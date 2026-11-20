@@ -1,9 +1,9 @@
 import Foundation
 
-/// What a phone's composer band says once it has folded to its one-line bar, while the reader goes
-/// back through the history (`TailPinning.foldsBand`; the owner, 2026-10-16): the draft, or the
-/// composer's placeholder, then one mark for each of the session's cards it folded — each card's own
-/// line cut to its count.
+/// What a phone's composer band says once it has folded to its pill, while the reader goes back
+/// through the history (`TailPinning.foldsBand`; the owner, 2026-10-16 and 2026-11-11): the draft,
+/// or else one mark for each of the session's cards it folded — each card's own line cut to its
+/// count — or else the composer's placeholder.
 public enum FoldedBand {
     /// The composer's placeholder, read where nothing is drafted.
     public static let placeholder = "Message…"
@@ -19,10 +19,28 @@ public enum FoldedBand {
         return nil
     }
 
-    /// The Background processes tray: what still runs, or, once nothing does, how many there are.
-    public static func processes(_ procs: [BackgroundProc]) -> String {
-        let running = procs.filter { $0.status == "running" }.count
-        return running > 0 ? "\(running) running" : "\(procs.count)"
+    /// What the folded pill leads with (the owner, 2026-11-11: the pill keeps one thing, as Safari's
+    /// folded address bar keeps the site's name): a draft not yet sent, else the cards' marks, and the
+    /// placeholder only where there is nothing else to show.
+    public enum Lead: Equatable, Sendable {
+        case draft(String)
+        case marks
+        case placeholder
+    }
+
+    public static func lead(draft: String?, hasMarks: Bool) -> Lead {
+        if let draft { return .draft(draft) }
+        return hasMarks ? .marks : .placeholder
+    }
+
+    /// The Background row (`BackgroundRowRule`): what still runs, or, once nothing does, how many
+    /// it still shows. Nil — no mark — when the rule shows no row.
+    public static func processes(_ procs: [BackgroundProc], lastUserMessageAt: String?,
+                                 sessionLive: Bool) -> String? {
+        let shown = BackgroundRowRule.shown(BackgroundRowRule.inputs(procs), lastUserMessageAt: lastUserMessageAt,
+                                            sessionLive: sessionLive)
+        if !shown.running.isEmpty { return "\(shown.running.count) running" }
+        return shown.ended.isEmpty ? nil : "\(shown.ended.count)"
     }
 
     /// The Tasks card's sentence cut to one part: what failed, the one part drawn red, or else how

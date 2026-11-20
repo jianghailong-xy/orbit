@@ -12,12 +12,25 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   'POST /owner-requests/:id/secret',
   'POST /owner-requests/:id/secret/cancel',
   'POST /owner-requests/:id/secret/revoke',
+  // The owner's Create wiki on a WIKI_CREATE card (docs/wiki-explicit-creation-design.md §3.6): making a wiki is the
+  // owner's own act, as POST /wiki/spaces is; it also refuses an acting session, WIKI_OWNER_CHANNEL_ONLY.
+  'POST /owner-requests/:id/create-wiki',
+  // The owner's Save changes on a SETTINGS_CHANGE card (docs/settings-from-conversation-design.md §5.2): it writes the
+  // account's preferences; it also refuses an acting session, SETTINGS_OWNER_CHANNEL_ONLY.
+  'POST /owner-requests/:id/apply-settings',
   'GET /account-secrets',
   'PUT /account-secrets/:id',
   'DELETE /account-secrets/:id',
   'POST /tasks/:taskId/owner-confirmation',
   'POST /tasks/:taskId/evidence/decision',
+  'POST /tasks/:taskId/evidence/:revision/restart',
   'POST /sessions/:id/approvals/:approvalId/decision',
+  // Session guests (docs/session-guests-design.md §3): who may drive the agent on the owner's machine, with the
+  // owner's accounts, is the owner's to decide and to see.
+  'GET /sessions/:id/guests',
+  'GET /sessions/:id/guests/suggestions',
+  'POST /sessions/:id/guests',
+  'DELETE /sessions/:id/guests/:userId',
   'POST /projects/:id/acceptance/confirmation',
   'POST /projects/:id/acceptance/criteria-decisions/:intentId',
   'POST /projects/:projectId/promotions/:promotionId/confirm',
@@ -32,6 +45,8 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   'POST /projects/:id/done',
   'POST /projects/:id/pause',
   'POST /projects/:id/resume',
+  // Move to a follow-up… on the done card: it refuses an acting session, as pause and resume do.
+  'POST /projects/:id/criteria/:criterionKey/move',
   // Complete on a finished project's row (session-list-projects-design §3.6): it refuses an acting
   // session, as pause and resume do.
   'POST /projects/:id/sessions/complete',
@@ -61,6 +76,8 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   // §10.8's "look again", the owner's door annotated and registered as the abandon door is: it refuses
   // an acting session, and a coordinator asks through `integration_observe`.
   'POST /projects/:id/integration/observe',
+  // §12.15 P-R1: the owner putting a coordinator's recorded landing-check change back. Refuses an acting session.
+  'POST /projects/:id/setting-changes/:changeId/revert',
   // The wiki's owner channel: each refuses an agent session WIKI_OWNER_CHANNEL_ONLY.
   'POST /wiki/entries/:id/reject',
   'POST /wiki/entries/:id/confirm',
@@ -69,6 +86,9 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   'POST /wiki/spaces/:id/verifications/reopen',
   'POST /wiki/spaces/:id/workspaces',
   'DELETE /wiki/spaces/:id/workspaces/:workspaceId',
+  // The maintenance settings' probe and Check again and run now (docs/wiki-repo-tiers-design.md §7.3).
+  'POST /wiki/spaces/:id/maintenance/probe',
+  'POST /wiki/spaces/:id/maintenance/run',
   'DELETE /wiki/spaces/:id',
   'POST /wiki/spaces/:id/restore',
   'DELETE /wiki/spaces/:id/purge',
@@ -99,4 +119,18 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   'POST /integrations/feishu/chats/confirm',
   'PATCH /integrations/feishu/chats/:id',
   'DELETE /integrations/feishu/chats/:id',
+  // Who can use the Feishu bot (docs/feishu-bot-design.md §14.1): opening it lets everyone the app is available to in
+  // Feishu start agents on the owner's machines, in the workspace and mode chosen here.
+  'PUT /integrations/feishu/access',
+  // A terminal asking to be approved (docs/terminal-session-design.md, "The terminal credential"): approving mints a
+  // credential that answers this machine's approval cards for 30 days, so the card, its Approve and its Deny are the
+  // owner's own, signed in to the app — never a token's, a runner's or another terminal's.
+  'GET /terminals/requests',
+  'POST /terminals/requests/:id/approve',
+  'POST /terminals/requests/:id/deny',
+  // A scheduled task's two cards (docs/scheduled-tasks-design.md §4, §9.1): Create on a create card writes the schedule
+  // and its envelope, Allow on an envelope card grows what it may do; Not now and Decline answer them. Each also refuses
+  // a request carrying an acting session, SCHEDULE_DECISION_OWNER_CHANNEL_ONLY.
+  'POST /schedule-requests/:id/allow',
+  'POST /schedule-requests/:id/decline',
 ];

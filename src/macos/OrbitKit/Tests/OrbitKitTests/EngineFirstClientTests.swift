@@ -3,7 +3,7 @@ import XCTest
 @testable import OrbitKit
 
 /// The rest of the clients' engine-first reading (docs/provider-engine-contract.md §1, §6): the wire's
-/// `engine` fields, a task's run pins (board 6), the Infrastructure page's API keys and a DeepSeek key's
+/// `engine` fields, a task's run pins (board 6), the Machines & models page's API keys and a DeepSeek key's
 /// page (boards iOS 1 and 2), and the composer's Provider level (boards iOS 4 and 5).
 final class EngineFirstClientTests: XCTestCase {
     private func json(_ value: some Encodable) throws -> [String: Any] {
@@ -133,7 +133,41 @@ final class EngineFirstClientTests: XCTestCase {
         XCTAssertNil(pinned.providerRequest("deepseek"))
     }
 
-    // MARK: Infrastructure's API keys (board iOS 1 ③)
+    /// "Runs with" for an unpinned task is the server's `runsWith` (apiserver workspaces/start-anchor.ts),
+    /// the resolution dispatch makes — the project's coordinator here, on DeepSeek Harness with a key —
+    /// not the assignee's lastEngine/lastProvider. Under a pin, and from an older server, the pin and the
+    /// assignee's still say it.
+    func testAnUnpinnedTaskRunsWithWhatTheServerSays() throws {
+        func task(_ extra: String) throws -> TaskItem {
+            try JSONDecoder().decode(TaskItem.self, from: Data(#"{"id":"t1","title":"T","status":"OPEN"\#(extra)}"#.utf8))
+        }
+        let coordinator = #","runsWith":{"engine":"dsh","provider":"deepseek","providerBuiltin":false,"source":"PROJECT_COORDINATOR","anchorSessionId":"s9","refusal":null}"#
+        let anchored = try task(coordinator)
+        XCTAssertEqual(anchored.runsWith?.source, "PROJECT_COORDINATOR")
+        XCTAssertEqual(anchored.runsWith?.anchorSessionId, "s9")
+        let pin = TaskRunPin(task: anchored, assignee: try assignee(), configured: [deepseek])
+        XCTAssertEqual(pin.runEngine, "dsh")
+        XCTAssertEqual(pin.inheritedEngine, "Assignee's · DeepSeek Harness")
+        XCTAssertEqual(pin.runsWithKey, "deepseek")
+        XCTAssertEqual(pin.runProvider(firstDeepSeekKey: nil), "deepseek")
+        // On an engine's own sign-in the Provider field still says Engine default.
+        let signIn = TaskRunPin(task: try task(#","runsWith":{"engine":"codex","provider":"codex","providerBuiltin":true,"source":"WORKSPACE"}"#),
+                                assignee: try assignee(), configured: [deepseek])
+        XCTAssertEqual(signIn.runEngine, "codex")
+        XCTAssertNil(signIn.runsWithKey)
+        // A pinned engine is the pin's, whatever runsWith says; TASK_PIN is the pin the fields already show.
+        let pinned = TaskRunPin(task: try task(#","engine":"codex","runsWith":{"engine":"codex","provider":"codex","providerBuiltin":true,"source":"TASK_PIN"}"#),
+                                assignee: try assignee(), configured: [deepseek])
+        XCTAssertEqual(pinned.runEngine, "codex")
+        XCTAssertEqual(pinned.assigneeEngine, "claude")
+        XCTAssertNil(pinned.runsWithKey)
+        // An older server sends none: the assignee's lastEngine/lastProvider.
+        let older = TaskRunPin(task: try task(""), assignee: try assignee(), configured: [deepseek])
+        XCTAssertEqual(older.runEngine, "claude")
+        XCTAssertNil(older.runsWithKey)
+    }
+
+    // MARK: Machines & models' API keys (board iOS 1 ③)
 
     /// Each vendor's keys together, in the order of each vendor's first key: a key from the retired
     /// DeepSeek Harness preset is DeepSeek's, a self-maintained endpoint Custom's.

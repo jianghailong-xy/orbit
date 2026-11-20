@@ -85,12 +85,17 @@ final class WikiHealthCopyParityTests: XCTestCase {
             let mark: String
             let link: String
             let strong: Bool
+            let hint: String?
         }
         struct Case: Decodable {
             let name: String
             let health: WikiSpaceHealth
             let parts: [Part]
             let text: String
+            /// A phone's parts and text: the repository's short words (design §7.2).
+            let narrowParts: [Part]
+            let narrowText: String
+            /// The phone's whole line under the title: entries · anchors · narrowText.
             let line: String
         }
         let now: String
@@ -107,6 +112,15 @@ final class WikiHealthCopyParityTests: XCTestCase {
         try XCTUnwrap(RelativeTime.parse(shared.now), "the fixture's now is an instant")
     }
 
+    private func assertParts(_ parts: [WikiStatusPart], _ expected: [Fixture.Part], _ name: String, line: UInt = #line) {
+        XCTAssertEqual(parts.map(\.text), expected.map(\.text), name, line: line)
+        XCTAssertEqual(parts.map(\.tone.rawValue), expected.map(\.tone), "\(name): tones", line: line)
+        XCTAssertEqual(parts.map(\.mark.rawValue), expected.map(\.mark), "\(name): marks", line: line)
+        XCTAssertEqual(parts.map(\.link.rawValue), expected.map(\.link), "\(name): links", line: line)
+        XCTAssertEqual(parts.map(\.strong), expected.map(\.strong), "\(name): weight", line: line)
+        XCTAssertEqual(parts.map(\.hint), expected.map(\.hint), "\(name): hints", line: line)
+    }
+
     /// Each case's parts, text and whole line, as `WikiHealthLogic` and `WikiHomeContent` say them.
     func testEveryLookSaysTheFixturesWords() throws {
         let shared = try fixture()
@@ -121,16 +135,18 @@ final class WikiHealthCopyParityTests: XCTestCase {
                 XCTAssertEqual(parts, WikiHealthLogic.parts(one.health.maintenance, now: now),
                                "\(one.name): a read that does not say the server executes the wiki says the look alone")
             }
-            XCTAssertEqual(parts.map(\.text), one.parts.map(\.text), one.name)
-            XCTAssertEqual(parts.map(\.tone.rawValue), one.parts.map(\.tone), "\(one.name): tones")
-            XCTAssertEqual(parts.map(\.mark.rawValue), one.parts.map(\.mark), "\(one.name): marks")
-            XCTAssertEqual(parts.map(\.link.rawValue), one.parts.map(\.link), "\(one.name): links")
-            XCTAssertEqual(parts.map(\.strong), one.parts.map(\.strong), "\(one.name): weight")
+            assertParts(parts, one.parts, one.name)
             XCTAssertEqual(WikiHealthLogic.text(parts), one.text, one.name)
+            // A phone's line: the repository's short words, and the whole line under the title ends with it.
+            let narrow = WikiHealthLogic.parts(one.health, now: now, narrow: true)
+            assertParts(narrow, one.narrowParts, "\(one.name) (narrow)")
+            XCTAssertEqual(WikiHealthLogic.text(narrow), one.narrowText, "\(one.name) (narrow)")
+            XCTAssertTrue(one.line.hasSuffix(" · \(one.narrowText)"), "\(one.name): the line ends with the phone's part")
             // The whole line under the title: every active entry the read counts — not the entries the
-            // home read, which stop at 200 — the anchors, then the maintenance part.
+            // home read, which stop at 200 — the anchors, then the maintenance part, as a phone says it.
             let home = WikiHomeContent(space: space, spaces: [space], entries: [], timeline: [], health: one.health)
             XCTAssertEqual(home.statusLine(now: now), one.line, "\(one.name): the line under the title")
+            XCTAssertEqual(home.statusParts(now: now).suffix(parts.count), parts[...], "\(one.name): the wide line's parts")
             XCTAssertEqual(one.health.entries, shared.entries)
         }
     }
@@ -157,6 +173,56 @@ final class WikiHealthCopyParityTests: XCTestCase {
     func testTheFixtureCoversEveryLook() throws {
         let looks = Set(try fixture().cases.map(\.health.maintenance.look))
         XCTAssertEqual(looks, Set(WikiMaintenanceLook.contractOrder))
+    }
+
+    /// Every repository tier the contract names is in the fixture (`WIKI_REPO_TIERS`).
+    func testTheFixtureCoversEveryRepositoryTier() throws {
+        let tiers = Set(try fixture().cases.compactMap(\.health.repo?.tier))
+        XCTAssertEqual(tiers, Set(WikiRepoTier.contractOrder))
+        let shared = try web("src/shared/src/wikiRepoOps.ts")
+        XCTAssertTrue(shared.contains("export const WIKI_REPO_TIERS = [\(WikiRepoTier.contractOrder.map { "'\($0.rawValue)'" }.joined(separator: ", "))] as const;"),
+                      "the tiers drifted from WIKI_REPO_TIERS")
+        XCTAssertTrue(shared.contains("export const WIKI_REPO_ATTENTION_REASONS = [\(WikiRepoTier.attentionReasons.map { "'\($0)'" }.joined(separator: ", "))] as const;"),
+                      "the red reasons drifted from WIKI_REPO_ATTENTION_REASONS")
+    }
+
+    /// The repository's part (design §7.2, mock 44 ⑤): nothing on git; the folder grey, to Settings, its cost in the
+    /// hint; amber while code checks wait, red for a folder somebody has to set right, Fix in Settings last; the short
+    /// words alone on a phone and nothing while maintenance is off; the offline runner said once.
+    func testTheRepositorysPartSaysTheTierAsTheWebDoes() throws {
+        let shared = try fixture()
+        let now = try now(shared)
+        let byTier = { (tier: WikiRepoTier) throws -> WikiSpaceHealth in
+            try XCTUnwrap(shared.cases.first { $0.health.repo?.tier == tier && $0.health.maintenance.look == .ok }?.health, "\(tier)")
+        }
+        let git = try byTier(.git)
+        XCTAssertEqual(WikiHealthLogic.repoParts(git, narrow: false), [])
+        XCTAssertEqual(WikiHealthLogic.parts(git, now: now), WikiHealthLogic.parts(git.maintenance, now: now))
+        let folder = try byTier(.folder)
+        XCTAssertEqual(WikiHealthLogic.repoParts(folder, narrow: false),
+                       [WikiStatusPart("Reading the folder, not git", tone: .muted, link: .settings,
+                                       hint: "Commit anchors are not checked: ~/work/app is not a git checkout.")])
+        XCTAssertEqual(WikiHealthLogic.repoParts(folder, narrow: true).map(\.text), ["Reading the folder"])
+        let sessions = WikiHealthLogic.parts(try byTier(.sessions), now: now)
+        XCTAssertEqual(sessions.suffix(2).map(\.text), ["Code checks paused: ~/work/app was not found on MacBook", WikiHealthCopy.repoFix])
+        XCTAssertEqual(sessions.last?.link, .settings)
+        XCTAssertEqual(WikiHealthLogic.repoParts(try byTier(.sessions), narrow: true).map(\.text), ["Code checks paused"])
+        XCTAssertEqual(WikiHealthLogic.repoParts(try byTier(.wrongRepository), narrow: true).map(\.text), ["Wrong folder"])
+        XCTAssertEqual(WikiHealthLogic.repoParts(try byTier(.wrongRepository), narrow: false).first?.tone, .error)
+        let refused = try XCTUnwrap(shared.cases.first { $0.health.repo?.reason == "fetch_refused" }?.health)
+        XCTAssertEqual(WikiHealthLogic.repoParts(refused, narrow: false).first?.tone, .error)
+        // Off: the repository says nothing.
+        let on = try byTier(.sessions)
+        let m = on.maintenance
+        let off = WikiSpaceHealth(spaceId: on.spaceId, entries: on.entries,
+                                  maintenance: WikiMaintenanceHealth(look: m.look, enabled: false, lastOkAt: m.lastOkAt, backlog: m.backlog),
+                                  repo: on.repo, executor: on.executor, systemModel: on.systemModel)
+        XCTAssertEqual(WikiHealthLogic.repoParts(off, narrow: false), [])
+        // The offline runner: said as the reason code checks wait, not again as the server's reason.
+        let offline = try XCTUnwrap(shared.cases.first { $0.health.repo?.tier == .sessions && $0.health.repo?.reason == "runner_offline" }?.health)
+        XCTAssertNil(WikiHealthLogic.serverReason(offline))
+        let said = WikiHealthLogic.text(WikiHealthLogic.parts(offline, now: now))
+        XCTAssertEqual(said.components(separatedBy: WikiHealthCopy.reasonRunnerOffline).count - 1, 1, said)
     }
 
     /// Without a health read the line says what it said before criterion 5, and a look this build does not
@@ -233,6 +299,24 @@ final class WikiHealthCopyParityTests: XCTestCase {
         XCTAssertTrue(lib.contains("count === 1 ? 'Maintenance failed' : `Maintenance failed ${count} times`"))
         XCTAssertEqual(WikiHealthCopy.failed(1), "Maintenance failed")
         XCTAssertEqual(WikiHealthCopy.failed(3), "Maintenance failed 3 times")
+        // The repository's part (design §7.2): its words and its two templates.
+        for (name, value) in [("WIKI_REPO_FOLDER", WikiHealthCopy.repoFolder), ("WIKI_REPO_FOLDER_SHORT", WikiHealthCopy.repoFolderShort),
+                              ("WIKI_REPO_PAUSED", WikiHealthCopy.repoPaused), ("WIKI_REPO_WRONG_SHORT", WikiHealthCopy.repoWrongShort),
+                              ("WIKI_REPO_FIX", WikiHealthCopy.repoFix), ("WIKI_REPO_COMMIT_ANCHORS", WikiHealthCopy.repoCommitAnchors)] {
+            XCTAssertTrue(lib.contains("export const \(name) = '\(value)';"),
+                          "\(name) drifted: \(Self.lib) no longer declares it as \(value.debugDescription)")
+        }
+        XCTAssertTrue(lib.contains("export const wikiRepoPaused = (detail: string): string => `${WIKI_REPO_PAUSED}: ${detail}`;"),
+                      "wikiRepoPaused drifted in \(Self.lib)")
+        XCTAssertEqual(WikiHealthCopy.repoPaused("{}"), "Code checks paused: {}")
+        XCTAssertTrue(lib.contains("export const wikiRepoFolderHint = (detail: string | null | undefined): string => "
+                                   + "detail ? `${WIKI_REPO_COMMIT_ANCHORS}: ${detail}.` : `${WIKI_REPO_COMMIT_ANCHORS}.`;"),
+                      "wikiRepoFolderHint drifted in \(Self.lib)")
+        XCTAssertEqual(WikiHealthCopy.repoFolderHint("{}"), "Commit anchors are not checked: {}.")
+        XCTAssertEqual(WikiHealthCopy.repoFolderHint(nil), "Commit anchors are not checked.")
+        XCTAssertEqual(WikiHealthCopy.repoFolderHint(""), "Commit anchors are not checked.")
+        // The server's reason gives way to the repository's part said for the same reason.
+        XCTAssertTrue(lib.contains("if (wikiRepoParts(health, false).length > 0 && repo.reason === repo.look) return null;"))
         // View run is the run page's own word, already the web's (`WIKI_VIEW_RUN`).
         XCTAssertTrue(lib.contains("import { WIKI_VIEW_RUN } from './wikiReviewMode';"))
         XCTAssertEqual(WikiModeCopy.viewRun, "View run")
@@ -294,15 +378,18 @@ final class WikiHealthCopyParityTests: XCTestCase {
                     "View run opens a server run's log, else the run's session")
 
         let logic = try swift(Self.kit + "App/WikiLogic.swift")
-        let parts = try slice(logic, from: "public func statusParts(now: Date) -> [WikiStatusPart] {", to: "return parts")
+        let parts = try slice(logic, from: "public func statusParts(now: Date, narrow: Bool = false) -> [WikiStatusPart] {", to: "return parts")
         assertOrder(parts, ["let count = health?.entries ?? entries.count", "WikiCopy.entryNoun(count)",
-                            "WikiCopy.anchorsVerified(", "WikiHealthLogic.parts(health, now: now)"],
+                            "WikiCopy.anchorsVerified(", "WikiHealthLogic.parts(health, now: now, narrow: narrow)"],
                     "the native line's parts")
 
         // The line is Activity's now (design §12.3.2): the home says what the space holds instead.
         let activity = try swift(Self.app + "Views/WikiActivityView.swift")
         let line = try slice(activity, from: "private var statusLine: some View {", to: "private struct WikiActivityBannerRow: View {")
-        XCTAssertTrue(line.contains("Text(wikiStatusText(content.statusParts(now: now)))"))
+        // A phone says the repository's short words; a Mac the whole sentence, the folder's cost as the line's help.
+        assertOrder(line, ["#if os(iOS)", "let narrow = true", "#else", "let narrow = false", "#endif",
+                           "let parts = content.statusParts(now: now, narrow: narrow)", "Text(wikiStatusText(parts))",
+                           ".help(parts.compactMap(\\.hint).joined(separator: \" \"))"], "the native line's width")
         assertOrder(line, ["case wikiStatusSettingsURL:", "actions.openSettings()", "case wikiStatusRunURL:",
                            "content.health?.maintenance.lastRun?.jobId", "actions.openJob(job)",
                            "content.health?.maintenance.lastRun?.sessionId", "actions.openSession(session)"],
@@ -317,6 +404,7 @@ final class WikiHealthCopyParityTests: XCTestCase {
         let colours = try slice(view, from: "private func wikiStatusColour(", to: "}\n}")
         XCTAssertTrue(colours.contains("case .warn: return Color.orange"), "amber while a run waits")
         XCTAssertTrue(colours.contains("case .error: return Color.red"), "red when it broke")
+        XCTAssertTrue(colours.contains("case .muted: return Color.secondary"), "grey on the folder tier, though it is a link")
 
         XCTAssertTrue(activity.contains("openSession: { id in model.openFromConversation(.session(PublicID.toPublic(id)), overConsole: false) }"))
         XCTAssertTrue(activity.contains("openJob: { id in model.push(.wikiJob(jobID: id)) }"), "a server run opens its own page")

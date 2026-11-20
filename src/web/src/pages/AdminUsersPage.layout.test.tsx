@@ -183,7 +183,7 @@ afterEach(async () => {
 describe('Admin → Users · one row an account', { timeout: 60_000 }, () => {
   it('says how many accounts there are, who each is, and when each last used Orbit', async () => {
     await open();
-    expect(container!.querySelector('.admin-users-sub')?.textContent).toBe('4 accounts · 2 administrators · 1 disabled');
+    expect(container!.querySelector('.settings-header-description')?.textContent).toBe('4 accounts · 2 administrators · 1 disabled');
     expect(headers()).toEqual(['User', 'Sign-in', 'Status', 'Last active', 'Created', '']);
     // Your own account and an administrator are marked; an account without a name goes by its address.
     expect(rowOf('admin@example.test')?.querySelector('.admin-users-name')?.textContent).toBe('AdminYouAdmin');

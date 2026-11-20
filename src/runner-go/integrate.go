@@ -627,16 +627,30 @@ func integrateOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, sc
 					}
 					return result
 				}
+				baselineTree, err := git(baseline, "rev-parse", "HEAD^{tree}")
+				if err != nil {
+					return result
+				}
 				attribution, err := runIntegrationCheckTracked(stop, baseline, spec, len(result.Checks)+1, len(cmd.Checks)+1, progress)
 				if err != nil {
 					return integrationStepEnded(err, "CHECK")
 				}
 				attribution.Scope = "BASELINE"
+				attribution.TreeSha = strings.TrimSpace(baselineTree)
 				result.Checks = append(result.Checks, attribution)
 				result.BaselineRed = !attribution.TimedOut && attribution.ExitCode != nil && *attribution.ExitCode != spec.ExpectedExitCode
 			}
 			return result
 		}
+	}
+
+	// The task is exempt from the project's landing check (§12.15 P-C2): the command carried only its
+	// acceptance, which passed above. Record the check that was not run, and why, where it would have
+	// run, so the result says the landing was not checked rather than leaving it to be inferred.
+	if cmd.Kind == "LAND_TASK" && cmd.LandingCheckExemptReason != "" {
+		result.Checks = append(result.Checks, IntegrationCheckResult{
+			Name: "LANDING_CHECK", Skipped: "TASK_EXEMPT", Reason: cmd.LandingCheckExemptReason,
+		})
 	}
 
 	// ── J-S6a the tree that is about to land ──────────────────────────────────────────────────
@@ -692,10 +706,12 @@ func integrateOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, sc
 		return result
 	}
 	mergeLock.Lock()
+	unlockCheckout := lockMainCheckout(repoRoot)
 	pushErr := integrationPush(repoRoot, scratch, remote, cmd.TargetRef, tested, targetSha, local)
 	if pushErr == nil {
 		advanceLocalRef(repoRoot, cmd.TargetRef, tested)
 	}
+	unlockCheckout()
 	mergeLock.Unlock()
 	if pushErr != nil {
 		result.State, result.Phase = "ERROR", "PUSH"
@@ -1039,6 +1055,7 @@ func promoteOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, scra
 		return result
 	}
 	mergeLock.Lock()
+	unlockCheckout := lockMainCheckout(repoRoot)
 	// The same push for both kinds, and it is a fast-forward either way: a merge commit and a rebased
 	// commit both carry the upstream tip as an ancestor. What differs is the commit being pushed, not
 	// the way it travels — and no force, so an upstream that moved underneath is refused (J-S6).
@@ -1046,6 +1063,7 @@ func promoteOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, scra
 	if pushErr == nil {
 		advanceLocalRef(repoRoot, cmd.UpstreamRef, tested)
 	}
+	unlockCheckout()
 	mergeLock.Unlock()
 	if pushErr != nil {
 		result.State, result.Phase = "ERROR", "PUSH"

@@ -65,13 +65,13 @@ class NavigationIncrementDeviceTest {
                 compose.onNode(row("Tasks")).performClick()
                 await { exists(hasTestTag("task:$task")) }
                 compose.onNodeWithTag("task:$task").performClick()
-                await { exists(hasTestTag("task-assignee")) }
+                await { exists(hasTestTag("task-runs-with")) }
                 capture("02-task-page")
                 // The destination already showing: its row is the selected one, and pressing it only closes the drawer.
                 openDrawer(); compose.onNode(row("Tasks")).assertIsSelected()
                 capture("03-drawer-tasks-selected")
                 compose.onNode(row("Tasks")).performClick(); settle()
-                assertTrue("the task page stays", exists(hasTestTag("task-assignee")))
+                assertTrue("the task page stays", exists(hasTestTag("task-runs-with")))
                 compose.onNodeWithContentDescription("Back").assertExists()
                 capture("04-current-row-only-closes")
                 // Another destination lands on its root; back to Tasks is the list, not the task left there.
@@ -81,7 +81,7 @@ class NavigationIncrementDeviceTest {
                 capture("05-workspace-root")
                 openDrawer(); compose.onNode(row("Tasks")).performClick(); settle()
                 await { exists(hasTestTag("task:$task")) }
-                assertFalse("the Tasks list at its root", exists(hasTestTag("task-assignee")))
+                assertFalse("the Tasks list at its root", exists(hasTestTag("task-runs-with")))
                 capture("06-tasks-root")
 
                 // A05-2 · Set assignee lists the workspaces with a runner first, as the drawer does.
@@ -111,9 +111,8 @@ class NavigationIncrementDeviceTest {
                 compose.onNode(hasText("Review navigation") and hasClickAction()).performClick()
                 await { exists(hasContentDescription("Session actions") and isEnabled()) }
                 compose.onNodeWithContentDescription("Session actions").performClick(); settle()
-                // Session details heads the group that opens what the session is part of since A06-18 (the session's name under the
-                // bar opened them until that row went with iOS's title).
-                assertEquals(listOf("Share…", "Copy Link", "Rename…", "Pin", "Move…", "Tags…", "Session details", "Open Task", "Complete Session",
+                // Settings follows Tags… (docs/mocks/session-settings ⑤); it took in Session details, which is gone.
+                assertEquals(listOf("Share…", "Copy Link", "Rename…", "Pin", "Move…", "Tags…", "Settings", "Open Task", "Complete Session",
                     "Move to Trash"), menuItems())
                 compose.onNode(hasText("Complete Session") and hasText("Stops the current run") and hasAnyAncestor(isPopup())).assertExists()
                 capture("10-session-menu")
@@ -151,7 +150,7 @@ class NavigationIncrementDeviceTest {
                 await { exists(hasContentDescription("Session actions") and isEnabled()) }
                 awaitWritable()
                 compose.onNodeWithContentDescription("Session actions").performClick(); settle()
-                assertEquals(listOf("Session details", "Move to Open", "Delete Permanently"), menuItems())
+                assertEquals(listOf("Settings", "Move to Open", "Delete Permanently"), menuItems())
                 capture("14-trash-menu")
                 awaitWritable()
                 press(hasText("Delete Permanently") and hasAnyAncestor(isPopup()))

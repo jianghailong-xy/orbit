@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><style>
+:root{--bg:#f6f6f4;--card:#fff;--line:#e6e4df;--text:#1d1d1b;--t2:#55534e;--t3:#8b8882;--acc:#d97757;--accbg:#fbeee8;--blue:#2f6fde;--ok:#2e8b57;--warn:#c4581b;--bub:#efede8}
+*{box-sizing:border-box}
+body{margin:0;background:#e9e7e2;font-family:-apple-system,BlinkMacSystemFont,'PingFang SC',sans-serif;color:var(--text)}
+.board{width:2160px;padding:40px;background:#e9e7e2}
+h1{font-size:30px;margin:0 0 6px}
+.sub{color:var(--t2);font-size:16px;margin-bottom:28px;line-height:1.6}
+.row{display:flex;gap:28px;align-items:flex-start;margin-bottom:32px}
+.frame{background:#fff;border-radius:14px;box-shadow:0 2px 10px rgba(0,0,0,.08);overflow:hidden}
+.cap{font-size:15px;font-weight:600;margin:0 0 10px;color:#333}
+.cap small{font-weight:400;color:var(--t2);margin-left:6px}
+.num{display:inline-flex;width:24px;height:24px;border-radius:12px;background:var(--acc);color:#fff;font-size:13px;align-items:center;justify-content:center;margin-right:6px;font-weight:700}
+.mk{display:inline-flex;width:20px;height:20px;border-radius:10px;background:var(--acc);color:#fff;font-size:11px;align-items:center;justify-content:center;font-weight:700;vertical-align:middle;margin-left:6px;box-shadow:0 0 0 2px #fff}
+/* web transcript */
+.tr{padding:18px 26px;font-size:14px;line-height:1.6}
+.u{display:flex;flex-direction:column;align-items:flex-end;margin:6px 0 14px}
+.ub{background:var(--bub);border-radius:14px;padding:9px 13px;max-width:78%}
+.foot{font-size:12px;color:var(--t3);margin-top:4px;display:flex;gap:8px;align-items:center}
+.foot a{color:var(--t2);text-decoration:underline;text-underline-offset:2px}
+.foot .tg{display:inline-flex;align-items:center;gap:4px}
+.a{margin:4px 0 12px}
+.a p{margin:0 0 6px}
+/* notes */
+.notes{background:#fff;border-radius:14px;padding:22px 26px;font-size:14.5px;line-height:1.65;box-shadow:0 2px 10px rgba(0,0,0,.06)}
+.notes h3{margin:0 0 10px;font-size:18px}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+td,th{border-bottom:1px solid #eee;padding:7px 8px;text-align:left;vertical-align:top}
+th{color:#666;font-weight:600;background:#faf9f7}
+code{font-family:'SF Mono',monospace;font-size:12.5px;background:#f3f1ec;padding:1px 5px;border-radius:4px}
+.dec{border:2px dashed var(--acc);background:#fffaf7}
+.dec li{margin-bottom:10px}
+.rec{color:var(--ok);font-weight:600}
+.pair{margin:0 0 12px}
+.pair .zh{margin:0}
+.pair .en{margin:2px 0 0;color:#8b8882;font-size:.9em;line-height:1.5}
+.pair.li{display:grid;grid-template-columns:18px 1fr;column-gap:4px}
+.pair.li .dot{color:var(--t2)}
+.bi{margin-top:6px;padding-top:6px;border-top:1px dashed #d9d6d0;color:#8b8882;font-size:.92em;line-height:1.5}
+.bi p{margin:0 0 6px}
+.h4{font-weight:700;margin:14px 0 6px}
+.h4 .en{font-weight:600}
+.cmk{display:inline-flex;width:18px;height:18px;border-radius:9px;background:var(--acc);color:#fff;font-size:10.5px;align-items:center;justify-content:center;font-weight:700;margin-left:6px;vertical-align:middle}
+.foot .sep{color:#c9c6c0}
+.foot a.hl2{outline:2px solid var(--acc);outline-offset:3px;border-radius:3px}
+.opt-t td:first-child{white-space:nowrap}
+</style></head><body><div class="board" style="width:1720px">
+<h1>Show both languages · 单条回复隐藏原文</h1>
+<div class="sub">双语开着时，回复底部的 “Translated” 后面加一个按钮，只隐藏这一条的原文；再点恢复双语。只作用于这一条，不保存，刷新后恢复双语（与现有 Show original 一致）。全局开关仍在 Settings › Translation。界面文字一律英文，标注用中文。</div>
+<div class="row">
+  <div>
+    <div class="cap"><span class="num">1</span>双语（默认）<small>“Translated” 后多一个按钮</small></div>
+    <div class="frame w" style="width:620px;background:#fff"><div class="tr"><div class="pair"><p class="zh">“显示两种语言”现在已在 main 上，生产环境升级正在进行中。</p><p class="en">Show both languages is on main now, and the production upgrade is running.</p></div><div class="h4">将其合并到 main：<div class="en" style="color:#8b8882;font-size:.9em;font-weight:600">Getting it onto main:</div></div><div class="pair li"><span class="dot">•</span><div><p class="zh">在你发消息之前，main 尚未更新。唯一相关的提交是设计板图片（<code>54452c4f7</code>）。</p><p class="en">Main wasn't updated before your message. The only related commit was the design board image (<code>54452c4f7</code>).</p></div></div><div class="pair li"><span class="dot">•</span><div><p class="zh">追赶任务已完成 19 个冲突的解决。我已批准。</p><p class="en">The catch-up task finished resolving the 19 conflicts. I approved it.</p></div></div><div class="foot">Translated <span class="sep">·</span> <a class="hl2">Hide original</a><span class="cmk">A</span></div></div></div>
+  </div>
+  <div>
+    <div class="cap"><span class="num">2</span>点了 Hide original <small>只剩译文</small></div>
+    <div class="frame w" style="width:620px;background:#fff"><div class="tr"><div class="pair"><p class="zh">“显示两种语言”现在已在 main 上，生产环境升级正在进行中。</p></div><div class="h4">将其合并到 main：</div><div class="pair li"><span class="dot">•</span><div><p class="zh">在你发消息之前，main 尚未更新。唯一相关的提交是设计板图片（<code>54452c4f7</code>）。</p></div></div><div class="pair li"><span class="dot">•</span><div><p class="zh">追赶任务已完成 19 个冲突的解决。我已批准。</p></div></div><div class="foot">Translated <span class="sep">·</span> <a class="hl2">Show both</a><span class="cmk">B</span></div></div></div>
+  </div>
+</div>
+<div class="row">
+  <div class="notes" style="width:620px">
+    <b>A</b> 按钮常驻显示（不等 hover），样式同现有 “Show original”：灰色、带下划线、前面一个 “·”。<br>
+    <b>B</b> 隐藏后按钮变成 “Show both”，点一下回到 ①。不用 “Show original”：关闭双语时它的意思是<b>把译文换成原文</b>，同一个词在这里却是<b>把原文加回来</b>，会混。<br>
+    复制按钮不变，始终复制译文。你自己发的消息不加此按钮。
+  </div>
+  <div class="notes dec" style="width:620px">
+    <h3>名字候选（推荐第 1 组）</h3>
+    <table class="opt-t">
+      <tr><th>隐藏</th><th>恢复</th><th>说明</th></tr>
+      <tr><td class="rec">Hide original</td><td class="rec">Show both</td><td>“original” 与现有 Show original 同一个词；恢复后回到 “两种语言”，与设置名呼应</td></tr>
+      <tr><td>Hide English</td><td>Show English</td><td>直呼语言名，同 “Show English · N lines”；但原文实际不是英文时（截图里那种）会说错</td></tr>
+      <tr><td>Translation only</td><td>Show both</td><td>描述结果而非动作；在 “Translated” 后面读起来重复</td></tr>
+    </table>
+  </div>
+</div>
+</div></body></html>

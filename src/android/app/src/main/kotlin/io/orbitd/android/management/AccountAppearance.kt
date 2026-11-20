@@ -14,24 +14,18 @@ import io.orbitd.android.OrbitApplication
 import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.core.auth.DataKind
 import io.orbitd.android.core.auth.SessionHandle
+import io.orbitd.android.core.promptoptimizer.PromptOptimizer
 import io.orbitd.android.core.protocol.Wire
+import io.orbitd.android.core.translation.Translation
 import io.orbitd.android.ui.OrbitTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.put
-import kotlinx.serialization.json.putJsonObject
 
 val LocalAppearanceChanged = staticCompositionLocalOf<(String) -> Unit> { {} }
-/** The account's smart model selection switch (`preferences.modelRouting`; off unless the owner turned it on, iOS
+/** The account's smart model selection switch (`preferences.modelRouting`; on unless the owner turned it off, iOS
  * UserPreferences.smartModelSelection), read with the theme from the same `users/me`. While it is off no page draws smart selection:
  * the composer's ✦ (OrbitKit `ComposerLogic.smartRoute`), the task page's Suggested and tier tags, the workspace form's Task runs.
  * Settings' switch sets it the moment the server has taken the change. */
@@ -43,13 +37,42 @@ val LocalSmartSelectionChanged = staticCompositionLocalOf<(Boolean) -> Unit> { {
  * the server has taken the change. */
 val LocalSessionRecaps = compositionLocalOf { true }
 val LocalSessionRecapsChanged = staticCompositionLocalOf<(Boolean) -> Unit> { {} }
-/** The model last picked for each engine and credential (`preferences.defaultModels`, keyed `<engine>:<provider>`; A07-19 (e), iOS
- * AppModel `defaultModels`), read with the theme from the same `users/me` — with this device's picks the server has not taken yet
- * over it. A new session starts on its engine and credential's. */
-val LocalDefaultModels = compositionLocalOf { emptyMap<String, String>() }
-/** Remembers a model picked for an engine and a credential (iOS `rememberDefaultModel`): the next new session has it at once, and
- * every device once the server has taken it. */
-val LocalRememberModel = staticCompositionLocalOf<(engine: String, provider: String, model: String) -> Unit> { { _, _, _ -> } }
+/** The account's Settings › Translation (`preferences.translationEnabled` / `translationLanguage` / `translationAgentLanguage`, and the server's
+ * `translationAvailable`), read with the theme from the same `users/me`. While it is on, a reply still streaming is greyed with its
+ * chip and the composer carries its tag (board frames 6 and 10). Settings' switch and picker set it the moment the server has taken
+ * the change. */
+val LocalTranslation = compositionLocalOf { AccountTranslation() }
+val LocalTranslationChanged = staticCompositionLocalOf<(AccountTranslation) -> Unit> { {} }
+/** Settings › Prompt optimizer (`preferences.promptOptimizer`, absent = on, and the server's `promptOptimizerAvailable`), read with the
+ * theme from the same `users/me`: whether the composer offers ✦ Optimize (docs/prompt-optimizer-design.md, iOS `PromptOptimizer.isOn`).
+ * Settings' switch sets it the moment the server has taken the change. */
+val LocalPromptOptimizer = compositionLocalOf { false }
+val LocalPromptOptimizerChanged = staticCompositionLocalOf<(Boolean) -> Unit> { {} }
+
+/** [enabled]: the owner's switch; [available]: the server can translate; [language]: the owner's; [agentLanguage]: the agents'. */
+data class AccountTranslation(val enabled: Boolean = false, val available: Boolean = false, val language: String = Translation.DEFAULT_LANGUAGE,
+    val agentLanguage: String = Translation.DEFAULT_AGENT_LANGUAGE,
+    /** "Show both languages" (`preferences.translationBilingual`, only while [enabled]): a translated message also shows the agent-language text. */
+    val bilingual: Boolean = false,
+    /** `translationUnavailableUntil` (board docs/ux/translation-failure-policy.html, frame 6): until when the server skips a failing
+     *  translator and holds every message at once. Null while it is in use. The server does not say when it passes: see [unavailableAt]. */
+    val unavailableUntil: java.time.Instant? = null) {
+    /** The owner's messages are being translated now: switched on, and the server able to. */
+    val on: Boolean get() = enabled && available
+    /** The language an owner card's translation must be in to be drawn ([OwnerCardTranslation][io.orbitd.android.core.cards.OwnerCardTranslation]):
+     *  the owner's while their translation is [on], none otherwise (web `ownerLanguageTranslation`, iOS `OwnerCardTranslations.ownerLanguage`). */
+    val cardLanguage: String? get() = language.takeIf { on }
+    /** Whether a message sent at [now] waits: [unavailableUntil] is still ahead. */
+    fun unavailableAt(now: java.time.Instant): Boolean = unavailableUntil?.isAfter(now) == true
+    companion object {
+        fun of(user: JsonObject?): AccountTranslation = (user?.get("preferences") as? JsonObject).let {
+            AccountTranslation(Translation.enabled(it), Translation.available(user), Translation.language(it), Translation.agentLanguage(it),
+                Translation.bilingual(it), Translation.unavailableUntil(user))
+        }
+    }
+}
+// The account-wide model memory is retired (docs/workspace-default-model-design.md): a new session's model is its workspace's
+// `lastModel`, and nothing here reads or writes the preferences' model map, which older clients may still write.
 
 // androidx.activity's own defaults for the navigation bar's scrim (EdgeToEdge.kt).
 private val LightScrim = Color.argb(0xe6, 0xFF, 0xFF, 0xFF)
@@ -65,15 +88,19 @@ fun AccountAppearance(app: OrbitApplication, content: @Composable () -> Unit) {
     val live by remember(app) { app.realtime.state.map { it.handle to it.controlConnects }.distinctUntilChanged() }
         .collectAsState(null to 0L)
     val revision = if (live.first === handle) live.second else 0L
+    // `translation.status_changed`: the server opened, reopened or closed its skip of a failing translator — read `users/me` again.
+    val translationStatus by remember(app) { app.realtime.state.map { it.accountEvents[Translation.STATUS_CHANGED_EVENT] ?: 0L }.distinctUntilChanged() }
+        .collectAsState(0L)
     var theme by remember(handle) { mutableStateOf("system") }
     var smartSelection by remember(handle) { mutableStateOf(false) }
     var sessionRecaps by remember(handle) { mutableStateOf(true) }
     var appearanceVersion by remember(handle) { mutableLongStateOf(0L) }
     var smartSelectionVersion by remember(handle) { mutableLongStateOf(0L) }
     var sessionRecapsVersion by remember(handle) { mutableLongStateOf(0L) }
-    var savedModels by remember(handle) { mutableStateOf(emptyMap<String, String>()) }
-    var pendingModels by remember(handle) { mutableStateOf(emptyMap<String, String>()) }
-    var modelsVersion by remember(handle) { mutableLongStateOf(0L) }
+    var translation by remember(handle) { mutableStateOf(AccountTranslation()) }
+    var translationVersion by remember(handle) { mutableLongStateOf(0L) }
+    var promptOptimizer by remember(handle) { mutableStateOf(false) }
+    var promptOptimizerVersion by remember(handle) { mutableLongStateOf(0L) }
     var restored by remember(handle) { mutableStateOf(false) }
     var resume by remember { mutableIntStateOf(0) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -82,7 +109,7 @@ fun AccountAppearance(app: OrbitApplication, content: @Composable () -> Unit) {
         lifecycle.addObserver(observer)
         onDispose { lifecycle.removeObserver(observer) }
     }
-    LaunchedEffect(handle, resume, revision) {
+    LaunchedEffect(handle, resume, revision, translationStatus) {
         if (handle != null) {
             // What the first frame draws in (iOS `LaunchSnapshot.user`): what this phone last knew, until the read below answers.
             if (!restored) {
@@ -92,14 +119,16 @@ fun AccountAppearance(app: OrbitApplication, content: @Composable () -> Unit) {
             val version = appearanceVersion
             val smartVersion = smartSelectionVersion
             val recapsVersion = sessionRecapsVersion
-            val modelVersion = modelsVersion
+            val translatedVersion = translationVersion
+            val optimizerVersion = promptOptimizerVersion
             try {
                 val user = ManagementApi(app.session, handle).get("users/me") as JsonObject
                 if (version == appearanceVersion) theme = (user["preferences"] as? JsonObject)?.text("theme") ?: "system"
                 // A read that left before the switch was pressed does not take its answer back.
                 if (smartVersion == smartSelectionVersion) smartSelection = smartModelSelection(user["preferences"] as? JsonObject)
                 if (recapsVersion == sessionRecapsVersion) sessionRecaps = sessionRecapsEnabled(user["preferences"] as? JsonObject)
-                if (modelVersion == modelsVersion) savedModels = defaultModels(user["preferences"] as? JsonObject)
+                if (translatedVersion == translationVersion) translation = AccountTranslation.of(user)
+                if (optimizerVersion == promptOptimizerVersion) promptOptimizer = PromptOptimizer.isOn(user)
             } catch (cancel: CancellationException) { throw cancel }
             catch (_: Exception) { /* Keep this account's last known preference until the next refresh. */ }
         }
@@ -107,24 +136,6 @@ fun AccountAppearance(app: OrbitApplication, content: @Composable () -> Unit) {
     LaunchedEffect(handle, restored, theme, sessionRecaps) {
         if (handle != null && restored) writeSavedAppearance(app, handle, SavedAppearance(theme, sessionRecaps))
     }
-    val scope = rememberCoroutineScope()
-    val modelWrites = remember(handle) { Mutex() }
-    val rememberModel: (String, String, String) -> Unit = remember(handle) { { engine, provider, model ->
-        val key = "$engine:$provider"
-        if (handle != null && (savedModels + pendingModels)[key] != model) {
-            pendingModels = pendingModels + (key to model)
-            // One write after another, so two quick picks cannot leave the account remembering the older one.
-            scope.launch { modelWrites.withLock {
-                try {
-                    val user = ManagementApi(app.session, handle).patch("users/me/preferences",
-                        buildJsonObject { putJsonObject("defaultModels") { put(key, model) } }) as? JsonObject
-                    (user?.get("preferences") as? JsonObject)?.let { modelsVersion++; savedModels = defaultModels(it) }
-                } catch (cancel: CancellationException) { throw cancel }
-                catch (_: Exception) { /* The pick stays this device's until the next one, or the next read, says otherwise. */ }
-                if (savedModels[key] == model && pendingModels[key] == model) pendingModels = pendingModels - key
-            } }
-        }
-    } }
     val dark = when (theme) { "dark" -> true; "light" -> false; else -> isSystemInDarkTheme() }
     // enableEdgeToEdge() sized the bars' icons for the system's mode; the account's own appearance decides them,
     // or a dark app under a light system keeps dark icons on a dark bar. Same transparent bars and scrims as before.
@@ -138,7 +149,8 @@ fun AccountAppearance(app: OrbitApplication, content: @Composable () -> Unit) {
     CompositionLocalProvider(LocalAppearanceChanged provides { appearanceVersion++; theme = it }, LocalSmartSelection provides smartSelection,
         LocalSmartSelectionChanged provides { smartSelectionVersion++; smartSelection = it },
         LocalSessionRecaps provides sessionRecaps, LocalSessionRecapsChanged provides { sessionRecapsVersion++; sessionRecaps = it },
-        LocalDefaultModels provides savedModels + pendingModels, LocalRememberModel provides rememberModel) {
+        LocalTranslation provides translation, LocalTranslationChanged provides { translationVersion++; translation = it },
+        LocalPromptOptimizer provides promptOptimizer, LocalPromptOptimizerChanged provides { promptOptimizerVersion++; promptOptimizer = it }) {
         OrbitTheme(darkTheme = dark, content = content)
     }
 }
@@ -157,6 +169,3 @@ private suspend fun writeSavedAppearance(app: OrbitApplication, handle: SessionH
     app.session.writeData(handle, DataKind.CACHE, SAVED_APPEARANCE, Wire.json.encodeToString(SavedAppearance.serializer(), appearance).encodeToByteArray())
 } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { }
 
-/** `preferences.defaultModels` as the strings it maps. */
-private fun defaultModels(preferences: JsonObject?): Map<String, String> =
-    (preferences?.get("defaultModels") as? JsonObject).orEmpty().mapNotNull { (key, value) -> (value as? JsonPrimitive)?.contentOrNull?.let { key to it } }.toMap()

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { expiryText, resolutionTurnLabel, snoozeChoices, waitingCount } from './ownerRequests';
+import { expiryText, ownerRequestChatContext, resolutionTurnLabel, snoozeChoices, waitingCount } from './ownerRequests';
 import type { SidebarProject } from './projectAttention';
 
 const NOW = Date.parse('2026-11-09T12:00:00.000Z');
@@ -22,6 +22,9 @@ describe('resolutionTurnLabel', () => {
     expect(resolutionTurnLabel(turn('DECLINED'))).toBe('Owner declined the request · turn started automatically');
     expect(resolutionTurnLabel(turn('EXPIRED'))).toBe('Owner request expired · turn started automatically');
     expect(resolutionTurnLabel(turn('WITHDRAWN'))).toBe('Owner request withdrawn · turn started automatically');
+    const wiki = turn('DONE').replace('(MANUAL_STEP) ended DONE: the owner did what was asked.',
+      '(WIKI_CREATE) ended DONE. The owner created the wiki w. You can propose to it now.');
+    expect(resolutionTurnLabel(wiki)).toBe('Owner action resolved · turn started automatically');
   });
 
   it('leaves what a person typed alone', () => {
@@ -62,5 +65,14 @@ describe('deadlines', () => {
     expect(keys(null)).toEqual(['1h', '4h', '1d']);
     expect(keys(2)).toEqual(['1h']);
     expect(keys(0.5)).toEqual([]);
+  });
+});
+
+describe('ownerRequestChatContext', () => {
+  it('names the request and says it is still open, ahead of the owner’s words', () => {
+    expect(ownerRequestChatContext({ id: '34uabc', title: 'Register the package name' })).toBe(
+      'The owner pressed Chat about this on your request “Register the package name” (owner request 34uabc). '
+        + 'It is still open: not marked done and not declined. Their message:',
+    );
   });
 });

@@ -378,6 +378,22 @@ test('a runaway quota report is bounded', () => {
   assert.equal(entry.planUsage?.fetchedAt, undefined, 'an unparseable or missing time is left out, not invented');
 });
 
+test("OpenCode's no-key answer is carried for OpenCode alone, and never beside a yes", () => {
+  assert.deepEqual(
+    sanitizeRunnerEngines([
+      { engine: 'opencode', installed: true, auth: 'unknown', openCodeNoKey: true },
+      { engine: 'codex', installed: true, auth: 'no', openCodeNoKey: true },
+    ]),
+    [
+      { engine: 'codex', installed: true, auth: 'no' },
+      { engine: 'opencode', installed: true, auth: 'unknown', openCodeNoKey: true },
+    ],
+  );
+  for (const [auth, openCodeNoKey] of [['yes', true], ['unknown', 'true'], ['unknown', 1], ['unknown', false]] as const) {
+    assert.equal('openCodeNoKey' in sanitizeRunnerEngines([{ engine: 'opencode', installed: true, auth, openCodeNoKey }])![0], false);
+  }
+});
+
 test("Kimi's site is carried for Kimi alone, and only as one of its two", () => {
   assert.deepEqual(
     sanitizeRunnerEngines([

@@ -383,8 +383,11 @@ describe('folders in the session list', { timeout: 60_000 }, () => {
     expect(folderNames()).toEqual(['Release', 'Wiki']);
     expect(sessionTitles()).toEqual(['Loose one']);
     const release = folderRow('Release');
-    expect(release.querySelector('.session-folder-count')?.textContent).toBe('2');
+    // One number: who waits on you takes the total's place, and the total moves into its label.
+    expect(release.querySelector('.session-folder-count')).toBeNull();
     expect(release.querySelector('.session-folder-needs')?.textContent).toBe('1');
+    expect(release.querySelector('.session-folder-needs')?.getAttribute('aria-label'))
+      .toBe('1 session needs your reply · 2 sessions');
     expect(release.querySelector('.session-folder-activity:not(.jobs)'), 'a running session lights the folder').not.toBeNull();
     const wiki = folderRow('Wiki');
     expect(wiki.querySelector('.session-folder-count')?.textContent).toBe('1');
@@ -398,7 +401,10 @@ describe('folders in the session list', { timeout: 60_000 }, () => {
     folders = [ELSEWHERE];
     await mount(`/sessions/${LOOSE.id}`, () => expect(sessionTitles()).toHaveLength(4));
     expect(folderRows()).toHaveLength(0);
-    expect(listCalls.every((p) => p.includes('limit=40'))).toBe(true);
+    // The Scheduled runs folder's own read is whole: a workspace's runs, not its list.
+    const pagedReads = listCalls.filter((p) => !p.includes('scheduled=1'));
+    expect(pagedReads.length).toBeGreaterThan(0);
+    expect(pagedReads.every((p) => p.includes('limit=40'))).toBe(true);
   });
 
   it('opens a folder’s page in place, and its back button returns to the list', async () => {

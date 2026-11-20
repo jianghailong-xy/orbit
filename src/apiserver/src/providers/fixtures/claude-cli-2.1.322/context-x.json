@@ -1,0 +1,1757 @@
+{
+ "cli": "claude 2.1.322",
+ "recordedAt": "2026-11-11",
+ "scenario": "/context: count_tokens requests.",
+ "recipe": "scripts/claude-gateway-recorder/drive.sh context-x",
+ "requests": [
+  {
+   "role": "other",
+   "method": "HEAD",
+   "path": "/api/hello"
+  },
+  {
+   "role": "main",
+   "method": "POST",
+   "path": "/v1/messages?beta=true",
+   "headers": {
+    "accept": "application/json",
+    "content-type": "application/json",
+    "user-agent": "claude-cli/2.1.322 (external, sdk-cli)",
+    "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14,context-management-2025-06-27,mid-conversation-tool-changes-2026-07-01,thinking-token-count-2026-05-13,advanced-tool-use-2025-11-20,effort-2025-11-24,thinking-display-updates-2026-08-18",
+    "anthropic-version": "2023-06-01",
+    "x-app": "cli",
+    "x-stainless-retry-count": "0",
+    "x-stainless-timeout": "600",
+    "x-stainless-package-version": "0.128.0",
+    "anthropic-dangerous-direct-browser-access": "true",
+    "authorization": "Bearer orbit-gwk-<redacted>",
+    "x-claude-code-session-id": "00000000-0000-4000-8000-000000000000"
+   },
+   "body": {
+    "model": "gpt-5.5",
+    "messages": [
+     {
+      "role": "user",
+      "content": [
+       {
+        "type": "text",
+        "text": "<system-reminder>\nAs you answer the user's questions, you ca<omitted: 511 chars of CLI prompt text>"
+       },
+       {
+        "type": "text",
+        "text": "<system-reminder>\nAttribution for git commits and pull reque<omitted: 516 chars of CLI prompt text>"
+       },
+       {
+        "type": "text",
+        "text": "hi"
+       }
+      ]
+     },
+     {
+      "role": "system",
+      "content": [
+       {
+        "type": "text",
+        "text": "# Environment\nYou have been invoked in the following environ<omitted: 8967 chars of CLI prompt text>",
+        "cache_control": {
+         "type": "ephemeral"
+        }
+       }
+      ]
+     }
+    ],
+    "system": [
+     {
+      "type": "text",
+      "text": "x-anthropic-billing-header: cc_version=2.1.322.000; cc_entrypoint=sdk-cli;"
+     },
+     {
+      "type": "text",
+      "text": "You are a Claude agent, built on Anthropic's Claude Agent SDK.",
+      "cache_control": {
+       "type": "ephemeral"
+      }
+     },
+     {
+      "type": "text",
+      "text": "<omitted: 5541 chars of CLI prompt text>",
+      "cache_control": {
+       "type": "ephemeral"
+      }
+     }
+    ],
+    "tools": "$basic.tools",
+    "metadata": {
+     "user_id": "{\"device_id\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"account_uuid\":\"\",\"session_id\":\"00000000-0000-4000-8000-000000000000\"}"
+    },
+    "max_tokens": 32000,
+    "thinking": {
+     "type": "adaptive",
+     "display": "updates"
+    },
+    "context_management": {
+     "edits": [
+      {
+       "type": "clear_thinking_20251015",
+       "keep": "all"
+      }
+     ]
+    },
+    "output_config": {
+     "effort": "high"
+    },
+    "stream": true
+   }
+  },
+  {
+   "role": "other",
+   "method": "POST",
+   "path": "/v1/messages/count_tokens?beta=true",
+   "headers": {
+    "accept": "application/json",
+    "content-type": "application/json",
+    "user-agent": "claude-cli/2.1.322 (external, sdk-cli)",
+    "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14,context-management-2025-06-27,token-counting-2024-11-01",
+    "anthropic-version": "2023-06-01",
+    "x-app": "cli",
+    "x-stainless-retry-count": "0",
+    "x-stainless-package-version": "0.128.0",
+    "anthropic-dangerous-direct-browser-access": "true",
+    "authorization": "Bearer orbit-gwk-<redacted>",
+    "x-claude-code-session-id": "00000000-0000-4000-8000-000000000000"
+   },
+   "body": {
+    "model": "gpt-5.5",
+    "messages": [
+     {
+      "role": "user",
+      "content": "\nYou are an agent working with the user toward their goals, <omitted: 1169 chars of CLI prompt text>"
+     }
+    ],
+    "tools": []
+   }
+  },
+  {
+   "role": "other",
+   "method": "POST",
+   "path": "/v1/messages/count_tokens?beta=true",
+   "headers": {
+    "accept": "application/json",
+    "content-type": "application/json",
+    "user-agent": "claude-cli/2.1.322 (external, sdk-cli)",
+    "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14,context-management-2025-06-27,token-counting-2024-11-01",
+    "anthropic-version": "2023-06-01",
+    "x-app": "cli",
+    "x-stainless-retry-count": "0",
+    "x-stainless-package-version": "0.128.0",
+    "anthropic-dangerous-direct-browser-access": "true",
+    "authorization": "Bearer orbit-gwk-<redacted>",
+    "x-claude-code-session-id": "00000000-0000-4000-8000-000000000000"
+   },
+   "body": {
+    "model": "gpt-5.5",
+    "messages": [
+     {
+      "role": "user",
+      "content": "When you use a pronoun for someone — the user or anyone else<omitted: 297 chars of CLI prompt text>"
+     }
+    ],
+    "tools": []
+   }
+  },
+  {
+   "role": "other",
+   "method": "POST",
+   "path": "/v1/messages/count_tokens?beta=true",
+   "headers": {
+    "accept": "application/json",
+    "content-type": "application/json",
+    "user-agent": "claude-cli/2.1.322 (external, sdk-cli)",
+    "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14,context-management-2025-06-27,token-counting-2024-11-01",
+    "anthropic-version": "2023-06-01",
+    "x-app": "cli",
+    "x-stainless-retry-count": "0",
+    "x-stainless-package-version": "0.128.0",
+    "anthropic-dangerous-direct-browser-access": "true",
+    "authorization": "Bearer orbit-gwk-<redacted>",
+    "x-claude-code-session-id": "00000000-0000-4000-8000-000000000000"
+   },
+   "body": {
+    "model": "gpt-5.5",
+    "messages": [
+     {
+      "role": "user",
+      "content": "For actions that are hard to reverse or outward-facing, conf<omitted: 460 chars of CLI prompt text>"
+     }
+    ],
+    "tools": []
+   }
+  },
+  {
+   "role": "other",
+   "method": "POST",
+   "path": "/v1/messages/count_tokens?beta=true",
+   "headers": {
+    "accept": "application/json",
+    "content-type": "application/json",
+    "user-agent": "claude-cli/2.1.322 (external, sdk-cli)",
+    "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14,context-management-2025-06-27,token-counting-2024-11-01",
+    "anthropic-version": "2023-06-01",
+    "x-app": "cli",
+    "x-stainless-retry-count": "0",
+    "x-stainless-package-version": "0.128.0",
+    "anthropic-dangerous-direct-browser-access": "true",
+    "authorization": "Bearer orbit-gwk-<redacted>",
+    "x-claude-code-session-id": "00000000-0000-4000-8000-000000000000"
+   },
+   "body": {
+    "model": "gpt-5.5",
+    "messages": [
+     {
+      "role": "user",
+      "content": "# Session-specific guidance\n - When the user types `/<skill-<omitted: 103 chars of CLI prompt text>"
+     }
+    ],
+    "tools": []
+   }
+  },
+  {
+   "role": "other",
+   "method": "POST",
+   "path": "/v1/messages/count_tokens?beta=true",
+   "headers": {
+    "accept": "application/json",
+    "content-type": "application/json",
+    "user-agent": "claude-cli/2.1.322 (external, sdk-cli)",
+    "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14,context-management-2025-06-27,token-counting-2024-11-01",
+    "anthropic-version": "2023-06-01",
+    "x-app": "cli",
+    "x-stainless-retry-count": "0",
+    "x-stainless-package-version": "0.128.0",
+    "anthropic-dangerous-direct-browser-access": "true",
+    "authorization": "Bearer orbit-gwk-<redacted>",
+    "x-claude-code-session-id": "00000000-0000-4000-8000-000000000000"
+   },
+   "body": {
+    "model": "gpt-5.5",
+    "messages": [
+     {
+      "role": "user",
+      "content": "# Memory\n\nYou have a persistent file-based memory at `/home/<omitted: 2021 chars of CLI prompt text>"
+     }
+    ],
+    "tools": []
+   }
+  },
+  {
+   "role": "other",
+   "method": "POST",
+   "path": "/v1/messages/count_tokens?beta=true",
+   "headers": {
+    "accept": "application/json",
+    "content-type": "application/json",
+    "user-agent": "claude-cli/2.1.322 (external, sdk-cli)",
+    "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14,context-management-2025-06-27,token-counting-2024-11-01",
+    "anthropic-version": "2023-06-01",
+    "x-app": "cli",
+    "x-stainless-retry-count": "0",
+    "x-stainless-package-version": "0.128.0",
+    "anthropic-dangerous-direct-browser-access": "true",
+    "authorization": "Bearer orbit-gwk-<redacted>",
+    "x-claude-code-session-id": "00000000-0000-4000-8000-000000000000"
+   },
+   "body": {
+    "model": "gpt-5.5",
+    "messages": [
+     {
+      "role": "user",
+      "content": "foo"
+     }
+    ],
+    "tools": [
+     {
+      "name": "Agent",
+      "description": "<omitted: 3227 chars of CLI prompt text>",
+      "input_schema": {
+       "$schema": "https://json-schema.org/draft/2020-12/schema",
+       "type": "object",
+       "properties": {
+        "description": {
+         "description": "A short (3-5 word) description of the task",
+         "type": "string"
+        },
+        "prompt": {
+         "description": "The task for the agent to perform",
+         "type": "string"
+        },
+        "subagent_type": {
+         "description": "The type of specialized agent to use for this task",
+         "type": "string"
+        },
+        "model": {
+         "description": "<omitted: 358 chars of CLI prompt text>",
+         "type": "string",
+         "enum": [
+          "sonnet",
+          "opus",
+          "haiku",
+          "fable"
+         ]
+        },
+        "effort": {
+         "description": "<omitted: 341 chars of CLI prompt text>",
+         "type": "string",
+         "enum": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+         ]
+        },
+        "run_in_background": {
+         "description": "<omitted: 286 chars of CLI prompt text>",
+         "type": "boolean"
+        },
+        "isolation": {
+         "description": "<omitted: 221 chars of CLI prompt text>",
+         "type": "string",
+         "enum": [
+          "worktree",
+          "remote"
+         ]
+        }
+       },
+       "required": [
+        "description",
+        "prompt"
+       ],
+       "additionalProperties": false
+      }
+     },
+     {
+      "name": "Bash",
+      "description": "<omitted: 1935 chars of CLI prompt text>",
+      "input_schema": {
+       "$schema": "https://json-schema.org/draft/2020-12/schema",
+       "type": "object",
+       "properties": {
+        "command": {
+         "description": "The command to execute",
+         "type": "string"
+        },
+        "timeout": {
+         "description": "Optional timeout in milliseconds (max 600000 for a foreground command)",
+         "type": "number"
+        },
+        "description": {
+         "description": "<omitted: 926 chars of CLI prompt text>",
+         "type": "string"
+        },
+        "run_in_background": {
+         "description": "<omitted: 182 chars of CLI prompt text>",
+         "type": "boolean"
+        },
+        "dangerouslyDisableSandbox": {
+         "description": "<omitted: 90 chars of CLI prompt text>",
+         "type": "boolean"
+        }
+       },
+       "required": [
+        "command"
+       ],
+       "additionalProperties": false
+      }
+     },
+     {
+      "name": "Edit",
+      "description": "<omitted: 360 chars of CLI prompt text>",
+      "input_schema": {
+       "$schema": "https://json-schema.org/draft/2020-12/schema",
+       "type": "object",
+       "properties": {
+        "file_path": {
+         "description": "The absolute path to the file to modify",
+         "type": "string"
+        },
+        "old_string": {
+         "description": "The text to replace",
+         "type": "string"
+        },
+        "new_string": {
+         "description": "The text to replace it with (must be different from old_string)",
+         "type": "string"
+        },
+        "replace_all": {
+         "description": "Replace all occurrences of old_string (default false)",
+         "default": false,
+         "type": "boolean"
+        }
+       },
+       "required": [
+        "file_path",
+        "old_string",
+        "new_string"
+       ],
+       "additionalProperties": false
+      }
+     },
+     {
+      "name": "ListAgents",
+      "description": "<omitted: 777 chars of CLI prompt text>",
+      "input_schema": {
+       "$schema": "https://json-schema.org/draft/2020-12/schema",
+       "type": "object",
+       "properties": {
+        "channel": {
+         "description": "Not available in this build; leave unset.",
+         "type": "string",
+         "maxLength": 256
+        },
+        "q": {
+         "description": "Not available in this build; leave unset.",
+         "type": "string",
+         "maxLength": 256
+        }
+       },
+       "additionalProperties": false
+      }
+     },
+     {
+      "name": "Read",
+      "description": "<omitted: 790 chars of CLI prompt text>",
+      "input_schema": {
+       "$schema": "https://json-schema.org/draft/2020-12/schema",
+       "type": "object",
+       "properties": {
+        "file_path": {
+         "description": "The absolute path to the file to read",
+         "type": "string"
+        },
+        "offset": {
+         "description": "<omitted: 92 chars of CLI prompt text>",
+         "type": "integer",
+         "minimum": 0,
+         "maximum": 9007199254740991
+        },
+        "limit": {
+         "description": "<omitted: 83 chars of CLI prompt text>",
+         "type": "integer",
+         "exclusiveMinimum": 0,
+         "maximum": 9007199254740991
+        },
+        "pages": {
+         "description": "<omitted: 113 chars of CLI prompt text>",
+         "type": "string"
+        },
+        "allow_large": {
+         "description": "<omitted: 281 chars of CLI prompt text>",
+         "type": "boolean"
+        }
+       },
+       "required": [
+        "file_path"
+       ],
+       "additionalProperties": false
+      }
+     },
+     {
+      "name": "ReportFindings",
+      "description": "<omitted: 574 chars of CLI prompt text>",
+      "input_schema": {
+       "$schema": "https://json-schema.org/draft/2020-12/schema",
+       "type": "object",
+       "properties": {
+        "level": {
+         "description": "Effort level the review ran at",
+         "type": "string",
+         "enum": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+         ]
+        },
+        "findings": {
+         "description": "Verified findings, most-severe first; empty if none survived",
+         "maxItems": 32,
+         "type": "array",
+         "items": {
+          "type": "object",
+          "properties": {
+           "file": {
+            "description": "Repo-relative path of the file the finding is in",
+            "type": "string"
+           },
+           "line": {
+            "description": "1-indexed line the finding anchors to",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+           },
+           "summary": {
+            "description": "One-sentence statement of the defect",
+            "type": "string"
+           },
+           "short_summary": {
+            "description": "<omitted: 96 chars of CLI prompt text>",
+            "type": "string",
+            "maxLength": 60
+           },
+           "failure_scenario": {
+            "description": "Concrete inputs/state → wrong output/crash",
+            "type": "string"
+           },
+           "category": {
+            "description": "<omitted: 110 chars of CLI prompt text>",
+            "type": "string",
+            "maxLength": 40
+           },
+           "verdict": {
+            "description": "Set when a verify pass ran; absent on inline-only reviews",
+            "type": "string",
+            "enum": [
+             "CONFIRMED",
+             "PLAUSIBLE"
+            ]
+           },
+           "outcome": {
+            "description": "Set ONLY when re-reporting after applying fixes: what happened to this finding",
+            "type": "string",
+            "enum": [
+             "fixed",
+             "skipped",
+             "no_change_needed"
+            ]
+           }
+          },
+          "required": [
+           "file",
+           "summary",
+           "failure_scenario"
+          ],
+          "additionalProperties": false
+         }
+        }
+       },
+       "required": [
+        "findings"
+       ],
+       "additionalProperties": false
+      }
+     },
+     {
+      "name": "ScheduleWakeup",
+      "description": "<omitted: 3396 chars of CLI prompt text>",
+      "input_schema": {
+       "$schema": "https://json-schema.org/draft/2020-12/schema",
+       "type": "object",
+       "properties": {
+        "delaySeconds": {
+         "description": "<omitted: 98 chars of CLI prompt text>",
+         "type": "number"
+        },
+        "reason": {
+         "description": "<omitted: 136 chars of CLI prompt text>",
+         "type": "string"
+        },
+        "prompt": {
+         "description": "<omitted: 355 chars of CLI prompt text>",
+         "type": "string"
+        },
+        "stop": {
+         "description": "<omitted: 154 chars of CLI prompt text>",
+         "type": "boolean"
+        },
+        "noop": {
+         "description": "<omitted: 307 chars of CLI prompt text>",
+         "type": "boolean"
+        }
+       },
+       "additionalProperties": false
+      }
+     },
+     {
+      "name": "Skill",
+      "description": "<omitted: 1417 chars of CLI prompt text>",
+      "input_schema": {
+       "$schema": "https://json-schema.org/draft/2020-12/schema",
+       "type": "object",
+       "properties": {
+        "skill": {
+         "description": "The name of a skill from the available-skills list. Do not guess names.",
+         "type": "string"
+        },
+        "args": {
+         "description": "Optional arguments for the skill",
+         "type": "string"
+        }
+       },
+       "required": [
+        "skill"
+       ],
+       "additionalProperties": false
+      }
+     },
+     {
+      "name": "ToolSearch",
+      "description": "<omitted: 953 chars of CLI prompt text>",
+      "input_schema": {
+       "$schema": "https://json-schema.org/draft/2020-12/schema",
+       "type": "object",
+       "properties": {
+        "query": {
+         "description": "<omitted: 99 chars of CLI prompt text>",
+         "type": "string"
+        },
+        "max_results": {
+         "description": "Maximum number of results to return (default: 5)",
+         "default": 5,
+         "type": "number"
+        }
+       },
+       "required": [
+        "query",
+        "max_results"
+       ],
+       "additionalProperties": false
+      }
+     },
+     {
+      "name": "Workflow",
+      "description": "<omitted: 3480 chars of CLI prompt text>",
+      "input_schema": {
+       "$schema": "https://json-schema.org/draft/2020-12/schema",
+       "type": "object",
+       "properties": {
+        "script": {
+         "description": "<omitted: 207 chars of CLI prompt text>",
+         "type": "string",
+         "maxLength": 524288
+        },
+        "name": {
+         "description": "<omitted: 105 chars of CLI prompt text>",
+         "type": "string"
+        },
+        "description": {
+         "description": "Ignored — set the workflow description in the script's `meta` block.",
+         "type": "string"
+        },
+        "title": {
+         "description": "Ignored — set the workflow title in the script's `meta` block.",
+         "type": "string"
+        },
+        "args": {
+         "description": "<omitted: 280 chars of CLI prompt text>"
+        },
+        "scriptPath": {
+         "description": "<omitted: 329 chars of CLI prompt text>",
+         "type": "string"
+        },
+        "resumeFromRunId": {
+         "description": "<omitted: 251 chars of CLI prompt text>",
+         "type": "string",
+         "pattern": "^wf_[a-z0-9-]{6,}$"
+        }
+       },
+       "additionalProperties": false
+      }
+     },
+     {
+      "name": "Write",
+      "description": "<omitted: 240 chars of CLI prompt text>",
+      "input_schema": {
+       "$schema": "https://json-schema.org/draft/2020-12/schema",
+       "type": "object",
+       "properties": {
+        "file_path": {
+         "description": "The absolute path to the file to write (must be absolute, not relative)",
+         "type": "string"
+        },
+        "content": {
+         "description": "The content to write to the file",
+         "type": "string"
+        }
+       },
+       "required": [
+        "file_path",
+        "content"
+       ],
+       "additionalProperties": false
+      }
+     }
+    ]
+   }
+  },
+  {
+   "role": "other",
+   "method": "POST",
+   "path": "/v1/messages/count_tokens?beta=true",
+   "headers": {
+    "accept": "application/json",
+    "content-type": "application/json",
+    "user-agent": "claude-cli/2.1.322 (external, sdk-cli)",
+    "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14,context-management-2025-06-27,token-counting-2024-11-01",
+    "anthropic-version": "2023-06-01",
+    "x-app": "cli",
+    "x-stainless-retry-count": "0",
+    "x-stainless-package-version": "0.128.0",
+    "anthropic-dangerous-direct-browser-access": "true",
+    "authorization": "Bearer orbit-gwk-<redacted>",
+    "x-claude-code-session-id": "00000000-0000-4000-8000-000000000000"
+   },
+   "body": {
+    "model": "gpt-5.5",
+    "messages": [
+     {
+      "role": "user",
+      "content": "# Environment\n - The most recent Claude models are the Claud<omitted: 560 chars of CLI prompt text>"
+     }
+    ],
+    "tools": []
+   }
+  },
+  {
+   "role": "other",
+   "method": "POST",
+   "path": "/v1/messages/count_tokens?beta=true",
+   "headers": {
+    "accept": "application/json",
+    "content-type": "application/json",
+    "user-agent": "claude-cli/2.1.322 (external, sdk-cli)",
+    "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14,context-management-2025-06-27,token-counting-2024-11-01",
+    "anthropic-version": "2023-06-01",
+    "x-app": "cli",
+    "x-stainless-retry-count": "0",
+    "x-stainless-package-version": "0.128.0",
+    "anthropic-dangerous-direct-browser-access": "true",
+    "authorization": "Bearer orbit-gwk-<redacted>",
+    "x-claude-code-session-id": "00000000-0000-4000-8000-000000000000"
+   },
+   "body": {
+    "model": "gpt-5.5",
+    "messages": [
+     {
+      "role": "user",
+      "content": "# Context management\nWhen the conversation grows long, some <omitted: 220 chars of CLI prompt text>"
+     }
+    ],
+    "tools": []
+   }
+  },
+  {
+   "role": "other",
+   "method": "POST",
+   "path": "/v1/messages/count_tokens?beta=true",
+   "headers": {
+    "accept": "application/json",
+    "content-type": "application/json",
+    "user-agent": "claude-cli/2.1.322 (external, sdk-cli)",
+    "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14,context-management-2025-06-27,token-counting-2024-11-01",
+    "anthropic-version": "2023-06-01",
+    "x-app": "cli",
+    "x-stainless-retry-count": "0",
+    "x-stainless-package-version": "0.128.0",
+    "anthropic-dangerous-direct-browser-access": "true",
+    "authorization": "Bearer orbit-gwk-<redacted>",
+    "x-claude-code-session-id": "00000000-0000-4000-8000-000000000000"
+   },
+   "body": {
+    "model": "gpt-5.5",
+    "messages": [
+     {
+      "role": "user",
+      "content": "When you have enough information to act, act. Do not re-deri<omitted: 217 chars of CLI prompt text>"
+     }
+    ],
+    "tools": []
+   }
+  },
+  {
+   "role": "other",
+   "method": "POST",
+   "path": "/v1/messages/count_tokens?beta=true",
+   "headers": {
+    "accept": "application/json",
+    "content-type": "application/json",
+    "user-agent": "claude-cli/2.1.322 (external, sdk-cli)",
+    "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14,context-management-2025-06-27,token-counting-2024-11-01",
+    "anthropic-version": "2023-06-01",
+    "x-app": "cli",
+    "x-stainless-retry-count": "0",
+    "x-stainless-package-version": "0.128.0",
+    "anthropic-dangerous-direct-browser-access": "true",
+    "authorization": "Bearer orbit-gwk-<redacted>",
+    "x-claude-code-session-id": "00000000-0000-4000-8000-000000000000"
+   },
+   "body": {
+    "model": "gpt-5.5",
+    "messages": [
+     {
+      "role": "user",
+      "content": "foo"
+     }
+    ],
+    "tools": []
+   }
+  },
+  {
+   "role": "other",
+   "method": "POST",
+   "path": "/v1/messages/count_tokens?beta=true",
+   "headers": {
+    "accept": "application/json",
+    "content-type": "application/json",
+    "user-agent": "claude-cli/2.1.322 (external, sdk-cli)",
+    "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14,context-management-2025-06-27,token-counting-2024-11-01",
+    "anthropic-version": "2023-06-01",
+    "x-app": "cli",
+    "x-stainless-retry-count": "0",
+    "x-stainless-package-version": "0.128.0",
+    "anthropic-dangerous-direct-browser-access": "true",
+    "authorization": "Bearer orbit-gwk-<redacted>",
+    "x-claude-code-session-id": "00000000-0000-4000-8000-000000000000"
+   },
+   "body": {
+    "model": "gpt-5.5",
+    "messages": [
+     {
+      "role": "user",
+      "content": "foo"
+     }
+    ],
+    "tools": [
+     {
+      "name": "Skill",
+      "description": "<omitted: 1417 chars of CLI prompt text>",
+      "input_schema": {
+       "$schema": "https://json-schema.org/draft/2020-12/schema",
+       "type": "object",
+       "properties": {
+        "skill": {
+         "description": "The name of a skill from the available-skills list. Do not guess names.",
+         "type": "string"
+        },
+        "args": {
+         "description": "Optional arguments for the skill",
+         "type": "string"
+        }
+       },
+       "required": [
+        "skill"
+       ],
+       "additionalProperties": false
+      }
+     }
+    ]
+   }
+  },
+  {
+   "role": "other",
+   "method": "POST",
+   "path": "/v1/messages/count_tokens?beta=true",
+   "headers": {
+    "accept": "application/json",
+    "content-type": "application/json",
+    "user-agent": "claude-cli/2.1.322 (external, sdk-cli)",
+    "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14,context-management-2025-06-27,token-counting-2024-11-01",
+    "anthropic-version": "2023-06-01",
+    "x-app": "cli",
+    "x-stainless-retry-count": "0",
+    "x-stainless-package-version": "0.128.0",
+    "anthropic-dangerous-direct-browser-access": "true",
+    "authorization": "Bearer orbit-gwk-<redacted>",
+    "x-claude-code-session-id": "00000000-0000-4000-8000-000000000000"
+   },
+   "body": {
+    "model": "gpt-5.5",
+    "messages": [
+     {
+      "role": "user",
+      "content": "foo"
+     }
+    ],
+    "tools": [
+     {
+      "name": "CronCreate",
+      "description": "<omitted: 3399 chars of CLI prompt text>",
+      "input_schema": {
+       "$schema": "https://json-schema.org/draft/2020-12/schema",
+       "type": "object",
+       "properties": {
+        "cron": {
+         "description": "<omitted: 151 chars of CLI prompt text>",
+         "type": "string"
+        },
+        "prompt": {
+         "description": "The prompt to enqueue at each fire time.",
+         "type": "string"
+        },
+        "recurring": {
+         "description": "<omitted: 224 chars of CLI prompt text>",
+         "type": "boolean"
+        },
+        "durable": {
+         "description": "<omitted: 208 chars of CLI prompt text>",
+         "type": "boolean"
+        }
+       },
+       "required": [
+        "cron",
+        "prompt"
+       ],
+       "additionalProperties": false
+      }
+     }
+    ]
+   }
+  },
+  {
+   "role": "other",
+   "method": "POST",
+   "path": "/v1/messages/count_tokens?beta=true",
+   "headers": {
+    "accept": "application/json",
+    "content-type": "application/json",
+    "user-agent": "claude-cli/2.1.322 (external, sdk-cli)",
+    "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14,context-management-2025-06-27,token-counting-2024-11-01",
+    "anthropic-version": "2023-06-01",
+    "x-app": "cli",
+    "x-stainless-retry-count": "0",
+    "x-stainless-package-version": "0.128.0",
+    "anthropic-dangerous-direct-browser-access": "true",
+    "authorization": "Bearer orbit-gwk-<redacted>",
+    "x-claude-code-session-id": "00000000-0000-4000-8000-000000000000"
+   },
+   "body": {
+    "model": "gpt-5.5",
+    "messages": [
+     {
+      "role": "user",
+      "content": "foo"
+     }
+    ],
+    "tools": [
+     {
+      "name": "CronDelete",
+      "description": "<omitted: 167 chars of CLI prompt text>",
+      "input_schema": {
+       "$schema": "https://json-schema.org/draft/2020-12/schema",
+       "type": "object",
+       "properties": {
+        "id": {
+         "description": "Job ID returned by CronCreate.",
+         "type": "string"
+        }
+       },
+       "required": [
+        "id"
+       ],
+       "additionalProperties": false
+      }
+     }
+    ]
+   }
+  },
+  {
+   "role": "other",
+   "method": "POST",
+   "path": "/v1/messages/count_tokens?beta=true",
+   "headers": {
+    "accept": "application/json",
+    "content-type": "application/json",
+    "user-agent": "claude-cli/2.1.322 (external, sdk-cli)",
+    "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14,context-management-2025-06-27,token-counting-2024-11-01",
+    "anthropic-version": "2023-06-01",
+    "x-app": "cli",
+    "x-stainless-retry-count": "0",
+    "x-stainless-package-version": "0.128.0",
+    "anthropic-dangerous-direct-browser-access": "true",
+    "authorization": "Bearer orbit-gwk-<redacted>",
+    "x-claude-code-session-id": "00000000-0000-4000-8000-000000000000"
+   },
+   "body": {
+    "model": "gpt-5.5",
+    "messages": [
+     {
+      "role": "user",
+      "content": "foo"
+     }
+    ],
+    "tools": [
+     {
+      "name": "CronList",
+      "description": "<omitted: 106 chars of CLI prompt text>",
+      "input_schema": {
+       "$schema": "https://json-schema.org/draft/2020-12/schema",
+       "type": "object",
+       "properties": {},
+       "additionalProperties": false
+      }
+     }
+    ]
+   }
+  },
+  {
+   "role": "other",
+   "method": "POST",
+   "path": "/v1/messages/count_tokens?beta=true",
+   "headers": {
+    "accept": "application/json",
+    "content-type": "application/json",
+    "user-agent": "claude-cli/2.1.322 (external, sdk-cli)",
+    "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14,context-management-2025-06-27,token-counting-2024-11-01",
+    "anthropic-version": "2023-06-01",
+    "x-app": "cli",
+    "x-stainless-retry-count": "0",
+    "x-stainless-package-version": "0.128.0",
+    "anthropic-dangerous-direct-browser-access": "true",
+    "authorization": "Bearer orbit-gwk-<redacted>",
+    "x-claude-code-session-id": "00000000-0000-4000-8000-000000000000"
+   },
+   "body": {
+    "model": "gpt-5.5",
+    "messages": [
+     {
+      "role": "user",
+      "content": "foo"
+     }
+    ],
+    "tools": [
+     {
+      "name": "DesignSync",
+      "description": "<omitted: 5228 chars of CLI prompt text>",
+      "input_schema": {
+       "$schema": "https://json-schema.org/draft/2020-12/schema",
+       "type": "object",
+       "properties": {
+        "method": {
+         "type": "string",
+         "enum": [
+          "list_projects",
+          "get_project",
+          "list_files",
+          "get_file",
+          "finalize_plan",
+          "write_files",
+          "delete_files",
+          "register_assets",
+          "unregister_assets",
+          "create_project",
+          "report_validate"
+         ]
+        },
+        "projectId": {
+         "description": "Required for all methods except list_projects and create_project",
+         "type": "string",
+         "minLength": 1
+        },
+        "path": {
+         "description": "get_file: file path to read",
+         "type": "string",
+         "minLength": 1
+        },
+        "writes": {
+         "description": "<omitted: 286 chars of CLI prompt text>",
+         "maxItems": 256,
+         "type": "array",
+         "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+         }
+        },
+        "deletes": {
+         "description": "<omitted: 100 chars of CLI prompt text>",
+         "maxItems": 256,
+         "type": "array",
+         "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+         }
+        },
+        "planId": {
+         "description": "<omitted: 97 chars of CLI prompt text>",
+         "type": "string",
+         "minLength": 1
+        },
+        "files": {
+         "description": "<omitted: 134 chars of CLI prompt text>",
+         "maxItems": 256,
+         "type": "array",
+         "items": {
+          "type": "object",
+          "properties": {
+           "path": {
+            "description": "Path within the project, e.g. components/button/index.html",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+           },
+           "localPath": {
+            "description": "<omitted: 256 chars of CLI prompt text>",
+            "type": "string",
+            "minLength": 1
+           },
+           "data": {
+            "description": "<omitted: 160 chars of CLI prompt text>",
+            "type": "string"
+           },
+           "encoding": {
+            "description": "Set to \"base64\" for binary inline data",
+            "type": "string",
+            "enum": [
+             "base64"
+            ]
+           },
+           "mimeType": {
+            "type": "string"
+           }
+          },
+          "required": [
+           "path"
+          ],
+          "additionalProperties": false
+         }
+        },
+        "paths": {
+         "description": "<omitted: 189 chars of CLI prompt text>",
+         "maxItems": 256,
+         "type": "array",
+         "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+         }
+        },
+        "name": {
+         "description": "create_project: name for the new design-system project",
+         "type": "string",
+         "minLength": 1,
+         "maxLength": 200
+        },
+        "assets": {
+         "description": "<omitted: 152 chars of CLI prompt text>",
+         "maxItems": 256,
+         "type": "array",
+         "items": {
+          "type": "object",
+          "properties": {
+           "name": {
+            "description": "Short human-readable label (\"Primary buttons\"), not a path",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+           },
+           "path": {
+            "description": "Project-relative path to the preview/spec file this card renders",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+           },
+           "subtitle": {
+            "description": "Variants shown (\"Primary / secondary / ghost, 3 sizes\")",
+            "type": "string",
+            "maxLength": 255
+           },
+           "viewport": {
+            "description": "Card dimensions in the Design System pane",
+            "type": "object",
+            "properties": {
+             "width": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+             },
+             "height": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+             }
+            },
+            "required": [
+             "width"
+            ],
+            "additionalProperties": false
+           },
+           "group": {
+            "description": "<omitted: 348 chars of CLI prompt text>",
+            "type": "string",
+            "maxLength": 64
+           }
+          },
+          "required": [
+           "name",
+           "path"
+          ],
+          "additionalProperties": false
+         }
+        },
+        "localDir": {
+         "description": "<omitted: 229 chars of CLI prompt text>",
+         "type": "string",
+         "minLength": 1
+        },
+        "counts": {
+         "description": "<omitted: 104 chars of CLI prompt text>",
+         "type": "object",
+         "properties": {
+          "total": {
+           "type": "integer",
+           "minimum": 0,
+           "maximum": 9007199254740991
+          },
+          "bad": {
+           "type": "integer",
+           "minimum": 0,
+           "maximum": 9007199254740991
+          },
+          "thin": {
+           "type": "integer",
+           "minimum": 0,
+           "maximum": 9007199254740991
+          },
+          "variantsIdentical": {
+           "type": "integer",
+           "minimum": 0,
+           "maximum": 9007199254740991
+          },
+          "iterations": {
+           "type": "integer",
+           "minimum": 0,
+           "maximum": 9007199254740991
+          }
+         },
+         "required": [
+          "total",
+          "bad",
+          "thin",
+          "variantsIdentical",
+          "iterations"
+         ],
+         "additionalProperties": false
+        }
+       },
+       "required": [
+        "method"
+       ],
+       "additionalProperties": false
+      }
+     }
+    ]
+   }
+  },
+  {
+   "role": "other",
+   "method": "POST",
+   "path": "/v1/messages/count_tokens?beta=true",
+   "headers": {
+    "accept": "application/json",
+    "content-type": "application/json",
+    "user-agent": "claude-cli/2.1.322 (external, sdk-cli)",
+    "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14,context-management-2025-06-27,token-counting-2024-11-01",
+    "anthropic-version": "2023-06-01",
+    "x-app": "cli",
+    "x-stainless-retry-count": "0",
+    "x-stainless-package-version": "0.128.0",
+    "anthropic-dangerous-direct-browser-access": "true",
+    "authorization": "Bearer orbit-gwk-<redacted>",
+    "x-claude-code-session-id": "00000000-0000-4000-8000-000000000000"
+   },
+   "body": {
+    "model": "gpt-5.5",
+    "messages": [
+     {
+      "role": "user",
+      "content": "foo"
+     }
+    ],
+    "tools": [
+     {
+      "name": "EnterWorktree",
+      "description": "<omitted: 3220 chars of CLI prompt text>",
+      "input_schema": {
+       "$schema": "https://json-schema.org/draft/2020-12/schema",
+       "type": "object",
+       "properties": {
+        "name": {
+         "description": "<omitted: 221 chars of CLI prompt text>",
+         "type": "string"
+        },
+        "path": {
+         "description": "<omitted: 262 chars of CLI prompt text>",
+         "type": "string"
+        }
+       },
+       "additionalProperties": false
+      }
+     }
+    ]
+   }
+  },
+  {
+   "role": "other",
+   "method": "POST",
+   "path": "/v1/messages/count_tokens?beta=true",
+   "headers": {
+    "accept": "application/json",
+    "content-type": "application/json",
+    "user-agent": "claude-cli/2.1.322 (external, sdk-cli)",
+    "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14,context-management-2025-06-27,token-counting-2024-11-01",
+    "anthropic-version": "2023-06-01",
+    "x-app": "cli",
+    "x-stainless-retry-count": "0",
+    "x-stainless-package-version": "0.128.0",
+    "anthropic-dangerous-direct-browser-access": "true",
+    "authorization": "Bearer orbit-gwk-<redacted>",
+    "x-claude-code-session-id": "00000000-0000-4000-8000-000000000000"
+   },
+   "body": {
+    "model": "gpt-5.5",
+    "messages": [
+     {
+      "role": "user",
+      "content": "foo"
+     }
+    ],
+    "tools": [
+     {
+      "name": "ExitWorktree",
+      "description": "<omitted: 1923 chars of CLI prompt text>",
+      "input_schema": {
+       "$schema": "https://json-schema.org/draft/2020-12/schema",
+       "type": "object",
+       "properties": {
+        "action": {
+         "description": "\"keep\" leaves the worktree and branch on disk; \"remove\" deletes both.",
+         "type": "string",
+         "enum": [
+          "keep",
+          "remove"
+         ]
+        },
+        "discard_changes": {
+         "description": "<omitted: 143 chars of CLI prompt text>",
+         "type": "boolean"
+        }
+       },
+       "required": [
+        "action"
+       ],
+       "additionalProperties": false
+      }
+     }
+    ]
+   }
+  },
+  {
+   "role": "other",
+   "method": "POST",
+   "path": "/v1/messages/count_tokens?beta=true",
+   "headers": {
+    "accept": "application/json",
+    "content-type": "application/json",
+    "user-agent": "claude-cli/2.1.322 (external, sdk-cli)",
+    "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14,context-management-2025-06-27,token-counting-2024-11-01",
+    "anthropic-version": "2023-06-01",
+    "x-app": "cli",
+    "x-stainless-retry-count": "0",
+    "x-stainless-package-version": "0.128.0",
+    "anthropic-dangerous-direct-browser-access": "true",
+    "authorization": "Bearer orbit-gwk-<redacted>",
+    "x-claude-code-session-id": "00000000-0000-4000-8000-000000000000"
+   },
+   "body": {
+    "model": "gpt-5.5",
+    "messages": [
+     {
+      "role": "user",
+      "content": "foo"
+     }
+    ],
+    "tools": [
+     {
+      "name": "Monitor",
+      "description": "<omitted: 6354 chars of CLI prompt text>",
+      "input_schema": {
+       "$schema": "https://json-schema.org/draft/2020-12/schema",
+       "type": "object",
+       "properties": {
+        "description": {
+         "description": "<omitted: 85 chars of CLI prompt text>",
+         "type": "string"
+        },
+        "timeout_ms": {
+         "description": "<omitted: 149 chars of CLI prompt text>",
+         "default": 300000,
+         "type": "number",
+         "minimum": 1000,
+         "maximum": 3600000
+        },
+        "command": {
+         "description": "Shell command or script. Each stdout line is an event; exit ends the watch.",
+         "type": "string"
+        },
+        "ws": {
+         "description": "<omitted: 159 chars of CLI prompt text>",
+         "type": "object",
+         "properties": {
+          "url": {
+           "type": "string"
+          },
+          "protocols": {
+           "type": "array",
+           "items": {
+            "type": "string",
+            "pattern": "^[!#$%&'*+.^_`|~0-9A-Za-z-]+$"
+           }
+          }
+         },
+         "required": [
+          "url"
+         ],
+         "additionalProperties": false
+        }
+       },
+       "required": [
+        "description",
+        "timeout_ms"
+       ],
+       "additionalProperties": false
+      }
+     }
+    ]
+   }
+  },
+  {
+   "role": "other",
+   "method": "POST",
+   "path": "/v1/messages/count_tokens?beta=true",
+   "headers": {
+    "accept": "application/json",
+    "content-type": "application/json",
+    "user-agent": "claude-cli/2.1.322 (external, sdk-cli)",
+    "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14,context-management-2025-06-27,token-counting-2024-11-01",
+    "anthropic-version": "2023-06-01",
+    "x-app": "cli",
+    "x-stainless-retry-count": "0",
+    "x-stainless-package-version": "0.128.0",
+    "anthropic-dangerous-direct-browser-access": "true",
+    "authorization": "Bearer orbit-gwk-<redacted>",
+    "x-claude-code-session-id": "00000000-0000-4000-8000-000000000000"
+   },
+   "body": {
+    "model": "gpt-5.5",
+    "messages": [
+     {
+      "role": "user",
+      "content": "foo"
+     }
+    ],
+    "tools": [
+     {
+      "name": "NotebookEdit",
+      "description": "<omitted: 619 chars of CLI prompt text>",
+      "input_schema": {
+       "$schema": "https://json-schema.org/draft/2020-12/schema",
+       "type": "object",
+       "properties": {
+        "notebook_path": {
+         "description": "<omitted: 87 chars of CLI prompt text>",
+         "type": "string"
+        },
+        "cell_id": {
+         "description": "<omitted: 151 chars of CLI prompt text>",
+         "type": "string"
+        },
+        "new_source": {
+         "description": "The new source for the cell",
+         "type": "string"
+        },
+        "cell_type": {
+         "description": "<omitted: 141 chars of CLI prompt text>",
+         "type": "string",
+         "enum": [
+          "code",
+          "markdown"
+         ]
+        },
+        "edit_mode": {
+         "description": "The type of edit to make (replace, insert, delete). Defaults to replace.",
+         "type": "string",
+         "enum": [
+          "replace",
+          "insert",
+          "delete"
+         ]
+        }
+       },
+       "required": [
+        "notebook_path",
+        "new_source"
+       ],
+       "additionalProperties": false
+      }
+     }
+    ]
+   }
+  },
+  {
+   "role": "other",
+   "method": "POST",
+   "path": "/v1/messages/count_tokens?beta=true",
+   "headers": {
+    "accept": "application/json",
+    "content-type": "application/json",
+    "user-agent": "claude-cli/2.1.322 (external, sdk-cli)",
+    "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14,context-management-2025-06-27,token-counting-2024-11-01",
+    "anthropic-version": "2023-06-01",
+    "x-app": "cli",
+    "x-stainless-retry-count": "0",
+    "x-stainless-package-version": "0.128.0",
+    "anthropic-dangerous-direct-browser-access": "true",
+    "authorization": "Bearer orbit-gwk-<redacted>",
+    "x-claude-code-session-id": "00000000-0000-4000-8000-000000000000"
+   },
+   "body": {
+    "model": "gpt-5.5",
+    "messages": [
+     {
+      "role": "user",
+      "content": "foo"
+     }
+    ],
+    "tools": [
+     {
+      "name": "SendMessage",
+      "description": "<omitted: 4259 chars of CLI prompt text>",
+      "input_schema": {
+       "$schema": "https://json-schema.org/draft/2020-12/schema",
+       "type": "object",
+       "properties": {
+        "to": {
+         "description": "<omitted: 155 chars of CLI prompt text>",
+         "type": "string",
+         "allOf": [
+          {
+           "pattern": "^[^\\n\\r]*$"
+          },
+          {
+           "pattern": "^[\\s\\S]{0,300}$"
+          }
+         ]
+        },
+        "summary": {
+         "description": "<omitted: 167 chars of CLI prompt text>",
+         "type": "string",
+         "maxLength": 200
+        },
+        "message": {
+         "default": "",
+         "description": "<omitted: 247 chars of CLI prompt text>",
+         "type": "string"
+        },
+        "notify_when_idle": {
+         "description": "<omitted: 289 chars of CLI prompt text>",
+         "type": "boolean"
+        }
+       },
+       "required": [
+        "to",
+        "message"
+       ],
+       "additionalProperties": false
+      }
+     }
+    ]
+   }
+  },
+  {
+   "role": "other",
+   "method": "POST",
+   "path": "/v1/messages/count_tokens?beta=true",
+   "headers": {
+    "accept": "application/json",
+    "content-type": "application/json",
+    "user-agent": "claude-cli/2.1.322 (external, sdk-cli)",
+    "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14,context-management-2025-06-27,token-counting-2024-11-01",
+    "anthropic-version": "2023-06-01",
+    "x-app": "cli",
+    "x-stainless-retry-count": "0",
+    "x-stainless-package-version": "0.128.0",
+    "anthropic-dangerous-direct-browser-access": "true",
+    "authorization": "Bearer orbit-gwk-<redacted>",
+    "x-claude-code-session-id": "00000000-0000-4000-8000-000000000000"
+   },
+   "body": {
+    "model": "gpt-5.5",
+    "messages": [
+     {
+      "role": "user",
+      "content": "foo"
+     }
+    ],
+    "tools": [
+     {
+      "name": "TaskStop",
+      "description": "<omitted: 364 chars of CLI prompt text>",
+      "input_schema": {
+       "$schema": "https://json-schema.org/draft/2020-12/schema",
+       "type": "object",
+       "properties": {
+        "task_id": {
+         "description": "<omitted: 126 chars of CLI prompt text>",
+         "type": "string"
+        },
+        "shell_id": {
+         "description": "Deprecated: use task_id instead",
+         "type": "string"
+        }
+       },
+       "additionalProperties": false
+      }
+     }
+    ]
+   }
+  },
+  {
+   "role": "other",
+   "method": "POST",
+   "path": "/v1/messages/count_tokens?beta=true",
+   "headers": {
+    "accept": "application/json",
+    "content-type": "application/json",
+    "user-agent": "claude-cli/2.1.322 (external, sdk-cli)",
+    "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14,context-management-2025-06-27,token-counting-2024-11-01",
+    "anthropic-version": "2023-06-01",
+    "x-app": "cli",
+    "x-stainless-retry-count": "0",
+    "x-stainless-package-version": "0.128.0",
+    "anthropic-dangerous-direct-browser-access": "true",
+    "authorization": "Bearer orbit-gwk-<redacted>",
+    "x-claude-code-session-id": "00000000-0000-4000-8000-000000000000"
+   },
+   "body": {
+    "model": "gpt-5.5",
+    "messages": [
+     {
+      "role": "user",
+      "content": "foo"
+     }
+    ],
+    "tools": [
+     {
+      "name": "WebSearch",
+      "description": "<omitted: 334 chars of CLI prompt text>",
+      "input_schema": {
+       "$schema": "https://json-schema.org/draft/2020-12/schema",
+       "type": "object",
+       "properties": {
+        "query": {
+         "description": "The search query to use",
+         "type": "string",
+         "minLength": 2
+        },
+        "allowed_domains": {
+         "description": "Only include search results from these domains",
+         "type": "array",
+         "items": {
+          "type": "string"
+         }
+        },
+        "blocked_domains": {
+         "description": "Never include search results from these domains",
+         "type": "array",
+         "items": {
+          "type": "string"
+         }
+        }
+       },
+       "required": [
+        "query"
+       ],
+       "additionalProperties": false
+      }
+     }
+    ]
+   }
+  },
+  {
+   "role": "other",
+   "method": "POST",
+   "path": "/v1/messages/count_tokens?beta=true",
+   "headers": {
+    "accept": "application/json",
+    "content-type": "application/json",
+    "user-agent": "claude-cli/2.1.322 (external, sdk-cli)",
+    "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14,context-management-2025-06-27,token-counting-2024-11-01",
+    "anthropic-version": "2023-06-01",
+    "x-app": "cli",
+    "x-stainless-retry-count": "0",
+    "x-stainless-package-version": "0.128.0",
+    "anthropic-dangerous-direct-browser-access": "true",
+    "authorization": "Bearer orbit-gwk-<redacted>",
+    "x-claude-code-session-id": "00000000-0000-4000-8000-000000000000"
+   },
+   "body": {
+    "model": "gpt-5.5",
+    "messages": [
+     {
+      "role": "user",
+      "content": "foo"
+     }
+    ],
+    "tools": [
+     {
+      "name": "WebFetch",
+      "description": "<omitted: 469 chars of CLI prompt text>",
+      "input_schema": {
+       "$schema": "https://json-schema.org/draft/2020-12/schema",
+       "type": "object",
+       "properties": {
+        "url": {
+         "description": "The URL to fetch content from",
+         "type": "string",
+         "format": "uri"
+        },
+        "prompt": {
+         "description": "The prompt to run on the fetched content",
+         "type": "string"
+        },
+        "offset": {
+         "description": "<omitted: 155 chars of CLI prompt text>",
+         "type": "integer",
+         "minimum": 0,
+         "maximum": 9007199254740991
+        }
+       },
+       "required": [
+        "url",
+        "prompt"
+       ],
+       "additionalProperties": false
+      }
+     }
+    ]
+   }
+  }
+ ],
+ "outcome": [
+  {
+   "is_error": false,
+   "terminal_reason": "completed",
+   "api_error_status": null,
+   "result": "{\"title\":\"Recorder test\",\"isNewTopic\":true}",
+   "num_turns": 1
+  },
+  {
+   "is_error": false,
+   "terminal_reason": null,
+   "api_error_status": null,
+   "result": "## Context Usage\n\n**Model:** gpt-5.5  \n**Tokens:** 11.9k / 350k (3%)\n\n### Estimated usage by category\n\n| Category | Tokens | Percentage |\n|----------|--------|------------|\n| System prompt | 9.9k | 2.8% |\n| System tools (deferred) | 8.8k | 2.5% |\n| Skills | 2.1k | 0.6% |\n| Free space | 305.1k | 87.2% |\n| Autocompact buffer | 33k | 9.4% |\n\n### Skills\n\n| Skill | Source | Tokens |\n|-------|--------|--------|\n| dataviz | Built-in | ~480 |\n| update-config | Built-in | ~240 |\n| keybindings-help | Built-in | ~80 |\n| code-review | Built-in | ~280 |\n| simplify | Built-in | ~60 |\n| fewer-permission-prompts | Built-in | ~60 |\n| loop | Built-in | ~120 |\n| claude-api | Built-in | ~390 |\n| workflow-authoring | Built-in | ~80 |\n| run | Built-in | ~120 |\n| plugin-authoring | Built-in | ~90 |\n| init | Built-in | ~20 |\n| security-review | Built-in | ~30 |\n\n",
+   "num_turns": 0
+  }
+ ]
+}

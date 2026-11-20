@@ -46,13 +46,26 @@ import Foundation
 
 /// What the run said when it ended the turn the owner is being asked about: its last message.
 public struct OwnerConfirmationReport: Codable, Equatable, Sendable {
-    public let text: String
+    public var text: String
     /// ISO-8601, as JSON carries it. Never parsed here.
     public let reportedAt: String
+    /// The run event's own translation of that message, served when it is in the owner's current
+    /// language (Settings › Translation); nil otherwise.
+    public let translation: ReplyTranslation?
 
-    public init(text: String, reportedAt: String) {
+    public init(text: String, reportedAt: String, translation: ReplyTranslation? = nil) {
         self.text = text
         self.reportedAt = reportedAt
+        self.translation = translation
+    }
+
+    private enum CodingKeys: String, CodingKey { case text, reportedAt, translation }
+
+    public init(from decoder: Decoder) throws {
+        let box = try decoder.container(keyedBy: CodingKeys.self)
+        text = try box.decode(String.self, forKey: .text)
+        reportedAt = try box.decode(String.self, forKey: .reportedAt)
+        translation = ReplyTranslation.parse((try? box.decodeIfPresent(JSONValue.self, forKey: .translation)) ?? nil)
     }
 }
 
@@ -355,23 +368,29 @@ public struct OwnerDecisionRequest: Encodable, Equatable, Sendable {
     public let note: String?
     public let reviewRecordId: String?
     public let answers: [OwnerAnswerBody]
+    /// Send as written, after a 422 TRANSLATION_FAILED: the owner's words go untranslated. Only
+    /// `true` is written.
+    public let sendAsWritten: Bool
 
     public init(decision: OwnerDecision, requestId: String? = nil, note: String? = nil,
-                reviewRecordId: String? = nil, answers: [OwnerAnswerBody] = []) {
+                reviewRecordId: String? = nil, answers: [OwnerAnswerBody] = [],
+                sendAsWritten: Bool = false) {
         self.decision = decision
         self.requestId = requestId
         self.note = note
         self.reviewRecordId = reviewRecordId
         self.answers = answers
+        self.sendAsWritten = sendAsWritten
     }
 
-    private enum CodingKeys: String, CodingKey { case decision, requestId, note, reviewRecordId, answers }
+    private enum CodingKeys: String, CodingKey { case decision, requestId, note, reviewRecordId, answers, sendAsWritten }
 
     public func encode(to encoder: Encoder) throws {
         var box = encoder.container(keyedBy: CodingKeys.self)
         try box.encode(decision, forKey: .decision)
         try box.encode(requestId, forKey: .requestId)
         try box.encodeIfPresent(note, forKey: .note)
+        if sendAsWritten { try box.encode(true, forKey: .sendAsWritten) }
         guard decision == .confirm else { return }
         if let reviewRecordId {
             try box.encode(reviewRecordId, forKey: .reviewRecordId)
@@ -1069,18 +1088,22 @@ public enum OwnerConfirmations {
         "\(count) \(count == 1 ? one : many)"
     }
 
-    /// The moment, in the words both receipts use: "16:00", or "9/10 16:00" when it was another
-    /// day. Fixed 24-hour clock rather than the browser's locale-formatted one — the two ends say
-    /// the same thing, each in its own reader's convention.
+    /// The moment, in the words both receipts use: the reader's own short clock ("4:00 PM", or "16:00"
+    /// where that is the convention), with "9/10" before it when it was another day — the same clock
+    /// the transcript's own times use (`EvidenceDecisions.receiptTime`, web `decisionReceiptTime`).
     public static func receiptTime(_ iso: String, now: Date = Date(),
                                    calendar: Calendar = .current,
-                                   timeZone: TimeZone = .current) -> String? {
+                                   timeZone: TimeZone = .current,
+                                   locale: Locale = .current) -> String? {
         guard let at = RelativeTime.parse(iso) else { return nil }
         var cal = calendar
         cal.timeZone = timeZone
-        let parts = cal.dateComponents([.hour, .minute], from: at)
-        guard let hour = parts.hour, let minute = parts.minute else { return nil }
-        let clock = String(format: "%02d:%02d", hour, minute)
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.timeZone = timeZone
+        formatter.dateStyle = .none
+        formatter.timeStyle = .short
+        let clock = formatter.string(from: at)
         guard !cal.isDate(at, inSameDayAs: now) else { return clock }
         let day = cal.dateComponents([.month, .day], from: at)
         guard let month = day.month, let dayOfMonth = day.day else { return clock }

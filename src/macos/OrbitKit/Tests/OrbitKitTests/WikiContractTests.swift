@@ -318,6 +318,18 @@ final class WikiContractTests: XCTestCase {
     /// A search hit is the contract's (`agentSurface.toolSpecs.wiki_search.hit`): what this model reads is
     /// what the contract lists — `topics` aside, which the client asks for by name — and how old the entry
     /// is (`age`) decodes as the server writes it, and as nothing where a server sent none.
+    /// Why a search found nothing because there was no wiki to search: the contract's closed set, decoded as sent.
+    func testSearchUnavailableIsTheContracts() throws {
+        let values = try object(contract()["searchUnavailable"], "searchUnavailable")
+        XCTAssertEqual(Set(values.keys), Set(WikiSearchUnavailable.allCases.map(\.rawValue)))
+        let none = try JSONDecoder().decode(WikiSearchResponse.self,
+            from: Data(#"{"q":"src/a.ts","semantic":false,"hits":[],"unavailable":"no_wiki"}"#.utf8))
+        XCTAssertEqual(none.unavailable.flatMap(WikiSearchUnavailable.init(rawValue:)), .noWiki)
+        XCTAssertEqual(none.hits, [])
+        let searched = try JSONDecoder().decode(WikiSearchResponse.self, from: Data(#"{"q":"a","hits":[]}"#.utf8))
+        XCTAssertNil(searched.unavailable)
+    }
+
     func testASearchHitIsTheContractsAndSaysHowOldItIs() throws {
         let specs = try object(try object(contract()["agentSurface"], "agentSurface")["toolSpecs"], "agentSurface.toolSpecs")
         let search = try object(specs["wiki_search"], "agentSurface.toolSpecs.wiki_search")

@@ -1,4 +1,4 @@
-import type { SessionTurnPlacement } from '@orbit/shared';
+import type { SessionTurnPlacement, TurnTranslation } from '@orbit/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -50,6 +50,7 @@ import { useToast } from './toast';
 import { RECORD_NOT_FOUND } from './transcriptDeepLink';
 import { firstPaintSlice } from './transcriptPaint';
 import { loadTranscript, saveTranscript } from './transcriptStore';
+import { foldTranslationEvent } from './translation';
 import { turnPlacementOf } from './turnPlacement';
 
 export interface RunEvent {
@@ -86,6 +87,8 @@ export interface QueuedTurn extends TurnCards {
   createdAt?: string;
   /** The control plane wrote this turn itself, so nobody typed it (`ActiveSessionTurn.authoredByOrbit`). */
   authoredByOrbit?: true;
+  /** Settings › Translation: the owner's message as typed and how far its translation got. */
+  translation?: TurnTranslation;
 }
 
 /** Map one authoritative active-snapshot receipt into the pending-tail renderer. `accepted` is
@@ -120,6 +123,18 @@ const AROUND_PAGE = 200;
 // still costing ~12s of the backoff below — short enough that a wedged tab recovers on its own,
 // long enough that an ordinary redeploy blip never throws away a loaded window. See reseed().
 const RESEED_AFTER_STALLED_RECONNECTS = 3;
+// Twelve quick retries ride out a redeploy; past them the stream is asked for once a minute rather
+// than given up on. The control plane learned this the expensive way (useControlPlane, 2026-10-20);
+// here the shape it dies in most is a laptop asleep and awake with the socket half-open, where the
+// person comes back to a console whose events stopped arriving and stays that way until a reload.
+const QUICK_RECONNECTS = 12;
+const SLOW_RECONNECT_MS = 60_000;
+// The server pings ~every 20s (sessions.controller KEEPALIVE_MS); 45s of total silence means the
+// socket went half-dead without firing `onerror`. EventSource has no read timeout, so we watch for
+// it — the same watchdog the control-plane stream runs. Without one a slept-on socket is never
+// noticed at all: nothing arrives, nothing errors, and no reconnect is ever attempted.
+const WATCHDOG_SILENCE_MS = 45_000;
+const WATCHDOG_TICK_MS = 15_000;
 // How long a cached /background scan stays fresh. `/background` scans the session's whole
 // tool-event history, so re-opening a session (or scrubbing the list) within this window paints
 // the cached shells instead of re-running that scan — see bgCacheRef.
@@ -539,6 +554,31 @@ export function useSessionStream({
     let es: EventSource | null = null;
     let retry: ReturnType<typeof setTimeout> | undefined;
     let closed = false;
+    // The pending cards, read again each time the stream opens. A card's `approval_resolved` is
+    // live-only (seq 0): a stream that was closed when another client answered it — a tab in the
+    // background while the owner answers on the phone, a dropped socket — never sees it, and the
+    // replay that resumes the stream holds only stored events. Without this read the card stays
+    // on screen, still pressable, until the session is opened again.
+    // The frames that arrive while the read is in flight are newer than its snapshot, so they win
+    // over it: a card resolved meanwhile stays gone, one raised meanwhile stays shown.
+    let approvalsGeneration = 0;
+    let approvalsLive: { raised: Map<string, ApprovalInfo>; resolved: Set<string> } | null = null;
+    const refreshApprovals = (): void => {
+      const generation = ++approvalsGeneration;
+      const live = { raised: new Map<string, ApprovalInfo>(), resolved: new Set<string>() };
+      approvalsLive = live;
+      listApprovals(selectedId)
+        .then((rows) => {
+          if (closed || generation !== approvalsGeneration) return;
+          approvalsLive = null;
+          const fetched = rows.filter((row) => !live.resolved.has(row.id));
+          const ids = new Set(fetched.map((row) => row.id));
+          setApprovals([...fetched, ...[...live.raised.values()].filter((card) => !ids.has(card.id))]);
+        })
+        .catch(() => {
+          if (generation === approvalsGeneration) approvalsLive = null;
+        });
+    };
     // Queue refreshes can overlap when another client quickly adds/withdraws turns. Only the most
     // recently requested snapshot may paint, or a slower stale response can resurrect a cancelled
     // row. The snapshot is authoritative for rows known when its request began; reconcile below
@@ -564,6 +604,7 @@ export function useSessionStream({
               sessionId: selectedId,
               source: 'activeSnapshot',
               turnId: row.turnId,
+              ...(row.opening ? { opening: true as const } : {}),
               text: row.content,
               acceptedAt: row.createdAt ?? new Date().toISOString(),
               attachments: (row.attachments ?? []).map((attachment) => ({
@@ -573,6 +614,8 @@ export function useSessionStream({
               // Every card the snapshot carried, so the placeholder this row paints is the card the
               // runner's echo will replace it with.
               ...turnCardsOf(row),
+              // And a translated message's original, so the placeholder shows what the owner wrote.
+              ...(row.translation ? { translation: row.translation } : {}),
             }))
             .filter(
               (turn) => !acceptedUserTurnLanded(turn, selectedId, accRef.current),
@@ -583,6 +626,7 @@ export function useSessionStream({
               current,
               selectedId,
               knownAcceptedBefore,
+              rows.some((row) => row.opening && turnPlacementOf(row) !== 'accepted'),
             ),
           );
           const serverQueued = rows.flatMap((row) => {
@@ -606,6 +650,8 @@ export function useSessionStream({
     // stream can be re-opened in place when the session resumes (see resumeStreamRef).
     let paused = false;
     let fails = 0;
+    // When this connection last heard anything, keepalive included (see WATCHDOG_SILENCE_MS).
+    let lastMsgAt = Date.now();
     // Resume just past what's loaded so only the gap is streamed, not the whole history.
     let lastSeq = cached.reduce((m, e) => (isSeq(e.seq) ? Math.max(m, e.seq) : m), 0);
     // The cursor the current connection opened at, and how many connections in a row have died
@@ -613,6 +659,11 @@ export function useSessionStream({
     // so a cursor the client can't get past is a loop, not a retry — see reseed().
     let seqAtConnect = -1;
     let stalled = 0;
+    // Set when the window is about to be filled by a cursor-less replay rather than a page: a tail
+    // page that failed (seedTail, reseed). No page said where the window's older edge is, so the
+    // first event the replay brings decides it (push). Left unset, the edge read "nothing older", and
+    // a session whose replay began mid-conversation could never be scrolled back past that point.
+    let olderEdgeUnknown = false;
     const writeCache = (): void => {
       // A window opened at a record ends at a gap, not at the tail: a reopen must not resume from it.
       if (newerCursorRef.current !== null) return;
@@ -645,6 +696,11 @@ export function useSessionStream({
       seedAbort.abort();
     };
     const push = (ev: RunEvent): void => {
+      if (olderEdgeUnknown && isSeq(ev.seq)) {
+        olderEdgeUnknown = false;
+        oldestSeqRef.current = ev.seq;
+        hasMoreOlderRef.current = ev.seq > 1; // seqs start at 1; a page before it answers the rest
+      }
       accRef.current = [...accRef.current, ev];
       writeCache();
       setEvents(accRef.current);
@@ -708,6 +764,7 @@ export function useSessionStream({
       } catch {
         // Leave lastSeq at 0 and let the reconnect below carry it: a cursor-less connect is
         // server-capped, so the fallback for a failed re-seed is still a bounded replay.
+        olderEdgeUnknown = true;
       }
       if (closed) return;
       // `fails` is deliberately NOT reset: re-seeding is a different way to spend the same retry
@@ -716,9 +773,18 @@ export function useSessionStream({
       connect();
     };
     const connect = (): void => {
+      // A tab in the background holds no transcript stream: nobody is reading it, and every frame
+      // it took would be growth in a tab nobody is watching — the shape of a tab that gets heavier
+      // the longer it is left open. `onVisibility` reopens it from `lastSeq` on the way back, so the
+      // server replays only the gap (or answers `resync` and the tab re-seeds from a tail page).
+      if (closed || document.visibilityState === 'hidden') return;
       seqAtConnect = lastSeq;
+      lastMsgAt = Date.now();
       es = new EventSource(sessionEventsUrl(selectedId, lastSeq));
+      // Once the stream is subscribed, so nothing resolved after the read can slip between the two.
+      es.onopen = () => refreshApprovals();
       es.onmessage = (e) => {
+        lastMsgAt = Date.now();
         fails = 0; // a message means the stream is healthy
         const ev = JSON.parse(e.data) as RunEvent;
         // Server keepalive (~20s): a health byte with no seq/payload, sent so an idle transcript
@@ -827,10 +893,17 @@ export function useSessionStream({
         // keyed on seq and would drop the second one. They drive `approvals`, not the
         // transcript reducer.
         if (ev.type === 'approval_request') {
-          const p = ev.payload as { id: string; toolName: string; input: unknown; toolUseId?: string };
+          const p = ev.payload as { id: string; toolName: string; input: unknown; toolUseId?: string; translation?: ApprovalInfo['translation'] };
+          if (approvalsLive && !approvalsLive.raised.has(p.id)) {
+            approvalsLive.raised.set(p.id, { ...p, sessionId: selectedId, status: 'PENDING', createdAt: new Date().toISOString() } as ApprovalInfo);
+          }
+          // A card the server has translated is published again with the same id, carrying
+          // `translation` (Settings › Translation, 3A): it replaces the card's display text, nothing else.
           setApprovals((prev) =>
             prev.some((x) => x.id === p.id)
-              ? prev
+              ? p.translation
+                ? prev.map((x) => (x.id === p.id ? { ...x, translation: p.translation } : x))
+                : prev
               : [
                   ...prev,
                   { ...p, sessionId: selectedId, status: 'PENDING', createdAt: new Date().toISOString() } as ApprovalInfo,
@@ -838,9 +911,24 @@ export function useSessionStream({
           );
           return;
         }
+        // An agent reply translated, or its translation failed (Settings › Translation, 2A): live-only
+        // at seq 0, so before the dedup. Folded into the event it translates, as a replay carries it.
+        if (ev.type === 'translation') {
+          const folded = foldTranslationEvent(accRef.current, ev.payload);
+          if (folded) {
+            accRef.current = folded;
+            writeCache();
+            setEvents(accRef.current);
+          }
+          return;
+        }
         if (ev.type === 'approval_resolved') {
           const id = ev.payload?.id as string | undefined;
-          if (id) setApprovals((prev) => prev.filter((x) => x.id !== id));
+          if (id) {
+            approvalsLive?.raised.delete(id);
+            approvalsLive?.resolved.add(id);
+            setApprovals((prev) => prev.filter((x) => x.id !== id));
+          }
           return;
         }
         if (seen.current.has(ev.seq)) return;
@@ -914,23 +1002,49 @@ export function useSessionStream({
           refreshQueued();
         }
       };
-      es.onerror = () => {
+      es.onerror = () => dropStream();
+    };
+    // Close the stream and schedule a backoff reconnect. Shared by `onerror` and the silence
+    // watchdog, which can both fire for the same dead socket. Never gives up: past the quick
+    // retries the stream is asked for once a minute (QUICK_RECONNECTS).
+    const dropStream = (): void => {
+      es?.close();
+      es = null;
+      if (closed || paused) return;
+      // A background tab waits for `onVisibility` instead of counting down retries nobody reads.
+      if (document.visibilityState === 'hidden') return;
+      // A connection that died without moving the cursor forward left us exactly where we
+      // started, so reconnecting asks the server for the same replay again. Once is a dropped
+      // connection; three in a row is a replay this tab cannot get through — the shape a single
+      // outsized event makes — and the only way out is to stop asking for it. See reseed().
+      stalled = lastSeq > seqAtConnect ? 0 : stalled + 1;
+      if (stalled >= RESEED_AFTER_STALLED_RECONNECTS) {
+        void reseed();
+        return;
+      }
+      fails += 1;
+      const delay = fails > QUICK_RECONNECTS ? SLOW_RECONNECT_MS : Math.min(2000 * fails, 15_000);
+      retry = setTimeout(connect, delay + Math.random() * 500);
+    };
+    // A tab coming back into view, or a browser back online, asks for the stream at once rather
+    // than waiting out the backoff. Nothing to do while one is open, or while the session is
+    // paused (a finalized turn) or the window is detached from the live tail.
+    const retryNow = (): void => {
+      if (closed || paused || es || newerCursorRef.current !== null) return;
+      if (document.visibilityState === 'hidden') return;
+      if (retry) clearTimeout(retry);
+      connect();
+    };
+    const onVisibility = (): void => {
+      if (closed) return;
+      if (document.visibilityState === 'hidden') {
+        // Nobody is reading this tab; hold no stream for it (see `connect`). A pending retry
+        // fires into the same guard and is left for `onVisibility` to answer.
         es?.close();
-        if (closed || paused) return;
-        // A connection that died without moving the cursor forward left us exactly where we
-        // started, so reconnecting asks the server for the same replay again. Once is a dropped
-        // connection; three in a row is a replay this tab cannot get through — the shape a single
-        // outsized event makes — and the only way out is to stop asking for it. See reseed().
-        stalled = lastSeq > seqAtConnect ? 0 : stalled + 1;
-        if (stalled >= RESEED_AFTER_STALLED_RECONNECTS) {
-          void reseed();
-          return;
-        }
-        // Auto-reconnect, resuming after lastSeq — survives long idle / redeploy
-        // drops (the seq dedup set makes any replay overlap harmless).
-        if (++fails > 12) return;
-        retry = setTimeout(connect, Math.min(2000 * fails, 15000) + Math.random() * 500);
-      };
+        es = null;
+        return;
+      }
+      retryNow();
     };
     // Bridge for the liveness watcher: re-open a stream paused by a `final` event once the
     // session is live again. No-op unless paused (so it's safe to call on any status tick);
@@ -1088,6 +1202,7 @@ export function useSessionStream({
       }
       // Every attempt failed. Clear the skeleton anyway rather than spin forever — the SSE
       // replay below is the remaining path to content.
+      olderEdgeUnknown = true;
       if (!closed) setSeeding(false);
     };
     // A link to one record: the page around it — or, for a record that is not this session's, the
@@ -1164,11 +1279,21 @@ export function useSessionStream({
         loadBackgroundShells();
       })();
     }, SWITCH_DEBOUNCE_MS);
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('online', retryNow);
+    const watchdog = setInterval(() => {
+      if (closed || paused || !es) return;
+      if (document.visibilityState === 'hidden') return;
+      if (Date.now() - lastMsgAt > WATCHDOG_SILENCE_MS) dropStream();
+    }, WATCHDOG_TICK_MS);
     return () => {
       resumeStreamRef.current = null;
       openRecordRef.current = null;
       joinLiveRef.current = null;
       backToLatestRef.current = null;
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('online', retryNow);
+      clearInterval(watchdog);
       clearTimeout(start);
       stop();
     };
@@ -1242,6 +1367,8 @@ export function useSessionStream({
     setIdle,
     queued,
     setQueued,
+    /** The selected session's accepted turns still drawn as placeholders (no `user` echo yet). */
+    acceptedUserTurns: visibleAcceptedUserTurns,
     setAcceptedUserTurns,
     serverBgShells,
     loadOlder,

@@ -16,10 +16,12 @@ class ProjectLandingCardTest {
     /** One `inFlightJobs` element, its instants counted in seconds before `now`. */
     private fun job(id: String, kind: String = "LAND_TASK", state: String = "RUNNING", phase: String? = "CHECK", taskId: String? = "t-c5",
         title: String? = "C5 · 托管 runner", started: Long = 66, heartbeat: Long? = 0, runner: String? = "workstation-gpu", timedOut: Boolean = false,
-        limit: Int? = 600, retryable: Boolean = false) = buildJsonObject {
+        limit: Int? = 600, retryable: Boolean = false, skippable: Boolean? = null, skipCheck: String? = null) = buildJsonObject {
         put("jobId", id); put("kind", kind); put("state", state); put("phase", phase); put("taskId", taskId); put("taskTitle", title); put("generation", 1)
         put("startedAt", iso(started)); put("queuedAt", iso(started + 32)); put("heartbeatAt", heartbeat?.let(::iso)); put("runnerName", runner)
         put("retriedBy", null as String?); put("timedOut", timedOut); put("limitSeconds", limit); put("retryable", retryable)
+        skippable?.let { put("skippable", it) }
+        skipCheck?.let { put("skipCheck", it) }
     }
 
     /** One of the project's landings, as `landTasks` serves it — the branch a job lands on. */
@@ -112,6 +114,39 @@ class ProjectLandingCardTest {
         val behind = running(listOf(job("j-1"), job("j-2", taskId = "t-d", title = "维护", started = 6_630, heartbeat = 6_620, timedOut = true, retryable = true)))
         val card = ProjectPage.landingCard(behind, now, now, false)!!
         assertEquals("checking", card.state); assertNull(card.retryJobId)
+    }
+
+    @Test fun skipIsOfferedForOneSkippableJobWithATask() {
+        val job = job("j-c5", skippable = true)
+        val card = ProjectPage.landingCard(running(listOf(job)), now, now, false)!!
+        assertTrue(card.jobs.single().skippable)
+        assertEquals("t-c5", card.skipTaskId)
+        assertNull(card.skipNote)
+
+        val older = ProjectPage.landingCard(running(listOf(job("j-c5"))), now, now, false)!!
+        assertFalse(older.jobs.single().skippable)
+        assertNull(older.jobs.single().skipCheck)
+        assertNull(older.skipTaskId)
+        assertNull(older.skipNote)
+
+        val noTask = running(listOf(job("j-c5", taskId = null, skippable = true)))
+        assertNull(ProjectPage.landingCard(noTask, now, now, false)!!.skipTaskId)
+        val several = running(listOf(job, job("j-next", state = "QUEUED")))
+        assertNull(ProjectPage.landingCard(several, now, now, false)!!.skipTaskId)
+    }
+
+    @Test fun skipStatusIsDecodedForEachJobAndOnlyOneJobGetsACardNote() {
+        val stopping = job("j-c5", skippable = false, skipCheck = "STOPPING")
+        val skipped = job("j-next", state = "QUEUED", skippable = false, skipCheck = "SKIPPED")
+        val card = ProjectPage.landingCard(running(listOf(stopping)), now, now, false)!!
+        assertNull(card.skipTaskId)
+        assertEquals(ProjectPage.landingSkipCheckStopping, card.skipNote)
+        assertEquals(ProjectPage.landingSkipCheckSkipped,
+            ProjectPage.landingCard(running(listOf(skipped)), now, now, false)!!.skipNote)
+
+        val several = ProjectPage.landingCard(running(listOf(stopping, skipped)), now, now, false)!!
+        assertEquals(listOf("STOPPING", "SKIPPED"), several.jobs.map { it.skipCheck })
+        assertNull(several.skipNote)
     }
 
     /** Nothing in flight is no card at all — and a server that lists no jobs still gets the card, with what it can say: no rows, no

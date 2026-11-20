@@ -308,7 +308,7 @@ func settleSetConfigTurn(turnID, result string, job *ClaimedSession, completeTur
 		Result:           result,
 		Subtype:          subtypeSetConfig,
 		RuntimeSessionID: currentRuntimeSessionID(job),
-		BranchSha:        effectiveBranchSha(job.WT),
+		BranchSha:        effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT),
 	}); err != nil {
 		logln("setconfig turn-complete failed for", job.SessionID+":", err)
 	}

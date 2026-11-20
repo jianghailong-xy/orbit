@@ -1,6 +1,7 @@
 package io.orbitd.android.cards
 
 import io.orbitd.android.core.cards.*
+import io.orbitd.android.directory.SessionHeader
 import io.orbitd.android.core.realtime.SessionSnapshot
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.projects.ProjectDoc
@@ -26,6 +27,13 @@ data class NeedsYouBanner(val count: Int, val target: JsonObject, val text: Stri
     /** How many other conversations wait behind the one the bar names — its "+2"; none when the first line is itself the
      * count ("2 sessions need you"). */
     val more: Int get() = if (ownerItem == null) 0 else maxOf(0, count - 1)
+}
+
+/** One notice that a conversation has just started waiting on the reader (OrbitKit `NeedsYouToast`; the owner, 2026-11-15,
+ * `docs/mocks/needs-you-capsule/12-once`): [title] the conversation, [line] what it waits on and its workspace. [id] is the wait it
+ * announces (`NeedsYouLogic.waitKey`): one notice per wait. */
+data class NeedsYouToast(val id: String, val target: JsonObject, val title: String, val line: String, val ownerItem: OwnerItem? = null) {
+    val glyph: NeedsYouGlyph get() = ownerItem?.let { NeedsYouGlyph.of(it.kind) } ?: NeedsYouGlyph.HAND
 }
 
 /** Which mark the needs-you bar draws in its circle (OrbitKit `NeedsYouGlyph`): one per owner item kind — work that landed without
@@ -117,6 +125,19 @@ object NeedsYouLogic {
         return belowRows(CardCatalog.session(sessionId, snapshot, answered = answered), asking)
     }
 
+    /** This conversation's own approvals still asking, at its tail (`approval:<id>` cards): the capsule in its header counts them
+     * after the rail's cards (the owner, 2026-11-15, `docs/mocks/needs-you-capsule/07-console-one-capsule`). */
+    fun approvalRows(sessionId: String, snapshot: SessionSnapshot, answered: Map<String, JsonObject> = emptyMap()): List<BelowRow> =
+        CardCatalog.session(sessionId, snapshot, answered = answered)
+            .filter { it.key.startsWith("approval:") && it.actions.isNotEmpty() }.map { BelowRow(it.key, false) }
+
+    /** What the conversation's own capsule says (OrbitKit `here`): its cards, then its approvals — which lie below wherever the
+     * reader is, so alone they say "below" and carry the raised hand. Only this conversation: what waits elsewhere is the lists'. */
+    fun here(rows: List<BelowRow>, approvals: List<BelowRow>, side: ReaderSide?): WaitingBelow? {
+        val said = below(rows + approvals, if (rows.isEmpty()) ReaderSide.BELOW else side) ?: return null
+        return if (rows.isEmpty()) said.copy(glyph = NeedsYouGlyph.HAND) else said
+    }
+
     /** The address the coordinator's done card is drawn under (`CardFocus`). */
     fun doneKey(projectId: String) = "done:$projectId"
 
@@ -145,6 +166,72 @@ object NeedsYouLogic {
         // Aged from the conversation's last state move — when it stopped to ask — on the recency key's own fallbacks.
         return NeedsYouBanner(elsewhere.size, target, text(elsewhere.size, target), detail = detail(elsewhere.size, target),
             since = target.text("lastTurnAt") ?: target.text("updatedAt") ?: target.text("createdAt"))
+    }
+
+    /** One wait: the conversation, and when it started waiting — its oldest owner item's instant, or its last turn's (OrbitKit
+     * `waitKey`). The same conversation stopping again is a new wait. A wait the server names a kind for (an owner request, a
+     * confirmation, …) is keyed by that kind instead: it stops no turn, so keying it by the last turn announced the same request
+     * again after every turn the conversation took while it waited. */
+    fun waitKey(row: JsonObject): String {
+        oldestOwnerItem(listOf(row))?.second?.since?.takeIf { it.isNotEmpty() }?.let { return "${row.text("id")}|$it" }
+        row.text("waitingKind")?.takeIf { it.isNotEmpty() && it != "UNKNOWN" }?.let { return "${row.text("id")}|$it" }
+        val since = row.text("lastTurnAt") ?: row.text("updatedAt") ?: row.text("createdAt") ?: ""
+        return "${row.text("id")}|$since"
+    }
+
+    /** The notices for what has started waiting since [seen] (the keys of the last look), leaving out the conversation on screen
+     * — its own card is in front of the reader (OrbitKit `newlyWaiting`). Each names the conversation and what it waits on: an
+     * owner item's word, or a reply to a tool call, then the workspace. */
+    fun newlyWaiting(open: List<JsonObject>, seen: Set<String>, focused: String? = null): List<NeedsYouToast> =
+        entries(open, focused).mapNotNull { entry ->
+            val key = waitKey(entry.target)
+            if (key in seen) return@mapNotNull null
+            val session = entry.target
+            val workspace = named(session.obj("agent")?.text("name"))
+            NeedsYouToast(key, session, named(session.text("title")) ?: workspace ?: "A session",
+                listOfNotNull(entry.ownerItem?.let(::ownerItemWord) ?: noticeWord(session), workspace).joinToString(" · "), entry.ownerItem)
+        }
+
+    /** What a blocked tool call waits on, in the push's own words. */
+    const val replyWord = "Needs your reply"
+
+    /** What a conversation with no owner item waits on (OrbitKit `noticeWord`): the row's own words for a wait the server names a
+     * kind for, and the push's for a blocked tool call. */
+    fun noticeWord(row: JsonObject): String {
+        val kind = row.text("waitingKind")?.takeIf { it.isNotEmpty() && it != "UNKNOWN" } ?: return replyWord
+        return SessionHeader.waitingWord(kind, ownerItems(row))
+    }
+
+    /** At most this many notices at once; the rest are said as "and N more" (12-once). */
+    const val toastLimit = 3
+
+    /** How long a notice stays, unpressed (12-once). */
+    const val toastMillis = 6_000L
+
+    /** TalkBack's action that sends a notice away (iOS `accessibilityAction(named: "Dismiss")`). */
+    const val dismissLabel = "Dismiss"
+
+    /** The bar unfolded (OrbitKit `entries`; the owner, 2026-11-13, option B of `docs/mocks/needs-you-capsule/03-expand.html`):
+     * one line per waiting conversation, in the order the folded bar picks its target by, so the first is the one it names. The
+     * conversations on an owner item first, oldest item first, each named by its own oldest item; then the blocked tool calls,
+     * longest-waiting first. Each line is a bar for one conversation (count 1, no "+N"). */
+    fun entries(open: List<JsonObject>, focused: String? = null): List<NeedsYouBanner> {
+        val elsewhere = open.filter { needsYou(it) && !(focused != null && ObjectId.same(it.text("id"), focused)) }
+        val owned = mutableListOf<Pair<JsonObject, OwnerItem>>()
+        val plain = mutableListOf<JsonObject>()
+        elsewhere.forEach { row ->
+            val found = oldestOwnerItem(listOf(row))
+            if (found != null) owned += found else plain += row
+        }
+        val items = owned.sortedBy { parse(it.second.since) ?: Instant.MAX }.map { (session, item) ->
+            NeedsYouBanner(1, session, ownerItemWord(item), detail = named(session.text("projectTitle")),
+                since = item.since.takeIf { it.isNotEmpty() }, ownerItem = item)
+        }
+        val sessions = plain.sortedBy(::recency).map {
+            NeedsYouBanner(1, it, text(1, it), detail = detail(1, it),
+                since = it.text("lastTurnAt") ?: it.text("updatedAt") ?: it.text("createdAt"))
+        }
+        return items + sessions
     }
 
     /** The words the bar and a session row share for one of the five; null for a kind this build does not know. A merge approval

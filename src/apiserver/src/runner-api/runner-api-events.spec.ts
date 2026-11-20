@@ -481,6 +481,44 @@ test('an async Agent and a Workflow count as running sub-agents until their noti
   );
 });
 
+test('an Orbit workflow remains running after its JSON receipt and clears on background completion', async () => {
+  const toolUseId = 'toolu_orbit_workflow';
+  const { calls, controller } = makeController();
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      { seq: 64, type: RunEventType.TOOL_USE, ts: '2026-11-19T06:00:00.000Z',
+        payload: { id: toolUseId, name: 'mcp__orbit__workflow', input: {} } },
+      { seq: 65, type: RunEventType.TOOL_RESULT, ts: '2026-11-19T06:00:01.000Z',
+        payload: { toolUseId, content: [{ type: 'text', text: JSON.stringify({
+          workflowRunId: 'workflow-1', status: 'running',
+        }, null, 2) }] } },
+    ],
+  });
+  assert.deepEqual(calls.update[0].data.runningSubagents, [toolUseId]);
+
+  const ended = makeController(RunStatus.AWAITING_INPUT, 'runtime-1', { runningSubagents: [toolUseId] });
+  await ended.controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      { seq: 66, type: RunEventType.BACKGROUND_TASK, ts: '2026-11-19T06:01:00.000Z',
+        payload: { toolUseId, kind: 'workflow', status: 'completed' } },
+    ],
+  });
+  assert.deepEqual(ended.calls.update[0].data.runningSubagents, []);
+});
+
+test('an Orbit workflow re-announced after a resume counts as a running sub-agent, not a background job', async () => {
+  const toolUseId = 'toolu_orbit_workflow';
+  const { calls, controller } = makeController();
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      { seq: 70, type: RunEventType.BACKGROUND_TASK, ts: '2026-11-19T06:02:00.000Z',
+        payload: { toolUseId, status: 'running', kind: 'subagent', workflowRunId: 'workflow-1' } },
+    ],
+  });
+  assert.deepEqual(calls.update[0].data.runningSubagents, [toolUseId]);
+  assert.equal(calls.update[0].data.runningBgJobs, undefined);
+});
+
 test('a Workflow leaves the running sub-agents when its notification arrives', async () => {
   const { calls, controller } = makeController(RunStatus.AWAITING_INPUT, 'runtime-1', {
     runningSubagents: ['toolu_agent', 'toolu_wf'],
@@ -493,6 +531,83 @@ test('a Workflow leaves the running sub-agents when its notification arrives', a
     ],
   });
 
+  assert.deepEqual(calls.update[0].data.runningSubagents, ['toolu_agent']);
+});
+
+// Session ac5fYOgID3kywMbjnz8xX (Claude Code 2.1.325): the background Agent's launch went into
+// runningSubagents, a Claude restart reported it "stopped" with no <tool-use-id>, SendMessage revived
+// it, and its "completed" notification named the SendMessage call. The runner reports both terminal
+// notifications under the launch it recorded from the ack (runner-go noteAgentLaunch), and that is
+// what empties the set; the ids the notifications carried themselves never could.
+const RELAUNCH_ID = 'toolu_01E3219KcZphXTzWY9hPoVmr';
+const RELAUNCH_SEND_ID = 'toolu_018uxDocXvBrR8Veipg6A15o';
+function relaunchTail(stoppedId: string, completedId: string) {
+  return [
+    { seq: 101, type: RunEventType.BACKGROUND_TASK, ts: '2026-11-15T23:43:12.208Z',
+      payload: { status: 'stopped', shellId: 'ac99e9cc2f9865c6f', toolUseId: stoppedId } },
+    { seq: 102, type: RunEventType.TOOL_USE, ts: '2026-11-15T23:43:29.000Z',
+      payload: { id: RELAUNCH_SEND_ID, name: 'SendMessage', input: { to: 'ac99e9cc2f9865c6f', message: 'Resume' } } },
+    { seq: 103, type: RunEventType.TOOL_RESULT, ts: '2026-11-15T23:43:30.335Z',
+      payload: { toolUseId: RELAUNCH_SEND_ID, content: [{ type: 'text', text: '{"success":true,"message":"Resuming agent ac99e9c","resumedAgentId":"ac99e9cc2f9865c6f"}' }] } },
+    { seq: 104, type: RunEventType.BACKGROUND_TASK, ts: '2026-11-16T00:27:42.000Z',
+      payload: { status: 'completed', shellId: 'ac99e9cc2f9865c6f', toolUseId: completedId } },
+  ];
+}
+
+test('a restarted and revived background Agent leaves runningSubagents when its ends name the launch', async () => {
+  const launch = makeController();
+  await launch.controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      { seq: 99, type: RunEventType.TOOL_USE, ts: '2026-11-15T23:06:45.000Z',
+        payload: { id: RELAUNCH_ID, name: 'Agent', input: { description: 'Probe', run_in_background: true } } },
+      { seq: 100, type: RunEventType.TOOL_RESULT, ts: '2026-11-15T23:07:12.814Z',
+        payload: { toolUseId: RELAUNCH_ID, content: [{ type: 'text', text: ASYNC_AGENT_ACK }] } },
+    ],
+  });
+  assert.deepEqual(launch.calls.update[0].data.runningSubagents, [RELAUNCH_ID], 'the launch is running');
+
+  const { calls, controller } = makeController(RunStatus.AWAITING_INPUT, 'runtime-1', { runningSubagents: [RELAUNCH_ID] });
+  await controller.events({ id: 'runner-1' }, 'session-1', { events: relaunchTail(RELAUNCH_ID, RELAUNCH_ID) });
+  assert.deepEqual(calls.update[0].data.runningSubagents, [], 'nothing is left running, and the revival does not re-enter the set');
+});
+
+test('the same ends under the ids the notifications carried leave the launch stuck (why the runner maps them)', async () => {
+  const { calls, controller } = makeController(RunStatus.AWAITING_INPUT, 'runtime-1', { runningSubagents: [RELAUNCH_ID] });
+  await controller.events({ id: 'runner-1' }, 'session-1', { events: relaunchTail('', RELAUNCH_SEND_ID) });
+  assert.equal('runningSubagents' in (calls.update[0]?.data ?? {}), false, 'the launch stays in runningSubagents');
+});
+
+// Orbit's own SubAgent (docs/subagent-design.md §6.2): a background delegate's receipt leaves it running,
+// a foreground delegate's result is its completion.
+test('a background delegate counts as a running sub-agent until its notification; a foreground one ends with its result', async () => {
+  const { calls, controller } = makeController();
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      { seq: 90, type: RunEventType.TOOL_USE, ts: '2026-11-11T07:00:00.000Z',
+        payload: { id: 'toolu_bg', name: 'mcp__orbit__delegate', input: { description: 'Sweep', prompt: 'Read', background: true } } },
+      { seq: 91, type: RunEventType.TOOL_RESULT, ts: '2026-11-11T07:00:00.200Z',
+        payload: { toolUseId: 'toolu_bg', content: [{ type: 'text', text: '{\n  "runId": "r1",\n  "status": "running"\n}' }] } },
+      { seq: 92, type: RunEventType.TOOL_USE, ts: '2026-11-11T07:00:01.000Z',
+        payload: { id: 'toolu_fg', name: 'mcp__orbit__delegate', input: { description: 'Fix', prompt: 'Fix it' } } },
+      { seq: 93, type: RunEventType.TOOL_RESULT, ts: '2026-11-11T07:02:00.000Z',
+        payload: { toolUseId: 'toolu_fg', content: [{ type: 'text', text: '{"runId":"r2","status":"DONE","result":"fixed"}' }] } },
+    ],
+  });
+  assert.deepEqual(calls.update[0].data.runningSubagents, ['toolu_bg']);
+});
+
+test('a background delegate leaves the running sub-agents when its terminal background_task arrives', async () => {
+  const { calls, controller } = makeController(RunStatus.AWAITING_INPUT, 'runtime-1', {
+    runningSubagents: ['toolu_agent', 'toolu_bg'],
+  });
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      { seq: 95, type: RunEventType.BACKGROUND_TASK, ts: '2026-11-11T07:10:00.000Z',
+        payload: { status: 'completed', toolUseId: 'toolu_bg', summary: 'SubAgent finished' } },
+    ],
+  });
   assert.deepEqual(calls.update[0].data.runningSubagents, ['toolu_agent']);
 });
 

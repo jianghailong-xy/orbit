@@ -458,7 +458,7 @@ export function taskDispatchRefusedFact(refused: {
     projectId: refused.projectId,
     subjectType: 'TASK',
     subjectId: refused.taskId,
-    subjectVersion: refusal.sessionId,
+    subjectVersion: refusal.sessionId ?? refusal.refusedAt,
     detail: {
       taskTitle: refused.taskTitle,
       sessionId: refusal.sessionId,

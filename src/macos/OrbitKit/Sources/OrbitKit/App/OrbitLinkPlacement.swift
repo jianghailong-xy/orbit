@@ -25,11 +25,16 @@ import Foundation
 public enum OrbitRenderBlock: Equatable, Sendable {
     case markdown(MarkdownBlock)
     case card(OrbitLinkRef)
+    /// An `orbit-settings:` link on a line of its own: the Open in Settings row (design §6).
+    case settings(SettingPlace)
 }
 
 public enum OrbitLinkPlacement {
     /// The paragraph that is nothing but a reference link, and the destination it points at.
     private static let loneReference = Pattern("^\\[([^\\]]*)\\]\\((orbit-(?:task|session|project|list|wiki):[^)\\s]+)\\)$")
+
+    /// The paragraph that is nothing but a link to a row of Settings.
+    private static let loneSettings = Pattern("^\\[([^\\]]*)\\]\\(orbit-settings:([^)\\s]+)\\)$")
 
     /// Rewrite a parsed conversation so every link a card can stand for is one.
     ///
@@ -43,6 +48,10 @@ public enum OrbitLinkPlacement {
         guard case .paragraph(let text) = block else { return [.markdown(block)] }
 
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let groups = loneSettings.groups(trimmed), groups.count > 2, let name = groups[2],
+           let place = SettingsFromConversation.place(name) {
+            return [.settings(place)]
+        }
         if let groups = loneReference.groups(trimmed), groups.count > 2,
            let destination = groups[2],
            let target = OrbitLinkParser.target(forReference: destination) {

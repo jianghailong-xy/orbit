@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Workspace rows · machine label</title>
+<style>
+:root {
+  --bg-raised: #ffffff; --bg-hover: #f5f6f7; --text-1: #1f2329; --text-2: #646a73; --text-3: #8f959e;
+  --text-4: #a8acb3; --brand: #3370ff; --brand-tint: #eaf1ff; --warning: #d97706; --warning-bg: #fff4e0;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: #eef0f3; font-family: -apple-system, BlinkMacSystemFont, Inter, 'PingFang SC', 'Noto Sans SC', sans-serif; color: var(--text-1); }
+.board { width: 1460px; padding: 32px 36px 40px; }
+h1 { font-size: 24px; margin: 0 0 6px; }
+.sub { color: var(--text-2); font-size: 14px; margin-bottom: 24px; line-height: 1.6; }
+.cols { display: flex; gap: 22px; align-items: flex-start; }
+.col { width: 340px; }
+.col h2 { font-size: 16px; margin: 0 0 4px; }
+.col .cap { font-size: 12.5px; color: var(--text-2); line-height: 1.55; min-height: 58px; margin-bottom: 10px; }
+.tag { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; margin-left: 6px; vertical-align: 2px; }
+.tag.rec { background: #e6f6ec; color: #18794e; }
+.tag.alt { background: #f0eefc; color: #5b4bc4; }
+.tag.now { background: #eceef1; color: #646a73; }
+
+/* ---- the sidebar, copied from src/web/src/index.css ---- */
+.nav { width: 264px; background: var(--bg-raised); border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.08); padding: 8px 0 10px; }
+.tp-group-head { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 16px; font-size: 13px; font-weight: 600; color: var(--text-2); }
+.tp-group-head .n { font-weight: 400; color: var(--text-3); }
+.tp-section { padding: 0 8px; }
+.tp-item { display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 8px; border-radius: 6px; color: var(--text-1); font-size: 14px; }
+.tp-item.hover { background: var(--bg-hover); }
+.tp-item.active { background: var(--brand-tint); color: var(--brand); }
+.tp-ico { display: flex; font-size: 16px; color: var(--text-2); flex: none; position: relative; }
+.tp-item.active .tp-ico { color: var(--brand); }
+.tp-ico svg { width: 16px; height: 16px; fill: currentColor; }
+.tp-label { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.tp-count { color: var(--text-3); font-size: 12px; flex: none; }
+.tp-item.active .tp-count { color: var(--brand); }
+.more { display: flex; width: 24px; height: 24px; align-items: center; justify-content: center; color: var(--text-3); flex: none; border-radius: 4px; }
+.more svg { width: 14px; height: 14px; fill: currentColor; }
+.off { position: absolute; right: -6px; bottom: -5px; width: 12px; height: 12px; border-radius: 50%; background: var(--bg-raised); color: var(--text-3); display: flex; align-items: center; justify-content: center; }
+.off svg { width: 9px; height: 9px; }
+.tp-item.active .off { background: var(--brand-tint); }
+.dot { position: absolute; right: -3px; bottom: -2px; width: 6px; height: 6px; border-radius: 50%; background: var(--brand); box-shadow: 0 0 0 1.5px var(--bg-raised); }
+.needs { color: var(--warning); background: var(--warning-bg); border-radius: 999px; padding: 1px 7px; font-weight: 600; font-size: 12px; flex: none; }
+
+/* ① today: name and runner share one line, both shrink (runner 8x faster, weighted by width) */
+.today .tp-workspace-label { display: flex; align-items: center; gap: 6px; }
+.today .name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.today .sep { flex: none; color: var(--text-3); }
+.today .runner { flex: 1 8 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text-3); }
+
+/* ② D: the name keeps the line; "· machine" is whole or gone (it wraps to a clipped second line) */
+.d .tp-workspace-label { display: flex; flex-wrap: wrap; align-items: center; height: 20px; overflow: hidden; column-gap: 6px; }
+.d .name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; line-height: 20px; }
+.d .meta { flex: none; color: var(--text-4); line-height: 20px; }
+.d .tp-item.active .meta { color: #7fa2f5; }
+
+/* ③ C: the folder becomes the machine's chip; the line is the name alone */
+.chip { width: 20px; height: 20px; border-radius: 5px; font-size: 9.5px; font-weight: 700; letter-spacing: .2px; display: flex; align-items: center; justify-content: center; position: relative; flex: none; margin: 0 -2px; }
+.chip.offline { filter: grayscale(1); opacity: .55; }
+.c .tp-item.active .chip { box-shadow: 0 0 0 1.5px var(--brand); }
+
+.tip { position: absolute; background: #1f2329; color: #fff; font-size: 12px; padding: 5px 8px; border-radius: 6px; white-space: nowrap; z-index: 5; box-shadow: 0 4px 12px rgba(0,0,0,.18); }
+.rowwrap { position: relative; }
+.kbdhint { position: absolute; left: 8px; right: 8px; bottom: -30px; font-size: 11.5px; color: var(--text-2); text-align: center; }
+
+.mark { position: absolute; width: 20px; height: 20px; border-radius: 50%; background: #e5484d; color: #fff; font-size: 11.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 2px #fff; z-index: 6; }
+
+/* notes */
+.notes { display: flex; gap: 22px; margin-top: 30px; }
+.panel { background: #fff; border-radius: 10px; padding: 18px 22px; box-shadow: 0 1px 3px rgba(0,0,0,.06); font-size: 13.5px; line-height: 1.65; }
+.panel h3 { margin: 0 0 10px; font-size: 15px; }
+.panel table { border-collapse: collapse; width: 100%; }
+.panel td, .panel th { text-align: left; vertical-align: top; padding: 6px 10px 6px 0; border-top: 1px solid #eef0f3; }
+.panel th { color: var(--text-2); font-weight: 600; border-top: none; }
+.panel code { font-family: inherit; font-size: 12.5px; color: #3d4450; background: #f3f4f6; padding: 0 4px; border-radius: 3px; }
+.panel ol { margin: 0; padding-left: 20px; }
+.panel li { margin-bottom: 6px; }
+.en { font-family: Inter, sans-serif; }
+</style>
+</head>
+<body>
+<div class="board" id="board">
+  <h1>侧栏 Workspaces：机器名（runner）怎么显示</h1>
+  <div class="sub">
+    数据照你 11-14 的截图：17 个工作区，只有 5 台机器（HPC、workstation、wikova、longdeMac-mini、orbit@austin）。截断的名字（如 <span class="en">orbit-develop…</span>）是按机器名补全的猜测。侧栏宽 264 px，行的样式抄自 <code>index.css</code> 的 <code>.tp-item</code>。<br>
+    三列：① 今天 ② <b>方案 D</b>（推荐：一行文字，只改截断和显示规则）③ 方案 C（对照：用机器色块代替文件夹图标）。下面一排是同一套规则下的单行特写。
+  </div>
+
+  <div class="cols">
+    <div class="col">
+      <h2>① 今天 <span class="tag now">现状</span></h2>
+      <div class="cap">名字和机器名一起缩：CSS 想让机器名先缩（<code>flex-shrink 8 : 1</code>），但收缩量按宽度加权，长名字照样被截（❶）。<span class="en">HPC · HPC</span> 这种重复照样显示（❷），<span class="en">⌘N</span> 一直占着右侧（❸）。</div>
+      <div class="nav today" id="today"></div>
+    </div>
+    <div class="col">
+      <h2>② 方案 D <span class="tag rec">推荐</span></h2>
+      <div class="cap">名字优先占满一行；「· 机器名」要么完整显示，要么整段不显示，不再出现 <span class="en">workstat…</span>（❹）。机器名和工作区名相同时不显示（❺）。<span class="en">⌘N</span> 平时不显示，按住 ⌘ 才出现（见 ④）。机器名再淡一档。</div>
+      <div class="nav d" id="d"></div>
+    </div>
+    <div class="col">
+      <h2>③ 方案 C <span class="tag alt">对照</span></h2>
+      <div class="cap">每台机器一个固定颜色的两字母色块，代替文件夹图标；行内只写工作区名，所以不会被截断。缺点：要先记住颜色对应哪台机器（<span class="en">WO / WI</span> 很像），而且收起后的侧栏图标用的是工作区首字母，两套标记会混（❻）。</div>
+      <div class="nav c" id="c"></div>
+    </div>
+    <div class="col" style="width:300px">
+      <h2>④ 特写（方案 D）</h2>
+      <div class="cap">按住 ⌘ 时、悬停时、机器离线时、有待你处理的事项时。</div>
+      <div id="close"></div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <div class="panel" style="flex: 1.35">
+      <h3>方案 D 的规则</h3>
+      <table>
+        <tr><th style="width:118px">情况</th><th>显示</th></tr>
+        <tr><td>名字 + 机器名都放得下</td><td><span class="en">orbit-op · wikova</span>，和今天一样，机器名颜色从 <code>--text-3</code> 降到 <code>--text-4</code></td></tr>
+        <tr><td>放不下</td><td>整段「· 机器名」不显示，名字完整；名字本身还放不下，就截断名字。完整的「名字 · 机器名」放在悬停提示里（今天的 <code>title</code> 已经有）</td></tr>
+        <tr><td>机器名 = 工作区名</td><td>不显示机器名（不区分大小写）：<span class="en">HPC · HPC</span> → <span class="en">HPC</span></td></tr>
+        <tr><td>⌘1–9</td><td>平时不显示；按住 ⌘ / Ctrl 超过 ~300 ms 才在前 9 行显示，松开就消失（macOS 原生应用的做法）。悬停时右侧照旧显示 ⋯</td></tr>
+        <tr><td>离线、运行中、待你处理</td><td>不变：离线角标和运行中圆点仍在文件夹图标上，待你处理的数字仍在行尾</td></tr>
+        <tr><td>手机抽屉（≤960 px）</td><td>今天抽屉本来就不显示 ⌘N；截断规则一样</td></tr>
+      </table>
+    </div>
+    <div class="panel" style="flex: 1">
+      <h3>待你定</h3>
+      <ol>
+        <li><b>D 还是 C？</b> 我推荐 D：不改排序，也不需要学一套新标记。</li>
+        <li><b><span class="en">orbit · orbit@austin</span></b>：只按「完全相同」隐藏的话，这行照旧显示（②里就是这样）。要不要再加一条规则：机器名是 <span class="en">user@host</span>、并且 user 等于工作区名时，只显示 <span class="en">austin</span>？</li>
+        <li><b>⌘N 按住才显示</b>，还是保持常驻、只改截断？常驻的话，长名字那几行机器名会更常被藏起来。</li>
+        <li>网页确认后，macOS / iOS / Android 的侧栏要不要一起改？</li>
+      </ol>
+      <h3 style="margin-top:16px">会改到的文件</h3>
+      <div><code>src/web/src/components/TasksSidePanel.tsx</code>（<span class="en">WorkspaceRow</span>：重复机器名的判断、按住 ⌘ 的状态）<br><code>src/web/src/index.css</code>（<span class="en">.tp-workspace-label / -runner / -shortcut</span>）<br>以及对应的测试 <code>TasksSidePanel.test.tsx</code></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const S = {
+  folder: '<svg viewBox="64 64 896 896"><path d="M880 298.4H521L403.7 186.2a8.15 8.15 0 00-5.5-2.2H144c-17.7 0-32 14.3-32 32v592c0 17.7 14.3 32 32 32h736c17.7 0 32-14.3 32-32V330.4c0-17.7-14.3-32-32-32zM840 768H184V256h188.5l119.6 114.4H840V768z"/></svg>',
+  disc: '<svg viewBox="64 64 896 896" fill="currentColor"><path d="M832.6 191.4c-84.6-84.6-221.5-84.6-306 0l-96.9 96.9 51 51 96.9-96.9c53.8-53.8 144.6-59.5 204 0 59.5 59.5 53.8 150.2 0 204l-96.9 96.9 51.1 51.1 96.9-96.9c84.4-84.6 84.4-221.5-.1-306.1zM446.5 781.6c-53.8 53.8-144.6 59.5-204 0-59.5-59.5-53.8-150.2 0-204l96.9-96.9-51.1-51.1-96.9 96.9c-84.6 84.6-84.6 221.5 0 306s221.5 84.6 306 0l96.9-96.9-51-51-96.8 97zM260.3 209.4a8.03 8.03 0 00-11.3 0L209.4 249a8.03 8.03 0 000 11.3l554.4 554.4c3.1 3.1 8.2 3.1 11.3 0l39.6-39.6c3.1-3.1 3.1-8.2 0-11.3L260.3 209.4z"/></svg>',
+  more: '<svg viewBox="64 64 896 896"><path d="M456 231a56 56 0 10112 0 56 56 0 10-112 0zm0 280a56 56 0 10112 0 56 56 0 10-112 0zm0 280a56 56 0 10112 0 56 56 0 10-112 0z"/></svg>',
+};
+const W = [
+  ['orbit-develop', 'HPC'], ['orbit-develop-workstation', 'workstation'], ['orbit-op', 'wikova'],
+  ['orbit-prod', 'orbit'], ['orbit-macos', 'longdeMac-mini'], ['wikova-data', 'workstation'],
+  ['kiktok', 'HPC'], ['wikova-develop', 'wikova'], ['wikova-prod', 'wikova'], ['HPC', 'HPC'],
+  ['lfs', 'workstation'], ['wikids', 'workstation'], ['Penetration Testing', 'HPC'],
+  ['orbit-prod-fcm', 'wikova'], ['orbit', 'orbit@austin'], ['kiktok-macos', 'longdeMac-mini'],
+  ['orbit-clean-install-workstation', 'workstation'],
+];
+const CHIP = {
+  HPC: ['HP', '#dbe7ff', '#2a5bd7'], workstation: ['WO', '#d9f2ec', '#0f7a62'], wikova: ['WI', '#fde8cc', '#a35a00'],
+  orbit: ['OR', '#ece4fb', '#6a3fc1'], 'longdeMac-mini': ['LM', '#fbe1e6', '#b4234a'], 'orbit@austin': ['OA', '#e4ecef', '#3d5a66'],
+};
+const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+const kbd = (i) => (i < 9 ? `<span class="tp-count">⌘${i + 1}</span>` : '');
+
+function row(kind, [name, runner], i, o = {}) {
+  const active = o.active ? ' active' : '';
+  const hover = o.hover ? ' hover' : '';
+  const badge = (o.offline ? `<span class="off">${S.disc}</span>` : '') + (o.running ? '<span class="dot"></span>' : '');
+  let ico = `<span class="tp-ico">${S.folder}${badge}</span>`;
+  let label;
+  if (kind === 'today') {
+    label = `<span class="tp-label tp-workspace-label"><span class="name">${esc(name)}</span><span class="sep">·</span><span class="runner">${esc(runner)}</span></span>`;
+  } else if (kind === 'd') {
+    const same = name.toLowerCase() === runner.toLowerCase();
+    label = `<span class="tp-label tp-workspace-label"><span class="name">${esc(name)}</span>${same ? '' : `<span class="meta">· ${esc(runner)}</span>`}</span>`;
+  } else {
+    const [t, bg, fg] = CHIP[runner];
+    ico = `<span class="chip${o.offline ? ' offline' : ''}" style="background:${bg};color:${fg}">${t}${o.running ? '<span class="dot"></span>' : ''}</span>`;
+    label = `<span class="tp-label">${esc(name)}</span>`;
+  }
+  let tail = '';
+  if (o.needs) tail = `<span class="needs">${o.needs}</span>`;
+  else if (o.hover) tail = `<span class="more">${S.more}</span>`;
+  else if (kind === 'today' || kind === 'c' || o.cmd) tail = kbd(i);
+  return `<div class="tp-item${active}${hover}">${ico}${label}${tail}</div>`;
+}
+function nav(kind, rows) {
+  return `<div class="tp-group-head">Workspaces <span class="n">${W.length}</span></div><div class="tp-section">${rows}</div>`;
+}
+for (const k of ['today', 'd', 'c'])
+  document.getElementById(k).innerHTML = nav(k, W.map((w, i) => row(k, w, i, { active: i === 0, running: i === 0 })).join(''));
+
+// close-ups (D)
+const close = document.getElementById('close');
+const block = (title, html, extra = '') => `<div style="margin-bottom:26px"><div style="font-size:12.5px;color:var(--text-2);margin-bottom:6px">${title}</div><div class="nav d rowwrap" style="width:264px;padding:6px 0">${`<div class="tp-section">${html}</div>`}${extra}</div></div>`;
+close.innerHTML =
+  block('按住 ⌘：前 9 行出现 ⌘1–⌘9；放不下的那几行，机器名让位',
+    W.slice(0, 5).map((w, i) => row('d', w, i, { cmd: true, active: i === 0 })).join('')) +
+  block('悬停：⋯ 占右侧，和今天一样；完整名字在提示里',
+    row('d', W[16], 16, { hover: true }),
+    '<div class="tip" style="left:40px;top:46px">orbit-clean-install-workstation · workstation</div>') +
+  '<div style="height:14px"></div>' +
+  block('机器离线：图标上的角标不变，机器名照样按规则显示',
+    row('d', W[5], 5, { offline: true }) + row('d', W[4], 4, { offline: true })) +
+  block('待你处理：数字在行尾，规则相同',
+    row('d', W[2], 2, { needs: 2 }) + row('d', W[12], 12, { needs: 1 }));
+
+// numbered marks
+function mark(n, el, dx, dy) {
+  const r = el.getBoundingClientRect(), b = document.getElementById('board').getBoundingClientRect();
+  const m = document.createElement('div');
+  m.className = 'mark'; m.textContent = n;
+  m.style.left = r.left - b.left + dx + 'px'; m.style.top = r.top - b.top + dy + 'px';
+  document.getElementById('board').appendChild(m);
+}
+document.getElementById('board').style.position = 'relative';
+window.drawMarks = () => {
+  const t = document.querySelectorAll('#today .tp-item'), d = document.querySelectorAll('#d .tp-item'), c = document.getElementById('c');
+  mark('1', t[1], 258, 8);
+  mark('2', t[9], 258, 8);
+  mark('3', t[0], 258, -14);
+  mark('4', d[1], 258, 8);
+  mark('5', d[9], 258, 8);
+  mark('6', c.querySelector('.chip'), -26, 0);
+};
+</script>
+</body>
+</html>

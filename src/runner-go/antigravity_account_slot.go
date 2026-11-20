@@ -105,14 +105,15 @@ func antigravitySessionGoogleDir(agentEnv map[string]string) (string, error) {
 // antigravitySessionAccountDirs is every added account's directory a session this runner is running
 // is on — read from each session's own record (sessionMeta.AntigravityGoogleDir), written as its agy
 // starts. A session on Default contributes nothing: Default is not a slot, and no removal touches it.
-func antigravitySessionAccountDirs(sessionIDs []string) map[string]bool {
-	out := map[string]bool{}
+func antigravitySessionAccountDirs(sessionIDs []string) accountDirSessions {
+	out := accountDirSessions{}
 	for _, id := range sessionIDs {
 		meta := readSessionMeta(filepath.Join(runDir(id), "meta.json"))
 		if meta == nil || meta.AntigravityGoogleDir == "" {
 			continue
 		}
-		out[filepath.Clean(meta.AntigravityGoogleDir)] = true
+		dir := filepath.Clean(meta.AntigravityGoogleDir)
+		out[dir] = append(out[dir], id)
 	}
 	return out
 }

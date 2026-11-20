@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { RollbackOutlined } from '@ant-design/icons';
 import type { SessionReplyCard as Card } from '@orbit/shared';
 import { routeId } from '../lib/idCodec';
@@ -11,11 +11,11 @@ import {
   SESSION_REPLY_OPEN_REQUEST,
   SESSION_REPLY_OUTCOME_LABEL,
   SESSION_REPLY_YOU_ASKED,
-  sessionReplySticky,
 } from '../lib/sessionRequest';
 import { sessionRecordHref } from '../lib/transcriptDeepLink';
 import { AppLink } from './AppLink';
-import { MD, relTime } from './Transcript';
+import { SESSION_MESSAGE_SHOW_LESS, SESSION_MESSAGE_SHOW_MORE, useTallBody } from './SessionMessageCard';
+import { ExportCtx, MD, REVEAL_EVENT, relTime } from './Transcript';
 
 /**
  * The outcomes of this session's own requests, handed back to it (docs/session-request-reply-contract.md
@@ -32,24 +32,39 @@ export function SessionReplyCards({
   cards,
   seq,
   ts,
-  attached,
+  queued,
 }: {
   cards: readonly Card[];
   seq?: number;
   ts?: string;
-  /** What else delivery appended to the same turn, as its own folded entry. */
-  attached?: ReactNode;
+  /** The queue's status line, while a reply turn waits to be delivered. */
+  queued?: ReactNode;
 }) {
-  const sticky = sessionReplySticky(cards);
   return (
-    <div className="src-wrap" data-seq={seq} data-sticky-label={sticky.label} data-sticky-text={sticky.text}>
+    <div className="src-wrap" data-seq={seq} data-orbit-round>
       {cards.map((card) => <SessionReplyCard key={card.requestId} card={card} ts={ts} />)}
-      {attached}
+      {queued}
     </div>
   );
 }
 
 export function SessionReplyCard({ card, ts }: { card: Card; ts?: string }) {
+  // A long reply folds as a long message does (SessionMessageCard, docs/mocks/session-message-clamp):
+  // its first lines and "Show more"; an export, read on paper, gets it whole.
+  const exporting = useContext(ExportCtx) != null;
+  const [expanded, setExpanded] = useState(false);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const tall = useTallBody(bodyRef, !exporting);
+  const clamped = tall && !expanded && !exporting;
+  // A find that lands in the hidden part opens it.
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const reveal = () => setExpanded(true);
+    el.addEventListener(REVEAL_EVENT, reveal);
+    return () => el.removeEventListener(REVEAL_EVENT, reveal);
+  }, []);
   const title = card.fromTitle.trim() || 'Untitled session';
   const sessionPublic = routeId(card.fromSessionId);
   const sessionHref = sessionPublic ? `/sessions/${encodeURIComponent(sessionPublic)}` : null;
@@ -58,7 +73,7 @@ export function SessionReplyCard({ card, ts }: { card: Card; ts?: string }) {
     ? (turnPublic ? sessionRecordHref(sessionPublic, turnPublic) : sessionHref)
     : null;
   return (
-    <div className="src" data-outcome={card.outcome}>
+    <div ref={rootRef} className="src" data-outcome={card.outcome}>
       <div className="src-head">
         <span className="src-mark"><RollbackOutlined /></span>
         <span>{SESSION_REPLY_FROM}</span>
@@ -76,9 +91,16 @@ export function SessionReplyCard({ card, ts }: { card: Card; ts?: string }) {
         </div>
       )}
       {card.replyText && (
-        <div className="src-body">
-          <MD breaks>{card.replyText}</MD>
-        </div>
+        <>
+          <div ref={bodyRef} className={`src-body${clamped ? ' is-clamped' : ''}`}>
+            <MD breaks>{card.replyText}</MD>
+          </div>
+          {tall && !exporting && (
+            <button type="button" className="smc-more" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
+              {expanded ? SESSION_MESSAGE_SHOW_LESS : SESSION_MESSAGE_SHOW_MORE}
+            </button>
+          )}
+        </>
       )}
       {card.outcome === 'UNDELIVERED' && <div className="src-note">{SESSION_REPLY_NEVER_SEEN}</div>}
       {card.outcome !== 'REPLIED' && card.excerpt && (

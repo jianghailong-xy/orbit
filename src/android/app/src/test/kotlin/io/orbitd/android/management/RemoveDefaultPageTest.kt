@@ -47,6 +47,7 @@ class RemoveDefaultPageTest {
     private var record by mutableStateOf<String?>(null)
     private var revision by mutableLongStateOf(0L)
     private var shownOnce = false
+    private val opened = mutableListOf<io.orbitd.android.navigation.OrbitRoute>()
     /** The runner's page, or one of its own ([where]), read again from the fixture as it stands now. */
     private fun page(where: String?) {
         record = where; revision++
@@ -55,7 +56,7 @@ class RemoveDefaultPageTest {
             val session = fixture.session()
             runBlocking { fixture.signIn(session) }
             val api = ManagementApi(session, (session.state.value as AuthState.SignedIn).handle)
-            compose.setContent { RunnerScreen(api, fixture.RUNNER, record, revision, {}, {}, {}) }
+            compose.setContent { RunnerScreen(api, fixture.RUNNER, record, revision, { opened += it }, {}, {}) }
         }
         compose.waitForIdle()
     }
@@ -167,6 +168,30 @@ class RemoveDefaultPageTest {
         assertEquals(1, compose.onAllNodes(hasContentDescription("More for Default")).fetchSemanticsNodes().size)
     }
 
+    @Test fun aRemovalRefusedOverSessionsListsThemEachAWayToIt() {
+        fixture.runnerEngines = withDefault(work())
+        fixture.runnerExtra = ""","accountRemove":{"engine":"codex","account":"$WORK","status":"failed",""" +
+            """"message":"codex account $WORK is in use by a session running on this machine — end that session, then remove it",""" +
+            """"sessions":[{"id":"s-run","title":"Fix the login redirect","status":"RUNNING"},{"id":"s-wait","title":" ","status":"AWAITING_INPUT"}]}"""
+        page("engine:codex")
+        await("This Codex account can’t be removed while 2 sessions on it can’t move to another account — sign in another account, or end them below; then remove the account")
+        assertEquals("the machine's sentence gives way", 0, shown("is in use by a session"))
+        await("Fix the login redirect"); await(RunnerAccountCopy.IN_USE_UNTITLED)
+        await(RunnerAccountCopy.IN_USE_RUNNING); await(RunnerAccountCopy.IN_USE_WAITING)
+        assertEquals(2, shown(RunnerAccountCopy.IN_USE_OPEN))
+        click(hasTestTag("account-in-use:s-wait"))
+        assertEquals(listOf("s-wait"), opened.map { it.id })
+    }
+
+    @Test fun aRemovalRefusedWithoutSessionsSaysTheMachinesSentence() {
+        fixture.runnerEngines = withDefault(work())
+        fixture.runnerExtra = ""","accountRemove":{"engine":"codex","account":"$WORK","status":"failed",""" +
+            """"message":"codex account $WORK is in use by a session running on this machine — end that session, then remove it"}"""
+        page("engine:codex")
+        await("codex account $WORK is in use by a session running on this machine — end that session, then remove it")
+        assertEquals(0, compose.onAllNodes(hasTestTag("account-in-use")).fetchSemanticsNodes().size)
+    }
+
     // The removed state
 
     @Test fun theAccountsThatRemainEachHaveTheirOwnStateThenDefaultsLineEndsThem() {
@@ -265,7 +290,7 @@ class RemoveDefaultPageTest {
         menu("Personal")
         click(removeItem)
         await("Remove Personal?")
-        await("Its sign-in is deleted from wikova. Workspaces set to this account run on Automatic.")
+        await("Its sessions move to another account first, then its sign-in is deleted from wikova. Workspaces set to this account run on Automatic.")
         assertEquals(0, shown("run on Default"))
         confirm()
         compose.waitUntil(60_000) { writes(PERSONAL).isNotEmpty() }

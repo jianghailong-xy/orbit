@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>访客与只读观众的会话推送（SSE）</title>
+<style>
+  body { margin: 0; background: #f4f5f7; font-family: Inter, "Noto Sans SC", sans-serif; color: #1d2330; }
+  .b-wrap { width: 1360px; margin: 0 auto; padding: 32px 0 48px; }
+  h1 { font-size: 30px; margin: 0 0 6px; }
+  .b-sub { color: #5b6475; font-size: 15px; margin-bottom: 24px; }
+  section.b-part { background: #fff; border-radius: 16px; padding: 28px 32px 32px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  h2 { font-size: 22px; margin: 0 0 4px; }
+  .b-lead { color: #5b6475; font-size: 14px; margin: 0 0 20px; }
+  .b-cols { display: flex; gap: 24px; }
+  .b-col { flex: 1; border: 1px solid #e3e6ec; border-radius: 12px; padding: 18px 20px; }
+  .b-col h3 { margin: 0 0 12px; font-size: 16px; }
+  .b-now h3 { color: #a2541b; } .b-new h3 { color: #1a7f4b; }
+  .b-lane { display: grid; grid-template-columns: 110px 1fr; gap: 6px 12px; font-size: 13px; align-items: center; }
+  .b-who { font-weight: 600; color: #3b4456; }
+  .b-track { position: relative; height: 34px; background: #f7f8fa; border-radius: 8px; }
+  .b-tick { position: absolute; top: 6px; height: 22px; border-radius: 6px; font-size: 11px; line-height: 22px; padding: 0 6px; white-space: nowrap; }
+  .b-poll { background: #fde7d6; color: #8a4512; }
+  .b-push { background: #d8f3e4; color: #135c37; }
+  .b-ev { background: #e4e9ff; color: #2b3f9e; }
+  .b-axis { font-size: 11px; color: #8a92a3; display: flex; justify-content: space-between; margin: 4px 0 0 122px; }
+  .b-note { font-size: 13px; color: #3b4456; margin-top: 12px; line-height: 1.6; }
+  .b-note b { color: #1d2330; }
+  .b-arch { display: grid; grid-template-columns: 1fr 70px 1.25fr 70px 1fr; align-items: center; }
+  .b-box { border: 1.5px solid #c9cfda; border-radius: 12px; padding: 12px 14px; background: #fbfcfd; font-size: 13px; line-height: 1.5; margin: 8px 0; }
+  .b-box.b-hot { border-color: #2f9e64; background: #f1fbf5; }
+  .b-box.b-own { border-color: #9aa3b5; background: #f4f5f7; }
+  .b-box .t { font-weight: 700; font-size: 14px; margin-bottom: 2px; }
+  .b-box code, td code, .b-note code { font-family: "JetBrains Mono", monospace; font-size: 12px; background: #eef0f4; padding: 0 4px; border-radius: 4px; }
+  .b-arrow { text-align: center; color: #7b8496; font-size: 22px; }
+  .b-num { display: inline-block; width: 20px; height: 20px; border-radius: 10px; background: #2f6fe0; color: #fff; font-size: 12px; text-align: center; line-height: 20px; margin-right: 6px; font-weight: 700; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { border-bottom: 1px solid #e8ebf0; padding: 9px 10px; text-align: left; vertical-align: top; }
+  th { background: #f7f8fa; font-weight: 600; color: #3b4456; }
+  .y { color: #1a7f4b; font-weight: 600; } .n { color: #b3261e; font-weight: 600; } .c { color: #a2541b; font-weight: 600; }
+  .b-dec td:first-child { font-weight: 700; white-space: nowrap; }
+  .b-rec { background: #eefaf3; }
+  .b-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .b-step { border: 1px solid #e3e6ec; border-radius: 12px; padding: 14px 16px; font-size: 13px; line-height: 1.55; }
+  .b-step .t { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
+  .b-dep { color: #8a92a3; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="b-wrap">
+  <h1>访客与只读观众的会话推送（SSE）</h1>
+  <div class="b-sub">设计文档 <code>docs/session-viewer-stream-design.md</code> · 2026-11-16 · 待定 D1–D6</div>
+
+  <section class="b-part" id="part-1">
+    <h2>① 今天 vs 建议：一次回复怎么到观众眼前</h2>
+    <p class="b-lead">所有者 03:43:51 回一句话，Agent 回复用了约 20 秒逐字写出。下面三条线是同一段时间里三类读者看到的东西。</p>
+    <div class="b-cols">
+      <div class="b-col b-now">
+        <h3>今天：观众轮询</h3>
+        <div class="b-lane">
+          <div class="b-who">Agent 写出</div>
+          <div class="b-track"><span class="b-tick b-ev" style="left:4%;width:88%">逐字输出 ……………………………… 完</span></div>
+          <div class="b-who">所有者</div>
+          <div class="b-track"><span class="b-tick b-push" style="left:4%;width:88%">SSE：逐字看到</span></div>
+          <div class="b-who">访客</div>
+          <div class="b-track">
+            <span class="b-tick b-poll" style="left:0%">问</span><span class="b-tick b-poll" style="left:18%">问 +一块</span><span class="b-tick b-poll" style="left:38%">问 +一块</span><span class="b-tick b-poll" style="left:58%">问 +一块</span><span class="b-tick b-poll" style="left:78%">问 +一块</span>
+          </div>
+          <div class="b-who">公开链接观众</div>
+          <div class="b-track"><span class="b-tick b-poll" style="left:0%">问（等回复中：30 s 一次）</span><span class="b-tick b-poll" style="left:70%">问 +整段</span></div>
+        </div>
+        <div class="b-axis"><span>0 s</span><span>5</span><span>10</span><span>15</span><span>20 s</span></div>
+        <div class="b-note">每 4 s 一块（在跑）或 30 s 才一问（在等回复）。production 11-16：访客页 4 s 一次 <code>events?after=</code>，绝大多数回 304 / 空。</div>
+      </div>
+      <div class="b-col b-new">
+        <h3>建议：观众也走 SSE</h3>
+        <div class="b-lane">
+          <div class="b-who">Agent 写出</div>
+          <div class="b-track"><span class="b-tick b-ev" style="left:4%;width:88%">逐字输出 ……………………………… 完</span></div>
+          <div class="b-who">所有者</div>
+          <div class="b-track"><span class="b-tick b-push" style="left:4%;width:88%">SSE：逐字（不变）</span></div>
+          <div class="b-who">访客</div>
+          <div class="b-track"><span class="b-tick b-push" style="left:4%;width:88%">访客流：逐字，同一投影</span></div>
+          <div class="b-who">公开链接观众</div>
+          <div class="b-track"><span class="b-tick b-push" style="left:4%;width:88%">公开流：逐字，按链接是否含工具输出</span></div>
+        </div>
+        <div class="b-axis"><span>0 s</span><span>5</span><span>10</span><span>15</span><span>20 s</span></div>
+        <div class="b-note">目标：runner 写出 → 观众看到 <b>p95 &lt; 1 s</b>。流打不开（老服务器、超上限、网络）时退回今天的轮询，体验不比今天差。</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="b-part" id="part-2">
+    <h2>② 组件：同一个实时来源，三扇门三套投影</h2>
+    <p class="b-lead">不把所有者的流开放给观众；新加两条路由，复用 <code>RealtimeService.streamForRun</code>，每一帧过“观众投影”。</p>
+    <div class="b-arch">
+      <div>
+        <div class="b-box"><div class="t">Runner</div>事件经 runner-link / NATS 上报</div>
+        <div class="b-box"><div class="t">run_event 表</div>持久事件（按 seq）</div>
+      </div>
+      <div class="b-arrow">→</div>
+      <div>
+        <div class="b-box b-own"><div class="t">RealtimeService.streamForRun(sessionId)</div>hub（进程内）+ runner-link 增量；<code>replayThenLive</code> 先补历史再接实时 —— 已有</div>
+        <div class="b-box b-hot"><div class="t"><span class="b-num">1</span>观众投影 viewerFrame()（新）</div>持久事件：与读口同一个判定（<code>replayableEventSql</code> 的 JS 拼法）；实时事件：白名单；审批 / status → <code>head</code> 帧</div>
+        <div class="b-box b-hot"><div class="t"><span class="b-num">2</span>撤销与上限（新）</div><code>viewer.revoked</code> 信号当场断流 + 每次 ping 复查权限；IP+token / 链接 / 每台上限</div>
+      </div>
+      <div class="b-arrow">→</div>
+      <div>
+        <div class="b-box b-own"><div class="t">所有者流（不变）</div><code>GET /api/sessions/:id/events</code><br>按 ownerId 把门，原样全量</div>
+        <div class="b-box b-hot"><div class="t"><span class="b-num">3</span>访客流（新）</div><code>GET /api/guest-sessions/:id/stream</code><br>登录（<code>access_token</code> 查询参数）；投影 = 含工具输出</div>
+        <div class="b-box b-hot"><div class="t"><span class="b-num">4</span>公开流（新）</div><code>GET /api/shared/:token/stream</code><br><code>…/sessions/:sessionId/stream</code><br>匿名，token 即能力；按 <code>include.toolOutput</code></div>
+      </div>
+    </div>
+    <div class="b-note"><span class="b-num">5</span>网关：单 apiserver 走现有 <code>/api/</code>（已 <code>proxy_buffering off</code>、<code>proxy_read_timeout 3600s</code>）；多 apiserver 在 <code>several-apiservers/server/routes.conf</code> 加两个 location，访客流按 id、公开流按 token 哈希，让同一会话的流共用一个订阅。<br>
+    <span class="b-num">6</span>客户端：Web 公开页与访客页、iOS/macOS 与 Android 访客页都复用各自已有的 SSE 客户端；原生没有公开页。</div>
+  </section>
+
+  <section class="b-part" id="part-3">
+    <h2>③ 投影：每类事件谁能收到</h2>
+    <p class="b-lead">持久事件与今天的分页读口完全一致；实时事件只放白名单里的。以后新加的实时类型默认不给观众。</p>
+    <table>
+      <tr><th style="width:34%">事件</th><th>所有者流</th><th>访客流</th><th>公开流</th></tr>
+      <tr><td>持久事件：user / assistant / thinking / tool_use / tool_result / system init…</td><td class="y">原样</td><td class="y">原样（= 访客读口）</td><td class="y">同读口；链接不含工具输出时只留工具名与成败</td></tr>
+      <tr><td><code>text_delta</code> <code>thinking_delta</code>（逐字增量）</td><td class="y">有</td><td class="y">有（D2）</td><td class="y">有（D2）</td></tr>
+      <tr><td><code>tool_output</code> <code>background_output</code>（运行中输出快照）</td><td class="y">有</td><td class="y">有</td><td class="c">仅链接含工具输出时</td></tr>
+      <tr><td><code>approval_request</code> <code>approval_resolved</code></td><td class="y">有</td><td class="n">无 → <code>head.waitingOnOwner</code></td><td class="n">无 → <code>head</code></td></tr>
+      <tr><td><code>queued_turns_changed</code> <code>translation</code> <code>task_progress</code> <code>tombstone</code></td><td class="y">有</td><td class="n">无</td><td class="n">无</td></tr>
+      <tr><td><code>status</code>（含终态哨兵 seq）</td><td class="y">有</td><td class="c">不原样发，触发 <code>head</code></td><td class="c">同访客</td></tr>
+      <tr><td><code>resync</code> <code>ping</code></td><td class="y">有</td><td class="y">有</td><td class="y">有</td></tr>
+      <tr><td><b>新</b> <code>head</code>：标题、状态字段、activity、waitingOnOwner（= 今天 <code>events?after=</code> 的头部）</td><td>—</td><td class="y">打开时一帧，之后变了才发（250 ms 合并）</td><td class="y">同左，无 waitingOnOwner</td></tr>
+      <tr><td><b>新</b> <code>gone</code>：权限没了</td><td>—</td><td class="y">发完即关 → 页面显示今天的“不再共享”</td><td class="y">同左 → 链接失效页</td></tr>
+    </table>
+    <div class="b-note">证明方式：现有“否定断言” spec 扩成同一组断言跑两扇门（读口、流），证明流不比读口多给任何字段或事件类型。</div>
+  </section>
+
+  <section class="b-part" id="part-4">
+    <h2>④ 撤销与容量</h2>
+    <p class="b-lead">流是长连接：开着的时候权限可能没了；匿名长连接也更容易被耗。</p>
+    <div class="b-cols">
+      <div class="b-col">
+        <h3>什么时候断流</h3>
+        <table>
+          <tr><th>事件</th><th>断哪些</th></tr>
+          <tr><td>访客被移除 / 自己离开</td><td>该访客在该会话的流</td></tr>
+          <tr><td>公开链接撤销 / 过期 / 改成不含会话</td><td>该链接的所有流</td></tr>
+          <tr><td>会话进回收站 / 被删</td><td>该会话的所有访客流与公开流</td></tr>
+        </table>
+        <div class="b-note"><b>建议 A</b>：写路径提交后发 <code>viewer.revoked</code>，经现有 NOTIFY 桥到每台 apiserver，当场发 <code>gone</code> 并关流；每次 ping（~20 s）再复查一次（一条主键查询），兜住信号丢失和过期到点。<br><b>B</b>：只靠 ping 复查，撤销后最多还能看 20 s。</div>
+      </div>
+      <div class="b-col">
+        <h3>上限（超了回 429 → 客户端退回轮询）</h3>
+        <table>
+          <tr><th>维度</th><th>建议值</th></tr>
+          <tr><td>同一 IP + token 同时开的流</td><td>4</td></tr>
+          <tr><td>同一链接同时开的流</td><td>200</td></tr>
+          <tr><td>每台 apiserver 观众流总数</td><td>2000（环境变量可调）</td></tr>
+          <tr><td>重连退避</td><td>1 s 起翻倍到 30 s，加抖动</td></tr>
+        </table>
+        <div class="b-note">一条流的成本：hub 上一个进程内过滤订阅；同一会话的观众共用一个 runner-link 订阅。没有额外 DB 轮询，只有 ping 时一条权限复查和 <code>head</code> 的偶发重读。标签页隐藏时 Web 关流，回来带 <code>sinceSeq</code> 重开。</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="b-part" id="part-5">
+    <h2>⑤ 待定 · 要你拍板</h2>
+    <p class="b-lead">绿色行是建议默认。</p>
+    <table class="b-dec">
+      <tr><th style="width:8%">#</th><th style="width:16%">问题</th><th class="b-rec">A（建议）</th><th>B</th></tr>
+      <tr><td>D1</td><td>推给谁</td><td class="b-rec">访客 + 只读观众（公开会话链接、项目/任务链接里的会话）同一期</td><td>先只做访客，公开页下一期</td></tr>
+      <tr><td>D2</td><td>观众看不看逐字输出</td><td class="b-rec">看，与所有者一样逐字出现，匿名观众也看</td><td>只推整条消息，不推增量</td></tr>
+      <tr><td>D3</td><td>状态怎么更新</td><td class="b-rec">服务端推 <code>head</code> 帧</td><td>客户端收到 status 后自己重读头部</td></tr>
+      <tr><td>D4</td><td>撤销多快生效</td><td class="b-rec">信号当场断流 + ping 复查兜底</td><td>只在 ping 复查（≤ 20 s）</td></tr>
+      <tr><td>D5</td><td>匿名流上限</td><td class="b-rec">每 IP+token 4、每链接 200、每台 2000，超了回轮询</td><td>不设流上限，只靠现有请求限流</td></tr>
+      <tr><td>D6</td><td>轮询退路</td><td class="b-rec">保留（老服务器、超限、流失败时）</td><td>流上线后删掉轮询</td></tr>
+    </table>
+    <h3 style="margin:24px 0 10px;font-size:16px">落地（按依赖排）</h3>
+    <div class="b-steps">
+      <div class="b-step"><div class="t">S1 服务端</div>观众投影（与读口共用判定）、两条流路由、<code>head</code> / <code>gone</code>、撤销信号、上限；否定断言扩到流；pg spec：移除 / 撤销 / 过期 / 回收站 1 s 内断流。</div>
+      <div class="b-step"><div class="t">S2 网关</div>several-apiservers 两个 location（按 id / token 哈希）；Cloudflare 后 20 s ping 不被掐。<div class="b-dep">依赖 S1</div></div>
+      <div class="b-step"><div class="t">W1 Web 公开页 · W2 Web 访客页</div>接流、逐字草稿、<code>sinceSeq</code> 重连、退回轮询。<div class="b-dep">依赖 S1</div></div>
+      <div class="b-step"><div class="t">N1 iOS/macOS · N2 Android 访客页</div>复用各自 SSE 客户端，<code>GuestFollow</code> 作退路；需要发版。<div class="b-dep">依赖 S1</div></div>
+      <div class="b-step"><div class="t">E1 端到端</div>真 runner + 真浏览器：访客与匿名观众各一页，量“写出 → 看到”p95 &lt; 1 s；撤销断流；超上限回轮询。<div class="b-dep">依赖 S1、S2、W1、W2</div></div>
+    </div>
+  </section>
+</div>
+</body>
+</html>

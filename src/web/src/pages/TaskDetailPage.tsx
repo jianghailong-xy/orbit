@@ -259,9 +259,14 @@ export function TaskAcceptanceFields({
         </>
       )}
 
-      <div className="tdp-acceptance-head">
-        <span className="tdp-acceptance-label">Automatic judgement</span>
-      </div>
+      {/* At rest the pair is drawn only when it is set. Unset, its line said "a person decides",
+          which a task judged by evidence or a check contradicted from the header; Edit still opens
+          the pair, so nothing that could be set here was lost. */}
+      {(editing || judged) && (
+        <div className="tdp-acceptance-head">
+          <span className="tdp-acceptance-label">Automatic judgement</span>
+        </div>
+      )}
       {editing ? (
         <div className="tdp-acceptance-pair">
           <label className="tdp-acceptance-pair-label" htmlFor={commandId}>
@@ -303,15 +308,13 @@ export function TaskAcceptanceFields({
             done when it exits <code>{draft.exitCode.trim()}</code>
           </span>
         </div>
-      ) : (
-        <span className="tdp-acceptance-empty orbit-typography orbit-typography-secondary">
-          {ACCEPTANCE_PAIR_EMPTY}
+      ) : null}
+
+      {(editing || judged) && (
+        <span id={hintId} className="tdp-acceptance-hint orbit-typography orbit-typography-secondary">
+          {ACCEPTANCE_AUTOMATIC_HINT}
         </span>
       )}
-
-      <span id={hintId} className="tdp-acceptance-hint orbit-typography orbit-typography-secondary">
-        {ACCEPTANCE_AUTOMATIC_HINT}
-      </span>
       {editing && problem && (
         <div id={problemId} role="alert" className="tdp-acceptance-error">
           {problem}

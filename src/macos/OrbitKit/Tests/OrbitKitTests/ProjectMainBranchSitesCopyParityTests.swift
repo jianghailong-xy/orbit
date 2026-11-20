@@ -282,8 +282,9 @@ final class ProjectMainBranchSitesCopyParityTests: XCTestCase {
         XCTAssertFalse(card.contains("syntheticDoneGaps"))
         XCTAssertEqual(ProjectDone.gaps(ProjectDoneSubject(title: "P", status: "OPEN", criteria: [],
                                                            upstreamRef: Self.branch), request: nil), [])
-        // Off the project document the cards read, in each of the two cards that still name it.
-        XCTAssertEqual(card.components(separatedBy: "const main = mainBranchName(project.integration?.upstreamRef);").count, 3)
+        // Off the project document the cards read, in each of the three places that still name it
+        // (Done when, the grouped findings, the Why-not-done card).
+        XCTAssertEqual(card.components(separatedBy: "const main = mainBranchName(project.integration?.upstreamRef);").count, 4)
     }
 
     // MARK: Copy as Markdown

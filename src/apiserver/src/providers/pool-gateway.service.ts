@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { request as httpRequest, type IncomingHttpHeaders, type IncomingMessage, type OutgoingHttpHeaders } from 'node:http';
 import { Agent as HttpsAgent, request as httpsRequest } from 'node:https';
+import type { LookupFunction } from 'node:net';
 import { AgentProvider } from '@orbit/shared';
 import { ACCOUNT_DISABLED, DisabledAccounts } from '../auth/disabled-accounts';
 import { sha256 } from '../common/crypto.util';
@@ -15,6 +16,7 @@ import { decryptSecret } from './provider-crypto';
 import { readResponsesEvent, ResponsesStreamTap, type ResponsesOutcome } from './responses-stream-tap';
 import { maskedKey, nextUsageWindowStart, sharedPoolKeyCandidates, usageWindowStart } from './shared-pool';
 import { SharedPoolsService } from './shared-pools.service';
+import { servesKeptSubagent } from './kept-subagent-gateway';
 
 /**
  * Where the pool gateway sends every request it forwards: OpenAI's API. Fixed here — no request, header,
@@ -143,6 +145,11 @@ export interface GatewayCaller {
   accountId: string | null;
   /** `session.pool_key_id`: the API key of the pool the session runs on, if any. */
   keyId: string | null;
+  /**
+   * A SubAgent's child (migration 0800): `accountId` and `keyId` are its token's, not its session's, and the
+   * session — its parent's — is owed no transcript line about them.
+   */
+  subagent?: boolean;
 }
 
 /** A key as the gateway uses one. The secret is decrypted only for the request, and never kept. */
@@ -338,15 +345,16 @@ export class PoolGatewayService {
     if (!row || row.revokedAt || row.expiresAt.getTime() <= Date.now()) return null;
     const { pool } = row.person;
     const { session } = row;
+    const open = OPEN_SESSION_STATUSES.includes(session.status) && !session.completedAt;
     const current =
       pool.engine === AgentProvider.CODEX &&
-      OPEN_SESSION_STATUSES.includes(session.status) &&
-      !session.completedAt &&
       !session.deletedAt &&
       session.ownerId === row.userId &&
       // A session moved onto another provider since: its old tokens name a pool it no longer runs on.
       session.provider === pool.slug;
     if (!current) return null;
+    // A session no longer open serves on only while its handover left a SubAgent running on its tokens.
+    if (!open && !(await servesKeptSubagent(this.prisma, row.sessionId))) return null;
     // The session's owner is the token's person (above). Asked last, as the runner credential asks it:
     // the token itself is good, and works again once the account is enabled.
     if (session.owner.disabledAt) return ACCOUNT_DISABLED;
@@ -491,10 +499,11 @@ export async function sendUpstream(
   headers: OutgoingHttpHeaders,
   body: Buffer,
   res: Response,
+  lookup?: LookupFunction,
 ): Promise<Answer> {
   let waited = 0;
   for (let attempt = 1; ; attempt += 1) {
-    const response = await exchangeUpstream(agent, method, url, headers, body, res);
+    const response = await exchangeUpstream(agent, method, url, headers, body, res, lookup);
     if ((response.statusCode ?? 0) < 400) return { response };
     const answer = { response, body: await readAll(response) };
     if (response.statusCode !== 429) return answer;
@@ -511,7 +520,10 @@ export async function sendUpstream(
   }
 }
 
-/** One request to the upstream, resolved with its answer's head; aborted if codex goes away first. */
+/**
+ * One request to the upstream, resolved with its answer's head; aborted if codex goes away first. With
+ * `lookup`, the host's name is resolved by it alone (the address a guard already checked, gateway-upstream.ts).
+ */
 export function exchangeUpstream(
   agent: HttpsAgent,
   method: string,
@@ -519,13 +531,14 @@ export function exchangeUpstream(
   headers: OutgoingHttpHeaders,
   body: Buffer,
   res: Response,
+  lookup?: LookupFunction,
 ): Promise<IncomingMessage> {
   return new Promise((resolve, reject) => {
     const target = new URL(url);
     const send = target.protocol === 'https:' ? httpsRequest : httpRequest;
     const request = send(
       target,
-      { method, headers, ...(target.protocol === 'https:' ? { agent } : {}) },
+      { method, headers, ...(target.protocol === 'https:' ? { agent } : {}), ...(lookup ? { lookup } : {}) },
       resolve,
     );
     request.on('error', reject);
@@ -539,14 +552,27 @@ export function exchangeUpstream(
 }
 
 /**
+ * What a gateway that answers in another protocol puts between the upstream's bytes and the caller
+ * (the /api/gw/anthropic gateway: Responses events in, Messages events out). Fed each chunk as it arrives,
+ * it answers what to write for it — possibly nothing yet — and at the stream's complete end, the rest.
+ */
+export interface RelayConversion {
+  /** The answer's content type, in place of the upstream's. */
+  contentType: string;
+  push(chunk: Buffer): string;
+  end(): string;
+}
+
+/**
  * A successful answer, passed back byte for byte as it arrives and read along the way (a copy, never the
  * bytes codex gets) for what it used; `done` is told what was read, once, when the stream ends — complete,
- * or cut off by either side.
+ * or cut off by either side. With `convert`, what is passed back is what it makes of those bytes instead.
  */
 export function relayStream(
   response: IncomingMessage,
   res: Response,
   done: (outcome: ResponsesOutcome, complete: boolean) => void,
+  convert?: RelayConversion,
 ): Promise<void> {
   return new Promise((resolve) => {
     const tap = new ResponsesStreamTap();
@@ -554,6 +580,12 @@ export function relayStream(
     const whole = /application\/json/i.test(String(response.headers['content-type'] ?? '')) ? ([] as Buffer[]) : null;
     let wholeBytes = 0;
     relayHead(res, response);
+    if (convert) {
+      // The converted answer is not the upstream's bytes: neither its length nor its encoding holds.
+      res.removeHeader('content-length');
+      res.removeHeader('content-encoding');
+      res.setHeader('content-type', convert.contentType);
+    }
     res.flushHeaders();
     let settled = false;
     const end = (complete: boolean) => {
@@ -572,13 +604,15 @@ export function relayStream(
       } else {
         tap.push(chunk);
       }
-      if (!res.write(chunk)) {
+      const out = convert ? convert.push(chunk) : chunk;
+      if (out.length > 0 && !res.write(out)) {
         response.pause();
         res.once('drain', () => response.resume());
       }
     });
     response.on('end', () => {
-      res.end();
+      if (convert) res.end(convert.end());
+      else res.end();
       end(true);
     });
     response.on('error', () => {

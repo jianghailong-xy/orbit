@@ -18,7 +18,7 @@ import OrbitKit
 /// conversation leaves it out at the moment the owner answered (`OwnerAnswer.handedOver`). Still on
 /// the queue, the card is dashed and says so, with no Cancel: the answer is given, and taking the turn
 /// back would leave the coordinator never told. Unconfirmed, it says that; the words the coordinator
-/// read are folded at the foot of its sheet (`CoordinatorQuestionRecordView`).
+/// read are folded at the foot of the card (`CoordinatorQuestionRecordView`), which opens in place.
 ///
 /// The line is for what the card cannot be: a Not yet… to a request to record the project done, which
 /// has no card, and a question this conversation holds no record of. It is the pill a merge's record
@@ -33,9 +33,6 @@ struct OwnerAnswerLineView: View {
     /// The words the agent was handed, verbatim — what the line opens to.
     let text: String
     var undelivered: Bool = false
-    /// Whatever else the same turn's note carried, as its own folded entry under the words in the
-    /// sheet: nobody typed this turn, so it never goes back into a bubble in the reader's name.
-    var attached: (kind: String, text: String)?
     /// Withdraws an answer still queued behind the running turn; nil once a runner has taken it.
     var onCancelQueued: (() -> Void)?
 
@@ -43,12 +40,11 @@ struct OwnerAnswerLineView: View {
 
     var body: some View {
         if let record = OwnerAnswer.record(of: card, in: answered) {
-            // The queue's Cancel is not offered here: the answer is given. Its sheet is the record's own
-            // review, which folds the words this turn told the coordinator at its foot.
+            // The queue's Cancel is not offered here: the answer is given. The record unfolds in
+            // place on a tap — no sheet — and keeps the words this turn told the coordinator folded
+            // at its foot.
             CoordinatorQuestionRecordView(record: record, queued: queued && !undelivered,
                                           notice: undelivered ? OwnerAnswerCard.undelivered : nil)
-                .environment(\.approvalReviewTarget,
-                             .delivered(DeliveredDecisionCard(kind: .coordinatorQuestionRecord(record: record))))
         } else {
             line
         }
@@ -56,7 +52,7 @@ struct OwnerAnswerLineView: View {
 
     private var line: some View {
         VStack(spacing: 4) {
-            Button { openTold(OwnerAnswerTold(card: card, text: text, attached: attached)) } label: {
+            Button { openTold(OwnerAnswerTold(card: card, text: text)) } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "arrow.right").accessibilityHidden(true)
                     Text(OwnerAnswerCard.line(card)).lineLimit(2).multilineTextAlignment(.leading)
@@ -84,7 +80,7 @@ struct OwnerAnswerLineView: View {
             }
             if let onCancelQueued {
                 HStack(spacing: 8) {
-                    Text("Queued").font(.orbitMeta).foregroundStyle(.secondary)
+                    QueuedWord()
                     Button("Cancel") { onCancelQueued() }
                         .buttonStyle(.plain)
                         .font(.orbitMeta)
@@ -101,12 +97,15 @@ struct OwnerAnswerLineView: View {
 struct OwnerAnswerTold: Identifiable {
     let card: OwnerAnswer
     let text: String
-    let attached: (kind: String, text: String)?
     var id: String { "\(card.itemId):\(card.sessionId)" }
 }
 
 private struct OpenOwnerAnswerKey: EnvironmentKey {
     static let defaultValue: (OwnerAnswerTold) -> Void = { _ in }
+}
+
+private struct RevealedItemIDKey: EnvironmentKey {
+    static let defaultValue: String? = nil
 }
 
 private struct AnsweredQuestionsKey: EnvironmentKey {
@@ -127,6 +126,14 @@ extension EnvironmentValues {
         get { self[AnsweredQuestionsKey.self] }
         set { self[AnsweredQuestionsKey.self] = newValue }
     }
+
+    /// The transcript item a record link or a search hit last asked for (`ConsoleModel.revealedItemID`):
+    /// a long message from another session that is that item opens to show it. Nil where no console
+    /// sets it.
+    var revealedItemID: String? {
+        get { self[RevealedItemIDKey.self] }
+        set { self[RevealedItemIDKey.self] = newValue }
+    }
 }
 
 /// What the coordinator was told: the line it was sent as, then the words verbatim.
@@ -145,7 +152,6 @@ struct OwnerAnswerSheet: View {
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    if let attached = told.attached { AttachedNoteEntry(attached: attached) }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding()

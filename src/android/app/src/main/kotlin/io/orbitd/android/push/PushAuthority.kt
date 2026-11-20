@@ -35,6 +35,12 @@ class PushAuthority(private val api: OrbitApi, private val handle: SessionHandle
                 if (!ObjectId.same(project.text("id"), payload.projectId)) throw ProtocolException()
                 if (project.text("status") == "DONE") PushCheck.ACTIVE else PushCheck.STALE
             }
+            // The orphan sweep's report to an owner with no coordinator: it stands while its project is still open.
+            payload.kind == "project-orphan" -> {
+                val project = objectRead(listOf("projects", payload.projectId!!))
+                if (!ObjectId.same(project.text("id"), payload.projectId)) throw ProtocolException()
+                if (project.text("status") == "OPEN") PushCheck.ACTIVE else PushCheck.STALE
+            }
             payload.kind == "watch-matched" -> {
                 val row = objectRead(listOf("watches", payload.watchId!!))
                 if (!ObjectId.same(row.text("id"), payload.watchId) || row.text("action") == null) throw ProtocolException()
@@ -59,6 +65,33 @@ class PushAuthority(private val api: OrbitApi, private val handle: SessionHandle
                 if (!ObjectId.same(row.text("id"), payload.ownerRequestId) || row.text("state") == null) throw ProtocolException()
                 if (row.text("state") == "PENDING") PushCheck.ACTIVE else PushCheck.STALE
             }
+            // A terminal's request stands while it is still waiting: approved, denied or expired anywhere, it takes its
+            // notification with it.
+            payload.isTerminalLogin -> {
+                val rows = array(objectRead(listOf("terminals", "requests"))["requests"])
+                if (rows.any { ObjectId.same(canonical(it.text("id")), payload.terminalLoginId) }) PushCheck.ACTIVE else PushCheck.STALE
+            }
+            // A crossing request stands while it is still PENDING on the project it was pushed for (GET /projects/:id/handoffs lists
+            // both directions): approved, declined or withdrawn anywhere, it takes its notification with it.
+            payload.kind == PushPayload.CROSSING_REQUEST -> {
+                val rows = array(get(listOf("projects", payload.projectId!!, "handoffs"), listOf("state" to "PENDING")))
+                if (rows.any { ObjectId.same(canonical(it.text("id")), payload.handoffId) && it.text("state") == "PENDING" }) PushCheck.ACTIVE
+                else PushCheck.STALE
+            }
+            // A coordinator's raise stands while the task's owner confirmation still waits on the run that session holds.
+            payload.kind == PushPayload.CONFIRMATION_RAISED -> {
+                val session = sessionRead(payload.sessionId!!)
+                val row = objectRead(listOf("tasks", payload.taskId!!, "owner-confirmation"))
+                if (session.present("deletedAt") || session.text("lifecycleState") == "TRASH") PushCheck.MISSING
+                else if (ObjectId.same(row.obj("waiting")?.text("sessionId"), payload.sessionId)) PushCheck.ACTIVE else PushCheck.STALE
+            }
+            // A can't-read alert stands while its Waiting on you item is still PENDING: a check that reads again closes it.
+            payload.kind == PushPayload.CONDITION && payload.ownerRequestId != null -> {
+                val row = objectRead(listOf("owner-requests", payload.ownerRequestId))
+                if (!ObjectId.same(row.text("id"), payload.ownerRequestId) || row.text("state") == null) throw ProtocolException()
+                if (row.text("state") == "PENDING") PushCheck.ACTIVE else PushCheck.STALE
+            }
+            // A schedule alert that opens a run's session falls through to the session's own check below.
             payload.sessionId != null -> {
                 val row = sessionRead(payload.sessionId)
                 if (row.present("deletedAt")) PushCheck.MISSING
@@ -67,12 +100,20 @@ class PushAuthority(private val api: OrbitApi, private val handle: SessionHandle
                         (payload.kind == "failed" && row.present("completedAt")))) PushCheck.STALE
                 else PushCheck.ACTIVE
             }
+            // A schedule alert with no run's session stands while its schedule exists.
+            payload.kind == PushPayload.SCHEDULE -> {
+                val row = objectRead(listOf("schedules", payload.scheduleId!!)).obj("schedule") ?: throw ProtocolException()
+                if (ObjectId.same(row.text("id"), payload.scheduleId)) PushCheck.ACTIVE else throw ProtocolException()
+            }
             payload.runnerId != null -> {
                 val runner = array(get(listOf("runners"))).firstOrNull { ObjectId.same(it.text("id"), payload.runnerId) }
                 if (runner == null) PushCheck.MISSING
                 // The runner's effective region verdict (docs/claude-region-check-contract.md §6): the flip stands while it
                 // reads blocked. A runner that reads no region says nothing either way.
-                else if (payload.kind == "claude-region-blocked") {
+                // Something of the owner's waits on its drain while GET /runners says so (D3); the drain's end, or the wait's, retires it.
+                else if (payload.kind == "runner-updating") {
+                    if (runner["drainWaiting"] is JsonObject) PushCheck.ACTIVE else PushCheck.STALE
+                } else if (payload.kind == "claude-region-blocked") {
                     when (runner.obj("region")?.text("verdict")) { "blocked" -> PushCheck.ACTIVE; "allowed" -> PushCheck.STALE; else -> PushCheck.UNKNOWN }
                 } else {
                     val engine = runner.optionalArray("engines").firstOrNull { it.text("engine") == payload.engine }

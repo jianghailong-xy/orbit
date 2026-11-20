@@ -1145,6 +1145,83 @@ func TestResolveBaseShaKeepsTighterAndMergedForks(t *testing.T) {
 	}
 }
 
+// A branch rebased onto a newer target and then fast-forwarded in has fully landed, but its old fork
+// also spans the target commits the rebase brought in: the bar counted them as this session's work.
+// The last rebase's onto point is the fork then, still with the session's commit ahead of it.
+func TestResolveBaseShaLandedAfterRebaseUsesTheRebaseOnto(t *testing.T) {
+	repo := initRepo(t)
+	oldFork := mustGit(t, repo, "rev-parse", "HEAD")
+	mustGit(t, repo, "checkout", "-b", "orbit/feat")
+	commitFile(t, repo, "feat.txt", "feature\n", "feat work")
+	mustGit(t, repo, "checkout", "main")
+	commitFile(t, repo, "other.txt", "other\n", "someone else's work")
+	onto := mustGit(t, repo, "rev-parse", "main")
+	mustGit(t, repo, "checkout", "orbit/feat")
+	mustGit(t, repo, "rebase", "main")
+	mustGit(t, repo, "checkout", "main")
+	mustGit(t, repo, "merge", "--ff-only", "orbit/feat")
+
+	if got := resolveBaseSha(repo, "s6", "orbit/feat", oldFork); got != onto {
+		t.Errorf("a branch landed after a rebase must fork at the rebase's onto point, got %s want %s", got, onto)
+	}
+	if ref := mustGit(t, repo, "rev-parse", baseRefName("s6")); ref != onto {
+		t.Errorf("the tighter fork must be persisted, got %s want %s", ref, onto)
+	}
+	if n := mustGit(t, repo, "rev-list", "--count", onto+"..orbit/feat"); n != "1" {
+		t.Errorf("the session's one commit must stay ahead of the fork, got %s", n)
+	}
+	// Stable: asked again with the healed base, it stays.
+	if got := resolveBaseSha(repo, "s6", "orbit/feat", onto); got != onto {
+		t.Errorf("the healed fork must be stable, got %s", got)
+	}
+}
+
+// A task forked off a project's integration line, whose line then took in main and which was
+// rebased onto the line's new tip, while the shared checkout sits on main. Against main the recorded
+// fork never tightened (the line has commits main lacks), so every file main brought into the line
+// counted as this task's change. Against the session's merge target the fork is the rebase point,
+// and the diff holds the task's own file alone.
+func TestResolveBaseShaTightensAgainstTheMergeTarget(t *testing.T) {
+	repo := initRepo(t)
+	mustGit(t, repo, "checkout", "-b", "project/p1")
+	commitFile(t, repo, "line.txt", "line\n", "project line work")
+	oldFork := mustGit(t, repo, "rev-parse", "HEAD")
+	mustGit(t, repo, "checkout", "-b", "orbit/task")
+	commitFile(t, repo, "task.txt", "task\n", "task work")
+	mustGit(t, repo, "checkout", "main")
+	commitFile(t, repo, "main.txt", "main\n", "main advance")
+	mustGit(t, repo, "checkout", "project/p1")
+	mustGit(t, repo, "merge", "--no-ff", "-m", "Merge main into project/p1", "main")
+	newTip := mustGit(t, repo, "rev-parse", "HEAD")
+	mustGit(t, repo, "checkout", "orbit/task")
+	mustGit(t, repo, "rebase", "project/p1")
+	mustGit(t, repo, "checkout", "main")
+
+	// Without a remembered target the candidate is HEAD's (main's) merge-base, which the old fork
+	// is not an ancestor of: it is kept, and main.txt counts as the task's.
+	if got := resolveBaseSha(repo, "s7", "orbit/task", oldFork); got != oldFork {
+		t.Fatalf("without a target the old fork is kept, got %s want %s", got, oldFork)
+	}
+	rememberMergeTarget("s7", "project/p1")
+	t.Cleanup(func() { forgetMergeTarget("s7") })
+	got := resolveBaseSha(repo, "s7", "orbit/task", oldFork)
+	if got != newTip {
+		t.Fatalf("the fork must tighten to the merge target's tip the branch was rebased onto, got %s want %s", got, newTip)
+	}
+	if ref := mustGit(t, repo, "rev-parse", baseRefName("s7")); ref != newTip {
+		t.Errorf("the tighter fork must be persisted, got %s want %s", ref, newTip)
+	}
+	if files := mustGit(t, repo, "diff", "--name-only", got, "orbit/task"); files != "task.txt" {
+		t.Errorf("the diff must hold the task's own file alone, got %q", files)
+	}
+	// A target that does not exist here falls back to HEAD.
+	rememberMergeTarget("s8", "project/gone")
+	t.Cleanup(func() { forgetMergeTarget("s8") })
+	if got := resolveBaseSha(repo, "s8", "orbit/task", oldFork); got != oldFork {
+		t.Errorf("a missing target must fall back to HEAD, got %s want %s", got, oldFork)
+	}
+}
+
 // TestFreshenBaseShaAfterRebase: a branch rebased mid-session leaves the recorded fork outside
 // its history — the live/final diffs must re-base onto the NEW fork instead of counting the
 // target's commits as session work (the "+3170 −532 phantom diff" symptom).

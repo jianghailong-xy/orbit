@@ -1,6 +1,12 @@
+import {
+  LANDING_CHECK_COPY, LANDING_CHECK_ORIGIN_COPY, LANDING_CHECK_ORIGIN_NOTES, LANDING_MODE_COPY,
+  inheritedLandingCommand, inheritedLandingTimeout, landingCheckModeOf, type LandingCheckMode,
+} from '../lib/landingCheck';
 import { useEffect, useState, type JSX } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { DeliveryMode, IntegrationLine, ProjectIntegrationView, ProjectPauseState, PromotionState } from '@orbit/shared';
+import type {
+  DeliveryMode, IntegrationLine, ProjectIntegrationView, ProjectPauseState, ProjectSettingChangeView, PromotionState,
+} from '@orbit/shared';
 import { api } from '../api';
 import {
   DEFAULT_MAIN_BRANCH,
@@ -59,6 +65,22 @@ import {
   runTasksAtATime,
   shortBranch,
 } from '../lib/projectStart';
+import {
+  NON_CODE_ANCHOR,
+  NON_CODE_BADGE,
+  RUN_DELIVERS,
+  RUN_DELIVERS_CODE,
+  RUN_DELIVERS_CODE_HINT,
+  RUN_DELIVERS_NOT_CODE,
+  RUN_DELIVERS_NOT_CODE_HINT,
+  RUN_LANDING,
+  RUN_LANDING_OFF_HINT,
+  RUN_TO_CODE,
+  RUN_TO_NOT_CODE,
+  formatDoneDateTime,
+  nonCodeProvenance,
+  nonCodeReasonLine,
+} from '../lib/projectDone';
 import { projectIntegrationQuery, projectPromotionQuery } from '../lib/queries';
 import { ago } from '../lib/watches';
 import { MainBranchSelect } from './MainBranchSelect';
@@ -69,6 +91,8 @@ import { useConfirm } from './ui/ConfirmDialog';
 import { Input } from './ui/Input';
 import { NumberInput } from './ui/NumberInput';
 import { Radio, RadioGroup } from './ui/Radio';
+import { Segmented } from './ui/Segmented';
+import { ProjectChangesRow } from './ProjectLandingChanges';
 import { Select } from './ui/Select';
 import { Spinner } from './ui/Spinner';
 import { Switch } from './ui/Switch';
@@ -131,6 +155,20 @@ function escalationLabel(seconds: number): string {
   return `${minutes} minute${minutes === 1 ? '' : 's'}`;
 }
 
+/** Who set the landing check and when, under it (D3): a badge and the time. */
+function LandingCheckOrigin({ setBy, setAt, now }: {
+  setBy: keyof typeof LANDING_CHECK_ORIGIN_COPY;
+  setAt: string | null;
+  now: number;
+}): JSX.Element {
+  return (
+    <div className="project-landing-origin">
+      <span className={`project-landing-badge is-${setBy.toLowerCase()}`}>{LANDING_CHECK_ORIGIN_COPY[setBy]}</span>
+      {setAt ? <span className="project-landing-origin-time">{`set ${ago(setAt, now)}`}</span> : null}
+    </div>
+  );
+}
+
 /**
  * What `PATCH /projects/:id/integration` accepts (§1.2 L5). Sent as one object so the server
  * validates the whole choice at once.
@@ -140,6 +178,10 @@ interface IntegrationSettingsBody {
   /** The main branch as a full ref; sent only while the line can still move (L4 locks both). */
   upstreamRef?: string;
   mergeCheckCommand?: string | null;
+  landingCheckCommand?: string | null;
+  /** `NONE`: run no landing check (§12.15 P-C1); a command or a null command lifts it. */
+  landingCheck?: 'NONE';
+  landingCheckTimeoutSeconds?: number | null;
   exceptionEscalationSeconds?: number;
   /** How the work reaches main (§10.5 O-L1); AGENT_PUSH only with a main line. */
   deliveryMode?: DeliveryMode;
@@ -179,6 +221,14 @@ export interface RunSettingsProject {
   maxConcurrentTasks: number;
   configRevision: string;
   pausedAt?: string | null;
+  /** The explicit non-code mark and who set it, when (migration 0535). Absent from an older server. */
+  nonCode?: boolean;
+  nonCodeSetBy?: 'OWNER' | 'COORDINATOR' | null;
+  nonCodeSetAt?: string | null;
+  /** The short reason given with the mark (0555). */
+  nonCodeReason?: string | null;
+  /** The project's landing-check history, newest first (P-R1); absent from an older server. */
+  settingChanges?: ProjectSettingChangeView[];
 }
 
 /** The block as the reader edits it: the number box can be empty mid-edit, the text box is text,
@@ -190,9 +240,15 @@ interface RunSettingsDraft {
   automatic: boolean;
   maxConcurrentTasks: number | null;
   mergeCheckCommand: string;
+  landingCheckCommand: string;
+  /** Which of the three the landing check is: the merge check, the command typed, or none at all. */
+  landingMode: LandingCheckMode;
+  landingCheckTimeoutSeconds: number | null;
   escalationSeconds: number;
   /** How the work reaches main, as last chosen in this block; it counts only on a main line. */
   deliveryMode: DeliveryMode;
+  /** Delivers: Code (false) or Not code (true). */
+  nonCode: boolean;
 }
 
 /** The main branch the project stands on, by name — before it is bound to its repository, the one
@@ -212,8 +268,12 @@ function storedDraft(view: ProjectIntegrationView, project: RunSettingsProject):
     automatic: project.coordinatorEnabled,
     maxConcurrentTasks: project.maxConcurrentTasks,
     mergeCheckCommand: view.mergeCheckCommand ?? '',
+    landingCheckCommand: view.landingCheckCommand ?? '',
+    landingMode: landingCheckModeOf(view),
+    landingCheckTimeoutSeconds: view.landingCheckTimeoutSeconds ?? null,
     escalationSeconds: view.escalationSeconds,
     deliveryMode: view.deliveryMode ?? 'PLATFORM',
+    nonCode: project.nonCode === true,
   };
 }
 
@@ -231,13 +291,22 @@ function runSettingsWrites(
   view: Pick<
     ProjectIntegrationView,
     'line' | 'repository' | 'upstreamRef' | 'lastMainBranch' | 'locked' | 'mergeCheckCommand' | 'escalationSeconds'
-    | 'deliveryMode'
+    | 'deliveryMode' | 'landingCheckCommand' | 'landingCheckTimeoutSeconds' | 'landingCheck'
   >,
   project: RunSettingsProject,
   draft: RunSettingsDraft,
-): { integration: IntegrationSettingsBody | null; authorization: AuthorizationBody | null } {
+): { integration: IntegrationSettingsBody | null; authorization: AuthorizationBody | null; nonCode: boolean | null } {
   const check = draft.mergeCheckCommand.trim() === '' ? null : draft.mergeCheckCommand;
+  const landing = draft.landingMode === 'COMMAND' && draft.landingCheckCommand.trim() !== '' ? draft.landingCheckCommand : null;
+  const storedMode = landingCheckModeOf(view);
+  // No check is its own value (D4), written by name; the merge check and a command go through the command.
+  const landingWrite: IntegrationSettingsBody = draft.landingMode === 'NONE'
+    ? (storedMode !== 'NONE' ? { landingCheck: 'NONE' } : {})
+    : (landing !== (view.landingCheckCommand ?? null) || storedMode === 'NONE' ? { landingCheckCommand: landing } : {});
   const integration: IntegrationSettingsBody = {
+    ...landingWrite,
+    ...(draft.landingMode !== 'NONE' && draft.landingCheckTimeoutSeconds !== (view.landingCheckTimeoutSeconds ?? null)
+      ? { landingCheckTimeoutSeconds: draft.landingCheckTimeoutSeconds } : {}),
     ...(!view.locked && draft.line !== null && draft.line !== view.line ? { line: draft.line } : {}),
     ...(!view.locked && draft.upstream !== null && draft.upstream !== storedUpstream(view)
       ? { upstreamRef: mainBranchRef(draft.upstream) }
@@ -263,6 +332,9 @@ function runSettingsWrites(
     authorization: Object.keys(authorization).length > 0
       ? { ...authorization, expectedConfigRevision: project.configRevision }
       : null,
+    // The mark, written by the owner's PATCH and only when it moves. A project marked non-code keeps
+    // its line settings untouched, so switching back to Code brings them back as they were.
+    nonCode: draft.nonCode !== (project.nonCode === true) ? draft.nonCode : null,
   };
 }
 
@@ -297,6 +369,10 @@ export function ProjectRunSettings({
   const drawn = view !== null;
   useEffect(() => {
     if (drawn && window.location.hash === `#${RUN_DELIVERY_ANCHOR}`) revealRunDelivery();
+    // Arrived from the done card's Change: the Delivers row is brought into view.
+    if (drawn && window.location.hash === `#${NON_CODE_ANCHOR}`) {
+      document.getElementById(NON_CODE_ANCHOR)?.scrollIntoView?.({ block: 'center' });
+    }
   }, [drawn]);
 
   const reread = () => qc.invalidateQueries({ queryKey: ['project', projectId] });
@@ -306,6 +382,9 @@ export function ProjectRunSettings({
       // refusal there leaves the rest unwritten rather than half of the reader's choice.
       if (writes.integration) await updateProjectIntegration(projectId, writes.integration);
       if (writes.authorization) await updateProjectAuthorization(projectId, writes.authorization);
+      if (writes.nonCode !== null) {
+        await api(`/projects/${encodeURIComponent(projectId)}`, { method: 'PATCH', body: { nonCode: writes.nonCode } });
+      }
     },
     onSettled: () => reread(),
   });
@@ -345,11 +424,15 @@ export function ProjectRunSettings({
   const draft: RunSettingsDraft = { ...stored, ...edits };
   const set = (patch: Partial<RunSettingsDraft>) => setEdits((current) => ({ ...current, ...patch }));
   const writes = runSettingsWrites(view, project, draft);
-  const dirty = writes.integration !== null || writes.authorization !== null;
-  const complete = draft.maxConcurrentTasks !== null;
+  const dirty = writes.integration !== null || writes.authorization !== null || writes.nonCode !== null;
+  const provenance = nonCodeProvenance(project, formatDoneDateTime);
+  const reason = nonCodeReasonLine(project);
+  const complete = draft.maxConcurrentTasks !== null
+    && (draft.landingCheckTimeoutSeconds === null || (Number.isInteger(draft.landingCheckTimeoutSeconds) && draft.landingCheckTimeoutSeconds > 0));
   const missingCheck = draft.line !== null && runMergeCheckMissing({ ...draft, line: draft.line });
   const branch = view.line === 'PROJECT_BRANCH' && view.ref ? view.ref : `project/${projectId}`;
   const now = Date.now();
+  const landingCheckSetBy = view.landingCheck?.setBy ?? null;
   // The branch the sentences about where work goes name: the one being chosen, or main for a project
   // with no repository. Pausing is about the project as it stands, so its sentence names that one.
   const main = draft.upstream ?? DEFAULT_MAIN_BRANCH;
@@ -381,12 +464,14 @@ export function ProjectRunSettings({
         <div>
           <strong>{RUN_AUTOMATIC} {draft.automatic ? RUN_SWITCH_ON : RUN_SWITCH_OFF}</strong>
           <span>
-            {draft.line === null
+            {draft.nonCode
+              ? NON_CODE_BADGE
+              : draft.line === null
               ? ''
               : draft.line === 'MAIN'
                 ? runLineMain(main)
                 : `${RUN_LINE_PROJECT_BRANCH} · ${shortBranch(branch)}`}
-            {draft.line !== null && draft.maxConcurrentTasks !== null
+            {(draft.nonCode || draft.line !== null) && draft.maxConcurrentTasks !== null
               ? ` · ${draft.maxConcurrentTasks} ${runTasksAtATime(draft.maxConcurrentTasks)}`
               : ''}
           </span>
@@ -397,6 +482,37 @@ export function ProjectRunSettings({
         <div className="project-run-settings-group">
           <div className="project-run-settings-group-head">{RUN_EXECUTION}</div>
 
+          {/* What the project delivers (board 01 A–C), first because it decides whether the landing
+              settings under it mean anything. The choice is its own Change; its provenance says who
+              set it and when. */}
+          <div className="project-integration-setting" id={NON_CODE_ANCHOR} tabIndex={-1}>
+            <div className="project-integration-setting-label">{RUN_DELIVERS}</div>
+            <div>
+              <RadioGroup<'CODE' | 'NOT_CODE'>
+                className="project-run-lines project-run-delivers"
+                aria-label={RUN_DELIVERS}
+                value={draft.nonCode ? 'NOT_CODE' : 'CODE'}
+                onValueChange={(value) => set({ nonCode: value === 'NOT_CODE' })}
+              >
+                <Radio value="CODE">
+                  <b>{RUN_DELIVERS_CODE}</b>
+                  <div className="project-integration-setting-hint">{RUN_DELIVERS_CODE_HINT.replace('{main}', main)}</div>
+                </Radio>
+                <Radio value="NOT_CODE">
+                  <b>{RUN_DELIVERS_NOT_CODE}</b>
+                  <div className="project-integration-setting-hint">{RUN_DELIVERS_NOT_CODE_HINT}</div>
+                </Radio>
+              </RadioGroup>
+              {provenance && draft.nonCode ? (
+                <div className="project-integration-setting-hint project-run-non-code-by">
+                  {provenance}
+                  {reason && project.nonCode ? <div className="project-run-non-code-reason">{reason}</div> : null}
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          {draft.nonCode ? null : (<>
           <div className="project-integration-setting">
             <div className="project-integration-setting-label">{RUN_TASKS_LAND_ON}</div>
             <div>
@@ -486,6 +602,8 @@ export function ProjectRunSettings({
             </div>
           ) : null}
 
+          </>)}
+
           <div className="project-integration-setting">
             <div className="project-integration-setting-label">{RUN_AUTOMATIC}</div>
             <div>
@@ -531,26 +649,92 @@ export function ProjectRunSettings({
         <div className="project-run-settings-group">
           <div className="project-run-settings-group-head">{RUN_INTEGRATION}</div>
 
-          <div className={missingCheck ? 'project-integration-setting is-warn' : 'project-integration-setting'}>
-            <div className="project-integration-setting-label">{RUN_MERGE_CHECK}</div>
-            <div>
-              <Input
-                className="start-card-mono"
-                value={draft.mergeCheckCommand}
-                placeholder={RUN_MERGE_CHECK_PLACEHOLDER}
-                aria-label={RUN_MERGE_CHECK}
-                warning={missingCheck}
-                onChange={(event) => set({ mergeCheckCommand: event.target.value })}
-              />
-              {/* While the agent pushes, Orbit runs no check: the agent runs it before it pushes. */}
-              {delivery === 'AGENT_PUSH' ? (
-                <div className="project-integration-setting-hint">{runMergeCheckHintAgentPush(main)}</div>
-              ) : (
-                <div className="project-integration-setting-hint">{runMergeCheckHint(main)}</div>
-              )}
-              {missingCheck ? <div className="start-card-warn">{runNoMergeCheckWarning(main)}</div> : null}
+          {draft.nonCode ? (
+            <div className="project-integration-setting project-run-landing-off">
+              <div className="project-integration-setting-label">{RUN_LANDING}</div>
+              <div className="project-integration-setting-hint">{RUN_LANDING_OFF_HINT}</div>
             </div>
-          </div>
+          ) : (
+            <>
+              <div className="project-integration-setting">
+                <div className="project-integration-setting-label">{LANDING_CHECK_COPY.LABEL}</div>
+                <div>
+                  {draft.line === 'MAIN' ? <div className="project-integration-setting-hint">{LANDING_CHECK_COPY.MAIN}</div> : <>
+                    <Segmented<LandingCheckMode>
+                      className="project-landing-mode"
+                      aria-label={LANDING_CHECK_COPY.LABEL}
+                      value={draft.landingMode}
+                      onValueChange={(landingMode) => set({ landingMode })}
+                      options={[
+                        { value: 'MERGE_CHECK', label: LANDING_MODE_COPY.MERGE_CHECK },
+                        { value: 'COMMAND', label: LANDING_MODE_COPY.COMMAND },
+                        { value: 'NONE', label: LANDING_MODE_COPY.NONE },
+                      ]}
+                    />
+                    {draft.landingMode === 'COMMAND' ? <>
+                      <Input value={draft.landingCheckCommand} aria-label={LANDING_CHECK_COPY.LABEL}
+                        className="start-card-mono"
+                        placeholder={LANDING_CHECK_COPY.COMMAND_PLACEHOLDER}
+                        onChange={(event) => set({ landingCheckCommand: event.target.value })} />
+                      {landingCheckSetBy ? <LandingCheckOrigin setBy={landingCheckSetBy} setAt={view.landingCheck?.setAt ?? null} now={now} /> : null}
+                      <div className="project-integration-setting-hint">{LANDING_CHECK_COPY.HINT} {LANDING_MODE_COPY.COMMAND_NOTE}</div>
+                    </> : null}
+                    {draft.landingMode === 'MERGE_CHECK' ? <>
+                      {landingCheckSetBy ? <LandingCheckOrigin setBy={landingCheckSetBy} setAt={view.landingCheck?.setAt ?? null} now={now} /> : null}
+                      <div className="project-integration-setting-hint">{inheritedLandingCommand(draft.mergeCheckCommand || null)}</div>
+                    </> : null}
+                    {draft.landingMode === 'NONE' ? <>
+                      <div className="project-landing-none">
+                        <b>{LANDING_MODE_COPY.NONE_HEAD}</b> {LANDING_MODE_COPY.NONE_BODY}
+                      </div>
+                      {landingCheckSetBy ? <LandingCheckOrigin setBy={landingCheckSetBy} setAt={view.landingCheck?.setAt ?? null} now={now} /> : null}
+                      <div className="project-landing-who" aria-label={LANDING_MODE_COPY.WHO_CAN_SET}>
+                        <div className="project-integration-setting-label">{LANDING_MODE_COPY.WHO_CAN_SET}</div>
+                        {LANDING_CHECK_ORIGIN_NOTES.map((entry) => (
+                          <div key={entry.by} className="project-landing-who-row">
+                            <span className={`project-landing-badge is-${entry.by.toLowerCase()}`}>{LANDING_CHECK_ORIGIN_COPY[entry.by]}</span>
+                            <span>{entry.note}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </> : null}
+                    {draft.landingMode !== 'NONE' ? <>
+                      <label>{LANDING_CHECK_COPY.TIMEOUT}</label>
+                      <NumberInput className="project-check-timeout" min={1} precision={0} value={draft.landingCheckTimeoutSeconds}
+                        aria-label={`${LANDING_CHECK_COPY.LABEL} ${LANDING_CHECK_COPY.TIMEOUT}`}
+                        placeholder={LANDING_CHECK_COPY.INHERITS_TIMEOUT}
+                        onValueChange={(value) => set({ landingCheckTimeoutSeconds: value })} />
+                      <div className="project-integration-setting-hint">{LANDING_CHECK_COPY.TIMEOUT_HINT}</div>
+                      {draft.landingCheckTimeoutSeconds === null && <div className="project-integration-setting-hint">{inheritedLandingTimeout(view.mergeCheckTimeoutSeconds)}</div>}
+                    </> : null}
+                  </>}
+                </div>
+              </div>
+
+              <ProjectChangesRow projectId={projectId} changes={project.settingChanges} />
+
+              <div className={missingCheck ? 'project-integration-setting is-warn' : 'project-integration-setting'}>
+                <div className="project-integration-setting-label">{RUN_MERGE_CHECK}</div>
+                <div>
+                  <Input
+                    className="start-card-mono"
+                    value={draft.mergeCheckCommand}
+                    placeholder={RUN_MERGE_CHECK_PLACEHOLDER}
+                    aria-label={RUN_MERGE_CHECK}
+                    warning={missingCheck}
+                    onChange={(event) => set({ mergeCheckCommand: event.target.value })}
+                  />
+                  {/* While the agent pushes, Orbit runs no check: the agent runs it before it pushes. */}
+                  {delivery === 'AGENT_PUSH' ? (
+                    <div className="project-integration-setting-hint">{runMergeCheckHintAgentPush(main)}</div>
+                  ) : (
+                    <div className="project-integration-setting-hint">{runMergeCheckHint(main)}</div>
+                  )}
+                  {missingCheck ? <div className="start-card-warn">{runNoMergeCheckWarning(main)}</div> : null}
+                </div>
+              </div>
+            </>
+          )}
 
           <div className="project-integration-setting">
             <div className="project-integration-setting-label">{RUN_ESCALATE_AFTER}</div>
@@ -571,6 +755,13 @@ export function ProjectRunSettings({
         </div>
       </div>
 
+      {/* Web's How it runs saves rather than asking at the press, so what a change of Delivers does is
+          said here, above Save (board 01 ⑤). */}
+      {writes.nonCode !== null ? (
+        <div className="project-integration-setting-hint project-run-non-code-consequence">
+          {writes.nonCode ? RUN_TO_NOT_CODE.replace('{branch}', shortBranch(branch)) : RUN_TO_CODE}
+        </div>
+      ) : null}
       <div className="project-integration-setting-actions">
         <Button
           variant="primary"

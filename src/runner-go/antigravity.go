@@ -300,7 +300,9 @@ func antigravityEnv(job *ClaimedSession, execDir string) []string {
 		"ORBIT_ALLOW_ORCHESTRATION": orchestrationEnv(job.AllowOrchestration),
 		envWatches:                  watchesEnv(job.WatchesDisabled),
 		envWiki:                     wikiEnv(job.WikiDisabled),
+		envScheduleRun:              scheduleRunEnv(job.ScheduleRun),
 		envMCPPermissionPrompt:      "0",
+		envSpawnDepth:               strconv.Itoa(job.SpawnDepth),
 		// Without it every start spawns a detached `agy --bg-updater` that replaces the binary in
 		// place, and only the lowercase "true" turns it off (§6). The binary changes when Orbit's
 		// engine updater says so.
@@ -977,7 +979,45 @@ func (d *agyDriver) finishTurn(result map[string]interface{}, failure string) {
 	if turn == nil {
 		return
 	}
-	status, subtype, errText := stSucceeded, "success", ""
+	status, subtype, errText, resultText := d.settleTurn(turn, result, failure)
+	d.emit(evTurnEnd, withAntigravityContextWindow(map[string]interface{}{
+		"subtype":  subtype,
+		"numTurns": 1, // agy's num_turns counts the whole conversation
+		// agy reports no cost.
+		"costUsd":       0,
+		"contextTokens": turn.contextTokens,
+	}, d.job))
+	usage := turn.usage
+	liveFiles, livePatches := liveDiff(d.job.WT)
+	if err := d.completeTurn(TurnCompleteRequest{
+		TurnID:           turn.turnID,
+		Status:           status,
+		Result:           resultText,
+		Error:            errText,
+		Subtype:          subtype,
+		NumTurns:         1,
+		Usage:            &usage,
+		RuntimeSessionID: currentRuntimeSessionID(d.job),
+		IsolationStatus:  d.job.IsolationStatus,
+		ChangedFiles:     liveFiles,
+		ChangedDiff:      livePatches,
+		BaseSha:          d.job.WT.baseSha(),
+		WorktreeDirty:    worktreeIsDirty(d.job.WT),
+		BranchSha:        effectiveBranchSha(d.job.WT), BranchCommits: branchCommits(d.job.WT),
+		BranchMerged:   branchMergedInto(d.job.WT),
+		WorktreeBranch: currentBranch(d.job.WT),
+	}); err != nil {
+		logln("turn-complete failed for", d.job.SessionID+":", err)
+	}
+	d.turn = nil
+	d.setTurn("")
+}
+
+// settleTurn is how a turn ended — from its `result`, or with failure set when there is none — and writes what
+// the transcript still owes it: the last tool's result, a result for every call left open, and the error. The
+// session's finishTurn reports it; a SubAgent's child (runAntigravityChild) returns it.
+func (d *agyDriver) settleTurn(turn *agyTurn, result map[string]interface{}, failure string) (status, subtype, errText, resultText string) {
+	status, subtype, errText = stSucceeded, "success", ""
 	resultError := firstString(result, "error")
 	switch {
 	case turn.interrupted || (result != nil && resultError == "interrupted"):
@@ -1006,41 +1046,11 @@ func (d *agyDriver) finishTurn(result map[string]interface{}, failure string) {
 	if errText != "" {
 		d.emit(evError, map[string]interface{}{"message": errText})
 	}
-	resultText := strings.TrimSpace(firstString(result, "response"))
+	resultText = strings.TrimSpace(firstString(result, "response"))
 	if resultText == "" {
 		resultText = strings.TrimSpace(turn.all.String())
 	}
-	d.emit(evTurnEnd, withAntigravityContextWindow(map[string]interface{}{
-		"subtype":  subtype,
-		"numTurns": 1, // agy's num_turns counts the whole conversation
-		// agy reports no cost.
-		"costUsd":       0,
-		"contextTokens": turn.contextTokens,
-	}, d.job))
-	usage := turn.usage
-	liveFiles, livePatches := liveDiff(d.job.WT)
-	if err := d.completeTurn(TurnCompleteRequest{
-		TurnID:           turn.turnID,
-		Status:           status,
-		Result:           resultText,
-		Error:            errText,
-		Subtype:          subtype,
-		NumTurns:         1,
-		Usage:            &usage,
-		RuntimeSessionID: currentRuntimeSessionID(d.job),
-		IsolationStatus:  d.job.IsolationStatus,
-		ChangedFiles:     liveFiles,
-		ChangedDiff:      livePatches,
-		BaseSha:          d.job.WT.baseSha(),
-		WorktreeDirty:    worktreeIsDirty(d.job.WT),
-		BranchSha:        effectiveBranchSha(d.job.WT),
-		BranchMerged:     branchMergedInto(d.job.WT),
-		WorktreeBranch:   currentBranch(d.job.WT),
-	}); err != nil {
-		logln("turn-complete failed for", d.job.SessionID+":", err)
-	}
-	d.turn = nil
-	d.setTurn("")
+	return status, subtype, errText, resultText
 }
 
 // processExited handles the current process going away: its turn, if one was still running, ends
@@ -1161,6 +1171,10 @@ func runAntigravitySessionProcess(ctx context.Context, shutdownCtx context.Conte
 		pendingReloads = nil
 		// Model, effort, permission mode and environment are all fixed when agy starts.
 		d.retire()
+		// An account switch is recorded now rather than at the next agy: the conversation is the
+		// session's own, never an account's, so with agy retired nothing holds the account it left,
+		// which can be removed while the session is idle (moveIdleSessionToItsAccount).
+		writeSessionMeta(scratchDir, job, execDir)
 		emit(evSystem, map[string]interface{}{"subtype": "resumed", "reason": "config_changed"})
 	}
 
@@ -1192,7 +1206,7 @@ func runAntigravitySessionProcess(ctx context.Context, shutdownCtx context.Conte
 				runShellTurnBackground(bg, execDir, scratchDir, command, resp.TurnID, emit, job.Agent.Env)
 				if err := completeTurn(TurnCompleteRequest{
 					TurnID: resp.TurnID, Status: stSucceeded, Result: "started in background", Subtype: "shell",
-					RuntimeSessionID: currentRuntimeSessionID(job), BranchSha: effectiveBranchSha(job.WT),
+					RuntimeSessionID: currentRuntimeSessionID(job), BranchSha: effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT),
 				}); err != nil {
 					logln("shell turn-complete failed for", job.SessionID+":", err)
 				}
@@ -1265,9 +1279,11 @@ func runAntigravitySessionProcess(ctx context.Context, shutdownCtx context.Conte
 			shutdownDone = nil
 			draining = true
 			stopInbox()
-			drainTimer = time.After(shutdownDrainTimeout)
+			drainTimer = time.After(stopDrainBudget(shutdownCtx, shutdownDrainTimeout))
 		case <-drainTimer:
 			logln("Antigravity drain timeout for", job.SessionID+"; stopping the running turn")
+			// Marked, as the Claude drain marks its own (watchShutdownDrain).
+			emit(evInterrupt, stopInterruptPayload(shutdownCtx))
 			return stCancelled, true, false
 		case <-d.stopTimerC():
 			d.stopTimer = nil
@@ -1345,7 +1361,7 @@ func reportUnknownInboxKind(resp *RunInboxResponse, job *ClaimedSession, complet
 		Result:           fmt.Sprintf("this runner does not understand turns of kind %q; upgrade the runner", resp.Kind),
 		Subtype:          subtypeUnknownKind,
 		RuntimeSessionID: currentRuntimeSessionID(job),
-		BranchSha:        effectiveBranchSha(job.WT),
+		BranchSha:        effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT),
 	}); err != nil {
 		logln("unknown-kind turn-complete failed for", job.SessionID+":", err)
 	}

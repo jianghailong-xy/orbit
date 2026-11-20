@@ -135,14 +135,18 @@ final class StartProjectWiringTests: XCTestCase {
                        "the press writes no line of its own: the receipt is the read's")
     }
 
-    func testConfirmingTheNewCriteriaKeepsWhatItConfirmedForTheReceipt() throws {
+    func testConfirmingTheNewCriteriaLeavesTheChangesToTheRecord() throws {
         let console = try source(Self.consolePath)
         let press = code(try section(console, from: "func confirmCriteriaChange() async {",
                                      to: "\n    // MARK: the project's two owner cards"))
         XCTAssertTrue(press.contains("api.confirmAcceptanceCriteria(projectID: projectID,"),
                       "the same confirmation door, which for a started project only confirms")
-        XCTAssertTrue(press.contains("confirmedChangeSummaries[digest] = CriteriaChanges.counts(changes)"),
-                      "what the version changed is kept for its receipt, under the seal it signed")
+        XCTAssertTrue(press.contains("acceptanceConfirmation = next"),
+                      "the door's answer becomes the standing — its confirmation carries "
+                          + "`changes`, which the receipt reads")
+        XCTAssertFalse(press.contains("confirmedChangeSummaries"),
+                       "what the version changed is the record's own fact now, not a summary the "
+                           + "pressing window kept by the seal it signed")
         XCTAssertTrue(press.contains("close(.criteriaChange)"))
     }
 
@@ -243,7 +247,7 @@ final class StartProjectWiringTests: XCTestCase {
                       "the plan is drawn as the task graph by OrbitKit's rule")
         XCTAssertTrue(start.contains("ProjectGraphFullScreen(graph: graph, expanded: $graphExpanded, onOpenTask: openTask)"),
                       "and a plan listed by level opens the project page's task graph full screen")
-        XCTAssertTrue(start.contains("graph: console.projectGraph)"),
+        XCTAssertTrue(start.contains("graph: console.projectGraph,"),
                       "the conversation's card is given the graph its plan is read off")
         XCTAssertTrue(start.contains("Text(StartProject.barCaption(opensCoordinator: opensCoordinator, startsNow: plan.startsNow,"),
                       "and the line under Start says what pressing it does")

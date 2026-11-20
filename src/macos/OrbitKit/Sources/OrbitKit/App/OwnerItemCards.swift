@@ -144,6 +144,8 @@ public enum CoordinatorQuestions {
     public static let yourNote = "Your note"
     /// The card's last row.
     public static let viewDetails = "View details"
+    /// The expanded card's last row, folding it back (board card-ui-polish ③).
+    public static let hideDetails = "Hide details"
 
     /// The records the read carries, as the conversation draws them: each at the moment it ended.
     public struct Receipt: Equatable, Sendable, Identifiable {
@@ -214,9 +216,11 @@ public enum CoordinatorQuestions {
     }
 
     /// The question's opening as one run of plain text — the Markdown's marks gone, its lines
-    /// joined — which the card cuts at two lines. The browser's `markdownToPlainText`.
+    /// joined — which the card cuts at two lines. The browser's `markdownToPlainText`. A table's
+    /// rows are dropped: flattened they read as `| A | 9 | |---|`, and a preview cannot hold one.
     public static func lead(_ question: CoordinatorQuestion) -> String {
-        OwnerConfirmations.plainText(question.question)
+        OwnerConfirmations.plainText(question.question
+            .replacingOccurrences(of: "(?m)^[ \\t]*\\|.*$", with: "", options: .regularExpression))
             .replacingOccurrences(of: "(?m)^[ \\t]*(?:•|[0-9]{1,9}[.)])[ \\t]+", with: "",
                                   options: .regularExpression)
             .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
@@ -1225,6 +1229,17 @@ public enum ExceptionCards {
     /// field for field (`ProjectProgressStatus.tsx`). The one place the two may differ is the font a
     /// row is drawn in; the rows, their order and every word in them are the same.
     public static func facts(_ row: ProjectOpenItemRow) -> ItemFacts {
+        if let baseline = row.baseline {
+            return .rows(FactBlock(rows: [
+                FactRow(label: "", value: LandingCheckCopy.baselineBody),
+                FactRow(label: LandingCheckCopy.held, value: String(row.heldTaskIds.count)),
+                FactRow(label: LandingCheckCopy.upstream, value: baseline.upstreamSha, mono: true),
+                FactRow(label: LandingCheckCopy.tip, value: baseline.targetSha, mono: true),
+                FactRow(label: LandingCheckCopy.baseline, value: baseline.mergeTreeSha, mono: true),
+                FactRow(label: LandingCheckCopy.label, value: baseline.check.command ?? "", mono: true),
+                FactRow(label: "", value: LandingCheckCopy.resumes),
+            ]))
+        }
         // §4.6 X-E5 draws the claim it is about in three rows (board v4 06 c) instead of the
         // item's sentence: which landing, on which runner and since when, and where the runner had
         // got to. An item an older build opened carries no lease and keeps the sentence it always
@@ -1236,7 +1251,9 @@ public enum ExceptionCards {
         var rows: [FactRow] = []
         if let task = facts.task { rows.append(FactRow(label: taskLabel, value: task.title)) }
         if let targetRef = facts.targetRef {
-            var into = targetRef
+            // The branch by its name: `refs/heads/main` is the server's spelling, not a person's.
+            var into = targetRef.hasPrefix("refs/heads/")
+                ? String(targetRef.dropFirst("refs/heads/".count)) : targetRef
             if let sha = facts.targetSha { into += " at \(String(sha.prefix(7)))" }
             if facts.nothingLanded { into += nothingLanded }
             rows.append(FactRow(label: intoLabel, value: into))
@@ -1261,7 +1278,7 @@ public enum ExceptionCards {
                                 logTail: CheckTail.of(check.outputTail)))
         }
         if facts.branchUnchanged {
-            rows.append(FactRow(label: branchLabel, value: branchUnchanged))
+            rows.append(FactRow(label: branchLabel, value: facts.branchLine ?? branchUnchanged))
         }
         if let failure = facts.failure {
             rows.append(FactRow(label: howLabel, value: howFailed(failure)))
@@ -1329,7 +1346,9 @@ public enum ExceptionCards {
     /// What a fix is expected to do, and the one thing it does not ask the reader to do.
     public static let afterAFix =
         "push to the task branch — Orbit re-integrates and re-checks on its own"
-    /// The whole sentence of a check that failed only combined with the task's own branch.
+    /// The whole sentence of a check that failed only combined with the task's own branch: a task's
+    /// landing. The server writes `branchLine` by the job the check failed in, and this is what a
+    /// server older than that field leaves the card to say.
     public static let branchUnchanged =
         "unchanged — the task passed on its own branch; it fails only on the combined tree"
 
@@ -1665,18 +1684,22 @@ public enum ExceptionCards {
     /// what else would do it, and the ways in and out. Each press carries its own label and its one
     /// line of consequence, both the browser's.
     ///
+    /// `quiet` is a repair task already on the item (board card-ui-polish ①, D1 = A): every door is
+    /// a quiet link and none of them is the reader's next step, so no door carries a consequence line.
+    ///
     /// `Mark as handled` is NOT one of these: see `markable`.
     public static func presses(_ row: ProjectOpenItemRow,
-                               mergeCard: String? = nil) -> [CardPress] {
+                               mergeCard: String? = nil,
+                               quiet: Bool = false) -> [CardPress] {
         let actions = drawn(row, mergeCard: mergeCard)
         let leading = leadingDoors(row, actions)
         let primary = leading.first
         let secondary = leading.dropFirst().first
         return (leading + actions.filter { !leading.contains($0) }).map { action in
             CardPress(action: action,
-                      tier: action == primary ? .primary : action == secondary ? .secondary : .link,
+                      tier: quiet ? .link : action == primary ? .primary : action == secondary ? .secondary : .link,
                       label: actionLabel(row, action) ?? action.rawValue,
-                      consequence: actionConsequence(row, action))
+                      consequence: quiet ? "" : actionConsequence(row, action))
         }
     }
 
@@ -1838,10 +1861,23 @@ public enum ExceptionCards {
         row.escalatedAt ?? row.waitingSince
     }
 
+    /// An escalated item's heading while its coordinator cannot be reached — the browser's
+    /// `ESCALATED_UNREACHABLE_HEADING` and the push's title, verbatim.
+    public static let escalatedUnreachableHeading = "Now yours — the coordinator can’t take messages"
+    /// The same item while its coordinator can be asked again: the clock moved it, and the heading
+    /// says so without a number — the card's one clock is the total wait at its top right (board
+    /// owner-exception-who-fixes, D3 = A), and how long the coordinator had it is in Details. The
+    /// browser's `ESCALATED_REACHABLE_HEADING`.
+    public static let escalatedReachableHeading = "Now yours — the coordinator didn’t get to it"
+    public static let coordinatorEndedHeading = "Now yours — the coordinator conversation ended"
+    public static let handedOverHeading = "Now yours — the coordinator handed it over"
+    public static let noCoordinatorHeading = "Now yours — this project has no coordinator"
+
     /// §7.5's heading for an item that BECAME the owner's, one per way it happened — the browser's
     /// `escalationHeading`, verbatim. Nil for an item that was the owner's from the start, which is
     /// every other kind this card draws and says so in its own title.
     public static func heading(_ row: ProjectOpenItemRow, now: Date = Date()) -> String? {
+        if row.baseline != nil { return LandingCheckCopy.title(row.facts?.targetRef?.replacingOccurrences(of: "refs/heads/", with: "") ?? "the project branch") }
         // §4.6 X-E5 (revision 23): the item is escalated at birth, so `waitedBeforeEscalation`
         // would only ever say "1s". Its heading is the fact it is about — how long the claim has
         // been silent, counted from the last report the runner made and the moment the clock opened
@@ -1854,15 +1890,17 @@ public enum ExceptionCards {
         }
         switch row.assigneeReason {
         case .escalated:
-            return "Now yours — no one acted on this for \(waitedBeforeEscalation(row))"
+            // The clock moved it, but with no coordinator to ask or message — the server's reading,
+            // which the doors below already show — "no one acted" would point at somebody who cannot.
+            return row.coordinatorUnreachable ? escalatedUnreachableHeading : escalatedReachableHeading
         case .coordinatorEnded:
-            return "Now yours — the coordinator conversation ended"
+            return coordinatorEndedHeading
         case .chainLimit:
             return "Now yours — the 3rd failure in this chain"
         case .handedOver:
-            return "Now yours — the coordinator handed it over"
+            return handedOverHeading
         case .noCoordinator:
-            return "Now yours — this project has no coordinator (waiting \(waited(row, now: now)))"
+            return noCoordinatorHeading
         case .defaultReason, .unknown:
             return nil
         }
@@ -1891,6 +1929,33 @@ public enum ExceptionCards {
     public static func requiredAction(_ row: ProjectOpenItemRow) -> String {
         if let said = row.requiredAction { return said }
         return row.detailLine.isEmpty ? requiredActionFallback : row.detailLine
+    }
+
+    // MARK: - a live repair task (board card-ui-polish ①)
+
+    /// The tag an item wears while a repair task filed for it is still live — the browser's
+    /// `FIXING_TAG`, in the same tone the Handling tag has.
+    public static let fixingTag = "Fixing"
+    /// The one line that replaces the server's sentence and the handled-by sentences: the task and
+    /// where its title goes, with nothing for the reader to do under it.
+    public static let beingFixedIn = "Being fixed in"
+    public static let fixingNothingForYou = "In progress · nothing for you to do unless it fails."
+
+    /// The repair tasks still working on an item: any whose state is not DONE or CANCELLED — the
+    /// server's own test (`openItemRequiredAction`'s `hasLiveFix`), so the card and the sentence it
+    /// replaces agree.
+    public static func liveRepairs(_ row: ProjectOpenItemRow) -> [OpenItemFixTask] {
+        (row.handledBy ?? []).filter { $0.state != "DONE" && $0.state != "CANCELLED" }
+    }
+
+    public static func fixing(_ row: ProjectOpenItemRow) -> Bool {
+        !liveRepairs(row).isEmpty
+    }
+
+    /// Where a repair task's title leads: the app's own `orbit-task:` door, or nil for an id that
+    /// names no task — the title is then drawn as plain words rather than as a link that goes nowhere.
+    public static func repairLink(_ task: OpenItemFixTask) -> URL? {
+        link(task.taskId, scheme: "orbit-task")
     }
 
     /// What the card says about the tasks filed as this item's fixes (§4.7): one sentence per task,
@@ -1973,5 +2038,432 @@ public enum ExceptionCards {
         if !row.detailLine.isEmpty { out += "\n\(row.detailLine)" }
         out += "\n\n(open item \(row.itemId), waiting since \(row.waitingSince))"
         return out
+    }
+}
+
+// MARK: - "Who fixes it?" (board docs/mocks/owner-exception-who-fixes, D1–D4 = A)
+
+/// Why the coordinator can or cannot take an item right now — board part 6's rows, the browser's
+/// `CoordinatorCause`.
+public enum CoordinatorCause: String, Equatable, Sendable, CaseIterable {
+    case workspaceDisabled = "WORKSPACE_DISABLED"
+    case workspaceTrashed = "WORKSPACE_TRASHED"
+    case workspaceUnbound = "WORKSPACE_UNBOUND"
+    case runnerDown = "RUNNER_DOWN"
+    case coordinatorEnded = "COORDINATOR_ENDED"
+    case noCoordinator = "NO_COORDINATOR"
+    case escalated = "ESCALATED"
+    case handedOver = "HANDED_OVER"
+}
+
+/// The live cause, with the workspace the coordinator is bound to as the status read named it —
+/// the browser's `CoordinatorReading`.
+public struct CoordinatorReading: Equatable, Sendable {
+    public let cause: CoordinatorCause
+    public let workspaceId: String?
+    public let workspaceName: String?
+
+    public init(cause: CoordinatorCause, workspaceId: String? = nil, workspaceName: String? = nil) {
+        self.cause = cause
+        self.workspaceId = workspaceId
+        self.workspaceName = workspaceName
+    }
+}
+
+/// The two facts of the coordinator's workspace a LIVE status does not carry (a live coordinator in
+/// a workspace disabled underneath it still reads LIVE), from the workspace itself — the browser's
+/// `CoordinatorWorkspaceFacts`.
+public struct CoordinatorWorkspaceFacts: Equatable, Sendable {
+    public let enabled: Bool?
+    public let runnerId: String?
+
+    public init(enabled: Bool? = nil, runnerId: String? = nil) {
+        self.enabled = enabled
+        self.runnerId = runnerId
+    }
+}
+
+/// One press of the coordinator row (board part 6, third column), with its weight — the browser's
+/// `CoordinatorRowPress`.
+public enum CoordinatorRowPress: Equatable, Sendable {
+    case askAgain(ExceptionCards.PressTier)
+    /// "or Chat about this first": a plain link, drawn only where a message can go (D2 = A).
+    case chatFirst
+    /// Enable / Restore / Bind the workspace: the repair the coordinator needs, and nothing else
+    /// (D1 = A).
+    case fix(label: String, detail: CoordinatorCause)
+    case changeWorkspace(ExceptionCards.PressTier)
+    case startNewCoordinator
+    case setUpCoordinator
+
+    /// What the press says.
+    public var label: String {
+        switch self {
+        case .askAgain: return ExceptionCards.askCoordinatorAgain
+        case .chatFirst: return ExceptionCards.chatFirstLink
+        case .fix(let label, _): return label
+        case .changeWorkspace: return CoordinatorChangeCopy.button
+        case .startNewCoordinator: return ExceptionCards.startNewCoordinator
+        case .setUpCoordinator: return ExceptionCards.setUpCoordinator
+        }
+    }
+
+    /// The weight it is drawn in: primary = borderedProminent, secondary = bordered, link = plain.
+    public var tier: ExceptionCards.PressTier {
+        switch self {
+        case .askAgain(let tier), .changeWorkspace(let tier): return tier
+        case .chatFirst: return .link
+        case .fix, .startNewCoordinator, .setUpCoordinator: return .primary
+        }
+    }
+}
+
+/// The owner exception card organised around the owner's first question (board
+/// owner-exception-who-fixes ②, D1–D4 = A): the heading is the live cause, a subline says what it
+/// is, then WHO FIXES IT? — the coordinator and you — then how it ends, the facts folded into
+/// Details, and after a divider the way to end it without fixing it. One clock: the total wait at
+/// the top right. Every word and rule is the browser's (`ProjectProgressStatus.tsx`, the section
+/// that starts `"Who fixes it?"`), held to it by `ExceptionCardsTests`.
+extension ExceptionCards {
+    /// The browser's `WHO_FIXES_IT`, `WHO_FIXES_COORDINATOR`, `WHO_FIXES_YOU`.
+    public static let whoFixesItLabel = "Who fixes it?"
+    public static let whoFixesCoordinator = "The coordinator"
+    public static let whoFixesYou = "You"
+    public static let fixItMyself = "Fix it myself"
+    public static let startNewCoordinator = "Start a new coordinator"
+    public static let setUpCoordinator = "Set up a coordinator…"
+    public static let chatFirstLink = "or Chat about this first"
+    public static let askAgainOnceBack =
+        "Once it’s back, Ask the coordinator again hands this to it with a fresh clock."
+    public static let runnerDownSentence =
+        "Its runner is offline. Ask again comes back here as soon as it is."
+    public static let coordinatorEndedSentence = "Its conversation was completed."
+    public static let noCoordinatorSentence = "This project isn’t coordinated."
+    public static let handedOverSentence = "It handed this to you on purpose."
+    /// The browser's `HANDOVER_NOTE_CAPTION`: the caption over the coordinator's hand-over note.
+    public static let handoverNoteCaption = "Why the coordinator handed it over"
+    /// The browser's `CLOSES_BY_ITSELF`: the green line, in place of the old "After a fix" row.
+    public static let closesByItselfLine =
+        "Closes by itself once this work lands — push a fix to the task branch and you’re done."
+    public static let alreadySettled = "Already settled?"
+    public static let markHandledSettledConsequence =
+        "The work landed another way. Your reason goes on the record."
+    public static let detailsLabel = "Details"
+    public static let openLandingDetail = "every attempt, step by step"
+    /// How many files Details lists before "and N more" — the browser's `DETAIL_FILES_SHOWN`.
+    public static let detailFilesShown = 5
+    /// The Details row that says how long the coordinator had it.
+    public static let cameToYouLabel = "Came to you"
+
+    /// The subline's word for what kind of exception this is — the browser's `WHO_FIXES_KIND`.
+    public static let whoFixesKind: [ProjectOpenItemKind: String] = [
+        .integrationConflict: "Merge conflict",
+        .integrationCheckFailed: "Checks failed",
+        .integrationError: "Integration error",
+        .taskFailed: "Task failed",
+        .deliveryReview: "Delivery review",
+    ]
+
+    /// What "Fix it myself" opens and what the owner does there — the browser's
+    /// `FIX_IT_MYSELF_CONSEQUENCE`.
+    public static let fixItMyselfConflict =
+        "Opens the task session. Fix the conflict there and push to the task branch."
+    public static let fixItMyselfCheck =
+        "Opens the task session. Fix the check there and push to the task branch."
+    public static let fixItMyselfDefault = "Opens the task session."
+
+    /// The browser's `COORDINATOR_FIX_LABEL` (`lib/coordinatorWorkspace.ts`): the one fix a broken
+    /// coordinator workspace has, by what is wrong with it. Nil for a cause that is not a workspace.
+    public static func coordinatorFixLabel(_ cause: CoordinatorCause, workspace: String) -> String? {
+        switch cause {
+        case .workspaceDisabled: return "Enable \(workspace)"
+        case .workspaceTrashed: return "Restore \(workspace)"
+        case .workspaceUnbound: return "Bind \(workspace) to a runner"
+        default: return nil
+        }
+    }
+
+    /// The kinds the card draws once they are the owner's by escalation, a hand-over, an ended or
+    /// missing coordinator. A failed chain's 3rd failure and a silent landing claim keep cards of
+    /// their own, and so does a baseline item (`row.baseline`): it is about the project branch with
+    /// main, not one task's branch, so its heading, facts, held tasks and resume line are the card.
+    static let whoFixesKinds: Set<ProjectOpenItemKind> = [
+        .integrationConflict, .integrationCheckFailed, .integrationError, .taskFailed, .deliveryReview,
+    ]
+
+    /// Whether this item is drawn as the "Who fixes it?" card — the browser's `whoFixesIt`.
+    public static func whoFixesIt(_ row: ProjectOpenItemRow) -> Bool {
+        row.assignee == .owner
+            && row.baseline == nil
+            && whoFixesKinds.contains(row.kind)
+            && row.assigneeReason != .chainLimit
+            && row.assigneeReason != .defaultReason
+    }
+
+    /// The live cause, board part 6 — the browser's `readCoordinatorCause`. Askable first: the
+    /// server drew Ask again, so the coordinator can take it — and a hand-over says it gave it back on
+    /// purpose. Otherwise what the coordinator status says is wrong: the bound workspace
+    /// (UNAVAILABLE's refusal detail, or for a LIVE conversation the workspace itself), no
+    /// coordinator ever, a conversation that ended — and, when nothing else is wrong, its run is
+    /// down. Without a status read yet, the row's own reading decides.
+    public static func readCoordinatorCause(_ row: ProjectOpenItemRow,
+                                            status: ProjectCoordinatorStatus? = nil,
+                                            workspace: CoordinatorWorkspaceFacts? = nil) -> CoordinatorReading {
+        func read(_ cause: CoordinatorCause) -> CoordinatorReading {
+            CoordinatorReading(cause: cause, workspaceId: status?.coordination.workspaceId,
+                               workspaceName: status?.coordination.workspaceName)
+        }
+        if row.actions.contains(.askCoordinatorAgain) {
+            return read(row.assigneeReason == .handedOver ? .handedOver : .escalated)
+        }
+        if let status {
+            switch status.state {
+            case .unavailable:
+                switch status.openability.refusalDetail {
+                case "WORKSPACE_DISABLED": return read(.workspaceDisabled)
+                case "WORKSPACE_TRASHED": return read(.workspaceTrashed)
+                case "WORKSPACE_UNBOUND": return read(.workspaceUnbound)
+                default: return read(.coordinatorEnded)
+                }
+            case .neverOpened: return read(.noCoordinator)
+            case .trashed: return read(.coordinatorEnded)
+            case .live, .unknown: break
+            }
+            if status.coordination.session?.lifecycleState == .completed { return read(.coordinatorEnded) }
+            // It takes a message but cannot be asked: the conversation is over.
+            if !row.coordinatorUnreachable { return read(.coordinatorEnded) }
+            if workspace?.enabled == false { return read(.workspaceDisabled) }
+            if let workspace, workspace.runnerId == nil { return read(.workspaceUnbound) }
+            return read(.runnerDown)
+        }
+        if row.assigneeReason == .noCoordinator || row.chat?.refusal == "NO_COORDINATOR" {
+            return read(.noCoordinator)
+        }
+        if !row.coordinatorUnreachable || row.assigneeReason == .coordinatorEnded {
+            return read(.coordinatorEnded)
+        }
+        return read(.runnerDown)
+    }
+
+    /// The card's heading for each cause (board part 6, first column) — the browser's
+    /// `whoFixesHeading`.
+    public static func whoFixesHeading(_ cause: CoordinatorCause) -> String {
+        switch cause {
+        case .coordinatorEnded: return coordinatorEndedHeading
+        case .noCoordinator: return noCoordinatorHeading
+        case .escalated: return escalatedReachableHeading
+        case .handedOver: return handedOverHeading
+        case .workspaceDisabled, .workspaceTrashed, .workspaceUnbound, .runnerDown:
+            return escalatedUnreachableHeading
+        }
+    }
+
+    /// The coordinator row's status sentence (board part 6, second column) — the browser's
+    /// `coordinatorRowSentence`. The workspace's name is drawn bold (`boldWorkspace`).
+    public static func coordinatorRowSentence(_ row: ProjectOpenItemRow,
+                                              _ reading: CoordinatorReading) -> String {
+        let its = reading.workspaceName.map { "Its workspace \($0)" } ?? "Its workspace"
+        switch reading.cause {
+        case .workspaceDisabled: return "\(its) is disabled, so it can’t take messages."
+        case .workspaceTrashed: return "\(its) is in Trash, so it can’t take messages."
+        case .workspaceUnbound: return "\(its) isn’t bound to a runner."
+        case .runnerDown: return runnerDownSentence
+        case .coordinatorEnded: return coordinatorEndedSentence
+        case .noCoordinator: return noCoordinatorSentence
+        case .escalated:
+            return "Reachable. It had this for \(waitedBeforeEscalation(row)) and didn’t get to it."
+        case .handedOver:
+            // The coordinator's own note is drawn under its caption (`shownHandoverNote`), not in here.
+            return handedOverSentence
+        }
+    }
+
+    /// The sentence split around the workspace's name, for drawing the name bold — the browser's
+    /// `BoldWorkspace`. Nil when there is no name, or it is not in the sentence as a word.
+    public static func boldWorkspace(_ sentence: String,
+                                     name: String?) -> (before: String, name: String, after: String)? {
+        guard let name, !name.isEmpty, let range = sentence.range(of: " \(name) ") else { return nil }
+        let before = String(sentence[..<range.lowerBound]) + " "
+        let after = " " + String(sentence[range.upperBound...])
+        return (before, name, after)
+    }
+
+    /// The coordinator row's presses (board part 6, third column), in order, with their weight — the
+    /// browser's `coordinatorRowPresses`. D1 = A: a repair only repairs the coordinator; Ask again
+    /// is drawn only once the server reads it askable again.
+    public static func coordinatorRowPresses(_ reading: CoordinatorReading) -> [CoordinatorRowPress] {
+        switch reading.cause {
+        case .workspaceDisabled, .workspaceTrashed, .workspaceUnbound:
+            if let name = reading.workspaceName,
+               let label = coordinatorFixLabel(reading.cause, workspace: name) {
+                return [.fix(label: label, detail: reading.cause), .changeWorkspace(.link)]
+            }
+            return [.changeWorkspace(.secondary)]
+        case .runnerDown: return [.changeWorkspace(.secondary)]
+        case .coordinatorEnded: return [.startNewCoordinator]
+        case .noCoordinator: return [.setUpCoordinator]
+        case .escalated: return [.askAgain(.primary), .chatFirst]
+        // D4 = A: the owner was handed this on purpose, so "Fix it myself" leads and Ask again is
+        // the second weight.
+        case .handedOver: return [.askAgain(.secondary), .chatFirst]
+        }
+    }
+
+    /// Ask again's consequence with the project's own escalation window in it — the browser's
+    /// `askAgainFreshClock`: "It goes back to the coordinator with a fresh 2h clock."
+    public static func askAgainFreshClock(_ escalationSeconds: Int) -> String {
+        "It goes back to the coordinator with a fresh \(RelativeTime.span(TimeInterval(escalationSeconds))) clock."
+    }
+
+    /// The line under the coordinator row's presses — the browser's `coordinatorRowNote`.
+    /// `escalationSeconds` is the project's window (`exceptionEscalationSeconds`); without one Ask
+    /// again keeps its plain consequence.
+    public static func coordinatorRowNote(_ row: ProjectOpenItemRow,
+                                          _ reading: CoordinatorReading,
+                                          escalationSeconds: Int? = nil) -> String? {
+        switch reading.cause {
+        case .escalated, .handedOver:
+            if let escalationSeconds, escalationSeconds > 0 { return askAgainFreshClock(escalationSeconds) }
+            return actionConsequence(row, .askCoordinatorAgain)
+        case .runnerDown: return nil
+        default: return askAgainOnceBack
+        }
+    }
+
+    /// D4 = A: a hand-over leads with the owner's own row; everything else with the coordinator's.
+    public static func youLead(_ reading: CoordinatorReading) -> Bool {
+        reading.cause == .handedOver
+    }
+
+    /// "Fix it myself" is the primary press where nothing in the coordinator row is: a hand-over,
+    /// and a run that is only down.
+    public static func fixItMyselfLeads(_ reading: CoordinatorReading) -> Bool {
+        reading.cause == .handedOver || reading.cause == .runnerDown
+    }
+
+    /// What "Fix it myself" opens and what the owner does there, by kind.
+    public static func fixItMyselfConsequence(_ row: ProjectOpenItemRow) -> String {
+        switch row.kind {
+        case .integrationConflict: return fixItMyselfConflict
+        case .integrationCheckFailed: return fixItMyselfCheck
+        default: return fixItMyselfDefault
+        }
+    }
+
+    /// The owner's other ways onto the work the server listed (a failed task's Retry, say), drawn
+    /// in the You row after "Fix it myself": the writing doors in the second weight, the rest as
+    /// quiet links — the browser's `youDoors`. Ask again, the task session, Cancel task, the landing
+    /// and the coordinator each have their own place on this card.
+    public static func youDoors(_ row: ProjectOpenItemRow, mergeCard: String? = nil) -> [CardPress] {
+        let placed: Set<ProjectOpenItemAction> = [
+            .askCoordinatorAgain, .openTaskSession, .cancelTask, .openLanding, .openCoordinator,
+        ]
+        let writes: Set<ProjectOpenItemAction> = [.retry, .cancelTask, .askCoordinatorAgain, .abandon,
+                                                  .accept, .observe]
+        return drawn(row, mergeCard: mergeCard).filter { !placed.contains($0) }.map { action in
+            CardPress(action: action,
+                      tier: leadingActions.contains(action) || writes.contains(action) ? .secondary : .link,
+                      label: actionLabel(row, action) ?? action.rawValue,
+                      consequence: actionConsequence(row, action))
+        }
+    }
+
+    /// The green line: an integration item with a task branch closes by itself once a fix lands
+    /// there. A candidate's failed check has no task branch to push to — the browser's
+    /// `closesByItself`.
+    public static func closesByItself(_ row: ProjectOpenItemRow) -> Bool {
+        (row.kind == .integrationConflict || row.kind == .integrationCheckFailed
+            || row.kind == .integrationError)
+            && row.taskId != nil
+            && row.promotionId == nil
+    }
+
+    /// "<kind> · <task title> → <project name>", from what the row carries — the browser's
+    /// `whoFixesSubline`. A delivery review is named by its own heading, which this build reads as
+    /// the item's title.
+    public static func whoFixesSubline(_ row: ProjectOpenItemRow, projectName: String?) -> String {
+        let kind = row.kind == .deliveryReview ? row.title : (whoFixesKind[row.kind] ?? row.title)
+        guard let task = row.facts?.task?.title else { return kind }
+        if let projectName, !projectName.isEmpty { return "\(kind) · \(task) → \(projectName)" }
+        return "\(kind) · \(task)"
+    }
+
+    /// The folded Details summary: "Details · 9 files · Open landing" — the browser's
+    /// `detailsSummary`.
+    public static func detailsSummary(_ row: ProjectOpenItemRow, landing: Bool) -> String {
+        let files = row.facts?.files.count ?? 0
+        return [detailsLabel,
+                files > 0 ? "\(files) file\(files == 1 ? "" : "s")" : nil,
+                landing ? openLanding : nil].compactMap { $0 }.joined(separator: " · ")
+    }
+
+    /// The "Came to you" fact: how long the coordinator had it, which the heading no longer says.
+    public static func cameToYouLine(_ row: ProjectOpenItemRow) -> String? {
+        row.escalatedAt == nil ? nil : "after \(waitedBeforeEscalation(row)) with the coordinator"
+    }
+
+    /// A target ref as Details draws it: the branch name, its long id cut short — the browser's
+    /// `shortRef` in this section (not `PromotionCards.shortRef`, which keeps the whole name).
+    public static func detailRef(_ ref: String) -> String {
+        let name = ref.hasPrefix("refs/heads/") ? String(ref.dropFirst("refs/heads/".count)) : ref
+        return name.count > 18 ? String(name.prefix(16)) + "…" : name
+    }
+
+    /// The card's one clock (D3 = A): the total wait, from `waitingSince`.
+    public static func whoFixesClock(_ row: ProjectOpenItemRow, now: Date = Date()) -> String {
+        "waiting \(waited(row, now: now))"
+    }
+
+    /// Details' rows (board ② 4) — the browser's `ItemFactRows` drawn `folded`: the task is
+    /// already on the subline, the branch is the project's by name, the files stop at five, "After a
+    /// fix" gives way to the card's own line about how the item ends — then how long the
+    /// coordinator had it. The landing link is the view's, after these.
+    public static func detailRows(_ row: ProjectOpenItemRow, projectName: String?) -> [FactRow] {
+        var rows: [FactRow] = []
+        switch facts(row) {
+        case .detailLine(let line):
+            if !line.isEmpty { rows.append(FactRow(label: "", value: line)) }
+        case .rows:
+            guard let payload = row.facts else { break }
+            if let targetRef = payload.targetRef {
+                var runs: [FactRow.Run] = []
+                if let projectName, !projectName.isEmpty { runs.append(.init(text: "\(projectName)’s branch ")) }
+                runs.append(.init(text: detailRef(targetRef), face: .mono))
+                var tail = ""
+                if let sha = payload.targetSha { tail += " at \(String(sha.prefix(7)))" }
+                if payload.nothingLanded { tail += nothingLanded }
+                if !tail.isEmpty { runs.append(.init(text: tail)) }
+                rows.append(FactRow(label: intoLabel, runs: runs))
+            }
+            if !payload.files.isEmpty {
+                var runs: [FactRow.Run] = [
+                    .init(text: payload.files.prefix(detailFilesShown).joined(separator: " · "), face: .mono),
+                ]
+                if payload.files.count > detailFilesShown {
+                    runs.append(.init(text: " and \(payload.files.count - detailFilesShown) more"))
+                }
+                rows.append(FactRow(label: "\(filesLabel) (\(payload.files.count))", runs: runs))
+            }
+            if let check = payload.check {
+                rows.append(FactRow(label: checkLabel,
+                                    runs: [.init(text: check.command, face: .mono),
+                                           .init(text: " · "),
+                                           .init(text: checkVerdict(check), face: .bad),
+                                           .init(text: " after \(checkDuration(check.durationMs ?? 0))")],
+                                    logTail: CheckTail.of(check.outputTail)))
+            }
+            if payload.branchUnchanged { rows.append(FactRow(label: branchLabel, value: payload.branchLine ?? branchUnchanged)) }
+            if let failure = payload.failure {
+                rows.append(FactRow(label: howLabel, value: howFailed(failure)))
+                if let standing = chainStanding(failure) {
+                    rows.append(FactRow(label: retriesLabel, value: standing))
+                }
+            }
+            if let errorCode = payload.errorCode {
+                rows.append(FactRow(label: errorLabel, value: errorCode, mono: true))
+            }
+        }
+        if let came = cameToYouLine(row) { rows.append(FactRow(label: cameToYouLabel, value: came)) }
+        return rows
     }
 }

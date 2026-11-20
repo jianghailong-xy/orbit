@@ -1,5 +1,6 @@
 package io.orbitd.android.composer
 
+import io.orbitd.android.core.promptoptimizer.PromptOptimizerState
 import io.orbitd.android.core.cards.ClaudeRegion
 import io.orbitd.android.core.cards.ClaudeRegionCopy
 import io.orbitd.android.core.realtime.SessionState
@@ -48,7 +49,7 @@ data class DraftTarget(val workspaceId: String, val folderId: String? = null, va
 data class ComposerState(val draft: ComposerDraft = ComposerDraft(), val loaded: Boolean = false,
     val busy: Boolean = false, val waiting: Boolean = false, val error: String? = null,
     val notice: String? = null, val uploads: Map<String, Float> = emptyMap(),
-    val failures: Map<String, String> = emptyMap(), val catalog: ComposerCatalog? = null,
+    val catalog: ComposerCatalog? = null,
     val catalogLoading: Boolean = false, val catalogError: String? = null,
     val acknowledgementPending: Boolean = false,
     /** What the provider picked for the session will do, and when, until the next message goes ([EngineCopy.switchNote]). */
@@ -58,7 +59,10 @@ data class ComposerState(val draft: ComposerDraft = ComposerDraft(), val loaded:
     val withdrawing: Set<String> = emptySet(), val steering: Set<String> = emptySet(),
     /** What the server confirmed before the queue's listing or the runner says so: a message sent into the running turn, drawn on its
      * way there, and one taken back, gone from the tray — or, put back, from the tail. */
-    val steered: Set<String> = emptySet(), val withdrawn: Set<String> = emptySet())
+    val steered: Set<String> = emptySet(), val withdrawn: Set<String> = emptySet(),
+    /** The prompt optimizer (docs/prompt-optimizer-design.md): the press out, the suggestion, the failure line, and what Use put in the
+     * box, for Undo and `optimizedTranslation`. Not saved with the draft: after a restart the text is sent, and translated, as typed. */
+    val optimizer: PromptOptimizerState = PromptOptimizerState())
 
 /** Where a credential comes from, as the Provider menu groups it (docs/provider-engine-contract.md §1.3): the engine's own
  * sign-in on the runner, OpenCode's own configuration there, an account pool, or one of the user's keys. */
@@ -69,10 +73,11 @@ enum class CredentialKind { LOGIN, OPENCODE, POOL, KEY }
  * beside it (`opencode auth`; Antigravity's Google account or env key). [fixEngine] is the engine whose page on the runner fixes
  * [unavailable] (OrbitKit `ProviderChoice.fixEngine`), null when none can. [regionBlocked]: [unavailable] is the runner's Claude region
  * (docs/claude-region-check-contract.md §8), which nothing on the page fixes, so the row names no fix — the machine's Claude Code page
- * ([fixEngine]) explains (OrbitKit `ProviderChoice.regionBlocked`). */
+ * ([fixEngine]) explains (OrbitKit `ProviderChoice.regionBlocked`). [notice] is what picking it risks, said under it: a Codex pool
+ * under Claude Code ([EngineCopy.CODEX_POOL_ON_CLAUDE_NOTICE]; OrbitKit `ProviderChoice.notice`). */
 data class ProviderOption(val id: String, val label: String, val kind: CredentialKind,
     val models: List<JsonObject>, val unavailable: String? = null, val detail: String? = null, val fixEngine: String? = null,
-    val regionBlocked: Boolean = false)
+    val regionBlocked: Boolean = false, val notice: String? = null)
 
 /** An engine as the new session's Engine list shows it (web `EngineChoice`): every credential it runs on here, and the one a pick
  * of it lands on — none for DeepSeek Harness before a DeepSeek key is connected, whose row offers the connection instead. */
@@ -94,6 +99,10 @@ object EngineCopy {
     const val DEEPSEEK_CONNECT_PATH = "/providers/new/deepseek"
     const val PROVIDER = "Provider"
     const val ACCOUNT_POOLS = "Account pools"
+    /** Under a Codex pool of one's own listed under Claude Code, which runs on its ChatGPT account through Orbit's gateway rather
+     * than the Codex CLI (web `CODEX_POOL_ON_CLAUDE_NOTICE`, OrbitKit `SessionProviderChoices.codexPoolOnClaudeNotice`). */
+    const val CODEX_POOL_ON_CLAUDE_NOTICE =
+        "Runs Claude Code on your ChatGPT account outside the official Codex CLI. OpenAI may restrict the account."
     const val API_KEYS = "API keys"
     const val THIS_SESSIONS_KEY = "This session's key"
     const val KEY_DELETED = "Key deleted"
@@ -281,26 +290,18 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
         }.orEmpty()
     }
 
-    /** The model last picked for [engine] on [provider] (`preferences.defaultModels`, contract §6.5's order; OrbitKit
-     * `AgentDefaults.rememberedModel`, web `rememberedModel`): the pair's own key, `<engine>:<provider>`, then what an older client
-     * remembered — `opencode/<slug>` (whose value names the key, `orbit-<slug>/<model>`) and `opencode` for OpenCode, the bare slug
-     * for the engine a provider runs on by default. */
-    fun rememberedModel(engine: String, provider: String, remembered: Map<String, String>): String? {
-        remembered["$engine:$provider"]?.let { return it }
-        if (engine == ProviderEngines.OPENCODE) {
-            if (provider == ProviderEngines.OPENCODE) return remembered[ProviderEngines.OPENCODE]?.takeUnless { it.startsWith("orbit-") && '/' in it }
-            val named = remembered["opencode/$provider"] ?: return null
-            return named.removePrefix("orbit-$provider/").takeIf { named.startsWith("orbit-$provider/") }
-        }
-        return remembered[provider]?.takeIf { providerEngines(provider).firstOrNull() == engine }
-    }
+    /** The [workspace]'s `lastModel` — the model of the session a person last opened there — when a draft on [engine] with [provider]
+     * runs on its `lastEngine` and `lastProvider` (never the deprecated `provider` alias), else null (docs/workspace-default-model-design.md;
+     * web `newSessionModelFor`). The account-wide model memory is retired: nothing reads or writes it. */
+    fun lastModel(engine: String, provider: String, workspace: JsonObject?): String? =
+        workspace?.text("lastModel")?.takeIf { workspace.text("lastEngine") == engine && workspace.text("lastProvider") == provider }
 
     /** That model while the pair still offers it, null once the runtime has retired it (OrbitKit `AgentDefaults.livePin`, web
      * `livePinnedModel`): OpenCode owns its own selection, a key's own list is a document rather than a live probe, a catalogue not
      * reported retires nothing, and an id the runtime names as its default is current by definition. Judged against the catalogue of
      * the CLI that runs it — DeepSeek Harness's own, whichever key it spends. */
-    fun liveRememberedModel(engine: String, provider: String, remembered: Map<String, String>): String? {
-        val model = rememberedModel(engine, provider, remembered) ?: return null
+    fun liveLastModel(engine: String, provider: String, workspace: JsonObject?): String? {
+        val model = lastModel(engine, provider, workspace) ?: return null
         if (engine == ProviderEngines.OPENCODE) return model
         val row = row(provider)
         if (model.isEmpty()) return if (row == null && engine == ProviderEngines.ANTIGRAVITY) null else model
@@ -313,10 +314,10 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
         return model.takeIf { offered.any { it.text("value") == model || it.text("value") == name } }
     }
 
-    /** The model a new session on [engine] with [provider] starts on (A07-19 (e); OrbitKit `AgentDefaults.newSessionModel`, web
-     * `newSessionModelFor`): the one last picked for the pair while it is still offered, else the pair's default. */
-    fun newSessionModel(engine: String, provider: String, remembered: Map<String, String>): String =
-        liveRememberedModel(engine, provider, remembered) ?: defaultModel(engine, provider)
+    /** The model a new session on [engine] with [provider] starts on (web `newSessionModelFor`): the [workspace]'s `lastModel` on its
+     * own engine and credential while still offered, else the pair's runner or key default. */
+    fun newSessionModel(engine: String, provider: String, workspace: JsonObject?): String =
+        liveLastModel(engine, provider, workspace) ?: defaultModel(engine, provider)
 
     /** A credential by the name a sentence gives it where its engine is not beside it (OrbitKit `SessionProviderChoices.providerName`,
      * web `providerNameOn`): an engine's own sign-in by the engine's CLI, anything else by its own label. */
@@ -390,11 +391,13 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
         return rows.firstOrNull { it.text("value") == name }
     }
 
-    /** A model as its row names it, or the id itself; an empty one is the runtime's own pick. */
+    /** A model as its row names it, else a Claude id as Claude Code names it, else the id itself; an empty one is the runtime's
+     *  own pick. */
     fun modelLabel(engine: String, provider: String, model: String): String =
         modelRow(engine, provider, model)?.let { it.text("label") ?: model }
             // Cursor CLI's Auto, which its catalogue names `default` and no model named runs too.
             ?: if (CursorRuntime.onAuto(engine, model)) CursorRuntime.AUTO
+            else if (engine == ProviderEngines.CLAUDE && model.isNotEmpty()) ProviderEngines.claudeModelName(model)
             else model.ifEmpty { if (engine == ProviderEngines.OPENCODE) "Managed by OpenCode" else "Runtime default" }
 
     /** Whether this runner can start a Cursor CLI session, as the server admits one (web `cursorRunnerState`): null when it can, else why
@@ -456,7 +459,10 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
                 else ClaudeRegion.Credential.Key(row.text("presetSlug")))
             return ProviderOption(row.text("slug")!!, row.text("label") ?: row.text("slug")!!, kind, models(engine, row.text("slug")!!),
                 if (region) ClaudeRegionCopy.CLAUDE_REGION_NOT_SUPPORTED else carried ?: row.text("unavailable"),
-                fixEngine = if (region) engine else fix, regionBlocked = region)
+                fixEngine = if (region) engine else fix, regionBlocked = region,
+                notice = EngineCopy.CODEX_POOL_ON_CLAUDE_NOTICE.takeIf {
+                    kind == CredentialKind.POOL && engine == ProviderEngines.CLAUDE && row.text("runtime") == ProviderEngines.CODEX
+                })
         }
         return own + runs.filter(::isPool).map { option(it, CredentialKind.POOL) } + runs.filterNot(::isPool).map { option(it, CredentialKind.KEY) }
     }
@@ -560,12 +566,13 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
         runner.objects("engines").firstOrNull { it.text("engine") == provider }?.objects("accounts").orEmpty() else emptyList()
     /** Whether a session here moves to another of the runner's [provider] accounts (EngineAccounts.moveCapability). */
     fun movesAccounts(provider: String) = EngineAccounts.moveCapability(provider) in runner.strings("capabilities")
-    /** SessionProviderChoices.accountChoices: the runner's accounts of [provider] as rows, each with its own quota. */
+    /** SessionProviderChoices.accountChoices: the runner's accounts of [provider] as rows, each with its own quota;
+     *  one signed out on this runner is not one it can run, so it gets no row. */
     fun accountChoices(provider: String): List<AccountChoice> {
         val health = runner.objects("engines").firstOrNull { it.text("engine") == provider } ?: return emptyList()
         val accounts = accounts(provider)
         val usage = EngineAccounts.usage(provider, runner)
-        return accounts.map { account ->
+        return accounts.filter { it.text("auth") != "no" || RunnerPage.runsOnEnvKey(health, it.text("id").orEmpty(), it.text("auth")) }.map { account ->
             val id = account.text("id").orEmpty()
             val label = RunnerPage.accountLabel(id, accounts)
             // Antigravity's Default on the runner's own Gemini key runs, on the key, with no quota of its own: not signed out.
@@ -579,8 +586,7 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
             val rows = own?.let(::usageRows).orEmpty()
             // The window closest to its limit; a bucket's row counts what is left, so its tightest is the binding one.
             val row = if (rows.any { it.remaining }) own?.let { bindingRow(it, System.currentTimeMillis()) } else rows.maxByOrNull { it.percent }
-            AccountChoice(id, label, row?.let(::quotaText), (row?.utilization ?: 0.0) >= 90,
-                if (account.text("auth") == "no") "Not signed in" else null)
+            AccountChoice(id, label, row?.let(::quotaText), (row?.utilization ?: 0.0) >= 90)
         }
     }
 
@@ -659,7 +665,7 @@ internal fun SessionState?.canCompose() = this != null && fresh && !accessDenied
 /** The decision behind a task run whose model smart selection picked, while the composer still shows that model (OrbitKit
  * `ComposerLogic.smartRoute`; the session read's `route`): it marks the model chip ✦ and opens its menu on why. A model changed here
  * is this run's own, a session opened by hand has no route, a run on an Agent without smart selection has one that was not applied —
- * and so does every run while the account's switch (`preferences.modelRouting`, off by default) is off: all keep the chip as it was. */
+ * and so does every run while the account's switch (`preferences.modelRouting`, on by default) is off: all keep the chip as it was. */
 internal fun smartRoute(taskId: String?, route: JsonObject?, model: String, smartSelection: Boolean): JsonObject? {
     if (!smartSelection || taskId.isNullOrEmpty() || route == null || route.flag("applied") != true) return null
     if (route.text("level").isNullOrEmpty() || route.text("model") != model) return null

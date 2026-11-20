@@ -1,0 +1,417 @@
+import {
+  isAuthErrorText,
+  isUsageLimitErrorText,
+  PermissionMode,
+  SUBAGENT_RUN_STATUSES,
+  type SubagentAttempt,
+  type SubagentAttemptOutcome,
+  type SubagentCandidateTarget,
+  type SubagentFallbackRequest,
+  type RunnerModelCatalog,
+  type SubagentDecision,
+  type SubagentRunStatus,
+  type SubagentRunView,
+  type SubagentRunCreateRequest,
+  type SubagentRunUpdateRequest,
+  type SubagentSize,
+} from '@orbit/shared';
+import {
+  ArrayMaxSize,
+  IsBoolean,
+  IsIn,
+  IsInt,
+  Max,
+  IsNumber,
+  IsObject,
+  IsOptional,
+  IsString,
+  MaxLength,
+  Min,
+  MinLength,
+} from 'class-validator';
+import { IsPublicId } from '../common/public-id';
+import { MODEL_AT_CAPACITY_ERROR_MARKER, subagentFitLine, type SubagentRoutingDecision } from '../tasks/model-routing';
+import { stripNul } from './strip-nul';
+
+/**
+ * SubAgent runs (docs/subagent-design.md §5.1, §6.1): what the runner reports when a parent session's
+ * `mcp__orbit__delegate` call opens one and when it ends, validated.
+ */
+
+const SIZES: SubagentSize[] = ['S', 'M', 'L', 'XL'];
+
+export class SubagentRunCreateDto implements SubagentRunCreateRequest {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  toolUseId!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  type!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(4_096)
+  definitionSource!: string;
+
+  @IsOptional()
+  @IsBoolean()
+  background?: boolean;
+
+  @IsOptional()
+  @IsIn(SIZES)
+  size?: SubagentSize;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2_000)
+  sizeReason?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  model?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  definitionModel?: string;
+
+  @IsOptional()
+  @IsIn(SIZES)
+  definitionSize?: SubagentSize;
+
+  @IsOptional()
+  @IsBoolean()
+  readonly?: boolean;
+
+  @IsOptional()
+  @IsIn(Object.values(PermissionMode))
+  permissionMode?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1_000)
+  description?: string;
+
+  /** A workspace to run on, by name (docs/subagent-design.md §10.1). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  workspace?: string;
+
+  /** Runner capabilities the work needs, e.g. `os:darwin` (§10.1). */
+  @IsOptional()
+  @IsString({ each: true })
+  @MaxLength(200, { each: true })
+  @ArrayMaxSize(32)
+  needs?: string[];
+
+  /** The brief, which a remote run's target runner needs (§10.2). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(400_000)
+  prompt?: string;
+
+  /** A finished remote run of this session to continue (§10.2). */
+  @IsOptional()
+  @IsPublicId()
+  resumeOf?: string;
+
+  @IsOptional()
+  @IsPublicId()
+  workflowRunId?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(2_147_483_647)
+  callIndex?: number;
+
+  @IsOptional()
+  @IsString()
+  label?: string;
+
+  @IsOptional()
+  @IsString()
+  phase?: string;
+}
+
+export class SubagentRunUpdateDto implements SubagentRunUpdateRequest {
+  /** `RUNNING` only with `wake: true` (the controller refuses it otherwise): the call stopped waiting. */
+  @IsIn([...SUBAGENT_RUN_STATUSES])
+  status!: SubagentRunUpdateRequest['status'];
+
+  @IsOptional()
+  @IsBoolean()
+  wake?: boolean;
+
+  /** Truncated to SUBAGENT_RESULT_SUMMARY_MAX on write, so a long result is not refused. */
+  @IsOptional()
+  @IsString()
+  resultSummary?: string;
+
+  @IsOptional()
+  @IsString({ each: true })
+  @MaxLength(4_096, { each: true })
+  @ArrayMaxSize(10_000)
+  changedFiles?: string[];
+
+  @IsOptional()
+  @IsNumber({ allowNaN: false, allowInfinity: false })
+  @Min(0)
+  costUsd?: number;
+
+  @IsOptional()
+  @IsObject()
+  usage?: Record<string, unknown>;
+}
+
+export class SubagentFallbackDto implements SubagentFallbackRequest {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(20_000)
+  error!: string;
+
+  @IsOptional()
+  @IsBoolean()
+  readonly?: boolean;
+
+  @IsOptional()
+  @IsIn(Object.values(PermissionMode))
+  permissionMode?: string;
+}
+
+/** How many times one delegate call may move to another candidate after a usage limit, capacity or failed login (§4.3). */
+export const SUBAGENT_MAX_MOVES = 2;
+
+/** How much of a failed attempt's error `subagent_run.attempts` keeps. */
+export const SUBAGENT_ATTEMPT_ERROR_MAX = 500;
+
+/**
+ * A child's failure as §4.3 moves it: a spent quota (USAGE_LIMIT_ERROR_MARKERS, opening the text) or a model at
+ * capacity (MODEL_AT_CAPACITY_ERROR_MARKER). Null for every other failure, which goes back to the parent as is.
+ */
+export function limitFailure(error: string): Extract<SubagentAttemptOutcome, 'USAGE_LIMIT' | 'AT_CAPACITY'> | null {
+  if (isUsageLimitErrorText(error)) return 'USAGE_LIMIT';
+  return error.toLowerCase().includes(MODEL_AT_CAPACITY_ERROR_MARKER) ? 'AT_CAPACITY' : null;
+}
+
+/** How a sign-in failure may open when the engine does not wrap it in `Failed to authenticate` (Codex, OAuth). */
+const LOGIN_FAILURE_OPENINGS = ['not logged in', 'oauth session expired'];
+
+/**
+ * Whether a child failed on its engine's login: the runtime's `Failed to authenticate` (isAuthErrorText, which
+ * leaves out a dropped connection), or a text that opens as `Not logged in` / `OAuth session expired`. Kept in sync
+ * with isSubagentLoginFailure in runner-go/subagent_fallback.go.
+ */
+export function isLoginFailureText(error: string): boolean {
+  if (isAuthErrorText(error)) return true;
+  const opening = error.trimStart().toLowerCase();
+  return LOGIN_FAILURE_OPENINGS.some((marker) => opening.startsWith(marker));
+}
+
+/** A child's failure as §4.3 moves it: a limit or capacity (limitFailure), else a failed login; null otherwise. */
+export function movableFailure(error: string): Extract<SubagentAttemptOutcome, 'USAGE_LIMIT' | 'AT_CAPACITY' | 'AUTH_FAILED'> | null {
+  return limitFailure(error) ?? (isLoginFailureText(error) ? 'AUTH_FAILED' : null);
+}
+
+/** The first entry of a run's attempts: where it was opened to run. */
+export function firstAttempt(target: SubagentCandidateTarget, at = new Date()): SubagentAttempt {
+  return { ...target, attempt: 1, outcome: 'RUNNING', startedAt: at.toISOString() };
+}
+
+/** `subagent_run.attempts` as written; [] on a row from before attempts were kept. */
+export function attemptsOf(value: unknown): SubagentAttempt[] {
+  return Array.isArray(value) ? (value as SubagentAttempt[]).map((a) => ({ ...a })) : [];
+}
+
+/** The candidates a run may move to, in rank order, from the decision it opened with: the pick, then the rest of its tier. */
+export function fallbackCandidates(
+  decision: Pick<SubagentDecision, 'engine' | 'provider' | 'model' | 'effort' | 'fallbacks' | 'note'>,
+): SubagentCandidateTarget[] {
+  const pick = decision.engine && decision.provider && decision.model
+    ? [{
+      engine: decision.engine, provider: decision.provider, model: decision.model, effort: decision.effort,
+      ...(decision.note ? { note: decision.note } : {}),
+    }]
+    : [];
+  return [...pick, ...(decision.fallbacks ?? [])];
+}
+
+/**
+ * NO_SUBAGENT_PROVIDER's message: no candidate left to move to, with each provider's reason — the ones whose
+ * account hit its limit or whose login failed on an attempt, the ones the router removed, and the ones that could
+ * not be started.
+ */
+export function noProviderMessage(
+  decision: Pick<SubagentDecision, 'level' | 'candidates'>,
+  attempts: readonly SubagentAttempt[],
+  skipped: readonly string[] = [],
+): string {
+  const tier = decision.level ? ` in tier ${decision.level}` : '';
+  const lines = [
+    ...attempts.filter((a) => a.outcome === 'USAGE_LIMIT' || a.outcome === 'AT_CAPACITY' || a.outcome === 'AUTH_FAILED').map((a) =>
+      `${a.provider} (${a.engine}), ${a.model}: ${a.outcome === 'AT_CAPACITY' ? 'the model was at capacity'
+        : a.outcome === 'AUTH_FAILED' ? 'its login failed' : 'the account hit its limit'}`),
+    ...(decision.candidates ?? []).map((c) =>
+      `${c.provider}${c.engine ? ` (${c.engine})` : ''}${c.model ? `, ${c.model}${c.effort ? ` · ${c.effort}` : ''}` : ''}: ${c.reason}`),
+    ...skipped,
+  ];
+  return `No provider is left to run this SubAgent${tier}.` + (lines.length ? ` Each provider's reason:\n- ${lines.join('\n- ')}` : '');
+}
+
+/** How much of a SubAgent's result `subagent_run.result_summary` keeps. */
+export const SUBAGENT_RESULT_SUMMARY_MAX = 20_000;
+
+/**
+ * The router's decision as `subagent_run.decision` stores it now routing applies (§8 P3): the SubAgent runs on
+ * the candidate it opened on — the pick, or, when the pick could not be started on this runner, the first of
+ * the tier's next candidates that could. Each candidate passed over is recorded as removed with its reason and
+ * leaves the fallbacks, which keep only what ranks after the one it runs on.
+ */
+export function appliedDecision(
+  route: SubagentRoutingDecision,
+  runsOn: SubagentCandidateTarget,
+  passedOver: ReadonlyArray<{ target: SubagentCandidateTarget; reason: string }> = [],
+): SubagentDecision {
+  const ranked = fallbackCandidates(route);
+  const at = ranked.findIndex((c) => c.engine === runsOn.engine && c.provider === runsOn.provider && c.model === runsOn.model);
+  const fallbacks = at >= 0 ? ranked.slice(at + 1) : route.fallbacks;
+  // A candidate further down that runs because the ones before it could not start: say when it is not of the asked tier.
+  const ran = at > 0 ? ranked[at] : null;
+  const fit = ran && route.level && ran.level !== undefined
+    ? subagentFitLine(route.level, { level: ran.level, model: ran.model, provider: ran.provider, engine: ran.engine })
+    : null;
+  return {
+    ...route,
+    engine: runsOn.engine,
+    provider: runsOn.provider,
+    model: runsOn.model,
+    effort: runsOn.effort,
+    ...(at > 0 ? { note: runsOn.note } : {}),
+    reasons: [
+      ...route.reasons,
+      ...passedOver.map((p) => `Passed over ${p.target.model} on ${p.target.provider}: ${p.reason}`),
+      ...(fit ? [fit] : []),
+    ],
+    candidates: [
+      ...route.candidates,
+      ...passedOver.map((p) => ({
+        provider: p.target.provider, engine: p.target.engine, model: p.target.model, effort: p.target.effort, reason: p.reason,
+      })),
+    ],
+    fallbacks,
+    applied: true,
+  };
+}
+
+const OPTIMIZE_LABEL: Record<string, string> = { cost: 'Cost', balance: 'Balance', intelligence: 'Intelligence' };
+
+/**
+ * The Why line of a SubAgent block: where the tier or model came from, the model it runs on with its provider
+ * named once and why it, each move after a limit, and how many candidates were removed — e.g.
+ * `Tier S, set by the caller · Cost: claude-sonnet-5-5 · low on claude, subscription with 64% quota left · 11
+ * others removed`. The full reasons and every removed candidate stay in the decision. Null for a row from before
+ * the decision kept its notes.
+ */
+export function subagentWhyLine(decision: Partial<SubagentDecision>): string | null {
+  if (typeof decision.tierNote !== 'string') return null;
+  const parts = [decision.tierNote];
+  if (decision.model) {
+    const engine = decision.engine && decision.engine !== decision.provider ? ` (${decision.engine})` : '';
+    const where = `${decision.model}${decision.effort ? ` · ${decision.effort}` : ''} on ${decision.provider}${engine}`;
+    const routed = decision.tierSource !== 'named-model' && decision.tierSource !== 'definition-model'
+      && decision.tierSource !== 'not-routed';
+    const mode = routed && decision.optimizeFor ? OPTIMIZE_LABEL[decision.optimizeFor] : undefined;
+    const lead = mode ? `${mode}: ${where}` : where;
+    parts.push(decision.note ? `${lead}, ${decision.note}` : lead);
+  }
+  parts.push(...(Array.isArray(decision.moves) ? decision.moves : []));
+  const removed = Array.isArray(decision.candidates) ? decision.candidates.length : 0;
+  if (removed > 0) parts.push(`${removed} other${removed === 1 ? '' : 's'} removed`);
+  return parts.join(' · ');
+}
+
+/**
+ * How the owner's tables name each model id: the provider rows' tables as the API serves them (`withPreset`), then
+ * the runner's catalogue. The first name found for an id wins.
+ */
+export function modelLabels(
+  providers: Array<{ models?: unknown }>,
+  catalog?: RunnerModelCatalog | null,
+): Map<string, string> {
+  const labels = new Map<string, string>();
+  const add = (rows: unknown) => {
+    for (const row of Array.isArray(rows) ? rows : []) {
+      const { value, label } = (row ?? {}) as { value?: unknown; label?: unknown };
+      if (typeof value === 'string' && typeof label === 'string' && label && !labels.has(value)) labels.set(value, label);
+    }
+  };
+  for (const provider of providers) add(provider.models);
+  for (const rows of Object.values(catalog ?? {})) add(rows);
+  return labels;
+}
+
+/**
+ * A `subagent_run` row as `GET /sessions/:id/subagents` answers it. The model is the one the SubAgent runs
+ * on: the router's pick, else what it runs on instead (`runModel`: the candidate a limit moved it to, or the
+ * parent's on a shadow row), named by `modelLabels`.
+ */
+export function subagentRunView(
+  row: {
+    toolUseId: string;
+    type: string;
+    background: boolean;
+    status: string;
+    decision: unknown;
+    costUsd: number;
+    resultSummary: string | null;
+    createdAt: Date;
+    endedAt: Date | null;
+    /** The workspace a remote run went to (§10), read beside the row; absent for one on the parent's machine. */
+    workspace?: { name: string } | null;
+    attempts?: unknown;
+    changedFiles?: string[];
+    description?: string | null;
+  },
+  labels?: ReadonlyMap<string, string>,
+): SubagentRunView {
+  const decision = (row.decision ?? {}) as Partial<SubagentDecision>;
+  const instead = decision.runModel !== undefined;
+  const model = (instead ? decision.runModel : decision.model) ?? null;
+  const effort = (instead ? decision.runEffort : decision.effort) ?? null;
+  // A shadow row runs on the parent's engine, whatever it picked; a moved run on its last attempt's.
+  const engine = decision.applied === false ? null : attemptsOf(row.attempts).at(-1)?.engine ?? decision.engine ?? null;
+  return {
+    toolUseId: row.toolUseId,
+    type: row.type,
+    background: row.background,
+    status: row.status as SubagentRunStatus,
+    level: decision.level ?? null,
+    model,
+    modelLabel: model ? labels?.get(model) ?? model : null,
+    effort,
+    reasons: Array.isArray(decision.reasons) ? decision.reasons.filter((r) => typeof r === 'string') : [],
+    why: subagentWhyLine(decision),
+    removed: Array.isArray(decision.candidates) ? decision.candidates : [],
+    costUsd: row.costUsd,
+    resultSummary: row.resultSummary,
+    // The workspace's name now, else the one the decision recorded (a workspace deleted since leaves the column null).
+    workspaceName: row.workspace?.name ?? decision.workspace?.name ?? null,
+    description: row.description ?? null,
+    engine,
+    readonly: decision.readonly === true,
+    changedFiles: row.changedFiles ?? [],
+    createdAt: row.createdAt.toISOString(),
+    endedAt: row.endedAt ? row.endedAt.toISOString() : null,
+  };
+}
+
+export function truncateResultSummary(summary: string | undefined): string | undefined {
+  if (summary === undefined) return undefined;
+  const clean = stripNul(summary);
+  return clean.length > SUBAGENT_RESULT_SUMMARY_MAX ? clean.slice(0, SUBAGENT_RESULT_SUMMARY_MAX) : clean;
+}

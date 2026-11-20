@@ -6,7 +6,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { readOwnerDecisionsBySession } from '../projects/owner-decision-signal';
 import { orbitUrl } from '../push/feishu-transport';
 import { PushService } from '../push/push.service';
+import { ownerWordsForAgent } from '../sessions/reply-translation';
+import type { ExternalTurnSender } from '../sessions/session-message';
 import { SessionsService } from '../sessions/sessions.service';
+import { isSlashCommand, translationLanguages } from '../sessions/turn-translation';
 import {
   DEFAULT_WORKSPACE_ACTION,
   DIRECT_CARD_MAX_ENTRIES,
@@ -15,6 +18,8 @@ import {
   renderWorkspacePickerCard,
   type FeishuDirectCard,
 } from './cards/feishu-direct-cards';
+import { groupReason } from './feishu-group.service';
+import { openSlotStarted, releaseOpenSlot, reserveOpenSlot, type FeishuOpenRequest } from './feishu-open-limits';
 import { FeishuOutbound, feishuDedupeUuid } from './feishu-outbound';
 import { credentialsOf, FeishuOwnerService, type FeishuOwnerApp } from './feishu-owner.service';
 import type { FeishuActor } from './feishu-router';
@@ -39,9 +44,29 @@ export const FEISHU_DIRECT_REPLIES = {
   workspaceChosen: (name: string) => `Default workspace: ${name}`,
 } as const;
 
+/**
+ * What the bot answers someone other than the owner in a direct message while it is open (§14.2, task O3). English,
+ * and, since the reader is not the account's owner, never naming Orbit (§15.1): a server's refusal is passed through
+ * `groupReason`, as in a group. The limits' sentences are FEISHU_OPEN_REPLIES (feishu-open-limits.ts).
+ */
+export const FEISHU_OPEN_DIRECT_REPLIES = {
+  started: (title: string) => `Started · ${title}`,
+  notLinked: "This message isn't linked to a session. To start a new session, send a new message rather than a reply.",
+  notStarted: (reason: string) => `Nothing was started: ${groupReason(reason)}.`,
+  notSent: (reason: string) => `This wasn't sent to the session: ${groupReason(reason)}.`,
+} as const;
+
 /** The app as the router read it, with where the owner's new sessions open. */
 export interface FeishuDirectApp extends FeishuOwnerApp {
   defaultWorkspaceId: string | null;
+  /** "Show Orbit in Feishu" (§15.2): off, the status card has no Open in Orbit. */
+  showOrbit: boolean;
+}
+
+/** The app as the router read it, with the settings sessions other people open use (§14.1). */
+export interface FeishuOpenDirectApp extends FeishuDirectApp {
+  openWorkspaceId: string | null;
+  openPermissionMode: string;
 }
 
 type Json = Record<string, unknown>;
@@ -169,6 +194,138 @@ export class FeishuDirectService {
   }
 
   /**
+   * One direct message from someone other than the owner, in the app's availability scope, while the app is open
+   * (§14.2, task O3). False when the app is not open after all — switched back to OWNER_ONLY, or its open workspace
+   * gone — and nothing was written: the router answers as it does for a closed bot.
+   *
+   *   - A top-level message opens a session in `open_workspace_id`, in `open_permission_mode`, owned by the account,
+   *     whose first turn records the sender (Feishu, the open_id, the name Feishu gives). Before it is made, a slot of
+   *     the open bot is held (reserveOpenSlot, §14.4): the message's chain in feishu_thread, with the sender as
+   *     `open_access_open_id`. Over a limit nothing is made, and the sender is answered with the limit's sentence. The
+   *     bot answers the message with `Started · <title>`, and every turn's last words come back to the chain through the
+   *     outbox, as words alone (feishu-outbox.ts).
+   *   - A reply in a chain the sender opened is a turn of its session, recording the sender. A reply anywhere else is
+   *     answered `notLinked`; nobody else's chain, and no alert card, is reachable from here.
+   *   - Anything that is not text is answered as the owner's is. `help`, `status` and `disconnect` are the owner's
+   *     commands, and here they are an ordinary message.
+   *
+   * Keyed on the event as the owner's path is: the session id is derived from the app and the message, a turn's
+   * clientTurnId from the app and the event, every reply's Feishu uuid from the message answered. Each new session or
+   * turn, and each request refused for a limit, is recorded once as an activity with credentialKind=FEISHU.
+   */
+  async handleOpenMessage(app: FeishuOpenDirectApp, actor: FeishuActor, eventId: string, payload: unknown): Promise<boolean> {
+    const message = directMessageOf(payload);
+    if (!message) return false;
+    const workspace = app.openWorkspaceId
+      ? await this.prisma.workspace.findFirst({ where: { id: app.openWorkspaceId, ownerId: app.ownerId, deletedAt: null }, select: { id: true } })
+      : null;
+    if (!workspace) return false;
+    if (message.text === null) {
+      await this.replyText(app, message.messageId, 'non-text', FEISHU_DIRECT_REPLIES.nonText);
+      return true;
+    }
+    if (message.rootId || message.parentId) {
+      await this.openReply(app, actor, eventId, message, message.text);
+      return true;
+    }
+    return this.openStart(app, actor, message, message.text, workspace.id);
+  }
+
+  /** A top-level message from someone else: a session in the open settings, within the limits (§14.2, §14.4). */
+  private async openStart(app: FeishuOpenDirectApp, actor: FeishuActor, message: DirectMessage, text: string, workspaceId: string): Promise<boolean> {
+    const openId = actor.credential.openId;
+    const sessionId = feishuDerivedUuid('feishu-open-session', app.appId, message.messageId);
+    const slot: Omit<FeishuOpenRequest, 'ownerId' | 'openId'> = { appId: app.appId, chatId: message.chatId, rootMessageId: message.messageId, sessionId };
+    const find = () => this.prisma.session.findFirst({ where: { id: sessionId, ownerId: app.ownerId }, select: { id: true, title: true } });
+    let session = await find();
+    if (!session) {
+      const held = await withTransactionRetry(this.prisma, async (tx) => {
+        const answer = await reserveOpenSlot(tx, { ...slot, ownerId: app.ownerId, openId });
+        if (!answer.ok && answer.limit !== 'NOT_OPEN') {
+          await this.recordActivityOnce(tx, app.ownerId, actor, 'feishu.open.refused', { chatId: message.chatId, limit: answer.limit, max: answer.max });
+        }
+        return answer;
+      }, loggedRetry(this.logger, 'feishuDirect.openStart'));
+      if (!held.ok) {
+        if (held.limit === 'NOT_OPEN') return false;
+        this.logger.log(`feishu app ${app.appId}: a direct message from someone else started nothing (${held.limit})`);
+        await this.replyText(app, message.messageId, 'over-limit', held.words);
+        return true;
+      }
+      const sender: ExternalTurnSender = { source: 'FEISHU', id: openId, name: await this.userName(app, openId) };
+      try {
+        const made = await this.sessions.create(
+          app.ownerId,
+          { workspaceId, prompt: text, permissionMode: app.openPermissionMode },
+          { id: sessionId, credential: actor.credential, openedBy: 'FEISHU', externalSender: sender },
+        );
+        session = { id: made.id, title: made.title };
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') session = await find();
+        if (!session) {
+          // Anything but a refusal fails the inbox attempt, and the next one finds the reservation and uses it.
+          if (!(error instanceof HttpException)) throw error;
+          await releaseOpenSlot(this.prisma, slot);
+          this.logger.log(`feishu app ${app.appId}: a session for someone else was not started (${error.getStatus()})`);
+          await this.replyText(app, message.messageId, 'not-started', FEISHU_OPEN_DIRECT_REPLIES.notStarted(refusalWords(error)));
+          return true;
+        }
+      }
+    }
+    const opened = session;
+    await withTransactionRetry(this.prisma, async (tx) => {
+      if (await openSlotStarted(tx, slot)) {
+        await this.recordActivity(tx, app.ownerId, actor, 'feishu.open.session.created', { sessionId: opened.id, workspaceId, chatId: message.chatId });
+      }
+    }, loggedRetry(this.logger, 'feishuDirect.openStarted'));
+    this.logger.log(`feishu app ${app.appId}: session ${opened.id} started from someone else's direct message`);
+    await this.replyText(app, message.messageId, 'started', FEISHU_OPEN_DIRECT_REPLIES.started(opened.title));
+    return true;
+  }
+
+  /** A reply from someone else: a turn of the session whose chain they opened, recording them. */
+  private async openReply(app: FeishuOpenDirectApp, actor: FeishuActor, eventId: string, message: DirectMessage, text: string): Promise<void> {
+    const openId = actor.credential.openId;
+    const roots = [message.rootId, message.parentId].filter((id): id is string => id !== undefined);
+    // Only a chain this sender opened in this chat: never the owner's chains, nor an alert card.
+    const thread = await this.prisma.feishuThread.findFirst({
+      where: { appId: app.appId, ownerId: app.ownerId, chatId: message.chatId, rootMessageId: { in: roots }, openAccessOpenId: openId },
+      orderBy: { createdAt: 'desc' },
+      select: { sessionId: true, rootMessageId: true },
+    });
+    if (!thread) {
+      await this.replyText(app, message.messageId, 'not-linked', FEISHU_OPEN_DIRECT_REPLIES.notLinked);
+      return;
+    }
+    const { sessionId, rootMessageId } = thread;
+    const sender: ExternalTurnSender = { source: 'FEISHU', id: openId, name: await this.userName(app, openId) };
+    try {
+      await this.sessions.createTurn(app.ownerId, sessionId, { clientTurnId: feishuTurnKey(app.appId, eventId), content: text }, {
+        senderClient: { client: 'feishu' },
+        externalSender: sender,
+        // Written with the turn, so a replay of this clientTurnId records nothing again. The chain is the one the slot
+        // was held on, stamped as spoken in; no other chain is written for the session.
+        onTurnWritten: async (tx, turn) => {
+          await this.registerChain(tx, app, message.chatId, rootMessageId, sessionId);
+          await this.recordActivity(tx, app.ownerId, actor, 'feishu.open.session.turn', { sessionId, turnId: turn.id, chatId: message.chatId });
+        },
+      });
+    } catch (error) {
+      if (!(error instanceof HttpException)) throw error;
+      this.logger.log(`feishu app ${app.appId}: someone else's reply was not sent to session ${sessionId} (${error.getStatus()})`);
+      await this.replyText(app, message.messageId, 'not-sent', FEISHU_OPEN_DIRECT_REPLIES.notSent(refusalWords(error)));
+      return;
+    }
+    this.logger.log(`feishu app ${app.appId}: someone else's reply went to session ${sessionId} as a turn`);
+  }
+
+  /** The name Feishu gives for `openId`, read each handling; a replay's turn keeps the one it was written with. */
+  private async userName(app: FeishuOwnerApp, openId: string): Promise<string | null> {
+    const credentials = credentialsOf(app);
+    return credentials ? this.outbound.userName(credentials, openId) : null;
+  }
+
+  /**
    * The owner's click on a card this branch sent: a default-workspace button. The answer Feishu shows at once; null
    * for a click that is not this branch's.
    */
@@ -198,7 +355,13 @@ export class FeishuDirectService {
       return;
     }
     try {
+      // Settings › Translation: the owner's reply reaches the session in the agent language. One that cannot be
+      // translated is refused (422 TRANSLATION_FAILED, answered below in the chat) and nothing is written.
+      const langs = await translationLanguages(this.prisma, app.ownerId);
+      const translation = isSlashCommand(text) ? null : await ownerWordsForAgent(text, langs);
       await this.sessions.createTurn(app.ownerId, sessionId, { clientTurnId: feishuTurnKey(app.appId, eventId), content: text }, {
+        ...(translation && langs ? { translated: { content: translation.text, from: langs.owner } } : {}),
+        senderClient: { client: 'feishu' },
         // Written with the turn, so a second handling — a replay of this clientTurnId — records nothing again.
         onTurnWritten: async (tx, turn) => {
           await this.registerChain(tx, app, message.chatId, root, sessionId);
@@ -250,7 +413,7 @@ export class FeishuDirectService {
     if (!session) {
       try {
         // No permissionMode: the account's default applies (§7.2).
-        const made = await this.sessions.create(app.ownerId, { workspaceId: workspace.id, prompt: text }, { id: sessionId, credential: actor.credential });
+        const made = await this.sessions.create(app.ownerId, { workspaceId: workspace.id, prompt: text }, { id: sessionId, credential: actor.credential, openedBy: 'FEISHU' });
         session = { id: made.id, title: made.title };
       } catch (error) {
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
@@ -303,7 +466,7 @@ export class FeishuDirectService {
       ownerItems: (decisions.get(s.id)?.ownerItems ?? []).map((item) => item.title),
       url: orbitUrl({ sessionId: s.id }),
     }));
-    await this.replyCard(app, message.messageId, 'status', renderStatusCard(entries));
+    await this.replyCard(app, message.messageId, 'status', renderStatusCard(entries, app.showOrbit));
   }
 
   /**
@@ -326,6 +489,21 @@ export class FeishuDirectService {
     const { appId, openId, messageId } = actor.credential;
     await tx.activity.create({
       data: { actorId: ownerId, type, payload: { ...payload, appId, openId, messageId: messageId ?? null } as Prisma.InputJsonValue, credentialKind: 'FEISHU' },
+    });
+  }
+
+  /**
+   * The same record for an act that leaves nothing else behind (a request refused for a limit): its id is derived from
+   * the app and the message, so the same event handled again records it once.
+   */
+  private async recordActivityOnce(tx: Prisma.TransactionClient, ownerId: string, actor: FeishuActor, type: string, payload: Json): Promise<void> {
+    const { appId, openId, messageId } = actor.credential;
+    await tx.activity.createMany({
+      data: [{
+        id: feishuDerivedUuid('feishu-activity', type, appId, messageId ?? ''),
+        actorId: ownerId, type, payload: { ...payload, appId, openId, messageId: messageId ?? null } as Prisma.InputJsonValue, credentialKind: 'FEISHU',
+      }],
+      skipDuplicates: true,
     });
   }
 

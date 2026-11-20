@@ -6,7 +6,7 @@
 - `docs/project-agent-contract.md`（下称 **PAC**）定义 WHO / WITH WHAT / WHERE 三条解析链。本契约定义**第四条正交链 SOURCE —— 从哪份代码开始**，并复用 PAC §6 的"执行快照冻结"范式与 §12 的"错误码闭合"范式。
 - `docs/project-coordinator-status-contract.md` 定义 coordinator 状态读接口；本契约只向它贡献一个 blocker kind（§10.3）。
 
-**编号约定（唯一）**：本文所有规范性条款使用**单一序列** `SR1 … SR54`，按阅读顺序分配，全文不重复编号；v1.3 增补的 SR54 放在它所限定的 SR45 旁边，编号接在 SR53 之后，已有编号不重排（§16）。§11 是索引而非重述 —— 两处编号就是两处会漂移的真相，PAC v1 的二义正是这么来的。
+**编号约定（唯一）**：本文所有规范性条款使用**单一序列** `SR1 … SR55`，按阅读顺序分配，全文不重复编号；v1.3 增补的 SR54 放在它所限定的 SR45 旁边、v1.4 增补的 SR55 放在它所定义的 §4.1 PF 行旁边，编号接在 SR53 之后，已有编号不重排（§16）。§11 是索引而非重述 —— 两处编号就是两处会漂移的真相，PAC v1 的二义正是这么来的。
 
 ---
 
@@ -153,6 +153,9 @@ Branch 表达意图，commit SHA 表达运行事实，**两者必须同时留痕
 |---|---|---|
 | `pinnedRevision` | text? | 显式基线（§4 P2）。40 位十六进制 SHA 或全名 ref |
 | `codeless` | boolean | 默认 `false`。`true` = 即使 Project 绑了 codebase，这个任务也不解析 SOURCE（SR5 的逃生口：一个绑了代码库的 Project 里的调研/文档任务） |
+| `forkSessionId` / `forkRunnerId` | uuid? | v1.4（SR55）：这个任务从哪条会话 fork 出来、那条会话当时在哪台机器上。无外键 |
+| `forkSha` / `forkBaseHead` | text? | v1.4（SR55）：快照提交 S 与 fork 会话当时的 HEAD，均为 40 位小写十六进制 |
+| `forkIncludesUncommitted` | boolean? | v1.4（SR55）：S 是否带着未提交的修改，恰为 `forkSha != forkBaseHead`。五列全空或全有，只在建任务的那条 INSERT 里写，此后不可改 |
 
 **SR15**：`pinnedRevision` 写入时校验：40 位十六进制（小写规范化）→ SHA 值 selector；否则必须是全名 ref → ref 值 selector。两者都不是则拒绝 `CODEBASE_AUTHORITY_INVALID`。**缩写 SHA 一律拒绝** —— 缩写按构造就是二义的，而基线的全部意义是事后可核对。
 **SR16**：往 `verifiesTaskId` 非空的任务上写 `pinnedRevision`，拒绝 `SOURCE_PIN_IMMUTABLE`。理由见 §4 D1：一个 verification 的全部意义是"检查那个候选"，允许改基线就是允许它对着别的代码宣布结论。
@@ -171,7 +174,8 @@ resolveSource(input: SourceResolutionInput) -> SourceSelector | Refusal
 
 ```
 { task: { id, projectId, verifiesTaskId, pinnedRevision, codeless,
-          attemptGeneration, inheritedKnownGoodSha, dependsOnTaskIds },
+          attemptGeneration, inheritedKnownGoodSha, dependsOnTaskIds,
+          fork: { sessionId, sessionTitle, sha, includesUncommitted } | null },
   codebase: ProjectCodebase | null,
   integrationLineHasLanding: boolean,
   subjectCandidate: { taskId, commitSha } | null,
@@ -179,6 +183,8 @@ resolveSource(input: SourceResolutionInput) -> SourceSelector | Refusal
 ```
 
 `integrationLineHasLanding`（v1.1 新增）是**本项目**在自己集成线上是否已有落地回执，由调用方从回执表读出后传入；它被 P5 读（见 4.1 的 P5 行），自 v1.2 起也被 P4 读——这两序读的是同一条线。它是一个**关于项目的事实**，不是关于机器的事实：加进来的是"这条线上有没有东西"，不是"这台机器的 HEAD 在哪"，所以 SR17 禁的那五个字段仍然不可表达。
+
+`task.fork`（v1.4 新增）是 PF 行的输入：任务创建时写下的快照事实（SR55），`sessionTitle` 只用于 SR18 的理由句。快照所在的那台机器**不在**这里——它是权威，与绑定的 `authorityRunnerId` 一样在 selector 之外读取，所以 SR17 禁的字段仍然不可表达。
 
 **SR18（解析结论自带理由）**：返回值必须携带 `reason`：命中了哪一条优先级、依据的输入是什么。一个说不出为什么的基线，用户无法在 UI 上得到"这次运行为什么从这里开始"的回答（Project AC7）。
 
@@ -189,6 +195,7 @@ resolveSource(input: SourceResolutionInput) -> SourceSelector | Refusal
 | 序 | 谓词 | `sourceKind` | 基线取值 | selector 类型 |
 |---|---|---|---|---|
 | **P0** | `codebase == null` ∧ 任务需要代码 | — | — | **拒绝** `PROJECT_CODEBASE_UNBOUND` |
+| **PF** | `codebase == null` ∧ `task.forkSha != null` | `SESSION_FORK` | `task.forkSha` | SHA 值，`refAuthority = RUNNER_LOCAL`，权威机器 = fork 会话的 runner |
 | **P0'** | `codebase == null` ∧ `task.codeless` 或非 Project 任务 | — | — | `UNBOUND`（Legacy，§9） |
 | **P1** | `verifiesTaskId != null` | `VERIFICATION_SUBJECT` | subject 的 candidate commit | SHA 值 |
 | **P2** | `pinnedRevision != null` | `PINNED_REVISION` | 该 SHA，或该 ref 在权威处的解析结果 | SHA 值或 ref 值 |
@@ -199,6 +206,15 @@ resolveSource(input: SourceResolutionInput) -> SourceSelector | Refusal
 P4 与 P5 的两个取值不是回退（SR19 说的回退是"换一序"），而是**同一序下同一条线的两种写法**：`docs/project-integration-line-contract.md` §1.5 L10 第一行，项目分支要等第一条落地回执才被创建，在那之前它与 upstream 逐字节是同一棵树；第一条落地之后，upstream 就少了本项目已完成的每一件工作，再从它起跑等于让新任务把兄弟们解过的问题重解一遍。所以基线仍然只有一条——项目集成的那条线——只是它在被创建之前只能用 upstream 的名字称呼。`MAIN` 线项目两个 ref 相等，这条规则对它无差别。
 
 这段话对 P4 同样成立，因为 P4 与 P5 读的是**同一条线**：D5 说的"结构互斥"是两者的谓词（前置集非空 / 为空）不能同时为真，不是两条不同的线。而一个 P4 任务最常被派发的时刻，恰恰是它的前置刚在 upstream 落地的那一刻——那时本项目自己的线往往还没有第一条落地回执，只写 `integrationRef` 就是在钉一个还没被创建的 ref，runner 的 `git fetch` 得到 `BASE_REF_NOT_FOUND`（2026-10-07 实测于项目 `34bZ3i4AvgJaaoaw5E9tH`，三次 LAND_TASK 全部以 CHECK_FAILED 终态，工作径直并进 main，那条线从未被创建）。两种写法给出的仍是**同一棵树**，`requiredContains` 一个字都不变（SR25/SR26 的包含语义与 SR19 的拒绝纪律都不受影响）。
+
+**SR55（从会话 fork 出的任务）**（v1.4，2026-11-11，`docs/task-fork-from-session-design.md` §2.3、§2.4）：一个任务可以在创建时声明"从调用它的那条会话现在的样子开始"。runner 在建任务的调用里给那条会话的检出拍一个快照提交 S（不动它的检出），随任务一起提交；任务把它记成五个创建时事实（§3.3 的 fork 列），此后不可改。
+- **PF 行在 P0' 之前**：P0' 是"没有声明起点"，fork 恰恰是一个声明过的起点。一个不在任何项目里的任务、或 `codeless` 任务，若落到 P0'，就会从 workspace 检出当时的 HEAD 起跑——那正是 fork 要替换掉的东西。PF 的 selector：`sourceKind` 为 `SESSION_FORK`，`sourceRevisionSha` 为 S，`sourceRef` 为空，`sourceRefAuthority` 为 `RUNNER_LOCAL`；`sourceCodebaseId`、`sourceConfigRevision`、`sourceRepoUrl`、`sourceRootCommitSha` 为空（没有绑定，控制面也不掌握那份仓库的身份）；`sourceRequiredContains` 为空集。权威机器（`authorityRunnerId`）是 fork 会话当时的 runner，记在任务上，在 claim 时随快照下发。pin 照 §6.3 的三步握手在首次 claim 冻结。
+- **重试不换基线**（SR12 / SR19）：PF 读的是任务自己的列，所以同一任务的每一次运行（重试也一样）都冻结同一个 S；S 在本机不可得时，结果是 `BASE_SHA_UNAVAILABLE`，不是 workDir 的 HEAD。
+- **只在 fork 会话的那台机器上跑**（设计 D2）：S 只在 fork 会话的仓库里。建任务时，assignee 的 workspace 不在那台 runner 上，拒绝 `FORK_SOURCE_NOT_REACHABLE`；`task_update` 把它改派到另一台机器上的 workspace，同样拒绝（改到同一台机器上的另一个 workspace 照旧允许）；workspace 自己换了机器的，建运行的那一刻拒绝。
+- **不进有 code binding 的 Project**（设计 D4）：Project 任务的基线必须在它自己的线上（SR1），而 fork 的基线是 fork 会话的工作，可能还没落地。建任务时落进这样的 Project，拒绝 `FORK_IN_BOUND_PROJECT`；`task_update` 或经确认的跨项目移动把它移进这样的 Project，同样拒绝；任务建好之后项目才绑上 codebase 的，解析时同样拒绝——PF 的谓词此时不成立，但答案是拒绝而不是 P1–P5（SR19）：落到 P5 等于悄悄丢掉 fork。两个码同时成立时报后者：它是项目级的因，换一台机器修不好（与 SR24 同理）。
+- **总有自己的 worktree**：fork 任务的运行即使在 `enableWorktree` 关着的 workspace 上也有自己的分支。一个没有分支的 pinned 运行在检出时被拒（`WORKTREE_REQUIRED`），而与它 fork 出来的那条会话共用一个目录，正是这份设计要排除的。
+- **只能 fork 调用者自己**（设计 D6）：fork 载荷里的会话必须是发起这次调用的会话，且就是这张 runner 凭据正在跑的那条；浏览器那扇门没有调用会话，一律拒绝。
+- 这两个码都在建任务或建运行的那一刻同步回答给调用方，从不写到会话的 SOURCE 列上，也不落 blocker（那时还没有运行可记）；runner 也不能经 `/source/pin` 报告它们。
 
 **SR19（拒绝不回退）**：命中某一序后，若该序的输入不可用（P1 的 subject 没有 candidate、P3 的 SHA 不可达、P4 的前置没有 accepted checkpoint），**结果是拒绝，不是落到下一序**。回退会让一次本该停下来的运行拿到一个"看起来能跑"的基线 —— 这正是 §0 那三个降级分支的形状。
 
@@ -214,6 +230,8 @@ P4 与 P5 的两个取值不是回退（SR19 说的回退是"换一序"），而
 | **D4** P3 ∩ P4 | 能（有前置的任务被重试） | **P3 胜** | 重试是**同一件工作的延续**；把它改基到已经前移的 integration tip，会丢掉上一代挣到的 known-good 点、重做已经解决的工作。依赖安全**不因此被跳过**：`requiredContains` 仍然由 §5 G5 施加于 P3 选出的基线上，前置没落地就拒绝（SR22） |
 | **D5** P4 ∩ P5 | 不能（P4 要求前置集非空，P5 要求为空） | 结构互斥 | 无需定序 |
 | **D6** P0 ∩ 其余 | 不能（P0 要求 `codebase == null`，P1–P5 全部读 codebase） | 结构互斥 | 无需定序 |
+| **D7** PF ∩ P0' | 能（不在项目里的 fork 任务、或 fork 出来的 `codeless` 任务） | **PF 胜** | fork 是创建时写下的起点，P0' 是没有起点。P0' 胜等于让一个声明了"从我的工作开始"的任务从 workdir 当时的 HEAD 起跑（SR55） |
+| **D8** PF ∩ P1–P5 | 不能（PF 要求 `codebase == null`，P1–P5 全部读 codebase） | 结构互斥 | 一个带 fork 又落在有绑定的项目里的任务两边都不进：拒绝 `FORK_IN_BOUND_PROJECT`（SR55） |
 
 **SR20**：D1–D4 的四条交集，每条都必须有一个**同时满足两个谓词**的构造性测试用例，断言解析结果等于定序方的结论。
 
@@ -418,10 +436,12 @@ apiserver 没有 checkout，runner 有。因此 ref→SHA 的解析必须在 run
 | `SOURCE_PROTOCOL_UNSUPPORTED` | 派发 | 409 | SR35：候选 runner 不支持 `source-pin/v1` | `runnerId`, 缺失的能力名 | `UPGRADE_RUNNER` |
 | `SOURCE_PIN_IMMUTABLE` | 写入 | 409 | 改已冻结的 selector 或 pin（SR11）；往 verification 任务写 `pinnedRevision`（SR16） | 目标列名, 当前 `sourceState` | `START_NEW_RUN` |
 | `CODEBASE_AUTHORITY_INVALID` | 写入 | 400 | 短名 ref（SR9）、缩写 SHA（SR15）、`RUNNER_LOCAL` 无 `authorityRunnerId`（SR31） | 字段名 + 收到的值 | `FIX_CODEBASE_CONFIG` |
+| `FORK_SOURCE_NOT_REACHABLE` | 写入 / 派发 | 409 | SR55：fork 任务的 assignee 的 workspace（或这次运行被放到的机器）不是 fork 会话的 runner | 期望与实际的 runner、`forkSessionId` | `ASSIGN_ON_FORK_RUNNER` |
+| `FORK_IN_BOUND_PROJECT` | 写入 / 解析 | 409 | SR55：fork 任务落在有 code binding 的 Project 里 | `projectId`、`forkSessionId` | `FORK_OUTSIDE_PROJECT` |
 
 **SR47（闭合性，双向）**：正文中每一处写作 `拒绝 <CODE>` 的错误码都必须是本表的一行；本表每一行也都必须在正文中至少被一处规则引用。**两个方向**都由契约自检断言 —— 只在表里存在的码和只在正文里存在的码，都是"两个实现都能引用同一份契约"的来源。
 
-**SR48（同一输入只有一个码）**：解析路径七个码的谓词由 §5 的**全序闸门**消歧（SR21），结构上不可能同时命中两个。写入路径两个码的谓词互斥（`SOURCE_PIN_IMMUTABLE` 要求目标已冻结，`CODEBASE_AUTHORITY_INVALID` 要求值本身非法）。派发路径一个码独立。契约自检对**闸门全序**跑一次断言（每一级的拒绝条件蕴含前面各级已通过），而不是只比对码的集合。
+**SR48（同一输入只有一个码）**：解析路径七个码的谓词由 §5 的**全序闸门**消歧（SR21），结构上不可能同时命中两个。写入路径两个码的谓词互斥（`SOURCE_PIN_IMMUTABLE` 要求目标已冻结，`CODEBASE_AUTHORITY_INVALID` 要求值本身非法）。派发路径一个码独立。SR55 的两个码由它自己的谓词与顺序消歧（项目级先于机器级）。契约自检对**闸门全序**跑一次断言（每一级的拒绝条件蕴含前面各级已通过），而不是只比对码的集合。
 
 **SR49（`fixAction` 是封闭集合且必须可执行）**：`fixAction` 的取值封闭于上表第六列。每一个值必须对应用户在 UI/CLI 上**做得到**的一个动作。这满足兄弟任务 `34D2AgMRztyeLUaaV9CWM` 的"所有失败码有明确修复动作"。
 
@@ -491,6 +511,7 @@ v1 冻结时这一条读作"尚未落地"，自检那时断言的是它的**缺�
 | SR45 / SR46 | 迁移后既有行全为 `UNBOUND`；三条降级分支 golden 逐字节一致 | `source-legacy.pg.spec.ts` / `worktree_test.go` |
 | SR47 / SR49 | 码表 ↔ 正文双向闭合；`fixAction` 取值封闭 | `project-source-contract.spec.ts` |
 | SR50 / SR51 / SR52 | 本契约声称的 blocker kind 集合 = 迁移新增集合；写入真库成功 | `project-source-contract.spec.ts` / `source-blocker.pg.spec.ts` |
+| SR55 | PF 行与 D7 的构造用例、两个码各一条负向用例；建 fork 任务后 claim，`SESSION_FORK` 钉在 S、权威为 `RUNNER_LOCAL` 与 fork 会话的 runner，重试仍是同一个 S；`enableWorktree` 关着仍有分支 | `source-selector.spec.ts` / `task-session-fork.pg.spec.ts` |
 | SR54 | 建聊天即 `SELECTED`、kind `CHAT_UPSTREAM`、ref 为 `refs/heads/main`、codebase 与 `configRevision` 为空；首次 claim 钉住 origin 上 main 的提交，不受 workDir HEAD 影响；拒绝只落在会话上 | 聊天的 pg spec（C5）/ `source_pin_test.go` |
 
 **SR53（契约自检必须先于实现存在）**：`project-source-contract.spec.ts` 是**纯契约测试**（不连数据库、不起 Nest），断言本文的自洽性：编号唯一且连续、错误码双向闭合、冻结集合不相交、闸门全序、禁列名缺席、`fixAction` 封闭、§13 的每一行都引用得到一条 §12 用例。
@@ -638,3 +659,4 @@ v1 冻结时这一条读作"尚未落地"，自检那时断言的是它的**缺�
 - **v1.1**（2026-09-17）：SR17 的封闭输入集增加 `integrationLineHasLanding: boolean`，§4.1 的 P5 行随之改为「本项目集成线上已有落地回执 → `integrationRef` 的 tip；否则 `upstreamRef` 的 tip」。理由是 `docs/project-integration-line-contract.md` §1.5 L10 第一行，那条契约的实现任务（`34PAfnnE8wgD9kOGvgwwU`）按 SR17「加字段即契约变更」先改本文再改代码。优先级序、错误码表、闸门与状态机不变；被加进来的是关于项目的事实，不是关于机器的事实，SR1/SR2 禁的字段仍不可表达。
 - **v1.2**（2026-10-07）：§4.1 的 P4 行改为与 P5 同款的两种写法（`integrationLineHasLanding` 为真 → `integrationRef` 的 tip；否则 `upstreamRef` 的 tip），`requiredContains` 一字未动。理由是 §1.5 L10 第一行对 P4 同样成立：P4 与 P5 读的是**同一条线**（D5 只声明两者的谓词结构互斥，不是两条线），而项目分支要等这条线上的第一条落地回执才被创建。偏离只在派发时刻可见：2026-10-07 实测项目 `34bZ3i4AvgJaaoaw5E9tH` 的集成线从未被创建（三次 LAND_TASK 全以 CHECK_FAILED 终态，工作直接并进 main），走 P4 的任务据此钉到 `refs/heads/project/34bZ3i4AvgJaaoaw5E9tH`，runner 的 `git fetch` 得到 `fatal: couldn't find remote ref` → `BASE_REF_NOT_FOUND`。本次只改一条取值，不改输入集（`integrationLineHasLanding` 自 v1.1 起已在 SR17 的封闭集合内），优先级序、错误码表、闸门与状态机不变。
 - **v1.3**（2026-11-06）：新增 SR54，wiki 聊天会话的 SOURCE（`docs/wiki-chat-design.md` §5.2，wiki 契约 `chat.source`）：SR1 原本只规定了项目任务，聊天是第一个冻结 selector 的非任务会话——ref 为 `refs/heads/main`、权威 `REMOTE`，`sourceKind` 新增 `CHAT_UPSTREAM`。它放在 §9 的 SR45 旁边，因为它限定的正是 SR45 的那句话；编号接在 SR53 之后，已有编号不重排（编号约定以唯一与连续为准，自检照旧断言）。优先级表、错误码表、闸门与状态机不变；数据模型的三条 CHECK 由建聊天的迁移改写。
+- **v1.4**（2026-11-11）：新增 SR55 与 §4.1 的 PF 行（`docs/task-fork-from-session-design.md` §2.3、§2.4）：从调用会话 fork 出的任务，`sourceKind` 新增 `SESSION_FORK`，SHA 值、`RUNNER_LOCAL` 权威、权威机器是 fork 会话的 runner。SR17 的封闭输入集增加 `task.fork`（任务上的创建时事实，不是机器的事实）；§4.2 增加 D7（PF 胜 P0'）与 D8（与 P1–P5 结构互斥，落在有绑定的项目里则拒绝）；§10.1 增加两个码 `FORK_SOURCE_NOT_REACHABLE` 与 `FORK_IN_BOUND_PROJECT`，各配一个新的 `fixAction`。闸门与状态机不变；数据模型由迁移 0615/0616 改写会话的三条 SOURCE CHECK 与拒绝码 CHECK，并给 `task` 加上五列 fork 事实。

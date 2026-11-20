@@ -108,7 +108,7 @@ abstract class LandingEntriesShots {
         }
         val card = ProjectPage.landingCard(view, now, now, false)!!
         show { Column(Modifier.fillMaxWidth().padding(16.dp)) {
-            ProjectLandingCardView(card, onOpenJobs = {}, onOpenProject = null, openLanding = {}, retry = { null }) } }
+            ProjectLandingCardView(card, onOpenJobs = {}, onOpenProject = null, openLanding = {}, retry = { null }, skipCheck = { null }) } }
         compose.onNodeWithTag("landing-card:open-landing", useUnmergedTree = true).assertExists()
         shot("01-landing-card")
     }
@@ -158,7 +158,8 @@ abstract class LandingEntriesShots {
         shot("04-xe5-card")
     }
 
-    /** E · board 07 13:28: an INTEGRATION_* item's card, Open landing appended after its existing doors. */
+    /** E · board 07 13:28: an INTEGRATION_* item's card reaches its landing — on the owner exception card
+     *  (board owner-exception-who-fixes ② 4) from the folded Details, whose summary names it. */
     @Test fun anIntegrationItemsCardEndsWithOpenLanding() {
         val row = buildJsonObject {
             put("itemId", "item-integration"); put("kind", "INTEGRATION_CHECK_FAILED"); put("title", "Checks failed on the combined tree")
@@ -176,7 +177,8 @@ abstract class LandingEntriesShots {
             })
         }
         show { Column(Modifier.verticalScroll(rememberScrollState())) { exceptionCard(row) } }
-        compose.onNodeWithTag("item:item-integration:OPEN_LANDING").assertTextEquals("Open landing")
+        compose.onNodeWithTag("item:item-integration:details").assertTextContains("Open landing", substring = true).performScrollTo().performClick()
+        compose.onNodeWithTag("item:item-integration:OPEN_LANDING").assertTextEquals("Open landing — every attempt, step by step")
         shot("05-integration-card")
     }
 
@@ -184,7 +186,7 @@ abstract class LandingEntriesShots {
     @Test fun theDeliveryCardsTwoLinks() {
         val delivery = buildJsonObject {
             put("itemId", "i1"); put("kind", "INTEGRATION_CHECK_FAILED"); put("title", "Checks failed on the combined tree")
-            putJsonObject("task") { put("id", "t1"); put("title", "Wire the page"); put("sessionId", "s-failed") }
+            putJsonObject("task") { put("id", "01a03f58-40bd-76ac-85c1-d9c6b29f8ca9"); put("title", "Wire the page"); put("sessionId", "489fc485-949c-533a-9b56-7712a68762ef") }
             putJsonArray("files") {}; put("targetRef", "refs/heads/project/launch")
             put("landingSessionId", landing)
         }
@@ -306,7 +308,7 @@ abstract class LandingEntriesShots {
     private fun openPage() {
         signIn()
         await { exists(hasTestTag("project-row:$launch")) }
-        compose.onNodeWithTag("project-row:$launch").performClick()
+        compose.openProjectSessionsPage(launch)
         await { exists(hasTestTag("project-sessions")) }
     }
 

@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from 'react';
+import { useContext, useState, type ReactNode } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   AimOutlined,
   AuditOutlined,
@@ -15,7 +16,9 @@ import type {
   SessionOpeningCard,
 } from '@orbit/shared';
 import { routeId } from '../lib/idCodec';
+import { sessionRequestQuery } from '../lib/queries';
 import { AppLink } from './AppLink';
+import { ExportCtx } from './Transcript';
 import { Button } from './ui/Button';
 import { decisionReceiptTime } from './EvidenceDecisionCard';
 import { OPEN_TASK_SESSION } from './ConfirmationReviewTurnCards';
@@ -152,11 +155,10 @@ function Told({ label, text }: { label: string; text: string }) {
   );
 }
 
-function Foot({ undelivered, attached, queued }: { undelivered?: boolean; attached?: ReactNode; queued?: ReactNode }) {
+function Foot({ undelivered, queued }: { undelivered?: boolean; queued?: ReactNode }) {
   return (
     <>
       {undelivered && <div className="crc-undelivered">{UNDELIVERED}</div>}
-      {attached}
       {queued && <div className="crc-queued">{queued}</div>}
     </>
   );
@@ -187,7 +189,6 @@ interface CardProps {
   undelivered?: boolean;
   /** The block the agent was handed — the turn's own words or its control-plane note. */
   told: string;
-  attached?: ReactNode;
   queued?: ReactNode;
 }
 
@@ -201,15 +202,14 @@ function Head({ icon, label, ts }: { icon: ReactNode; label: string; ts?: string
   );
 }
 
-export function EvidenceToReviewCard({ card, seq, ts, undelivered, told, attached, queued }: CardProps & { card: EvidenceReviewCard }) {
+export function EvidenceToReviewCard({ card, seq, ts, undelivered, told, queued }: CardProps & { card: EvidenceReviewCard }) {
   const open = card.state === 'OPEN';
   return (
     <div className="crc-wrap">
       <div
         className={`crc crc-evidence-review${open ? '' : ' is-neutral'}${queued ? ' is-queued' : ''}`}
         data-seq={seq}
-        data-sticky-label={EVIDENCE_TO_REVIEW}
-        data-sticky-text={card.title}
+        data-orbit-round
       >
         <Head icon={<AuditOutlined />} label={EVIDENCE_TO_REVIEW} ts={ts} />
         <TaskTitle taskId={card.taskId} title={card.title} />
@@ -218,13 +218,13 @@ export function EvidenceToReviewCard({ card, seq, ts, undelivered, told, attache
         <StateLine state={evidenceState(card)} />
         {open ? <OpenTaskSession runSessionId={card.runSessionId} /> : null}
         <Told label={SESSION_WAS_TOLD} text={told} />
-        <Foot undelivered={undelivered} attached={attached} queued={queued} />
+        <Foot undelivered={undelivered} queued={queued} />
       </div>
     </div>
   );
 }
 
-export function EvidenceSentBackCard({ card, seq, ts, undelivered, told, attached, queued }: CardProps & { card: EvidenceSendBackCard }) {
+export function EvidenceSentBackCard({ card, seq, ts, undelivered, told, queued }: CardProps & { card: EvidenceSendBackCard }) {
   const who = sendBackWho(card);
   const session = who.sessionId ? routeId(who.sessionId) : null;
   return (
@@ -232,8 +232,7 @@ export function EvidenceSentBackCard({ card, seq, ts, undelivered, told, attache
       <div
         className={`crc crc-evidence-send-back is-returned${queued ? ' is-queued' : ''}`}
         data-seq={seq}
-        data-sticky-label={EVIDENCE_SENT_BACK}
-        data-sticky-text={card.note}
+        data-orbit-round
       >
         <Head icon={<RollbackOutlined />} label={EVIDENCE_SENT_BACK} ts={ts} />
         <TaskTitle taskId={card.taskId} title={card.title} />
@@ -243,21 +242,30 @@ export function EvidenceSentBackCard({ card, seq, ts, undelivered, told, attache
         </div>
         {card.note.trim() !== '' ? <div className="crc-quote">{`“${card.note.trim()}”`}</div> : null}
         <Told label={RUN_WAS_TOLD} text={told} />
-        <Foot undelivered={undelivered} attached={attached} queued={queued} />
+        <Foot undelivered={undelivered} queued={queued} />
       </div>
     </div>
   );
 }
 
-export function RunQuestionTurnCard({ card, seq, ts, undelivered, told, attached, queued }: CardProps & { card: RunQuestionCard }) {
+export function RunQuestionTurnCard({ card: stored, seq, ts, undelivered, told, queued }: CardProps & { card: RunQuestionCard }) {
+  // The card the echo carries was read when the turn was handed out, before anyone answered. Its
+  // request carries the card as it stands now (`SessionRequestView.runQuestion`), so that one is
+  // drawn over it: answered, by whom, or passed to the owner. Not read on paper, and not once the
+  // stored card already says who answered — that never changes.
+  const exporting = useContext(ExportCtx) != null;
+  const live = useQuery({
+    ...sessionRequestQuery(stored.requestId),
+    enabled: !exporting && stored.answeredBy === null,
+  }).data?.runQuestion;
+  const card = live ?? stored;
   const answered = card.answeredBy !== null;
   return (
     <div className="crc-wrap">
       <div
         className={`crc crc-run-question${queued ? ' is-queued' : ''}`}
         data-seq={seq}
-        data-sticky-label={QUESTION_FROM_RUN}
-        data-sticky-text={card.questions[0]?.question ?? card.taskTitle}
+        data-orbit-round
       >
         <Head icon={<QuestionCircleOutlined />} label={QUESTION_FROM_RUN} ts={ts} />
         <TaskTitle taskId={card.taskId} title={card.taskTitle} />
@@ -282,27 +290,26 @@ export function RunQuestionTurnCard({ card, seq, ts, undelivered, told, attached
         <StateLine state={runQuestionState(card)} />
         {!answered ? <OpenTaskSession runSessionId={card.runSessionId} /> : null}
         <Told label={COORDINATOR_WAS_TOLD} text={told} />
-        <Foot undelivered={undelivered} attached={attached} queued={queued} />
+        <Foot undelivered={undelivered} queued={queued} />
       </div>
     </div>
   );
 }
 
-export function RunNoticeTurnCard({ card, seq, ts, undelivered, told, attached, queued }: CardProps & { card: RunNoticeCard }) {
+export function RunNoticeTurnCard({ card, seq, ts, undelivered, told, queued }: CardProps & { card: RunNoticeCard }) {
   return (
     <div className="crc-wrap">
       <div
         className={`crc crc-run-notice is-neutral${queued ? ' is-queued' : ''}`}
         data-seq={seq}
-        data-sticky-label={NOTICE_FROM_RUN}
-        data-sticky-text={card.message}
+        data-orbit-round
       >
         <Head icon={<BellOutlined />} label={NOTICE_FROM_RUN} ts={ts} />
         <TaskTitle taskId={card.taskId} title={card.taskTitle} />
         {card.message.trim() !== '' ? <div className="crc-quote">{`“${card.message.trim()}”`}</div> : null}
         <StateLine state={{ text: NOTICE_STATE }} />
         <Told label={COORDINATOR_WAS_TOLD} text={told} />
-        <Foot undelivered={undelivered} attached={attached} queued={queued} />
+        <Foot undelivered={undelivered} queued={queued} />
       </div>
     </div>
   );
@@ -313,12 +320,10 @@ export function SessionOpeningLine({
   card,
   brief,
   seq,
-  attached,
 }: {
   card: SessionOpeningCard;
   brief: string;
   seq?: number;
-  attached?: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const href = card.target ? targetHref(card.target) : null;
@@ -343,7 +348,6 @@ export function SessionOpeningLine({
         ? <div className="session-opening-quote">{`“${card.mention.trim()}”`}</div>
         : null}
       {open && <pre className="session-opening-brief">{brief}</pre>}
-      {attached}
     </div>
   );
 }

@@ -40,7 +40,9 @@ class RunnerPageTest {
 
     private fun input(name: String) = cases.first { it.text("name") == name }["input"]!!.jsonObject
     private fun items(input: JsonObject) = RunnerPage.attention(input["runner"]!!.jsonObject, input.list("workspaces"),
-        input["nowMs"]!!.jsonPrimitive.long, input.str("latestVersion"))
+        input["nowMs"]!!.jsonPrimitive.long, input.str("latestVersion"), managed = managedIn(input))
+    /** The case's `managed`: the account's managed runner (Orbit Cloud). */
+    private fun managedIn(input: JsonObject) = (input["managed"] as? JsonPrimitive)?.booleanOrNull == true
 
     @Test fun everyCaseSaysWhatTheWebRuleSays() {
         assertTrue("the case file holds no cases", cases.size >= 60)
@@ -54,11 +56,109 @@ class RunnerPageTest {
                 listOf(it.str("kind"), it.str("tone"), it.str("short"), it.str("title"), it.str("actionKind"))
             }, found.map { listOf(it.kind, it.tone, it.short, it.title, it.action?.kind) })
             assertEquals(name, expected.str("listLine"), RunnerPage.listAttentionLine(found))
-            assertEquals(name, expected.str("subtitle"), RunnerPage.listSubtitle(input["runner"]!!.jsonObject, input["nowMs"]!!.jsonPrimitive.long))
+            assertEquals(name, expected.str("subtitle"), RunnerPage.listSubtitle(input["runner"]!!.jsonObject, input["nowMs"]!!.jsonPrimitive.long, managedIn(input)))
             val disk = expected.obj("disk")
             assertEquals(name, disk?.let { RunnerDisk(it.long("freeBytes")!!, it.long("totalBytes")!!, it.int("usedPercent")!!) },
                 RunnerPage.runnerDisk(input.list("workspaces")))
         }
+    }
+
+    /** GET /runners says `managed` on the managed runner's row, so it is Orbit Cloud with no managed status read yet (or one that
+     * failed) — the drawer's Set up row included, never its stored name `orbit-cloud`; the owner's name still wins, and a row marked
+     * false keeps its own name. */
+    @Test fun theRowsManagedFlagMakesItOrbitCloudWithNoManagedStatus() {
+        val id = "0199a0c4-7a1e-7c3e-9d4f-2a6b8c0d1e99"
+        fun row(name: String, managed: Boolean?, displayName: String? = null, rowId: String = id) = buildJsonObject {
+            put("id", rowId); put("name", name); put("online", true); put("lastHeartbeatAt", java.time.Instant.now().toString())
+            displayName?.let { put("displayName", it) }; managed?.let { put("managed", it) }
+        }
+        val flagged = row("orbit-cloud", true)
+        assertTrue(RunnerPage.isManaged(flagged, managedRunnerId = null))
+        assertEquals("Orbit Cloud", RunnerPage.displayName(flagged, managedRunnerId = null))
+        assertEquals("Orbit Cloud", RunnerPage.nameOf(id, "orbit-cloud", null, managedRunnerId = null, managed = true))
+        assertEquals("Team cloud", RunnerPage.displayName(row("orbit-cloud", true, "Team cloud"), managedRunnerId = null))
+        assertEquals("Team cloud", RunnerPage.nameOf(id, "orbit-cloud", "Team cloud", managedRunnerId = null, managed = true))
+        val other = row("build-box", false, rowId = "0199a0c4-7a1e-7c3e-9d4f-2a6b8c0d1e10")
+        assertFalse(RunnerPage.isManaged(other, managedRunnerId = null))
+        assertEquals("build-box", RunnerPage.displayName(other, managedRunnerId = null))
+        // An older server sends no flag: the managed status's runnerId still decides.
+        assertEquals("orbit-cloud", RunnerPage.displayName(row("orbit-cloud", null), managedRunnerId = null))
+        assertEquals("Orbit Cloud", RunnerPage.displayName(row("orbit-cloud", null), managedRunnerId = id))
+        // The drawer's Set up rows, with the runner list in and no managed status.
+        val previous = io.orbitd.android.composer.ManagedRunnerIdentity.runnerId
+        io.orbitd.android.composer.ManagedRunnerIdentity.runnerId = null
+        try {
+            val setUp = io.orbitd.android.composer.MachineSetup.machinesToSetUp(listOf(other, flagged), emptyList(), managedStatus = null)
+            assertEquals(listOf("Orbit Cloud", "build-box"), setUp.map { it.name })
+        } finally {
+            io.orbitd.android.composer.ManagedRunnerIdentity.runnerId = previous
+        }
+    }
+
+    @Test fun osReadsTheReportedCapabilityAndNothingWithoutOne() {
+        fun row(vararg capabilities: String) = buildJsonObject { put("capabilities", JsonArray(capabilities.map { JsonPrimitive(it) })) }
+        assertEquals("linux", RunnerPage.os(row("session-worktree-ops-v1", "os:linux")))
+        assertEquals("darwin", RunnerPage.os(row("os:darwin")))
+        assertNull(RunnerPage.os(row("provider:dsh")))
+        assertNull(RunnerPage.os(buildJsonObject { put("id", "r1") }))
+    }
+
+    @Test fun managedRunnerFirstKeepsTheOtherMachinesInServerOrder() {
+        fun row(id: String, managed: Boolean? = null) = buildJsonObject {
+            put("id", id)
+            managed?.let { put("managed", it) }
+        }
+        val first = row("b", false)
+        val second = row("a")
+        val id = "0199a0c4-7a1e-7c3e-9d4f-2a6b8c0d1e99"
+        val flagged = row(id, true)
+        val legacy = row(id)
+        assertEquals(listOf(flagged, first, second), RunnerPage.managedRunnerFirst(listOf(first, flagged, second), null))
+        val runners = listOf(first, second, legacy)
+        assertEquals(listOf(legacy, first, second), RunnerPage.managedRunnerFirst(runners, id))
+        assertEquals(runners, RunnerPage.managedRunnerFirst(runners, null))
+    }
+
+    /** The account's managed runner is Orbit Cloud — told by the managed status's runnerId, never by its stored name — unless its owner
+     * named it; its version line is its release or that Orbit keeps it up to date, and it is never told its updates are turned off. */
+    @Test fun theManagedRunnerIsOrbitCloudWithAReadableVersionAndNoUpdatesOffCard() {
+        val id = "0199a0c4-7a1e-7c3e-9d4f-2a6b8c0d1e99"
+        fun runner(name: String, displayName: String? = null, version: String = "managed-95884b154feb3d4e2a575fb012c4185b20c282ac") = buildJsonObject {
+            put("id", id); put("name", name); displayName?.let { put("displayName", it) }; put("version", version)
+        }
+        assertEquals("Orbit Cloud", RunnerPage.displayName(runner("orbit-cloud"), managedRunnerId = id))
+        // By id, not by name: any stored name is Orbit Cloud, and orbit-cloud on a runner that isn't the account's stays as it is.
+        assertEquals("Orbit Cloud", RunnerPage.displayName(runner("some-pod"), managedRunnerId = id))
+        assertEquals("orbit-cloud", RunnerPage.displayName(runner("orbit-cloud"), managedRunnerId = null))
+        assertEquals("orbit-cloud", RunnerPage.displayName(runner("orbit-cloud"), managedRunnerId = "0199a0c4-0000-7c3e-9d4f-2a6b8c0d1e99"))
+        assertEquals("Lab pod", RunnerPage.displayName(runner("orbit-cloud", "Lab pod"), managedRunnerId = id))
+        assertEquals("Orbit Cloud", RunnerPage.nameOf(id, "orbit-cloud", null, managedRunnerId = id))
+        assertEquals("orbit-cloud", RunnerPage.nameOf(id, "orbit-cloud", " ", managedRunnerId = null))
+
+        // The head's line and About's Version: never the image hash.
+        assertEquals("Kept up to date by Orbit", RunnerPage.hostLine(runner("orbit-cloud"), managed = true))
+        assertEquals("Kept up to date by Orbit", RunnerPage.versionValue(runner("orbit-cloud"), "0.1.197", managed = true))
+        assertEquals("v0.1.190", RunnerPage.hostLine(runner("orbit-cloud", version = "0.1.190"), managed = true))
+        assertEquals("0.1.190 · Orbit updates this machine for you.", RunnerPage.versionValue(runner("orbit-cloud", version = "0.1.190"), "0.1.197", managed = true))
+        assertFalse(RunnerPage.hostLine(runner("orbit-cloud"), managed = true).contains("managed-"))
+
+        // The head's line leads with the country its IP is in, once a check has decided one; the words are OrbitKit's.
+        fun located(viaProxy: Boolean) = buildJsonObject {
+            put("id", id); put("name", "orbit-cloud"); put("version", "0.1.190")
+            put("region", buildJsonObject { put("verdict", "allowed"); put("country", "JP"); put("name", "Japan"); put("viaProxy", viaProxy); put("checkedAt", "2026-09-28T11:57:00Z") })
+        }
+        assertEquals("📍 Japan · v0.1.190", RunnerPage.headLine(located(false), managed = true))
+        assertEquals("📍 Japan (via proxy) · v0.1.190", RunnerPage.headLine(located(true), managed = true))
+        assertEquals("v0.1.190", RunnerPage.headLine(runner("orbit-cloud", version = "0.1.190"), managed = true))
+        val root = generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }.first { File(it, "src/macos/OrbitKit/Sources/OrbitKit").isDirectory }
+        val swift = File(root, "src/macos/OrbitKit/Sources/OrbitKit/App/RunnerPageCopy.swift").readText()
+        assertTrue(swift.contains("static func runnerLocation(place: String) -> String { \"${RunnerCopy.location("\\(place)")}\" }"))
+        assertTrue(swift.contains("static func runnerLocationViaProxy(place: String) -> String { \"${RunnerCopy.locationViaProxy("\\(place)")}\" }"))
+
+        // ORBIT_NO_SELFUPDATE and behind: no card on the managed runner, the card unchanged on a self-hosted one.
+        val behind = case("selfUpdate disabledByEnv and behind")
+        assertEquals(listOf("Updates are turned off"), items(behind).map { it.title })
+        assertEquals(emptyList<AttentionItem>(), items(JsonObject(behind + ("managed" to JsonPrimitive(true)))))
     }
 
     // OrbitKit RunnerSelfUpdateTests: what the case file can't carry about the selfUpdate machines.
@@ -155,6 +255,14 @@ class RunnerPageTest {
         assertEquals("Resets Tue, Sep 29 at 3:00 AM. ${quota.detail}", RunnerPage.attentionDetail(quota, 0L, ZoneId.of("UTC")))
     }
 
+    /** Max Concurrent's use: the slots taken of it — none while offline, when the count is stale. */
+    @Test fun runningIsTheSlotsTakenWhileOnline() {
+        fun runner(online: Boolean) = buildJsonObject { put("online", online); put("maxConcurrent", 12); put("activeSessions", 4) }
+        assertEquals(4 to 12, RunnerPage.slots(runner(true), System.currentTimeMillis()))
+        assertEquals("4 of 12 running", RunnerCopy.runningOf(4, 12))
+        assertEquals(null, RunnerPage.slots(runner(false), System.currentTimeMillis()))
+    }
+
     /** OrbitKit testAMachineWithNoCodingCLISignedInNamesItsCLIsAndSignsInTheFirst (rule 10 of docs/mocks/first-workspace-in-conversation/04):
      * one item, naming every CLI installed there by its own name, in the engines' order, and signing in the first. When it is raised is
      * the case file's, above. */
@@ -202,7 +310,11 @@ class RunnerPageTest {
         }
         val templates = mapOf("attentionNoCliSignedInDetail(cli: String)" to RunnerCopy.noCliSignedInDetail("\\(cli)"),
             "attentionNoCliSignedInDetailMany(clis: String)" to RunnerCopy.noCliSignedInDetailMany("\\(clis)"),
-            "runnerNamesTwo(first: String, second: String)" to RunnerCopy.namesTwo("\\(first)", "\\(second)"))
+            "runnerNamesTwo(first: String, second: String)" to RunnerCopy.namesTwo("\\(first)", "\\(second)"),
+            // The quiet-window wording of a runner update (selfUpdate.quietWindowSeconds); a number is rendered as a sentinel.
+            "runnerVersionInstallsWhenQuiet(minutes: Int)" to RunnerCopy.versionInstallsWhenQuiet(90_001).replace("90001", "\\(minutes)"),
+            "runnerUpdateAvailableBodyQuiet(minutes: Int, unit: String)" to
+                RunnerCopy.updateAvailableBodyQuiet(90_001, "\\(unit)").replace("90001", "\\(minutes)"))
         for ((signature, rendered) in templates) {
             val body = Regex("static func ${Regex.escape(signature)} -> String \\{\\s*\"((?:[^\"\\\\]|\\\\.)*)\"\\s*\\}").find(swift)?.groupValues?.get(1)
             assertEquals(signature, rendered, body)
@@ -255,7 +367,33 @@ class RunnerPageTest {
         val single = buildJsonObject { put("engine", "kimi"); put("installed", true); put("auth", "yes") }
         assertNull(RunnerPage.accountLines(single).single().signInAccount)
         assertTrue(RunnerPage.engineUpdateInFlight(buildJsonObject { put("mode", "update"); put("status", "installing") }))
-        assertEquals("Nothing to update.", RunnerPage.updateRelayLine(buildJsonObject { put("mode", "update"); put("status", "done") }))
+        assertEquals(listOf(RunnerPage.UpdateRelayLine("Nothing to update.")),
+            RunnerPage.updateRelayLines(buildJsonObject { put("mode", "update"); put("status", "done") }))
+    }
+
+    @Test fun updateEnginesNowListsOnlyWhatNeedsSomeoneAsIosDoes() {
+        fun run(vararg lines: String) = buildJsonObject {
+            put("mode", "update"); put("status", "failed"); put("message", lines.joinToString("\n"))
+        }
+        assertEquals(listOf(RunnerPage.UpdateRelayLine("Nothing here needs your attention.")), RunnerPage.updateRelayLines(run(
+            "Claude Code updated 2.1.284 → 2.1.290",
+            "Codex — 5 sessions running, it'll update once they finish",
+            "Kimi Code — updater finished, but its version couldn't be read",
+        )))
+        assertEquals(listOf(
+            RunnerPage.UpdateRelayLine("OpenCode — update timed out after 5m0s", failed = true),
+            RunnerPage.UpdateRelayLine("Antigravity — installed but does not run: signal: killed", failed = true),
+            RunnerPage.UpdateRelayLine("Gemini — owned by another user, left alone"),
+            RunnerPage.UpdateRelayLine("Cursor CLI — update failed: npm error code EACCES", failed = true),
+        ), RunnerPage.updateRelayLines(run(
+            "Claude Code — already up to date (2.1.323)",
+            "OpenCode — update timed out after 5m0s",
+            "Antigravity — installed but does not run: signal: killed",
+            "Gemini — owned by another user, left alone",
+            "Cursor CLI — update failed: npm error code EACCES",
+            "DeepSeek Harness — fixed supported version 0.2.0-rc.2",
+        )))
+        assertTrue(RunnerPage.updateRelayLines(buildJsonObject { put("mode", "install"); put("status", "pending") }).isEmpty())
     }
 
     @Test fun usageRowsLabelWindowsAsIosDoes() {
@@ -345,5 +483,151 @@ class RunnerPageTest {
         assertEquals("Not supported here", status("""{"engine":"dsh","installed":false,"installationError":"DSH_PLATFORM_UNSUPPORTED: darwin"}"""))
         assertEquals("Not installed", status("""{"engine":"dsh","installed":false}"""))
         assertEquals("Unsupported version", status("""{"engine":"dsh","installed":true,"dsh":{"versionCompatible":false}}"""))
+    }
+
+    // Dismiss until the next release (web runnerEngines.test.ts / runnerAttention.cases.json's dismissal cases)
+
+    private val dismissedCase = "Codex update warning dismissed against the release that is still the latest"
+    /** The dismissal case's runner, with Codex's latest and the dismissal set as given. */
+    private fun dismissal(latest: String, dismissed: String?): JsonObject {
+        val input = case(dismissedCase)
+        val runner = runnerOf(input)
+        val engines = runner.list("engines").map { e ->
+            if (e.str("engine") != "codex") e else JsonObject(e + ("update" to JsonObject(e.obj("update")!! + ("latest" to JsonPrimitive(latest)))))
+        }
+        val dismissals = dismissed?.let { buildJsonObject { put("codex", it) } } ?: JsonNull
+        return JsonObject(input + ("runner" to JsonObject(runner + mapOf("engines" to JsonArray(engines), "engineUpdateDismissals" to dismissals))))
+    }
+    private fun codexUpdate(input: JsonObject) = runnerOf(input).list("engines").first { it.str("engine") == "codex" }.obj("update")
+
+    @Test fun aWarningDismissedAgainstTheLatestGoesQuietAndANewerLatestWarnsAgain() {
+        val now = case(dismissedCase)["nowMs"]!!.jsonPrimitive.long
+        val still = dismissal("0.169.0", "0.169.0")
+        assertEquals("quiet" to "13d behind 0.169.0 · warning dismissed", RunnerPage.updateNoteOf(codexUpdate(still), now, dismissed = "0.169.0"))
+        assertEquals("0.169.0", RunnerPage.engineUpdateDismissedFor(runnerOf(still), "codex"))
+        val newer = dismissal("0.170.0", "0.169.0")
+        assertEquals("warn" to "13d behind 0.170.0", RunnerPage.updateNoteOf(codexUpdate(newer), now, dismissed = "0.169.0"))
+        assertEquals("not dismissed", "warn" to "13d behind 0.169.0", RunnerPage.updateNoteOf(codexUpdate(still), now))
+        assertEquals("an empty dismissal is none", "warn" to "13d behind 0.169.0", RunnerPage.updateNoteOf(codexUpdate(still), now, dismissed = ""))
+        // A note that was not a warning is left as it is.
+        val quiet = buildJsonObject { put("status", "skipped"); put("latest", "0.169.0") }
+        assertEquals("quiet" to "not auto-updated", RunnerPage.updateNoteOf(quiet, now, dismissed = "0.169.0"))
+        assertNull("an older server sends no dismissals", RunnerPage.engineUpdateDismissedFor(runnerOf(dismissal("0.169.0", null)), "codex"))
+    }
+
+    @Test fun aDismissedEngineRaisesNoItemNorCountsUntilTheLatestMoves() {
+        val now = case(dismissedCase)["nowMs"]!!.jsonPrimitive.long
+        val still = dismissal("0.169.0", "0.169.0")
+        assertEquals(emptyList<AttentionItem>(), items(still))
+        assertNull("the machine is not in Needs Attention", RunnerPage.listAttentionLine(items(still)))
+        assertFalse(RunnerPage.offersUpdateDismiss(runnerOf(still), "codex", now))
+        assertNull(RunnerPage.updateFailedLine(runnerOf(still).list("engines")[1], now, ZoneId.of("UTC"), dismissed = "0.169.0"))
+        assertFalse(MachinesAndModels.summary(runnerOf(still), now).contains("not updating"))
+
+        val newer = dismissal("0.170.0", "0.169.0")
+        assertEquals(listOf("engineNotUpdating"), items(newer).map { it.kind })
+        assertEquals("Codex update failed", RunnerPage.listAttentionLine(items(newer)))
+        assertTrue(RunnerPage.offersUpdateDismiss(runnerOf(newer), "codex", now))
+        assertEquals("1 engine not updating", MachinesAndModels.summary(runnerOf(newer), now))
+        assertEquals("Dismiss until next Codex release", RunnerCopy.dismissUntilNextRelease(RunnerPage.engineName("codex")))
+        assertEquals("runners/r1/engines/codex/update-warning/dismiss", RunnerPage.updateDismissPath("r1", "codex"))
+    }
+
+    // Fix with an agent (agent-fix contract; RunnerAgentFix in src/shared/src/dto.ts)
+
+    private fun fixRunner(blocked: String? = null, fixing: String = "") = Json.parseToJsonElement("""{"id":"r1","agentFix":{
+        "workspaceId":"w1","workspaceName":"orbit-dev","engine":"claude","engineName":"Claude Code",
+        "blocked":${blocked?.let { """{"code":"$it","message":"Why: $it."}""" } ?: "null"},"fixing":[$fixing]}}""").jsonObject
+    private fun fixingEntry(kind: String, engine: String?) =
+        """{"kind":"$kind","engine":${engine?.let { "\"$it\"" } ?: "null"},"sessionId":"s1","workspaceId":"w1","workspaceName":"orbit-dev"}"""
+    private fun item(kind: String, engine: String? = null) = AttentionItem(kind, "warn", kind, kind, "", engine?.let { AttentionAction("updateEngines", engine = it) })
+
+    @Test fun agentFixDecodesFromTheRunnerAndAnOlderServerSendsNone() {
+        val fix = RunnerPage.agentFixOf(fixRunner("engineSignedOut", fixingEntry("engineNotUpdating", "codex") + "," + fixingEntry("cannotSelfUpdate", null)))!!
+        assertEquals(AgentFix("w1", "orbit-dev", "claude", "Claude Code", "engineSignedOut", "Why: engineSignedOut.", listOf(
+            AgentFixing("engineNotUpdating", "codex", "s1", "w1", "orbit-dev"), AgentFixing("cannotSelfUpdate", null, "s1", "w1", "orbit-dev"))), fix)
+        assertNull(RunnerPage.agentFixOf(buildJsonObject { put("id", "r1") }))
+        assertNull(RunnerPage.agentFixOf(buildJsonObject { put("id", "r1"); put("agentFix", JsonNull) }))
+        val none = Json.parseToJsonElement("""{"agentFix":{"workspaceId":null,"workspaceName":null,"engine":null,"engineName":null,
+            "blocked":{"code":"noWorkspace","message":"No workspace runs on this machine yet."},"fixing":[]}}""").jsonObject
+        assertEquals(AgentFix(null, null, null, null, "noWorkspace", "No workspace runs on this machine yet.", emptyList()), RunnerPage.agentFixOf(none))
+    }
+
+    @Test fun onlyAnEngineThatWontUpdateAndARunnerThatCantUpdateItselfGetTheButton() {
+        val runner = fixRunner()
+        assertEquals(AgentFixView(null, true, null), RunnerPage.agentFixOnCard(runner, item("engineNotUpdating", "codex")))
+        assertEquals(AgentFixView(null, true, null), RunnerPage.agentFixOnCard(runner, AttentionItem("cannotSelfUpdate", "warn", "", "", "")))
+        for (kind in listOf("offline", "signedOut", "noCliSignedIn", "quota", "disk", "checkout", "claudeRegion")) {
+            assertNull(kind, RunnerPage.agentFixOnCard(runner, item(kind)))
+        }
+        assertNull("no agentFix, no button", RunnerPage.agentFixOnCard(buildJsonObject { put("id", "r1") }, item("engineNotUpdating", "codex")))
+        assertNull("offline draws nothing at all", RunnerPage.agentFixOnCard(fixRunner("offline"), item("engineNotUpdating", "codex")))
+        assertEquals(AgentFixView(null, false, "Why: noWorkspace."), RunnerPage.agentFixOnCard(fixRunner("noWorkspace"), item("engineNotUpdating", "codex")))
+        assertEquals("the card adds no sign-in hint", AgentFixView(null, false, "Why: engineSignedOut."),
+            RunnerPage.agentFixOnCard(fixRunner("engineSignedOut"), AttentionItem("cannotSelfUpdate", "warn", "", "", "")))
+    }
+
+    @Test fun aFixingEntryOfTheSameKindAndEngineTakesTheButtonsPlace() {
+        val codex = fixRunner(fixing = fixingEntry("engineNotUpdating", "codex"))
+        val entry = AgentFixing("engineNotUpdating", "codex", "s1", "w1", "orbit-dev")
+        assertEquals(AgentFixView(entry, false, null), RunnerPage.agentFixOnCard(codex, item("engineNotUpdating", "codex")))
+        assertEquals("another engine's card still offers it", AgentFixView(null, true, null), RunnerPage.agentFixOnCard(codex, item("engineNotUpdating", "claude")))
+        assertEquals("another kind's too", AgentFixView(null, true, null), RunnerPage.agentFixOnCard(codex, AttentionItem("cannotSelfUpdate", "warn", "", "", "")))
+        assertEquals(AgentFixView(null, true, RunnerCopy.agentFixStarts("orbit-dev", "Claude Code")), RunnerPage.agentFixOnInstall(codex, "codex"))
+        val self = fixRunner(fixing = fixingEntry("cannotSelfUpdate", null))
+        assertEquals(AgentFixing("cannotSelfUpdate", null, "s1", "w1", "orbit-dev"),
+            RunnerPage.agentFixOnCard(self, AttentionItem("cannotSelfUpdate", "warn", "", "", ""))?.fixing)
+        val installing = fixRunner("engineSignedOut", fixingEntry("installFailed", "codex"))
+        assertEquals("fixing outranks a later block", AgentFixing("installFailed", "codex", "s1", "w1", "orbit-dev"), RunnerPage.agentFixOnInstall(installing, "codex")?.fixing)
+        assertEquals("An agent is fixing this in orbit-dev · ", RunnerCopy.agentFixing("orbit-dev"))
+    }
+
+    @Test fun theInstallFailedLineSaysWhereTheSessionStartsOrWhyNot() {
+        assertEquals(AgentFixView(null, true, "Starts a session in orbit-dev on this machine, with Claude Code."), RunnerPage.agentFixOnInstall(fixRunner(), "codex"))
+        assertEquals(AgentFixView(null, false, "Why: engineSignedOut. Sign in to Claude Code above to use this."),
+            RunnerPage.agentFixOnInstall(fixRunner("engineSignedOut"), "codex"))
+        assertEquals(AgentFixView(null, false, "Why: noWorkspace."), RunnerPage.agentFixOnInstall(fixRunner("noWorkspace"), "codex"))
+        assertEquals("offline is said here, the button off", AgentFixView(null, false, "Why: offline."), RunnerPage.agentFixOnInstall(fixRunner("offline"), "codex"))
+        assertNull(RunnerPage.agentFixOnInstall(buildJsonObject { put("id", "r1") }, "codex"))
+    }
+
+    @Test fun thePressPostsTheKindWithItsEngineOrTheLatestRelease() {
+        assertEquals("runners/r1/attention/installFailed/fix", RunnerPage.agentFixPath("r1", "installFailed"))
+        assertEquals(buildJsonObject { put("engine", "codex") }, RunnerPage.agentFixBody("engineNotUpdating", "codex", "0.1.250"))
+        assertEquals(buildJsonObject { put("engine", "codex") }, RunnerPage.agentFixBody("installFailed", "codex", null))
+        assertEquals(buildJsonObject { put("latest", "0.1.250") }, RunnerPage.agentFixBody("cannotSelfUpdate", null, "0.1.250"))
+        assertEquals(buildJsonObject { }, RunnerPage.agentFixBody("cannotSelfUpdate", null, null))
+        assertEquals(buildJsonObject { }, RunnerPage.agentFixBody("engineUpdateFailed", null, "0.1.250"))
+    }
+
+    // Under the Update Engines Now report (docs/mocks/engine-update-fix-with-agent/03-mobile.png)
+
+    /** [fixRunner] after an Update Engines Now that ended [status], reporting [message]. */
+    private fun updated(blocked: String? = null, fixing: String = "", status: String = "failed",
+                        message: String = "Codex — updated 0.168.2 → 0.169.0\nOpenCode — update timed out after 5m0s"): JsonObject =
+        buildJsonObject {
+            fixRunner(blocked, fixing).forEach { (k, v) -> put(k, v) }
+            put("install", buildJsonObject {
+                put("status", status); put("engine", JsonNull); put("command", "orbit engine-update"); put("message", message); put("mode", "update")
+            })
+        }
+
+    @Test fun theUpdateReportOffersItOnlyWhileARunFailed() {
+        assertEquals(AgentFixView(null, true, "Starts a session in orbit-dev on this machine, with Claude Code."), RunnerPage.agentFixOnUpdate(updated()))
+        assertNull("nothing failed", RunnerPage.agentFixOnUpdate(updated(status = "done", message = "OpenCode — updated 1.0.98 → 1.0.112")))
+        assertNull("still running", RunnerPage.agentFixOnUpdate(updated(status = "installing")))
+        assertNull("no report", RunnerPage.agentFixOnUpdate(fixRunner()))
+        assertNull("an older server", RunnerPage.agentFixOnUpdate(buildJsonObject {
+            put("id", "r1"); put("install", updated()["install"]!!)
+        }))
+    }
+
+    @Test fun theUpdateReportIsBlockedOrFixingAsThePanelIs() {
+        assertEquals(AgentFixView(null, false, "Why: engineSignedOut. Sign in to Claude Code above to use this."),
+            RunnerPage.agentFixOnUpdate(updated("engineSignedOut")))
+        assertEquals(AgentFixing("engineUpdateFailed", null, "s1", "w1", "orbit-dev"),
+            RunnerPage.agentFixOnUpdate(updated(fixing = fixingEntry("engineUpdateFailed", null)))?.fixing)
+        assertEquals("another warning's agent is not this one's", AgentFixView(null, true, RunnerCopy.agentFixStarts("orbit-dev", "Claude Code")),
+            RunnerPage.agentFixOnUpdate(updated(fixing = fixingEntry("installFailed", "codex"))))
     }
 }

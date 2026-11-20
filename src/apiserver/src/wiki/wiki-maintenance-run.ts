@@ -46,6 +46,7 @@ import {
   type WikiMaintenance,
 } from './wiki-maintenance';
 import { currentWikiRollout, wikiOnFor } from './wiki-rollout';
+import { WikiRefusalError } from './wiki.service';
 
 /**
  * The Wiki maintenance job's server side (design §8.2, contracts/wiki.contract.json `maintenance.job`,
@@ -293,11 +294,14 @@ class MaintenanceJobWriter {
       backlog: number;
       pendingSessions: number;
       oldestPendingAt: Date | null;
-      expect: FactPosition;
+      /** The position the run is expected to reach; null for an owner's run with nothing settled to read, which reads a page. */
+      expect: FactPosition | null;
       catchUp: WikiMaintenanceCatchUp | null;
     };
     /** The run whose end asks (`WikiMaintenanceHint.runEnd`): still running, and set aside as it ends. */
     endingJobId?: string;
+    /** `Use this folder` (design §7.3): this run's folder snapshot is kept whatever it shares with the last one. */
+    acceptFolder?: boolean;
   }): Promise<{ jobId: string; runId: string } | { why: 'off' | 'unfinished' | 'daily_limit_reached' }> {
     const { ownerId, spaceId, now } = input;
     return withTransactionRetry(
@@ -323,9 +327,9 @@ class MaintenanceJobWriter {
             backlog: input.run.backlog,
             pendingSessions: input.run.pendingSessions,
             oldestPendingAt: input.run.oldestPendingAt,
-            expectAt: input.run.expect.at,
-            expectKind: input.run.expect.kind,
-            expectRef: input.run.expect.ref,
+            expectAt: input.run.expect?.at ?? null,
+            expectKind: input.run.expect?.kind ?? null,
+            expectRef: input.run.expect?.ref ?? null,
             catchUp: input.run.catchUp,
             // The System model's locality is the worker's to record when it starts the run (P8).
             localEndpoint: false,
@@ -339,7 +343,7 @@ class MaintenanceJobWriter {
             spaceId,
             kind: 'maintain',
             // The run the job executes: what it is for is the run row's, and the row is the job's.
-            input: { runId },
+            input: input.acceptFolder ? { runId, acceptFolder: true } : { runId },
             priority: WIKI_MAINTAIN_JOB.priority,
             state: 'queued',
           },
@@ -394,6 +398,92 @@ class MaintenanceJobWriter {
       loggedRetry(this.logger, 'wiki.backfillJob'),
     );
   }
+}
+
+/** What the owner's run now made: its `maintain` job and its run row (contract `maintenance.run`). */
+export interface WikiMaintenanceRunNow {
+  jobId: string;
+  runId: string;
+}
+
+/**
+ * `Check again and run now` (docs/wiki-repo-tiers-design.md §7.3, contract `maintenance.run`): the owner's run of a space
+ * whose maintenance is on, made at once rather than by the next fact. The run's first step is the probe
+ * (`maintenance.job.run.steps`), so the run checks the folder again before anything else. It is made by the one writer a
+ * fact's run is made by, under the space's lock, with `due` `owner`: one run of a space at a time — another not ended is
+ * WIKI_MAINTENANCE_RUNNING — and counted against the day like any other, so a day whose runs are used up is
+ * WIKI_MAINTENANCE_DAILY_LIMIT. `acceptFolder` is `Use this folder`: this run's folder snapshot is kept even when it
+ * shares too few paths with the last one (`repoOps.folder.minPathOverlap`).
+ */
+export async function runWikiMaintenanceNow(
+  prisma: PrismaService,
+  input: { ownerId: string; spaceId: string; acceptFolder?: boolean; now?: Date },
+): Promise<WikiMaintenanceRunNow> {
+  const { ownerId, spaceId } = input;
+  const now = input.now ?? new Date();
+  const space = await prisma.wikiSpace.findFirst({ where: { id: spaceId, ownerId, deletedAt: null }, select: { id: true, settings: true } });
+  if (!space) throw new NotFoundException('no such wiki space');
+  const settings = wikiMaintenanceSettings((space.settings as Record<string, unknown> | null)?.maintenance);
+  if (!settings.enabled || !settings.workspaceId) {
+    throw new BadRequestException('maintenance is off in this space: turn it on before asking for a run');
+  }
+  const running = (): never => {
+    throw new WikiRefusalError({
+      code: 'WIKI_MAINTENANCE_RUNNING',
+      message: 'a maintenance run of this space has not ended: one run of a space at a time, so ask again when it has',
+    });
+  };
+  const limited = (): never => {
+    throw new WikiRefusalError({
+      code: 'WIKI_MAINTENANCE_DAILY_LIMIT',
+      message: `this space has made its ${settings.dailyRunLimit} maintenance runs for today (UTC): Daily limit reached`,
+    });
+  };
+  if (await unfinishedMaintainJob(prisma, ownerId, spaceId)) running();
+  if ((await wikiMaintenanceRunsToday(prisma, ownerId, spaceId, now)).remaining <= 0) limited();
+
+  const scope = await spaceScope(prisma, ownerId, spaceId);
+  const cursor = await cursorOf(prisma, ownerId, spaceId);
+  const watermark: FactPosition | null = cursor.positionAt && cursor.positionKind && cursor.positionRef
+    ? { at: cursor.positionAt, kind: cursor.positionKind as FactPosition['kind'], ref: cursor.positionRef }
+    : null;
+  const backlog = await countBacklog(prisma, scope, watermark);
+  const catchUp = await wikiMaintenanceCatchUpOf(prisma, ownerId, spaceId, backlog.oldestPendingAt, now);
+  const mode = wikiSpaceSettings(space.settings).reviewMode;
+  const runSessions = wikiMaintenanceRunSessions({
+    mode,
+    activeEntries: mode === 'manual' ? 0 : await prisma.wikiEntry.count({ where: { ownerId, spaceId, status: 'active' } }),
+    pendingInSpace: mode === 'manual'
+      ? await prisma.wikiChangesetOp.count({ where: { ownerId, decision: 'pending', spotCheck: false, changeset: { spaceId } } })
+      : 0,
+  });
+  // The position a fact's run would be given, when there are settled facts to cover; none is no refusal — the owner asked
+  // for the check, and the run reads what there is.
+  const settled = new Date(now.getTime() - WIKI_MAINTENANCE_RULES.settleGraceSeconds * 1000);
+  const scanned = runSessions > 0 ? await factsAfter(prisma, scope, watermark, settled, PAGE_FACT_SCAN) : [];
+  const end = scanned.length > 0 ? pageOf(scanned, watermark, runSessions, scanned.length === PAGE_FACT_SCAN).end : null;
+  const expect = end && comparePositions(end, watermark) > 0 ? end : null;
+  const made = await new MaintenanceJobWriter(prisma).makeJob({
+    ownerId,
+    spaceId,
+    cursorId: cursor.id,
+    now,
+    run: {
+      due: 'owner',
+      backlog: backlog.backlog,
+      pendingSessions: backlog.pendingSessions,
+      oldestPendingAt: backlog.oldestPendingAt,
+      expect,
+      catchUp: catchUp.state,
+    },
+    acceptFolder: input.acceptFolder === true,
+  });
+  if ('why' in made) {
+    if (made.why === 'unfinished') running();
+    if (made.why === 'daily_limit_reached') limited();
+    throw new NotFoundException('no such wiki space');
+  }
+  return made;
 }
 
 /** What a backfill is asked for: which space, why, and which sessions. */
@@ -741,6 +831,7 @@ export async function finishWikiMaintenanceJob(
       opsRefused: refused,
     }, now);
     await maintenance.noteNoNotes(ownerId, spaceId);
+    await maintenance.noteRepoAttention(ownerId, spaceId, jobId);
     const articles = await queueWikiArticlesAfterRun(prisma, {
       ownerId,
       spaceId,

@@ -66,7 +66,9 @@ final class DownloadMarkTests: XCTestCase {
         let file = try folder().appendingPathComponent("report.html")
         try DownloadMark.write(Data("<script>".utf8), to: file)
         let mark = try XCTUnwrap(quarantine(file), "a file written for somebody to open has no quarantine attribute")
-        XCTAssertTrue(mark.contains("Orbit"), "the attribute names who wrote it: \(mark)")
+        // Only that it is there: the raw value's layout is the system's (macOS 27 leaves its agent field empty).
+        // Who wrote it is read back the system's way in testTheMarkSaysItIsADownload.
+        XCTAssertFalse(mark.isEmpty, "the quarantine attribute is empty")
     }
 
     /// Read back the way the system reads it, beside the raw attribute above.

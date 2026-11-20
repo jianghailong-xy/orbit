@@ -68,14 +68,14 @@ MANAGER_KUBECONFIG = SERVER / 'manager-kubeconfig.json'
 PROFILE = SERVER / 'managed-runner-profile.json'
 WEBHOOK_TOKEN = SERVER / 'secrets' / 'admission-webhook-token'
 WEBHOOK_TEMPLATE = REPO / 'deploy/managed-runner/admission/pod-admission-webhook.template.json'
-WEBHOOK_NAME = 'orbit-managed-runner-pods'
+WEBHOOK_NAME = 'orbit-cloud-runner-pods'
 GUEST_ADMISSION_DIR = '/etc/rancher/k3s/orbit-admission'
 GUEST_K3S_DROP_IN = '/etc/rancher/k3s/config.yaml.d/50-orbit-admission.yaml'
 PAYLOAD = REPO / 'scripts/managed-runner/ceph-rbd-payload.py'
 # The runner runs as UID 10001 and owns only its home on the volume; the volume's root is root's.
-PAYLOAD_ROOT = '/var/lib/orbit/home/storage-verification'
+PAYLOAD_ROOT = '/home/orbit/storage-verification'
 PAYLOAD_IN_POD = '/tmp/t02a-payload.py'
-IMAGE_NAME = 'docker.io/library/orbit-managed-runner-lab'
+IMAGE_NAME = 'docker.io/library/orbit-cloud-runner-lab'
 PG = 'orbit-mr-lab-pg'
 INSTANCE_CAPABILITY = 'managed-runner-instance-v1'
 # Which test owner (and so which mapping) a command is about: state/<name>.json. The first is the
@@ -231,7 +231,7 @@ def cmd_retry(_args):
 
 def manager_objects():
     """The manager's ServiceAccount and exactly the access kubernetes-backend.ts uses, nothing more."""
-    meta = {'name': MANAGER, 'namespace': NAMESPACE, 'labels': {'app.kubernetes.io/name': 'orbit-managed-runner-manager'}}
+    meta = {'name': MANAGER, 'namespace': NAMESPACE, 'labels': {'app.kubernetes.io/name': 'orbit-cloud-runner-manager'}}
     subject = [{'kind': 'ServiceAccount', 'name': MANAGER, 'namespace': NAMESPACE}]
     storage = f'{MANAGER}-storage'
     return [
@@ -597,8 +597,8 @@ def contender(name, mapping, pod, labelled=False):
     return {'apiVersion': 'v1', 'kind': 'Pod', 'metadata': {'name': name, 'namespace': NAMESPACE},
             'spec': {'restartPolicy': 'Never', 'nodeName': NODE,
                      'containers': [{'name': 'second-writer', 'image': ENV['PROBE_IMAGE'],
-                                     'command': ['sh', '-c', 'echo second > /var/lib/orbit/second-pod.txt; sleep 3600'],
-                                     'volumeMounts': [{'name': 'data', 'mountPath': '/var/lib/orbit'}]}],
+                                     'command': ['sh', '-c', 'echo second > /home/orbit/second-pod.txt; sleep 3600'],
+                                     'volumeMounts': [{'name': 'data', 'mountPath': '/home/orbit'}]}],
                      'volumes': [{'name': 'data', 'persistentVolumeClaim': {'claimName': mapping['pvc_name']}}]}}
 
 
@@ -664,7 +664,7 @@ def cmd_contenders(_args):
     # An ephemeral container would share the authorized Pod's volumes.
     patch = {'spec': {'ephemeralContainers': [{'name': 't02a-debug', 'image': ENV['PROBE_IMAGE'], 'command': ['sleep', '3600'],
                                                'targetContainerName': 'runner',
-                                               'volumeMounts': [{'name': 'user-state', 'mountPath': '/var/lib/orbit'}]}]}}
+                                               'volumeMounts': [{'name': 'user-state', 'mountPath': '/home/orbit'}]}]}}
     result = kubectl('patch', 'pod', pod['metadata']['name'], '--subresource', 'ephemeralcontainers', '--type', 'strategic',
                      '-p', json.dumps(patch), check=False)
     attempts.append({'case': 'an ephemeral container mounting the volume, added to the authorized Pod by the cluster admin', 'at': now(),
@@ -704,16 +704,16 @@ def cmd_outage(args):
 # ---- data on the volume ----------------------------------------------------------------------
 
 def payload_source():
+    # The payload's root is already under the runner's home, the volume's root.
     text = PAYLOAD.read_text()
-    old = 'Path("/var/lib/orbit/storage-verification")'
-    if text.count(old) != 1:
+    if text.count(f'Path("{PAYLOAD_ROOT}")') != 1:
         raise SystemExit(f'{PAYLOAD} no longer names its root once')
-    return text.replace(old, f'Path({PAYLOAD_ROOT!r})')
+    return text
 
 
 IDENTITY = r'''
 import json, pathlib
-orbit = pathlib.Path('/var/lib/orbit/home/.orbit')
+orbit = pathlib.Path('/home/orbit/.orbit')
 def read(name):
     p = orbit / name
     return json.loads(p.read_text()) if p.exists() else None
@@ -828,9 +828,9 @@ def cmd_credential(args):
         if offer.get('declare', True):
             headers['X-Orbit-Runner-Capabilities'] = INSTANCE_CAPABILITY
         if offer.get('generation') is not None:
-            headers['X-Orbit-Managed-Runner-Generation'] = str(offer['generation'])
+            headers['X-Orbit-Cloud-Runner-Generation'] = str(offer['generation'])
         if offer.get('podUid'):
-            headers['X-Orbit-Managed-Runner-Pod-Uid'] = offer['podUid']
+            headers['X-Orbit-Cloud-Runner-Pod-Uid'] = offer['podUid']
         status, answer = call(method, path, body, token=token, headers=headers, timeout=30)
         code = answer.get('code') if isinstance(answer, dict) else None
         message = answer.get('message') if isinstance(answer, dict) else answer

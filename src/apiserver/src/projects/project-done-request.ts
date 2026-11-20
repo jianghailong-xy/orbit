@@ -130,6 +130,7 @@ export async function readDoneState(
       completionCriterionOverrideReason: true,
       revision: true,
       contentHash: true,
+      satisfiedBy: true,
       servingTasks: {
         where: { ownerId },
         orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
@@ -154,6 +155,9 @@ export async function readDoneState(
     (await readCriterionSatisfaction(tx, ownerId, projectId)).map((row) => [row.definitionId, row]),
   );
   const branches = await readLandingBranches(tx, projectId);
+  // The non-code mark (0535) is not read (§12.15 P-M3): a project none of whose tasks delivered a
+  // commit reads every criterion LANDED from that fact alone, and one whose tasks did is read like any
+  // other, marked or not.
   const landing = new Map(
     criterionLanding(served, branches).map((row) => [row.definitionId, row.landing]),
   );
@@ -253,6 +257,8 @@ export async function readDoneState(
     jobs,
     criteriaDigest: standardSetVersion(stated).digest,
     stateDigest: doneStateDigest(criteria, tasks, jobs),
+    // Kept for the clients that read it; the mark no longer changes what the check finds.
+    nonCode: false,
   };
 }
 
@@ -313,8 +319,13 @@ const UNLANDED: Record<CriterionLandingReason, (ordinal: number) => [string, str
     'If it is on main by a path Orbit did not see, name it as a gap with what you checked; if it is '
       + 'not, land it first.',
   ],
+  NO_BRANCH: (n) => [
+    `criterion ${n}'s work ran without a branch, so Orbit can't see whether its changes reached main`,
+    'Check main for its changes and name it as a gap with what you found; if they are not there, '
+      + 'land them first.',
+  ],
   CODELESS: (n) => [
-    `criterion ${n}'s work ran no branch, so nothing of it can land`,
+    `criterion ${n}'s work was done in another repository, so nothing of it lands here`,
     'Name it as a gap: why Orbit cannot prove it, and what you checked instead.',
   ],
 };
@@ -399,7 +410,9 @@ export function doneReadiness(
 
   const named = new Set(gaps.map((gap) => gap.criterionKey));
   for (const criterion of state.criteria) {
-    if (criterion.landing === 'LANDED') continue;
+    // An unmet criterion is already a refusal of its own (DONE_CRITERION_UNSATISFIED): reporting it
+    // unlanded too would count one thing twice.
+    if (criterion.landing === 'LANDED' || !criterion.satisfied) continue;
     const reason = criterion.reason ?? 'NO_RECEIPT';
     const [message, requiredAction] = UNLANDED[reason](criterion.stated.ordinal);
     finding('WARN', 'DONE_CRITERION_UNLANDED',

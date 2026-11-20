@@ -88,6 +88,16 @@ class WikiContractTest {
     /** OrbitKit `testASearchHitIsTheContractsAndSaysHowOldItIs`: what this model reads is what the contract's hit lists
      * (`agentSurface.toolSpecs.wiki_search.hit`) — `topics` aside, which the client asks for by name — and how old the entry
      * is (`age`) decodes as the server writes it, and as nothing where a server sent none. */
+    /** Why a search found nothing because there was no wiki to search: the contract's closed set, decoded as sent. */
+    @Test fun searchUnavailableIsTheContracts() {
+        assertEquals(at("searchUnavailable").jsonObject.keys, WikiSearchUnavailable.all.toSet())
+        val none = Wire.json.decodeFromString(WikiSearchResponse.serializer(),
+            """{"q":"src/a.ts","semantic":false,"hits":[],"unavailable":"wiki_in_trash"}""")
+        assertEquals(WikiSearchUnavailable.WIKI_IN_TRASH, none.unavailable)
+        assertEquals(emptyList<WikiSearchHit>(), none.hits)
+        assertNull(Wire.json.decodeFromString(WikiSearchResponse.serializer(), """{"q":"a","hits":[]}""").unavailable)
+    }
+
     @Test fun aSearchHitIsTheContractsAndSaysHowOldItIs() {
         val search = at("agentSurface", "toolSpecs", "wiki_search").jsonObject
         val fields = search.getValue("hit").jsonArray.map { it.jsonPrimitive.content }

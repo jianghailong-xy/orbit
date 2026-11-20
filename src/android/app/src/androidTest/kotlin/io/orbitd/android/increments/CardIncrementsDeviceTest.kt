@@ -195,7 +195,7 @@ class CardIncrementsDeviceTest : IncrementDeviceTest() {
         capture("02-question-review-markdown")
     }
 
-    /** A08-13: an answered and a withdrawn question stay as records where their cards were; View details replays the answer. */
+    /** A08-13: an answered and a withdrawn question stay as records where their cards were; View details unfolds the answer in place. */
     @Test fun endedCoordinatorQuestionsAreKeptAsRecords() = journey {
         openConversation()
         val record = Json.parseToJsonElement(answered).jsonObject
@@ -214,8 +214,10 @@ class CardIncrementsDeviceTest : IncrementDeviceTest() {
         verify("and why", textOf("item:q-withdrawn:reason") == "“Not needed after the rollback.”")
         capture("02-withdrawn-record")
         scrollTranscriptTo(hasTestTag("item:q-answered"))
-        compose.onNodeWithTag("item:q-answered").performClick()
+        // Board card-ui-polish ③: View details unfolds the record in place, with no sheet.
+        compose.onNodeWithTag("item:q-answered:details", useUnmergedTree = true).performClick()
         await("the answered record's replay") { exists(hasTestTag("item:q-answered:footer-line"), unmerged = true) }
+        verify("it opened in place", exists(hasTestTag("item:q-answered:unfolded"), unmerged = true) && !exists(hasTestTag("card-review")))
         verify("the replay ticks the option chosen", exists(hasTestTag("item:q-answered:option:1:chosen"), unmerged = true) &&
             !exists(hasTestTag("item:q-answered:option:0:chosen"), unmerged = true))
         verify("the replay's footer says who ended it", textOf("item:q-answered:footer-line") == CoordinatorQuestions.footerLine(record))
@@ -260,25 +262,27 @@ class CardIncrementsDeviceTest : IncrementDeviceTest() {
     /** B19: the session-request, reply, task-start, delivery and project-start cards, and the sender's door. */
     @Test fun sessionRequestReplyDeliveryAndSourceCards() = journey {
         openConversation()
-        scrollTranscriptTo(hasText("Message from another session"))
-        verify("the request card", exists(hasText("Message from another session")) && exists(hasText("Can you confirm the tag?"), unmerged = true))
+        // The message is a bubble (docs/mocks/session-message-bubble): who sent it above, its words in it, the request on its foot.
+        scrollTranscriptTo(hasTestTag("session-message:from"))
+        verify("the message bubble", exists(hasTestTag("session-message:from") and hasText("Release checklist"), unmerged = true) &&
+            exists(hasText("Message from Release checklist"), unmerged = true))
         await("the request's state read from the server") { calls.any { it == "GET session-requests/$request" } }
-        await("the request's state drawn") { exists(hasText("REPLIED"), unmerged = true) }
-        verify("the recipient answers it", exists(hasText("The recipient session answers this request."), unmerged = true))
+        await("the request's state drawn") { exists(hasText("Replied"), unmerged = true) }
+        verify("it asked for a reply", exists(hasText("Asked for a reply · "), unmerged = true))
         capture("01-session-request")
         scrollTranscriptTo(hasText("Session reply · REPLIED"))
         verify("the reply card says what came back", exists(hasText("Tagged v0.1.230."), unmerged = true))
         capture("02-session-reply")
         scrollTranscriptTo(hasText("Task started"))
         verify("the task-start card names the task", exists(hasText("Wire the checks"), unmerged = true))
-        scrollTranscriptTo(hasText("Project item delivered"))
+        scrollTranscriptTo(hasText("Wire the checks failed"))
         verify("the delivery's two doors", exists(hasText("Open the failed session ↗"), unmerged = true) && exists(hasText("Open the landing ↗"), unmerged = true))
         capture("03-delivery")
         scrollTranscriptTo(hasText("Project started"))
         verify("the project-start card", exists(hasText("Release 0.1.230"), unmerged = true))
         capture("04-project-started")
-        scrollTranscriptTo(hasText("Message from another session"))
-        compose.onAllNodes(hasText("Open sender session") and hasClickAction()).onFirst().performScrollTo().performClick()
+        scrollTranscriptTo(hasTestTag("session-message:from"))
+        compose.onAllNodes(hasTestTag("session-message:from") and hasClickAction()).onFirst().performScrollTo().performClick()
         await("the sender's session opens") { app.realtime.state.value.session?.id?.let { io.orbitd.android.navigation.ObjectId.same(it, sender) } == true }
         awaitText("Asking the coordinator.")
         capture("05-sender-session")

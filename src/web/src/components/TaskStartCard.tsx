@@ -43,7 +43,6 @@ export function TaskStartCard({
   ts,
   undelivered,
   attachments,
-  attached,
   queued,
 }: {
   card: Card;
@@ -55,8 +54,6 @@ export function TaskStartCard({
   undelivered?: boolean;
   /** The task's inputs the turn carried (images, files), drawn under the description. */
   attachments?: ReactNode;
-  /** Whatever else delivery appended to the same turn, as its own folded entry. */
-  attached?: ReactNode;
   /** The queue's own line, while a resumed run's brief still waits behind a running turn. */
   queued?: ReactNode;
 }) {
@@ -74,13 +71,12 @@ export function TaskStartCard({
   const projectHref = projectPublic ? `/projects/${encodeURIComponent(projectPublic)}` : null;
   return (
     <div className="tsc-wrap">
-      {/* The sticky bar at the top of the transcript names this turn off these two attributes, the
-          way it names every other card that is nobody's message. */}
+      {/* `data-orbit-round`: Orbit opened this round, so the sticky bar at the top of the transcript
+          hides over it rather than naming a message nobody typed (WorkspaceView). */}
       <div
         className={`tsc${queued ? ' is-queued' : ''}`}
         data-seq={seq}
-        data-sticky-label={TASK_START_LABEL}
-        data-sticky-text={card.title}
+        data-orbit-round
       >
         <div className="tsc-head">
           <span className="tsc-mark"><PlayCircleFilled /></span>
@@ -145,7 +141,6 @@ export function TaskStartCard({
         {undelivered && (
           <div className="tsc-undelivered">The session has not confirmed it received this.</div>
         )}
-        {attached}
         <details className="tsc-raw" open={exporting || undefined}>
           <summary>{TASK_START_RAW_SUMMARY}</summary>
           <pre>{text}</pre>

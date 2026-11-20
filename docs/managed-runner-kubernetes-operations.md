@@ -8,6 +8,12 @@ on kernel RBD), the claim's PersistentVolume (`Retain`) and an RBD image `csi-vo
 the account's checkouts, sessions, uploads, engine sign-ins and the runner's own identity; nothing else keeps a copy of
 it. A deployment whose managed runners run on Docker has [its own runbook](managed-runner-docker-operations.md).
 
+> **The .3 deployment (2026-11-16)** does **not** use the ext4/kernel-RBD baseline below. It runs on XFS with
+> `mounter: rbd-nbd`, Ceph-CSI 3.18.2 carrying the local [XFS reflink patch](../deploy/managed-runner/csi-xfs-reflink/README.md),
+> StorageClass `runner-data-xfs` with `reflink: enabled`, 100 GiB and 2 CPU/4 GiB per runner, on one node. See
+> [the deployment record](managed-runner-k3s-xfs-deployment.md). Every ext4/kernel-RBD or "no clones" statement
+> below describes the lab/test baseline; the record's values apply to production.
+
 The procedures were run in the lab ([docs/managed-runner-lab.md](managed-runner-lab.md)): k3s v1.36.5, Ceph 20.2.4,
 Ceph-CSI v3.18.0. The deployment steps are its scripts' (tasks L0, T02a and T04). Every other number comes from one of these
 runs:
@@ -63,6 +69,10 @@ supplied by its own owners does the same with that owner's tooling.
    `scripts/managed-runner/ceph_rbd.py render --environment ACTUAL.json --output DIR` and apply it: `runner-data`,
    `ReadWriteOnce`, `Filesystem`, ext4, `mounter: rbd`, `imageFeatures: layering`, `reclaimPolicy: Retain`, `Immediate`,
    no expansion, not the default class. Check that a claim binds and mounts (lab: `smoke.sh run`).
+   **On the .3 deployment the class is `runner-data-xfs`**, not `runner-data`: `ReadWriteOnce`, `Filesystem`,
+   `csi.storage.k8s.io/fstype: xfs`, `mounter: rbd-nbd`, `parameters.reflink: enabled`, `mountOptions: ["noatime","discard"]`,
+   `Retain`, expansion disabled, no `mkfsOptions`, with the patched Ceph-CSI image. See the
+   [deployment record](managed-runner-k3s-xfs-deployment.md) and the [patch](../deploy/managed-runner/csi-xfs-reflink/README.md).
 3. **Namespace and the manager's identity.** A namespace for managed runners only. In it a ServiceAccount
    (`automountServiceAccountToken: false`) with exactly these rights, and nothing on nodes, Ceph or webhooks:
 
@@ -175,7 +185,7 @@ would remove the report within a second, and a routine deletion would end in `FE
 The processes on that node may still be writing to the volume. With the object gone, Kubernetes no longer accounts for
 them, the attach/detach controller may force the volume's detach after its timeout, and an operator, or a receipt written
 on the strength of "the Pod is gone", could let the next generation mount the same volume on another node: a second
-writer to one ext4 filesystem and its SQLite files. A missing heartbeat, `NotReady`, a cordon or a timeout are not
+writer to one filesystem (ext4 in the lab, XFS on the .3 deployment) and its SQLite files. A missing heartbeat, `NotReady`, a cordon or a timeout are not
 fencing. Fence first; see [Failover](#failover).
 
 The command, with the UID test the manager uses itself, so it can only touch that one Pod:
@@ -218,8 +228,11 @@ snapshots and the pool's replicas are not backups.
 
 ## Check a backup without the cluster
 
-The archive is a raw ext4 image. Its checks need no Ceph, no Kubernetes, no mount and no kernel module (`debugfs` reads
-it as a file), so they run on the backup host:
+The archive is a raw filesystem image. The recipe below is the lab's ext4 path: its checks need no Ceph, no Kubernetes,
+no mount and no kernel module (`debugfs` reads an ext4 image as a file). **The .3 volumes are XFS**, which `debugfs`
+does not read: check an exported XFS image with `xfs_db`/`xfs_repair -n`, or mount it read-only on a scratch loop device,
+and run the same SQLite/Git checks over the mounted tree. The raw-image export/import and `rbd import-diff` steps above are
+filesystem-agnostic. For ext4 the recipe is:
 
 ```bash
 gzip -dc volume.img.gz | dd of=volume.img bs=1M conv=sparse status=none
@@ -259,7 +272,7 @@ and to prove that a backup restores.
    and the PV held by the attacher's finalizer (seen in the lab; the attachment had never attached, so its finalizer could
    be removed by hand).
 3. **Check it in a Pod** of the runner image, as the runner's user (10001), read-only root, no service account token, the
-   claim mounted at `/var/lib/orbit` as the runner sees it: SQLite `integrity_check`, `git fsck`, the checksums. It runs no
+   claim mounted at `/home/orbit` as the runner sees it: SQLite `integrity_check`, `git fsck`, the checksums. It runs no
    runner: never start `orbit run` on a restored copy while the account's runner exists, because the copy carries its
    credential.
 4. **Afterwards** delete the check Pod. The restored claim, its PV and image stay until someone deletes them on purpose
@@ -437,7 +450,7 @@ kubectl --kubeconfig $ADMIN_KUBECONFIG --context $TEST_CONTEXT drain <node> --ig
   and taken the stop-report finalizer off. With managed runners switched off, or for a managed Pod no running manager
   records, it waits until its `--timeout` ([When a Pod stays Terminating](#the-stop-report-finalizer)).
   `--skip-wait-for-delete-timeout=SECONDS` passes Pods that have been terminating longer than that.
-- `--pod-selector=app.kubernetes.io/name=orbit-managed-runner` moves only the runners. The lab drains its first node this
+- `--pod-selector=app.kubernetes.io/name=orbit-cloud-runner` moves only the runners. The lab drains its first node this
   way, because the CSI controller plugin runs there too.
 
 Measured:
@@ -564,7 +577,12 @@ ext4 allocates delayed blocks only at writeback.
 - The engine's transcript is not fsynced either (T08x). A turn answered 20 s before a cut was missing from the
   account's transcript on the volume after the failover. The session went on from the lines written before it, and the
   turn was not in the conversation the engine resumed. Orbit's server kept the turn's events. The other account, whose
-  volume was synced (`sync -f /var/lib/orbit` in the runner container) just before the cut, kept its last turn.
+  volume was synced (`sync -f /home/orbit` in the runner container) just before the cut, kept its last turn.
+
+The measurements above are ext4. **XFS on the .3 deployment has not been put through the same power-cut drills**;
+SQLite, Git and the runner's syncfs behavior are ext4-proven, not yet XFS-proven. See
+[the deployment record](managed-runner-k3s-xfs-deployment.md#not-verified-here--risks) before treating XFS as
+durability-accepted.
 
 Since T02c (2026-10-19, [evidence](evidence/managed-runner-power-cut-durability/2026-10-19/README.md)) a managed runner
 syncs its volume (`syncfs`) before it reports work that lives there, and behind every tool an engine runs. A turn the
@@ -588,12 +606,15 @@ After a failover, read the next generation's start in its log:
 - a storage fence (`STORAGE_FENCE`) as the receipt's method;
 - the failure of the node that runs the control plane: the lab's k3s server and CSI controller run on its first node,
   and only the second was failed;
-- failover across separate physical machines: the lab's two nodes are VMs on one host.
+- failover across separate physical machines: the lab's two nodes are VMs on one host;
+- any cross-node move on the .3 deployment: it is a **single-node** k3s cluster, so a node failure stops the runner until
+  the node returns (see [the deployment record](managed-runner-k3s-xfs-deployment.md)).
 
 ## Session checkouts and the volume
 
 Each session works in a checkout of its own on its runner's volume. Inside the Pod, `statfs` reports the claim's own
-ext4 filesystem, so the runner measures the volume itself and reclaims checkouts below its floor as any runner does
+filesystem (ext4 in the lab; **XFS on the .3 deployment**), so the runner measures the volume itself and reclaims
+checkouts below its floor as any runner does
 ([the rule](runner-troubleshooting.md#d-the-disk-is-short-or-a-sessions-checkout-has-gone)):
 
 - **The floor** is the owner's **Keep Free** (the runner's page, Capacity) whenever one is set. Otherwise it is a
@@ -607,13 +628,34 @@ ext4 filesystem, so the runner measures the volume itself and reclaims checkouts
   and every commit is on a remote, a look that finds nothing to take waits an hour, and no room is made before a new
   checkout. So resting sessions keep their checkouts for two weeks, and a volume with many of them can fill up:
   writes then fail with "no space left on device".
-- **No clones.** ext4 cannot clone files, so every session checkout is written out in full, and the runner says so
-  at start: `checkouts: plain: probe failed (EOPNOTSUPP): the filesystem of /var/lib/orbit/home/.orbit/worktrees
-  cannot clone files, so git writes out every session checkout`. A StorageClass whose filesystem is `xfs`, with
-  `reflink=1`, would let runners clone; switching to one is a later decision (D4 in the
-  [checkout storage design](session-checkout-storage-design.md#8-decisions-for-the-owner)), because it means running
-  the durability and power-cut drills again. A repository's `.orbit/checkout-exclude` makes checkouts smaller here
-  too ([the format](runner-troubleshooting.md#f-a-sessions-checkout-lacks-some-paths)).
+- **Clones on XFS; plain on ext4.** On the .3 deployment the claim is XFS with `reflink=1` (the patched Ceph-CSI class),
+  so every session checkout is cloned from the workspace checkout and the runner logs `checkouts: cloned: …`; the
+  index fast path avoids the full `git update-index --refresh` rehash. The design's D4 was revisited for this
+  deployment ([checkout storage design](session-checkout-storage-design.md#8-decisions-for-the-owner)), and the XFS
+  durability/power-cut drills are still outstanding (see the deployment record). On an ext4 deployment (the lab
+  baseline) the runner instead says
+  `checkouts: plain: probe failed (EOPNOTSUPP): the filesystem of /home/orbit/.orbit/worktrees cannot clone
+  files, so git writes out every session checkout`, and every checkout is written out in full. A repository's
+  `.orbit/checkout-exclude` makes checkouts smaller on either filesystem
+  ([the format](runner-troubleshooting.md#f-a-sessions-checkout-lacks-some-paths)).
+
+## Names from before orbit-cloud (2026-11-20)
+
+Until 2026-11-20 these names said `orbit-managed`; they now say `orbit-cloud`. What a cluster already holds keeps working:
+
+- The admission webhook configuration is `orbit-cloud-runner-pods`. One applied earlier is `orbit-managed-runner-pods` and
+  still guards the namespace: it selects no label, and the manager accepts a refusal that starts with either
+  `orbit-cloud-runner-admission` or `orbit-managed-runner-admission`. To move to the new name, apply the template, check
+  the two dry runs, then delete `orbit-managed-runner-pods`.
+- Pods and PVCs the manager makes are labelled `app.kubernetes.io/name: orbit-cloud-runner`. Earlier ones keep
+  `orbit-managed-runner` until they are made again. Nothing in Orbit selects by this label, but a `--pod-selector` of
+  your own should name both.
+- A runner image built before the rename sends `X-Orbit-Managed-Runner-Generation` and `-Pod-Uid`. The apiserver reads
+  those as well as `X-Orbit-Cloud-Runner-*`, so a Pod keeps working until its image is replaced.
+- The hosted runners' image is now `<registry>/orbit-cloud-runner`. The first release after the rename builds and pushes
+  it there; the earlier `<registry>/orbit-managed-runner` digests stay in the registry for a rollback.
+- The namespace is whatever the profile's `kubernetes.namespace` says. An existing `orbit-managed` namespace needs no
+  change.
 
 ## Where each setting lives
 
@@ -625,5 +667,5 @@ ext4 filesystem, so the runner measures the volume itself and reclaims checkouts
 | The floor a runner reclaims session checkouts at | Its owner's **Keep Free** on the runner's page; with none, a quarter of the claim's size | The runner's next heartbeat |
 | Idle interval, attempts, backoff, poll, lease, startup deadline, heartbeat freshness, drain | The profile, `lifecycle` | The apiserver's restart |
 | The manager's identity and rights | Its ServiceAccount, Role, ClusterRole and the kubeconfig the profile names | At once (RBAC); the kubeconfig at the apiserver's restart |
-| The admission guard | `ValidatingWebhookConfiguration` `orbit-managed-runner-pods`; the API server's admission configuration (token) | At once; the token at the API server's restart |
+| The admission guard | `ValidatingWebhookConfiguration` `orbit-cloud-runner-pods`; the API server's admission configuration (token) | At once; the token at the API server's restart |
 | The webhook token's hash | The profile, `admission.webhookTokenSha256` | The apiserver's restart |

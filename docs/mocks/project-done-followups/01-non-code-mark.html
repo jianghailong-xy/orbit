@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>01 · Non-code mark on the project page</title>
+<link rel="stylesheet" href="board.css">
+</head>
+<body>
+<div class="board">
+  <h1>① 非代码项目标记：在哪显示、谁来设、怎么读</h1>
+  <div class="sub">
+    已定（11-11，判据 1）：项目是否“非代码”只看显式标记，由协调者（<span class="mono">project_update</span>）或 owner（项目页）设置，绝不推断；被标记的项目不读任何落地。
+    这块板画已定板没画的部分：<b>标记放在哪</b>、<b>owner 怎么设/清</b>、<b>协调者设的标记怎么读</b>（谁、何时、Change）。iOS 为准，Web 跟随。<br>
+    Web 帧是真控制台截图（<span class="mono">src/web/ui-migration</span> fixtures + CBAI 形状的项目数据，提议部分用控制台自己的 class 注入），iOS 帧为手绘。UI 文案英文，标注中文。
+  </div>
+
+  <div class="cols">
+    <!-- ① today iOS -->
+    <div class="col" style="width:393px">
+      <div class="frame-title">① 现在 · iOS 项目详情</div>
+      <div class="frame-sub">“How it runs” 只有落地相关的设置。项目做的是文档/账号还是代码，Orbit 不知道，只能从任务猜（CODELESS）。</div>
+      <div class="ph">
+        <div class="status"><span>9:41</span><span>●●● ▮</span></div>
+        <div class="nav"><span class="l">‹ Projects</span><span class="t">CBAI AI 视觉内容平台…<small>Open · 155 tasks</small></span><span></span></div>
+        <div class="scroll">
+          <div class="hdr"><span>How it runs</span><span>applies from the next task</span></div>
+          <div class="grp">
+            <div class="cell">
+              <div class="lbl">Tasks land on</div>
+              <div class="opt"><span class="rad on"></span><div><b>A project branch</b> <span class="val mono">· project/2zwQZ…</span><div class="meta">Recommended when tasks depend on each other: they land here first and are checked together.</div></div></div>
+              <div class="opt"><span class="rad"></span><div><b>Directly into main</b><div class="meta">For a single task or an urgent fix. Every merge into main asks you.</div></div></div>
+            </div>
+            <div class="cell">
+              <div class="lbl">Delivery</div>
+              <div class="opt"><span class="rad on"></span><div><b>Orbit lands it</b></div></div>
+              <div class="opt"><span class="rad"></span><div><b>The agent pushes it</b></div></div>
+            </div>
+            <div class="cell row"><span class="lbl">Main branch</span><span class="val">main</span></div>
+            <div class="cell row"><span class="lbl">Automatic</span><span class="val">On</span></div>
+            <div class="cell row"><span class="lbl">At most</span><span class="val">3 tasks at a time</span></div>
+            <div class="cell row"><span class="lbl">Merge check</span><span class="amber">None</span></div>
+          </div>
+          <div class="hdr"><span>Acceptance criteria</span><span></span></div>
+          <div class="grp"><div class="cell meta">4 criteria · 3 met by their work · no merge receipt either way</div></div>
+        </div>
+      </div>
+      <div class="notes">
+        <div class="n"><span class="k">!</span><div>155 个任务全在 shared 里跑、没有分支，done 卡片却在每行写 “No code to land” 又在汇总里写 “not on main”（见已定板 ①②）。缺的是一个<b>由人说了算</b>的事实：这个项目本来就不交代码。</div></div>
+      </div>
+    </div>
+
+    <!-- ② iOS proposal: how it reads, coordinator-set -->
+    <div class="col" style="width:393px">
+      <div class="frame-title">② 提议 · iOS：How it runs 第一行 “Delivers”</div>
+      <div class="frame-sub">协调者已经标过的样子。落地相关的三行收成一行说明。</div>
+      <div class="ph">
+        <div class="status"><span>9:41</span><span>●●● ▮</span></div>
+        <div class="nav"><span class="l">‹ Projects</span><span class="t">CBAI AI 视觉内容平台…<small>Open · Non-code · 155 tasks</small></span><span></span></div>
+        <div class="scroll">
+          <div class="hdr"><span>How it runs</span><span>applies from the next task</span></div>
+          <div class="grp">
+            <div class="cell rel">
+              <i class="mk l">A</i>
+              <div class="lbl">Delivers</div>
+              <div class="opt"><span class="rad"></span><div><b>Code</b><div class="meta">Tasks land on a branch, and the done card checks the work reached main.</div></div></div>
+              <div class="opt"><span class="rad on"></span><div><b>Not code</b><div class="meta">Documents, accounts, approvals. Orbit checks the criteria only; nothing lands.</div></div></div>
+              <div class="rel" style="margin:10px 0 0 30px;padding:8px 10px;background:#f2f2f7;border-radius:9px">
+                <i class="mk r">B</i>
+                <div class="meta" style="color:var(--ink)">Marked by the coordinator · Nov 11, 18:20</div>
+                <div class="q">“All work is documents and vendor accounts; no repository.”</div>
+              </div>
+            </div>
+            <div class="cell rel">
+              <i class="mk l">C</i>
+              <div class="row"><span class="lbl">Landing</span><span class="val">Off</span></div>
+              <div class="meta" style="margin-top:3px">Tasks land on, Delivery, Main branch and Merge check don't apply to a non-code project.</div>
+            </div>
+            <div class="cell row"><span class="lbl">Automatic</span><span class="val">On</span></div>
+            <div class="cell row"><span class="lbl">At most</span><span class="val">3 tasks at a time</span></div>
+          </div>
+          <div class="hdr"><span>Acceptance criteria</span><span></span></div>
+          <div class="grp"><div class="cell meta">4 criteria · 3 met</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ③ iOS: owner sets / clears -->
+    <div class="col" style="width:393px">
+      <div class="frame-title">③ 提议 · iOS：owner 设 / 清</div>
+      <div class="frame-sub">点另一个选项就弹确认（iOS 的 How it runs 没有 Save，点即写）。确认后出处行变成 “Marked by you · just now”。</div>
+      <div class="ph">
+        <div class="status"><span>9:41</span><span>●●● ▮</span></div>
+        <div class="nav"><span class="l">‹ Projects</span><span class="t">CBAI AI 视觉内容平台…<small>Open · Non-code · 155 tasks</small></span><span></span></div>
+        <div class="scroll">
+          <div class="hdr"><span>How it runs</span><span>applies from the next task</span></div>
+          <div class="grp">
+            <div class="cell">
+              <div class="lbl">Delivers</div>
+              <div class="opt"><span class="rad"></span><div><b>Code</b><div class="meta">Tasks land on a branch, and the done card checks the work reached main.</div></div></div>
+              <div class="opt"><span class="rad on"></span><div><b>Not code</b><div class="meta">Documents, accounts, approvals. Orbit checks the criteria only; nothing lands.</div></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="dim"></div>
+        <div class="alert rel">
+          <div class="a-b">
+            <h4>Treat this project as code?</h4>
+            <p>The done card will check where work landed again. 155 tasks ran without a branch; they will show as “Ran without a branch”.</p>
+          </div>
+          <div class="a-btns"><span>Cancel</span><span>Mark as code</span></div>
+          <i class="mk r" style="top:6px;right:6px">D</i>
+        </div>
+      </div>
+      <div style="height:18px"></div>
+      <div class="ph" style="height:330px">
+        <div class="status"><span>9:41</span><span>●●● ▮</span></div>
+        <div class="scroll">
+          <div class="grp" style="margin-top:110px"><div class="cell"><div class="lbl">Delivers</div><div class="opt"><span class="rad on"></span><div><b>Code</b></div></div><div class="opt"><span class="rad"></span><div><b>Not code</b></div></div></div></div>
+        </div>
+        <div class="dim"></div>
+        <div class="alert" style="top:58%">
+          <div class="a-b"><h4>Mark as not code?</h4><p>The done card stops reading where work landed. Work already on project/2zwQZ… stays there.</p></div>
+          <div class="a-btns"><span>Cancel</span><span>Mark as not code</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ④ iOS: project page + done card -->
+    <div class="col" style="width:393px">
+      <div class="frame-title">④ 提议 · iOS：项目页与 done 卡</div>
+      <div class="frame-sub">项目会话页（SessionProjectPage）的进度卡加一行；done 卡顶部的说明（已定板 ③ A）里 Change 打开项目详情并滚到 Delivers。</div>
+      <div class="ph">
+        <div class="status"><span>9:41</span><span>●●● ▮</span></div>
+        <div class="nav"><span class="l">‹</span><span class="t">CBAI AI 视觉内容平台…<small>12 sessions</small></span><span class="r">⊞</span></div>
+        <div class="scroll">
+          <div class="grp rel" style="background:#e9e9ee">
+            <i class="mk l">E</i>
+            <div class="cell" style="border:0"><div class="row"><span class="meta"><span style="display:inline-block;width:66px;height:6px;border-radius:3px;background:linear-gradient(90deg,var(--green) 98%,#ccc 98%);vertical-align:middle;margin-right:8px"></span>154 of 155 done</span></div>
+            <div class="meta" style="margin-top:6px">Non-code · Orbit checks the criteria only</div></div>
+          </div>
+          <div class="c-card rel" style="margin-top:12px">
+            <div class="c-head"><span class="c-heading">Is this project done?</span><span class="c-prov">FROM ORBIT</span></div>
+            <div class="c-body">
+              <div class="c-untracked rel"><i class="mk l">F</i><span>ⓘ</span><div><b style="color:var(--ink)">Non-code project.</b> Orbit checks the criteria only, not where work landed. Marked by the coordinator · Nov 11 · <span class="lnk">Change</span></div></div>
+              <div class="c-sec">Done when · 4 criteria</div>
+              <div class="c-tally">3 of 4 met</div>
+              <ul class="c-rows">
+                <li><span class="c-no">1</span><span class="c-text">Criterion 1</span><span class="c-state"><span class="ok">met</span></span></li>
+                <li><span class="c-no">2</span><span class="c-text">Criterion 2 (91 tasks)</span><span class="c-state"><span class="ok">met</span></span></li>
+                <li><span class="c-no">3</span><span class="c-text">Criterion 3 (2 tasks)</span><span class="c-state"><span class="ok">met</span></span></li>
+                <li><span class="c-no">4</span><span class="c-text">External prerequisites</span><span class="c-state"><span class="bad">not met</span></span></li>
+              </ul>
+            </div>
+          </div>
+          <div class="meta" style="margin:10px 4px">… “1 thing stands in the way” as on the decided board ③.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ⑤ web -->
+    <div class="col" style="width:640px">
+      <div class="frame-title">⑤ Web（真控制台）· 今天 → 提议</div>
+      <div class="frame-sub">Web 项目详情：标题行、分支行、How it runs。Web 的 How it runs 有 Save，所以不弹确认，Save 时同样的两句写在 Save 上方。</div>
+      <div class="cap">今天</div>
+      <img class="shot" src="shots/w-head-today.png" width="640">
+      <div style="height:10px"></div>
+      <img class="shot" src="shots/w-runs-today.png" width="640">
+      <div class="cap" style="margin-top:22px">提议 · 协调者标过</div>
+      <div class="rel"><i class="mk" style="top:30px;left:92px">G</i><img class="shot" src="shots/w-head-noncode.png" width="640"></div>
+      <div style="height:10px"></div>
+      <div class="rel"><i class="mk" style="top:100px;left:-14px">A</i><i class="mk" style="top:192px;left:62px">B</i><i class="mk" style="top:100px;left:296px">C</i><img class="shot" src="shots/w-runs-noncode-coord.png" width="640"></div>
+    </div>
+
+    <!-- side -->
+    <div class="col" style="width:520px">
+      <div class="notes" style="margin-top:0">
+        <div class="n"><span class="k">A</span><div><b>放在 How it runs 第一行 “Delivers”</b>：Code / Not code 两个选项，样子同 “Tasks land on”。它决定下面的落地设置有没有意义，所以排在最前。</div></div>
+        <div class="n"><span class="k">B</span><div><b>出处行</b>：谁标的（you / the coordinator）+ 时间 + 协调者写的理由（<span class="mono">project_update</span> 可带一句 reason）。没有单独的 Change 按钮——选项本身就是 Change。owner 改了以后变成 “Marked by you · just now”，理由清空。</div></div>
+        <div class="n"><span class="k">C</span><div><b>落地设置收起</b>：Tasks land on / Delivery / Main branch / Merge check 换成一行 “Landing · Off”。不删数据：改回 Code 时原样回来。</div></div>
+        <div class="n"><span class="k">D</span><div><b>owner 切换要确认</b>，并说出后果：改回 Code 时说出有多少任务没分支跑过（它们会显示黄色 “Ran without a branch”，判据 2）；改成 Not code 时说明已经在项目分支上的东西不动。</div></div>
+        <div class="n"><span class="k">E</span><div>项目会话页进度卡下多一行 “Non-code · Orbit checks the criteria only”，没有任何按钮——设置只在一个地方。</div></div>
+        <div class="n"><span class="k">F</span><div>done 卡顶部说明（已定板 ③ A）：“Marked by the coordinator · Nov 11 · Change”。Change 打开项目详情并滚到 Delivers（iOS push；Web 跳 <span class="mono">/projects/:id#delivers</span>）。</div></div>
+        <div class="n"><span class="k">G</span><div>Web 标题行加灰色 “Non-code” 徽标；分支行（<span class="mono">project/… · Running jobs · Last landing check</span>）换成一句 “Non-code project · Orbit checks the criteria only, not where work landed”。</div></div>
+      </div>
+
+      <div class="side" style="margin-top:16px">
+        <h3>规则</h3>
+        <table>
+          <tr><th>情况</th><th>项目页</th><th>done 卡 / 汇总</th></tr>
+          <tr><td>未标记（默认）</td><td>Delivers = Code；落地设置照旧</td><td>照读落地；shared 无分支 → 黄色 “Ran without a branch”</td></tr>
+          <tr><td>协调者标 Not code</td><td>出处 “by the coordinator · 时间 · 理由”；Not code 选中</td><td>顶部说明 + Change；行和汇总没有落地字样；Record as done 不存落地缺口</td></tr>
+          <tr><td>owner 标 / 清</td><td>确认后立即写；出处 “by you”</td><td>同上 / 回到读落地</td></tr>
+          <tr><td>开工前（How it runs 还不显示）</td><td>Start 卡同一行 Delivers（待你定 1）</td><td>—</td></tr>
+          <tr><td>已有落地记录再标 Not code</td><td>允许；分支和收据都留着</td><td>不再读落地</td></tr>
+        </table>
+      </div>
+
+      <div class="side" style="margin-top:16px">
+        <h3>会改到的文件</h3>
+        <div class="mono" style="line-height:1.7">
+          apiserver: projects (PATCH + project_update 的 nonCode/reason/by/at)，project-done-request.ts，criterion-landing-reason.ts<br>
+          shared: project-done.ts（ProjectDetail.nonCode）<br>
+          web: components/ProjectRunSettings.tsx，ProjectIntegrationLine.tsx，pages/ProjectsPage.tsx（徽标），components/ProjectSettlementCard.tsx，lib/projectDone.ts（文案常量）<br>
+          iOS/macOS: Views/ProjectsView.swift（runSettingsSection），Views/SessionProjectPage.swift（progressCard），Views/ProjectDoneCards.swift，OrbitKit/App/RunSettings.swift + ProjectDone.swift（文案）<br>
+          Android: 同步的项目详情 / done 卡<br>
+          + copy-parity 测试
+        </div>
+      </div>
+
+      <div class="side todo" style="margin-top:16px">
+        <h3>待你定</h3>
+        <ol>
+          <li><b>开工前在哪设？</b>How it runs 只在项目开工后显示。<span class="rec">建议：</span>Start 卡（StartProjectCard / OwnerStartProjectSheet）也放同一行 Delivers，协调者的开工请求可以带上建议值。</li>
+          <li><b>协调者标了要不要你确认？</b><span class="rec">建议：</span>不要，直接生效（已定 1 写的是“协调者或 owner 设置”），但出处行一直写着是谁标的、何时、理由，你随时可改。另一种：像放宽判据那样挂成待你决定的提议。</li>
+          <li><b>落地设置是收起还是置灰？</b><span class="rec">建议：</span>收成一行 “Landing · Off”（C）。置灰会让人以为还在用。</li>
+          <li><b>非代码项目里的任务还开 worktree 吗？</b>标记只影响 done 卡读不读落地；任务隔离方式不变。<span class="rec">建议：</span>不变，这块板不碰。</li>
+          <li><b>文案：</b>“Delivers · Code / Not code” 还是 “Non-code project” 开关？<span class="rec">建议：</span>两个选项（和 Tasks land on 同一种控件，选中的那项自己解释后果）。</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

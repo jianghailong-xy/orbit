@@ -63,6 +63,9 @@ type fakeWorkGateway struct {
 	oldAcks bool
 	// beforeAck, when set, runs just before a beat's HeartbeatAck is sent.
 	beforeAck func(c *fakeWorkConn, hb *linkpb.Heartbeat)
+	// onStream, when set, takes each byte stream frame a connection carries (link_streams_test.go), on its reading
+	// goroutine.
+	onStream func(c *fakeWorkConn, f *linkpb.Frame)
 
 	conns      []*fakeWorkConn
 	upgrades   []time.Time
@@ -269,6 +272,14 @@ func (g *fakeWorkGateway) serve(w http.ResponseWriter, r *http.Request) {
 			g.onLiveBatch(c, body.LiveBatch)
 		case *linkpb.Frame_TurnPrefixResponse:
 			g.onTurnPrefixAnswer(c, body.TurnPrefixResponse)
+		case *linkpb.Frame_StreamOpened, *linkpb.Frame_StreamData, *linkpb.Frame_StreamCredit, *linkpb.Frame_StreamClose,
+			*linkpb.Frame_StreamPasted:
+			g.mu.Lock()
+			onStream := g.onStream
+			g.mu.Unlock()
+			if onStream != nil {
+				onStream(c, f)
+			}
 		}
 	}
 }

@@ -1,0 +1,115 @@
+{
+ "steps": [
+  {
+   "at": "2026-11-19T08:16:57.956Z",
+   "what": "the tab opened from Settings is live",
+   "path": "/runners/34zE43JigkTAYShdumORq/browser",
+   "search": "",
+   "title": "Browser · Orbit Cloud",
+   "bar": "You are controlling the browser · the agent keeps running",
+   "controlling": 1
+  },
+  {
+   "at": "2026-11-19T08:16:58.446Z",
+   "what": "the remote Chrome runs with --no-sandbox and --test-type",
+   "noSandbox": true,
+   "testType": true
+  },
+  {
+   "at": "2026-11-19T08:17:02.930Z",
+   "what": "the viewer clicked the remote field through VNC",
+   "screen": {
+    "x": 80,
+    "y": 243.890625
+   },
+   "scale": 106
+  },
+  {
+   "at": "2026-11-19T08:17:04.929Z",
+   "what": "the remote field holds the pasted text",
+   "sent": "密码 Pässwörd 🔑",
+   "readBack": "密码 Pässwörd 🔑",
+   "exact": true,
+   "firstSeen": "密码 Pässwörd 🔑"
+  },
+  {
+   "at": "2026-11-19T08:17:13.481Z",
+   "what": "the remote copy reached the local clipboard",
+   "expected": "Copied in the runner",
+   "localClipboard": "Copied in the runner"
+  },
+  {
+   "at": "2026-11-19T08:17:20.390Z",
+   "what": "Done: view only, and a paste reached nothing",
+   "bar": "Watching the browser",
+   "foot": "View only1280 × 800 · 106%Live",
+   "takeControl": 1,
+   "remoteFieldAfterPaste": "\"\"",
+   "streamsStillLive": 1
+  },
+  {
+   "at": "2026-11-19T08:17:24.164Z",
+   "what": "Open in new tab: the drawer closed and the tab is live, view only",
+   "drawerOpen": 0,
+   "tabPath": "/runners/34zE43JigkTAYShdumORq/browser",
+   "tabControlling": 0,
+   "tabBar": "Watching the browser"
+  }
+ ],
+ "chromeArgs": [
+  "--show-component-extension-options",
+  "--enable-gpu-rasterization",
+  "--no-default-browser-check",
+  "--disable-pings",
+  "--media-router=0",
+  "--disable-dev-shm-usage",
+  "--enable-remote-extensions",
+  "--load-extension=",
+  "--no-sandbox",
+  "--test-type",
+  "--disable-dev-shm-usage",
+  "--user-data-dir=/home/orbit/.orbit/browser/profile",
+  "--remote-debugging-address=127.0.0.1",
+  "--remote-debugging-port=9222",
+  "--no-first-run",
+  "--no-default-browser-check",
+  "--window-position=0,0",
+  "--window-size=1280,800"
+ ],
+ "paste": {
+  "sent": "密码 Pässwörd 🔑",
+  "readBack": "密码 Pässwörd 🔑",
+  "exact": true,
+  "firstSeen": "密码 Pässwörd 🔑"
+ },
+ "inControl": {
+  "bar": "You are controlling the browser · the agent keeps running",
+  "foot": "Not in use by any sessionPaste with Ctrl+V1280 × 800 · 106%Live",
+  "pasteError": 0
+ },
+ "copyBack": {
+  "expected": "Copied in the runner",
+  "localClipboard": "Copied in the runner"
+ },
+ "actualSize": {
+  "size": "1280 × 800 · 100%",
+  "canvasWidth": 1280
+ },
+ "fit": {
+  "size": "1280 × 800 · 106%"
+ },
+ "viewOnly": {
+  "bar": "Watching the browser",
+  "foot": "View only1280 × 800 · 106%Live",
+  "takeControl": 1,
+  "remoteFieldAfterPaste": "\"\"",
+  "streamsStillLive": 1
+ },
+ "handOver": {
+  "drawerOpen": 0,
+  "tabPath": "/runners/34zE43JigkTAYShdumORq/browser",
+  "tabControlling": 0,
+  "tabBar": "Watching the browser"
+ },
+ "ok": true
+}

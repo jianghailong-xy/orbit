@@ -238,6 +238,8 @@ var userModeRoutes = []struct {
 	{command: "session merge-receipts", args: []string{"S1", "--limit", "2", "--json"},
 		method: "GET", path: "/api/sessions/S1/merge-receipts", query: map[string]string{"limit": "2"}},
 	{command: "session end", args: []string{"S1", "--json"}, method: "POST", path: "/api/sessions/S1/end"},
+	{command: "session move", args: []string{"S1", "--workspace-id", "W1", "--folder-id", "F1", "--json"},
+		method: "POST", path: "/api/sessions/S1/move", body: `{"folderId":"F1","workspaceId":"W1"}`},
 	{command: "session complete", args: []string{"S1", "--json"}, method: "POST", path: "/api/sessions/S1/complete"},
 	{command: "session delete", args: []string{"S1", "--json"}, method: "DELETE", path: "/api/sessions/S1", noBody: true},
 }
@@ -305,7 +307,8 @@ func TestUserModeCommandsCallTheUserRoutesWithThePersonalAccessToken(t *testing.
 			if want == "" {
 				want = `{"answeredBy":"` + tc.method + ` ` + tc.path + `"}`
 			}
-			if strings.TrimSpace(out) != want {
+			// A keyed write also prints the id it was sent under, in front (call_identity.go).
+			if stripEchoedCallID(out, r.body) != want {
 				t.Errorf("printed %q, want %q", out, want)
 			}
 		})

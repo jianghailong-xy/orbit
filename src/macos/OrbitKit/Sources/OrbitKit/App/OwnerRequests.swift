@@ -16,6 +16,8 @@ public enum OwnerRequests {
         case .secret:     return "SECRET"
         case .manualStep: return "STEPS"
         case .confirm:    return "CONFIRM"
+        case .wikiCreate: return "WIKI"
+        case .settingsChange: return "SETTINGS"
         }
     }
 
@@ -26,6 +28,8 @@ public enum OwnerRequests {
         case .secret:     return "Provide key"
         case .manualStep: return "Mark done"
         case .confirm:    return "Confirm"
+        case .wikiCreate: return "Create wiki"
+        case .settingsChange: return SettingsChangeCopy.save
         }
     }
 
@@ -41,6 +45,8 @@ public enum OwnerRequests {
         case .secret:     return "Provide"
         case .manualStep: return "Open steps"
         case .confirm:    return "Review"
+        case .wikiCreate: return "Review"
+        case .settingsChange: return "Review"
         }
     }
 
@@ -51,6 +57,8 @@ public enum OwnerRequests {
         case .secret:     return "key.fill"
         case .manualStep: return "list.number"
         case .confirm:    return "checkmark.shield"
+        case .wikiCreate: return "books.vertical"
+        case .settingsChange: return "gearshape"
         }
     }
 
@@ -114,6 +122,43 @@ public enum OwnerRequests {
     public static let addNote = "Add a note (optional)"
     public static let ownAnswer = "Or type your own answer…"
 
+    // MARK: Chat about this
+
+    /// A request talked about rather than answered: the next send is an ordinary turn to the session
+    /// that asked, with the request named in front of the typed words. Nothing is resolved. The web's
+    /// `OWNER_REQUEST_CHAT_PREFIX`, `OWNER_REQUEST_CHAT_PLACEHOLDER` and `ownerRequestChatContext`.
+    public static let chatPrefix = "About your request: "
+    public static let chatPlaceholder = "Ask about this request…"
+
+    /// What rides in front of the owner's words: which request, and that it is still open.
+    public static func chatContext(_ request: OwnerRequest) -> String {
+        "The owner pressed Chat about this on your request “\(request.title)” (owner request \(request.id)). "
+            + "It is still open: not marked done and not declined. Their message:"
+    }
+
+    // MARK: How a resolution turn reads
+
+    /// Orbit's mark on the turn it queues when a request ends (`ownerRequestResolutionTurn` on the server).
+    static let resolutionMark = "This turn was queued by Orbit when the request ended, not typed by a person."
+    private static let resolutionHead =
+        try? NSRegularExpression(pattern: #"^Orbit owner request \S+ \([A-Z_]+\) ended (DONE|DECLINED|EXPIRED|WITHDRAWN)[:.] "#)
+    private static let resolutionLabels: [String: String] = [
+        "DONE": "Owner action resolved",
+        "DECLINED": "Owner declined the request",
+        "EXPIRED": "Owner request expired",
+        "WITHDRAWN": "Owner request withdrawn",
+    ]
+
+    /// The divider drawn for the turn Orbit starts when a request ends, or nil for any other turn
+    /// (web parity: `resolutionTurnLabel`). Nobody typed it, so it is not the owner's bubble.
+    public static func resolutionTurnLabel(_ text: String) -> String? {
+        guard text.contains(resolutionMark), let head = resolutionHead,
+              let match = head.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+              let range = Range(match.range(at: 1), in: text),
+              let label = resolutionLabels[String(text[range])] else { return nil }
+        return "\(label) · turn started automatically"
+    }
+
     public static func usingSaved(_ label: String) -> String { "Using saved “\(label)”" }
     public static func useSaved(_ label: String) -> String { "Use saved “\(label)”" }
     public static func verifyHint(_ hint: String) -> String { "How to check: \(hint)" }
@@ -153,7 +198,7 @@ public enum OwnerRequests {
         switch request.kind {
         case .secret:   return draft.body != nil
         case .decision: return option != nil || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        case .manualStep, .confirm: return true
+        case .manualStep, .confirm, .wikiCreate, .settingsChange: return true
         }
     }
 
@@ -193,6 +238,10 @@ public enum OwnerRequests {
             let words = (said?.isEmpty == false) ? said : nil
             if let label { return words.map { "\(label): “\($0)”" } ?? label }
             return words.map { "“\($0)”" } ?? "Answered"
+        }
+        if request.kind == .wikiCreate { return WikiStartCopy.created(request.answer?.name) }
+        if request.kind == .settingsChange {
+            return SettingsChangeCopy.changed(SettingsFromConversation.entries(request.payload).count)
         }
         return request.kind == .confirm ? "Confirmed" : "Marked done"
     }
@@ -299,7 +348,7 @@ public enum OwnerRequests {
             return label.map { "decision · recommended: \($0)" } ?? "decision"
         case .confirm:
             return "confirmation"
-        case .secret:
+        case .secret, .wikiCreate, .settingsChange:
             return nil
         }
     }
@@ -320,6 +369,12 @@ public enum OwnerRequests {
         return requests
             .filter { PublicID.storageKey($0.askedBySessionId) == key }
             .sorted { (RelativeTime.parse($0.createdAt) ?? .distantPast) < (RelativeTime.parse($1.createdAt) ?? .distantPast) }
+    }
+
+    /// The request a press on a session's needs-you notice opens: the oldest one it asked that is still
+    /// pending, or nil when this device holds none of them yet.
+    public static func oldestPending(_ requests: [OwnerRequest], sessionID: String) -> OwnerRequest? {
+        forSession(requests, sessionID: sessionID).first { $0.state == .pending }
     }
 
     /// Two reads (open, and every state) as one list by id, the newer read of a request winning.
@@ -432,7 +487,7 @@ public enum OwnerRequestLink {
         switch kind {
         case .secret: return .secret
         case .decision: return .answer
-        case .manualStep, .confirm: return .primary
+        case .manualStep, .confirm, .wikiCreate, .settingsChange: return .primary
         }
     }
 }

@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>Settings → Account pools: buttons</title>
+<link rel="stylesheet" href="kit.css"></head>
+<body><div class="board">
+<h1>Settings → Account pools：按钮重排</h1>
+<p class="lede">今天同一张卡片里有三种按钮样式（带框按钮、蓝色链接、带框按钮 + 图标），状态标签长得像按钮，折叠箭头几乎看不见，头部挤得标题折成两行。<br>
+提议沿用 API keys 页的规则：页面级新增一个带框按钮；跳到别的页面用 “Manage →” 链接；行内常规操作收进 “⋯”；需要你处理的恢复操作才做成可见按钮。</p>
+
+<div class="cols">
+<!-- ① today -->
+<div>
+<div class="col-h">① 今天 <small>按 owner 截图重画，账号换成占位</small></div>
+<div class="frame">
+  <div class="head"><h2 class="title">Account pools</h2><span class="btn m focus"><span class="mk" style="left:-28px;top:3px">1</span><span class="plus">+</span>New account pool</span></div>
+  <p class="sub">Several accounts under one name.</p>
+
+  <div class="pool">
+    <div class="pool-head">
+      <span class="chev m ring">▾<span class="mk" style="left:-8px;top:-24px">2</span></span>
+      <span class="tile t-cx" style="width:22px;height:22px;border-radius:6px">◎</span>
+      <span class="pname wrap m ring">Codex Pool<span class="mk" style="left:16px;top:-22px">4</span></span>
+      <span class="badge-shared m ring">SHARED<span class="mk" style="left:16px;top:-24px">3</span></span>
+      <span class="vsep"></span>
+      <span class="avail">1 of 1 account available</span>
+      <span class="avs"><span class="av" style="background:#3370ff">J</span><span class="av" style="background:#2ea121">J</span></span>
+      <span class="next ring m" style="max-width:150px">Next for you: you@exampl…<span class="mk" style="left:60px;top:-24px">4</span></span>
+      <span class="gauge ring"><i style="width:23%"></i></span>
+      <span class="wk ring">Weekly 23%</span>
+      <span class="manage m ring">Manage →<span class="mk" style="left:22px;top:-24px">1</span></span>
+    </div>
+    <div class="prow">
+      <div class="who"><span class="tile t-cx">◎</span><div style="min-width:0"><div class="em">you@example.com</div><div class="sm m">you · ChatGPT Pro · …016a · <span class="ring" style="padding:0 2px">…</span><span class="mk" style="right:-26px;top:-2px">6</span></div></div></div>
+      <span class="pill-ok m ring">Available<span class="mk" style="left:28px;top:-22px">3</span></span>
+      <div><div class="q-head"><b>Weekly limit</b><span>23%</span></div><div class="q-bar"><i style="width:23%"></i></div><div class="q-foot">resets Sat 22:57</div></div>
+      <div class="pacts down"><span class="btn m ring"><span class="mk" style="left:-28px;top:3px">5</span>⏸ Pause…</span></div>
+    </div>
+  </div>
+  <p style="color:var(--text-3);font-size:12px;margin:14px 0 0">只有 1 个账号时，头部的 “Next for you” 和 Weekly 进度条与下面那一行完全重复。</p>
+</div></div>
+
+<!-- ② proposal -->
+<div>
+<div class="col-h">② 提议 <small>两种池：单账号共享池，双账号池（其中一个已暂停）</small></div>
+<div class="frame">
+  <div class="head"><h2 class="title">Account pools</h2><span class="btn m"><span class="mk g" style="left:-28px;top:3px">1</span><span class="plus">+</span>New account pool</span></div>
+  <p class="sub">Several accounts under one name.</p>
+
+  <div class="pool">
+    <div class="pool-head hover m">
+      <span class="callout" style="left:230px;top:-14px">头部任意处可点 → 折叠/展开</span>
+      <span class="m" style="display:inline-flex"><span class="chev big"><svg width="12" height="12" viewBox="0 0 12 12"><path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="mk g" style="left:-6px;top:-26px">2</span></span>
+      <span class="tile t-cx" style="width:22px;height:22px;border-radius:6px">◎</span>
+      <span class="pname nowrap m">Codex Pool<span class="mk g" style="left:56px;top:-24px">4</span></span>
+      <span class="badge-quiet m">Shared<span class="mk g" style="left:16px;top:-24px">3</span></span>
+      <span class="avail">1 of 1 account available</span>
+      <span class="sp"></span>
+      <span class="avs"><span class="av" style="background:#3370ff">J</span><span class="av" style="background:#2ea121">J</span></span>
+      <span class="manage m">Manage →<span class="mk g" style="left:22px;top:-24px">1</span></span>
+    </div>
+    <div class="prow">
+      <div class="who"><span class="tile t-cx">◎</span><div style="min-width:0"><div class="em">you@example.com</div><div class="sm m">you · ChatGPT Pro · …016a<span class="mk g" style="right:-26px;top:-2px">6</span></div></div></div>
+      <span class="dot-ok m">Available<span class="mk g" style="left:76px;top:0">3</span></span>
+      <div><div class="q-head"><b>Weekly limit</b><span>23%</span></div><div class="q-bar"><i style="width:23%"></i></div><div class="q-foot">resets Sat 22:57</div></div>
+      <div class="pacts m"><span class="mk g" style="right:34px;top:3px">5</span><span class="btn text icon" style="background:var(--bg-hover);color:var(--text-1)">⋯</span>
+        <div class="menu"><div class="hl">Pause…</div><hr><div class="danger">Remove from pool</div></div></div>
+    </div>
+  </div>
+
+  <div class="pool" style="margin-top:66px">
+    <div class="pool-head">
+      <span class="chev big"><svg width="12" height="12" viewBox="0 0 12 12"><path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+      <span class="tile t-an" style="width:22px;height:22px;border-radius:6px">✳</span>
+      <span class="pname nowrap">Claude Pool</span>
+      <span class="avail">1 of 2 accounts available</span>
+      <span class="sp"></span>
+      <span class="next m" style="max-width:120px;font-weight:500">Next: work@example.com<span class="callout" style="left:-20px;top:-26px">≥ 2 个账号才显示</span></span>
+      <span class="gauge"><i style="width:41%"></i></span>
+      <span class="wk">Weekly 41%</span>
+      <span class="manage">Manage →</span>
+    </div>
+    <div class="prow">
+      <div class="who"><span class="tile t-an">✳</span><div style="min-width:0"><div class="em">work@example.com</div><div class="sm">Claude Max</div></div></div>
+      <span class="dot-ok">Available</span>
+      <div><div class="q-head"><b>Weekly limit</b><span>41%</span></div><div class="q-bar"><i style="width:41%"></i></div><div class="q-foot">resets Mon 09:00</div></div>
+      <div class="pacts"><span class="btn text icon">⋯</span></div>
+    </div>
+    <div class="prow" style="background:var(--bg-subtle);border-radius:0 0 10px 10px">
+      <div class="who"><span class="tile t-an" style="opacity:.55">✳</span><div style="min-width:0"><div class="em" style="color:var(--text-2)">home@example.com</div><div class="sm">Claude Pro</div></div></div>
+      <div><span class="dot-pause">Paused</span><span class="dot-sub">until 18:00</span></div>
+      <div><div class="q-head"><b>Weekly limit</b><span>88%</span></div><div class="q-bar"><i style="width:88%;background:var(--warning-solid)"></i></div><div class="q-foot">resets Tue 14:30</div></div>
+      <div class="pacts m"><span class="callout" style="right:0;top:-22px">恢复操作留在外面</span><span class="btn">▶ Resume</span><span class="btn text icon">⋯</span></div>
+    </div>
+  </div>
+</div></div>
+</div>
+
+<div class="notes">
+<h2>改动清单</h2>
+<table>
+<tr><th></th><th>今天</th><th>提议</th><th>文件</th></tr>
+<tr><td><span class="n">1</span></td><td>“New account pool” 带框按钮、“Manage →” 蓝色链接、“Pause…” 带框按钮 + 图标，三种样式，看不出主次。截图里 “New account pool” 的蓝色焦点框是 Esc 关弹窗后焦点回到按钮上（<code>:focus-visible</code>），属于正常行为，不改。</td><td>页面只有 “New account pool” 一个带框按钮。“Manage →” 是跳页，保留链接样式。行内操作见 5。</td><td>—</td></tr>
+<tr><td><span class="n">2</span></td><td>折叠箭头是 10px 的 “▸”，<code>--text-3</code> 颜色，像一个灰点。头部其实整块可点（<code>foldFromAnywhere</code>），但看不出来。</td><td>箭头放大到 13px，颜色加深到 <code>--text-2</code>。鼠标停留时整个头部出背景。</td><td><code>index.css</code> <code>.re-chev</code>, <code>.re-head</code></td></tr>
+<tr><td><span class="n">3</span></td><td>“SHARED” 蓝底大写、“Available” 绿底胶囊，形状和颜色都像按钮。</td><td>“Shared” 改成灰底小标签（大小写正常）。状态改成 “● Available”，圆点 + 文字；暂停时是橙点 + “Paused / until 18:00”。</td><td><code>AccountPools.tsx</code>, <code>AccountPause.tsx</code></td></tr>
+<tr><td><span class="n">4</span></td><td>头部塞了 9 样东西，标题折成 “Codex / Pool” 两行。“Next for you” 被截断，单账号时它和进度条都与下面那一行重复。</td><td>标题不换行。“Next” 和头部进度条只在池里 ≥ 2 个账号时显示。去掉竖分隔线。</td><td><code>AccountPools.tsx</code> <code>PoolCard</code></td></tr>
+<tr><td><span class="n">5</span></td><td>“Pause…” 是带框按钮，贴在行的偏下位置，和邮箱、进度条三列对不齐。</td><td>常规操作（Pause…、Disable、Remove from pool）收进无框的 “⋯”，Remove 放最后、标红。需要处理的恢复操作（Resume、Replace key、Re-add key、Sign in again）仍是可见按钮，放在 “⋯” 左边。所有列顶对齐。</td><td><code>AccountPools.tsx</code> <code>MemberRow</code> / key 行 / login 行, <code>AccountPause.tsx</code></td></tr>
+<tr><td><span class="n">6</span></td><td>副标题被截断，末尾留下 “· …” 的残片。</td><td>截断落在完整的一项上，不留悬空的分隔点。</td><td><code>AccountPools.tsx</code></td></tr>
+</table>
+<div class="rule"><h3>两页共用的规则</h3><p>页面级新增：一个带框按钮。跳到别的页面：“Manage →” / 行尾 “›”。行内常规操作：无框 “⋯” 菜单，危险项放最后、标红。需要你处理的恢复操作：可见的按钮。状态：圆点 + 文字，不做成胶囊。</p></div>
+<div class="decide"><h3>待你定</h3><ol>
+<li>暂停中的账号，“Resume” 留在外面当可见按钮（提议图如此），还是也收进 “⋯”？</li>
+<li>单账号的池，头部去掉 “Next for you” 和进度条，可以吗？</li>
+<li>iOS / macOS / Android 也有这两页。先只改 web，还是四端一起出图？</li>
+</ol></div>
+</div>
+</div></body></html>

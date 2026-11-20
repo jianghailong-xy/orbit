@@ -7,17 +7,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.cards.BackgroundWakeLine
+import io.orbitd.android.core.cards.SubagentFinished
 import io.orbitd.android.cards.LocalAnsweredQuestions
 import io.orbitd.android.cards.OwnerAnswerLineView
 import io.orbitd.android.cards.QueuedFoot
 import io.orbitd.android.cards.TranscriptCardView
 import io.orbitd.android.cards.WatchWakeLine
+import io.orbitd.android.composer.CoordinatorHandoff
 import io.orbitd.android.cards.dashedBorder
 import io.orbitd.android.core.cards.InteractionCard
 import io.orbitd.android.core.cards.objects
 import io.orbitd.android.core.cards.text
 import io.orbitd.android.core.cards.transcriptCards
 import io.orbitd.android.core.realtime.RunEvent
+import io.orbitd.android.core.translation.Translation
+import io.orbitd.android.translation.UserTranslationFoot
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.text.MarkdownText
 import kotlinx.serialization.json.*
@@ -31,17 +35,41 @@ import kotlinx.serialization.json.*
  * [readersOwn]: the reader's own words, named by their turn (web `returnsToComposer`) — not what Orbit queued: a brief, a delivery,
  * another session's message, a wake, which keeps its card in the tail. [shell] is a `!cmd`, [createdAt] when the server filed it.
  * [delivery], with its [deliveryCode] and [deliveryReason]: the server's durable receipt that a steer was not delivered (`failed`) or
- * not known to be read (`unconfirmed`) — over, and no turn of the queue's.
+ * not known to be read (`unconfirmed`) — over, and no turn of the queue's. [translation]: Settings › Translation's state of the owner's
+ * message; one still held for it (translating, or failed — 1A) is drawn here in the conversation with its chip or its way out, never in
+ * the tray (board frame 6, web `inPendingTray`).
  */
 internal data class QueuedTurn(val turnId: String?, val steer: Boolean, val event: RunEvent, val cards: List<InteractionCard>,
     val wake: JsonObject?, val watch: JsonObject? = null, val shell: Boolean = false, val createdAt: String? = null,
-    val readersOwn: Boolean = false, val delivery: String? = null, val deliveryCode: String? = null, val deliveryReason: String? = null) {
+    val readersOwn: Boolean = false, val delivery: String? = null, val deliveryCode: String? = null, val deliveryReason: String? = null,
+    val translation: Translation.Turn? = null,
+    /** A SubAgent's end the queue will deliver: its block, which each run's card says is waiting (web `queuedSubagentWake`). */
+    val subagent: SubagentFinished? = null) {
     /** The reader's own words still on their way — queued for the next turn, or a steer no runner has taken yet — which the tray above
      * the composer holds instead of the tail (docs/mocks/steer-tray; web `inPendingTray`, OrbitKit `PendingTray.holds`). */
-    val inTray: Boolean get() = readersOwn && delivery == null
+    val inTray: Boolean get() = readersOwn && delivery == null && translation?.held != true
     val cancelable: Boolean get() = turnId != null && !steer && delivery == null
+    /** Still waiting for a turn of its own — not a steer, nor one whose delivery settled: what a runner's update holds, so its queue line
+     * says so (docs/mocks/queued-card-runner-updating ②⑤; web `queuedTurnWaitsItsTurn`, OrbitKit `RunnerUpdating.holdsQueued`). */
+    val heldByUpdate: Boolean get() = !steer && delivery == null
     val key: String get() = "queued:" + (turnId?.let { ObjectId.canonical(it) ?: it } ?: event.fields.text("text").hashCode().toString())
 }
+
+/** Whether the tail draws a queued turn: not a SubAgent's end alone, which waits on its run's card instead (web `queuedSubagentWake().alone`). */
+internal fun QueuedTurn.inTail(): Boolean = subagent == null || wake != null
+
+/**
+ * The SubAgent end turns still on the queue, by run id: each run's card says the agent has not read it yet, and its `Don't send` does what
+ * the tail's Cancel did — null where the turn cannot be taken off the queue (a steer, or while [cancelEnabled] is false).
+ */
+internal fun subagentQueuedWakes(queued: List<QueuedTurn>, cancelEnabled: Boolean, cancel: (String) -> Unit): Map<String, (() -> Unit)?> =
+    buildMap {
+        queued.forEach { turn ->
+            val wake = turn.subagent ?: return@forEach
+            val dontSend: (() -> Unit)? = if (turn.cancelable && cancelEnabled) ({ cancel(turn.turnId!!) }) else null
+            wake.runs.forEach { put(it.runId, dontSend) }
+        }
+    }
 
 /** The queue as the composer's list holds it: every row still waiting, in the listing's order, except one whose echo the window
  * already holds (delivered between the echo and the queue's own re-read) and a receipt or an accepted head. The transcript's tail
@@ -49,7 +77,7 @@ internal data class QueuedTurn(val turnId: String?, val steer: Boolean, val even
 internal fun queuedTail(rows: List<JsonObject>, events: List<RunEvent>): List<QueuedTurn> {
     val delivered = events.filter { it.type == "user" }.mapNotNull { it.turnId }
     return rows.mapNotNull { row ->
-        if (row.isReceipt() || row.text("placement") == "accepted") return@mapNotNull null
+        if (row.isReceipt() || row.text("placement") == "accepted" || row.isHandoffNotePrompt()) return@mapNotNull null
         val turnId = row.text("turnId")
         if (turnId != null && delivered.any { ObjectId.same(it, turnId) }) return@mapNotNull null
         listedTurn(row)
@@ -84,11 +112,13 @@ private fun listedTurn(row: JsonObject): QueuedTurn {
     val event = RunEvent("user", 0, echoPayload(row), turnId)
     val cards = transcriptCards(event)
     val wake = io.orbitd.android.core.cards.queuedWake(content)
+    val subagent = SubagentFinished.parse(content)
     val orbits = row["authoredByOrbit"] == JsonPrimitive(true) || SteerDelivery.cardKeys.any { row[it] != null && row[it] != JsonNull }
     return QueuedTurn(turnId, row.text("kind") == "steer", event, cards, wake, cards.firstOrNull { it.key.endsWith(":watch") }?.source,
         shell = row.text("kind") == "shell", createdAt = row.text("createdAt"),
-        readersOwn = turnId != null && !orbits && cards.isEmpty() && wake == null,
-        delivery = row.text("delivery"), deliveryCode = row.text("deliveryCode"), deliveryReason = row.text("deliveryReason"))
+        readersOwn = turnId != null && !orbits && cards.isEmpty() && wake == null && subagent == null,
+        delivery = row.text("delivery"), deliveryCode = row.text("deliveryCode"), deliveryReason = row.text("deliveryReason"),
+        translation = Translation.turn(row["translation"]), subagent = subagent)
 }
 
 /**
@@ -101,12 +131,17 @@ private fun listedTurn(row: JsonObject): QueuedTurn {
 internal fun acceptedHeads(rows: List<JsonObject>, events: List<RunEvent>): List<RunEvent> {
     val done = events.filter { it.type == "user" || it.type == "turn_end" }.mapNotNull { it.turnId }
     return rows.mapNotNull { row ->
-        if (row.text("placement") != "accepted" || row.text("kind") == "shell" || row.isReceipt()) return@mapNotNull null
+        if (row.text("placement") != "accepted" || row.text("kind") == "shell" || row.isReceipt() || row.isHandoffNotePrompt()) return@mapNotNull null
         val turnId = row.text("turnId") ?: return@mapNotNull null
         if (done.any { ObjectId.same(it, turnId) }) return@mapNotNull null
         RunEvent("user", 0, echoPayload(row), turnId, row.text("createdAt"))
     }
 }
+
+/** The platform's turn asking a coordinator for its handoff note (board 02 ②): Orbit's, drawn only as the handoff's own row — never
+ * as a queued card or an accepted head (web `queuedTurnsOutsideTranscript`, OrbitKit `PendingTray`). The listing carries no turn key,
+ * so it is told by its first line, as the transcript tells its echo. */
+private fun JsonObject.isHandoffNotePrompt() = CoordinatorHandoff.isNotePrompt(text("content"))
 
 /** A steer's receipt that it never made it (`failed`, `unconfirmed`): over, and no turn of the tail's. */
 private fun JsonObject.isReceipt() = this["delivery"] != null && this["delivery"] != JsonNull
@@ -123,6 +158,8 @@ private fun echoPayload(row: JsonObject) = buildJsonObject {
     SteerDelivery.cardKeys.forEach { key -> row[key]?.takeIf { it != JsonNull }?.let { put(key, it) } }
     // Who outside Orbit sent it, which the listing carries beside the cards (turn-cards.ts): the accepted head says what its echo will.
     row["externalSender"]?.takeIf { it != JsonNull }?.let { put("externalSender", it) }
+    // And a translated message's own words and state, as the runner's echo will carry them (Settings › Translation).
+    row["translation"]?.takeIf { it != JsonNull }?.let { put("translation", it) }
     if (row.text("kind") == "steer") put("steer", true)
 }
 
@@ -144,13 +181,16 @@ internal fun QueuedTurnRow(turn: QueuedTurn, open: (String) -> Unit, cancelEnabl
     }
     Column(Modifier.fillMaxWidth().testTag(turn.key), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         when {
+            // A SubAgent's end waits on its card instead ([subagentQueuedWakes]): the tail draws only the job's news written beside it.
+            turn.subagent != null -> turn.wake?.let { BackgroundWakeLine(it, null, steerState = if (turn.steer) "Sending…" else null,
+                queued = turn.cancelable, onCancelQueued = withdraw) }
             turn.wake != null -> BackgroundWakeLine(turn.wake, null, steerState = if (turn.steer) "Sending…" else null, queued = turn.cancelable,
                 onCancelQueued = withdraw)
             // A watch's wake waiting for a runner (A08-14): its line, dashed, and the queue's own line, which asks before it withdraws.
             turn.watch != null -> WatchWakeLine(turn.watch, null, open, queued = turn.cancelable, onWithdraw = withdraw)
             handover != null -> {
                 turn.cards.forEach { card ->
-                    if (card === handover) OwnerAnswerLineView(card, turn.event, queued = turn.delivery == null) else TranscriptCardView(card, open, turn.event)
+                    if (card === handover) OwnerAnswerLineView(card, turn.event, queued = turn.delivery == null, openLink = open) else TranscriptCardView(card, open, turn.event)
                 }
                 foot()
             }
@@ -167,6 +207,16 @@ internal fun QueuedTurnRow(turn: QueuedTurn, open: (String) -> Unit, cancelEnabl
                 }
                 QueuedAttachments(turn, open)
                 foot()
+            }
+            // The owner's message held for its translation (board frame 6): what they wrote, and the chip or the way out of a failure.
+            turn.translation?.held == true && turn.turnId != null -> {
+                val doors = LocalSessionConsole.current?.composer
+                Text("You", style = MaterialTheme.typography.labelMedium)
+                turn.translation.original.takeIf { it.isNotBlank() }?.let { MarkdownText(it, open = open) }
+                QueuedAttachments(turn, open)
+                UserTranslationFoot(turn.translation, flipped = false, onFlip = {},
+                    retry = doors?.let { { it.translationAction("turns/${turn.turnId}/translation/retry") } },
+                    sendAsWritten = doors?.let { { it.translationAction("turns/${turn.turnId}/translation/send-as-written") } })
             }
             else -> {
                 Text("You", style = MaterialTheme.typography.labelMedium)

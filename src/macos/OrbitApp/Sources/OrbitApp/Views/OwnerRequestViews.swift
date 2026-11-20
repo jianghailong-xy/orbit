@@ -15,10 +15,13 @@ struct OwnerRequestView: View {
     let requestID: String
     /// The input a push or a link asked for: the card puts the cursor there when it appears.
     var focus: OwnerRequestLink.Focus? = nil
+    /// Hands a talk about the request to the conversation's composer. Only a conversation has one,
+    /// so the inbox passes none and its cards offer no Chat about this.
+    var onChat: ((OwnerRequest) -> Void)? = nil
 
     var body: some View {
         if let model = appModel.ownerRequests, let request = model.request(requestID) {
-            OwnerRequestContent(model: model, request: request, focus: focus)
+            OwnerRequestContent(model: model, request: request, focus: focus, onChat: onChat)
         }
     }
 }
@@ -28,23 +31,38 @@ struct OwnerRequestContent: View {
     let model: OwnerRequestsModel
     let request: OwnerRequest
     var focus: OwnerRequestLink.Focus? = nil
+    var onChat: ((OwnerRequest) -> Void)? = nil
 
     var body: some View {
-        if request.state != .pending {
+        if request.kind == .settingsChange, [.pending, .done, .declined].contains(request.state) {
+            SettingsChangeCardView(model: model, request: request)
+        } else if request.state != .pending {
             OwnerRequestResolvedLine(model: model, request: request)
         } else if focus == nil, let until = model.snoozedUntil(request.id) {
             OwnerRequestSnoozedLine(model: model, request: request, until: until)
         } else {
-            OwnerRequestCard(model: model, request: request, focus: focus)
+            OwnerRequestCard(model: model, request: request, focus: focus, onChat: onChat)
         }
     }
 }
 
 /// A pending request, whole: panel 1 of the owner-action board.
 struct OwnerRequestCard: View {
+    @Environment(AppModel.self) private var appModel
     let model: OwnerRequestsModel
-    let request: OwnerRequest
+    /// The request as it was filed; `request` below is what the card draws.
+    let source: OwnerRequest
+    /// Settings › Translation: the whole card flips back to the asking session's words.
+    @State private var showOriginal = false
+    private var owner: TranslationLanguage? { OwnerCardTranslations.ownerLanguage(appModel.user) }
+    /// The request as drawn: title, why, ifUnanswered, options, steps and verifyHint in the owner's
+    /// language where they were translated. Same id, kind and option order, so every press is the same.
+    private var request: OwnerRequest { source.shown(owner: owner, showOriginal: showOriginal) }
+    /// The answer the server refused with 422 TRANSLATION_FAILED, to send again — as typed when
+    /// `true` (Send as written). Nil while nothing was refused.
+    @State private var resend: ((Bool) -> Void)?
     var focus: OwnerRequestLink.Focus? = nil
+    var onChat: ((OwnerRequest) -> Void)? = nil
 
     private enum Field: Hashable { case secret, answer, reason }
 
@@ -57,12 +75,18 @@ struct OwnerRequestCard: View {
     @State private var reason = ""
     @State private var busy = false
     @State private var failure: String?
+    /// WIKI_CREATE's Change settings…: the Create wiki form on the asking session's workspace.
+    @State private var changingSettings = false
     @FocusState private var field: Field?
+    /// Closes the review sheet this card may be drawn in, so the composer it arms is in view.
+    @Environment(\.dismissApprovalReview) private var dismissReview
 
-    init(model: OwnerRequestsModel, request: OwnerRequest, focus: OwnerRequestLink.Focus? = nil) {
+    init(model: OwnerRequestsModel, request: OwnerRequest, focus: OwnerRequestLink.Focus? = nil,
+         onChat: ((OwnerRequest) -> Void)? = nil) {
         self.model = model
-        self.request = request
+        self.source = request
         self.focus = focus
+        self.onChat = onChat
         _draft = State(initialValue: OwnerRequests.SecretDraft(spec: request.secretSpec))
         _chosen = State(initialValue: request.recommendedOption)
     }
@@ -83,6 +107,9 @@ struct OwnerRequestCard: View {
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                TranslationFootView(parts: source.translationFoot(owner: owner, showOriginal: showOriginal)) { _ in
+                    showOriginal.toggle()
+                }
                 facts
                 kindContent
                 if let hint = request.verifyHint {
@@ -93,6 +120,11 @@ struct OwnerRequestCard: View {
                         Image(systemName: "exclamationmark.triangle.fill")
                     }
                     .font(.orbitLabel).foregroundStyle(.red)
+                }
+                if let resend {
+                    TranslationFootView(parts: OwnerCardTranslations.refusedFoot) { action in
+                        resend(action == .sendAsWritten)
+                    }
                 }
                 if declining { declineForm } else { actions }
                 if let unanswered = request.ifUnanswered {
@@ -185,6 +217,10 @@ struct OwnerRequestCard: View {
         case .secret:
             secret
         case .confirm:
+            EmptyView()
+        case .wikiCreate:
+            OwnerRequestWikiCreateFacts(request: request)
+        case .settingsChange:
             EmptyView()
         }
     }
@@ -285,22 +321,48 @@ struct OwnerRequestCard: View {
         }
     }
 
-    /// Two rows, so a phone's width never breaks a button's words: what to do, then the ways out.
-    private var actions: some View {
+    /// The buttons as every other card draws them (`ApprovalActions`: stacked full width on a phone,
+    /// one row on a Mac), Chat about this after the press; then the ways out, as links. A WIKI_CREATE card's
+    /// are its own three (design §3.6): Create wiki, Change settings…, Not for this repository.
+    @ViewBuilder private var actions: some View {
+        if request.kind == .wikiCreate { wikiCreateActions } else { kindActions }
+    }
+
+    private var kindActions: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 12) { doors }
+            ApprovalActions {
+                doors
+                chat
+            }
             HStack(spacing: 12) { exits }
         }
         .lineLimit(1)
     }
 
+    /// Chat about this: on any pending card in its conversation (an `onChat` to hand it to), none past the deadline.
+    @ViewBuilder private var chat: some View {
+        if let onChat, !closed {
+            Button {
+                PlatformHaptics.tap()
+                dismissReview()
+                onChat(request)
+            } label: {
+                Text(Approvals.chatAction).approvalActionLabel()
+            }
+            .buttonStyle(.bordered)
+            .accessibilityIdentifier("owner-request-chat")
+        }
+    }
+
     @ViewBuilder private var doors: some View {
             if grant?.state == .pendingDelivery {
-                Button(OwnerRequests.cancel) { run { try await model.cancelSecret(request) } }
-                    .buttonStyle(.bordered).disabled(busy)
+                Button { run { try await model.cancelSecret(request) } } label: {
+                    Text(OwnerRequests.cancel).approvalActionLabel()
+                }
+                .buttonStyle(.bordered).disabled(busy)
             } else {
                 Button { pressPrimary() } label: {
-                    Text(OwnerRequests.primaryLabel(request.kind)).bold()
+                    Text(OwnerRequests.primaryLabel(request.kind)).bold().approvalActionLabel()
                 }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
@@ -308,10 +370,12 @@ struct OwnerRequestCard: View {
                           || !OwnerRequests.canSubmit(request, draft: draft, option: chosen, text: text))
                 .accessibilityIdentifier("owner-request-primary")
                 if request.kind == .secret, draft.savedID == nil, let saved = model.savedSecrets.first {
-                    Button(OwnerRequests.useSaved(saved.label)) {
+                    Button {
                         draft.value = ""
                         draft.save = false
                         draft.savedID = saved.id
+                    } label: {
+                        Text(OwnerRequests.useSaved(saved.label)).approvalActionLabel()
                     }
                     .buttonStyle(.bordered)
                 }
@@ -335,6 +399,53 @@ struct OwnerRequestCard: View {
             .disabled(OwnerRequests.snoozeChoices(request).isEmpty)
     }
 
+    private var wikiCreateActions: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ApprovalActions {
+                Button {
+                    run {
+                        try await model.createWiki(request)
+                        await appModel.wiki?.loadSpaces()
+                    }
+                } label: {
+                    Text(OwnerRequests.primaryLabel(request.kind)).bold().approvalActionLabel()
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+                .disabled(busy || closed)
+                .accessibilityIdentifier("owner-request-primary")
+                Button { changingSettings = true } label: {
+                    Text(WikiStartCopy.changeSettings).approvalActionLabel()
+                }
+                .buttonStyle(.bordered)
+                .disabled(busy || closed || appModel.wiki == nil)
+                .accessibilityIdentifier("owner-request-wiki-settings")
+                chat
+            }
+            HStack(spacing: 12) {
+                Button(WikiStartCopy.notHere) { run { try await model.decline(request, reason: WikiStartCopy.notHere) } }
+                    .buttonStyle(.borderless)
+                    .disabled(busy || closed)
+                    .accessibilityIdentifier("owner-request-not-here")
+                Spacer(minLength: 0)
+                Menu(OwnerRequests.remindLater) {
+                    ForEach(OwnerRequests.snoozeChoices(request)) { choice in
+                        Button(choice.label) { model.snooze(request.id, for: choice.seconds) }
+                    }
+                }
+                .fixedSize()
+                .font(.orbitLabel)
+                .disabled(OwnerRequests.snoozeChoices(request).isEmpty)
+            }
+        }
+        .lineLimit(1)
+        .sheet(isPresented: $changingSettings) {
+            if let wiki = appModel.wiki {
+                WikiCreateSheet(wiki: wiki, workspaceID: request.workspaceId, created: { await model.load() })
+            }
+        }
+    }
+
     private var declineForm: some View {
         VStack(alignment: .leading, spacing: 8) {
             TextField(OwnerRequests.declinePrompt, text: $reason, axis: .vertical)
@@ -344,7 +455,10 @@ struct OwnerRequestCard: View {
             HStack(spacing: 12) {
                 Button(OwnerRequests.declineButton) {
                     let why = reason.trimmingCharacters(in: .whitespacesAndNewlines)
-                    run { try await model.decline(request, reason: why) }
+                    func decline(asWritten: Bool) {
+                        run(resend: decline) { try await model.decline(request, reason: why, sendAsWritten: asWritten) }
+                    }
+                    decline(asWritten: false)
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(busy || closed || reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -363,14 +477,27 @@ struct OwnerRequestCard: View {
             return
         }
         let body = OwnerRequests.doneBody(request, option: chosen, text: text)
-        run { try await model.complete(request, body) }
+        func complete(asWritten: Bool) {
+            let sent = OwnerRequestDoneBody(option: body.option, text: body.text, sendAsWritten: asWritten)
+            run(resend: complete) { try await model.complete(request, sent) }
+        }
+        complete(asWritten: false)
     }
 
-    private func run(_ work: @escaping @MainActor () async throws -> Void) {
+    /// `resend` is the press again, for an answer whose words could not be translated (Retry with
+    /// `false`, Send as written with `true`).
+    private func run(resend: ((Bool) -> Void)? = nil, _ work: @escaping @MainActor () async throws -> Void) {
         busy = true
         failure = nil
+        self.resend = nil
         Task { @MainActor in
-            do { try await work() } catch { failure = error.localizedDescription }
+            do { try await work() } catch {
+                if let resend, OwnerCardTranslations.refused(error) {
+                    self.resend = { asWritten in resend(asWritten) }
+                } else {
+                    failure = error.localizedDescription
+                }
+            }
             busy = false
         }
     }
@@ -378,6 +505,40 @@ struct OwnerRequestCard: View {
     static func markdown(_ text: String) -> AttributedString {
         (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
             ?? AttributedString(text)
+    }
+}
+
+/// What a WIKI_CREATE card will make (docs/wiki-explicit-creation-design.md §3.6, board 46 part 3): the repository,
+/// the asking session's workspace it reads it from — offline when its runner is — and the maintenance it starts with.
+struct OwnerRequestWikiCreateFacts: View {
+    @Environment(AppModel.self) private var appModel
+    let request: OwnerRequest
+
+    var body: some View {
+        let facts = WikiStartLogic.cardFacts(repoUrlNorm: request.repoUrlNorm, workspaceId: request.workspaceId,
+                                             choices: appModel.wikiWorkspaceChoices)
+        Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 16, verticalSpacing: 6) {
+            if let repository = facts.repository {
+                GridRow {
+                    Text(WikiStartCopy.cardRepository).foregroundStyle(.secondary)
+                    Text(repository).textSelection(.enabled)
+                }
+            }
+            GridRow {
+                Text(WikiStartCopy.cardReadsFrom).foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    Text(facts.readsFrom ?? "—")
+                    if facts.offline {
+                        Text(WikiStartCopy.workspaceOffline).font(.orbitMeta).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            GridRow {
+                Text(WikiStartCopy.cardMaintenance).foregroundStyle(.secondary)
+                Text(facts.maintenance)
+            }
+        }
+        .font(.orbitSubtext)
     }
 }
 
@@ -436,6 +597,75 @@ struct OwnerRequestSteps: View {
         }
         .padding(.horizontal, 8).padding(.vertical, 4)
         .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+    }
+}
+
+/// A terminal asking to be approved (docs/terminal-session-design.md, board 2 marker 7): the owner request card's
+/// frame, header and action row — no look of its own. Approve mints the terminal's credential for 30 days; Deny tells
+/// the terminal so. Web parity: `TerminalApproveCard.tsx`; the words are OrbitKit's `Terminals`.
+struct TerminalApproveCard: View {
+    let model: OwnerRequestsModel
+    let request: TerminalRequest
+    @State private var busy = false
+    @State private var failure: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                Circle().fill(Color.ownerRequestAccent).frame(width: 8, height: 8)
+                Text(OwnerRequests.waitingOnYou).font(.orbitLabel.weight(.semibold))
+                    .foregroundStyle(Color.ownerRequestAccent)
+                Spacer(minLength: 8)
+                Text("Asked \(RelativeTime.ago(request.createdAt) ?? "")").font(.orbitLabel).foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 16).padding(.vertical, 10)
+            .background(Color.ownerRequestAccent.opacity(0.10))
+            Divider().overlay(Color.ownerRequestAccent.opacity(0.35))
+            VStack(alignment: .leading, spacing: 12) {
+                Text(Terminals.approveTitle).font(.headline)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(Terminals.requestLine(request))
+                    Text(Terminals.approveDetail)
+                }
+                .font(.orbitProse)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                if let failure {
+                    Label { Text("\(OwnerRequests.notRecorded): \(failure)") } icon: {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                    }
+                    .font(.orbitLabel).foregroundStyle(.red)
+                }
+                HStack(spacing: 10) {
+                    Button { decide(approve: false) } label: {
+                        Text(Terminals.deny).frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("terminal-deny-\(request.id)")
+                    Button { decide(approve: true) } label: {
+                        Text(Terminals.approve).frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityIdentifier("terminal-approve-\(request.id)")
+                }
+                .disabled(busy)
+            }
+            .padding(16)
+        }
+        .background(Color.ownerRequestAccent.opacity(0.03), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.ownerRequestAccent.opacity(0.45)))
+        // A container, so its own identifier does not overwrite its buttons'.
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("terminal-request-\(request.id)")
+    }
+
+    private func decide(approve: Bool) {
+        busy = true
+        Task { @MainActor in
+            do { try await model.decideTerminal(request, approve: approve) } catch { failure = error.localizedDescription }
+            busy = false
+        }
     }
 }
 
@@ -515,6 +745,7 @@ struct OwnerRequestInboxView: View {
     let model: OwnerRequestsModel
     var onClose: (() -> Void)? = nil
     @State private var expanded: Set<String> = []
+    @Environment(AppModel.self) private var appModel: AppModel?
 
     var body: some View {
         @Bindable var model = model
@@ -547,8 +778,34 @@ struct OwnerRequestInboxView: View {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         let rows = model.rows(model.tab)
                         let entries = model.openEntries
-                        if model.tab == .open ? entries.isEmpty : rows.isEmpty {
+                        if model.tab == .open
+                            ? entries.isEmpty && model.terminalRequests.isEmpty && model.scheduleItems.isEmpty
+                                && model.conditionItems.isEmpty
+                            : rows.isEmpty {
                             Text(model.tab.empty).font(.orbitSubtext).foregroundStyle(.secondary).padding(16)
+                        }
+                        // A terminal asking to be approved waits ten minutes at most: its card is whole, at the top.
+                        if model.tab == .open {
+                            ForEach(model.terminalRequests) { request in
+                                TerminalApproveCard(model: model, request: request)
+                                    .padding(.horizontal, 16).padding(.vertical, 8)
+                                Divider()
+                            }
+                        }
+                        // A condition's items, whole: the can't-read card and the 30-day question
+                        // (condition-triggers board ⑥ ①).
+                        if model.tab == .open {
+                            ForEach(model.conditionItems) { item in
+                                ConditionWaitingCardView(item: item)
+                                    .padding(.horizontal, 16).padding(.vertical, 8)
+                            }
+                        }
+                        // A scheduled task's items, whole: each answers at its own door (Waiting on you, board 01 ⑥).
+                        if model.tab == .open {
+                            ForEach(model.scheduleItems) { item in
+                                ScheduleWaitingCardView(item: item)
+                                    .padding(.horizontal, 16).padding(.vertical, 8)
+                            }
                         }
                         if model.tab == .open {
                             ForEach(entries) { entry in
@@ -616,7 +873,10 @@ struct OwnerRequestInboxView: View {
                     .frame(width: 32, height: 32)
                     .background(Color.secondary.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(request.title).font(.orbitSubtext.weight(.semibold))
+                    // The title in the owner's language, as the card it opens draws it.
+                    Text(request.shown(owner: OwnerCardTranslations.ownerLanguage(appModel?.user),
+                                       showOriginal: false).title)
+                        .font(.orbitSubtext.weight(.semibold))
                     if !detail.isEmpty || holds != nil {
                         Text("\(detail)\(detail.isEmpty || holds == nil ? "" : " · ")\(Text(holds ?? "").foregroundColor(.orange).bold())")
                             .font(.orbitLabel).foregroundStyle(.secondary)
@@ -679,14 +939,14 @@ struct OwnerRequestInboxEntry: View {
                 requests.tab = .open
                 requests.inboxPresented = true
             } label: {
+                // The drawer's row: the count in amber, written like the Projects and Wiki rows above it.
                 HStack {
                     Label(OwnerRequests.waitingOnYou, systemImage: "hand.raised")
-                    Spacer()
+                    Spacer(minLength: 6)
                     if requests.waitingCount > 0 {
                         Text("\(requests.waitingCount)")
-                            .font(.orbitLabel.weight(.bold)).foregroundStyle(.white)
-                            .padding(.horizontal, 7).padding(.vertical, 1)
-                            .background(Color.ownerRequestAccent, in: Capsule())
+                            .font(.orbitMeta.weight(.semibold)).monospacedDigit()
+                            .foregroundStyle(.orange)
                     }
                 }
                 .contentShape(Rectangle())

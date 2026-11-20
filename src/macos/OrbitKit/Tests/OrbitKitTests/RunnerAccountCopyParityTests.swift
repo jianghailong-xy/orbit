@@ -77,6 +77,20 @@ final class RunnerAccountCopyParityTests: XCTestCase {
 
     private static let constants: [(name: String, value: String)] = [
         ("RUNNER_DEFAULT_USE_AGAIN", RunnerAccountCopy.RUNNER_DEFAULT_USE_AGAIN),
+        ("RUNNER_ACCOUNT_IN_USE_OPEN", RunnerAccountCopy.RUNNER_ACCOUNT_IN_USE_OPEN),
+        ("RUNNER_ACCOUNT_IN_USE_RUNNING", RunnerAccountCopy.RUNNER_ACCOUNT_IN_USE_RUNNING),
+        ("RUNNER_ACCOUNT_IN_USE_WAITING", RunnerAccountCopy.RUNNER_ACCOUNT_IN_USE_WAITING),
+        ("RUNNER_ACCOUNT_IN_USE_UNTITLED", RunnerAccountCopy.RUNNER_ACCOUNT_IN_USE_UNTITLED),
+        ("RUNNER_ACCOUNT_REMOVE_DETAIL", RunnerAccountCopy.RUNNER_ACCOUNT_REMOVE_DETAIL),
+        ("RUNNER_ACCOUNT_SET_DEFAULT", RunnerAccountCopy.RUNNER_ACCOUNT_SET_DEFAULT),
+        ("RUNNER_ACCOUNT_SET_DEFAULT_HINT", RunnerAccountCopy.RUNNER_ACCOUNT_SET_DEFAULT_HINT),
+        ("RUNNER_ACCOUNT_SET_DEFAULT_OFFLINE", RunnerAccountCopy.RUNNER_ACCOUNT_SET_DEFAULT_OFFLINE),
+        ("RUNNER_ACCOUNT_SET_DEFAULT_UPDATE", RunnerAccountCopy.RUNNER_ACCOUNT_SET_DEFAULT_UPDATE),
+        ("RUNNER_ACCOUNT_SET_DEFAULT_BUSY", RunnerAccountCopy.RUNNER_ACCOUNT_SET_DEFAULT_BUSY),
+        ("RUNNER_ACCOUNT_SET_DEFAULT_CONFIRM", RunnerAccountCopy.RUNNER_ACCOUNT_SET_DEFAULT_CONFIRM),
+        ("RUNNER_ACCOUNT_SETTING_DEFAULT_TERMINAL", RunnerAccountCopy.RUNNER_ACCOUNT_SETTING_DEFAULT_TERMINAL),
+        ("RUNNER_ACCOUNT_SET_DEFAULT_UNCHANGED", RunnerAccountCopy.RUNNER_ACCOUNT_SET_DEFAULT_UNCHANGED),
+        ("RUNNER_ACCOUNT_FORMER_DEFAULT", RunnerAccountCopy.RUNNER_ACCOUNT_FORMER_DEFAULT),
     ]
 
     /// This end's templates, each handed the web's own interpolations as its values.
@@ -88,6 +102,24 @@ final class RunnerAccountCopyParityTests: XCTestCase {
                                                                                           name: "${name}")),
         ("runnerDefaultRemovedLine", RunnerAccountCopy.runnerDefaultRemovedLine(name: "${name}", dir: "${dir}")),
         ("runnerDefaultUseAgainFailed", RunnerAccountCopy.runnerDefaultUseAgainFailed(name: "${name}")),
+        ("runnerAccountInUseOne", RunnerAccountCopy.runnerAccountInUseOne(engine: "${engine}")),
+        // A count no sentence says otherwise, put back as the web's `${count}`.
+        ("runnerAccountInUseMany", RunnerAccountCopy.runnerAccountInUseMany(engine: "${engine}", count: 90_001)
+            .replacingOccurrences(of: "90001", with: "${count}")),
+        ("runnerAccountMovingOne", RunnerAccountCopy.runnerAccountMovingOne(engine: "${engine}")),
+        ("runnerAccountMovingMany", RunnerAccountCopy.runnerAccountMovingMany(engine: "${engine}", count: 90_001)
+            .replacingOccurrences(of: "90001", with: "${count}")),
+        ("runnerAccountSetDefaultTitle", RunnerAccountCopy.runnerAccountSetDefaultTitle(name: "${name}")),
+        ("runnerAccountSetDefaultDetail",
+         RunnerAccountCopy.runnerAccountSetDefaultDetail(name: "${name}", defaultDir: "${defaultDir}",
+                                                        defaultName: "${defaultName}", dir: "${dir}",
+                                                        runner: "${runner}")),
+        ("runnerAccountSettingDefault", RunnerAccountCopy.runnerAccountSettingDefault(name: "${name}")),
+        ("runnerAccountSettingDefaultOne", RunnerAccountCopy.runnerAccountSettingDefaultOne(name: "${name}")),
+        ("runnerAccountSettingDefaultMany",
+         RunnerAccountCopy.runnerAccountSettingDefaultMany(name: "${name}", count: 90_001)
+             .replacingOccurrences(of: "90001", with: "${count}")),
+        ("runnerAccountSetDefaultFailed", RunnerAccountCopy.runnerAccountSetDefaultFailed(name: "${name}")),
     ]
 
     /// The web's declarations this end has nowhere to say, and why.

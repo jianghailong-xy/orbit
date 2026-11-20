@@ -454,7 +454,9 @@ describe('wiki chat contract', () => {
     expect(DESIGN).toContain('就是 session 页的 composer，是同一个组件');
     expect(keysOf(panel.widths)).toEqual(['atLeast1440', 'from1200', 'from640', 'below640']);
     expect(panel.widths.atLeast1440).toMatch(/a third of the window wide by default but never under 400 nor over 720, dragged between 320 and half the window/u);
-    for (const row of ['| ≥ 1440 | 右侧停靠，默认窗口宽的 1/3（400–720），可拖 320 到窗口宽的一半（owner 11-11 定） | 照旧 |', '| 1200–1439 | 右侧停靠，默认同上（这一档是 400–480） |', '| 640–1199 | 从右滑出，盖住正文右侧，不加遮罩 |', '| < 640 | 底部 sheet，半屏与全屏两档 |']) {
+    expect(panel.widths.atLeast1440).toMatch(/a column of the page from the window's top to its foot, not a layer over it/u);
+    expect(panel.widths.from1200).toMatch(/the contents column stays and the app sidebar shows as its icon rail/u);
+    for (const row of ['| ≥ 1440 | 页面最右的一栏，从窗口顶到底，不是盖在页面上的浮层（owner 11-13 定，效果图 `docs/mocks/wiki-rail` 03 Ⓑ）；默认窗口宽的 1/3（400–720），可拖 320 到窗口宽的一半（owner 11-11 定） | 照旧 |', '| 1200–1439 | 同上，一栏，默认宽度同上（这一档是 400–480）；应用侧栏收成图标条（03 C2）', '| 640–1199 | 从右滑出，盖住正文右侧，不加遮罩 |', '| < 640 | 底部 sheet，半屏与全屏两档 |']) {
       expect(DESIGN).toContain(row);
     }
     expect(panel.drawer).toMatch(/The entry drawer opens to the left of the panel/u);

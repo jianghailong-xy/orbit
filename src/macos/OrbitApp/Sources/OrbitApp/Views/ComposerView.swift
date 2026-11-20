@@ -69,6 +69,23 @@ extension EnvironmentValues {
     }
 }
 
+/// Whether a page this view is on is one of the wide shells' pages (macOS, and the iPad's split
+/// view), where a task link opens the task detail over the page it was pressed on rather than
+/// switching to the Tasks section (owner decision 2026-11-12). Set once by `MainView`, so every
+/// conversation, wiki page and watch card inside it says the same thing; the phone's shell leaves it
+/// false, where a task link keeps its own way out. The view knows its shell; the model is handed the
+/// answer (`AppModel.openFromConversation(_:overConsole:overPage:)`), never told which shell it is in.
+private struct OpensTasksOverPageKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var opensTasksOverPage: Bool {
+        get { self[OpensTasksOverPageKey.self] }
+        set { self[OpensTasksOverPageKey.self] = newValue }
+    }
+}
+
 /// Whether a view stands in a composer band that floats over the transcript (iOS 26,
 /// `ConsoleView.transcriptAndBand`), with the rows passing behind it — where a card washed with a
 /// faint tint has to be glass instead (`composerBandWash`).
@@ -195,6 +212,8 @@ struct ComposerView: View {
     @Bindable var console: ConsoleModel
     /// On the phone's console a page this conversation opens is pushed over it (`OpensPagesOverConsoleKey`).
     @Environment(\.opensPagesOverConsole) private var opensPagesOverConsole
+    /// On a wide shell a task this conversation opens opens over it (`OpensTasksOverPageKey`).
+    @Environment(\.opensTasksOverPage) private var opensTasksOverPage
     /// Focus the field as soon as it appears — used by the draft "new session" composer, where the
     /// user came here to type. A live console leaves it false so opening a session doesn't grab focus.
     /// Turning it on later focuses too: an iPad's draft appears unasked with it off, and ✎ turns it on.
@@ -207,6 +226,9 @@ struct ComposerView: View {
     @State private var slashDismissed: String?
     /// Measured height of the `/` menu's rows — the floating card is sized from this (see slashMenu).
     @State private var slashHeight: CGFloat = 0
+    /// The translation tag's drawn width, which the text keeps clear of: "Portuguese → Indonesian" is
+    /// wider than "Chinese → English".
+    @State private var translationTagWidth: CGFloat = 104
     #if os(macOS)
     @FocusState private var inputFocused: Bool
     @State private var pasteMonitor: Any?
@@ -306,8 +328,6 @@ struct ComposerView: View {
         if cursorTurnRunning, console.replyContext == nil { return CursorRuntime.runningPlaceholder }
         // A new account's welcome card above: what to write (docs/mocks/new-user-onboarding).
         if console.welcomes, console.replyContext == nil { return WelcomeCopy.WELCOME_PLACEHOLDER }
-        // A machine's new session page has no workspace to send to, and no question to answer.
-        if let machine = console.machinePlaceholder { return machine }
         // A wiki chat's panel says what to ask, unless a reply has its own words.
         if console.replyContext == nil, let emptyPlaceholder { return emptyPlaceholder }
         return console.replyContext?.placeholder ?? "Message…"
@@ -328,6 +348,15 @@ struct ComposerView: View {
         )
     }
 
+    /// The "Chinese → English" tag shows while the account translates and the box is empty.
+    /// A suggestion on offer takes the line instead (docs/mocks/prompt-suggestion-room): the tag is about
+    /// words typed, and the guess needs the width. Its "unavailable" warning still shows over a guess.
+    private var showsTranslationTag: Bool {
+        guard SessionTranslation.isOn(app.user), console.composerText.isEmpty else { return false }
+        if offeredSuggestion == nil { return true }
+        return (SessionTranslation.temporarilyUnavailableUntil(app.user) ?? .distantPast) > Date()
+    }
+
     /// The engine's guess at the next message, when the empty box offers it (`ComposerLogic`,
     /// docs/prompt-suggestions-design.md §4): the transcript's own `promptSuggestion`, held to the
     /// same authoritative record the Stop morph reads.
@@ -335,7 +364,7 @@ struct ComposerView: View {
         guard !console.isDraft else { return nil }
         let session = app.session(id: console.sessionID)
         return ComposerLogic.offeredPromptSuggestion(
-            console.state.promptSuggestion,
+            console.state.shownPromptSuggestion,
             session: session?.effectiveRunState,
             // A message on its way is a turn in flight before the record or the stream says so: the
             // suggestion it answered must not come back into the box it just left.
@@ -348,6 +377,54 @@ struct ComposerView: View {
                 || (session?.pendingApprovals ?? 0) > 0 || session?.waitingKind != nil,
             sendable: console.sendBlockedMessage == nil && console.runnerOnline != false
                 && session?.effectiveLifecycleState == .open)
+    }
+
+    /// Frame 2's ✦ Optimize: the account has it on and the box holds a draft it can improve (the
+    /// web's rules, `PromptOptimizer.showsButton`); while a press is out it stays, as the busy button.
+    private var showsOptimize: Bool {
+        console.promptOptimizer.isOptimizing
+            || PromptOptimizer.showsButton(on: PromptOptimizer.isOn(app.user), text: console.composerText)
+    }
+
+    /// Frame 4's card above the composer on a Mac.
+    private func optimizationCard(_ optimization: PromptOptimization) -> some View {
+        PromptOptimizationCard(
+            optimization: optimization,
+            basedOnEarlierDraft: console.promptOptimizer.basedOnEarlierDraft(current: console.composerText),
+            showingPrompt: $console.promptOptimizer.showingPrompt,
+            glossLanguage: SessionTranslation.language(app.user?.preferences),
+            use: { console.useOptimization(edit: false) },
+            editThenUse: editThenUseOptimization,
+            tryAgain: { console.retryOptimizePrompt() },
+            dismiss: { console.dismissOptimization() })
+    }
+
+    /// Edit, then use: Use, with the caret in the box. On a phone the sheet goes first, so the box
+    /// takes focus once it has.
+    private func editThenUseOptimization() {
+        #if os(iOS)
+        console.useOptimization(edit: false)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { requestFocus() }
+        #else
+        console.useOptimization(edit: true)
+        #endif
+    }
+
+    #if os(iOS)
+    /// The phone's sheet is up while there is a suggestion; swiped down, it is dismissed (draft kept).
+    private var optimizationSheetShown: Binding<Bool> {
+        Binding(get: { console.promptOptimizer.suggestion != nil },
+                set: { if !$0 { console.dismissOptimization() } })
+    }
+    #endif
+
+    /// The composer's translation tag: Settings › General, where Translation is.
+    private func openTranslationSettings() {
+        #if os(iOS)
+        app.nav.openSettings(at: .general)
+        #else
+        app.selectedSection = .settings
+        #endif
     }
 
     /// Into the box, and the box focused: a guess is where the message starts, not a message sent.
@@ -393,7 +470,7 @@ struct ComposerView: View {
             if showsCompletedResumeNotice {
                 HStack(spacing: 6) {
                     Image(systemName: "checkmark.circle").foregroundStyle(.secondary)
-                    Text("Completed · Sending a message will resume this session in Open.")
+                    Text("Completed · Send a message to reopen this session.")
                         .font(.orbitLabel).foregroundStyle(.secondary)
                     Spacer(minLength: 0)
                 }
@@ -427,6 +504,20 @@ struct ComposerView: View {
                 .background(.blue.opacity(0.1), in: Capsule())
             }
 
+            // Frame 6: the press failed; the draft below is untouched.
+            if console.promptOptimizer.failed {
+                PromptOptimizationFailureLine(retry: { console.retryOptimizePrompt() },
+                                              dismiss: { console.dismissOptimization() })
+            }
+
+            // Frame 4 on a Mac: the suggestion is a card above the composer; the box is untouched
+            // until Use. A phone shows the same card as a sheet (below).
+            #if os(macOS)
+            if let optimization = console.promptOptimizer.suggestion {
+                optimizationCard(optimization)
+            }
+            #endif
+
             // The composer card: staged attachments, the text across the whole width, and a toolbar
             // pinned to its foot — `+` and the mode on the left; the model control, the usage gauges
             // and Send on the right (web parity: `.composer-box` / `.composer-toolbar`). The text grows
@@ -445,6 +536,19 @@ struct ComposerView: View {
                             #else
                             PromptSuggestionLine(text: suggestion, accept: acceptSuggestion)
                             #endif
+                        }
+                    }
+                    // Settings › Translation (6A): "Chinese → English" on the box's right while the
+                    // account translates; pressed, it opens the setting. Like the placeholder, it shows
+                    // only while the box is empty, so typed text gets the whole width.
+                    .padding(.trailing, showsTranslationTag ? translationTagWidth + 8 : 0)
+                    .overlay(alignment: .topTrailing) {
+                        if showsTranslationTag {
+                            ComposerTranslationTag(language: SessionTranslation.language(app.user?.preferences),
+                                                   agentLanguage: SessionTranslation.agentLanguage(app.user?.preferences),
+                                                   unavailableUntil: SessionTranslation.temporarilyUnavailableUntil(app.user),
+                                                   open: openTranslationSettings)
+                            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { translationTagWidth = $0 }
                         }
                     }
                     .onChange(of: console.slashToken) { _, new in
@@ -496,7 +600,32 @@ struct ComposerView: View {
             // Raise the card (and with it the floating `/` card) above the notices stacked over it,
             // so nothing in this stack paints across the menu.
             .zIndex(1)
+
+            // Frame 5: after Use, Undo puts the owner's own draft back, for as long as the box still
+            // holds what Use put there, and for a few seconds.
+            if console.promptOptimizer.offersUndo(current: console.composerText) {
+                PromptOptimizationUndoToast { console.undoOptimization() }
+                    .task {
+                        try? await Task.sleep(nanoseconds: 8_000_000_000)
+                        console.promptOptimizer.forgetUndo()
+                    }
+            }
         }
+        #if os(iOS)
+        // Frame 4 on a phone: the suggestion is a sheet over the composer, with the same actions.
+        .sheet(isPresented: optimizationSheetShown) {
+            if let optimization = console.promptOptimizer.suggestion {
+                PromptOptimizationSheet(
+                    optimization: optimization,
+                    basedOnEarlierDraft: console.promptOptimizer.basedOnEarlierDraft(current: console.composerText),
+                    showingPrompt: $console.promptOptimizer.showingPrompt,
+                    use: { console.useOptimization(edit: false) },
+                    edit: editThenUseOptimization,
+                    tryAgain: { console.retryOptimizePrompt() },
+                    dismiss: { console.dismissOptimization() })
+            }
+        }
+        #endif
         // No gutter, surface or vertical padding of its own: the enclosing `ComposerBand` owns all
         // three for every member of the stack, so this can't drift away from the bars above it.
         //
@@ -570,11 +699,28 @@ struct ComposerView: View {
             // Tab takes the offered suggestion, as on the web; with none on offer it moves focus as
             // it always has. The box is empty whenever one is offered, so no `/` menu is open.
             .onKeyPress(keys: [.tab]) { press in
-                guard press.modifiers.isEmpty, offeredSuggestion != nil else { return .ignored }
+                guard press.modifiers.isEmpty else { return .ignored }
+                // Tab is the optimizer's key in the box, as on the web: Use on its card, and on a draft
+                // it can take, Optimize. While a press is out, and on a spent draft, Tab moves focus.
+                if console.promptOptimizer.suggestion != nil, !showSlash {
+                    console.useOptimization(edit: false)
+                    return .handled
+                }
+                if !showSlash,
+                   console.promptOptimizer.tabOptimizes(on: PromptOptimizer.isOn(app.user), text: console.composerText) {
+                    console.optimizePrompt()
+                    return .handled
+                }
+                guard offeredSuggestion != nil else { return .ignored }
                 acceptSuggestion()
                 return .handled
             }
             .onKeyPress(.escape) {
+                // Esc dismisses the optimizer's card (or its failure line); the draft is kept.
+                if console.promptOptimizer.suggestion != nil || console.promptOptimizer.failed {
+                    console.dismissOptimization()
+                    return .handled
+                }
                 if showSlash {
                     slashDismissed = console.slashToken
                     return .handled
@@ -608,7 +754,7 @@ struct ComposerView: View {
             Spacer(minLength: 8).layoutPriority(-1)
             // No model to show where a first session cannot start yet: the managed default workspace
             // before its runner was ever ready (`ConsoleModel.managed`), as on the web.
-            if console.managed?.blocksNewSession != true { modelMenu }
+            modelMenu
             // A session on an account pool spends one of its accounts at a time: name that account
             // beside the quota, which is that account's own (web parity — the pool's name is the
             // model control's provider row, and says nothing about whose quota this is). Beside
@@ -622,18 +768,23 @@ struct ComposerView: View {
                     .help(help)
                     .accessibilityLabel(help)
             }
-            if let usage = console.planUsage {
-                // Which of the runner's Codex or Claude accounts this quota is, named in the gauge's
-                // detail rather than beside it, where a phone's footer has no room for an email (web
-                // parity).
-                PlanUsageIndicator(usage: usage, model: console.modelID,
-                                   account: (console.accountLabel ?? console.poolAccountLabel).map {
-                                       PlanUsageAccount(label: $0, note: console.accountNote)
-                                   }, resetConsole: console)
+            // Which of the runner's Codex or Claude accounts this quota is, named in the gauge's
+            // detail rather than beside it, where a phone's footer has no room for an email (web
+            // parity).
+            let plan = console.planUsage.map { usage in
+                FooterPlanUsage(usage: usage, model: console.modelID,
+                                account: (console.accountLabel ?? console.poolAccountLabel).map {
+                                    PlanUsageAccount(label: $0, note: console.accountNote)
+                                }, resetConsole: console)
+            }
+            let showsContext = !(console.engine == "opencode" && console.modelID.isEmpty)
+            if let plan {
+                // On a phone the context gauge carries this bar in its own button (below).
+                PlanUsageIndicator(plan: plan, foldsIntoContext: showsContext)
             }
             // Context stays visible even before the first turn reports tokens — a New Session
             // reads 0%. Rightmost gauge, next to Send.
-            if !(console.engine == "opencode" && console.modelID.isEmpty) {
+            if showsContext {
                 ContextWindowIndicator(tokens: console.state.contextTokens ?? 0,
                                        reportedWindow: console.state.contextWindow,
                                        model: console.modelID, provider: console.provider,
@@ -641,7 +792,18 @@ struct ComposerView: View {
                                        configured: console.configuredProviders,
                                        unavailable: console.engine == CursorRuntime.engine
                                            ? CursorRuntime.contextUnavailable : nil,
-                                       modelLine: console.engine == CursorRuntime.engine ? cursorModelLine : nil)
+                                       modelLine: console.engine == CursorRuntime.engine ? cursorModelLine : nil,
+                                       actions: contextActions, plan: plan)
+            }
+            // Frame 2: ✦ Optimize beside Send once there is a draft; frame 3: busy, it cancels.
+            if showsOptimize {
+                PromptOptimizeButton(busy: console.promptOptimizer.isOptimizing) { console.optimizePrompt() }
+                    #if os(macOS)
+                    .keyboardShortcut("o", modifiers: [.command, .shift])
+                    #endif
+                    // Below the model control's 1: the model is offered its room first, so on a full
+                    // phone footer Optimize folds to ✦ before the model gives up its effort or name.
+                    .layoutPriority(0.5)
             }
             sendControls
         }
@@ -651,6 +813,31 @@ struct ComposerView: View {
         // The toolbar's words are tappable controls, not metadata — list-subtitle size on iOS (15pt)
         // for comfortable targets; macOS keeps the dense web-parity caption.
         .font(.orbitListSubtitle)
+    }
+
+    /// What the context panel offers this session (boards 01 and 03): Compact where the engine has
+    /// it, Start a new coordinator on the project's current, open coordinator. A draft offers neither.
+    private var contextActions: ContextActions {
+        guard !console.isDraft, let session = app.session(id: console.sessionID) else { return ContextActions() }
+        let running = session.isGenerating || console.state.status == .running
+        let projectID = session.projectId
+        return ContextActions(
+            offersCompact: CoordinatorContextActions.offersCompact(slashItems: console.composerSlashItems,
+                                                                   engine: console.engine),
+            compactEnabled: CoordinatorContextActions.compactEnabled(running: running,
+                                                                     handoff: session.coordinatorHandoff),
+            offersNewCoordinator: CoordinatorContextActions.offersNewCoordinator(session),
+            running: running,
+            projectTitle: session.projectTitle ?? "the project",
+            compact: { Task { await console.compactConversation() } },
+            pendingWaits: {
+                guard let projectID else { return [] }
+                return await console.coordinatorPendingWaits(projectID: projectID)
+            },
+            handOver: {
+                guard let projectID else { return }
+                Task { await console.coordinatorHandoff(projectID: projectID, .start) }
+            })
     }
 
     /// Send, or Stop while a turn runs — the toolbar's right end, in a 32pt frame so its centre sits
@@ -829,13 +1016,12 @@ struct ComposerView: View {
     }
 
     /// A Cursor CLI model's setting picked: the session's model value carries it — one back at the model's
-    /// own default is taken out of it — applied and remembered as a model pick is.
+    /// own default is taken out of it — applied as a model pick is.
     private func pickCursorSetting(_ id: String, _ value: String, pick: CursorRuntime.Pick) {
         var settings: [String: String?] = pick.parameters.mapValues { Optional($0) }
         settings[id] = value
         let model = CursorRuntime.encodeModel(pick.model, settings, row: pick.row)
         let clampedPermissionMode = console.selectModel(model)
-        app.rememberDefaultModel(model, engine: console.engine, provider: console.provider)
         let permissionMode = clampedPermissionMode ? console.permissionMode.rawValue : nil
         Task { await console.applyConfig(model: model, permissionMode: permissionMode) }
     }
@@ -935,6 +1121,18 @@ struct ComposerView: View {
                                     providerItems(choice)
                                 }
                             }
+                            // What a pool's row risks (`ProviderChoice.notice`), said once under the
+                            // pools (web parity).
+                            if group.id == "pools" {
+                                ForEach(SessionProviderChoices.notices(group.choices), id: \.self) { notice in
+                                    #if os(macOS)
+                                    ForEach(Array(ComposerLogic.menuLines(notice).enumerated()),
+                                            id: \.offset) { _, line in Text(line) }
+                                    #else
+                                    ForEach(ComposerLogic.sentences(notice), id: \.self) { Text($0) }
+                                    #endif
+                                }
+                            }
                         }
                     }
                     // A Claude subscription token is the one key on Anthropic's protocol OpenCode does
@@ -972,9 +1170,8 @@ struct ComposerView: View {
                         catalog: console.modelCatalog, configured: console.configuredProviders)
                     let resetEffort = nextEffort != console.effort
                     let clampedPermissionMode = console.selectModel(m.id)
-                    // Remembered per engine and provider (`<engine>:<provider>`, contract §6.5): one
-                    // key's model on Claude Code is not its model on DeepSeek Harness.
-                    app.rememberDefaultModel(m.id, engine: console.engine, provider: console.provider)
+                    // The pick is this session's alone: no account-wide model memory is written
+                    // (docs/workspace-default-model-design.md).
                     let permissionMode = clampedPermissionMode
                         ? console.permissionMode.rawValue
                         : nil
@@ -1049,7 +1246,8 @@ struct ComposerView: View {
             if smartRoute != nil, let taskID = console.taskID {
                 Divider()
                 Button(TaskDetailCopy.openTask) {
-                    app.openFromConversation(.task(taskID), overConsole: opensPagesOverConsole)
+                    app.openFromConversation(.task(taskID), overConsole: opensPagesOverConsole,
+                                             overPage: opensTasksOverPage)
                 }
             }
         } label: {
@@ -1103,23 +1301,11 @@ struct ComposerView: View {
     private var modelChipLabel: some View {
         let smart = smartRoute != nil
         #if os(iOS)
-        HStack(alignment: .firstTextBaseline, spacing: 5) {
-            if smart {
-                Text("✦")
-                    .foregroundStyle(Color.accentColor)
-                    .accessibilityHidden(true)
-            }
-            Text(modelDisplayName)
-                .fontWeight(.semibold)
-                .foregroundStyle(Color.primary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-            if !chipEffortLabel.isEmpty {
-                Text(chipEffortLabel)
-                    .foregroundStyle(Color.secondary)
-                    .lineLimit(1)
-                    .fixedSize()
-            }
+        // Where the name and the effort don't both fit, the effort leaves the footer (it stays in
+        // the menu) before the name truncates (board composer-usage-tap 04).
+        ViewThatFits(in: .horizontal) {
+            chipRow(smart: smart, effort: !chipEffortLabel.isEmpty)
+            if !chipEffortLabel.isEmpty { chipRow(smart: smart, effort: false) }
         }
         .padding(.horizontal, smart ? 7 : 0)
         .padding(.vertical, smart ? 2 : 0)
@@ -1133,6 +1319,30 @@ struct ComposerView: View {
             .lineLimit(1)
         #endif
     }
+
+    #if os(iOS)
+    /// One of the phone chip's two widths: the name with the effort after it, or the name alone.
+    private func chipRow(smart: Bool, effort: Bool) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 5) {
+            if smart {
+                Text("✦")
+                    .foregroundStyle(Color.accentColor)
+                    .accessibilityHidden(true)
+            }
+            Text(modelDisplayName)
+                .fontWeight(.semibold)
+                .foregroundStyle(Color.primary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            if effort {
+                Text(chipEffortLabel)
+                    .foregroundStyle(Color.secondary)
+                    .lineLimit(1)
+                    .fixedSize()
+            }
+        }
+    }
+    #endif
 
     /// The effort half of the chip, with the fast lane appended while the session is in one —
     /// "Max · Fast". Web parity (`.composer-model-effort`); the lane is named there too rather than
@@ -1615,13 +1825,20 @@ struct ComposerView: View {
     }
 
     #if os(iOS)
-    /// Photos-library picks: PhotosUI hands back the original bytes (often HEIC/JPEG); normalize to
-    /// PNG — one of the server's inline-image types — before uploading via the shared attach path.
+    /// Photos-library picks: PhotosUI hands back the original bytes (often HEIC/JPEG);
+    /// `orbitPhotoUpload` turns them into an inline image under the cap before the shared attach path.
     private func attachPhotos(_ items: [PhotosPickerItem]) async {
         for item in items {
             guard let data = try? await item.loadTransferable(type: Data.self) else { continue }
-            let png = PlatformImage(data: data)?.orbitPNGData() ?? data
-            console.attach(filename: "photo.png", mimeType: "image/png", data: png)
+            guard let photo = orbitPhotoUpload(data) else {
+                console.statusMessage = "Couldn\u{2019}t read that photo"
+                continue
+            }
+            if let reason = Attachments.rejectReason(mimeType: photo.mimeType, byteCount: photo.data.count) {
+                console.statusMessage = reason
+                continue
+            }
+            console.attach(filename: photo.filename, mimeType: photo.mimeType, data: photo.data)
         }
     }
 
@@ -1635,10 +1852,11 @@ struct ComposerView: View {
         }
     }
 
-    /// Clipboard image → PNG (the server's inline-image type) → the shared attach path.
+    /// Clipboard image → PNG (the server's inline-image type) → the shared paste path, which
+    /// shrinks one past the cap and enforces it.
     private func attachClipboardImage(_ image: UIImage) async {
         guard let png = image.orbitPNGData() else { return }
-        console.attach(filename: "pasted.png", mimeType: "image/png", data: png)
+        await console.attachPastedImage(pngData: png)
     }
     #endif
 }
@@ -1647,7 +1865,7 @@ struct ComposerView: View {
 /// placeholder would be (docs/prompt-suggestions-design.md §4.1). On a Mac, Use at its end (or Tab)
 /// takes it, and only Use takes the click. A touch screen has no button: a double-tap on the line
 /// takes it (`GrowingTextEditor`), and the words are followed by
-/// "Double-tap to use". Either way a tap anywhere else lands in the field, to type something else.
+/// "Double-tap". Either way a tap anywhere else lands in the field, to type something else.
 private struct PromptSuggestionLine: View {
     let text: String
     #if !os(iOS)
@@ -1660,7 +1878,7 @@ private struct PromptSuggestionLine: View {
         // field's own line height and the words sit exactly where typed ones would.
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             words
-            Text("Double-tap to use")
+            Text("Double-tap")
                 .font(.orbitLabel)
                 .foregroundStyle(Self.placeholderColor)
                 .fixedSize()
@@ -1900,9 +2118,25 @@ private struct GrowingTextEditor: UIViewRepresentable {
         context.coordinator.doubleTap?.isEnabled = suggestion != nil
         view.accessibilityHint = suggestion.map { "Suggested reply: \($0)." }
         view.accessibilityCustomActions = suggestion == nil ? nil : [context.coordinator.useAction]
-        // Drive focus from the binding, but never fight the field's own responder state.
-        if isEditing, !view.isFirstResponder { view.becomeFirstResponder() }
-        else if !isEditing, view.isFirstResponder { view.resignFirstResponder() }
+        // Drive focus from the binding, but never fight the field's own responder state. Not from
+        // inside this update: a responder change runs SwiftUI's own focus bookkeeping, which re-enters
+        // the graph mid-update. Called here from a background scene update (device locked with the
+        // composer focused), that kept the main thread busy until the watchdog killed the app
+        // (0x8BADF00D in -[UITextView becomeFirstResponder]). So it waits for the next turn of the
+        // main loop and for a scene in the foreground (a background one is skipped; the next update applies it).
+        if isEditing != view.isFirstResponder {
+            DispatchQueue.main.async { [weak view, weak coordinator = context.coordinator] in
+                guard let view, let coordinator else { return }
+                let editing = coordinator.parent.isEditing
+                let scene = view.window?.windowScene?.activationState
+                if editing, !view.isFirstResponder,
+                   scene == .foregroundActive || scene == .foregroundInactive {
+                    view.becomeFirstResponder()
+                } else if !editing, view.isFirstResponder {
+                    view.resignFirstResponder()
+                }
+            }
+        }
     }
 
     /// Height for the proposed width, capped at `maxLines`. `UITextView.sizeThatFits` measures the
@@ -2000,12 +2234,30 @@ private struct PlanUsageAccount {
 /// Compact plan-usage pill for the composer footer. Limit items mirror Codex TUI,
 /// while percentages retain Orbit's percent-consumed semantics — but for an Antigravity
 /// bucket's, which says what is left, as agy does, and says so ("4% left").
-private struct PlanUsageIndicator: View {
+/// The footer's plan usage: the runner's snapshot, the model whose quota the gauge reads
+/// (`bindingRow(model:)`), whose account it is, and the console that can spend a Codex reset credit.
+private struct FooterPlanUsage {
     let usage: PlanUsageSnapshot
-    /// The model the session runs: the pill's number is the quota it spends (`bindingRow(model:)`).
     let model: String
-    var account: PlanUsageAccount?
+    let account: PlanUsageAccount?
     let resetConsole: ConsoleModel?
+
+    /// The row the footer's bar draws, nil when the snapshot has none for this model.
+    var row: PlanUsageRow? { usage.bindingRow(model: model) }
+}
+
+/// A plan usage row's reading. An Antigravity bucket counts what is left, as agy does: said so, or
+/// 100% would read spent (web parity). Cursor's included allowance prefers "$12.34 left" when Cursor
+/// sent cents.
+private func planReading(_ row: PlanUsageRow) -> String {
+    row.headline ?? "\(row.percent)%\(row.remaining ? " left" : "")"
+}
+
+private struct PlanUsageIndicator: View {
+    let plan: FooterPlanUsage
+    /// Whether a phone's context gauge draws this bar inside its own button (board
+    /// composer-usage-tap): then this one draws nothing there.
+    var foldsIntoContext = false
     @State private var showDetail = false
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -2021,14 +2273,11 @@ private struct PlanUsageIndicator: View {
     }
 
     var body: some View {
-        if let row = usage.bindingRow(model: model) {
-            let pct = row.percent
-            // An Antigravity bucket counts what is left, as agy does: said so, or 100% would read spent
-            // (web parity). Cursor's included allowance prefers "$12.34 left" when Cursor sent cents.
-            let reading = row.headline ?? "\(pct)%\(row.remaining ? " left" : "")"
+        if let row = plan.row, !(foldsIntoContext && !gaugeShowsNumber) {
+            let reading = planReading(row)
             Button { showDetail.toggle() } label: {
                 HStack(spacing: 5) {
-                    UsageBar(percent: pct, warn: row.remaining ? row.nearLimit : nil, spent: row.spent)
+                    UsageBar(percent: row.percent, warn: row.remaining ? row.nearLimit : nil, spent: row.spent)
                         .frame(width: gaugeShowsNumber ? 26 : 20, height: 4)
                     if gaugeShowsNumber {
                         // fixedSize keeps the pill at its ideal width: an unbounded Text is the most
@@ -2041,8 +2290,8 @@ private struct PlanUsageIndicator: View {
             .buttonStyle(.plain)
             .help("Plan usage \(reading)")
             .accessibilityLabel("Plan usage \(reading)")
-            .modifier(PlanUsageDetailPresentation(isPresented: $showDetail, usage: usage,
-                                                   account: account, resetConsole: resetConsole))
+            .modifier(PlanUsageDetailPresentation(isPresented: $showDetail, usage: plan.usage,
+                                                   account: plan.account, resetConsole: plan.resetConsole))
         }
     }
 }
@@ -2087,7 +2336,19 @@ private struct ContextWindowIndicator: View {
     /// The model the session runs, as the chip names it, for a row of its own under the reading — what
     /// the context is of, when there is no number to read (Cursor CLI, board iOS 5 ④).
     var modelLine: String? = nil
+    /// Compact and Start a new coordinator, under the reading (boards 01 and 03).
+    var actions = ContextActions()
+    /// The session's plan usage. A phone's footer has room for neither number, and two gauges a few
+    /// points wide are hard to hit, so there this button carries the plan bar beside the ring and its
+    /// sheet reads both (board composer-usage-tap); elsewhere the plan has its own gauge.
+    var plan: FooterPlanUsage? = nil
     @State private var showDetail = false
+
+    /// The plan row this button draws, only where it carries the plan (a phone).
+    private var foldedPlanRow: PlanUsageRow? { gaugeShowsNumber ? nil : plan?.row }
+    /// The waits the confirm names, once read: non-nil is the confirm on screen (board 02 ①; a system
+    /// Alert on a phone, board 03 iOS 2).
+    @State private var confirmWaits: [CoordinatorPendingWait]?
 
     private var window: Int? {
         reportedWindow ?? AgentDefaults.contextWindow(for: model, catalog: modelCatalog,
@@ -2106,8 +2367,14 @@ private struct ContextWindowIndicator: View {
     private var headline: String { !known ? "—" : sized ? "\(pct)%" : fmtTokens(tokens) }
 
     var body: some View {
+        let planRow = foldedPlanRow
         Button { showDetail.toggle() } label: {
-            HStack(spacing: 5) {
+            HStack(spacing: gaugeShowsNumber ? 5 : planRow == nil ? 6 : 3) {
+                if let planRow {
+                    UsageBar(percent: planRow.percent, warn: planRow.remaining ? planRow.nearLimit : nil,
+                             spent: planRow.spent)
+                        .frame(width: 24, height: 5)
+                }
                 UsageRing(percent: pct, unavailable: unavailable != nil)
                     .frame(width: gaugeShowsNumber ? 14 : 16, height: gaugeShowsNumber ? 14 : 16)
                 if gaugeShowsNumber {
@@ -2116,15 +2383,53 @@ private struct ContextWindowIndicator: View {
                     Text(headline).foregroundStyle(.secondary).fixedSize()
                 }
             }
+            // With the plan bar in it, the pair sits close inside a hairline capsule, so the two
+            // read as one control without a fill no other footer control has (board
+            // composer-usage-tap 03, option C).
+            .padding(.horizontal, planRow == nil ? 0 : 7)
+            .frame(height: planRow == nil ? nil : 26)
+            .overlay {
+                if planRow != nil { Capsule().strokeBorder(.separator, lineWidth: 0.5) }
+            }
+            // A phone's gauge is a 32pt-tall target like + and Send beside it, never narrower than
+            // it is tall.
+            .frame(minWidth: gaugeShowsNumber ? nil : 32, minHeight: gaugeShowsNumber ? nil : 32)
+            // A min-only frame lets a full toolbar squeeze it down to 32pt, narrower than the bar,
+            // ring and capsule inside it, which then draw over the model name and ✦ Optimize. Pinned
+            // to its ideal width, the gauge holds its room and the model name truncates instead.
+            .fixedSize()
             // The ring is only a stroke — dashed when there is no reading — and a plain button takes
             // a tap only where it draws: the whole gauge opens the detail, its hollow centre too.
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(helpText)
-        .accessibilityLabel(helpText)
+        .help(accessibilityText)
+        .accessibilityLabel(accessibilityText)
         .modifier(ContextWindowDetailPresentation(isPresented: $showDetail, tokens: tokens, window: window, pct: pct,
-                                                  known: known, unavailable: unavailable, modelLine: modelLine))
+                                                  known: known, unavailable: unavailable, modelLine: modelLine,
+                                                  actions: actions, plan: planRow == nil ? nil : plan,
+                                                  startNewCoordinator: startNewCoordinator))
+        .modifier(CoordinatorHandoffConfirmPresentation(waits: $confirmWaits, actions: actions))
+    }
+
+    /// Start a new coordinator: the panel goes, the waits are read, and the confirm asks — it never
+    /// hands over on the press itself (board 01 ②).
+    private func startNewCoordinator() {
+        showDetail = false
+        Task {
+            let waits = await actions.pendingWaits()
+            #if os(iOS)
+            // An Alert cannot come up while the sheet it replaces is still leaving.
+            try? await Task.sleep(for: .milliseconds(450))
+            #endif
+            confirmWaits = waits
+        }
+    }
+
+    /// Both readings when the button carries the plan bar, the plan's first as it draws first.
+    private var accessibilityText: String {
+        guard let planRow = foldedPlanRow else { return helpText }
+        return "Plan usage \(planReading(planRow)), \(helpText)"
     }
 
     private var helpText: String {
@@ -2174,21 +2479,35 @@ private struct ContextWindowDetailPresentation: ViewModifier {
     var unavailable: String? = nil
     /// The model row under the reading (`ContextWindowIndicator.modelLine`).
     var modelLine: String? = nil
+    /// The action rows under the reading, and what Start a new coordinator does.
+    var actions = ContextActions()
+    /// The plan usage the phone sheet reads between the context and the actions, when the footer's
+    /// button carries the plan bar (`ContextWindowIndicator.plan`).
+    var plan: FooterPlanUsage? = nil
+    var startNewCoordinator: () -> Void = {}
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     #endif
 
     private var sized: Bool { (window ?? 0) > 0 }
+    private var reading: String {
+        unavailable != nil ? "Unavailable" : !known ? "—" : sized ? "\(pct)%" : fmtTokens(tokens)
+    }
+
+    private var actionRows: some View {
+        ContextActionRows(actions: actions, pct: pct,
+                          dismiss: { isPresented = false }, startNewCoordinator: startNewCoordinator)
+    }
 
     private var detail: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text("Context window").foregroundStyle(.secondary)
                 Spacer()
-                Text(unavailable != nil ? "Unavailable" : !known ? "—" : sized ? "\(pct)%" : fmtTokens(tokens))
+                Text(reading)
                     .monospacedDigit()
             }
-            if sized && unavailable == nil { UsageBar(percent: pct).frame(height: 4) }
+            if sized && unavailable == nil { UsageBar(percent: pct, warn: pct >= 75, critical: pct >= 90).frame(height: 4) }
             Text(detailCaption).font(.caption).foregroundStyle(.secondary)
             if let modelLine {
                 Divider().padding(.vertical, 4)
@@ -2216,7 +2535,21 @@ private struct ContextWindowDetailPresentation: ViewModifier {
     func body(content: Content) -> some View {
         #if os(macOS)
         content.popover(isPresented: $isPresented, arrowEdge: .top) {
-            detail.padding(14).frame(width: 220)
+            if actions.isEmpty {
+                detail.padding(14).frame(width: 220)
+            } else {
+                // Board 01: the reading as it was, a rule, then the action rows.
+                VStack(alignment: .leading, spacing: 0) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(CoordinatorContextCopy.title).font(.headline)
+                        detail
+                    }
+                    .padding(14)
+                    Divider()
+                    actionRows.padding(6)
+                }
+                .frame(width: 300)
+            }
         }
         #else
         if ComposerFooterDetailLayout.usesPopover(horizontalSizeClass: horizontalSizeClass) {
@@ -2224,9 +2557,23 @@ private struct ContextWindowDetailPresentation: ViewModifier {
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Context").font(.headline)
                     detail
+                    if !actions.isEmpty {
+                        Divider()
+                        actionRows
+                    }
                 }
                 .padding(16)
                 .frame(width: ComposerFooterDetailLayout.popoverWidth)
+            }
+        } else if !actions.isEmpty || plan != nil {
+            // Board 03 iOS 1: a medium sheet, the reading in one group and the actions in another;
+            // board composer-usage-tap puts the plan usage group between them.
+            content.sheet(isPresented: $isPresented) {
+                ContextActionsSheet(reading: reading, pct: pct,
+                                    showsBar: sized && unavailable == nil, caption: detailCaption,
+                                    modelLine: modelLine, actions: actions, plan: plan,
+                                    dismiss: { isPresented = false },
+                                    startNewCoordinator: startNewCoordinator)
             }
         } else {
             content.sheet(isPresented: $isPresented) {
@@ -2420,13 +2767,15 @@ private struct UsageBar: View {
     /// Nothing left (`PlanUsageRow.spent`): the whole bar red, even where `percent` counts what is
     /// left and is 0.
     var spent: Bool = false
+    /// Red short of spent: the context reading from 90%, as its ring is (board 01 ①).
+    var critical: Bool = false
     private var fraction: CGFloat { spent ? 1 : CGFloat(min(100, max(0, percent))) / 100 }
 
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
                 Capsule().fill(.quaternary)
-                Capsule().fill(spent ? Color.red : (warn ?? (percent >= 90)) ? Color.orange : Color.accentColor)
+                Capsule().fill(spent ? Color.red : critical ? Color.red : (warn ?? (percent >= 90)) ? Color.orange : Color.accentColor)
                     .frame(width: geo.size.width * fraction)
             }
         }
@@ -2507,3 +2856,281 @@ private let removeGlyphFont: Font = .subheadline
 #else
 private let removeGlyphFont: Font = .orbitMeta
 #endif
+
+/// What the context panel can do for this session (boards 01 and 03): built by the composer from
+/// `CoordinatorContextActions`, drawn by `ContextWindowIndicator`. Empty draws the panel as before.
+struct ContextActions {
+    var offersCompact = false
+    var compactEnabled = false
+    var offersNewCoordinator = false
+    var running = false
+    var projectTitle = ""
+    var compact: () -> Void = {}
+    var pendingWaits: () async -> [CoordinatorPendingWait] = { [] }
+    var handOver: () -> Void = {}
+
+    var isEmpty: Bool { !offersCompact && !offersNewCoordinator }
+
+    var compactDetail: String {
+        compactEnabled ? CoordinatorContextCopy.compactDetail : CoordinatorContextCopy.compactWhileRunning
+    }
+    var newCoordinatorDetail: String {
+        running ? CoordinatorContextCopy.newCoordinatorWhileRunning : CoordinatorContextCopy.newCoordinatorDetail
+    }
+}
+
+/// The action rows of the Mac's (and an iPad's) context popover, board 01.
+private struct ContextActionRows: View {
+    let actions: ContextActions
+    let pct: Int
+    let dismiss: () -> Void
+    let startNewCoordinator: () -> Void
+
+    var body: some View {
+        VStack(spacing: 2) {
+            if actions.offersCompact {
+                ContextActionRow(systemImage: ContextActionSymbol.compact, title: CoordinatorContextCopy.compact,
+                                 detail: actions.compactDetail,
+                                 emphasized: actions.compactEnabled
+                                     && CoordinatorContextActions.emphasizesCompact(percent: pct),
+                                 enabled: actions.compactEnabled) {
+                    dismiss()
+                    actions.compact()
+                }
+                .accessibilityIdentifier("context-action-compact")
+            }
+            if actions.offersNewCoordinator {
+                ContextActionRow(systemImage: ContextActionSymbol.newCoordinator,
+                                 title: CoordinatorContextCopy.newCoordinator,
+                                 detail: actions.newCoordinatorDetail, action: startNewCoordinator)
+                    .accessibilityIdentifier("context-action-new-coordinator")
+            }
+        }
+    }
+}
+
+#if os(iOS)
+/// The phone's context panel once it has something to do (board 03 iOS 1): a medium sheet with the
+/// reading in one group and the actions in another, the actions in the system's blue.
+private struct ContextActionsSheet: View {
+    let reading: String
+    let pct: Int
+    let showsBar: Bool
+    let caption: String
+    let modelLine: String?
+    let actions: ContextActions
+    /// The plan usage group, when the footer's button carries the plan bar.
+    var plan: FooterPlanUsage? = nil
+    let dismiss: () -> Void
+    let startNewCoordinator: () -> Void
+
+    /// The sheet's groups, in the order they draw. The groups are the List's one row array; each row
+    /// draws its section and that section's rows.
+    private enum Group: Hashable { case reading, plan, actions }
+
+    private var groups: [Group] {
+        var groups: [Group] = [.reading]
+        if plan != nil { groups.append(.plan) }
+        if !actions.isEmpty { groups.append(.actions) }
+        return groups
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Android's dialog names both readings the same way (ComposerUsage.kt).
+            Text(plan == nil ? CoordinatorContextCopy.title : "Context and plan usage")
+                .font(.headline)
+                .padding(.top, 22)
+                .padding(.bottom, 4)
+            List {
+                ForEach(groups, id: \.self) { group in
+                    switch group {
+                    case .reading:
+                        ContextReadingSection(reading: reading, pct: pct, showsBar: showsBar,
+                                              caption: caption, modelLine: modelLine)
+                    case .plan:
+                        PlanUsageSection(plan: plan)
+                    case .actions:
+                        ContextActionSection(actions: actions, dismiss: dismiss,
+                                             startNewCoordinator: startNewCoordinator)
+                    }
+                }
+            }
+            .listStyle(.insetGrouped)
+        }
+        .background(Color(uiColor: .systemGroupedBackground))
+        // With the plan's windows (and a Codex reset card) the groups can outgrow half the screen.
+        .presentationDetents(plan == nil ? [.medium] : [.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+}
+
+/// The plan usage group: whose quota it is, each window with its bar and reset, and a Codex reset
+/// credit when the runner has one — what the phone's own Plan usage sheet reads. Its rows are one
+/// flat array, as `ContextReadingSection`'s are (ListRowShapeTests).
+private struct PlanUsageSection: View {
+    /// Never nil where the sheet draws this group (`ContextActionsSheet.groups`); nil draws no rows.
+    let plan: FooterPlanUsage?
+
+    private enum Row: Hashable { case windows, resetCard }
+
+    private var rows: [Row] {
+        guard let plan else { return [] }
+        var rows: [Row] = [.windows]
+        if plan.resetConsole?.codexResetCardVisible == true { rows.append(.resetCard) }
+        return rows
+    }
+
+    var body: some View {
+        Section("Plan usage") {
+            ForEach(rows, id: \.self) { row in
+                switch row {
+                case .windows:
+                    VStack(alignment: .leading, spacing: 18) {
+                        plan?.account.map { PlanUsageAccountRow(account: $0) }
+                        PlanUsageDetailRows(rows: plan?.usage.currentRows() ?? [])
+                    }
+                    .padding(.vertical, 6)
+                case .resetCard:
+                    plan?.resetConsole.map { CodexResetCreditCard(console: $0) }
+                }
+            }
+        }
+    }
+}
+
+/// The reading group: the context window, the bar while a size is known, the caption, the model.
+private struct ContextReadingSection: View {
+    let reading: String
+    let pct: Int
+    let showsBar: Bool
+    let caption: String
+    let modelLine: String?
+
+    /// The rows this snapshot draws, in order: the bar only while a size is known, the model line
+    /// only when the runtime named one.
+    private enum Row: Hashable { case reading, bar, caption, model(String) }
+
+    private var rows: [Row] {
+        var rows: [Row] = [.reading]
+        if showsBar { rows.append(.bar) }
+        rows.append(.caption)
+        if let modelLine { rows.append(.model(modelLine)) }
+        return rows
+    }
+
+    var body: some View {
+        Section {
+            ForEach(rows, id: \.self) { row in
+                switch row {
+                case .reading:
+                    HStack {
+                        Text("Context window")
+                        Spacer()
+                        Text(reading).monospacedDigit().foregroundStyle(.secondary)
+                    }
+                case .bar:
+                    UsageBar(percent: pct, warn: pct >= 75, critical: pct >= 90).frame(height: 4)
+                case .caption:
+                    Text(caption).foregroundStyle(.secondary)
+                case .model(let line):
+                    HStack {
+                        Text("Model")
+                        Spacer()
+                        Text(line).lineLimit(1).foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// The actions group, the actions in the system's blue.
+private struct ContextActionSection: View {
+    let actions: ContextActions
+    let dismiss: () -> Void
+    let startNewCoordinator: () -> Void
+
+    private enum Row: Hashable { case compact, newCoordinator }
+
+    private var rows: [Row] {
+        var rows: [Row] = []
+        if actions.offersCompact { rows.append(.compact) }
+        if actions.offersNewCoordinator { rows.append(.newCoordinator) }
+        return rows
+    }
+
+    var body: some View {
+        Section {
+            ForEach(rows, id: \.self) { row in
+                switch row {
+                case .compact:
+                    actionRow(ContextActionSymbol.compact, CoordinatorContextCopy.compact,
+                              actions.compactDetail, enabled: actions.compactEnabled) {
+                        dismiss()
+                        actions.compact()
+                    }
+                    .accessibilityIdentifier("context-action-compact")
+                case .newCoordinator:
+                    actionRow(ContextActionSymbol.newCoordinator, CoordinatorContextCopy.newCoordinator,
+                             actions.newCoordinatorDetail, enabled: true, action: startNewCoordinator)
+                        .accessibilityIdentifier("context-action-new-coordinator")
+                }
+            }
+        }
+    }
+
+    private func actionRow(_ symbol: String, _ title: String, _ detail: String, enabled: Bool,
+                           action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: symbol).foregroundStyle(enabled ? Color.accentColor : Color.secondary)
+                    .frame(width: 22)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).foregroundStyle(enabled ? Color.accentColor : Color.secondary)
+                    // The system's grey, not the button's tint at secondary strength (board 03).
+                    Text(detail).font(.orbitLabel).foregroundStyle(Color(uiColor: .secondaryLabel))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .disabled(!enabled)
+    }
+}
+#endif
+
+/// The confirm Start a new coordinator asks (board 02 ①): the Mac's own dialog naming the note and
+/// each wait; on iOS the system Alert, Hand over bold (the default action) and the waits a count only
+/// (board 03 iOS 2). Board 03 ② draws Hand over above Cancel; SwiftUI's `.alert` has no axis to ask
+/// for, so the system lays out two buttons that fit side by side, Cancel leading, and that is the
+/// accepted reading (docs/coordinator-handoff.md, Phones).
+private struct CoordinatorHandoffConfirmPresentation: ViewModifier {
+    @Binding var waits: [CoordinatorPendingWait]?
+    let actions: ContextActions
+
+    private var shown: Binding<Bool> {
+        Binding(get: { waits != nil }, set: { if !$0 { waits = nil } })
+    }
+
+    func body(content: Content) -> some View {
+        #if os(macOS)
+        content.sheet(isPresented: shown) {
+            CoordinatorHandoffConfirmView(projectTitle: actions.projectTitle, running: actions.running,
+                                          waits: waits ?? [],
+                                          onCancel: { waits = nil },
+                                          onHandOver: {
+                                              waits = nil
+                                              actions.handOver()
+                                          })
+        }
+        #else
+        content.alert(CoordinatorHandoffCopy.confirmTitle, isPresented: shown) {
+            Button(CoordinatorHandoffCopy.handOver) { actions.handOver() }
+                .keyboardShortcut(.defaultAction)
+            Button(CoordinatorHandoffCopy.cancel, role: .cancel) {}
+        } message: {
+            Text(CoordinatorContextCopy.phoneConfirmMessage(waits: waits ?? [], running: actions.running))
+        }
+        #endif
+    }
+}

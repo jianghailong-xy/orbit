@@ -66,6 +66,7 @@ test('the client tail page applies the replay fence before its LIMIT', async () 
 test('the public shared transcript applies the same historical replay fence', async () => {
   let captured: TaggedQuery | undefined;
   const prisma = {
+    approval: { findMany: async () => [] },
     session: {
       findFirst: async () => ({
         id: SESSION,
@@ -117,6 +118,7 @@ test('what a shared session added after a seq sits behind the same fence, read a
   const reads: string[] = [];
   let captured: TaggedQuery | undefined;
   const prisma = {
+    approval: { findMany: async () => [] },
     session: {
       findFirst: async () => {
         reads.push('header');
@@ -134,6 +136,16 @@ test('what a shared session added after a seq sits behind the same fence, read a
       },
     },
     $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
+      // The header's own second read, what the session is still doing (readSessionActivities, 29fc026c1), comes as one
+      // Prisma.sql object rather than a template: it is part of the header, not an events read.
+      if (!Array.isArray(strings)) {
+        const query = strings as unknown as { sql: string; values: unknown[] };
+        assert.match(query.sql, /AS "activity"/);
+        assert.match(query.sql, /FROM "session" s/);
+        assert.deepEqual(query.values, [SESSION]);
+        reads.push('activity');
+        return [{ id: SESSION, activity: null }];
+      }
       reads.push('events');
       captured = { strings, values };
       return [];
@@ -147,7 +159,7 @@ test('what a shared session added after a seq sits behind the same fence, read a
   assert.equal(now.after, null);
   assert.equal(now.runState, 'RUNNING');
   // The header first: an answer that says the run is over holds every event written before it.
-  assert.deepEqual(reads, ['header', 'events']);
+  assert.deepEqual(reads, ['header', 'activity', 'events']);
   assert.ok(captured);
   assert.match(renderedQuery(captured), /seq > \?/);
   assert.ok(captured.values.includes(7));

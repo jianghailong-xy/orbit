@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -14,9 +15,10 @@ import {
 import { PublicIdPipe } from '../common/public-id';
 import { randomUUID } from 'crypto';
 import { Prisma, Runner, RunStatus } from '@prisma/client';
+import { ProjectsService } from '../projects/projects.service';
 import { RunnerSessionScope, SessionsService } from '../sessions/sessions.service';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
-import { RecordMergeReceiptDto } from '../sessions/dto';
+import { MoveSessionDto, RecordMergeReceiptDto } from '../sessions/dto';
 import { assertClientTurnIdNotReserved } from '../sessions/watch-turn-key';
 import { chargeSessionMessage } from '../sessions/session-message';
 import {
@@ -32,6 +34,7 @@ import { SessionRequestService } from '../sessions/session-request.service';
 import { ProjectFuseService } from '../projects/project-fuse.service';
 import { SessionAttemptService } from '../projects/session-attempt.service';
 import { SessionLifecycleActor } from '../projects/attempt-budget';
+import { CreateRequestReceipts, readRequestId, REQUEST_ID_HEADER } from './create-request-receipts';
 import { CurrentRunner } from './current-runner.decorator';
 import { CurrentServiceGrant, RunnerSessionAuthGuard } from './runner-session-auth.guard';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
@@ -65,7 +68,7 @@ const RUNNER_CREDENTIAL_SCOPES: readonly ServiceTokenScope[] = [
  *   - the machine's runner token   → get / list / send over the sessions this runner hosts
  *   - a minted service token       → exactly its scopes (which may include create), further
  *                                    narrowed to one workspace when the token is pinned
- * Either way the destructive verbs — interrupt, merge, end, complete — and the owner-wide search
+ * Either way the destructive verbs — interrupt, merge, end, complete, move — and the owner-wide search
  * stay out of reach: those still require a live calling session with orchestration enabled.
  *
  * Registered AFTER RunnerApiController (see runner-api.module.ts) so its static
@@ -96,6 +99,14 @@ export class RunnerSessionsController {
      * goes exactly as it did before without it.
      */
     @Optional() private readonly requests?: SessionRequestService,
+    /**
+     * The create door's receipts (create-request-receipts.ts). `@Optional()` for the reason `fuse` is:
+     * absent, a create is answered as one with no request id.
+     */
+    @Optional() private readonly receipts?: CreateRequestReceipts,
+    /** Opens the next coordinator when this door trashes one (`reopenTrashedCoordinator`).
+     *  `@Optional()` for the reason `fuse` is. */
+    @Optional() private readonly projects?: ProjectsService,
   ) {}
 
   /**
@@ -161,6 +172,39 @@ export class RunnerSessionsController {
       engine?: string;
       provider?: string;
       permissionMode?: string;
+      /** `false`: no worktree for this child (SessionsService.spawnFromSession). */
+      worktree?: boolean;
+    },
+    @Headers(REQUEST_ID_HEADER) requestIdHeader?: string,
+  ) {
+    // A named request is created at most once (create-request-receipts.ts): a repeat under the same
+    // X-Orbit-Request-Id is answered with the Session the first delivery created, never a second one.
+    const requestId = readRequestId(requestIdHeader);
+    if (!requestId || !this.receipts) {
+      return this.createSessionOnce(runner, grant, parentSessionId, orchestrationToken, dto);
+    }
+    const caller = isHeadlessCaller(parentSessionId) ? { tokenId: grant?.tokenId ?? null } : { sessionId: parentSessionId!.trim() };
+    return this.receipts.run(runner.ownerId, 'SESSION_CREATE', requestId, { caller, dto }, () =>
+      this.createSessionOnce(runner, grant, parentSessionId, orchestrationToken, dto),
+    );
+  }
+
+  private async createSessionOnce(
+    runner: Runner,
+    grant: ServiceTokenGrant | undefined,
+    parentSessionId: string | undefined,
+    orchestrationToken: string | undefined,
+    dto: {
+      prompt: string;
+      workspaceId?: string;
+      agentId?: string;
+      workspaceName?: string;
+      title?: string;
+      model?: string;
+      engine?: string;
+      provider?: string;
+      permissionMode?: string;
+      worktree?: boolean;
     },
   ) {
     if (isHeadlessCaller(parentSessionId)) {
@@ -172,6 +216,9 @@ export class RunnerSessionsController {
         throw new ForbiddenException('this service token may only start its own workspace');
       }
       if (!scope.workspaceId) throw new ForbiddenException('this service token has no workspace to start');
+      if (dto.worktree === false) {
+        throw new BadRequestException('worktree: false is only for a session started by another session');
+      }
       return this.sessions.spawnForServiceToken(
         runner.ownerId,
         { assignedRunnerId: runner.id, workspaceId: scope.workspaceId, tokenId: grant!.tokenId },
@@ -378,6 +425,9 @@ export class RunnerSessionsController {
     const turn = { clientTurnId, content: dto.message };
     const charge = {
       senderSessionId,
+      // A headless credential is the runner's own: the `orbit` CLI or a script on the machine (turn-sender-client.ts).
+      // A session's message is said by its sender column instead.
+      ...(senderSessionId ? {} : { senderClient: { client: 'runner' as const } }),
       // AU3/TH3, but only for a NEW turn that has already passed idempotency and placement. The
       // callback runs under createTurn's Session lock and in its transaction: a retry observes the
       // durable clientTurnId first and spends nothing, while a refusal rolls back both charge and
@@ -522,8 +572,11 @@ export class RunnerSessionsController {
     const caller = await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
     await this.sessions.assertMayReach(runner.ownerId, caller, id, 'merge');
     // A Merge pressed from a session (§10.6 O-R3): recorded with the operation, so a landing it makes
-    // on a PLATFORM project's main is put in front of the owner.
-    return this.sessions.mergeToMain(runner.ownerId, id, dto.targetBranch, dto.waitSeconds, { requestedBy: 'AGENT' });
+    // on a PLATFORM project's main is put in front of the owner. A session merging itself asks from
+    // inside its own turn, so its merge waits that turn out instead of being refused for it.
+    return this.sessions.mergeToMain(runner.ownerId, id, dto.targetBranch, dto.waitSeconds, {
+      requestedBy: 'AGENT', selfRequest: caller === id,
+    });
   }
 
   /**
@@ -609,6 +662,27 @@ export class RunnerSessionsController {
     return this.sessions.complete(runner.ownerId, id);
   }
 
+  /**
+   * File a session in one of its workspace's folders, or in none, or move an ended one to another
+   * workspace: the Move panel's door (SessionsService.move), reached from a session. The rules are the
+   * service's, refusals and all — only an ended session changes workspace — so an agent meets the same
+   * 409 and reason the owner's panel does. Nothing here ends a session, so no attempt is asked about.
+   */
+  @Post('sessions/:id/move')
+  async moveSession(
+    @CurrentRunner() runner: Runner,
+    @CurrentServiceGrant() grant: ServiceTokenGrant | undefined,
+    @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Headers('x-orbit-session-token') orchestrationToken: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: MoveSessionDto,
+  ) {
+    this.assertNoServiceToken(grant);
+    const caller = await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
+    await this.sessions.assertMayReach(runner.ownerId, caller, id, 'move');
+    return this.sessions.move(runner.ownerId, id, dto);
+  }
+
   // Soft-delete only: this moves the session to Trash and retains its transcript and other data.
   // Permanent purge remains a human-only action on the user-authenticated SessionsController.
   @Delete('sessions/:id')
@@ -627,7 +701,9 @@ export class RunnerSessionsController {
       id,
       RunnerSessionsController.actor(callingSessionId),
     );
-    return this.sessions.remove(runner.ownerId, id);
+    const removed = await this.sessions.remove(runner.ownerId, id);
+    await this.projects?.reopenTrashedCoordinator(runner.ownerId, id, callingSessionId);
+    return removed;
   }
 
   /** @deprecated Compatibility route for older runner binaries. */

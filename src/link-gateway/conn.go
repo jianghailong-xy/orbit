@@ -20,8 +20,9 @@ import (
 )
 
 // conn is one runner's connection after the upgrade (docs/runner-link-design.md §6.1): the handler's goroutine reads,
-// one goroutine writes from three queues (control frames first, then hints and RPC results, then the live stream's)
-// and one pings. Its state lives in memory only; a runner that loses it reconnects.
+// one goroutine writes from four queues (control frames first, then hints and RPC results, then the live stream's, then
+// byte streams' data),
+// and a timer pings. Its state lives in memory only; a runner that loses it reconnects.
 type conn struct {
 	g      *gateway
 	ws     *websocket.Conn
@@ -38,7 +39,7 @@ type conn struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	queues [tierCount]chan outItem
+	queues outQueues
 	outID  atomic.Uint64
 	// queued is the encoded size of the frames queued and not yet written, bounded by maxQueuedBytes.
 	queued atomic.Int64
@@ -49,13 +50,18 @@ type conn struct {
 	drainOnce  sync.Once
 	closing    chan struct{}
 	writerDone chan struct{}
+	writerOnce sync.Once
 	reason     atomic.Pointer[string] // why the connection ended; the first to say so wins
 
 	mu         sync.Mutex
 	hello      *linkpb.Hello
 	timers     []*time.Timer
+	pingTimer  *time.Timer
 	welcomed   bool
 	welcomedAt time.Time
+	// browser is what the connection's Welcome said of the managed runner browser: the welcome route offers it only to a
+	// managed runner whose Hello's ManagedInstance matches the manager's record (streams.go, streamable).
+	browser bool
 
 	chunks reassembler
 	// link is what the connection forwards with (forward.go, heartbeat.go, events.go, live.go); nil on a gateway built
@@ -79,8 +85,9 @@ type closeRequest struct {
 	text   string
 }
 
-// The three priorities frames are written in (§5.1). A tier is written only while every tier above it is empty, and
-// a frame sent in pieces (Chunk) yields to a higher tier between two pieces.
+// The priorities frames are written in (§5.1), and below them byte streams' data (docs/runner-browser-design.md §4).
+// A tier is written only while every tier above it is empty, and a frame sent in pieces (Chunk) yields to a higher tier
+// between two pieces.
 type tier int
 
 const (
@@ -92,6 +99,9 @@ const (
 	tierNormal
 	// tierLive: what serves the live stream (TurnPrefixRequest). Best effort: a full queue drops the frame.
 	tierLive
+	// tierStream: byte streams' StreamData (streams.go), written only when nothing else waits. Each stream's window
+	// bounds what it queues; a full queue ends the stream, never the connection.
+	tierStream
 	tierCount
 )
 
@@ -99,28 +109,28 @@ const (
 	controlQueue = 64
 	normalQueue  = 256
 	liveQueue    = 64
+	// streamQueue holds the StreamData of a runner's streams: their windows in frames as small as a viewer's input.
+	streamQueue = 4096
 	// maxQueuedBytes bounds what one connection's queues hold, whatever their count: answers can be megabytes each, and
 	// a runner that stops reading must not make the gateway hold them all.
 	maxQueuedBytes = 32 << 20
 	writeTimeout   = 10 * time.Second
 )
 
-var tierNames = [tierCount]string{"control", "normal", "live"}
+var tierNames = [tierCount]string{"control", "normal", "live", "stream"}
 
 func newConn(g *gateway, ws *websocket.Conn, claims *linkClaims, remote string) *conn {
 	ctx, cancel := context.WithCancel(context.Background())
 	c := &conn{
 		g: g, ws: ws, id: newConnectionID(), claims: claims, remote: remote,
 		ctx: ctx, cancel: cancel,
-		queues: [tierCount]chan outItem{
-			tierControl: make(chan outItem, controlQueue),
-			tierNormal:  make(chan outItem, normalQueue),
-			tierLive:    make(chan outItem, liveQueue),
-		},
 		closing: make(chan struct{}), writerDone: make(chan struct{}),
 	}
 	c.log = g.log.With("conn", c.id, "runner", claims.RunnerID, "process", claims.LeaseOwner, "remote", remote)
 	c.writeWS = func(ctx context.Context, b []byte) error { return ws.Write(ctx, websocket.MessageBinary, b) }
+	if g.wrapWrite != nil {
+		c.writeWS = g.wrapWrite(c.writeWS)
+	}
 	// Forwarding needs somewhere to forward to: configuration requires backends, and a gateway built without them (as
 	// some tests build it) forwards nothing.
 	if g.backends != nil {
@@ -138,13 +148,12 @@ func newConnectionID() string {
 // run serves the connection from the upgrade to its end. started is when the upgrade request arrived.
 func (c *conn) run(started time.Time) {
 	c.started = started
-	go c.writeLoop()
 	defer c.finish()
 
 	if !c.handshake() {
 		return
 	}
-	go c.pingLoop()
+	c.pings()
 	c.readLoop()
 }
 
@@ -194,13 +203,15 @@ func (c *conn) handshake() bool {
 	c.mu.Lock()
 	c.hello = hello
 	c.mu.Unlock()
-	// What Welcome says of the Hello's sessions and of the runner's release, as the welcome route answers it (welcome.go).
+	// What Welcome says of the Hello's sessions, of the runner's release and of its browser, as the welcome route answers
+	// it (welcome.go).
 	// Asked before this connection takes over from an older one of the process, which carries the work meanwhile.
 	var sessions []*linkpb.SessionState
 	var release *linkpb.AssignedRelease
+	var browser bool
 	if c.link != nil {
 		c.link.greeted(hello)
-		sessions, release = c.link.welcome(hello)
+		sessions, release, browser = c.link.welcome(hello)
 	}
 	if old := c.g.reg.activate(c); old != nil {
 		old.closeWith(linkpb.CloseCode_CLOSE_CODE_SUPERSEDED, "a newer connection of this process took over", 0,
@@ -225,9 +236,11 @@ func (c *conn) handshake() bool {
 		Hints:               &linkpb.HintState{},
 		Release:             release,
 		ConnectionId:        c.id,
+		Browser:             browser,
 	}}}, true)
 	c.welcomed = true
 	c.welcomedAt = time.Now()
+	c.browser = browser
 	c.mu.Unlock()
 	if c.link != nil {
 		c.link.start(credit)
@@ -314,6 +327,9 @@ func (c *conn) dispatch(f *linkpb.Frame) bool {
 		if c.link != nil {
 			c.link.onPrefixAnswer(body.TurnPrefixResponse)
 		}
+	case *linkpb.Frame_StreamOpened, *linkpb.Frame_StreamData, *linkpb.Frame_StreamCredit, *linkpb.Frame_StreamClose,
+		*linkpb.Frame_StreamPasted:
+		c.onStreamFrame(f)
 	case *linkpb.Frame_Chunk:
 		joined, err := c.chunks.add(body.Chunk)
 		if err != nil {
@@ -385,12 +401,25 @@ func (c *conn) sendTier(f *linkpb.Frame, t tier) {
 		c.slowConsumer(t, "the runner reads too slowly: its queued frames passed their bound in bytes")
 		return
 	}
-	select {
-	case c.queues[t] <- outItem{frame: f, size: size}:
-	default:
+	if !c.enqueue(t, outItem{frame: f, size: size}) {
 		c.queued.Add(-size)
 		c.slowConsumer(t, "the runner reads too slowly")
 	}
+}
+
+// enqueue queues it on tier t, unless the tier is full, and starts the writer if it is not running.
+func (c *conn) enqueue(t tier, it outItem) bool {
+	queued, start := c.queues.push(t, it)
+	if start {
+		go c.writeLoop()
+	}
+	return queued
+}
+
+// writerOver says the writer has stopped for good: the connection's close is written, the connection is over, or a
+// write failed.
+func (c *conn) writerOver() {
+	c.writerOnce.Do(func() { close(c.writerDone) })
 }
 
 func (c *conn) slowConsumer(t tier, message string) {
@@ -430,27 +459,28 @@ func (c *conn) offerTier(f *linkpb.Frame, t tier) bool {
 		c.g.metrics.queueFull.inc(tierNames[t], "dropped")
 		return false
 	}
-	select {
-	case c.queues[t] <- outItem{frame: f, size: size}:
-		return true
-	default:
+	if !c.enqueue(t, outItem{frame: f, size: size}) {
 		c.queued.Add(-size)
 		c.g.metrics.queueFull.inc(tierNames[t], "dropped")
 		return false
 	}
+	return true
 }
 
 // writeLoop writes what the queues hold, one WebSocket message at a time: the highest tier first, and within a tier
 // in order. A frame over Limits.max_frame_bytes goes out as several messages (Chunk), and between two of them the loop
 // looks again, so a control frame queued meanwhile is written before the frame's next piece (§5.1).
 func (c *conn) writeLoop() {
-	defer close(c.writerDone)
 	// The pieces still to write of the frame each tier is in the middle of, and that frame.
 	var rest [tierCount][][]byte
 	var current [tierCount]outItem
 	for {
-		t, it, ok := c.nextToWrite(&rest)
-		if !ok {
+		t, it, state := c.nextToWrite(&rest)
+		switch state {
+		case writerIdle:
+			return
+		case writerOver:
+			c.writerOver()
 			return
 		}
 		if len(rest[t]) == 0 {
@@ -459,6 +489,7 @@ func (c *conn) writeLoop() {
 					_ = c.writeFrameWhole(it.close.frame)
 				}
 				_ = c.ws.Close(it.close.status, it.close.text)
+				c.writerOver()
 				return
 			}
 			msgs, err := encodeFrame(it.frame, maxFrameBytes, func() uint64 { return c.outID.Add(1) })
@@ -476,6 +507,7 @@ func (c *conn) writeLoop() {
 				c.setReason("connection_lost")
 				_ = c.ws.CloseNow()
 			}
+			c.writerOver()
 			return
 		}
 		rest[t] = rest[t][1:]
@@ -487,29 +519,111 @@ func (c *conn) writeLoop() {
 	}
 }
 
-// nextToWrite is the tier to write next and, when that tier has no frame in progress, the item it starts. It waits
-// when nothing is ready, and reports false once the connection is over.
-func (c *conn) nextToWrite(rest *[tierCount][][]byte) (tier, outItem, bool) {
-	for t := tierControl; t < tierCount; t++ {
-		if len(rest[t]) > 0 {
-			return t, outItem{}, true
+// What the writer does next (nextToWrite).
+type writerState int
+
+const (
+	// writerBusy: there is something to write.
+	writerBusy writerState = iota
+	// writerIdle: nothing is queued; the writer ends, and the next frame queued starts another.
+	writerIdle
+	// writerOver: the connection is over.
+	writerOver
+)
+
+// nextToWrite is the tier to write next and, when that tier has no frame in progress, the item it starts. With
+// nothing to write it says the writer goes idle, and once the connection is over, that it is over.
+func (c *conn) nextToWrite(rest *[tierCount][][]byte) (tier, outItem, writerState) {
+	for {
+		if c.ctx.Err() != nil {
+			return 0, outItem{}, writerOver
 		}
-		select {
-		case it := <-c.queues[t]:
-			return t, it, true
-		default:
+		for t := tierControl; t < tierCount; t++ {
+			if len(rest[t]) > 0 {
+				return t, outItem{}, writerBusy
+			}
+			if it, ok := c.queues.pop(t); ok {
+				return t, it, writerBusy
+			}
+		}
+		if state, again := c.queues.idle(); !again {
+			return 0, outItem{}, state
 		}
 	}
-	select {
-	case it := <-c.queues[tierControl]:
-		return tierControl, it, true
-	case it := <-c.queues[tierNormal]:
-		return tierNormal, it, true
-	case it := <-c.queues[tierLive]:
-		return tierLive, it, true
-	case <-c.ctx.Done():
-		return 0, outItem{}, false
+}
+
+// outQueues are a connection's three queues of frames to write, each bounded by its count (queueBounds), and whether
+// a writer is running. They hold memory only while they hold frames, and the writer runs only while there is
+// something to write: a gateway holds hundreds of thousands of connections, mostly idle, and the GC marks what each
+// of them holds. Queues of fixed capacity held about 9 KiB a connection, and the writer's goroutine its stack (task
+// 34paLvEDFObkoBxYLAJSN: 56 KiB of live heap and 4 goroutines a connection set how long the GC took to mark them).
+type outQueues struct {
+	mu    sync.Mutex
+	items [tierCount][]outItem
+	// writing says a writer is running; stopped, that the connection is over and none may start.
+	writing, stopped bool
+}
+
+var queueBounds = [tierCount]int{tierControl: controlQueue, tierNormal: normalQueue, tierLive: liveQueue, tierStream: streamQueue}
+
+// push queues it at the back of tier t, unless the tier is full. start says no writer is running: the caller starts
+// one. Once the connection is over, a frame is taken and never written.
+func (q *outQueues) push(t tier, it outItem) (queued, start bool) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.stopped {
+		return true, false
 	}
+	if len(q.items[t]) >= queueBounds[t] {
+		return false, false
+	}
+	q.items[t] = append(q.items[t], it)
+	if !q.writing {
+		q.writing, start = true, true
+	}
+	return true, start
+}
+
+// pop takes the frame at the front of tier t; an emptied tier lets go of its memory.
+func (q *outQueues) pop(t tier) (outItem, bool) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if len(q.items[t]) == 0 {
+		return outItem{}, false
+	}
+	it := q.items[t][0]
+	q.items[t][0] = outItem{}
+	q.items[t] = q.items[t][1:]
+	if len(q.items[t]) == 0 {
+		q.items[t] = nil
+	}
+	return it, true
+}
+
+// idle is the writer finding nothing to write: again when something was queued meanwhile, and otherwise whether it
+// goes idle or, the connection being over, ends for good.
+func (q *outQueues) idle() (state writerState, again bool) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	for _, items := range q.items {
+		if len(items) > 0 {
+			return writerBusy, true
+		}
+	}
+	q.writing = false
+	if q.stopped {
+		return writerOver, false
+	}
+	return writerIdle, false
+}
+
+// stop says the connection is over: no writer starts after it. It reports whether none is running, in which case the
+// caller says the writer is over.
+func (q *outQueues) stop() bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.stopped = true
+	return !q.writing
 }
 
 func (c *conn) writeMessage(b []byte) error {
@@ -556,9 +670,7 @@ func (c *conn) closeWith(code linkpb.CloseCode, message string, retryAfter time.
 			text = text[:120]
 		}
 		close(c.closing)
-		select {
-		case c.queues[tierControl] <- outItem{close: &closeRequest{frame: f, status: status, text: text}}:
-		default:
+		if !c.enqueue(tierControl, outItem{close: &closeRequest{frame: f, status: status, text: text}}) {
 			go func() { _ = c.ws.Close(status, text) }()
 		}
 	})
@@ -601,27 +713,33 @@ func (c *conn) after(d time.Duration, fn func()) {
 	c.timers = append(c.timers, time.AfterFunc(d, fn))
 }
 
-func (c *conn) pingLoop() {
-	t := time.NewTicker(c.g.cfg.PingInterval)
-	defer t.Stop()
-	for {
-		select {
-		case <-c.ctx.Done():
-			return
-		case <-t.C:
+// pings pings the runner every PingInterval, from a timer rather than a goroutine of its own: a goroutine runs only
+// while a ping waits for its pong. The next ping is set when the pong comes.
+func (c *conn) pings() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.ctx.Err() == nil {
+		c.pingTimer = time.AfterFunc(c.g.cfg.PingInterval, c.ping)
+	}
+}
+
+func (c *conn) ping() {
+	ctx, cancel := context.WithTimeout(c.ctx, c.g.cfg.PingTimeout)
+	start := time.Now()
+	err := c.ws.Ping(ctx)
+	cancel()
+	if err != nil {
+		if c.ctx.Err() == nil && errors.Is(err, context.DeadlineExceeded) {
+			c.closeWith(linkpb.CloseCode_CLOSE_CODE_UNSPECIFIED, "no answer to a ping within "+c.g.cfg.PingTimeout.String(), 0,
+				websocket.StatusPolicyViolation, "ping_timeout")
 		}
-		ctx, cancel := context.WithTimeout(c.ctx, c.g.cfg.PingTimeout)
-		start := time.Now()
-		err := c.ws.Ping(ctx)
-		cancel()
-		if err != nil {
-			if c.ctx.Err() == nil && errors.Is(err, context.DeadlineExceeded) {
-				c.closeWith(linkpb.CloseCode_CLOSE_CODE_UNSPECIFIED, "no answer to a ping within "+c.g.cfg.PingTimeout.String(), 0,
-					websocket.StatusPolicyViolation, "ping_timeout")
-			}
-			return
-		}
-		c.g.metrics.rtt.observe(time.Since(start))
+		return
+	}
+	c.g.metrics.rtt.observe(time.Since(start))
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.ctx.Err() == nil {
+		c.pingTimer.Reset(c.g.cfg.PingInterval)
 	}
 }
 
@@ -639,12 +757,19 @@ func (c *conn) finish() {
 	default:
 	}
 	c.cancel()
+	if c.queues.stop() {
+		// No writer is running, and none will start now.
+		c.writerOver()
+	}
 	<-c.writerDone
 	_ = c.ws.CloseNow()
 
 	c.mu.Lock()
 	for _, t := range c.timers {
 		t.Stop()
+	}
+	if c.pingTimer != nil {
+		c.pingTimer.Stop()
 	}
 	welcomed := c.welcomed
 	c.mu.Unlock()
@@ -653,6 +778,7 @@ func (c *conn) finish() {
 		return
 	}
 	c.g.reg.remove(c)
+	c.g.closeStreams(c)
 	if c.link != nil {
 		c.link.close()
 	}

@@ -3,6 +3,7 @@ import { PauseAccountDto } from '../common/account-pause';
 import { PublicIdPipe } from '../common/public-id';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatForbidden, PatScope } from '../auth/pat-scope.decorator';
+import { TerminalRoute } from '../auth/terminal-credentials';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import {
   AddProviderPoolMemberDto,
@@ -10,7 +11,10 @@ import {
   CreateProviderPoolDto,
   TestModelProviderDto,
   UpdateModelProviderDto,
+  UpdateProviderModelTierDto,
 } from './dto';
+import { PrismaService } from '../prisma/prisma.service';
+import { subagentTierView } from '../runner-api/subagent-route';
 import { CodexLoginService } from './codex-login.service';
 import { DeepSeekBalanceService } from './deepseek-balance.service';
 import { ProvidersService } from './providers.service';
@@ -28,9 +32,12 @@ export class ProvidersController {
     private readonly providers: ProvidersService,
     private readonly codexLogin: CodexLoginService,
     private readonly balances: DeepSeekBalanceService,
+    private readonly prisma: PrismaService,
   ) {}
 
   @PatScope('workspaces:read', { workspaceConfinable: false })
+  // A terminal's model picker reads it too: listPublic is keyless and endpointless.
+  @TerminalRoute('PROVIDER_LIST')
   @Get()
   list(@CurrentUser() user: AuthUser) {
     return this.providers.listPublic(user.userId);
@@ -108,6 +115,27 @@ export class ProvidersController {
   @Patch('mine/:id')
   updateMine(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: UpdateModelProviderDto) {
     return this.providers.update(user.userId, id, dto);
+  }
+
+  // The Providers page's Tier column and the SubAgents settings' provider list (docs/subagent-design.md §7).
+  @PatScope('workspaces:read', { workspaceConfinable: false })
+  @Get('subagent-tiers')
+  subagentTiers(@CurrentUser() user: AuthUser) {
+    return subagentTierView(this.prisma, user.userId);
+  }
+
+  // The owner's tier for a model the catalogue gives none. Human-only: the runner's provider doors take no tier.
+  @PatScope('workspaces:write', { workspaceConfinable: false })
+  @Patch('mine/:id/model-tier')
+  setModelTier(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: UpdateProviderModelTierDto) {
+    return this.providers.setModelTier(user.userId, id, dto.model, dto.tier ?? null);
+  }
+
+  // The owner's tier for a model of a built-in engine's catalogue (Claude Code, Cursor, …), set or cleared (null).
+  @PatScope('workspaces:write', { workspaceConfinable: false })
+  @Patch('builtin/:engine/model-tier')
+  setBuiltinModelTier(@CurrentUser() user: AuthUser, @Param('engine') engine: string, @Body() dto: UpdateProviderModelTierDto) {
+    return this.providers.setBuiltinModelTier(user.userId, engine, dto.model, dto.tier ?? null);
   }
 
   @PatScope('workspaces:write', { workspaceConfinable: false })

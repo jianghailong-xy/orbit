@@ -223,40 +223,38 @@ final class OpenItemDeliveryCopyParityTests: XCTestCase {
         XCTAssertEqual(OpenItemDeliveryCard.kindLabel(.unknown), OpenItemDeliveryCard.header)
     }
 
-    /// The doors, in the web's own words — and the two it deliberately leaves out, which is also
-    /// where this client's chips have to stop.
-    func testTheDoorLabelsAreTheWebs() throws {
+    /// The card points at the item's own card rather than naming doors nobody can press — the same
+    /// words the web's card leans on (board card-ui-polish ②). The old chips are gone from both ends.
+    func testTheCardPointsAtTheItemCardInTheWebsWords() throws {
         let web = try flat(Self.webCard)
-        let table = try section(web, from: "const ACTION_LABEL", to: "\n};", Self.webCard)
-        let pairs = try zip(captures(table, "(?m)^  (\\w+):"),
-                            captures(table, "(?m)^  \\w+: '([^']*)',")).map { ($0, $1) }
-        guard !pairs.isEmpty else {
-            throw ParityError.notDeclared(what: "any door label", file: Self.webCard)
+        for (name, mine) in [("GO_TO_ITEM_CARD", OpenItemDeliveryCard.goToItemCard),
+                             ("ITEM_CARD_NOT_HERE", OpenItemDeliveryCard.itemCardNotHere),
+                             ("SENT_TO_COORDINATOR", OpenItemDeliveryCard.sentToCoordinator)] {
+            XCTAssertEqual(mine,
+                           try capture(web, "export const \(name) = '([^']*)'", name, Self.webCard),
+                           "\(name) drifted — first is this client's, second is the browser's.")
         }
-        for (action, label) in pairs {
-            XCTAssertEqual(OpenItemDeliveryCard.actionLabels([action]), [label],
-                           "\(action)'s label drifted — first is this client's, second is "
-                               + "ACTION_LABEL in \(Self.webCard).")
+        // The browser's chips and the sentences that went with them are gone from the web source,
+        // which is what lets this end drop them too.
+        for gone in ["The coordinator can:", "a notification, not an interruption",
+                     "The platform will not retry it by itself."] {
+            XCTAssertFalse(web.contains(gone),
+                           "\(Self.webCard) still carries \(gone.debugDescription) — either the "
+                               + "browser draws it again or this check should read where it moved.")
         }
-        // The two doors the web leaves unlabelled on purpose: the conversation the card is drawn in,
-        // and the session link drawn below it. Neither becomes a chip here either.
-        for unlabelled in ["OPEN_COORDINATOR", "OPEN_TASK_SESSION"] {
-            XCTAssertFalse(pairs.map(\.0).contains(unlabelled),
-                           "\(unlabelled) gained a chip label on the web — check both ends")
-            XCTAssertEqual(OpenItemDeliveryCard.actionLabels([unlabelled]), [])
-        }
+        assertBuilt(web, "revealOpenItemCard(card.itemId)",
+                    "the scroll to the item's own card", Self.webCard)
     }
 
-    /// Every other sentence the card is read in: the header, the fold, the two links, the foot, and
+    /// Every other sentence the card is read in: the header, the fold, the three links, the foot, and
     /// the why-line each kind is drawn with.
     func testEverySentenceIsTheWebs() throws {
         let web = try flat(Self.webCard)
         let sentences = [
             OpenItemDeliveryCard.header,
-            OpenItemDeliveryCard.doorsLead,
             OpenItemDeliveryCard.openTask,
             OpenItemDeliveryCard.openSession,
-            OpenItemDeliveryCard.notification,
+            OpenItemDeliveryCard.openLanding,
             OpenItemDeliveryCard.undelivered,
             OpenItemDeliveryCard.rawSummary,
             "Show fewer files",
@@ -272,9 +270,10 @@ final class OpenItemDeliveryCopyParityTests: XCTestCase {
                         "what \(how ?? "an unrecorded failure") is called", Self.webCard)
         }
         // The sentences built around a value of the other end's: the words either side are what the
-        // two ends have to share.
-        for run in ["git refused the merge", "; the target branch did not move. "
-                    + "The platform will not retry it by itself.",
+        // two ends have to share — including the conflict line, which now names the branch by name
+        // and leaves the agent's "will not retry" half in the disclosure.
+        for run in ["git refused the merge into ",
+                    " did not move.",
                     " was declared; the target branch did not move.",
                     "The integration job ended with",
                     "merge receipt", "none naming",
@@ -288,34 +287,19 @@ final class OpenItemDeliveryCopyParityTests: XCTestCase {
         let landed = OpenItemDeliveryCard.landingLine(try conflictCard())
         XCTAssertEqual(landed?.text,
                        "No merge receipt for this work — Orbit cannot tell whether it has landed.")
+        let conflict = try conflictCard()
+        XCTAssertEqual(OpenItemDeliveryCard.headline(conflict),
+                       "git refused the merge into main; main did not move.")
     }
 
-    /// The bar at the top of the console names this turn off the card on both clients — the web
-    /// stamps the pair onto the card's root, this client reads it in `StickySummary`.
-    func testTheStickyPairIsTheSameOnBothEnds() throws {
+    /// The browser marks the card's root as a round Orbit opened, which its sticky bar hides over;
+    /// this client reads the same thing off the turn (`StickySummary.isOrbits`).
+    func testTheCardIsARoundOrbitOpenedOnBothEnds() throws {
         let web = try flat(Self.webCard)
-        assertBuilt(web, "data-sticky-label=\"Exception item\"", "the label the bar reads",
-                    Self.webCard)
-        // The kind, then the title — and the guard that keeps a title already carrying its kind from
-        // being prefixed with it a second time. Both ends spell the rule out (`stickyText` here,
-        // `stickyText` in the browser): a bar reading "Task failed: Task failed: [WARC]…" is one
-        // turn told twice, and a browser that de-duplicated while this end kept both would be two
-        // wordings of it.
-        assertBuilt(web, "data-sticky-text={stickyText}",
-                    "the line under that label", Self.webCard)
-        assertBuilt(web,
-                    "card.title.toLowerCase().startsWith(label.toLowerCase())",
-                    "the browser de-duplicating a title that already opens with its kind", Self.webCard)
-
-        let sticky = OpenItemDeliveryCard.sticky(try conflictCard())
-        XCTAssertEqual(sticky.label, OpenItemDeliveryCard.header)
-        XCTAssertEqual(sticky.text, "Merge conflict: 回填历史 user 事件的 controlPlaneNote",
-                       "this fixture's title already opens with its kind, so it is not prefixed again")
-        // And a title that does NOT say it keeps the prefix, so the line still names the kind: the
-        // rule drops a repetition, not the label.
-        XCTAssertEqual(
-            OpenItemDeliveryCard.stickyText(kind: .taskFailed, title: "[WARC] 000_00022 的 WARC 依赖"),
-            "Task failed: [WARC] 000_00022 的 WARC 依赖")
+        assertBuilt(web, "data-orbit-round", "the mark the bar's scanner reads", Self.webCard)
+        var bubble = UserBubble(id: "u", text: "x", ts: nil, pending: false, queued: false)
+        bubble.itemCard = try conflictCard()
+        XCTAssertTrue(StickySummary.isOrbits(bubble))
         // And where the browser checks it, so does this client: before the wakes, which are read out
         // of the text this card is not.
         let transcript = try flat(Self.webTranscript)

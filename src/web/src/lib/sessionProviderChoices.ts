@@ -69,6 +69,8 @@ export interface PoolChoiceSource {
   unavailable?: string | null;
   /** `codex` for a pool of one's own ChatGPT account (migration 0323); absent or `claude` otherwise. */
   engine?: string;
+  /** Every engine a Codex pool of one's own runs on (ProviderPool.engines); absent: `engine` alone. */
+  engines?: string[];
   shared?: SharedPool;
 }
 
@@ -85,6 +87,9 @@ export interface ProviderChoice {
   /** Which credential an engine's own sign-in is, in small type beside it: Antigravity's Google
    *  account or the machine's Gemini key, OpenCode's `opencode auth`. */
   labelDetail?: string;
+  /** A sentence the menu shows with the row, for what picking it risks: a Codex pool under Claude Code
+   *  (CODEX_POOL_ON_CLAUDE_NOTICE). */
+  notice?: string;
   /** Brand mark for the tile: the vendor's gradient plus the glyph key to draw on it. */
   brand: ProviderBrand;
   /** Which PROVIDER_GLYPHS entry to draw, or undefined to fall back to the monogram. */
@@ -313,6 +318,16 @@ export interface EnginePick {
 const poolEngine = (pool: PoolChoiceSource): AgentProvider =>
   pool.shared || pool.engine === AgentProvider.CODEX ? AgentProvider.CODEX : AgentProvider.CLAUDE;
 
+/** Whether `engine` runs on the pool: the engines the server lists for a pool of one's own, else the
+ *  one it was made on. A shared pool runs on Codex alone, whatever it lists. */
+const poolRunsOn = (pool: PoolChoiceSource, engine: AgentProvider): boolean =>
+  !pool.shared && pool.engines ? pool.engines.includes(engine) : poolEngine(pool) === engine;
+
+/** Said with a Codex pool of one's own listed under Claude Code, which runs on its ChatGPT account
+ *  through Orbit's gateway rather than the Codex CLI. */
+export const CODEX_POOL_ON_CLAUDE_NOTICE =
+  'Runs Claude Code on your ChatGPT account outside the official Codex CLI. OpenAI may restrict the account.';
+
 /** OpenCode has no sign-in to judge, only whether it is there: Orbit installs it, so a machine without
  *  it lists it with the reason. A runner that has reported nothing claims nothing. */
 const openCodeMissing = (engineHealth?: RunnerEngineHealth[] | null): boolean =>
@@ -324,14 +339,15 @@ const signInLabel = (health?: RunnerEngineHealth): string =>
   health?.accounts?.length === 1 ? accountNameOf(health.accounts[0]) : 'Default';
 
 /** The runner's accounts of an engine, when it has signed in more than one: each with its own
- *  quota's tightest window, as the composer's quota pill reads it. */
+ *  quota's tightest window, as the composer's quota pill reads it. An account signed out on this
+ *  runner is not one it can run, so it gets no row. */
 function accountChoices(
   engine: AgentProvider,
   health: RunnerEngineHealth | undefined,
   usage: PlanUsage | null | undefined,
 ): AccountChoice[] | undefined {
   if (!isAccountEngine(engine) || (health?.accounts?.length ?? 0) < 2) return undefined;
-  return health!.accounts!.map((account): AccountChoice => {
+  return health!.accounts!.filter((account) => account.auth !== 'no' || runsOnEnvKey(health, account)).map((account): AccountChoice => {
     // Antigravity's Default on the runner's Gemini key: it runs, on the key, with no quota.
     if (runsOnEnvKey(health, account)) return { id: account.id, label: accountNameOf(account), quota: 'env key' };
     const snapshot = accountPlanUsage(usage, engine, account.id);
@@ -354,7 +370,6 @@ function accountChoices(
             ...(quota.nearLimit ? { nearLimit: true } : {}),
           }
         : {}),
-      ...(account.auth === 'no' ? { unavailable: 'Not signed in' } : {}),
     };
   });
 }
@@ -424,12 +439,15 @@ export function engineProviders(engine: AgentProvider, sources: ChoiceSources): 
   // can (pool-credential-select.ts, 2026-10-03), so what the pool holds is what they can run on, and
   // the pool's own answer (`unavailable`, built the same way for them as for its owner) is the reason.
   const poolChoices: ProviderChoice[] = pools
-    .filter((pool) => poolEngine(pool) === engine)
+    .filter((pool) => poolRunsOn(pool, engine))
     .map((pool) => ({
       slug: pool.slug,
       label: pool.label,
       kind: 'pool' as const,
-      ...brandForProvider(pool.slug, pool.label, ENGINE_PRESET[engine]),
+      ...(engine === AgentProvider.CLAUDE && poolEngine(pool) === AgentProvider.CODEX
+        ? { notice: CODEX_POOL_ON_CLAUDE_NOTICE }
+        : {}),
+      ...brandForProvider(pool.slug, pool.label, ENGINE_PRESET[poolEngine(pool)]),
       modelLabel: modelLabel(pool.slug),
       poolSize: pool.members.length,
       // 'N keys' only where the pool really is nothing but keys; a pool holding ChatGPT accounts counts
@@ -439,7 +457,7 @@ export function engineProviders(engine: AgentProvider, sources: ChoiceSources): 
         (carried
           ? { unavailable: carried, fixEngine: engine }
           : pool.unavailable
-            ? { unavailable: pool.unavailable, fixHref: `/providers/pools/${encodeId(pool.id)}` }
+            ? { unavailable: pool.unavailable, fixHref: `/settings/providers/pools/${encodeId(pool.id)}` }
             : {})),
     }));
 
@@ -693,6 +711,30 @@ export function currentEngineChoice(
 ): EngineChoice {
   const providers = engines.find((choice) => choice.slug === engine)?.providers ?? [];
   return engineLanding(engine, providers, currentProviderChoice(engine, provider, providers, sources));
+}
+
+/** Where a new session goes when nobody picked in this draft and what the workspace last ran on
+ *  (`remembered`, from currentEngineChoice) can't run on this machine (board
+ *  docs/mocks/new-session-usable-default): that engine's own landing, when one of its credentials
+ *  can run (landingOf's order), else the first of the hero's engines that has one. Null while the
+ *  remembered pick can run, and when nothing here can: the hero then says why and the send is held.
+ *  Only a known reason moves it: a credential nobody has checked yet counts as one that runs. Moving
+ *  to another engine, the bigger move, also takes the runner's word that it has that engine's CLI. */
+export function draftFallback(
+  remembered: EngineChoice,
+  engines: readonly EngineChoice[],
+  engineHealth?: readonly RunnerEngineHealth[] | null,
+): { engine: AgentProvider; provider: string } | null {
+  if (!remembered.unavailable) return null;
+  const runs = (choice: EngineChoice | undefined): choice is EngineChoice & { provider: ProviderChoice } =>
+    !!choice?.provider && !choice.unavailable;
+  const installed = (choice: EngineChoice) =>
+    !!engineHealth?.some((health) => health.engine === choice.slug && health.installed);
+  const same = engines.find((choice) => choice.slug === remembered.slug);
+  const to = runs(same)
+    ? same
+    : engines.find((choice) => choice.slug !== remembered.slug && runs(choice) && installed(choice));
+  return to?.provider ? { engine: to.slug, provider: to.provider.slug } : null;
 }
 
 /** The engine a session runs on, as the composer's model menu titles itself: the CLI's own product

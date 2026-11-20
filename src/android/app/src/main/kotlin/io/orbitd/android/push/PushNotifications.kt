@@ -79,7 +79,7 @@ class PushNotifications(private val context: Context) {
             .setContentText(message.payload.body).setStyle(Notification.BigTextStyle().bigText(message.payload.body))
             .setContentIntent(pending).setAutoCancel(true).setOnlyAlertOnce(true)
             .setVisibility(Notification.VISIBILITY_PRIVATE)
-            .setCategory(if (message.payload.isReminder || message.payload.isOwnerRequest) Notification.CATEGORY_REMINDER else Notification.CATEGORY_STATUS)
+            .setCategory(if (message.payload.isReminder || message.payload.isOwnerRequest || message.payload.isOwnerDecision) Notification.CATEGORY_REMINDER else Notification.CATEGORY_STATUS)
             .addExtras(extras)
             .apply { ownerRequestActions(message, data, tag).forEach(::addAction) }
             .apply { if (silent) setGroup(SILENT_GROUP).setGroupAlertBehavior(Notification.GROUP_ALERT_SUMMARY) }
@@ -113,7 +113,12 @@ class PushNotifications(private val context: Context) {
         seen.clear(); history.delete()
     }
     fun channel(message: PushMessage) = when {
-        message.payload.isReminder || message.payload.kind == "confirmation-problems" || message.payload.isOwnerRequest -> needsYou
+        message.payload.isReminder || message.payload.kind == "confirmation-problems" || message.payload.isOwnerRequest ||
+            message.payload.isTerminalLogin || message.payload.isOwnerDecision ||
+            // A scheduled task's failure or hold files a Waiting on you item; the push names it.
+            (message.payload.kind == PushPayload.SCHEDULE && message.payload.ownerRequestId != null) ||
+            // A condition that cannot be read files its can't-read card in Waiting on you (§5.3).
+            message.payload.kind == PushPayload.CONDITION -> needsYou
         message.payload.sessionId != null -> SESSIONS
         else -> UPDATES
     }

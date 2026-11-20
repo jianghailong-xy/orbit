@@ -103,91 +103,18 @@ struct MergeRecoverySheet: View {
         let close = { dismiss() }
         let target = r.targetBranch
         return List {
-            Section { header(r, check: buttons.headerCheck, working: working, checking: checking, blocked: blocked) }
-                .listRowBackground(Color.clear)
-            if let repair {
-                Section { repairStatus(repair, target: r.targetBranch) }
-            }
-            if landed {
-                landedSections(d, r, close: close)
-            } else {
-                Group {
-                    if let message = d.mergeError, !r.ready {
-                        Section {
-                            NavigationLink("Details") { RecoveryTextPage(title: "Details", text: message, close: close) }
-                        }
-                    }
-                    if let conflicts = r.conflicts, !conflicts.isEmpty {
-                        Section {
-                            ForEach(conflicts, id: \.self) { Text($0).font(.orbitMono).textSelection(.enabled) }
-                        } header: {
-                            Text(r.conflictsTitle).textCase(nil)
-                        } footer: {
-                            if let note = r.targetMovedNote { footnote(note) }
-                        }
-                    }
-                    // The branches in one row: what the review is about, before what it lists.
-                    Section {
-                        NavigationLink {
-                            RecoveryBranchesPage(recovery: r, branch: d.branch, close: close)
-                        } label: {
-                            RecoveryRouteRow(branch: d.branch, target: target, relation: r.targetRelation)
-                        }
-                    }
-                    let candidate = r.candidateSha != nil ? r.patch : nil
-                    if let push = r.pushCommits, !push.isEmpty {
-                        // What the push adds to origin, exactly — the question the review answers. The diff
-                        // is the same push read as content, so it closes the list rather than leading it.
-                        let inline = r.inlinePushCommits()
-                        Section {
-                            ForEach(inline.shown, id: \.sha) { MergeRecoveryCommitRow(commit: $0, origin: r.origin(of: $0)) }
-                            if inline.hidden > 0 {
-                                NavigationLink {
-                                    RecoveryCommitsPage(title: "Pushes to origin/\(target)", commits: push,
-                                                        origin: r.origin(of:), close: close)
-                                } label: {
-                                    RecoveryLinkRow(title: "All \(push.count) commits",
-                                                    subtitle: Text("\(inline.hidden) more from this session"), value: "")
-                                }
-                            }
-                            if let candidate { candidateDiffLink(target: target, patch: candidate, close: close) }
-                        } header: {
-                            HStack {
-                                Text("Pushes to origin/\(target)")
-                                Spacer(minLength: 8)
-                                Text("\(push.count) \(push.count == 1 ? "commit" : "commits")")
-                            }
-                            .textCase(nil)
-                        } footer: {
-                            Text(r.landingNote)
-                        }
-                    } else {
-                        // A runner that predates the push list: the local-only commits on their own.
-                        if let commits = r.localCommits, !commits.isEmpty {
-                            Section {
-                                ForEach(commits, id: \.sha) { MergeRecoveryCommitRow(commit: $0) }
-                            } header: {
-                                HStack {
-                                    Text("Local-only commits — included in the push")
-                                    Spacer(minLength: 8)
-                                    Text("\(commits.count)")
-                                }
-                                .textCase(nil)
-                            }
-                        }
-                        if let candidate {
-                            Section { candidateDiffLink(target: target, patch: candidate, close: close) }
-                        }
-                    }
-                    if let check = r.check {
-                        Section {
-                            checkRow(check, close: close)
-                        } footer: {
-                            if let note = r.reviewNote { Text(note) }
-                        }
-                    }
+            ForEach(MergeRecoveryListLogic.rows(hasRepair: repair != nil, landed: landed)) { row in
+                switch row {
+                case .header:
+                    Section { header(r, check: buttons.headerCheck, working: working, checking: checking, blocked: blocked) }
+                        .listRowBackground(Color.clear)
+                case .repair:
+                    repairSection(repair, target: r.targetBranch)
+                case .landed:
+                    landedSections(d, r, close: close)
+                case .review:
+                    reviewBlocks(d, r, target: target, close: close, checking: checking)
                 }
-                .opacity(checking ? 0.4 : 1)
             }
         }
         #if os(iOS)
@@ -201,6 +128,99 @@ struct MergeRecoverySheet: View {
     }
 
     // MARK: - header
+
+    /// The repair session's row, while there is one to draw.
+    @ViewBuilder
+    private func repairSection(_ repair: MergeRepairRow?, target: String) -> some View {
+        if let repair {
+            Section { repairStatus(repair, target: target) }
+        }
+    }
+
+    /// The blocks that ask for a decision, while the recovery has not landed: what holds the merge,
+    /// what the push adds, the candidate and the check. The List's ForEach hands the whole review to
+    /// this one row, so the closure itself holds no branch.
+    @ViewBuilder
+    private func reviewBlocks(_ d: SessionDetail, _ r: MergeRecovery, target: String,
+                              close: @escaping () -> Void, checking: Bool) -> some View {
+        Group {
+            if let message = d.mergeError, !r.ready {
+                Section {
+                    NavigationLink("Details") { RecoveryTextPage(title: "Details", text: message, close: close) }
+                }
+            }
+            if let conflicts = r.conflicts, !conflicts.isEmpty {
+                Section {
+                    ForEach(conflicts, id: \.self) { Text($0).font(.orbitMono).textSelection(.enabled) }
+                } header: {
+                    Text(r.conflictsTitle).textCase(nil)
+                } footer: {
+                    if let note = r.targetMovedNote { footnote(note) }
+                }
+            }
+            // The branches in one row: what the review is about, before what it lists.
+            Section {
+                NavigationLink {
+                    RecoveryBranchesPage(recovery: r, branch: d.branch, close: close)
+                } label: {
+                    RecoveryRouteRow(branch: d.branch, target: target, relation: r.targetRelation)
+                }
+            }
+            let candidate = r.candidateSha != nil ? r.patch : nil
+            if let push = r.pushCommits, !push.isEmpty {
+                // What the push adds to origin, exactly — the question the review answers. The diff
+                // is the same push read as content, so it closes the list rather than leading it.
+                let inline = r.inlinePushCommits()
+                Section {
+                    ForEach(inline.shown, id: \.sha) { MergeRecoveryCommitRow(commit: $0, origin: r.origin(of: $0)) }
+                    if inline.hidden > 0 {
+                        NavigationLink {
+                            RecoveryCommitsPage(title: "Pushes to origin/\(target)", commits: push,
+                                                origin: r.origin(of:), close: close)
+                        } label: {
+                            RecoveryLinkRow(title: "All \(push.count) commits",
+                                            subtitle: Text("\(inline.hidden) more from this session"), value: "")
+                        }
+                    }
+                    if let candidate { candidateDiffLink(target: target, patch: candidate, close: close) }
+                } header: {
+                    HStack {
+                        Text("Pushes to origin/\(target)")
+                        Spacer(minLength: 8)
+                        Text("\(push.count) \(push.count == 1 ? "commit" : "commits")")
+                    }
+                    .textCase(nil)
+                } footer: {
+                    Text(r.landingNote)
+                }
+            } else {
+                // A runner that predates the push list: the local-only commits on their own.
+                if let commits = r.localCommits, !commits.isEmpty {
+                    Section {
+                        ForEach(commits, id: \.sha) { MergeRecoveryCommitRow(commit: $0) }
+                    } header: {
+                        HStack {
+                            Text("Local-only commits — included in the push")
+                            Spacer(minLength: 8)
+                            Text("\(commits.count)")
+                        }
+                        .textCase(nil)
+                    }
+                }
+                if let candidate {
+                    Section { candidateDiffLink(target: target, patch: candidate, close: close) }
+                }
+            }
+            if let check = r.check {
+                Section {
+                    checkRow(check, close: close)
+                } footer: {
+                    if let note = r.reviewNote { Text(note) }
+                }
+            }
+        }
+        .opacity(checking ? 0.4 : 1)
+    }
 
     /// What holds the merge, when it was last checked (with checking again, when that isn't the
     /// pinned step) or that the server is checking the repair now, and the one sentence the state needs.
@@ -577,7 +597,11 @@ private struct RecoveryCommitsPage: View {
     let close: () -> Void
 
     var body: some View {
-        List(commits, id: \.sha) { MergeRecoveryCommitRow(commit: $0, origin: origin($0)) }
+        List {
+            ForEach(commits, id: \.sha) { commit in
+                MergeRecoveryCommitRow(commit: commit, origin: origin(commit))
+            }
+        }
             .navigationTitle(title)
             .toolbar { RecoveryCloseButton(close: close) }
     }
@@ -593,31 +617,39 @@ private struct CandidateDiffPage: View {
 
     var body: some View {
         List {
-            if files.isEmpty {
-                Text(patch.isEmpty ? "No content changes." : patch)
-                    .font(.orbitDiffLine)
-                    .textSelection(.enabled)
-            } else {
-                Section {
-                    ForEach(files) { file in
-                        NavigationLink {
-                            CandidateFilePage(file: file, close: close)
-                        } label: {
-                            DiffFileRow(file: SessionChangedFile(path: file.path, additions: file.additions,
-                                                                 deletions: file.deletions, status: file.status))
-                        }
-                    }
-                } header: {
-                    let add = files.reduce(0) { $0 + max(0, $1.additions) }
-                    let del = files.reduce(0) { $0 + max(0, $1.deletions) }
-                    (Text("Against origin/\(target) · \(files.count) \(files.count == 1 ? "file" : "files") · ")
-                        + Text("+\(add)").foregroundStyle(.green) + Text(" −\(del)").foregroundStyle(.red))
-                        .textCase(nil)
+            ForEach(CandidateDiffListLogic.rows(hasFiles: !files.isEmpty)) { row in
+                switch row {
+                case .text:
+                    Text(patch.isEmpty ? "No content changes." : patch)
+                        .font(.orbitDiffLine)
+                        .textSelection(.enabled)
+                case .files:
+                    candidateFilesSection()
                 }
             }
         }
         .navigationTitle("Candidate diff")
         .toolbar { RecoveryCloseButton(close: close) }
+    }
+
+    /// The changed files under one header carrying the sheet's counts.
+    private func candidateFilesSection() -> some View {
+        Section {
+            ForEach(files) { file in
+                NavigationLink {
+                    CandidateFilePage(file: file, close: close)
+                } label: {
+                    DiffFileRow(file: SessionChangedFile(path: file.path, additions: file.additions,
+                                                         deletions: file.deletions, status: file.status))
+                }
+            }
+        } header: {
+            let add = files.reduce(0) { $0 + max(0, $1.additions) }
+            let del = files.reduce(0) { $0 + max(0, $1.deletions) }
+            (Text("Against origin/\(target) · \(files.count) \(files.count == 1 ? "file" : "files") · ")
+                + Text("+\(add)").foregroundStyle(.green) + Text(" −\(del)").foregroundStyle(.red))
+                .textCase(nil)
+        }
     }
 }
 
@@ -662,40 +694,56 @@ private struct RecoveryBranchesPage: View {
         let r = recovery
         let t = r.targetBranch
         List {
-            Section {
-                row(branch ?? "This session", r.sourceSha)
-            } header: {
-                Text("Source").textCase(nil)
-            }
-            Section {
-                row("Local \(t)", r.localSha)
-                row("origin/\(t)", r.remoteSha)
-            } header: {
-                Text("Target").textCase(nil)
-            } footer: {
-                if let relation = r.targetRelation { Text(relation) }
-            }
-            if let remote = r.remoteCommits, !remote.isEmpty {
-                Section {
-                    ForEach(remote, id: \.sha) { MergeRecoveryCommitRow(commit: $0) }
-                } header: {
-                    Text("Already on origin/\(t)").textCase(nil)
-                } footer: {
-                    Text("Brought to this machine by the sync; not pushed.")
-                }
-            }
-            if r.candidateSha != nil || r.repairBranch != nil || r.repairWorktree != nil {
-                Section {
-                    row("Candidate", r.candidateSha)
-                    row("Repair branch", r.repairBranch)
-                    row("Repair worktree", r.repairWorktree)
-                } header: {
-                    Text("Candidate").textCase(nil)
+            ForEach(RecoveryBranchesListLogic.rows(
+                hasRemoteCommits: !(r.remoteCommits ?? []).isEmpty,
+                hasCandidate: r.candidateSha != nil || r.repairBranch != nil || r.repairWorktree != nil)) { item in
+                switch item {
+                case .source:
+                    Section {
+                        row(branch ?? "This session", r.sourceSha)
+                    } header: {
+                        Text("Source").textCase(nil)
+                    }
+                case .target:
+                    targetSection(t)
+                case .remoteCommits:
+                    remoteCommitsSection(t)
+                case .candidate:
+                    Section {
+                        row("Candidate", r.candidateSha)
+                        row("Repair branch", r.repairBranch)
+                        row("Repair worktree", r.repairWorktree)
+                    } header: {
+                        Text("Candidate").textCase(nil)
+                    }
                 }
             }
         }
         .navigationTitle("Branches")
         .toolbar { RecoveryCloseButton(close: close) }
+    }
+
+    /// The target's two refs, and what the local one is to the remote.
+    private func targetSection(_ target: String) -> some View {
+        Section {
+            row("Local \(target)", recovery.localSha)
+            row("origin/\(target)", recovery.remoteSha)
+        } header: {
+            Text("Target").textCase(nil)
+        } footer: {
+            if let relation = recovery.targetRelation { Text(relation) }
+        }
+    }
+
+    /// The commits already on origin, which the sync brought to this machine rather than pushed.
+    private func remoteCommitsSection(_ target: String) -> some View {
+        Section {
+            ForEach(recovery.remoteCommits ?? [], id: \.sha) { MergeRecoveryCommitRow(commit: $0) }
+        } header: {
+            Text("Already on origin/\(target)").textCase(nil)
+        } footer: {
+            Text("Brought to this machine by the sync; not pushed.")
+        }
     }
 
     @ViewBuilder

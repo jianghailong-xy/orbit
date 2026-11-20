@@ -14,21 +14,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import io.orbitd.android.OrbitApplication
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.navigation.ObjectId
-import io.orbitd.android.reader.AttachedNoteEntry
+import io.orbitd.android.reader.SessionMessageBubble
 import io.orbitd.android.reader.personWords
-import io.orbitd.android.text.LocalReaderResources
 import io.orbitd.android.ui.LocalOrbitColors
-import kotlinx.coroutines.CancellationException
 import io.orbitd.android.core.realtime.RunEvent
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -51,6 +47,8 @@ internal fun TranscriptCardView(card: InteractionCard, open: (String) -> Unit, e
         val delivery = event?.turnId?.let { LocalSteerDeliveries.current[it] } ?: event?.fields?.text("delivery")
         OrbitTurnCardView(card, event, open, undelivered = delivery == "failed" || delivery == "unconfirmed"); return
     }
+    // A SubAgent's end draws nothing: its card is the end (docs/mocks/subagent-card-and-end-line, web `Transcript.tsx`).
+    if (card.family == CardFamily.BACKGROUND && card.key.endsWith(":subagent")) return
     // A background job's news or a wakeup coming due is a line in the agent's stream (A08-11), not a card of fields.
     if (card.family == CardFamily.BACKGROUND && card.key.endsWith(":wake")) {
         val fields = event?.fields
@@ -68,51 +66,31 @@ internal fun TranscriptCardView(card: InteractionCard, open: (String) -> Unit, e
     }
     // The owner's answer handed to the coordinator is one line that opens to the words the agent read, not a card of fields.
     if (card.key.endsWith(":ownerAnswer")) {
-        OwnerAnswerLineView(card, event); return
+        OwnerAnswerLineView(card, event, openLink = open); return
     }
     // So is a fact told to this session — the coordinator told of one, or the answer to its criteria proposal: its sentence, then when it
     // was sent, opening to the words the agent read.
     if (card.key.endsWith(":coordinatorDelivery")) {
         CoordinatorDeliveryLineView(card, event, open); return
     }
-    val resources = LocalReaderResources.current
-    val app = LocalContext.current.applicationContext as? OrbitApplication
-    val live = app?.realtime?.state?.collectAsState()?.value
-    val authorized = resources != null && live?.handle === resources.handle && live?.session?.id == resources.sessionId && live?.session?.fresh == true && live?.session?.accessDenied == false
-    var request by remember(card.key) { mutableStateOf<JsonObject?>(null) }
-    var unread by remember(card.key) { mutableStateOf(false) }
-    val requestId = card.source.text("requestId").takeIf { card.key.endsWith(":sessionMessage") }
-    // Behind the conversation's snapshot reads, as its cards (SessionCardsReads): not on every account event.
-    LaunchedEffect(resources, requestId, authorized, live?.session?.snapshotReads) {
-        if (!authorized || requestId == null) { unread = requestId != null; return@LaunchedEffect }
-        try { request = CardAuthority(resources!!.auth, resources.handle).get(listOf("session-requests", requestId)) as? JsonObject; unread = false }
-        catch (cancel: CancellationException) { throw cancel }
-        catch (_: Exception) { request = null; unread = true }
+    // An exception item delivered to the coordinator is its own card, pointing at the item's card (board card-ui-polish ②).
+    if (card.key.endsWith(":openItemDelivery")) {
+        OpenItemDeliveryCardView(card, event, open); return
     }
-    Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.secondaryContainer) {
+    // Another session's message is a bubble on the left (docs/mocks/session-message-bubble), queued or not.
+    if (card.key.endsWith(":sessionMessage")) {
+        SessionMessageBubble(card.source, event, open); return
+    }
+    // Every card of the conversation ends at its one width (ConversationCardWidth), as the message bubble beside them does.
+    Surface(Modifier.conversationCard(), shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.secondaryContainer) {
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(card.title, style = MaterialTheme.typography.titleSmall)
             Text("Recorded by Orbit", style = MaterialTheme.typography.labelSmall)
             CardFields(card.source, listOf("title", "projectTitle", "fromTitle", "preview", "requestPreview", "description", "acceptanceCriteria",
                 "completionCriterion", "reason", "problems", "report", "dueAt", "branch", "sha", "task", "files", "check", "failure", "settings",
                 "differsFromRequest", "startedAt", "outcome", "replyOptionLabel", "replyText", "excerpt", "closeReason", "closedAt", "status", "command", "outputTail", "progress", "state", "generation", "changedTargets", "jobs", "wakeups"), open)
-            if (requestId != null) {
-                Text("The recipient session answers this request.", style = MaterialTheme.typography.bodySmall)
-                if (unread) Text("Current request state unavailable · reconnect to check.")
-                else request?.let { CardFields(it, listOf("state", "replyOptions", "replyBy", "replyText", "excerpt", "closeReason"), open) }
-            }
             listOf("fromSessionId" to "Open sender session", "runSessionId" to "Open task session", "reviewerSessionId" to "Open reviewer session").forEach { (field, label) ->
                 card.source.text(field)?.let { LinkButton(label, "orbit-session:$it", open) }
-            }
-            // An open-item delivery's two ways into the record (iOS `OpenItemDeliveryCardView`, board v4 06 b): the session whose
-            // failure opened the item, and the landing it belongs to (§2.9 LS6). Either is drawn only where the payload names it.
-            if (card.key.endsWith(":openItemDelivery")) {
-                card.source.obj("task")?.text("sessionId")?.takeIf { it.isNotEmpty() }?.let {
-                    LinkButton(OpenItemDeliveryCopy.openSession, "orbit-session:$it", open)
-                }
-                card.source.text("landingSessionId")?.takeIf { it.isNotEmpty() }?.let {
-                    LinkButton(OpenItemDeliveryCopy.openLanding, "orbit-session:$it", open)
-                }
             }
             if (card.source.text("taskId") != null || card.source.text("projectId") != null) {
                 Text("Task and project details are not connected yet.", style = MaterialTheme.typography.bodySmall)
@@ -125,9 +103,9 @@ internal fun TranscriptCardView(card: InteractionCard, open: (String) -> Unit, e
  * The ended questions this conversation draws — its rail's records — and the turns of it that hand their answers to the coordinator, each
  * by item in one spelling, whichever each read was served ([key]; web `AnsweredQuestionsCtx`, `answeredItemKey`, `answersHandedOver`).
  * Such a turn draws its question's record in its own place (`OwnerAnswerLineView`), so the rail leaves that record out
- * ([leftToItsTurn]), and the record's review folds what the coordinator was told at its foot ([told]). [open] opens a record's review.
+ * ([leftToItsTurn]), and the record, unfolded, folds what the coordinator was told at its foot ([told]).
  */
-internal class AnsweredQuestions(records: List<InteractionCard>, turns: List<RunEvent>, val open: (String) -> Unit) {
+internal class AnsweredQuestions(records: List<InteractionCard>, turns: List<RunEvent>) {
     private val records = records.filter { it.family == CardFamily.QUESTION_RECORD }.associateBy { key(it.objectId) }
     private val turns = turns.mapNotNull { turn -> OwnerAnswerLine.question(turn)?.let { key(it) to turn } }.toMap()
 
@@ -150,7 +128,8 @@ internal val LocalAnsweredQuestions = compositionLocalOf<AnsweredQuestions?> { n
  * The owner's answer handed to the coordinator (`OwnerAnswerLine`). Where the conversation holds the question it answers, the turn is that
  * question's own card, Answered, and nothing else (docs/mocks/owner-answer-sent-card/merged.html): the owner reads Answered as "the agent
  * has my answer", so a line under it said so twice. Drawn here, where the coordinator was handed the answer, the card is dashed and says so
- * while the turn still waits on the queue ([queued]), says when its delivery went unconfirmed, and its review folds the words the agent read.
+ * while the turn still waits on the queue ([queued]), says when its delivery went unconfirmed, and unfolded in place it folds the words the
+ * agent read at its foot.
  *
  * Otherwise — a Not yet… to a request to record the project done, which has no card, or a question the conversation does not hold — it is
  * one line, "Sent to the coordinator · 08:29" — the pill a revision handed to its coordinator leaves (`SentToCoordinatorLine`) — in place of
@@ -158,16 +137,15 @@ internal val LocalAnsweredQuestions = compositionLocalOf<AnsweredQuestions?> { n
  * `OwnerAnswerLine.tsx`, iOS `OwnerAnswerLineView`).
  */
 @Composable
-internal fun OwnerAnswerLineView(card: InteractionCard, event: RunEvent?, queued: Boolean = false) {
+internal fun OwnerAnswerLineView(card: InteractionCard, event: RunEvent?, queued: Boolean = false, openLink: (String) -> Unit = {}) {
     var open by rememberSaveable(card.key) { mutableStateOf(false) }
     val undelivered = event?.fields?.text("delivery") in setOf("failed", "unconfirmed")
     val answered = LocalAnsweredQuestions.current
     val record = answered?.record(card.source)
     if (answered != null && record != null) {
-        Box(Modifier.fillMaxWidth().testTag(card.key)) {
-            QuestionRecordCard(record, queued = queued && !undelivered, notice = OwnerAnswerLine.undelivered.takeIf { undelivered }) {
-                answered.open(record.key)
-            }
+        Box(Modifier.conversationCard().testTag(card.key)) {
+            QuestionRecordCard(record, queued = queued && !undelivered, notice = OwnerAnswerLine.undelivered.takeIf { undelivered },
+                told = event, open = openLink)
         }
         return
     }
@@ -186,11 +164,10 @@ internal fun OwnerAnswerLineView(card: InteractionCard, event: RunEvent?, queued
     if (open) OwnerAnswerTold(card, event) { open = false }
 }
 
-/** What the coordinator was told: the line it was sent as, then its words verbatim, and what delivery appended folded under them. */
+/** What the coordinator was told: the line it was sent as, then its words verbatim. */
 @Composable
 private fun OwnerAnswerTold(card: InteractionCard, event: RunEvent?, close: () -> Unit) {
     val words = event?.personWords().orEmpty()
-    val note = event?.fields?.text("controlPlaneNote")?.takeIf { it.isNotBlank() }
     Dialog(close, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxSize().safeDrawingPadding()) {
             Column(Modifier.padding(12.dp).verticalScroll(rememberScrollState()).testTag("${card.key}:told"),
@@ -202,7 +179,6 @@ private fun OwnerAnswerTold(card: InteractionCard, event: RunEvent?, close: () -
                 Text(OwnerAnswerLine.line(card.source), style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 SelectionContainer { Text(words, style = MaterialTheme.typography.bodyMedium) }
-                note?.let { AttachedNoteEntry(it.trim()) }
             }
         }
     }
@@ -256,13 +232,11 @@ internal fun CoordinatorDeliveryLineView(card: InteractionCard, event: RunEvent?
     if (shown) CoordinatorDeliveryTold(card, delivery, event, open) { shown = false }
 }
 
-/** What the coordinator — or this session — was told: the line it was sent as, its words verbatim, what delivery appended folded under
- * them, and the task. */
+/** What the coordinator — or this session — was told: the line it was sent as, its words verbatim, and the task. */
 @Composable
 private fun CoordinatorDeliveryTold(card: InteractionCard, delivery: CoordinatorDelivery, event: RunEvent?, open: (String) -> Unit,
     close: () -> Unit) {
     val words = event?.personWords().orEmpty()
-    val note = event?.fields?.text("controlPlaneNote")?.takeIf { it.isNotBlank() }
     Dialog(close, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxSize().safeDrawingPadding()) {
             Column(Modifier.padding(12.dp).verticalScroll(rememberScrollState()).testTag("${card.key}:told"),
@@ -275,7 +249,6 @@ private fun CoordinatorDeliveryTold(card: InteractionCard, delivery: Coordinator
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(CoordinatorDeliveryLine.sent(delivery), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
                 SelectionContainer { Text(words, style = MaterialTheme.typography.bodyMedium) }
-                note?.let { AttachedNoteEntry(it.trim()) }
                 delivery.task?.let { task ->
                     TextButton(onClick = { close(); open("orbit-task:${task.id}") }, Modifier.testTag("${card.key}:task")) {
                         Text(CoordinatorDeliveryLine.itsTask)

@@ -30,6 +30,7 @@ import {
   WIKI_ACTION_EDIT,
   WIKI_ACTION_RETIRE,
   WIKI_ACTION_SUPERSEDE,
+  WIKI_ANCHOR_DEFERRED,
   WIKI_ANCHORS_NOTE,
   WIKI_HISTORY_CONFIRMED_BY,
   WIKI_HISTORY_MAINTENANCE,
@@ -45,6 +46,7 @@ import {
   WIKI_SECTION_HISTORY,
   WIKI_SECTION_SOURCES,
   WIKI_SECTION_USED,
+  wikiAnchorDeferred,
   wikiAnchorLabel,
   wikiAnchorMark,
   wikiAnchorStateOf,
@@ -214,7 +216,10 @@ export function WikiEntryDrawer({
                     return (
                       <div className="wk-anc" key={index}>
                         <WikiAim />
-                        <span className="p">{wikiAnchorLabel(anchor)}</span>
+                        <span className="p">
+                          {wikiAnchorLabel(anchor)}
+                          {wikiAnchorDeferred(anchor) && <span className="wk-anc-deferred">{WIKI_ANCHOR_DEFERRED}</span>}
+                        </span>
                         <WikiAnchorMark mark={state} />
                       </div>
                     );

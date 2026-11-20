@@ -1,6 +1,6 @@
 ---
 name: upgrade
-description: Upgrade the Orbit Docker Compose deployment by rebuilding the apiserver and web images from current source and recreating only changed services; apiserver applies database migrations on boot and unchanged postgres stays running. Use when asked to deploy the latest Orbit code, update or upgrade the running containers, run /upgrade, or bring the Compose deployment up to date. Use --pull-base only when explicitly asked to refresh postgres or gateway base images.
+description: Upgrade the Orbit Docker Compose deployment by rebuilding the apiserver and web images from current source and recreating only changed services; apiserver applies database migrations on boot and unchanged postgres stays running. Use when asked to deploy the latest Orbit code, update or upgrade the running containers, run /upgrade, or bring the Compose deployment up to date. Use --pull-base only when explicitly asked to refresh postgres or gateway base images. With ORBIT_REGISTRY set it is a two-stage release: build, boot-check and push here, then pull and recreate on ORBIT_DEPLOY_HOST, which builds nothing and hands the apiserver and web over without a gap (--stop-then-start for a release whose migration the running code cannot run against); roll back with --deploy <earlier commit>. From a session on another workspace, deploy production through SubAgents on orbit-op (build and deploy) and orbit-prod (check, and move its checkout to the release).
 ---
 
 # Upgrade the Orbit stack
@@ -8,6 +8,15 @@ description: Upgrade the Orbit Docker Compose deployment by rebuilding the apise
 Orbit uses `docker-compose.yml` with `postgres`, `apiserver`, `wiki-worker`, `web`, and `gateway`. A routine upgrade rebuilds the locally built `apiserver` and `web` images (`wiki-worker` runs the `apiserver` image), then recreates only changed services. The persisted `orbit_pg` volume is preserved.
 
 Database migrations are not a separate step: the apiserver container runs `prisma migrate deploy` during startup.
+
+## Who runs it
+
+An upgrade is mostly waiting on builds and reading their output, which needs no expensive model. On one, such as an
+Opus, Fable or GPT-6.x Sol model, hand the run to DeepSeek V4.1 Flash with Orbit's `delegate` (`model:
+"deepseek-flash"`, Orbit's id for it; `background: true`) instead of running it yourself. If `delegate` refuses the
+model (`SUBAGENT_TARGET_CANNOT_RUN`), take another flash model from the list the refusal prints. Settle every choice
+before handing it off (the checkout, the exact command and flags), since the SubAgent cannot ask anyone; have it stop
+at the first failure without retrying or rolling back, and end the turn: Orbit wakes this session with the result.
 
 ## Workflow
 
@@ -39,7 +48,7 @@ On `main` the helper first fast-forwards to origin (`git pull --ff-only`) unless
 
 Without `--pull-base`, the helper:
 
-1. Builds `apiserver` (whose image `wiki-worker` runs) and `web`.
+1. Builds `apiserver` (whose image `wiki-worker` runs) and `web`. The web image's downloadable runner is built from the newest `v*` tag behind HEAD (unpacked at `.runner-release/`), not from the checkout, so runner code ships only with a release tag (docs/release-process.md, "Runner binaries come from the release tag"); with no such tag, the checkout's own runner is built, with a warning.
 2. Runs `docker compose up -d --wait apiserver wiki-worker web gateway`.
 3. Where `docker-compose.override.yml` adds other apiservers (`apiserver-2` and on; docs/self-hosting.md, "Several apiservers"), recreates them once `apiserver` is healthy and the migrations are applied, so they find none to apply.
 4. Brings `pgbackup` up to date, last (see "pgbackup" below).
@@ -49,12 +58,12 @@ Postgres is omitted from the recreate set. With `--pull-base`, the helper pulls 
 
 The helper writes nothing of managed runners to `.env`, so they stay as the deployment's `.env` has them: off unless it switches them on, which only a fresh install (`scripts/install-server.sh`) or an administrator does (docs/self-hosting.md, "Managed runners"). Where `.env` does not turn on the `managed-runners-docker` Compose profile, Compose does not list `docker-channel`, and the helper builds, recreates and writes exactly what it did before managed runners existed: nothing under `data/`, no managed runner image.
 
-The helper also brings up the runner link (docs/self-hosting.md, "Runner link"; the section marked in the script, the same in both copies), and what `.env` says decides what it may do. With no link in it, it builds `src/link-gateway`, has that image make the link's secrets, and appends them to `.env` with `RUNNER_LINK_URL=same-origin`, in one write that changes no line and prints none of them. With `RUNNER_LINK_URL=same-origin` it rebuilds the gateway, named by the last commit under `src/link-gateway`, so that a commit elsewhere recreates nothing. With anything else, as production's own host name, `.env` is not opened for writing, and `link-gateway` and `nats` are neither built nor restarted. After the images are built and before the apiserver is recreated, it starts `nats` and `link-gateway`, recreates the web gateway if the `gateway/nginx.conf` it runs is not this checkout's, which Compose does not see, and checks that `/runner-link` reaches the link gateway. This build's `docker-compose.yml` requires `RUNNER_LINK_SIGNING_KEY`, since it has no HTTPS work path, so a failure there stops the upgrade before the apiserver is recreated, and the deployment goes on running the build it has. A pull that changes this script runs the new one, from the start.
+The helper also brings up the runner link (docs/self-hosting.md, "Runner link"; the section marked in the script, the same in both copies), and what `.env` says decides what it may do. With no link in it, it builds `src/link-gateway`, has that image make the link's secrets, and appends them to `.env` with `RUNNER_LINK_URL=same-origin`, in one write that changes no line and prints none of them. With `RUNNER_LINK_URL=same-origin` it rebuilds the gateway, named by the last commit under `src/link-gateway`, so that a commit elsewhere recreates nothing. With anything else, as production's own host name, `.env` is not opened for writing, and `link-gateway` and `nats` are neither built nor restarted. After the images are built and before the apiserver is recreated, it starts `nats` and `link-gateway`, recreates `nats` if the `src/link-gateway/nats.conf` it runs is not this checkout's and the web gateway if the `gateway/nginx.conf` it runs is not this checkout's, which Compose does not see, and checks that `/runner-link` reaches the link gateway. This build's `docker-compose.yml` requires `RUNNER_LINK_SIGNING_KEY`, since it has no HTTPS work path, so a failure there stops the upgrade before the apiserver is recreated, and the deployment goes on running the build it has. A pull that changes this script runs the new one, from the start.
 
 Where `.env` turns that profile on, the helper also keeps managed runners current (the section marked in the script, the same in both copies of /upgrade's script):
 
 1. It finds the managed runners' directory where Compose binds it into `docker-channel`, and stops before building anything if its `channel.json` and `profile.json` are not there.
-2. It builds `docker-channel` with the other images, then the managed runner image from `deploy/managed-runner/image` as `orbit-managed-runner:local` (local, never pushed; `--no-cache` applies to it too).
+2. It builds `docker-channel` with the other images, then the managed runner image from `deploy/managed-runner/image` as `orbit-cloud-runner:local` (local, never pushed; `--no-cache` applies to it too).
 3. After the migrations, when the image ID is new, it writes that ID into both files, each replaced whole by a rename.
 4. It recreates the other services as above, then the apiserver again if that did not recreate it (it reads the profile only as it starts), and with it the other apiservers, then `docker-channel`, last. The apiserver goes first: until the channel serves the image its profile names, it makes no container and only waits, while a channel already on the new image would refuse the old apiserver's creates.
 
@@ -92,6 +101,44 @@ ssh root@backup-host ls -l "/data/backup/orbit-pg-archive-files/${f#data/files/}
 ```
 
 With no `ORBIT_BACKUP_SYNC_TARGET`, or with `ORBIT_FILES_BACKEND=s3`, the last two have nothing to show: see the backup and restore runbook, `docs/postgres-backup-restore.md`, "Attachment files".
+
+## Two-stage release
+
+With `ORBIT_REGISTRY` set, the helper builds on this host and deploys on another, which runs the deployment and builds nothing: Orbit's production builds on wikova, pushes to the WireGuard-only registry `10.66.0.1:5000`, and runs on `10.66.0.4`. Without `ORBIT_REGISTRY` nothing here applies. The full account is the `.claude` skill's section of the same name (`.claude/skills/upgrade/SKILL.md`).
+
+```bash
+ORBIT_REGISTRY=10.66.0.1:5000 ORBIT_DEPLOY_HOST=root@10.66.0.4 .agents/skills/upgrade/scripts/upgrade.sh --prune
+ORBIT_REGISTRY=10.66.0.1:5000 .agents/skills/upgrade/scripts/upgrade.sh --build-only
+ORBIT_REGISTRY=10.66.0.1:5000 ORBIT_DEPLOY_HOST=root@10.66.0.4 .agents/skills/upgrade/scripts/upgrade.sh --deploy <40-character commit>
+ORBIT_REGISTRY=10.66.0.1:5000 ORBIT_DEPLOY_HOST=root@10.66.0.4 .agents/skills/upgrade/scripts/upgrade.sh --plan <40-character commit>
+ORBIT_REGISTRY=10.66.0.1:5000 ORBIT_DEPLOY_HOST=root@10.66.0.4 .agents/skills/upgrade/scripts/upgrade.sh --deploy <40-character commit> --stop-then-start
+```
+
+`ORBIT_DEPLOY_DIR` is the deployment's directory on the target (`/root/orbit`). After the lock, the dirty check and the pull, `deploy/two-stage/release.sh` takes over, and this host's own containers, `.env` and runner link are left as they are.
+
+- Build stage, here: the images are tagged by commit, `<registry>/orbit-apiserver:<commit>`, `<registry>/orbit-web:<commit>`, `<registry>/orbit-link-gateway:<last commit under src/link-gateway>` and the hosted runners' `<registry>/orbit-cloud-runner:<last commit that changed what deploy/managed-runner/image builds it from>` (none for a commit without that directory). Each that is not in the registry yet is built (`docker compose build apiserver wiki-worker web`, keeping the target's serving web release at `/dl/previous/` through `orbit-web:previous-release`; the link gateway and the hosted runners' image with `docker build --provenance=false`), booted by `scripts/image-boot-check.sh`, and pushed. A tag in the registry is never pushed again. Before building, with less than `ORBIT_BUILD_MIN_FREE_GB` (default 15) free on Docker's disk, it makes room: this registry's earlier release images on this host (each is in the registry; one a container uses is kept), then dangling images, then week-old build cache, then all build cache, stopping once there is enough, and refusing to build if there still is not.
+- Deploy stage, on the target over ssh: the target has no checkout. The commit's `docker-compose.yml`, `gateway/`, `scripts/pg-archive-wal.sh`, `scripts/pg-backup.sh`, `src/link-gateway/nats.conf`, `deploy/runner-link/`, `deploy/postgres-pinned.yml`, `deploy/db-proxy.yml` and `deploy/db-proxy/` are shipped with `git archive`, and `deploy/two-stage/deploy-stage.sh` takes the target's `/tmp/orbit-upgrade.lock`, puts the files in place (and back, with no directory it added, if it stops before its images are all pulled), prints each service's config-hash plan (with `db-proxy`, `nats`, `gateway` and `pgbackup` also `recreate` when the single file each bind-mounts is not the release's), refuses an image that does not come from the registry, pulls every image, writes the release into its block of the target's `.env`, sets the hosted runners' profile to the release's image where the target runs managed runners on Kubernetes (below), and brings each service up with `docker compose up -d --wait --no-deps --no-build` in `depends_on` order: postgres, db-proxy, nats, apiserver and the rest. A running postgres is recreated only with `--pull-base`. Its log and history are in `.upgrade/` there.
+- Without a gap, the default: the apiserver and web it recreates are handed over. `<name>-next`, a container of the release (`docker compose run --no-deps`; the apiserver's with `--use-aliases`, so the link gateway reaches it too), starts beside the running `<name>` and, once healthy, gets the web gateway's traffic: `gateway/nginx.conf`'s routes include a file from `/etc/nginx/handover/`, which the deploy writes inside the running gateway before `nginx -t` and a reload. Then `<name>` stops by itself (an apiserver exits 0 within 25 s), `up` recreates it, the gateway is pointed at it, and `<name>-next` stops and is removed. The apiserver's `-next` applies the migrations as it starts. `wiki-worker` is simply recreated. A gateway the release recreates goes first, a moment's break of its own. Streams end when their apiserver stops and the clients open them again from the last stored event; a reload closes the gateway's idle keep-alive connections, as every nginx reload does.
+- The plan says which way: `Replacing the apiserver and web: without a gap`, or `stop, then start` with the reason: `--stop-then-start`, a release whose `gateway/nginx.conf` predates handovers (a rollback to one), or no gateway running. Stop, then start is how every release did it before: the web gateway answers 502 until each new one is healthy, 20 to 40 s for the apiserver.
+- Migrations, the exception: during a handover the running release's code runs against the database as the new release's migrations leave it. A migration that code cannot run against (it drops or renames a table or column the old code uses, adds a `NOT NULL` column without a default where it inserts, or a constraint or trigger its writes break) is deployed with `--stop-then-start`. Additive migrations need nothing. Compare the release with the commit the target runs, the last line of its `.upgrade/history`: `git diff --stat <running> <release> -- src/apiserver/prisma/migrations/`.
+- A deploy that did not finish can leave `<name>-next` running with the gateway on it: the next deploy puts the gateway back and removes it once `<name>` is healthy, and otherwise stops and says to deploy with `--stop-then-start`. A `-next` that has not passed its health check is never stopped, since it may be applying the migrations.
+- `--plan <commit>` runs the deploy stage up to its plan and the registry check, then puts every file back: it pulls, writes and brings up nothing.
+- The target's `.env` is its own, made once before the first deploy; a deploy writes only the block between `# >>> The release this host runs` and `# <<< The release this host runs`, so a later `docker compose` there renders the release that runs. Its `COMPOSE_FILE` lists `docker-compose.yml:deploy/postgres-pinned.yml`, and `:deploy/db-proxy.yml` where the apiserver connects through the proxy (10.66.0.4's does); the release ships those. Any other Compose file it lists, or its `docker-compose.override.yml`, is rendered with each release and otherwise left alone.
+- Base images run by digest: postgres and pgbackup as `deploy/postgres-pinned.yml` pins them (PostgreSQL 16.14), db-proxy as `deploy/db-proxy.yml` does, nginx and nats as `deploy/two-stage/base-images.env` does. A target that does not list `deploy/postgres-pinned.yml` is refused.
+- Hosted runners on Kubernetes (the target's `.env` sets `ORBIT_MANAGED_RUNNERS_ENABLED=true` and the `profile.json` in `ORBIT_MANAGED_RUNNERS_DIR` says `"backend": "kubernetes"`): the plan prints the profile's `runner.image` against the release's image by digest, or `unchanged`. A deploy sets `runner.image` to it by a rename, keeps the profile it replaces beside it as `profile.json.bak-<time>-before-<commit>`, and replaces the apiserver, which reads the profile only as it starts, even when the release does not otherwise. Its manager then moves each hosted runner onto the new image once that runner is idle: drained like a sleep and woken at once on the same volume. The node pulls the image from the registry, so k3s there lists it in `/etc/rancher/k3s/registries.yaml`.
+- Earlier release images: after each deploy the target removes its `orbit-apiserver`, `orbit-web` and `orbit-link-gateway` images except those of the last 3 releases in `.upgrade/history` (Docker refuses any a container uses), with or without `--prune`. Before this they were never removed: production kept 77 releases' images, 137 GB, until 6.6 GB of its disk was left (2026-11-18).
+- Rollback: `--deploy <earlier commit>`, which builds nothing (`--plan <earlier commit>` first shows what it changes); the target's `.upgrade/history` lists what it ran. A release older than the last 3 is pulled from the registry again. Code older than a migration the database has applied may not run on it.
+- Both hosts' Docker must trust the registry (`insecure-registries` in `/etc/docker/daemon.json` for a plain-HTTP one, applied with `systemctl reload docker`). `docker buildx du` and `docker image ls` on the target show that nothing was built there.
+
+## Production from another workspace
+
+Production spans two workspaces, each a git checkout of this repository at `/root/orbit`. **orbit-op** is wikova, where the two-stage release is built and driven from, always in a fresh `/dev/shm/wkdir-release-main-<commit>` worktree, never in its shared `/root/orbit`. **orbit-prod** is `10.66.0.4`, whose `/root/orbit` is the deploy directory, detached at the commit it runs. A session on another workspace runs nothing locally. Once the owner has asked for the deploy in that session, it:
+
+1. names the commit (`git fetch origin main && git rev-parse origin/main`, unless the owner named one);
+2. calls `delegate({ workspace: "orbit-op", background: true, size: "M", ... })` with the orbit-op brief and ends its turn until Orbit wakes it with the result (a session on orbit-op deploys itself instead);
+3. on `✓ Release <commit> runs on root@10.66.0.4`, calls `delegate({ workspace: "orbit-prod", size: "S", ... })` with the orbit-prod brief, which checks production on the host and moves its checkout to the release.
+
+Both briefs are in `.claude/skills/upgrade/SKILL.md`, "Production from another workspace". A result without that line is not a deploy.
 
 ## Requirements
 

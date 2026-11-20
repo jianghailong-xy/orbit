@@ -49,17 +49,21 @@ RUN if [ -n "$ORBIT_MACOS_SIGNING" ]; then \
         aarch64) arch=aarch64 sum=4af92c87ddf52f5f2d1258a3b4e56c7dcb8f1b2468df744976c5f139e031961f ;; \
         *) echo "no rcodesign release for $(uname -m)" >&2; exit 1 ;; \
       esac && \
-      curl -fsSL -o /tmp/rcodesign.tar.gz \
+      curl -fsSL --connect-timeout 30 --speed-limit 4096 --speed-time 60 --retry 5 --retry-delay 10 --retry-all-errors \
+        -o /tmp/rcodesign.tar.gz \
         "https://github.com/indygreg/apple-platform-rs/releases/download/apple-codesign/0.29.0/apple-codesign-0.29.0-$arch-unknown-linux-musl.tar.gz" && \
       echo "$sum  /tmp/rcodesign.tar.gz" | sha256sum -c - && \
       tar -xzf /tmp/rcodesign.tar.gz -C /usr/local/bin --strip-components=1 \
         "apple-codesign-0.29.0-$arch-unknown-linux-musl/rcodesign" && \
       rm /tmp/rcodesign.tar.gz; \
     fi
-COPY src/runner-go ./src/runner-go
-COPY package.json ./package.json
-COPY scripts ./scripts
-COPY contracts/runner-write-protocol.json ./contracts/runner-write-protocol.json
+# The tree the runner is built from: the build context itself, or, from the upgrade skill, the newest release
+# tag's tree it unpacks at .runner-release/ (ORBIT_RUNNER_SOURCE), whose commit ORBIT_RUNNER_SOURCE_SHA names.
+ARG ORBIT_RUNNER_SOURCE=.
+COPY ${ORBIT_RUNNER_SOURCE}/src/runner-go ./src/runner-go
+COPY ${ORBIT_RUNNER_SOURCE}/package.json ./package.json
+COPY ${ORBIT_RUNNER_SOURCE}/scripts ./scripts
+COPY ${ORBIT_RUNNER_SOURCE}/contracts/runner-write-protocol.json ./contracts/runner-write-protocol.json
 # The commit this build stamps into the binaries, when ORBIT_SOURCE_SHA was not passed:
 # .git/HEAD plus the refs, which is all the .dockerignore lets through. Bracketed so a
 # source tree without Git metadata still builds (it must then pass ORBIT_SOURCE_SHA).
@@ -68,6 +72,7 @@ COPY .gi[t] ./.git/
 # build-binaries.sh) so a self-hosted runner's `orbit register` needs no --server.
 ARG PUBLIC_ORIGIN
 ARG ORBIT_SOURCE_SHA
+ARG ORBIT_RUNNER_SOURCE_SHA
 ENV PUBLIC_ORIGIN=$PUBLIC_ORIGIN
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=secret,id=orbit_macos_signing_p12 \
@@ -76,7 +81,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
       export ORBIT_MACOS_SIGNING_P12=/run/secrets/orbit_macos_signing_p12 \
         ORBIT_MACOS_SIGNING_PASSWORD_FILE=/run/secrets/orbit_macos_signing_password; \
     fi; \
-    ORBIT_SOURCE_SHA="$ORBIT_SOURCE_SHA" bash scripts/build-binaries.sh dist-bin
+    ORBIT_SOURCE_SHA="${ORBIT_RUNNER_SOURCE_SHA:-$ORBIT_SOURCE_SHA}" bash scripts/build-binaries.sh dist-bin
 
 # The image PREVIOUS_RELEASE_IMAGE names, whose /dl the runtime stage reads (empty: scratch).
 FROM ${PREVIOUS_RELEASE_IMAGE} AS previous-release

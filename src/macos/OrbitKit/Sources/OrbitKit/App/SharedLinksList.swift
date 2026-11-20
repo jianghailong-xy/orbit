@@ -50,6 +50,22 @@ public enum SharedLinksList {
         link.state == .active || link.state == .paused
     }
 
+    /// A press on the row opens the link's Share panel — web's row press (docs/mocks/share-links/
+    /// 13-row-buttons). Only an active link has one to change: a paused one's session is in the Trash,
+    /// and an ended link is gone for good.
+    public static func opens(_ link: ShareLink) -> Bool {
+        link.state == .active
+    }
+
+    /// The row's ⋯, as the web names it: Settings… opens the Share panel, Turn off… asks first.
+    public static let settings = "Settings…"
+    public static let turnOffMenu = "Turn off…"
+
+    /// The ⋯'s name for a screen reader, which lists every ⋯ on the page: "More for <title>".
+    public static func moreLabel(_ link: ShareLink) -> String {
+        "More for \(link.root.title ?? kindWord(link.kind))"
+    }
+
     /// `<baseURL>/s/<token>` — the address a visitor opens, the same one the Share panel copies.
     public static func publicURL(_ link: ShareLink, base: URL) -> URL {
         base.appendingPathComponent("s").appendingPathComponent(link.token)

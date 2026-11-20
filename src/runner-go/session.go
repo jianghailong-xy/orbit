@@ -446,6 +446,27 @@ func currentRuntimeSessionID(job *ClaimedSession) string {
 	return ""
 }
 
+// moveIdleSessionToItsAccount is what a reload does for a session it finds idle, besides leaving it
+// cold: an account switch carries its conversation now, as its next spawn would, so the account it
+// left can be removed while it waits for its next message (2026-11-16). Each engine moves the way its
+// own spawn does, and records the new account only once the conversation is there. A reload that did
+// not switch accounts finds nothing to carry. Antigravity keeps no conversation in an account and
+// records its new one as it retires agy (runAntigravitySessionProcess).
+func moveIdleSessionToItsAccount(job *ClaimedSession, execDir, scratch string) {
+	switch runtimeProvider(job) {
+	case providerClaude:
+		moveIdleClaudeConversation(job, execDir, scratch)
+	case providerCodex:
+		if moved, err := moveCodexThreadToClaimedAccount(job, scratch, execDir); err != nil {
+			logln("codex session", job.SessionID, "stays on its account: moving its thread failed:", err)
+		} else if moved {
+			logln("codex session", job.SessionID, "moved to the account it was switched to")
+		}
+	case providerKimi:
+		moveIdleKimiConversation(job, execDir, scratch)
+	}
+}
+
 func writeSessionMeta(scratch string, job *ClaimedSession, execDir string) {
 	writeSessionMetaRecord(scratch, job, execDir, "", "", "", false, false, "")
 }
@@ -954,9 +975,9 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// run_event held the message. Keep the last one so finalize can carry it.
 	var lastErrMu sync.Mutex
 	lastErrorMessage := ""
-	// Baseline for the shared-checkout warning below, taken before this session runs anything
-	// so pre-existing dirt is never blamed on it. Nil unless the session is isolated.
-	sharedDirt := watchSharedCheckout(job.WT)
+	// Baseline for the main-checkout card below, taken before this session runs anything so
+	// pre-existing changes are never blamed on it. Nil unless the session is isolated.
+	mainCheckout := watchMainCheckout(job.WT)
 	// The session's background work (newBgTailer below), declared ahead of emitThrough, which
 	// announces its runner-hosted jobs again behind every `resumed` handshake.
 	var bg *bgTailer
@@ -964,8 +985,8 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// once emitFor exists: the server's next-message guess for an engine without one
 	// (orbit_prompt_suggestion.go), filed against the turn it follows like the engine's own.
 	var requestOrbitSuggestion func(turnID string, at int)
-	// emitThrough buffers one event, filed against turnID, if gate still admits it.
-	emitThrough := func(gate *eventEmissionGate, turnID, eventType string, payload map[string]interface{}) {
+	// emitOne buffers one event, filed against turnID, if gate still admits it (emitThrough).
+	emitOne := func(gate *eventEmissionGate, turnID, eventType string, payload map[string]interface{}) {
 		// Every owner-request secret this runner holds is scrubbed from every string of the payload before anything
 		// below reads it, the spool included (secret_store.go).
 		payload = runnerSecrets().scrubPayload(payload)
@@ -977,6 +998,8 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		if eventType == evToolResult {
 			volumeSyncAfterTools.nudge()
 		}
+		// A delegate call, whose id an engine other than Claude Code does not send with it (delegateCallLog).
+		delegateCalls.note(sessionID, eventType, payload)
 		if eventType == evError {
 			if msg, ok := payload["message"].(string); ok && strings.TrimSpace(msg) != "" {
 				lastErrMu.Lock()
@@ -1009,11 +1032,39 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		if admitted && eventType == evSystem {
 			if subtype, _ := payload["subtype"].(string); subtype == "resumed" {
 				bg.announceRunningJobs()
+				// The SubAgents this runner hosts did not die with the engine either (subagent.go).
+				bg.mu.Lock()
+				announceSubagents := bg.announceSubagents
+				bg.mu.Unlock()
+				if announceSubagents != nil {
+					announceSubagents()
+				}
 			}
+		}
+		// What the parent's own edit tools write, for a stopped SubAgent's hold to leave to it (subagent_tree.go).
+		if admitted && bg != nil {
+			bg.parentEdits.note(eventType, payload)
 		}
 		// Do NOT postEvents inline: emit runs on the stdout-reader goroutine, and a
 		// slow post must never stall draining claude's stdout (backpressure freeze).
 		// The 250ms flush goroutine owns all network sends.
+	}
+	// The tool calls each turn has open, so a runner stop that cuts the turn answers them in the
+	// transcript before its interrupt (interrupted_tool_calls.go): every engine's events pass here.
+	toolCalls := &interruptedToolCalls{}
+	// How the turn used Orbit, in counts and codes only, filed ahead of its turn_end (agent_contract_telemetry.go).
+	contractTelemetry := newSessionAgentContractTelemetry(job)
+	// emitThrough buffers one event, filed against turnID, if gate still admits it — preceded, for a
+	// runner stop's interrupt, by the synthetic results of the calls that turn leaves open, and for a
+	// turn_end by the turn's agent-contract telemetry.
+	emitThrough := func(gate *eventEmissionGate, turnID, eventType string, payload map[string]interface{}) {
+		for _, result := range toolCalls.observe(turnID, eventType, payload) {
+			emitOne(gate, turnID, evToolResult, result)
+		}
+		if summary := contractTelemetry.observe(turnID, eventType, payload); summary != nil {
+			emitOne(gate, turnID, evSystem, summary)
+		}
+		emitOne(gate, turnID, eventType, payload)
 	}
 	// emitFor files one event against a turn the caller names, instead of against whatever
 	// the attribution cursor happens to hold. Only one thing needs it: a steer's own `user`
@@ -1049,7 +1100,13 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	}
 	emit := emitOn(emissionGate)
 	// Where a file left out of a commit for holding a secret is told about (secretUnstagedWarning).
-	defer registerSecretWarnings(sessionID, emit)()
+	defer registerSecretWarnings(sessionID, emit, func() string {
+		curTurnMu.Lock()
+		defer curTurnMu.Unlock()
+		return curTurn
+	})()
+	// Where a main checkout result line the control plane queued as a `notice` turn is written (main_checkout_notice.go).
+	defer registerMainCheckoutNotices(sessionID, emitFor)()
 
 	// What the stream still holds, left in the spool by an earlier process or not yet seen stored for an
 	// earlier supervisor of the session, is stored before this supervisor emits anything: it was written
@@ -1110,6 +1167,16 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// only looked at the turn permit would rewrite the checkout under it.
 	bg = newBgTailer(sessionCtx, emitOn(bgEmissionGate), pool.worktreeHoldsFor(job.SessionID))
 	defer bg.stopAll()
+	bg.parentEdits.mu.Lock()
+	bg.parentEdits.dir = execDir
+	bg.parentEdits.mu.Unlock()
+	// A session another runner process took over ends here without being ended: its SubAgents are stopped owing
+	// the parent a wake, which the server delivers in the session's new home (subagent.go).
+	bg.subagentHandoff = func() bool { return ownershipLost.Load() && ctx.Err() == nil }
+	// A coordinator handing over ends here leaving its SubAgents and jobs running (session_keep_work.go). What an
+	// earlier run of this session was told is not this run's: it is cleared as this one starts.
+	clearSessionKeepsWork(sessionID)
+	bg.endKeepsWork = func() bool { return sessionKeepsWork(sessionID) }
 	// A Monitor watches from inside this engine, so the pool's warm timer and LRU order are what
 	// end it — between turns, where the agent is not there to see the events stop coming, and
 	// where Claude writes no terminal notification for it. Lend the pool the one fact that defers
@@ -1117,21 +1184,14 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// holds p.mu when it asks, and this tailer reaches into the pool from under b.mu.
 	clearMonitorProbe := pool.setMonitorProbe(live, bg.hasLiveMonitors)
 	defer clearMonitorProbe()
+	// A SubAgent of the session still running defers the idle park the same way, until it ends (subagent.go).
+	clearSubagentProbe := pool.setSubagentProbe(live, bg.hasRunningSubagents)
+	defer clearSubagentProbe()
 	// A runner that stops — re-executing into an update, or its service stopped — ends these
 	// jobs too, and that is not this session ending. Its drain starts the moment the runner
 	// starts to stop rather than after this supervisor's turn drain, so what it kills is
 	// reported inside the grace the final event flush is given (eventCtx above).
 	bg.drainOnRunnerShutdown(shutdownCtx)
-	// A runner-hosted job outlives the engine that asked for it, so it can also finish long after
-	// the last engine was recycled — with the whole point being that nobody has to sit and watch.
-	// Lend the tailer the pool's own notion of residency and the account's existing push channel,
-	// so a job that lands on a cold session says so on somebody's phone instead of waiting to be
-	// discovered. The alert is the same one `orbit notify` sends, rate limit and all, on the daemon's
-	// own route (sessionNotify).
-	bg.notifyWhenCold(
-		func() bool { return pool.engineResident(live) },
-		func(message string) error { return t.sessionNotify(job.SessionID, message) },
-	)
 	// A job that asked to wake this session does it through the control plane, which files the wake
 	// as a turn: delivered to the resident engine, or resumed into a new one when the engine that
 	// started the wait is gone. The receipt says which, for this runner's log.
@@ -1153,7 +1213,18 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		defer cancelReport()
 		return flushWithContext(reportCtx)
 	})
-	bg.adoptJobs(pool.takeHostlessJobs(sessionID))
+	if adopted := pool.takeHostlessJobs(sessionID); len(adopted) > 0 {
+		bg.adoptJobs(adopted)
+		// Announced before this session's first inbox fetch: the control plane writes the turn it hands
+		// out with a <background-jobs> note, and a job last reported by the image before reads there as
+		// one whose runner went away, ended. The Update Now drill (2026-11-12) caught a Claude session
+		// told its adopted ticker had ended while the same jobs on a Codex session read as running.
+		flushCtx, cancelFlush := context.WithTimeout(context.Background(), bgHandedOnReportTimeout)
+		if err := flushWithContext(flushCtx); err != nil {
+			logln("could not report the background jobs adopted for", sessionID, "before its first turn:", err)
+		}
+		cancelFlush()
+	}
 	// Claude records background-shell completions in its transcript even while the session is
 	// idle, but only streams them to stdout on the next turn; tail the transcript so a shell
 	// that finishes between turns still clears from the "Background processes" tray. (Claude
@@ -1191,6 +1262,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 				endSessionLeases(sessionID)
 			}
 			stopBgJobService()
+			delegateCalls.forget(sessionID)
 		}()
 	}
 
@@ -1238,12 +1310,8 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		// terminal are persisted but no longer broadcast — the notice would exist and nobody
 		// would see it. Every runtime's turn ends through this one function, so this covers all
 		// of them; non-isolated sessions have no watch and skip it entirely.
-		if paths := sharedDirt.newlyDirty(); len(paths) > 0 {
-			emit(evSystem, map[string]interface{}{
-				"notice":     sharedCheckoutNotice(job.WT.RepoDir, effectiveBranch(job.WT), paths),
-				"noticeKind": "shared-checkout-dirty",
-				"paths":      paths,
-			})
+		if notice := mainCheckout.changed(); notice != nil {
+			emit(evSystem, notice.payload())
 		}
 		completionCtx := turnAckCtx
 		cancelCompletion := func() {}
@@ -1312,7 +1380,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 				// AWAITING_INPUT, a new send/claim may reach pool.activate before this
 				// response returns; generation matching prevents this old ack from
 				// releasing the new claim's permit.
-				permitGeneration = pool.permitGeneration(live)
+				permitGeneration = pool.beginTurnCompletion(live)
 				// What the turn wrote — the engine's transcript, its Git work — is on the volume
 				// before the control plane hears the turn is over.
 				syncManagedVolume("a turn", execDir)
@@ -1331,6 +1399,9 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			// The permit went straight to a queued follow-up; a drain for an update holds it back.
 			pool.holdFollowUpForUpdate(live, permitGeneration)
 		}
+		pool.endTurnCompletion(live)
+		// The browser lease lasts the holder's turn (browser_supervisor.go).
+		runnerBrowser().Release(sessionID)
 		return err
 	}
 	// The server changes PENDING -> RUNNING before returning a claim and may wake
@@ -1694,8 +1765,11 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			// --resume + the new flags (already applied to job.Agent). Not a crash, so
 			// it doesn't consume the respawn budget. If the session is idle, leave it
 			// cold rather than spawning a process that owns no active permit; its next
-			// claim resumes directly with these updated flags.
+			// claim resumes directly with these updated flags. An account switch is the one
+			// change that cannot wait for that claim: the conversation is carried now, so the
+			// account the session left can be removed while it is idle.
 			if !pool.isActive(live) {
+				moveIdleSessionToItsAccount(job, execDir, scratch)
 				continue
 			}
 			emit(evSystem, map[string]interface{}{"subtype": "resumed", "reason": "config_changed"})
@@ -1849,6 +1923,10 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	if runtimeProvider(job) == providerClaude {
 		finalizeRequest.ClaudeSessionID = job.SessionUUID
 	}
+	// A codeless run's detached checkout goes, or becomes job.WT on its branch, before the report is made.
+	if job.Detached != nil {
+		finalizeCodelessCheckout(job)
+	}
 	if job.WT != nil {
 		finalizeWorktreeReport(&finalizeRequest, job.SessionID, job.WT, status)
 	}
@@ -1914,7 +1992,7 @@ func withBuiltinTaskToolsDisallowed(configured []string) []string {
 func sessionContextEnvKey(key string) bool {
 	switch strings.ToUpper(key) {
 	case "ORBIT_SESSION_ID", "ORBIT_AGENT_ID", "ORBIT_TASK_ID", envSpawnDepth,
-		envMCPOrchestration, envOrchestrationToken, envMCPPermissionPrompt, envBgJobID:
+		envMCPOrchestration, envOrchestrationToken, envMCPPermissionPrompt, envBgJobID, envScheduleRun:
 		return true
 	default:
 		return false
@@ -2071,18 +2149,32 @@ func watchShutdownDrain(procCtx, shutdownCtx context.Context, pending <-chan str
 	pollCancel()
 	tk := time.NewTicker(drainPollInterval)
 	defer tk.Stop()
+	// The owner's Update Now cuts a turn in the engine at once (stopDrainBudget); a shell turn the
+	// runner runs itself — a `!cmd`, an acceptance command whose -1 would fail its task — still gets
+	// the whole drain.
+	turnDeadline := time.After(stopDrainBudget(shutdownCtx, timeout))
 	deadline := time.After(timeout)
 	for len(pending) > 0 || shells.Load() > 0 {
 		select {
 		case <-tk.C:
+			continue
 		case <-procCtx.Done():
 			return
+		case <-turnDeadline:
+			turnDeadline = nil
+			if len(pending) == 0 {
+				continue
+			}
 		case <-deadline:
-			emit(evInterrupt, map[string]interface{}{"reason": "runner_restart"})
-			logln("drain timeout for", sessionID+"; tearing down mid-turn")
-			procCancel()
-			return
 		}
+		emit(evInterrupt, stopInterruptPayload(shutdownCtx))
+		if stoppingForUpdateNow(shutdownCtx) {
+			logln("update now for", sessionID+"; interrupting the turn in flight")
+		} else {
+			logln("drain timeout for", sessionID+"; tearing down mid-turn")
+		}
+		procCancel()
+		return
 	}
 	procCancel()
 }
@@ -2108,11 +2200,11 @@ func pushLiveDiff(t *Transport, job *ClaimedSession) {
 	liveFiles, livePatches := liveDiff(job.WT)
 	liveBaseSha := job.WT.baseSha()
 	if err := t.diffResult(job.SessionID, DiffResultRequest{
-		ChangedFiles:   liveFiles,
-		ChangedDiff:    livePatches,
-		BaseSha:        liveBaseSha,
-		WorktreeDirty:  worktreeIsDirty(job.WT),
-		BranchSha:      effectiveBranchSha(job.WT),
+		ChangedFiles:  liveFiles,
+		ChangedDiff:   livePatches,
+		BaseSha:       liveBaseSha,
+		WorktreeDirty: worktreeIsDirty(job.WT),
+		BranchSha:     effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT),
 		BranchMerged:   branchMergedInto(job.WT),
 		WorktreeBranch: currentBranch(job.WT),
 	}); err != nil {
@@ -2157,6 +2249,10 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 			firstSpawn = true
 		}
 	}
+	// Set while the conversation this process continues was compacted or resumed and no message has carried
+	// the note that says so yet (context_reset_note.go): from the start for a resume, and on each compaction.
+	var contextReset atomic.Bool
+	contextReset.Store(!firstSpawn)
 	args := claudeCommandArgs(job, scratchDir, firstSpawn)
 	// What this process's running totals start from, read from the transcript --resume is about to
 	// read, before it reads it: every completion it sends carries it (claude_running_totals.go).
@@ -2481,6 +2577,10 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 					// NOT cleared here: a message the runtime refuses below is never fed, and
 					// the shell output it was carrying still belongs to whatever is fed next.
 				}
+				// A conversation compacted or resumed since the last message: this one says so first. Like the
+				// shell output, the flag is cleared only once the message is accepted below.
+				carriesReset := !steer && contextReset.Load()
+				feedText = withContextResetNote(feedText, carriesReset, job.insideRecordedWork())
 				// Tell claude where the written-to-disk uploads landed (absolute paths outside
 				// the worktree), so it reads them with its tools instead of expecting inline
 				// content it never received.
@@ -2546,6 +2646,9 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				// answered.
 				deliveries.accept(delivery, slot.receipt)
 				pendingShellCtx = nil // this message carries it now
+				if carriesReset {
+					contextReset.Store(false)
+				}
 				userEv["delivery"] = string(deliveryEnqueued)
 				if steer {
 					// Which kind this message was filed as, on the one event that survives a
@@ -2641,7 +2744,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 						TurnID: resp.TurnID, Status: stSucceeded,
 						Result: "started in background", Subtype: "shell",
 						RuntimeSessionID: currentRuntimeSessionID(job),
-						BranchSha:        effectiveBranchSha(job.WT),
+						BranchSha:        effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT),
 					}); err != nil {
 						logln("shell turn-complete failed for", job.SessionID+":", err)
 					}
@@ -2902,7 +3005,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 					Result:           fmt.Sprintf("this runner does not understand turns of kind %q; upgrade the runner", resp.Kind),
 					Subtype:          subtypeUnknownKind,
 					RuntimeSessionID: currentRuntimeSessionID(job),
-					BranchSha:        effectiveBranchSha(job.WT),
+					BranchSha:        effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT),
 				}); err != nil {
 					logln("unknown-kind turn-complete failed for", job.SessionID+":", err)
 				}
@@ -2931,6 +3034,11 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	// The turn the latest `result` answered, which a prompt_suggestion arriving after it is filed
 	// against. Empty when that result failed or closed a turn the engine started on its own.
 	var lastAnsweredTurnID string
+	// What this process's engine says about Orbit's tools, sent when it changes (agent_tools_report.go).
+	var agentTools agentToolsReporter
+	// Whether a compaction boundary has gone by since the last result: what tells a `/compact`
+	// turn's result from the resume carrier it otherwise looks exactly like.
+	var compactedThisTurn bool
 	targetFenceTripped := false
 scanLoop:
 	for sc.Scan() {
@@ -2970,6 +3078,9 @@ scanLoop:
 		}
 		handleMessage(msg, emit, bg)
 		claudeNoteEngineMode(job, msg)
+		if msg["type"] == "system" && msg["subtype"] == "compact_boundary" && msg["parent_tool_use_id"] == nil {
+			contextReset.Store(true)
+		}
 		// The init handshake is where the CLI names its own version, and it is the only place
 		// it does. One control frame has to know it — apply_flag_settings answers `success`
 		// whether or not it acted, so the version is all there is to gate on (claude_setconfig.go)
@@ -2978,6 +3089,14 @@ scanLoop:
 		if msg["type"] == "system" && msg["subtype"] == "init" {
 			version, _ := msg["claude_code_version"].(string)
 			rt.noteAnnouncedVersion(version)
+			// The same frame names the MCP servers it started and the tools and skills it has: the
+			// session's Agent Tools report, in the engine's own words. A subagent's init is not the session's.
+			if msg["parent_tool_use_id"] == nil {
+				agentTools.send(claudeAgentToolsReport(job, msg), emit)
+			}
+		}
+		if msg["type"] == "system" && msg["subtype"] == "compact_boundary" {
+			compactedThisTurn = true
 		}
 		// --replay-user-messages: the CLI echoes back each user turn it reads, which is the
 		// only signal that a message became part of the conversation rather than just bytes
@@ -3023,7 +3142,9 @@ scanLoop:
 			// the reply the user is waiting for — and leave `pending` untouched: the message
 			// that was fed is still unanswered, and the result of the work it actually starts
 			// is what acks it.
-			if isResumeCarrierResult(r, lastAssistantText) {
+			compacted := compactedThisTurn
+			compactedThisTurn = false
+			if isResumeCarrierResult(r, lastAssistantText, compacted) {
 				continue
 			}
 			var turnID string
@@ -3092,10 +3213,14 @@ scanLoop:
 			// A Claude API error — or an expired sign-in — returns as assistant text + a
 			// "success" result with no is_error, so it slips past resultFrom. Treat the turn
 			// as failed so the control plane surfaces it (and reclaims a task session)
-			// instead of parking the session as if the turn succeeded.
+			// instead of parking the session as if the turn succeeded. A failure of the
+			// connection to the API — Cloudflare's block page, a dropped socket — is neither
+			// an API error nor a sign-in failure and is named separately: it is still a dead
+			// turn (control plane arms the retry from it).
 			if turnStatus == stSucceeded &&
 				(isAPIError(r.Result) || isAPIError(lastAssistantText) ||
-					isAuthError(r.Result) || isAuthError(lastAssistantText)) {
+					isAuthError(r.Result) || isAuthError(lastAssistantText) ||
+					isConnectionFailure(r.Result) || isConnectionFailure(lastAssistantText)) {
 				turnStatus = stFailed
 			}
 			lastAssistantText = ""
@@ -3131,9 +3256,9 @@ scanLoop:
 					ChangedDiff:      livePatches,
 					BaseSha:          liveBaseSha,
 					WorktreeDirty:    worktreeIsDirty(job.WT),
-					BranchSha:        effectiveBranchSha(job.WT),
-					BranchMerged:     branchMergedInto(job.WT),
-					WorktreeBranch:   currentBranch(job.WT),
+					BranchSha:        effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT),
+					BranchMerged:   branchMergedInto(job.WT),
+					WorktreeBranch: currentBranch(job.WT),
 				}); err != nil {
 					logln("turn-complete failed for", job.SessionID+":", err)
 				}

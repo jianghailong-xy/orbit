@@ -231,6 +231,7 @@ func populateByCloning(template, wtPath string) (int, error) {
 		return 0, err
 	}
 	cloned := 0
+	clonedPaths := make([]string, 0, 64)
 	made := map[string]bool{}
 	for _, entry := range strings.Split(entries, "\x00") {
 		if entry == "" {
@@ -260,11 +261,23 @@ func populateByCloning(template, wtPath string) (int, error) {
 		if err := cloneFile(src, dst, info.Mode().Perm()); err != nil {
 			return cloned, &fileCloneError{path: path, after: cloned, err: err}
 		}
+		// The template's mtime comes along. It keeps git from treating a freshly cloned file as racily clean, and
+		// lets the index's stat data describe the clone without a content hash. A failure only costs that faster
+		// refresh.
+		_ = os.Chtimes(dst, info.ModTime(), info.ModTime())
 		cloned++
+		clonedPaths = append(clonedPaths, path)
+	}
+	// The clones hold the commit's bytes, so their index entries need stat data but not a content hash. Fill what
+	// can be proven from the two indexes and one lstat each (index_stat.go); git hashes the rest, as before.
+	if filled, left, err := fillClonedIndexStats(wtPath, template, clonedPaths); err != nil {
+		logln("checkout index: fast path skipped: " + err.Error())
+	} else if filled > 0 {
+		logln(fmt.Sprintf("checkout index: filled %d stat entries, left %d for git", filled, left))
 	}
 	// To git every clone is a new file, matching none of the stat data the index holds, and `reset --hard` writes out
-	// again every entry whose stat data does not match its file. Refreshed first, an entry whose clone holds what the
-	// commit does is matched, so the reset keeps that clone.
+	// again every entry whose stat data does not match its file. Now an entry whose clone holds what the commit does
+	// is matched, so the reset keeps that clone; the entries the fast path left are hashed here.
 	if _, err := git(wtPath, "update-index", "-q", "--refresh"); err != nil {
 		return cloned, err
 	}

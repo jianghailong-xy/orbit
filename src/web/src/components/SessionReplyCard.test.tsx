@@ -10,7 +10,6 @@ import {
   SESSION_REQUEST_ASKS,
   SESSION_REQUEST_STATE_LABEL,
   parseSessionReplies,
-  withoutReplyBlocks,
 } from '../lib/sessionRequest';
 import { Transcript, type RunEvent } from './Transcript';
 
@@ -147,16 +146,11 @@ describe('the recipient’s card says the message is a request, and where it sta
     expect(status.textContent).toContain('due');
     expect(status.getAttribute('data-state')).toBe('OPEN');
     expect(status.textContent).toContain(SESSION_REQUEST_STATE_LABEL.OPEN);
-    // Read-only: nothing on the card lets the owner answer for the session. The only control is the
-    // line naming what delivery appended, which every card has. It does not answer.
+    // Read-only: nothing on the card lets the owner answer for the session.
     expect(container.querySelector('.smc input, .smc textarea, .smc-request button')).toBeNull();
-    const fold = container.querySelector('.smc .chat-injected')!;
-    expect([...fold.querySelectorAll('button')].map((b) => b.className)).toEqual(['chat-injected-head']);
-    const head = fold.querySelector<HTMLButtonElement>('.chat-injected-head')!;
-    await click(head);
-    // Pressing it opens the block delivery appended.
-    expect(head.getAttribute('aria-expanded')).toBe('true');
-    expect(fold.querySelector('.chat-injected-body')?.textContent).toContain('<orbit-session-message');
+    // The block delivery appended only tells the agent what the card shows — the request among it — so
+    // it is not folded under the card (board session-message-attached-line).
+    expect(container.querySelector('.smc .chat-injected')).toBeNull();
   });
 
   it('refreshes when the request moves: the state the next read returns is the one drawn', async () => {
@@ -236,12 +230,5 @@ describe('the pieces the cards are drawn from', () => {
     expect(parseSessionReplies({ sessionReplies: [{ ...REPLIED, requestId: '' }] })).toBeNull();
     expect(parseSessionReplies({ sessionReplies: 'nope' })).toBeNull();
     expect(parseSessionReplies({ text: 'hi' })).toBeNull();
-  });
-
-  it('takes the reply blocks out of a note and leaves what else was appended', () => {
-    const block = '<orbit-session-reply request-id="a" outcome="REPLIED">\n回复：ok\n</orbit-session-reply>';
-    expect(withoutReplyBlocks(block)).toBe('');
-    expect(withoutReplyBlocks(`${block}\n\n<background-jobs>\n…\n</background-jobs>`)).toBe('<background-jobs>\n…\n</background-jobs>');
-    expect(withoutReplyBlocks(undefined)).toBe('');
   });
 });

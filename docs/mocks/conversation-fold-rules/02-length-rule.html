@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Orbit 来回折叠 · 按长度折叠（02）</title>
+<style>
+  body { margin: 0; background: #eceef2; font-family: Inter, 'Noto Sans SC', sans-serif; color: #1d2330; }
+  .board { width: 2240px; padding: 48px; box-sizing: border-box; background: #eceef2; }
+  h1 { font-size: 34px; margin: 0 0 8px; }
+  .sub { font-size: 17px; color: #5b6475; margin-bottom: 28px; line-height: 1.6; }
+  .b-row { display: flex; gap: 24px; align-items: flex-start; margin-bottom: 32px; }
+  .b-frame { background: #fff; border-radius: 14px; padding: 18px 18px 14px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .b-frame h2 { font-size: 19px; margin: 0 0 4px; }
+  .b-frame .b-cap { font-size: 14px; color: #5b6475; margin: 0 0 12px; line-height: 1.55; max-width: 620px; }
+  .b-frame img { display: block; border: 1px solid #e3e6eb; border-radius: 8px; }
+  .b-tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 10px; margin-right: 6px; vertical-align: 2px; }
+  .t-now { background: #fde8e8; color: #b42318; } .t-a { background: #e3f0ff; color: #1757c2; }
+  .b-sect { font-size: 24px; font-weight: 700; margin: 8px 0 14px; }
+  .b-panel { background: #fff; border-radius: 14px; padding: 22px 26px; box-shadow: 0 1px 3px rgba(0,0,0,.08); font-size: 15px; line-height: 1.65; }
+  .b-panel h2 { font-size: 20px; margin: 0 0 12px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+  th, td { text-align: left; vertical-align: top; padding: 7px 10px; border-bottom: 1px solid #e8eaee; }
+  th { color: #5b6475; font-weight: 600; background: #f6f7f9; }
+  code { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px; background: #f1f3f6; padding: 1px 5px; border-radius: 4px; }
+  .b-q { background: #fff8e6; border: 1px solid #f3d27a; border-radius: 10px; padding: 14px 18px; margin-top: 14px; }
+  .b-q b { color: #8a5a00; }
+  .b-rule { font-size: 18px; background: #eef4ff; border: 1px solid #c9dbff; border-radius: 10px; padding: 12px 16px; margin-bottom: 14px; }
+  ul, ol { margin: 6px 0; padding-left: 22px; }
+</style>
+</head>
+<body>
+<div class="board">
+  <h1>Orbit 来回折叠 · 改成「默认展开，只折很短的」</h1>
+  <div class="sub">
+    依据：orbit@austin 那套部署的真实数据（2,924 个会话，30,721 个会被折叠的轮次）。今天的规则把这 3 万轮全折了，但抽 40 条看，75% 是结论、进展或要你决定的事。<br>
+    新规则只看<b>轮次种类 + agent 回复的总字数</b>，协调会话和普通会话同一条规则，与语言无关。截图来自真实 Web 控制台（vite + 假 API），对话为示例文字；原型改动见 <code>prototype-02.patch</code>。
+  </div>
+
+  <div class="b-row">
+    <div class="b-panel" style="width: 2144px; box-sizing: border-box;">
+      <div class="b-rule"><b>新规则：</b>Orbit 发起的一轮，只有在 <b>watch 且回复 &lt; 220 字</b>，或 <b>会话回信以外的其他种类且回复 &lt; 80 字</b> 时才折叠；其余一律照常展开。原有的“不折”条件不变（最新一轮、没回复、报错、调了 ask_owner 的轮次都不折）。替换掉 beta.234 的“只在协调会话里折后台作业”。</div>
+      <table>
+        <tr><th>验证（austin 新抽 60 条，先盲标再套规则）</th><th>被折叠</th><th>照常展开</th><th></th><th>放到全库</th><th>折叠量</th></tr>
+        <tr><td>噪音 14 条</td><td>11</td><td>3</td><td rowspan="2" style="color:#5b6475">阈值 80：有用内容 0 误折；<br>阈值 120 时误折 2 条，160 时误折 6 条</td><td>今天</td><td>~25,000 轮（beta.234 之后）</td></tr>
+        <tr><td>有用内容 46 条</td><td><b>0</b></td><td>46</td><td>新规则</td><td>不到 5,900 轮（阈值 120 时 5,868，80 更少），集中在 watch 和短的后台作业</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="b-sect">普通会话（你截图的那类：一个提问 → agent 起后台作业接着查）</div>
+  <div class="b-row">
+    <div class="b-frame">
+      <h2><span class="b-tag t-now">今天（beta.234）</span>后台作业全展开，watch 仍折</h2>
+      <p class="b-cap">普通会话不再折后台作业：每一步过程、最后的结论都在。末尾那条 19 字的重复 watch 通知单独折成一行。</p>
+      <img src="shots/n-p-today.png" width="620">
+    </div>
+    <div class="b-frame">
+      <h2><span class="b-tag t-a">新规则</span>结论和长进展展开，短的过程话折起来</h2>
+      <p class="b-cap">第一轮（117 字，提出新假设）和最后的结论照常展开；中间三条 54–62 字的“等下一个读数 / 下一步要跑…”折成 <code>3 Orbit updates handled</code>；“推送已完成，验证仍在跑”和重复 watch 也折起来。<b>代价：</b>短的过程话要点开才看到——中文 80 字已能写下一个判断，austin 的样本里这类短回复多数是“在等”。</p>
+      <img src="shots/n-p-new.png" width="620">
+    </div>
+    <div class="b-panel" style="width: 760px;">
+      <h2>austin 数据里各类轮次回复长度（中位数）</h2>
+      <table>
+        <tr><th>种类</th><th>普通会话</th><th>协调会话</th><th>新规则折掉的比例</th></tr>
+        <tr><td>watch</td><td>109 字</td><td>119 字</td><td>~70%</td></tr>
+        <tr><td>后台作业</td><td>170 字</td><td>650 字</td><td>36% / 2%</td></tr>
+        <tr><td>会话消息</td><td>446 字</td><td>226 字</td><td>12% / 16%</td></tr>
+        <tr><td>协调通知</td><td>308 字</td><td>452 字</td><td>~1% / 19%</td></tr>
+        <tr><td>会话回信</td><td>365 字</td><td>235 字</td><td>0（不按长度折）</td></tr>
+      </table>
+      <p style="margin:12px 0 0;color:#5b6475">（折掉比例按阈值 120 算的，80 只会更少。）会话回信不折：上一轮样本里两条不到 120 字的回信是实打实的结论（豁免裁定、失败原因）。</p>
+    </div>
+  </div>
+
+  <div class="b-sect">协调会话（11-11 折叠的原场景）</div>
+  <div class="b-row">
+    <div class="b-frame">
+      <h2><span class="b-tag t-now">今天</span>两次你说话之间的 7 轮全折</h2>
+      <p class="b-cap">证据判定、退回理由这类长回复也一起折在 <code>7 Orbit updates handled</code> 里。</p>
+      <img src="shots/n-c-today.png" width="620">
+    </div>
+    <div class="b-frame">
+      <h2><span class="b-tag t-a">新规则</span>证据判定照常展开，例行的短处理折起来</h2>
+      <p class="b-cap">B1 确认、B4b 退回、B5 确认这几段判定理由照常展开；“B4 已开工”“runner 已进 main”“提醒到期不用续”这类一两句的折叠。协调会话会比今天长，但每段展开的都是有内容的判定。</p>
+      <img src="shots/n-c-new.png" width="620">
+    </div>
+    <div class="b-panel" style="width: 760px;">
+      <h2>落地（三端一起）</h2>
+      <ol>
+        <li>Web <code>Transcript.tsx</code> <code>foldOrbitExchanges</code>：按轮内 agent 回复总字数判断；去掉 beta.234 的协调会话开关。</li>
+        <li>macOS/iOS <code>OrbitExchangeFold.swift</code>、Android <code>ExchangeFold.kt</code> 同步；三端各补测试（两个阈值的边界、会话回信不折、协调/普通同一规则）。</li>
+        <li>CI 全绿后合入 main、发 beta。</li>
+      </ol>
+      <div class="b-q">
+        <b>待定 · 要你拍板</b><br>
+        <b>A（推荐）</b>：如上，阈值 watch 220 / 其他 80。<br>
+        <b>B</b>：普通会话保持 beta.234（后台作业全展开），只在协调会话用长度规则——你截图那类场景一条都不折，代价是普通会话里的 watch 噪音继续按旧规则折、后台作业的“在等”也全展开。
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

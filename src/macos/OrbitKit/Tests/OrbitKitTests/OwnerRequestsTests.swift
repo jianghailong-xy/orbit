@@ -156,15 +156,24 @@ final class OwnerRequestsTests: XCTestCase {
     }
 
     func testEachKindsCardSaysWhatItAsksFor() {
-        XCTAssertEqual(OwnerRequestKind.allCases.map(OwnerRequests.kindTag), ["DECISION", "SECRET", "STEPS", "CONFIRM"])
+        XCTAssertEqual(OwnerRequestKind.allCases.map(OwnerRequests.kindTag), ["DECISION", "SECRET", "STEPS", "CONFIRM", "WIKI", "SETTINGS"])
         XCTAssertEqual(OwnerRequestKind.allCases.map(OwnerRequests.primaryLabel),
-                       ["Send answer", "Provide key", "Mark done", "Confirm"])
+                       ["Send answer", "Provide key", "Mark done", "Confirm", "Create wiki", "Save changes"])
         XCTAssertEqual(OwnerRequestKind.allCases.map(OwnerRequests.declineLabel),
-                       ["Decline…", "Decline…", "Can’t do this…", "Decline…"])
+                       ["Decline…", "Decline…", "Can’t do this…", "Decline…", "Decline…", "Decline…"])
         XCTAssertEqual(OwnerRequestKind.allCases.map(OwnerRequests.inboxAction),
-                       ["Answer", "Provide", "Open steps", "Review"])
+                       ["Answer", "Provide", "Open steps", "Review", "Review", "Review"])
         XCTAssertEqual(OwnerRequests.askedLine(secret(), now: now), "Asked 2m ago · expires in 2d 23h")
         XCTAssertEqual(OwnerRequests.removedText(secret()), "When the task ends, or after 7 days")
+    }
+
+    /// The web's `ownerRequestChatContext` and composer copy, word for word.
+    func testChatAboutThisNamesTheRequestAndSaysItIsStillOpen() {
+        XCTAssertEqual(OwnerRequests.chatPrefix, "About your request: ")
+        XCTAssertEqual(OwnerRequests.chatPlaceholder, "Ask about this request…")
+        XCTAssertEqual(OwnerRequests.chatContext(steps()),
+                       "The owner pressed Chat about this on your request “Reboot the GPU node after driver install” "
+                           + "(owner request s2). It is still open: not marked done and not declined. Their message:")
     }
 
     func testSecretCardWordingIsTheDesignsNotTheMockups() {
@@ -316,6 +325,16 @@ final class OwnerRequestsTests: XCTestCase {
         XCTAssertEqual(OwnerRequests.find(PublicID.toPublic(requestID), in: open)?.kind, .secret)
     }
 
+    /// A press on a session's needs-you notice opens the oldest request it asked that is still
+    /// pending: not one that ended, and not another session's.
+    func testANoticeOpensTheSessionsOldestPendingRequest() {
+        let ended = OwnerRequest(id: "old", kind: .manualStep, state: .withdrawn, title: "Earlier steps", why: "",
+                                 blocksTaskIds: [], askedBySessionId: sessionID, createdAt: "2026-11-05T09:00:00Z")
+        let read = [ended, secret(), decision(), confirm()]
+        XCTAssertEqual(OwnerRequests.oldestPending(read, sessionID: sessionID)?.id, "c4")
+        XCTAssertNil(OwnerRequests.oldestPending([ended, decision()], sessionID: sessionID))
+    }
+
     func testSnoozesLiveOnThisDeviceAndLapse() {
         let defaults = UserDefaults(suiteName: "owner-request-snoozes-\(UUID().uuidString)")!
         let store = OwnerRequestSnoozes(defaults: defaults)
@@ -344,10 +363,11 @@ final class OwnerRequestsTests: XCTestCase {
         // The server's categories, one per kind, and the first action's words on each.
         XCTAssertEqual(OwnerRequestKind.allCases.map(Notifications.ownerRequestCategory), [
             "ORBIT_OWNER_REQUEST_DECISION", "ORBIT_OWNER_REQUEST_SECRET",
-            "ORBIT_OWNER_REQUEST_MANUAL_STEP", "ORBIT_OWNER_REQUEST_CONFIRM",
+            "ORBIT_OWNER_REQUEST_MANUAL_STEP", "ORBIT_OWNER_REQUEST_CONFIRM", "ORBIT_OWNER_REQUEST_WIKI_CREATE",
+            "ORBIT_OWNER_REQUEST_SETTINGS_CHANGE",
         ])
         XCTAssertEqual(OwnerRequestKind.allCases.map(Notifications.ownerRequestActionTitle),
-                       ["Answer", "Provide key", "Mark done", "Review"])
+                       ["Answer", "Provide key", "Mark done", "Review", "Review", "Review"])
         XCTAssertEqual(Notifications.ownerRequestLaterTitle, "Later")
         let reminder = Notifications.ownerRequestReminder(requestID: requestID, kind: .secret,
                                                           title: "Provide a DeepSeek API key", sessionID: sessionID)
@@ -428,5 +448,21 @@ final class OwnerRequestsTests: XCTestCase {
         XCTAssertEqual(OwnerRequests.waitingCount(pending, questions: [q], snoozes: later, now: now), 3)
         XCTAssertEqual(OwnerRequests.waitingCount([], questions: [q, question("q3", project: asking, waiting: "x")],
                                                   snoozes: [:], now: now), 2)
+    }
+
+    /// The turn Orbit queues when a request ends is a divider, not the owner's bubble (web: `resolutionTurnLabel`).
+    func testResolutionTurnIsADividerNotTheOwnersBubble() {
+        let turn = { (head: String) in
+            [head, "", OwnerRequests.resolutionMark + " The request is final and will not wake this session again.",
+             "", "```json", "{}", "```"].joined(separator: "\n")
+        }
+        let done = turn("Orbit owner request 34uabc (MANUAL_STEP) ended DONE: the owner did what was asked.")
+        XCTAssertEqual(OwnerRequests.resolutionTurnLabel(done), "Owner action resolved · turn started automatically")
+        XCTAssertEqual(OwnerRequests.resolutionTurnLabel(turn("Orbit owner request 34uabc (CONFIRM) ended DECLINED: x.")),
+                       "Owner declined the request · turn started automatically")
+        XCTAssertEqual(OwnerRequests.resolutionTurnLabel(turn("Orbit owner request 34uabc (WIKI_CREATE) ended DONE. The owner created the wiki w.")),
+                       "Owner action resolved · turn started automatically")
+        XCTAssertNil(OwnerRequests.resolutionTurnLabel("Orbit owner request 34uabc (SECRET) ended DONE: looks wrong to me"))
+        XCTAssertNil(OwnerRequests.resolutionTurnLabel("hello"))
     }
 }

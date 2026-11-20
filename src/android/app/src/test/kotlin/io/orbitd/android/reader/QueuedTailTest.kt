@@ -90,7 +90,7 @@ class QueuedTailTest {
         }, "t5")
         assertEquals(transcriptCards(echo).map { it.title to it.source }, turn.cards.map { it.title to it.source })
         val record = records("01a0d6a9-d763-70e1-b4cf-8793e971b511").single()
-        val answered = AnsweredQuestions(listOf(record), listOf(turn.event)) {}
+        val answered = AnsweredQuestions(listOf(record), listOf(turn.event))
         assertSame("the queued turn draws its question's card", record, answered.record(card.source))
         assertTrue("so the rail does not draw it again", answered.leftToItsTurn(record))
         assertSame("and its review folds what this turn told the coordinator", turn.event, answered.told(record))
@@ -112,7 +112,7 @@ class QueuedTailTest {
         val queued = queuedTail(rows("""[{"turnId":"t7","kind":"message","content":"told","attachments":[],"ownerAnswer":${ownerAnswer(queuedItem)},
             "authoredByOrbit":true},{"turnId":"t8","kind":"message","content":"plain","attachments":[]}]"""), emptyList())
         val answered = AnsweredQuestions(held, listOf(turn("user", ownerAnswer(echoed)), turn("user", ownerAnswer(notYet, "DONE_REQUEST")),
-            turn("assistant", ownerAnswer(agents))) + queued.map { it.event }) {}
+            turn("assistant", ownerAnswer(agents))) + queued.map { it.event })
         val byItem = held.associateBy { it.objectId }
         assertEquals(setOf(ObjectId.toPublic(echoed), queuedItem), held.filter(answered::leftToItsTurn).map { it.objectId }.toSet())
         assertSame(byItem[ObjectId.toPublic(echoed)], answered.record(Wire.json.parseToJsonElement(ownerAnswer(echoed)).jsonObject))

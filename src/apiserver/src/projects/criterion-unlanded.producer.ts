@@ -128,6 +128,8 @@ export class CriterionUnlandedProducer {
 
     const [definitions, codebases] = await Promise.all([
       this.prisma.projectAcceptanceCriterionDefinition.findMany({
+        // The non-code mark (0535) is not read (§12.15 P-M3): a criterion whose work delivered no
+        // commit reads LANDED from that fact, marked or not.
         where: { projectId: { in: ids } },
         select: {
           id: true,
@@ -135,7 +137,6 @@ export class CriterionUnlandedProducer {
           servingTasks: {
             select: {
               id: true,
-              status: true,
               // Which of the task's deliveries this is: one sent back and delivered again is a new
               // fact even when nothing else under the criterion moved (`deliveryVersion`).
               progress: { select: { lifecycleEpoch: true } },

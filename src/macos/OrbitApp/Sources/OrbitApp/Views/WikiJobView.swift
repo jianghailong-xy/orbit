@@ -49,6 +49,8 @@ func wikiRunStateLine(_ row: WikiRunRow, font: Font) -> AttributedString {
 /// One run on Activity's Runs band: its kind and when on the first line, its state and the sentence after it under them.
 struct WikiRunListRow: View {
     let row: WikiRunRow
+    /// What a maintenance run read of the repository (design §7.4): nil for any other kind, and before its probe.
+    var tier: WikiRunTier? = nil
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
@@ -66,10 +68,37 @@ struct WikiRunListRow: View {
                     .font(.orbitListSubtitle)
                     .foregroundStyle(Color.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                if let tier {
+                    WikiRunTierTag(tier: tier)
+                }
             }
         }
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// A run's tier as its row's tag (design §7.4, the web's `wk-job-tier`): the tier word in a small capsule — grey on the
+/// folder — and, when the run read the sessions alone, why, amber or red after it.
+struct WikiRunTierTag: View {
+    let tier: WikiRunTier
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text(tier.tier)
+                .font(.orbitMeta)
+                .foregroundStyle(tier.tone == .muted ? Color.secondary.opacity(0.8) : Color.secondary)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 1)
+                .background(Capsule().fill(Color.secondary.opacity(0.12)))
+                .fixedSize()
+            if let reason = tier.reason {
+                Text(reason)
+                    .font(.orbitListSubtitle)
+                    .foregroundStyle(tier.tone == .error ? Color.red : Color.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 }
 

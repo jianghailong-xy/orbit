@@ -179,6 +179,9 @@ test('a session cannot start a session wider than itself', {
           update: tasks.update.bind(tasks),
           execute: tasks.execute.bind(tasks),
           resolveAgentCreator: tasks.resolveAgentCreator.bind(tasks),
+          // The runner door's card gate (`task-write-approval.ts`): the controller calls it before
+          // every session create, so a facade that does not lend it answers 500 instead.
+          assertSessionTaskWriteApproved: tasks.assertSessionTaskWriteApproved.bind(tasks),
         },
       },
       { provide: MergeReceiptService, useValue: {} },

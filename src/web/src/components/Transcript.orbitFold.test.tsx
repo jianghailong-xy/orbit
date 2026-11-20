@@ -8,6 +8,7 @@ import type { CoordinatorDeliveryKind } from '@orbit/shared';
 import type { ExchangeTreeLookup } from '../lib/orbitExchangeFold';
 import { EXCHANGE_REVEAL_EVENT, ExchangeTreeCtx } from './OrbitExchangeFold';
 import { ExportCtx, Transcript, type RunEvent } from './Transcript';
+import { SUBAGENT_DONE, SUBAGENT_FAILED, SUBAGENT_STEER } from '../lib/subagentFinished.fixtures';
 
 /**
  * Turns Orbit opened fold, with the agent's answer, into one line each, and a run of them into one
@@ -207,6 +208,68 @@ describe('turns Orbit opened, folded', () => {
     expect(text('.orbit-branch .orbit-branch .orbit-exchange-what')).toEqual(['Run notice', 'Message']);
     act(() => all('.orbit-branch .orbit-branch .orbit-exchange-line')[1].click());
     expect(q('.orbit-exchange.is-open .smc')).not.toBeNull();
+  });
+
+  it('folds only a short answer: a watch under 220 characters, anything else under 80, never a reply', () => {
+    const wake = (id: string, name: string) => [
+      '<background-job-wake>',
+      '  A background job you started with bg_run has news you were waiting for; the control plane opened this turn for it:',
+      `    ${id}｜query｜bash q.sh｜${name}`,
+      '      ended｜completed｜exit code 0',
+      `      output /root/.orbit/runs/x/${id}.output｜this covers bytes 0–20`,
+      '  The control plane recorded this for you; the user did not write it. Read the whole output with mcp__orbit__bg_output by id.',
+      '</background-job-wake>',
+    ].join('\n');
+    const job = (min: number, id: string, reply: string) =>
+      exchange(min, { text: wake(id, id), controlPlaneNote: wake(id, id) }, reply, ['mcp__orbit__bg_output']);
+    const replyFrom = (min: number, reply: string) =>
+      exchange(min, { text: '', sessionReplies: [{ requestId: `r${min}`, fromSessionId: RUN_OF_B1, fromTitle: 'B1 run', outcome: 'REPLIED' }] }, reply);
+    seq = 0;
+    turn = 0;
+    const events = [
+      ...exchange(0, { text: 'Why is 11-10 not ready?' }, 'I started a query.', []),
+      ...job(5, 'bgj_1', 'Still running.'),
+      ...job(10, 'bgj_2', `Found it: ${'the job waits on lane 7, which never arrives. '.repeat(2)}`),
+      ...exchange(15, { text: watchText({ kind: 'SESSION', id: RUN_OF_B1 }) }, `Duplicate wake; ${'nothing new. '.repeat(15)}`),
+      ...exchange(20, { text: watchText({ kind: 'SESSION', id: RUN_OF_B1 }) }, `B1 landed. ${'All three gates are green on main. '.repeat(7)}`),
+      ...replyFrom(25, 'Exempt.'),
+      ...exchange(30, { text: 'ok' }, 'Done.', []),
+    ];
+    // 14, 102, 211 and 256 characters.
+    expect(events.filter((e) => e.type === 'assistant').map((e) => String(e.payload.text).length).slice(1, 5)).toEqual([14, 102, 211, 256]);
+    mount(events);
+    // Each folds alone: the job's long answer stands between them.
+    expect(text('.orbit-exchange-root .orbit-exchange-what').map((w) => w!.split(':')[0])).toEqual(['Background job finished', 'Watch triggered']);
+    expect(q('.orbit-exchanges')).toBeNull();
+    // A job's answer of 80 or more, a watch's of 220 or more, and any reply stay drawn as they were.
+    expect(container.textContent).toContain('Found it: the job waits on lane 7');
+    expect(container.textContent).toContain('B1 landed.');
+    expect(container.textContent).toContain('Exempt.');
+    // A watch's short answer folds even past 80: it is its row's words, not a message of its own.
+    expect(text('.chat-msg.chat-assistant').some((t) => t!.includes('Duplicate wake'))).toBe(false);
+  });
+
+  // A SubAgent's end draws nothing (its card is the end), so there is no line to fold the turn under: what the
+  // agent said next reads on as its answer, however short.
+  it('folds no SubAgent’s end: the turn draws nothing and the agent’s answer stays in view', () => {
+    const sub = (min: number, block: string, reply: string) =>
+      exchange(min, { text: block, controlPlaneNote: block }, reply, []);
+    seq = 0;
+    turn = 0;
+    const events = [
+      ...exchange(0, { text: 'Deploy it and find the callers.' }, 'Two SubAgents started.', []),
+      ...sub(5, SUBAGENT_DONE, 'Waiting for PID 916891.'),
+      ...exchange(8, { text: 'ok' }, 'Noted.', []),
+      ...sub(10, SUBAGENT_STEER, 'Three callers.'),
+      ...sub(15, SUBAGENT_FAILED, 'Fixing it.'),
+      ...exchange(30, { text: 'thanks' }, 'Done.', []),
+    ];
+    mount(events);
+    expect(q('.orbit-exchange-root, .orbit-exchanges')).toBeNull();
+    expect(all('.bgwake, .orbitwake')).toHaveLength(0);
+    for (const reply of ['Waiting for PID 916891.', 'Three callers.', 'Fixing it.']) expect(container.textContent).toContain(reply);
+    // Only the words the reader typed are bubbles.
+    expect(all('.chat-user')).toHaveLength(3);
   });
 
   it('leaves a turn the agent has not answered as the line its card draws', () => {

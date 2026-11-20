@@ -93,13 +93,17 @@ const REWORDED = 'a rewrite is a new version, and it answers for itself';
  * The acceptance wall as `format_type` spells it, copied from
  * `criteria-confirmation-removal.pg.spec.ts` so that this file — the one thing this task's
  * acceptance command runs — fails if 0251 put authorship on the wall after all.
+ *
+ * `satisfied_by` arrived with 0545 (owner decision 2026-11-11): how the criterion is met, TASKS or
+ * CONFIRMATION, authored with its text. It says nothing about who wrote the criterion or in which
+ * conversation, so authorship is still off the wall.
  */
 const DEFINITION_COLUMNS =
   'id:uuid!, project_id:uuid!, ordinal:integer!, text:text!, revision:integer!, '
   + 'content_hash:character(64)!, created_at:timestamp(3) without time zone!, '
   + 'updated_at:timestamp(3) without time zone!, verification_method:text!, '
   + 'completion_criterion_override_reason:text, semantic_revision:integer!, '
-  + 'semantic_hash:character(64)!';
+  + 'semantic_hash:character(64)!, satisfied_by:criterion_satisfied_by!';
 
 /** What `update` hands back instead of applying an edit whose direction cannot be read. */
 interface HeldEdit {

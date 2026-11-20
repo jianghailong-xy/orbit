@@ -60,3 +60,23 @@ export interface CriteriaChangesSinceConfirmed {
  * compare with. Not a set with no changes — a project confirmed a moment ago has one of those.
  */
 export type CriteriaChangesSinceConfirmedAbsentReason = 'NEVER_CONFIRMED';
+
+/**
+ * One criterion of a RECORDED confirmation, as its receipt reads it: the words that were confirmed,
+ * and whether the criterion has moved since.
+ *
+ * `text` and `verificationMethod` are the words stored with the confirmation. A confirmation written
+ * before they were stored (`wordingRecorded: false` on the confirmation) gets today's words where the
+ * criterion's content hash still matches the one confirmed — the same hash means the same words — and
+ * null where it does not, because those words were never kept anywhere.
+ */
+export interface ConfirmedCriterionReading {
+  key: string;
+  /** Its place in the set that was confirmed; on an older record, its place now, or null once it is gone. */
+  ordinal: number | null;
+  text: string | null;
+  verificationMethod: string | null;
+  /** UNCHANGED: it stands with the content confirmed. EDITED: it stands, reworded or re-checked.
+   *  REMOVED: it no longer stands. */
+  since: 'UNCHANGED' | 'EDITED' | 'REMOVED';
+}

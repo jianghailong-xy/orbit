@@ -41,6 +41,7 @@ import {
 } from './coordinator-pg-test-safety';
 import { taskLandingSql } from './project-criterion-landing';
 import { canonicalRepoUrl, configureProjectIntegration } from './project-integration-line';
+import { prerequisiteLandedSql } from '../tasks/task-dependencies';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { readTaskIntegrationViews } from './project-task-integration';
 import * as integrationJob from './project-integration-job';
@@ -610,7 +611,7 @@ test('(2) J-T9: a silent observation is ended ERROR · RUNNER_LOST by the next t
 
 // ═══ (3) §10.9 3: the empty branch ═══════════════════════════════════════════════════════════
 
-test('(3) §10.9 3, O-R2: an empty branch with no work reported gets a receipt; one whose session reported work gets WORK_ELSEWHERE; work in another repository is not observed',
+test('(3) §10.9 3, O-R2 at the DONE (§12.15 P-M1): an empty branch with no work reported is not observed and reads as nothing to land; one whose session reported work opens WORK_ELSEWHERE at its DONE; work in another repository is not observed',
   { skip, timeout: 240_000 }, async () => {
     const stack = await connect();
     try {
@@ -632,25 +633,21 @@ test('(3) §10.9 3, O-R2: an empty branch with no work reported gets a receipt; 
       const foreign = await finishedTask(stack, w, 'work in another repository', {
         branch: 'orbit/foreign', branchSha: sha('3'), baseSha: sha('4'), workspaceId: otherWorkspace,
       });
+      // A commit of its own, so there is an observation to read the waiting tasks off.
+      const committed = await finishedTask(stack, w, 'a commit of its own', {
+        branch: 'orbit/committed', branchSha: sha('5'), baseSha: sha('6'),
+      });
 
       const command = await claimObservation(stack, w.runnerId, 'observer');
       assert.ok(command);
-      assert.deepEqual(command.observeTasks?.map((task) => task.taskId).sort(),
-        [nothing.taskId, elsewhere.taskId].sort(), 'O-L7: work in another repository is not this line\'s');
+      assert.deepEqual(command.observeTasks?.map((task) => task.taskId), [committed.taskId],
+        'P-M1: neither empty branch is observed — their DONE decided them; O-L7: work in another repository is not this line\'s');
       assert.ok(!command.observeTasks?.some((task) => task.taskId === foreign.taskId));
-      const applied = await report(stack, w, command, observed(command, [
-        seen({ taskId: nothing.taskId, deliveredSha: sha('1'), baseSha: sha('1') }, { empty: true, onUpstream: true, fullyApplied: false }),
-        seen({ taskId: elsewhere.taskId, deliveredSha: sha('2'), baseSha: sha('2') }, { empty: true, onUpstream: true, fullyApplied: false }),
-      ]));
-      assert.equal(applied.answer.accepted, true);
 
-      const [receipt, ...extra] = await receiptsOf(stack, nothing.taskId);
-      assert.equal(extra.length, 0);
-      assert.equal(receipt.result, 'ALREADY_MERGED');
-      assert.equal(receipt.targetBranch, 'main');
-      assert.equal(receipt.sourceSha, sha('1'));
-      assert.deepEqual(receipt.detail, { integrationJobId: command.jobId, observed: true, empty: true });
-      assert.equal(await landingOf(stack, nothing.taskId), 'ON_UPSTREAM', 'J8: nothing to land releases J9');
+      assert.deepEqual(await receiptsOf(stack, nothing.taskId), [], 'nothing to land, and no receipt claims a landing');
+      const [released] = await stack.db.$queryRaw<Array<{ landed: boolean }>>(Prisma.sql`
+        SELECT ${Prisma.raw(prerequisiteLandedSql('t'))} AS "landed" FROM "task" t WHERE t."id" = ${nothing.taskId}::uuid`);
+      assert.equal(released?.landed, true, 'J9: nothing to land releases its dependents');
 
       assert.deepEqual(await receiptsOf(stack, elsewhere.taskId), [], 'a session reported work: no receipt');
       const [unobserved, ...more] = await openItems(stack, w, 'LANDING_UNOBSERVED');
@@ -658,8 +655,8 @@ test('(3) §10.9 3, O-R2: an empty branch with no work reported gets a receipt; 
       assert.equal(unobserved.taskId, elsewhere.taskId);
       assert.equal(unobserved.state, 'OPEN');
       assert.equal(unobserved.dedupeKey, `LU:${elsewhere.taskId}:${sha('2')}`);
-      assert.equal((unobserved.payload as { reason?: string }).reason, 'WORK_ELSEWHERE');
-      assert.deepEqual(applied.after?.openItemIds, [unobserved.id], 'the item is delivered to its holder');
+      assert.equal((unobserved.payload as { reason?: string }).reason, 'WORK_ELSEWHERE',
+        'opened by its DONE, where the empty branch was measured');
     } finally {
       await stack.db.$disconnect();
     }
@@ -1208,6 +1205,40 @@ test('(12) §10.9 2: work pushed as another commit opens LANDING_UNOBSERVED (APP
       assert.equal(await landingOf(stack, rebased), 'ON_UPSTREAM');
       assert.equal(await stack.db.session.count({ where: { taskId: dependent.id } }), 1,
         'J10 started the dependent by itself once the landing was recorded');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+// ═══ (13) a landing still on its way answers for its task ══════════════════════════════════════
+
+test('(13) an observation writes no receipt for a PLATFORM task whose LAND_TASK is still on its way: the 0.1.253 bump, frozen at a stale tip on main, kept its own commit off main',
+  { skip, timeout: 300_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'stale-tip', { line: 'PROJECT_BRANCH', deliveryMode: 'PLATFORM' });
+      // The identity was frozen at (a), a tip from before the task's own commit, already on main.
+      const bump = await finishedTask(stack, w, 'the bump', { branch: 'orbit/the-bump', branchSha: sha('a'), baseSha: sha('b') });
+      const landing = await stack.db.projectIntegrationJob.findFirst({
+        where: { taskId: bump.taskId, kind: 'LAND_TASK' }, select: { state: true },
+      });
+      assert.ok(landing && ['QUEUED', 'RUNNING'].includes(landing.state),
+        `CONTROL: the DONE queued the task's landing (${landing?.state ?? 'none'})`);
+
+      await observeAgain(stack, w);
+      const command = await claimObservation(stack, w.runnerId, 'observer');
+      assert.ok(command, 'CONTROL: an observation was handed out');
+      assert.deepEqual(command.observeTasks?.map((t) => t.taskId), [bump.taskId],
+        'CONTROL: the observation was asked about the bump');
+      await report(stack, w, command, observed(command, [
+        seen({ taskId: bump.taskId, deliveredSha: sha('a'), baseSha: sha('b') }, { onUpstream: true }),
+      ]));
+
+      assert.deepEqual((await receiptsOf(stack, bump.taskId)).map((r) => `${r.result} ${r.targetBranch} ${r.sourceSha}`), [],
+        'the observation wrote a receipt about the stale commit while the task\'s own landing was still on its way');
+      assert.equal(await landingOf(stack, bump.taskId), 'NOT_KNOWN');
+      const [job] = (await observations(stack, w)).filter((row) => row.id === command.jobId);
+      assert.equal(job?.state, 'OBSERVED', 'the observation still ends OBSERVED');
     } finally {
       await stack.db.$disconnect();
     }

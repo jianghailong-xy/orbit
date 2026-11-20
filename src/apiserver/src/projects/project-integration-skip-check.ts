@@ -226,3 +226,78 @@ function cardRefusal(facts: IntegrationSkipCheckFacts): IntegrationSkipCheckDeci
   }
   return null;
 }
+
+// ── a landing still in flight (the owner's "Land without the check") ──────────────────────────────
+
+export { SKIP_CHECK_STOP_CAUSE } from './project-integration-job';
+
+/** The landing already carries a stop, or is itself the generation without the check. 409. */
+export const INTEGRATION_SKIP_CHECK_ALREADY_ASKED = 'INTEGRATION_SKIP_CHECK_ALREADY_ASKED';
+/** The project has no landing check, so a landing runs none to skip. 409. */
+export const INTEGRATION_SKIP_CHECK_NO_CHECK = 'INTEGRATION_SKIP_CHECK_NO_CHECK';
+/** The landing is past the push boundary: it may already have landed. 409. */
+export const INTEGRATION_SKIP_CHECK_PUSHED = 'INTEGRATION_SKIP_CHECK_PUSHED';
+
+/** What a landing still in flight is judged over: its job row, and the project's check commands. */
+export interface InFlightSkipFacts {
+  kind: string;
+  state: string;
+  phase: string | null;
+  cancelRequestedAt: Date | null;
+  skipMergeCheck: boolean;
+  progressProtocol: string | null;
+  pushReportedGeneration: bigint | null;
+  claimGeneration: bigint;
+  landingCheckCommand: string | null;
+  /** The project runs no landing check (`landingCheck` NONE, §12.15 P-C1). */
+  landingCheckNone?: boolean;
+  mergeCheckCommand: string | null;
+}
+
+/**
+ * Why the owner may not skip the landing check of this in-flight landing, or null when they may.
+ *
+ * One rule for the card's button (`skippable` on `inFlightJobs`) and for the door behind it, so the
+ * button is never drawn on a landing the door would refuse. A landing in flight can be skipped while
+ * nothing about it says it already went past the check: it is a task's landing, it runs a landing
+ * check at all, nobody has asked it to stop yet (a stop already asked is somebody's decision, and a
+ * generation queued without the check has nothing left to skip), and it has not reached the push —
+ * past it the merge may already have happened, and stopping it would claim otherwise.
+ */
+export function inFlightSkipRefusal(job: InFlightSkipFacts): { code: string; message: string } | null {
+  if (job.kind !== 'LAND_TASK' || (job.state !== 'QUEUED' && job.state !== 'RUNNING')) {
+    return {
+      code: INTEGRATION_SKIP_CHECK_NOT_A_CHECK_FAILURE,
+      message: 'this landing is not in flight, so there is no check of it to skip.',
+    };
+  }
+  if (job.skipMergeCheck) {
+    return {
+      code: INTEGRATION_SKIP_CHECK_ALREADY_ASKED,
+      message: 'this landing already runs without the landing check: there is nothing left to skip.',
+    };
+  }
+  if (job.cancelRequestedAt) {
+    return {
+      code: INTEGRATION_SKIP_CHECK_ALREADY_ASKED,
+      message: 'this landing has already been asked to stop. Wait for its answer, then decide again.',
+    };
+  }
+  if (job.landingCheckNone || !(job.landingCheckCommand ?? job.mergeCheckCommand)) {
+    return {
+      code: INTEGRATION_SKIP_CHECK_NO_CHECK,
+      message: 'this project has no landing check, so this landing runs none to skip.',
+    };
+  }
+  const pastPush = job.state === 'RUNNING' && (
+    job.phase === 'PUSH' || job.phase === 'VERIFY'
+    || (job.pushReportedGeneration != null && job.pushReportedGeneration === job.claimGeneration));
+  if (pastPush) {
+    return {
+      code: INTEGRATION_SKIP_CHECK_PUSHED,
+      message: 'this landing has passed its checks and reached the push, so it may already have '
+        + 'landed. Wait for its result.',
+    };
+  }
+  return null;
+}

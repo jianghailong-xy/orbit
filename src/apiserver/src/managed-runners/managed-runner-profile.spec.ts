@@ -35,7 +35,7 @@ test('every field a manager acts on is required and checked', () => {
     ['an API server with credentials', (p) => (p.kubernetes.apiServer = 'https://u:p@kube.invalid'), /must not carry credentials/],
     ['a placeholder', (p) => (p.clusterKey = 'REPLACE_ME'), /clusterKey is still a placeholder/],
     ['a template token', (p) => (p.storage.className = '${storage.className}'), /storage\.className is still a placeholder/],
-    ['an image by tag', (p) => (p.runner.image = 'registry.invalid/orbit-managed-runner:latest'), /runner\.image must be pinned by digest/],
+    ['an image by tag', (p) => (p.runner.image = 'registry.invalid/orbit-cloud-runner:latest'), /runner\.image must be pinned by digest/],
     ['a remote plain-http Orbit server', (p) => (p.runner.serverUrl = 'http://orbit.invalid'), /runner\.serverUrl must be an https URL/],
     ['a capacity that is no quantity', (p) => (p.storage.capacity = 'twenty gigs'), /storage\.capacity is not a quantity/],
     ['no attempt budget', (p) => delete p.lifecycle.maxAttempts, /lifecycle\.maxAttempts must be an integer/],

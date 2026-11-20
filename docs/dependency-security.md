@@ -48,6 +48,7 @@ The root Node.js requirement is therefore 20.19 or newer.
 | `katex` pinned to `^0.18.2` | `micromark-extension-math` 3.1.0, which the `markdownlint` documentation linter pins, asks for `katex` `^0.16.0`, and no 0.16 release fixes [GHSA-238p-pmpm-9mq7](https://github.com/advisories/GHSA-238p-pmpm-9mq7) (low; inherited `Object.prototype` properties, `trust` among them, are read as renderer options). The extension calls only `katex.renderToString`, which 0.17 and 0.18 left unchanged: their breaking changes are the internal `__defineFunction` API and prefixed CSS class names. | Drop the `overrides` entry once the `markdownlint` release in use resolves a `micromark-extension-math` that accepts `katex` 0.18.2 or later. |
 | `re2js` pinned to `^2.8.7` | `markdownlint` 0.42.0 pins `re2js` to 2.8.6, which carries [GHSA-gg6h-894w-4m9c](https://github.com/advisories/GHSA-gg6h-894w-4m9c) (high; quadratic-time denial of service in lookbehind matching). `re2js` 2.8.7 is the first patched release. | Drop the `overrides` entry once `markdownlint` updates to a release that depends on `re2js` 2.8.7 or later. |
 | `@deepseek-ai/libreoffice-kit` → `fflate` pinned to `0.8.3` in `scripts/deepseek-harness-p0/package.json` | The P0 harness's `@deepseek-ai/libreoffice-kit` 0.1.5 pins vulnerable `fflate` 0.8.2 exactly; the scoped override fixes [GHSA-px8p-9vwx-vf98](https://github.com/advisories/GHSA-px8p-9vwx-vf98) while retaining the recorded DSH release. | Remove when the harness adopts an upstream `libreoffice-kit` release whose dependency resolves to patched `fflate` without the override, or when the P0 harness is retired. |
+| `@modelcontextprotocol/client` pinned to `2.4.0` in both DSH `package.json` files | `@deepseek-ai/dsh-mcp-client` 0.2.0-rc.2 pins the client to 2.0.0 exactly, which carries [GHSA-6qxp-vccf-f47h](https://github.com/advisories/GHSA-6qxp-vccf-f47h) (high; fixed in 2.2.0) and [GHSA-6prh-2h8m-c8cw](https://github.com/advisories/GHSA-6prh-2h8m-c8cw) (moderate; fixed in 2.3.0). 2.4.0 is the latest 2.x release; the vulnerable OAuth path was already unreachable (see the 2026-11-13 section). | Drop the override once a `@deepseek-ai/dsh` release depends on `@modelcontextprotocol/client` 2.3.0 or later. |
 
 ## Multer aborted-upload cleanup (2026-09-30)
 
@@ -352,6 +353,128 @@ The other way, `/bin/cp -c`, would start a process for every file or directory o
   raising the module's `go` line, so take one only with that decision.
 
 Decision: accepted, with no override or audit exception. GO-2026-5024 needs none, since its package is not imported.
+
+## Bubble Tea for the Orbit TUI (2026-11-12)
+
+The Orbit TUI (`src/runner-go/terminal_tui*.go`, `docs/terminal-session-design.md` "Landing" step 2) draws a session
+in the terminal with Bubble Tea, the dependency the design names. It needs only the program loop, key reading and the
+inline renderer. Colours are plain ANSI written by the TUI itself.
+
+| Module | Version | Purpose | License |
+| --- | --- | --- | --- |
+| `github.com/charmbracelet/bubbletea` | v1.3.4 | The TUI's program loop, key input and renderer. New in `src/runner-go/go.mod`. | MIT |
+| `github.com/charmbracelet/lipgloss` | v1.0.0 | Indirect: Bubble Tea's renderer. | MIT |
+| `github.com/charmbracelet/x/ansi`, `github.com/charmbracelet/x/term` | v0.8.0, v0.2.1 | Indirect: escape-sequence parsing, raw mode. | MIT |
+| `github.com/muesli/termenv`, `github.com/muesli/ansi`, `github.com/muesli/cancelreader` | v0.15.2, v0.0.0-20230316100256-276c6243b2f6, v0.2.2 | Indirect: terminal capabilities, cancellable input. | MIT |
+| `github.com/mattn/go-isatty`, `github.com/mattn/go-runewidth`, `github.com/rivo/uniseg` | v0.0.20, v0.0.16, v0.4.7 | Indirect: TTY detection, cell widths. | MIT |
+| `github.com/aymanbagabas/go-osc52/v2`, `github.com/lucasb-eyer/go-colorful` | v2.0.1, v1.2.0 | Indirect: termenv's clipboard and colour code. | MIT |
+| `github.com/mattn/go-localereader`, `github.com/erikgeiser/coninput` | v0.0.1, v0.0.0-20211004153227-1c3628e74d0f | Indirect: Windows console input only. | MIT |
+| `golang.org/x/sync` | v0.11.0 | Indirect: `errgroup` in Bubble Tea's command runner. | BSD-3-Clause |
+| `golang.org/x/text` | v0.3.8 | Indirect: go-localereader's `transform`, Windows builds only. | BSD-3-Clause |
+
+- **Version.** v1.3.4 is the newest Bubble Tea whose module graph keeps `src/runner-go/go.mod` at `go 1.23` and
+  `golang.org/x/sys` at v0.30.0. v1.3.10 raises the `go` line to 1.24.0 and x/sys to v0.36.0 (see the x/sys section
+  above for why the line stays).
+- **Source and integrity.** `go mod verify` passes for every module in `go.sum`.
+- **Known vulnerabilities.** OSV lists nothing for any module above at its version, except `golang.org/x/text` v0.3.8:
+  - GO-2026-5970 (CVE-2026-56852), `x/text/unicode/norm`, fixed in v0.39.0.
+  - GO-2026-6629 (CVE-2026-56851), `x/text/secure/precis`, fixed in v0.41.0.
+
+  Neither package of the module is built. On linux and darwin `go list -deps` shows no package of the x/text module
+  at all: only the standard library's own vendored copy, which is the toolchain's. On Windows only
+  `golang.org/x/text/transform` is added, and the runner has no Windows build. The fixed releases ask for go 1.25.0, so
+  taking one would raise the `go` line. govulncheck v1.9.0 with the scanning host's go1.27.1 reports, beyond that
+  toolchain's own standard-library advisories, only GO-2026-5024 in `golang.org/x/sys` as required and not called. It
+  reports the same for main's `src/runner-go`, so this change adds no finding.
+- **Reach.** The TUI reads keys from the person's own terminal and draws events the person's own session produced. The
+  events come from the Orbit server over TLS, authenticated with the TERMINAL credential. Nothing reads input from
+  anyone else.
+- **Updates.** Dependabot's existing `gomod` entry for `/src/runner-go` covers these modules. Take a later Bubble Tea
+  only with a decision to raise the module's `go` line.
+
+Decision: accepted, with no override or audit exception. The x/text advisories need none, since neither affected
+package is built.
+
+## MCP client in the DeepSeek DSH lockfiles (2026-11-13)
+
+[Dependabot alerts #75](https://github.com/jianghailong-xy/orbit/security/dependabot/75) and
+[#76](https://github.com/jianghailong-xy/orbit/security/dependabot/76) (high), and
+[#77](https://github.com/jianghailong-xy/orbit/security/dependabot/77) and
+[#78](https://github.com/jianghailong-xy/orbit/security/dependabot/78) (moderate), report the
+`@modelcontextprotocol/client` copy in the two DSH lockfiles. No other lockfile in the repository resolves that
+package; the root workspace does not depend on it.
+
+| Package | Advisory | Severity | Affected | Locked before | Reachability | Locked after |
+| --- | --- | --- | --- | --- | --- | --- |
+| `@modelcontextprotocol/client` | [GHSA-6qxp-vccf-f47h](https://github.com/advisories/GHSA-6qxp-vccf-f47h) (CVE-2026-104850) | high | `>=2.0.0, <2.2.0` | 2.0.0 | The OAuth flow it fixes is never configured by Orbit's MCP client. | 2.4.0 |
+| `@modelcontextprotocol/client` | [GHSA-6prh-2h8m-c8cw](https://github.com/advisories/GHSA-6prh-2h8m-c8cw) (CVE-2026-111769) | moderate | `>=2.0.0, <2.3.0` | 2.0.0 | The redirected-header path needs a `streamable-http` MCP entry with custom headers; no product path declares one. | 2.4.0 |
+
+Both advisories also name `@modelcontextprotocol/sdk`. That package is not installed: DSH packages declare it as an
+optional peer (`peerDependenciesMeta.optional`), and neither lockfile has an entry for it.
+
+**Reachability.** The only consumer is `@deepseek-ai/dsh-mcp-client` 0.2.0-rc.2, which the pinned
+`@deepseek-ai/dsh` 0.2.0-rc.2 install brings in and which pins `@modelcontextprotocol/client` exactly 2.0.0.
+
+- The high advisory is the SDK's OAuth client following authorization-server metadata advertised by a remote MCP
+  server and sending the client's credentials there. `dsh-mcp-client` never supplies an `authProvider` or any other
+  OAuth setting: the words `authProvider`, `OAuth` and `bearer` do not occur in its bundle, and it builds its client
+  as `new Client({name, version}, {capabilities, versionNegotiation, listChanged})`. Its transports are
+  `StdioClientTransport` and `StreamableHTTPClientTransport(url, {requestInit: {headers}})`. Orbit injects its own
+  MCP server over stdio (`orbit mcp`, [runtime contract](deepseek-harness-runtime-contract.md) §3), so nothing
+  enters the OAuth code.
+- The moderate advisory also covers HTTP transports following cross-origin redirects and re-sending custom headers
+  and request bodies. Its precondition is a `streamable-http` MCP entry carrying `headers`. The runtime contract
+  records HTTP MCP as unverified in the P0 harness, and `dshMCPServers` (`src/runner-go/dsh_mcp.go`) refuses every
+  entry without a `command` with `DSH_MCP_UNSUPPORTED` before the process starts, so no such entry reaches the
+  client at all.
+
+Neither advisory is accepted as a residual: both lockfiles take a patched release.
+
+**Disposition.** `@deepseek-ai/dsh` 0.2.0-rc.2 pins the client exactly, and the next DSH line does not fix the
+moderate: `@deepseek-ai/dsh-mcp-client` 0.2.2-rc.2, the newest release of the 0.2 line, pins 2.2.0, which clears
+the high advisory but stays below the moderate one's 2.3.0. Dependabot listed both alerts when they were published
+but opened no update pull request for either manifest, because no version its updater may choose satisfies the
+exact pin. Both DSH `package.json` files therefore gain the same override, the shape already used for `fflate`:
+
+```json
+"overrides": {
+  "@deepseek-ai/libreoffice-kit": { "fflate": "0.8.3" },
+  "@modelcontextprotocol/client": "2.4.0"
+}
+```
+
+2.4.0 is the latest 2.x release and is above both fixed versions (2.2.0 and 2.3.0). Its exact dependency moves
+`@modelcontextprotocol/core` from 2.0.0 to 2.4.0, the only other change in either lockfile. Both packages change
+license from MIT to Apache-2.0 at these releases; both are permissive and compatible with Orbit's MIT license.
+`dsh-mcp-client` imports only `Client`, `StreamableHTTPClientTransport` and `StdioClientTransport`, whose signatures
+are unchanged across 2.x, and the reproduction below exercises the stdio transport it actually uses.
+
+The two files stay byte-identical: `src/runner-go/dsh-install/package.json` and `package-lock.json` are the
+`//go:embed` copies the runner installs DSH from, and `dsh_install_test.go` asserts they equal the P0 harness's.
+
+**Verification (2026-11-13).**
+
+- `npm audit --prefix scripts/deepseek-harness-p0 --package-lock-only` and the same for
+  `src/runner-go/dsh-install` report 0 findings at every severity. Before the change the same audit reported five
+  high packages in each tree — `@modelcontextprotocol/client` and the four DSH packages the lockfiles carry it
+  through, which are the two advisories behind Dependabot alerts #75–#78.
+- A clean `npm ci` of the harness installs `@modelcontextprotocol/client` 2.4.0 and `@modelcontextprotocol/core`
+  2.4.0.
+- The 24-scenario P0 reproduction passes on the patched tree — all 24, including stdio MCP injection, tool calls,
+  side effects, permissions, crash recovery and the credential and configuration layers. The run used a copy of
+  `reproduce.mjs` whose per-call timeouts are raised from 30 s to 180 s (10 s to 60 s), because this host's load
+  put dsh's ACP boot between 8.9 s and 86.8 s across three trees and both client versions; the copy changes
+  timeouts only, not scenarios or assertions.
+- `go test -run Dsh ./...` in `src/runner-go` passes, the embedded-file equality assertion included.
+
+**Removal condition.** Drop the override when a `@deepseek-ai/dsh` release depends on
+`@modelcontextprotocol/client` 2.3.0 or later.
+
+**Existing installations.** A published `${ORBIT_HOME}/engines/dsh/0.2.0-rc.2` directory is immutable and is not
+reinstalled because the lockfile changed ([runtime environment](deepseek-harness-runtime-environment.md)), so a
+machine that already installed DSH keeps the old tree until the supported version moves to a new directory. That
+residual is why the reachability analysis above matters: there the high advisory stays present but unreachable,
+while every fresh install takes the patched tree.
 
 ## Verification
 

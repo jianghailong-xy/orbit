@@ -67,6 +67,8 @@ API="$REPO/src/apiserver"
 . "$REPO/scripts/pg-matrix-summary.lib.sh" || exit 1
 
 IMAGE="${RUN_PG_SPEC_IMAGE:-postgres:16-alpine}"
+# Set this to keep database scratch on a designated filesystem instead of Docker's volume store.
+PGDATA_DIRS=()
 CONTAINER="pccspec-pg-$$-$RANDOM"   # never a fixed name: sibling sessions run their own
 ADMIN=pccspec_          # the pcc_* naming the specs' own isolation guard demands of role and database
 PASSWORD=pccspec_pw
@@ -116,7 +118,23 @@ PRISMA="$API/node_modules/.bin/prisma"; [ -x "$PRISMA" ] || PRISMA="$REPO/node_m
 
 echo "==> building the test tree (rm -rf build first)"
 rm -rf "$API/build"
-( cd "$API" && "$TSC" -p tsconfig.test.json ) || die "tsconfig.test.json failed to compile"
+# RUN_PG_SPEC_COMPILE=specs compiles only the named specs and what they import, into the same
+# build/ layout (rootDir is src). For machines whose memory cap kills the whole test tree's tsc;
+# the rest of the tree is then not type-checked by this run.
+case "${RUN_PG_SPEC_COMPILE:-}" in
+  '')
+    ( cd "$API" && "$TSC" -p tsconfig.test.json ) || die "tsconfig.test.json failed to compile"
+    ;;
+  specs)
+    SUBSET="$API/.tsconfig.pg-specs.$$.json"
+    "$NODE" -e 'require("node:fs").writeFileSync(process.argv[1], JSON.stringify({ extends: "./tsconfig.test.json", files: process.argv.slice(2), include: [] }))' \
+      "$SUBSET" "${SPECS[@]}" || die "could not write the subset tsconfig"
+    ( cd "$API" && "$TSC" -p "$SUBSET" ); status=$?
+    rm -f "$SUBSET"
+    [ "$status" = 0 ] || die "the named specs failed to compile"
+    ;;
+  *) die "RUN_PG_SPEC_COMPILE must be unset or specs" ;;
+esac
 # The overlay's `src/node_modules/@orbit/shared` already answers for everything under `build/`;
 # this one is here because it is nearer still, and because `build/` is this script's own to lay out.
 mkdir -p "$API/build/node_modules/@orbit"
@@ -137,6 +155,7 @@ fi
 cleanup() {
   echo "==> removing $CONTAINER"
   docker rm -f -v "$CONTAINER" >/dev/null 2>&1 || true
+  for data_dir in "${PGDATA_DIRS[@]}"; do rm -rf "$data_dir"; done
   [ "$REMOVE_LOG_DIR" = 0 ] || rm -rf "$LOG_DIR"
 }
 trap cleanup EXIT INT TERM
@@ -145,9 +164,16 @@ provision_server() {
   echo "==> provisioning $CONTAINER ($IMAGE, disposable PGDATA volume)"
   # Pin an available host port explicitly: Docker can reassign an automatic port on restart.
   PORT="$("$NODE" -e 'const s = require("node:net").createServer(); s.listen(0, "127.0.0.1", () => { console.log(s.address().port); s.close(); });')" || die "could not select a host port"
+  pgdata_mount=(-v /pgdata)
+  if [ -n "${RUN_PG_SPEC_PGDATA_ROOT:-}" ]; then
+    mkdir -p "$RUN_PG_SPEC_PGDATA_ROOT" || die "could not create PGDATA root"
+    data_dir="$(mktemp -d "$RUN_PG_SPEC_PGDATA_ROOT/pgdata.XXXXXX")" || die "could not create PGDATA"
+    PGDATA_DIRS+=("$data_dir")
+    pgdata_mount=(-v "$data_dir:/pgdata")
+  fi
   docker run -d --name "$CONTAINER" \
     -e "POSTGRES_USER=$ADMIN" -e "POSTGRES_PASSWORD=$PASSWORD" -e POSTGRES_DB=postgres \
-    -e PGDATA=/pgdata -v /pgdata \
+    -e PGDATA=/pgdata "${pgdata_mount[@]}" \
     -p "127.0.0.1:$PORT:5432" "$IMAGE" >/dev/null || die "docker run failed"
 
   psql_db() {

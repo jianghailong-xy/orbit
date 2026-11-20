@@ -20,6 +20,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -156,6 +157,19 @@ type kimiACPClient struct {
 	permissions   map[string]context.CancelFunc
 	permissionOff bool
 	permissionGen uint64
+
+	// toolInputs joins a permission request to its tool call's arguments. Kimi's
+	// session/request_permission toolCall carries no rawInput (the engine builds it
+	// from the approval's title and action text only), and the update that does
+	// carry rawInput is sent when the call starts executing — after the permission
+	// answer. What precedes the request on the wire is the argument stream:
+	// tool_call (rawInput null) and tool_call_update notifications whose content
+	// text is the arguments accumulated so far. Recorded in readLoop, in wire
+	// order, so a request handler goroutine always sees every update Kimi wrote
+	// before the request.
+	inputsMu       sync.Mutex
+	toolInputs     map[string]map[string]interface{}
+	toolInputOrder []string
 }
 
 func (a *kimiACPClient) nextRequestID() string {
@@ -448,6 +462,9 @@ func (a *kimiACPClient) readLoop(r io.Reader) {
 		}
 		if msg.Method != "" {
 			copy := msg
+			if copy.Method == "session/update" {
+				a.noteKimiToolInput(rawObject(copy.Params))
+			}
 			select {
 			case a.notifications <- kimiInboundItem{message: &copy}:
 			case <-a.done:
@@ -597,7 +614,11 @@ func startKimiACP(ctx context.Context, t *Transport, job *ClaimedSession, execDi
 		"ORBIT_ALLOW_ORCHESTRATION="+orchestrationEnv(job.AllowOrchestration),
 		envWatches+"="+watchesEnv(job.WatchesDisabled),
 		envWiki+"="+wikiEnv(job.WikiDisabled),
+		envScheduleRun+"="+scheduleRunEnv(job.ScheduleRun),
 		envMCPPermissionPrompt+"=0",
+		envSpawnDepth+"="+strconv.Itoa(job.SpawnDepth),
+		// Kimi's own deadline for a call of `orbit mcp` (kimiMCPConfigRecord): a wait ends inside it.
+		envMCPCallTimeout+"="+strconv.Itoa(int(kimiOrbitMCPToolTimeout/time.Second)),
 	)
 	// Runner-hosted background jobs (mcp__orbit__bg_run). Kimi's `orbit` MCP server
 	// is configured with an empty env block on purpose and inherits this process's
@@ -652,7 +673,7 @@ func startKimiACP(ctx context.Context, t *Transport, job *ClaimedSession, execDi
 		permissionOff: true,
 	}
 	app.permission = func(permissionCtx context.Context, params map[string]interface{}) map[string]interface{} {
-		return bridgeKimiPermission(permissionCtx, t, job, params)
+		return app.bridgeKimiPermission(permissionCtx, t, job, params)
 	}
 	if err := startSessionProcess(cmd); err != nil {
 		_ = stdin.Close()
@@ -958,10 +979,19 @@ func kimiMCPConfigRecord(agent AgentExecConfig, orbitExe string) map[string]inte
 			// env startKimiACP sets. Writing the ids here would pin this session's
 			// identity into a file instead.
 			"env": map[string]string{},
+			// Kimi ends an MCP tool call after 60 seconds by default, which cuts a delegate or session_create
+			// wait short and reports a call that is still running as failed. Orbit's own server gets the longest
+			// wait it holds (`orbit mcp` is told it in startKimiACP, envMCPCallTimeout).
+			"toolTimeoutMs": int(kimiOrbitMCPToolTimeout / time.Millisecond),
 		}
 	}
 	return servers
 }
+
+// kimiOrbitMCPToolTimeout is how long Kimi lets a call of Orbit's own MCP server run: twice the longest wait
+// `orbit mcp` holds a call for (maxSessionWaitPolls × sessionWaitInterval, 10 minutes), as longestInlineWait
+// keeps a wait to half the engine's deadline.
+const kimiOrbitMCPToolTimeout = 22 * time.Minute
 
 func kimiMCPConfigEntry(name string, value interface{}) map[string]interface{} {
 	m := mapValue(value)
@@ -1047,7 +1077,7 @@ func kimiAgentInstructions(agent AgentExecConfig, orbitExe string, insideRecorde
 	if strings.TrimSpace(agent.SystemPrompt) != "" {
 		parts = append(parts, agent.SystemPrompt)
 	}
-	if appendPrompt := strings.TrimSpace(withOrbitCLIInstructions(agent.AppendSystemPrompt, orbitExe, insideRecordedWork, watches)); appendPrompt != "" {
+	if appendPrompt := strings.TrimSpace(withOrbitCLIInstructions(agent.AppendSystemPrompt, orbitExe, insideRecordedWork, watches, agentDelegates(agent))); appendPrompt != "" {
 		parts = append(parts, appendPrompt)
 	}
 	if len(agent.AllowedTools) > 0 {
@@ -1130,6 +1160,10 @@ type kimiActiveTurn struct {
 	seenTools      map[string]bool
 	doneTools      map[string]bool
 	plans          int // plan updates seen this turn; makes each one a distinct tool id
+	// unsent is closed by an interrupt (under activeMu) so a prompt still waiting on a turn Kimi
+	// runs by itself is not sent at all (waitKimiOwnTurn).
+	unsent       chan struct{}
+	unsentClosed bool
 }
 
 // Kimi's deltas carry no ordering across kinds, so the transcript's order is the runner's to
@@ -1444,22 +1478,34 @@ type kimiTurnOutcome struct {
 	ran bool
 	// failure is the sentence the turn failed with, "" when it did not fail.
 	failure string
+	// compactionDropped is true when the turn failed because Kimi dropped the compaction it was
+	// waiting on, before its model was asked anything (kimiTurnRecord.compactionDropped).
+	compactionDropped bool
+	// text is what the turn answered, as its record holds it. ACP streams nothing of a prompt Kimi
+	// queued behind a turn of its own (kimiTurnLedger), so this is the only place that answer is.
+	text string
 }
 
 // readKimiTurnOutcome reads the outcome of the turn this prompt opened, waiting up to
 // kimiTurnOutcomeWait for its end record. A record that reaches the wire a moment after the answer
-// is waited for; one that never does, with the prompt answered, is a turn that never opened.
-func readKimiTurnOutcome(ctx context.Context, wire string, from int64) kimiTurnOutcome {
+// is waited for; one that never does, with the prompt answered, is a turn that never opened. While
+// a turn is open on the wire (turns, nil when nothing follows it) the wait goes on: Kimi queued
+// this prompt behind a turn of its own and runs it when that one ends.
+func readKimiTurnOutcome(ctx context.Context, wire string, from int64, turns *kimiTurnLedger) kimiTurnOutcome {
 	if wire == "" {
 		return kimiTurnOutcome{}
 	}
-	deadline := time.Now().Add(kimiTurnOutcomeWait)
+	began := time.Now()
+	deadline := began.Add(kimiTurnOutcomeWait)
 	for {
 		if ended, ok := kimiTurnEnded(wire, from); ok {
 			if ended.Reason != "failed" {
-				return kimiTurnOutcome{read: true, ran: true}
+				return kimiTurnOutcome{read: true, ran: true, text: ended.text}
 			}
-			return kimiTurnOutcome{read: true, ran: true, failure: kimiFailureSentence(ended.Error)}
+			return kimiTurnOutcome{read: true, ran: true, failure: kimiFailureSentence(ended.Error), compactionDropped: ended.compactionDropped, text: ended.text}
+		}
+		if turns.running() && time.Since(began) < kimiQueuedTurnWait {
+			deadline = time.Now().Add(kimiTurnOutcomeWait)
 		}
 		if !time.Now().Before(deadline) {
 			// Answered `end_turn` with no turn on the wire behind it: the engine's agent was not idle
@@ -1498,8 +1544,10 @@ func kimiFailureSentence(err *kimiTurnError) string {
 		return sentence
 	}
 	sentence := "Kimi Code failed this turn"
-	if err.Name != "" {
-		sentence += " (" + err.Name + ")"
+	// An error Kimi raises itself has no name, only a code ("internal"): the code is the only word
+	// that says what kind of failure it was.
+	if label := firstNonEmpty(err.Name, err.Code); label != "" {
+		sentence += " (" + label + ")"
 	}
 	if message != "" {
 		sentence += ": " + clip(message, kimiRPCErrorDataMax)
@@ -1511,6 +1559,7 @@ func kimiFailureSentence(err *kimiTurnError) string {
 // name for it and the provider's sentence.
 type kimiTurnError struct {
 	Name    string `json:"name"`
+	Code    string `json:"code"`
 	Message string `json:"message"`
 }
 
@@ -1533,11 +1582,36 @@ type kimiTurnRecord struct {
 	TurnID  json.RawMessage `json:"turnId"`
 	Reason  string          `json:"reason"`
 	Error   *kimiTurnError  `json:"error"`
+	Kind    string          `json:"kind"`
+	// Origin is what opened a turn.prompt: "user" for a prompt sent over ACP, "task" for a
+	// background task's notification Kimi answers by itself. Absent on older records.
+	Origin *struct {
+		Kind string `json:"kind"`
+	} `json:"origin"`
+	// Event is a context.append_loop_event's event; only its text parts are read (text).
+	Event *struct {
+		Type   string          `json:"type"`
+		TurnID json.RawMessage `json:"turnId"`
+		Part   *struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		} `json:"part"`
+	} `json:"event"`
+	// text is the answer the turn wrote: its text parts, in order.
+	text string
+	// compactionDropped: a full compaction of the main agent was cancelled in this turn and no model
+	// request of the turn's own (an llm.request of kind "loop") came after it. Kimi 2.5.3 starts an
+	// automatic compaction as a turn opens and makes the turn wait on it; when a message lands in the
+	// history meanwhile (an MCP tool-update reminder), it throws the finished summary away and the
+	// cancellation fails the waiting turn as `internal: [object Object]` — a turn that never ran,
+	// which the same prompt sent again runs (session 34tldRMFzXMU1CBLQ1GFZ, 2026-11-12).
+	compactionDropped bool
 }
 
 // kimiTurnEnded reads, from the whole lines of wire past from, the turn.ended of the main agent's turn
 // that opens there: the one its first turn.prompt names. By number, because the end of the turn before
-// can be written after from too, when it took longer to reach the wire than it was waited for. False
+// can be written after from too, when it took longer to reach the wire than it was waited for. A turn
+// Kimi opened by itself (an origin other than "user") is not the prompt's, and is passed over. False
 // while it is not there yet.
 func kimiTurnEnded(wire string, from int64) (kimiTurnRecord, bool) {
 	f, err := os.Open(wire)
@@ -1555,18 +1629,35 @@ func kimiTurnEnded(wire string, from int64) (kimiTurnRecord, bool) {
 		return kimiTurnRecord{}, false
 	}
 	var turn json.RawMessage
+	var text strings.Builder
+	dropped := false
 	for _, line := range bytes.Split(data[:end], []byte{'\n'}) {
-		if !bytes.Contains(line, []byte(`"turn.`)) {
+		if !bytes.Contains(line, []byte(`"turn.`)) && !bytes.Contains(line, []byte(`"full_compaction.cancel"`)) &&
+			!bytes.Contains(line, []byte(`"llm.request"`)) && !bytes.Contains(line, []byte(`"content.part"`)) {
 			continue
 		}
 		var rec kimiTurnRecord
-		if json.Unmarshal(line, &rec) != nil || rec.AgentID != "main" || len(rec.TurnID) == 0 {
+		if json.Unmarshal(line, &rec) != nil || rec.AgentID != "main" {
 			continue
 		}
 		switch {
+		case rec.Type == "context.append_loop_event":
+			if ev := rec.Event; turn != nil && ev != nil && ev.Type == "content.part" && ev.Part != nil &&
+				ev.Part.Type == "text" && strings.Trim(string(ev.TurnID), `"`) == strings.Trim(string(turn), `"`) {
+				text.WriteString(ev.Part.Text)
+			}
+		case rec.Type == "full_compaction.cancel" && turn != nil:
+			dropped = true
+		case rec.Type == "llm.request" && rec.Kind == "loop" && turn != nil:
+			dropped = false
+		case len(rec.TurnID) == 0:
 		case rec.Type == "turn.prompt" && turn == nil:
-			turn = rec.TurnID
+			if rec.Origin == nil || rec.Origin.Kind == "" || rec.Origin.Kind == "user" {
+				turn = rec.TurnID
+			}
 		case rec.Type == "turn.ended" && turn != nil && bytes.Equal(rec.TurnID, turn):
+			rec.compactionDropped = dropped && rec.Reason == "failed"
+			rec.text = strings.TrimSpace(text.String())
 			return rec, true
 		}
 	}
@@ -1682,11 +1773,15 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 		emit(evError, map[string]interface{}{"message": kimiAuthMessage(err)})
 		return stFailed, true, false
 	}
+	// Read from before the resume: Kimi opens its turns for the background tasks its previous
+	// process lost while resuming (kimiTurnLedger).
+	turns := newKimiTurnLedger(realHome, job.RuntimeSessionID)
 	sessionID, err := app.startOrResumeSession(ctx, job, execDir)
 	if err != nil {
 		emit(evError, map[string]interface{}{"message": kimiAuthMessage(err)})
 		return stFailed, true, false
 	}
+	turns.setSession(sessionID)
 	job.RuntimeSessionID = sessionID
 	expectedSessionID.Store(sessionID)
 	writeKimiSessionMeta(scratchDir, job, execDir)
@@ -1780,6 +1875,12 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 				}
 			}
 		}
+		// A prompt Kimi queued behind a turn of its own ran with nothing streamed (kimiTurnLedger):
+		// its answer is the one its record holds.
+		if done.outcome.ran && done.outcome.text != "" && kimiTurnSaidNothing(turn) {
+			turn.text.WriteString(done.outcome.text)
+			resultText = done.outcome.text
+		}
 		// Whatever the turn was in the middle of when it ended is the only stretch not yet
 		// persisted; everything earlier landed where the stream moved past it.
 		turn.flushThought(emit)
@@ -1803,9 +1904,9 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 			ChangedDiff:      livePatches,
 			BaseSha:          liveBaseSha,
 			WorktreeDirty:    worktreeIsDirty(job.WT),
-			BranchSha:        effectiveBranchSha(job.WT),
-			BranchMerged:     branchMergedInto(job.WT),
-			WorktreeBranch:   currentBranch(job.WT),
+			BranchSha:        effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT),
+			BranchMerged:   branchMergedInto(job.WT),
+			WorktreeBranch: currentBranch(job.WT),
 		}); completeErr != nil {
 			logln("turn-complete failed for", job.SessionID+":", completeErr)
 		}
@@ -1823,7 +1924,7 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 				draining = true
 				shutdownDone = nil
 				pollCancel()
-				drainTimer = time.After(shutdownDrainTimeout)
+				drainTimer = time.After(stopDrainBudget(shutdownCtx, shutdownDrainTimeout))
 				activeMu.Lock()
 				idle := active == nil
 				activeMu.Unlock()
@@ -1832,6 +1933,8 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 				}
 			}
 		case <-drainTimer:
+			// The turn still running is cut: marked, as the Claude drain marks its own (watchShutdownDrain).
+			emit(evInterrupt, stopInterruptPayload(shutdownCtx))
 			app.cancelPermissions()
 			return stCancelled, true, false
 		case <-app.done:
@@ -1898,6 +2001,7 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 						orbitTurnID: resp.TurnID,
 						seenTools:   map[string]bool{},
 						doneTools:   map[string]bool{},
+						unsent:      make(chan struct{}),
 					}
 				}
 				activeMu.Unlock()
@@ -1916,39 +2020,91 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 				emit(evUser, userEvent)
 				turnID := resp.TurnID
 				interruptRequested = false
-				app.beginPermissionTurn()
-				wire, wireFrom := kimiTurnWire(realHome, sessionID)
-				pending, writeAck, promptErr := app.queueRequest("session/prompt", map[string]interface{}{
+				prompt := map[string]interface{}{
 					"sessionId": sessionID,
 					"prompt":    prepared.blocks,
-				})
-				if promptErr != nil {
-					promptDone <- kimiPromptResult{turnID: turnID, err: promptErr}
-					continue
 				}
+				unsent := active.unsent
 				app.wg.Add(1)
 				go func() {
 					defer app.wg.Done()
+					// A prompt sent while Kimi runs a turn of its own is queued behind it and answered
+					// at once without running (kimiTurnLedger): it goes when that turn has ended.
+					waited, ownTurnErr := waitKimiOwnTurn(ctx, app.done, unsent, turns)
+					if ownTurnErr != nil {
+						done := kimiPromptResult{turnID: turnID, err: ownTurnErr}
+						if ownTurnErr == errKimiPromptUnsent {
+							done = kimiPromptResult{turnID: turnID, result: map[string]interface{}{"stopReason": "cancelled"}}
+						}
+						select {
+						case promptDone <- done:
+						case <-ctx.Done():
+						}
+						return
+					}
+					if waited >= kimiForeignTurnPoll {
+						logln("kimi ran a turn of its own; prompt for", job.SessionID, "sent after", waited.Round(time.Millisecond))
+					}
+					// Under activeMu, with an interrupt's check of unsent: a Stop pressed while the
+					// prompt waited is never followed by the prompt itself.
+					activeMu.Lock()
+					select {
+					case <-unsent:
+						activeMu.Unlock()
+						select {
+						case promptDone <- kimiPromptResult{turnID: turnID, result: map[string]interface{}{"stopReason": "cancelled"}}:
+						case <-ctx.Done():
+						}
+						return
+					default:
+					}
+					app.beginPermissionTurn()
+					wire, wireFrom := kimiTurnWire(realHome, sessionID)
+					pending, writeAck, promptErr := app.queueRequest("session/prompt", prompt)
+					activeMu.Unlock()
+					if promptErr != nil {
+						select {
+						case promptDone <- kimiPromptResult{turnID: turnID, err: promptErr}:
+						case <-ctx.Done():
+						}
+						return
+					}
 					var result map[string]interface{}
 					var waitErr error
-					select {
-					case waitErr = <-writeAck:
-						if waitErr == nil {
-							result, waitErr = app.waitRequest(ctx, pending)
-						} else {
-							app.forget(pending.id)
-						}
-					case <-app.done:
-						app.forget(pending.id)
-						waitErr = fmt.Errorf("kimi acp closed")
-					case <-ctx.Done():
-						app.forget(pending.id)
-						waitErr = ctx.Err()
-					}
-					// A failed turn is answered as end_turn, and only then is its record read.
 					var outcome kimiTurnOutcome
-					if waitErr == nil && strings.EqualFold(firstString(result, "stopReason", "stop_reason"), "end_turn") {
-						outcome = readKimiTurnOutcome(ctx, wire, wireFrom)
+					for attempt := 0; ; attempt++ {
+						result, waitErr, outcome = nil, nil, kimiTurnOutcome{}
+						select {
+						case waitErr = <-writeAck:
+							if waitErr == nil {
+								result, waitErr = app.waitRequest(ctx, pending)
+							} else {
+								app.forget(pending.id)
+							}
+						case <-app.done:
+							app.forget(pending.id)
+							waitErr = fmt.Errorf("kimi acp closed")
+						case <-ctx.Done():
+							app.forget(pending.id)
+							waitErr = ctx.Err()
+						}
+						// A failed turn is answered as end_turn, and only then is its record read.
+						if waitErr == nil && strings.EqualFold(firstString(result, "stopReason", "stop_reason"), "end_turn") {
+							outcome = readKimiTurnOutcome(ctx, wire, wireFrom, turns)
+						}
+						// A turn failed only by the compaction Kimi dropped never reached its model: the
+						// same prompt is sent once more, as part of the same Orbit turn, and it is that
+						// attempt that answers the turn (kimiTurnRecord.compactionDropped).
+						if !outcome.compactionDropped || attempt > 0 || ctx.Err() != nil {
+							break
+						}
+						logln("kimi dropped the compaction turn", turnID, "waited on; sending its prompt again for", job.SessionID)
+						var resendErr error
+						wire, wireFrom = kimiTurnWire(realHome, sessionID)
+						pending, writeAck, resendErr = app.queueRequest("session/prompt", prompt)
+						if resendErr != nil {
+							break
+						}
 					}
 					select {
 					case promptDone <- kimiPromptResult{turnID: turnID, result: result, err: waitErr, outcome: outcome}:
@@ -1968,7 +2124,7 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 					runShellTurnBackground(bg, execDir, scratchDir, shellCommand, resp.TurnID, emit, job.Agent.Env)
 					if err := completeTurn(TurnCompleteRequest{
 						TurnID: resp.TurnID, Status: stSucceeded, Result: "started in background", Subtype: "shell",
-						RuntimeSessionID: sessionID, BranchSha: effectiveBranchSha(job.WT),
+						RuntimeSessionID: sessionID, BranchSha: effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT),
 					}); err != nil {
 						logln("shell turn-complete failed for", job.SessionID+":", err)
 					}
@@ -1997,6 +2153,12 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 				stopBackgroundWorkForTurn(bg, resp)
 				emit(evInterrupt, map[string]interface{}{})
 				interruptRequested = true
+				activeMu.Lock()
+				if active != nil && !active.unsentClosed {
+					close(active.unsent)
+					active.unsentClosed = true
+				}
+				activeMu.Unlock()
 				app.cancelPermissions()
 				ack, cancelErr := app.queueNotify("session/cancel", map[string]interface{}{"sessionId": sessionID})
 				if cancelErr != nil {
@@ -2044,7 +2206,7 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 					ChangedFiles: liveFiles, ChangedDiff: livePatches,
 					BaseSha:       liveBaseSha,
 					WorktreeDirty: worktreeIsDirty(job.WT), BranchMerged: branchMergedInto(job.WT),
-					BranchSha: effectiveBranchSha(job.WT), WorktreeBranch: currentBranch(job.WT),
+					BranchSha: effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT), WorktreeBranch: currentBranch(job.WT),
 				}); err != nil {
 					logln("diff-result failed for", job.SessionID+":", err)
 				}
@@ -2057,7 +2219,136 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 	}
 }
 
-func bridgeKimiPermission(ctx context.Context, t *Transport, job *ClaimedSession, params map[string]interface{}) map[string]interface{} {
+// kimiToolInputRegistryMax bounds the joined-input map; entries past it are
+// evicted oldest-first. A permission request names a call from the current
+// turn, so a few hundred entries is far beyond reach.
+const kimiToolInputRegistryMax = 512
+
+// noteKimiToolInput records a session/update's tool arguments, keyed by
+// toolCallId, for the permission bridge. Runs in readLoop, so every line Kimi
+// wrote before a session/request_permission is recorded before the request's
+// handler goroutine can run.
+func (a *kimiACPClient) noteKimiToolInput(params map[string]interface{}) {
+	update := mapValue(params["update"])
+	kind := firstString(update, "sessionUpdate", "session_update")
+	if kind != "tool_call" && kind != "tool_call_update" {
+		return
+	}
+	id := firstString(update, "toolCallId", "tool_call_id")
+	if id == "" {
+		return
+	}
+	input := mapValue(firstPresent(update, "rawInput", "raw_input"))
+	if input == nil {
+		input = kimiStreamedArgs(update)
+	}
+	if input == nil {
+		return
+	}
+	a.inputsMu.Lock()
+	defer a.inputsMu.Unlock()
+	if a.toolInputs == nil {
+		a.toolInputs = map[string]map[string]interface{}{}
+	}
+	if _, ok := a.toolInputs[id]; !ok {
+		a.toolInputOrder = append(a.toolInputOrder, id)
+		for len(a.toolInputOrder) > kimiToolInputRegistryMax {
+			delete(a.toolInputs, a.toolInputOrder[0])
+			a.toolInputOrder = a.toolInputOrder[1:]
+		}
+	}
+	a.toolInputs[id] = input
+}
+
+// kimiStreamedArgs reads a streaming tool_call_update's content text as the
+// call's arguments. Each delta carries the whole arguments document so far
+// (not a fragment), so the last text of a pending/in_progress update is the
+// input once it parses as a JSON object. A completed update's content is the
+// tool's result instead, and is never taken for the input.
+func kimiStreamedArgs(update map[string]interface{}) map[string]interface{} {
+	switch status := strings.ToLower(firstString(update, "status")); status {
+	case "", "pending", "in_progress":
+	default:
+		return nil
+	}
+	rows, _ := update["content"].([]interface{})
+	text := ""
+	for _, rowValue := range rows {
+		row := mapValue(rowValue)
+		if t := kimiContentText(row["content"]); t != "" {
+			text = t
+		}
+	}
+	text = strings.TrimSpace(text)
+	if !strings.HasPrefix(text, "{") || !strings.HasSuffix(text, "}") {
+		return nil
+	}
+	var parsed map[string]interface{}
+	if err := json.Unmarshal([]byte(text), &parsed); err != nil {
+		return nil
+	}
+	return parsed
+}
+
+// kimiToolInputLookup answers the arguments recorded for a tool call, or nil.
+func (a *kimiACPClient) kimiToolInputLookup(toolCallID string) map[string]interface{} {
+	a.inputsMu.Lock()
+	defer a.inputsMu.Unlock()
+	return a.toolInputs[toolCallID]
+}
+
+// kimiPermissionToolInput resolves the input a permission card is filed with.
+// Kimi's request carries no rawInput, so the joined stream answers by
+// toolCallId; kimiPermissionFallbackInput is the last resort, never the raw
+// toolCall map — filing it rendered the web card as a bare "$".
+func (a *kimiACPClient) kimiPermissionToolInput(toolCall map[string]interface{}, toolUseID string) interface{} {
+	if input := firstPresent(toolCall, "rawInput", "raw_input"); mapValue(input) != nil {
+		return input
+	}
+	if joined := a.kimiToolInputLookup(toolUseID); joined != nil {
+		return joined
+	}
+	return kimiPermissionFallbackInput(toolCall)
+}
+
+// kimiPermissionFallbackInput derives a card body from the permission
+// request's own content when the stream had no arguments to join: a diff entry
+// (Kimi's Edit/Write approvals carry one) becomes the file fields the card
+// renders, and anything else keeps the engine's action line
+// ("Requesting approval to …") as the description so one card can still be
+// told from another.
+func kimiPermissionFallbackInput(toolCall map[string]interface{}) map[string]interface{} {
+	rows, _ := toolCall["content"].([]interface{})
+	for _, rowValue := range rows {
+		row := mapValue(rowValue)
+		if firstString(row, "type") != "diff" {
+			continue
+		}
+		input := map[string]interface{}{}
+		if path := firstString(row, "path"); path != "" {
+			input["file_path"] = path
+		}
+		if oldText, ok := row["oldText"].(string); ok {
+			input["old_string"] = oldText
+		}
+		if newText, ok := row["newText"].(string); ok {
+			input["new_string"] = newText
+		}
+		if len(input) > 0 {
+			return input
+		}
+	}
+	for _, rowValue := range rows {
+		row := mapValue(rowValue)
+		text := kimiContentText(row["content"])
+		if action := strings.TrimSpace(strings.TrimPrefix(text, "Requesting approval to ")); action != "" {
+			return map[string]interface{}{"description": action}
+		}
+	}
+	return map[string]interface{}{}
+}
+
+func (a *kimiACPClient) bridgeKimiPermission(ctx context.Context, t *Transport, job *ClaimedSession, params map[string]interface{}) map[string]interface{} {
 	if ctx.Err() != nil {
 		return kimiCancelledPermissionResult()
 	}
@@ -2068,10 +2359,7 @@ func bridgeKimiPermission(ctx context.Context, t *Transport, job *ClaimedSession
 	options, _ := params["options"].([]interface{})
 	toolName := firstString(toolCall, "title")
 	toolUseID := firstString(toolCall, "toolCallId", "tool_call_id")
-	input := firstPresent(toolCall, "rawInput", "raw_input")
-	if input == nil {
-		input = toolCall
-	}
+	input := a.kimiPermissionToolInput(toolCall, toolUseID)
 	question, questionOptions := kimiQuestionFromPermission(toolCall, options)
 	if question != "" && len(questionOptions) > 0 {
 		toolName = "AskUserQuestion"
@@ -2149,6 +2437,9 @@ func kimiAutomaticPermissionOption(job *ClaimedSession, toolName string, input i
 			return selectDecision(true)
 		}
 	}
+	if kimiReadonlyShellFollowsParent(job, toolName) {
+		return selectDecision(true)
+	}
 	if job.Agent.PermissionMode == "acceptEdits" && (toolName == "Edit" || toolName == "Write") {
 		return selectDecision(true)
 	}
@@ -2156,6 +2447,23 @@ func kimiAutomaticPermissionOption(job *ClaimedSession, toolName string, input i
 		return selectDecision(false)
 	}
 	return "", false
+}
+
+// kimiReadonlyShellFollowsParent reports whether a read-only SubAgent's shell request is answered without a card:
+// its plan mode keeps Kimi's edit tools off but asks about every shell call, so a parent session that runs
+// without asking (Auto, Bypass) would get a card for each `git grep` its read-only helper makes. The owner chose,
+// on 2026-11-20, that such a request follows the parent's mode. Nothing here checks the command: a shell call
+// that writes runs too, so a read-only Kimi child is read-only by its plan-mode instructions alone, under those
+// two parent modes. Under any other parent mode the card is filed as before.
+func kimiReadonlyShellFollowsParent(job *ClaimedSession, toolName string) bool {
+	if !job.readonlySubagent || job.readonlyParentMode == nil || (toolName != "Bash" && toolName != "Terminal") {
+		return false
+	}
+	switch job.readonlyParentMode() {
+	case "auto", "bypassPermissions":
+		return true
+	}
+	return false
 }
 
 // kimiToolMatchesRule recognizes the conservative subset shared by Orbit's

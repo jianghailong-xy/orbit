@@ -167,7 +167,7 @@ func TestBatchesOfSeveralConnectionsGoAsOneMergedCallAndEachIsAcknowledgedOnItsO
 		runner, process := claimsOf(t, c.LinkToken)
 		byRunner[runner+"/"+process] = i
 		if c.Headers["x-orbit-runner-capabilities"] != "session-terminal-handoff-v1,source-pin/v1" ||
-			c.Headers["x-orbit-managed-runner-generation"] != "7" || c.Headers["x-orbit-managed-runner-pod-uid"] != "pod-1" ||
+			c.Headers["x-orbit-cloud-runner-generation"] != "7" || c.Headers["x-orbit-cloud-runner-pod-uid"] != "pod-1" ||
 			c.Headers["x-orbit-supported-providers"] != "claude,codex" {
 			t.Fatalf("connection %d's headers %v: what every call forwarded for it carries", i, c.Headers)
 		}

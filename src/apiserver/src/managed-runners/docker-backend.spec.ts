@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
+import { Socket } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
@@ -69,11 +70,12 @@ test('every Docker field is required and checked, and Kubernetes sections are re
     ['two channels', (p) => (p.docker.channel = { socketPath: '/run/c.sock', url: 'http://127.0.0.1:1' }), /exactly one/],
     ['Docker\'s own socket', (p) => (p.docker.channel = { socketPath: '/var/run/docker.sock' }), /never Docker's own/],
     ['a relative socket', (p) => (p.docker.channel = { socketPath: 'run/c.sock' }), /must be an absolute path/],
-    ['a channel off loopback', (p) => (p.docker.channel = { url: 'http://10.0.0.5:7781' }), /listens on loopback only/],
-    ['a channel over https', (p) => (p.docker.channel = { url: 'https://127.0.0.1:7781' }), /listens on loopback only/],
+    ['a channel on a public address', (p) => (p.docker.channel = { url: 'http://8.8.8.8:7781' }), /docker\.channel\.url must be http:\/\/127\.0\.0\.1:<port>, http:\/\/\[::1\]:<port>, or http:\/\/<private IPv4/],
+    ['a channel by host name', (p) => (p.docker.channel = { url: 'http://channel-host:7781' }), /docker\.channel\.url must be http:\/\/127/],
+    ['a channel over https', (p) => (p.docker.channel = { url: 'https://127.0.0.1:7781' }), /docker\.channel\.url must be http:\/\/127/],
     ['a relative token file', (p) => (p.docker.tokenFile = 'token'), /docker\.tokenFile must be an absolute path/],
     ['an instance that is no DNS label', (p) => (p.docker.instanceId = 'Orbit_A'), /docker\.instanceId must be a DNS label/],
-    ['an image by tag', (p) => (p.runner.image = 'orbit-managed-runner:local'), /runner\.image must be the local image ID/],
+    ['an image by tag', (p) => (p.runner.image = 'orbit-cloud-runner:local'), /runner\.image must be the local image ID/],
     ['an image by registry digest', (p) => (p.runner.image = `registry.invalid/x@sha256:${'a'.repeat(64)}`), /local image ID/],
     ['plain http to a public name', (p) => (p.runner.serverUrl = 'http://orbit.example.com'), /runner\.serverUrl must be an https URL, or http to a loopback or private address/],
     ['plain http to a public address', (p) => (p.runner.serverUrl = 'http://8.8.8.8:3000'), /runner\.serverUrl must be an https URL/],
@@ -480,6 +482,16 @@ test('the channel client speaks to the channel\'s socket with its token, and tel
     await assert.rejects(slow.info(), (e: unknown) => e instanceof DockerChannelUnreachable && /no answer within 200 ms/.test(e.message) && e.connected);
     // No socket to connect to: nothing reached the channel.
     await assert.rejects(new DockerChannelClient({ socketPath: path.join(dir, 'nothing.sock') }, 't', 1_000).info(), (e: unknown) => e instanceof DockerChannelUnreachable && !e.connected);
+    // A connection that is never made (an address that drops packets): nothing reached the channel either,
+    // after the connect timeout, not the request timeout.
+    const started = Date.now();
+    const dropped = new DockerChannelClient({ url: 'http://10.0.0.1:7300' }, 't', 60_000, { timeoutMs: 150, create: () => new Socket() });
+    await assert.rejects(dropped.info(), (e: unknown) => e instanceof DockerChannelUnreachable && /no connection within 150 ms/.test(e.message) && !e.connected);
+    assert.ok(Date.now() - started < 5_000, 'failed at the connect timeout');
+    // The default connect timeout is never longer than the call's own (whichever of the two fires first).
+    const short = Date.now();
+    await assert.rejects(new DockerChannelClient({ url: 'http://10.0.0.1:7300' }, 't', 100, { create: () => new Socket() }).info(), (e: unknown) => e instanceof DockerChannelUnreachable && !e.connected);
+    assert.ok(Date.now() - short < 2_000, 'not the 3 s default');
   } finally {
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));

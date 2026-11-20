@@ -83,8 +83,8 @@ final class NavigationEntrancesWiringTests: XCTestCase {
              "show(.console(sessionID: s.id, origin: .banner), agent: s.agent?.id ?? s.agentId)"),
             // Its cold fetch is a function of its own now (`refreshUnlistedSession`, shared with a
             // console a phone's conversation pushes over itself), so the entry ends where it does.
-            ("func openSession(_ id: String) {", "\n    }",
-             "show(.console(sessionID: id, origin: .deepLink), agent: agentID(for: id))"),
+            ("func openSession(_ id: String, inScheduledRuns: Bool) {", "\n    }",
+             "show(.console(sessionID: id, origin: .deepLink), agent: agentID(for: id), folder: folder)"),
         ]
         for (entry, end, frame) in entries {
             let body = code(try slice(app, from: entry, to: end))
@@ -116,7 +116,7 @@ final class NavigationEntrancesWiringTests: XCTestCase {
     func testTheOneTransitionWritesTheSectionTheAgentAndTheFrame() throws {
         let app = try appSource("AppModel.swift")
         let show = code(try slice(app,
-                                  from: "private func show(_ node: NavNode, agent agentID: String? = nil) {",
+                                  from: "private func show(_ node: NavNode,",
                                   to: "\n    }"))
         XCTAssertTrue(show.contains("selectedSection = .agents"), "the section it opens in")
         XCTAssertTrue(show.contains("if let agentID, selectedAgentID != agentID { selectedAgentID = agentID }"),
@@ -127,7 +127,7 @@ final class NavigationEntrancesWiringTests: XCTestCase {
         // And it is where they land: every entry calls it.
         for entry in ["func newSessionInCurrentAgent() {", "func composeWithAgent(_ id: String) {",
                       "func openNeedsYouSession(_ s: Session) {",
-                      "func openSession(_ id: String) {"] {
+                      "func openSession(_ id: String, inScheduledRuns: Bool) {"] {
             let end = entry.hasPrefix("func openSession") ? "guard !sessions.contains(where:" : "\n    }"
             XCTAssertTrue(code(try slice(app, from: entry, to: end)).contains("show("),
                           "\(entry) goes through the one transition")
@@ -180,7 +180,7 @@ final class NavigationEntrancesWiringTests: XCTestCase {
     /// `FollowingRunnersAdminWiringTests`, `AgentsStackWiringTests`).
     func testEveryRouteLandsSomewhere() throws {
         let app = try appSource("AppModel.swift")
-        let route = code(try slice(app, from: "func route(to route: Route) {",
+        let route = code(try slice(app, from: "func route(to route: Route,",
                                    to: "private func openSession("))
         for label in ["case .active:", "case .session(let id):", "case .task(let id):",
                       "case .list(let id):", "case .runner(let id):", "case .watch(let id):"] {
@@ -194,9 +194,9 @@ final class NavigationEntrancesWiringTests: XCTestCase {
     /// that spelling, the banner check has to compare the push's id as an id, not as a string.
     func testASessionRouteOpensTheListsSpellingOfItsID() throws {
         let app = try appSource("AppModel.swift")
-        let route = code(try slice(app, from: "func route(to route: Route) {",
+        let route = code(try slice(app, from: "func route(to route: Route,",
                                    to: "private func openSession("))
-        XCTAssertTrue(route.contains("case .session(let id): openSession(PublicID.toPublic(id))"),
+        XCTAssertTrue(route.contains("case .session(let id): openSession(PublicID.toPublic(id), inScheduledRuns: inScheduledRuns)"),
                       "a session route opens the lists' spelling of its id")
 
         let manager = code(try appSource("NotificationManager.swift"))
@@ -210,17 +210,24 @@ final class NavigationEntrancesWiringTests: XCTestCase {
                        "no comparison of the two spellings as strings is left")
     }
 
-    /// The approval push's other two readers. The foreground card looked its title up by the UUID and
-    /// found nothing, and the needs-you check that takes it down never found the UUID either — so it
-    /// came down at the next change to that set, answered or not. The Notification Center reconcile
-    /// read every server banner's thread id (the UUID) as "no longer needs you" and cleared them all.
+    func testScheduleRunUsesTheWorkspaceSessionRoute() throws {
+        let app = try appSource("AppModel.swift")
+        let open = code(try slice(app, from: "func openScheduleRun(", to: "\n    }"))
+        XCTAssertTrue(open.contains("route(to: .session(sessionID), inScheduledRuns: true)"))
+        let history = code(try appSource("Views/ScheduledPage.swift"))
+        XCTAssertEqual(history.components(separatedBy: "model.openScheduleRun(sessionID: session)").count - 1, 2)
+        let cards = code(try appSource("Views/ScheduleCards.swift"))
+        XCTAssertTrue(cards.contains("appModel.openScheduleRun(sessionID: session)"))
+        XCTAssertTrue(cards.contains("ScheduleRunStripView(schedule:"))
+        XCTAssertTrue(cards.contains("ScheduleRunReportView(run:"))
+        XCTAssertFalse(cards.contains("schedule-run-crumb"))
+    }
+
+    /// The approval push's other reader. The Notification Center reconcile read every server
+    /// banner's thread id (the UUID) as "no longer needs you" and cleared them all. (The foreground
+    /// card it fed is gone: a wait is noticed from the needs-you rows, 12-once.)
     func testAnApprovalPushIsReadInTheListsSpelling() throws {
         let app = code(try appSource("AppModel.swift"))
-        let card = try slice(app, from: "notifications.onForegroundApproval = {",
-                             to: "awaitsApproval: true)")
-        XCTAssertTrue(card.contains("sessionID: PublicID.toPublic(sessionID)"),
-                      "the foreground card holds the lists' spelling of the pushed session")
-
         let reconcile = try slice(app, from: "private func reconcileDeliveredApprovals(_ needsYou: Set<String>) {",
                                   to: "#endif")
         XCTAssertTrue(reconcile.contains(

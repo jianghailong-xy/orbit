@@ -2,7 +2,9 @@ package io.orbitd.android.reader
 
 import androidx.compose.runtime.Immutable
 import io.orbitd.android.core.cards.ClaudeRegion
+import io.orbitd.android.core.cards.OwnerChatReply
 import io.orbitd.android.core.realtime.RunEvent
+import io.orbitd.android.core.translation.Translation
 import io.orbitd.android.navigation.ObjectId
 import kotlinx.serialization.json.*
 
@@ -10,6 +12,14 @@ internal fun JsonObject.string(key: String) = (get(key) as? JsonPrimitive)?.cont
 internal fun RunEvent.toolId() = fields.string("toolUseId") ?: fields.string("tool_use_id") ?: fields.string("id")
 internal fun RunEvent.parent() = fields.string("parentToolUseId")
 internal fun RunEvent.body() = fields.string("text") ?: contentText(fields["content"]) ?: fields.string("message") ?: fields.string("result").orEmpty()
+
+/** The owner's words when [row] is one of Orbit's own calls they answered with "Chat about this" (OwnerChatReply). */
+internal fun ownerChatWords(row: TranscriptRow): String? {
+    val result = row.result ?: return null
+    val isError = result.fields.string("isError") == "true" || result.fields.string("is_error") == "true"
+    return OwnerChatReply.words(row.event.fields.string("name") ?: row.event.fields.string("toolName"),
+        contentText(result.fields["content"]) ?: result.fields.string("result"), isError)
+}
 
 internal fun contentText(value: JsonElement?): String? = when (value) {
     null, JsonNull -> null
@@ -37,7 +47,7 @@ internal fun contentImages(value: JsonElement?): List<String> = when (value) {
 @Immutable
 internal data class TranscriptRow(val event: RunEvent, val result: RunEvent? = null, val children: List<TranscriptRow> = emptyList(),
     val folded: List<RunEvent> = emptyList(), val steer: SteerOutcome? = null, val steps: List<TranscriptRow> = emptyList(),
-    val exchanges: List<FoldedExchange> = emptyList()) {
+    val exchanges: List<FoldedExchange> = emptyList(), val awaitsTranslation: Boolean = false) {
     val key: String get() = "event:${event.seq}"
     fun contains(seq: Long): Boolean = event.seq == seq || result?.seq == seq || folded.any { it.seq == seq } || children.any { it.contains(seq) } ||
         steps.any { it.contains(seq) } || exchanges.any { ex -> ex.rows.any { it.contains(seq) } }
@@ -67,6 +77,7 @@ internal fun transcriptRows(events: List<RunEvent>, receipts: List<JsonObject> =
         }
     }
     val engine = EngineReading(events)
+    val awaiting = awaitingTranslation(events)
     val knownTools = events.filter { it.type == "tool_use" }.mapNotNull { it.toolId() }.toSet()
     fun parent(event: RunEvent) = event.parent()?.takeIf(knownTools::contains)
     val results = events.filter { it.type == "tool_result" && it.toolId() != null }
@@ -95,12 +106,32 @@ internal fun transcriptRows(events: List<RunEvent>, receipts: List<JsonObject> =
             result?.let { usedResults += it.seq }
             val id = e.toolId()
             val children = if (e.type == "tool_use" && id != null && id !in visited) rows(id, visited + id) else emptyList()
-            TranscriptRow(e, result, children, steer = steer(e))
+            TranscriptRow(e, result, children, steer = steer(e), awaitsTranslation = e.seq in awaiting)
         }.let(::foldThinking)
     }
     // Results may precede calls in a restored partial window; suppress matched results independent of order.
     events.filter { it.type == "tool_use" }.forEach { e -> results[parent(e) to e.toolId()]?.let { usedResults += it.seq } }
     return rows(null, emptySet())
+}
+
+/**
+ * Settings › Translation (2A, web `awaitsTranslation`): the agent's own replies in a turn opened by a message the owner wrote with
+ * translation on, that carry no translation yet — the server translates each once its block is stored, so one is on its way. A
+ * sub-agent's report to its caller is never translated.
+ */
+internal fun awaitingTranslation(events: List<RunEvent>): Set<Long> {
+    val awaiting = mutableSetOf<Long>()
+    var translated = false
+    events.forEach { e ->
+        when (e.type) {
+            "user" -> if (e.parent().isNullOrEmpty() && e.fields["steer"] != JsonPrimitive(true)) Translation.turn(e.fields["translation"])?.let {
+                translated = it.state == Translation.TurnState.DONE || it.state == Translation.TurnState.SENT_AS_WRITTEN
+            }
+            "assistant" -> if (translated && e.parent().isNullOrEmpty() && e.fields["translation"] == null) awaiting += e.seq
+            "turn_end" -> translated = false
+        }
+    }
+    return awaiting
 }
 
 /**
@@ -131,10 +162,23 @@ internal class EngineReading(events: List<RunEvent>) {
         val retries = mutableListOf<Retry>()
         val seen = HashMap<String, Triple<Stderr, String, Int>>()
         val diagnosticsSeen = HashMap<String, Diagnostic>()
+        var legacyWithheld: RunEvent? = null
+        var legacyCount = 0
         var lastStderr: Triple<Stderr, Long, Boolean>? = null
         var lastFailure: Failure? = null
         val open = LinkedHashMap<String, String>()
         var lastRow: RunEvent? = null
+        // Sign-in failures the conversation moved past (web `settled`, OrbitKit `TranscriptSettlement`): superseded by a later
+        // message or failure, resolved once the agent worked again. The account switches beside them mute once anything follows.
+        var openAuth: RunEvent? = null
+        val settledAuth = LinkedHashMap<Long, Pair<RunEvent, Boolean>>()
+        val switches = mutableListOf<Pair<RunEvent, String>>()
+        val settledSwitches = mutableSetOf<Long>()
+        val openSwitches = mutableListOf<Long>()
+        fun settleSwitches() { settledSwitches += openSwitches; openSwitches.clear() }
+        fun supersede() { openAuth?.let { settledAuth.putIfAbsent(it.seq, it to false) } }
+        fun authFailed(e: RunEvent) { supersede(); openAuth = e }
+        fun agentWorked() { openAuth?.let { settledAuth[it.seq] = it to true }; openAuth = null; settleSwitches() }
         fun retry(e: RunEvent, message: String, quota: Boolean) {
             retries.lastOrNull()?.stale = true
             val afterUserMsg = lastRow?.let { it.type == "user" && it.personWords().isNotBlank() } == true
@@ -148,6 +192,12 @@ internal class EngineReading(events: List<RunEvent>) {
             else -> false
         }
         events.forEach { e ->
+            val legacy = e.type == "system" && e.fields.string("subtype") == "secret_patch_withheld" &&
+                e.fields.string("path")?.let { path -> listOf(
+                    "Orbit is still checking this runner's checkouts for a secret the owner removed, so it left this diff out of what it reports for now. Nothing in the file is known to hold a secret; its diff shows again with the session's next report.",
+                    "Orbit could not read its record of files that held a secret's value on this runner, so it left this diff out of what it reports. Nothing in the file is known to hold a secret."
+                ).any { e.fields.string("notice") == "$path: $it" } } == true
+            if (!legacy || legacyWithheld?.turnId != e.turnId) { legacyWithheld = null; legacyCount = 0 }
             // A tool call can sit between a stderr line and its continuation; anything else ends the log.
             if (e.type !in setOf("system", "tool_use", "tool_result")) { lastStderr = null; lastFailure = null }
             if (!e.parent().isNullOrEmpty() && e.type in setOf("assistant", "thinking", "tool_use", "tool_result")) {
@@ -158,13 +208,15 @@ internal class EngineReading(events: List<RunEvent>) {
                 return@forEach
             }
             when (e.type) {
-                "tool_use" -> { e.toolId()?.let { open[it] = e.fields.string("name") ?: e.fields.string("toolName") ?: "tool" }; lastRow = e }
+                "tool_use" -> { e.toolId()?.let { open[it] = e.fields.string("name") ?: e.fields.string("toolName") ?: "tool" }; lastRow = e; agentWorked() }
                 "tool_result" -> { val id = e.toolId(); if (id != null) open.remove(id) else open.keys.lastOrNull()?.let { open.remove(it) } }
-                "user" -> { retries.lastOrNull()?.stale = true; lastRow = e }
+                "user" -> { retries.lastOrNull()?.stale = true; lastRow = e; supersede(); settleSwitches() }
                 "assistant" -> {
                     val text = e.fields.string("text") ?: e.fields.string("content") ?: ""
                     if (!selfHealing(e, text)) {
-                        if (!EngineAuth.isAuthErrorText(text) && EngineErrors.isApiErrorText(text)) rows[e.seq] = e.row("error") { put("text", text) }
+                        if (EngineAuth.isAuthErrorText(text)) authFailed(e)
+                        else if (EngineErrors.isApiErrorText(text)) rows[e.seq] = e.row("error") { put("text", text) }
+                        else if (text.isNotBlank()) agentWorked()
                         lastRow = e
                     }
                 }
@@ -173,17 +225,41 @@ internal class EngineReading(events: List<RunEvent>) {
                     when (val region = ClaudeRegion.errorLine(message)) {
                         ClaudeRegion.ErrorLine.Refusal -> rows[e.seq] = null
                         is ClaudeRegion.ErrorLine.Stopped -> { rows[e.seq] = e.row("error") { put("text", region.sentence) }; lastRow = e }
-                        ClaudeRegion.ErrorLine.NotRegion -> if (!selfHealing(e, message)) lastRow = e
+                        ClaudeRegion.ErrorLine.NotRegion -> if (!selfHealing(e, message)) {
+                            if (EngineAuth.isAuthErrorText(message)) authFailed(e)
+                            lastRow = e
+                        }
                     }
                 }
                 "thinking", "interrupt" -> lastRow = e
                 "system" -> {
                     // A new engine run: as on web, a diagnostic it reports again starts a row of its own.
                     if (e.fields.string("subtype") == "resumed") { lastStderr = null; lastFailure = null; diagnosticsSeen.clear() }
-                    // A deliberate heads-up wins over stderr, one row each; a recoverable diagnostic is a calm row of its own kind.
+                    // The main checkout's card and its action lines (docs/main-checkout-git-contract.md §7) are rows of their own; their
+                    // `notice` text is what a client without them draws.
+                    when (e.fields.string("noticeKind")) {
+                        MainCheckout.NOTICE_CHANGED, MainCheckout.NOTICE_RESULT -> {
+                            val card = e.fields.string("noticeKind") == MainCheckout.NOTICE_CHANGED
+                            val readable = if (card) MainCheckout.changedNotice(e.fields) != null else MainCheckout.resultNotice(e.fields) != null
+                            if (readable) {
+                                rows[e.seq] = e.copy(type = if (card) MainCheckout.ROW_CARD else MainCheckout.ROW_RESULT)
+                                lastRow = e
+                                return@forEach
+                            }
+                        }
+                    }
+                    // A deliberate heads-up wins over stderr; legacy temporary secret notices fold into one row.
                     val notice = e.fields.string("notice")?.ifEmpty { null }
                     if (notice != null) {
-                        rows[e.seq] = e.row("notice") { put("text", notice) }
+                        if (legacy) {
+                            val first = legacyWithheld ?: e.also { legacyWithheld = it }
+                            legacyCount++
+                            rows[first.seq] = first.row("notice") { put("text", if (legacyCount == 1) "Orbit held back the diff of 1 file while it checked this runner for a removed secret. No secret was found in it." else "Orbit held back the diffs of $legacyCount files while it checked this runner for a removed secret. No secret was found in them.") }
+                            if (first.seq != e.seq) rows[e.seq] = null
+                        } else {
+                            rows[e.seq] = e.row("notice") { put("text", notice) }
+                        }
+                        if (e.fields.string("noticeKind") == "pool-member-switched") { switches += e to notice; openSwitches += e.seq }
                         lastRow = e
                         return@forEach
                     }
@@ -243,6 +319,13 @@ internal class EngineReading(events: List<RunEvent>) {
         failures.forEach { f -> toolFailures[f.toolId] = RunEvent("tool_result", f.seq, buildJsonObject {
             put("toolUseId", f.toolId); put("content", f.message); put("isError", true)
         }) }
+        settledAuth.values.forEach { (e, resolved) -> rows[e.seq] = e.row("auth_settled") {
+            put("text", e.fields.string("text") ?: e.fields.string("content") ?: e.fields.string("message") ?: e.fields.string("error").orEmpty())
+            put("resolved", resolved)
+        } }
+        switches.filter { it.first.seq in settledSwitches }.forEach { (e, notice) -> rows[e.seq] = e.row("notice") {
+            put("text", notice); put("settled", true)
+        } }
         retries.forEach { r -> rows[r.event.seq] = r.event.row("auto_retry") {
             put("text", r.message); put("variant", if (r.quota) "quota" else "apiError")
             put("stale", r.stale); put("afterUserMsg", r.afterUserMsg)
@@ -254,9 +337,12 @@ internal class EngineReading(events: List<RunEvent>) {
         copy(type = type, payload = buildJsonObject(build), truncated = false)
 }
 
-/** A signed-out engine's own words (OrbitKit `EngineAuth.isAuthErrorText`): a sign-in remedy, not an API error. */
+/** A signed-out engine's own words (OrbitKit `EngineAuth.isAuthErrorText`): a sign-in remedy, not an API error.
+ * A failure of the connection — Cloudflare's block page, a dropped socket — carries the same prefix but is not
+ * one: the credentials are intact and it clears on its own, so it is excluded here and retried instead. */
 internal object EngineAuth {
-    fun isAuthErrorText(text: String?): Boolean = text != null && text.trimStart().startsWith("Failed to authenticate")
+    fun isAuthErrorText(text: String?): Boolean =
+        text != null && !EngineErrors.isConnectionFailureText(text) && text.trimStart().startsWith("Failed to authenticate")
 }
 
 /**

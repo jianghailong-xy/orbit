@@ -10,6 +10,7 @@ import {
   type RunnerEngineAccount,
   type RunnerEngineHealth,
   type RunnerEngineUpdate,
+  type RunnerEngineUpdateDismissals,
   type DshRuntimeHealth,
 } from '@orbit/shared';
 import { ACCOUNT_ID_PATTERN } from '../runners/dto';
@@ -118,6 +119,8 @@ export function sanitizeRunnerEngines(value: unknown): RunnerEngineHealth[] | nu
       : undefined;
     // Kimi alone says which of its two sites its login is on (kimi.com or kimi.ai).
     const kimiRegion = entry.engine === 'kimi' && isKimiRegion(entry.kimiRegion) ? entry.kimiRegion : undefined;
+    // OpenCode alone says its CLI listed no provider key — beside a yes it would contradict itself.
+    const openCodeNoKey = entry.engine === 'opencode' && entry.openCodeNoKey === true && auth !== 'yes';
     byEngine.set(entry.engine, {
       engine: entry.engine,
       installed: entry.installed === true,
@@ -128,6 +131,7 @@ export function sanitizeRunnerEngines(value: unknown): RunnerEngineHealth[] | nu
       ...(authSource ? { authSource } : {}),
       ...(planUsage ? { planUsage } : {}),
       ...(kimiRegion ? { kimiRegion } : {}),
+      ...(openCodeNoKey ? { openCodeNoKey } : {}),
       ...(dsh ? { dsh } : {}),
       ...(installationError ? { installationError } : {}),
     });
@@ -328,6 +332,22 @@ function isoInstant(value: unknown): string | undefined {
   return Number.isFinite(ms) ? new Date(ms).toISOString() : undefined;
 }
 
+/**
+ * Read `runner.engine_update_dismissals` (RunnersService.dismissEngineUpdateWarning writes it): a
+ * reported engine and the `update.latest` it was dismissed against, a version as sanitizeEngineUpdate
+ * keeps one. Anything else is dropped. Always an object, so every client can index it by engine.
+ */
+export function sanitizeEngineUpdateDismissals(value: unknown): RunnerEngineUpdateDismissals {
+  const out: RunnerEngineUpdateDismissals = {};
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return out;
+  for (const [engine, latest] of Object.entries(value as Record<string, unknown>)) {
+    if (!isReportedEngine(engine) || typeof latest !== 'string') continue;
+    const trimmed = latest.trim();
+    if (trimmed && trimmed.length <= 120) out[engine] = trimmed;
+  }
+  return out;
+}
+
 /** The names the user gave a runner's accounts in Orbit, by engine and then account id. */
 export type AccountNames = Partial<Record<LoginEngine, Record<string, string>>>;
 
@@ -352,10 +372,41 @@ export function sanitizeAccountNames(value: unknown): AccountNames {
   return out;
 }
 
+/** Where `runner.account_names` keeps its former Defaults: `{ formerDefault: { claude: { <slot>: <email or ""> } } }`.
+ *  Not an engine, so sanitizeAccountNames never reads it as names. */
+export const FORMER_DEFAULT_KEY = 'formerDefault';
+
+/** An email as it is kept for a former Default: one line, at most 254 characters, with an `@`. Anything else is none. */
+export function formerDefaultEmail(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const email = value.trim();
+  return email.length <= 254 && email.includes('@') && !/[\p{Cc}\s]/u.test(email) ? email : null;
+}
+
+/**
+ * Read the former Defaults kept in `runner.account_names` (swappedAccountNames writes them): each Claude Code slot that
+ * holds the account a Set as default moved out of ~/.claude, with that account's email, or null where none was known.
+ */
+export function sanitizeFormerDefaults(value: unknown): Map<string, string | null> {
+  const out = new Map<string, string | null>();
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return out;
+  const kept = (value as Record<string, unknown>)[FORMER_DEFAULT_KEY];
+  if (!kept || typeof kept !== 'object' || Array.isArray(kept)) return out;
+  const claude = (kept as Record<string, unknown>).claude;
+  if (!claude || typeof claude !== 'object' || Array.isArray(claude)) return out;
+  for (const [id, email] of Object.entries(claude as Record<string, unknown>)) {
+    if (ACCOUNT_ID_PATTERN.test(id) && id !== 'default') out.set(id, formerDefaultEmail(email));
+  }
+  return out;
+}
+
 /**
  * A runner's engines as everything that NAMES an account has to read them: the report
  * (sanitizeRunnerEngines) with the name the user gave each account in Orbit laid over the one the
  * machine reports. Default is never named by the machine, so this is the only name it can have.
+ *
+ * A Claude Code former Default (sanitizeFormerDefaults) is served as one, with its email: the name the runner reports for
+ * its slot is the one the account now in ~/.claude was added under, so it is never laid over it — only the owner's.
  *
  * `accountNames` is required on purpose: a select that forgets the column would otherwise compile, and
  * name every account the way the runner does whatever it was renamed to.
@@ -363,14 +414,21 @@ export function sanitizeAccountNames(value: unknown): AccountNames {
 export function namedRunnerEngines(runner: { engines: unknown; accountNames: unknown; accountPauses?: unknown }): RunnerEngineHealth[] | null {
   const engines = sanitizeRunnerEngines(runner.engines);
   const names = sanitizeAccountNames(runner.accountNames);
+  const formerDefaults = sanitizeFormerDefaults(runner.accountNames);
   if (!engines) return engines;
   return engines.map((entry) => {
     const own = engineKeepsAccounts(entry.engine) ? names[entry.engine] : undefined;
     if (!entry.accounts) return entry;
     return {
       ...entry,
-      accounts: entry.accounts.map((account) => {
-        const pausedUntil = runnerAccountPausedUntil(runner.accountPauses, entry.engine, account.id);
+      accounts: entry.accounts.map((reported) => {
+        const pausedUntil = runnerAccountPausedUntil(runner.accountPauses, entry.engine, reported.id);
+        let account = reported;
+        if (entry.engine === 'claude' && formerDefaults.has(reported.id)) {
+          const { name: _reportedName, ...rest } = reported;
+          const email = formerDefaults.get(reported.id);
+          account = { ...rest, formerDefault: true, ...(email ? { email } : {}) };
+        }
         return {
           ...account,
           ...(own?.[account.id] ? { name: own[account.id] } : {}),

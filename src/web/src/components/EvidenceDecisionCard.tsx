@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type JSX, type Ref } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowRightOutlined } from '@ant-design/icons';
 import { Alert } from './ui/Alert';
+import { useOwnerCardTranslation } from './TranslationParts';
 import { api } from '../api';
 import { decisionReceiptAnchor } from '../lib/decisionReceipt';
 import { citesFiles } from '../lib/evidenceFiles';
@@ -594,7 +595,13 @@ export function EvidenceDecisionCard({
   onConfirm: () => void;
   onChatAbout: () => void;
 }): JSX.Element {
-  const row = standing.state === 'DECIDABLE' ? standing.row : null;
+  const decidable = standing.state === 'DECIDABLE' ? standing.row : null;
+  // The claim and gaps are the agent's words (board 04-owner-cards.html): one flip for both.
+  const translated = useOwnerCardTranslation(decidable?.translation);
+  const t = translated.shown;
+  const row = decidable && t
+    ? { ...decidable, claim: t.claim || decidable.claim, gaps: decidable.gaps.map((gap, i) => t.gaps?.[i] || gap) }
+    : decidable;
   const stale = recorded ? null : evidenceDecisionStaleExplanation(standing);
   const refusal = error ? evidenceDecisionRefusal(error) : null;
   return (
@@ -619,6 +626,7 @@ export function EvidenceDecisionCard({
             <>
               <div className="decision-ask-chip">{row.title}</div>
               <EvidenceDecisionFacts row={row} />
+              {translated.foot}
             </>
           ) : (
             // The address and nothing else: a version that has left the read is not published any
@@ -658,6 +666,7 @@ export interface EvidenceDecisionRequestBody {
   evidenceRevision: string;
   decision: EvidenceDecision;
   note?: string;
+  sendAsWritten?: true;
 }
 
 /**
@@ -674,6 +683,8 @@ export function evidenceDecisionRequest(
   decidingSessionId: string,
   decision: EvidenceDecision,
   note?: string,
+  /** Send as written, after the door refused the owner's note 422 TRANSLATION_FAILED. */
+  sendAsWritten?: boolean,
 ): { path: string; body: EvidenceDecisionRequestBody } {
   const reason = note?.trim() ?? '';
   return {
@@ -683,6 +694,7 @@ export function evidenceDecisionRequest(
       evidenceRevision: row.evidenceRevision,
       decision,
       ...(decision === 'SEND_BACK' && reason !== '' ? { note: reason } : {}),
+      ...(sendAsWritten ? { sendAsWritten: true } : {}),
     },
   };
 }
@@ -693,8 +705,9 @@ export function sendEvidenceDecision(
   decidingSessionId: string,
   decision: EvidenceDecision,
   note?: string,
+  sendAsWritten?: boolean,
 ): Promise<EvidenceDecisionResult> {
-  const request = evidenceDecisionRequest(row, decidingSessionId, decision, note);
+  const request = evidenceDecisionRequest(row, decidingSessionId, decision, note, sendAsWritten);
   return api<EvidenceDecisionResult>(request.path, { method: 'POST', body: request.body });
 }
 
@@ -937,11 +950,14 @@ export const DECISION_RECEIPT_OPEN = 'Show the claim and the gaps';
 export const DECISION_RECEIPT_LOADING = 'Reading…';
 export const DECISION_RECEIPT_UNREAD = 'This version of the evidence could not be read back just now.';
 export const DECISION_RECEIPT_REASON = 'the reason it was sent back';
+/** The label over a confirm's note: it is not a reason anything was sent back. */
+export const DECISION_RECEIPT_NOTE = 'Note';
 
 /** When a receipt says it was decided: the clock on the day it happened, the date as well after. */
 export function decisionReceiptTime(decidedAt: string, now: Date = new Date()): string {
   const at = new Date(decidedAt);
-  const time = at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  // `numeric` hour, as the transcript's own times read ("7:14 PM", not "07:14 PM").
+  const time = at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   if (at.toDateString() === now.toDateString()) return time;
   return `${at.toLocaleDateString([], { month: 'numeric', day: 'numeric' })} ${time}`;
 }
@@ -999,9 +1015,6 @@ export function EvidenceDecisionReceipt({ decided }: { decided: RecordedDecision
         <section className="decision-ask-q">
           <div className="decision-ask-chip">{decided.title}</div>
           <div className="decision-ask-picked">{decisionReceiptLine(decided)}</div>
-          {decided.note ? (
-            <div className="decision-ask-picked">{`${DECISION_RECEIPT_REASON}：${decided.note}`}</div>
-          ) : null}
           <button
             type="button"
             className="decision-ask-toggle"
@@ -1010,6 +1023,12 @@ export function EvidenceDecisionReceipt({ decided }: { decided: RecordedDecision
           >
             {open ? 'Show less' : `${DECISION_RECEIPT_OPEN} ▾`}
           </button>
+          {/* Folded with the evidence: a record is a few lines, and its note can be thirty. */}
+          {open && decided.note ? (
+            <div className="decision-ask-picked">
+              {`${decided.decision === 'CONFIRM' ? DECISION_RECEIPT_NOTE : DECISION_RECEIPT_REASON}：${decided.note}`}
+            </div>
+          ) : null}
           {!open ? null : revisions.isPending ? (
             <div className="decision-ask-quiet">{DECISION_RECEIPT_LOADING}</div>
           ) : facts === null ? (

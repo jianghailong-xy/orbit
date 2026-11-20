@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  orbitWorkflowLaunchReceipt,
   isApiErrorText,
   isAsyncAgentLaunchAck,
   isAuthErrorText,
   isBenignEngineStderr,
+  isConnectionFailureText,
   isRateLimitApiErrorText,
   isRetryableApiErrorText,
   isUsageLimitErrorText,
@@ -215,6 +217,33 @@ describe('isRetryableApiErrorText', () => {
     expect(isRetryableApiErrorText(null)).toBe(false);
   });
 
+  // Cloudflare's block page and a dropped socket, verbatim from FAILED sessions' assistant text on
+  // 2026-11-13 (two dozen sessions, three machines, every credential intact). Claude Code wraps both
+  // in "Failed to authenticate", so the prefix alone would read as a credential rejection — the
+  // page, or the socket, is what says otherwise.
+  it('retries a failure of the connection, which clears on its own', () => {
+    const blocked = 'Failed to authenticate. API Error: 403 Attention Required! | Cloudflare';
+    expect(isConnectionFailureText(blocked)).toBe(true);
+    expect(isRetryableApiErrorText(blocked)).toBe(true);
+    expect(isRetryableApiErrorText('API Error: 403 Attention Required! | Cloudflare')).toBe(true);
+    const reset =
+      'Failed to authenticate. API Error: 403 ECONNRESET: The socket connection was closed unexpectedly. '
+      + 'For more information, pass `verbose: true` in the second argument to fetch()';
+    expect(isConnectionFailureText(reset)).toBe(true);
+    expect(isRetryableApiErrorText(reset)).toBe(true);
+    // The same 403 with neither wording is still a fact about the request: no re-send.
+    expect(isRetryableApiErrorText('Failed to authenticate. API Error: 403 Request not allowed')).toBe(false);
+    // Anchored like the other classifications: a reply that merely quotes one is an ordinary reply,
+    // and re-sending it would send the user's message twice.
+    for (const quoted of [
+      'The run died on "Failed to authenticate. API Error: 403 Attention Required! | Cloudflare" — retrying.',
+      `The run died on "${reset}" — retrying.`,
+    ]) {
+      expect(isConnectionFailureText(quoted)).toBe(false);
+      expect(isRetryableApiErrorText(quoted)).toBe(false);
+    }
+  });
+
   // Every distinct `API Error:` reply in the production database, verbatim, with the call this
   // classifier has to make on each. Guessing at wording is what the marker list forbids, so the
   // list of things actually seen in the wild is the test: a new one shows up here first.
@@ -250,6 +279,21 @@ describe('isAuthErrorText', () => {
   it('ignores normal text', () => {
     expect(isAuthErrorText('all good')).toBe(false);
     expect(isAuthErrorText(null)).toBe(false);
+  });
+  // A 403 Cloudflare answered at the edge, or a socket that dropped, not a credential the API
+  // rejected. The prefix is the runtime's; the page and the socket are the connection's. Reading
+  // either as a sign-in failure moved sessions off accounts whose credentials were intact
+  // (2026-11-13), so both are excluded here and retried instead.
+  it('does not read a failure of the connection as a sign-in failure', () => {
+    expect(
+      isAuthErrorText('Failed to authenticate. API Error: 403 Attention Required! | Cloudflare'),
+    ).toBe(false);
+    expect(
+      isAuthErrorText(
+        'Failed to authenticate. API Error: 403 ECONNRESET: The socket connection was closed unexpectedly. '
+        + 'For more information, pass `verbose: true` in the second argument to fetch()',
+      ),
+    ).toBe(false);
   });
   // The two are disjoint: each drives a different UI (bare error line vs sign-in guidance).
   it('does not overlap with isApiErrorText', () => {
@@ -331,5 +375,16 @@ describe('isBenignEngineStderr', () => {
     expect(isBenignEngineStderr('API Error: 400 model "deepseek-v4-pro" not found')).toBe(false);
     expect(isBenignEngineStderr('')).toBe(false);
     expect(isBenignEngineStderr(null)).toBe(false);
+  });
+});
+
+describe('orbitWorkflowLaunchReceipt', () => {
+  it('reads the workflow tool\'s launch receipt, and nothing else', () => {
+    const receipt = JSON.stringify({ status: 'running', workflowRunId: 'wf1' }, null, 2);
+    expect(orbitWorkflowLaunchReceipt(receipt)).toEqual({ workflowRunId: 'wf1' });
+    expect(orbitWorkflowLaunchReceipt([{ type: 'text', text: receipt }])).toEqual({ workflowRunId: 'wf1' });
+    expect(orbitWorkflowLaunchReceipt(JSON.stringify({ status: 'DONE', workflowRunId: 'wf1' }))).toBeNull();
+    expect(orbitWorkflowLaunchReceipt(JSON.stringify({ status: 'running', runId: 'r1' }))).toBeNull();
+    expect(orbitWorkflowLaunchReceipt('workflow failed: no script')).toBeNull();
   });
 });

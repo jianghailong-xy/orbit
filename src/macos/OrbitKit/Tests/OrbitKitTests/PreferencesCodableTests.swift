@@ -113,11 +113,11 @@ final class PreferencesCodableTests: XCTestCase {
         XCTAssertEqual(try prefs(#"{"modelRouting":false}"#)?.smartModelSelection, false)
         let bare = try prefs(#"{"theme":"light"}"#)
         XCTAssertNil(bare?.modelRouting)
-        XCTAssertEqual(bare?.smartModelSelection, false, "absent is off")
+        XCTAssertEqual(bare?.smartModelSelection, true, "absent is on")
         for odd in [#""true""#, "1", "null", #"{"on":true}"#] {
             let p = try prefs(#"{"theme":"dark","modelRouting":\#(odd)}"#)
             XCTAssertNil(p?.modelRouting, odd)
-            XCTAssertEqual(p?.smartModelSelection, false, odd)
+            XCTAssertEqual(p?.smartModelSelection, true, odd)
             XCTAssertEqual(p?.theme, "dark", "the rest of the preferences still decode")
         }
     }
@@ -164,14 +164,52 @@ final class PreferencesCodableTests: XCTestCase {
         XCTAssertFalse(try jsonObject(UpdatePreferencesRequest(theme: "dark")).keys.contains("modelRouting"))
     }
 
-    func testModelPreferencesRoundTripAndRemainOptional() throws {
-        let json = #"{"preferences":{"defaultModels":{"codex":"gpt-6.1-sol","claude":"claude-sonnet-5"}},"id":"u1","email":"a@b.com"}"#
+    /// The account-wide "Optimize For" pick (board docs/mocks/routing-mode-account): absent reads as
+    /// Balance, each value decodes, and a stray value reads as absent rather than failing `me`.
+    func testPreferencesDecodesOptimizeForLeniently() throws {
+        func prefs(_ body: String) throws -> UserPreferences? {
+            try JSONDecoder().decode(User.self, from: Data(#"{"id":"u1","email":"a@b.com","preferences":\#(body)}"#.utf8)).preferences
+        }
+        XCTAssertEqual(OptimizeFor(stored: try prefs(#"{"theme":"light"}"#)?.optimizeFor), .balance, "absent is balance")
+        for (value, expected) in [("cost", OptimizeFor.cost), ("balance", .balance), ("intelligence", .intelligence)] {
+            let p = try prefs(#"{"optimizeFor":"\#(value)"}"#)
+            XCTAssertEqual(p?.optimizeFor, value)
+            XCTAssertEqual(OptimizeFor(stored: p?.optimizeFor), expected)
+        }
+        for odd in ["1", "null", "true", #"{"pick":"cost"}"#] {
+            let p = try prefs(#"{"theme":"dark","optimizeFor":\#(odd)}"#)
+            XCTAssertNil(p?.optimizeFor, odd)
+            XCTAssertEqual(OptimizeFor(stored: p?.optimizeFor), .balance, odd)
+            XCTAssertEqual(p?.theme, "dark", "the rest of the preferences still decode")
+        }
+        // An unknown string decodes — a newer server's value is kept, and reads as Balance here.
+        let future = try prefs(#"{"optimizeFor":"fastest"}"#)
+        XCTAssertEqual(future?.optimizeFor, "fastest")
+        XCTAssertEqual(OptimizeFor(stored: future?.optimizeFor), .balance)
+    }
+
+    /// Moving the picker sends `optimizeFor` alone — PATCH /users/me/preferences {optimizeFor}, as
+    /// the web Settings page does.
+    func testUpdatePreferencesOptimizeForOnly() throws {
+        for value in OptimizeFor.allCases {
+            let obj = try jsonObject(UpdatePreferencesRequest(optimizeFor: value.rawValue))
+            XCTAssertEqual(obj["optimizeFor"] as? String, value.rawValue)
+            XCTAssertEqual(obj.count, 1)
+        }
+        XCTAssertFalse(try jsonObject(UpdatePreferencesRequest(theme: "dark")).keys.contains("optimizeFor"))
+    }
+
+    /// docs/workspace-default-model-design.md: the account-wide model memory is retired. A `me` that
+    /// still carries one (an older client wrote it) decodes, and no preferences PATCH this client can
+    /// build names it — a model pick writes nothing account-wide.
+    func testModelPreferencesAreNeitherReadNorWritten() throws {
+        let json = #"{"preferences":{"defaultModels":{"codex":"gpt-6.1-sol"},"defaultEffort":"high"},"id":"u1","email":"a@b.com"}"#
         let user = try JSONDecoder().decode(User.self, from: Data(json.utf8))
-        XCTAssertEqual(user.preferences?.defaultModels?["codex"], "gpt-6.1-sol")
-        let old = try JSONDecoder().decode(UserPreferences.self, from: Data("{}".utf8))
-        XCTAssertNil(old.defaultModels)
-        let patch = try jsonObject(UpdatePreferencesRequest(defaultModels: ["codex": "gpt-6.1-sol"]))
-        XCTAssertEqual(patch["defaultModels"] as? [String: String], ["codex": "gpt-6.1-sol"])
-        XCTAssertEqual(patch.count, 1)
+        XCTAssertEqual(user.preferences?.defaultEffort, "high")
+        let every = UpdatePreferencesRequest(theme: "dark", defaultModel: "m", defaultPermissionMode: "default",
+                                             defaultEffort: "high", enableOrchestration: true,
+                                             notifySessionFinished: true, notifyAgentMessage: true, modelRouting: true,
+                                             promptSuggestions: true, recaps: true)
+        XCTAssertNil(try jsonObject(every)["defaultModels"])
     }
 }

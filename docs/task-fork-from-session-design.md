@@ -45,8 +45,17 @@ The `orbit mcp` process runs on the calling session's runner. Before it posts th
 session's checkout (`worktreesDir()/<sessionId>`, or `workDir` for a session with no worktree) **without touching
 it**:
 
-1. `GIT_INDEX_FILE=<temp> git add -A` → `git write-tree`. A temporary index means the session's own index,
+1. Copy the session's own index byte for byte (`cp -p <index> <temp>`), then
+   `GIT_OPTIONAL_LOCKS=0 GIT_INDEX_FILE=<temp> git add -A --sparse` → `git write-tree`. The session's own index,
    staged state and working files are unchanged. Untracked files are included, and `.gitignore`d ones are not.
+   - **Not an empty index** (P0 F1, 2026-11-11): session checkouts are sparse. An empty index has no skip-worktree
+     marks, so it stages the deletion of every left-out path (8,430 here), drops tracked files that match
+     `.gitignore`, exits 1 on an untracked file under a left-out path, and on a clean checkout gives a tree that is
+     not HEAD's. The copied index keeps all of that right and takes 0.1–0.5 s instead of 2–12 s.
+   - **`GIT_OPTIONAL_LOCKS=0` is required** (P0 F2): without it, `add -A` refreshes and rewrites a racily clean
+     submodule index, which touches the session's checkout.
+   - Not the runner's `stagedLiveDiff` seeding (copy, then `read-tree -m HEAD`): it fails on a staged-then-edited
+     file and during a merge.
 2. `git commit-tree <tree> -p HEAD -m "Snapshot of session <id> for task <title>"` → snapshot SHA `S`. When the
    tree equals HEAD's tree (nothing uncommitted), `S` is simply `HEAD`, and no commit is made.
 3. `git update-ref refs/orbit/fork/<snapshotId> S`, so `git gc` cannot drop `S` before the task runs.
@@ -92,7 +101,11 @@ When the task is DONE, its branch is `S` + the task's commits, in the same repos
 In v1 the **forking session merges it itself**:
 
 - The `task_await` payload for a forked task carries `branch`, `forkSha` and the one command to run in the
-  forking session's checkout: `git merge --no-ff <branch>`.
+  forking session's checkout: `git merge --no-ff <branch>`. As built (P3), the wake's `forkedTasks` entry names
+  `branch`, `forkSha`, `baseHead`, `snapshotChangedFiles` (the files S changed relative to `baseHead`, sent by
+  the runner at the snapshot and stored in `task.fork_changed_files`, migration 0617) and, once the task is DONE,
+  `reviewCommand` (`git diff HEAD...<branch>`), `mergeCommand` and a `mergeInstruction` saying to read the first
+  before running the second (§2.7 F4).
 - If the forking session committed `S`'s edits in the meantime (its own turn-end commit, for example), git sees
   the same changes on both sides from `baseHead` and merges them without conflict. Conflicts happen only where the
   forking session kept editing the lines the task changed. That is a real conflict, and it is the forking agent's
@@ -104,8 +117,25 @@ Orbit does not merge into a live session's checkout for it in v1 (D3).
 
 ### 2.6 Cleanup
 
-`refs/orbit/fork/<snapshotId>` is deleted when no task that names `S` remains open. The runner's existing gc pass
-reads the task states it already receives.
+`refs/orbit/fork/<snapshotId>` is deleted when no task that names `S` remains open. The runner received no task
+states before this, so P2 added the minimum to the heartbeat: a full reconcile answers a runner that declares
+`task-fork/v1` with `forkSnapshotsOpen`, the snapshots of its OPEN and IN_PROGRESS forked tasks. The runner deletes a
+ref whose `S` is not listed once it has seen `S` listed before, or once the ref is an hour old (a task still behind
+its card, or never created). A declined card or a refused create deletes the ref at once.
+
+### 2.7 Limits found by P0 (2026-11-11), and what v1 does
+
+- **Submodules (F3).** `S` records a submodule only as its gitlink. A submodule's uncommitted edits are not in `S`,
+  and a submodule commit that exists only in the session's clone cannot be fetched by the task's checkout. v1
+  refuses the fork in `orbit mcp`, before anything is posted, when any submodule has uncommitted changes or its
+  checked-out commit is not reachable from the workDir's copy of that submodule: `FORK_SUBMODULE_NOT_SHAREABLE`,
+  naming the submodule. This repository has none.
+- **An edit reverted after the snapshot comes back (F4).** If the forking session undoes an edit that `S` captured,
+  then merges the task branch, git sees the edit only on the task's side and brings it back without a conflict.
+  That is what a merge of `S` means, so v1 does not try to detect it. The `task_await` payload names the files `S`
+  changed relative to `baseHead`, and the merge instruction says to read `git diff HEAD...<branch>` before merging.
+- **Large untracked files (F5).** They are written into the shared object store, and the keep-alive ref holds them
+  until §2.6 cleanup removes the ref. v1 sets no size limit. Cleanup is what bounds it.
 
 ## 3. Codeless: isolated, but no branch unless something changed
 
@@ -123,6 +153,11 @@ A `codeless` task declares that it produces no code. Two ways to stop it leaving
 Neither option decides what a codeless task that did write code means for its criterion. Today
 `task-codeless.ts` refuses only the *later* declaration on a task with commits; a task created codeless that
 then commits is not flagged. That is unchanged by this design and noted as a follow-up.
+
+As built (P3): the session is created with no branch; the claim hands a runner declaring `codeless-checkout/v1`
+`codelessCheckout` and `codelessBranch` (`orbit/<slug>-<6 hex of the session id>`), and an older runner the
+branch up front. Only a codeless task's run may report a branch at finalize that it was not created with. A
+codeless task with worktrees off still runs in the workDir, as every task on that workspace does.
 
 B2 keeps isolation and leaves nothing behind in the common case. Its cost is that the server must accept a branch
 first reported at finalize rather than named at creation, for this one kind of session.

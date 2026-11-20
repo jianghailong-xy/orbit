@@ -498,7 +498,8 @@ test('REST/service creation returns the structured advisory contract', () => {
 });
 
 test('CLI creation receives advice and can send the audited override in all CLI truths', () => {
-  const cli = readFileSync(path.join(repoRoot(), 'src/runner-go/task_cli.go'), 'utf8');
+  const cli = readFileSync(path.join(repoRoot(), 'src/runner-go/task_cli.go'), 'utf8')
+    + readFileSync(path.join(repoRoot(), 'src/runner-go/operation_catalog.go'), 'utf8');
   const transport = readFileSync(path.join(repoRoot(), 'src/runner-go/transport.go'), 'utf8');
   assert.match(cli, /--completion-criterion-override-reason TEXT/); // usage/help
   assert.match(cli, /body\["completionCriterionOverrideReason"\]/); // handler
@@ -507,7 +508,8 @@ test('CLI creation receives advice and can send the audited override in all CLI 
 });
 
 test('MCP single and batch creation receive advice and forward the same override field', () => {
-  const mcp = readFileSync(path.join(repoRoot(), 'src/runner-go/mcp.go'), 'utf8');
+  const mcp = readFileSync(path.join(repoRoot(), 'src/runner-go/mcp.go'), 'utf8')
+    + readFileSync(path.join(repoRoot(), 'src/runner-go/operation_catalog.go'), 'utf8');
   assert.match(mcp, /"completionCriterionOverrideReason": criterionOverrideReasonProp/);
   assert.match(mcp, /copyIfPresent\(body, args,[^\n]+"completionCriterionOverrideReason"/);
   assert.match(mcp, /copyIfPresent\(body, item,[^\n]+"completionCriterionOverrideReason"/);

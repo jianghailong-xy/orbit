@@ -31,6 +31,32 @@ public struct ListLoadState: Equatable, Sendable {
         loading = false
         lastLoadFailed = true
     }
+
+    /// The state a read that starts now begins from. A list that already answered — and whose
+    /// latest read did not fail — keeps drawing what it has while the read runs (stale-while-
+    /// revalidate), so nothing moves: a refresh that answers the same thing writes no state and
+    /// the surfaces reading it stay put. A first read, or a retry after a failed one, does go to
+    /// `loading`, where an empty surface draws the spinner instead of "No …".
+    public func startingRead() -> ListLoadState {
+        guard !loading, !hasLoaded || lastLoadFailed else { return self }
+        var next = self
+        next.begin()
+        return next
+    }
+
+    /// The state after this read succeeded. Equal to the state in hand when it already had.
+    public func afterSuccess() -> ListLoadState {
+        var next = self
+        next.succeed()
+        return next
+    }
+
+    /// The state after this read failed. Equal to the state in hand when it already had.
+    public func afterFailure() -> ListLoadState {
+        var next = self
+        next.fail()
+        return next
+    }
 }
 
 /// What a list surface draws where its rows would be.
@@ -83,7 +109,7 @@ public enum LoadFailureLogic {
     /// chosen anything yet, so this fetch decides afresh — a workspace deleted since the snapshot
     /// was written isn't kept.
     ///
-    /// `firstOnlineMachine` is the first runner online, which is where an account with no workspace
+    /// `firstOnlineMachine` is the first runner online or eligible for managed setup, where an account with no workspace
     /// lands rather than on a page of engines.
     public static func defaultLanding(agents: ListLoadState,
                                       orderedAgentIDs: [String],

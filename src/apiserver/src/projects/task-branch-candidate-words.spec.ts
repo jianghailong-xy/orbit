@@ -16,6 +16,8 @@ import { openItemActions, openItemMessage, openItemRequiredAction, primaryAction
  * Every "before" below is copied byte for byte from what `openItemMessage` and `openItemRequiredAction`
  * rendered on d5e899d33, the commit before the field. A payload without the field reads as it did on
  * that commit, so the second half of this file also passes against it, and the first half does not.
+ * Two sentences have moved since, for every source alike: a timed-out check now says the limit it was
+ * stopped at and when a rerun can help, and the rerun list no longer names a timeout as its reason.
  */
 
 const PROJECT = '01a0f5c8-0000-7000-8000-000000000001';
@@ -101,8 +103,9 @@ const NEXT_STEPS: Record<FailureClass, Record<(typeof HOLDERS)[number], string>>
     OWNER: 'Nothing on this task’s branch reaches develop until this check passes — re-run it or ask the coordinator to fix it.',
   },
   CHECK_TIMED_OUT: {
+    // Changed on 2026-11-16: a timed-out check is the owner's timeout sentence too, not "until this check passes".
     COORDINATOR: 'This task’s branch cannot reach develop until this check finishes — re-run it with a reason or file a fix task.',
-    OWNER: 'Nothing on this task’s branch reaches develop until this check passes — re-run it or ask the coordinator to fix it.',
+    OWNER: 'This task’s branch cannot reach develop until this check finishes — re-run it with a reason or ask the coordinator to fix it.',
   },
   ERROR: {
     COORDINATOR: 'This task’s branch cannot reach develop until this integration is repaired — re-run it or file a fix task.',
@@ -171,7 +174,8 @@ test('the coordinator’s text speaks of the task’s branch in every class, and
     }
   }
   // CONTROL: the census saw real names, or it proved nothing.
-  assert.deepEqual([...found].sort(), ['ask_owner', 'integration_retry', 'open_item_hand_over', 'open_item_resolve', 'task_create']);
+  assert.deepEqual([...found].sort(),
+    ['ask_owner', 'integration_retry', 'merge_receipt', 'open_item_hand_over', 'open_item_resolve', 'task_create']);
 });
 
 test('a conflict on a task’s branch is answered by a new task in ordinary commits, not by the project branch’s recipe', () => {
@@ -184,7 +188,8 @@ test('a conflict on a task’s branch is answered by a new task in ordinary comm
       + 'Do not resolve it in a merge commit: a task’s branch lands by a rebase, which drops merge commits and meets the same conflict again. '
       + 'When that task is DONE its branch becomes a candidate of its own, with its own check and its own card for the account owner. '
       + 'Its landing leaves this candidate and this item as they are and does not bring this item back to you: '
-      + 'once this task’s work is on the project’s main branch, close this item with open_item_resolve.\n',
+      + 'once this task’s work is on the project’s main branch, close this item with open_item_resolve. '
+      + 'Closing the last item about this candidate ends the candidate too, and its card leaves the account owner’s page (M-T14).\n',
   ), told);
   // Everything that recipe said, which is false here.
   assert.doesNotMatch(told, /sync task/);
@@ -193,7 +198,23 @@ test('a conflict on a task’s branch is answered by a new task in ordinary comm
   assert.doesNotMatch(told, /closes this candidate and this item with it/);
   assert.doesNotMatch(told, /superseded by a new landing/);
   // And the doors this cell does not hold, which a reader of a task's item would reach for first.
-  assert.doesNotMatch(told, /task_reopen|task_get|task_start|merge_receipt/);
+  assert.doesNotMatch(told, /task_reopen|task_get|task_start/);
+});
+
+test('M-T13 for a task branch: work already on main as other commits is answered by the receipt, in every class', () => {
+  for (const failureClass of CLASSES) {
+    const told = openItemMessage(failure(failureClass, TASK_TITLE, TASK_BRANCH));
+    assert.ok(told.includes(
+      'If this task’s work is already on the project’s main branch as other commits — cherry-picked, rebased or squashed there by hand — '
+        + 'there is nothing to resolve: record the commit there that carries it with merge_receipt (result: ALREADY_MERGED, '
+        + 'sessionId: the task’s work session, sourceBranch: this task’s branch, sourceSha: that commit, targetBranch: the project’s main branch). '
+        + 'The receipt ends this candidate, its card and this item, and the task reads as landed.',
+    ), `${failureClass}: ${told}`);
+  }
+  // A project branch's candidate is not ended by one task's receipt, so its text never offers one.
+  for (const failureClass of CLASSES) {
+    assert.doesNotMatch(openItemMessage(failure(failureClass, PROJECT_TITLE)), /merge_receipt/, failureClass);
+  }
 });
 
 test('a red on a task’s branch: a fix is its own candidate, and only the account owner confirms the merge', () => {
@@ -204,7 +225,8 @@ test('a red on a task’s branch: a fix is its own candidate, and only the accou
         + `this item with fixesOpenItemId: ${ITEM_SHOWN}. A fix does not change this candidate: it runs on a branch of its own, so it has to `
         + 'carry this task’s work with it. When that task is DONE its branch becomes a candidate of its own, with its own check and its own '
         + 'card for the account owner. Its landing leaves this candidate and this item as they are and does not bring this item back to you: '
-        + 'once this task’s work is on the project’s main branch, close this item with open_item_resolve.\n',
+        + 'once this task’s work is on the project’s main branch, close this item with open_item_resolve. '
+        + 'Closing the last item about this candidate ends the candidate too, and its card leaves the account owner’s page (M-T14).\n',
     ), told);
     assert.ok(told.includes(`rerun this candidate’s check once with integration_retry (projectId: ${PROJECT_SHOWN}, promotionId: ${CANDIDATE_SHOWN}, `
       + 'reason: why this time will be different). Once the check passes, the merge is still confirmed by the account owner on the card, '
@@ -263,7 +285,8 @@ const PROJECT_NEXT_STEPS: Record<FailureClass, Record<(typeof HOLDERS)[number], 
   },
   CHECK_TIMED_OUT: {
     COORDINATOR: 'The project branch cannot reach main until this check finishes — re-run it with a reason or ask the coordinator to fix it.',
-    OWNER: 'Nothing on the project branch reaches main until this check passes — re-run it or ask the coordinator to fix it.',
+    // Changed on 2026-11-16: a timed-out check is the owner's timeout sentence too, not "until this check passes".
+    OWNER: 'The project branch cannot reach main until this check finishes — re-run it with a reason or ask the coordinator to fix it.',
   },
   ERROR: {
     COORDINATOR: 'The project branch cannot reach main until this integration is repaired — re-run it or ask the coordinator to fix it.',
@@ -289,20 +312,37 @@ const NOTHING_TO_REPORT = 'You do not need to report back. Where the platform ca
 
 const CLOSED_BY = 'When this candidate is superseded by a new landing, declined or merged, the platform closes this item itself. ';
 
-/** What a class a rerun answers was told after its facts: all three said the same. */
-const RERUN_BEFORE = `First work out whose red it is. If it is a code problem on the project branch, file a fix task with task_create and attach it to this item with fixesOpenItemId: ${ITEM_SHOWN}; `
-  + 'once it lands, the platform opens a new candidate.\n'
-  + 'If it is not the work’s problem — the merge check’s baseline was repaired since, the check timed out (go test hitting its default 10-minute limit, for example), the integration machinery failed — '
-  + `rerun this candidate’s check once with integration_retry (projectId: ${PROJECT_SHOWN}, promotionId: ${CANDIDATE_SHOWN}, reason: why this time will be different). `
+const FIX_TASK_FIRST = `First work out whose red it is. If it is a code problem on the project branch, file a fix task with task_create and attach it to this item with fixesOpenItemId: ${ITEM_SHOWN}; `
+  + 'once it lands, the platform opens a new candidate.\n';
+
+const RERUN_DOOR = `rerun this candidate’s check once with integration_retry (projectId: ${PROJECT_SHOWN}, promotionId: ${CANDIDATE_SHOWN}, reason: why this time will be different). `
   + 'Once the check passes, the merge is still confirmed by the account owner on the card, or done automatically by the Automatic setting under its usual rule: '
-  + 'this door only brings the candidate back to a state where it can be merged, and merges nothing for anybody.\n'
-  + 'If the merge-check command or its time limit has to change, or there is another trade-off only the account owner can decide, ask with ask_owner, giving at least two options, '
-  + 'with the reason in the recommended one.\n'
-  + ASK_OWNER_FIRST
+  + 'this door only brings the candidate back to a state where it can be merged, and merges nothing for anybody.\n';
+
+const AFTER_RERUN = ASK_OWNER_FIRST
   + CLOSED_BY
   + 'After you rerun the check with integration_retry, this item shows as being handled and stays open until the rerun job has a result: if the check passes, it is marked handled (HANDLED) '
   + 'automatically, with your session and reason recorded; if it fails again, it is marked superseded (RETRIED), and the new failure opens an item of its own. '
   + NOTHING_TO_REPORT;
+
+/** What a red check and an error were told after their facts: both say the same. */
+const RERUN_BEFORE = FIX_TASK_FIRST
+  + 'If it is not the work’s problem — the merge check’s baseline was repaired since, the integration machinery failed — '
+  + RERUN_DOOR
+  + 'If the merge-check command or its time limit has to change, or there is another trade-off only the account owner can decide, ask with ask_owner, giving at least two options, '
+  + 'with the reason in the recommended one.\n'
+  + AFTER_RERUN;
+
+/** What a check stopped at its limit is told instead: a rerun only beside a reason, else the owner's question. */
+const TIMED_OUT_NEXT = FIX_TASK_FIRST
+  + 'The check ran out of time rather than failing. Run again as it stands, the same check on the same tree takes about as long and stops at the same limit, '
+  + 'so rerun it once only when you can name why the next run will be shorter — the machine was under unusual load, the output above shows a one-off hang '
+  + '(a stuck network call or lock, for example), or a fix for the slow part has landed since — and give that reason: '
+  + RERUN_DOOR
+  + 'If this check usually takes close to its limit or longer, a rerun will time out again: do not rerun it, ask the account owner with ask_owner instead, '
+  + 'offering options such as raising the check’s time limit, changing the merge-check command (to a faster one, or a subset of it), or filing a fix task for the slow part, '
+  + 'with your recommended option and its reason.\n'
+  + AFTER_RERUN;
 
 /** The coordinator's text on d5e899d33: everything after the title. */
 const TOLD_BEFORE: Record<FailureClass, string> = {
@@ -318,9 +358,10 @@ const TOLD_BEFORE: Record<FailureClass, string> = {
   CHECK_FAILED: `${OPENED}Check MERGE_CHECK exited with code 1 (its declaration expects 0); the target branch did not move.\nIt ran: npm test\nThe end of its output:\nnot ok 1\n\n`
     + 'Failure class: CHECK_FAILED (the check ran to the end, and its exit code disagrees with its declaration).\n\n'
     + YOURS + RERUN_BEFORE,
-  CHECK_TIMED_OUT: `${OPENED}Check TASK_ACCEPTANCE exited with code null (its declaration expects 0); the target branch did not move.\nIt ran: go test ./...\n`
+  CHECK_TIMED_OUT: `${OPENED}Check TASK_ACCEPTANCE did not finish: the platform stopped it at its time limit (this item did not record the limit), so it reached no verdict; `
+    + 'the target branch did not move.\nIt ran: go test ./...\n'
     + 'Failure class: CHECK_TIMED_OUT (a check was still running when its time budget ran out, and the platform stopped it before it reached a verdict).\n\n'
-    + YOURS + RERUN_BEFORE,
+    + YOURS + TIMED_OUT_NEXT,
   ERROR: `${OPENED}The integration job ended with an error: FETCH_FAILED.\nError detail: {"detail":"the remote hung up"}\n`
     + 'Failure class: ERROR (the integration job itself went wrong; this is not a check’s verdict).\n\n'
     + YOURS + RERUN_BEFORE,

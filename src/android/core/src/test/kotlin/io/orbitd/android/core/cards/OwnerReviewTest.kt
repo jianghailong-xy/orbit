@@ -7,6 +7,7 @@ import org.junit.Test
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZoneOffset
+import java.util.Locale
 
 /**
  * A08-1 (iOS b573f499b): the owner-confirmation card's review — held, case for case, to the fixture the web and the Apple
@@ -94,11 +95,13 @@ class OwnerReviewTest {
         assertEquals("Only the agent that did the work has checked this.", OwnerReview.notReviewedNote(null, 1800))
     }
 
-    @Test fun receiptTimesAreAFixedClockAndADayWhenItIsAnotherDay() {
+    @Test fun receiptTimesAreTheReadersClockAndADayWhenItIsAnotherDay() {
         val zone = ZoneId.of("Asia/Shanghai")
         val now = Instant.parse("2026-10-09T02:00:00Z")
-        assertEquals("08:05", OwnerReview.receiptTime("2026-10-09T00:05:00Z", now, zone))
-        assertEquals("9/15 08:05", OwnerReview.receiptTime("2026-09-15T00:05:00.000Z", now, zone))
+        // The JDK writes a narrow no-break space before AM/PM; read it as a space.
+        fun plain(text: String?) = text?.replace('\u202F', ' ')
+        assertEquals("8:05 AM", plain(OwnerReview.receiptTime("2026-10-09T00:05:00Z", now, zone, Locale.US)))
+        assertEquals("9/15 8:05 AM", plain(OwnerReview.receiptTime("2026-09-15T00:05:00.000Z", now, zone, Locale.US)))
         assertNull(OwnerReview.receiptTime("not a time", now, zone))
     }
 

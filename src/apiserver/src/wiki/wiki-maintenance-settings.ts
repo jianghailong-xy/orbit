@@ -9,6 +9,8 @@ import {
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { FactPosition } from './wiki-maintenance';
+import { probeWikiMaintenanceWorkspace } from './wiki-maintenance-probe';
+import { WikiRefusalError } from './wiki.service';
 
 /**
  * The owner's maintenance settings of a space (design §8.2, contracts/wiki.contract.json
@@ -108,7 +110,20 @@ class MaintenanceSettingsWriter {
         );
       }
     };
-    needsWorkspace(merged(storedMaintenance(before.settings), input));
+    const asked = merged(storedMaintenance(before.settings), input);
+    needsWorkspace(asked);
+    // Turn on — or a new workspace while on — asks the workspace's runner which tier its folder is on first (design §7.3):
+    // another repository's checkout is refused, and every other answer, could not check included, is let through.
+    const was = storedMaintenance(before.settings);
+    if (asked.enabled && asked.workspaceId && (!was.enabled || was.workspaceId !== asked.workspaceId)) {
+      const probe = await probeWikiMaintenanceWorkspace(this.prisma, { ownerId, spaceId, workspaceId: asked.workspaceId });
+      if (!probe.canTurnOn) {
+        throw new WikiRefusalError({
+          code: 'WIKI_MAINTENANCE_WRONG_REPOSITORY',
+          message: `${probe.title}: maintenance would read another repository's code, so it was not turned on. Choose a workspace of this wiki's repository.`,
+        });
+      }
+    }
     return withTransactionRetry(
       this.prisma,
       async (tx) => {

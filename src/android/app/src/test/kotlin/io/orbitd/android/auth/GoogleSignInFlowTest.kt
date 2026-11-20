@@ -10,10 +10,13 @@ import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasProgressBarRangeInfo
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performCustomAccessibilityActionWithLabel
@@ -174,9 +177,11 @@ class GoogleSignInFlowTest {
 
         deliver("orbit://auth/google?ticket=fixture-ticket&state=$state")
         compose.waitUntil(60_000) { session().state.value is AuthState.SignedIn }
-        // Signed in, the app opens on its directory; the account is shown in Settings.
+        // Signed in, the app opens on its directory; the account's email is shown on Settings › Profile.
         compose.onNodeWithContentDescription("Open navigation").performClick()
-        compose.onNodeWithText("Settings").performScrollTo().performClick()
+        compose.onNodeWithTag("drawer:settings").performClick()
+        compose.waitUntil(60_000) { compose.onAllNodes(hasText("Profile") and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasText("Profile") and hasClickAction()).performScrollTo().performClick()
         compose.waitUntil(60_000) { compose.onAllNodesWithText("fixture@example.test").fetchSemanticsNodes().isNotEmpty() }
         val exchange = exchanges.single()
         assertEquals("https://orbit.example/team/", exchange.server.value)

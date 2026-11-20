@@ -326,6 +326,8 @@ export const WIKI_SECTION_USED = "Where it's used";
 export const WIKI_SECTION_HISTORY = 'History';
 export const WIKI_ANCHORS_NOTE =
   'Checked again after every commit to main. If the anchored code changes, agents stop getting this entry until someone re-checks it.';
+/** Beside a code anchor learned when no code could be read, until its first check (contract `anchorRules.deferred`). */
+export const WIKI_ANCHOR_DEFERRED = 'Not checked yet: the code could not be read when this was learned';
 export const wikiPushedTo = (sessions: number, fetched: number): string =>
   `Pushed to ${sessions} session${sessions === 1 ? '' : 's'} this week · fetched ${fetched}×`;
 export const WIKI_NO_USE_YET = 'No session has been shown this entry yet.';
@@ -660,6 +662,11 @@ export function wikiAnchorLabel(anchor: { type?: unknown; path?: unknown; symbol
   if (typeof anchor.command === 'string') return anchor.command;
   if (typeof anchor.ref === 'string') return anchor.ref;
   return '—';
+}
+
+/** A code anchor marked deferred and not checked on any tree since (contract `anchorRules.deferred`). */
+export function wikiAnchorDeferred(anchor: { deferred?: unknown; check?: unknown }): boolean {
+  return anchor.deferred === true && anchor.check == null;
 }
 
 /** One anchor's state, in the same three words the entry's own mark uses. */

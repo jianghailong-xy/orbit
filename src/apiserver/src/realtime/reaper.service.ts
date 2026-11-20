@@ -9,6 +9,7 @@ import {
   gracefulEndStatus,
   isApiErrorText,
   isAuthErrorText,
+  isConnectionFailureText,
 } from '@orbit/shared';
 import { randomUUID } from 'crypto';
 import { initializesRuntimeDynamically } from '../common/runtime-provider';
@@ -18,6 +19,7 @@ import { retireSessionInboxGeneration } from '../common/session-inbox-fence';
 import { PrismaService } from '../prisma/prisma.service';
 import { postRunFailureComment, reclaimStalledTask } from '../tasks/reclaim-stalled-task';
 import { RealtimeService } from './realtime.service';
+import { readRuntimeStartupFacts, runtimeStartupClock, runtimeStartupOverdue } from './runtime-startup-clock';
 import {
   classifyTransactionFault,
   loggedRetry,
@@ -35,6 +37,7 @@ import { settleUnrunSessionRequests } from '../sessions/session-request';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import { PushService } from '../push/push.service';
 import { RUNNER_LINK_REVOCATION_WINDOW_MS } from '../runner-api/runner-link-token';
+import { CompletionInputRouter } from '../projects/completion-input-router.service';
 import { settleUnrunWakeTurns, signalDrainedWakeups } from '../runner-api/wake-turn-withdraw';
 import {
   APISERVER_PROCESS_QUIET_AFTER_MS,
@@ -46,6 +49,7 @@ import {
   type RunnerBeats,
 } from '../runners/runner-presence';
 import { KEEPS_SESSION_IN_TRASH } from '../files/file-retention';
+import { reprojectAfterSettledChecks, settleChecksOfEndedRun } from '../projects/criterion-check-ended';
 import { ControlPlaneLeader } from './control-plane-leader';
 
 const REAP_INTERVAL_MS = 30_000;
@@ -306,6 +310,12 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
      * checks); `@Optional()` for the specs that build the reaper by hand about something else.
      */
     @Optional() private readonly push?: PushService,
+    /**
+     * The completion doors a project's facts go out through. A DONE task whose route this reap decided
+     * (§12.15 P-M1) re-derives the settled fact its deferred landing held. CoordinatorJudgmentModule,
+     * which RealtimeModule imports, provides it; `@Optional()` for the specs that build the reaper by hand.
+     */
+    @Optional() private readonly completionInputs?: CompletionInputRouter,
   ) {}
 
   onModuleInit(): void {
@@ -614,7 +624,13 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           initializesRuntimeDynamically(provider) &&
           s.status === RunStatus.RUNNING &&
           !s.runtimeSessionId &&
-          now - lastTurn > runtimeStartupGrace
+          now - lastTurn > runtimeStartupGrace &&
+          // Not the time a runner restart or Update Now kept the turn waiting (runtime-startup-clock.ts).
+          runtimeStartupOverdue(
+            runtimeStartupClock(await readRuntimeStartupFacts(this.prisma, s.id, s.lastTurnAt)),
+            now,
+            runtimeStartupGrace,
+          )
         ) {
           await this.forceFinalize(
             s.id,
@@ -630,12 +646,12 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           continue;
         }
         // Backstop for a task run whose last turn ended in a Claude API error (e.g.
-        // content filtering) or an expired sign-in: the SDK reports it as a successful
-        // turn, so an older runner parks the session at AWAITING_INPUT and the task stays
-        // IN_PROGRESS with nothing watching. (Current runners flag the turn FAILED at the
-        // source, so this only catches sessions a stale runner left behind — which outlive
-        // a release, since a runner only self-updates at startup.) Finalize FAILED and
-        // reclaim the task as FAILED. Task-bound, online, not-being-cancelled only.
+        // content filtering), a failure of the connection to the API, or an expired sign-in:
+        // the SDK reports it as a successful turn, so an older runner parks the session at
+        // AWAITING_INPUT and the task stays IN_PROGRESS with nothing watching. (Current runners
+        // flag the turn FAILED at the source, so this only catches sessions a stale runner left
+        // behind — which outlive a release, since a runner only self-updates at startup.) Finalize
+        // FAILED and reclaim the task as FAILED. Task-bound, online, not-being-cancelled only.
         if (s.status === RunStatus.AWAITING_INPUT && s.taskId && !s.cancelRequestedAt) {
           const last = await this.prisma.runEvent.findFirst({
             where: { sessionId: s.id, type: RunEventType.ASSISTANT },
@@ -643,7 +659,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
             select: { payload: true },
           });
           const text = (last?.payload as { text?: string } | null)?.text;
-          if (isApiErrorText(text) || isAuthErrorText(text)) {
+          if (isApiErrorText(text) || isAuthErrorText(text) || isConnectionFailureText(text)) {
             const why = isAuthErrorText(text) ? 'run failed (sign-in expired)' : 'run failed (API error)';
             await this.forceFinalize(s.id, s.assignedRunnerId, s.taskId, why, {
               resetTaskTo: TaskStatus.FAILED,
@@ -899,7 +915,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
       const delivered = taskId
         ? await settleDeliveredIdentityAfterFinish(tx, await tx.session.findUnique({
           where: { id: sessionId },
-          select: { ownerId: true, taskId: true, startsTaskWork: true },
+          select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
         }))
         : null;
       await retireSessionInboxGeneration(tx, sessionId);
@@ -937,6 +953,12 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         where: { sessionId, status: { not: 'ANSWERED' } },
         data: { status: 'ANSWERED', answeredAt: new Date() },
       });
+      // An Agent check this run was, ended without its verdict (projects/criterion-check-ended.ts).
+      const checksSettled = retryAt != null ? [] : await settleChecksOfEndedRun(
+        tx,
+        { sessionId, taskId },
+        `its run was reaped as ${status} (${reason})`,
+      );
       // Reclaim a now-stalled IN_PROGRESS task so it stops showing as running.
       const taskReclaimed = taskId && status !== RunStatus.SUCCEEDED
         ? await reclaimStalledTask(
@@ -957,8 +979,11 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         ok: true,
         taskReclaimed,
         currentWorkTerminalized,
-        identityUnknown: delivered === 'IDENTITY_UNKNOWN',
+        // Or the WORK_ELSEWHERE item an identity frozen here opened (§12.15 P-M1). The dependents of a
+        // task that delivered nothing are released by the 60 s ready sweep, which asks the same predicate.
+        identitySettled: delivered === 'IDENTITY_UNKNOWN' || delivered === 'FROZEN',
         droppedWakeups,
+        checksSettled,
       };
     }, loggedRetry(this.log, 'reaper.forceFinalize'));
     if (!outcome.ok) {
@@ -970,6 +995,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     // The one-shot wakeups this reap dropped with the session it FAILED, retry unarmed: their owner is told,
     // once, now that the drop has committed (contract §4).
     signalDrainedWakeups(this.push, this.log, outcome.droppedWakeups ?? []);
+    if ('checksSettled' in outcome) await reprojectAfterSettledChecks(this.prisma, outcome.checksSettled, this.log);
     // The session summary refreshes the task's own running/queued overlay. A reclaimed status also
     // changes prerequisite dependents, whose complete reverse fan-out is not known here; the
     // compatibility helper deliberately emits an explicit resync for that rare abnormal path.
@@ -978,9 +1004,16 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
       // And the exception item this sweep opened goes to whoever is responsible for it (§4.4 X-D4 1).
       await this.openItems?.deliverForTasks([taskId]);
     }
-    // The item a DONE task's unknown identity opened when this finish settled its work (O-T1).
-    if ('identityUnknown' in outcome && outcome.identityUnknown && taskId) {
+    // The item a DONE task's unknown identity opened when this finish settled its work (O-T1), or the
+    // WORK_ELSEWHERE item its frozen identity opened (§12.15 P-M1).
+    if ('identitySettled' in outcome && outcome.identitySettled && taskId) {
       await this.openItems?.deliverForTasks([taskId]);
+      // And the project facts the deferred landing held (PROJECT_TASKS_SETTLED / looks-finished),
+      // re-derived now that it is decided. The dependents themselves are the 60 s ready sweep's.
+      if (this.completionInputs) {
+        const settled = await this.prisma.task.findUnique({ where: { id: taskId }, select: { projectId: true } });
+        await this.completionInputs.routeSettledWork([settled?.projectId]);
+      }
     }
     if (outcome.currentWorkTerminalized > 0) {
       this.realtime.publishQueuedTurnsChanged(sessionId);

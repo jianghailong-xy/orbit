@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { OpenItemDeliveryCard as Delivery } from '@orbit/shared';
 import { Transcript, type RunEvent } from './Transcript';
+import { GO_TO_ITEM_CARD, ITEM_CARD_NOT_HERE } from './OpenItemDeliveryCard';
 
 /**
  * An exception item's delivery is drawn from the payload the control plane recorded beside the
@@ -120,10 +121,17 @@ describe('an exception item delivered to the coordinator', () => {
     // The change that made this worth a card: the platform's own reading of the landing, which
     // otherwise costs the coordinator a re-check of the merge receipts every time.
     expect(el!.querySelector('.oic-facts')?.textContent).toContain('No merge receipt');
-    // The doors are the server's list, and the ones a reader can walk are links. A conflict offers
-    // no rerun (the server refuses one for it), so the only chip left is the quiet one that stops.
-    const chips = [...el!.querySelectorAll('.oic-chip')].map((c) => c.textContent);
-    expect(chips).toEqual(['Cancel the task']);
+    // No door names drawn as chips nobody can press (board card-ui-polish ②): the doors are on the
+    // item's own card, and this one points at it.
+    expect(el!.querySelector('.oic-chip')).toBeNull();
+    expect(el!.querySelector('.oic-goto')?.textContent).toBe(GO_TO_ITEM_CARD);
+    // The agent's half of the headline stays in the disclosure, and the branch is named by its name.
+    expect(el!.querySelector('.oic-why')?.textContent).not.toContain('will not retry');
+    expect(el!.querySelector('.oic-why')?.textContent).not.toContain('refs/heads/');
+    // The footer is the person's line; the item's id is inside the disclosure with the agent's words.
+    expect(el!.querySelector('.oic-meta')?.textContent).toMatch(/^Sent to the coordinator · /u);
+    expect(el!.querySelector('.oic-meta')?.textContent).not.toContain('notification');
+    expect(el!.querySelector('details.oic-raw .oic-raw-id')?.textContent).toContain('Item ');
     const links = [...el!.querySelectorAll('.oic-links a')].map((a) => a.textContent);
     expect(links).toEqual(['Open the task ↗', 'Open the failed session ↗']);
     // The paragraph the agent read is still one disclosure away, verbatim.
@@ -149,27 +157,16 @@ describe('an exception item delivered to the coordinator', () => {
       .toEqual(['src/web/src/index.css']);
   });
 
-  /**
-   * The pair the sticky bar at the top of the transcript reads off the card's root — and the guard
-   * that keeps a title already carrying its kind from being prefixed with it again. A failed task's
-   * title is built as `Task failed: <task>` while its kind label is `Task failed` too, so the bar
-   * read "Task failed: Task failed: [WARC]…" (the account owner's screenshot, 2026-09-22).
-   * `OpenItemDeliveryCard.stickyText` is the same rule on the native end.
-   */
-  it('stamps the kind once: a title that already says it is not prefixed again', async () => {
-    await mount([delivered({ ...CARD, kind: 'TASK_FAILED',
-                             title: 'Task failed: 回填历史 user 事件的 controlPlaneNote' })]);
-    expect(card()!.getAttribute('data-sticky-label')).toBe('Exception item');
-    expect(card()!.getAttribute('data-sticky-text'))
-      .toBe('Task failed: 回填历史 user 事件的 controlPlaneNote');
+  it('says so when the item card it points at is not in this conversation', async () => {
+    await mount([delivered(CARD)]);
+    await act(async () => card()!.querySelector<HTMLButtonElement>('.oic-goto')!.click());
+    expect(card()!.querySelector('.oic-goto')).toBeNull();
+    expect(card()!.querySelector('.oic-missing')?.textContent).toBe(ITEM_CARD_NOT_HERE);
+  });
 
-    // And a title that does NOT say it still gets the kind, so the line names what this is.
-    await act(async () => {
-      root.unmount();
-    });
-    root = createRoot(container);
-    await mount([delivered({ ...CARD, kind: 'TASK_FAILED', title: '[WARC] 000_00022 的 WARC 依赖' })]);
-    expect(card()!.getAttribute('data-sticky-text')).toBe('Task failed: [WARC] 000_00022 的 WARC 依赖');
+  it('marks a round Orbit opened, which the sticky bar hides over', async () => {
+    await mount([delivered(CARD)]);
+    expect(card()!.hasAttribute('data-orbit-round'), 'Orbit opened this round: the sticky bar hides over it').toBe(true);
   });
 
   it('folds the file list past three, and unfolds it again', async () => {

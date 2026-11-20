@@ -90,9 +90,18 @@ final class ProjectPageSectionsCopyParityTests: XCTestCase {
                             ("NO_PUSH_RECORDED", ProjectPage.landingNoPushRecorded),
                             ("MAY_HAVE_BEEN_PUSHED", ProjectPage.landingMayHaveBeenPushed),
                             ("RETRIED_BY_OWNER", ProjectPage.landingRetriedByOwner),
-                            ("RETRIED_BY_COORDINATOR", ProjectPage.landingRetriedByCoordinator)] {
+                            ("RETRIED_BY_COORDINATOR", ProjectPage.landingRetriedByCoordinator),
+                            ("SKIP_CHECK", ProjectPage.landingSkipCheck),
+                            ("SKIP_CHECK_GO", ProjectPage.landingSkipCheckGo),
+                            ("SKIP_CHECK_CANCEL", ProjectPage.landingSkipCheckCancel),
+                            ("SKIP_CHECK_FAILED", ProjectPage.landingSkipCheckFailed),
+                            ("SKIP_CHECK_REASON", ProjectPage.landingSkipCheckReason),
+                            ("SKIP_CHECK_STOPPING", ProjectPage.landingSkipCheckStopping),
+                            ("SKIP_CHECK_SKIPPED", ProjectPage.landingSkipCheckSkipped)] {
             assertSays(web, "\(key): '\(word)'", in: Self.panorama)
         }
+        // The one the web quotes in double quotes, for the apostrophe it holds.
+        assertSays(web, "SKIP_CHECK_CONFIRM: \"\(ProjectPage.landingSkipCheckConfirm)\"", in: Self.panorama)
         // §7.2 V6's words (board docs/mocks/landing-session/v4, 05), every one of them in the web's
         // `LANDING_LIVENESS_WORDS`; Kotlin's ProjectPage may only use these.
         for (key, word) in [("OUTPUT", ProjectPage.landingOutput),
@@ -107,7 +116,8 @@ final class ProjectPageSectionsCopyParityTests: XCTestCase {
                             ("OF", ProjectPage.landingOf),
                             ("TAKEN_OVER", ProjectPage.landingTakenOver),
                             ("FIRST_STARTED", ProjectPage.landingFirstStarted),
-                            ("USUALLY", ProjectPage.landingUsually)] {
+                            ("USUALLY", ProjectPage.landingUsually),
+                            ("WAITING", ProjectPage.landingWaiting)] {
             assertSays(web, "\(key): '\(word)'", in: Self.panorama)
         }
         // A runner that stopped reporting says so — a fact about the REPORTS, worded apart from

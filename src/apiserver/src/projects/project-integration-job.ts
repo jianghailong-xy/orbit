@@ -9,7 +9,7 @@ import {
   openTaskLanding,
   type OpenedLanding,
 } from './landing-session';
-import { taskLandingSql, workOnProjectRepository } from './project-criterion-landing';
+import { WORK_REPORTED_WHERE, taskLandingSql, workOnProjectRepository } from './project-criterion-landing';
 import { isCodeTask, startOnFirstIntegration } from './project-integration-line';
 import {
   appendIntegrationJobEvent,
@@ -206,6 +206,10 @@ export type LandingFailureClass = (typeof LANDING_FAILURE_CLASSES)[number];
 /** Explicit retry treats BASELINE_RED like CHECK_FAILED; migrations 0344/0513 admit both. */
 export const RETRYABLE_LANDING_FAILURE_CLASSES = ['CHECK_FAILED', 'CHECK_TIMED_OUT', 'BASELINE_RED', 'ERROR'] as const;
 export type RetryableLandingFailureClass = (typeof RETRYABLE_LANDING_FAILURE_CLASSES)[number];
+/** What `integration_retry` reruns: a retryable failure, or a MAIN_SYNC conflict whose branch has
+ *  moved since (§3.1 M3). The CONFLICT one is queued without the retry columns, whose class check
+ *  (0344/0513) admits only the retryable classes. */
+export type LandingRetryFailureClass = RetryableLandingFailureClass | 'CONFLICT';
 
 /**
  * The class of a finished job, or null for a state that is not a failure.
@@ -237,8 +241,11 @@ export function isRetryableLandingFailure(
 
 /** The checks the runner ran, as it reports them back. `outputTail` is clipped by the runner. */
 export interface IntegrationCheckResult {
-  skipped?: 'PATHS_EXEMPT';
+  /** PATHS_EXEMPT: only the repository's exempt paths changed (§11 K2), with `files`. TASK_EXEMPT: the
+   *  task is exempt from the landing check (§12.15 P-C2), with `reason`. Either is a skip, not a pass. */
+  skipped?: 'PATHS_EXEMPT' | 'TASK_EXEMPT';
   files?: string[];
+  reason?: string;
   name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK' | 'LANDING_CHECK';
   command: string;
   expectedExitCode: number;
@@ -280,6 +287,14 @@ export interface IntegrationCheckSource {
   acceptanceTimeoutSeconds: number | null;
   landingCheckCommand?: string | null;
   landingCheckTimeoutSeconds?: number | null;
+  /** The project runs no landing check (`landingCheck` NONE, §12.15 P-C1); absent reads false. */
+  landingCheckNone?: boolean;
+  /** The task is exempt from the landing check, and why (§12.15 P-C2); absent reads not exempt. */
+  landingCheckExempt?: boolean;
+  landingCheckExemptReason?: string | null;
+  /** Where the job lands and the upstream: an exemption holds only when they differ (a project branch). */
+  targetRef?: string;
+  upstreamRef?: string;
   mergeCheckCommand: string | null;
   mergeCheckTimeoutSeconds: number | null;
   skipMergeCheck: boolean;
@@ -318,7 +333,7 @@ export function checksFor(row: IntegrationCheckSource): IntegrationCheckSpec[] {
       name: 'TASK_ACCEPTANCE',
       command: row.acceptanceCommand,
       expectedExitCode: row.acceptanceExpectedExitCode,
-      timeoutSeconds: row.acceptanceTimeoutSeconds ?? DEFAULT_CHECK_TIMEOUT_SECONDS,
+      timeoutSeconds: checkTimeoutSeconds('TASK_ACCEPTANCE', row),
     });
   }
   // The kind is checked as well as the flag even though 0393's CHECK makes the combination
@@ -326,19 +341,55 @@ export function checksFor(row: IntegrationCheckSource): IntegrationCheckSpec[] {
   // that arrived saying otherwise — a hand-written fixture, a build ahead of the migration — keeps
   // the check it was queued for rather than landing unchecked.
   const landing = row.kind === 'LAND_TASK';
+  // NONE (§12.15 P-C1) is the project saying "no landing check": a landing then runs only the task's
+  // own acceptance above. A null command is not that: it falls back to the merge check (§11 K1).
+  if (landing && row.landingCheckNone) return checks;
+  // P-C2: a task exempt from the landing check gets its own acceptance above and nothing else. The
+  // server leaves the check out of the command rather than asking the runner to skip it, so a runner
+  // that has never heard of TASK_EXEMPT still runs exactly what the coordinator decided.
+  if (taskLandingCheckExemption(row) !== null) return checks;
   const command = landing ? row.landingCheckCommand ?? row.mergeCheckCommand : row.mergeCheckCommand;
-  const timeout = landing
-    ? row.landingCheckTimeoutSeconds ?? row.mergeCheckTimeoutSeconds
-    : row.mergeCheckTimeoutSeconds;
   if (command && !(landing && row.skipMergeCheck)) {
     checks.push({
       name: landing ? 'LANDING_CHECK' : 'MERGE_CHECK',
       command,
       expectedExitCode: 0,
-      timeoutSeconds: timeout ?? DEFAULT_CHECK_TIMEOUT_SECONDS,
+      timeoutSeconds: checkTimeoutSeconds(landing ? 'LANDING_CHECK' : 'MERGE_CHECK', row),
     });
   }
   return checks;
+}
+
+/**
+ * Why this job's landing check is not run because its task is exempt (§12.15 P-C2), or null when it
+ * runs as usual. Null too when there was no landing check to skip — `landingCheck` NONE, an owner's
+ * skip of this generation, no command at all — so a skip is recorded only where a check was due.
+ *
+ * Only for a landing onto a project branch. The door refuses the exemption on a MAIN line, and this
+ * asks again of the job itself: a landing whose target IS the upstream is the gate into main, which no
+ * task's exemption opens, whatever the task row says.
+ */
+export function taskLandingCheckExemption(row: IntegrationCheckSource): string | null {
+  if (row.kind !== 'LAND_TASK' || !row.landingCheckExempt || !row.landingCheckExemptReason) return null;
+  if (!row.targetRef || !row.upstreamRef || row.targetRef === row.upstreamRef) return null;
+  if (row.landingCheckNone || row.skipMergeCheck || !(row.landingCheckCommand ?? row.mergeCheckCommand)) return null;
+  return row.landingCheckExemptReason;
+}
+
+/**
+ * The budget `checksFor` gives the check of this name: the task's acceptance its own, a landing check
+ * the project's landing budget or else its merge-check budget, a merge check the merge-check budget.
+ * Also what a timed-out check's item records as the limit it was stopped at.
+ */
+export function checkTimeoutSeconds(
+  name: IntegrationCheckSpec['name'],
+  row: Pick<IntegrationCheckSource, 'acceptanceTimeoutSeconds' | 'landingCheckTimeoutSeconds' | 'mergeCheckTimeoutSeconds'>,
+): number {
+  if (name === 'TASK_ACCEPTANCE') return row.acceptanceTimeoutSeconds ?? DEFAULT_CHECK_TIMEOUT_SECONDS;
+  if (name === 'LANDING_CHECK') {
+    return row.landingCheckTimeoutSeconds ?? row.mergeCheckTimeoutSeconds ?? DEFAULT_CHECK_TIMEOUT_SECONDS;
+  }
+  return row.mergeCheckTimeoutSeconds ?? DEFAULT_CHECK_TIMEOUT_SECONDS;
 }
 
 /**
@@ -951,7 +1002,7 @@ export function timedOutErrorCode(job: {
 /** Which door ended a timed-out attempt, for the timeline's `TIMED_OUT` fact (§2.9 LS2). The two
  *  the job row cannot tell apart from an ordinary J-T9 end are the candidate's recheck gate and
  *  M-T13's retirement, which today write the same `error_detail` as the retry door. */
-export type TimeoutEndCause = 'RETRY' | 'RECHECK' | 'M13' | 'STOP' | 'SUPERSEDE' | 'TASK_REOPEN';
+export type TimeoutEndCause = 'RETRY' | 'RECHECK' | 'M13' | 'STOP' | 'SUPERSEDE' | 'TASK_REOPEN' | 'SKIP_CHECK';
 
 export async function endTimedOutLanding(
   tx: Prisma.TransactionClient,
@@ -1030,9 +1081,25 @@ export async function endTimedOutLanding(
   return errorCode;
 }
 
+/** K5: the result transaction queues the same delivery behind the baseline hold, without a retry decision. */
+export async function queueBaselineHeld(
+  tx: Prisma.TransactionClient,
+  input: { ownerId: string; projectId: string; taskId: string; sessionId: string; sourceRef: string; runnerId: string | null },
+): Promise<void> {
+  const codebase = await tx.projectCodebase.findFirstOrThrow({
+    where: { projectId: input.projectId, slot: 'primary' },
+    select: { id: true, canonicalRepoUrl: true, integrationRef: true, upstreamRef: true },
+  });
+  await queueLandTask(tx, {
+    ...input, codebase,
+    session: { id: input.sessionId, branch: shortBranchName(input.sourceRef), runnerId: input.runnerId },
+    cause: 'BASELINE_HELD',
+  });
+}
+
 /**
  * Queue the next generation of a task's landing because its coordinator asked for it (§2.3 J-T1b) —
- * the one way a landing that stopped is attempted again without the task being completed again (J5).
+ * the explicit retry door for a stopped landing (J5); K5 queues baseline-held work in its result transaction.
  *
  * The branch is the one a DONE written now would hand the line (`landingWorkSession`), not the one
  * the failed generation was handed: a task that was run again after its landing failed has its work
@@ -1051,20 +1118,26 @@ export async function queueLandingRetry(
     ownerId: string;
     projectId: string;
     taskId: string;
-    retry: LandingRetryRequest;
+    /** The failed generation this one reruns. Omitted only for the owner's skip of a landing that
+     *  was still in flight: the one it replaces was stopped rather than failed, so there is no
+     *  failure to rerun, and the skip columns alone say who asked and why. */
+    retry?: LandingRetryRequest;
     /**
      * Set only by `integration_skip_merge_check`: this generation runs no merge check (§2.4 J-S5,
      * 0393). Omitted by `integration_retry`, which queues the same generation WITH the check.
      */
     skipMergeCheck?: LandingSkipMergeCheck;
+    /** Which door queued it, when it is neither a recorded rerun nor a skip: the rerun of a MAIN_SYNC
+     *  conflict whose branch moved carries no retry columns (§3.1 M3) and is still the RETRY door's. */
+    cause?: EnqueueCause;
   },
 ): Promise<{ jobId: string; generation: number; sourceRef: string; landingSessionId: string } | null> {
   const task = await tx.task.findFirst({
     where: { id: input.taskId, ownerId: input.ownerId, projectId: input.projectId },
-    select: { codeless: true, sessions: workSessionsOfTaskSelect() },
+    select: { sessions: workSessionsOfTaskSelect() },
   });
   const work = landingWorkSession(task?.sessions ?? []);
-  if (!task || task.codeless || !work?.branch) return null;
+  if (!task || !work?.branch) return null;
   const codebase = await tx.projectCodebase.findFirst({
     where: { projectId: input.projectId, slot: 'primary' },
     select: { id: true, canonicalRepoUrl: true, integrationRef: true, upstreamRef: true },
@@ -1078,7 +1151,7 @@ export async function queueLandingRetry(
     session: { id: work.id, branch: work.branch, runnerId: work.assignedRunnerId },
     retry: input.retry,
     skipMergeCheck: input.skipMergeCheck,
-    cause: 'RETRY',
+    cause: input.cause ?? (input.retry ? 'RETRY' : 'SKIP_CHECK'),
   });
   if (queued === null) return null;
   const job = await tx.projectIntegrationJob.findUniqueOrThrow({
@@ -1091,6 +1164,87 @@ export async function queueLandingRetry(
     sourceRef: job.sourceRef,
     landingSessionId: queued.landingSessionId,
   };
+}
+
+/**
+ * The tip of the branch a rerun of this task's landing would hand the line — the same
+ * `landingWorkSession` choice `queueLandingRetry` makes — as its runner last reported it
+ * (`session.branch_sha`, 0370). Null when there is no such branch or no tip was reported.
+ */
+export async function readLandingSourceTip(
+  db: Prisma.TransactionClient,
+  input: { ownerId: string; projectId: string; taskId: string },
+): Promise<string | null> {
+  const task = await db.task.findFirst({
+    where: { id: input.taskId, ownerId: input.ownerId, projectId: input.projectId },
+    select: { sessions: workSessionsOfTaskSelect() },
+  });
+  const work = landingWorkSession(task?.sessions ?? []);
+  if (!task || !work?.branch) return null;
+  const tip = await db.session.findUnique({ where: { id: work.id }, select: { branchSha: true } });
+  return tip?.branchSha ?? null;
+}
+
+/** The stop a skip of an in-flight landing asks for: the cause its `STOP_REQUESTED` line carries,
+ *  and what the result transaction reads to queue the generation without the check once the stopped
+ *  one has answered (`queueSkippedLandingAfterStop`). */
+export const SKIP_CHECK_STOP_CAUSE = 'SKIP_CHECK';
+
+/** What a `STOP_REQUESTED` line asked by a skip carries in its data. */
+export interface SkipCheckStopData {
+  cause: typeof SKIP_CHECK_STOP_CAUSE;
+  skip: { reason: string; approvedByUserId: string };
+}
+
+/** The skip a stop line's data asked for, or null when the stop was not a skip's. */
+export function skipCheckStopOf(data: unknown): SkipCheckStopData['skip'] | null {
+  if (!data || typeof data !== 'object') return null;
+  const row = data as { cause?: unknown; skip?: { reason?: unknown; approvedByUserId?: unknown } };
+  if (row.cause !== SKIP_CHECK_STOP_CAUSE || !row.skip) return null;
+  const { reason, approvedByUserId } = row.skip;
+  if (typeof reason !== 'string' || !reason || typeof approvedByUserId !== 'string' || !approvedByUserId) {
+    return null;
+  }
+  return { reason, approvedByUserId };
+}
+
+/**
+ * The owner skipped the landing check of a landing that was still RUNNING: the runner was asked to
+ * stop, and the generation without the check waits for its answer, because J3 allows one landing of
+ * a task in flight. Called by the result transaction once the stopped generation is terminal.
+ *
+ * Whatever it answered, unless it landed — a runner that never read the stop (a legacy one reads it
+ * only when it starts) may report LANDED, ALREADY_LANDED or NOTHING_TO_LAND, and then there is
+ * nothing left to land. CANCELLED, CHECK_FAILED, ERROR and CONFLICT all queue it: the owner asked
+ * for this work to land without the check, and a conflict the next generation meets again is
+ * reported by that generation as an ordinary failure, with its item — a stopped generation opens
+ * none (J-T8).
+ *
+ * Nothing is queued when the task is no longer DONE (reopened since: its next DONE lands the new
+ * work, with the check), or when another generation is already in flight (the reopened DONE the
+ * same result just queued).
+ */
+export async function queueSkippedLandingAfterStop(
+  tx: Prisma.TransactionClient,
+  job: { id: string; ownerId: string; projectId: string; taskId: string },
+  endedAs: string,
+): Promise<void> {
+  if (endedAs === 'LANDED' || endedAs === 'ALREADY_LANDED' || endedAs === 'NOTHING_TO_LAND') return;
+  const stop = await tx.projectIntegrationJobEvent.findFirst({
+    where: { jobId: job.id, kind: 'STOP_REQUESTED' },
+    orderBy: { seq: 'desc' },
+    select: { data: true },
+  });
+  const skip = skipCheckStopOf(stop?.data);
+  if (!skip) return;
+  const task = await tx.task.findFirst({ where: { id: job.taskId }, select: { status: true } });
+  if (task?.status !== 'DONE') return;
+  await queueLandingRetry(tx, {
+    ownerId: job.ownerId,
+    projectId: job.projectId,
+    taskId: job.taskId,
+    skipMergeCheck: { reason: skip.reason, approvedByUserId: skip.approvedByUserId, approvalId: null },
+  });
 }
 
 // ── the delivered identity (§10.5 O-L4) ────────────────────────────────────────────────────────
@@ -1301,9 +1455,22 @@ export type DeliveredIdentitySettlement =
  */
 export async function settleDeliveredIdentity(
   tx: Prisma.TransactionClient,
-  input: { ownerId: string; taskId: string; after: 'DONE' | 'WORK_FINISHED' | 'DEPLOY' },
+  input: {
+    ownerId: string;
+    taskId: string;
+    after: 'DONE' | 'WORK_FINISHED' | 'DEPLOY';
+    /**
+     * WORK_FINISHED only: the work session whose finish this is. The DONE whose route the finish
+     * decides is not this transaction's, so its actor is gone; the session that finished the work
+     * stands for it in the H1 mark of a reopened task's earlier landing cards (§4.7).
+     */
+    finishedSessionId?: string | null;
+  },
 ): Promise<DeliveredIdentitySettlement> {
   const { ownerId, taskId } = input;
+  const finishedBy: DoneTaskSource | null = input.finishedSessionId ? { sessionId: input.finishedSessionId } : null;
+  // Read only when the route is decided here, and after the freeze UPDATE has taken the task row.
+  const finishSource = () => doneSourceFromRecord(tx, taskId, finishedBy);
   const task = await tx.task.findFirst({
     where: { id: taskId, ownerId },
     select: { status: true, projectId: true, deliveredAt: true },
@@ -1323,9 +1490,20 @@ export async function settleDeliveredIdentity(
       data: frozenColumns(reading.identity),
     });
     if (frozen.count > 0) {
+      // §12.15 P-M1: a DONE written while this work still moved queued nothing and started no line
+      // (`queueForDoneTask` answered WORK_MOVING), so the route it owes is decided here, on the
+      // identity just frozen — nothing for a branch with no commit of its own, today's route else.
+      if (input.after === 'WORK_FINISHED') await queueForDoneTask(tx, ownerId, taskId, await finishSource());
       await deliveredIdentityFrozen(tx, { ownerId, projectId: reading.projectId, taskId });
     }
     return 'FROZEN';
+  }
+  // The same deferred route for work that settled naming no commit: queued by branch as before, and
+  // the runner's J-S2 answers for it. Under the task's row lock (rank 50, after this transaction's
+  // session), which the DONE transaction holds when it queues and the generation counter is read under.
+  if (input.after === 'WORK_FINISHED') {
+    await tx.$queryRaw(Prisma.sql`SELECT 1 FROM "task" WHERE "id" = ${taskId}::uuid FOR NO KEY UPDATE`);
+    await queueForDoneTask(tx, ownerId, taskId, await finishSource());
   }
   const binding = await tx.projectCodebase.findFirst({
     where: { projectId: reading.projectId, slot: 'primary' },
@@ -1357,11 +1535,11 @@ export async function settleDeliveredIdentity(
  */
 export async function settleDeliveredIdentityAfterFinish(
   tx: Prisma.TransactionClient,
-  session: { ownerId: string; taskId: string | null; startsTaskWork: boolean } | null,
+  session: { id?: string; ownerId: string; taskId: string | null; startsTaskWork: boolean } | null,
 ): Promise<DeliveredIdentitySettlement | null> {
   if (!session?.taskId || !session.startsTaskWork) return null;
   return settleDeliveredIdentity(tx, {
-    ownerId: session.ownerId, taskId: session.taskId, after: 'WORK_FINISHED',
+    ownerId: session.ownerId, taskId: session.taskId, after: 'WORK_FINISHED', finishedSessionId: session.id ?? null,
   });
 }
 
@@ -1427,8 +1605,17 @@ export type EnqueueOutcome =
        * INTEGRATION_REPOSITORY_UNKNOWN — the caller opens an INTEGRATION_ERROR item (§4.2).
        * AGENT_PUSH — the project's agents push their own work to the upstream (§10.5 O-L2): no
        *   candidate; the observation sees the work there.
+       * WORK_MOVING — a work session of the task has not finished, so whether it has a commit of its
+       *   own is not known yet (§12.15 P-M1): the finish that freezes its identity decides the route
+       *   (`settleDeliveredIdentity`, O-L4 3). Nothing queued, no line started.
+       * NOTHING_TO_LAND — the frozen identity has no commit past its base and no work session of the
+       *   task reported work (§12.15 P-M1): nothing queued, no line started; its dependents are
+       *   dispatched on this DONE.
+       * WORK_ELSEWHERE — the same empty branch, but a session reported work: `LANDING_UNOBSERVED`
+       *   (WORK_ELSEWHERE) was opened instead of a route (§10.5 O-L7).
        */
-      reason: 'NOT_A_CODE_TASK' | 'ALREADY_QUEUED' | 'INTEGRATION_REPOSITORY_UNKNOWN' | 'AGENT_PUSH';
+      reason: 'NOT_A_CODE_TASK' | 'ALREADY_QUEUED' | 'INTEGRATION_REPOSITORY_UNKNOWN' | 'AGENT_PUSH'
+        | 'WORK_MOVING' | 'NOTHING_TO_LAND' | 'WORK_ELSEWHERE';
       projectId: string | null;
     };
 
@@ -1436,6 +1623,42 @@ export type EnqueueOutcome =
 export type DoneTaskSource =
   | { sessionId: string; userId?: never }
   | { userId: string; sessionId?: never };
+
+/**
+ * Who wrote the DONE whose route a finish decides (§4.7 H1), from rows already committed — no column of
+ * its own. The newest CONFIRM written after the task's reopen: the coordinator's evidence decision names
+ * its deciding session, the owner's confirmation names the owner. A DONE derived from the run's own
+ * acceptance (turnComplete) leaves no such row, and the session that finished stands for it, as it
+ * always did. Called under the task row, which the DONE's writers hold, so the rows are settled.
+ */
+async function doneSourceFromRecord(
+  tx: Prisma.TransactionClient,
+  taskId: string,
+  fallback: DoneTaskSource | null,
+): Promise<DoneTaskSource | null> {
+  const intent = await tx.taskReopenIntent.findUnique({ where: { taskId }, select: { createdAt: true } });
+  if (!intent) return fallback;
+  const since = { gte: intent.createdAt };
+  const [evidence, owner] = await Promise.all([
+    tx.taskEvidenceDecision.findFirst({
+      where: { taskId, decision: 'CONFIRM', decidedAt: since },
+      orderBy: { decidedAt: 'desc' },
+      select: { decidedAt: true, decidedByType: true, decidedById: true, decidingSessionId: true },
+    }),
+    tx.taskOwnerDecision.findFirst({
+      where: { taskId, decision: 'CONFIRM', decidedAt: since },
+      orderBy: { decidedAt: 'desc' },
+      select: { decidedAt: true, decidedById: true },
+    }),
+  ]);
+  if (owner && (!evidence || owner.decidedAt >= evidence.decidedAt)) return { userId: owner.decidedById };
+  if (evidence) {
+    return evidence.decidedByType === 'USER'
+      ? { userId: evidence.decidedById }
+      : { sessionId: evidence.decidingSessionId };
+  }
+  return fallback;
+}
 
 /** H1's reason for the generation queued after a task was reopened for delivery work. */
 export const REOPEN_LANDING_HANDLING_REASON = 'A new landing generation after the task was reopened for rework';
@@ -1469,9 +1692,10 @@ function workSessionsOfTaskSelect() {
 
 /**
  * What a DONE of this task hands its project's integration line: the project, and the work session
- * whose branch is landed — or no work, which is NOT_A_CODE_TASK: a task in no project, a codeless
- * one, one none of whose work sessions took a worktree on a branch, or one whose branch is in another
- * repository than the project's line (O-L7).
+ * whose branch is landed — or no work, which is NOT_A_CODE_TASK: a task in no project, one none of
+ * whose work sessions took a worktree on a branch, or one whose branch is in another repository than
+ * the project's line (O-L7). The `codeless` flag is not read (§12.15 P-M3): a codeless task with
+ * commits lands like any other.
  *
  * Writes nothing. `enqueueForDoneTask` acts on it, and the owner's confirmation card reads it as the
  * landing confirming starts (`landing: NONE` when there is no work).
@@ -1485,13 +1709,12 @@ export async function doneTaskLandingWork(
     where: { id: taskId, ownerId },
     select: {
       projectId: true,
-      codeless: true,
       sessions: workSessionsOfTaskSelect(),
       project: { select: { codebases: { where: { slot: 'primary' }, select: { canonicalRepoUrl: true } } } },
     },
   });
   const work = landingWorkSession(task?.sessions ?? []);
-  if (!task?.projectId || task.codeless || !work?.branch) {
+  if (!task?.projectId || !work?.branch) {
     return { projectId: task?.projectId ?? null, work: null };
   }
   // A branch in another repository than the one the project's line is bound to is not this line's
@@ -1513,8 +1736,8 @@ export async function doneTaskLandingWork(
  * when it queues nothing and the observation sees the work. Neither is a message to anybody: both are
  * rows, and the platform carries them from there.
  *
- * Does nothing for work that has no branch: a codeless task, a task in no project, a task none of
- * whose work sessions took a worktree. Those are the majority of DONE writes, and the check is
+ * Does nothing for work that has no branch: a task in no project, a task none of whose work
+ * sessions took a worktree on a branch (a codeless run that changed nothing makes none). Those are the majority of DONE writes, and the check is
  * three columns rather than an inference from the title.
  *
  * WHICH of the task's branches is handed over is `landing-source-branch.ts`, and it is not simply
@@ -1554,6 +1777,16 @@ async function queueForDoneTask(
     return { enqueued: false, reason: 'NOT_A_CODE_TASK', projectId: landing.projectId };
   }
   const { projectId, work } = landing;
+
+  // §12.15 P-M1: whether this DONE has anything to land is read off what it delivered, before the
+  // line is started or anything is queued for it.
+  const delivered = await deliveredRoute(tx, ownerId, taskId);
+  if (delivered !== 'QUEUE') {
+    // The reopen marker this DONE answers has no route to be consumed by, as under AGENT_PUSH below —
+    // except while the work moves, when the finish that decides the route consumes it.
+    if (delivered !== 'WORK_MOVING') await tx.taskReopenIntent.deleteMany({ where: { taskId } });
+    return { enqueued: false, reason: delivered, projectId };
+  }
 
   const first = await startOnFirstIntegration(tx, { ownerId, projectId, taskId });
   if (!first.started) {
@@ -1637,6 +1870,88 @@ async function queueForDoneTask(
       alsoQueuedTaskIds,
     }
     : { enqueued: true, kind: 'LAND_TASK', jobId: queued.jobId, projectId, alsoQueuedTaskIds };
+}
+
+/**
+ * §12.15 P-M1: what a DONE code task's delivery asks of the line, read from its frozen identity (O-L4)
+ * — the DONE's own statement froze it, or the finish that froze it late is the caller.
+ *
+ *   * WORK_MOVING — not frozen, and a work session has not finished: decided at that finish.
+ *   * QUEUE — a commit of its own, or an identity the settled work cannot name (the runner's J-S2
+ *     answers a branch that turns out empty): today's route.
+ *   * NOTHING_TO_LAND / WORK_ELSEWHERE — `emptyBranchRoute`.
+ */
+async function deliveredRoute(
+  tx: Prisma.TransactionClient,
+  ownerId: string,
+  taskId: string,
+): Promise<'WORK_MOVING' | 'QUEUE' | 'NOTHING_TO_LAND' | 'WORK_ELSEWHERE'> {
+  const task = await tx.task.findFirst({
+    where: { id: taskId, ownerId },
+    select: {
+      projectId: true,
+      deliveredAt: true,
+      deliveredSha: true,
+      deliveredBaseSha: true,
+      deliveredBranch: true,
+      deliveredSessionId: true,
+    },
+  });
+  if (!task?.projectId) return 'QUEUE';
+  let identity: DeliveredIdentity | null = task.deliveredAt && task.deliveredSha && task.deliveredBranch
+    ? {
+      sha: task.deliveredSha,
+      baseSha: task.deliveredBaseSha,
+      branch: task.deliveredBranch,
+      sessionId: task.deliveredSessionId,
+    }
+    : null;
+  if (!identity) {
+    // A door that wrote DONE without stating the identity (turnComplete), or one whose work still moves.
+    const reading = await readDeliveredIdentity(tx, ownerId, taskId);
+    if (reading.kind === 'WORK_MOVING') return 'WORK_MOVING';
+    if (reading.kind === 'KNOWN') identity = reading.identity;
+  }
+  if (!identity) return 'QUEUE';
+  return emptyBranchRoute(tx, { taskId, projectId: task.projectId, identity });
+}
+
+/**
+ * §10.5 O-L7's empty-branch rule, applied where the identity is frozen rather than on the runner's
+ * answer (§12.15 P-M1). A branch with a commit of its own is QUEUE. An empty one with no work session
+ * that reported work is NOTHING_TO_LAND, and nothing is written: the readers take the same two facts
+ * (`deliveredNothingOfItsOwn`). One where a session did report work has its work somewhere else, and
+ * opens `LANDING_UNOBSERVED` (WORK_ELSEWHERE) on the project's line — when it has one. In a project
+ * with no line that item has nothing to name, so the route goes on as before: the line starts and the
+ * runner's NOTHING_TO_LAND, which writes no receipt for such a task, says so on the task (J8).
+ */
+async function emptyBranchRoute(
+  tx: Prisma.TransactionClient,
+  input: { taskId: string; projectId: string; identity: DeliveredIdentity },
+): Promise<'QUEUE' | 'NOTHING_TO_LAND' | 'WORK_ELSEWHERE'> {
+  const { identity } = input;
+  if (identity.sha !== identity.baseSha) return 'QUEUE';
+  // Asked only of an empty branch, by the task's own session index: did any of its work sessions report
+  // work (J8's question, `WORK_REPORTED_WHERE`)?
+  const reported = await tx.session.findFirst({
+    where: { taskId: input.taskId, ...WORK_REPORTED_WHERE },
+    select: { id: true },
+  });
+  if (!reported) return 'NOTHING_TO_LAND';
+  const line = await tx.projectCodebase.findFirst({
+    where: { projectId: input.projectId, slot: 'primary', integrationStartedAt: { not: null } },
+    select: { id: true },
+  });
+  if (!line) return 'QUEUE';
+  await recordLandingUnobserved(tx, {
+    taskId: input.taskId,
+    reason: 'WORK_ELSEWHERE',
+    deliveredSha: identity.sha,
+    baseSha: identity.baseSha,
+    branch: identity.branch,
+    sessionId: identity.sessionId,
+  });
+  return 'WORK_ELSEWHERE';
 }
 
 /** Mark the OPEN integration cards for an earlier LAND_TASK generation as H1 handling. */
@@ -1941,13 +2256,20 @@ async function backfillFinishedCodeTasks(
     where: {
       ownerId: input.ownerId,
       projectId: input.projectId,
-      codeless: false,
       status: TaskStatus.DONE,
       id: { not: input.exceptTaskId },
+      // §12.15 P-M1: a DONE whose work still moves has no route yet; the finish that freezes its
+      // identity decides it (`settleDeliveredIdentity`), with this line started by then.
+      sessions: { none: { startsTaskWork: true, deletedAt: null, finishedAt: null } },
     },
     select: {
       id: true,
       sessions: workSessionsOfTaskSelect(),
+      deliveredAt: true,
+      deliveredSha: true,
+      deliveredBaseSha: true,
+      deliveredBranch: true,
+      deliveredSessionId: true,
       mergeReceipts: {
         where: { targetBranch: { in: landedBranches }, result: { in: ['MERGED', 'ALREADY_MERGED'] } },
         take: 1,
@@ -1962,6 +2284,21 @@ async function backfillFinishedCodeTasks(
     // Work in another repository is not this line's (O-L7), as it is not at its own DONE.
     if (!workOnProjectRepository(work.workspace?.repoUrl, input.codebase)) continue;
     if (candidate.mergeReceipts.length > 0) continue;
+    // §12.15 P-M1, as its own DONE decided it: a frozen branch with no commit of its own is given no
+    // route — nothing, or the WORK_ELSEWHERE item now that there is a line for it to name.
+    if (candidate.deliveredAt && candidate.deliveredSha && candidate.deliveredBranch) {
+      const route = await emptyBranchRoute(tx, {
+        taskId: candidate.id,
+        projectId: input.projectId,
+        identity: {
+          sha: candidate.deliveredSha,
+          baseSha: candidate.deliveredBaseSha,
+          branch: candidate.deliveredBranch,
+          sessionId: candidate.deliveredSessionId,
+        },
+      });
+      if (route !== 'QUEUE') continue;
+    }
     const session = { id: work.id, branch: work.branch, runnerId: work.assignedRunnerId };
     if (input.line === 'MAIN') {
       const made = await queueTaskBranchCandidate(tx, {

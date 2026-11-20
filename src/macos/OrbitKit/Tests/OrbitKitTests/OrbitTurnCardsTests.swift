@@ -124,6 +124,44 @@ final class OrbitTurnCardsTests: XCTestCase {
         XCTAssertNil(RunQuestionCard.parse(try json(#"{"runQuestion": {"requestId": "rq"}}"#)))
     }
 
+    func testRunQuestionDrawsTheRequestsCardOverTheStoredOneUntilItSaysWhoAnswered() throws {
+        let stored = try question()
+        let answered = try question(#""answers": {"Keep its place?": ["Keep"]}, "answeredBy": "SESSION""#,
+                                    state: "REPLIED", approval: "ALLOWED")
+        let replied = SessionRequestView(requestId: "rq", state: .closed(.replied), replyBy: "2026-11-11T06:10:00.000Z",
+                                         runQuestion: answered)
+        XCTAssertTrue(stored.readsLive)
+        XCTAssertFalse(answered.readsLive, "who answered never changes")
+        XCTAssertEqual(RunQuestionCard.drawn(stored: stored, live: replied), answered)
+        XCTAssertEqual(OrbitTurnCardCopy.questionState(RunQuestionCard.drawn(stored: stored, live: replied), now: now).text,
+                       "Answered by this session.")
+        // Before the first read, or a request without a card: the stored card.
+        XCTAssertEqual(RunQuestionCard.drawn(stored: stored, live: nil), stored)
+        let bare = SessionRequestView(requestId: "rq", state: .closed(.replied), replyBy: "2026-11-11T06:10:00.000Z")
+        XCTAssertEqual(RunQuestionCard.drawn(stored: stored, live: bare), stored)
+        // A stored card that already says who answered is drawn as it is.
+        let passed = SessionRequestView(requestId: "rq", state: .closed(.noReply), replyBy: "2026-11-11T06:10:00.000Z",
+                                        runQuestion: try question(state: "NO_REPLY"))
+        XCTAssertEqual(RunQuestionCard.drawn(stored: answered, live: passed), answered)
+    }
+
+    func testRunQuestionKeepsReadingWhileItWaitsForTheCoordinatorOrTheOwner() throws {
+        let by = "2026-11-11T06:10:00.000Z"
+        XCTAssertTrue(RunQuestionCard.keepsReading(nil), "before the first read")
+        XCTAssertTrue(RunQuestionCard.keepsReading(SessionRequestView(requestId: "rq", state: .open, replyBy: by,
+                                                                      runQuestion: try question())))
+        // Closed, passed to the owner and not answered yet: still moving.
+        XCTAssertTrue(RunQuestionCard.keepsReading(SessionRequestView(requestId: "rq", state: .closed(.noReply), replyBy: by,
+                                                                      runQuestion: try question(state: "NO_REPLY"))))
+        let owner = try question(#""answers": {"Keep its place?": ["Back"]}, "answeredBy": "OWNER""#,
+                                 state: "OWNER_ANSWERED", approval: "PENDING")
+        XCTAssertFalse(RunQuestionCard.keepsReading(SessionRequestView(requestId: "rq", state: .closed(.noReply), replyBy: by,
+                                                                       runQuestion: owner)))
+        XCTAssertFalse(RunQuestionCard.keepsReading(SessionRequestView(requestId: "rq", state: .closed(.undelivered), replyBy: by,
+                                                                       runQuestion: try question(state: "UNDELIVERED", approval: "DENIED"))))
+        XCTAssertFalse(RunQuestionCard.keepsReading(SessionRequestView(requestId: "rq", state: .closed(.replied), replyBy: by)))
+    }
+
     // MARK: - notice from a task run
 
     func testRunNoticeParses() throws {

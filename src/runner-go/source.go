@@ -33,6 +33,10 @@ const (
 	// like a project task's line but with no codebase behind it, so its snapshot carries no codebaseId.
 	sourceKindChatUpstream = "CHAT_UPSTREAM"
 
+	// Row PF (SR55): a task forked from a session starts from that session's snapshot, a commit that
+	// exists only in this machine's repository (docs/task-fork-from-session-design.md §2.2, §2.4).
+	sourceKindSessionFork = "SESSION_FORK"
+
 	// §10.1's codes, spelled here only where the runner can actually report one: a resolution refusal
 	// is sent to /source/pin, a checkout refusal is setupSourceWorktree's.
 	sourceRefusalAuthorityUnreachable = "SOURCE_AUTHORITY_UNREACHABLE"

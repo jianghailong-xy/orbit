@@ -298,9 +298,10 @@ describe('the Wiki home, by the confirmed plan', () => {
     ]);
   });
 
-  it('reads nothing of how the wiki is kept: no review, no timeline, no decisions, no health', async () => {
+  // The health is read once, for the directory column's Activity dot (board docs/mocks/wiki-rail ③); the home draws none of it.
+  it('reads nothing of how the wiki is kept: no review, no timeline, no decisions', async () => {
     await open();
-    expect(reads.filter((url) => /\/review|\/timeline|kind=decision|\/health/.test(url))).toEqual([]);
+    expect(reads.filter((url) => /\/review|\/timeline|kind=decision/.test(url))).toEqual([]);
     expect(container.querySelector('.wk-status-row, .wk-banner, .wk-card')).toBeNull();
   });
 });
@@ -335,7 +336,7 @@ describe('the home’s first read (design §12.3.6, mock 31 ⑦)', () => {
     let answer: (directory: WikiDocsDirectory) => void = () => {};
     docsAnswer = () => new Promise((resolve) => (answer = resolve));
     const client = await open();
-    expect(words(container.querySelector('.wk-title-row .wk-space-tag'))).toBe('orbit');
+    expect(words(container.querySelector('.wk-title-row .wk-select .v'))).toBe('orbit');
     expect(words(container.querySelector('.wk-activity-btn .tp-rail-badge'))).toBe('1');
     expect(container.querySelector('.wk-home-state .wk-sk')).toBeTruthy();
     expect(container.querySelector('.wk-home-sk')?.getAttribute('aria-busy')).toBe('true');

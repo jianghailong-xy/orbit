@@ -2,12 +2,16 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import {
   wikiMaintenanceLook,
   wikiMaintenanceSettings,
+  wikiRepoDetail,
   WIKI_EXECUTOR_READ,
   type WikiCursorOutcome,
   type WikiMaintenanceFailureKind,
   type WikiMaintenanceHealth,
   type WikiMaintenanceHeldReason,
+  type WikiRepoTier,
+  type WikiRepoTierReason,
   type WikiSpaceHealth,
+  type WikiSpaceRepoHealth,
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { readWikiRepoReadiness } from '../wiki-worker/wiki-repo-ops';
@@ -109,11 +113,35 @@ export class WikiHealth {
           online: repo.runner.online,
         },
         pending: repo.pending,
+        ...(await this.repoTier(ownerId, spaceId)),
       },
       // The server's half (contract `jobs.executor.read`, P9): the server executes every account's wiki, and the
       // System model it calls is what the line's server reasons are said from.
       executor: WIKI_EXECUTOR_READ,
       systemModel: await new WikiSystemModelReads(this.prisma).read(now),
+    };
+  }
+
+  /**
+   * What the latest maintenance run read of the repository (contract `maintenance.health.repo.tier`, design §7.1): the
+   * tier its latest attempt's probe found, why it read less than git, that reason as the sentence the run wrote
+   * (redacted when it was written), and when — the run that probed last, under way or ended. A space no run has probed
+   * reads null throughout.
+   */
+  private async repoTier(ownerId: string, spaceId: string): Promise<Pick<WikiSpaceRepoHealth, 'tier' | 'reason' | 'detail' | 'checkedAt'>> {
+    const run = await this.prisma.wikiMaintenanceRun.findFirst({
+      where: { ownerId, spaceId, repoTier: { not: null } },
+      orderBy: [{ lastStartedAt: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }, { id: 'desc' }],
+      select: { repoTier: true, repoReason: true, repoDetail: true, repoCheckedAt: true, lastStartedAt: true },
+    });
+    if (!run?.repoTier) return { tier: null, reason: null, detail: null, checkedAt: null };
+    const reason = (run.repoReason as WikiRepoTierReason | null) ?? null;
+    return {
+      tier: run.repoTier as WikiRepoTier,
+      reason,
+      // A run from before its sentence was written (0519) is said from its reason alone.
+      detail: run.repoDetail ?? (reason ? wikiRepoDetail(reason) : null),
+      checkedAt: (run.repoCheckedAt ?? run.lastStartedAt)?.toISOString() ?? null,
     };
   }
 

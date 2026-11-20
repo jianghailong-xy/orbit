@@ -99,6 +99,13 @@ final class WatchWiringTests: XCTestCase {
                                        from: "struct SessionLiveIndicator: View {", to: "struct BreathingGlyph: View {"))
         XCTAssertTrue(indicator.contains("SessionStatusGlyph.make(for: session, watching: watching)"))
         XCTAssertTrue(indicator.contains("case (.symbol(\"eye\"), _):"))
+        // A session queued for a slot draws the clock the web row draws, not only one under review,
+        // and a process merely left up draws the still terminal — after the breathing one, so a job
+        // in flight still breathes.
+        XCTAssertTrue(indicator.contains("case (.symbol(\"clock\"), .neutral):"))
+        let breathing = try XCTUnwrap(indicator.range(of: "BreathingGlyph(systemImage: \"terminal\")"))
+        let still = try XCTUnwrap(indicator.range(of: "case (.symbol(\"terminal\"), _):"))
+        XCTAssertLessThan(breathing.lowerBound, still.lowerBound)
         XCTAssertFalse(code(row).contains("SessionHeader.statusWord(for: session))"),
                        "every status word the row speaks is handed the watch")
     }
@@ -130,7 +137,7 @@ final class WatchWiringTests: XCTestCase {
 
     func testAWatchRouteOpensTheWatchAndEventsNudgeTheList() throws {
         let app = try source("AppModel.swift")
-        let route = try slice(app, from: "func route(to route: Route) {", to: "private func openSession(")
+        let route = try slice(app, from: "func route(to route: Route,", to: "private func openSession(")
         XCTAssertTrue(route.contains("case .watch(let id):"))
         XCTAssertTrue(route.contains("selectedWatchID"))
         let apply = try slice(app, from: "private func apply(_ ev: ControlEvent) {", to: "private func mergeSessionSummary(")

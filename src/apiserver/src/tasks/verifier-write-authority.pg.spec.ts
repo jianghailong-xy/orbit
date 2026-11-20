@@ -38,13 +38,17 @@ import { call, startApiserver, type Apiserver, type Reply } from '../auth/pat-te
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import '../test-support/daemon-routes-over-http';
+import { pastCreateAllowance } from '../test-support/past-create-allowance';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
 const PROVIDER_SECRET_KEY = `verifier-write-${RUN}`;
 const STANDARD = 'the work is checked by somebody who did not do it';
 const WRITE_REFUSED = 'VERIFIER_WRITE_FROM_RUN_REFUSED';
-const CARD_REQUIRED = 'VERIFIER_CREATE_NEEDS_OWNER_CARD';
+// Since the control plane cards EVERY session create by caller (`task-write-approval.ts`), the
+// door answers a run's uncarded verifier create with the universal code: the verifier rule below
+// still requires the card to name the verifiers, and a card that covers the whole body does.
+const CARD_REQUIRED = 'TASK_WRITE_NEEDS_OWNER_CARD';
 
 const b62 = (id: string) => uuidToBase62(id);
 
@@ -378,6 +382,9 @@ test('who may write the verification relation', { skip: !URL, concurrency: 1, ti
   await t.test('(5) a run files a verifier only on the owner\'s answered card', async (t) => {
     const cardProject = await projectOf('a project of cards');
     const cardPeer = await workOf('a peer', cardProject);
+    // Past the session's card-free creates (session-create-allowance.ts): these cases are about the card a person
+    // answers, and by the card-route case this peer has filed 7 tasks, which the default of 8 would answer itself.
+    await pastCreateAllowance(db, ownerId, cardPeer.sessionId);
     const cardSubject = await workOf('a subject', cardProject);
     const createdTitled = (title: string) => db.task.count({ where: { ownerId, title } });
     const create = (sessionId: string | undefined, body: unknown) => call(api, 'POST', '/api/runner/tasks', token, body, {
@@ -472,15 +479,27 @@ test('who may write the verification relation', { skip: !URL, concurrency: 1, ti
       ok(await call(api, 'POST', `/api/sessions/${b62(cardPeer.sessionId)}/approvals/${filed.id}/decision`, bearer, { behavior: 'allow' }), 'the owner\'s yes');
       ok(await create(cardPeer.sessionId, body), 'after it is answered');
     });
-    await t.test('an ordinary task from a run needs no card at this door', async () => {
-      ok(await create(cardPeer.sessionId, {
-        title: 'an ordinary task', completionCriterion: 'EVIDENCE_JUDGMENT', acceptanceCriteria: STANDARD, projectId: b62(cardProject.id), criterionKey: b62(cardProject.definitionId),
-      }), 'an ordinary task');
+    await t.test('an ordinary task from a run needs its card too', async () => {
+      const body = {
+        title: 'an ordinary task', completionCriterion: 'EVIDENCE_JUDGMENT', acceptanceCriteria: STANDARD,
+        projectId: b62(cardProject.id), criterionKey: b62(cardProject.definitionId),
+      };
+      // A different question from the verifier rule above: every session create is carded, verifier
+      // or not, and the server refuses a write no answered card covers (task-write-approval.ts).
+      refused(await create(cardPeer.sessionId, body), 'TASK_WRITE_NEEDS_OWNER_CARD', 'an ordinary task with no card');
+      await cardOf(cardPeer.sessionId, 'orbit_task_create', body);
+      ok(await create(cardPeer.sessionId, body), 'an ordinary task on its answered card');
     });
     await t.test('the coordinator, a judgment session and the owner file verifiers as before', async () => {
-      assert.ok(ok(await create(cardProject.coordinator, pairBody('a coordinator\'s pair')), 'a coordinator\'s pair').verification.id);
-      assert.equal(ok(await batch(cardProject.coordinator, batchPair('a coordinator\'s batch pair')), 'a coordinator\'s batch pair').length, 2);
-      ok(await create(cardProject.coordinator, verifierBody('a coordinator\'s check')), 'a coordinator\'s check');
+      const pair = pairBody('a coordinator\'s pair');
+      await cardOf(cardProject.coordinator, 'orbit_task_create', pair);
+      assert.ok(ok(await create(cardProject.coordinator, pair), 'a coordinator\'s pair').verification.id);
+      const coordinatorBatch = batchPair('a coordinator\'s batch pair');
+      await cardOf(cardProject.coordinator, 'orbit_task_batch', { tasks: coordinatorBatch, preview: {} });
+      assert.equal(ok(await batch(cardProject.coordinator, coordinatorBatch), 'a coordinator\'s batch pair').length, 2);
+      const check = verifierBody('a coordinator\'s check');
+      await cardOf(cardProject.coordinator, 'orbit_task_create', check);
+      ok(await create(cardProject.coordinator, check), 'a coordinator\'s check');
 
       const judgment = await sessionOf('a judgment session');
       await db.projectCoordinatorWake.create({
@@ -490,7 +509,9 @@ test('who may write the verification relation', { skip: !URL, concurrency: 1, ti
         },
       });
       await db.session.update({ where: { id: judgment }, data: { dispatchOrigin: 'PROJECT_COORDINATOR' } });
-      ok(await create(judgment, { ...verifierBody('a judgment\'s check'), criterionKey: b62(cardProject.definitionId) }), 'a judgment\'s check');
+      const judged = { ...verifierBody('a judgment\'s check'), criterionKey: b62(cardProject.definitionId) };
+      await cardOf(judgment, 'orbit_task_create', judged);
+      ok(await create(judgment, judged), 'a judgment\'s check');
 
       ok(await call(api, 'POST', '/api/tasks', bearer, verifierBody('the owner\'s check')), 'the owner\'s check');
       assert.equal(ok(await call(api, 'POST', '/api/tasks/batch-create', bearer, { tasks: batchPair('the owner\'s pair') }), 'the owner\'s pair').length, 2);

@@ -3,8 +3,7 @@ import OrbitKit
 
 /// The three turns a confirmation review puts into a conversation, drawn as the cards they are rather
 /// than as the reader's own bubble (docs/owner-confirmation-review-contract.md §2 D7, §8 B6) — web's
-/// `ConfirmationReviewTurnCards.tsx`. Nobody typed either: the words are a block Orbit wrote for the
-/// agent, which rides at the foot as the control plane's note (`attached`).
+/// `ConfirmationReviewTurnCards.tsx`. Nobody typed these turns: their words are written for the agent.
 ///
 ///  - In the REVIEWER's conversation, `Review requested`: which task's report it is asked to review,
 ///    by when, and the way onto the run that reported (`Open task session`).
@@ -18,7 +17,6 @@ struct ReviewRequestedCardView: View {
     let card: ConfirmationReviewRequestCard
     var ts: String?
     var undelivered: Bool = false
-    var attached: (kind: String, text: String)?
     /// Withdraws the turn while it is still queued; nil once a runner has taken it.
     var onCancelQueued: (() -> Void)?
 
@@ -65,7 +63,6 @@ struct ReviewRequestedCardView: View {
                 Text(SessionMessageCard.undelivered)
                     .font(.orbitMeta).foregroundStyle(.orange)
             }
-            if let attached { AttachedNoteEntry(attached: attached) }
             if let onCancelQueued { ReviewTurnQueuedFoot(cancel: onCancelQueued) }
         }
         .padding(.horizontal, 10)
@@ -77,6 +74,7 @@ struct ReviewRequestedCardView: View {
                 tone.opacity(0.30),
                 style: StrokeStyle(lineWidth: 1, dash: queued ? [4, 3] : []))
         )
+        .orbitCardWidth()
     }
 }
 
@@ -84,7 +82,6 @@ struct SentBackByReviewerCardView: View {
     let card: ConfirmationReturnCard
     var ts: String?
     var undelivered: Bool = false
-    var attached: (kind: String, text: String)?
     var onCancelQueued: (() -> Void)?
 
     @Environment(\.openURL) private var openURL
@@ -140,7 +137,6 @@ struct SentBackByReviewerCardView: View {
                 Text(SessionMessageCard.undelivered)
                     .font(.orbitMeta).foregroundStyle(.orange)
             }
-            if let attached { AttachedNoteEntry(attached: attached) }
             if let onCancelQueued { ReviewTurnQueuedFoot(cancel: onCancelQueued) }
         }
         .padding(.horizontal, 10)
@@ -152,6 +148,7 @@ struct SentBackByReviewerCardView: View {
                 tone.opacity(0.30),
                 style: StrokeStyle(lineWidth: 1, dash: queued ? [4, 3] : []))
         )
+        .orbitCardWidth()
     }
 }
 
@@ -160,7 +157,6 @@ struct YouConfirmedCardView: View {
     /// The block the reviewer was handed — the turn's own words, folded at the foot.
     let text: String
     var undelivered: Bool = false
-    var attached: (kind: String, text: String)?
     var onCancelQueued: (() -> Void)?
 
     @Environment(\.openURL) private var openURL
@@ -231,7 +227,6 @@ struct YouConfirmedCardView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            if let attached { AttachedNoteEntry(attached: attached) }
             if let onCancelQueued { ReviewTurnQueuedFoot(cancel: onCancelQueued) }
         }
         .padding(.horizontal, 10)
@@ -243,6 +238,7 @@ struct YouConfirmedCardView: View {
                 tone.opacity(0.30),
                 style: StrokeStyle(lineWidth: 1, dash: queued ? [4, 3] : []))
         )
+        .orbitCardWidth()
     }
 }
 
@@ -252,7 +248,7 @@ struct ReviewTurnQueuedFoot: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Text("Queued").font(.orbitMeta).foregroundStyle(.secondary)
+            QueuedWord()
             Button("Cancel") { cancel() }
                 .buttonStyle(.plain)
                 .font(.orbitMeta)

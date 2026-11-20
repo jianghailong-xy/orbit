@@ -24,9 +24,10 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/** The screenshots of Settings in the order the owner picked on docs/mocks/ios-settings-order (1A 2A 3A): the list opening with
- * Machines & models — one machine offline, so it says what needs you — then Preferences with Sessions first, then Account; and the
- * Sessions page with its five settings, each with its hint under it. Compose/Robolectric shots of the real `SettingsScreen` over fake
+/** The screenshots of Settings in the order the owner picked on docs/mocks/ios-settings-web-groups (1A 2A 3A), the web Settings nav's:
+ * Personal — General, Notifications, Appearance, Profile, Shared links, Access tokens, Terminals — then Machines — one machine offline,
+ * so it says what needs you — then Providers, then Sign out; the Profile page with the email and Change password; and the General page
+ * with its settings, each with its hint under it, Optimize For's segments below Smart model selection. Compose/Robolectric shots of the real `SettingsScreen` over fake
  * reads, written to PNGs under `src/android/build/evidence/ios-settings-order-android/`; what the pictures are for is asserted too, so
  * a shot that drew the old order fails rather than being kept. The account and machines are invented. */
 @RunWith(RobolectricTestRunner::class)
@@ -97,20 +98,34 @@ class SettingsOrderShotsTest {
         bitmap.recycle()
     }
 
-    @Test fun theListOpensWithMachinesAndModels() {
+    @Test fun theListTakesTheWebNavsGroups() {
         open(null)
         await("1 needs you")
-        assertTrue("Machines & models, then Preferences with Sessions first, then Account", top(Infrastructure.TITLE) < top("Preferences") &&
-            top("Preferences") < top(SESSIONS) && top(SESSIONS) < top("Notifications") && top("Notifications") < top("Appearance") &&
-            top("Appearance") < top("Account"))
-        compose.onAllNodesWithText(SESSION_RECAPS).assertCountEquals(0)
+        val order = listOf(SETTINGS_PERSONAL, GENERAL, "Notifications", "Appearance", SETTINGS_PROFILE, "Shared links", AccessTokens.TITLE,
+            Terminals.TITLE, MachinesAndModels.MACHINES, SETTINGS_PROVIDERS, "Sign out")
+        val tops = order.map(::top)
+        assertEquals("top to bottom: $order", tops.sorted(), tops)
+        listOf("Preferences", "Account", "Instance", "Admin", "Email", "Change password", MachinesAndModels.TITLE, SESSION_RECAPS)
+            .forEach { compose.onAllNodesWithText(it).assertCountEquals(0) }
+        compose.onAllNodesWithText("Orbit ", substring = true).assertCountEquals(0)
         shot("settings-home")
     }
 
-    @Test fun theSessionsPageHoldsTheFive() {
+    @Test fun theProfilePageHoldsTheEmailAndChangePassword() {
+        open("account")
+        await("alex@example.com")
+        assertTrue(top("Email") < top("Change password"))
+        compose.onNode(hasText("Change password") and hasClickAction()).assertExists()
+        assertEquals(SETTINGS_PROFILE, settingsTitle("account"))
+        shot("settings-profile")
+    }
+
+    @Test fun theGeneralPageHoldsTheSettings() {
         open("sessions")
         await(SESSION_RECAPS)
-        compose.onNode(hasText(SMART_MODEL_SELECTION) and isToggleable()).assertIsOff()
+        // The fixture sets no modelRouting, which reads as on (smartModelSelection), so Optimize For shows, on Balance.
+        compose.onNode(hasText(SMART_MODEL_SELECTION) and isToggleable()).assertIsOn()
+        compose.onNode(hasText("Balance") and isSelectable()).assertIsSelected()
         compose.onNode(hasText(SESSION_RECAPS) and isToggleable()).assertIsOn()
         shot("settings-sessions")
     }

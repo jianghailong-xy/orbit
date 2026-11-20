@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -94,6 +95,15 @@ type bgJobService struct {
 	// leases are then revoked rather than just closed.
 	sessionEnded   chan struct{}
 	endSessionOnce sync.Once
+	// The session's claim, which a SubAgent's child engine is launched from (subagent.go), and the SubAgents it
+	// hosts. A nil job hosts none.
+	job       *ClaimedSession
+	subagents subagentRegistry
+	// The workflows it hosts (subagent_workflow.go), whose calls are among subagents.
+	workflows workflowRegistry
+	// keptPastEnd: the session ended because its coordinator handed over, leaving its SubAgents running
+	// (keepSubagentsPastEnd). The end of each then owes a wake, which the server forwards to the successor.
+	keptPastEnd atomic.Bool
 }
 
 // startBgJobService listens on socketPath until ctx is cancelled, and writes the
@@ -252,6 +262,11 @@ func (s *bgJobService) handle(req bgSocketRequest) bgSocketResponse {
 	case "owner_wait":
 		return s.startOwnerWait(args)
 
+	case "subagent_start", "subagent_wait", "subagent_detach":
+		return s.handleSubagent(req.Op, args)
+	case "workflow_start":
+		return s.handleWorkflow(req.Op, args)
+
 	case "output":
 		tail, err := bgOptionalInt(args, "tail")
 		if err != nil {
@@ -277,6 +292,10 @@ func (s *bgJobService) handle(req bgSocketRequest) bgSocketResponse {
 		}
 		return bgSocketResponse{OK: true, Result: status}
 
+	case browserMCPAcquireOp:
+		// One browser tool call by this session (browser_mcp.go).
+		return s.serveBrowserAcquire()
+
 	case "secret_scan":
 		return s.secretScan(getString(args, "path"))
 
@@ -284,6 +303,14 @@ func (s *bgJobService) handle(req bgSocketRequest) bgSocketResponse {
 		return bgSocketResponse{OK: true, Result: map[string]interface{}{
 			"jobs": s.bg.listJobs(getBool(args, "includeFinished")), "liveCount": s.bg.liveJobCount(),
 		}}
+
+	case planGateModeOp:
+		// The session's permission mode as it is now, for Orbit's own Plan gate (plan_gate.go): `orbit mcp` and
+		// the in-session CLI ask before a write, because only this process sees the mode change mid-session.
+		if s.mode == nil {
+			return bgSocketResponse{Error: "this session's permission mode is not known to the runner"}
+		}
+		return bgSocketResponse{OK: true, Result: map[string]string{"permissionMode": s.mode()}}
 	}
 	return bgSocketResponse{Error: "unknown background job operation: " + req.Op}
 }
@@ -443,11 +470,17 @@ func startSessionBgJobService(ctx context.Context, t *Transport, bg *bgTailer, j
 		taskID:             publicID(job.TaskID),
 		allowOrchestration: job.AllowOrchestration,
 		secrets:            runnerSecrets(),
+		job:                job,
 	}
 	stop, err := startBgJobService(ctx, svc, bgSocketPath(job.SessionID), bgTokenPath(job.SessionID))
 	if err != nil {
 		return nil, err
 	}
+	bg.mu.Lock()
+	bg.stopSubagents = svc.stopSubagents
+	bg.keepSubagents = svc.keepSubagentsPastEnd
+	bg.announceSubagents = svc.announceSubagents
+	bg.mu.Unlock()
 	key := decodeSessionID(job.SessionID)
 	bgSessionServices.Store(key, svc)
 	return func() {

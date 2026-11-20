@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { HttpException, Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
@@ -5,24 +6,41 @@ import { PrismaService } from '../prisma/prisma.service';
 import type { ExternalTurnSender } from '../sessions/session-message';
 import { SessionsService } from '../sessions/sessions.service';
 import { feishuDerivedUuid, feishuTurnKey, refusalWords } from './feishu-direct.service';
+import { FEISHU_GROUP_REPLIES } from './feishu-chat-route.service';
+import { FEISHU_OPEN_REPLIES, openSlotStarted, releaseOpenSlot, reserveOpenSlot } from './feishu-open-limits';
 import { FeishuOutbound, feishuDedupeUuid } from './feishu-outbound';
 import { credentialsOf, type FeishuOwnerApp } from './feishu-owner.service';
 import type { FeishuActor } from './feishu-router';
 
-/** What the bot answers in a connected group (§8.2). English, as every word the bot sends (CLAUDE.md §5). */
+/**
+ * What the bot answers in a connected group (§8.2). English, as every word the bot sends (CLAUDE.md §5); and, since
+ * everyone in the group reads it, never naming Orbit (§15.1) — the bot's own name aside.
+ */
 export const FEISHU_GROUP_WORK_REPLIES = {
   started: (title: string) => `Started · ${title}`,
-  notAllowed: "This group's Orbit connection doesn't take requests from you, so nothing was started. Ask the bot's owner to add you in Orbit.",
+  notAllowed: "This group's connection doesn't take requests from you, so nothing was started. Ask the bot's owner to add you.",
   empty: (bot: string) => `Say what you want done after @${bot}, for example: @${bot} fix the failing test.`,
-  notLinked: (bot: string) => `This topic isn't linked to an Orbit session. To start one, send "@${bot} <request>" in the group, not in a topic.`,
-  notStarted: (reason: string) => `Orbit didn't start a session: ${reason}.`,
-  notSent: (reason: string) => `Orbit didn't send this to the session: ${reason}.`,
+  notLinked: (bot: string) => `This topic isn't linked to a session. To start one, send "@${bot} <request>" in the group, not in a topic.`,
+  notStarted: (reason: string) => `Nothing was started: ${groupReason(reason)}.`,
+  notSent: (reason: string) => `This wasn't sent to the session: ${groupReason(reason)}.`,
   busy: (limit: number) =>
-    `Orbit didn't start a session: this group already has ${sessionsWord(limit)} running, the most its connection allows at a time. Try again when one finishes.`,
+    `Nothing was started: this group already has ${sessionsWord(limit)} running, the most its connection allows at a time. Try again when one finishes.`,
   dailyLimit: (limit: number) =>
-    `Orbit didn't start a session: this group has started ${sessionsWord(limit)} today, the most its connection allows in a day. Try again after midnight UTC.`,
-  gone: "Orbit didn't start a session: this group is no longer connected to Orbit.",
+    `Nothing was started: this group has started ${sessionsWord(limit)} today, the most its connection allows in a day. Try again after midnight UTC.`,
+  gone: 'Nothing was started: this group is no longer connected.',
 } as const;
+
+/** What a group reads in place of a server's refusal that names Orbit (§15.1). */
+export const FEISHU_GROUP_NEUTRAL_REASON = "the bot's owner needs to look into it";
+
+/**
+ * A server's refusal as the group reads it (§15.1). Refusals are written for the account owner and may name Orbit, its
+ * pages or its tools; one that does is replaced whole by a neutral reason rather than edited, so no half-sentence about
+ * Orbit reaches the group.
+ */
+export function groupReason(reason: string): string {
+  return /orbit/i.test(reason) ? FEISHU_GROUP_NEUTRAL_REASON : reason;
+}
 
 function sessionsWord(n: number): string {
   return n === 1 ? '1 session' : `${n} sessions`;
@@ -36,7 +54,10 @@ const RESERVED_AT = '1970-01-01T00:00:00Z';
 /** How long a reservation whose session never came (the process died mid-start) still holds a slot. */
 const RESERVATION_HOLD = '10 minutes';
 
-/** The confirmed, switched-on route of the group a mention was sent in (feishu_chat_route, §8.1). */
+/**
+ * The confirmed, switched-on route of the group a mention was sent in (feishu_chat_route, §8.1) — or, while the bot is
+ * open, the app's settings for a group that uses them (§14.2), with `openAccess`.
+ */
 export interface FeishuGroupRoute {
   ownerId: string;
   chatId: string;
@@ -44,6 +65,11 @@ export interface FeishuGroupRoute {
   permissionMode: string;
   /** Who may send work besides the owner; empty means everyone in the group. */
   allowedOpenIds: string[];
+  /**
+   * Set for a group with no confirmed connection, served with the app's settings (§14.2): its implicit route is written
+   * with a request's slot, named as Feishu gave the group, and its sessions count against the open bot's limits (§14.4).
+   */
+  openAccess?: { chatName: string | null };
 }
 
 /** A mention of the bot in a connected group, as this branch reads it. */
@@ -121,14 +147,24 @@ export class FeishuGroupService {
 
   /** A top-level mention: a session in the route's workspace and mode, answered in a topic. */
   private async start(
-    app: FeishuOwnerApp, actor: FeishuActor, route: FeishuGroupRoute, message: FeishuGroupMention, sender: ExternalTurnSender | undefined,
+    app: FeishuOwnerApp & { botName: string | null }, actor: FeishuActor, route: FeishuGroupRoute, message: FeishuGroupMention, sender: ExternalTurnSender | undefined,
   ): Promise<void> {
     const sessionId = feishuDerivedUuid('feishu-group-session', app.appId, message.messageId);
+    const open = route.openAccess;
+    if (open && !sender) {
+      // The app's settings are for other people (§14.2): the owner connects the group to send work from it.
+      this.logger.log(`feishu app ${app.appId}: the owner mentioned the bot in a group that is not connected; nothing started`);
+      await this.reply(app, message.messageId, 'not-connected', FEISHU_GROUP_REPLIES.notConnected(app.botName ?? 'bot'), false);
+      return;
+    }
+    const slot = { appId: app.appId, chatId: message.chatId, rootMessageId: message.messageId, sessionId };
     const find = () => this.prisma.session.findFirst({ where: { id: sessionId, ownerId: route.ownerId }, select: { id: true, title: true } });
     let session = await find();
     if (!session) {
-      const refusal = await withTransactionRetry(this.prisma, (tx) => this.reserve(tx, app, route, message.chatId, message.messageId, sessionId),
-        loggedRetry(this.logger, 'feishuGroup.reserve'));
+      const refusal = await withTransactionRetry(this.prisma, (tx) => open
+        ? this.reserveOpen(tx, app, route, message, sessionId, open, sender!)
+        : this.reserve(tx, app, route, message.chatId, message.messageId, sessionId),
+      loggedRetry(this.logger, 'feishuGroup.reserve'));
       if (refusal) {
         this.logger.log(`feishu app ${app.appId}: a group session was not started (over the route's limits)`);
         await this.reply(app, message.messageId, 'over-limit', refusal, true);
@@ -138,7 +174,7 @@ export class FeishuGroupService {
         const made = await this.sessions.create(
           route.ownerId,
           { workspaceId: route.workspaceId, prompt: message.text, permissionMode: route.permissionMode },
-          { id: sessionId, credential: actor.credential, ...(sender ? { externalSender: sender } : {}) },
+          { id: sessionId, credential: actor.credential, openedBy: 'FEISHU', ...(sender ? { externalSender: sender } : {}) },
         );
         session = { id: made.id, title: made.title };
       } catch (error) {
@@ -146,7 +182,8 @@ export class FeishuGroupService {
         if (!session) {
           // Anything but a refusal fails the inbox attempt, and the next one finds the reservation and uses it.
           if (!(error instanceof HttpException)) throw error;
-          await this.release(app, message.chatId, message.messageId, sessionId);
+          if (open) await releaseOpenSlot(this.prisma, slot);
+          else await this.release(app, message.chatId, message.messageId, sessionId);
           this.logger.log(`feishu app ${app.appId}: a group session was not started (${error.getStatus()})`);
           await this.reply(app, message.messageId, 'not-started', FEISHU_GROUP_WORK_REPLIES.notStarted(refusalWords(error)), true);
           return;
@@ -155,7 +192,7 @@ export class FeishuGroupService {
     }
     const opened = session;
     await withTransactionRetry(this.prisma, async (tx) => {
-      if (await this.openReserved(tx, app, message.chatId, message.messageId, opened.id)
+      if ((open ? await openSlotStarted(tx, slot) : await this.openReserved(tx, app, message.chatId, message.messageId, opened.id))
         || await this.registerTopic(tx, app, route, message.chatId, message.messageId, opened.id)) {
         await this.recordActivity(tx, route.ownerId, actor, 'feishu.group.session.created', {
           sessionId: opened.id, workspaceId: route.workspaceId, chatId: message.chatId,
@@ -183,6 +220,7 @@ export class FeishuGroupService {
     const sessionId = thread.sessionId;
     try {
       await this.sessions.createTurn(route.ownerId, sessionId, { clientTurnId: feishuTurnKey(app.appId, message.eventId), content: message.text }, {
+        senderClient: { client: 'feishu' },
         ...(sender ? { externalSender: sender } : {}),
         // Written with the turn, so a replay of this clientTurnId records nothing again.
         onTurnWritten: async (tx, turn) => {
@@ -239,6 +277,47 @@ export class FeishuGroupService {
       VALUES (${feishuDerivedUuid('feishu-thread', app.appId, chatId, root)}::uuid, ${route.ownerId}::uuid, ${app.appId}, ${chatId}, ${root},
               ${sessionId}::uuid, ${RESERVED_AT}::timestamptz)
       ON CONFLICT ("app_id", "chat_id", "root_message_id") DO NOTHING`;
+    return null;
+  }
+
+  /**
+   * Hold a slot of the open bot (§14.4) for the session `sessionId` about to be made from a group using the app's
+   * settings, and write the group's implicit route with it (§14.2), or say why not. In one transaction, so a request
+   * over a limit writes nothing at all; and the route exists before anything reads the session's topic (the cards'
+   * `Started by <name> in <group>`, O5).
+   *
+   *   - The group's route row, when there is one, is locked first: a route the owner switched off meanwhile, or the bot
+   *     left, is answered as such.
+   *   - `reserveOpenSlot` counts under the app row's lock and writes the topic's row; not open any more, the group is
+   *     not connected.
+   *   - Then the implicit route: inserted with who used it first (source OPEN_ACCESS, on, unconfirmed), or made one from
+   *     a connect that was never confirmed — whose ticket still works, and confirming it gives the group its own
+   *     settings. A row already an implicit route, or confirmed, is left as it is, so a replay writes nothing more.
+   */
+  private async reserveOpen(
+    tx: Prisma.TransactionClient, app: FeishuOwnerApp & { botName: string | null }, route: FeishuGroupRoute, message: FeishuGroupMention,
+    sessionId: string, open: NonNullable<FeishuGroupRoute['openAccess']>, sender: ExternalTurnSender,
+  ): Promise<string | null> {
+    const [row] = await tx.$queryRaw<Array<{ enabled: boolean; source: string; confirmed: boolean }>>`
+      SELECT "enabled", "source", "confirmed_at" IS NOT NULL AS "confirmed" FROM "feishu_chat_route"
+      WHERE "app_id" = ${app.appId} AND "chat_id" = ${message.chatId} AND "owner_id" = ${route.ownerId}::uuid
+      FOR UPDATE`;
+    if (row && row.source === 'OPEN_ACCESS' && !row.enabled && !row.confirmed) return FEISHU_OPEN_REPLIES.switchedOff;
+    const slot = await reserveOpenSlot(tx, {
+      appId: app.appId, ownerId: route.ownerId, chatId: message.chatId, rootMessageId: message.messageId, sessionId, openId: message.openId,
+    });
+    if (!slot.ok) return slot.limit === 'NOT_OPEN' ? FEISHU_GROUP_REPLIES.notConnected(app.botName ?? 'bot') : slot.words;
+    await tx.$executeRaw`
+      INSERT INTO "feishu_chat_route"
+        ("id", "owner_id", "app_id", "chat_id", "chat_name", "source", "enabled", "first_used_by_open_id", "first_used_by_name", "first_used_at", "updated_at")
+      VALUES (${randomUUID()}::uuid, ${route.ownerId}::uuid, ${app.appId}, ${message.chatId}, ${open.chatName}, 'OPEN_ACCESS', true,
+              ${message.openId}, ${sender.name}, now(), now())
+      ON CONFLICT ("app_id", "chat_id") DO UPDATE SET
+        "source" = 'OPEN_ACCESS', "enabled" = true, "disabled_reason" = NULL,
+        "chat_name" = COALESCE(EXCLUDED."chat_name", "feishu_chat_route"."chat_name"),
+        "first_used_by_open_id" = EXCLUDED."first_used_by_open_id", "first_used_by_name" = EXCLUDED."first_used_by_name",
+        "first_used_at" = EXCLUDED."first_used_at", "updated_at" = now()
+      WHERE "feishu_chat_route"."source" = 'CONNECT' AND "feishu_chat_route"."confirmed_at" IS NULL`;
     return null;
   }
 

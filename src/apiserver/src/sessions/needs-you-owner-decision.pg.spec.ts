@@ -37,8 +37,9 @@
  *
  *   (6) Its own fixture: evidence waiting on a CONFIRM or SEND_BACK is the second kind of owner
  *       decision, and it lights the coordinator row for exactly the rows that conversation's
- *       evidence card draws. A revision the door would refuse from anyone comes FIRST and lights
- *       nothing; the answerable one lights the coordinator and not the run that submitted it; a
+ *       evidence card draws. A revision the door would refuse from anyone — its task's standard
+ *       reworded after it was submitted, since the server binds the standard at submit and a
+ *       submitter's quote is no longer read — comes FIRST and lights nothing; the answerable one lights the coordinator and not the run that submitted it; a
  *       CONFIRM puts it back. Each write also asks for the coordinator's row to be re-drawn,
  *       because `task.changed` refreshes no session row.
  *
@@ -100,7 +101,6 @@ import {
 import { readOwnerDecisionSignals } from '../projects/owner-decision-signal';
 import { ownerItemNeed } from '../projects/project-open-item';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
-import { criterionKeyOf } from '../projects/project-acceptance';
 import { ProjectAcceptanceService } from '../projects/project-acceptance.service';
 import { ProjectsService } from '../projects/projects.service';
 import { readPendingEvidenceJudgments } from '../tasks/pending-evidence-judgments';
@@ -514,8 +514,12 @@ test('the badge counts evidence waiting on the coordinator’s card, and only wh
     select: { runnerId: true },
   });
 
-  /** An EVIDENCE_JUDGMENT task in this project, the run that works it, and a check it can cite. */
-  async function judgedTask(label: string) {
+  /**
+   * An EVIDENCE_JUDGMENT task in this project, the run that works it, and a check it can cite.
+   * `declares` false files it without declaring `judged`, so it is held to its own
+   * acceptanceCriteria — a standard (6a) can reword without moving the one the other tasks serve.
+   */
+  async function judgedTask(label: string, declares = true) {
     const taskId = randomUUID();
     const sourceSessionId = randomUUID();
     const cited = `toolu_needs_you_${label}`;
@@ -531,8 +535,8 @@ test('the badge counts evidence waiting on the coordinator’s card, and only wh
         status: TaskStatus.IN_PROGRESS,
         completionCriterion: 'EVIDENCE_JUDGMENT',
         acceptanceCriteria: JUDGED,
-        criterionDefinitionId: judged.id,
-        criterionRevision: judged.revision,
+        criterionDefinitionId: declares ? judged.id : null,
+        criterionRevision: declares ? judged.revision : null,
       },
     });
     await db.session.create({
@@ -563,10 +567,9 @@ test('the badge counts evidence waiting on the coordinator’s card, and only wh
     return { taskId, sourceSessionId, cited };
   }
 
-  /** Submit revision 1 for a task, quoting the criterion's text as `quote`, through `service`. */
+  /** Submit revision 1 for a task through `service`. The server binds the standard it is held to. */
   function submit(
     task: { taskId: string; sourceSessionId: string; cited: string },
-    quote: string,
     service = evidence,
   ) {
     return service.submit(f.ownerId, task.taskId, { type: CreatorType.AGENT, id: f.workspaceId }, {
@@ -574,7 +577,6 @@ test('the badge counts evidence waiting on the coordinator’s card, and only wh
       idempotencyKey: `needs-you-${task.taskId}`,
       evidence: {
         claim: 'the declared command ran and its output names dist/server.js',
-        criterion: { key: criterionKeyOf(judged.id), text: quote },
         checks: [{ kind: 'TOOL_CALL', ref: task.cited, command: 'npm test', succeeded: true }],
         gaps: [],
       },
@@ -607,7 +609,7 @@ test('the badge counts evidence waiting on the coordinator’s card, and only wh
     return queue.pending.filter((row) => row.projectId === f.projectId).map((row) => row.taskId);
   }
 
-  const moved = await judgedTask('moved');
+  const moved = await judgedTask('moved', false);
   const answerable = await judgedTask('answerable');
 
   // ── the paired negative, first: both tasks exist and neither has submitted anything ────────────
@@ -616,9 +618,15 @@ test('the badge counts evidence waiting on the coordinator’s card, and only wh
 
   await t.test('(6a) a revision the door would refuse from anyone lights nothing', async () => {
     nudged.length = 0;
-    await submit(moved, `${JUDGED}, as it read before somebody reworded it`);
+    await submit(moved);
+    // The revision bound the task's criteria as they read at submit; rewording them afterwards is
+    // the one way left for a revision to become one nobody can decide.
+    await db.task.update({
+      where: { id: moved.taskId },
+      data: { acceptanceCriteria: `${JUDGED}, as it reads after somebody reworded it` },
+    });
     assert.deepEqual(await cardRows(), [],
-      'the quote is not the live criterion, so the coordinator is drawn no card for it');
+      'the standard it was bound to is not the live one, so the coordinator is drawn no card for it');
     assert.equal(await countOn(f.coordinatorSessionId), 0,
       'and the badge agrees with the card: a lit row that opens onto nothing is worse than a dark one');
     assert.deepEqual(await readOwnerDecisionSignals(db as never, f.ownerId), []);
@@ -629,7 +637,7 @@ test('the badge counts evidence waiting on the coordinator’s card, and only wh
   await t.test('(6b) an answerable revision lights the coordinator, and only the coordinator',
     async () => {
       nudged.length = 0;
-      await submit(answerable, JUDGED);
+      await submit(answerable);
       assert.deepEqual(await cardRows(), [answerable.taskId], 'the card has one question to draw');
       assert.equal(await countOn(f.coordinatorSessionId), 1,
         'the PARKED coordinator row says somebody is waiting on it — the state the badge was dark in');
@@ -697,7 +705,7 @@ test('the badge counts evidence waiting on the coordinator’s card, and only wh
     async () => {
       const later = await judgedTask('later');
       log.length = 0;
-      await submit(later, JUDGED, observed);
+      await submit(later, observed);
       assert.deepEqual(log, redrawn,
         'the submission asked for the coordinator’s row after its revision committed');
 
@@ -735,7 +743,7 @@ test('the badge counts evidence waiting on the coordinator’s card, and only wh
     sendThrows = true;
     try {
       log.length = 0;
-      const receipt = await submit(unsent, JUDGED, observed);
+      const receipt = await submit(unsent, observed);
       assert.equal(receipt.revision, '1', 'the submission still answers with the revision it recorded');
       assert.deepEqual(log, redrawn, 'and the send that threw really was attempted, after the commit');
       assert.deepEqual(await cardRows(), [unsent.taskId], 'the revision is a question on the card');
@@ -1000,6 +1008,13 @@ test('the badge says Record as done… once a finished-looking project has waite
   // The settled fact, as the producer leaves it when it hands a finished-looking project to the
   // conversation coordinating it: DELIVERED there, instead of a judgment.
   const wakeId = randomUUID();
+  const clientTurnId = randomUUID();
+  await db.conversationTurn.create({
+    data: {
+      sessionId: f.coordinatorSessionId, clientTurnId, seq: 2,
+      kind: 'message', content: 'The project looks finished.', status: 'ANSWERED', deliveredAt: new Date(),
+    },
+  });
   await db.projectCoordinatorWake.create({
     data: {
       id: wakeId,
@@ -1011,7 +1026,7 @@ test('the badge says Record as done… once a finished-looking project has waite
       idempotencyKey: `cw:v1:PROJECT_TASKS_SETTLED:PROJECT:${f.projectId}:settled`,
       status: 'DELIVERED',
       sessionId: f.coordinatorSessionId,
-      delivery: { clientTurnId: randomUUID() },
+      delivery: { clientTurnId },
     },
   });
 
@@ -1036,9 +1051,9 @@ test('the badge says Record as done… once a finished-looking project has waite
 
   await t.test('(8b) once the window has run out with no request, the row lights as Record as done…', async () => {
     await sql.query(
-      `UPDATE "project_coordinator_wake" SET "updated_at" = "updated_at" - interval '7201 seconds'
-        WHERE "id" = $1::uuid`,
-      [wakeId],
+      `UPDATE "conversation_turn" SET "delivered_at" = "delivered_at" - interval '7201 seconds'
+        WHERE "session_id" = $1::uuid AND "client_turn_id" = $2`,
+      [f.coordinatorSessionId, clientTurnId],
     );
     assert.deepEqual(await readOwnerDecisionSignals(db as never, f.ownerId), [{
       sessionId: f.coordinatorSessionId, projectId: f.projectId, count: 1, kind: 'RECORD_AS_DONE',

@@ -28,6 +28,8 @@ import {
   acceptanceConfirmedLine,
   acceptanceReadLabel,
   acceptanceReceiptLine,
+  acceptanceReceiptMovedNote,
+  acceptanceReceiptOpenLabel,
   acceptanceReconfirmedLine,
   type ConfirmationCriterion,
 } from './AcceptanceConfirmationCard';
@@ -203,24 +205,6 @@ async function mountReceipt(confirmation: RecordedStandardSetConfirmation): Prom
   root = tree;
   await act(async () => {
     tree.render(<AcceptanceConfirmationReceipt confirmation={confirmation} />);
-  });
-  return node;
-}
-
-/** A second record beside the first, for a case that compares two of them in one document. */
-async function mountReceiptAgain(
-  confirmation: RecordedStandardSetConfirmation,
-  changed: string | null,
-): Promise<HTMLElement> {
-  const node = document.createElement('div');
-  document.body.appendChild(node);
-  const tree = createRoot(node);
-  await act(async () => {
-    tree.render(<AcceptanceConfirmationReceipt confirmation={confirmation} changed={changed} />);
-  });
-  cleanups.push(async () => {
-    await act(async () => tree.unmount());
-    node.remove();
   });
   return node;
 }
@@ -954,7 +938,7 @@ describe('the record a confirmation leaves', () => {
     const node = await mountReceipt(started);
     const [receipt] = receiptsIn(node);
     expect(receiptLineOf(receipt!)).toBe(acceptanceConfirmedLine(started));
-    expect(receiptLineOf(receipt!)).toBe(`You started the project on 3 criteria at seal ${shortSeal(CURRENT)}`);
+    expect(receiptLineOf(receipt!)).toBe('You started the project on 3 criteria');
     const settings = receipt!.querySelector('.settlement-receipt-settings');
     expect(settings?.textContent?.replace(` (${RUN_SETTING_DIFFERS})`, ''))
       .toBe('project/34Wvw… · Automatic on · 3 tasks at a time · merge check set');
@@ -964,20 +948,98 @@ describe('the record a confirmation leaves', () => {
     expect(changed[0]?.textContent).toContain('3 tasks at a time');
   });
 
-  it('says You confirmed for every other confirmation — with what it changed when this window pressed it', async () => {
+  it('says You confirmed for every other confirmation — with what it changed, off the record', async () => {
     const confirmed = standingOf('CONFIRMED').confirmation!;
     const node = await mountReceipt({ ...confirmed, startedWith: null });
     const [receipt] = receiptsIn(node);
-    expect(receiptLineOf(receipt!)).toBe(`You confirmed 3 criteria at seal ${shortSeal(CURRENT)}`);
+    expect(receiptLineOf(receipt!)).toBe('You confirmed 3 criteria');
     expect(receiptLineOf(receipt!)).not.toContain('started');
+    expect(receiptLineOf(receipt!), 'the seal is proof in the fold, not the headline').not.toContain('seal');
     expect(receipt!.querySelector('.settlement-receipt-settings'), 'a confirmation that started nothing has no settings')
       .toBeNull();
 
-    expect(acceptanceReconfirmedLine(confirmed, '1 new, 1 stricter'))
-      .toBe(`You confirmed 3 criteria at seal ${shortSeal(CURRENT)} — 1 new, 1 stricter`);
-    const pressedHere = await mountReceiptAgain({ ...confirmed, startedWith: null }, '1 new, 1 stricter');
-    expect(receiptLineOf(receiptsIn(pressedHere)[0]!))
-      .toBe(`You confirmed 3 criteria at seal ${shortSeal(CURRENT)} — 1 new, 1 stricter`);
+    const changes = {
+      added: [{ key: 'k3', ordinal: 3, text: 'condition 3' }],
+      stricter: [{ key: 'k2', ordinal: 2, verificationMethod: 'EXECUTABLE', confirmedVerificationMethod: 'HUMAN' }],
+      revised: [],
+      removed: [],
+      unchanged: [1],
+    };
+    expect(acceptanceReconfirmedLine({ ...confirmed, startedWith: null, changes }))
+      .toBe('You confirmed 3 criteria · 1 new, 1 stricter, 1 unchanged');
+    expect(acceptanceReconfirmedLine({ ...confirmed, startedWith: null, changes: { ...changes, added: [], stricter: [] } }))
+      .toBe('You confirmed 3 criteria · 1 unchanged');
+  });
+});
+
+/**
+ * WHAT THE CONFIRMATION WAS ABOUT, folded under the record (docs/mocks/acceptance-receipt-fold): the
+ * change card's rows, the set in the words confirmed, a note when some of it moved or its words were
+ * never kept, and the seal.
+ */
+describe('the fold under the record', () => {
+  const words = ['condition 1', 'condition 2', 'condition 3'];
+  const reading = (ordinal: number, since: 'UNCHANGED' | 'EDITED' | 'REMOVED' = 'UNCHANGED', text: string | null = words[ordinal - 1]!) =>
+    ({ key: `k${ordinal}`, ordinal, text, verificationMethod: null, since });
+  const recordOf = (over: Partial<RecordedStandardSetConfirmation>): RecordedStandardSetConfirmation => ({
+    ...standingOf('CONFIRMED').confirmation!,
+    startedWith: null,
+    wordingRecorded: true,
+    changes: { added: [{ key: 'k3', ordinal: 3, text: 'condition 3' }], stricter: [], revised: [], removed: [], unchanged: [1, 2] },
+    criteria: [reading(1), reading(2), reading(3)],
+    ...over,
+  });
+  const foldOf = (receipt: Element) => receipt.querySelector('details.settlement-receipt-fold');
+  const rowsOf = (receipt: Element) =>
+    [...receipt.querySelectorAll('.settlement-card-criteria li')].map((li) => li.textContent);
+
+  it('is closed, says what it opens, and holds the changes, the confirmed words and the seal', async () => {
+    const [receipt] = receiptsIn(await mountReceipt(recordOf({})));
+    const fold = foldOf(receipt!);
+    expect(fold?.hasAttribute('open'), 'the fold starts closed').toBe(false);
+    expect(fold?.querySelector('.settlement-receipt-when-closed')?.textContent).toBe('What this confirmed · 3 criteria');
+    expect(fold?.querySelector('.settlement-receipt-when-open')?.textContent).toBe('Hide what this confirmed');
+    expect([...fold!.querySelectorAll('.criteria-change-list li')].map((li) => li.textContent))
+      .toEqual(['+3 · Newcondition 3']);
+    expect(rowsOf(receipt!)).toEqual(['condition 1', 'condition 2', 'condition 3new']);
+    expect(fold?.querySelector('.settlement-card-explains'), 'nothing moved, so nothing to note').toBeNull();
+    expect(fold?.querySelector('.settlement-receipt-seal')?.textContent).toBe(`Seal ${shortSeal(CURRENT)}`);
+    expect(receiptLineOf(receipt!)).toBe('You confirmed 3 criteria · 1 new, 2 unchanged');
+  });
+
+  it('marks what moved since and names it under the words that were confirmed', async () => {
+    const [receipt] = receiptsIn(await mountReceipt(recordOf({
+      criteria: [reading(1), reading(2, 'EDITED'), reading(3, 'REMOVED')],
+    })));
+    expect(rowsOf(receipt!)).toEqual(['condition 1', 'condition 2edited since', 'condition 3newremoved since']);
+    expect(foldOf(receipt!)?.querySelector('.settlement-card-explains')?.textContent).toBe(
+      'These are the words you confirmed. Criteria 2 and 3 have changed since; Orbit asks about the '
+      + 'criteria standing now on its own card.',
+    );
+    expect(acceptanceReceiptMovedNote([3])).toContain('Criterion 3 has changed since');
+    expect(acceptanceReceiptMovedNote([5, 2, 3])).toContain('Criteria 2, 3 and 5 have changed since');
+  });
+
+  it('says so on a record older than keeping the words, and which words are gone', async () => {
+    const [receipt] = receiptsIn(await mountReceipt(recordOf({
+      wordingRecorded: false,
+      changes: null,
+      criteria: [reading(1), reading(2, 'EDITED', null), reading(3)],
+    })));
+    expect(receiptLineOf(receipt!)).toBe('You confirmed 3 criteria');
+    expect(rowsOf(receipt!)).toEqual(['condition 1', 'Its words are not on recordedited since', 'condition 3']);
+    expect(foldOf(receipt!)?.querySelector('.criteria-change-list')).toBeNull();
+    expect(foldOf(receipt!)?.querySelector('.settlement-card-explains')?.textContent).toBe(
+      'This confirmation was recorded before Orbit kept the wording. Criteria that still match it show '
+      + 'their words today, which are the same words. One criterion has changed since and its old '
+      + 'words are gone.',
+    );
+  });
+
+  it('is not drawn for a server that publishes no criteria, and counts one criterion as one', async () => {
+    const [receipt] = receiptsIn(await mountReceipt(recordOf({ criteria: undefined })));
+    expect(foldOf(receipt!)).toBeNull();
+    expect(acceptanceReceiptOpenLabel(1)).toBe('What this confirmed · 1 criterion');
   });
 });
 

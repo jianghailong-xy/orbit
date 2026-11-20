@@ -13,6 +13,9 @@ import type {
 } from '@orbit/shared';
 import { api, ApiError } from '../api';
 import { MOBILE_QUERY } from '../lib/useMediaQuery';
+import { meQuery } from '../lib/queries';
+import { TRANSLATION_COPY } from '../lib/translation';
+import { OWNER_LANG, ownerMe } from '../test/ownerCardTranslation';
 import { revealSettlementCard } from './DecisionRail';
 import type { StandardSetConfirmationStanding } from '../lib/acceptanceConfirmation';
 import {
@@ -501,7 +504,7 @@ describe('the words, as the copy table has them', () => {
     expect(RUN_AUTOMATIC_HINT_MAIN).toContain(
       'Merging into main always asks you — to skip that card, choose “The agent pushes it” under Delivery.');
     expect(RUN_MERGE_CHECK_HINT).toBe(
-      'Runs on the combined tree before anything lands — on the project branch and again before main.');
+      'Runs before merging into main.');
     expect(startExplanation(4)).toBe(
       'Orbit derives done from these 4 criteria and nothing else. If they change later, it asks you to '
       + 'confirm the new version — the project keeps running.');
@@ -671,11 +674,32 @@ describe('what a press sends', () => {
       maxConcurrentTasks: 3,
       mergeCheckCommand: 'cd src/web && npx tsc -b && npx vitest run',
       mergeCheckTimeoutSeconds: 900,
+      landingCheckCommand: '', landingCheckTimeoutSeconds: null,
       // No integration read: no delivery choice on offer, and none sent.
       deliveryMode: null,
     });
     // A coordinator that suggested no budget leaves the box empty, which is the default one.
     expect(startDraftOf(requestOf().settings).mergeCheckTimeoutSeconds).toBeNull();
+  });
+
+  it('words the Automatic sentence and the Comes-to-you list without a branch for a request with no line', () => {
+    expect(runAutomaticSays(true, null, false)).toBe('The coordinator decides when each task is done.');
+    expect(runAutomaticSays(false, null, true)).toBe('You decide when each task is done.');
+    for (const automatic of [true, false]) {
+      const list = startComesToYou({ automatic, line: null, ownerConfirmed: [], evidenceJudged: 0, escalationSeconds: 7_200 });
+      expect(list.map((item) => item.text).join(' ')).not.toMatch(/\bmain\b|merge/i);
+    }
+    // With a line the sentences are today's.
+    expect(runAutomaticSays(true, 'PROJECT_BRANCH', false)).toContain('merges into main by itself');
+  });
+
+  it('opens a request with no line on no line, and the body carries no line key', () => {
+    const request = requestOf({ settings: { automatic: true, maxConcurrentTasks: 3, mergeCheckCommand: null } });
+    const draft = startDraftOf(request.settings, integrationOf());
+    expect(draft.line).toBeNull();
+    expect(draft.upstream).toBeNull();
+    const body = startBody(request, draft, 'item-1');
+    expect(Object.keys(body)).not.toContain('line');
   });
 
   it('sends the seal it was asked about, every setting as the card shows it, and the request', () => {
@@ -691,6 +715,7 @@ describe('what a press sends', () => {
       maxConcurrentTasks: 5,
       mergeCheckCommand: 'npm test',
       mergeCheckTimeoutSeconds: 90,
+      landingCheckCommand: null, landingCheckTimeoutSeconds: null,
       requestId: 'item-1',
     });
     // Directly into main names no branch — the door refuses one — and a blank check is none. An
@@ -990,6 +1015,7 @@ describe('the press', () => {
       maxConcurrentTasks: 5,
       mergeCheckCommand: 'cd src/web && npx tsc -b && npx vitest run',
       mergeCheckTimeoutSeconds: null,
+      landingCheckCommand: null, landingCheckTimeoutSeconds: null,
       requestId: 'item-1',
     });
     // The question is answered: the card goes, and the record is the conversation's to draw.
@@ -1013,7 +1039,7 @@ describe('the press', () => {
     await key({ ctrlKey: true });
     expect(armed).toEqual([]);
     expect(bodies, 'the chord reached the door').toEqual([]);
-    expect(card().querySelectorAll('textarea'), 'a text box grew inside the card').toHaveLength(0);
+    expect(card().querySelectorAll('textarea:not([aria-label="Landing check"])'), 'a reply box grew inside the card').toHaveLength(0);
 
     await key();
     await until(() => bodies.length === 1, 'the bare key to press Start');
@@ -1167,7 +1193,7 @@ describe('the main branch on the card', () => {
     server.integration = integrationOf();
     server.row = rowOf('item-1', suggestingMaster());
     const { card } = await delivered();
-    expect(rowNames(card())).toEqual(['Automatic', 'Tasks land on', 'Main branch', 'Merge check', 'At most']);
+    expect(rowNames(card())).toEqual(['Automatic', 'Tasks land on', 'Main branch', 'Landing check', 'Merge check', 'At most']);
     expect(mainBranchShown(card())).toBe('master');
     // Nobody chose it before: nothing to say under it.
     expect(settingRow(card(), 'Main branch').querySelector('.start-card-hint')).toBeNull();
@@ -1182,7 +1208,7 @@ describe('the main branch on the card', () => {
     expect(comesToYou(card())).toContain('Merging the branch into master');
     expect(card().textContent).not.toMatch(/into main\b/u);
     await mergeCheckBox(card());
-    expect(settingRow(card(), 'Merge check').textContent).toContain('on the project branch and again before master.');
+    expect(settingRow(card(), 'Merge check').textContent).toContain('Runs before merging into master.');
   });
 
   it('lists the branches the runner reported in the menu, and the line menu says directly into master', async () => {
@@ -1251,6 +1277,7 @@ describe('the main branch on the card', () => {
       maxConcurrentTasks: 3,
       mergeCheckCommand: 'cd src/web && npx tsc -b && npx vitest run',
       mergeCheckTimeoutSeconds: null,
+      landingCheckCommand: null, landingCheckTimeoutSeconds: null,
       requestId: 'item-1',
     });
   });
@@ -1278,13 +1305,36 @@ describe('the main branch on the card', () => {
       settings: { line: 'MAIN', automatic: true, maxConcurrentTasks: 1, mergeCheckCommand: null },
     }));
     const { card } = await delivered();
-    expect(rowNames(card())).toEqual(['Automatic', 'Tasks land on', 'Merge check', 'At most']);
+    expect(rowNames(card())).toEqual(['Automatic', 'Tasks land on', 'Landing check', 'Merge check', 'At most']);
     expect(settingRow(card(), 'Automatic').textContent).toContain(RUN_AUTOMATIC_ON_MAIN);
     await act(async () => {
       action(card(), START_PROJECT_ACTION).click();
     });
     await until(() => bodies.length === 1, 'the press');
     expect(bodies[0]).not.toHaveProperty('upstreamRef');
+  });
+
+  it('draws one sentence for a request with no line, and the press sends no line key', async () => {
+    server.integration = integrationOf();
+    server.row = rowOf('item-1', requestOf({
+      settings: { automatic: true, maxConcurrentTasks: 3, mergeCheckCommand: null },
+    }));
+    const { card } = await delivered();
+    expect(rowNames(card())).toEqual(['Automatic', 'Merge check', 'At most']);
+    // Nothing about the line is decided, so no sentence on the card names main.
+    expect(settingRow(card(), 'Automatic').textContent).toContain('The coordinator decides when each task is done.');
+    expect(settingRow(card(), 'Automatic').textContent).not.toMatch(/\bmain\b/);
+    expect(card().querySelector('.start-card-comes')?.textContent).not.toMatch(/\bmain\b/);
+    expect(card().querySelector('[data-no-line="true"]')?.textContent).toBe('Lands on the project’s branch when a task commits');
+    expect(card().querySelector('[data-landing-check="true"]')).toBeNull();
+    await act(async () => {
+      action(card(), START_PROJECT_ACTION).click();
+    });
+    await until(() => bodies.length === 1, 'the press');
+    expect(bodies[0]).not.toHaveProperty('line');
+    expect(bodies[0]).not.toHaveProperty('upstreamRef');
+    expect(bodies[0]).not.toHaveProperty('landingCheckCommand');
+    expect(bodies[0]).toMatchObject({ requestId: 'item-1', mergeCheckCommand: null });
   });
 
   it('is read-only once the request no longer stands', async () => {
@@ -1404,11 +1454,11 @@ describe('the delivery mode on the card', () => {
     server.row = rowOf('item-1', suggestingMain());
     const { card } = await delivered();
     // Delivery straight under the line it belongs to, before Main branch (owner decision 2026-11-10).
-    expect(rowNames(card())).toEqual(['Automatic', 'Tasks land on', 'Delivery', 'Main branch', 'Merge check', 'At most']);
+    expect(rowNames(card())).toEqual(['Automatic', 'Tasks land on', 'Delivery', 'Main branch', 'Landing check', 'Merge check', 'At most']);
     expect(deliveryField(card()).textContent).toBe('Orbit lands it');
     await mergeCheckBox(card());
     expect(settingRow(card(), 'Merge check').textContent).toContain(
-      'Runs on the combined tree before anything lands — on the project branch and again before main.');
+      'Runs before merging into main.');
     expect(deliveryLocked(card())).toBe(false);
     expect(settingRow(card(), 'Delivery').querySelector(':scope > .start-card-hint')?.textContent)
       .toBe('The agent doesn’t push to main: Orbit lands its branch once the work is accepted.');
@@ -1518,5 +1568,41 @@ describe('the delivery mode on the card', () => {
       .not.toHaveProperty('deliveryMode');
     expect(startBody(suggestingMain(), { ...draft, line: 'MAIN', deliveryMode: null }, null))
       .not.toHaveProperty('deliveryMode');
+  });
+});
+
+describe('Start this project? in the owner’s language (board 04-owner-cards.html)', () => {
+  const WHY = 'B and C both build on A — one branch checks them together before main.';
+  const TRANSLATED = 'B et C reposent sur A — une branche les vérifie ensemble avant main.';
+
+  async function drawn(translation: ProjectOpenItemRow['translation'], me = ownerMe()) {
+    server.row = { ...rowOf('item-1'), translation };
+    const { qc, card } = await delivered();
+    await act(async () => { qc.setQueryData(meQuery().queryKey, me); });
+    await turn();
+    await turn();
+    return card;
+  }
+
+  it('quotes the translated why with Translated · Show original, and the toggle shows the original', async () => {
+    const card = await drawn({ lang: OWNER_LANG, why: TRANSLATED });
+    expect(card().textContent).toContain(TRANSLATED);
+    expect(card().textContent).not.toContain(WHY);
+    expect(card().textContent).toContain(`${TRANSLATION_COPY.translated}·${TRANSLATION_COPY.showOriginal}`);
+    const flip = [...card().querySelectorAll('button')].find((b) => b.textContent === TRANSLATION_COPY.showOriginal)!;
+    await act(async () => { flip.click(); });
+    expect(card().textContent).toContain(WHY);
+    expect(card().textContent).not.toContain(TRANSLATED);
+    expect(card().textContent).toContain(`${TRANSLATION_COPY.original}·${TRANSLATION_COPY.showTranslation}`);
+  });
+
+  it.each([
+    ['no translation', undefined, ownerMe()],
+    ['a failed translation', { lang: OWNER_LANG, failed: true as const }, ownerMe()],
+    ['translation switched off', { lang: OWNER_LANG, why: TRANSLATED }, ownerMe({ translationEnabled: false })],
+  ])('quotes the original with %s', async (_, translation, me) => {
+    const card = await drawn(translation, me);
+    expect(card().textContent).toContain(WHY);
+    expect(card().textContent).not.toContain(TRANSLATION_COPY.showOriginal);
   });
 });

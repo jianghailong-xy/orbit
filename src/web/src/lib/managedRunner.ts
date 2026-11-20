@@ -5,17 +5,22 @@
 // reading OrbitKit mirrors, so Web, macOS and iOS say the same thing about the same state.
 
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import {
   MANAGED_RUNNER_STATUS_POLL_SECONDS,
   firstSessionProvider,
   managedRunnerDisplay,
+  managedRunnerRow,
   managedRunnersOffered,
   type ManagedRunnerDisplay,
+  type ManagedRunnerRow,
   type ManagedRunnerStatus,
   type ServerCapabilities,
 } from '@orbit/shared';
 import { api, ApiError } from '../api';
+import { routeId } from './idCodec';
+import { machineName } from './machineSetup';
+import { runnersQuery } from './queries';
 import { useToast } from './toast';
 import { compatibleUuid } from './uuid';
 
@@ -39,7 +44,7 @@ export const serverCapabilitiesQuery = () =>
 /**
  * Where first-run setup sends the account it just created. The registration guide, as always —
  * unless the server offers managed runners, in which case bootstrap has started one for it and the
- * default landing opens its workspace. A capability that cannot be read is no capability.
+ * default landing opens its setup card. A capability that cannot be read is no capability.
  */
 export async function firstRunLanding(): Promise<string> {
   try {
@@ -88,12 +93,47 @@ export function useManagedRunner(ask = true): { managed: ManagedRunner | null; s
 }
 
 /**
- * What a first session in the managed default workspace starts on moves while its runner comes up —
- * the owner adds a key, READY records what it was found ready with — and the workspace list says
- * it as the draft's default (`lastProvider`, which the server derives): the list is read again
- * when it moves, so the draft offers what the server would start rather than what the list said
- * before. Nothing is read on the first answer, or without managed runners.
+ * The account's managed runner's id, as a page that shows a machine has already read it: the runner list's
+ * row that says `managed`, else the managed status's runnerId (a server that predates the row's flag).
+ * Reads nothing itself, so any place that names a machine can ask.
  */
+export function useManagedRunnerId(): string | null {
+  const { data } = useQuery({ ...managedRunnerStatusQuery(), enabled: false });
+  const { data: runners } = useQuery({ ...runnersQuery(), enabled: false });
+  const flagged = (runners as Array<{ id?: string; managed?: boolean }> | undefined)?.find((runner) => runner.managed === true)?.id;
+  return flagged ?? (managedRunnerDisplay(data) ? (data?.runnerId ?? null) : null);
+}
+
+/**
+ * A list of machines with Orbit Cloud (the account's managed runner) first and the rest in their own
+ * order, as every machine list draws them (docs/mocks/orbit-cloud-pinned). The list as given without one.
+ */
+export function managedFirst<T extends { id: string }>(runners: T[], managedId: string | null): T[] {
+  if (!managedId) return runners;
+  const at = runners.findIndex((runner) => routeId(runner.id) === routeId(managedId));
+  if (at <= 0) return runners;
+  return [runners[at], ...runners.slice(0, at), ...runners.slice(at + 1)];
+}
+
+/** machineName with the account's managed runner said as Orbit Cloud. */
+export function useMachineName(): (runner: { id?: string; name?: string; displayName?: string | null; managed?: boolean }) => string {
+  const managedId = useManagedRunnerId();
+  return useCallback((runner) => machineName(runner, managedId), [managedId]);
+}
+
+/**
+ * How a place that shows a runner by its heartbeat shows the account's managed runner instead
+ * (docs/managed-runner-existing-account-entry-design.md, D4): the shared short label and tone, Asleep
+ * rather than Offline. Null for any other runner, and for every runner with the feature off.
+ */
+export function managedRowOf(managed: ManagedRunner | null, runnerId: string | null | undefined): ManagedRunnerRow | null {
+  const id = managed?.status.runnerId;
+  if (!id || !runnerId || routeId(id) !== routeId(runnerId)) return null;
+  return managedRunnerRow(id, managed.status);
+}
+
+/** Refresh workspace defaults when the managed runner names a different first-session provider.
+ * The server seeds any workspace on that runner that has no interactive history yet. */
 export function useFollowFirstSessionProvider(managed: ManagedRunner | null): void {
   const qc = useQueryClient();
   const startsOn = managed ? firstSessionProvider(managed.status) : undefined;
@@ -105,6 +145,25 @@ export function useFollowFirstSessionProvider(managed: ManagedRunner | null): vo
     }
     seen.current = startsOn;
   }, [startsOn, qc]);
+}
+
+/**
+ * A managed runner asleep (or going to sleep) while it waits for a login can only be signed in once it
+ * is up again, so the page that signs it in wakes it when it is opened: one wake per page, then the
+ * status is read again. Nothing for any other state, and nothing when the server offers no wake.
+ */
+export function useWakeForSignIn(managed: ManagedRunner | null): void {
+  const qc = useQueryClient();
+  const asked = useRef(false);
+  const status = managed?.status;
+  const wanted = !!status && !!managed?.display.signIn && status.actions.canWake && status.desiredState === 'SLEEPING';
+  useEffect(() => {
+    if (!wanted || asked.current) return;
+    asked.current = true;
+    void api<ManagedRunnerStatus>('/managed-runner/wake', { method: 'POST', body: { idempotencyKey: compatibleUuid() } })
+      .catch(() => undefined)
+      .finally(() => void qc.invalidateQueries({ queryKey: managedRunnerStatusQuery().queryKey }));
+  }, [wanted, qc]);
 }
 
 /**
@@ -139,8 +198,7 @@ export function useManagedRunnerActions() {
       }),
     onSuccess: (status) => {
       answered(status);
-      // The mapping brings its runner and default workspace with it.
-      void qc.invalidateQueries({ queryKey: ['workspaces'] });
+      // The new mapping brings its runner into the machine list.
       void qc.invalidateQueries({ queryKey: ['runners'] });
     },
     onError: refused("Couldn't set up the managed runner"),

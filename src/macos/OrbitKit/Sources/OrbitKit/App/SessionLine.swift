@@ -59,11 +59,16 @@ public struct SessionLine: Equatable, Sendable {
             return SessionLine(text: OwnerConfirmations.underReviewLine(review.reviewerTitle), tone: .review)
         }
         if live && s.isGenerating {
+            // A sub-agent launch still in flight (a synchronous Agent, a foreground delegate) names
+            // the sub-agent's work rather than the tool (web parity).
+            if let t = s.lastToolUse, subagentLaunchTools.contains(fmtTool(t)), let n = s.runningSubagentCount, n > 0 {
+                return SessionLine(text: subagentRunningLine(n, title: s.runningSubagentTitle), tone: .running)
+            }
             if let t = s.lastToolUse, !t.isEmpty { return SessionLine(text: "Running \(fmtTool(t))…", tone: .running) }
             // A sub-agent or workflow in flight: its launch result cleared the tool line at once, so
             // say it rather than fall through to a preview that reads as idle (web parity).
             if let n = s.runningSubagentCount, n > 0 {
-                return SessionLine(text: "\(subagentRunningLabel(n))…", tone: .running)
+                return SessionLine(text: subagentRunningLine(n, title: s.runningSubagentTitle), tone: .running)
             }
             // The agent hasn't answered yet: show the message it was sent (server-kept from the moment
             // it is enqueued until a reply lands) rather than the previous turn's reply, which
@@ -74,13 +79,22 @@ public struct SessionLine: Equatable, Sendable {
             return SessionLine(text: "Running…", tone: .running)
         }
         if live && s.effectiveRunState == .queued {
-            return SessionLine(text: ClaudeRegion.heldWords(s, machine: machine) ?? "Queued", tone: .queued)
+            if let held = ClaudeRegion.heldWords(s, machine: machine) { return SessionLine(text: held, tone: .queued) }
+            // A runner draining for its update is the one queue word in the warning colour (board 5,
+            // web `sessionLine`): it can last hours, and only the owner can shorten it.
+            if RunnerUpdating.holds(s) { return SessionLine(text: RunnerUpdating.title(s), tone: .warning) }
+            // A full runner, run or batch reads in plain words, in the queue's own colour (board
+            // session-row-runner-full, web `sessionLine`); the Mac row's tooltip says which is full.
+            if QueuedCapacity.holds(s) { return SessionLine(text: QueuedCapacity.CAPACITY_HELD_LINE, tone: .queued) }
+            // Keep Free holds a new session on a runner short of disk (web `queuedLabel`).
+            if QueuedDiskLow.holds(s) { return SessionLine(text: QueuedDiskLow.title, tone: .queued) }
+            return SessionLine(text: "Queued", tone: .queued)
         }
         // Parked while a sub-agent or workflow it started works on: the workspace itself still
         // working, so it outranks the wait it is parked on and anything it left running (web's
         // `parkedWorkLabel`, subagent first). Its turn has ended, so this is where it surfaces.
         if live, let n = s.runningSubagentCount, n > 0 {
-            return SessionLine(text: "\(subagentRunningLabel(n))…", tone: .running)
+            return SessionLine(text: subagentRunningLine(n, title: s.runningSubagentTitle), tone: .running)
         }
         // Parked on a live watch that will resume it: not idle, not waiting on you, and — whatever
         // else it left running — not a background process (contract §9.2). Said in the strip's own
@@ -88,10 +102,10 @@ public struct SessionLine: Equatable, Sendable {
         if live, let watching, s.effectiveRunState == .awaitingInput {
             return SessionLine(text: watching.rowLine, tone: .watching)
         }
-        // Parked (AWAITING_INPUT) but a background process is still running — not idle, though
-        // not the agent working either (see the glyph): muted, not the working blue.
-        if live, let bg = s.runningBgCount, bg > 0 {
-            return SessionLine(text: "\(bgRunningLabel(bg))…", tone: .background)
+        // The same place for a wait the server reports and this caller holds no watch for — a
+        // scheduled wake-up, an armed auto-retry (web `resumeWords`).
+        if live, s.resumesOnItsOwn {
+            return SessionLine(text: SessionHeader.waitingToResume, tone: .watching)
         }
         // A message that never got an answer — the turn was interrupted, or failed, before any
         // reply landed — outranks the previous turn's reply: it's the newer of the two, and it's
@@ -109,6 +123,12 @@ public struct SessionLine: Equatable, Sendable {
             return SessionLine(text: r, tone: .preview)
         }
         if let a = s.lastAssistantText, !a.isEmpty { return SessionLine(text: plainPreview(a), tone: .preview) }
+        // Parked (AWAITING_INPUT) but a background process is still running. It never takes the line
+        // from the unanswered message, the recap or the reply (the owner, 2026-11-16; web parity):
+        // the glyph already says a process is up, so the words only fill a row with nothing else to say.
+        if live, let bg = s.runningBgCount, bg > 0 {
+            return SessionLine(text: "\(bgRunningLabel(bg))…", tone: .background)
+        }
         // Nothing to preview at all (a run that died before even its user turn was recorded, or an
         // older row from before the server kept the pending message). Fall back to the run's own
         // state word — the same one the console header shows — so the row still says what happened
@@ -125,9 +145,10 @@ public struct SessionLine: Equatable, Sendable {
         SessionLine(text: "\(sender(from)): \(plainPreview(text))", tone: .preview)
     }
 
-    /// The line for a message somebody outside Orbit sent — a member of a connected Feishu group
-    /// (`lastUserFromExternal`, docs/feishu-bot-design.md §8.2) — or nil for anybody else's: named the way
-    /// the conversation names them over their words, `From Feishu · <name>: …`, never "You". One message
+    /// The line for a message somebody other than the owner sent — a member of a connected Feishu group
+    /// (`lastUserFromExternal`, docs/feishu-bot-design.md §8.2) or a guest the owner invited
+    /// (docs/session-guests-design.md §3) — or nil for anybody else's: named the way the conversation
+    /// names them over their words, `From Feishu · <name>: …` or `From <name>: …`, never "You". One message
     /// has one sender; the web asks it inside `sentBy`, before another session's title.
     static func externalLine(_ text: String, _ from: ExternalMessageFrom?) -> SessionLine? {
         guard let from else { return nil }
@@ -194,6 +215,9 @@ public struct SessionLine: Equatable, Sendable {
         return s.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// The calls that launch a sub-agent (the server's RUNTIME_SUBAGENT_TOOLS, shortened by fmtTool).
+    static let subagentLaunchTools: Set<String> = ["Task", "Agent", "Workflow", "delegate"]
+
     /// Shorten a tool id for the live status line: mcp__orbit__task_create -> task_create; plain
     /// tool names (Bash, Read, Edit) pass through unchanged.
     static func fmtTool(_ name: String) -> String {
@@ -204,6 +228,16 @@ public struct SessionLine: Equatable, Sendable {
     /// word web's `subagentRunningLabel`.
     static func subagentRunningLabel(_ n: Int) -> String {
         n > 1 ? "Running \(n) agents" : "Running Agent"
+    }
+
+    /// The row's words for the same, naming what the newest one is doing when the server knows
+    /// (`runningSubagentTitle`): "Agent: Deploy …" for one, "Running 2 agents · Deploy …" for
+    /// several, the bare label without a title. The row only — the header and the glyph keep the
+    /// short label. Word for word web's `subagentRunningLine`.
+    static func subagentRunningLine(_ n: Int, title: String?) -> String {
+        let t = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if t.isEmpty { return "\(subagentRunningLabel(n))…" }
+        return n > 1 ? "\(subagentRunningLabel(n)) · \(t)…" : "Agent: \(t)…"
     }
 
     /// "Background process running" / "N background processes running".

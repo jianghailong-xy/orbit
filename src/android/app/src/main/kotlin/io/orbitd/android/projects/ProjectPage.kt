@@ -60,12 +60,14 @@ data class LandingHead(val right: String, val isClock: Boolean, val detail: Stri
  * body under that head). */
 data class LandingCard(val word: String, val title: String, val state: String, val running: Boolean, val timedOut: Boolean, val what: String?,
     val jobs: List<Job>, val target: String?, val clock: String, val clockLabel: String, val wait: String?, val updated: String?,
-    val liveness: LandingLiveness?, val detail: String?, val retryJobId: String?, val mergeJob: Boolean = false) {
+    val liveness: LandingLiveness?, val detail: String?, val retryJobId: String?, val mergeJob: Boolean = false,
+    val skipTaskId: String? = null, val skipNote: String? = null) {
     /** One job in flight, as the card's body draws it: its task's title (null for a job that lands no task) and its own state.
      * `landingSessionId` is the landing it belongs to (§2.9), or null where the server named none; `mergeJob` is a round of
      * merging into main, whose way in is the merge card — its row carries no "Open landing ›". */
     data class Job(val jobId: String, val taskId: String?, val title: String?, val state: String, val running: Boolean, val timedOut: Boolean,
-        val retryable: Boolean, val detail: String?, val landingSessionId: String? = null, val mergeJob: Boolean = false)
+        val retryable: Boolean, val detail: String?, val landingSessionId: String? = null, val mergeJob: Boolean = false,
+        val skippable: Boolean = false, val skipCheck: String? = null)
     val head: LandingHead get() = ProjectPage.landingHead(state, timedOut, clockLabel, clock, wait, updated, liveness)
 }
 /** One job of the list the landing row opens, drawn as the row itself: `taskId` is what a press opens, `detail` what a timed-out or
@@ -73,7 +75,7 @@ data class LandingCard(val word: String, val title: String, val state: String, v
  * `landingSessionId` is the landing this job belongs to (§2.9); `mergeJob` is a round of merging into main, whose row's only way in
  * is "Open landing ›" — the merge card is that round's other way. */
 data class LandingJobLine(val jobId: String, val taskId: String?, val line: LandingLine, val detail: String?, val retryable: Boolean,
-    val landingSessionId: String? = null, val mergeJob: Boolean = false)
+    val landingSessionId: String? = null, val mergeJob: Boolean = false, val skippable: Boolean = false, val skipCheck: String? = null)
 data class Pill(val label: String, val tone: TagTone)
 data class Tag(val text: String, val tone: TagTone)
 data class TaskGroup(val key: String, val heading: String, val tasks: List<JsonObject>, val settled: Boolean = false)
@@ -148,6 +150,14 @@ object ProjectPage {
     const val landingOnto = "onto"
     const val landingNothingToDo = "Nothing to do — it lands on its own."
     const val landingAllJobs = "All jobs"
+    const val landingSkipCheck = "Land without the check"
+    const val landingSkipCheckConfirm = "The landing check won't run for this landing. It stops now and lands again without the check, recorded as skipped by you."
+    const val landingSkipCheckGo = "Land without it"
+    const val landingSkipCheckCancel = "Keep checking"
+    const val landingSkipCheckFailed = "Could not skip the check"
+    const val landingSkipCheckReason = "The owner chose to land this without waiting for the landing check."
+    const val landingSkipCheckStopping = "Stopping — it lands again without the landing check."
+    const val landingSkipCheckSkipped = "Landing without the landing check — you skipped it."
     /** "waited 1m 20s": the wait as a clause of the head's one line (iOS 3b23aa163). */
     const val landingWaited = "waited"
     // §7.2 V6's words (board docs/mocks/landing-session/v4, 05), every one of them declared in OrbitKit's ProjectPage.swift
@@ -165,6 +175,9 @@ object ProjectPage {
     const val landingTakenOver = "Taken over"
     const val landingFirstStarted = "first started"
     const val landingUsually = "usually"
+    /** The state word of a claimed job waiting for its runner's local lock: it has not started its work, so it is not fetching and has
+     * no output to be quiet about (web `LANDING_LIVENESS_WORDS.WAITING`). */
+    const val landingWaiting = "waiting"
     /** "round 2 of 3" for a task's landing, "round 1" for a merge check or a merge into main (iOS `landingRoundClause`): the M is the
      * kind's own most rounds per claim (`ExceptionCards.landTaskRoundsPerClaim`), never the check's count, and a kind with one round —
      * or one this client does not know — names no M. */
@@ -224,7 +237,7 @@ object ProjectPage {
         return liveLine(word, what, running, inFlight.text("phase"), inFlight.text("startedAt"), inFlight.text("heartbeatAt"), now, updatedAt, unavailable, main,
             silent, wait, inFlight.text("runner"), inFlight.text("kind"), inFlight.number("claim"), inFlight.number("round"), inFlight.obj("check"),
             inFlight.text("stepStartedAt"), inFlight.text("outputMovedAt"), inFlight.number("typicalMs"), inFlight.text("liveness"),
-            firstStartedAt(view, inFlight.text("jobId")))
+            firstStartedAt(view, inFlight.text("jobId")), inFlight.obj("blockingReason"))
     }
 
     /** When the attempt behind a job FIRST started: the `landTask` row's own `startedAt` is the column a claim leaves alone across
@@ -256,15 +269,22 @@ object ProjectPage {
         val jobs = landingJobLines(view, now, updatedAt, refreshFailed, zone).map { job ->
             // A merge job lands no single task, so its row is named by its word — "Merge to main", "Merge check" — not left blank.
             LandingCard.Job(job.jobId, job.taskId, job.line.what ?: job.line.word, job.line.state, job.line.running,
-                job.line.timedOut, job.retryable, job.detail, job.landingSessionId, job.mergeJob)
+                job.line.timedOut, job.retryable, job.detail, job.landingSessionId, job.mergeJob, job.skippable, job.skipCheck)
         }
         // The line's own rule for the name slot, one row down: several jobs are a count in the head and a row each in the body.
         val several = view.n("integratingCount") + view.n("queuedCount") > 1
         val lead = jobs.firstOrNull()
+        val singleJob = jobs.singleOrNull()?.takeUnless { several }
+        val skipTaskId = singleJob?.takeIf { it.skippable }?.taskId?.takeIf { it.isNotEmpty() }
+        val skipNote = when (singleJob?.skipCheck) {
+            "STOPPING" -> landingSkipCheckStopping
+            "SKIPPED" -> landingSkipCheckSkipped
+            else -> null
+        }
         return LandingCard(line.word, if (several) listOfNotNull(line.word, line.what).joinToString(" ") else line.word, line.state, line.running,
             line.timedOut, if (several) null else line.what, jobs, lead?.let { landingTarget(view, it.jobId) }, line.clock, line.clockLabel, line.wait,
             line.updated, line.liveness, if (line.timedOut) lead?.detail else null, lead?.takeIf { it.retryable }?.jobId,
-            !several && ProjectMergeCard.isMergeJob(view.obj("inFlight")))
+            !several && ProjectMergeCard.isMergeJob(view.obj("inFlight")), skipTaskId, skipNote)
     }
 
     /** The branch a job lands on, short, off the project's own landings (`landTasks[].integration.landTask`) — the task page's Target
@@ -289,9 +309,9 @@ object ProjectPage {
                     job.text("heartbeatAt"), now, updatedAt, unavailable, main, runner = job.text("runnerName"), kind = job.text("kind"),
                     claim = job.number("claim"), round = job.number("round"), check = job.obj("check"), stepStartedAt = job.text("stepStartedAt"),
                     outputMovedAt = job.text("outputMovedAt"), typicalMs = job.number("typicalMs"), livenessWord = job.text("liveness"),
-                    firstStartedAt = firstStartedAt(view, job.text("jobId")))
+                    firstStartedAt = firstStartedAt(view, job.text("jobId")), blockingReason = job.obj("blockingReason"))
             LandingJobLine(job.text("jobId").orEmpty(), job.text("taskId"), line, landingJobDetail(job, zone, main), job.flag("retryable"),
-                job.text("landingSessionId")?.takeIf { it.isNotEmpty() }, mergeJob)
+                job.text("landingSessionId")?.takeIf { it.isNotEmpty() }, mergeJob, job.flag("skippable"), job.text("skipCheck"))
         }
     }
 
@@ -304,7 +324,7 @@ object ProjectPage {
      * than 90 s; SILENT freezes it at the runner's last word, and LEGACY at the read it came with (iOS `landingLiveness`). */
     private fun landingLiveness(liveness: String?, running: Boolean, startedAt: String?, heartbeatAt: String?, kind: String?, claim: Int?, round: Int?,
         check: JsonObject?, stepStartedAt: String?, outputMovedAt: String?, typicalMs: Int?, runner: String?, firstStartedAt: String?,
-        now: Instant, updatedAt: Instant?): LandingLiveness? {
+        now: Instant, updatedAt: Instant?, lockWait: String? = null): LandingLiveness? {
         if (liveness == null || liveness == "LEASE_EXPIRED" || !running) return null
         val stepStart = ProjectTime.parse(stepStartedAt ?: startedAt.orEmpty())
         val heartbeat = heartbeatAt?.let(ProjectTime::parse)
@@ -323,7 +343,9 @@ object ProjectPage {
         // the 360 dp Android card) elide everything past it, and the board says the liveness there — "checking · output 1s ago"
         // (v4 04 and 07). The claim, round and the usual duration follow it and are read in full on the wider rows.
         val clauses = mutableListOf<String>()
-        when (liveness) {
+        // A job waiting for its runner's local lock has not started: what holds it leads the line, and the step's clock is the wait's.
+        if (lockWait != null) clauses += lockWait
+        else when (liveness) {
             "LIVE" -> if (outputMoved != null) clauses += "${landingOutput.replaceFirstChar { it.lowercase() }} " +
                 "${max(0, Math.round(seconds(outputMoved, now)))}s ago"
             "QUIET" -> {
@@ -352,13 +374,21 @@ object ProjectPage {
         return LandingLiveness(if (budget != null) "$stepClock $landingOf ${budget}m" else stepClock, clauses, ticking)
     }
 
+    /** The server's sentence about a claimed job waiting for its runner's local lock, naming the job holding it — or null for any
+     * other job. A SILENT runner keeps its own words (web `localLockWait`). */
+    private fun localLockWait(running: Boolean, liveness: String?, blockingReason: JsonObject?): String? {
+        if (!running || liveness == "SILENT" || liveness == "LEASE_EXPIRED") return null
+        return if (blockingReason?.text("code") == "WAITING_LOCAL_LOCK") blockingReason.text("summary") else null
+    }
+
     /** A job running or waiting its turn. `unavailable` freezes the clock at the last update the app had and stops the row claiming
      * activity; `silent` freezes it at the last REPORT instead — the same freeze, reached from the runner's silence rather than this
      * app's read — and the freshness slot then says where the reports stand rather than a false "Updated". */
     private fun liveLine(word: String, what: String?, running: Boolean, phase: String?, startedAt: String?, heartbeatAt: String?, now: Instant,
         updatedAt: Instant?, unavailable: Boolean, main: String, silent: Boolean = false, wait: String? = null, runner: String? = null,
         kind: String? = null, claim: Int? = null, round: Int? = null, check: JsonObject? = null, stepStartedAt: String? = null, outputMovedAt: String? = null,
-        typicalMs: Int? = null, livenessWord: String? = null, firstStartedAt: String? = null): LandingLine {
+        typicalMs: Int? = null, livenessWord: String? = null, firstStartedAt: String? = null, blockingReason: JsonObject? = null): LandingLine {
+        val lockWait = localLockWait(running, livenessWord, blockingReason)
         // A queued job's heartbeat and phase can be an earlier claim's: only a running job's count.
         val reported = heartbeatAt?.let(ProjectTime::parse)
         val lastUpdate = if (running) reported ?: updatedAt else updatedAt
@@ -367,9 +397,10 @@ object ProjectPage {
         val elapsed = startedAt?.let(ProjectTime::parse)?.let { seconds(it, elapsedAt) } ?: 0.0
         val report = if (silent) (if (reported != null) age?.let { landingNoReportFor(it) } else null) ?: landingNoReportYet
             else age?.let { if (it == 0) "Updated just now" else "Updated ${it}m ago" }
-        val state = when { unavailable -> "Update unavailable"; silent -> landingNoReport; running -> phaseWords(main)[phase] ?: "running"; else -> "queued" }
+        val state = when { unavailable -> "Update unavailable"; silent -> landingNoReport; running && lockWait != null -> landingWaiting
+            running -> phaseWords(main)[phase] ?: "running"; else -> "queued" }
         val v6 = if (unavailable) null else landingLiveness(livenessWord, running, startedAt, heartbeatAt, kind, claim, round, check, stepStartedAt,
-            outputMovedAt, typicalMs, runner, firstStartedAt, now, updatedAt)
+            outputMovedAt, typicalMs, runner, firstStartedAt, now, updatedAt, lockWait)
         // A legacy claim's runner reports only between steps, so its quiet is not a stall: the ring keeps turning and the line says
         // why. SILENT is the state that stops it.
         return LandingLine(word, what, running && !unavailable && !silent && livenessWord != "SILENT", state,
@@ -514,7 +545,7 @@ object ProjectPage {
     const val startNewCoordinator = "Start a new coordinator"
     fun startNewCoordinatorDetail(finished: Boolean) = if (finished)
         "Opens empty. This conversation stays completed and readable, and stops being the one this project is coordinated from."
-        else "Completes this conversation first, then opens an empty one. Nothing is deleted — it stays readable."
+        else "Completes this conversation first, then opens an empty one here. Nothing is deleted — it stays readable."
     const val replaceCoordinatorQuestion = "Complete this conversation and start a new coordinator?"
     const val replaceCoordinatorDetail = "The current conversation is completed — a turn in flight finishes first — and this project starts coordinating from a new, empty one. Nothing is deleted: the completed conversation stays readable."
     const val replaceCoordinatorConfirm = "Complete and start a new one"
@@ -523,21 +554,16 @@ object ProjectPage {
     // MARK: open items
     const val openItemsHeading = "Open items"
     const val needsYouGroup = "Needs you"
-    const val withCoordinatorGroup = "With the coordinator"
     const val noOpenItems = "No open items"
-    const val noActionNeeded = "No action needed from you"
-    const val nothingWaiting = "Nothing is waiting on you or the coordinator."
     const val openItemsUnread = "Open items couldn't be loaded"
     /** What the toolbar's Open items says aloud before its read has answered, or once it has failed. */
     const val openItemsLoading = "Loading"
     const val openItemsCantLoad = "Couldn't load open items"
     const val closeOpenItems = "Close open items"
-    /** The toolbar counts every open item; only the owner's share raises a reminder on the page (`OpenItemsSummary`). */
-    data class OpenItemsSummary(val needsYou: Int, val withCoordinator: Int) {
-        val count get() = needsYou + withCoordinator
+    data class OpenItemsSummary(val needsYou: Int) {
+        val count get() = needsYou
         val attention get() = if (needsYou <= 0) null else if (needsYou == 1) "1 item needs you" else "$needsYou items need you"
-        val subtitle get() = if (count == 0) noOpenItems
-            else (attention ?: noActionNeeded).let { if (withCoordinator > 0) "$it · $withCoordinator with the coordinator" else it }
+        val subtitle get() = attention ?: noOpenItems
     }
     /** A missing read is not an empty inbox. A start request counts only while the page can answer it, and the coordinator's
      * request to record the project done while it is OPEN; the owner's own Start… and Record as done… are actions nobody waits on. */
@@ -545,7 +571,7 @@ object ProjectPage {
         if (items == null) return null
         val asked = StartProjectCopy.pageRow(ProjectDoc.status(doc), ProjectDoc.started(doc), items) is StartProjectCopy.PageRow.Asked
         val done = ProjectDone.live(items, ProjectDoc.status(doc)) != null
-        return OpenItemsSummary(needsYouRows(items).size + (if (asked) 1 else 0) + (if (done) 1 else 0), items.objects("withCoordinator").size)
+        return OpenItemsSummary(needsYouRows(items).size + (if (asked) 1 else 0) + (if (done) 1 else 0))
     }
     /** The owner's rows, without the request to record the project done should a server ever list it there too: it has a row of
      * its own (`ProjectDone.PageRow`). */
@@ -1118,7 +1144,8 @@ object StartProjectCopy {
     }
     /** `upstreamRef` is the main branch as a full ref: a coordinator's suggestion, or the one the project already stands on. */
     data class Settings(val line: String, val projectBranchName: String?, val automatic: Boolean, val maxConcurrentTasks: Int, val mergeCheckCommand: String?,
-        val upstreamRef: String? = null)
+        val upstreamRef: String? = null, val landingCheckCommand: String? = null,
+        val landingCheckTimeoutSeconds: Int? = null, val mergeCheckTimeoutSeconds: Int? = null)
     /** `StartProject.defaultSettings`: the decided line, else a branch when the plan has dependencies — and the main branch the
      * project already stands on, which a start that names none would keep (the card's own order puts the owner's choices first). */
     fun defaultSettings(view: JsonObject?, maxConcurrentTasks: Int?, graph: DependencyGraph?): Settings {
@@ -1126,7 +1153,8 @@ object StartProjectCopy {
         val line = decided ?: if (graph?.let(::planHasDependencies) == true) "PROJECT_BRANCH" else "MAIN"
         val branch = if (decided == "PROJECT_BRANCH") view?.text("ref")?.takeIf { it.isNotEmpty() }?.let { "refs/heads/$it" } else null
         return Settings(line, branch, true, maxConcurrentTasks ?: 1, view?.text("mergeCheckCommand"),
-            view?.text("upstreamRef")?.takeIf { it.isNotEmpty() }?.let(RunSettings::mainBranchRef))
+            view?.text("upstreamRef")?.takeIf { it.isNotEmpty() }?.let(RunSettings::mainBranchRef),
+            view?.text("landingCheckCommand"), view?.number("landingCheckTimeoutSeconds"), view?.number("mergeCheckTimeoutSeconds"))
     }
 
     /** The main branch a start opens with, by name: the first of the one this project's owner already chose for it, the one they
@@ -1147,15 +1175,17 @@ object StartProjectCopy {
         val count = settings.number("maxConcurrentTasks")?.takeIf { it >= 0 } ?: return null
         val check = when (val value = settings["mergeCheckCommand"]) { null, JsonNull -> null; is JsonPrimitive -> if (value.isString) value.content else return null; else -> return null }
         val digest = asked.text("criteriaDigest") ?: return null
-        return Request(Settings(line, settings.text("projectBranchName"), automatic, count, check, settings.text("upstreamRef")), asked.text("why").orEmpty(), digest)
+        return Request(Settings(line, settings.text("projectBranchName"), automatic, count, check, settings.text("upstreamRef"),
+            settings.text("landingCheckCommand"), settings.number("landingCheckTimeoutSeconds"), settings.number("mergeCheckTimeoutSeconds")), asked.text("why").orEmpty(), digest)
     }
     /** The settings as the card edits them — opened with Automatic on whatever was suggested (`StartSettingsDraft`). `upstream` is
      * the main branch by name, `refs/heads/` left off: what the row shows and the picker takes — null for a project with no
      * repository, which has no main branch to choose, and for an integration read that did not answer. `deliveryMode` is how the work
      * reaches it (§10.5 O-L1, A-Q21) — null where the card offers no choice: a read that does not say, or a server that predates it. */
     data class Draft(val line: String, val automatic: Boolean, val maxConcurrentTasks: Int, val mergeCheckCommand: String = "",
-        val upstream: String? = null, val deliveryMode: String? = null) {
-        val complete get() = (line == "MAIN" || line == "PROJECT_BRANCH") && maxConcurrentTasks in 1..StartProjectCopy.maxConcurrentTasks
+        val upstream: String? = null, val deliveryMode: String? = null, val landingCheckCommand: String = "",
+        val landingCheckTimeoutSeconds: Int? = null, val mergeCheckTimeoutSeconds: Int? = null) {
+        val complete get() = (line == "MAIN" || line == "PROJECT_BRANCH") && maxConcurrentTasks in 1..StartProjectCopy.maxConcurrentTasks && (landingCheckTimeoutSeconds == null || landingCheckTimeoutSeconds > 0)
         val hasMergeCheck get() = mergeCheckCommand.isNotBlank()
         /** The branch every sentence about where work goes names: the one on the card, or main for a project with none. */
         val main get() = upstream ?: RunSettings.defaultMainBranch
@@ -1167,7 +1197,8 @@ object StartProjectCopy {
              * on a line that stays main, and otherwise on PLATFORM, the default. */
             fun of(settings: Settings, view: JsonObject? = null) = Draft(settings.line, true, settings.maxConcurrentTasks, settings.mergeCheckCommand.orEmpty(),
                 if (ProjectMainBranch.repository(view) != null) startMainBranch(settings.upstreamRef, view) else null,
-                view?.text("deliveryMode")?.let { RunSettings.delivery(settings.line, it) })
+                view?.text("deliveryMode")?.let { RunSettings.delivery(settings.line, it) }, settings.landingCheckCommand.orEmpty(),
+                settings.landingCheckTimeoutSeconds, settings.mergeCheckTimeoutSeconds)
         }
     }
     /** `StartProject.body`: the seal, every setting, and the request answered — the branch only with a project branch, a blank check
@@ -1180,6 +1211,11 @@ object StartProjectCopy {
         draft.upstream?.let { put("upstreamRef", RunSettings.mainBranchRef(it)) }
         put("automatic", draft.automatic); put("maxConcurrentTasks", draft.maxConcurrentTasks)
         put("mergeCheckCommand", if (check.isEmpty()) JsonNull else JsonPrimitive(check))
+        if (draft.line == "PROJECT_BRANCH") {
+            put("landingCheckCommand", draft.landingCheckCommand.takeIf { it.isNotBlank() }?.let(::JsonPrimitive) ?: JsonNull)
+            put("landingCheckTimeoutSeconds", draft.landingCheckTimeoutSeconds?.let(::JsonPrimitive) ?: JsonNull)
+        }
+        put("mergeCheckTimeoutSeconds", draft.mergeCheckTimeoutSeconds?.let(::JsonPrimitive) ?: JsonNull)
         // With a main line only: the door refuses AGENT_PUSH anywhere else, and a card that offered no choice records none.
         if (draft.line == "MAIN") draft.deliveryMode?.let { put("deliveryMode", it) }
         put("requestId", requestId?.let(::JsonPrimitive) ?: JsonNull)
@@ -1306,8 +1342,8 @@ object RunSettings {
     const val mergeCheckNoneSays = "Work lands once it rebases cleanly."
     const val atMost = "At most"
     const val mergeCheck = "Merge check"
-    const val mergeCheckHint = "Runs on the combined tree before anything lands — on the project branch and again before main."
-    fun mergeCheckHint(main: String) = "Runs on the combined tree before anything lands — on the project branch and again before $main."
+    const val mergeCheckHint = "Runs before merging into main."
+    fun mergeCheckHint(main: String) = "Runs before merging into $main."
     /** …while the agent pushes its own work: the check is the agent's, on its work rebased onto main, and Orbit runs none. */
     fun mergeCheckHintAgentPush(main: String) = "Run by the agent before it pushes, on its work rebased onto $main. Orbit doesn’t run it."
     const val mergeCheckPlaceholder = "No check — work lands once it rebases cleanly"

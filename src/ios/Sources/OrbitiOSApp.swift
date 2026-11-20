@@ -69,19 +69,30 @@ struct OrbitiOSApp: App {
                         model.consoleRegistry?.persistAll()
                         model.persistLaunchSnapshot()
                     case .active:
+                        // Share to Orbit: opened within ten minutes of a share, Orbit goes to it
+                        // (docs/share-to-orbit-design.md §3.1) — after a banner pass too, since a
+                        // share sheet over another app is exactly such a trip.
+                        model.noticeSharedItems(launching: false)
                         // Only after a genuine background trip: a socket suspended there may be dead
                         // but not yet erroring, so kick the open consoles + the user-level
                         // control-plane stream to reconnect instead of waiting out URLSession's long
                         // read timeout. Coming back from a banner has nothing to repair.
                         guard didBackground else { break }
                         didBackground = false
+                        // What started waiting while away is the lists' to show, not a burst of
+                        // notices on the way back in (docs/mocks/needs-you-capsule/12-once).
+                        model.retakeNeedsYouStock()
                         model.consoleRegistry?.reconnectAll()
                         model.kickControlPlane()
                     default:
                         break
                     }
                 }
-                .task { model.bootstrap() }
+                .task {
+                    model.bootstrap()
+                    // A share left in the App Group inbox: sweep a day-old one, open a fresh one.
+                    model.noticeSharedItems(launching: true)
+                }
         }
     }
 }

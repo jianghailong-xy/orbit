@@ -1,5 +1,9 @@
 import { createHash } from 'node:crypto';
 
+import type {
+  CriterionConfirmationStanding,
+  CriterionSatisfiedByValue,
+} from './project-criterion-confirmation';
 import { Logger } from '@nestjs/common';
 import type { PushService } from '../push/push.service';
 import { Prisma, ProjectStatus } from '@prisma/client';
@@ -159,6 +163,11 @@ export interface DerivedDoneCriterion {
    *  set on every criterion that is not LANDED, and on a LANDED one that had nothing to land. Null
    *  exactly when it is on main by work of its own. A card groups by this and decides nothing. */
   landingReason: CriterionLandingReason | null;
+  /** How it is met (migration 0545), and — for a CONFIRMATION criterion — who confirmed which
+   *  revision, when, with what note, and whether that confirmation has gone stale. Optional for the
+   *  fixtures that build a criterion by hand; `derivedDoneFromLanes` always sets both. */
+  satisfiedBy?: CriterionSatisfiedByValue;
+  confirmation?: CriterionConfirmationStanding | null;
 }
 
 /**
@@ -188,6 +197,12 @@ export interface DerivedProjectDone {
   criteria: DerivedDoneCriterionAnswer[];
   confirmation: StandardSetConfirmationState;
   counts: DerivedDoneCounts;
+  /**
+   * Always false since revision 42 (§12.15 P-M3): the non-code mark (`project.non_code`, migration
+   * 0535) is no longer read. A project none of whose tasks delivered a commit reads every criterion
+   * LANDED from that fact, with no mark. Kept so clients that read it still decode.
+   */
+  nonCode: boolean;
 }
 
 /**
@@ -257,6 +272,7 @@ export function deriveProjectDone(
     criteria: answers,
     confirmation,
     counts: derivedDoneCounts(answers),
+    nonCode: false,
   };
 }
 
@@ -385,7 +401,9 @@ export async function readDerivedProjectDoneReading(
   );
   const landing = criterionLandingWithReasons(landingFacts, branches, inFlight);
   return {
-    derived: derivedDoneFromLanes(satisfaction, landing, independence, standing.state),
+    derived: derivedDoneFromLanes(
+      satisfaction, landing, independence, standing.state,
+    ),
     standing,
     satisfaction,
     inFlight,
@@ -404,15 +422,23 @@ export interface CriterionLandingWithReason extends CriterionLandingAnswer {
  * two cannot describe different work.
  */
 export function criterionLandingWithReasons(
-  facts: ReadonlyArray<{ id: string; servingTasks: ReadonlyArray<LandingReasonServingTask> }>,
+  facts: ReadonlyArray<{
+    id: string;
+    satisfiedBy?: 'TASKS' | 'CONFIRMATION';
+    servingTasks: ReadonlyArray<LandingReasonServingTask>;
+  }>,
   branches: LandingBranches,
   inFlight: readonly InFlightLandingJob[],
 ): CriterionLandingWithReason[] {
-  const serving = new Map(facts.map((definition) => [definition.id, definition.servingTasks]));
+  const byId = new Map(facts.map((definition) => [definition.id, definition]));
   return criterionLanding(facts, branches).map((answer) => ({
     ...answer,
     landingReason: criterionLandingReason(
-      { landing: answer.landing, servingTasks: serving.get(answer.definitionId) ?? [] },
+      {
+        landing: answer.landing,
+        servingTasks: byId.get(answer.definitionId)?.servingTasks ?? [],
+        satisfiedBy: byId.get(answer.definitionId)?.satisfiedBy,
+      },
       branches,
       inFlight,
     ),
@@ -457,6 +483,8 @@ export function derivedDoneFromLanes(
     landingReason: landed.has(row.definitionId)
       ? landed.get(row.definitionId)!.landingReason
       : ('NO_RECEIPT' satisfies CriterionLandingReason),
+    satisfiedBy: row.satisfiedBy,
+    confirmation: row.confirmation,
   }));
 
   return deriveProjectDone(criteria, confirmation);

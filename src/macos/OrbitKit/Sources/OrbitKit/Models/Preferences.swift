@@ -2,23 +2,22 @@ import Foundation
 
 // User preferences, mirroring users.controller `me` / `me/preferences` (UpdatePreferencesDto).
 // The PATCH body is a partial set shallow-merged server-side: an omitted key keeps its value.
-// `defaultModels` also merges its provider entries, preserving the other providers' choices.
+// Compatibility: the server still accepts `defaultModels` from older clients, but nothing reads it; this
+// client neither decodes nor writes it (a draft's model is the workspace's `lastModel`).
 // `theme` / `defaultPermissionMode` are kept as `String` (not enums) so an unknown future value
 // decodes rather than throwing — the app maps known values and ignores the rest.
 
 public struct UserPreferences: Codable, Equatable, Sendable {
     public let theme: String?                  // "system" | "light" | "dark"
     public let defaultModel: String?
-    /// Last-picked model per provider, synced across clients.
-    public let defaultModels: [String: String]?
     public let defaultPermissionMode: String?
     /// Account-wide default reasoning effort for a new session (last-picked-wins). "" = model
     /// default; otherwise an `Effort` raw value. Synced so a value chosen on web seeds new
     /// sessions here, and vice-versa (replaces web's per-browser localStorage).
     public let defaultEffort: String?
-    /// Whether this account's sessions may orchestrate — spawn and drive other sessions via the orbit
-    /// MCP session tools. One switch for every workspace, enforced server-side on each claim, spawn
-    /// and call. Absent means on; only opting out is ever written.
+    /// Whether this account's sessions may orchestrate — spawn and drive other sessions, and manage the
+    /// account's agents and runners, via the orbit MCP tools and CLI. One switch for every workspace,
+    /// enforced server-side on each claim, spawn and call. Absent means on; only opting out is ever written.
     public let enableOrchestration: Bool?
     /// Whether a session settling — finished on its own, or failed for good — pushes an alert to
     /// this account's devices. Absent means on; only opting out is ever written.
@@ -26,8 +25,8 @@ public struct UserPreferences: Codable, Equatable, Sendable {
     /// Whether an agent may push a line of its own (the `notify` tool / `orbit notify`) to this
     /// account's devices. Absent means on; only opting out is ever written.
     public let notifyAgentMessage: Bool?
-    /// The account's master switch for smart model selection (docs/model-routing-design.md). Off
-    /// unless it is exactly `true`: absent, or anything but a boolean, decodes nil and reads as off
+    /// The account's master switch for smart model selection (docs/model-routing-design.md). On
+    /// unless it is exactly `false`: absent, or anything but a boolean, decodes nil and reads as on
     /// (`smartModelSelection`), so a stray value never fails the whole `me` payload.
     public let modelRouting: Bool?
     /// Whether this account's Claude sessions offer the next message it would probably type once a
@@ -38,25 +37,46 @@ public struct UserPreferences: Codable, Equatable, Sendable {
     /// a session's list row in place of its raw last reply. Absent means on; only opting out is ever
     /// written. Tolerant like the two above: a stray value reads as absent rather than failing `me`.
     public let recaps: Bool?
+    /// Settings › Translation (@orbit/shared translation.ts): whether the owner's messages and the
+    /// agent's replies are translated. Absent means off. Tolerant like the three above.
+    public let translationEnabled: Bool?
+    /// "Your language" (a `TranslationLanguage` raw value), kept as a String so an unknown future
+    /// language decodes; `SessionTranslation.language` maps it, absent or unknown being the default pick.
+    public let translationLanguage: String?
+    /// "Agents work in", kept as a String like the one above; `SessionTranslation.agentLanguage` maps
+    /// it, absent or unknown being English.
+    public let translationAgentLanguage: String?
+    /// "Show both languages": each translated message also shows the words the agent read or
+    /// wrote, in the agent language. Absent means off; drawn only while `translationEnabled` is on. Tolerant like the above.
+    public let translationBilingual: Bool?
+    /// The providers SubAgents may not use, by slug (docs/subagent-design.md §7). Absent: none blocked.
+    public let subagentBlockedProviders: [String]?
+    /// Settings › Prompt optimizer (@orbit/shared prompt-optimizer.ts): whether the composer offers
+    /// ✦ Optimize. Absent means on; only an explicit `false` turns it off (owner's decision of
+    /// 2026-11-16) — read it through `PromptOptimizer.switchedOn`. Tolerant like the switches above.
+    public let promptOptimizer: Bool?
+    /// Settings › Optimize For (board docs/mocks/routing-mode-account, approved 2026-11-19): the one
+    /// account-wide pick SubAgents and smart-selected tasks rank providers by — "cost", "balance" or
+    /// "intelligence". Absent means Balance; kept as a String so an unknown future value decodes.
+    public let optimizeFor: String?
 
-    /// Whether smart model selection is on for this account — only an explicit `true` turns it on.
-    public var smartModelSelection: Bool { modelRouting == true }
+    /// Whether smart model selection is on for this account — on unless explicitly turned off.
+    public var smartModelSelection: Bool { modelRouting != false }
     /// Whether suggested replies are on for this account — on unless explicitly turned off.
     public var suggestedReplies: Bool { promptSuggestions != false }
     /// Whether session recaps are on for this account — on unless explicitly turned off.
     public var showRecaps: Bool { recaps != false }
 
     private enum CodingKeys: String, CodingKey {
-        case theme, defaultModel, defaultModels, defaultPermissionMode, defaultEffort
+        case theme, defaultModel, defaultPermissionMode, defaultEffort
         case enableOrchestration, notifySessionFinished, notifyAgentMessage, modelRouting, promptSuggestions
-        case recaps
+        case recaps, translationEnabled, translationLanguage, translationAgentLanguage, translationBilingual, subagentBlockedProviders, promptOptimizer, optimizeFor
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         theme = try c.decodeIfPresent(String.self, forKey: .theme)
         defaultModel = try c.decodeIfPresent(String.self, forKey: .defaultModel)
-        defaultModels = try c.decodeIfPresent([String: String].self, forKey: .defaultModels)
         defaultPermissionMode = try c.decodeIfPresent(String.self, forKey: .defaultPermissionMode)
         defaultEffort = try c.decodeIfPresent(String.self, forKey: .defaultEffort)
         enableOrchestration = try c.decodeIfPresent(Bool.self, forKey: .enableOrchestration)
@@ -65,7 +85,30 @@ public struct UserPreferences: Codable, Equatable, Sendable {
         modelRouting = (try? c.decodeIfPresent(Bool.self, forKey: .modelRouting)) ?? nil
         promptSuggestions = (try? c.decodeIfPresent(Bool.self, forKey: .promptSuggestions)) ?? nil
         recaps = (try? c.decodeIfPresent(Bool.self, forKey: .recaps)) ?? nil
+        translationEnabled = (try? c.decodeIfPresent(Bool.self, forKey: .translationEnabled)) ?? nil
+        translationLanguage = (try? c.decodeIfPresent(String.self, forKey: .translationLanguage)) ?? nil
+        translationAgentLanguage = (try? c.decodeIfPresent(String.self, forKey: .translationAgentLanguage)) ?? nil
+        translationBilingual = (try? c.decodeIfPresent(Bool.self, forKey: .translationBilingual)) ?? nil
+        subagentBlockedProviders = (try? c.decodeIfPresent([String].self, forKey: .subagentBlockedProviders)) ?? nil
+        promptOptimizer = (try? c.decodeIfPresent(Bool.self, forKey: .promptOptimizer)) ?? nil
+        optimizeFor = (try? c.decodeIfPresent(String.self, forKey: .optimizeFor)) ?? nil
     }
+}
+
+/// The account-wide "Optimize For" pick (`UserPreferences.optimizeFor`): what SubAgents and
+/// smart-selected tasks rank providers by, in the segmented control's order.
+public enum OptimizeFor: String, CaseIterable, Identifiable, Sendable {
+    case cost, balance, intelligence
+    public var id: String { rawValue }
+    public var label: String {
+        switch self {
+        case .cost: return "Cost"
+        case .balance: return "Balance"
+        case .intelligence: return "Intelligence"
+        }
+    }
+    /// An absent or unknown value reads as Balance, the server's default.
+    public init(stored: String?) { self = OptimizeFor(rawValue: stored ?? "") ?? .balance }
 }
 
 /// PATCH /users/me/preferences — only the present keys are merged; nil omits (synthesized
@@ -73,7 +116,6 @@ public struct UserPreferences: Codable, Equatable, Sendable {
 public struct UpdatePreferencesRequest: Encodable, Sendable {
     public var theme: String?
     public var defaultModel: String?
-    public var defaultModels: [String: String]?
     public var defaultPermissionMode: String?
     public var defaultEffort: String?
     public var enableOrchestration: Bool?
@@ -82,14 +124,30 @@ public struct UpdatePreferencesRequest: Encodable, Sendable {
     public var modelRouting: Bool?
     public var promptSuggestions: Bool?
     public var recaps: Bool?
-    public init(theme: String? = nil, defaultModel: String? = nil, defaultModels: [String: String]? = nil,
+    public var translationEnabled: Bool?
+    public var translationLanguage: String?
+    public var translationAgentLanguage: String?
+    public var translationBilingual: Bool?
+    /// Replaces the whole blocked list.
+    public var subagentBlockedProviders: [String]?
+    /// Settings › Prompt optimizer's switch.
+    public var promptOptimizer: Bool?
+    /// Settings › Optimize For: an `OptimizeFor` raw value.
+    public var optimizeFor: String?
+    public init(theme: String? = nil, defaultModel: String? = nil,
                 defaultPermissionMode: String? = nil,
                 defaultEffort: String? = nil, enableOrchestration: Bool? = nil,
                 notifySessionFinished: Bool? = nil, notifyAgentMessage: Bool? = nil,
-                modelRouting: Bool? = nil, promptSuggestions: Bool? = nil, recaps: Bool? = nil) {
+                modelRouting: Bool? = nil, promptSuggestions: Bool? = nil, recaps: Bool? = nil,
+                translationEnabled: Bool? = nil, translationLanguage: String? = nil,
+                translationAgentLanguage: String? = nil,
+                translationBilingual: Bool? = nil,
+                subagentBlockedProviders: [String]? = nil, promptOptimizer: Bool? = nil,
+                optimizeFor: String? = nil) {
+        self.promptOptimizer = promptOptimizer
+        self.optimizeFor = optimizeFor
         self.theme = theme
         self.defaultModel = defaultModel
-        self.defaultModels = defaultModels
         self.defaultPermissionMode = defaultPermissionMode
         self.defaultEffort = defaultEffort
         self.enableOrchestration = enableOrchestration
@@ -98,5 +156,10 @@ public struct UpdatePreferencesRequest: Encodable, Sendable {
         self.modelRouting = modelRouting
         self.promptSuggestions = promptSuggestions
         self.recaps = recaps
+        self.translationEnabled = translationEnabled
+        self.translationLanguage = translationLanguage
+        self.translationAgentLanguage = translationAgentLanguage
+        self.translationBilingual = translationBilingual
+        self.subagentBlockedProviders = subagentBlockedProviders
     }
 }

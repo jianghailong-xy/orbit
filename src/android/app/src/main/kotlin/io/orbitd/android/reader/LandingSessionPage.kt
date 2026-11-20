@@ -26,6 +26,9 @@ import androidx.lifecycle.repeatOnLifecycle
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.R
 import io.orbitd.android.core.auth.SessionHandle
+import io.orbitd.android.core.guests.GuestSession
+import io.orbitd.android.core.guests.guestSession
+import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.cards.number
 import io.orbitd.android.core.cards.obj
 import io.orbitd.android.core.cards.text
@@ -68,7 +71,7 @@ import kotlinx.serialization.json.JsonObject
  */
 @Composable
 fun SessionDestination(app: OrbitApplication, handle: SessionHandle, route: OrbitRoute, api: DirectoryApi, data: DirectoryData,
-    open: (OrbitRoute) -> Unit, listedElsewhere: (String) -> Boolean = { false }, leave: () -> Unit = {}) {
+    open: (OrbitRoute) -> Unit, listedElsewhere: (String) -> Boolean = { false }, swap: (OrbitRoute) -> Unit = open, leave: () -> Unit = {}) {
     val id = route.id ?: return
     val listed = remember(data.sessions, id) { data.sessions.values.any { rows -> rows.any { ObjectId.same(it.id, id) } } || listedElsewhere(id) }
     var kind by remember(id) { mutableStateOf<SessionKind?>(if (listed) SessionKind.Conversation else null) }
@@ -77,7 +80,13 @@ fun SessionDestination(app: OrbitApplication, handle: SessionHandle, route: Orbi
         if (kind != null) return@LaunchedEffect
         kind = try { SessionKind.of(api.objectRead(listOf("sessions", id))) }
         catch (cancel: CancellationException) { throw cancel }
-        catch (_: Exception) { app.landingJobs.snapshot(handle, id)?.let { SessionKind.Landing(it.projectId, null) } ?: SessionKind.Conversation }
+        catch (failure: Exception) {
+            app.landingJobs.snapshot(handle, id)?.let { SessionKind.Landing(it.projectId, null) }
+                // No session of yours: one someone invited you to reply in opens its guest view here (web `WorkspaceConsole`'s
+                // `asGuest`, board docs/mocks/share-links/11-guest-one-link). Asked only once the owner's read is refused.
+                ?: (if (failure is ApiError && failure.status in setOf(403, 404)) guestKind(app, handle, id) else null)
+                ?: SessionKind.Conversation
+        }
     }
     when (val shown = kind) {
         null -> Box(Modifier.fillMaxSize().testTag("session-opening"), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
@@ -87,14 +96,23 @@ fun SessionDestination(app: OrbitApplication, handle: SessionHandle, route: Orbi
                 Text(LandingSessionCopy.UPDATE_UNAVAILABLE, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else ProjectLandingsWindow(app, handle, route, api, shown.projectId, id, open, shown.detail)
-        SessionKind.Conversation -> SessionReader(app, handle, route, api, data, open, leave)
+        SessionKind.Conversation -> SessionReader(app, handle, route, api, data, open, leave, swap)
+        is SessionKind.Guest -> GuestSessionPage(app, handle, route, id, shown.root)
     }
 }
+
+/** The guest door's answer for [id], when it has one: the root the guest view opens on. */
+private suspend fun guestKind(app: OrbitApplication, handle: SessionHandle, id: String): SessionKind? =
+    try { SessionKind.Guest(app.session.guestSession(handle, id)) }
+    catch (cancel: CancellationException) { throw cancel }
+    catch (_: Exception) { null }
 
 /** What a session id turned out to be: a conversation, or a landing of a project (with the detail that said so, when it was read). */
 internal sealed interface SessionKind {
     data object Conversation : SessionKind
     data class Landing(val projectId: String, val detail: JsonObject?) : SessionKind
+    /** Not the reader's: a session shared with them, as the guest door first answered it. */
+    data class Guest(val root: GuestSession) : SessionKind
 
     companion object {
         fun of(detail: JsonObject): SessionKind = if (!LandingSessionModel.isLanding(detail)) Conversation
@@ -459,7 +477,7 @@ private fun LandingTimelineSectionView(section: LandingSection, view: LandingVie
     val attempt = view.currentAttempt
     val live = current && attempt?.state == "RUNNING" && !attempt.timedOut
     var openLog by remember(section.jobId) { mutableStateOf<LandingLogSelectors?>(null) }
-    val steps = remember(section) { LandingSteps.steps(section.entries, section.kind) }
+    val steps = remember(section, view.checks, attempt) { LandingSteps.steps(LandingSessionModel.scopedEntries(section.entries, view, section.jobId), section.kind) }
     Column(Modifier.fillMaxWidth().testTag("landing:section:${section.jobId}"), verticalArrangement = Arrangement.spacedBy(3.dp)) {
         if ((view.timeline?.sections?.size ?: 0) > 1) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(section.title, Modifier.testTag("landing:section-title:${section.jobId}"), style = MaterialTheme.typography.labelLarge,
@@ -528,7 +546,7 @@ private fun LandingStepRow(section: LandingSection, step: LandingStep, status: S
             Icon(painterResource(R.drawable.ic_chevron_forward), null, Modifier.size(12.dp).rotate(if (open) 90f else 0f), tint = muted.copy(alpha = 0.6f))
             Text(step.name, Modifier.testTag("landing:step-name"), style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
                 fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
-            Text(step.summary.text, Modifier.weight(1f).testTag("landing:step-summary"), style = MaterialTheme.typography.bodyMedium, color = muted,
+            Text(LandingSessionModel.timelineText(step.summary), Modifier.weight(1f).testTag("landing:step-summary"), style = MaterialTheme.typography.bodyMedium, color = muted,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(when (status) {
                 StepStatus.FAILED -> LandingStepWords.FAILED
@@ -567,7 +585,7 @@ private fun LandingEntryLine(section: LandingSection, index: Int, entry: Landing
             val mark = landingMark(entry, section.kind, section.entries, index)
             Text(mark.first, Modifier.width(16.dp).testTag("landing:mark:$index"), style = MaterialTheme.typography.bodySmall,
                 color = mark.second)
-            Text(entry.text, Modifier.weight(1f).testTag("landing:entry:$index"), style = MaterialTheme.typography.bodyMedium)
+            Text(LandingSessionModel.timelineText(entry), Modifier.weight(1f).testTag("landing:entry:$index"), style = MaterialTheme.typography.bodyMedium)
             if (selectors != null) {
                 TextButton(onClick = { setOpenLog(if (openLog == selectors) null else selectors) },
                     modifier = Modifier.testTag("landing:log:$index")) { Text("${LandingSessionCopy.LOG} ›", style = MaterialTheme.typography.bodySmall) }
@@ -587,7 +605,7 @@ private fun LandingEntryLine(section: LandingSection, index: Int, entry: Landing
 private fun landingMark(entry: LandingEntry, jobKind: String, entries: List<LandingEntry>, index: Int): Pair<String, Color> = when (entry.kind) {
     "TAKEN_OVER" -> "↗" to Color(0xFF0066BE)
     "CHECK_FINISHED", "RESULT", "RESULT_FALLBACK" ->
-        if (LandingSessionModel.entryOk(entry, jobKind)) "✓" to Color(0xFF247344) else "✗" to Color(0xFFB3261E)
+        if (entry.data?.text("skipped") == "PATHS_EXEMPT") "≡" to Color.Unspecified else if (LandingSessionModel.entryOk(entry, jobKind)) "✓" to Color(0xFF247344) else "✗" to Color(0xFFB3261E)
     "STOP_REQUESTED", "CANCELLED", "ABANDONED", "TIMED_OUT", "PUSH_REFUSED" -> "✗" to Color(0xFFB3261E)
     "ENQUEUED", "REQUEUED", "NEXT_GENERATION", "SKIPPED_CHECK", "FIX_TASK" -> "≡" to Color.Unspecified
     "RELEASED" -> "↩" to Color.Unspecified

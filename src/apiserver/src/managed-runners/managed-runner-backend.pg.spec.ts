@@ -80,7 +80,7 @@ test('the manager drives a mapping on a run backend with no Kubernetes in it', {
   function world(budget: CapacityBudget = ROOMY) {
     const profile = testManagedRunnerProfile();
     const backend = new MemoryRunBackend(
-      { clusterKey: `memory-${randomUUID().slice(0, 8)}`, namespace: 'orbit-managed-memory' },
+      { clusterKey: `memory-${randomUUID().slice(0, 8)}`, namespace: 'orbit-cloud-memory' },
       { budget, compute: COMPUTE, storage: STORAGE },
     );
     const clock = { ms: Date.now() };

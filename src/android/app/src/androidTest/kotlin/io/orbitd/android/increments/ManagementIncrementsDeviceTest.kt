@@ -70,7 +70,7 @@ class ManagementIncrementsDeviceTest : IncrementDeviceTest() {
     private fun machinesAndModels() {
         signIn()
         compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
-        compose.onNode(hasText("Settings") and hasClickAction()).performClick()
+        compose.onNodeWithTag("drawer:settings").performClick()
         await("Settings") { exists(hasText("Machines & models") and hasClickAction()) }
         compose.onNode(hasText("Machines & models") and hasClickAction()).performScrollTo().performClick()
         await("Machines & models") { exists(hasText("wikova"), unmerged = true) }

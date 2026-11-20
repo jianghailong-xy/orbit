@@ -1,5 +1,5 @@
 import { CURSOR_KEY_CHECK_STATES } from '@orbit/shared';
-import { IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, Matches, Min, MinLength } from 'class-validator';
+import { IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, Matches, MaxLength, Min, MinLength } from 'class-validator';
 import { IsPublicId } from '../common/public-id';
 
 // Custom providers borrow one of the configurable runtimes: `claude` for Anthropic-compatible endpoints,
@@ -80,6 +80,13 @@ export class UpdateModelProviderDto {
    *  as it is. The vendor identity itself is fixed at creation. */
   @IsOptional() @IsBoolean() followsPreset?: boolean;
   @IsOptional() @IsBoolean() enabled?: boolean;
+}
+
+/** PATCH /providers/mine/:id/model-tier (docs/subagent-design.md §7): the owner's SubAgent tier for one model of
+ *  the key, or null to clear it. Human-only: no runner door takes it. */
+export class UpdateProviderModelTierDto {
+  @IsString() @MinLength(1) @MaxLength(200) model!: string;
+  @IsOptional() @IsIn(['S', 'M', 'L', 'XL']) tier!: 'S' | 'M' | 'L' | 'XL' | null;
 }
 
 // An account pool: several of the caller's own subscription providers, dispatched under one slug of

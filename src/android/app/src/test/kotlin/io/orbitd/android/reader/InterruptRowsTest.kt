@@ -49,6 +49,27 @@ class InterruptRowsTest : ComposerShellTest() {
         shot("interrupt-rows")
     }
 
+    /** The owner's Update Now (D4): its interrupt names the release, and the turn Orbit sent to continue is one grey Orbit line, not the
+     * owner's message. */
+    @Test fun anUpdateNowInterruptAndOrbitsContinuationReadAsTheRunnersDoing() {
+        ComposerShell.events = listOf(
+            event(1, "user", """{"text":"Backfill the missing shard rows."}"""),
+            event(2, "assistant", """{"text":"Reading the shard map."}"""),
+            event(3, "interrupt", """{"reason":"runner_update","targetVersion":"0.1.254"}"""),
+            event(4, "turn_end", """{"subtype":"interrupted"}"""),
+            event(5, "user", """{"text":"[Orbit] The runner update interrupted this turn; continue. Orbit updated its runner to 0.1.254."}"""),
+            event(6, "assistant", """{"text":"Back on the shard map."}"""),
+            event(7, "interrupt", """{"reason":"runner_update"}"""))
+        signIn(); openSession()
+        await { shows("Back on the shard map.") }
+        assertTrue(has(hasText("Interrupted — the runner updated to 0.1.254") and row(3), unmerged = true))
+        assertTrue(has(hasText("Interrupted — the runner updated") and row(7), unmerged = true))
+        assertTrue(has(hasText("The runner update interrupted this turn; continue.") and hasTestTag("runner-update-resume"), unmerged = true))
+        assertFalse("Orbit's words are not the owner's", has(hasText("[Orbit]", substring = true), unmerged = true))
+        assertFalse(has(hasText("You") and row(5), unmerged = true))
+        shot("update-now-rows")
+    }
+
     /** The screen as a PNG, and never a blank one, with the semantics tree beside it. */
     private fun shot(name: String) {
         compose.waitForIdle()

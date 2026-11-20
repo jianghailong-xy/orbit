@@ -64,7 +64,8 @@ public struct SessionStatusGlyph: Equatable, Sendable {
              engineTurnActive: s.engineTurnActive == true,
              error: s.error,
              retryPending: s.retryPending(now: now),
-             watchingLabel: watching?.word,
+             // The watch's own words, else the server's for a wait this caller holds no watch for.
+             watchingLabel: watching?.word ?? (s.resumesOnItsOwn ? SessionHeader.waitingToResume : nil),
              waitingKind: s.waitingKind,
              underReview: s.confirmationUnderReview != nil,
              heldLabel: ClaudeRegion.heldWords(s, machine: machine))

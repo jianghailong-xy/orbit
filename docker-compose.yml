@@ -9,6 +9,15 @@ x-logging: &logging
     max-file: "5"
     compress: "true"
 
+# Where each image comes from. With none of these variables set, every image is what a single host has always run:
+# the apiserver, web and link gateway images built here from this checkout, postgres, nginx and nats pulled from
+# Docker Hub by tag. /upgrade's two-stage release (.claude/skills/upgrade/SKILL.md, "Two-stage release") builds on
+# one host and sets them on the host it deploys to, which builds nothing: ORBIT_REGISTRY is the registry every image
+# is pulled from, ORBIT_IMAGE_TAG the commit the apiserver and web images were built from, ORBIT_LINK_GATEWAY_TAG the
+# last commit under src/link-gateway, and ORBIT_NGINX_IMAGE and ORBIT_NATS_IMAGE the base images by digest
+# (deploy/two-stage/base-images.env). postgres and pgbackup are pinned by deploy/postgres-pinned.yml instead, which
+# that host lists in COMPOSE_FILE.
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -162,13 +171,18 @@ services:
       - ./data/files:/var/lib/orbit/files:ro
 
   apiserver:
-    image: orbit-apiserver:local
+    image: ${ORBIT_REGISTRY:+${ORBIT_REGISTRY}/}orbit-apiserver:${ORBIT_IMAGE_TAG:-local}
     build:
       context: .
       dockerfile: src/apiserver/Dockerfile
     container_name: orbit-apiserver
     restart: unless-stopped
     logging: *logging
+    # How long `docker stop` waits before SIGKILL. The apiserver stops by itself well inside it
+    # (src/apiserver/src/common/graceful-stop.ts): the requests in flight are answered for up to 23 s, and it exits by 25 s
+    # after it gets the signal, which leaves 5 s for a signal that comes late. A second apiserver defined with `extends`
+    # takes this with the rest.
+    stop_grace_period: 30s
     environment:
       DATABASE_URL: "postgresql://orbit:orbit@postgres:5432/orbit?schema=public"
       JWT_SECRET: "${JWT_SECRET:?set JWT_SECRET (generate: openssl rand -base64 32)}"
@@ -204,16 +218,31 @@ services:
       # Set it on the host as ORBIT_WIKI_MODE, not ORBIT_WIKI, for the reason ORBIT_WATCHES_MODE gives above.
       ORBIT_WIKI: "${ORBIT_WIKI_MODE:-on}"
       ORBIT_WIKI_CANARY_OWNERS: "${ORBIT_WIKI_CANARY_OWNERS:-}"
+      # Optional: off stops the "Run stopped" wake (TASK_RUN_STOPPED, projects/task-run-stopped.producer.ts), which tells
+      # a project's lead session when a task's run parks with nothing to wake it; on (default) keeps it. Takes effect on
+      # `docker compose up -d apiserver`. Set it on the host as ORBIT_RUN_STOPPED_WAKE_MODE.
+      ORBIT_RUN_STOPPED_WAKE: "${ORBIT_RUN_STOPPED_WAKE_MODE:-on}"
       PORT: "3000"
       CORS_ORIGINS: "http://localhost:2086"
       # Where runners reach this deployment — the origin the web image bakes in below. A session on a
       # shared Codex pool is handed <origin>/api/gw/codex as its OpenAI endpoint (providers/shared-pool.ts).
       PUBLIC_ORIGIN: "${PUBLIC_ORIGIN:-http://localhost:2086}"
+      # Optional: Claude Code on an OpenAI API key through this server's /api/gw/anthropic gateway (docs/configuration.md).
+      # `true` turns it on; anything else leaves every key's engines and dispatch environment as they were.
+      ORBIT_CLAUDE_OPENAI_GATEWAY: "${ORBIT_CLAUDE_OPENAI_GATEWAY:-}"
+      # Optional: Claude Code on the account owner's own Codex login pool, through the same gateway (docs/configuration.md).
+      # `true` turns it on; anything else leaves every pool's engines and dispatch environment as they were.
+      ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY: "${ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY:-}"
+      # Optional: hosts besides api.openai.com that gateway may call (comma-separated; public https only, no redirects).
+      ORBIT_GATEWAY_UPSTREAM_HOSTS: "${ORBIT_GATEWAY_UPSTREAM_HOSTS:-}"
       # Optional: the proxies in front of the gateway (a CDN such as Cloudflare, a load balancer, a TLS proxy on the host),
       # as addresses and CIDR ranges separated by commas or spaces (docs/configuration.md). The apiserver reads a
       # visitor's own address through them from X-Forwarded-For, as the register approval page shows it; unset, a visitor
       # is the address that connected to the gateway, which behind a proxy is the proxy's.
       TRUSTED_PROXIES: "${TRUSTED_PROXIES:-}"
+      # Optional: how many live viewer streams (public links' and guests' pages) this apiserver keeps open at once;
+      # unset, 2000 (docs/self-hosting.md, "Live viewers of shared sessions").
+      VIEWER_STREAMS_MAX: "${VIEWER_STREAMS_MAX:-}"
       # Optional: DeepSeek (OpenAI-compatible) for asynchronously improving prompt-derived
       # session titles and filing the session under a few semantic tags. Session creation and
       # worktree branch generation never wait on it.
@@ -223,6 +252,10 @@ services:
       # Optional independent push channels. APNS_KEY is base64 of AuthKey_XXXX.p8.
       APNS_KEY: "${APNS_KEY:-}"
       APNS_KEY_ID: "${APNS_KEY_ID:-}"
+      APNS_SANDBOX_KEY: "${APNS_SANDBOX_KEY:-}"
+      APNS_SANDBOX_KEY_ID: "${APNS_SANDBOX_KEY_ID:-}"
+      APNS_PRODUCTION_KEY: "${APNS_PRODUCTION_KEY:-}"
+      APNS_PRODUCTION_KEY_ID: "${APNS_PRODUCTION_KEY_ID:-}"
       APNS_TEAM_ID: "${APNS_TEAM_ID:-}"
       APNS_BUNDLE_ID: "${APNS_BUNDLE_ID:-io.orbitd.app}"
       # FCM HTTP v1 for GMS Android. PRIVATE_KEY is base64 of the service account PEM.
@@ -260,6 +293,9 @@ services:
       # Welcome and HeartbeatAck, assigned from these two manifests as GET /api/runner/release assigns it. Read at most once
       # a minute, for at most 2 s; while it cannot be read, no release is stated and runners ask that route over HTTPS.
       RUNNER_RELEASE_DL_URL: "${RUNNER_RELEASE_DL_URL:-http://web/dl/}"
+      # The GitHub repository (owner/repo) this build was released from: where Help → Still stuck → Report on GitHub
+      # opens a new issue. Empty is Orbit's own.
+      ORBIT_RELEASE_REPOSITORY: "${ORBIT_RELEASE_REPOSITORY:-}"
       # Orbit Files (docs/orbit-files-design.md §2.10): where attachment bytes are kept, one copy per content, named by
       # its sha256; Postgres keeps only what describes each file. local (the default) is ./data/files, mounted below.
       # s3 is an S3-compatible bucket, addressed path-style at the endpoint, and needs the bucket and key pair below;
@@ -283,9 +319,14 @@ services:
       # runners keeps them off. The profile read here, the Docker channel's token and its socket are the files in
       # ORBIT_MANAGED_RUNNERS_DIR, mounted below.
       ORBIT_MANAGED_RUNNERS_ENABLED: "${ORBIT_MANAGED_RUNNERS_ENABLED:-false}"
-      ORBIT_MANAGED_RUNNERS_PROFILE: /var/lib/orbit-managed-runners/profile.json
+      # Orbit Cloud browser, off unless the host's .env says true (docs/runner-browser-design.md §2).
+      ORBIT_MANAGED_RUNNER_BROWSER_ENABLED: "${ORBIT_MANAGED_RUNNER_BROWSER_ENABLED:-false}"
+      ORBIT_MANAGED_RUNNERS_PROFILE: /var/lib/orbit-cloud-runners/profile.json
     volumes:
       # Read-only. With ORBIT_MANAGED_RUNNERS_DIR unset, /dev/null stands in, so nothing is created on the host.
+      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-cloud-runners:ro"
+      # The same directory at its path from before the rename, which channel.json and profile.json written by an
+      # earlier install still name inside them.
       - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-managed-runners:ro"
       # The files directory (ORBIT_FILES_DIR's default), the way ./data/postgres holds the database: the bytes of every
       # attachment the local store keeps, and the temporary files uploads arrive in.
@@ -315,7 +356,7 @@ services:
   # key are given to this service and no other: the apiserver reads the model's name and state from the row this one
   # writes (wiki_model_status). Until the wiki's executor is switched to the server, probing the model is all it does.
   wiki-worker:
-    image: orbit-apiserver:local
+    image: ${ORBIT_REGISTRY:+${ORBIT_REGISTRY}/}orbit-apiserver:${ORBIT_IMAGE_TAG:-local}
     container_name: orbit-wiki-worker
     restart: unless-stopped
     logging: *logging
@@ -341,6 +382,9 @@ services:
         condition: service_healthy
 
   web:
+    # Empty unless ORBIT_IMAGE_TAG is set, and an empty image is none: Compose names the image it builds after the
+    # project, as it always has.
+    image: ${ORBIT_IMAGE_TAG:+${ORBIT_REGISTRY:+${ORBIT_REGISTRY}/}orbit-web:${ORBIT_IMAGE_TAG}}
     build:
       context: .
       dockerfile: src/web/Dockerfile
@@ -351,6 +395,10 @@ services:
         # Full commit embedded in every advertised runner capability revision. Empty is fine
         # from a Git checkout: the build reads the commit from the checkout's own .git/HEAD.
         ORBIT_SOURCE_SHA: "${ORBIT_SOURCE_SHA:-}"
+        # The release tag's tree the runner binaries are built from, and its commit; empty builds them from the
+        # context. The upgrade skill sets both (docs/release-process.md, "Runner binaries come from the release tag").
+        ORBIT_RUNNER_SOURCE: "${ORBIT_RUNNER_SOURCE:-.}"
+        ORBIT_RUNNER_SOURCE_SHA: "${ORBIT_RUNNER_SOURCE_SHA:-}"
     container_name: orbit-web
     restart: unless-stopped
     logging: *logging
@@ -367,7 +415,7 @@ services:
       start_period: 10s
 
   gateway:
-    image: nginx:alpine
+    image: ${ORBIT_REGISTRY:+${ORBIT_REGISTRY}/}${ORBIT_NGINX_IMAGE:-nginx:alpine}
     container_name: orbit-gateway
     restart: unless-stopped
     logging: *logging
@@ -406,16 +454,18 @@ services:
     # The disk the storage budget is measured on: an empty volume of the channel's own, read-only, which Docker keeps
     # beside every runner's data volume whatever filesystem its data root is on. This container sees neither the data
     # root nor what is in it.
-    command: ["serve", "--config", "/var/lib/orbit-managed-runners/channel.json", "--disk-probe-path", "/var/lib/orbit-docker-volumes"]
+    command: ["serve", "--config", "/var/lib/orbit-cloud-runners/channel.json", "--disk-probe-path", "/var/lib/orbit-docker-volumes"]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-cloud-runners"
+      # Its path from before the rename, which an earlier install's channel.json still names.
       - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-managed-runners"
       - type: volume
         target: /var/lib/orbit-docker-volumes
         read_only: true
     healthcheck:
       # Serving: its socket takes a connection. Every request on it still needs the token.
-      test: ["CMD", "python3", "-c", "import socket; socket.socket(socket.AF_UNIX).connect('/var/lib/orbit-managed-runners/channel.sock')"]
+      test: ["CMD", "python3", "-c", "import socket; socket.socket(socket.AF_UNIX).connect('/var/lib/orbit-cloud-runners/channel.sock')"]
       interval: 5s
       timeout: 5s
       retries: 6
@@ -433,8 +483,8 @@ services:
     build:
       context: .
       dockerfile: deploy/managed-runner/firewall/Dockerfile
-    image: orbit-managed-runner-firewall:local
-    container_name: orbit-managed-runner-firewall
+    image: orbit-cloud-runner-firewall:local
+    container_name: orbit-cloud-runner-firewall
     restart: unless-stopped
     logging: *logging
     network_mode: host
@@ -444,7 +494,7 @@ services:
     read_only: true
     volumes:
       # Its configuration, and the status the Docker channel reads.
-      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}/firewall:/var/lib/orbit-managed-runner-firewall"
+      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}/firewall:/var/lib/orbit-cloud-runner-firewall"
       # The legacy iptables backend's lock, which Docker's own iptables calls take too; the install names it only where
       # the host's iptables is legacy. Never made on the host: a directory there would break the host's iptables.
       - type: bind
@@ -454,7 +504,7 @@ services:
           create_host_path: false
     healthcheck:
       # Healthy while its status says the rules are in force: what the Docker channel reads before it starts a runner.
-      test: ["CMD", "python3", "-I", "/opt/orbit-managed-runner-firewall/firewall.py", "status"]
+      test: ["CMD", "python3", "-I", "/opt/orbit-cloud-runner-firewall/firewall.py", "status"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -477,7 +527,7 @@ services:
       context: src/link-gateway
       args:
         ORBIT_SOURCE_SHA: "${ORBIT_SOURCE_SHA:-}"
-    image: orbit-link-gateway:local
+    image: ${ORBIT_REGISTRY:+${ORBIT_REGISTRY}/}orbit-link-gateway:${ORBIT_LINK_GATEWAY_TAG:-local}
     container_name: orbit-link-gateway
     restart: unless-stopped
     logging: *logging
@@ -538,7 +588,7 @@ services:
   # the host, monitoring included, and runs only under the runner-link profile, beside the gateway.
   nats:
     profiles: [runner-link]
-    image: nats:2.15-alpine
+    image: ${ORBIT_REGISTRY:+${ORBIT_REGISTRY}/}${ORBIT_NATS_IMAGE:-nats:2.15-alpine}
     container_name: orbit-nats
     restart: unless-stopped
     logging: *logging

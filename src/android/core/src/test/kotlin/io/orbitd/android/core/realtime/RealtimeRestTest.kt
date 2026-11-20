@@ -5,7 +5,10 @@ import io.orbitd.android.core.auth.OrbitApi
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.net.ApiRequest
 import io.orbitd.android.core.net.ApiResponse
+import io.orbitd.android.core.net.HttpMethod
+import io.orbitd.android.core.net.scheduledSessions
 import io.orbitd.android.core.protocol.ProtocolException
+import io.orbitd.android.core.protocol.SessionSummary
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotSame
@@ -58,6 +61,23 @@ class RealtimeRestTest {
         val snapshot = rest.directory(handle)
         assertEquals(setOf("open"), snapshot.sessions.keys)
         assertEquals(listOf("sessions/open"), server.asked.filter { it.startsWith("sessions") })
+    }
+
+    @Test fun scheduledSessionsReadFullWorkspaceListsWithoutACursor() = runTest {
+        val calls = mutableListOf<ApiRequest>()
+        val server = object : OrbitApi {
+            override suspend fun request(handle: SessionHandle, request: ApiRequest): ApiResponse {
+                calls += request
+                return ApiResponse(200, """[{"id":"run","status":"RUNNING","workspaceId":"w","runSource":"SCHEDULE"}]""".encodeToByteArray())
+            }
+        }
+        for (view in listOf("open", "completed", "trash")) {
+            val rows = server.scheduledSessions(handle, "w", view, SessionSummary.serializer())
+            assertEquals(listOf(SessionSummary("run", status = "RUNNING", workspaceId = "w")), rows)
+            assertEquals(HttpMethod.GET, calls.last().method)
+            assertEquals(listOf("sessions"), calls.last().path)
+            assertEquals(mapOf("workspaceId" to "w", "view" to view, "scheduled" to "1"), calls.last().query.toMap())
+        }
     }
 
     @Test fun aListThatIsNotAnArrayOfObjectsIsStillAProtocolError() = runTest {

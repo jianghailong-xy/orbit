@@ -9,6 +9,7 @@ import {
   OpenItemStage,
   OwnerAnswerCard,
   OwnerItemKind,
+  OwnerWordsTranslation,
   SessionLifecycleState,
   SessionRunState,
   deriveSessionLifecycleState,
@@ -24,6 +25,7 @@ import {
   taskLandingSql,
 } from './project-criterion-landing';
 import { PROJECT_LIVE_SESSION_STATUS_SQL } from './live-session-status';
+import { evidenceUndecidedOwed } from './evidence-undecided';
 import { LIVE_PROMOTION_STATES } from './project-promotion';
 import {
   doorsForOpenItem,
@@ -67,7 +69,9 @@ export interface ProjectOpenItemDelivery {
  *  (§4.6 X-E5), so that the owner can abandon an attempt whose runner stopped reporting.
  *  `LANDING_UNOBSERVED` (0453) is a finished task's work not yet seen on its line, put to the
  *  coordinator first; `LANDED_WITHOUT_CONFIRMATION` (0453) is the owner's item about work that
- *  reached main without their confirmation (§10.7). */
+ *  reached main without their confirmation (§10.7). `EVIDENCE_UNDECIDED` (1110) is the owner's: the
+ *  escalation clock opens it when a task's latest evidence revision has had no decision for longer
+ *  than its project's window, after the coordinator was asked first (`evidence-undecided.ts`). */
 export const OPEN_ITEM_KINDS = [
   'INTEGRATION_CONFLICT',
   'INTEGRATION_CHECK_FAILED',
@@ -82,6 +86,7 @@ export const OPEN_ITEM_KINDS = [
   'LANDING_LEASE_EXPIRED',
   'LANDING_UNOBSERVED',
   'LANDED_WITHOUT_CONFIRMATION',
+  'EVIDENCE_UNDECIDED',
 ] as const;
 export type OpenItemKind = (typeof OPEN_ITEM_KINDS)[number];
 
@@ -172,6 +177,10 @@ export const OPEN_ITEM_RESOLUTIONS = [
   /** The task a `LANDING_UNOBSERVED` item was about was declared codeless, with a reason (§10.7,
    *  0453). */
   'CODELESS',
+  /** The evidence revision an `EVIDENCE_UNDECIDED` item was about was decided — CONFIRM or SEND_BACK (1110). */
+  'DECIDED',
+  /** A newer evidence revision replaced the one an `EVIDENCE_UNDECIDED` item was about (1110). */
+  'REVISED',
 ] as const;
 export type OpenItemResolution = (typeof OPEN_ITEM_RESOLUTIONS)[number];
 
@@ -339,6 +348,7 @@ export function ownerItemNeed(kind: OpenItemKind | string): string {
     case 'LANDING_LEASE_EXPIRED': return 'Runner stopped reporting';
     case 'LANDING_UNOBSERVED': return 'Not on the line yet';
     case 'LANDED_WITHOUT_CONFIRMATION': return 'Landed without your confirmation';
+    case 'EVIDENCE_UNDECIDED': return 'Evidence waiting for a decision';
     default: return 'Exception';
   }
 }
@@ -351,6 +361,8 @@ function primaryActionPreference(row: OpenItemDecisionRow): OpenItemAction[] {
   const owner = row.assignee === 'OWNER';
   // §10.8: what this item asks the owner for is the Accept.
   if (row.kind === 'LANDED_WITHOUT_CONFIRMATION') return ['ACCEPT'];
+  // Undecided evidence asks the owner to read it: the Review opens the revision.
+  if (row.kind === 'EVIDENCE_UNDECIDED') return ['REVIEW'];
   if (owner) return ['ASK_COORDINATOR_AGAIN', 'OPEN_TASK_SESSION', 'RETRY', 'REVIEW', 'ANSWER', 'RESUME'];
   if (row.kind === 'TASK_FAILED') return ['RETRY', 'OPEN_TASK_SESSION', 'OPEN_COORDINATOR', 'CANCEL_TASK'];
   if (row.kind === 'COORDINATOR_QUESTION') return ['ANSWER'];
@@ -422,15 +434,24 @@ export function openItemRequiredAction(row: OpenItemDecisionRow): string {
   // other. Only the owner's cell can ask the coordinator, so the coordinator's own next door is the fix.
   const taskBranch = taskBranchSourceOf(row.payload);
   const subject = taskBranch ? 'This task’s branch' : 'The project branch';
-  const orFix = taskBranch && row.assignee !== 'OWNER' ? 'file a fix task' : 'ask the coordinator to fix it';
+  // The owner's sentence names the coordinator only while this row's own projection holds the press
+  // that asks it (`ASK_COORDINATOR_AGAIN`): with no conversation to ask, the card draws no such door,
+  // and a sentence offering it would promise a way out the card does not have. The same projection
+  // the doors are drawn from, so the two cannot disagree.
+  const ownerCannotAsk = row.assignee === 'OWNER'
+    && !openItemActionsFromDoors(input).includes('ASK_COORDINATOR_AGAIN');
+  const orAsk = (clause: string): string => (ownerCannotAsk ? '' : ` or ${clause}`);
+  const orFix = taskBranch && row.assignee !== 'OWNER' ? ' or file a fix task' : orAsk('ask the coordinator to fix it');
 
+  // A check that timed out did not fail on merit, so it falls through to its own sentence below,
+  // the owner's as much as the coordinator's.
   // This is the copy approved in the project effect and is intentionally byte-for-byte stable:
   // the three clients render this field, they do not translate it. Its main is the project's main
   // branch by name, so a project on main reads every sentence as it always did.
   if (row.assignee === 'OWNER' && row.kind === 'INTEGRATION_CHECK_FAILED'
       && (sourceJob === 'CHECK_PROMOTION' || sourceJob === 'LAND_PROMOTION')
-      && failureClass !== 'CONFLICT') {
-    return `Nothing on ${taskBranch ? 'this task’s branch' : 'the project branch'} reaches ${main} until this check passes — re-run it or ask the coordinator to fix it.`;
+      && failureClass !== 'CONFLICT' && failureClass !== 'CHECK_TIMED_OUT') {
+    return `Nothing on ${taskBranch ? 'this task’s branch' : 'the project branch'} reaches ${main} until this check passes — re-run it${orAsk('ask the coordinator to fix it')}.`;
   }
 
   if (row.kind === 'COORDINATOR_QUESTION') {
@@ -460,6 +481,10 @@ export function openItemRequiredAction(row: OpenItemDecisionRow): string {
     return `This task’s work is not on ${landingLineOf(row.payload) ?? main} yet — record the commit that carries it, `
       + 'or send the task back to push it.';
   }
+  if (row.kind === 'EVIDENCE_UNDECIDED') {
+    // No ask-again: the coordinator already had this evidence, and the cell draws no such door.
+    return 'The coordinator has not decided this evidence — review it, then confirm it or send it back.';
+  }
   if (row.kind === 'LANDED_WITHOUT_CONFIRMATION') {
     const target = filled((row.payload as { targetBranch?: unknown } | null | undefined)?.targetBranch);
     return `This work reached ${target ?? main} without your confirmation — accept it, or use Chat about this `
@@ -479,25 +504,25 @@ export function openItemRequiredAction(row: OpenItemDecisionRow): string {
     if (failureClass === 'CONFLICT') {
       if (taskBranch) {
         return `This task’s branch cannot reach ${main} until this conflict is repaired — file a task that puts its work on ${main}`
-          + `${row.assignee === 'OWNER' ? ', or ask the coordinator to do it' : ''}.`;
+          + `${row.assignee === 'OWNER' && !ownerCannotAsk ? ', or ask the coordinator to do it' : ''}.`;
       }
-      return `The project branch cannot reach ${main} until this promotion conflict is repaired — create a sync task or ask the coordinator to fix it.`;
+      return `The project branch cannot reach ${main} until this promotion conflict is repaired — create a sync task${orAsk('ask the coordinator to fix it')}.`;
     }
     if (failureClass === 'CHECK_TIMED_OUT') {
-      return `${subject} cannot reach ${main} until this check finishes — re-run it with a reason or ${orFix}.`;
+      return `${subject} cannot reach ${main} until this check finishes — re-run it with a reason${orFix}.`;
     }
     const outdatedRunner = outdatedRunnerOf(row.payload);
     if (outdatedRunner) return `Update runner ${outdatedRunner}, then run this check again.`;
-    return `${subject} cannot reach ${main} until this integration is repaired — re-run it or ${orFix}.`;
+    return `${subject} cannot reach ${main} until this integration is repaired — re-run it${orFix}.`;
   }
   if (failureClass === 'CONFLICT') {
-    return 'This task cannot reach the project branch until its merge conflict is repaired — fix the task branch or ask the coordinator to do it.';
+    return `This task cannot reach the project branch until its merge conflict is repaired — fix the task branch${orAsk('ask the coordinator to do it')}.`;
   }
   if (failureClass === 'CHECK_FAILED' || failureClass === 'CHECK_TIMED_OUT') {
-    return 'This task cannot reach the project branch until its landing check passes — re-run it or ask the coordinator to fix it.';
+    return `This task cannot reach the project branch until its landing check passes — re-run it${orAsk('ask the coordinator to fix it')}.`;
   }
   if (failureClass === 'ERROR') {
-    return 'This task cannot reach the project branch until the integration error is repaired — retry it or ask the coordinator to fix it.';
+    return `This task cannot reach the project branch until the integration error is repaired — retry it${orAsk('ask the coordinator to fix it')}.`;
   }
   return `${actor} must use the available door to move this exception forward.`;
 }
@@ -637,7 +662,10 @@ export interface CoordinatorQuestion {
 /** How the owner answered: an option, free text, or both. */
 export interface OwnerAnswer {
   option?: number;
+  /** The owner's words, as they typed them: what every card shows. */
   text?: string;
+  /** `text` in the agent language, when Settings › Translation translated it: what the coordinator is told. */
+  translation?: OwnerWordsTranslation;
   answeredByUserId: string;
 }
 
@@ -728,15 +756,33 @@ export function answerInWords(question: CoordinatorQuestion, answer: OwnerAnswer
  * given, the moment it was answered — because a replay under the same key compares the content byte
  * for byte, and a conversation that already read it must not be told a second, differently worded
  * version of the same answer.
+ *
+ * `redelivered` is set when the conversation told is not the one that asked (§5.2 R11): "you asked"
+ * would be false there, and the new coordinator needs to know which work the answer still holds up,
+ * named, so it can act on it without a read first. Which tasks still block is read at delivery, once
+ * per conversation; the asker's words never carry it.
  */
 export function ownerAnswerMessage(
   question: CoordinatorQuestion,
   answer: OwnerAnswer,
   answeredAt: Date,
+  redelivered?: { stillBlocks: ReadonlyArray<{ title: string; status: string }> },
 ): string {
-  return `From Orbit · owner answer: you asked "${question.question}". `
-    + `The owner answered: ${answerInWords(question, answer)} (${answeredAt.toISOString()}).`;
+  const asked = redelivered ? 'a previous coordinator of this project asked' : 'you asked';
+  // The owner's words as the agent reads them: their translation into the agent language when one was made.
+  const words = answer.translation?.text ? { ...answer, text: answer.translation.text } : answer;
+  const told = `From Orbit · owner answer: ${asked} "${question.question}". `
+    + `The owner answered: ${answerInWords(question, words)} (${answeredAt.toISOString()}).`;
+  if (!redelivered) return told;
+  const blocking = redelivered.stillBlocks;
+  if (blocking.length === 0) return told + ' That question no longer blocks any unfinished task.';
+  const named = blocking.slice(0, BLOCKING_TASKS_NAMED).map((task) => `"${task.title}" (${task.status})`);
+  const more = blocking.length > BLOCKING_TASKS_NAMED ? ` and ${blocking.length - BLOCKING_TASKS_NAMED} more` : '';
+  return told + ` That question still blocks unfinished tasks: ${named.join(', ')}${more}.`;
 }
+
+/** How many still-blocked tasks a redelivered answer names before counting the rest. */
+const BLOCKING_TASKS_NAMED = 5;
 
 /** The columns "has this conversation ended" is decided from. */
 export const SESSION_ENDING_SELECT = {
@@ -770,6 +816,29 @@ export function sessionHasEnded(session: SessionEnding): boolean {
   return run === SessionRunState.ENDED
     || run === SessionRunState.SUCCEEDED
     || run === SessionRunState.FAILED;
+}
+
+/** Read whether the chat can send now and whether Ask again can queue on this conversation. */
+export async function readCoordinatorReach(
+  sessions: { receiveBlockedReasonFor(ownerId: string, sessionId: string): Promise<string | null> },
+  ownerId: string,
+  project: { coordinatorSessionId: string | null; coordinatorSession: (SessionEnding & { retryAt?: Date | null }) | null },
+): Promise<{ askable: boolean; coordinator: { sessionId: string; receiving: boolean } | null }> {
+  const blocked = project.coordinatorSessionId
+    ? await sessions.receiveBlockedReasonFor(ownerId, project.coordinatorSessionId)
+    : null;
+  const coordinator = project.coordinatorSessionId && blocked !== 'SESSION_GONE'
+    ? { sessionId: project.coordinatorSessionId, receiving: blocked == null }
+    : null;
+  const session = project.coordinatorSession;
+  const askable = coordinator != null && session != null && !conversationIsOver(session)
+    && (coordinator.receiving || conversationIsDown(session) || session.retryAt != null);
+  return { askable, coordinator };
+}
+
+/** Whether neither of the owner's coordinator actions is available. */
+export function coordinatorUnreachable(reach: { askable: boolean; coordinator: { receiving: boolean } | null }): boolean {
+  return !reach.askable && !reach.coordinator?.receiving;
 }
 
 /**
@@ -851,10 +920,49 @@ export function openItemDeliveredAt(alias: string): Prisma.Sql {
   )`;
 }
 
-/** Owner-facing lists omit coordinator items still waiting in the conversation's queue. */
+/**
+ * Whether the project's coordinator conversation can still take this item's ITEM turn: it is
+ * switched on, not filed, trashed or completed, and either live or FAILED with an auto-retry
+ * pending. Only then does an undelivered item wait for its receipt with no deadline.
+ *
+ * A coordinator that is down with no retry coming (`conversationIsDown`, nobody scheduled one) never
+ * takes the turn. Without this, its item had no deadline and no owner card for ever, and an
+ * INTEGRATION_CONFLICT held every later landing of its lane by M2 with nobody told (production,
+ * 2026-11-13 to 11-18: a landing QUEUED 98 h). Such an item goes to the owner by the clock, one
+ * window after it opened.
+ */
+export function openItemCoordinatorCanTake(alias: string): Prisma.Sql {
+  const item = Prisma.raw(`"${alias}"`);
+  return projectCoordinatorCanTake(Prisma.sql`${item}."project_id"`);
+}
+
+/**
+ * `openItemCoordinatorCanTake`'s rule for any project, named by the SQL expression `projectId`: its
+ * coordinator conversation is switched on, not filed, trashed or completed, and live or FAILED with an
+ * auto-retry pending. The one definition, shared by the open-item clock and the evidence clock
+ * (`evidence-undecided.ts`), so the two cannot come to disagree about whether a coordinator can still
+ * take its turn. Parameter-free when `projectId` is.
+ */
+export function projectCoordinatorCanTake(projectId: Prisma.Sql): Prisma.Sql {
+  return Prisma.sql`EXISTS (
+    SELECT 1
+      FROM "project" taker_project
+      JOIN "session" taker ON taker."id" = taker_project."coordinator_session_id"
+     WHERE taker_project."id" = ${projectId}
+       AND taker_project."coordinator_enabled" = true
+       AND taker."deleted_at" IS NULL
+       AND taker."completed_at" IS NULL
+       AND taker."archived_at" IS NULL
+       AND (taker."status" IN (${Prisma.raw(PROJECT_LIVE_SESSION_STATUS_SQL)})
+            OR (taker."status" = 'FAILED' AND taker."retry_at" IS NOT NULL)))`;
+}
+
+/** Owner-facing lists omit coordinator items still waiting in the queue of a conversation that can
+ *  take them (`openItemCoordinatorCanTake`). */
 export function openItemVisible(alias: string): Prisma.Sql {
   const item = Prisma.raw(`"${alias}"`);
-  return Prisma.sql`(${item}."assignee" <> 'COORDINATOR' OR ${openItemDeliveredAt(alias)} IS NOT NULL)`;
+  return Prisma.sql`(${item}."assignee" <> 'COORDINATOR' OR ${openItemDeliveredAt(alias)} IS NOT NULL
+    OR NOT ${openItemCoordinatorCanTake(alias)})`;
 }
 
 /**
@@ -900,6 +1008,8 @@ export function openItemVisible(alias: string): Prisma.Sql {
  *    codeless and still NOT_KNOWN (§1.4, `taskLandingSql`): the complement of the endings
  *    `resolveByFact` and the landing edge write — `SUCCESSOR_FILED`, `TASK_CLOSED`, `RETRIED`,
  *    `CODELESS`, `LANDED`;
+ *  - an `EVIDENCE_UNDECIDED` (1110), while the revision it names is still its task's latest, has no
+ *    decision, and its task is still OPEN or IN_PROGRESS in the same project (`evidenceUndecidedOwed`);
  *  - a `LANDED_WITHOUT_CONFIRMATION` (§10.7), always — until the owner presses Accept — unless its
  *    task was cancelled or replaced, the two facts `resolveByFact` answers it with;
  *  - anything else — a question, a pause, a request — while it is open: what answers those is a
@@ -916,6 +1026,7 @@ export function openItemOwed(alias: string): Prisma.Sql {
   const liveSessions = Prisma.raw(PROJECT_LIVE_SESSION_STATUS_SQL);
   const notKnown = Prisma.raw(`(${taskLandingSql('owed_task')}) = 'NOT_KNOWN'`);
   return Prisma.sql`(CASE
+      WHEN ${item}."kind" = 'INTEGRATION_CHECK_FAILED' AND ${item}."dedupe_key" LIKE 'ICB:%' THEN true
       WHEN ${item}."kind" = 'LANDING_UNOBSERVED' THEN EXISTS (
         SELECT 1 FROM "task" owed_task
          WHERE owed_task."id" = ${item}."task_id"
@@ -928,6 +1039,7 @@ export function openItemOwed(alias: string): Prisma.Sql {
          WHERE owed_task."id" = ${item}."task_id"
            AND owed_task."status" <> 'CANCELLED'
            AND owed_task."superseded_by_task_id" IS NULL))
+      WHEN ${item}."kind" = 'EVIDENCE_UNDECIDED' THEN ${evidenceUndecidedOwed(alias)}
       WHEN ${item}."kind" = 'LANDING_LEASE_EXPIRED' THEN EXISTS (
         SELECT 1 FROM "project_integration_job" owed_job
          WHERE owed_job."id" = ${item}."integration_job_id"
@@ -1130,7 +1242,7 @@ export interface OwnerHeldItem {
  * Open the item for an integration that did not land, in the transaction that wrote the job's
  * terminal state (§2.6, §4.2).
  *
- * The platform does not retry a conflict or a red check by itself (J5), so this item IS the retry
+ * Except for K5 baseline holds, the platform does not retry a conflict or red check (J5): this item IS the retry
  * mechanism: it names somebody, and what they decide is what happens next. Never escalated past the
  * coordinator by this function — a conflict has no chain limit, because there is no chain: one
  * failed job is one generation, and a second generation only exists because somebody asked.
@@ -1194,6 +1306,18 @@ export async function recordIntegrationFailure(
     skipDuplicates: true,
     select: { id: true },
   });
+  if (!created && failure.dedupeKey.startsWith('ICB:') && failure.taskId) {
+    const [held] = await tx.$queryRaw<Array<{ id: string; assignee: OpenItemAssignee }>>(Prisma.sql`
+      UPDATE "project_open_item"
+         SET "payload" = jsonb_set("payload", '{heldTaskIds}',
+           COALESCE("payload"->'heldTaskIds', '[]'::jsonb) ||
+           CASE WHEN COALESCE("payload"->'heldTaskIds', '[]'::jsonb) @> ${JSON.stringify([failure.taskId])}::jsonb
+                THEN '[]'::jsonb ELSE ${JSON.stringify([failure.taskId])}::jsonb END)
+       WHERE "project_id" = ${failure.projectId}::uuid AND "dedupe_key" = ${failure.dedupeKey}
+         AND "state" = 'OPEN'
+       RETURNING "id", "assignee"`);
+    return held ? { itemId: held.id, projectId: failure.projectId, taskId: failure.taskId, assignee: held.assignee } : null;
+  }
   if (!created) return null;
   return {
     itemId: created.id,
@@ -1220,7 +1344,7 @@ export async function resolveIntegrationItemsOnLanding(
   taskId: string,
 ): Promise<void> {
   await tx.projectOpenItem.updateMany({
-    where: { taskId, kind: { in: [...INTEGRATION_ITEM_KINDS] }, state: 'OPEN' },
+    where: { taskId, kind: { in: [...INTEGRATION_ITEM_KINDS] }, state: 'OPEN', NOT: { dedupeKey: { startsWith: 'ICB:' } } },
     data: {
       state: 'RESOLVED' satisfies OpenItemState,
       resolution: 'LANDED' satisfies OpenItemResolution,
@@ -1232,7 +1356,8 @@ export async function resolveIntegrationItemsOnLanding(
 
 /**
  * §4.4 X-D4 (5), revision 13: a task filed to fix an exception has landed, so that exception goes
- * back in front of the coordinator, which closes it or reruns what it is about.
+ * back in front of the coordinator, which closes it or reruns what it is about. K5 baseline items
+ * are resolved LANDED instead when the fix lands on the failed job's serial key.
  *
  * Called in the transaction that wrote the fix's landing receipt. The item is about ANOTHER task's
  * work, and whether that work reached the line with the fix is a question about commits this server
@@ -1245,9 +1370,20 @@ export async function resolveIntegrationItemsOnLanding(
 export async function rearmItemFixedBy(
   tx: Prisma.TransactionClient,
   taskId: string,
+  serialKey?: string,
 ): Promise<string | null> {
   const fix = await tx.task.findUnique({ where: { id: taskId }, select: { fixesOpenItemId: true } });
   if (!fix?.fixesOpenItemId) return null;
+  if (serialKey) {
+    const closed = await tx.$executeRaw(Prisma.sql`
+      UPDATE "project_open_item" i SET "state" = 'RESOLVED', "resolution" = 'LANDED',
+             "resolved_by" = 'PLATFORM', "resolved_at" = now()
+        FROM "project_integration_job" f
+       WHERE i."id" = ${fix.fixesOpenItemId}::uuid AND i."state" = 'OPEN'
+         AND i."kind" = 'INTEGRATION_CHECK_FAILED' AND f."id" = i."integration_job_id"
+         AND f."baseline_red" = true AND f."serial_key" = ${serialKey}`);
+    if (closed > 0) return null;
+  }
   const rearmed = await tx.projectOpenItem.updateMany({
     where: { id: fix.fixesOpenItemId, state: 'OPEN', assignee: 'COORDINATOR', promotionId: null },
     data: { assignedAt: new Date() },
@@ -2061,6 +2197,11 @@ interface IntegrationItemPayload {
     exitCode?: number;
     expectedExitCode?: number;
     outputTail?: string;
+    /** Set by the runner on a check it stopped at its budget. */
+    timedOut?: boolean;
+    durationMs?: number;
+    /** The budget the check was stopped at, recorded with a timed-out check's failure. */
+    timeoutSeconds?: number;
   } | null;
   errorCode?: string;
   errorDetail?: unknown;
@@ -2214,6 +2355,14 @@ function integrationItemFacts(kind: string, payload: IntegrationItemPayload): st
     const check = payload.check;
     if (!check?.name) return ['A check on the merged tree did not pass, and this item did not record which one.'];
     const tail = typeof check.outputTail === 'string' ? check.outputTail : '';
+    if (stoppedAtItsLimit(payload)) {
+      return [
+        `Check ${check.name} did not finish: the platform stopped it ${limitAndRunTime(check)}, so it reached no verdict; `
+          + 'the target branch did not move.',
+        ...(check.command ? [`It ran: ${check.command}`] : []),
+        ...(tail ? [`The end of its output:\n${clip(tail.slice(-MAX_CHECK_TAIL_IN_MESSAGE))}`] : []),
+      ];
+    }
     return [
       `Check ${check.name} exited with code ${check.exitCode} (its declaration expects ${check.expectedExitCode}); `
         + 'the target branch did not move.',
@@ -2233,6 +2382,62 @@ function integrationItemFacts(kind: string, payload: IntegrationItemPayload): st
       : []),
     ...(detail ? [`Error detail: ${clip(detail)}`] : []),
   ];
+}
+
+/** Whether the item's check was stopped by the platform at its time limit rather than ending on its own. */
+function stoppedAtItsLimit(payload: IntegrationItemPayload): boolean {
+  return payload.check?.timedOut === true || payload.failureClass === 'CHECK_TIMED_OUT';
+}
+
+/** A span of time as a reader states it: "4h 0m", "12m 5s", "40s". */
+function spanOf(ms: number): string {
+  const total = Math.round(ms / 1_000);
+  const hours = Math.floor(total / 3_600);
+  const minutes = Math.floor((total % 3_600) / 60);
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (minutes > 0) return `${minutes}m ${total % 60}s`;
+  return `${total}s`;
+}
+
+/** A limit in seconds: "4h" or "10m" when it is a round one, else the span it is. */
+function limitOf(seconds: number): string {
+  if (seconds >= 3_600 && seconds % 3_600 === 0) return `${seconds / 3_600}h`;
+  if (seconds < 3_600 && seconds % 60 === 0) return `${seconds / 60}m`;
+  return spanOf(seconds * 1_000);
+}
+
+/**
+ * "at its 4h limit after running 4h 0m", from the check's own record: an item written before the
+ * limit was recorded says it does not know it, and a run time that was not reported is left out.
+ */
+function limitAndRunTime(check: NonNullable<IntegrationItemPayload['check']>): string {
+  const limit = typeof check.timeoutSeconds === 'number' && check.timeoutSeconds > 0
+    ? `at its ${limitOf(check.timeoutSeconds)} limit`
+    : 'at its time limit (this item did not record the limit)';
+  const ran = typeof check.durationMs === 'number' && check.durationMs > 0 ? ` after running ${spanOf(check.durationMs)}` : '';
+  return `${limit}${ran}`;
+}
+
+/**
+ * The next step of a check the platform stopped at its time limit, for a landing and a candidate alike.
+ *
+ * The same check on the same tree takes about as long again, so a rerun is advised only beside a
+ * reason the next run can be shorter; a check whose usual run is near its limit is a question for the
+ * account owner — the limit, the command, or a fix for the slow part — and not a rerun at all. Each
+ * half is written only where the cell holds its door.
+ */
+function timedOutNextStep(rerunWith: string | null, askOwnerMcp: string | null): string | null {
+  const rerun = rerunWith == null ? null
+    : 'The check ran out of time rather than failing. Run again as it stands, the same check on the same tree takes about as long and stops at the same limit, '
+      + 'so rerun it once only when you can name why the next run will be shorter — the machine was under unusual load, the output above shows a one-off hang '
+      + '(a stuck network call or lock, for example), or a fix for the slow part has landed since — and give that reason: '
+      + rerunWith;
+  const ask = askOwnerMcp == null ? null
+    : 'If this check usually takes close to its limit or longer, a rerun will time out again: do not rerun it, '
+      + `ask the account owner with ${askOwnerMcp} instead, offering options such as raising the check’s time limit, `
+      + 'changing the merge-check command (to a faster one, or a subset of it), or filing a fix task for the slow part, '
+      + 'with your recommended option and its reason.';
+  return lines(rerun, ask) || null;
 }
 
 /** What each failure class means, in the sentence a coordinator decides the next step from. */
@@ -2338,11 +2543,14 @@ function landingNextStep(
   }
   // The rerun paragraph is written only where the cell really holds that door — the classes that
   // reach here are the ones a rerun answers, and the matrix gives them the door.
-  const rerun = doors.retryMcp == null ? null
-    : `If it is not the delivery’s problem — the merge check’s baseline was repaired since, the check timed out, the integration machinery failed — queue the landing once more with ${doors.retryMcp}`
-      + ` (projectId: ${projectId}, taskId: ${taskId}, reason: why this time will be different): `
-      + 'it queues the next generation of this task’s landing; if that lands, the work goes into the project branch and on to the merge checks after it, and if it does not, a new item comes to you. '
-      + 'Whether such a landing goes ahead is yours to judge, not a question for the account owner.';
+  const queues = 'it queues the next generation of this task’s landing; if that lands, the work goes into the project branch and on to the merge checks after it, and if it does not, a new item comes to you. '
+    + 'Whether such a landing goes ahead is yours to judge, not a question for the account owner.';
+  const retryArgs = ` (projectId: ${projectId}, taskId: ${taskId}, reason: why this time will be different): `;
+  const rerun = stoppedAtItsLimit(payload)
+    ? timedOutNextStep(doors.retryMcp == null ? null : `queue the landing once more with ${doors.retryMcp}${retryArgs}${queues}`, doors.askOwnerMcp)
+    : doors.retryMcp == null ? null
+      : `If it is not the delivery’s problem — the merge check’s baseline was repaired since, the integration machinery failed — queue the landing once more with ${doors.retryMcp}`
+        + retryArgs + queues;
   return read + lines(
     'First work out whose red it is. If the delivery itself is the problem, ' + `${rework}; ${repair}`,
     rerun,
@@ -2398,7 +2606,24 @@ function mainSyncNextStep(
 function fixOfATaskBranch(doors: Pick<OpenItemDoorMessageNames, 'resolveMcp'>): string {
   return 'When that task is DONE its branch becomes a candidate of its own, with its own check and its own card for the account owner. '
     + 'Its landing leaves this candidate and this item as they are and does not bring this item back to you: '
-    + `once this task’s work is on the project’s main branch, close this item with ${doors.resolveMcp}.`;
+    + `once this task’s work is on the project’s main branch, close this item with ${doors.resolveMcp}. `
+    + 'Closing the last item about this candidate ends the candidate too, and its card leaves the account owner’s page (M-T14).';
+}
+
+/**
+ * M-T13 said to the coordinator of a task branch's failed candidate: work it already put on the
+ * upstream as other commits — a cherry-pick, a rebase or a squash by hand — is answered by the receipt
+ * that names the commit carrying it. Without that receipt nothing can see the work landed: the commit
+ * is a different one, the card stays in front of the owner, and the task reads as not landed
+ * (2026-11-13, orbit/task-ai-c49d3a).
+ */
+function workAlreadyOnUpstream(doors: Pick<OpenItemDoorMessageNames, 'mergeReceiptMcp'>): string | null {
+  if (doors.mergeReceiptMcp == null) return null;
+  return 'If this task’s work is already on the project’s main branch as other commits — cherry-picked, rebased or squashed there by hand — '
+    + `there is nothing to resolve: record the commit there that carries it with ${doors.mergeReceiptMcp} (result: ALREADY_MERGED, `
+    + 'sessionId: the task’s work session, sourceBranch: this task’s branch, sourceSha: that commit, targetBranch: the project’s main branch). '
+    + 'The receipt ends this candidate, its card and this item, and the task reads as landed. Do this whenever you put a task’s work on '
+    + 'that branch by hand, before anything fails: a card that is still asking ends the same way.';
 }
 
 /**
@@ -2431,6 +2656,7 @@ function promotionNextStep(
     // The re-check is not named here: a conflict's cell holds no such door, and the sync task below
     // is the one that answers it.
     return about + lines(
+      taskBranch ? workAlreadyOnUpstream(doors) : null,
       // A task's branch lands by a rebase (M6), so the project branch's recipe would fail here: a
       // resolution in a merge commit is dropped by the replay, which then meets the same conflict.
       taskBranch
@@ -2448,15 +2674,21 @@ function promotionNextStep(
   }
   const candidate = promotionId ? uuidToBase62(promotionId) : 'this candidate’s id';
   const retry = ` (projectId: ${projectId}, promotionId: ${candidate}, reason: why this time will be different)`;
-  const rerun = doors.retryMcp == null ? null
-    : `If it is not the work’s problem — the merge check’s baseline was repaired since, the check timed out (go test hitting its default 10-minute limit, for example), the integration machinery failed — rerun this candidate’s check once with ${doors.retryMcp}`
-      + `${retry}. Once the check passes, the merge is still confirmed by the account owner on the card, `
-      + (taskBranch ? 'whatever the Automatic setting says' : 'or done automatically by the Automatic setting under its usual rule')
-      + ': this door only brings the candidate back to a state where it can be merged, and merges nothing for anybody.';
-  const tradeOff = doors.askOwnerMcp == null ? null
+  const afterPass = 'Once the check passes, the merge is still confirmed by the account owner on the card, '
+    + (taskBranch ? 'whatever the Automatic setting says' : 'or done automatically by the Automatic setting under its usual rule')
+    + ': this door only brings the candidate back to a state where it can be merged, and merges nothing for anybody.';
+  const timedOut = stoppedAtItsLimit(payload);
+  const rerun = timedOut
+    ? timedOutNextStep(doors.retryMcp == null ? null : `rerun this candidate’s check once with ${doors.retryMcp}${retry}. ${afterPass}`, doors.askOwnerMcp)
+    : doors.retryMcp == null ? null
+      : `If it is not the work’s problem — the merge check’s baseline was repaired since, the integration machinery failed — rerun this candidate’s check once with ${doors.retryMcp}`
+        + `${retry}. ${afterPass}`;
+  // A timed-out check's paragraph above already puts the limit and the command to the account owner.
+  const tradeOff = doors.askOwnerMcp == null || timedOut ? null
     : `If the merge-check command or its time limit has to change, or there is another trade-off only the account owner can decide, ask with ${doors.askOwnerMcp}`
       + ', giving at least two options, with the reason in the recommended one.';
   return about + lines(
+    taskBranch ? workAlreadyOnUpstream(doors) : null,
     taskBranch
       ? `First work out whose red it is. If it is a code problem on this task’s branch, file a fix task with ${doors.taskCreateMcp} and attach it to this item with fixesOpenItemId: ${itemId}. `
         + 'A fix does not change this candidate: it runs on a branch of its own, so it has to carry this task’s work with it. '
@@ -2492,6 +2724,7 @@ export function openItemFacts(
   kind: string,
   payload: unknown,
   task: { id: string; title: string } | null,
+  mainBranch: string | null = null,
 ): OpenItemFacts | null {
   if (!(INTEGRATION_ITEM_KINDS as readonly string[]).includes(kind) && kind !== 'TASK_FAILED'
       && kind !== DELIVERY_REVIEW_KIND && kind !== 'LANDING_LEASE_EXPIRED') {
@@ -2513,6 +2746,7 @@ export function openItemFacts(
     nothingLanded: row.nothingLanded === true,
     check: checkResult(row.check),
     branchUnchanged: row.branchUnchanged === true,
+    branchLine: row.branchUnchanged === true ? branchLineOf(row, mainBranch ?? 'main') : null,
     errorCode: filled(row.errorCode),
     failure: kind === 'TASK_FAILED'
       ? {
@@ -2531,6 +2765,23 @@ export function openItemFacts(
         }
       : null,
   };
+}
+
+/** A failed LAND_TASK check's Branch row, and the one any payload that names no promotion keeps. */
+export const TASK_BRANCH_UNCHANGED_LINE =
+  'unchanged — the task passed on its own branch; it fails only on the combined tree';
+
+/**
+ * What a failed check's Branch row says, by the job it failed in. A task's landing checks the task
+ * branch merged onto the project's line, so the task had passed alone. A promotion checks the project
+ * branch (or, on a MAIN line, one task's branch) merged with main: the payload records no run of that
+ * branch on its own, only that the job moved nothing, so that is all these two sentences say.
+ */
+function branchLineOf(row: IntegrationItemPayload, main: string): string {
+  if (row.jobKind !== 'CHECK_PROMOTION' && row.jobKind !== 'LAND_PROMOTION') return TASK_BRANCH_UNCHANGED_LINE;
+  return taskBranchSourceOf(row)
+    ? `unchanged — this task’s branch did not move, and nothing on it reached ${main}`
+    : `unchanged — the project branch did not move, and nothing reached ${main}`;
 }
 
 function filled(value: unknown): string | null {

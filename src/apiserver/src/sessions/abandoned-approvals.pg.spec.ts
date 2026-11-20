@@ -60,9 +60,11 @@ import {
   APPROVAL_ABANDONED_MESSAGE,
   APPROVAL_ABANDONED_STATUS,
   APPROVAL_ORPHANED_MESSAGE,
+  countLiveApprovals,
   reapApprovalsOfEndedTurns,
 } from './abandoned-approvals';
 import { SessionsService } from './sessions.service';
+import { pastCreateAllowance } from '../test-support/past-create-allowance';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -169,6 +171,7 @@ async function fixture(db: PrismaClient, label: string): Promise<Fixture> {
       runtimeSessionId: randomUUID(),
     },
   });
+  await pastCreateAllowance(db, ownerId, sessionId);
   const turn = await db.conversationTurn.create({
     data: {
       sessionId,
@@ -712,6 +715,91 @@ test('a card a runner-hosted job is still reading outlives the turn that raised 
     assert.equal(row.message, APPROVAL_ABANDONED_JOB_MESSAGE, 'with the sentence for the reader it lost');
     assert.equal(row.turnId, null, 'still naming no turn: there never was one');
     assert.equal(row.decidedAt, null, 'and nobody decided anything');
+  });
+});
+
+/**
+ * A JOB'S CARD GOES WITH ITS JOB, WHILE THE TURN RUNS ON.
+ *
+ * 2026-11-19, in production. A `bg_run` job asked for approval at 00:17; the session killed it
+ * itself at 00:19 and went on working until 00:31. The card listing stopped offering the card the
+ * moment the job left `running_bg_shells`, but the row stayed PENDING until the turn ended, and
+ * every count of a generating session counted it — so the conversation read "Waiting for
+ * approval" for twelve minutes with no card anywhere to press.
+ *
+ *   (1) Mid-turn, a job card whose job is no longer up is not counted, by the list or by the
+ *       per-session count the live frames carry — the same verdict the card listing gives.
+ *   (2) The runner's terminal report for the job, through the real ingest, collects the card at
+ *       once — with the turn still in flight — and tells the clients.
+ */
+test('a job card is collected when its job ends, not when the turn does', {
+  skip, concurrency: 1, timeout: 300_000,
+}, async (t) => {
+  const url = URL!;
+  assertCoordinatorPgUrlIsIsolated(url);
+  const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
+  await sql.connect();
+  await verifyCoordinatorPgIdentity(sql);
+  const stack = connect(url);
+  t.after(async () => {
+    await stack.db.$disconnect().catch(() => undefined);
+    await sql.end().catch(() => undefined);
+  });
+  const db = stack.db;
+  const f = await fixture(db, 'job-killed');
+  const jobId = `bgj_${randomUUID().replaceAll('-', '').slice(0, 12)}`;
+  await db.session.update({ where: { id: f.sessionId }, data: { runningBgShells: [jobId] } });
+
+  async function counts(): Promise<{ list: number; live: number; shown: number }> {
+    const rows = await stack.sessions.list(f.ownerId, {});
+    const row = rows.find((s: { id: string }) => s.id === f.sessionId) as { pendingApprovals: number } | undefined;
+    assert.ok(row, 'the conversation is in this owner’s Open list');
+    const session = await db.session.findUniqueOrThrow({
+      where: { id: f.sessionId },
+      select: { id: true, taskId: true, status: true, engineTurnActive: true, runningBgShells: true, runningSubagents: true },
+    });
+    const shown = await stack.sessions.listApprovals(f.ownerId, f.sessionId, 'PENDING');
+    return { list: row.pendingApprovals, live: await countLiveApprovals(db as never, session), shown: shown.length };
+  }
+
+  const card = await stack.api.createApproval({ id: f.runnerId }, f.sessionId, {
+    toolName: 'Bash',
+    input: { command: 'gradle test', kind: 'job' },
+    toolUseId: jobId,
+    backgroundJobId: jobId,
+  });
+  assert.deepEqual(await counts(), { list: 1, live: 1, shown: 1 }, 'while the job waits, the card is shown and counted');
+
+  await t.test('(1) mid-turn, a card whose job is gone is neither shown nor counted', async () => {
+    await db.session.update({ where: { id: f.sessionId }, data: { runningBgShells: [] } });
+    assert.deepEqual(await counts(), { list: 0, live: 0, shown: 0 },
+      'every surface agrees: the job that would read the answer is gone');
+    await db.session.update({ where: { id: f.sessionId }, data: { runningBgShells: [jobId] } });
+  });
+
+  await t.test('(2) the job is killed: the card is collected at once, with the turn still running', async () => {
+    const before = stack.published.length;
+    await stack.api.events({ id: f.runnerId }, f.sessionId, {
+      events: [{
+        seq: 1,
+        type: RunEventType.BACKGROUND_TASK,
+        ts: new Date().toISOString(),
+        turnId: f.turnId,
+        payload: { kind: 'job', status: 'killed', reason: 'requested', shellId: jobId, toolUseId: jobId },
+      }],
+    });
+    const row = await db.approval.findUniqueOrThrow({ where: { id: card.id }, select: { status: true, message: true, decidedAt: true } });
+    assert.equal(row.status, APPROVAL_ABANDONED_STATUS, 'the card is collected by the report of its job ending');
+    assert.equal(row.message, APPROVAL_ABANDONED_JOB_MESSAGE, 'with the sentence for the reader it lost');
+    assert.equal(row.decidedAt, null, 'nobody decided anything');
+    assert.equal((await db.conversationTurn.findUniqueOrThrow({ where: { id: f.turnId } })).status, 'IN_FLIGHT',
+      'and the turn is still running: its end had nothing to do with this');
+    assert.ok(
+      stack.published.slice(before).some((e) => e.type === RunEventType.APPROVAL_RESOLVED
+        && (e.payload as { id?: string }).id === card.id),
+      'the clients are told, so a count they hold drops',
+    );
+    assert.deepEqual(await counts(), { list: 0, live: 0, shown: 0 }, 'and nothing reads as waiting');
   });
 });
 

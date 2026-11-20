@@ -1,0 +1,95 @@
+# TEMPORARY evidence probe workflow (never merged to main; it lives on `probe/ios-search-mode` as
+# `.github/workflows/client.yml`). Copied from docs/evidence/landing-session-followup/probe-harness.
+# On the commit under test it runs client.yml's two compile gates — the Mac app (`swift build` of
+# OrbitApp) and the iOS app (XcodeGen + xcodebuild for the simulator) — and photographs the needs-you
+# capsule (owner board 2026-10-21, docs/mocks/needs-you-capsule, A) on an iPhone, light and dark.
+name: Search mode probe (gates + iPhone shots)
+
+on:
+  push:
+    branches: ["probe/ios-search-mode"]
+  workflow_dispatch:
+
+jobs:
+  shots:
+    name: Search mode shots (iPhone)
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Toolchain
+        run: swift --version && xcodebuild -version && xcodegen --version && sw_vers
+      - name: Stage the harness at the repository root
+        run: |
+          mkdir -p .sm-probe
+          cp -R docs/evidence/ios-search-mode-like-notes/probe-harness/. .sm-probe/
+          # Probe only: every isPresented write the bottom search sees, posted to the stub's log.
+          perl -0pi -e 's/(    private func setPresented\(_ on: Bool\) \{\n)/$1        post("SET on=\\(on) presented=\\(presented) recentX=\\(SearchCloseTap.recent())")\n/' src/macos/OrbitApp/Sources/OrbitApp/Views/SessionListSearch.swift
+          grep -n 'post("SET' src/macos/OrbitApp/Sources/OrbitApp/Views/SessionListSearch.swift
+      - name: Build, drive and capture
+        id: capture
+        continue-on-error: true
+        run: |
+          bash .sm-probe/run.sh 2>&1 | tee run-output.log
+          exit "${PIPESTATUS[0]}"
+      - name: Keep the build's errors and the run's output beside the shots
+        if: always()
+        run: |
+          mkdir -p .sm-probe/shots
+          cp run-output.log .sm-probe/shots/run-output.log 2>/dev/null || true
+          for log in .sm-probe/build-*.log; do
+            [ -f "$log" ] || continue
+            base=$(basename "$log" .log)
+            grep -E "error:|Test Case|Executed|\*\* TEST|\*\* BUILD" "$log" | head -400 > ".sm-probe/shots/summary-$base.txt" || true
+            tail -300 "$log" > ".sm-probe/shots/tail-$base.txt" || true
+          done
+          find .sm-probe/shots -name 'xcodebuild-*.log' -size +20M -exec gzip -9 {} \;
+          echo "capture=${{ steps.capture.outcome }}" > .sm-probe/shots/outcomes.txt
+          echo "run=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> .sm-probe/shots/outcomes.txt
+          echo "sha=${{ github.sha }}" >> .sm-probe/shots/outcomes.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: search-mode-shots
+          path: .sm-probe/shots
+          include-hidden-files: true
+      - name: Fail as the capture did
+        if: steps.capture.outcome != 'success'
+        run: exit 1
+
+  publish:
+    name: Push the shots where a clone can read them
+    needs: [shots]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+      - name: Push to probe/ios-search-mode-results
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p out && cd out
+          {
+            echo "run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo "sha: ${{ github.sha }}"
+            echo "shots: ${{ needs.shots.result }}"
+          } > RESULTS.txt
+          cat RESULTS.txt
+          git init -q
+          git config user.name "orbit-probe"
+          git config user.email "probe@orbit.invalid"
+          git checkout -q -b results
+          git add -A
+          git commit -q -m "search mode probe results for ${{ github.sha }} (run ${{ github.run_id }})"
+          git push -q -f "https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git" \
+            results:refs/heads/probe/ios-search-mode-results

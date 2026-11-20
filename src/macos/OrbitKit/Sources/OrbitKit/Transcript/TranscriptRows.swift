@@ -133,6 +133,35 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         /// while it is pending, its one line once it has ended — drawn where it was asked, by its own
         /// `createdAt`, and re-read from the account's requests on every render.
         case ownerRequest(requestID: String)
+        /// One batch of cross-project requests into the project this conversation coordinates
+        /// (`CrossingBatches`), by its id (`crossing-batch-<first row>`): placed at its first row's
+        /// `requestedAt` and re-read from the project's handoffs on every render, live or answered.
+        case crossingBatch(batchID: String)
+        /// A scheduled task's card this conversation asked (docs/scheduled-tasks-design.md §8.1, §4): the create
+        /// card or an envelope card, by its request id, placed at its own `createdAt` and re-read from the
+        /// conversation's `GET /sessions/:id/schedule-cards` on every render.
+        case scheduleCard(requestID: String)
+        /// The record a change inside the envelope left here (§4): "Changed Codex stable check: time 10:00 →
+        /// 09:00 · Undo", placed at its own `createdAt`.
+        case scheduleRecord(scheduleID: String, revision: Int)
+        /// A scheduled task's run, at the head of its own session: "Scheduled run · planned 10:00, started 10:01 ·
+        /// access Check only · …" (§7.4), placed at the run's planned time.
+        case scheduleRunStrip(runID: String)
+        /// What that run reported, after its last event: placed at the run's end.
+        case scheduleRunReport(runID: String)
+
+        /// Historical records obey the conversation's creation boundary when placed by moment.
+        /// A promotion approval placed by moment is a blocked candidate's record.
+        public var isRecord: Bool {
+            switch self {
+            case .criteriaDecisionReceipt, .evidenceDecisionReceipt,
+                 .acceptanceConfirmationReceipt, .ownerDecisionReceipt, .promotionReceipt,
+                 .coordinatorQuestionRecord, .promotionApproval:
+                return true
+            default:
+                return false
+            }
+        }
     }
 
     /// Where this row belongs, which is the whole difference between a question and a record.
@@ -149,8 +178,8 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         /// delivery: the same moment answers "which row" on every console, and answers it again
         /// when the window has moved.
         ///
-        /// A record whose moment is older than every loaded row is drawn at the HEAD of the
-        /// window — as close to where it happened as this device can get, and it walks down into
+        /// A record since conversation creation but older than every loaded row leads at the HEAD
+        /// of the window — as close to where it happened as this device can get, and it walks into
         /// place as older pages arrive. NOT at the tail: that is where what is true NOW goes, and
         /// it is where these records used to pile up (`ReceiptAnchor.place` has the whole story).
         case at(String)
@@ -221,6 +250,12 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         case .fusePause(let itemID):              return "fuse-\(itemID)"
         // The web card's DOM id, `owner-request-<id>`.
         case .ownerRequest(let requestID):        return "owner-request-\(PublicID.storageKey(requestID))"
+        case .crossingBatch(let batchID):         return batchID
+        case .scheduleCard(let requestID):        return "schedule-card-\(PublicID.storageKey(requestID))"
+        case .scheduleRecord(let scheduleID, let revision):
+            return "schedule-record-\(PublicID.storageKey(scheduleID))@\(revision)"
+        case .scheduleRunStrip(let runID):        return "schedule-run-strip-\(PublicID.storageKey(runID))"
+        case .scheduleRunReport(let runID):       return "schedule-run-report-\(PublicID.storageKey(runID))"
         }
     }
 }
@@ -238,7 +273,7 @@ public extension TranscriptItem {
         case .assistant(let bubble): return bubble.ts
         case .thinking(let block):   return block.finishedTs ?? block.startedTs
         case .toolCall(let card):    return card.ts
-        case .interrupt, .error, .authError, .autoRetry, .notice, .diagnostic: return nil
+        case .interrupt, .error, .authError, .autoRetry, .notice, .diagnostic, .mainCheckout: return nil
         }
     }
 }
@@ -267,15 +302,11 @@ public enum ReceiptAnchor {
     public enum Placement: Equatable, Sendable {
         /// After this row: the last row whose own clock is at or before the moment.
         case after(String)
-        /// Older than every loaded row. Drawn at the HEAD of the window, above the load-earlier
-        /// row — as close to where it happened as this device can get, and it walks down into place
-        /// as older pages arrive and the window grows back past its moment.
-        ///
-        /// NOT the tail, which is the other end of the conversation: a record's own stamp on a card
-        /// sitting under everything that happened after it tells the reader the decision was made
-        /// now. Nor is it dropped, which is what the web end does and what the native end did before
-        /// — a record that disappears on a long conversation is a record the owner cannot read.
+        /// Since conversation creation but older than every loaded row. Drawn at the HEAD of
+        /// the window, and walks into place as older pages arrive.
         case beforeWindow
+        /// Older than the conversation itself. This record belongs to the previous conversation.
+        case beforeConversation
         /// A stamp nothing can parse: a record nobody can place is not drawn in the wrong one.
         case unplaceable
     }
@@ -303,8 +334,11 @@ public enum ReceiptAnchor {
 
     /// Where `stamp` sits among the rows `clocks` was read from — the whole rule, and the only place
     /// it is stated.
-    public static func place(_ clocks: Clocks, at stamp: String) -> Placement {
+    public static func place(_ clocks: Clocks, at stamp: String, since createdAt: String? = nil) -> Placement {
         guard let at = ThinkingSummary.date(stamp) else { return .unplaceable }
+        if let createdAt, let start = ThinkingSummary.date(createdAt), at < start {
+            return .beforeConversation
+        }
         var anchor: String?
         for row in clocks.rows where row.at <= at {
             anchor = row.id
@@ -387,7 +421,8 @@ public enum DeliveryAnchor {
              .acceptanceConfirmationReceipt,
              .evidenceDecision, .ownerDecisionReceipt, .evidenceDecisionReceipt,
              .promotionApproval, .promotionReceipt, .coordinatorQuestion,
-             .coordinatorQuestionRecord, .escalatedItem, .fusePause, .ownerRequest:
+             .coordinatorQuestionRecord, .escalatedItem, .fusePause, .ownerRequest, .crossingBatch,
+             .scheduleCard, .scheduleRecord, .scheduleRunStrip, .scheduleRunReport:
             return items.last?.id
         }
     }
@@ -446,11 +481,20 @@ public enum DeliveryAnchor {
 public enum TranscriptRow: Identifiable, Equatable, Sendable {
     /// What this conversation made as it started (`CreatedWorkspaceLine`): its first line.
     case createdWorkspace(CreatedWorkspaceLine)
+    /// A successor coordinator's handoff from the one before it (board 02 ③): the note card and
+    /// the waits that moved here, at the top of the conversation it opened.
+    case handoffReceived(SessionCoordinatorHandoffReceived)
     case loadOlder(cursor: Int)
     case item(TranscriptItem)
+    /// How long a turn worked, or has been working: drawn under the message that opened it and over
+    /// everything the turn wrote (`TurnHead`).
+    case turnHead(TurnHeadLine)
     /// A stretch of work between two replies — settled thinking and tool calls — folded into one
     /// steps line (see `TranscriptRows.groupToolRuns`, `StepsSummary`).
     case steps([TranscriptItem])
+    /// Two or more Agents (`mcp__orbit__delegate`) started one after another with nothing between them,
+    /// drawn as one group (`SubagentGroup`, `TranscriptRows.groupAgents`).
+    case agents([ToolCard])
     /// Turns Orbit opened, each with everything drawn under it, folded into one row — a run of them
     /// into one group row (`OrbitExchangeFold`; web parity: `OrbitExchangeSolo` / `OrbitExchangeGroup`).
     case exchanges([OrbitExchange])
@@ -474,9 +518,13 @@ public enum TranscriptRow: Identifiable, Equatable, Sendable {
     public var id: String {
         switch self {
         case .createdWorkspace:      return "created-workspace"
+        case .handoffReceived:       return "coordinator-handoff-received"
         case .loadOlder(let cursor): return "load-older-\(cursor)"
         case .item(let item):        return item.id
+        case .turnHead(let line):    return "turn-head-\(line.bubbleID)"
         case .steps(let items):      return items.first?.id ?? "steps-empty"
+        // The bare id of its first call, for the steps line's reason.
+        case .agents(let cards):     return cards.first?.id ?? "agents-empty"
         // The bare id of the first turn's opening bubble, for `.steps`' reason: it replaces that
         // bubble's own row, and a scroll aimed at it must still land somewhere.
         case .exchanges(let turns):  return turns.first?.id ?? "exchanges-empty"
@@ -501,20 +549,29 @@ public enum TranscriptRows {
     /// questions still trailing at the tail, which stay nearest the composer (web parity: the card
     /// is drawn after the transcript and before the cards that ask the owner something).
     ///
+    /// `running` is whether the session's turn is running now, which is when the newest turn's head
+    /// counts up (`TurnHead.label`).
+    ///
     /// `createdWorkspace` is the conversation's first line, so it is above everything — and only once
     /// the first page is loaded: first means first, not the top of a window that starts later.
+    /// `handoffReceived` (a successor coordinator's note card) follows it, by the same rule.
     public static func build(state: TranscriptState,
                              statusCards: [LocalStatusCard],
                              canPageOlder: Bool,
                              showWorkingIndicator: Bool,
+                             running: Bool = false,
                              decisionCards: [DeliveredDecisionCard] = [],
                              clocks known: ReceiptAnchor.Clocks? = nil,
+                             conversationCreatedAt: String? = nil,
                              recap: RecapCard? = nil,
                              foldExchanges: Bool = true,
                              watchName: ((WatchWake, WatchWakeTarget) -> String?)? = nil,
+                             handoffReceived: SessionCoordinatorHandoffReceived? = nil,
                              createdWorkspace: CreatedWorkspaceLine? = nil) -> [TranscriptRow] {
         var rows: [TranscriptRow] = []
         if let createdWorkspace, !canPageOlder { rows.append(.createdWorkspace(createdWorkspace)) }
+        // The note the conversation opened with, by the same rule: first, once the first page is in.
+        if let handoffReceived, !canPageOlder { rows.append(.handoffReceived(handoffReceived)) }
         // A command run before the first transcript event belongs above events that arrive later;
         // the rest are placed after the item that was last at invocation time.
         var anchored: [String: [LocalStatusCard]] = [:]
@@ -525,7 +582,7 @@ public enum TranscriptRows {
         // A delivered decision card follows `placement`: a QUESTION sits where it arrived — and one
         // whose row it cannot place trails at the TAIL rather than being lost, because it is still
         // waiting on somebody. A RECORD is resolved against the rows loaded right now, and one whose
-        // moment is above them all leads at the HEAD (see `ReceiptAnchor.Placement`).
+        // moment is since creation but above them all leads at the HEAD (see `ReceiptAnchor.Placement`).
         var anchoredDecisions: [String: [DeliveredDecisionCard]] = [:]
         var trailingDecisions: [DeliveredDecisionCard] = []
         var headRecords: [DeliveredDecisionCard] = []
@@ -552,10 +609,11 @@ public enum TranscriptRows {
             case .at(let moment):
                 let read = clocks ?? ReceiptAnchor.Clocks(state.items)
                 clocks = read
-                switch ReceiptAnchor.place(read, at: moment) {
+                switch ReceiptAnchor.place(read, at: moment,
+                                           since: card.kind.isRecord ? conversationCreatedAt : nil) {
                 case .after(let anchor): anchoredDecisions[anchor, default: []].append(card)
                 case .beforeWindow:      headRecords.append(card)
-                case .unplaceable:       break
+                case .beforeConversation, .unplaceable: break
                 }
             }
         }
@@ -575,6 +633,7 @@ public enum TranscriptRows {
         // older than, so a record's moment being above the window must not hide the control that
         // pages the window back to it.
         if canPageOlder { rows.append(.loadOlder(cursor: state.oldestSeq ?? 0)) }
+        let turnHeads = TurnHead.lines(state)
         for item in state.items {
             // An AskUserQuestion / ExitPlanMode tool card duplicates the live interactive approval
             // rendered below while the prompt still awaits an answer — show only the interactive
@@ -582,6 +641,11 @@ public enum TranscriptRows {
             // Transcript.tsx hides the read-only copy while `live && !result`).
             if !Approvals.duplicatesPendingApproval(item, pendingApprovals: state.pendingApprovals) {
                 rows.append(.item(item))
+            }
+            // Only a head with something to say gets a row: an empty one would still hold its insets.
+            if case .user(let bubble) = item, let line = turnHeads[bubble.id],
+               TurnHead.label(line, running: running) != nil {
+                rows.append(.turnHead(line))
             }
             for card in anchored.removeValue(forKey: item.id) ?? [] { rows.append(.statusCard(card)) }
             for card in anchoredDecisions.removeValue(forKey: item.id) ?? [] {
@@ -628,7 +692,7 @@ public enum TranscriptRows {
         // Ids are unique by construction above; a repeat could only come from a malformed stream
         // (two events sharing a tool_use id). Drop it rather than hand the List a diff that aborts.
         var seen = Set<String>()
-        let grouped = groupToolRuns(rows)
+        let grouped = groupAgents(groupToolRuns(rows))
         // The turns Orbit opened, folded with their answers (`OrbitExchangeFold`), unless the caller
         // draws every row as it is — a static export, a sub-agent's own transcript.
         let folded = foldExchanges ? OrbitExchangeFold.fold(grouped, watchName: watchName) : grouped
@@ -653,6 +717,28 @@ public enum TranscriptRows {
         for row in rows {
             if case .item(let item) = row, isStep(item) {
                 run.append(item)
+            } else {
+                flush()
+                out.append(row)
+            }
+        }
+        flush()
+        return out
+    }
+
+    /// Fold Agents started together — two or more `delegate` calls in rows of their own, one after the
+    /// other — into one group row. One alone keeps its own row; anything between two of them, a sentence
+    /// or a steps line, keeps them apart.
+    static func groupAgents(_ rows: [TranscriptRow]) -> [TranscriptRow] {
+        var out: [TranscriptRow] = []
+        var run: [ToolCard] = []
+        func flush() {
+            if run.count > 1 { out.append(.agents(run)) } else { out.append(contentsOf: run.map { .item(.toolCall($0)) }) }
+            run.removeAll()
+        }
+        for row in rows {
+            if case .item(.toolCall(let card)) = row, card.name == SubagentBlock.toolName {
+                run.append(card)
             } else {
                 flush()
                 out.append(row)
@@ -689,7 +775,7 @@ public enum TranscriptRows {
                      foldExchanges: false)
             .filter {
                 switch $0 {
-                case .item, .steps: return true
+                case .item, .steps, .agents: return true
                 default: return false
                 }
             }
@@ -697,11 +783,17 @@ public enum TranscriptRows {
 
     private static func isGroupable(_ card: ToolCard) -> Bool {
         if card.id.hasPrefix("shell-") { return false }
+        // The owner's "Chat about this" reply to a card is their message, drawn under the call; folded
+        // into a steps line it would vanish behind "Used tool".
+        if OwnerChatReply.words(of: card) != nil { return false }
         switch card.name {
         // Task/Agent/Workflow: Claude Code's names for a sub-agent and a team of them (the 08-14
         // Agent→Workspace rename had rewritten "Agent" here). Their cards carry work of their own —
-        // a nested transcript, progress — and must never fold into a run.
-        case "AskUserQuestion", "ExitPlanMode", "mcp__orbit__session_create", "Task", "Agent", "Workflow":
+        // a nested transcript, progress — and must never fold into a run. So does Orbit's own
+        // SubAgent (`mcp__orbit__delegate`), which draws the child's steps under the same block
+        // (docs/subagent-design.md §6.4).
+        case "AskUserQuestion", "ExitPlanMode", "mcp__orbit__session_create", "Task", "Agent", "Workflow",
+             SubagentBlock.toolName:
             return false
         default:
             return true

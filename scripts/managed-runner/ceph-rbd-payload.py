@@ -78,7 +78,7 @@ def snapshot(root, minimum_rows=0, recover=False):
         mounts = []
         for line in Path("/proc/self/mountinfo").read_text().splitlines():
             fields = line.split()
-            if fields[4] == "/var/lib/orbit":
+            if fields[4] == "/home/orbit":
                 mounts.append(line)
         result = {
             "runID": root.name,
@@ -158,7 +158,7 @@ def main():
         raise RuntimeError("Exec target Pod UID differs from recorded generation")
     if not args.run_id or any(character not in "abcdefghijklmnopqrstuvwxyz0123456789-" for character in args.run_id):
         parser.error("run-id must contain only lowercase letters, numbers and hyphens")
-    root = Path("/var/lib/orbit/storage-verification") / args.run_id
+    root = Path("/home/orbit/storage-verification") / args.run_id
     if args.operation == "writer":
         if args.expected_pod_name and os.environ.get("POD_NAME") != args.expected_pod_name:
             # A duplicate that unexpectedly passes admission must remain inert.

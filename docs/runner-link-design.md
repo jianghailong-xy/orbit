@@ -296,6 +296,7 @@ runner ──WebSocket（TLS，protobuf）──▶ 四层负载均衡 ──▶
 - `rnr.<runnerId>`：提示、踢连接。
 - `ses.<sessionId>.live`：实时流。
 - `usr.<userId>`：控制面事件，以后给客户端网关用。
+- `vnc.<streamId>.down`、`vnc.<streamId>.up`：托管 runner 浏览器的字节流（`docs/runner-browser-design.md` §4，`src/link-gateway/streams.go`）。apiserver 在 `rnr.<runnerId>` 上发 `StreamOpen` 请求，持有该 runner 连接的网关应答；之后每条消息是一个只带 `stream_data`、`stream_credit` 或 `stream_close` 的二进制 `Frame`。网关的用户可以在 `vnc.>` 上发布和订阅。
 - `api.held`、`api.<instanceId>`：apiserver 进程之间转交只在内存里的登录状态（Antigravity 粘贴的登录码、待检查的 Cursor 密钥；`src/apiserver/src/runners/relay-peers.ts`）。
   - 持有方在 `api.held` 上声明：哪个实例、为哪台 runner、持有哪个登录尝试或检查 ID。声明里不带登录码和密钥，持有期间每 5 秒重发一次，交出或作废后撤回。
   - 心跳落到别的进程时，该进程向 `api.<instanceId>` 发请求，带上自己读到的登录尝试或检查 ID，对得上才交出。登录码和密钥只出现在这一次应答里，发往请求方的 inbox，只交一次；不存库、不写日志、不进事件。
@@ -329,6 +330,7 @@ runner ──WebSocket（TLS，protobuf）──▶ 四层负载均衡 ──▶
 
 - 实时流改走 NATS。
 - 持久事件的跨副本通知，改为写入器提交后按会话发布一次，不再逐条 NOTIFY。
+- **合批调用的通知在提交之后发。** 事务里发了 NOTIFY，提交时就要拿 PostgreSQL 唯一的通知队列锁（`PreCommit_Notify`），一直持有到提交结束、WAL 刷盘也在内，所以所有合批调用只能一个接一个提交；排队超过 `LINK_CALL_LOCK_TIMEOUT_MS`（1 秒）的调用在 COMMIT 上锁超时、整体回滚、每批改为单独发送（C2b 实测一小时 41 次、3,185 批）。现在合批事务里不发 NOTIFY，提交之后用一条只发通知的语句把各批的通知一起发出（`RealtimeService.sendNotices`；这样的事务不写 WAL，只在排进队列的那一刻持锁），发出之后才回答这次调用。进程如果死在提交和通知之间，调用就没有回答：网关把调用重发给另一个 apiserver，或者让各批失败、由 runner 重发；重发的入库发现这些 seq 已经存过，就把它们作为一段 seq 范围重新通知，各个 apiserver（包括接到重发的那个）从 run_event 读回（`restatedBatchNotice`）。单独入库也一样：通知发出之后才回答。见 `runner-link-merged-notify-lock.pg.spec.ts`。
 
 ---
 

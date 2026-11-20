@@ -1,9 +1,12 @@
 import type { ComponentProps, ContextType } from 'react';
+import type { SubagentRunView } from '@orbit/shared';
 import { useNavigate } from 'react-router-dom';
 import { encodeId } from '../lib/idCodec';
+import { useSubagentRuns } from '../lib/subagentRuns';
 import type { SessionStream } from '../lib/useSessionStream';
 import { OrbitLinkCardsProvider } from './OrbitLinkCard';
 import { AnsweredQuestionsCtx } from './OwnerAnswerLine';
+import { SubagentQueuedWakesCtx } from './SubagentCardEnd';
 import { WikiDraftCardCtx, type WikiDraftCardHost } from './WikiDraftCard';
 import {
   AuthErrorCtx,
@@ -13,12 +16,18 @@ import {
   SessionNavCtx,
   SteerWithdrawCtx,
   StreamingDraftsCtx,
+  SubagentRunsCtx,
+  SubagentWaitingCtx,
   TaskActivityCtx,
   Transcript,
   type TranscriptInsert,
   type TurnImage,
   UndeliveredCtx,
 } from './Transcript';
+
+const NO_SUBAGENT_WAITING: ReadonlyMap<string, string> = new Map();
+const NO_QUEUED_WAKES: ReadonlyMap<string, () => void> = new Map();
+const NO_EVENTS: SessionStream['transcriptEvents'] = [];
 
 /**
  * A session's live conversation: the transcript of what `useSessionStream` holds, inside the
@@ -45,6 +54,9 @@ export function SessionConversation({
   linkRefreshKey,
   answeredQuestions,
   wikiChat = null,
+  subagentWaiting = NO_SUBAGENT_WAITING,
+  subagentRuns: givenRuns,
+  subagentQueuedWakes = NO_QUEUED_WAKES,
 }: {
   sessionId: string;
   stream: SessionStream;
@@ -65,8 +77,16 @@ export function SessionConversation({
   answeredQuestions: ContextType<typeof AnsweredQuestionsCtx>;
   /** The card host of a wiki chat (`WikiDraftCard`); null for any other session. */
   wikiChat?: WikiDraftCardHost | null;
+  /** What each SubAgent waits for a person to approve, by its delegate call (`SubagentWaitingCtx`). */
+  subagentWaiting?: ReadonlyMap<string, string>;
+  /** The session's SubAgent runs, when the page already reads them (`useSubagentRuns`); else read here. */
+  subagentRuns?: ReadonlyMap<string, SubagentRunView>;
+  /** Each SubAgent end turn still on the queue, by run id: its `Don't send` (`SubagentQueuedWakesCtx`). */
+  subagentQueuedWakes?: ReadonlyMap<string, () => void>;
 }) {
   const navigate = useNavigate();
+  const ownRuns = useSubagentRuns(sessionId, givenRuns ? NO_EVENTS : stream.transcriptEvents);
+  const subagentRuns = givenRuns ?? ownRuns;
   return (
     <SessionNavCtx.Provider value={(rawId) => navigate(`/sessions/${encodeId(rawId)}`)}>
       <EventFullCtx.Provider value={stream.fetchEventFull}>
@@ -76,6 +96,9 @@ export function SessionConversation({
               <SteerWithdrawCtx.Provider value={steerWithdrawal}>
                 <LiveToolOutputsCtx.Provider value={stream.liveToolOutputs}>
                   <TaskActivityCtx.Provider value={stream.taskActivity}>
+                    <SubagentRunsCtx.Provider value={subagentRuns}>
+                    <SubagentWaitingCtx.Provider value={subagentWaiting}>
+                    <SubagentQueuedWakesCtx.Provider value={subagentQueuedWakes}>
                     <StreamingDraftsCtx.Provider value={stream.streamingDrafts}>
                       {/* The links in this conversation, drawn as cards. The provider is what makes a
                           card possible at all — the shared page and the export mount none — and it
@@ -96,6 +119,9 @@ export function SessionConversation({
                         </AnsweredQuestionsCtx.Provider>
                       </OrbitLinkCardsProvider>
                     </StreamingDraftsCtx.Provider>
+                    </SubagentQueuedWakesCtx.Provider>
+                    </SubagentWaitingCtx.Provider>
+                    </SubagentRunsCtx.Provider>
                   </TaskActivityCtx.Provider>
                 </LiveToolOutputsCtx.Provider>
               </SteerWithdrawCtx.Provider>

@@ -284,20 +284,15 @@ describe('ProjectsPage', () => {
       // the one thing that clears `NO_LANDING_WORKSPACE` — and an empty object otherwise, which is
       // what lets the server borrow the workspace this project's work already runs in.
       "`/projects/${encodeURIComponent(projectId)}/coordinator`, { method: 'POST', body: workspaceId ? { workspaceId } : {} }",
-      // The other half of that pair, and a SEPARATE route for the reason the card draws a separate
-      // button: the open above resolves, so pressing it on a completed conversation hands that same
-      // conversation back. This one replaces it. No body at all — where the replacement opens is
-      // the project's to decide, and a `workspaceId` here would be a move wearing a replacement's
-      // name (the rebind below is the move).
-      "`/projects/${encodeURIComponent(projectId)}/coordinator/replace`, { method: 'POST' }",
+      // The other half of that pair — the replace door — moved to components/CoordinatorChange.tsx
+      // with the coordinator's Change, and is held there (below). Its body names a
+      // workspace only when the reader picked one: "start the next coordinator THERE".
       // No Automatic PATCH here any more: the switch moved off the coordinator card into How it
       // runs (`ProjectRunSettings`), which writes `automatic` with the rest of the settings the
       // start card set — asserted over the requests that leave the client in
       // ProjectRunSettings.test.tsx and ProjectsPage.automatic.test.tsx.
-      // The verb behind every COORDINATOR_UNAVAILABLE. Held as literally as the path above,
-      // `workspaceId` included: this endpoint has no `null` spelling, and a body that could send
-      // one would be a way to REACH the state it exists to leave.
-      "`/projects/${encodeURIComponent(projectId)}/coordinator/rebind`, { method: 'POST', body: { workspaceId } }",
+      // No rebind here any more: a project whose workspace broke starts its next coordinator in a
+      // workspace the reader picks (the replace door with a workspaceId), in one step.
       // Exactly this, spelled out: the root level is requested by sending NO parentId, so an
       // added `&parentId=…` here would silently turn this into a subtask page under the same
       // cache key. `limit=100` is inline rather than interpolated so this stays a literal read
@@ -316,6 +311,10 @@ describe('ProjectsPage', () => {
       // down — base62 has nothing to escape, so the escaping itself is held here — and this list
       // is what proves there is no THIRD task-page spelling and no sixth endpoint in the file.
       '`/projects/${encodeURIComponent(projectId)}/tasks/page?parentId=${encodeURIComponent(encodeId(parentTaskId))}&limit=100`',
+    ]);
+    const startSource = readFileSync(fileURLToPath(new URL('../components/CoordinatorChange.tsx', import.meta.url)), 'utf8');
+    expect([...startSource.matchAll(API_CALL)].map((m) => m[1].trim().replace(/,$/, ''))).toEqual([
+      "`/projects/${encodeURIComponent(projectId)}/coordinator/replace`, { method: 'POST', body: workspaceId ? { workspaceId } : {} }",
     ]);
     // The status write that moved to lib/projectDone.ts keeps its exact shape there: PATCH, with a
     // body carrying nothing but the status being claimed.
@@ -2584,6 +2583,25 @@ describe('ProjectDetailPage — a project nobody has started', () => {
     return html.slice(at, html.indexOf('data-project-block=', at + 1));
   };
 
+  it('shows owner open items and hides open and settled coordinator items', () => {
+    const owner = { ...startRow, kind: 'INTEGRATION_CHECK_FAILED', title: 'Owner exception', startRequest: null };
+    const coordinator = { ...owner, itemId: 'coordinator-open', assignee: 'COORDINATOR', title: 'Coordinator open exception' };
+    const html = page({ startedAt: '2026-09-29T08:26:00.000Z' }, {
+      needsYou: [owner],
+      withCoordinator: [coordinator],
+      settled: [{
+        ...coordinator,
+        itemId: 'coordinator-settled',
+        title: 'Coordinator settled exception',
+        outcome: { state: 'RESOLVED', resolution: 'HANDLED', resolvedAt: owner.waitingSince },
+      }],
+    });
+
+    expect(text(openItemsOf(html))).toContain('Owner exception');
+    expect(html).not.toContain('Coordinator open exception');
+    expect(html).not.toContain('Coordinator settled exception');
+  });
+
   it('tags it Not started, where a started project reads Open', () => {
     const unstarted = page({ startedAt: null }, null);
     expect(unstarted).toContain('>Not started</span>');
@@ -2605,7 +2623,7 @@ describe('ProjectDetailPage — a project nobody has started', () => {
     expect(items).toContain('You waiting 2m');
     expect(openItemsOf(html)).toMatch(/<button[^>]*class="project-open-item-action is-primary"[^>]*>Review<\/button>/);
     // Counted with what needs you, because somebody is waiting on you.
-    expect(items).toContain('1 need you · 0 with the coordinator');
+    expect(items).toContain('1 need you');
     expect(items).not.toContain('not asked yet');
   });
 
@@ -2617,7 +2635,7 @@ describe('ProjectDetailPage — a project nobody has started', () => {
     expect(text(items)).toContain('not asked yet');
     expect(text(items)).not.toContain('Start this project?');
     // Nobody is waiting on the owner for it, so it is not counted as something that needs them.
-    expect(text(items)).toContain('0 need you · 0 with the coordinator');
+    expect(text(items)).toContain('0 need you');
   });
 
   it('draws neither row once the project is started', () => {

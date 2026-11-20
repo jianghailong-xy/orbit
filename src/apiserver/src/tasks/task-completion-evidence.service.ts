@@ -17,7 +17,9 @@ import {
 import {
   EVIDENCE_DECISIONS,
   EvidenceDecisionValue,
+  assertConfirmGapsFollowedUp,
   assertCriterionUnmoved,
+  assertGapFollowUpsValid,
   assertCurrentEvidenceRevision,
   assertDecidingSessionInTaskProject,
   assertDecisionMayReachRuns,
@@ -30,6 +32,14 @@ import {
   type TaskCompletionCriterionValue,
 } from './task-completion-criterion';
 import { readPendingEvidenceJudgments } from './pending-evidence-judgments';
+import { EVIDENCE_FIELDS, queueOwnerCardTranslation, translatedInto } from '../sessions/card-translation';
+import { translationLanguages, type TranslationLanguages } from '../sessions/turn-translation';
+import { ownerWordsForAgent } from '../sessions/reply-translation';
+import {
+  RESTART_TASK_ACTION,
+  unansweredUndecidableRevision,
+  undecidableAddressees,
+} from './undecidable-evidence';
 import {
   EvidenceCitation,
   EvidenceCriterionMatch,
@@ -39,13 +49,19 @@ import {
   evidenceCriterionMatch,
   parseEvidenceEnvelope,
   resolveEvidenceCitations,
+  statesAStandard,
   storedEvidenceEnvelope,
+  taskStandard,
 } from './task-evidence-envelope';
 import { TasksService } from './tasks.service';
 import { EvidenceReviewService } from './evidence-review.service';
 import { ownerDecidesInTheRun, ownerEvidenceCard } from './evidence-review';
 import { ownerConfirmationPrincipalRefusal, type OwnerConfirmationPrincipal } from './task-owner-confirmation';
 import { CompletionInputRouter } from '../projects/completion-input-router.service';
+import {
+  resolveUndecidedEvidenceOnDecision,
+  resolveUndecidedEvidenceOnRevision,
+} from '../projects/evidence-undecided';
 import { completionEvidenceRevisedFact } from '../projects/completion-input';
 import { refreshProjectDone } from '../projects/project-done-request';
 import { deliveredIdentityAtDone, enqueueForDoneTask } from '../projects/project-integration-job';
@@ -73,6 +89,9 @@ export interface DecideCompletionEvidence {
   evidenceRevision: string;
   decision: EvidenceDecisionValue;
   note?: string;
+  /** The account owner's press only: deliver a SEND_BACK's note untranslated, the "Send as written" of a note
+   *  refused 422 TRANSLATION_FAILED. */
+  sendAsWritten?: boolean;
 }
 
 export interface CompletionCriterionSnapshotInput {
@@ -268,6 +287,9 @@ function decisionResponse(row: DecisionRow): TaskEvidenceDecisionDto {
  * immutable. After their commits both re-project the status of the task's project, because a
  * revision and its decision are inputs to it (`reprojectProjectStatus`).
  */
+/** A Restart press on a row that no longer offers it. */
+export const EVIDENCE_RESTART_NOT_OFFERED_CODE = 'EVIDENCE_RESTART_NOT_OFFERED';
+
 @Injectable()
 export class TaskCompletionEvidenceService {
   private readonly logger = new Logger(TaskCompletionEvidenceService.name);
@@ -328,6 +350,19 @@ export class TaskCompletionEvidenceService {
          FOR UPDATE
       `);
       if (!task) throw new NotFoundException('task not found');
+      // Known at submit time, so refused to the caller here, before anything is written: evidence
+      // for a task that states no standard would sit undecidable with nobody able to move it.
+      // A verifier is settled by its verdict on the task it checks, not by a judgment of its
+      // evidence against a standard of its own, so it is not held to stating one.
+      if (task.verifiesTaskId === null && !statesAStandard(task)) {
+        throw new ConflictException({
+          code: 'TASK_STATES_NO_STANDARD',
+          message: 'this task states no standard to judge evidence against: it declares no criterionKey and its '
+            + 'acceptanceCriteria are empty. Write the task\'s acceptanceCriteria (task_update) or declare a '
+            + 'criterionKey, then submit again.',
+          requiredAction: 'WRITE_ACCEPTANCE_CRITERIA_OR_DECLARE_CRITERION_KEY',
+        });
+      }
 
       // Source Session status never gates the fact: RUNNING, AWAITING_INPUT and terminal source
       // Sessions submit the same evidence. Task.status is read only to decide whether the evidence
@@ -347,10 +382,24 @@ export class TaskCompletionEvidenceService {
       // the same receipt a first one gets. Both read only rows already inside this transaction's
       // scope, and both refuse by throwing, so nothing below runs for a refused envelope.
       const citations = await resolveEvidenceCitations(tx, { ownerId, taskId }, envelope, images);
-      const criterionMatch = await evidenceCriterionMatch(tx, task, envelope.criterion);
+      // Known at submit time too: a follow-up a gap names has to be a task of this project now.
+      await assertGapFollowUpsValid(tx, { ownerId, taskId, projectId: task.projectId }, envelope.gapClauses);
+      // The server binds the standard this revision is judged against: the one the task is held to
+      // now, read under the Task mutex. Whatever `criterion` the submitter sent is dropped, never
+      // checked (docs/evidence-always-has-an-addressee-design.md §2.2, D1). The decision door holds
+      // this snapshot against the live standard, so it stays decidable until that is reworded.
+      const standard = await taskStandard(tx, task, taskId);
+      const unquoted: JsonObject = { ...normalizedEvidence };
+      delete unquoted.criterion;
+      const standardEvidence: JsonObject = standard
+        ? { ...unquoted, criterion: normalizeCompletionEvidence(standard) as JsonObject }
+        : unquoted;
+      // Reported so the submitter reads the standard its evidence is held to; true here by
+      // construction, it turns false only when that standard is reworded after this submission.
+      const criterionMatch = standard ? await evidenceCriterionMatch(tx, task, standard) : null;
       const receipt: EvidenceReceipt = { citations, criterionMatch };
       // In here because a cited file's sha256 is read with its citation, and is digested with the rest.
-      const boundEvidence = bindCitedFiles(normalizedEvidence, citations);
+      const boundEvidence = bindCitedFiles(standardEvidence, citations);
       const evidenceDigest = completionDigest(boundEvidence);
 
       if (idempotencyKey) {
@@ -410,6 +459,8 @@ export class TaskCompletionEvidenceService {
           },
           include: evidenceInclude,
         });
+        // A newer revision supersedes the owner's item about an older one that waited undecided (1110).
+        await resolveUndecidedEvidenceOnRevision(tx, taskId, evidence.id);
         // Each cited file, and each file of a cited bundle, names the newest revision citing it. That is what says it
         // is evidence at all (`FilesService.readableInSession`) and which revision's fate is its own (§2.8). A file with a
         // tombstone is no longer one a version can hold, so it is refused whole, with these rows locked: the sweep waits
@@ -453,6 +504,12 @@ export class TaskCompletionEvidenceService {
     }, loggedRetry(this.logger, 'taskCompletionEvidence.submit'));
 
     await this.reprojectProjectStatus(ownerId, committed.projectId);
+    // Translated for the owner in the background, when their translation is on (decision 1A).
+    void translationLanguages(this.prisma, ownerId)
+      .then((langs) => {
+        if (langs) this.queueTranslation(ownerId, taskId, committed.evidenceRow.revision.toString(), langs);
+      })
+      .catch((error: Error) => this.logger.warn(`translating evidence of task ${taskId} failed to queue: ${error.message}`));
 
     try {
       // The revision itself is the trigger. A source Session may still be RUNNING or
@@ -678,6 +735,7 @@ export class TaskCompletionEvidenceService {
         },
         include: evidenceInclude,
       });
+      await resolveUndecidedEvidenceOnRevision(tx, taskId, evidence.id);
       await settleCitedFileExpiry(tx, { ownerId, taskId });
       await tx.taskCompletionEvidenceIdempotency.create({
         data: { id: randomUUID(), taskId, idempotencyKey, evidenceId: evidence.id },
@@ -761,6 +819,13 @@ export class TaskCompletionEvidenceService {
     const note = decisionNote(input.decision, input.note);
     const ownerInTheApp = principal !== undefined
       && ownerConfirmationPrincipalRefusal(ownerId, principal) === null;
+    // Settings › Translation, before anything is written: a SEND_BACK the account owner typed in the app reaches the
+    // run in the agent language, or the decision is refused whole (422 TRANSLATION_FAILED). A session's note is an
+    // agent's own words and goes as written. The row keeps the owner's words; the translation rides the turn.
+    const langs = input.decision === 'SEND_BACK' && actor.type === CreatorType.USER && ownerInTheApp
+      ? await translationLanguages(this.prisma, ownerId)
+      : null;
+    const noteForAgent = await ownerWordsForAgent(note, langs, input.sendAsWritten);
 
     const committed = await withTransactionRetry(this.prisma, async (tx) => {
       // The same Task mutex submission takes. It is what makes check 1 a compare-and-set: a
@@ -833,6 +898,11 @@ export class TaskCompletionEvidenceService {
         // was derived then, under this same lock, so nothing is re-derived here.
         return { decision: decisionResponse(existing), completed: false, projectId: task.projectId };
       }
+      // A gap that names a clause of the standard is accepted only with a follow-up that proves it.
+      // After the replay above, so a CONFIRM recorded before this rule is still answered as it was.
+      if (input.decision === 'CONFIRM') {
+        await assertConfirmGapsFollowedUp(tx, { ownerId, taskId, projectId: task.projectId }, latest.evidence);
+      }
 
       // The derivation, and the only thing this door writes outside its own row. It asks the
       // task's OWN declared criterion: evidence submitted against an EXECUTABLE or VERIFICATION
@@ -864,12 +934,17 @@ export class TaskCompletionEvidenceService {
           evidenceDigest: latest.evidenceDigest,
           decision: input.decision,
           note,
+          ...(noteForAgent && langs ? { translatedNote: noteForAgent.text, translationLang: langs.owner } : {}),
           decidedByType: actor.type,
           decidedById: actor.id,
           decidingSessionId: decidingSession.id,
         },
         include: decisionInclude,
       });
+      // The owner's item about this revision waiting undecided ends with the decision (1110).
+      await resolveUndecidedEvidenceOnDecision(tx, taskId, latest.id, actor.type === CreatorType.USER
+        ? { resolvedBy: 'USER', resolvedByUserId: actor.id }
+        : { resolvedBy: 'COORDINATOR', resolvedBySessionId: decidingSession.id });
       // A send-back starts the 30 days of what this version cites, and a CONFIRM holds it until the task goes (§2.8).
       await settleCitedFileExpiry(tx, { ownerId, taskId });
 
@@ -1018,7 +1093,91 @@ export class TaskCompletionEvidenceService {
       select: { id: true, taskId: true },
     });
     if (!session) throw new NotFoundException('deciding session not found');
-    return readPendingEvidenceJudgments(this.prisma, ownerId, session);
+    const queue = await readPendingEvidenceJudgments(this.prisma, ownerId, session);
+    await this.translateUntranslated(ownerId, [...queue.pending, ...queue.waitingOnYou]).catch((error: Error) =>
+      this.logger.warn(`queueing evidence translations failed: ${error.message}`));
+    return queue;
+  }
+
+  /**
+   * Queue the translation of one evidence revision's claim and gaps into the owner's language
+   * (sessions/card-translation.ts): stored in `translation` while no decision answers the revision, then the task
+   * and the conversation its card is drawn in are announced, as a new revision is. Returns at once.
+   */
+  queueTranslation(ownerId: string, taskId: string, revision: string, langs: TranslationLanguages): boolean {
+    const where = { taskId, ownerId, revision: BigInt(revision), decisions: { none: {} } };
+    return queueOwnerCardTranslation({
+      key: `evidence:${taskId}:${revision}`,
+      read: async () => {
+        const row = await this.prisma.taskCompletionEvidence.findFirst({
+          where,
+          select: { evidence: true, translation: true },
+        });
+        return row ? { source: row.evidence, fields: EVIDENCE_FIELDS, translation: row.translation } : null;
+      },
+      write: async (translation) => (await this.prisma.taskCompletionEvidence.updateMany({
+        where,
+        data: { translation: translation as unknown as Prisma.InputJsonValue },
+      })).count > 0,
+      published: () => {
+        this.realtime?.publishForUser(ownerId, RunEventType.TASK_CHANGED, { taskIds: [taskId], resync: false });
+        void this.nudgeCoordinatorRow(ownerId, taskId);
+      },
+    }, langs);
+  }
+
+  /**
+   * Decision 1A: an unanswered revision on this reader's card with no translation in the owner's current language
+   * gets one queued as it is read; one already tried in this language, failed or not, is left.
+   */
+  private async translateUntranslated(
+    ownerId: string,
+    rows: ReadonlyArray<{ taskId: string; evidenceRevision: string; translation?: unknown }>,
+  ): Promise<void> {
+    if (rows.length === 0) return;
+    const langs = await translationLanguages(this.prisma, ownerId);
+    if (!langs) return;
+    for (const row of rows) {
+      if (!translatedInto(row.translation, langs)) this.queueTranslation(ownerId, row.taskId, row.evidenceRevision, langs);
+    }
+  }
+
+  /**
+   * Restart the task, pressed on the owner's pending row that offers it (`ownerAction:
+   * RESTART_TASK`): the task's latest revision is unanswered and undecidable, it has no live run,
+   * and no Automatic coordinator was told to act on it. Asked again here, at the press, by the same
+   * predicates the read placed the row with, so a press that is no longer the owner's to make is
+   * refused 409 with nothing started. Then it is the owner's own Run (`TasksService.execute`), so a
+   * repeat of one press (`triggerId`) is the same run, and every rule that press already has holds.
+   */
+  async restartFromEvidence(ownerId: string, taskId: string, revision: string, triggerId?: string) {
+    if (!this.tasks) throw new Error('restartFromEvidence needs the tasks service');
+    const task = await this.prisma.task.findFirst({ where: { id: taskId, ownerId }, select: { id: true } });
+    if (!task) throw new NotFoundException('task not found');
+    const found = await unansweredUndecidableRevision(this.prisma, ownerId, taskId);
+    const notOffered = (why: string, extra: Record<string, unknown> = {}) => new ConflictException({
+      code: EVIDENCE_RESTART_NOT_OFFERED_CODE,
+      requiredAction: 'READ_THE_PENDING_EVIDENCE_AGAIN',
+      taskId,
+      evidenceRevision: revision,
+      ...extra,
+      message: `${why}; nothing was started`,
+    });
+    if (!found) {
+      throw notOffered('this task has no unanswered evidence revision that cannot be decided, so there is nothing to restart it for');
+    }
+    const latest = found.latest.revision.toString();
+    if (latest !== revision) {
+      throw notOffered(`this task's latest evidence revision is ${latest}, not ${revision}`, { currentRevision: latest });
+    }
+    const placed = (await undecidableAddressees(this.prisma, ownerId, [found.task])).get(taskId)!;
+    if (placed.addressee !== 'OWNER') {
+      throw notOffered(placed.addressee === 'RUN'
+        ? 'a run of this task is live and has been told to submit the revision again'
+        : 'this project\'s coordinator has been told to act on this revision', { addressee: placed.addressee });
+    }
+    const started = await this.tasks.execute(ownerId, taskId, undefined, triggerId);
+    return { taskId, evidenceRevision: revision, action: RESTART_TASK_ACTION, started };
   }
 
   async list(ownerId: string, taskId: string) {
@@ -1031,8 +1190,8 @@ export class TaskCompletionEvidenceService {
     });
     const revisions: TaskCompletionEvidenceDto[] = [];
     for (const row of rows) {
-      const checks = storedEvidenceEnvelope(row.evidence)?.checks ?? [];
-      revisions.push(response(row, checks.some((check) => check.kind === 'FILE')
+      const checks = storedEvidenceEnvelope(row.evidence)?.checks;
+      revisions.push(response(row, checks
         ? { citations: await describeEvidenceCitations(this.prisma, { ownerId, taskId }, checks), criterionMatch: null }
         : undefined));
     }

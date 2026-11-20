@@ -63,6 +63,7 @@ import io.orbitd.android.taskprojects.canWrite
 import io.orbitd.android.taskprojects.writable
 import io.orbitd.android.ui.LocalOrbitColors
 import io.orbitd.android.wiki.PageBar
+import io.orbitd.android.watch.WatchSessionSummary
 import io.orbitd.android.watch.WatchStore
 import io.orbitd.android.watch.watchKey
 import io.orbitd.android.wiki.WikiDate
@@ -105,6 +106,110 @@ internal fun SessionProjectRowView(row: SessionProjectRow, onOpen: () -> Unit, o
             Text(row.line.text, Modifier.testTag("project-row-line"), maxLines = 1, overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.bodyMedium, color = lineColor(row.line.tone))
         }
+    }
+}
+
+/** The words of the conversation bar's project sessions button and of the sheet it opens (owner 2026-11-11, docs/mocks/
+ * project-sessions-column board 5). Kept apart from [SessionProjectCopy], whose every word is held to OrbitKit's Swift: iOS has yet
+ * to land its own button. */
+internal object ProjectSessionsSheetCopy {
+    const val button = "Project sessions"
+    const val close = "Close"
+    /** What the button says, beside its name, while anything in the sheet is active. */
+    const val active = "Active"
+}
+
+/** The conversation bar's button for its project's sessions (owner 2026-11-11, docs/mocks/project-sessions-column board 5): the
+ * project glyph and how many sessions the project has, left of the ⋮, on the coordinator's conversation and on every member's alike.
+ * While anything its sheet shows is [active] the glyph gives its place to the running spinner (owner 2026-11-17,
+ * docs/mocks/project-sessions-button-running, option C). */
+@Composable
+internal fun ProjectSessionsButton(count: Int?, active: Boolean, onClick: () -> Unit) {
+    TextButton(onClick, Modifier.heightIn(min = 48.dp).testTag("project-sessions-button")
+        .semantics(mergeDescendants = true) {
+            contentDescription = ProjectSessionsSheetCopy.button
+            if (active) stateDescription = ProjectSessionsSheetCopy.active
+        },
+        contentPadding = PaddingValues(horizontal = 8.dp),
+        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant)) {
+        if (active) CircularProgressIndicator(Modifier.size(18.dp).padding(1.dp).testTag("project-sessions-button-active"),
+            color = MaterialTheme.colorScheme.primary, strokeWidth = 2.dp)
+        else Icon(painterResource(R.drawable.ic_grid), null, Modifier.size(18.dp))
+        if (count != null) {
+            Spacer(Modifier.width(4.dp))
+            Text("$count", style = MaterialTheme.typography.labelLarge, modifier = Modifier.testTag("project-sessions-button-count"))
+        }
+    }
+}
+
+/** What the conversation bar's project sessions button says: how many sessions the project has, and whether anything is active. */
+internal data class ProjectSessionsButtonState(val count: Int? = null, val active: Boolean = false)
+
+/** Whether the project sessions button spins: anything its sheet shows as active — a member or landing session at work (the spinner)
+ * or with a background job in flight (the breathing terminal), a landing job running or queued, or a merge into main being checked
+ * or landing. Waiting on a decision is not activity. iOS `AppModel.projectActive`. */
+internal object ProjectSessionsButtonActivity {
+    private val activeMergeStates = setOf("CHECKING", "CONFIRMED", "RECHECKING")
+    fun active(sessions: List<DirectorySession>, watching: (DirectorySession) -> WatchSessionSummary?, integration: JsonObject?,
+        promotion: JsonObject?): Boolean =
+        ProjectPage.landingInFlight(integration) || integration?.let { ProjectPage.inFlightJobs(it) }.orEmpty().isNotEmpty() ||
+            promotion?.text("state") in activeMergeStates ||
+            sessions.any { it.isRunning() || it.isRunningJob(watching(it)) }
+}
+
+/** The project sessions button's reading of [projectId], kept current while the conversation carrying it shows: its sessions — Open and
+ * Completed, read across workspaces, landings among them, never one on its way to Trash — counted as the sessions page counts them
+ * (no landing), and with its landing line and merge, whether anything is active. Each follows the account stream as the page does, the
+ * line and the merge every 4 s while a job is in flight. While the sheet is [paused] the page in it reads the same things, so these
+ * stop, and read again when it closes. The count is null until the first read answers, and a failed read keeps the last answer. */
+@Composable
+internal fun rememberProjectSessionsButton(app: OrbitApplication, handle: SessionHandle, api: DirectoryApi, projectId: String?,
+    paused: Boolean): State<ProjectSessionsButtonState> {
+    val projects = remember(handle) { ProjectApi(app.session, handle) { app.canWrite(handle) } }
+    val watches by remember(handle) { WatchStore.of(app.session, handle, app.processScope).state }.collectAsState()
+    var rows by remember(projectId) { mutableStateOf<List<DirectorySession>?>(null) }
+    var integration by remember(projectId) { mutableStateOf<JsonObject?>(null) }
+    var promotion by remember(projectId) { mutableStateOf<JsonObject?>(null) }
+    if (projectId != null && !paused) {
+        PagePoll(app, handle, PagePolls.PROJECT_EVENTS, projectId) {
+            suspend fun read(view: String): List<DirectorySession> =
+                api.read(listOf("sessions"), ListSerializer(DirectorySession.serializer()), listOf("view" to view, "projectId" to projectId, "includeLanding" to "1"))
+            try {
+                val read = coroutineScope { val open = async { read("open") }; val completed = async { read("completed") }; open.await() + completed.await() }
+                val kept = app.trashing.without(read) { it.id }
+                rows = SessionProjectMembers.members(projectId, kept) + SessionProjectMembers.landings(projectId, kept)
+            } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { }
+        }
+        PagePoll(app, handle, PagePolls.PROJECT_EVENTS, projectId, inFlightMs = {
+            if (ProjectSessionsButtonActivity.active(emptyList(), { null }, integration, promotion)) LANDING_READ_MS else null
+        }) {
+            coroutineScope {
+                launch { try { integration = projects.integration(projectId) } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { } }
+                launch { try { promotion = projects.currentPromotion(projectId) } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { } }
+            }
+        }
+    }
+    val hidden by app.trashing.ids.collectAsState()
+    return remember(projectId) { derivedStateOf {
+        val shown = rows?.let { all -> TrashingSessions.without(all, hidden) { it.id } }
+        ProjectSessionsButtonState(
+            count = shown?.count { !it.isLanding },
+            active = ProjectSessionsButtonActivity.active(shown.orEmpty(), { watches.summaries[watchKey(it.id)] }, integration, promotion))
+    } }
+}
+
+/** The project's sessions over a phone's conversation (board 5): today's sessions page in a bottom sheet that opens at half height and
+ * drags to full; ✕, the scrim, a drag down and Back close it. A member picked in it is handed to [pick] with the sheet gone. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun ProjectSessionsSheet(app: OrbitApplication, handle: SessionHandle, projectId: String, workspaceId: String?, data: DirectoryData,
+    api: DirectoryApi, open: (OrbitRoute) -> Unit, close: () -> Unit, onCount: (Int) -> Unit, pick: (OrbitRoute) -> Unit) {
+    val state = rememberModalBottomSheetState()
+    val scope = rememberCoroutineScope()
+    val route = remember(projectId, workspaceId) { OrbitRoute(Destination.PROJECT_SESSIONS, projectId, workspaceId, origin = Origin.LIST) }
+    ModalBottomSheet(onDismissRequest = close, sheetState = state, modifier = Modifier.testTag("project-sessions-sheet")) {
+        SessionProjectPage(app, handle, route, data, api, open,
+            close = { scope.launch { state.hide() }.invokeOnCompletion { close() } }, pick = pick, onCount = onCount)
     }
 }
 
@@ -236,7 +341,7 @@ private const val LANDING_READ_MS = 4_000L
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, route: OrbitRoute, data: DirectoryData, api: DirectoryApi,
-    open: (OrbitRoute) -> Unit) {
+    open: (OrbitRoute) -> Unit, close: (() -> Unit)? = null, pick: (OrbitRoute) -> Unit = open, onCount: (Int) -> Unit = {}) {
     val projectId = route.id ?: return
     val projects = remember(handle) { ProjectApi(app.session, handle) { app.canWrite(handle) } }
     // A new page opens on what the app already holds of the project — every workspace's Open rows — and its read replaces them when
@@ -400,6 +505,13 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
         try { projects.retryJob(projectId, jobId)?.let { view -> state.integration = view; state.integrationReadAt = Instant.now(); state.integrationReadFailed = false }; null }
         catch (cancel: CancellationException) { throw cancel }
         catch (failure: Exception) { "${ProjectPage.landingRetryFailed} — ${failureReason(failure).trimEnd('.')}." }
+    suspend fun skipLandingCheck(taskId: String): String? {
+        val error = try { projects.skipLandingCheck(projectId, taskId); null }
+        catch (cancel: CancellationException) { throw cancel }
+        catch (failure: Exception) { failureReason(failure) }
+        loadIntegration()
+        return error
+    }
     /** One of the timed-out merge card's doors — Re-run the check (J-T9) or Abandon (J-T10): the page's landing read and the
      *  candidate are read again when it answers; a refusal comes back in the server's words. */
     suspend fun landingDoor(press: suspend () -> Unit): String? =
@@ -409,9 +521,14 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
 
     val members = TrashingSessions.without(state.members, hidden) { it.id }
     val coordinator = members.firstOrNull { it.projectMembership?.isCoordinator == true }
-    PageBar.Bind(route, project?.text("title") ?: members.firstOrNull()?.projectMembership?.projectTitle ?: "Project",
-        // No count while no member is known yet: "0 sessions" would be a claim nobody checked.
-        if (state.loading && members.isEmpty()) SessionProjectCopy.pageSubtitleLoading else SessionProjectCopy.pageSubtitle(members.size)) {
+    val pageTitle = project?.text("title") ?: members.firstOrNull()?.projectMembership?.projectTitle ?: "Project"
+    // No count while no member is known yet: "0 sessions" would be a claim nobody checked.
+    val pageSubtitle = if (state.loading && members.isEmpty()) SessionProjectCopy.pageSubtitleLoading else SessionProjectCopy.pageSubtitle(members.size)
+    // Only a count the page's own read stands behind: before it, the members are the Open list's alone.
+    if (state.readAt != null) SideEffect { onCount(members.size) }
+    // A page binds the shell's bar; in a conversation's sheet (owner 2026-11-11, docs/mocks/project-sessions-column board 5) the
+    // bar is the conversation's, so the sheet draws the same title, line and button in a head of its own, with ✕ to close.
+    if (close == null) PageBar.Bind(route, pageTitle, pageSubtitle) {
         IconButton(onClick = ::openProject, modifier = Modifier.testTag("project-sessions-open-project")) {
             Icon(painterResource(R.drawable.ic_grid), SessionProjectCopy.openProject)
         }
@@ -419,9 +536,24 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
     @Composable
     fun MemberRow(session: DirectorySession) {
         val view = if (session.effectiveLifecycleState == "COMPLETED") SessionView.COMPLETED else SessionView.OPEN
-        SessionRow(session, data.machineName(session.workspace), { open(OrbitRoute(Destination.SESSION, session.id, route.workspaceId, origin = Origin.LIST)) },
+        SessionRow(session, data.machineName(session.workspace), { pick(OrbitRoute(Destination.SESSION, session.id, route.workspaceId, origin = Origin.LIST)) },
             watching = watches.summaries[watchKey(session.id)]) {
             action = DirectoryDialog.SessionMenu(session, view)
+        }
+    }
+    Column(Modifier.fillMaxSize()) {
+    if (close != null) Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, bottom = 4.dp).testTag("project-sessions-sheet-head"),
+        verticalAlignment = Alignment.CenterVertically) {
+        IconButton(onClick = close, modifier = Modifier.testTag("project-sessions-sheet-close")) {
+            Icon(painterResource(R.drawable.ic_close), ProjectSessionsSheetCopy.close)
+        }
+        Column(Modifier.weight(1f).semantics(mergeDescendants = true) {}) {
+            Text(pageTitle, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
+            Text(pageSubtitle, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        IconButton(onClick = ::openProject, modifier = Modifier.testTag("project-sessions-open-project")) {
+            Icon(painterResource(R.drawable.ic_grid), SessionProjectCopy.openProject)
         }
     }
     PullToRefreshBox(isRefreshing = refreshing, onRefresh = { refresh() }, modifier = Modifier.fillMaxSize().testTag("project-sessions")) {
@@ -457,7 +589,7 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
                     item(key = "landing") {
                         ProjectLandingCardView(card, onOpenJobs = if (ProjectPage.inFlightJobs(integration) != null) ({ showsJobs = true }) else null,
                             onOpenProject = ::openProject, openLanding = { id -> open(OrbitRoute(Destination.SESSION, id, route.workspaceId, origin = Origin.LIST)) },
-                            retry = { retryJob(it) }, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+                            retry = { retryJob(it) }, skipCheck = { skipLandingCheck(it) }, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
                     }
                 }
             }
@@ -485,7 +617,7 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
                         rerunCheck = { promotionId -> landingDoor {
                             projects.recheckPromotion(projectId, promotionId, LandingSessionCopy.RERUN_CHECK_REASON) } },
                         onDetails = { promotionReview = it },
-                        onCoordinator = coordinator?.let { c -> { open(OrbitRoute(Destination.SESSION, c.id, route.workspaceId, origin = Origin.LIST)) } },
+                        onCoordinator = coordinator?.let { c -> { pick(OrbitRoute(Destination.SESSION, c.id, route.workspaceId, origin = Origin.LIST)) } },
                         // Why it asks, off the line read and the Automatic the merge's document read carries; Let the agent push
                         // instead… opens the project's page, whose How it runs has Delivery.
                         asksReason = PromotionCards.askReason(merge.current, integration?.text("line"), integration?.text("deliveryMode"), merge.automatic),
@@ -530,6 +662,7 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
                 }
             }
         }
+    }
     }
     action?.let { dialog ->
         // A row's menu does not wait for a read (iOS), as on the session list.

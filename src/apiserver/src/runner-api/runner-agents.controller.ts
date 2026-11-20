@@ -19,6 +19,7 @@ import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
 import { namesWorkspaceCardField, requireWorkspaceWriteApproval } from './runner-workspace-approval';
+import { worktreeNeedsGit } from '../workspaces/worktree-needs-git';
 
 // The exact create contract shared by the runner HTTP route, MCP agent_create and
 // `orbit agent create`. Keep this as one literal: runner-go's parity test reads it and compares all
@@ -38,6 +39,18 @@ export const ORCHESTRATOR_WORKSPACE_CREATE_FIELDS = [
   'enableWorktree',
   'env',
   'defaultMergeTarget',
+] as const;
+
+// Fields that decide what an Agent's runs cost or where they may go: the owner's, through the workspace
+// and preferences APIs (docs/subagent-design.md §7). Unlike the other fields this route leaves out, these
+// are refused by name rather than dropped, so an agent that tries learns it cannot instead of reading
+// a 200 as done.
+export const HUMAN_ONLY_WORKSPACE_FIELDS = [
+  'modelRouting',
+  'modelRoutingOptimizeFor',
+  'modelRoutingProviders',
+  'subagentsEnabled',
+  'subagentsMaxRunning',
 ] as const;
 
 export type OrchestratorWorkspaceInput = {
@@ -135,7 +148,10 @@ export class RunnerAgentsController {
     const sanitized = sanitizeWorkspaceWrite(body);
     if (namesWorkspaceCardField(sanitized)) {
       // Another account's workspace is not found, card or no card, before anything is said about one.
-      await this.workspaces.get(runner.ownerId, id);
+      const current = await this.workspaces.get(runner.ownerId, id);
+      // Refused before the owner is asked to approve a write that would be refused anyway.
+      const needsGit = worktreeNeedsGit(current, sanitized);
+      if (needsGit) throw needsGit;
       await requireWorkspaceWriteApproval(this.prisma, scope, id, sanitized);
     }
     const workspace = await this.workspaces.update(runner.ownerId, id, sanitized as UpdateWorkspaceDto);
@@ -183,6 +199,14 @@ export function sanitizeWorkspaceWrite(body: unknown): OrchestratorWorkspaceInpu
     throw new BadRequestException('workspace body must be an object');
   }
   const input = body as Record<string, unknown>;
+  const humanOnly = HUMAN_ONLY_WORKSPACE_FIELDS.filter((field) => input[field] !== undefined);
+  if (humanOnly.length > 0) {
+    throw new BadRequestException({
+      code: 'HUMAN_ONLY_WORKSPACE_FIELD',
+      message: `${humanOnly.join(', ')} can only be set by the owner, in the Agent's settings`,
+      fields: humanOnly,
+    });
+  }
   const sanitized: Record<string, unknown> = {};
   for (const field of ORCHESTRATOR_WORKSPACE_CREATE_FIELDS) {
     if (field === 'enableWorktree') {

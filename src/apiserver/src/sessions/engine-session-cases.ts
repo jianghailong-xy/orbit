@@ -42,11 +42,11 @@ export function routesNamingSession(
  *  did not have). */
 export const ENGINE_SESSION_USER_ROUTES = routesNamingSession(TENANT_ISOLATION_CASES, '/sessions');
 
-/** The runner door: 32 routes today (naming, a turn suggestion, the Cursor key check, a job's alert and the two file doors included). */
+/** Runner routes that act on an engine session. */
 export const ENGINE_SESSION_RUNNER_ROUTES = routesNamingSession(RUNNER_ISOLATION_CASES, '/runner/sessions');
 
 /**
- * The doors whose session id rides in the body or the query rather than the path (6). Each is held
+ * The doors whose session id rides in the body or the query rather than the path (7). Each is held
  * to the field case of the same name in the isolation registries, so the two lists cannot drift.
  */
 export const ENGINE_SESSION_FIELD_CASES: Readonly<Record<string, { guard: string; note: string }>> = {
@@ -73,6 +73,10 @@ export const ENGINE_SESSION_FIELD_CASES: Readonly<Record<string, { guard: string
   'POST /runner/heartbeat body expiredCommitErrors[].sessionId': {
     guard: 'RunnerApiController.assertNoLandingSessionNamed',
     note: 'an expired commit attempt belongs to a session this runner hosts',
+  },
+  'POST /runner/sessions/takeover-leases body sessions[].sessionId': {
+    guard: 'RunnerApiController.takeoverLeasesBatch',
+    note: 'each row of the batch takeover is the single takeover door, answered per row',
   },
 };
 
@@ -137,6 +141,16 @@ export const ENGINE_SESSION_GUARD_SITES: Readonly<Record<string, EngineSessionGu
     snippet: '// Model, permission mode, effort, provider and account are all engine-path settings (§2.9 LS6).',
     note: 'PATCH /config',
   },
+  'SessionsService.updateSettings': {
+    file: 'sessions/sessions.service.ts',
+    snippet: "// A landing's row belongs to the platform (§2.9 LS6), as for rename and config.",
+    note: 'PATCH /settings',
+  },
+  'SessionsService.restart': {
+    file: 'sessions/sessions.service.ts',
+    snippet: "throw new ConflictException('the session is in Trash; restore it before restarting it');\n      }\n      assertEngineSessionRow(session);",
+    note: 'POST /restart',
+  },
   'SessionsService.switchAccount': {
     file: 'sessions/sessions.service.ts',
     snippet: '// Switching the runner account a session runs on is an engine door (§2.9 LS6).',
@@ -145,7 +159,7 @@ export const ENGINE_SESSION_GUARD_SITES: Readonly<Record<string, EngineSessionGu
   'SessionsService.mergeToMain': {
     file: 'sessions/sessions.service.ts',
     snippet:
-      'requestedBy?: MergeRequester;\n    } = {},\n  ) {\n    await this.assertEngineSession(ownerId, id);',
+      'selfRequest?: boolean;\n    } = {},\n  ) {\n    await this.assertEngineSession(ownerId, id);',
     note: 'POST /merge and the runner merge door',
   },
   'SessionsService.startMergeRepair': {
@@ -182,6 +196,16 @@ export const ENGINE_SESSION_GUARD_SITES: Readonly<Record<string, EngineSessionGu
     file: 'sessions/sessions.service.ts',
     snippet: '// It queues a diff turn for the runner: an engine door like any other (§2.9 LS6).',
     note: 'POST /diff/refresh',
+  },
+  'SessionsService.ownHeldTurn': {
+    file: 'sessions/sessions.service.ts',
+    snippet: '// A landing has no messages, held or otherwise: an engine door (§2.9 LS6).\n    assertEngineSessionRow(session);',
+    note: 'POST /turns/:turnId/translation/retry and /send-as-written both load through it',
+  },
+  'SessionsService.retryReplyTranslation': {
+    file: 'sessions/sessions.service.ts',
+    snippet: '// A landing has no replies to translate: an engine door (§2.9 LS6).\n    assertEngineSessionRow(session);',
+    note: 'POST /events/:seq/translation/retry',
   },
   'SessionsService.steerQueuedTurn': {
     file: 'sessions/sessions.service.ts',
@@ -236,6 +260,11 @@ export const ENGINE_SESSION_GUARD_SITES: Readonly<Record<string, EngineSessionGu
     snippet: '// A landing session is not a conversation anyone can share (§2.9 LS6).',
     note: 'POST and PUT /sessions/:id/share',
   },
+  'SessionGuestsService.ownedSession': {
+    file: 'session-guests/session-guests.service.ts',
+    snippet: '// Nobody is invited into the platform\'s landing record: it runs no engine turn (§2.9 LS6).\n    if (opts.write) assertEngineSession(session);',
+    note: 'POST /sessions/:id/guests and DELETE /sessions/:id/guests/:userId',
+  },
   'ShareLinksService.turnOff': {
     file: 'share-links/share-links.service.ts',
     snippet: 'if (kind === \'SESSION\') assertEngineSession(root);\n    await this.end({ ownerId, ...rootColumn(kind, rootId) }, new Date());',
@@ -261,6 +290,11 @@ export const ENGINE_SESSION_GUARD_SITES: Readonly<Record<string, EngineSessionGu
     snippet: 'if (session) assertEngineSession(session);',
     note: 'a folder bundle is written into a session the way an upload is, and a pin acts for the session that asks',
   },
+  'RunnerSubagentsController.assertParentOfRunner': {
+    file: 'runner-api/runner-subagents.controller.ts',
+    snippet: 'if (session && session.ownerId === runner.ownerId) assertEngineSession(session);',
+    note: 'a delegate call opens a SubAgent run in the parent session, which is never a landing',
+  },
   'RunnerApiController.assertSessionOwnership': {
     file: 'runner-api/runner-api.controller.ts',
     snippet: 'if (session && (ownerId === undefined || session.ownerId === ownerId)) assertEngineSessionRow(session);',
@@ -270,6 +304,11 @@ export const ENGINE_SESSION_GUARD_SITES: Readonly<Record<string, EngineSessionGu
     file: 'runner-api/runner-api.controller.ts',
     snippet: 'return assertEngineSessionRowById(this.prisma, sessionId, ownerId);',
     note: 'the runner doors that name the session only by id: leases, pin, credential, reporting routes',
+  },
+  'RunnerApiController.takeoverLeasesBatch': {
+    file: 'runner-api/runner-api.controller.ts',
+    snippet: "// The single route's first refusal, on the caller's own account: a landing is the platform's (§2.9 LS6).",
+    note: 'every row of the batch takeover, refused per row as the single takeover refuses it',
   },
   'RunnerApiController.assertNoLandingSessionNamed': {
     file: 'runner-api/runner-api.controller.ts',
@@ -290,9 +329,14 @@ export const ENGINE_SESSION_DOORS: Readonly<Record<string, string>> = {
   'POST /sessions/:id/turns/current-work-routing': 'SessionsService.createTurn',
   'DELETE /sessions/:id/turns/:turnId': 'SessionsService.getSendable',
   'POST /sessions/:id/turns/:turnId/steer': 'SessionsService.steerQueuedTurn',
+  'POST /sessions/:id/turns/:turnId/translation/retry': 'SessionsService.ownHeldTurn',
+  'POST /sessions/:id/turns/:turnId/translation/send-as-written': 'SessionsService.ownHeldTurn',
+  'POST /sessions/:id/events/:seq/translation/retry': 'SessionsService.retryReplyTranslation',
   'POST /sessions/:id/resume': 'SessionsService.resume',
   'PATCH /sessions/:id/config': 'SessionsService.updateConfig',
   'PATCH /sessions/:id/account': 'SessionsService.switchAccount',
+  'PATCH /sessions/:id/settings': 'SessionsService.updateSettings',
+  'POST /sessions/:id/restart': 'SessionsService.restart',
   'POST /sessions/:id/interrupt': 'SessionsService.interrupt',
   'POST /sessions/:id/end': 'SessionsService.getSendable',
   'POST /sessions/:id/merge': 'SessionsService.mergeToMain',
@@ -315,6 +359,8 @@ export const ENGINE_SESSION_DOORS: Readonly<Record<string, string>> = {
   'POST /sessions/:id/share': 'ShareLinksService.put',
   'PUT /sessions/:id/share': 'ShareLinksService.put',
   'DELETE /sessions/:id/share': 'ShareLinksService.turnOff',
+  'POST /sessions/:id/guests': 'SessionGuestsService.ownedSession',
+  'DELETE /sessions/:id/guests/:userId': 'SessionGuestsService.ownedSession',
 
   // ── the runner door (32) ──────────────────────────────────────────────────────────────────────
   'POST /runner/sessions/:id/source/pin': 'RunnerApiController.assertEngineSessionById',
@@ -333,6 +379,9 @@ export const ENGINE_SESSION_DOORS: Readonly<Record<string, string>> = {
   'POST /runner/sessions/:id/notify': 'RunnerApiController.assertSessionOwnership',
   'POST /runner/sessions/:id/scheduled-wakeup': 'RunnerApiController.assertSessionOwnership',
   'POST /runner/sessions/:id/naming': 'RunnerApiController.assertSessionOwnership',
+  'POST /runner/sessions/:id/subagents': 'RunnerSubagentsController.assertParentOfRunner',
+  'POST /runner/sessions/:id/workflows': 'RunnerSubagentsController.assertParentOfRunner',
+  'PATCH /runner/sessions/:id/workflows/:workflowRunId': 'RunnerSubagentsController.assertParentOfRunner',
   'POST /runner/sessions/:id/cursor-key-check': 'ProvidersService.recordCursorKeyCheck',
   'POST /runner/sessions/:id/turns/:turnId/suggestion': 'RunnerApiController.assertSessionOwnership',
   'POST /runner/sessions/:id/turn-complete': 'RunnerApiController.assertEngineSessionById',
@@ -348,6 +397,7 @@ export const ENGINE_SESSION_DOORS: Readonly<Record<string, string>> = {
   'POST /runner/sessions/:id/merge-receipts': 'MergeReceiptService.record',
   'POST /runner/sessions/:id/end': 'SessionsService.getSendable',
   'POST /runner/sessions/:id/complete-session': 'SessionsService.transitionEnd',
+  'POST /runner/sessions/:id/move': 'SessionsService.move',
   'DELETE /runner/sessions/:id': 'SessionsService.transitionEnd',
   'POST /runner/sessions/:id/archive': 'SessionsService.transitionEnd',
 };

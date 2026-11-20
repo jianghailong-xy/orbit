@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -154,9 +155,9 @@ func runCodexExecSessionProcess(ctx context.Context, shutdownCtx context.Context
 				ChangedDiff:      livePatches,
 				BaseSha:          liveBaseSha,
 				WorktreeDirty:    worktreeIsDirty(job.WT),
-				BranchSha:        effectiveBranchSha(job.WT),
-				BranchMerged:     branchMergedInto(job.WT),
-				WorktreeBranch:   currentBranch(job.WT),
+				BranchSha:        effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT),
+				BranchMerged:   branchMergedInto(job.WT),
+				WorktreeBranch: currentBranch(job.WT),
 			}); err != nil {
 				logln("turn-complete failed for", job.SessionID+":", err)
 			}
@@ -177,7 +178,7 @@ func runCodexExecSessionProcess(ctx context.Context, shutdownCtx context.Context
 					TurnID: resp.TurnID, Status: stSucceeded,
 					Result: "started in background", Subtype: "shell",
 					RuntimeSessionID: currentRuntimeSessionID(job),
-					BranchSha:        effectiveBranchSha(job.WT),
+					BranchSha:        effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT),
 				}); err != nil {
 					logln("shell turn-complete failed for", job.SessionID+":", err)
 				}
@@ -214,11 +215,11 @@ func runCodexExecSessionProcess(ctx context.Context, shutdownCtx context.Context
 			liveFiles, livePatches := liveDiff(job.WT)
 			liveBaseSha := job.WT.baseSha()
 			if err := t.diffResult(job.SessionID, DiffResultRequest{
-				ChangedFiles:   liveFiles,
-				ChangedDiff:    livePatches,
-				BaseSha:        liveBaseSha,
-				WorktreeDirty:  worktreeIsDirty(job.WT),
-				BranchSha:      effectiveBranchSha(job.WT),
+				ChangedFiles:  liveFiles,
+				ChangedDiff:   livePatches,
+				BaseSha:       liveBaseSha,
+				WorktreeDirty: worktreeIsDirty(job.WT),
+				BranchSha:     effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT),
 				BranchMerged:   branchMergedInto(job.WT),
 				WorktreeBranch: currentBranch(job.WT),
 			}); err != nil {
@@ -382,8 +383,31 @@ func codexProviderArgs(agentEnv map[string]string) []string {
 // it perfectly well. ORBIT_WATCHES is here for the same reason: without it `orbit mcp` would list the
 // watch tools in a session whose owner has Watch off (watch_rollout.go). The managed runner's
 // instance identity is here for the same reason: `orbit mcp` sends it with the runner credential,
-// which a managed runner's control plane refuses without it (managed_instance.go).
-const codexOrbitMCPEnvVarsConfig = `mcp_servers.orbit.env_vars=["ORBIT_HOME","ORBIT_SESSION_ID","ORBIT_AGENT_ID","ORBIT_TASK_ID","ORBIT_ALLOW_ORCHESTRATION","ORBIT_WATCHES","ORBIT_WIKI","ORBIT_MCP_PERMISSION_PROMPT","ORBIT_BG_SOCKET","ORBIT_BG_TOKEN","ORBIT_MANAGED_RUNNER_GENERATION","ORBIT_MANAGED_RUNNER_POD_UID"]`
+// which a managed runner's control plane refuses without it (managed_instance.go). ORBIT_SPAWN_DEPTH is here
+// because `orbit mcp` halves its session_create(wait) budget per level of nesting (sessionWaitPolls): without it a
+// Codex session started by another session waits as long as a root one, and can outlast the wait above it.
+// ORBIT_RUNNER_CHILD is the runner's mark on the processes it starts (runnerChildEnv): it is how Orbit's Plan gate
+// tells a session process with no socket, whose writes it refuses, from a terminal the runner did not start.
+const codexOrbitMCPEnvVarsConfig = `mcp_servers.orbit.env_vars=["ORBIT_HOME","ORBIT_SESSION_ID","ORBIT_AGENT_ID","ORBIT_TASK_ID","ORBIT_ALLOW_ORCHESTRATION","ORBIT_WATCHES","ORBIT_WIKI","ORBIT_SCHEDULE_RUN","ORBIT_MCP_PERMISSION_PROMPT","ORBIT_SPAWN_DEPTH","ORBIT_RUNNER_CHILD","ORBIT_BG_SOCKET","ORBIT_BG_TOKEN","ORBIT_MANAGED_RUNNER_GENERATION","ORBIT_MANAGED_RUNNER_POD_UID","ORBIT_SUBAGENT_RUN_ID"]`
+
+// codexOrbitSessionEnv is the session context both Codex spawn paths export, for `orbit mcp` to read: which
+// session, agent and task it acts for, what it may orchestrate, which optional tools it serves, that Claude's
+// permission bridge is not its to offer, and how deep this session sits under the one that started it. Every name
+// here has to be on codexOrbitMCPEnvVarsConfig too, or it never reaches `orbit mcp`
+// (TestCodexForwardsTheWholeSessionContextToOrbitMCP).
+func codexOrbitSessionEnv(job *ClaimedSession) []string {
+	return []string{
+		"ORBIT_SESSION_ID=" + publicID(job.SessionID),
+		"ORBIT_AGENT_ID=" + publicID(job.AgentID),
+		"ORBIT_TASK_ID=" + publicID(job.TaskID),
+		"ORBIT_ALLOW_ORCHESTRATION=" + orchestrationEnv(job.AllowOrchestration),
+		envWatches + "=" + watchesEnv(job.WatchesDisabled),
+		envWiki + "=" + wikiEnv(job.WikiDisabled),
+		envScheduleRun + "=" + scheduleRunEnv(job.ScheduleRun),
+		envMCPPermissionPrompt + "=0",
+		envSpawnDepth + "=" + strconv.Itoa(job.SpawnDepth),
+	}
+}
 
 // codexOrbitMCPServer is the name the config keys below register Orbit's own MCP server under —
 // the `serverName` Codex then reports on an elicitation, which is how an approval tells Orbit's
@@ -479,6 +503,7 @@ func codexExecCommandArgs(job *ClaimedSession, execDir, upDir string, imagePaths
 	}
 	args = appendCodexSessionToolConfig(args)
 	args = appendCodexOrbitMCPConfig(args, exe)
+	args = appendCodexBrowserMCPConfig(args, exe)
 	args = append(args, codexProviderArgs(job.Agent.Env)...)
 	args = append(args, "--skip-git-repo-check")
 	for _, p := range imagePaths {
@@ -505,15 +530,7 @@ func runCodexTurn(ctx context.Context, job *ClaimedSession, execDir, prompt stri
 	configureSessionProcessTree(cmd)
 	cmd.Dir = execDir
 	cmd.Env = envWithAgent(job.Agent.Env)
-	cmd.Env = append(cmd.Env,
-		"ORBIT_SESSION_ID="+publicID(job.SessionID),
-		"ORBIT_AGENT_ID="+publicID(job.AgentID),
-		"ORBIT_TASK_ID="+publicID(job.TaskID),
-		"ORBIT_ALLOW_ORCHESTRATION="+orchestrationEnv(job.AllowOrchestration),
-		envWatches+"="+watchesEnv(job.WatchesDisabled),
-		envWiki+"="+wikiEnv(job.WikiDisabled),
-		envMCPPermissionPrompt+"=0",
-	)
+	cmd.Env = append(cmd.Env, codexOrbitSessionEnv(job)...)
 	cmd.Env = append(cmd.Env, bgJobEnvPairs(job.SessionID)...)
 	cmd.Stdin = strings.NewReader(prompt)
 	stdout, err := cmd.StdoutPipe()
@@ -836,6 +853,14 @@ func codexToolItemName(item map[string]interface{}) string {
 	}
 	tool := firstString(item, "tool")
 	if server := firstString(item, "server"); server != "" && tool != "" {
+		if server == codexOrbitMCPServer && tool == delegateToolName {
+			// The name the control plane counts a running SubAgent by and the clients draw its block for
+			// (delegateEngineToolName), as every other engine spells it.
+			return delegateEngineToolName
+		}
+		if server == codexOrbitMCPServer && tool == workflowToolName {
+			return workflowEngineToolName
+		}
 		return server + "__" + tool
 	}
 	return tool

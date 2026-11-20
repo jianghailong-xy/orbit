@@ -39,6 +39,9 @@ type natsStandIn struct {
 	ops []string
 	// published is every message a client published, by subject, in order: what the gateway sent on NATS.
 	published map[string][][]byte
+	// tap, when set, sees every message a client publishes, as it arrives; one it says not to keep is not recorded in
+	// published.
+	tap func(subject string, payload []byte) (keep bool)
 }
 
 type natsClient struct {
@@ -162,6 +165,12 @@ func (s *natsStandIn) publish(subject string, payload []byte) int {
 }
 
 func (s *natsStandIn) record(subject string, payload []byte) {
+	s.mu.Lock()
+	tap := s.tap
+	s.mu.Unlock()
+	if tap != nil && !tap(subject, payload) {
+		return
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.published[subject] = append(s.published[subject], slices.Clone(payload))
@@ -527,8 +536,9 @@ func TestWhatIsNotAHintIsCountedAndTheConnectionStays(t *testing.T) {
 
 func TestAFullQueueDropsAHintWithoutClosingTheConnection(t *testing.T) {
 	h := newHarness(t, nil)
-	// A connection whose writer never runs, so its queue only fills.
+	// A connection whose writer never runs, so its queue only fills: one is taken to be running, so none starts.
 	c := newConn(h.g, nil, &linkClaims{RunnerID: runnerA, LeaseOwner: processA}, "127.0.0.1")
+	c.queues.writing = true
 	hint := func() *linkpb.Frame {
 		return &linkpb.Frame{Body: &linkpb.Frame_Hint{Hint: &linkpb.Hint{Kind: &linkpb.Hint_Claim{Claim: &linkpb.ClaimHint{}}}}}
 	}

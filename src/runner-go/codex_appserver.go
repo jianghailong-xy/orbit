@@ -93,7 +93,10 @@ type codexAppServer struct {
 	// consentScope tells this process's JSON-RPC ids from another's (mcpConsentToolUseID).
 	consentScope string
 
-	orbitExecutable     string
+	orbitExecutable string
+	// resetNotePending says the conversation was compacted or resumed since the last turn/start: the next one leads
+	// with orbitContextResetNote (context_reset_note.go).
+	resetNotePending    atomic.Bool
 	instructionMode     codexInstructionMode
 	instructionMu       sync.Mutex
 	contextGeneration   uint64
@@ -103,6 +106,16 @@ type codexAppServer struct {
 	// Set from the stderr reader when Codex died bringing up its SQLite state, which is the
 	// one start failure worth another attempt. Read only after close() has joined that reader.
 	stateInitFailed atomic.Bool
+
+	// engineVersion is the Codex version its initialize answer names (codexVersionFromUserAgent), for the
+	// session's Agent Tools report.
+	engineVersion string
+	// The latest startup state Codex reported for Orbit's own MCP server (mcpServer/startupStatus/updated),
+	// read off the wire before the notification channel so that none is dropped, and who is told of the
+	// next one (onOrbitMCP, which the session's Agent Tools report sets). Guarded by mu.
+	orbitMCPState string
+	orbitMCPError string
+	onOrbitMCP    func(state, errText string)
 
 	// Set the first time this build answers a turn/steer with "unknown variant", which is the
 	// authoritative signal that it predates the method. It is a property of the process, not of
@@ -311,6 +324,18 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 		asyncWg.Wait()
 	}()
 
+	// The session's Agent Tools report (agent_tools_report.go): Codex's own word on Orbit's MCP server, and
+	// the playbooks skill handed to it as a skill root of this session's own. A root it does not take is
+	// reported and changes nothing else: no step depends on the skill.
+	agentTools := newCodexAgentTools(job, app, emit)
+	if root := writeCodexManagedSkillRoot(scratchDir); root != "" {
+		_, rootErr := app.request(ctx, "skills/extraRoots/set", map[string]interface{}{"extraRoots": []string{root}})
+		agentTools.skillRoot(rootErr, root)
+	} else {
+		agentTools.skillRoot(nil, "")
+	}
+	app.listenOrbitMCP(agentTools.mcpStatus)
+
 	// A resumed thread already carries the developer message an earlier generation
 	// injected, and inject_items appends rather than replaces. Injecting again on every
 	// warm restart / LRU reload would accumulate a copy of the agent context per
@@ -337,6 +362,7 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 	job.RuntimeSessionID = threadID
 	writeSessionMetaWithCodexState(scratchDir, job, execDir, state.Layout, state.Partition, state.CodexHome)
 	emit(evSystem, map[string]interface{}{"subtype": "init", "sessionId": threadID, "provider": providerCodex, "runtime": "app-server"})
+	agentTools.carrier(app.currentInstructionMode())
 
 	var activeMu sync.Mutex
 	var active *codexAppActiveTurn
@@ -451,9 +477,9 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 			ChangedDiff:      livePatches,
 			BaseSha:          liveBaseSha,
 			WorktreeDirty:    worktreeIsDirty(job.WT),
-			BranchSha:        effectiveBranchSha(job.WT),
-			BranchMerged:     branchMergedInto(job.WT),
-			WorktreeBranch:   currentBranch(job.WT),
+			BranchSha:        effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT),
+			BranchMerged:   branchMergedInto(job.WT),
+			WorktreeBranch: currentBranch(job.WT),
 		}, workerCtx); err != nil {
 			logln("turn-complete failed for", job.SessionID+":", err)
 		}
@@ -675,10 +701,15 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 	waitForIdle := func() {
 		tk := time.NewTicker(150 * time.Millisecond)
 		defer tk.Stop()
-		deadline := time.After(shutdownDrainTimeout)
+		// The owner's Update Now cuts the turn at once (stopDrainBudget); any other stop gives it the drain.
+		deadline := time.After(stopDrainBudget(shutdownCtx, shutdownDrainTimeout))
 		for {
 			activeMu.Lock()
 			idle := active == nil
+			cut := ""
+			if active != nil {
+				cut = active.orbitTurnID
+			}
 			activeMu.Unlock()
 			if idle {
 				return
@@ -686,7 +717,15 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 			select {
 			case <-tk.C:
 			case <-deadline:
-				logln("codex app-server drain timeout for", job.SessionID)
+				// Marked interrupted, as the Claude drain marks its own (watchShutdownDrain): without it the
+				// transcript stops mid-call with nothing to say why. The turn is not acked, so the control
+				// plane hands it back as the continuation once the session is reclaimed.
+				emitFor(cut, evInterrupt, stopInterruptPayload(shutdownCtx))
+				if stoppingForUpdateNow(shutdownCtx) {
+					logln("codex app-server update now for", job.SessionID+"; interrupting the turn in flight")
+				} else {
+					logln("codex app-server drain timeout for", job.SessionID)
+				}
 				return
 			case <-ctx.Done():
 				return
@@ -767,7 +806,7 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 					TurnID: resp.TurnID, Status: stSucceeded,
 					Result: "started in background", Subtype: "shell",
 					RuntimeSessionID: currentRuntimeSessionID(job),
-					BranchSha:        effectiveBranchSha(job.WT),
+					BranchSha:        effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT),
 				}); err != nil {
 					logln("shell turn-complete failed for", job.SessionID+":", err)
 				}
@@ -812,11 +851,11 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 			liveFiles, livePatches := liveDiff(job.WT)
 			liveBaseSha := job.WT.baseSha()
 			if err := t.diffResult(job.SessionID, DiffResultRequest{
-				ChangedFiles:   liveFiles,
-				ChangedDiff:    livePatches,
-				BaseSha:        liveBaseSha,
-				WorktreeDirty:  worktreeIsDirty(job.WT),
-				BranchSha:      effectiveBranchSha(job.WT),
+				ChangedFiles:  liveFiles,
+				ChangedDiff:   livePatches,
+				BaseSha:       liveBaseSha,
+				WorktreeDirty: worktreeIsDirty(job.WT),
+				BranchSha:     effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT),
 				BranchMerged:   branchMergedInto(job.WT),
 				WorktreeBranch: currentBranch(job.WT),
 			}); err != nil {
@@ -988,6 +1027,31 @@ func codexStderrDiagnostic(line string) (map[string]interface{}, bool) {
 	return nil, false
 }
 
+// codexReadonlySubagentMode is the mode a read-only SubAgent's Codex child runs in, in place of plan. Plan on
+// Codex refuses every command, and Codex reads a repository only through its shell, so a read-only child
+// could read nothing. This mode runs every command in Codex's own read-only sandbox (no writes, no network)
+// without asking. A session's plan mode keeps its meaning: only a child claim carries readonlySubagent, and
+// only a scheduled CHECK_ONLY run's claim carries scheduledCheckOnly (codexScheduledCheckOnly).
+const codexReadonlySubagentMode = "orbitReadonlySubagent"
+
+// codexPermissionMode is the permission mode Codex is configured from for this claim.
+func codexPermissionMode(job *ClaimedSession) string {
+	if job.readonlySubagent || codexScheduledCheckOnly(job) {
+		return codexReadonlySubagentMode
+	}
+	return job.Agent.PermissionMode
+}
+
+// codexScheduledCheckOnly is a scheduled CHECK_ONLY run's Plan session, as the control plane says on the
+// claim (agent.scheduledCheckOnly). Under the `untrusted` policy every other Plan session runs on, Codex asks
+// about every command, `ls` included, and Plan declines them all, so a check could fetch but not read its
+// checkout. This one session runs in the read-only sandbox instead: commands run without asking, the OS
+// refuses every write, the shell has no network, and the built-in web search still fetches
+// (docs/scheduled-tasks-engine-modes.md §8).
+func codexScheduledCheckOnly(job *ClaimedSession) bool {
+	return job.Agent.ScheduledCheckOnly && job.Agent.PermissionMode == "plan"
+}
+
 // codexApprovalPolicy is the `approvalPolicy` Codex is started with, derived from the session's
 // permission mode. This is what makes an "ask me first" mode mean that on Codex too: `untrusted`
 // auto-approves only known-safe read-only commands and asks about everything else, which Orbit
@@ -1008,6 +1072,9 @@ func codexApprovalPolicy(permissionMode string) string {
 	switch permissionMode {
 	case "default", "acceptEdits", "plan":
 		return "untrusted"
+	case codexReadonlySubagentMode:
+		// Nothing to ask: the read-only sandbox is the boundary (codexSandboxPolicy).
+		return "never"
 	case "auto":
 		return "on-request"
 	default:
@@ -1030,30 +1097,41 @@ func codexApprovalsReviewer(permissionMode string) string {
 // kimiAutomaticPermissionOption. The second result reports whether the mode decided at all;
 // otherwise the request goes to the user.
 func codexAutomaticApproval(permissionMode string, request codexApprovalRequest) (allowed, decided bool) {
-	// What bg_run may do is the runner's gate's to say, in every mode (background_gate.go). A consent here
-	// would be a second card about the same call, and Plan's refusal of the consent would hide what the
-	// gate says to do instead.
-	if request.mcpTool && request.server == codexOrbitMCPServer && request.tool == "bg_run" {
+	// Orbit's own tools, each recognized by its name in the operation catalogue, are consented to in every mode.
+	// Every session may call them without a card (ALWAYS_ALLOWED_TOOLS, apiserver common/permission-mode.ts: the
+	// rule Claude Code is given as its mcp__orbit__* allow rule), so a consent card would only ask the owner to let
+	// Orbit talk to Orbit. What a call may do is decided by the gates behind it, each of which says what to do
+	// instead, where a declined consent tells the model only that it was declined: a write that needs the owner
+	// files its own card, Plan's refusal of a write is Orbit's Plan gate's (plan_gate.go), and bg_run's is the
+	// background-job gate's (background_gate.go). Codex itself asks about an Orbit call only when its annotations
+	// say it may destroy something or reach beyond Orbit (withCatalogAnnotations), so the consents that still reach
+	// this are the destructive writes and bg_run.
+	if request.mcpTool && request.server == codexOrbitMCPServer && catalogMCPTool(request.tool) {
 		return true, true
 	}
-	// Codex asks for MCP tool-call consent on every call, including under the `never` policy the
-	// non-asking modes run on. Decide those here: a card in a mode that promises not to interrupt
+	if permissionMode == codexReadonlySubagentMode {
+		// Under `never` Codex asks nothing about a command: each runs in the read-only sandbox, which refuses
+		// writes and network. What still comes here asks to go beyond it (an escalation, a grant, an edit), or is
+		// another server's tool, which could write: refused, as Plan refuses them.
+		return false, true
+	}
+	// Codex has asked for MCP tool-call consent under the `never` policy the non-asking modes run on as
+	// well (measured on 0.166; 0.167.2 answers it itself under full disk access, which is what those
+	// modes run with). Decide any that still come here: a card in a mode that promises not to interrupt
 	// would be a new prompt, and the task runs that mode exists for would wait on a human forever.
 	if request.mcpTool && codexApprovalPolicy(permissionMode) == "never" {
 		return true, true
 	}
-	// Auto means the model decides when to ask — but Codex's MCP consent is not the model's
-	// judgement, it fires on every MCP tool call regardless. Left to the card, Auto would raise a
-	// prompt for each `task_list`, which is not the posture that mode describes. Orbit answers it
-	// for the server Orbit itself registers and scopes to this owner; a third-party MCP server
-	// still reaches the user, and the modes whose whole point is being consulted (default,
-	// acceptEdits) still ask about every server.
+	// An Orbit consent whose tool could not be read (codexMCPConsentTool) is still Orbit's own server's, scoped to
+	// this owner: Auto, which lets the model decide when to ask, answers it, and the modes whose point is being
+	// consulted (Default, Accept Edits) put it on the card, as they do a third-party server's.
 	if request.mcpTool && permissionMode == "auto" && request.server == codexOrbitMCPServer {
 		return true, true
 	}
 	switch permissionMode {
 	case "plan":
-		// Plan mode is read-only by definition: nothing it proposes may execute or edit.
+		// Plan mode is read-only by definition: nothing it proposes may execute or edit. That includes an Orbit
+		// consent whose tool could not be read, which cannot be told apart from a write.
 		return false, true
 	case "acceptEdits":
 		if request.fileChange {
@@ -1061,6 +1139,12 @@ func codexAutomaticApproval(permissionMode string, request codexApprovalRequest)
 		}
 	}
 	return false, false
+}
+
+// catalogMCPTool reports whether a name is one of the MCP tools the operation catalogue declares.
+func catalogMCPTool(name string) bool {
+	entry, declared := planGateTable()[name]
+	return declared && entry.mcp
 }
 
 // bridgeCodexApproval answers one Codex approval request: the agent's own policy first, then a
@@ -1074,7 +1158,7 @@ func bridgeCodexApprovalWithContext(ctx context.Context, t *Transport, job *Clai
 	if ctx.Err() != nil || t == nil || job == nil {
 		return false
 	}
-	if allowed, decided := codexAutomaticApproval(job.Agent.PermissionMode, request); decided {
+	if allowed, decided := codexAutomaticApproval(codexPermissionMode(job), request); decided {
 		return allowed
 	}
 	if job.Agent.PermissionMode == "auto" {
@@ -1189,15 +1273,7 @@ func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, stat
 	// invents (cache_root.go). The cache root is also a writable root of the sandbox policy
 	// (codexRuntimeWorkspaceRoots), so a confined command may write it.
 	cmd.Env = append(cmd.Env, runnerCacheEnv()...)
-	cmd.Env = append(cmd.Env,
-		"ORBIT_SESSION_ID="+publicID(job.SessionID),
-		"ORBIT_AGENT_ID="+publicID(job.AgentID),
-		"ORBIT_TASK_ID="+publicID(job.TaskID),
-		"ORBIT_ALLOW_ORCHESTRATION="+orchestrationEnv(job.AllowOrchestration),
-		envWatches+"="+watchesEnv(job.WatchesDisabled),
-		envWiki+"="+wikiEnv(job.WikiDisabled),
-		envMCPPermissionPrompt+"=0",
-	)
+	cmd.Env = append(cmd.Env, codexOrbitSessionEnv(job)...)
 	// Runner-hosted background jobs (mcp__orbit__bg_run). Codex also needs the two
 	// names on the MCP env allowlist — see codexOrbitMCPEnvVarsConfig.
 	//
@@ -1275,6 +1351,7 @@ func codexAppServerCommandArgs(job *ClaimedSession, stateDir, exe string) []stri
 	args := []string{"app-server", "--stdio", "-c", fmt.Sprintf("sqlite_home=%q", stateDir)}
 	args = appendCodexSessionToolConfig(args)
 	args = appendCodexOrbitMCPConfig(args, exe)
+	args = appendCodexBrowserMCPConfig(args, exe)
 	return append(args, codexProviderArgs(job.Agent.Env)...)
 }
 
@@ -1291,6 +1368,7 @@ func (a *codexAppServer) initialize(ctx context.Context) error {
 		return err
 	}
 	a.setInstructionMode(codexInstructionModeForUserAgent(firstString(result, "userAgent")))
+	a.engineVersion = codexVersionFromUserAgent(firstString(result, "userAgent"))
 	return a.notify("initialized", map[string]interface{}{})
 }
 
@@ -1305,6 +1383,9 @@ func (a *codexAppServer) startOrResumeThread(ctx context.Context, job *ClaimedSe
 	if err != nil {
 		return "", err
 	}
+	if method == "thread/resume" {
+		a.resetNotePending.Store(true)
+	}
 	if id := threadIDFromResult(result); id != "" {
 		return id, nil
 	}
@@ -1318,6 +1399,7 @@ func (a *codexAppServer) startTurn(ctx context.Context, threadID string, job *Cl
 	mode, generation := a.prepareInstructionContext(func() error {
 		return a.injectAgentContext(ctx, threadID, job.instructionAgent(), job.insideRecordedWork(), job.watchesOn())
 	})
+	prompt = a.turnPrompt(prompt, job.insideRecordedWork())
 	result, err := a.request(ctx, "turn/start", codexTurnParams(
 		threadID, job, execDir, upDir, orbitTurnID, prompt, imagePaths,
 		codexTurnContextOptions{
@@ -1330,6 +1412,12 @@ func (a *codexAppServer) startTurn(ctx context.Context, threadID string, job *Cl
 		return "", err
 	}
 	return turnIDFromResult(result), nil
+}
+
+// turnPrompt is the person's words as the next turn/start sends them: led by orbitContextResetNote, once, after a
+// compaction or a resume (context_reset_note.go).
+func (a *codexAppServer) turnPrompt(prompt string, taskSession bool) string {
+	return withContextResetNote(prompt, a.resetNotePending.Swap(false), taskSession)
 }
 
 func (a *codexAppServer) injectAgentContext(
@@ -1351,7 +1439,7 @@ func (a *codexAppServer) injectAgentContext(
 }
 
 func codexAgentContext(agent AgentExecConfig, executable string, insideRecordedWork, watches bool) string {
-	context := withOrbitCLIInstructions(agent.AppendSystemPrompt, executable, insideRecordedWork, watches)
+	context := withOrbitCLIInstructions(agent.AppendSystemPrompt, executable, insideRecordedWork, watches, agentDelegates(agent))
 	if strings.TrimSpace(context) == "" {
 		return codexImageDeliveryInstructions
 	}
@@ -1391,6 +1479,7 @@ func (a *codexAppServer) currentInstructionMode() codexInstructionMode {
 }
 
 func (a *codexAppServer) markInstructionContextForRefresh() bool {
+	a.resetNotePending.Store(true)
 	a.instructionMu.Lock()
 	newlyInvalidated := !a.contextNeedsRefresh
 	a.contextNeedsRefresh = true
@@ -1502,6 +1591,41 @@ func splitUTF8ByBytes(value string, maxBytes int) []string {
 	return parts
 }
 
+// codexContextValueMaxBytes is the most one application-context value carries. Codex caps each
+// value at 1,000 tokens; a UTF-8 byte budget is conservative because a token cannot encode less
+// than one byte, so a value this size is never cut short.
+const codexContextValueMaxBytes = 900
+
+// codexContextParagraphs packs text's paragraphs into values of at most maxBytes, in order: as many
+// whole paragraphs as fit in each, so every value reads on its own, and a paragraph longer than one
+// value split at rune boundaries rather than cut.
+func codexContextParagraphs(text string, maxBytes int) []string {
+	var values []string
+	current := ""
+	for _, paragraph := range strings.Split(strings.TrimSpace(text), "\n\n") {
+		if paragraph = strings.TrimSpace(paragraph); paragraph == "" {
+			continue
+		}
+		if current != "" && len(current)+len("\n\n")+len(paragraph) <= maxBytes {
+			current += "\n\n" + paragraph
+			continue
+		}
+		if current != "" {
+			values = append(values, current)
+			current = ""
+		}
+		if len(paragraph) <= maxBytes {
+			current = paragraph
+			continue
+		}
+		values = append(values, splitUTF8ByBytes(paragraph, maxBytes)...)
+	}
+	if current != "" {
+		values = append(values, current)
+	}
+	return values
+}
+
 func codexAgentAdditionalContext(
 	agent AgentExecConfig,
 	executable string,
@@ -1515,15 +1639,15 @@ func codexAgentAdditionalContext(
 		"kind":  "application",
 		"value": codexImageDeliveryInstructions,
 	}
-	if instruction := orbitCLIInstructions(executable, insideRecordedWork, watches); instruction != "" {
-		context[prefix+"cli"] = map[string]interface{}{
+	// Orbit's instructions, the agent primer first, as whole paragraphs: one value of their length
+	// would pass the 1,000-token cap, and Codex would keep only part of it.
+	for i, part := range codexContextParagraphs(orbitCLIInstructions(executable, insideRecordedWork, watches, agentDelegates(agent)), codexContextValueMaxBytes) {
+		context[fmt.Sprintf("%scli_%08d", prefix, i)] = map[string]interface{}{
 			"kind":  "application",
-			"value": instruction,
+			"value": part,
 		}
 	}
-	// Codex caps each application-context value at 1,000 tokens. A UTF-8 byte
-	// budget is conservative because a token cannot encode less than one byte.
-	for i, part := range splitUTF8ByBytes(agent.AppendSystemPrompt, 900) {
+	for i, part := range splitUTF8ByBytes(agent.AppendSystemPrompt, codexContextValueMaxBytes) {
 		context[fmt.Sprintf("%sagent_append_%08d", prefix, i)] = map[string]interface{}{
 			"kind":  "application",
 			"value": part,
@@ -1555,11 +1679,11 @@ func codexTurnParams(threadID string, job *ClaimedSession, execDir, upDir, orbit
 		"clientUserMessageId":   orbitTurnID,
 		"input":                 input,
 		"cwd":                   execDir,
-		"approvalPolicy":        codexApprovalPolicy(job.Agent.PermissionMode),
-		"runtimeWorkspaceRoots": codexRuntimeWorkspaceRoots(job.Agent.PermissionMode, job, execDir, upDir),
-		"sandboxPolicy":         codexSandboxPolicy(job.Agent.PermissionMode, job, execDir, upDir),
+		"approvalPolicy":        codexApprovalPolicy(codexPermissionMode(job)),
+		"runtimeWorkspaceRoots": codexRuntimeWorkspaceRoots(codexPermissionMode(job), job, execDir, upDir),
+		"sandboxPolicy":         codexSandboxPolicy(codexPermissionMode(job), job, execDir, upDir),
 	}
-	if reviewer := codexApprovalsReviewer(job.Agent.PermissionMode); reviewer != "" {
+	if reviewer := codexApprovalsReviewer(codexPermissionMode(job)); reviewer != "" {
 		params["approvalsReviewer"] = reviewer
 	}
 	if contextOptions.Mode == codexInstructionsAdditionalContext {
@@ -1592,14 +1716,14 @@ func codexTurnParams(threadID string, job *ClaimedSession, execDir, upDir, orbit
 func codexThreadParams(job *ClaimedSession, execDir, upDir string) map[string]interface{} {
 	params := map[string]interface{}{
 		"cwd":                   execDir,
-		"approvalPolicy":        codexApprovalPolicy(job.Agent.PermissionMode),
-		"sandbox":               codexSandboxMode(job.Agent.PermissionMode),
-		"runtimeWorkspaceRoots": codexRuntimeWorkspaceRoots(job.Agent.PermissionMode, job, execDir, upDir),
+		"approvalPolicy":        codexApprovalPolicy(codexPermissionMode(job)),
+		"sandbox":               codexSandboxMode(codexPermissionMode(job)),
+		"runtimeWorkspaceRoots": codexRuntimeWorkspaceRoots(codexPermissionMode(job), job, execDir, upDir),
 		// The thread's own source: a user's turn, as the CLI reports one, not Orbit's "orbit" — the
 		// backend sees `thread_source: user` in the turn metadata.
 		"threadSource": "user",
 	}
-	if reviewer := codexApprovalsReviewer(job.Agent.PermissionMode); reviewer != "" {
+	if reviewer := codexApprovalsReviewer(codexPermissionMode(job)); reviewer != "" {
 		params["approvalsReviewer"] = reviewer
 	}
 	if job.Agent.Model != "" {
@@ -1731,6 +1855,14 @@ func (a *codexAppServer) readLoop(r io.Reader) {
 						a.emit(evSystem, map[string]interface{}{"subtype": "context_compacted"})
 					}
 				}
+				if msg.Method == "mcpServer/startupStatus/updated" {
+					params := rawObject(msg.Params)
+					if name, _ := params["name"].(string); name == codexOrbitMCPServer {
+						state, _ := params["status"].(string)
+						errText, _ := params["error"].(string)
+						a.noteOrbitMCP(state, errText)
+					}
+				}
 				select {
 				case a.notifications <- msg:
 				default:
@@ -1742,6 +1874,29 @@ func (a *codexAppServer) readLoop(r io.Reader) {
 			readErr = err
 			return
 		}
+	}
+}
+
+// noteOrbitMCP keeps the startup state Codex reported for Orbit's MCP server and tells the listener.
+func (a *codexAppServer) noteOrbitMCP(state, errText string) {
+	a.mu.Lock()
+	a.orbitMCPState, a.orbitMCPError = state, errText
+	listener := a.onOrbitMCP
+	a.mu.Unlock()
+	if listener != nil {
+		listener(state, errText)
+	}
+}
+
+// listenOrbitMCP has listener told every startup state Codex reports for Orbit's MCP server from now on,
+// starting with the latest one if Codex has reported any.
+func (a *codexAppServer) listenOrbitMCP(listener func(state, errText string)) {
+	a.mu.Lock()
+	a.onOrbitMCP = listener
+	state, errText := a.orbitMCPState, a.orbitMCPError
+	a.mu.Unlock()
+	if state != "" && listener != nil {
+		listener(state, errText)
 	}
 }
 
@@ -1827,8 +1982,10 @@ func (r codexApprovalRequest) toolName() string {
 
 // isCodexMCPToolConsent reports whether an elicitation is Codex's own "Allow the X MCP server to
 // run tool Y?" prompt: a form whose requested schema is empty because the only answer wanted is
-// accept or decline. Codex raises it for every MCP tool call whatever the turn's approvalPolicy
-// is, so this is the one elicitation Orbit can answer with the approval card it already has.
+// accept or decline. Codex raises it for an MCP tool call that needs approval by its annotations
+// (codex-rs 0.167.2: not read-only, and destructive or open-world, which a tool that declares
+// nothing is), whatever the turn's approvalPolicy, so this is the one elicitation Orbit can answer
+// with the approval card it already has.
 func isCodexMCPToolConsent(params map[string]interface{}) bool {
 	return firstString(mapValue(params["_meta"]), "codex_approval_kind") == "mcp_tool_call"
 }

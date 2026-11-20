@@ -77,7 +77,7 @@ OWN_SERVER_DIRS = ('test-server-t08', 'test-server-t08-dev')
 wl.OWN_SERVER_DIRS = wl.OWN_SERVER_DIRS + OWN_SERVER_DIRS
 wl.EMAIL = ml.EMAIL = 't08-{}@lab.invalid'
 wl.NAME_RE = re.compile(r't08-([a-z0-9]+)@lab\.invalid')
-wl.PROBE_ROOT = '/var/lib/orbit/home/t08-probe'
+wl.PROBE_ROOT = '/home/orbit/t08-probe'
 # 150 committed rows, not T06's 500: two volumes on this VM's one HDD fsync each row three times over.
 PROBE_ROWS = 150
 assert wl.PROBE.count('for n in range(500):') == 1
@@ -85,10 +85,10 @@ wl.PROBE = wl.PROBE.replace('for n in range(500):', f'for n in range({PROBE_ROWS
 
 PROJECT_LINE = 'refs/heads/project/34ZteKCnYMpKY46f63Leb'
 # T06b's lab image: deploy/managed-runner/image and src/runner-go unchanged since its source ebf54ab8d.
-IMAGE = 'docker.io/library/orbit-managed-runner-lab@sha256:cdb090148c194e536fe86c22f1507b45f74f2aa6929df26f7360747604102312'
+IMAGE = 'docker.io/library/orbit-cloud-runner-lab@sha256:cdb090148c194e536fe86c22f1507b45f74f2aa6929df26f7360747604102312'
 IMAGE_SOURCE = 'ebf54ab8d'
 # The build before it, T02a's (source 292b2eb43, without T06b's startup heartbeat): the image a rollback goes back to.
-PREVIOUS_IMAGE = 'docker.io/library/orbit-managed-runner-lab@sha256:54441a07125b7cd5ec11def5705608ebcd0f3f7243c98918556dd29d03aef98d'
+PREVIOUS_IMAGE = 'docker.io/library/orbit-cloud-runner-lab@sha256:54441a07125b7cd5ec11def5705608ebcd0f3f7243c98918556dd29d03aef98d'
 PREVIOUS_IMAGE_SOURCE = '292b2eb43'
 T02A = LAB_DIR / 'test-server-t02a'
 USERS = ('ann', 'bob')
@@ -922,7 +922,7 @@ SNAPSHOT = r'''
 import hashlib, json, os, sqlite3, subprocess, sys
 from pathlib import Path
 ROOT = Path(sys.argv[1]); prefix = json.loads(sys.argv[2]) if len(sys.argv) > 2 else {}
-HOME = ROOT / 'home'; ORBIT = HOME / '.orbit'; WS = HOME / 'orbit-repos/default'
+HOME = ROOT; ORBIT = HOME / '.orbit'; WS = HOME / 'orbit-repos/default'
 def sha(p): return hashlib.sha256(p.read_bytes()).hexdigest()
 def git(d, *a):
     r = subprocess.run(['git', '-C', str(d), *a], capture_output=True, text=True)
@@ -936,7 +936,7 @@ def read(p):
     except Exception: return None
 config = read(ORBIT / 'config.json') or {}
 mounts = [l.split() for l in Path('/proc/self/mountinfo').read_text().splitlines()]
-mount = [{'source': m[m.index('-') + 2], 'fstype': m[m.index('-') + 1]} for m in mounts if m[4] == '/var/lib/orbit']
+mount = [{'source': m[m.index('-') + 2], 'fstype': m[m.index('-') + 1]} for m in mounts if m[4] == '/home/orbit']
 result = {'runnerId': config.get('runnerId'), 'managedInstance': read(ORBIT / 'managed-instance.json'), 'mount': mount, 'uid': os.getuid(),
           'workspace': {'head': git(WS, 'rev-parse', 'HEAD'), 'worktrees': git(WS, 'worktree', 'list', '--porcelain').splitlines(),
                         'fsckExit': subprocess.run(['git', '-C', str(WS), 'fsck', '--full'], capture_output=True).returncode},
@@ -967,7 +967,7 @@ print(json.dumps(result, sort_keys=True))
 
 def pod_snapshot(name, prefix=None):
     _, pod = ml.running_pod(name)
-    view = json.loads(sw.pod_exec(pod['metadata']['name'], 'python3', '-c', SNAPSHOT, '/var/lib/orbit', json.dumps(prefix or {})).stdout)
+    view = json.loads(sw.pod_exec(pod['metadata']['name'], 'python3', '-c', SNAPSHOT, '/home/orbit', json.dumps(prefix or {})).stdout)
     view['takenAt'] = now()
     view['podUid'] = pod['metadata']['uid']
     return view
@@ -1021,7 +1021,7 @@ def snapshots(ctx, step, label):
     views = {}
     for name in USERS:
         views[name] = pod_snapshot(name)
-        step.check(f'{name}: /var/lib/orbit is an RBD device, ext4', views[name]['mount'] and views[name]['mount'][0]['source'].startswith('/dev/rbd')
+        step.check(f'{name}: /home/orbit is an RBD device, ext4', views[name]['mount'] and views[name]['mount'][0]['source'].startswith('/dev/rbd')
                    and views[name]['mount'][0]['fstype'] == 'ext4', views[name]['mount'])
         step.check(f'{name}: the attachment is on the volume with its checksum',
                    ctx['sessions'][name]['attachment']['sha256'] in views[name]['uploads'].values(), len(views[name]['uploads']))
@@ -1088,7 +1088,7 @@ def isolation(ctx, step):
         _, pod = ml.running_pod(name)
         inside[name] = json.loads(sw.pod_exec(pod['metadata']['name'], 'python3', '-c', ISOLATION).stdout)
         view = inside[name]
-        step.check(f'{name}: one RBD filesystem in the runner, at /var/lib/orbit', [v['target'] for v in view['rbdMounts']] == ['/var/lib/orbit'], view['rbdMounts'])
+        step.check(f'{name}: one RBD filesystem in the runner, at /home/orbit', [v['target'] for v in view['rbdMounts']] == ['/home/orbit'], view['rbdMounts'])
         step.check(f'{name}: no service account token, no credential variable, no RBD device node',
                    not view['serviceAccountToken'] and not view['credentialLikeVariables'] and not view['rbdDeviceNodes'],
                    {k: view[k] for k in ('serviceAccountToken', 'credentialLikeVariables', 'rbdDeviceNodes')})
@@ -1467,7 +1467,7 @@ def backup_export(ctx, step):
     host_gz = sha256_file(destination / 'volume.img.gz')
     guest(f'sudo rm -f {GUEST_BACKUP}/volume.img.gz {GUEST_BACKUP}/raw.sha256 && sudo rmdir {GUEST_BACKUP}')
     os.chmod(destination / 'volume.img.gz', 0o600)
-    manifest = {'schemaVersion': 1, 'kind': 'orbit-managed-runner-rbd-export', 'createdAt': now(), 'source': {
+    manifest = {'schemaVersion': 1, 'kind': 'orbit-cloud-runner-rbd-export', 'createdAt': now(), 'source': {
         'owner': ml.owner_state('ann')['user']['id'], 'runnerId': ident['runnerId'], 'namespace': NAMESPACE, 'pvc': {'name': ident['pvcName'], 'uid': ident['pvcUid']},
         'pv': {'name': ident['pvName'], 'uid': ident['pvUid']}, 'volumeHandle': ident['volumeHandle'], 'clusterID': ident['clusterID'],
         'pool': ident['pool'], 'image': ident['rbdImage'], 'imageId': info_before.get('id'), 'sizeBytes': info_before.get('size'),
@@ -1499,11 +1499,12 @@ def backup_verify_offline(ctx, step):
     fields = dict(re.findall(r'^(Filesystem UUID|Filesystem state|Block count|Inode count|Filesystem created):\s+(.*)$', fs, re.M))
     tree = work / 'tree'
     tree.mkdir(mode=0o700)
-    dump = run(['debugfs', '-R', f'rdump /home {tree}', str(raw)], check=False)
+    # The volume's root is the runner's home: copy out what the snapshot and the probe read.
+    dump = run(['debugfs', '-R', f'rdump /.orbit /.claude /.codex /orbit-repos /t08-probe {tree}', str(raw)], check=False)
     # The copy's files belong to the runner's UID, not to root: git checks them only with safe.directory.
     safe = {**os.environ, 'GIT_CONFIG_COUNT': '1', 'GIT_CONFIG_KEY_0': 'safe.directory', 'GIT_CONFIG_VALUE_0': '*'}
     view = json.loads(run([sys.executable, '-I', '-c', SNAPSHOT, str(tree), json.dumps(transcript_prefix(ctx['backup']['snapshot']))], env=safe).stdout)
-    probe_root = tree / 'home/t08-probe' / ctx['backup']['probeRun']
+    probe_root = tree / 't08-probe' / ctx['backup']['probeRun']
     probe = json.loads(run([sys.executable, '-I', '-c', wl.PROBE, 'check', str(probe_root)], env=safe).stdout)
     expected = ctx['backup']['probe']
     same = {key: expected[key] == probe[key] for key in ('randomSha256', 'rows', 'rowsSha256', 'gitHead')}
@@ -1514,7 +1515,7 @@ def backup_verify_offline(ctx, step):
     missing_uploads = {k: v for k, v in snap['uploads'].items() if view['uploads'].get(k) != v}
     step.check('every upload of the runner is in it with its checksum', not missing_uploads, missing_uploads or len(snap['uploads']))
     wrote = ctx['sessions']['ann']['wrote']
-    repo = tree / 'home/orbit-repos/default'
+    repo = tree / 'orbit-repos/default'
     shown = run(['git', '-C', str(repo), 'show', f"{wrote['commit']}:{wrote['file']}"], check=False, env=safe)
     step.check('the engine\'s commit is in the workspace repository, its file with its checksum',
                shown.returncode == 0 and hashlib.sha256(shown.stdout.encode()).hexdigest().startswith(wrote['fileSha256Prefix']), shown.returncode)
@@ -1589,16 +1590,16 @@ def restore_new_pvc(ctx, step):
     remaining = ceph_shell(f'rbd ls {pool}').split()
     step.check('the scratch image is gone', scratch not in remaining)
     pod_name = f't08-restore-check-{stamp}'
-    probe_root = f"/var/lib/orbit/home/t08-probe/{ctx['backup']['probeRun']}"
+    probe_root = f"/home/orbit/t08-probe/{ctx['backup']['probeRun']}"
     pod = {'apiVersion': 'v1', 'kind': 'Pod', 'metadata': {'name': pod_name, 'namespace': NAMESPACE, 'labels': {'orbit.dev/lab': 't08-restore'}},
            'spec': {'restartPolicy': 'Never', 'automountServiceAccountToken': False, 'enableServiceLinks': False,
                     'securityContext': {'runAsUser': 10001, 'runAsGroup': 10001, 'runAsNonRoot': True, 'seccompProfile': {'type': 'RuntimeDefault'}},
-                    'containers': [{'name': 'check', 'image': IMAGE, 'command': ['python3', '-c', VERIFY_POD_SCRIPT, '/var/lib/orbit',
+                    'containers': [{'name': 'check', 'image': IMAGE, 'command': ['python3', '-c', VERIFY_POD_SCRIPT, '/home/orbit',
                                                                                  json.dumps(transcript_prefix(ctx['backup']['snapshot'])), wl.PROBE, probe_root],
                                     'env': [{'name': 'HOME', 'value': '/tmp'}],
                                     'securityContext': {'allowPrivilegeEscalation': False, 'readOnlyRootFilesystem': True, 'capabilities': {'drop': ['ALL']}},
                                     'resources': {'requests': {'cpu': '100m', 'memory': '128Mi'}, 'limits': {'cpu': '1', 'memory': '512Mi'}},
-                                    'volumeMounts': [{'name': 'data', 'mountPath': '/var/lib/orbit'}, {'name': 'tmp', 'mountPath': '/tmp'}]}],
+                                    'volumeMounts': [{'name': 'data', 'mountPath': '/home/orbit'}, {'name': 'tmp', 'mountPath': '/tmp'}]}],
                     'volumes': [{'name': 'data', 'persistentVolumeClaim': {'claimName': claim}}, {'name': 'tmp', 'emptyDir': {'sizeLimit': '256Mi'}}]}}
     k('create', '-f', '-', input=json.dumps(pod))
     deadline = time.monotonic() + 300

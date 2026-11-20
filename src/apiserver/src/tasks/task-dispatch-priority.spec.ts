@@ -125,11 +125,14 @@ async function sweepOver(rows: Candidate[], room: Record<string, number>): Promi
         dispatchEpoch: 0n,
       }));
     },
+    // No task here belongs to a project, so none has a coordinator to start on (start-anchor.ts).
+    task: { findMany: async () => [] },
   } as never, {} as never, {} as never);
   const internals = service as any;
   internals.rearmEndedAutoRuns = async () => undefined;
   internals.quotaGate = async () => ({ blocked: new Map(), blind: new Set() });
   internals.autoRunHoldOff = async () => new Set();
+  internals.signedOutGate = async () => new Map();
   internals.recordListEvent = async () => undefined;
   internals.materialisationBudget = async () => ({
     runner: new Map(),

@@ -129,7 +129,8 @@ internal fun WikiCard(modifier: Modifier = Modifier, content: @Composable Column
 }
 
 /** The status line under the title: each part behind its `·`, amber while a run waits, red when it broke,
- * a green ✓ after a run that succeeded, and Set up and View run as links (iOS `wikiStatusText`). */
+ * a green ✓ after a run that succeeded, and Set up, View run and Fix in Settings as links — a muted one, the folder
+ * tier's, in grey (iOS `wikiStatusText`). */
 @Composable
 internal fun wikiStatusText(parts: List<WikiStatusPart>, openSettings: () -> Unit, openRun: () -> Unit): AnnotatedString {
     val warn = WikiPalette.amber; val error = MaterialTheme.colorScheme.error; val green = LocalOrbitColors.current.success
@@ -138,9 +139,15 @@ internal fun wikiStatusText(parts: List<WikiStatusPart>, openSettings: () -> Uni
         parts.forEachIndexed { index, part ->
             if (index > 0) append(" · ")
             val colour = when (part.tone) { WikiStatusPart.Tone.WARN -> warn; WikiStatusPart.Tone.ERROR -> error; else -> Color.Unspecified }
+            // A muted link stays grey (the folder tier leading to Settings, mock 44 ⑤); the other links are the link colour.
+            val words = when {
+                part.link != WikiStatusPart.Link.NONE && part.tone == WikiStatusPart.Tone.MUTED -> WikiPalette.secondary
+                part.link != WikiStatusPart.Link.NONE -> link
+                else -> colour
+            }
             // No-break spaces keep the dot on the line of the words it colours, and the ✓ on the line of its success.
             if (part.mark == WikiStatusPart.Mark.DOT) withStyle(SpanStyle(color = colour)) { append("● ") }
-            val style = SpanStyle(color = if (part.link != WikiStatusPart.Link.NONE) link else colour,
+            val style = SpanStyle(color = words,
                 fontWeight = if (part.strong) FontWeight.SemiBold else null)
             when (part.link) {
                 WikiStatusPart.Link.SETTINGS -> withLink(LinkAnnotation.Clickable("settings", TextLinkStyles(style)) { openSettings() }) { append(part.text) }

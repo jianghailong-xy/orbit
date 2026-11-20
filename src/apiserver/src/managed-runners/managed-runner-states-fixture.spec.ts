@@ -70,7 +70,7 @@ function row(input: NonNullable<ServerInput['mapping']>): ManagedRunner {
     generation: 0,
     revision: 0,
     clusterKey: 'test-cluster',
-    namespace: 'orbit-managed',
+    namespace: 'orbit-cloud',
     pvcName: `mr-data-${fixture.ids.runner}`,
     pvcUid: null,
     pvUid: null,

@@ -1,4 +1,4 @@
-import { Injectable, Optional } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 
 import type { CoordinatorWakeEvent, WakeFact } from './coordinator-wake';
 import {
@@ -87,6 +87,8 @@ const ALLOW_COMMITTED_INPUT: WakeAuthorizer = async () => ({ allowed: true });
  */
 @Injectable()
 export class CompletionInputRouter {
+  private readonly logger = new Logger(CompletionInputRouter.name);
+
   constructor(
     private readonly wakes: CoordinatorWakeService,
     private readonly settled: ProjectTasksSettledProducer,
@@ -245,6 +247,11 @@ export class CompletionInputRouter {
     return delivered ?? this.route(fact, 'JUDGMENT_REQUEST_DERIVER');
   }
 
+  /** Retry finished-looking notifications after recovery and on the leader's tick. */
+  async deliverLooksFinishedOwedTo(sessionId?: string): Promise<void> {
+    await this.settled.deliverOwedTo(sessionId);
+  }
+
   /**
    * The second door: the projects whose task set one committed task write may have closed.
    *
@@ -266,6 +273,26 @@ export class CompletionInputRouter {
     projectIds: ReadonlyArray<string | null | undefined>,
   ): Promise<SettledProjectDelivery[]> {
     return this.settled.afterCommit(projectIds);
+  }
+
+  /**
+   * §12.15 P-M1, for a finish that cannot reach `TasksService` (the reaper, the session end): the
+   * project facts a DONE task's settled work re-derives once its landing is decided — the settled
+   * fact the deferred landing held (`landingDeferred`), then the two criterion facts. Each step
+   * reads committed rows and is idempotent on the wake ledger; failures are logged, since the
+   * finish is already committed and the next delivery derives the same facts.
+   */
+  async routeSettledWork(
+    projectIds: ReadonlyArray<string | null | undefined>,
+  ): Promise<void> {
+    for (const [name, door] of [
+      ['settled-project', () => this.routeSettledProjects(projectIds)],
+      ['ready-criteria', () => this.routeReadyCriteria(projectIds)],
+      ['unlanded-criteria', () => this.routeUnlandedCriteria(projectIds)],
+    ] as const) {
+      await door().catch((e) =>
+        this.logger.warn(`${name} delivery after settled work failed: ${e?.message ?? e}`));
+    }
   }
 
   /**

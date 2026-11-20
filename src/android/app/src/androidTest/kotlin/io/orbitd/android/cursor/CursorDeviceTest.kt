@@ -87,7 +87,7 @@ class CursorDeviceTest {
                 signIn(server)
                 newSession(pass)
                 cursorSession(pass)
-                infrastructure(pass)
+                machinesAndModels(pass)
             } catch (e: Throwable) {
                 capture("$pass-failed"); throw e
             } finally {
@@ -150,12 +150,12 @@ class CursorDeviceTest {
         val named = "Claude Opus 5.5 High · 1M · Fast"
         compose.waitUntil(15_000) { compose.onAllNodes(hasText(named)).fetchSemanticsNodes().isNotEmpty() }
         capture("ios5-chip-$pass")
-        click(hasText("Context: Unavailable", substring = true) and hasClickAction())
+        click(hasTestTag("composer-context") and hasContentDescription("Context: Unavailable") and hasClickAction())
         await("Context window")
         // The sheet reads the catalogue afresh: its model is named once that is in.
-        compose.waitUntil(15_000) { compose.onAllNodes(hasText(named) and hasAnyAncestor(isDialog())).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(15_000) { compose.onAllNodes(hasText(named) and hasAnyAncestor(hasTestTag("composer-context-sheet"))).fetchSemanticsNodes().isNotEmpty() }
         capture("ios5-context-$pass")
-        closeDialog()
+        back()
         model = "default"; effort = ""; running = true
         reopen()
         compose.waitUntil(15_000) { compose.onAllNodesWithTag("pending-tray-note").fetchSemanticsNodes().isNotEmpty() }
@@ -187,15 +187,15 @@ class CursorDeviceTest {
         compose.waitUntil(15_000) { compose.onAllNodes(hasTestTag("composer-model") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
     }
 
-    // iOS 2, 3 and 4 · Infrastructure, a machine, Cursor CLI's engine page, its accounts and a Cursor key
+    // iOS 2, 3 and 4 · Machines & models, a machine, Cursor CLI's engine page, its accounts and a Cursor key
 
     /** hpc's row among the machines — not a "Needs you" line that names it. */
     private val hpcRow = hasText("hpc") and hasText(" running", substring = true) and hasClickAction()
 
-    private fun infrastructure(pass: String) {
+    private fun machinesAndModels(pass: String) {
         back()
         compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
-        click(hasText("Settings") and hasClickAction())
+        click(hasTestTag("drawer:settings"))
         click(hasText("Machines & models") and hasClickAction())
         compose.waitUntil(15_000) { compose.onAllNodes(hpcRow).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hpcRow).performScrollTo()
@@ -274,7 +274,7 @@ class CursorDeviceTest {
         click(hasText("Cancel") and hasClickAction())
         click(hasContentDescription("More for Team"))
         click(hasText("Remove…") and hasClickAction(), scroll = false)
-        await("Remove “Team” from hpc?")
+        await("Remove Team?")
         capture("ios3-remove-confirm-$pass")
         click(hasText("Remove") and hasAnyAncestor(isDialog()), scroll = false)
         await("Team is in use: 2 sessions on hpc are running on it.")

@@ -32,10 +32,10 @@ jobs:
       # checkout leaves HEAD parentless, so that reports the whole tree as additions and never
       # mentions a deleted file at all. They need the history they read. The runner link check
       # below reads origin/main from it too.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26
           cache: npm
@@ -56,8 +56,14 @@ jobs:
           fi
       - name: Test documentation checks
         run: npm run test:docs
+      - name: Test ALREADY_COORDINATING Agent interaction contract and negative outputs
+        run: node --test test/already-coordinating-eval.test.mjs
       - name: Validate public documentation
         run: npm run docs:check
+      - name: Test the release identity rules
+        run: npm run test:release-identity
+      - name: Test the release supply chain (checksums, SBOM, provenance)
+        run: npm run test:supply-chain
       - name: Generate Prisma Client
         run: npm run prisma:generate
       - name: Build workspaces
@@ -80,6 +86,13 @@ jobs:
         run: npm run test:upgrade-source-sha
       - name: Test what install and upgrade do for the runner link
         run: npm run test:upgrade-runner-link
+      # The two-stage release: built and pushed on one host, pulled and brought up on another, which builds nothing.
+      - name: Test the two-stage release's build and deploy stages
+        run: npm run test:upgrade-two-stage
+      # docker-compose.yml holds only the services and lines the account owner approved; a new one turns this red until it
+      # is approved and pinned in the test. It reads its pinned commits from the full history checked out above.
+      - name: Test the deployment topology (docker-compose.yml)
+        run: npm run test:compose-topology
       # The backup sidecar's rsync --delete is what can wipe the only off-host copy of the archive. Real rsync over local
       # paths, in seconds; it fails, rather than skips, where rsync is not installed.
       - name: Test what the backup sidecar does to its off-host target
@@ -99,12 +112,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26
+      # `npm audit --audit-level=high`, except for the advisories scripts/npm-audit-allowlist.json names, each
+      # until it expires or its vulnerable range moves (a patch was published): scripts/npm-audit-gate.mjs.
       - name: Audit dependencies
-        run: npm audit --audit-level=high
+        run: node scripts/npm-audit-gate.mjs
 
   # Every `*.pg.spec` in the apiserver, against a real PostgreSQL, with a skip counted red.
   #
@@ -232,8 +247,8 @@ jobs:
       # No `fetch-depth: 0` here, unlike the JavaScript job: the two removal censuses that read this
       # repository's history are plain specs, and the only pg specs that run `git` at all build
       # their own throwaway repositories.
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26
           cache: npm
@@ -260,7 +275,7 @@ jobs:
         run: mkdir -p "$PCC_PG_LOG_DIR" && bash scripts/project-pg-matrix.sh
       - name: Keep the failing specs' output
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           # Per shard, because three jobs uploading one artifact name is a collision rather than a
           # report. A red names its shard in the check list, and that is the artifact to read.
@@ -297,14 +312,32 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.27.x'
           cache-dependency-path: src/runner-go/go.sum
       - name: Test runner
         working-directory: src/runner-go
         run: go test -timeout 30m ./...
+
+  # The agent-contract eval's deterministic layer (docs/agent-contract-eval.md): the Orbit Agent Contract's scenarios
+  # played by a scripted agent through the real `orbit mcp` and CLI against the eval's control plane, the graders held
+  # by an agent per forbidden move, and the report and the per-turn telemetry held to carry no credential and no
+  # person's text. The Go runner job runs these tests too, inside the whole package; this job names them, so the
+  # release gate has a check of its own to cite, and answers in about two minutes rather than the package's thirty.
+  agent-contract-eval:
+    name: Agent contract eval
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27.x'
+          cache-dependency-path: src/runner-go/go.sum
+      - name: Run the deterministic agent-contract eval
+        run: scripts/agent-eval.sh deterministic
 
   # The runner link gateway (src/link-gateway), a Go module of its own. -race because it is a server of concurrent
   # connections whose reader, writer and pinger share state.
@@ -313,8 +346,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.27.x'
           cache-dependency-path: src/link-gateway/go.sum
@@ -328,7 +361,7 @@ jobs:
     timeout-minutes: 20
     container: swift:6.1
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Test OrbitKit
         working-directory: src/macos/OrbitKit
         run: swift test
@@ -437,7 +470,7 @@ jobs:
     env:
       DOCKER_BUILDKIT: '1'
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # Five base images come from Docker Hub over an IP this runner shares with everyone else's,
       # and its 502s are the one failure in this job that says nothing about this tree — run
       # 34333514813 died two seconds in on `unexpected status from HEAD request to

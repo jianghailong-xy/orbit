@@ -115,10 +115,11 @@ async function poll(
   let listed = 0;
   const service = new Proxy(f.sessions, {
     get(target, key, receiver) {
-      if (key === 'list') {
-        return (...args: Parameters<SessionsService['list']>) => {
+      // Every build of list rows, the plain read's and a since= read's, is one call of listRows.
+      if (key === 'listRows') {
+        return (...args: unknown[]) => {
           listed += 1;
-          return target.list(...args);
+          return (target as unknown as { listRows: (...a: unknown[]) => Promise<unknown> }).listRows.apply(receiver, args);
         };
       }
       return Reflect.get(target, key, receiver);
@@ -269,6 +270,59 @@ test('every source the Open list row shows moves its version', { skip }, async (
   await changes(f, 'main branch moved by raw SQL, updated_at untouched', () =>
     db.$executeRaw`UPDATE project_codebase SET upstream_ref = 'refs/heads/master',
       integration_ref = 'refs/heads/master' WHERE project_id = ${project.id}::uuid`);
+  // What a parked session is still doing (`activity`) reads two tables of their own (0641).
+  const parked = await parkedSession(f);
+  const wakeup = await db.sessionScheduledWakeup.create({
+    data: { sessionId: parked, delaySeconds: 600, reason: 'olv', dueAt: new Date(Date.now() + 600_000) },
+  });
+  await changes(f, 'a scheduled wake-up cancelled', () =>
+    db.sessionScheduledWakeup.update({ where: { id: wakeup.id }, data: { state: 'CANCELLED' } }));
+  await changes(f, 'a scheduled wake-up armed', () => db.sessionScheduledWakeup.create({
+    data: { sessionId: parked, delaySeconds: 600, reason: 'olv again', dueAt: new Date(Date.now() + 600_000) },
+  }));
+  const waiting = await parkedSession(f);
+  await changes(f, 'a watch that will resume a parked session', () => resumingWatch(f, waiting));
+});
+
+/** A conversation parked at AWAITING_INPUT with nothing that will wake it. */
+async function parkedSession(f: Fixture): Promise<string> {
+  const row = await f.db.session.create({
+    data: {
+      ownerId: f.ownerId, creatorId: f.ownerId, workspaceId: f.workspaceId, assignedRunnerId: f.runnerId,
+      title: 'olv parked', prompt: 'olv', provider: 'claude', providerBuiltin: true,
+      status: RunStatus.AWAITING_INPUT, startedAt: new Date(), dispatchOrigin: SessionDispatchOrigin.USER,
+    },
+  });
+  return row.id;
+}
+
+/** An ACTIVE RESUME_SESSION watch `sessionId` observes (task_await / session_await / watch_create). */
+const resumingWatch = (f: Fixture, sessionId: string) => f.db.watch.create({
+  data: {
+    ownerId: f.ownerId,
+    observerType: 'SESSION',
+    observerSessionId: sessionId,
+    predicate: { kind: 'ALL', over: 'ALL_TARGETS', leaf: 'TASK_TERMINAL' },
+    mode: 'ONE_SHOT',
+    action: 'RESUME_SESSION',
+    expiresAt: new Date(Date.now() + 24 * 60 * 60_000),
+  },
+});
+
+test('a watch being evaluated leaves the version alone; its state moving it does not', { skip }, async (t) => {
+  const f = await fixture(t);
+  const watch = await resumingWatch(f, await parkedSession(f));
+  const before = await readOpenListVersion(f.db as never, f.ownerId);
+  // The evaluator's own bookkeeping, every pass: nothing the row shows.
+  await f.db.watch.update({
+    where: { id: watch.id },
+    data: { lastEvaluatedAt: new Date(), nextEvaluateAt: new Date(Date.now() + 60_000) },
+  });
+  assert.equal(await readOpenListVersion(f.db as never, f.ownerId), before,
+    'evaluating a watch moved the version, so every poll of an account with a live watch is a 200');
+  await f.db.watch.update({ where: { id: watch.id }, data: { state: 'CANCELLED', nextEvaluateAt: null } });
+  assert.notEqual(await readOpenListVersion(f.db as never, f.ownerId), before,
+    'a watch that stopped resuming its session left the version alone');
 });
 
 test('a threshold the clock passes moves the version with no write', { skip }, async (t) => {
@@ -355,7 +409,7 @@ test('every counter source has its table triggers', { skip }, async (t) => {
       FROM pg_trigger WHERE NOT tgisinternal AND tgname LIKE '%open_list_epoch%'`;
   const actual = new Set(rows.map(({ tbl, def }) => {
     const table = tbl.replace(/^public\./, '');
-    const source = /open_list_bump_(?:owner|via_project|via_session)\('([^']+)'\)/.exec(def)?.[1];
+    const source = /open_list_bump_(?:owner|via_project|via_session|watch)\('([^']+)'\)/.exec(def)?.[1];
     return `${table}:${source ?? (table === 'session' ? 'session' : '?')}`;
   }));
   const expected = new Set([
@@ -376,6 +430,7 @@ test('every counter source has its table triggers', { skip }, async (t) => {
     'project_task_status_count:task_status_count',
     'session:session',
     'session_merge_receipt:merge_receipt',
+    'session_scheduled_wakeup:scheduled_wakeup',
     'session_request:session_request',
     'session_tag:session_tag',
     'session_tag_link:session_tag_link',
@@ -387,6 +442,7 @@ test('every counter source has its table triggers', { skip }, async (t) => {
     'task_owner_confirmation_review:confirmation_review',
     'task_owner_confirmation_review_record:confirmation_review_record',
     'task_owner_decision:owner_decision',
+    'watch:watch',
     'workspace:workspace',
   ]);
   assert.deepEqual([...actual].sort(), [...expected].sort());
@@ -609,9 +665,9 @@ test('a write landing after the build is not hidden behind the version kept with
   const f = await fixture(t);
   const racing = new Proxy(f.sessions, {
     get(target, key, receiver) {
-      if (key === 'list') {
-        return async (...args: Parameters<SessionsService['list']>) => {
-          const rows = await target.list(...args);
+      if (key === 'listRows') {
+        return async (...args: unknown[]) => {
+          const rows = await (target as unknown as { listRows: (...a: unknown[]) => Promise<unknown> }).listRows.apply(receiver, args);
           await f.db.session.update({ where: { id: f.sessionId }, data: { title: 'written after the build' } });
           return rows;
         };

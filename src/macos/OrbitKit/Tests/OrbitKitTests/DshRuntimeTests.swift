@@ -284,7 +284,7 @@ final class DshRuntimeTests: XCTestCase {
         let connect = try XCTUnwrap(SessionProviderChoices.engines(sources: ChoiceSources(configured: [], dshState: .ready))
             .first { $0.slug == "dsh" }?.unavailable)
         XCTAssertTrue(choices.contains("unavailable: '\(connect)'"), "web picker lost \(connect)")
-        XCTAssertTrue(lib.contains("export const DSH_CONNECT_HREF = '/providers/new/\(DshRuntime.keyPreset)';"))
+        XCTAssertTrue(lib.contains("export const DSH_CONNECT_HREF = '/settings/providers/new/\(DshRuntime.keyPreset)';"))
         // The engine's name is the shared table's (ENGINE_CLI_NAMES).
         let names = try source("src/shared/src/providerEngines.ts")
         XCTAssertTrue(names.contains("[AgentProvider.DSH]: '\(SessionProviderChoices.engineTitle("dsh"))',"))

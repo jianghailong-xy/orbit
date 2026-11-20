@@ -45,9 +45,10 @@ abstract class DiagnosticRows : ComposerShellTest() {
             (0 until 10).map { i ->
                 event(3L + i, "system", """{"stderr":${JsonPrimitive(refreshFailed(13 + i))}${if (i >= 5) ""","diagnostic":$diagnostic""" else ""}}""")
             } + listOf(
-            event(13, "system", """{"notice":${JsonPrimitive(notice)},"noticeKind":"pool-member-switched"}"""),
             event(14, "system", """{"stderr":"2026-10-28T15:23:07.112233Z ERROR codex_core::codex: stream error: request timed out"}"""),
-            event(15, "assistant", """{"text":"The catalog is the one this session already had."}"""))
+            event(15, "assistant", """{"text":"The catalog is the one this session already had."}"""),
+            // Last, so nothing has moved past it yet: a switch the conversation went on from mutes (SettledAuthRowsTest).
+            event(16, "system", """{"notice":${JsonPrimitive(notice)},"noticeKind":"pool-member-switched"}"""))
         signIn(); openSession()
         await { shows("The catalog is the one this session already had.") }
 
@@ -62,7 +63,7 @@ abstract class DiagnosticRows : ComposerShellTest() {
         for (seq in 4L..12L) assertFalse("report $seq has no row of its own", has(hasTestTag("event:$seq")))
 
         val screen = draw()
-        val noticeWords = hasText(notice) and row(13)
+        val noticeWords = hasText(notice) and row(16)
         val error = hasText("stream error: request timed out", substring = true) and row(14)
         assertTrue("the diagnostic's words are grey", grey in colours(screen, words))
         assertFalse("not in the warning tone", warning in colours(screen, words))

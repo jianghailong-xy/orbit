@@ -2,6 +2,7 @@ package io.orbitd.android.text
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import io.orbitd.android.core.cards.SettingsFromConversation
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -89,6 +90,10 @@ private fun MarkdownNode(node: Node, open: (String) -> Unit) {
         }
         is HtmlBlock -> Text(node.literal, style = MaterialTheme.typography.bodyLarge)
         else -> {
+            // A paragraph that is nothing but an `orbit-settings:` link is the Open in Settings row (design §6).
+            val settingsRow = ((node as? org.commonmark.node.Paragraph)?.children()?.singleOrNull() as? Link)?.destination
+                ?.takeIf { it.startsWith("orbit-settings:") }?.removePrefix("orbit-settings:")?.let(SettingsFromConversation::place)
+            if (settingsRow != null) { io.orbitd.android.cards.SettingsLinkRow(settingsRow, open); return }
             // Split images out of inline prose so they remain visible, including images inside links,
             // and a link to an image file the session can serve (a saved screenshot) as its file row.
             val sessionId = LocalReaderResources.current?.sessionId
@@ -166,6 +171,15 @@ private fun inlineNodes(nodes: List<Node>, open: (String) -> Unit): AnnotatedStr
         }
         nodes.forEach { appendNode(it) }
     } }
+}
+
+/** A Markdown source as one styled text — each block's inline content, a blank line between — for a preview that is cut by lines and
+ * ends in an ellipsis, which a column of blocks cannot do. */
+@Composable
+internal fun markdownInline(source: String, open: (String) -> Unit = {}): AnnotatedString {
+    val nodes = remember(source) { markdownParser.parse(mendCjkMarkdown(source)).children() }
+    val parts = nodes.map { inlineNodes(listOf(it), open) }
+    return remember(parts) { buildAnnotatedString { parts.forEachIndexed { i, part -> if (i > 0) append("\n\n"); append(part) } } }
 }
 
 /** Completed blocks stay parsed while only the unfinished paragraph changes at stream cadence. */

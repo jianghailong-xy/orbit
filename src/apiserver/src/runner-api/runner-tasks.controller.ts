@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Headers,
   Param,
@@ -26,7 +27,13 @@ import {
   UpdateTaskDto,
 } from '../tasks/dto';
 import { ProjectAttributionService } from '../projects/project-attribution.service';
+import { LANDING_CHECK_EXEMPT_COORDINATOR_ONLY } from '../tasks/task-landing-check-exempt';
 import { TasksService } from '../tasks/tasks.service';
+import {
+  DAG_CHANGE_CARD_TOOL,
+  TASK_BATCH_CARD_TOOL,
+  TASK_CREATE_CARD_TOOL,
+} from '../tasks/verifier-write-authority';
 import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { RunnerWriteProtocolInterceptor } from './runner-write-protocol';
@@ -73,6 +80,17 @@ export class RunnerTasksController {
     @Body() dto: CreateTaskDto,
   ) {
     RunnerTasksController.refuseImplicitEvidenceJudgment(dto);
+    if (dto.fork) await this.tasks.assertForkCallerOnRunner(runner.ownerId, runner.id, sessionId);
+    // The machine credential is the agent's credential: this create must name the acting session
+    // and be the one that session's answered card covers, whichever surface asked for it
+    // (`tasks/task-write-approval.ts`). A headless process acts as the account owner with a
+    // personal access token on the user route instead; there is no card-free write here. Asked
+    // before the caller's workspace is resolved: whether this write may happen at all turns on its
+    // identity, not on which workspace it names.
+    await this.tasks.assertSessionTaskWriteApproved(runner.ownerId, runner.id, sessionId, {
+      toolName: TASK_CREATE_CARD_TOOL,
+      create: dto,
+    });
     const creator = await this.tasks.resolveAgentCreator(runner.ownerId, actingWorkspaceId(workspaceId, legacyAgentId));
     return this.tasks.create(runner.ownerId, dto, creator, sessionId);
   }
@@ -93,6 +111,19 @@ export class RunnerTasksController {
     @Body() dto: CreateTasksBatchDto,
   ) {
     RunnerTasksController.refuseImplicitEvidenceJudgmentBatch(dto);
+    // SR55: a fork comes from the session making the call, on this credential — one check for the batch.
+    if (dto.tasks?.some((item) => item.fork)) {
+      await this.tasks.assertForkCallerOnRunner(runner.ownerId, runner.id, sessionId);
+    }
+    // The write that starts work in bulk takes the same acting session and answered card as the
+    // single create — and a dry run writes nothing, so it asks nobody
+    // (`tasks/task-write-approval.ts`). Asked before the caller's workspace is resolved.
+    if (!dto.dryRun) {
+      await this.tasks.assertSessionTaskWriteApproved(runner.ownerId, runner.id, sessionId, {
+        toolName: TASK_BATCH_CARD_TOOL,
+        tasks: dto.tasks,
+      });
+    }
     const creator = await this.tasks.resolveAgentCreator(runner.ownerId, actingWorkspaceId(workspaceId, legacyAgentId));
     return dto.dryRun
       ? this.tasks.previewPlan(runner.ownerId, dto, creator, sessionId)
@@ -252,6 +283,15 @@ export class RunnerTasksController {
     @Headers('x-orbit-session-id') sessionId: string | undefined,
     @Body() dto: UpdateTaskDto,
   ) {
+    // A runner write without a session reads as the owner below. The landing-check exemption is the
+    // owner's or the coordinator's (§12.15 P-C2), and a machine credential is neither on its own.
+    if (!sessionId && (dto.landingCheckExempt !== undefined || dto.landingCheckExemptReason !== undefined)) {
+      throw new ForbiddenException({
+        code: LANDING_CHECK_EXEMPT_COORDINATOR_ONLY,
+        message: 'a task\'s landing-check exemption is written from the project\'s coordinator session or by the '
+          + 'owner; this runner write names no session. Nothing was written',
+      });
+    }
     return this.tasks.update(runner.ownerId, id, dto, sessionId);
   }
 
@@ -428,12 +468,22 @@ export class RunnerTasksController {
    * run, an edit of a verifier's dependencies needs that card to be here as well.
    */
   @Post('task-lists/:id/dag-apply')
-  applyDag(
+  async applyDag(
     @CurrentRunner() runner: Runner,
     @Param('id', PublicIdPipe) id: string,
     @Body() dto: ProposeDagDto,
     @Headers('x-orbit-session-id') sessionId?: string,
   ) {
+    // A restructure can release a column of work into the dispatcher at once, so on the machine
+    // credential it takes the acting session and the answered card — the same one
+    // `tasklist_propose_dag` and `orbit task-list propose-dag --apply` raise, matched against this
+    // list and these edges (`tasks/task-write-approval.ts`). The CLI door used to apply with none;
+    // the server is where that stays closed, whichever surface asks.
+    await this.tasks.assertSessionTaskWriteApproved(runner.ownerId, runner.id, sessionId, {
+      toolName: DAG_CHANGE_CARD_TOOL,
+      listId: id,
+      ops: dto.ops,
+    });
     return this.tasks.applyDag(runner.ownerId, id, dto.ops, sessionId);
   }
 

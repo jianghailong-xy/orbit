@@ -34,6 +34,17 @@ final class StepsSummaryTests: XCTestCase {
         XCTAssertEqual(s.live, [])
     }
 
+    /// web's `StepsLine` `live`: once the turn is over, a call that never answered is not drawn as at
+    /// work under the line — it is counted in it.
+    func testAfterTheTurnACallWithoutItsAnswerJoinsTheLine() {
+        let items = [bash("a", "git status"), bash("b", "bytedcli task list", "List recent tasks", status: .running)]
+
+        XCTAssertEqual(StepsSummary.make(items).live.map(\.id), ["b"])
+        let ended = StepsSummary.make(items, live: false)
+        XCTAssertEqual(ended.line, "Ran 2 shell commands")
+        XCTAssertEqual(ended.live, [])
+    }
+
     func testThinkingAcrossBlocksIsSummedAndUntimedThinkingStillSaysSo() {
         XCTAssertEqual(StepsSummary.sentence([thinking("k1", ms: 20_000), bash("a", "pwd"), thinking("k2", ms: 50_000)]),
                        "Thought for 1m 10s, ran 1 shell command")

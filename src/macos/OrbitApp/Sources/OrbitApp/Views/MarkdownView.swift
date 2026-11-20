@@ -26,13 +26,15 @@ struct MarkdownView: View, Equatable {
     /// so this renderer gives the words back the rest of their own inset, and the gap between a card
     /// and the words beside it is the bubble's usual block gap.
     var inBubble: Bool = false
+    /// macOS: words drawn at the end of the last line, e.g. a translated reply's flip. Ignored on iOS.
+    var tail: MarkdownTail? = nil
 
     /// `@Environment` can't take part in the synthesized `Equatable` (SwiftUI's `Environment` isn't
     /// one), and `StreamingProse` compares this view to skip a re-parse — so the two are written out:
     /// everything that changes what is drawn, and nothing that merely lets it be drawn.
     static func == (lhs: MarkdownView, rhs: MarkdownView) -> Bool {
         lhs.source == rhs.source && lhs.base == rhs.base && lhs.ink == rhs.ink
-            && lhs.fillWidth == rhs.fillWidth && lhs.inBubble == rhs.inBubble
+            && lhs.fillWidth == rhs.fillWidth && lhs.inBubble == rhs.inBubble && lhs.tail == rhs.tail
     }
 
     /// The links a message is showing as cards, from the app's one card store. Nil outside the app's
@@ -75,10 +77,12 @@ struct MarkdownView: View, Equatable {
                         .frame(maxWidth: fillWidth ? .infinity : nil, alignment: .leading)
                         .modifier(BubbleProseInset(active: inset))
                 case .block(let block):
-                    MarkdownBlockView(block: block, base: base, ink: ink)
+                    MarkdownBlockView(block: block, base: base, ink: ink, fillWidth: fillWidth)
                         .modifier(BubbleProseInset(active: inset))
                 case .card(let ref):
                     OrbitLinkCardView(ref: ref, inBubble: inBubble)
+                case .settings(let place):
+                    SettingsLinkCardView(place: place)
                 case .file(let ref):
                     MarkdownFileLinkView(ref: ref)
                         .modifier(BubbleProseInset(active: inset))
@@ -86,18 +90,29 @@ struct MarkdownView: View, Equatable {
             }
         }
         #else
+        // The tail ends the last block's last line when that block is words; otherwise its own line.
+        let tailInline: Bool = {
+            guard tail != nil, case .markdown(let last)? = blocks.last else { return false }
+            return MarkdownBlockView.takesTail(last)
+        }()
         let content = VStack(alignment: .leading, spacing: spacing) {
             ForEach(blocks.indices, id: \.self) { i in
                 switch blocks[i] {
                 case .markdown(let block):
-                    MarkdownBlockView(block: block, base: base, ink: ink)
+                    MarkdownBlockView(block: block, base: base, ink: ink, fillWidth: fillWidth,
+                                      tail: tailInline && i == blocks.count - 1 ? tail : nil)
                         .modifier(BubbleProseInset(active: inset))
                 case .card(let ref):
                     OrbitLinkCardView(ref: ref, inBubble: inBubble)
+                case .settings(let place):
+                    SettingsLinkCardView(place: place)
                 case .file(let ref):
                     MarkdownFileLinkView(ref: ref)
                         .modifier(BubbleProseInset(active: inset))
                 }
+            }
+            if let tail, !tailInline {
+                tail.text.frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         // Opens the lines up toward web's `.md { line-height: 1.6 }` (SF's default leading is a
@@ -119,6 +134,7 @@ enum MarkdownRenderBlock: Equatable {
     case markdown(MarkdownBlock)
     case card(OrbitLinkRef)
     case file(MarkdownFileRef)
+    case settings(SettingPlace)
 }
 
 /// A message's blocks, with every Orbit link that stands for itself replaced by the card drawn in
@@ -136,6 +152,7 @@ enum MarkdownRenderBlock: Equatable {
     return placed.flatMap { rendered -> [MarkdownRenderBlock] in
         switch rendered {
         case .card(let ref): return [.card(ref)]
+        case .settings(let place): return [.settings(place)]
         case .markdown(let block): return splitFileLinks(in: block)
         }
     }
@@ -147,6 +164,7 @@ extension Array where Element == MarkdownRenderBlock {
         contains { block in
             if case .card = block { return true }
             if case .file = block { return true }
+            if case .settings = block { return true }
             return false
         }
     }
@@ -213,6 +231,7 @@ private enum ProseGroup {
     case block(MarkdownBlock)
     case card(OrbitLinkRef)
     case file(MarkdownFileRef)
+    case settings(SettingPlace)
 }
 
 /// Fold a block list into render groups: maximal runs of flowable prose (headings, paragraphs,
@@ -237,6 +256,11 @@ private func proseGroups(_ blocks: [MarkdownRenderBlock], base: ProseRole) -> [P
         if case .file(let ref) = rendered {
             flush()
             groups.append(.file(ref))
+            continue
+        }
+        if case .settings(let place) = rendered {
+            flush()
+            groups.append(.settings(place))
             continue
         }
         guard case .markdown(let block) = rendered else { continue }
@@ -301,6 +325,22 @@ private struct MarkdownBlockView: View {
     // iOS selectable-leaf styling threaded from MarkdownView; unused on macOS (which keeps `Text`).
     let base: ProseRole
     let ink: ProseInk
+    /// `MarkdownView.fillWidth`: off in the person's bubble, where each prose block hugs its words —
+    /// a block pinned to `maxWidth: .infinity` would stretch the bubble's tint across the whole row
+    /// however short the message.
+    var fillWidth: Bool = true
+    /// Words appended to this block's last line (macOS); only a block `takesTail` gets one.
+    var tail: MarkdownTail? = nil
+    private var proseWidth: CGFloat? { fillWidth ? .infinity : nil }
+    private var tailText: Text { tail?.text ?? Text("") }
+
+    static func takesTail(_ block: MarkdownBlock) -> Bool {
+        switch block {
+        case .heading, .paragraph: return true
+        case .list(let items): return !items.isEmpty
+        default: return false
+        }
+    }
 
     var body: some View {
         switch block {
@@ -308,22 +348,22 @@ private struct MarkdownBlockView: View {
         // (MarkdownView.proseGroups), so this view renders them only on macOS; the "island" blocks
         // below (code/table/quote/rule) can't share a text run and render here on both platforms.
         case .heading(let level, let text):
-            inlineMarkdown(text, codeBackground: false).font(headingFont(level)).bold()
+            (inlineMarkdown(text, codeBackground: false).font(headingFont(level)).bold() + tailText)
                 .fixedSize(horizontal: false, vertical: true)
 
         case .paragraph(let text):
-            inlineMarkdown(text)
+            (inlineMarkdown(text) + tailText)
                 .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: proseWidth, alignment: .leading)
 
         case .list(let items):
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(items.indices, id: \.self) { i in
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
                         marker(items[i]).foregroundStyle(.secondary)
-                        inlineMarkdown(items[i].text)
+                        (inlineMarkdown(items[i].text) + (i == items.count - 1 ? tailText : Text("")))
                             .fixedSize(horizontal: false, vertical: true)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .frame(maxWidth: proseWidth, alignment: .leading)
                     }
                     .padding(.leading, CGFloat(items[i].indent) * 16)
                 }
@@ -344,11 +384,11 @@ private struct MarkdownBlockView: View {
                 RoundedRectangle(cornerRadius: 1.5).fill(Color.secondary.opacity(0.4)).frame(width: 3)
                 #if os(iOS)
                 SelectableText(text: text, role: base, ink: .secondary, markdown: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: proseWidth, alignment: .leading)
                 #else
                 inlineMarkdown(text).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: proseWidth, alignment: .leading)
                 #endif
             }
 
@@ -1033,6 +1073,31 @@ func inlineMarkdownAttributed(_ s: String) -> AttributedString {
         options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
     )) ?? AttributedString(s)
     return LinkDetection.linkifying(parsed)
+}
+
+/// Words a `MarkdownView` draws at the end of its last line (macOS): a translated reply's
+/// "Translated · Show original" (docs/mocks/translation-reply-hover). Always in the line, so showing
+/// it never re-wraps the text; clear until `shown`, when `action` becomes a link to `url`, which the
+/// view holding it answers through `openURL`.
+struct MarkdownTail: Equatable {
+    var lead: String
+    var action: String
+    var url: URL
+    var shown: Bool
+
+    var text: Text {
+        var lead = AttributedString("  \(self.lead) · ")
+        var action = AttributedString(self.action)
+        action.swiftUI.underlineStyle = .single
+        if shown {
+            lead.swiftUI.foregroundColor = .secondary
+            action.link = url
+        } else {
+            lead.swiftUI.foregroundColor = .clear
+            action.swiftUI.foregroundColor = .clear
+        }
+        return Text(lead + action).font(.orbitMeta)
+    }
 }
 
 extension Color {

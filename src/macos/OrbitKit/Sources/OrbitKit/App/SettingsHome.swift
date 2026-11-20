@@ -4,20 +4,23 @@ import CoreGraphics   // CGSize/CGRect's Swift members on Apple platforms; Found
 #endif
 
 /// A page Settings opens from its list, each one a frame of Settings' own stack
-/// (`NavNode.settingsPage`).
+/// (`NavNode.settingsPage`). Change password is the one opened from a page rather than the list: Profile's.
 public enum SettingsPage: String, Hashable, Sendable, CaseIterable {
-    case infrastructure, sessions, notifications, sharedLinks, accessTokens, changePassword, admin
+    case general, notifications, profile, sharedLinks, accessTokens, terminals, github, machines, providers, changePassword
 
     /// The page's navigation title — the same words as the row that opens it.
     public var title: String {
         switch self {
-        case .infrastructure: return SettingsHome.title(.infrastructure)
-        case .sessions:       return SettingsHome.title(.sessions)
+        case .general:        return SettingsHome.title(.general)
         case .notifications:  return SettingsHome.title(.notifications)
+        case .profile:        return SettingsHome.title(.profile)
         case .sharedLinks:    return SettingsHome.title(.sharedLinks)
         case .accessTokens:   return SettingsHome.title(.accessTokens)
-        case .changePassword: return SettingsHome.title(.changePassword)
-        case .admin:          return SettingsHome.title(.admin)
+        case .terminals:      return SettingsHome.title(.terminals)
+        case .github:         return SettingsHome.title(.github)
+        case .machines:       return SettingsHome.title(.machines)
+        case .providers:      return SettingsHome.title(.providers)
+        case .changePassword: return SettingsCopy.changePassword
         }
     }
 }
@@ -25,106 +28,108 @@ public enum SettingsPage: String, Hashable, Sendable, CaseIterable {
 /// Settings' own list on iOS, top to bottom: which groups it has, which rows each holds, and what a
 /// row says about where things stand. The list is an index — a row names a thing and its current
 /// value, and the explanation behind it lives on the page it opens — so the view draws exactly this
-/// and nothing of its own — the ChatGPT-style sheet the owner picked from the mockups.
+/// and nothing of its own.
 ///
-/// The rows are the web's Settings and Profile pages, regrouped for a phone, in the order the owner
-/// picked from docs/mocks/ios-settings-order: first the Machines & models page — the web's Runners
-/// and Providers pages, made one — on a row of its own, since it is the one row that says what needs
-/// you; then Preferences: Sessions (the web's Session defaults and Session orchestration cards, on a
-/// page of their own — `SessionSettings`), Notifications and Appearance; then Profile's email and
-/// password under Account with Shared links and Access tokens beside them. The words are the web's
-/// wherever it has one.
+/// The groups and rows are the web Settings nav's (`SettingsLayout.tsx`, `settingsIndex.ts`), in its
+/// order: Personal — General, Notifications, Appearance, Profile, Shared links, Access tokens,
+/// Terminals — then Integrations' GitHub (docs/github-workspace-design.md §8), then Machines, then
+/// Providers. The web's pages the app has no page for yet (Storage, Feishu, Workspaces) are left out; a phone shows each of Machines and Providers as one row
+/// opening its page, where the web lists their items in the nav itself.
 public enum SettingsHome {
     public enum Group: String, CaseIterable, Sendable {
-        case machines, preferences, account
+        case personal, integrations, machines, providers
     }
 
     public enum Row: String, CaseIterable, Sendable {
-        case infrastructure
-        case sessions, notifications, appearance
-        case email, instance, sharedLinks, accessTokens, changePassword, admin
+        case general, notifications, appearance, profile, sharedLinks, accessTokens, terminals
+        /// Settings → GitHub (docs/github-workspace-design.md §8): the web's Integrations group's GitHub page.
+        case github
+        case machines
+        case providers
     }
 
-    /// A group's header. Machines & models has none: its one row says that name, and a header over it
-    /// would say it twice (docs/mocks/machines-and-models, ⑥-2) — the line under the row is its footer.
+    /// A group's header. Machines and Providers have none: each holds the one row that says that name,
+    /// and a header over it would say it twice.
     public static func header(_ group: Group) -> String? {
         switch group {
-        case .machines:    return nil
-        case .preferences: return "Preferences"
-        case .account:     return "Account"
+        case .personal:  return "Personal"
+        case .integrations: return GithubCopy.INTEGRATIONS
+        case .machines:  return nil
+        case .providers: return nil
         }
     }
 
-    /// The rows a group shows, in order. Admin is role-gated, like its section everywhere else.
-    public static func rows(_ group: Group, isAdmin: Bool) -> [Row] {
+    /// The rows a group shows, in order.
+    public static func rows(_ group: Group) -> [Row] {
         switch group {
-        case .machines:    return [.infrastructure]
-        case .preferences: return [.sessions, .notifications, .appearance]
-        case .account:
-            let rows: [Row] = [.email, .instance, .sharedLinks, .accessTokens, .changePassword]
-            return isAdmin ? rows + [.admin] : rows
+        case .personal:  return [.general, .notifications, .appearance, .profile, .sharedLinks, .accessTokens, .terminals]
+        case .integrations: return [.github]
+        case .machines:  return [.machines]
+        case .providers: return [.providers]
         }
     }
 
+    /// The web nav's labels.
     public static func title(_ row: Row) -> String {
         switch row {
-        case .infrastructure:    return AppSection.runners.title
-        case .sessions:          return "Sessions"
-        case .notifications:     return "Notifications"
-        case .appearance:        return "Appearance"
-        case .email:             return "Email"
-        case .instance:          return "Instance"
-        case .sharedLinks:       return "Shared links"
-        case .accessTokens:      return AccessTokensList.title
-        case .changePassword:    return "Change password"
-        case .admin:             return AppSection.admin.title
+        case .general:       return "General"
+        case .notifications: return "Notifications"
+        case .appearance:    return "Appearance"
+        case .profile:       return "Profile"
+        case .sharedLinks:   return "Shared links"
+        case .accessTokens:  return AccessTokensList.title
+        case .terminals:     return Terminals.title
+        case .github:        return GithubCopy.TITLE
+        case .machines:      return MachinesAndModels.machines
+        case .providers:     return "Providers"
         }
     }
 
-    /// SF Symbol for the row's leading glyph. Infrastructure and Admin keep the glyph their sections have.
+    /// SF Symbol for the row's leading glyph: the web nav's icon, as near as SF Symbols has it.
     public static func systemImage(_ row: Row) -> String {
         switch row {
-        case .infrastructure:    return AppSection.runners.systemImage
-        case .sessions:          return "bubble.left.and.bubble.right"
-        case .notifications:     return "bell"
-        case .appearance:        return "circle.lefthalf.filled"
-        case .email:             return "envelope"
-        case .instance:          return "globe"
-        case .sharedLinks:       return "link"
-        case .accessTokens:      return "key.horizontal"
-        case .changePassword:    return "lock.rotation"
-        case .admin:             return AppSection.admin.systemImage
+        case .general:       return "gearshape"
+        case .notifications: return "bell"
+        case .appearance:    return "sun.max"
+        case .profile:       return "person"
+        case .sharedLinks:   return "link"
+        case .accessTokens:  return "key.horizontal"
+        case .terminals:     return "terminal"
+        case .github:        return "chevron.left.forwardslash.chevron.right"
+        case .machines:      return AppSection.runners.systemImage
+        case .providers:     return "cloud"
         }
     }
 
-    /// The page a row opens. Nil for the rows that are answered in place: Appearance, a menu on the
-    /// row itself, and the two lines that only say something.
+    /// The page a row opens. Nil for Appearance, a menu on the row itself.
     public static func page(_ row: Row) -> SettingsPage? {
         switch row {
-        case .infrastructure: return .infrastructure
-        case .sessions:       return .sessions
-        case .notifications:  return .notifications
-        case .sharedLinks:    return .sharedLinks
-        case .accessTokens:   return .accessTokens
-        case .changePassword: return .changePassword
-        case .admin:          return .admin
-        case .appearance, .email, .instance:
-            return nil
+        case .general:       return .general
+        case .notifications: return .notifications
+        case .appearance:    return nil
+        case .profile:       return .profile
+        case .sharedLinks:   return .sharedLinks
+        case .accessTokens:  return .accessTokens
+        case .terminals:     return .terminals
+        case .github:        return .github
+        case .machines:      return .machines
+        case .providers:     return .providers
         }
-    }
-
-    /// The line under a group: the Infrastructure page's own, under the one row that opens it.
-    public static func footer(_ group: Group) -> String? {
-        group == .machines ? Infrastructure.subtitle : nil
     }
 
     // MARK: - What a row says
 
-    /// "1 needs you" — how many lines the Infrastructure page's Needs you holds; with none, how many of
-    /// the account's machines can take work right now.
-    public static func infrastructureValue(needsYou: Int, runners: [Runner]) -> String {
-        if needsYou > 0 { return needsYou == 1 ? "1 needs you" : "\(needsYou) need you" }
-        return runnersValue(runners)
+    /// "1 needs you" — how many lines the Machines & models page's Needs you holds; with none, how many of
+    /// the account's machines can take work right now. Settings' Machines row says it of the machines'
+    /// lines alone, the Mac's Machines & models row of them all.
+    public static func machinesAndModelsValue(needsYou: Int, runners: [Runner]) -> String {
+        needsYouValue(needsYou) ?? runnersValue(runners)
+    }
+
+    /// "1 needs you", "3 need you" — nil with none.
+    public static func needsYouValue(_ count: Int) -> String? {
+        guard count > 0 else { return nil }
+        return count == 1 ? "1 needs you" : "\(count) need you"
     }
 
     /// "3 of 4 online" — how many of the account's machines can take work right now.
@@ -132,6 +137,12 @@ public enum SettingsHome {
         guard !runners.isEmpty else { return "None" }
         let online = runners.filter { $0.online == true }.count
         return "\(online) of \(runners.count) online"
+    }
+
+    /// "@ada" — the GitHub account connected, once the connection has been read; nil before, and when none is.
+    public static func githubValue(_ integration: GithubIntegration?) -> String? {
+        guard let integration, integration.connected, let login = integration.login else { return nil }
+        return "@\(login)"
     }
 
     /// "25 active" — the links that open for anyone who has them.
@@ -148,30 +159,38 @@ public enum SettingsHome {
     public static func notificationsValue(allowed: Bool?) -> String? {
         allowed.map { $0 ? "On" : "Off" }
     }
-
-    /// The server this app is signed in to, as the sign-in screen asked for it: the host, and the
-    /// port when there is one.
-    public static func instanceName(_ baseURL: URL?) -> String? {
-        guard let baseURL, let host = baseURL.host, !host.isEmpty else { return nil }
-        return baseURL.port.map { "\(host):\($0)" } ?? host
-    }
-
-    /// "Orbit 0.1.2 (3581)" — the build, under the list, for a report about it.
-    public static func versionLine(version: String?, build: String?) -> String? {
-        guard let version, !version.isEmpty else { return nil }
-        guard let build, !build.isEmpty else { return "Orbit \(version)" }
-        return "Orbit \(version) (\(build))"
-    }
 }
 
-/// The page Settings' Sessions row opens on iOS, top to bottom: the account's five session settings —
+/// The page Settings' General row opens on iOS, top to bottom: the account's session settings —
 /// the web's Session defaults card and its Session orchestration card — each in a section of its own
 /// with the web's hint as its footer, as the Notifications page's switches have theirs
 /// (docs/mocks/ios-settings-order, 2A). Every one is the whole account's, so it is answered on its
 /// row and opens nothing.
 public enum SessionSettings {
     public enum Row: String, CaseIterable, Sendable {
-        case defaultPermission, orchestration, modelRouting, promptSuggestions, recaps
+        case defaultPermission, orchestration, modelRouting, optimizeFor, promptSuggestions, recaps
+    }
+
+    /// One group on the page: a row's section, Settings › Translation's, or the Prompt optimizer's.
+    public enum Group: Hashable, Sendable {
+        case row(Row)
+        case translation
+        case promptOptimizer
+    }
+
+    /// The page top to bottom: Translation sits right after Default permission and before Session
+    /// orchestration, as Android's and the web's pages have it (docs/mocks/session-translation, frame 7);
+    /// the Prompt optimizer sits right under Suggested replies (docs/mocks/prompt-optimizer, frame 1);
+    /// the rows keep their own order around them.
+    public static let groups: [Group] =
+        [.row(.defaultPermission), .translation] + Row.allCases.dropFirst().flatMap { row -> [Group] in
+            row == .promptSuggestions ? [.row(row), .promptOptimizer] : [.row(row)]
+        }
+
+    /// Whether a row is drawn: Optimize For only while smart model selection is on, the one thing that
+    /// reads it (owner, 2026-11-20); its saved value is kept while it is hidden. Every other row always.
+    public static func shows(_ row: Row, smartModelSelection: Bool) -> Bool {
+        row != .optimizeFor || smartModelSelection
     }
 
     public static func title(_ row: Row) -> String {
@@ -179,6 +198,7 @@ public enum SessionSettings {
         case .defaultPermission: return "Default permission"
         case .orchestration:     return "Session orchestration"
         case .modelRouting:      return SettingsCopy.smartModelSelection
+        case .optimizeFor:       return SettingsCopy.optimizeFor
         case .promptSuggestions: return SettingsCopy.suggestedReplies
         case .recaps:            return SettingsCopy.sessionRecaps
         }
@@ -190,6 +210,7 @@ public enum SessionSettings {
         case .defaultPermission: return SettingsCopy.defaultPermissionHint
         case .orchestration:     return SettingsCopy.letSessionsOrchestrateHint
         case .modelRouting:      return SettingsCopy.smartModelSelectionHint
+        case .optimizeFor:       return SettingsCopy.optimizeForHint
         case .promptSuggestions: return SettingsCopy.suggestedRepliesHint
         case .recaps:            return SettingsCopy.sessionRecapsHint
         }
@@ -291,7 +312,7 @@ public enum SettingsCopy {
     /// Over the two switches the web page has: they are the account's, so every device follows them.
     public static let accountHeader = "Sent to all your devices"
     public static let sessionFinished = "When a session finishes"
-    public static let sessionFinishedHint = "Alert your devices when a run finishes on its own or fails for good."
+    public static let sessionFinishedHint = "Alert your devices when a session you started finishes on its own or fails for good. Task, coordinator and agent-started sessions stay quiet; Project done still rings."
     public static let agentMessage = "When an agent asks for you"
     public static let agentMessageHint = "Let a running agent alert your devices itself — to ask something only you can answer, or to report what you were waiting for. At most one per session per minute."
     /// What alerts whatever the two switches say — the server gates only those two
@@ -318,14 +339,20 @@ public enum SettingsCopy {
     /// The account's one switch, where a form has room to label and explain it (macOS). On iOS' Sessions
     /// page the row is the switch, under the row's own name, and the hint is its footer.
     public static let letSessionsOrchestrate = "Let sessions orchestrate"
-    public static let letSessionsOrchestrateHint = "Sessions in every workspace can spawn and manage other sessions via the orbit MCP session tools. Off → those tools are hidden and refused."
+    public static let letSessionsOrchestrateHint = "Sessions in every workspace can start and manage other sessions, and manage your agents and runners, through the orbit MCP tools and CLI: create, change and delete agents, install engines on runners and delete them. Off → those tools are hidden and refused."
 
     // MARK: Smart model selection (the web page's Session defaults card)
 
-    /// The account's master switch for smart model selection, off unless turned on. On iOS' Sessions
+    /// The account's master switch for smart model selection, on unless turned off. On iOS' Sessions
     /// page the row is the switch and the hint its footer.
     public static let smartModelSelection = "Smart model selection"
-    public static let smartModelSelectionHint = "Coordinators suggest a tier for each task, and Agents you turn this on for run their tasks on that tier's model and effort. Off: tasks run exactly as before."
+    public static let smartModelSelectionHint = "Coordinators suggest a tier for each task, and a SubAgent's size sets its own. Task runs and SubAgents run on a model of that tier from your providers. Off: tasks keep their Agent's model and SubAgents their parent session's."
+
+    // MARK: Optimize For (board docs/mocks/routing-mode-account, approved 2026-11-19)
+
+    /// The account's one routing pick, directly under Smart model selection on Settings → General.
+    public static let optimizeFor = "Optimize For"
+    public static let optimizeForHint = "What to favour when a model is picked at a tier."
 
     // MARK: Suggested replies (the web page's Session defaults card)
 

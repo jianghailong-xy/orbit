@@ -40,6 +40,10 @@ data class SessionProjectRow(
     /** Whether the row's menu leads with Complete (design §4.3, owner 2026-11-07; iOS `offersComplete(in:)`): only a DONE or
      * CANCELLED project, and only in Open, where there is something left to move to Completed. */
     fun offersComplete(view: SessionView) = view == SessionView.OPEN && (status == "DONE" || status == "CANCELLED")
+    /** The member a tap on the row opens (owner 2026-11-14): the one its line says is waiting on you — never the coordinator, which
+     * the tap opens anyway. Null for every other row, which opens its coordinator (owner 2026-11-11, board 5). */
+    val waitingMember: String? get() = (target as? Target.Session)?.id
+        ?.takeIf { line.tone == SessionLine.Tone.APPROVAL && !ObjectId.same(it, coordinator?.id) }
     /** What the line speaks for, which Open Session opens: a session, or — with none — the project. */
     sealed interface Target {
         data class Session(val id: String) : Target

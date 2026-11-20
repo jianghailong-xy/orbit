@@ -106,7 +106,8 @@ export function wakeDeliveryRecord(
   };
 }
 
-function deliveryRecordOf(json: unknown): WakeDeliveryRecord | null {
+/** The record a DELIVERED wake row holds, or null when it holds none this reader can read. */
+export function deliveryRecordOf(json: unknown): WakeDeliveryRecord | null {
   if (!json || typeof json !== 'object' || Array.isArray(json)) return null;
   const { clientTurnId, waited, replaces } = json as Record<string, unknown>;
   if (typeof clientTurnId !== 'string') return null;

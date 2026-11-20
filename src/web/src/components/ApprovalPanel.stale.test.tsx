@@ -306,8 +306,9 @@ const cardFor = (command: string): HTMLElement => {
   return found as HTMLElement;
 };
 
+// The card's answers. Copy and the folds in its body read the call and stay pressable on a dead card.
 const actionsOf = (card: HTMLElement): HTMLButtonElement[] => [
-  ...card.querySelectorAll<HTMLButtonElement>('button'),
+  ...card.querySelectorAll<HTMLButtonElement>('.approval-actions button'),
 ];
 
 /** The card's own primary action — Approve here, Submit on a question. */

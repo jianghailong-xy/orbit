@@ -1,0 +1,24 @@
+-- ══════════════════════════════════════════════════════════════════════════════════════════════
+-- Feishu bot integration (project 34tJs8k23brO8Ie2WtMSk, task P2): the "Show Orbit in Feishu" switch.
+-- docs/feishu-bot-design.md section 15.2 is the authority.
+--
+-- WHAT CHANGES
+-- ------------
+--   feishu_app gains show_orbit: on (the default, what every app did before), the cards and replies sent to the owner
+--   carry an Open in Orbit button and Orbit links; off, they carry neither. Approvals are still answered on the card.
+--
+-- WHO WRITES IT. feishu/feishu-app.service.ts#change (PATCH /integrations/feishu), and #save carries it over to a
+-- replacing app; src/apiserver/src/common/db-write-inventory.ts names each writer.
+--
+-- LOCKS
+-- -----
+-- One ADD COLUMN with a constant default: catalog-only, ACCESS EXCLUSIVE on feishu_app for that instant, no rewrite.
+-- No constraint, index, function, trigger or type; no row is written.
+--
+-- NUMBERING, RE-RUNNABILITY
+-- -------------------------
+-- 1150: the highest on main, the project line, every origin branch and every local worktree was 1140 when this was
+-- written (2026-11-19); claimed in task P2's comments. ADD COLUMN IF NOT EXISTS runs twice.
+-- ══════════════════════════════════════════════════════════════════════════════════════════════
+
+ALTER TABLE "feishu_app" ADD COLUMN IF NOT EXISTS "show_orbit" BOOLEAN NOT NULL DEFAULT true;

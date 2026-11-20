@@ -124,7 +124,7 @@ func (u *codexAccountUsage) forget(id string) {
 // does everything this runner reads for it — the probe loop of that account's plan usage is stopped
 // with the directory it reads. A read that outlived the directory would open an app-server in a
 // CODEX_HOME nothing is left in, and would go on reporting the account as the runner's.
-func removeCodexAccount(usage *codexAccountUsage, id string, liveHomes map[string]bool) error {
+func removeCodexAccount(usage *codexAccountUsage, id string, liveHomes accountDirSessions) error {
 	if err := codexAccountKind.remove(id, liveHomes); err != nil {
 		return err
 	}

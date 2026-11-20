@@ -131,6 +131,43 @@ final class ProjectCrossingsTests: XCTestCase {
         XCTAssertThrowsError(try JSONDecoder().decode(ProjectCrossing.self, from: Data(json.utf8)))
     }
 
+    /// A move that takes its task out of its project names no target: the list around it still
+    /// decodes, the "to" end reads `no project`, and confirming says no project counts it any more.
+    func testAMoveToNoProjectDecodesAndReadsNoProject() throws {
+        let moveOut = #"{"id":"34bOutRow","publicId":"34bOutRow","fromProjectId":"34bFrom","fromProjectPublicId":"34bFrom","#
+            + #""toProjectId":null,"toProjectPublicId":null,"kind":"MOVE_TASK","subjectTaskId":"34bMovedTask","#
+            + #""crossingKey":"k","state":"PENDING","title":"Watchdog","requestedAt":"2026-10-07T09:00:00.000Z","#
+            + #""fromProject":{"title":"Coordinator control loop","status":"OPEN"},"toProject":null,"#
+            + #""subjectTask":{"id":"34bMovedTask","title":"Wire the drain watchdog"},"requestedCriterion":null}"#
+        let absent = #"{"id":"34bOutRow2","fromProjectId":"34bFrom","toProjectId":null,"kind":"MOVE_TASK","#
+            + #""crossingKey":"k2","state":"APPLIED","title":"t","requestedAt":"2026-10-07T08:00:00.000Z"}"#
+        let list = String(Self.list.trimmingCharacters(in: .whitespacesAndNewlines).dropLast()) + ",\(moveOut),\(absent)]"
+        let rows = try JSONDecoder().decode([ProjectCrossing].self, from: Data(list.utf8))
+        XCTAssertEqual(rows.count, 5)
+        XCTAssertFalse(rows[0].isToNoProject)
+
+        let row = rows[3]
+        XCTAssertTrue(row.isMove)
+        XCTAssertTrue(row.isToNoProject)
+        XCTAssertNil(row.toProjectId)
+        XCTAssertNil(row.toProjectPublicId)
+        XCTAssertNil(row.toProject)
+        XCTAssertNil(row.requestedCriterion)
+        XCTAssertTrue(rows[4].isToNoProject)
+        XCTAssertEqual(ProjectCrossings.toID(rows[4]), "no project")
+
+        let approve = ProjectCrossings.prompt(row, .approve)
+        XCTAssertEqual(approve.to, "no project")
+        XCTAssertEqual(approve.consequence,
+                       "Confirming takes the task out of this project; no project's acceptance counts it any more.")
+        XCTAssertEqual(ProjectCrossings.question(approve),
+                       "Approve moving “Wire the drain watchdog” from Coordinator control loop to no project?")
+        XCTAssertEqual(ProjectCrossings.prompt(row, .deny).consequence, ProjectCrossings.moveDenyConsequence)
+        XCTAssertEqual(ProjectCrossings.meaning(row), ProjectCrossings.moveStateMeaning["PENDING"])
+        // A move into a project keeps its own words.
+        XCTAssertEqual(ProjectCrossings.prompt(rows[0], .approve).consequence, ProjectCrossings.moveApproveConsequence)
+    }
+
     // MARK: which rows can be answered
 
     func testOnlyAPendingCrossingCanBeAnswered() throws {
@@ -142,6 +179,79 @@ final class ProjectCrossingsTests: XCTestCase {
         XCTAssertEqual(rows.map { ProjectCrossings.isAnswerable($0.state) }, [true, false, false])
         XCTAssertEqual(ProjectCrossings.waitingCount(rows), 1)
         XCTAssertEqual(ProjectCrossings.waiting(1), "1 waiting")
+    }
+
+    // MARK: which rows the project page lists
+
+    /// One row as the server writes it, its target end spelled out (or `null`) by the caller.
+    private func row(_ id: String, state: String = "PENDING", toProject: String) throws -> ProjectCrossing {
+        let json = #"{"id":"\#(id)","fromProjectId":"34bFrom","toProjectId":"34bTo","kind":"MOVE_TASK","#
+            + #""crossingKey":"k","state":"\#(state)","title":"t","requestedAt":"2026-10-07T08:00:00.000Z","#
+            + #""toProject":\#(toProject)}"#
+        return try JSONDecoder().decode(ProjectCrossing.self, from: Data(json.utf8))
+    }
+
+    func testACrossingAConversationAnswersIsNotListed() throws {
+        let card = try row("card", toProject: #"{"title":"Runner hardening","status":"OPEN","#
+            + #""coordinatorSessionId":"34bCoord","coordinatorSessionPublicId":"34bCoord"}"#)
+        XCTAssertEqual(card.toProject?.coordinatorSessionId, "34bCoord")
+        XCTAssertFalse(ProjectCrossings.isShownOnProjectPage(card))
+        let answered = try row("answered", state: "APPLIED",
+                               toProject: #"{"title":"Runner hardening","coordinatorSessionId":"34bCoord"}"#)
+        XCTAssertFalse(ProjectCrossings.isShownOnProjectPage(answered), "an answered one too")
+    }
+
+    func testACrossingNoConversationAnswersIsListed() throws {
+        let noCoordinator = try row("none", toProject: #"{"title":"Runner hardening","coordinatorSessionId":null}"#)
+        XCTAssertNil(noCoordinator.toProject?.coordinatorSessionId)
+        XCTAssertTrue(ProjectCrossings.isShownOnProjectPage(noCoordinator))
+        XCTAssertTrue(ProjectCrossings.isShownOnProjectPage(try row("out", toProject: "null")), "a move to no project")
+        XCTAssertTrue(ProjectCrossings.isShownOnProjectPage(try row("older", toProject: #"{"title":"Runner hardening"}"#)),
+                      "an older server that does not say: better a duplicate than a request nowhere to answer")
+        XCTAssertTrue(try decoded().allSatisfy(ProjectCrossings.isShownOnProjectPage))
+    }
+
+    /// A move out to no project is answered in its SOURCE project's coordinator conversation: the
+    /// page drops it when that conversation exists, and keeps it when it does not.
+    func testAMoveOutFollowsItsSourcesConversation() throws {
+        func moveOut(fromProject: String) throws -> ProjectCrossing {
+            let json = #"{"id":"34bOutRow","fromProjectId":"34bFrom","fromProjectPublicId":"34bFrom","#
+                + #""toProjectId":null,"kind":"MOVE_TASK","crossingKey":"k","state":"PENDING","#
+                + #""title":"t","requestedAt":"2026-10-07T08:00:00.000Z","fromProject":\#(fromProject)}"#
+            return try JSONDecoder().decode(ProjectCrossing.self, from: Data(json.utf8))
+        }
+        let answered = try moveOut(fromProject:
+            #"{"title":"Coordinator control loop","coordinatorSessionId":"34bCoord"}"#)
+        XCTAssertEqual(answered.fromProject?.coordinatorSessionId, "34bCoord")
+        XCTAssertFalse(ProjectCrossings.isShownOnProjectPage(answered), "its source conversation answers it")
+        XCTAssertTrue(ProjectCrossings.isShownOnProjectPage(try moveOut(fromProject:
+            #"{"title":"Coordinator control loop","coordinatorSessionId":null}"#)),
+            "a source with no coordinator conversation leaves the page to answer it")
+        XCTAssertTrue(ProjectCrossings.isShownOnProjectPage(try moveOut(fromProject:
+            #"{"title":"Coordinator control loop"}"#)),
+            "an older server that does not say: better a duplicate than a request nowhere to answer")
+
+        // A move into a project still follows its TARGET end, whatever its source conversation says.
+        let into = try JSONDecoder().decode(ProjectCrossing.self, from: Data(
+            (#"{"id":"into","fromProjectId":"a","toProjectId":"b","kind":"MOVE_TASK","crossingKey":"k","#
+             + #""state":"PENDING","title":"t","requestedAt":"2026-10-07T08:00:00.000Z","#
+             + #""fromProject":{"title":"A","coordinatorSessionId":"34bCoord"},"#
+             + #""toProject":{"title":"B","coordinatorSessionId":null}}"#).utf8))
+        XCTAssertTrue(ProjectCrossings.isShownOnProjectPage(into))
+    }
+
+    func testTheCountAndTheSectionHoldOnlyTheListedRows() throws {
+        let rows = [
+            try row("card", toProject: #"{"title":"A","coordinatorSessionId":"34bCoord"}"#),
+            try row("out", toProject: "null"),
+            try row("none", toProject: #"{"title":"B","coordinatorSessionId":null}"#),
+            try row("history", state: "DENIED", toProject: "null"),
+        ]
+        let shown = ProjectCrossings.shownOnProjectPage(rows)
+        XCTAssertEqual(shown.map(\.id), ["out", "none", "history"])
+        XCTAssertEqual(ProjectCrossings.waitingCount(shown), 2)
+        XCTAssertTrue(ProjectCrossings.shownOnProjectPage(Array(rows.prefix(1))).isEmpty,
+                      "nothing left to list: the page draws no section")
     }
 
     /// The questions first, the one that has waited longest leading; then history, newest first.

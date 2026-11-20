@@ -4,6 +4,8 @@ import { ProjectAttributionModule } from '../projects/project-attribution.module
 import { ProjectHandoffModule } from '../projects/project-handoff.module';
 import { SessionsModule } from '../sessions/sessions.module';
 import { PushModule } from '../push/push.module';
+import { ConditionsModule } from '../conditions/conditions.module';
+import { ProjectOrphanSweepService } from '../projects/project-orphan-sweep.service';
 import { TaskListsModule } from '../task-lists/task-lists.module';
 import { TasksController } from './tasks.controller';
 import { ReferenceExpansionService } from './reference-expansion';
@@ -29,6 +31,9 @@ import { TaskModelRoutingReportService } from './task-model-routing-report.servi
     ProjectAttributionModule,
     CoordinatorJudgmentModule,
     PushModule,
+    // A task's startWhen is a condition (docs/condition-triggers-design.md §6.2): written through ConditionsService,
+    // whose fire hook TasksService registers.
+    ConditionsModule,
     // For the pause projector's catch-up sweep, which rides this module's existing reconcile
     // timer: a paused list's tasks become dispatchable work, and the sweep that dispatches them
     // is this one. Imported, never re-provided — a second instance would be a second in-flight
@@ -55,6 +60,8 @@ import { TaskModelRoutingReportService } from './task-model-routing-report.servi
     TaskProgressService,
     SessionCreatedTasksService,
     TaskModelRoutingReportService,
+    // Rides TasksService's reconcile timer; provided here, once, for the reason the `exports` note gives.
+    ProjectOrphanSweepService,
   ],
   // Exported so RunnerApiModule can reuse this single instance. Providing TasksService
   // in a second module would construct a second one, and its onModuleInit would start a

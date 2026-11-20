@@ -27,6 +27,10 @@
  *       that reported changes, or with a MERGED receipt, the answer is what it was before;
  *   (8) that is only what the card says: DONE on such a task still queues its check or its landing,
  *       and its dependents still wait for the line's answer.
+ *   (9) a run whose rework landed on the project line after an older promotion of the same branch is
+ *       not on main by that promotion, nor by a newer one naming the earlier landing: the card answers
+ *       as `branchMerged` does, until a newer upstream receipt naming the commit the rework's landing
+ *       left says it is. An upstream receipt alone still puts it there.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/tasks/owner-confirmation-if-confirmed.pg.spec.ts
  *
@@ -52,11 +56,13 @@ import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated } from '../projects/coordinator-pg-test-safety';
 import { configureProjectIntegration } from '../projects/project-integration-line';
+import { settleDeliveredIdentityAfterFinish } from '../projects/project-integration-job';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { readOwnerConfirmation } from './owner-confirmation-read';
 import { TaskOwnerConfirmationService } from './task-owner-confirmation.service';
+import { prerequisiteLandedSql } from './task-dependencies';
 import { TasksService } from './tasks.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -472,7 +478,8 @@ test('(5) the landing is NONE outside a project, LINE_THEN_OWNER on a MAIN line 
       return { taskId, ...run };
     };
 
-    // NONE: in no project — and in a project, a codeless task or one whose run took no branch.
+    // NONE: in no project — and in a project, a task whose run took no branch. A task flagged codeless
+    // whose run made a branch is code work like any other (§12.15 P-M3) and lands.
     const outside = await codeTask(null, 'outside-any-project');
     assert.deepEqual(await landingOf(outside.taskId), { landing: 'NONE', startsAfterLanding: false });
     const mainLine = await lineProject(s.db, w, 'main-line', 'MAIN', true);
@@ -483,7 +490,7 @@ test('(5) the landing is NONE outside a project, LINE_THEN_OWNER on a MAIN line 
     await waitingRun(s.db, w, codeless, {
       declared: DECLARED_REPORT, stopped: DECLARED_REPORT, session: onBranch('orbit/codeless'),
     });
-    assert.deepEqual(await landingOf(codeless), { landing: 'NONE', startsAfterLanding: false });
+    assert.deepEqual(await landingOf(codeless), { landing: 'LINE_THEN_OWNER', startsAfterLanding: true });
     const noBranch = await confirmedTask(s.db, w, mainLine, 'no-worktree');
     await waitingRun(s.db, w, noBranch, { declared: DECLARED_REPORT, stopped: DECLARED_REPORT });
     assert.deepEqual(await landingOf(noBranch), { landing: 'NONE', startsAfterLanding: false });
@@ -700,43 +707,132 @@ test('(7) a branch measured empty, on a task nothing says has commits, lands not
   }
 });
 
-test('(8) DONE on a branch with no changes queues the check or the landing it always did, and its '
-  + 'dependents wait for the line\'s answer',
+test('(8) DONE on a branch with no changes queues nothing while its work moves, and the finish that '
+  + 'measures no commit of its own queues nothing either and releases its dependents (§12.15 P-M1)',
 { skip, timeout: 300_000 }, async () => {
   assertCoordinatorPgUrlIsIsolated(URL!);
   const s = connect();
   try {
     const w = await world(s.db, 'no-changes-done');
-    for (const [line, kind] of [['MAIN', 'CHECK_PROMOTION'], ['PROJECT_BRANCH', 'LAND_TASK']] as const) {
+    for (const line of ['MAIN', 'PROJECT_BRANCH'] as const) {
       const projectId = await lineProject(s.db, w, `no-changes-done-${line}`, line, false);
       const taskId = await confirmedTask(s.db, w, projectId, `no-changes-done-${line}`);
       const branch = noChanges(`orbit/no-changes-done-${line}`);
-      const { requestId } = await waitingRun(s.db, w, taskId, {
+      const { sessionId, requestId } = await waitingRun(s.db, w, taskId, {
         declared: DECLARED_REPORT, stopped: DECLARED_REPORT, session: branch,
       });
       const dependent = await seedTask(s.db, w, projectId, `after-no-changes-${line}`, { autoRunWhenReady: true });
       await s.db.taskDependency.create({ data: { taskId: dependent, dependsOnTaskId: taskId } });
+      const released = async () => (await s.db.$queryRaw<Array<{ landed: boolean }>>(Prisma.sql`
+        SELECT ${Prisma.raw(prerequisiteLandedSql('t'))} AS "landed" FROM "task" t WHERE t."id" = ${taskId}::uuid`))[0]?.landed;
 
       const card = (await s.confirmations.read(w.ownerId, taskId)).ifConfirmed;
       assert.equal(card?.landing, 'NONE', `CONTROL: the card says nothing lands on a ${line} line`);
       assert.deepEqual(card?.startsTasks?.map((task) => task.id), [dependent]);
-      assert.equal(await s.db.projectIntegrationJob.count({ where: { projectId } }), 0,
-        `CONTROL: nothing is queued on a ${line} line before the DONE`);
 
       const receipt = await s.confirmations.decide(
         w.ownerId, taskId, { door: 'USER', userId: w.ownerId }, { decision: 'CONFIRM', requestId },
       );
       assert.equal(receipt.completed, true, 'CONTROL: the confirmation settled the task');
-      assert.deepEqual(
-        await s.db.projectIntegrationJob.findMany({
-          where: { projectId },
-          select: { kind: true, state: true, sourceRef: true },
-        }),
-        [{ kind, state: 'QUEUED', sourceRef: `refs/heads/${branch.branch}` }],
-        `DONE on a ${line} line asks the line once, as it does for a branch with work`,
-      );
-      assert.equal(await runs(s.db, dependent), 0, 'the dependent started before the line answered');
+      assert.equal(await s.db.projectIntegrationJob.count({ where: { projectId } }), 0,
+        `DONE on a ${line} line while its run is open decides nothing yet: the finish does`);
+      assert.equal(await runs(s.db, dependent), 0, 'the dependent does not start before the work settles');
+      assert.equal(await released(), false, 'J9: the work may still commit');
+
+      // The runner's finish: the tip it reports is the commit the branch forked at.
+      await s.db.$transaction(async (tx) => {
+        const finished = await tx.session.update({
+          where: { id: sessionId },
+          data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), branchSha: 'b'.repeat(40) },
+          select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
+        });
+        await settleDeliveredIdentityAfterFinish(tx, finished);
+      });
+      assert.equal(await s.db.projectIntegrationJob.count({ where: { projectId } }), 0,
+        `no commit of its own: nothing is queued on a ${line} line (§12.15 P-M1)`);
+      assert.equal(await s.db.projectPromotion.count({ where: { projectId } }), 0);
+      assert.equal(await released(), true, 'J9: nothing to land, so its dependents go');
     }
+  } finally {
+    await s.db.$disconnect();
+  }
+});
+
+// ═══ (9) a rework landed in the same run is not on main by an older promotion ═════════════════════
+
+test('(9) a branch whose rework landed on the project line after an older promotion is not on main, nor '
+  + 'by a newer promotion naming the earlier landing; one naming the rework\'s landing puts it there; an '
+  + 'upstream receipt alone still does',
+{ skip, timeout: 300_000 }, async () => {
+  assertCoordinatorPgUrlIsIsolated(URL!);
+  const s = connect();
+  try {
+    const w = await world(s.db, 'rework');
+    const projectId = await lineProject(s.db, w, 'rework-line', 'PROJECT_BRANCH', false);
+    const codebase = await s.db.projectCodebase.findFirstOrThrow({
+      where: { projectId, slot: 'primary' },
+      select: { integrationRef: true, upstreamRef: true },
+    });
+    const line = codebase.integrationRef.replace(/^refs\/heads\//, '');
+    const upstream = codebase.upstreamRef.replace(/^refs\/heads\//, '');
+    const read = async (taskId: string) => (await s.confirmations.read(w.ownerId, taskId)).ifConfirmed;
+    const receipt = (
+      run: { sessionId: string; taskId: string; branch: string },
+      targetBranch: string,
+      sha: { source: string; after: string },
+      createdAt: Date,
+    ) => s.db.sessionMergeReceipt.create({
+      data: {
+        ownerId: w.ownerId, sessionId: run.sessionId, taskId: run.taskId, projectId, result: 'MERGED',
+        sourceBranch: run.branch, sourceSha: sha.source, targetBranch, targetShaBefore: 'b'.repeat(40),
+        targetShaAfter: sha.after, recordedBy: 'RUNNER', idempotencyKey: `merged:${randomUUID()}`,
+        createdAt,
+      },
+    });
+    const at = (minutes: number) => new Date(Date.now() - (10 - minutes) * 60_000);
+    // Each line landing leaves the line at a commit of its own, and a promotion names that commit.
+    const first = { source: '1'.repeat(40), after: 'a'.repeat(40) };
+    const rework = { source: '2'.repeat(40), after: 'd'.repeat(40) };
+    const promotes = (landing: { after: string }) => ({ source: landing.after, after: 'e'.repeat(40) });
+
+    // The task's first revision landed on the line and was promoted; it was reopened, and the same
+    // run's rework landed on the line after that promotion.
+    const reworked = await confirmedTask(s.db, w, projectId, 'reworked');
+    const reworkedBranch = onBranch('orbit/reworked', { branchMerged: false });
+    const reworkedRun = await waitingRun(s.db, w, reworked, {
+      declared: DECLARED_REPORT, stopped: DECLARED_REPORT, session: reworkedBranch,
+    });
+    const run = { sessionId: reworkedRun.sessionId, taskId: reworked, branch: reworkedBranch.branch };
+    const withoutReceipts = (await read(reworked))?.branch?.onMain;
+    assert.notEqual(withoutReceipts, 'YES', 'the runner judged this branch against the line, not main');
+    await receipt(run, line, first, at(1));
+    await receipt(run, upstream, promotes(first), at(2));
+    await receipt(run, line, rework, at(3));
+    const afterRework = await read(reworked);
+    assert.equal(afterRework?.branch?.onMain, withoutReceipts,
+      'an older promotion is about the first revision: the card answers as branchMerged does');
+    assert.equal(afterRework?.startsAfterLanding, false, 'the rework is on the line, so nothing waits for it');
+
+    // A promotion confirmed before the rework landed: newer, but it names the earlier landing.
+    await receipt(run, upstream, promotes(first), at(4));
+    assert.equal((await read(reworked))?.branch?.onMain, withoutReceipts,
+      'a promotion naming the earlier landing does not carry the rework');
+
+    // A promotion that carries the rework: newer, and naming the commit the rework's landing left.
+    await receipt(run, upstream, promotes(rework), at(5));
+    assert.equal((await read(reworked))?.branch?.onMain, 'YES');
+
+    // The case the rule always answered: an upstream receipt and no line receipt.
+    const promoted = await confirmedTask(s.db, w, projectId, 'promoted-only');
+    const promotedBranch = onBranch('orbit/promoted-only', { branchMerged: false });
+    const promotedRun = await waitingRun(s.db, w, promoted, {
+      declared: DECLARED_REPORT, stopped: DECLARED_REPORT, session: promotedBranch,
+    });
+    await receipt({ sessionId: promotedRun.sessionId, taskId: promoted, branch: promotedBranch.branch },
+      upstream, promotes(first), at(1));
+    const promotedCard = await read(promoted);
+    assert.equal(promotedCard?.branch?.onMain, 'YES');
+    assert.equal(promotedCard?.startsAfterLanding, false);
   } finally {
     await s.db.$disconnect();
   }

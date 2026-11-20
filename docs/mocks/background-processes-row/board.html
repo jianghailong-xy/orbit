@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="zh" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<title>Background processes：没在跑就不画，跑着就说出名字（iPhone · 深色 + web 手机版）</title>
+<!-- The shipped stylesheet: the web frames in part 2 are drawn with the tray's own classes (.bg-tray…). -->
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<style>
+  /* Phone kit: session-tasks-watch-merge-ios.html (393×852, dark, the band's card = RoundedRectangle(8),
+     4% fill, 12% hairline, 30pt row; orbitLabel 13 semibold, orbitMeta 11, orbitMono 12.4). */
+  :root { --tint: #0A84FF; --sec: #8D8D93; --ter: #5A5A5F; --blue: #0A84FF; --orange: #FF9F0A; --green: #30D158; --red: #FF453A; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #e9ebef; }
+  .b-part { width: 1900px; padding: 26px 30px 34px; background: #e9ebef;
+    font: 13px/1.6 Inter, "Noto Sans SC", sans-serif; color: #1f2329; }
+  .b-part h1 { font-size: 21px; font-weight: 650; margin: 0 0 6px; color: #1f2329; }
+  .b-part h2 { font-size: 17px; font-weight: 650; margin: 0 0 6px; color: #1f2329; }
+  .bsub { color: #4a4f57; margin: 0 0 16px; font-size: 13px; line-height: 1.65; max-width: 1780px; }
+  .b-part code { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11.5px; background: #dfe2e7; border-radius: 4px; padding: 1px 4px; color: #30343b; }
+  .data { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin: 0 0 20px; max-width: 1780px; }
+  .data div { background: #fff; border: 1px solid #d5d8dd; border-radius: 8px; padding: 8px 12px; font-size: 12px; color: #4a4f57; line-height: 1.45; }
+  .data b { display: block; font-size: 19px; color: #1f2329; font-weight: 650; }
+  .phones { display: flex; gap: 30px; align-items: flex-start; }
+  .cap { font-size: 12.5px; font-weight: 650; margin: 0 0 8px; }
+  .cap.before { color: #b3380a; } .cap.after { color: #1a7f37; }
+  .cap span { font-weight: 400; color: #646a73; margin-left: 6px; }
+  .bezel { padding: 11px; background: #2c2c2e; border-radius: 66px; box-shadow: 0 12px 30px rgba(0,0,0,.25); }
+  .screen { position: relative; width: 393px; height: 852px; border-radius: 55px; overflow: hidden; background: #000; color: #fff;
+    font-family: Inter, "Noto Sans SC", sans-serif; }
+  .abs { position: absolute; }
+  .time { left: 51px; top: 17px; font-size: 17px; font-weight: 600; }
+  .island { left: 134px; top: 11px; width: 125px; height: 37px; border-radius: 20px; background: #111; box-shadow: inset 0 0 0 1px #222; }
+  .glass { top: 59px; width: 44px; height: 44px; border-radius: 22px; background: rgba(60,60,64,.7); display: flex; align-items: center; justify-content: center; color: #fff; }
+  .navtitle { left: 70px; right: 70px; top: 62px; text-align: center; }
+  .navtitle b { display: block; font-size: 16.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .navtitle span { display: block; font-size: 12.5px; color: var(--sec); margin-top: 2px; }
+  .chat { left: 16px; right: 16px; top: 110px; display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden; gap: 12px; }
+  .chat p { margin: 0; font-size: 16px; line-height: 1.45; color: #f2f2f7; }
+  .chat ul { margin: 0; padding-left: 20px; font-size: 16px; line-height: 1.45; color: #f2f2f7; }
+  .bubble { align-self: flex-end; max-width: 260px; background: #1c2a4a; border-radius: 12px; padding: 6px 12px 4px; font-size: 16px; line-height: 1.45; }
+  .card { left: 16px; width: 361px; border-radius: 8px; background: rgba(255,255,255,.04); box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); overflow: hidden; }
+  .brow { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px; }
+  .t13 { font-size: 13px; } .semi { font-weight: 600; }
+  .bmeta { font-size: 11px; color: var(--sec); white-space: nowrap; }
+  .bmono { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12.4px; white-space: nowrap; }
+  .bgrow { flex: 1 1 auto; min-width: 0; }
+  .ell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .one { flex: 0 1 auto; min-width: 0; color: var(--tint); font-size: 13px; }
+  .bpill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: 6px; background: rgba(255,255,255,.05); box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
+  .composer { left: 16px; width: 361px; top: 712px; height: 92px; border-radius: 24px; background: #1c1c1e; box-shadow: inset 0 0 0 1px rgba(255,255,255,.08); }
+  .composer .ph { position: absolute; left: 16px; top: 13px; font-size: 17px; color: #6c6c70; }
+  .composer .bbar { position: absolute; left: 14px; right: 10px; bottom: 9px; display: flex; align-items: center; gap: 14px; font-size: 15px; color: #c7c7cc; }
+  .composer .bbar b { color: #fff; font-weight: 600; margin-left: 14px; }
+  .send { margin-left: auto; width: 32px; height: 32px; border-radius: 16px; background: #636366; display: flex; align-items: center; justify-content: center; }
+  .bhome { left: 129.5px; top: 839px; width: 134px; height: 5px; border-radius: 3px; background: #fff; }
+  .bspin { flex: none; width: 13px; height: 13px; border-radius: 50%; border: 2px solid rgba(235,235,245,.22); border-top-color: rgba(235,235,245,.75); }
+  .list { border-top: .5px solid rgba(255,255,255,.12); }
+  .prow { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 12px; }
+  .prow + .prow { border-top: .5px solid rgba(255,255,255,.08); }
+  .prow .bic { flex: none; width: 18px; display: flex; justify-content: center; }
+  .bchip { flex: none; font-family: "JetBrains Mono", monospace; font-size: 10.5px; color: var(--sec); padding: 1px 5px; border-radius: 4px; background: rgba(142,142,147,.14); }
+  .bnew { outline: 2px dashed #e8590c; outline-offset: 3px; }
+  .bgone { outline: 2px dashed #8d8d93; outline-offset: 3px; display: flex; align-items: center; justify-content: center; color: #8d8d93; font-size: 11px; height: 30px; background: transparent; box-shadow: none; }
+  .ann { font-size: 12px; color: #646a73; margin: 10px 4px 0; line-height: 1.55; max-width: 415px; }
+  .ann b { color: #1f2329; }
+  .strip { background: #000; border-radius: 14px; padding: 14px 16px; width: 393px; color: #fff; font-family: Inter, "Noto Sans SC", sans-serif; }
+  .strip .card { position: static; }
+  .strip .card + .card { margin-top: 6px; }
+  .strip .say { font-size: 13.5px; color: #c7c7cc; margin: 0 0 10px; line-height: 1.45; }
+  .cases { display: flex; gap: 28px; margin-top: 8px; align-items: flex-start; flex-wrap: wrap; }
+  .case { width: 425px; }
+  .case h4 { margin: 0 0 8px; font-size: 12.5px; font-weight: 650; color: #1a7f37; }
+  .case h4.alt { color: #646a73; }
+  .case h4.now { color: #b3380a; }
+  .case h4 span { font-weight: 400; color: #646a73; margin-left: 6px; }
+  /* Web mobile frames: the real tray classes, dark theme, at a phone's width. */
+  .webm { width: 393px; padding: 12px 12px 14px; border-radius: 14px; background: var(--bg-base); color: var(--text-1);
+    font: 13px/1.5 Inter, "Noto Sans SC", sans-serif; }
+  .webm .bg-tray + .bg-tray { margin-top: 0; }
+  .webm .one-web { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--brand); }
+  .webm .tail { margin: 0 0 10px; color: var(--text-1); font-size: 13.5px; }
+  .webm .wt-fake { margin: 0 0 8px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-subtle); min-height: 30px;
+    display: flex; align-items: center; gap: 8px; padding: 2px 10px; font-size: 12px; color: var(--text-3); font-family: "JetBrains Mono", monospace; }
+  .webm .cmp { height: 64px; border-radius: 16px; background: var(--bg-raised); border: 1px solid var(--border-subtle); color: var(--text-4); padding: 10px 14px; font-size: 14px; }
+  .webm .ico { width: 13px; height: 13px; color: var(--text-3); flex: none; }
+  .webm .spinw { flex: none; width: 12px; height: 12px; border-radius: 50%; border: 2px solid rgba(91,140,255,.25); border-top-color: var(--brand); }
+  .bwhy { margin-top: 24px; background: #fff; border: 1px solid #d5d8dd; border-radius: 10px; padding: 16px 20px; display: grid;
+    grid-template-columns: repeat(3, 1fr); gap: 6px 30px; font-size: 12.5px; line-height: 1.6; color: #30343b; }
+  .bwhy h3 { margin: 0 0 6px; font-size: 14px; color: #1f2329; }
+  .bwhy ul { margin: 0; padding-left: 16px; }
+  .bwhy li { margin: 0 0 5px; }
+  .pick { margin-top: 20px; background: #fff; border: 1px solid #d5d8dd; border-radius: 10px; padding: 16px 20px; }
+  .pick h3 { margin: 0 0 8px; font-size: 15px; }
+  .rec { display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: 5px; background: #dff3e4; color: #1d7a3a; font-size: 12px; font-weight: 600; }
+  table.btab { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  table.btab th, table.btab td { padding: 7px 10px; border-top: 1px solid #e6e6ea; text-align: left; vertical-align: top; }
+  table.btab th { color: #6b6b70; font-weight: 600; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="task" viewBox="0 0 16 16"><rect x="1.4" y="1.4" width="13.2" height="13.2" rx="2.6" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4.6 8.2 7 10.5l4.6-5.2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="sf-branch" viewBox="0 0 16 16"><path d="M5 2.5v11M5 9c0-2.6 6-2 6-5.2V2.5M11 2.5l-2 2M11 2.5l2 2" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="cr" viewBox="0 0 16 16"><path d="M6 3.5 10.5 8 6 12.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="cd" viewBox="0 0 16 16"><path d="M3.5 6 8 10.5 12.5 6" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="cl" viewBox="0 0 16 16"><path d="M10.5 3 5.5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="dots" viewBox="0 0 16 16"><circle cx="3.5" cy="8" r="1.3"/><circle cx="8" cy="8" r="1.3"/><circle cx="12.5" cy="8" r="1.3"/></symbol>
+  <symbol id="up" viewBox="0 0 16 16"><path d="M8 13V3.5M3.8 7.6 8 3.4l4.2 4.2" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="term" viewBox="0 0 16 16"><rect x="1.2" y="2.2" width="13.6" height="11.6" rx="2.4" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4.2 6.2 6.4 8 4.2 9.8M7.6 10.2h4" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="ok" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="#30D158"/><path d="M4.8 8.2 7 10.3l4.2-4.6" fill="none" stroke="#000" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="x" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="#FF453A"/><path d="M5.4 5.4l5.2 5.2M10.6 5.4l-5.2 5.2" stroke="#000" stroke-width="1.6" stroke-linecap="round"/></symbol>
+</svg>
+
+<template id="chrome">
+  <div class="abs time">9:41</div>
+  <div class="abs island"></div>
+  <div class="abs glass" style="left:16px"><svg width="20" height="20"><use href="#cl"/></svg></div>
+  <div class="abs glass" style="left:333px"><svg width="20" height="20"><use href="#dots"/></svg></div>
+  <div class="abs navtitle"><b>Coordinator handoff v2</b><span>Claude Opus 5.5</span></div>
+</template>
+
+<!-- The coordinator's own last reply (session_get on the project's coordinatorSessionId), trimmed. -->
+<template id="talk">
+  <p>It hasn't merged yet; I'll deploy once it does.</p>
+  <p><b>What happens next:</b></p>
+  <ul><li><b>When it reaches main:</b> a background job checks every 2 minutes and wakes me. I'll then deploy main to production.</li>
+  <li><b>If it hasn't reached main within 3 hours:</b> the job stops, and I'll look into why.</li></ul>
+</template>
+
+<template id="tasks">
+  <div class="brow">
+    <svg width="12" height="12" style="color:var(--sec);flex:none"><use href="#task"/></svg>
+    <span class="t13 semi" style="white-space:nowrap">Tasks</span>
+    <span class="bmeta ell">6/7 done</span>
+    <span class="bgrow"></span>
+    <svg width="11" height="11" style="color:var(--sec);flex:none"><use href="#cr"/></svg>
+  </div>
+</template>
+
+<template id="branch">
+  <div class="brow">
+    <span class="bpill"><svg width="11" height="11" style="color:var(--sec)"><use href="#sf-branch"/></svg><span class="bmono" style="color:#c7c7cc">orbit…887194</span></span>
+    <span class="bmono ell bgrow"><span style="color:var(--green)">+324</span> <span style="color:var(--red)">−0</span><span style="color:var(--sec)"> · 7 files</span></span>
+  </div>
+</template>
+
+<template id="bottom">
+  <div class="abs composer">
+    <span class="ph">Message…</span>
+    <div class="bbar">
+      <svg width="20" height="20" viewBox="0 0 22 22"><path d="M11 3v16M3 11h16" stroke="#c7c7cc" stroke-width="1.8" stroke-linecap="round"/></svg>
+      <span>Auto</span><b>Opus 5.5</b>
+      <span class="send"><svg width="15" height="15"><use href="#up"/></svg></span>
+    </div>
+  </div>
+  <div class="abs bhome"></div>
+</template>
+
+<!-- ═══════════════════════════ Part 1 ═══════════════════════════ -->
+<section class="b-part" id="part-1">
+  <h1>Background processes：没有在跑的就不画；跑着的，一个就说出它的名字（iPhone · 深色）</h1>
+  <p class="bsub">
+    今天这一行只要会话<b>启动过</b>一个后台进程就一直挂着，全跑完了也写「5 total」——你截图里那样。改成：<b>有在跑的才出现</b>；
+    只有一个在跑，就像 Tasks 卡只有一条任务、Watching 只等一个目标时那样，<b>标签后面直接写它的名字</b>（蓝色，跟 Tasks/Watching 的单条名字同色）；
+    几个在跑，用今天已有的计数句。字号、卡片、图标、顺序都照搬现有的 band，<b>没有新词</b>：每个字都出自
+    <code>BackgroundShellsTray.tsx</code> / <code>WorktreeBar.swift</code> / <code>FoldedBand.swift</code> 现有的文案。
+    对话和标题用的是真实数据：<code>project_get</code>「Coordinator handoff v2」→ 它的 coordinator 会话此刻正好有一个后台等待在跑。
+  </p>
+  <div class="data">
+    <div><b>565</b>本 runner 过去 7 天启动过后台进程的会话（837 份 transcript）</div>
+    <div><b>6 / 16 / 71</b>每个会话启动的个数 p50 / p90 / 最多 —「5 total」这种行是常态</div>
+    <div><b>45% · 32% · 17%</b>同时在跑最多 1 个 / 2 个 / 3 个以上 —「几个一起跑」一点不少见</div>
+    <div><b>43 / 74 字符</b>标题长度 p50 / p90（description，没有就用命令）— 手机上一行放不下一半</div>
+    <div><b>20% · 44%</b>结束的里有 20% 失败；44% 的会话至少失败过一个 — 失败不能一闪就没</div>
+    <div><b>95%</b>是 <code>bg_run</code> 任务 — 今天这一行根本不列它们（见第 2 部分 D3）</div>
+  </div>
+
+  <div class="phones">
+    <!-- ① today -->
+    <div>
+      <div class="cap before">① 现在 <span>全跑完了，还是一直挂着「5 total」</span></div>
+      <div class="bezel"><div class="screen" data-scene="today">
+        <div class="abs chat" style="bottom:262px"></div>
+        <div class="abs card bnew" style="top:598px"><div class="brow">
+          <svg width="12" height="12" style="color:var(--sec);flex:none"><use href="#term"/></svg>
+          <span class="t13 semi" style="white-space:nowrap">Background processes</span>
+          <span class="bmeta">5 total</span><span class="bgrow"></span>
+          <svg width="11" height="11" style="color:var(--sec);flex:none"><use href="#cr"/></svg>
+        </div></div>
+        <div class="abs card" style="top:636px" data-t="tasks"></div>
+        <div class="abs card" style="top:674px" data-t="branch"></div>
+      </div></div>
+      <p class="ann">计数句是 <code>(running&gt;0 ? "N running · " : "") + "N total"</code>：没有在跑的时候只剩「total」，告诉你一件<b>不需要你做任何事</b>的历史，却占着 composer 上面 38pt。</p>
+    </div>
+
+    <!-- ② nothing running -->
+    <div>
+      <div class="cap after">② 建议 · 没有在跑的 <span>这一行不画</span></div>
+      <div class="bezel"><div class="screen">
+        <div class="abs chat" style="bottom:224px"></div>
+        <div class="abs card" style="top:636px" data-t="tasks"></div>
+        <div class="abs card" style="top:674px" data-t="branch"></div>
+      </div></div>
+      <p class="ann">和 Watching 一样「<b>Hidden when there are none</b>」——Watching 只画在等的、等完就消失。Tasks 卡相反，建过任务就一直在：任务是这次对话的<b>产出</b>，进程只是<b>过程</b>。这一行不占地方，对话往下多露出一行（对比 ①）。</p>
+    </div>
+
+    <!-- ③ one running -->
+    <div>
+      <div class="cap after">③ 建议 · 一个在跑 <span>标签 + 它的名字 + 转圈</span></div>
+      <div class="bezel"><div class="screen">
+        <div class="abs chat" style="bottom:262px"></div>
+        <div class="abs card bnew" style="top:598px"><div class="brow">
+          <svg width="12" height="12" style="color:var(--sec);flex:none"><use href="#term"/></svg>
+          <span class="t13 semi" style="white-space:nowrap;flex:none">Background processes</span>
+          <span class="one ell">Wait until the handoff v2 project branch is on main</span>
+          <span class="bspin"></span><span class="bgrow"></span>
+          <svg width="11" height="11" style="color:var(--sec);flex:none"><use href="#cr"/></svg>
+        </div></div>
+        <div class="abs card" style="top:636px" data-t="tasks"></div>
+        <div class="abs card" style="top:674px" data-t="branch"></div>
+      </div></div>
+      <p class="ann">名字 = 列表里那一行的标题（<code>description ?? command</code>），<b>不新写</b>。蓝色、尾部截断、后面跟状态——和 Tasks 卡「<code>.ct-one</code> + 状态胶囊」同一个写法；状态用列表行已有的 <code>ProgressView</code> 转圈。真实标题 51 字符，这里露出约 20 个：见 D2。</p>
+    </div>
+
+    <!-- ④ several running -->
+    <div>
+      <div class="cap after">④ 建议 · 几个在跑 <span>今天的计数句，不变</span></div>
+      <div class="bezel"><div class="screen">
+        <div class="abs chat" style="bottom:262px"></div>
+        <div class="abs card bnew" style="top:598px"><div class="brow">
+          <svg width="12" height="12" style="color:var(--sec);flex:none"><use href="#term"/></svg>
+          <span class="t13 semi" style="white-space:nowrap">Background processes</span>
+          <span class="bmeta">3 running · 7 total</span><span class="bgrow"></span>
+          <svg width="11" height="11" style="color:var(--sec);flex:none"><use href="#cr"/></svg>
+        </div></div>
+        <div class="abs card" style="top:636px" data-t="tasks"></div>
+        <div class="abs card" style="top:674px" data-t="branch"></div>
+      </div></div>
+      <p class="ann">一个就点名、几个就计数——Watching（"Watching all 4 tasks · 1 running"）和 Tasks（单条点名，多条 "N running · d/t done"）都是这条规则。点开还是今天的列表，每行有名字（见第 2 部分）。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ Part 2 ═══════════════════════════ -->
+<section class="b-part" id="part-2">
+  <h2>边界情况：最后一个结束的那一刻、点开的列表、bg_run、web 手机版</h2>
+  <p class="bsub">卡片都是第 1 部分 band 里的那一张，按真实分布挑的例子：标题来自本 runner 上真实的后台进程（一个失败的 Android 单测、一次 web 全量测试、coordinator 的等待）。</p>
+
+  <div class="cases">
+    <div class="case">
+      <h4>D1 · 方案 a：结束后留着，到下一轮开始 <span>建议</span></h4>
+      <div class="strip">
+        <p class="say">（最后一个刚失败，agent 这一轮还没回应）</p>
+        <div class="card bnew"><div class="brow">
+          <svg width="12" height="12" style="color:var(--sec);flex:none"><use href="#term"/></svg>
+          <span class="t13 semi" style="white-space:nowrap;flex:none">Background processes</span>
+          <span class="one ell">Android app debug unit tests at 81d0f7b57</span>
+          <svg width="13" height="13" style="flex:none"><use href="#x"/></svg><span class="bgrow"></span>
+          <svg width="11" height="11" style="color:var(--sec);flex:none"><use href="#cr"/></svg>
+        </div></div>
+      </div>
+      <p class="ann">转圈换成列表行今天的结束图标（红 ✕ / 绿 ✓），名字不变。下一轮开始（agent 已经读到结果）这一行才收起。20% 的结束是失败——这一行就是唯一不需要翻对话就能看到的信号（代码注释原话：the row's icon already says how it ended）。</p>
+    </div>
+
+    <div class="case">
+      <h4 class="alt">D1 · 方案 b：立刻收起</h4>
+      <div class="strip">
+        <p class="say">（最后一个刚失败）</p>
+        <div class="card bgone">（这一行已经没了）</div>
+      </div>
+      <p class="ann">最简单。代价：失败只剩对话里的那条工具调用 / 唤醒行；如果 agent 正在忙别的，你得往上翻才知道。</p>
+      <h4 class="alt" style="margin-top:14px">D1 · 方案 c：成功立刻收起，失败留到你点开</h4>
+      <p class="ann" style="margin-top:0">要记住「看过没有」——三端各存一份状态，比 a 多一套逻辑；a 用的是已有的「新的一轮开始」信号。</p>
+    </div>
+
+    <div class="case">
+      <h4>点开（③④ 任一）：列表不变 <span>今天的样子</span></h4>
+      <div class="strip">
+        <div class="card"><div class="brow">
+          <svg width="12" height="12" style="color:var(--sec);flex:none"><use href="#term"/></svg>
+          <span class="t13 semi" style="white-space:nowrap">Background processes</span>
+          <span class="bmeta">2 running · 4 total</span><span class="bgrow"></span>
+          <svg width="11" height="11" style="color:var(--sec);flex:none"><use href="#cd"/></svg>
+        </div>
+        <div class="list">
+          <div class="prow"><span class="bic"><span class="bspin"></span></span><span class="bmono ell bgrow">Full web vitest run</span><span class="bmeta">5m ago</span><svg width="10" height="10" style="color:var(--ter);flex:none"><use href="#cr"/></svg></div>
+          <div class="prow"><span class="bic"><span class="bspin"></span></span><span class="bchip">Agent</span><span class="bmono ell bgrow">iOS/macOS: clamp long session messages</span><span class="bmeta">3m ago</span><svg width="10" height="10" style="color:var(--ter);flex:none"><use href="#cr"/></svg></div>
+          <div class="prow"><span class="bic"><svg width="14" height="14"><use href="#x"/></svg></span><span class="bmono ell bgrow">Android app debug unit tests at 81d0f7b57</span><span class="bmeta">1h ago</span><svg width="10" height="10" style="color:var(--ter);flex:none"><use href="#cr"/></svg></div>
+          <div class="prow"><span class="bic"><svg width="14" height="14"><use href="#ok"/></svg></span><span class="bmono ell bgrow">apiserver typecheck</span><span class="bmeta">2h ago</span><svg width="10" height="10" style="color:var(--ter);flex:none"><use href="#cr"/></svg></div>
+        </div></div>
+      </div>
+      <p class="ann">行还在的时候，点开仍然列出<b>全部</b>（含已结束的），不改 <code>BackgroundRow</code>。行收起后，历史在对话里的启动/唤醒行，<b>不加新入口</b>（D4）。</p>
+    </div>
+
+    <div class="case">
+      <h4 class="now">D3 · 真实数据暴露：bg_run 任务今天不在这一行 <span>coordinator 的等待</span></h4>
+      <div class="strip">
+        <p class="say">今天：等待任务（<code style="background:#2a2a2e;color:#c7c7cc">bg_run</code>，最长 3 小时）在跑，行里看不到它</p>
+        <div class="card bgone">（没有 Background processes —— 列表只认 Bash / Agent / Workflow）</div>
+        <p class="say" style="margin-top:12px">建议：bg_run 任务也算，同一种行</p>
+        <div class="card bnew"><div class="brow">
+          <svg width="12" height="12" style="color:var(--sec);flex:none"><use href="#term"/></svg>
+          <span class="t13 semi" style="white-space:nowrap;flex:none">Background processes</span>
+          <span class="one ell">Wait until the handoff v2 project branch is on main</span>
+          <span class="bspin"></span><span class="bgrow"></span>
+          <svg width="11" height="11" style="color:var(--sec);flex:none"><use href="#cr"/></svg>
+        </div></div>
+      </div>
+      <p class="ann">7 天 4,360 个后台进程里 4,145 个是 <code>bg_run</code>。「只在有东西在跑时出现」之后，不把它们算进来，这一行在 95% 的时间里该出现却不出现。服务端已经知道它们（会话行「a background job in flight」），<code>GET /sessions/:id/background</code> 只是没返回。</p>
+    </div>
+  </div>
+
+  <h2 style="margin-top:26px">web 手机版：同一个 band、同一个顺序，用的是 index.css 里真的 <code>.bg-tray</code> 类</h2>
+  <p class="bsub">web 的 composer 上方顺序是 Pending → Managed runner → Watching → <b>Background processes</b> → Tasks → Main checkout → 分支条；iOS 的 <code>ComposerBand</code> 一样（另多一行 Agents），web 有的 iOS 一个不少。三种状态一一对应第 1 部分的 ②③④。</p>
+  <div class="cases">
+    <div class="case">
+      <h4>web · ② 没在跑</h4>
+      <div class="webm">
+        <p class="tail">It hasn't merged yet; I'll deploy once it does.</p>
+        <div class="bg-tray"><div class="bg-tray-row"><svg class="ico"><use href="#task"/></svg><span class="bg-tray-title">Tasks</span><span class="bg-tray-count">6/7 done</span><span class="wt-spacer" style="flex:1"></span><span style="color:var(--text-3)">▸</span></div></div>
+        <div class="wt-fake">orbit…887194 <span style="color:var(--success)">+324</span> <span style="color:var(--error)">−0</span> · 7 files</div>
+        <div class="cmp">Message…</div>
+      </div>
+    </div>
+    <div class="case">
+      <h4>web · ③ 一个在跑</h4>
+      <div class="webm">
+        <p class="tail">It hasn't merged yet; I'll deploy once it does.</p>
+        <div class="bg-tray bnew"><div class="bg-tray-row"><svg class="ico"><use href="#term"/></svg><span class="bg-tray-title" style="flex:none">Background processes</span><span class="one-web">Wait until the handoff v2 project branch is on main</span><span class="spinw"></span><span class="wt-spacer" style="flex:1"></span><span style="color:var(--text-3)">▸</span></div></div>
+        <div class="bg-tray"><div class="bg-tray-row"><svg class="ico"><use href="#task"/></svg><span class="bg-tray-title">Tasks</span><span class="bg-tray-count">6/7 done</span><span class="wt-spacer" style="flex:1"></span><span style="color:var(--text-3)">▸</span></div></div>
+        <div class="wt-fake">orbit…887194 <span style="color:var(--success)">+324</span> <span style="color:var(--error)">−0</span> · 7 files</div>
+        <div class="cmp">Message…</div>
+      </div>
+    </div>
+    <div class="case">
+      <h4>web · ④ 几个在跑</h4>
+      <div class="webm">
+        <p class="tail">It hasn't merged yet; I'll deploy once it does.</p>
+        <div class="bg-tray bnew"><div class="bg-tray-row"><svg class="ico"><use href="#term"/></svg><span class="bg-tray-title">Background processes</span><span class="bg-tray-count">3 running · 7 total</span><span class="wt-spacer" style="flex:1"></span><span style="color:var(--text-3)">▸</span></div></div>
+        <div class="bg-tray"><div class="bg-tray-row"><svg class="ico"><use href="#task"/></svg><span class="bg-tray-title">Tasks</span><span class="bg-tray-count">6/7 done</span><span class="wt-spacer" style="flex:1"></span><span style="color:var(--text-3)">▸</span></div></div>
+        <div class="wt-fake">orbit…887194 <span style="color:var(--success)">+324</span> <span style="color:var(--error)">−0</span> · 7 files</div>
+        <div class="cmp">Message…</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ Part 3 ═══════════════════════════ -->
+<section class="b-part" id="part-3">
+  <h2>为什么这样画：三栏</h2>
+  <div class="bwhy" style="margin-top:8px">
+    <div>
+      <h3>iOS 习惯</h3>
+      <ul>
+        <li><b>没有事就不占地方</b>：系统的「正在进行」类信号（灵动岛、Live Activity、来电条）只在事情进行中出现，结束后自己走——不留「历史计数」。</li>
+        <li><b>状态用系统控件</b>：在跑 = <code>ProgressView</code> 小转圈，结束 = <code>checkmark/xmark.circle.fill</code>，正是 <code>BackgroundRow.statusIcon</code> 今天用的那几个 SF Symbol。</li>
+        <li><b>截断</b>：description 是一句话，按 iOS 文本惯例尾部截断；只有退回到命令时才中间截断（像 Finder/Files 的长路径），保住开头的程序名和结尾的参数。</li>
+        <li><b>出现/消失不推 composer</b>：只在一轮之间变化（开始/结束），沿用 band 已有的 <code>.easeOut(0.12)</code>；打字时整个 band 本来就会被 <code>TypingFold</code> 折起。</li>
+        <li>点击区域整行 30pt，和兄弟卡一致（低于 44pt 是 band 既有的取舍，不在这次改）。</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Orbit 一致</h3>
+      <ul>
+        <li><b>一个点名、几个计数</b>：Tasks 卡（<code>single</code> → <code>.ct-one</code> 蓝色名字 + 状态）和 Watching 条（一个目标点名）已经这样做；Background processes 照抄，不另立规则。</li>
+        <li><b>没有新词</b>：「Background processes」「N running · N total」、名字 <code>description ?? command</code>、「Agent / Workflow」小标，全是现有文案；不加「+N more」「finished」之类。</li>
+        <li><b>没有新颜色</b>：名字用 Tasks 卡单条名字的 tint；失败的红 ✕ 是列表行现有的；不把整行染红（stall 板 11-16 的做法：只有状态图标带颜色）。</li>
+        <li><b>隐藏规则跟 Watching 走，不跟 Tasks 走</b>：Watching「Hidden when there are none」（过程），Tasks「Once something is, the row stays」（产出）。后台进程是过程。</li>
+        <li>折起的 pill（<code>FoldedBand.processes</code>）同步：没在跑就不出这个标记，而不是写总数。</li>
+      </ul>
+    </div>
+    <div>
+      <h3>协调</h3>
+      <ul>
+        <li><b>三端同一条规则</b>：web <code>BackgroundShellsTray.tsx:56</code>、iOS/macOS <code>WorktreeBar.swift:1094</code>（<code>BackgroundTrayView</code>）+ <code>FoldedBand.swift</code>——同一次改、同一个 fixture（参照 <code>watch-strip.fixture.json</code>：显示/隐藏、单条名字、计数句三组用例）。<b>Android 今天没有这一行</b>（只有会话列表里的 <code>bgRunning</code>「Background process running」），按「Android 跟 iOS」的约定新加，直接按新规则做。</li>
+        <li><b>「在跑」要可信</b>：会话不在线时，web 推导时带 <code>sessionLive</code>；iOS 需确认 <code>console.state.background</code> 有没有同样处理，Android 新做时带上——否则一个假 running 会让这行永远不消失。</li>
+        <li><b>bg_run（D3）要动服务端</b>：<code>getBackgroundShells</code> 加上 runner 托管的任务，三端拿到同一份列表；不做的话这行在 95% 的场景里不会出现。</li>
+        <li>顺序不变：Watching → Background processes → Tasks → 分支条，web 与 iOS 一一对应（iOS 多的 Agents 行不受影响）。</li>
+        <li>文案仍是英文（CLAUDE.md §5），这块板只有标注是中文。</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="pick">
+    <h3>待定 · 要你拍板</h3>
+    <table class="btab">
+      <tr><th style="width:150px">问题</th><th>方案 A</th><th>方案 B</th><th style="width:250px">建议</th></tr>
+      <tr><td><b>D1</b> 最后一个结束后</td><td>a：留着（换成 ✓/✕），到下一轮开始再收起</td><td>b：立刻收起；c：只有失败留到你点开</td><td>A（a）<span class="rec">建议</span>：44% 的会话碰到过失败；用已有的「新一轮开始」信号，三端零新状态</td></tr>
+      <tr><td><b>D2</b> 一个在跑时名字放哪</td><td>标签 + 名字（③，同 Tasks/Watching），手机上名字只露约 20 字符</td><td>名字顶替标签（终端图标表明是进程），能露约 37 字符，p50 标题基本放得下</td><td>A <span class="rec">建议</span>：一致性优先；完整名字点开就有。若你更在意一眼读全，选 B，三端一起改</td></tr>
+      <tr><td><b>D3</b> bg_run 任务</td><td>算进这一行（服务端列表加上它们）</td><td>保持现状，只认 Bash / Agent / Workflow</td><td>A <span class="rec">建议</span>：否则新规则下这一行几乎不出现；可以作为同一项目的第二步</td></tr>
+      <tr><td><b>D4</b> 收起后的历史</td><td>只在对话里（启动行 / 唤醒行）</td><td>会话「⋯」菜单加一个入口</td><td>A <span class="rec">建议</span>：不加新入口；真有人找再说</td></tr>
+    </table>
+  </div>
+
+  <div class="pick">
+    <h3>落地（按代价排）</h3>
+    <table class="btab">
+      <tr><th style="width:40px">#</th><th>改动</th><th style="width:420px">文件</th></tr>
+      <tr><td>1</td><td>显示条件改成「有在跑的」（+ D1 的收起时机）；单条点名；pill 标记同步。web / iOS / Android 一起，共享 fixture + 三端 parity 测试</td><td><code>BackgroundShellsTray.tsx</code>、<code>WorktreeBar.swift</code>、<code>FoldedBand.swift</code>、Android 新增一行（band 里 Watching 与 Tasks 之间）、<code>src/shared</code> 新 fixture</td></tr>
+      <tr><td>2</td><td>iOS 核对会话不在线时的假 running（web 已有 <code>sessionLive</code>）</td><td><code>ConsoleModel.swift</code></td></tr>
+      <tr><td>3</td><td>D3：服务端列表加入 bg_run 任务，三端按同一种行画</td><td><code>sessions.service.ts</code> <code>getBackgroundShells</code>、<code>src/shared/src/background.ts</code></td></tr>
+    </table>
+  </div>
+</section>
+
+<script>
+  // Fill each phone from the templates (chrome, talk, the Tasks card, the branch bar, composer).
+  const tpl = (id) => document.getElementById(id).content.cloneNode(true);
+  for (const screen of document.querySelectorAll('.screen')) {
+    screen.prepend(tpl('chrome'));
+    screen.querySelector('.chat')?.append(tpl('talk'));
+    for (const el of screen.querySelectorAll('[data-t]')) el.append(tpl(el.dataset.t));
+    screen.append(tpl('bottom'));
+  }
+</script>
+</body>
+</html>

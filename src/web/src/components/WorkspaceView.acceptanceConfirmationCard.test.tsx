@@ -95,7 +95,8 @@ function conversation(id: string, projectId: string | null, title: string) {
     runState: 'RUNNING',
     engineTurnActive: true,
     provider: 'claude',
-    createdAt: '2026-09-11T03:00:00Z',
+    // Created before every record these tests place (handoff v2 §4: one stamped before it is not drawn).
+    createdAt: '2026-09-09T00:00:00Z',
     updatedAt: '2026-09-11T03:10:00Z',
   };
 }
@@ -356,6 +357,8 @@ beforeEach(() => {
           confirmedAt: '2026-09-11T03:10:40.000Z',
           confirmedById: 'user-1',
           startedWith: null,
+          // What the press changed, kept on the record as the server keeps it (1200).
+          changes: confirmationStanding.changesSinceConfirmed,
         },
         changesSinceConfirmed: { added: [], stricter: [], revised: [], removed: [], unchanged: [1, 2] },
         changesSinceConfirmedAbsentReason: null,
@@ -382,6 +385,8 @@ beforeEach(() => {
     }
     // The open items the coordinator question card reads (§5.2): no question is open in any of these
     // cases, and the start request the start card is drawn from is served beside them.
+    // No cross-project request is waiting on this project: the crossing card reads this door.
+    if (path === `/projects/${PROJECT_PUBLIC}/handoffs`) return reply([]);
     if (path === `/projects/${PROJECT_PUBLIC}/open-items`) {
       return reply({ needsYou: [], withCoordinator: [], startRequest: startRow });
     }
@@ -680,7 +685,7 @@ describe('the start card in WorkspaceView', { timeout: 60_000 }, () => {
     });
     const receipt = mounted().querySelector<HTMLElement>('.settlement-receipt')!;
     expect(receipt.querySelector('.settlement-receipt-line')?.textContent)
-      .toBe('You started the project on 2 criteria at seal 4fc57753a6ec');
+      .toBe('You started the project on 2 criteria');
     expect(receipt.querySelector('.settlement-receipt-settings')?.textContent)
       .toContain('Automatic on');
     expect(receipt.querySelector('.run-settings-changed')?.textContent).toContain('5 tasks at a time');
@@ -735,7 +740,7 @@ describe('the change card in WorkspaceView', { timeout: 60_000 }, () => {
     await waitForUi(() => {
       expect(count('#settlement-preview')).toBe(0);
       expect(mounted().querySelector('.settlement-receipt .settlement-receipt-line')?.textContent)
-        .toBe('You confirmed 2 criteria at seal 4fc57753a6ec — 1 new');
+        .toBe('You confirmed 2 criteria · 1 new, 1 unchanged');
     });
     // A confirmation that started nothing carries no settings.
     expect(count('.settlement-receipt-settings')).toBe(0);
@@ -919,7 +924,7 @@ describe('Chat about this on the start card', { timeout: 60_000 }, () => {
     expect(actions()[0]!.disabled, 'Start the project went dead with the handoff').toBe(false);
     // No text box grew inside the card — the sentence is typed in the one composer at the bottom —
     // and nothing was written anywhere.
-    expect(card().querySelectorAll('textarea')).toHaveLength(0);
+    expect(card().querySelectorAll('textarea:not([aria-label="Landing check"])')).toHaveLength(0);
     expect(requested.slice(requestedBefore), 'arming the composer asked the server for something')
       .toEqual([]);
   });
@@ -1118,14 +1123,17 @@ describe('where the card is mounted', () => {
    * turn. The other three each name a door (`decide`, `ownerDecision.mutate`); a send through this
    * branch that grew one would have this card answering a call that nobody made. The project
    * settlement card's press was the other kind on this branch until 2026-09-25; it now sends its
-   * own turn from its own handler, with no armed reply and nothing typed, so this branch is the
-   * plan change's alone.
+   * own turn from its own handler, with no armed reply and nothing typed. Since 2026-11-14 the
+   * branch also sends a talked-about owner request (848d2fffe), which is the same ordinary turn
+   * with a request in front instead of a plan, so it is shared with that kind and nothing else.
    */
   it('sends a plan change as an ordinary turn carrying the plan, through no door', () => {
     const source = workspaceView();
     // The whole line: the disarm effect above carries the same kind and ends in `return;`, and this
     // is the branch that sends.
-    const at = source.indexOf("if (replyTo.target.kind === 'planChange') {");
+    const at = source.indexOf(
+      "if (replyTo.target.kind === 'planChange' || replyTo.target.kind === 'ownerRequest') {",
+    );
     expect(at, 'nothing in onSend handles an armed plan change').toBeGreaterThan(-1);
     // To the end of the branch: the `return` that leaves onSend's replyTo block.
     const branch = source.slice(at, source.indexOf('\n      }', at));

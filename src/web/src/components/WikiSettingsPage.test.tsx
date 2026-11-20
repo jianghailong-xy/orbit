@@ -93,7 +93,21 @@ function servedBy(state: WikiSystemModelReadState = 'up', model: string | null =
 const reply = (status: number, body: unknown): Response =>
   ({ ok: status < 400, status, statusText: '', text: async () => JSON.stringify(body), json: async () => body }) as unknown as Response;
 
+/** What the probe answers for a workspace, what the health reads, and the runs the card asked for. */
+let probeAnswer: Record<string, unknown> | null = null;
+let probes: string[] = [];
+let health: Record<string, unknown> = { entries: 2606, maintenance: { look: 'off' } };
+let runs: Array<Record<string, unknown>> = [];
+
 async function serve(url: string, init?: RequestInit): Promise<Response> {
+  if (init?.method === 'POST' && url === `/api/wiki/spaces/${SPACE_ID}/maintenance/probe`) {
+    probes.push(JSON.parse(String(init.body)).workspaceId as string);
+    return probeAnswer ? reply(200, probeAnswer) : reply(500, { message: 'no probe in this case' });
+  }
+  if (init?.method === 'POST' && url === `/api/wiki/spaces/${SPACE_ID}/maintenance/run`) {
+    runs.push(JSON.parse(String(init.body)));
+    return reply(201, { jobId: 'j', runId: 'r' });
+  }
   if (init?.method === 'PATCH' && url === `/api/wiki/spaces/${SPACE_ID}`) {
     patches.push(JSON.parse(String(init.body)));
     return reply(200, {});
@@ -103,7 +117,7 @@ async function serve(url: string, init?: RequestInit): Promise<Response> {
     return deleteRefused ? reply(503, { message: deleteRefused }) : reply(200, { spaceId: SPACE_ID });
   }
   reads.push(url);
-  if (url === `/api/wiki/spaces/${SPACE_ID}/health`) return reply(200, { entries: 2606, maintenance: { look: 'off' } });
+  if (url === `/api/wiki/spaces/${SPACE_ID}/health`) return reply(200, health);
   if (url === '/api/wiki/spaces') return reply(200, [space()]);
   if (url === '/api/wiki/trash') return reply(200, { spaces: trash });
   const members_ = `/api/wiki/spaces/${SPACE_ID}/workspaces`;
@@ -138,6 +152,10 @@ beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn(serve));
   patches = [];
   deletes = [];
+  probeAnswer = null;
+  probes = [];
+  health = { entries: 2606, maintenance: { look: 'off' } };
+  runs = [];
   deleteRefused = null;
   trash = [];
   members = { workspaces: [], addable: [] };
@@ -526,5 +544,75 @@ describe('Wiki settings name the System model (mock 35 ①②)', () => {
       act(() => root.unmount());
       root = createRoot(container);
     }
+  });
+});
+
+/** What the probe answers, as the server words it (`wikiRepoProbeAnswer`, contract `maintenance.probe`). */
+function answer(tone: string, title: string, note: string | null, canTurnOn = true): Record<string, unknown> {
+  return { workspaceId: WORKSPACE_ID, tier: null, reason: null, origin: null, tone, title, note, canTurnOn, checkedAt: '2026-11-11T00:00:00.000Z' };
+}
+
+describe('The settings’ probe and the maintenance card (docs/wiki-repo-tiers-design.md §7.3, mock 44 ⑤)', () => {
+  it.each([
+    ['ok', 'Git checkout of github.com/jianghailong-xy/orbit', null, true],
+    ['folder', 'Folder, not git', 'Entries and code checks work. Commit anchors are not checked.', true],
+    ['paused', '~/work/app was not found on wikova', 'Maintenance can still learn from sessions. Code checks wait until the folder is back.', true],
+    ['wrong', '~/work/app is a clone of github.com/x/y, not this wiki\'s repository', null, false],
+    ['unchecked', 'Could not check: wikova is offline', null, true],
+  ] as const)('draws the %s answer under the picker, and Turn on is %s', async (tone, title, note, canTurnOn) => {
+    probeAnswer = answer(tone, title, note, canTurnOn);
+    await mount(space({ maintenance: { ...WIKI_DEFAULT_SPACE_SETTINGS.maintenance, workspaceId: WORKSPACE_ID } }));
+    await press(button('Set up…'));
+    expect(probes).toEqual([WORKSPACE_ID]);
+    const box = document.querySelector('.wk-probe');
+    expect(box?.className).toBe(`wk-probe ${tone}`);
+    expect(box?.querySelector('b')?.textContent).toBe(title);
+    expect(box?.textContent).toContain(note ?? title);
+    expect(button('Turn on').disabled).toBe(!canTurnOn);
+  });
+
+  const on = { ...WIKI_DEFAULT_SPACE_SETTINGS.maintenance, enabled: true, workspaceId: WORKSPACE_ID };
+  const read = (repo: Record<string, unknown>, maintenance: Record<string, unknown> = {}) => ({
+    entries: 2606,
+    maintenance: { look: 'ok', enabled: true, dailyLimitReached: false, running: null, lastRun: null, lastFailure: null, ...maintenance },
+    repo: { look: 'ready', checkedAt: new Date(Date.now() - 2 * 3600_000).toISOString(), ...repo },
+  });
+
+  it('says what the last run could not read, checks again and runs now, and opens the form from Change workspace…', async () => {
+    health = read({ tier: 'sessions', reason: 'not_found', detail: '~/work/app was not found on wikova' });
+    await mount(space({ maintenance: on }));
+    expect(container.querySelector('.wk-repo-tag')?.textContent).toBe('Code checks paused');
+    expect(container.querySelector('.wk-repo-line')?.textContent).toBe('~/work/app was not found on wikova · checked 2h ago');
+    expect(() => button('Use this folder')).toThrow();
+    await press(button('Check again and run now'));
+    expect(runs).toEqual([{}]);
+    await press(button('Change workspace…'));
+    expect(document.querySelector('.wk-setup-dialog')).toBeTruthy();
+  });
+
+  it('turns Check again and run now off with Daily limit reached once the day is used up', async () => {
+    health = read({ tier: 'folder', reason: null, detail: null }, { dailyLimitReached: true });
+    await mount(space({ maintenance: on }));
+    expect(button('Check again and run now').disabled).toBe(true);
+    expect(container.querySelector('.wk-repo-blocked')?.textContent).toBe('Daily limit reached');
+  });
+
+  it('offers Use this folder after a path_overlap read, and asks once before the run that keeps it', async () => {
+    health = read({ tier: 'wrong_repository', reason: 'path_overlap', detail: '~/work/app shares few files with the last snapshot' });
+    await mount(space({ maintenance: on }));
+    expect(container.querySelector('.wk-repo-tag')?.textContent).toBe('Wrong folder');
+    await press(button('Use this folder'));
+    expect(runs).toEqual([]);
+    expect(document.body.textContent).toContain('Use this folder?');
+    const dialog = document.querySelector('[role="dialog"], [role="alertdialog"]') as HTMLElement;
+    await press(button('Use this folder', dialog));
+    expect(runs).toEqual([{ acceptFolder: true }]);
+  });
+
+  it('draws nothing of the kind while the last run read git and succeeded', async () => {
+    health = read({ tier: 'git', reason: null, detail: null }, { lastRun: { outcome: 'succeeded', endedAt: new Date().toISOString() } });
+    await mount(space({ maintenance: on }));
+    expect(container.querySelector('.wk-repo-card')).toBeNull();
+    expect(container.querySelector('.wk-repo-tag')).toBeNull();
   });
 });

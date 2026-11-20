@@ -11,6 +11,7 @@ import OrbitKit
 /// live in `WorktreeBarLogic`; this view just renders them.
 struct WorktreeBar: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.openURL) private var openURL
     let console: ConsoleModel
     /// The bar opens one sheet at a time — the session's diff, or the merge recovery's review — so
     /// they share one `.sheet(item:)` host rather than stacking two `.sheet`s on the container.
@@ -34,13 +35,31 @@ struct WorktreeBar: View {
         // focus state (see `startStreaming`), NOT a view `.task` here, so it keeps running even when this
         // pushed detail's lifecycle churns on iPhone and freezes an on-screen `.task`.
         VStack(spacing: 0) {
+            // The workspace's main checkout, for Shared and Worktree sessions alike (boards 01⑤, 02④):
+            // above this session's own bar, because it is about the checkout every session shares.
+            MainCheckoutBarView(console: console)
+            sessionBar
+        }
+        // The main checkout's review sheet, opened from this bar, the card or a result line.
+        .sheet(item: Binding(get: { console.mainCheckout.reviewWorkspaceID.map(ReviewTarget.init) },
+                             set: { if $0 == nil { console.mainCheckout.reviewWorkspaceID = nil } })) { target in
+            MainCheckoutReviewSheet(model: console.mainCheckout, workspaceID: target.id, console: console)
+        }
+    }
+
+    private struct ReviewTarget: Identifiable { let id: String }
+
+    /// This session's own worktree: the branch, its diff and Commit / Merge, or the no-git notice.
+    private var sessionBar: some View {
+        VStack(spacing: 0) {
             let d = console.worktree.detail
             let files = d?.changedFiles ?? []
             switch WorktreeBarLogic.mode(isolationStatus: d?.isolationStatus, branch: d?.branch,
                                          changedFileCount: files.count,
                                          mergeStatus: d?.mergeStatus,
                                          commitStatus: d?.commitStatus,
-                                         hasMergeRecovery: d?.mergeRecovery != nil) {
+                                         hasMergeRecovery: d?.mergeRecovery != nil,
+                                         hasSourceLanding: d?.sourceLanding != nil) {
             case .hidden:
                 EmptyView()
             case .notIsolated:
@@ -151,13 +170,17 @@ struct WorktreeBar: View {
         let commitFailure = WorktreeBarLogic.commitFailure(commitStatus: d.commitStatus,
                                                            commitError: d.commitError,
                                                            commitResultMessage: d.commitResultMessage)
-        let failure = commitFailure != nil ? nil : WorktreeBarLogic.failureMessage(mergeStatus: d.mergeStatus,
+        let conflict = commitFailure != nil ? nil : WorktreeBarLogic.mergeConflict(mergeStatus: d.mergeStatus,
                                                                                   mergeError: d.mergeError,
-                                                                                  commitStatus: d.commitStatus,
-                                                                                  commitError: d.commitError)
-        let manualMergeCmd = failure != nil && d.commitStatus != "error"
-            ? WorktreeBarLogic.manualMergeCommand(mergeTarget: d.mergeTarget, branch: branch)
-            : nil
+                                                                                  mergeTarget: d.mergeTarget,
+                                                                                  branch: branch)
+        let failure = commitFailure != nil || conflict != nil ? nil
+            : WorktreeBarLogic.failureMessage(mergeStatus: d.mergeStatus, mergeError: d.mergeError,
+                                              commitStatus: d.commitStatus, commitError: d.commitError)
+        // Work handed to the platform to land (board docs/mocks/session-landing-slot-ios): the landing
+        // is the one state the card says, so the merge control gives way to it — its second row while
+        // it is on its way, a chip at the end of this row once it settled.
+        let landing = SessionProjectLandings.sourceSlot(d.sourceLanding, membership: d.projectMembership)
 
         return VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 4) {
@@ -173,7 +196,12 @@ struct WorktreeBar: View {
                     // under narrow width.
                     switch primary {
                     case .commit: WorktreeCommitControl(console: console, detail: d, turnActive: turnActive).layoutPriority(2)
-                    case .merge:  WorktreeMergeControl(console: console, detail: d, branch: branch).layoutPriority(2)
+                    case .merge:
+                        if let landing {
+                            if !landing.isRow { landingChip(landing, sessionID: d.sourceLanding?.landingSessionId) }
+                        } else {
+                            WorktreeMergeControl(console: console, detail: d, branch: branch).layoutPriority(2)
+                        }
                     case .none:   EmptyView()
                     }
                 }
@@ -186,11 +214,23 @@ struct WorktreeBar: View {
                 if let commitFailure {
                     WorktreeCommitFailureView(console: console, failure: commitFailure, branch: branch)
                         .id(d.commitError ?? "")
-                } else if d.mergeRecovery == nil, let failure {
-                    failureView(message: failure, manualMergeCommand: manualMergeCmd)
                 }
             }
             .padding(.horizontal, 10).padding(.vertical, 3)
+            // A failed merge is its own section under the row, inset from the bar's edges rather than
+            // sitting on its bottom border (web `.wt-merge-inset`, board docs/mocks/merge-conflict-strip).
+            if d.mergeRecovery == nil, conflict != nil || failure != nil {
+                Divider()
+                Group {
+                    if let conflict {
+                        WorktreeMergeConflictView(conflict: conflict).id(d.mergeError ?? "")
+                    } else if let failure {
+                        failureView(message: failure)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 10).padding(.top, 9).padding(.bottom, 10)
+            }
             // A merge held for target recovery is the bar's second row: what holds it, one line, and
             // the review behind it in a sheet — never the review itself, which is taller than the band
             // can give on a phone. The row is the recovery's only way in; the merge slot above gives
@@ -198,6 +238,9 @@ struct WorktreeBar: View {
             if commitFailure == nil, let recovery = d.mergeRecovery {
                 Divider()
                 MergeRecoveryRow(recovery: recovery, working: d.mergeStatus == "pending") { sheet = .recovery }
+            } else if let landing, landing.isRow {
+                SourceLandingRow(slot: landing) { openLanding(d.sourceLanding?.landingSessionId) }
+                    .padding(.horizontal, 6).padding(.bottom, 6).padding(.top, 2)
             }
         }
         // The same subtle tint the tray uses, NOT `.bar`: the two are peers in the stack and have to
@@ -206,6 +249,26 @@ struct WorktreeBar: View {
         // carries no surface of its own.
         .composerBandCard()
         .padding(.bottom, .composerBandGap)
+    }
+
+    /// A settled landing at the end of the branch row, where "✓ Merged" stands for a merge by hand;
+    /// it opens the landing session, as the open row does.
+    private func landingChip(_ slot: SourceLandingSlot, sessionID: String?) -> some View {
+        Button { openLanding(sessionID) } label: {
+            Text("\(slot.text) ›")
+                .font(.orbitLabel.weight(.semibold))
+                .foregroundStyle(slot.kind == .landed ? Color.green : Color.secondary)
+                .lineLimit(1)
+        }
+        .buttonStyle(.plain)
+        .layoutPriority(2)
+    }
+
+    private func openLanding(_ sessionID: String?) {
+        guard let sessionID, !sessionID.isEmpty,
+              let url = URL(string: "orbit-session:\(PublicID.toPublic(sessionID))") else { return }
+        PlatformHaptics.tap()
+        openURL(url)
     }
 
     @ViewBuilder
@@ -265,17 +328,25 @@ struct WorktreeBar: View {
         }
     }
 
+    /// The count is the row's reading: it takes its room before the branch name, which gives way
+    /// first. Short of room it drops words rather than truncating — "· committed" (the Merge button
+    /// beside it says as much), then the file count — so the Merge button keeps its title on a phone.
     private func statView(add: Int, del: Int, count: Int, committed: Bool) -> some View {
-        (Text("+\(add)").foregroundStyle(.green)
-            + Text(" −\(del)").foregroundStyle(.red)
-            + Text(" · \(count) \(count == 1 ? "file" : "files")\(committed ? " · committed" : "")")
-                .foregroundStyle(.secondary))
-            .font(.orbitMono)
-            .lineLimit(1)
-            .truncationMode(.tail)
+        let lines = Text("+\(add)").foregroundStyle(.green) + Text(" −\(del)").foregroundStyle(.red)
+        let files = lines + Text(" · \(count) \(count == 1 ? "file" : "files")").foregroundStyle(.secondary)
+        return ViewThatFits(in: .horizontal) {
+            if committed {
+                (files + Text(" · committed").foregroundStyle(.secondary)).fixedSize()
+            }
+            files.fixedSize()
+            lines.fixedSize()
+        }
+        .font(.orbitMono)
+        .lineLimit(1)
+        .layoutPriority(1)
     }
 
-    private func failureView(message: String, manualMergeCommand: String?) -> some View {
+    private func failureView(message: String) -> some View {
         HStack(alignment: .top, spacing: 6) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.orbitMeta.weight(.semibold))
@@ -291,11 +362,6 @@ struct WorktreeBar: View {
         .contextMenu {
             Button { copyFailureText(message) } label: {
                 Label("Copy failure reason", systemImage: "doc.on.doc")
-            }
-            if let manualMergeCommand {
-                Button { copyFailureText(manualMergeCommand) } label: {
-                    Label("Copy manual merge command", systemImage: "terminal")
-                }
             }
         }
         .accessibilityLabel(message)
@@ -377,16 +443,22 @@ private struct WorktreeMergeControl: View {
                 }
             } else {
                 let target = picked ?? detail.mergeTarget ?? defaultTarget
-                mergeSplit(title: "Retry merge to \(target ?? "main")",
+                mergeSplit(title: "Retry merge to \(targetName(target))",
                            tint: .red, busy: busy, primaryTarget: target,
                            targets: targets, currentTarget: target)
             }
         } else {
             let target = picked ?? defaultTarget
-            mergeSplit(title: "Merge to \(target ?? "main")",
+            mergeSplit(title: "Merge to \(targetName(target))",
                        tint: .accentColor, busy: busy, primaryTarget: target,
                        targets: targets, currentTarget: target)
         }
+    }
+
+    /// The target as the button says it: the project's title for the project's own line, never
+    /// `project/<id>`; the caret's list still names every branch in full.
+    private func targetName(_ target: String?) -> String {
+        SessionProjectLandings.targetName(target ?? "main", membership: detail.projectMembership)
     }
 
     /// Divergence flag + Adopt action, shown in the merge slot when the worktree's real HEAD has
@@ -414,7 +486,9 @@ private struct WorktreeMergeControl: View {
         let c = busy ? Color.secondary : tint
         return HStack(spacing: 0) {
             Button { Task { await console.worktree.merge(target: primaryTarget) } } label: {
-                Text(title).font(.orbitLabel.weight(.semibold)).lineLimit(1)
+                // Middle truncation keeps both ends of a long project title readable; the row gives
+                // the button its full width first (`statView` drops words instead).
+                Text(title).font(.orbitLabel.weight(.semibold)).lineLimit(1).truncationMode(.middle)
                     .foregroundStyle(c)
                     .padding(.leading, 10).padding(.trailing, targets.isEmpty ? 10 : 9).padding(.vertical, 3)
                     .contentShape(Rectangle())
@@ -502,24 +576,16 @@ private struct MergeTargetPickerSheet: View {
 
     var body: some View {
         NavigationStack {
-            List(filtered, id: \.self) { b in
-                Button {
-                    dismiss()
-                    onPick(b)
-                } label: {
-                    HStack(spacing: 8) {
-                        BranchLabelView(branch: b).lineLimit(1).truncationMode(.middle)
-                        Spacer(minLength: 8)
-                        if b == currentTarget {
-                            Image(systemName: "checkmark").font(.orbitMeta.weight(.semibold))
-                                .foregroundStyle(Color.accentColor)
-                        }
+            List {
+                ForEach(filtered, id: \.self) { b in
+                    MergeTargetRow(branch: b, isCurrent: b == currentTarget) {
+                        dismiss()
+                        onPick(b)
                     }
-                    .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
             }
             .listStyle(.plain)
+            .softTopEdgeEffect()
             .searchable(text: $query, prompt: "Search branches")
             .overlay { if filtered.isEmpty { ContentUnavailableView.search } }
             .navigationTitle("Merge into")
@@ -535,6 +601,28 @@ private struct MergeTargetPickerSheet: View {
         #else
         .frame(minWidth: 360, minHeight: 420)
         #endif
+    }
+}
+
+/// One branch in the merge-target sheet, marked when it is the one the merge already points at.
+private struct MergeTargetRow: View {
+    let branch: String
+    let isCurrent: Bool
+    let pick: () -> Void
+
+    var body: some View {
+        Button(action: pick) {
+            HStack(spacing: 8) {
+                BranchLabelView(branch: branch).lineLimit(1).truncationMode(.middle)
+                Spacer(minLength: 8)
+                if isCurrent {
+                    Image(systemName: "checkmark").font(.orbitMeta.weight(.semibold))
+                        .foregroundStyle(Color.accentColor)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -628,6 +716,105 @@ private struct WorktreeCommitFailureView: View {
     }
 }
 
+/// A merge conflict (mirrors web's conflict panel): what happened, then the by-hand recipe as two
+/// steps — where each runs above its command, which a click copies — with git's own words behind
+/// "Show git output". Keyed on the error by its parent, so a new conflict starts folded again.
+private struct WorktreeMergeConflictView: View {
+    let conflict: WorktreeBarLogic.MergeConflict
+    @State private var showGitOutput = false
+    @State private var copied: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Image(systemName: "exclamationmark.circle.fill")
+                Text(conflict.headline)
+            }
+            .font(.orbitMeta.weight(.semibold))
+            .foregroundStyle(Color.red)
+            why
+                .font(.orbitMeta)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            ForEach(Array(conflict.steps.enumerated()), id: \.offset) { i, step in
+                HStack(alignment: .top, spacing: 8) {
+                    Text("\(i + 1)")
+                        .font(.orbitMeta.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 16, height: 16)
+                        .background(Color.primary.opacity(0.06), in: Circle())
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(step.place)
+                            .font(.orbitMeta)
+                            .foregroundStyle(.secondary)
+                        Button { copy(step.command) } label: {
+                            Text(copied == step.command ? "Copied" : step.command)
+                                .font(.orbitMono)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .padding(.horizontal, 7).padding(.vertical, 2)
+                                .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
+                        }
+                        .buttonStyle(.plain)
+                        .help("Copy")
+                        .accessibilityLabel("Copy \(step.command)")
+                    }
+                }
+                .padding(.top, 2)
+            }
+            if conflict.gitOutput != nil {
+                Button { showGitOutput.toggle() } label: {
+                    HStack(spacing: 3) {
+                        Text(showGitOutput ? "Hide git output" : "Show git output")
+                        Image(systemName: showGitOutput ? "chevron.down" : "chevron.right")
+                    }
+                    .font(.orbitMeta)
+                    .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityValue(showGitOutput ? "Shown" : "Hidden")
+                .padding(.top, 2)
+            }
+            if showGitOutput, let gitOutput = conflict.gitOutput {
+                Text(gitOutput)
+                    .font(.orbitMonoFine)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 8).padding(.vertical, 6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+            }
+        }
+        .contextMenu {
+            if let gitOutput = conflict.gitOutput {
+                Button { copy(gitOutput) } label: {
+                    Label("Copy git output", systemImage: "terminal")
+                }
+            }
+        }
+    }
+
+    /// The why, with the button it names in the primary colour and semibold (web's `<b>`).
+    private var why: Text {
+        let button = "Resolve in session"
+        guard let range = conflict.why.range(of: button) else { return Text(conflict.why) }
+        return Text(conflict.why[..<range.lowerBound])
+            + Text(button).fontWeight(.semibold).foregroundColor(.primary)
+            + Text(conflict.why[range.upperBound...])
+    }
+
+    private func copy(_ text: String) {
+        PlatformPasteboard.copyString(text)
+        PlatformHaptics.success()
+        copied = text
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            if copied == text { copied = nil }
+        }
+    }
+}
+
 /// A compact tinted pill button used for the Commit / Merge / Resolve actions.
 private struct WTPillButton: View {
     let title: String
@@ -676,11 +863,13 @@ struct DiffSheet: View {
             ? (detail?.projectIntegrationRef ?? detail?.branch)
             : detail?.branch
         NavigationStack {
-            List(files) { file in
-                NavigationLink {
-                    DiffFileView(console: console, file: file)
-                } label: {
-                    DiffFileRow(file: file)
+            List {
+                ForEach(files) { file in
+                    NavigationLink {
+                        DiffFileView(console: console, file: file)
+                    } label: {
+                        DiffFileRow(file: file)
+                    }
                 }
             }
             .navigationTitle("Worktree changes")
@@ -842,20 +1031,30 @@ struct DiffFileView: View {
 }
 
 /// Background shells the agent launched, shown as a collapsible tray between the transcript and
-/// approvals — a port of web's `BackgroundShellsTray`. Collapsed it's a one-line header
-/// ("Background processes · N running · N total"); tapping it reveals the list, where each row
-/// (status · command · age) opens as an accordion to show that shell's captured output tail.
+/// approvals — a port of web's `BackgroundShellsTray`. Folded it is the Background row the shared
+/// rule draws (`BackgroundRowRule`, board v2): "Background", the name in the tint and its mark,
+/// several running names rotating, and the count; no row at all when the rule shows nothing. Tapped
+/// open it is the list as ever — "Background processes · N running · N total", each row
+/// (status · command · age) opening as an accordion to that shell's captured output tail.
 struct BackgroundTrayView: View {
     let procs: [BackgroundProc]
     /// The background agents' and workflows' progress, by launching call (TranscriptState.taskProgress).
     var progress: [String: TaskProgress] = [:]
+    /// What the folded row draws (`BackgroundRowRule.row`); nil hides the tray.
+    let row: BackgroundRowRule.Row?
+    /// The band is folded away (`TypingFold`, the folded pill): the names stop rotating.
+    var paused = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
     @State private var open = false
     @State private var expandedID: String? = nil
+    /// Which of the rotating names shows, counted up for good and read modulo their number.
+    @State private var turn = 0
 
     var body: some View {
-        if !procs.isEmpty {
+        if let row {
             VStack(spacing: 0) {
-                header
+                if open { header } else { folded(row) }
                 if open {
                     Divider().opacity(0.5)
                     // Web parity (.bg-tray-list: max-height 320px + overflow auto): cap the open
@@ -905,6 +1104,85 @@ struct BackgroundTrayView: View {
         (runningCount > 0 ? "\(runningCount) running · " : "") + "\(procs.count) total"
     }
 
+    // MARK: the folded row
+
+    /// The names in turn while two or more run (and no failure is shown), else nil.
+    private func rotating(_ row: BackgroundRowRule.Row) -> [BackgroundRowRule.Item]? {
+        if case .rotate(let items, _, _) = row.name, items.count > 1 { return items }
+        return nil
+    }
+
+    /// The name the row shows now.
+    private func current(_ row: BackgroundRowRule.Row) -> BackgroundRowRule.Item {
+        switch row.name {
+        case .one(let item), .pinned(let item): return item
+        case .rotate(let items, _, _): return items[turn % items.count]
+        }
+    }
+
+    /// Rotation stops while the list is open, while the app is not in front and while the band is
+    /// folded away; it starts again from where it was.
+    private var rotationPaused: Bool { open || paused || scenePhase != .active }
+
+    /// "Background", the name, the count and its mark: only the name moves, by a push from below,
+    /// or — with Reduce Motion — a crossfade in place.
+    private func folded(_ row: BackgroundRowRule.Row) -> some View {
+        let item = current(row)
+        let names = rotating(row)
+        return HStack(spacing: 8) {
+            Image(systemName: "terminal").font(.orbitMeta).foregroundStyle(.secondary)
+            Text(row.label).font(.orbitLabel.weight(.semibold)).lineLimit(1).fixedSize()
+            ZStack(alignment: .leading) {
+                Text(item.name)
+                    .font(.orbitLabel).foregroundStyle(.tint)
+                    .lineLimit(1).truncationMode(item.truncate == .middle ? .middle : .tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .id(item.id)
+                    .transition(reduceMotion ? .opacity : .push(from: .bottom))
+            }
+            .clipped()
+            // The screen reader reads the row's own label, never a name that changes every 3 s.
+            .accessibilityHidden(true)
+            // The count, then the mark, at the right edge before the chevron, as AgentsBandRow ends.
+            if !row.countParts.isEmpty {
+                row.countParts.enumerated().reduce(Text("")) { line, part in
+                    line + Text(part.offset == 0 ? "" : " · ")
+                        + Text(part.element.text).foregroundStyle(part.element.kind == "failed" ? Color.red : Color.secondary)
+                }
+                .font(.orbitMeta).foregroundStyle(.secondary).lineLimit(1).fixedSize()
+            }
+            BackgroundRowMarkView(mark: item.mark)
+            Image(systemName: "chevron.right")
+                .font(.orbitMeta.weight(.semibold)).foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 10).padding(.vertical, 3).frame(minHeight: 30)
+        .contentShape(Rectangle())
+        .onTapGesture { withAnimation(.easeOut(duration: 0.12)) { open.toggle() } }
+        .accessibilityElement(children: .ignore)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel(row.accessibilityLabel)
+        // A new set of running names starts again from the newest.
+        .onChange(of: names?.map(\.id) ?? []) { _, _ in turn = 0 }
+        // Restarted whenever the names or a pause condition change; a pause ends the loop.
+        .task(id: RotationKey(ids: names?.map(\.id) ?? [], paused: rotationPaused)) {
+            guard let names, !rotationPaused else { return }
+            let perName = UInt64(BackgroundRowRule.rotatePerNameMs) * 1_000_000
+            let change = Double(BackgroundRowRule.rotateChangeMs) / 1000
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: perName)
+                if Task.isCancelled { return }
+                withAnimation(.easeInOut(duration: change)) { turn = (turn + 1) % names.count }
+            }
+        }
+    }
+
+    private struct RotationKey: Equatable {
+        let ids: [String]
+        let paused: Bool
+    }
+
+    // MARK: the open list's header
+
     private var header: some View {
         HStack(spacing: 8) {
             Image(systemName: "terminal").font(.orbitMeta).foregroundStyle(.secondary)
@@ -919,6 +1197,20 @@ struct BackgroundTrayView: View {
         .onTapGesture { withAnimation(.easeOut(duration: 0.12)) { open.toggle() } }
         .accessibilityAddTraits(.isButton)
         .accessibilityLabel(open ? "Hide background processes" : "Show background processes")
+    }
+}
+
+/// The folded row's mark: the list row's own spinner and SF Symbols (`BackgroundRow.statusIcon`).
+private struct BackgroundRowMarkView: View {
+    let mark: BackgroundRowRule.Mark
+
+    var body: some View {
+        switch mark {
+        case .running: ProgressView().controlSize(.small)
+        case .done:    Image(systemName: "checkmark.circle.fill").font(.orbitLabel).foregroundStyle(.green)
+        case .failed:  Image(systemName: "xmark.circle.fill").font(.orbitLabel).foregroundStyle(.red)
+        case .killed:  Image(systemName: "stop.circle").font(.orbitLabel).foregroundStyle(.secondary)
+        }
     }
 }
 
@@ -997,6 +1289,75 @@ private struct BackgroundRow: View {
         case "failed":    Image(systemName: "xmark.circle.fill").font(.orbitLabel).foregroundStyle(.red)
         case "killed":    Image(systemName: "stop.circle").font(.orbitLabel).foregroundStyle(.secondary)
         default:          Image(systemName: "minus.circle").font(.orbitLabel).foregroundStyle(.secondary)
+        }
+    }
+}
+
+// MARK: - main checkout bar
+
+/// "● Main checkout  main  3 uncommitted files   Review" — or "Clean · 1 commit not pushed   Push to
+/// origin/main". Read from the workspace's heartbeat counts (`MainCheckoutBar`): absent while the
+/// checkout is clean with nothing to push, or while an older runner reports no counts; without the
+/// runner's capability it still says what it sees, with no buttons. Dirty isn't broken: grey, never red.
+struct MainCheckoutBarView: View {
+    @Environment(AppModel.self) private var app
+    let console: ConsoleModel
+
+    var body: some View {
+        let ctx = MainCheckoutContext(app: app, console: console)
+        if let workspaceID = ctx.workspaceID,
+           let bar = MainCheckoutBar.make(health: ctx.workspace?.repoHealth,
+                                          isolationStatus: console.worktree.detail?.isolationStatus,
+                                          isolated: ctx.isolated, actionsSupported: ctx.actionsSupported) {
+            let model = console.mainCheckout
+            HStack(spacing: 8) {
+                Button { if ctx.actionsSupported { model.openReview(workspaceID: workspaceID) } } label: {
+                    // Whole words first; a phone's narrower row takes the short status, then drops the
+                    // label, and only then truncates (the branch never gives way to the status).
+                    ViewThatFits(in: .horizontal) {
+                        summary(bar, label: true, status: bar.status)
+                        summary(bar, label: true, status: bar.shortStatus)
+                        summary(bar, label: false, status: bar.shortStatus)
+                        summary(bar, label: false, status: bar.shortStatus, truncates: true)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .layoutPriority(1)
+                if let review = bar.reviewLabel {
+                    WTPillButton(title: review) { model.openReview(workspaceID: workspaceID) }.fixedSize()
+                }
+                if let push = bar.pushLabel {
+                    WTPillButton(title: push, disabled: model.sending) {
+                        Task { await model.push(workspaceID: workspaceID); app.refreshMainCheckoutSoon() }
+                    }
+                    .fixedSize()
+                }
+            }
+            .frame(minHeight: 24)
+            .padding(.horizontal, 10).padding(.vertical, 3)
+            .composerBandCard()
+            .padding(.bottom, .composerBandGap)
+            .accessibilityIdentifier("main-checkout-bar")
+        }
+    }
+
+    private func summary(_ bar: MainCheckoutBar, label: Bool, status: String, truncates: Bool = false) -> some View {
+        HStack(spacing: 6) {
+            Circle().fill(bar.dirty ? Color.orange : Color.secondary.opacity(0.6))
+                .frame(width: 6, height: 6)
+            if label {
+                Text(MainCheckoutCopy.label).font(.orbitLabel).foregroundStyle(.secondary)
+                    .lineLimit(1).fixedSize()
+            }
+            if let branch = bar.branch {
+                Text(branch).font(.orbitMono).lineLimit(1).fixedSize()
+                    .padding(.horizontal, 5).padding(.vertical, 1)
+                    .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.secondary.opacity(0.35)))
+            }
+            Text(status).font(.orbitLabel).foregroundStyle(.secondary).lineLimit(1)
+                .fixedSize(horizontal: !truncates, vertical: false)
+            Spacer(minLength: 4)
         }
     }
 }

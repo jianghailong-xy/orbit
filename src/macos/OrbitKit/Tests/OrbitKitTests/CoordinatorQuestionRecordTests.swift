@@ -67,6 +67,8 @@ final class CoordinatorQuestionRecordTests: XCTestCase {
                        "灰度回退之后的收尾都做完了： 新版本部署之后，维护任务恢复了 三处修复都已经在生产上 请批准重开灰度。",
                        "the browser's `markdownToPlainText`: marks gone, lines joined — the card cuts it at two")
         XCTAssertEqual(CoordinatorQuestions.lead(.init(question: "1. first\n2) *second*")), "first second")
+        XCTAssertEqual(CoordinatorQuestions.lead(.init(question: "Six kinds, table below.\n\n| kind | n |\n|---|---|\n| A | 9 |\n\nWhich?")),
+                       "Six kinds, table below. Which?", "a table's rows are not preview text")
     }
 
     func testAnOptionAloneIsItsLabelWithNothingOwed() {

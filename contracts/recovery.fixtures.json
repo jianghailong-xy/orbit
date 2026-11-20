@@ -1,0 +1,2145 @@
+{
+  "name": "orbit.recovery.fixtures",
+  "contractVersion": 1,
+  "cases": [
+    {
+      "name": "refusal: legacy coded body names its action as a token",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"statusCode\":409,\"error\":\"Conflict\",\"code\":\"PROJECT_SCOPE_MISMATCH\",\"message\":\"this write names project P2, and this session belongs to P1\",\"owner\":\"COORDINATOR\",\"requiredAction\":\"FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF\",\"projectId\":\"P2\"}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "PROJECT_SCOPE_MISMATCH",
+        "message": "this write names project P2, and this session belongs to P1",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "AFTER_STATE_CHANGE",
+          "afterSeconds": null
+        },
+        "actor": "COORDINATOR",
+        "owner": "COORDINATOR",
+        "actionCode": "FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF",
+        "requiredAction": "FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "PROJECT",
+            "id": "P2"
+          }
+        ],
+        "disposition": "AUTOMATIC"
+      },
+      "legacyText": "  refused: PROJECT_SCOPE_MISMATCH\n  what:    this write names project P2, and this session belongs to P1\n  owner:   COORDINATOR\n  do:      FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF\n"
+    },
+    {
+      "name": "refusal: request in progress is retried under the same request id",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"statusCode\":409,\"error\":\"Conflict\",\"code\":\"TASK_RUN_REQUEST_IN_PROGRESS\",\"message\":\"this run request is being answered right now\",\"owner\":\"USER\",\"requiredAction\":\"retry the same request in a moment\",\"triggerId\":\"trg_1\"}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "TASK_RUN_REQUEST_IN_PROGRESS",
+        "message": "this run request is being answered right now",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "SAME_REQUEST_ID",
+          "afterSeconds": null
+        },
+        "actor": "USER",
+        "owner": "USER",
+        "actionCode": "RETRY_SAME_REQUEST",
+        "requiredAction": "retry the same request in a moment",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "REQUEST",
+            "id": "trg_1"
+          }
+        ],
+        "disposition": "AUTOMATIC"
+      },
+      "legacyText": "  refused: TASK_RUN_REQUEST_IN_PROGRESS\n  what:    this run request is being answered right now\n  owner:   USER\n  do:      retry the same request in a moment\n"
+    },
+    {
+      "name": "refusal: prose that says retry does not make a mismatch retryable",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"code\":\"TASK_RUN_REQUEST_MISMATCH\",\"message\":\"retry the same request, it will work\",\"requiredAction\":\"just retry the same request\",\"triggerId\":\"trg_2\"}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "TASK_RUN_REQUEST_MISMATCH",
+        "message": "retry the same request, it will work",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": "USE_NEW_REQUEST_ID",
+        "requiredAction": "just retry the same request",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "REQUEST",
+            "id": "trg_2"
+          }
+        ],
+        "disposition": "AUTOMATIC"
+      },
+      "legacyText": "  refused: TASK_RUN_REQUEST_MISMATCH\n  what:    retry the same request, it will work\n  do:      just retry the same request\n"
+    },
+    {
+      "name": "refusal: a stated recovery block wins over inference, inside the invariants (COMMITTED is never resent)",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"code\":\"PROJECT_CREATED_COORDINATOR_FAILED\",\"message\":\"the project exists; its coordinator session did not start\",\"owner\":\"USER\",\"projectId\":\"P9\",\"recovery\":{\"effect\":\"COMMITTED\",\"retryPolicy\":\"VERIFY_THEN_RETRY\",\"actionCode\":\"VERIFY_STATE\",\"actor\":\"CALLER\",\"userConfirmation\":\"NOT_REQUIRED\",\"retryAfterSeconds\":5,\"resources\":[{\"type\":\"PROJECT\",\"id\":\"P9\"},{\"type\":\"SESSION\",\"id\":\"S3\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "PROJECT_CREATED_COORDINATOR_FAILED",
+        "message": "the project exists; its coordinator session did not start",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "COMMITTED",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": "USER",
+        "actionCode": "VERIFY_STATE",
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "PROJECT",
+            "id": "P9"
+          },
+          {
+            "type": "SESSION",
+            "id": "S3"
+          }
+        ],
+        "disposition": "STOP"
+      },
+      "legacyText": "  refused: PROJECT_CREATED_COORDINATOR_FAILED\n  what:    the project exists; its coordinator session did not start\n  owner:   USER\n"
+    },
+    {
+      "name": "refusal: values outside the enums in a recovery block are ignored, not trusted",
+      "input": {
+        "source": "HTTP",
+        "status": 404,
+        "body": "{\"code\":\"TASK_NOT_FOUND\",\"message\":\"no such task\",\"taskId\":\"T1\",\"recovery\":{\"retryPolicy\":\"MAYBE\",\"effect\":\"PARTIAL\",\"actor\":\"ROBOT\",\"userConfirmation\":\"YES\",\"actionCode\":\"task_update\",\"resources\":\"T1\"}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "TASK_NOT_FOUND",
+        "message": "no such task",
+        "kind": "REFUSAL",
+        "status": 404,
+        "effect": "NONE",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": "FIX_REQUEST",
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "TASK",
+            "id": "T1"
+          }
+        ],
+        "disposition": "AUTOMATIC"
+      },
+      "legacyText": "  refused: TASK_NOT_FOUND\n  what:    no such task\n"
+    },
+    {
+      "name": "refusal: a crossing waits on the owner, behind a user confirmation",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"code\":\"CROSS_PROJECT_APPROVAL_REQUIRED\",\"message\":\"this crossing has to be approved by the account owner\",\"crossingId\":\"X1\",\"projectId\":\"P2\"}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "CROSS_PROJECT_APPROVAL_REQUIRED",
+        "message": "this crossing has to be approved by the account owner",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "AFTER_STATE_CHANGE",
+          "afterSeconds": null
+        },
+        "actor": "USER",
+        "owner": null,
+        "actionCode": "AWAIT_OWNER_DECISION",
+        "requiredAction": null,
+        "userConfirmation": "REQUIRED",
+        "resources": [
+          {
+            "type": "PROJECT",
+            "id": "P2"
+          },
+          {
+            "type": "CROSSING",
+            "id": "X1"
+          }
+        ],
+        "disposition": "CONFIRM_THEN_RUN"
+      },
+      "legacyText": "  refused: CROSS_PROJECT_APPROVAL_REQUIRED\n  what:    this crossing has to be approved by the account owner\n"
+    },
+    {
+      "name": "invariant: a coded 500 that says it is not retryable left the write UNKNOWN, so it is verified first",
+      "input": {
+        "source": "HTTP",
+        "status": 500,
+        "body": "{\"code\":\"TURN_COMPLETE_INVALID_DATA\",\"message\":\"the payload cannot be stored\",\"retryable\":false}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "TURN_COMPLETE_INVALID_DATA",
+        "message": "the payload cannot be stored",
+        "kind": "REFUSAL",
+        "status": 500,
+        "effect": "UNKNOWN",
+        "retry": {
+          "policy": "VERIFY_THEN_RETRY",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": "VERIFY_STATE",
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [],
+        "disposition": "AUTOMATIC"
+      },
+      "legacyText": "  refused: TURN_COMPLETE_INVALID_DATA\n  what:    the payload cannot be stored\n"
+    },
+    {
+      "name": "refusal: transient database conflict is safe to resend after its Retry-After",
+      "input": {
+        "source": "HTTP",
+        "status": 503,
+        "headers": {
+          "Retry-After": "1"
+        },
+        "body": "{\"statusCode\":503,\"error\":\"Service Unavailable\",\"code\":\"TRANSIENT_DB_CONFLICT\",\"message\":\"the database rolled this request back\",\"retryable\":true,\"retryAfterSeconds\":1}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "TRANSIENT_DB_CONFLICT",
+        "message": "the database rolled this request back",
+        "kind": "REFUSAL",
+        "status": 503,
+        "effect": "NONE",
+        "retry": {
+          "policy": "SAFE",
+          "afterSeconds": 1
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": "RETRY",
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [],
+        "disposition": "AUTOMATIC"
+      },
+      "legacyText": "  refused: TRANSIENT_DB_CONFLICT\n  what:    the database rolled this request back\n"
+    },
+    {
+      "name": "refusal: a millisecond retry hint rounds up to whole seconds",
+      "input": {
+        "source": "HTTP",
+        "status": 503,
+        "body": "{\"code\":\"DATABASE_UNAVAILABLE\",\"message\":\"the database could not serve this request\",\"retryable\":true,\"retryAfterMs\":1500}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "DATABASE_UNAVAILABLE",
+        "message": "the database could not serve this request",
+        "kind": "REFUSAL",
+        "status": 503,
+        "effect": "NONE",
+        "retry": {
+          "policy": "SAFE",
+          "afterSeconds": 2
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": "RETRY",
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [],
+        "disposition": "AUTOMATIC"
+      },
+      "legacyText": "  refused: DATABASE_UNAVAILABLE\n  what:    the database could not serve this request\n"
+    },
+    {
+      "name": "advisory: a refused write that asks a question is labelled advice",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"code\":\"TASK_CRITERION_SHAPE_ADVICE\",\"kind\":\"ADVISORY\",\"advisory\":true,\"message\":\"this criterion reads like a check\",\"requiredAction\":\"choose the suggested criterion or give an override reason\",\"declaredCriterion\":\"EVIDENCE_JUDGMENT\"}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "TASK_CRITERION_SHAPE_ADVICE",
+        "message": "this criterion reads like a check",
+        "kind": "ADVISORY",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": "ANSWER_ADVICE",
+        "requiredAction": "choose the suggested criterion or give an override reason",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [],
+        "disposition": "AUTOMATIC"
+      },
+      "legacyText": "  advice: TASK_CRITERION_SHAPE_ADVICE\n  what:    this criterion reads like a check\n  do:      choose the suggested criterion or give an override reason\n"
+    },
+    {
+      "name": "advisory: a write that succeeded with advice is committed and not resent",
+      "input": {
+        "source": "HTTP",
+        "status": 201,
+        "body": "{\"id\":\"T7\",\"code\":\"TASK_CREATED_OUTSIDE_PROJECT\",\"advisory\":true,\"message\":\"the task was filed outside any project\",\"taskId\":\"T7\",\"recovery\":{}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "TASK_CREATED_OUTSIDE_PROJECT",
+        "message": "the task was filed outside any project",
+        "kind": "ADVISORY",
+        "status": 201,
+        "effect": "COMMITTED",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": null,
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "TASK",
+            "id": "T7"
+          }
+        ],
+        "disposition": "STOP"
+      },
+      "legacyText": "  advice: TASK_CREATED_OUTSIDE_PROJECT\n  what:    the task was filed outside any project\n"
+    },
+    {
+      "name": "advisory: a success with no recovery block is not an error at all",
+      "input": {
+        "source": "HTTP",
+        "status": 200,
+        "body": "{\"id\":\"T8\",\"code\":\"OK_LOOKING_FIELD\"}"
+      },
+      "expect": null,
+      "legacyText": "  refused: OK_LOOKING_FIELD\n"
+    },
+    {
+      "name": "validation: the server lists field messages and no code",
+      "input": {
+        "source": "HTTP",
+        "status": 400,
+        "body": "{\"statusCode\":400,\"error\":\"Bad Request\",\"message\":[\"title must be a string\",\"priority must not be less than 0\"]}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "HTTP_400",
+        "message": "title must be a string; priority must not be less than 0",
+        "kind": "VALIDATION",
+        "status": 400,
+        "effect": "NONE",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": "FIX_REQUEST",
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [],
+        "disposition": "AUTOMATIC"
+      },
+      "legacyText": ""
+    },
+    {
+      "name": "validation: a local check refuses before anything is sent",
+      "input": {
+        "source": "LOCAL",
+        "code": "LOCAL_MISSING_ARGUMENT",
+        "message": "taskId is required"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "LOCAL_MISSING_ARGUMENT",
+        "message": "taskId is required",
+        "kind": "VALIDATION",
+        "status": null,
+        "effect": "NONE",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": "FIX_REQUEST",
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [],
+        "disposition": "AUTOMATIC"
+      },
+      "legacyText": ""
+    },
+    {
+      "name": "validation: a local code without the prefix gets it",
+      "input": {
+        "source": "LOCAL",
+        "code": "BAD_ENUM",
+        "message": "status must be one of OPEN, DONE"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "LOCAL_BAD_ENUM",
+        "message": "status must be one of OPEN, DONE",
+        "kind": "VALIDATION",
+        "status": null,
+        "effect": "NONE",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": "FIX_REQUEST",
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [],
+        "disposition": "AUTOMATIC"
+      },
+      "legacyText": ""
+    },
+    {
+      "name": "transport: a gateway page may have followed a committed write",
+      "input": {
+        "source": "HTTP",
+        "status": 502,
+        "body": "<html><body>Bad Gateway</body></html>"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "HTTP_502",
+        "message": "HTTP 502",
+        "kind": "TRANSPORT",
+        "status": 502,
+        "effect": "UNKNOWN",
+        "retry": {
+          "policy": "VERIFY_THEN_RETRY",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": "VERIFY_STATE",
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [],
+        "disposition": "AUTOMATIC"
+      },
+      "legacyText": ""
+    },
+    {
+      "name": "transport: the same gateway page under a request id is resent with that id",
+      "input": {
+        "source": "HTTP",
+        "status": 504,
+        "body": "",
+        "requestIdSent": true
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "HTTP_504",
+        "message": "HTTP 504",
+        "kind": "TRANSPORT",
+        "status": 504,
+        "effect": "UNKNOWN",
+        "retry": {
+          "policy": "SAME_REQUEST_ID",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": "RETRY_SAME_REQUEST",
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [],
+        "disposition": "AUTOMATIC"
+      },
+      "legacyText": ""
+    },
+    {
+      "name": "transport: a rate limit with only a Retry-After header",
+      "input": {
+        "source": "HTTP",
+        "status": 429,
+        "headers": {
+          "retry-after": "7"
+        },
+        "body": ""
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "HTTP_429",
+        "message": "HTTP 429",
+        "kind": "TRANSPORT",
+        "status": 429,
+        "effect": "NONE",
+        "retry": {
+          "policy": "SAFE",
+          "afterSeconds": 7
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": "RETRY",
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [],
+        "disposition": "AUTOMATIC"
+      },
+      "legacyText": ""
+    },
+    {
+      "name": "transport: an HTTP-date Retry-After is not read as seconds",
+      "input": {
+        "source": "HTTP",
+        "status": 429,
+        "headers": {
+          "Retry-After": "Wed, 21 Oct 2026 07:28:00 GMT",
+          "Retry-After-Ms": "2500"
+        },
+        "body": ""
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "HTTP_429",
+        "message": "HTTP 429",
+        "kind": "TRANSPORT",
+        "status": 429,
+        "effect": "NONE",
+        "retry": {
+          "policy": "SAFE",
+          "afterSeconds": 3
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": "RETRY",
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [],
+        "disposition": "AUTOMATIC"
+      },
+      "legacyText": ""
+    },
+    {
+      "name": "transport: an uncoded 401 waits for a new credential",
+      "input": {
+        "source": "HTTP",
+        "status": 401,
+        "body": "{\"statusCode\":401,\"message\":\"Unauthorized\"}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "HTTP_401",
+        "message": "Unauthorized",
+        "kind": "TRANSPORT",
+        "status": 401,
+        "effect": "NONE",
+        "retry": {
+          "policy": "AFTER_STATE_CHANGE",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": null,
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [],
+        "disposition": "WAIT"
+      },
+      "legacyText": ""
+    },
+    {
+      "name": "transport: no answer arrived and no request id protects a resend",
+      "input": {
+        "source": "NETWORK",
+        "message": "dial tcp: connection refused"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "TRANSPORT_NO_ANSWER",
+        "message": "dial tcp: connection refused",
+        "kind": "TRANSPORT",
+        "status": null,
+        "effect": "UNKNOWN",
+        "retry": {
+          "policy": "VERIFY_THEN_RETRY",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": "VERIFY_STATE",
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [],
+        "disposition": "AUTOMATIC"
+      },
+      "legacyText": ""
+    },
+    {
+      "name": "transport: no answer arrived under a request id",
+      "input": {
+        "source": "NETWORK",
+        "message": "context deadline exceeded",
+        "requestIdSent": true
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "TRANSPORT_NO_ANSWER",
+        "message": "context deadline exceeded",
+        "kind": "TRANSPORT",
+        "status": null,
+        "effect": "UNKNOWN",
+        "retry": {
+          "policy": "SAME_REQUEST_ID",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": "RETRY_SAME_REQUEST",
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [],
+        "disposition": "AUTOMATIC"
+      },
+      "legacyText": ""
+    },
+    {
+      "name": "unknown: an error from nowhere the contract knows",
+      "input": {
+        "source": "UNKNOWN",
+        "message": "something broke"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "UNKNOWN_ERROR",
+        "message": "something broke",
+        "kind": "UNKNOWN",
+        "status": null,
+        "effect": "UNKNOWN",
+        "retry": {
+          "policy": "VERIFY_THEN_RETRY",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": "VERIFY_STATE",
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [],
+        "disposition": "AUTOMATIC"
+      },
+      "legacyText": ""
+    },
+    {
+      "name": "invariant: UNKNOWN + SAFE with no request id verifies first",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"code\":\"X_UNKNOWN_SAFE\",\"message\":\"the write may or may not have happened\",\"recovery\":{\"effect\":\"UNKNOWN\",\"retryPolicy\":\"SAFE\",\"actionCode\":\"RETRY\",\"retryAfterSeconds\":2}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "X_UNKNOWN_SAFE",
+        "message": "the write may or may not have happened",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "UNKNOWN",
+        "retry": {
+          "policy": "VERIFY_THEN_RETRY",
+          "afterSeconds": 2
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": "VERIFY_STATE",
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [],
+        "disposition": "AUTOMATIC"
+      },
+      "legacyText": "  refused: X_UNKNOWN_SAFE\n  what:    the write may or may not have happened\n"
+    },
+    {
+      "name": "invariant: UNKNOWN + SAME_REQUEST_ID is kept when the request id was sent",
+      "input": {
+        "source": "HTTP",
+        "status": 503,
+        "requestIdSent": true,
+        "body": "{\"code\":\"X_UNKNOWN_REPLAY\",\"message\":\"ask again under the same id\",\"recovery\":{\"effect\":\"UNKNOWN\",\"retryPolicy\":\"SAME_REQUEST_ID\"}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "X_UNKNOWN_REPLAY",
+        "message": "ask again under the same id",
+        "kind": "REFUSAL",
+        "status": 503,
+        "effect": "UNKNOWN",
+        "retry": {
+          "policy": "SAME_REQUEST_ID",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": "RETRY_SAME_REQUEST",
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [],
+        "disposition": "AUTOMATIC"
+      },
+      "legacyText": "  refused: X_UNKNOWN_REPLAY\n  what:    ask again under the same id\n"
+    },
+    {
+      "name": "invariant: UNKNOWN + SAME_REQUEST_ID with no request id anywhere verifies first",
+      "input": {
+        "source": "HTTP",
+        "status": 503,
+        "body": "{\"code\":\"X_UNKNOWN_REPLAY\",\"message\":\"ask again under the same id\",\"recovery\":{\"effect\":\"UNKNOWN\",\"retryPolicy\":\"SAME_REQUEST_ID\",\"actionCode\":\"RETRY_SAME_REQUEST\"}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "X_UNKNOWN_REPLAY",
+        "message": "ask again under the same id",
+        "kind": "REFUSAL",
+        "status": 503,
+        "effect": "UNKNOWN",
+        "retry": {
+          "policy": "VERIFY_THEN_RETRY",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": "VERIFY_STATE",
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [],
+        "disposition": "AUTOMATIC"
+      },
+      "legacyText": "  refused: X_UNKNOWN_REPLAY\n  what:    ask again under the same id\n"
+    },
+    {
+      "name": "invariant: UNKNOWN + NEVER + FIX_REQUEST verifies first",
+      "input": {
+        "source": "HTTP",
+        "status": 500,
+        "body": "{\"code\":\"X_UNKNOWN_NEVER\",\"message\":\"do not send this again\",\"recovery\":{\"effect\":\"UNKNOWN\",\"retryPolicy\":\"NEVER\",\"actionCode\":\"FIX_REQUEST\"}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "X_UNKNOWN_NEVER",
+        "message": "do not send this again",
+        "kind": "REFUSAL",
+        "status": 500,
+        "effect": "UNKNOWN",
+        "retry": {
+          "policy": "VERIFY_THEN_RETRY",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": "VERIFY_STATE",
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [],
+        "disposition": "AUTOMATIC"
+      },
+      "legacyText": "  refused: X_UNKNOWN_NEVER\n  what:    do not send this again\n"
+    },
+    {
+      "name": "invariant: COMMITTED + SAFE + RETRY is never resent",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"code\":\"X_COMMITTED_SAFE\",\"message\":\"it was saved; send it again\",\"recovery\":{\"effect\":\"COMMITTED\",\"retryPolicy\":\"SAFE\",\"actionCode\":\"RETRY\",\"retryAfterSeconds\":3}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "X_COMMITTED_SAFE",
+        "message": "it was saved; send it again",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "COMMITTED",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": null,
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [],
+        "disposition": "STOP"
+      },
+      "legacyText": "  refused: X_COMMITTED_SAFE\n  what:    it was saved; send it again\n"
+    },
+    {
+      "name": "invariant: SAME_REQUEST_ID with no provable request id is verified, not replayed",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"code\":\"X_REPLAY_NO_ID\",\"message\":\"ask again with the same id\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"SAME_REQUEST_ID\",\"actionCode\":\"RETRY_SAME_REQUEST\"}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "X_REPLAY_NO_ID",
+        "message": "ask again with the same id",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "VERIFY_THEN_RETRY",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": "VERIFY_STATE",
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [],
+        "disposition": "AUTOMATIC"
+      },
+      "legacyText": "  refused: X_REPLAY_NO_ID\n  what:    ask again with the same id\n"
+    },
+    {
+      "name": "invariant: a legacy SAME_REQUEST_ID code whose answer names no request id is verified",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"code\":\"TASK_RUN_REQUEST_UNREADABLE\",\"message\":\"planned by a different version\",\"owner\":\"SYSTEM\",\"requiredAction\":\"retry the same request; a replica that understands it will answer\"}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "TASK_RUN_REQUEST_UNREADABLE",
+        "message": "planned by a different version",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "VERIFY_THEN_RETRY",
+          "afterSeconds": null
+        },
+        "actor": "SYSTEM",
+        "owner": "SYSTEM",
+        "actionCode": "VERIFY_STATE",
+        "requiredAction": "retry the same request; a replica that understands it will answer",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [],
+        "disposition": "AUTOMATIC"
+      },
+      "legacyText": "  refused: TASK_RUN_REQUEST_UNREADABLE\n  what:    planned by a different version\n  owner:   SYSTEM\n  do:      retry the same request; a replica that understands it will answer\n"
+    },
+    {
+      "name": "invariant: a required confirmation turns an automatic retry into waiting for the decision",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"code\":\"X_CONFIRM_THEN_RETRY\",\"message\":\"the owner has to confirm this\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"SAFE\",\"actionCode\":\"RETRY\",\"userConfirmation\":\"REQUIRED\",\"actor\":\"USER\",\"retryAfterSeconds\":4}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "X_CONFIRM_THEN_RETRY",
+        "message": "the owner has to confirm this",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "AFTER_STATE_CHANGE",
+          "afterSeconds": 4
+        },
+        "actor": "USER",
+        "owner": null,
+        "actionCode": "AWAIT_OWNER_DECISION",
+        "requiredAction": null,
+        "userConfirmation": "REQUIRED",
+        "resources": [],
+        "disposition": "CONFIRM_THEN_RUN"
+      },
+      "legacyText": "  refused: X_CONFIRM_THEN_RETRY\n  what:    the owner has to confirm this\n"
+    },
+    {
+      "name": "invariant: a required confirmation also stops a same-id replay",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"code\":\"X_CONFIRM_THEN_REPLAY\",\"message\":\"the owner has to confirm this run\",\"triggerId\":\"trg_9\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"SAME_REQUEST_ID\",\"userConfirmation\":\"REQUIRED\"}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "X_CONFIRM_THEN_REPLAY",
+        "message": "the owner has to confirm this run",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "AFTER_STATE_CHANGE",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": "AWAIT_OWNER_DECISION",
+        "requiredAction": null,
+        "userConfirmation": "REQUIRED",
+        "resources": [
+          {
+            "type": "REQUEST",
+            "id": "trg_9"
+          }
+        ],
+        "disposition": "CONFIRM_THEN_RUN"
+      },
+      "legacyText": "  refused: X_CONFIRM_THEN_REPLAY\n  what:    the owner has to confirm this run\n"
+    },
+    {
+      "name": "invariant: retryable:true contradicted by a stated UNKNOWN effect verifies first",
+      "input": {
+        "source": "HTTP",
+        "status": 503,
+        "body": "{\"code\":\"X_RETRYABLE_BUT_UNKNOWN\",\"message\":\"safe to send again\",\"retryable\":true,\"retryAfterSeconds\":1,\"recovery\":{\"effect\":\"UNKNOWN\"}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "X_RETRYABLE_BUT_UNKNOWN",
+        "message": "safe to send again",
+        "kind": "REFUSAL",
+        "status": 503,
+        "effect": "UNKNOWN",
+        "retry": {
+          "policy": "VERIFY_THEN_RETRY",
+          "afterSeconds": 1
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": "VERIFY_STATE",
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [],
+        "disposition": "AUTOMATIC"
+      },
+      "legacyText": "  refused: X_RETRYABLE_BUT_UNKNOWN\n  what:    safe to send again\n"
+    },
+    {
+      "name": "committed: COMMITTED + SAFE + RETRY + a required confirmation advises no later write",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"code\":\"X_COMMITTED_CONFIRM\",\"message\":\"saved; confirm and send it again\",\"recovery\":{\"effect\":\"COMMITTED\",\"retryPolicy\":\"SAFE\",\"actionCode\":\"RETRY\",\"userConfirmation\":\"REQUIRED\",\"actor\":\"USER\",\"retryAfterSeconds\":5}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "X_COMMITTED_CONFIRM",
+        "message": "saved; confirm and send it again",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "COMMITTED",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "USER",
+        "owner": null,
+        "actionCode": null,
+        "requiredAction": null,
+        "userConfirmation": "REQUIRED",
+        "resources": [],
+        "disposition": "STOP"
+      },
+      "legacyText": "  refused: X_COMMITTED_CONFIRM\n  what:    saved; confirm and send it again\n"
+    },
+    {
+      "name": "committed: a stated AWAIT_OWNER_DECISION on a committed write is dropped",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"code\":\"X_COMMITTED_AWAIT\",\"message\":\"saved; wait for the owner, then send it again\",\"recovery\":{\"effect\":\"COMMITTED\",\"retryPolicy\":\"AFTER_STATE_CHANGE\",\"actionCode\":\"AWAIT_OWNER_DECISION\"}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "X_COMMITTED_AWAIT",
+        "message": "saved; wait for the owner, then send it again",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "COMMITTED",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": null,
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [],
+        "disposition": "STOP"
+      },
+      "legacyText": "  refused: X_COMMITTED_AWAIT\n  what:    saved; wait for the owner, then send it again\n"
+    },
+    {
+      "name": "committed: a legacy crossing code on a committed write keeps its confirmation but advises no write",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"code\":\"CROSS_PROJECT_APPROVAL_REQUIRED\",\"message\":\"the task was filed; the crossing still needs approval\",\"crossingId\":\"X5\",\"recovery\":{\"effect\":\"COMMITTED\"}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "CROSS_PROJECT_APPROVAL_REQUIRED",
+        "message": "the task was filed; the crossing still needs approval",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "COMMITTED",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "USER",
+        "owner": null,
+        "actionCode": null,
+        "requiredAction": null,
+        "userConfirmation": "REQUIRED",
+        "resources": [
+          {
+            "type": "CROSSING",
+            "id": "X5"
+          }
+        ],
+        "disposition": "STOP"
+      },
+      "legacyText": "  refused: CROSS_PROJECT_APPROVAL_REQUIRED\n  what:    the task was filed; the crossing still needs approval\n"
+    },
+    {
+      "name": "committed: ANSWER_ADVICE (from the legacy advice code) on a committed write is dropped",
+      "input": {
+        "source": "HTTP",
+        "status": 201,
+        "body": "{\"id\":\"T9\",\"code\":\"TASK_CRITERION_SHAPE_ADVICE\",\"kind\":\"ADVISORY\",\"advisory\":true,\"message\":\"filed; the criterion reads like a check\",\"taskId\":\"T9\",\"recovery\":{\"effect\":\"COMMITTED\"}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "TASK_CRITERION_SHAPE_ADVICE",
+        "message": "filed; the criterion reads like a check",
+        "kind": "ADVISORY",
+        "status": 201,
+        "effect": "COMMITTED",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": null,
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "TASK",
+            "id": "T9"
+          }
+        ],
+        "disposition": "STOP"
+      },
+      "legacyText": "  advice: TASK_CRITERION_SHAPE_ADVICE\n  what:    filed; the criterion reads like a check\n"
+    },
+    {
+      "name": "committed: USE_NEW_REQUEST_ID on a committed write is dropped",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"code\":\"X_COMMITTED_NEW_ID\",\"message\":\"saved; send it under a new id\",\"triggerId\":\"trg_c\",\"recovery\":{\"effect\":\"COMMITTED\",\"actionCode\":\"USE_NEW_REQUEST_ID\"}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "X_COMMITTED_NEW_ID",
+        "message": "saved; send it under a new id",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "COMMITTED",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": null,
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "REQUEST",
+            "id": "trg_c"
+          }
+        ],
+        "disposition": "STOP"
+      },
+      "legacyText": "  refused: X_COMMITTED_NEW_ID\n  what:    saved; send it under a new id\n"
+    },
+    {
+      "name": "committed: FIX_REQUEST on a committed write is dropped",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"code\":\"X_COMMITTED_FIX\",\"message\":\"saved; fix it and send it again\",\"recovery\":{\"effect\":\"COMMITTED\",\"retryPolicy\":\"NEVER\",\"actionCode\":\"FIX_REQUEST\"}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "X_COMMITTED_FIX",
+        "message": "saved; fix it and send it again",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "COMMITTED",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": null,
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [],
+        "disposition": "STOP"
+      },
+      "legacyText": "  refused: X_COMMITTED_FIX\n  what:    saved; fix it and send it again\n"
+    },
+    {
+      "name": "committed: a token requiredAction (FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF) on a committed write is dropped",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"code\":\"PROJECT_SCOPE_MISMATCH\",\"message\":\"filed at home; the crossing was not asked\",\"owner\":\"COORDINATOR\",\"requiredAction\":\"FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF\",\"recovery\":{\"effect\":\"COMMITTED\"}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "PROJECT_SCOPE_MISMATCH",
+        "message": "filed at home; the crossing was not asked",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "COMMITTED",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "COORDINATOR",
+        "owner": "COORDINATOR",
+        "actionCode": null,
+        "requiredAction": "FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [],
+        "disposition": "STOP"
+      },
+      "legacyText": "  refused: PROJECT_SCOPE_MISMATCH\n  what:    filed at home; the crossing was not asked\n  owner:   COORDINATOR\n  do:      FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF\n"
+    },
+    {
+      "name": "committed: an action token the registry has never heard of is treated as a possible write and dropped",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"code\":\"X_COMMITTED_FUTURE\",\"message\":\"saved\",\"recovery\":{\"effect\":\"COMMITTED\",\"actionCode\":\"SOME_FUTURE_ACTION\"}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "X_COMMITTED_FUTURE",
+        "message": "saved",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "COMMITTED",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": null,
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [],
+        "disposition": "STOP"
+      },
+      "legacyText": "  refused: X_COMMITTED_FUTURE\n  what:    saved\n"
+    },
+    {
+      "name": "disposition: a stale revision is re-read and decided again by the caller",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"statusCode\":409,\"error\":\"Conflict\",\"code\":\"STALE_CONFIG_REVISION\",\"message\":\"this project is at configRevision 4, not 3\",\"owner\":\"USER\",\"requiredAction\":\"re-read this project, decide against the current settings, and write again\",\"projectId\":\"P1\",\"expectedConfigRevision\":\"3\",\"configRevision\":\"4\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"NEVER\",\"actionCode\":\"REREAD_AND_DECIDE\",\"actor\":\"CALLER\",\"userConfirmation\":\"NOT_REQUIRED\",\"resources\":[{\"type\":\"PROJECT\",\"id\":\"P1\"}],\"disposition\":\"AUTOMATIC\"}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "STALE_CONFIG_REVISION",
+        "message": "this project is at configRevision 4, not 3",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": "USER",
+        "actionCode": "REREAD_AND_DECIDE",
+        "requiredAction": "re-read this project, decide against the current settings, and write again",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "PROJECT",
+            "id": "P1"
+          }
+        ],
+        "disposition": "AUTOMATIC"
+      },
+      "legacyText": "  refused: STALE_CONFIG_REVISION\n  what:    this project is at configRevision 4, not 3\n  owner:   USER\n  do:      re-read this project, decide against the current settings, and write again\n"
+    },
+    {
+      "name": "disposition: a cycle is answered by reading the graph and planning again",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"statusCode\":409,\"error\":\"Conflict\",\"code\":\"DEPENDENCY_CYCLE\",\"message\":\"This dependency would create a cycle\",\"taskId\":\"T1\",\"dependsOnTaskId\":\"T2\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"NEVER\",\"actionCode\":\"READ_GRAPH_AND_REPLAN\",\"actor\":\"CALLER\",\"resources\":[{\"type\":\"TASK\",\"id\":\"T1\"},{\"type\":\"TASK\",\"id\":\"T2\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "DEPENDENCY_CYCLE",
+        "message": "This dependency would create a cycle",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": "READ_GRAPH_AND_REPLAN",
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "TASK",
+            "id": "T1"
+          },
+          {
+            "type": "TASK",
+            "id": "T2"
+          }
+        ],
+        "disposition": "AUTOMATIC"
+      },
+      "legacyText": "  refused: DEPENDENCY_CYCLE\n  what:    This dependency would create a cycle\n"
+    },
+    {
+      "name": "disposition: a prerequisite that has not finished is a wait for the system",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"code\":\"TASK_PREREQUISITES_INCOMPLETE\",\"message\":\"Prerequisites are not all complete yet, cannot run\",\"taskId\":\"T1\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"AFTER_STATE_CHANGE\",\"actor\":\"SYSTEM\",\"resources\":[{\"type\":\"TASK\",\"id\":\"T1\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "TASK_PREREQUISITES_INCOMPLETE",
+        "message": "Prerequisites are not all complete yet, cannot run",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "AFTER_STATE_CHANGE",
+          "afterSeconds": null
+        },
+        "actor": "SYSTEM",
+        "owner": null,
+        "actionCode": null,
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "TASK",
+            "id": "T1"
+          }
+        ],
+        "disposition": "WAIT"
+      },
+      "legacyText": "  refused: TASK_PREREQUISITES_INCOMPLETE\n  what:    Prerequisites are not all complete yet, cannot run\n"
+    },
+    {
+      "name": "disposition: a paused list is a person's to resume",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"code\":\"TASK_LIST_PAUSED\",\"message\":\"This task list is paused\",\"taskId\":\"T1\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"AFTER_STATE_CHANGE\",\"actor\":\"USER\",\"resources\":[{\"type\":\"TASK\",\"id\":\"T1\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "TASK_LIST_PAUSED",
+        "message": "This task list is paused",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "AFTER_STATE_CHANGE",
+          "afterSeconds": null
+        },
+        "actor": "USER",
+        "owner": null,
+        "actionCode": null,
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "TASK",
+            "id": "T1"
+          }
+        ],
+        "disposition": "HUMAN"
+      },
+      "legacyText": "  refused: TASK_LIST_PAUSED\n  what:    This task list is paused\n"
+    },
+    {
+      "name": "disposition: deleting a project that holds tasks needs the owner to confirm",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"code\":\"PROJECT_NOT_EMPTY\",\"message\":\"This project still holds 3 task(s)\",\"projectId\":\"P1\",\"taskCount\":3,\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"AFTER_STATE_CHANGE\",\"actionCode\":\"AWAIT_OWNER_DECISION\",\"actor\":\"USER\",\"userConfirmation\":\"REQUIRED\",\"resources\":[{\"type\":\"PROJECT\",\"id\":\"P1\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "PROJECT_NOT_EMPTY",
+        "message": "This project still holds 3 task(s)",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "AFTER_STATE_CHANGE",
+          "afterSeconds": null
+        },
+        "actor": "USER",
+        "owner": null,
+        "actionCode": "AWAIT_OWNER_DECISION",
+        "requiredAction": null,
+        "userConfirmation": "REQUIRED",
+        "resources": [
+          {
+            "type": "PROJECT",
+            "id": "P1"
+          }
+        ],
+        "disposition": "CONFIRM_THEN_RUN"
+      },
+      "legacyText": "  refused: PROJECT_NOT_EMPTY\n  what:    This project still holds 3 task(s)\n"
+    },
+    {
+      "name": "disposition: a retired task stands down and names its successor",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"code\":\"TASK_RETIRED\",\"message\":\"task T1 was superseded by T2\",\"taskId\":\"T1\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"NEVER\",\"actionCode\":\"STAND_DOWN\",\"actor\":\"CALLER\",\"resources\":[{\"type\":\"TASK\",\"id\":\"T2\"},{\"type\":\"TASK\",\"id\":\"T1\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "TASK_RETIRED",
+        "message": "task T1 was superseded by T2",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": "STAND_DOWN",
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "TASK",
+            "id": "T2"
+          },
+          {
+            "type": "TASK",
+            "id": "T1"
+          }
+        ],
+        "disposition": "STOP"
+      },
+      "legacyText": "  refused: TASK_RETIRED\n  what:    task T1 was superseded by T2\n"
+    },
+    {
+      "name": "disposition: a stated value is kept below a required confirmation, never above it",
+      "input": {
+        "source": "HTTP",
+        "status": 403,
+        "body": "{\"code\":\"X_STATED_AUTOMATIC\",\"message\":\"x\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"AFTER_STATE_CHANGE\",\"userConfirmation\":\"REQUIRED\",\"disposition\":\"AUTOMATIC\"}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "X_STATED_AUTOMATIC",
+        "message": "x",
+        "kind": "REFUSAL",
+        "status": 403,
+        "effect": "NONE",
+        "retry": {
+          "policy": "AFTER_STATE_CHANGE",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": "AWAIT_OWNER_DECISION",
+        "requiredAction": null,
+        "userConfirmation": "REQUIRED",
+        "resources": [],
+        "disposition": "CONFIRM_THEN_RUN"
+      },
+      "legacyText": "  refused: X_STATED_AUTOMATIC\n  what:    x\n"
+    },
+    {
+      "name": "disposition: a committed write stops whatever was stated",
+      "input": {
+        "source": "HTTP",
+        "status": 200,
+        "body": "{\"ok\":true,\"recovery\":{\"effect\":\"COMMITTED\",\"disposition\":\"AUTOMATIC\"}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "HTTP_200",
+        "message": "HTTP 200",
+        "kind": "ADVISORY",
+        "status": 200,
+        "effect": "COMMITTED",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": null,
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [],
+        "disposition": "STOP"
+      },
+      "legacyText": ""
+    },
+    {
+      "name": "disposition: a value outside the enum is ignored",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"code\":\"X_BAD_DISPOSITION\",\"message\":\"x\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"AFTER_STATE_CHANGE\",\"actor\":\"SYSTEM\",\"disposition\":\"MAYBE\"}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "X_BAD_DISPOSITION",
+        "message": "x",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "AFTER_STATE_CHANGE",
+          "afterSeconds": null
+        },
+        "actor": "SYSTEM",
+        "owner": null,
+        "actionCode": null,
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [],
+        "disposition": "WAIT"
+      },
+      "legacyText": "  refused: X_BAD_DISPOSITION\n  what:    x\n"
+    },
+    {
+      "name": "session recovery: ORCHESTRATION_DISABLED",
+      "input": {
+        "source": "HTTP",
+        "status": 403,
+        "body": "{\"statusCode\":403,\"error\":\"Forbidden\",\"code\":\"ORCHESTRATION_DISABLED\",\"message\":\"orchestration is not enabled for this session\",\"owner\":\"USER\",\"requiredAction\":\"AWAIT_USER_FIX\",\"retryable\":false,\"sessionId\":\"SESSION_FIXTURE_1\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"AFTER_STATE_CHANGE\",\"retryAfterSeconds\":null,\"actionCode\":\"AWAIT_USER_FIX\",\"actor\":\"USER\",\"userConfirmation\":\"NOT_REQUIRED\",\"disposition\":\"HUMAN\",\"resources\":[{\"type\":\"SESSION\",\"id\":\"SESSION_FIXTURE_1\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "ORCHESTRATION_DISABLED",
+        "message": "orchestration is not enabled for this session",
+        "kind": "REFUSAL",
+        "status": 403,
+        "effect": "NONE",
+        "retry": {
+          "policy": "AFTER_STATE_CHANGE",
+          "afterSeconds": null
+        },
+        "actor": "USER",
+        "owner": "USER",
+        "actionCode": "AWAIT_USER_FIX",
+        "requiredAction": "AWAIT_USER_FIX",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "SESSION",
+            "id": "SESSION_FIXTURE_1"
+          }
+        ],
+        "disposition": "HUMAN"
+      },
+      "legacyText": "  refused: ORCHESTRATION_DISABLED\n  what:    orchestration is not enabled for this session\n  owner:   USER\n  do:      AWAIT_USER_FIX\n"
+    },
+    {
+      "name": "session recovery: CALLER_SESSION_NOT_LIVE",
+      "input": {
+        "source": "HTTP",
+        "status": 403,
+        "body": "{\"statusCode\":403,\"error\":\"Forbidden\",\"code\":\"CALLER_SESSION_NOT_LIVE\",\"message\":\"orchestration is not enabled for this session\",\"owner\":\"CALLER\",\"requiredAction\":\"STOP_LOOP\",\"retryable\":false,\"sessionId\":\"SESSION_FIXTURE_1\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"NEVER\",\"retryAfterSeconds\":null,\"actionCode\":\"STOP_LOOP\",\"actor\":\"CALLER\",\"userConfirmation\":\"NOT_REQUIRED\",\"disposition\":\"STOP\",\"resources\":[{\"type\":\"SESSION\",\"id\":\"SESSION_FIXTURE_1\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "CALLER_SESSION_NOT_LIVE",
+        "message": "orchestration is not enabled for this session",
+        "kind": "REFUSAL",
+        "status": 403,
+        "effect": "NONE",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": "CALLER",
+        "actionCode": "STOP_LOOP",
+        "requiredAction": "STOP_LOOP",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "SESSION",
+            "id": "SESSION_FIXTURE_1"
+          }
+        ],
+        "disposition": "STOP"
+      },
+      "legacyText": "  refused: CALLER_SESSION_NOT_LIVE\n  what:    orchestration is not enabled for this session\n  owner:   CALLER\n  do:      STOP_LOOP\n"
+    },
+    {
+      "name": "session recovery: SPAWN_DEPTH_LIMIT",
+      "input": {
+        "source": "HTTP",
+        "status": 403,
+        "body": "{\"statusCode\":403,\"error\":\"Forbidden\",\"code\":\"SPAWN_DEPTH_LIMIT\",\"message\":\"spawn depth limit (5) reached\",\"owner\":\"CALLER\",\"requiredAction\":\"RETURN_TO_PARENT\",\"retryable\":false,\"sessionId\":\"SESSION_FIXTURE_1\",\"spawnDepth\":5,\"maxSpawnDepth\":5,\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"NEVER\",\"retryAfterSeconds\":null,\"actionCode\":\"RETURN_TO_PARENT\",\"actor\":\"CALLER\",\"userConfirmation\":\"NOT_REQUIRED\",\"disposition\":\"STOP\",\"resources\":[{\"type\":\"SESSION\",\"id\":\"SESSION_FIXTURE_1\"},{\"type\":\"SESSION\",\"id\":\"SESSION_FIXTURE_ROOT\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "SPAWN_DEPTH_LIMIT",
+        "message": "spawn depth limit (5) reached",
+        "kind": "REFUSAL",
+        "status": 403,
+        "effect": "NONE",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": "CALLER",
+        "actionCode": "RETURN_TO_PARENT",
+        "requiredAction": "RETURN_TO_PARENT",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "SESSION",
+            "id": "SESSION_FIXTURE_1"
+          },
+          {
+            "type": "SESSION",
+            "id": "SESSION_FIXTURE_ROOT"
+          }
+        ],
+        "disposition": "STOP"
+      },
+      "legacyText": "  refused: SPAWN_DEPTH_LIMIT\n  what:    spawn depth limit (5) reached\n  owner:   CALLER\n  do:      RETURN_TO_PARENT\n"
+    },
+    {
+      "name": "session recovery: SPAWN_TREE_OUTSTANDING_LIMIT",
+      "input": {
+        "source": "HTTP",
+        "status": 429,
+        "body": "{\"statusCode\":429,\"error\":\"Too Many Requests\",\"code\":\"SPAWN_TREE_OUTSTANDING_LIMIT\",\"message\":\"this run already has 20 unfinished sessions (limit 20); wait for some to finish before starting more\",\"owner\":\"CALLER\",\"requiredAction\":\"WAIT_FOR_SESSIONS\",\"retryable\":false,\"sessionId\":\"SESSION_FIXTURE_1\",\"rootSessionId\":\"SESSION_FIXTURE_ROOT\",\"outstanding\":20,\"limit\":20,\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"AFTER_STATE_CHANGE\",\"retryAfterSeconds\":null,\"actionCode\":\"WAIT_FOR_SESSIONS\",\"actor\":\"CALLER\",\"userConfirmation\":\"NOT_REQUIRED\",\"disposition\":\"WAIT\",\"resources\":[{\"type\":\"SESSION\",\"id\":\"SESSION_FIXTURE_CHILD_1\"},{\"type\":\"SESSION\",\"id\":\"SESSION_FIXTURE_CHILD_2\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "SPAWN_TREE_OUTSTANDING_LIMIT",
+        "message": "this run already has 20 unfinished sessions (limit 20); wait for some to finish before starting more",
+        "kind": "REFUSAL",
+        "status": 429,
+        "effect": "NONE",
+        "retry": {
+          "policy": "AFTER_STATE_CHANGE",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": "CALLER",
+        "actionCode": "WAIT_FOR_SESSIONS",
+        "requiredAction": "WAIT_FOR_SESSIONS",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "SESSION",
+            "id": "SESSION_FIXTURE_CHILD_1"
+          },
+          {
+            "type": "SESSION",
+            "id": "SESSION_FIXTURE_CHILD_2"
+          }
+        ],
+        "disposition": "WAIT"
+      },
+      "legacyText": "  refused: SPAWN_TREE_OUTSTANDING_LIMIT\n  what:    this run already has 20 unfinished sessions (limit 20); wait for some to finish before starting more\n  owner:   CALLER\n  do:      WAIT_FOR_SESSIONS\n"
+    },
+    {
+      "name": "session recovery: SPAWN_TREE_RATE_LIMIT",
+      "input": {
+        "source": "HTTP",
+        "status": 429,
+        "body": "{\"statusCode\":429,\"error\":\"Too Many Requests\",\"code\":\"SPAWN_TREE_RATE_LIMIT\",\"message\":\"this run has started 60 sessions in the past hour (limit 60); it is looping rather than making progress\",\"owner\":\"CALLER\",\"requiredAction\":\"STOP_LOOP\",\"retryable\":false,\"retryAfterSeconds\":540,\"sessionId\":\"SESSION_FIXTURE_1\",\"rootSessionId\":\"SESSION_FIXTURE_ROOT\",\"startedThisHour\":60,\"limit\":60,\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"AFTER_STATE_CHANGE\",\"retryAfterSeconds\":540,\"actionCode\":\"STOP_LOOP\",\"actor\":\"CALLER\",\"userConfirmation\":\"NOT_REQUIRED\",\"disposition\":\"STOP\",\"resources\":[{\"type\":\"SESSION\",\"id\":\"SESSION_FIXTURE_ROOT\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "SPAWN_TREE_RATE_LIMIT",
+        "message": "this run has started 60 sessions in the past hour (limit 60); it is looping rather than making progress",
+        "kind": "REFUSAL",
+        "status": 429,
+        "effect": "NONE",
+        "retry": {
+          "policy": "AFTER_STATE_CHANGE",
+          "afterSeconds": 540
+        },
+        "actor": "CALLER",
+        "owner": "CALLER",
+        "actionCode": "STOP_LOOP",
+        "requiredAction": "STOP_LOOP",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "SESSION",
+            "id": "SESSION_FIXTURE_ROOT"
+          }
+        ],
+        "disposition": "STOP"
+      },
+      "legacyText": "  refused: SPAWN_TREE_RATE_LIMIT\n  what:    this run has started 60 sessions in the past hour (limit 60); it is looping rather than making progress\n  owner:   CALLER\n  do:      STOP_LOOP\n"
+    },
+    {
+      "name": "session recovery: WORKSPACE_NAME_AMBIGUOUS",
+      "input": {
+        "source": "HTTP",
+        "status": 400,
+        "body": "{\"statusCode\":400,\"error\":\"Bad Request\",\"code\":\"WORKSPACE_NAME_AMBIGUOUS\",\"message\":\"multiple workspaces named \\\"twin\\\"; use workspaceId\",\"owner\":\"CALLER\",\"requiredAction\":\"FIX_REQUEST\",\"retryable\":false,\"workspaceName\":\"twin\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"NEVER\",\"retryAfterSeconds\":null,\"actionCode\":\"FIX_REQUEST\",\"actor\":\"CALLER\",\"userConfirmation\":\"NOT_REQUIRED\",\"disposition\":\"AUTOMATIC\",\"resources\":[{\"type\":\"WORKSPACE\",\"id\":\"WORKSPACE_FIXTURE_1\"},{\"type\":\"WORKSPACE\",\"id\":\"WORKSPACE_FIXTURE_2\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "WORKSPACE_NAME_AMBIGUOUS",
+        "message": "multiple workspaces named \"twin\"; use workspaceId",
+        "kind": "REFUSAL",
+        "status": 400,
+        "effect": "NONE",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": "CALLER",
+        "actionCode": "FIX_REQUEST",
+        "requiredAction": "FIX_REQUEST",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "WORKSPACE",
+            "id": "WORKSPACE_FIXTURE_1"
+          },
+          {
+            "type": "WORKSPACE",
+            "id": "WORKSPACE_FIXTURE_2"
+          }
+        ],
+        "disposition": "AUTOMATIC"
+      },
+      "legacyText": "  refused: WORKSPACE_NAME_AMBIGUOUS\n  what:    multiple workspaces named \"twin\"; use workspaceId\n  owner:   CALLER\n  do:      FIX_REQUEST\n"
+    },
+    {
+      "name": "session recovery: WORKSPACE_NAME_NOT_FOUND",
+      "input": {
+        "source": "HTTP",
+        "status": 400,
+        "body": "{\"statusCode\":400,\"error\":\"Bad Request\",\"code\":\"WORKSPACE_NAME_NOT_FOUND\",\"message\":\"no workspace named \\\"nobody\\\"\",\"owner\":\"CALLER\",\"requiredAction\":\"FIX_REQUEST\",\"retryable\":false,\"workspaceName\":\"nobody\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"NEVER\",\"retryAfterSeconds\":null,\"actionCode\":\"FIX_REQUEST\",\"actor\":\"CALLER\",\"userConfirmation\":\"NOT_REQUIRED\",\"disposition\":\"AUTOMATIC\",\"resources\":[]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "WORKSPACE_NAME_NOT_FOUND",
+        "message": "no workspace named \"nobody\"",
+        "kind": "REFUSAL",
+        "status": 400,
+        "effect": "NONE",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": "CALLER",
+        "actionCode": "FIX_REQUEST",
+        "requiredAction": "FIX_REQUEST",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [],
+        "disposition": "AUTOMATIC"
+      },
+      "legacyText": "  refused: WORKSPACE_NAME_NOT_FOUND\n  what:    no workspace named \"nobody\"\n  owner:   CALLER\n  do:      FIX_REQUEST\n"
+    },
+    {
+      "name": "session recovery: ENGINE_SIGNED_OUT",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"statusCode\":409,\"error\":\"Conflict\",\"code\":\"ENGINE_SIGNED_OUT\",\"message\":\"Claude is signed out on runner \\\"m\\\"\",\"owner\":\"USER\",\"requiredAction\":\"AWAIT_USER_FIX\",\"retryable\":false,\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"AFTER_STATE_CHANGE\",\"retryAfterSeconds\":null,\"actionCode\":\"AWAIT_USER_FIX\",\"actor\":\"USER\",\"userConfirmation\":\"NOT_REQUIRED\",\"disposition\":\"HUMAN\",\"resources\":[{\"type\":\"RUNNER\",\"id\":\"RUNNER_FIXTURE_1\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "ENGINE_SIGNED_OUT",
+        "message": "Claude is signed out on runner \"m\"",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "AFTER_STATE_CHANGE",
+          "afterSeconds": null
+        },
+        "actor": "USER",
+        "owner": "USER",
+        "actionCode": "AWAIT_USER_FIX",
+        "requiredAction": "AWAIT_USER_FIX",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "RUNNER",
+            "id": "RUNNER_FIXTURE_1"
+          }
+        ],
+        "disposition": "HUMAN"
+      },
+      "legacyText": "  refused: ENGINE_SIGNED_OUT\n  what:    Claude is signed out on runner \"m\"\n  owner:   USER\n  do:      AWAIT_USER_FIX\n"
+    },
+    {
+      "name": "session recovery: SESSION_ENDED",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"statusCode\":409,\"error\":\"Conflict\",\"code\":\"SESSION_ENDED\",\"message\":\"the session has ended\",\"owner\":\"CALLER\",\"requiredAction\":\"FIX_REQUEST\",\"retryable\":false,\"sessionId\":\"SESSION_FIXTURE_1\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"NEVER\",\"retryAfterSeconds\":null,\"actionCode\":\"FIX_REQUEST\",\"actor\":\"CALLER\",\"userConfirmation\":\"NOT_REQUIRED\",\"disposition\":\"AUTOMATIC\",\"resources\":[{\"type\":\"SESSION\",\"id\":\"SESSION_FIXTURE_1\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "SESSION_ENDED",
+        "message": "the session has ended",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": "CALLER",
+        "actionCode": "FIX_REQUEST",
+        "requiredAction": "FIX_REQUEST",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "SESSION",
+            "id": "SESSION_FIXTURE_1"
+          }
+        ],
+        "disposition": "AUTOMATIC"
+      },
+      "legacyText": "  refused: SESSION_ENDED\n  what:    the session has ended\n  owner:   CALLER\n  do:      FIX_REQUEST\n"
+    },
+    {
+      "name": "session recovery: SESSION_TRASHED",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"statusCode\":409,\"error\":\"Conflict\",\"code\":\"SESSION_TRASHED\",\"message\":\"the session is in Trash; restore it before sending a message\",\"owner\":\"USER\",\"requiredAction\":\"AWAIT_USER_FIX\",\"retryable\":false,\"sessionId\":\"SESSION_FIXTURE_1\",\"resumeBlockedReason\":\"TRASHED\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"AFTER_STATE_CHANGE\",\"retryAfterSeconds\":null,\"actionCode\":\"AWAIT_USER_FIX\",\"actor\":\"USER\",\"userConfirmation\":\"NOT_REQUIRED\",\"disposition\":\"HUMAN\",\"resources\":[{\"type\":\"SESSION\",\"id\":\"SESSION_FIXTURE_1\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "SESSION_TRASHED",
+        "message": "the session is in Trash; restore it before sending a message",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "AFTER_STATE_CHANGE",
+          "afterSeconds": null
+        },
+        "actor": "USER",
+        "owner": "USER",
+        "actionCode": "AWAIT_USER_FIX",
+        "requiredAction": "AWAIT_USER_FIX",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "SESSION",
+            "id": "SESSION_FIXTURE_1"
+          }
+        ],
+        "disposition": "HUMAN"
+      },
+      "legacyText": "  refused: SESSION_TRASHED\n  what:    the session is in Trash; restore it before sending a message\n  owner:   USER\n  do:      AWAIT_USER_FIX\n"
+    },
+    {
+      "name": "session recovery: SESSION_ENDING",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"statusCode\":409,\"error\":\"Conflict\",\"code\":\"SESSION_ENDING\",\"message\":\"the session is ending\",\"owner\":\"SYSTEM\",\"requiredAction\":\"POLL_STATE\",\"retryable\":false,\"retryAfterSeconds\":5,\"sessionId\":\"SESSION_FIXTURE_1\",\"resumeBlockedReason\":\"ENDING\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"AFTER_STATE_CHANGE\",\"retryAfterSeconds\":5,\"actionCode\":\"POLL_STATE\",\"actor\":\"SYSTEM\",\"userConfirmation\":\"NOT_REQUIRED\",\"disposition\":\"WAIT\",\"resources\":[{\"type\":\"SESSION\",\"id\":\"SESSION_FIXTURE_1\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "SESSION_ENDING",
+        "message": "the session is ending",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "AFTER_STATE_CHANGE",
+          "afterSeconds": 5
+        },
+        "actor": "SYSTEM",
+        "owner": "SYSTEM",
+        "actionCode": "POLL_STATE",
+        "requiredAction": "POLL_STATE",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "SESSION",
+            "id": "SESSION_FIXTURE_1"
+          }
+        ],
+        "disposition": "WAIT"
+      },
+      "legacyText": "  refused: SESSION_ENDING\n  what:    the session is ending\n  owner:   SYSTEM\n  do:      POLL_STATE\n"
+    },
+    {
+      "name": "session recovery: SESSION_NOT_TERMINAL",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"statusCode\":409,\"error\":\"Conflict\",\"code\":\"SESSION_NOT_TERMINAL\",\"message\":\"the session has not started yet\",\"owner\":\"SYSTEM\",\"requiredAction\":\"POLL_STATE\",\"retryable\":false,\"retryAfterSeconds\":5,\"sessionId\":\"SESSION_FIXTURE_1\",\"resumeBlockedReason\":\"NOT_TERMINAL\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"AFTER_STATE_CHANGE\",\"retryAfterSeconds\":5,\"actionCode\":\"POLL_STATE\",\"actor\":\"SYSTEM\",\"userConfirmation\":\"NOT_REQUIRED\",\"disposition\":\"WAIT\",\"resources\":[{\"type\":\"SESSION\",\"id\":\"SESSION_FIXTURE_1\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "SESSION_NOT_TERMINAL",
+        "message": "the session has not started yet",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "AFTER_STATE_CHANGE",
+          "afterSeconds": 5
+        },
+        "actor": "SYSTEM",
+        "owner": "SYSTEM",
+        "actionCode": "POLL_STATE",
+        "requiredAction": "POLL_STATE",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "SESSION",
+            "id": "SESSION_FIXTURE_1"
+          }
+        ],
+        "disposition": "WAIT"
+      },
+      "legacyText": "  refused: SESSION_NOT_TERMINAL\n  what:    the session has not started yet\n  owner:   SYSTEM\n  do:      POLL_STATE\n"
+    },
+    {
+      "name": "session recovery: SESSION_NOT_STARTED",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"statusCode\":409,\"error\":\"Conflict\",\"code\":\"SESSION_NOT_STARTED\",\"message\":\"this session never ran and cannot be resumed\",\"owner\":\"CALLER\",\"requiredAction\":\"CREATE_REPLACEMENT\",\"retryable\":false,\"sessionId\":\"SESSION_FIXTURE_1\",\"resumeBlockedReason\":\"NOT_STARTED\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"NEVER\",\"retryAfterSeconds\":null,\"actionCode\":\"CREATE_REPLACEMENT\",\"actor\":\"CALLER\",\"userConfirmation\":\"NOT_REQUIRED\",\"disposition\":\"AUTOMATIC\",\"resources\":[{\"type\":\"SESSION\",\"id\":\"SESSION_FIXTURE_1\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "SESSION_NOT_STARTED",
+        "message": "this session never ran and cannot be resumed",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": "CALLER",
+        "actionCode": "CREATE_REPLACEMENT",
+        "requiredAction": "CREATE_REPLACEMENT",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "SESSION",
+            "id": "SESSION_FIXTURE_1"
+          }
+        ],
+        "disposition": "AUTOMATIC"
+      },
+      "legacyText": "  refused: SESSION_NOT_STARTED\n  what:    this session never ran and cannot be resumed\n  owner:   CALLER\n  do:      CREATE_REPLACEMENT\n"
+    },
+    {
+      "name": "session recovery: SESSION_MISSING_CONTEXT",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"statusCode\":409,\"error\":\"Conflict\",\"code\":\"SESSION_MISSING_CONTEXT\",\"message\":\"this session never ran and cannot be resumed\",\"owner\":\"CALLER\",\"requiredAction\":\"CREATE_REPLACEMENT\",\"retryable\":false,\"sessionId\":\"SESSION_FIXTURE_1\",\"resumeBlockedReason\":\"MISSING_CONTEXT\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"NEVER\",\"retryAfterSeconds\":null,\"actionCode\":\"CREATE_REPLACEMENT\",\"actor\":\"CALLER\",\"userConfirmation\":\"NOT_REQUIRED\",\"disposition\":\"AUTOMATIC\",\"resources\":[{\"type\":\"SESSION\",\"id\":\"SESSION_FIXTURE_1\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "SESSION_MISSING_CONTEXT",
+        "message": "this session never ran and cannot be resumed",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": "CALLER",
+        "actionCode": "CREATE_REPLACEMENT",
+        "requiredAction": "CREATE_REPLACEMENT",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "SESSION",
+            "id": "SESSION_FIXTURE_1"
+          }
+        ],
+        "disposition": "AUTOMATIC"
+      },
+      "legacyText": "  refused: SESSION_MISSING_CONTEXT\n  what:    this session never ran and cannot be resumed\n  owner:   CALLER\n  do:      CREATE_REPLACEMENT\n"
+    },
+    {
+      "name": "session recovery: SESSION_NO_RUNNER",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"statusCode\":409,\"error\":\"Conflict\",\"code\":\"SESSION_NO_RUNNER\",\"message\":\"the session has no runner to resume on\",\"owner\":\"CALLER\",\"requiredAction\":\"CREATE_REPLACEMENT\",\"retryable\":false,\"sessionId\":\"SESSION_FIXTURE_1\",\"resumeBlockedReason\":\"NO_RUNNER\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"NEVER\",\"retryAfterSeconds\":null,\"actionCode\":\"CREATE_REPLACEMENT\",\"actor\":\"CALLER\",\"userConfirmation\":\"NOT_REQUIRED\",\"disposition\":\"AUTOMATIC\",\"resources\":[{\"type\":\"SESSION\",\"id\":\"SESSION_FIXTURE_1\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "SESSION_NO_RUNNER",
+        "message": "the session has no runner to resume on",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": "CALLER",
+        "actionCode": "CREATE_REPLACEMENT",
+        "requiredAction": "CREATE_REPLACEMENT",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "SESSION",
+            "id": "SESSION_FIXTURE_1"
+          }
+        ],
+        "disposition": "AUTOMATIC"
+      },
+      "legacyText": "  refused: SESSION_NO_RUNNER\n  what:    the session has no runner to resume on\n  owner:   CALLER\n  do:      CREATE_REPLACEMENT\n"
+    },
+    {
+      "name": "session recovery: SESSION_RUNNER_OFFLINE",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"statusCode\":409,\"error\":\"Conflict\",\"code\":\"SESSION_RUNNER_OFFLINE\",\"message\":\"the runner is offline; it must be online to resume this session\",\"owner\":\"SYSTEM\",\"requiredAction\":\"AWAIT_SYSTEM_FIX\",\"retryable\":false,\"retryAfterSeconds\":60,\"sessionId\":\"SESSION_FIXTURE_1\",\"resumeBlockedReason\":\"RUNNER_OFFLINE\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"AFTER_STATE_CHANGE\",\"retryAfterSeconds\":60,\"actionCode\":\"AWAIT_SYSTEM_FIX\",\"actor\":\"SYSTEM\",\"userConfirmation\":\"NOT_REQUIRED\",\"disposition\":\"WAIT\",\"resources\":[{\"type\":\"SESSION\",\"id\":\"SESSION_FIXTURE_1\"},{\"type\":\"RUNNER\",\"id\":\"RUNNER_FIXTURE_1\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "SESSION_RUNNER_OFFLINE",
+        "message": "the runner is offline; it must be online to resume this session",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "AFTER_STATE_CHANGE",
+          "afterSeconds": 60
+        },
+        "actor": "SYSTEM",
+        "owner": "SYSTEM",
+        "actionCode": "AWAIT_SYSTEM_FIX",
+        "requiredAction": "AWAIT_SYSTEM_FIX",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "SESSION",
+            "id": "SESSION_FIXTURE_1"
+          },
+          {
+            "type": "RUNNER",
+            "id": "RUNNER_FIXTURE_1"
+          }
+        ],
+        "disposition": "WAIT"
+      },
+      "legacyText": "  refused: SESSION_RUNNER_OFFLINE\n  what:    the runner is offline; it must be online to resume this session\n  owner:   SYSTEM\n  do:      AWAIT_SYSTEM_FIX\n"
+    },
+    {
+      "name": "session recovery: SESSION_NEXT_TURN_STARTING",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"statusCode\":409,\"error\":\"Conflict\",\"code\":\"SESSION_NEXT_TURN_STARTING\",\"message\":\"the next turn is already starting\",\"owner\":\"SYSTEM\",\"requiredAction\":\"RETRY\",\"retryable\":true,\"retryAfterSeconds\":2,\"sessionId\":\"SESSION_FIXTURE_1\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"SAFE\",\"retryAfterSeconds\":2,\"actionCode\":\"RETRY\",\"actor\":\"SYSTEM\",\"userConfirmation\":\"NOT_REQUIRED\",\"disposition\":\"AUTOMATIC\",\"resources\":[{\"type\":\"SESSION\",\"id\":\"SESSION_FIXTURE_1\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "SESSION_NEXT_TURN_STARTING",
+        "message": "the next turn is already starting",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "SAFE",
+          "afterSeconds": 2
+        },
+        "actor": "SYSTEM",
+        "owner": "SYSTEM",
+        "actionCode": "RETRY",
+        "requiredAction": "RETRY",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "SESSION",
+            "id": "SESSION_FIXTURE_1"
+          }
+        ],
+        "disposition": "AUTOMATIC"
+      },
+      "legacyText": "  refused: SESSION_NEXT_TURN_STARTING\n  what:    the next turn is already starting\n  owner:   SYSTEM\n  do:      RETRY\n"
+    },
+    {
+      "name": "session recovery: MANAGED_RUNNER_FAILED",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"statusCode\":409,\"error\":\"Conflict\",\"code\":\"MANAGED_RUNNER_FAILED\",\"message\":\"this workspace's managed runner is FAILED (PVC_MISSING: the data volume is gone) and will not come back by itself; it has to be repaired from its machine page before work can run there\",\"owner\":\"USER\",\"requiredAction\":\"AWAIT_USER_FIX\",\"retryable\":false,\"runnerId\":\"RUNNER_FIXTURE_1\",\"sessionId\":\"SESSION_FIXTURE_1\",\"managementState\":\"FAILED\",\"managedReason\":{\"code\":\"PVC_MISSING\",\"message\":\"the data volume is gone\",\"retryable\":false},\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"AFTER_STATE_CHANGE\",\"retryAfterSeconds\":null,\"actionCode\":\"AWAIT_USER_FIX\",\"actor\":\"USER\",\"userConfirmation\":\"NOT_REQUIRED\",\"disposition\":\"HUMAN\",\"resources\":[{\"type\":\"SESSION\",\"id\":\"SESSION_FIXTURE_1\"},{\"type\":\"RUNNER\",\"id\":\"RUNNER_FIXTURE_1\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "MANAGED_RUNNER_FAILED",
+        "message": "this workspace's managed runner is FAILED (PVC_MISSING: the data volume is gone) and will not come back by itself; it has to be repaired from its machine page before work can run there",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "AFTER_STATE_CHANGE",
+          "afterSeconds": null
+        },
+        "actor": "USER",
+        "owner": "USER",
+        "actionCode": "AWAIT_USER_FIX",
+        "requiredAction": "AWAIT_USER_FIX",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "SESSION",
+            "id": "SESSION_FIXTURE_1"
+          },
+          {
+            "type": "RUNNER",
+            "id": "RUNNER_FIXTURE_1"
+          }
+        ],
+        "disposition": "HUMAN"
+      },
+      "legacyText": "  refused: MANAGED_RUNNER_FAILED\n  what:    this workspace's managed runner is FAILED (PVC_MISSING: the data volume is gone) and will not come back by itself; it has to be repaired from its machine page before work can run there\n  owner:   USER\n  do:      AWAIT_USER_FIX\n"
+    },
+    {
+      "name": "session recovery: RUNNER_DISK_BELOW_FLOOR",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"statusCode\":409,\"error\":\"Conflict\",\"code\":\"RUNNER_DISK_BELOW_FLOOR\",\"message\":\"runner \\\"wikova\\\" has less free disk space than its Keep Free setting, so it starts no new sessions; nothing was created. Try again once space is freed there, or use an agent on another runner\",\"owner\":\"USER\",\"requiredAction\":\"AWAIT_USER_FIX\",\"retryable\":false,\"runnerId\":\"RUNNER_FIXTURE_1\",\"workspaceId\":\"WORKSPACE_FIXTURE_1\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"AFTER_STATE_CHANGE\",\"retryAfterSeconds\":null,\"actionCode\":\"AWAIT_USER_FIX\",\"actor\":\"USER\",\"userConfirmation\":\"NOT_REQUIRED\",\"disposition\":\"HUMAN\",\"resources\":[{\"type\":\"WORKSPACE\",\"id\":\"WORKSPACE_FIXTURE_1\"},{\"type\":\"RUNNER\",\"id\":\"RUNNER_FIXTURE_1\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "RUNNER_DISK_BELOW_FLOOR",
+        "message": "runner \"wikova\" has less free disk space than its Keep Free setting, so it starts no new sessions; nothing was created. Try again once space is freed there, or use an agent on another runner",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "AFTER_STATE_CHANGE",
+          "afterSeconds": null
+        },
+        "actor": "USER",
+        "owner": "USER",
+        "actionCode": "AWAIT_USER_FIX",
+        "requiredAction": "AWAIT_USER_FIX",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "WORKSPACE",
+            "id": "WORKSPACE_FIXTURE_1"
+          },
+          {
+            "type": "RUNNER",
+            "id": "RUNNER_FIXTURE_1"
+          }
+        ],
+        "disposition": "HUMAN"
+      },
+      "legacyText": "  refused: RUNNER_DISK_BELOW_FLOOR\n  what:    runner \"wikova\" has less free disk space than its Keep Free setting, so it starts no new sessions; nothing was created. Try again once space is freed there, or use an agent on another runner\n  owner:   USER\n  do:      AWAIT_USER_FIX\n"
+    }
+  ]
+}

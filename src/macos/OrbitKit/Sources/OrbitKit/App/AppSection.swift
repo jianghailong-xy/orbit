@@ -1,10 +1,13 @@
 import Foundation
 
 /// Top-level navigation sections, mirroring the web AppShell nav. Pure data — titles and SF
-/// Symbol names are just strings — so it lives in OrbitKit and is unit-tested; the SwiftUI
-/// sidebar renders `visible(isAdmin:)`. Admin is role-gated like the web's route guard.
+/// Symbol names are just strings — so it lives in OrbitKit and is unit-tested; every client's rail
+/// renders `workSections`. Admin is role-gated like the web's route guard.
 public enum AppSection: String, CaseIterable, Sendable, Identifiable {
     case tasks, following, agents, skills, runners, settings, admin, projects, wiki
+    /// Scheduled tasks (docs/scheduled-tasks-design.md §9.2): account-wide, in the drawer only — never a row of a
+    /// workspace's session list. The phone's drawer adds it (`DrawerWorkLogic.rows(scheduled:)`).
+    case scheduled
 
     public var id: String { rawValue }
 
@@ -21,6 +24,7 @@ public enum AppSection: String, CaseIterable, Sendable, Identifiable {
         case .settings: return "Settings"
         case .admin:    return "Admin"
         case .wiki:     return "Wiki"
+        case .scheduled: return ScheduleCopy.Nav.scheduled
         }
     }
 
@@ -38,27 +42,12 @@ public enum AppSection: String, CaseIterable, Sendable, Identifiable {
         // The SF Symbols glyph for a book or a library — what the web draws as AntD's
         // `BookOutlined`, on the drawer row and on every `orbit-wiki:` card alike.
         case .wiki:     return "book.closed"
+        case .scheduled: return "calendar"
         }
     }
 
-    /// Admin-area sections are hidden from non-admins (mirrors the web route guard).
-    public var adminOnly: Bool { self == .admin }
-
-    /// Sections to show in the nav, in display order. Skills is intentionally omitted (its detail view
-    /// still exists but is no longer a top-level destination), and so is Machines & models (`.runners`):
-    /// it is reached from Settings, as on the phone and the web (docs/mocks/machines-and-models, 02) — a
-    /// route to a machine still opens it, its way back to Settings in its toolbar. Projects sits just
-    /// before Tasks — a project is what its tasks are for — and the Wiki, what the work learned,
-    /// follows them: the work, then what is known. Following, the watches kept on sessions and tasks,
-    /// comes after. Admin is gated by role, and the Wiki by whether the server has the wiki on for the
-    /// account (`WikiLogic.shown`): an account it answers WIKI_DISABLED gets no Wiki row, as the drawer
-    /// and the web sidebar draw none.
-    public static func visible(isAdmin: Bool, wiki: Bool = true) -> [AppSection] {
-        let order: [AppSection] = [.agents, .projects, .tasks, .wiki, .following, .settings, .admin]
-        return order.filter { (!$0.adminOnly || isAdmin) && ($0 != .wiki || wiki) }
-    }
-
-    /// What the drawer — the iPhone's, and the iPad's sidebar, which is the same view — leads with,
+    /// What the drawer — the iPhone's, the iPad's sidebar, which is the same view, and the Mac's source
+    /// list (docs/mocks/macos-sidebar, 01) — leads with,
     /// ABOVE the Workspaces and set apart from them: the work itself — its projects and its tasks —
     /// and the Wiki, the other thing a codebase has (Projects is the work in it, the Wiki is what the
     /// work learned). The web sidebar puts Wiki right under Projects for the same reason. Following

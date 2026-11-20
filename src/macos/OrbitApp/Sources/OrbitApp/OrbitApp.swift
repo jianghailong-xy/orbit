@@ -22,6 +22,8 @@ struct OrbitApp: App {
                 .frame(minWidth: 820, minHeight: 520)
                 .hidesTitlebarSeparator()   // seamless, ChatGPT-style floating top (no hard rule)
                 .onOpenURL { url in
+                    // `orbit-session://<id>?share=<entry>`: the Share extension's Add (share-to-orbit §3.3).
+                    if let entryID = ShareHandoffLink.entryID(in: url) { model.requestShareClaim(entryID: entryID); return }
                     // `orbit://owner-request/<id>`: the inbox, with that request's card open on its input.
                     if let request = OwnerRequestLink.parse(url) { model.openOwnerRequest(request); return }
                     if let route = DeepLink.parse(url) { model.route(to: route) }
@@ -42,6 +44,8 @@ struct OrbitApp: App {
                 }
                 .task {
                     model.bootstrap()
+                    // A share left in the App Group inbox: sweep a day-old one, open a fresh one.
+                    model.noticeSharedItems(launching: true)
                     HotKeyManager.register { HotKeyManager.summonApp() }   // ⌥Space summons Orbit
                 }
         }
@@ -85,6 +89,10 @@ struct OrbitApp: App {
                 Button("Search Sessions…") { model.searchOpen = true }
                     .keyboardShortcut("k", modifiers: .command)
                     .disabled(!model.signedIn)
+                // The sidebar has no Following row (docs/mocks/macos-sidebar, 01): its watches are opened from
+                // the cards and links that name them, from the account menu, and from here.
+                Button(AppSection.following.title) { model.selectedSection = .following }
+                    .disabled(!model.signedIn)
                 Divider()
                 ForEach(Array(model.orderedAgents.prefix(9).enumerated()), id: \.element.id) { pair in
                     Button("\(pair.offset + 1)  \(pair.element.name)") {
@@ -116,9 +124,9 @@ struct OrbitApp: App {
             MenuBarContent().environment(model)
         } label: {
             if let badge = model.menuSummary.badge {
-                Label(badge, systemImage: "circle.hexagongrid.fill")
+                Label { Text(badge) } icon: { Image(nsImage: MenuBarIcon.image) }
             } else {
-                Image(systemName: "circle.hexagongrid")
+                Image(nsImage: MenuBarIcon.image)
             }
         }
         .menuBarExtraStyle(.window)
@@ -133,6 +141,7 @@ struct RootView: View {
                 MainView()
                     .sessionSearchSheet(model)
                     .ownerRequestInboxSheet(model)
+                    .wikiCreateHost(model)
             } else {
                 LoginView()
             }

@@ -57,10 +57,16 @@ const CONFIRMATION_INDEXES = [
  * decision than 0226's. The criterion's own wiring towards the work went in 0233, and the
  * evaluation-plan lane those columns fed went in 0234: two more later decisions. What 0226 was
  * protecting, and what came through all of it column for column, is the authored declaration.
+ *
+ * `0545_criterion_confirmation` then added `satisfied_by` (TASKS or CONFIRMATION, owner decision
+ * 2026-11-11): how the criterion is met, authored with its text and folded into its revision and
+ * hashes. It does not bring back 0226's standard-set confirmation: a confirmation of a single
+ * criterion lives in its own table, `project_criterion_confirmation`, outside this family, and this
+ * column only says that the criterion is one a confirmation can meet.
  */
 const PROJECT_ACCEPTANCE_COLUMNS: Readonly<Record<string, string>> = {
   project_acceptance_criterion_definition:
-    'id:uuid!, project_id:uuid!, ordinal:integer!, text:text!, revision:integer!, content_hash:character(64)!, created_at:timestamp(3) without time zone!, updated_at:timestamp(3) without time zone!, verification_method:text!, completion_criterion_override_reason:text, semantic_revision:integer!, semantic_hash:character(64)!',
+    'id:uuid!, project_id:uuid!, ordinal:integer!, text:text!, revision:integer!, content_hash:character(64)!, created_at:timestamp(3) without time zone!, updated_at:timestamp(3) without time zone!, verification_method:text!, completion_criterion_override_reason:text, semantic_revision:integer!, semantic_hash:character(64)!, satisfied_by:criterion_satisfied_by!',
 };
 
 

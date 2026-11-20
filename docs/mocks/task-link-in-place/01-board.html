@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>任务链接原地打开 · 图 01</title>
+<style>
+  body { margin: 0; background: #f4f5f7; color: #1f2329; font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; }
+  .b-part { padding: 28px 36px 32px; width: 1640px; box-sizing: border-box; background: #f4f5f7; font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; }
+  h1 { font-size: 26px; margin: 0 0 4px; } h2 { font-size: 20px; margin: 0 0 6px; }
+  .b-sub { color: #646a73; margin: 0 0 18px; }
+  .b-row { display: flex; flex-wrap: wrap; gap: 18px; align-items: flex-start; }
+  .b-frame { background: #fff; border-radius: 10px; padding: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .b-frame h3 { font-size: 14px; margin: 0 0 6px; } .b-frame .b-url { font: 12px "DejaVu Sans Mono", monospace; color: #646a73; margin: 0 0 6px; word-break: break-all; }
+  .b-shot { position: relative; } .b-shot img { display: block; width: 100%; border: 1px solid #e4e6ea; border-radius: 4px; }
+  .b-ring { position: absolute; border: 3px solid #f54a45; border-radius: 6px; box-sizing: border-box; }
+  .b-num { position: absolute; width: 26px; height: 26px; border-radius: 50%; background: #f54a45; color: #fff; font: 700 14px/26px Inter, sans-serif; text-align: center; }
+  .b-arrow { align-self: center; font-size: 30px; color: #8f959e; }
+  .b-notes { margin: 16px 0 0; padding-left: 0; list-style: none; } .b-notes li { margin: 4px 0; }
+  .b-notes b.n { display: inline-block; width: 22px; height: 22px; border-radius: 50%; background: #f54a45; color: #fff; text-align: center; font: 700 13px/22px Inter; margin-right: 6px; }
+  .b-bad { color: #d83931; font-weight: 600; } .b-good { color: #2ea121; font-weight: 600; }
+  table.b-t { border-collapse: collapse; background: #fff; width: 100%; } .b-t td, .b-t th { border: 1px solid #e4e6ea; padding: 8px 10px; vertical-align: top; text-align: left; }
+  .b-t th { background: #f8f9fa; } .b-rec { background: #e8f8e8; }
+  code { font: 13px "DejaVu Sans Mono", monospace; background: #eef0f3; padding: 1px 4px; border-radius: 3px; }
+</style></head><body>
+<section class="b-part" id="part-1">
+  <h1>图 01 · 任务链接在哪里点，就在哪里打开</h1>
+  <p class="b-sub">真实页面截图：左右两套构建（今天的 main 与原型），同一份示例数据。会话里一条回复引用了项目任务 “Capture browser baselines”。</p>
+  <h2>今天：点会话里的任务链接，被带离会话</h2>
+  <div class="b-row" id="today"></div>
+  <ul class="b-notes">
+    <li><b class="n">1</b>会话回复里的任务引用（<code>/tasks/&lt;id&gt;</code>）。</li>
+    <li><b class="n">2</b><span class="b-bad">地址变成项目页</span> <code>/projects/…/tasks/…</code>：会话不见了，侧栏高亮跳到 Projects。</li>
+    <li><b class="n">3</b>点 ✕ 关掉面板后，<span class="b-bad">停在项目页</span>，要自己再找回刚才的会话。</li>
+  </ul>
+</section>
+<section class="b-part" id="part-2">
+  <h2>改后：面板盖在会话上，✕ / 返回 回到会话原处</h2>
+  <p class="b-sub">面板就是项目页上那个任务面板，原样复用，不新造外观；地址只在会话后面加 <code>?task=&lt;id&gt;</code>。</p>
+  <div class="b-row" id="proto"></div>
+  <ul class="b-notes">
+    <li><b class="n">1</b>同一个链接，点下去不跳页。</li>
+    <li><b class="n">2</b><span class="b-good">任务面板盖在会话右侧</span>，会话还在背后，地址 <code>/sessions/…?task=…</code>，可复制、可刷新。</li>
+    <li><b class="n">3</b>面板顶部的项目名本来就是链接：想去项目页，点它。</li>
+    <li><b class="n">4</b>✕ 或浏览器返回：<span class="b-good">回到会话原处</span>（滚动位置不变）。</li>
+  </ul>
+</section>
+<section class="b-part" id="part-3">
+  <h2>改后 · 窄屏（≤960px）：任务占满屏幕，返回手势回到会话</h2>
+  <div class="b-row" id="phone"></div>
+</section>
+<section class="b-part" id="part-4">
+  <h2>规则</h2>
+  <table class="b-t">
+    <tr><th style="width:28%">在哪里点</th><th>今天</th><th>改后</th></tr>
+    <tr><td>会话（引用、任务卡、开工卡、消息卡、watch 行…）<br>Waiting on you、Wiki、设置等其它页面</td><td>项目任务 → 项目页；非项目任务 → Tasks 页</td><td><b>原地打开</b>：面板盖在当前页上</td></tr>
+    <tr><td>项目页里点它自己的任务</td><td>盖在项目页上</td><td>不变</td></tr>
+    <tr><td>Tasks 页 / 某个清单里</td><td>盖在清单上</td><td>不变</td></tr>
+    <tr><td>⌘/Ctrl/中键点击</td><td>新标签页打开任务地址</td><td>不变（新标签页仍是任务自己的地址）</td></tr>
+    <tr><td>粘贴的 <code>/tasks/&lt;id&gt;</code> 地址、推送通知点进来</td><td>项目任务 → 项目页</td><td>见下方待定 A</td></tr>
+  </table>
+  <h2 style="margin-top:22px">待定 · 要你拍板</h2>
+  <table class="b-t">
+    <tr><th style="width:14%">问题</th><th>方案 A（推荐）</th><th>方案 B</th></tr>
+    <tr><td>A. 直接打开任务地址（粘贴链接、通知）</td><td class="b-rec">保持今天：项目任务进项目页、盖在项目页上。没有“原处”可回，项目页是它的家。</td><td>进 Tasks 页、盖在“项目外任务”清单上（9 月改之前的做法，✕ 落到一个它不在的清单）。</td></tr>
+    <tr><td>B. iOS / Android</td><td class="b-rec">同一规则跟上：会话里点任务，任务页压在会话上，返回回到会话（先网页，再 iOS，Android 跟 iOS）。</td><td>只改网页，手机端以后再说。</td></tr>
+  </table>
+  <h2 style="margin-top:22px">落地（按代价排）</h2>
+  <ol>
+    <li>网页：一个文档级点击规则（所有 <code>/tasks/&lt;id&gt;</code> 链接统一生效，不逐个改卡片）+ 外壳里复用的任务面板。原型约 150 行，已能跑出本图的截图。</li>
+    <li>网页：少数不是链接、而是代码里直接跳转的入口，逐个改成同一个“盖在本页”的打开方式。</li>
+    <li>iOS、Android（若选 B-A）。</li>
+  </ol>
+</section>
+<script>
+const M = {"today-1-session": {"url": "/sessions/2zwQZ2hd93IvLb59t6p1c", "w": 1600, "h": 960, "boxes": {"link": {"x": 823.46875, "y": 183.3125, "width": 187.359375, "height": 19}}}, "today-2-open": {"url": "/projects/2zwQZ2hd93IvLb59t6p9d/tasks/2zwQZ2hd93IvLb59t6p5m", "w": 1600, "h": 960, "boxes": {"panel": {"x": 820, "y": 0, "width": 780, "height": 960}, "projectLine": {"x": 841, "y": 18, "width": 507.625, "height": 19.640625}, "close": {"x": 1556, "y": 18, "width": 32, "height": 32}}}, "today-3-closed": {"url": "/projects/2zwQZ2hd93IvLb59t6p9d", "w": 1600, "h": 960, "boxes": {}}, "proto-1-session": {"url": "/sessions/2zwQZ2hd93IvLb59t6p1c", "w": 1600, "h": 960, "boxes": {"link": {"x": 823.46875, "y": 183.3125, "width": 187.359375, "height": 19}}}, "proto-2-open": {"url": "/sessions/2zwQZ2hd93IvLb59t6p1c?task=2zwQZ2hd93IvLb59t6p5m", "w": 1600, "h": 960, "boxes": {"panel": {"x": 820, "y": 0, "width": 780, "height": 960}, "projectLine": {"x": 841, "y": 18, "width": 507.625, "height": 19.640625}, "close": {"x": 1556, "y": 18, "width": 32, "height": 32}}}, "proto-3-closed": {"url": "/sessions/2zwQZ2hd93IvLb59t6p1c", "w": 1600, "h": 960, "boxes": {}}, "proto-phone-1-session": {"url": "/sessions/2zwQZ2hd93IvLb59t6p1c", "w": 430, "h": 900, "boxes": {"link": {"x": 216.46875, "y": 195.703125, "width": 187.359375, "height": 19}}}, "proto-phone-2-open": {"url": "/sessions/2zwQZ2hd93IvLb59t6p1c?task=2zwQZ2hd93IvLb59t6p5m", "w": 430, "h": 900, "boxes": {"close": {"x": 378, "y": 18, "width": 40, "height": 40}}}, "proto-phone-3-back": {"url": "/sessions/2zwQZ2hd93IvLb59t6p1c", "w": 430, "h": 900, "boxes": {}}};
+const PW = 380;
+function frame(host, key, title, width, rings) {
+  const m = M[key], s = (width - 2) / m.w;
+  const f = document.createElement('div'); f.className = 'b-frame'; f.style.width = width + 'px';
+  f.innerHTML = `<h3>${title}</h3><p class="b-url">${m.url}</p><div class="b-shot"><img src="shots/${key}.png"></div>`;
+  const shot = f.querySelector('.b-shot');
+  for (const [box, n, pad = 4] of rings) {
+    const b = m.boxes[box]; if (!b) continue;
+    const r = document.createElement('div'); r.className = 'b-ring';
+    Object.assign(r.style, { left: (b.x - pad) * s + 'px', top: (b.y - pad) * s + 'px', width: (b.width + 2 * pad) * s + 'px', height: (b.height + 2 * pad) * s + 'px' });
+    const c = document.createElement('div'); c.className = 'b-num'; c.textContent = n;
+    Object.assign(c.style, { left: Math.max(0, (b.x - pad) * s - 30) + 'px', top: ((b.y + b.height + pad) * s + 4) + 'px' });
+    shot.append(r, c);
+  }
+  host.append(f);
+}
+const arrow = () => {};
+const t = document.getElementById('today'), p = document.getElementById('proto'), ph = document.getElementById('phone');
+frame(t, 'today-1-session', '① 会话', 775, [['link', 1]]); arrow(t);
+frame(t, 'today-2-open', '② 点了之后', 775, [['panel', 2, 0]]); arrow(t);
+frame(t, 'today-3-closed', '③ 点 ✕ 之后', 775, []);
+frame(p, 'proto-1-session', '① 会话', 775, [['link', 1]]); arrow(p);
+frame(p, 'proto-2-open', '② 点了之后', 775, [['projectLine', 3], ['close', 4]]); arrow(p);
+frame(p, 'proto-3-closed', '③ 点 ✕ 之后', 775, []);
+frame(ph, 'proto-phone-1-session', '① 会话', PW, [['link', 1]]); arrow(ph);
+frame(ph, 'proto-phone-2-open', '② 点了之后', PW, [['close', 4]]); arrow(ph);
+frame(ph, 'proto-phone-3-back', '③ 返回手势之后', PW, []);
+</script></body></html>

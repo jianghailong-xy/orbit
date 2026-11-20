@@ -22,7 +22,9 @@ data class DirectoryWorkspace(val id: String, val name: String, val runnerId: St
     val enabled: Boolean = true, val position: Int? = null, val createdAt: String? = null, val repoUrl: String? = null)
 @Serializable
 data class DirectoryRunner(val id: String, val name: String, val status: String? = null, val online: Boolean? = null,
-    val displayName: String? = null, val lastHeartbeatAt: String? = null)
+    val displayName: String? = null, val lastHeartbeatAt: String? = null,
+    /** True on the account's managed runner (Orbit Cloud); null from an older server (RunnerPage.isManaged). */
+    val managed: Boolean? = null)
 @Serializable
 data class Folder(val id: String, val workspaceId: String, val name: String)
 @Serializable
@@ -30,9 +32,6 @@ data class Tag(val id: String, val name: String, val color: String? = null,
     val isSystem: Boolean = false, val position: Int = 0)
 @Serializable
 data class WorkspaceRef(val id: String, val name: String = "")
-/** What one recap pass did (apiserver sessions/recap.ts `RecapOutcome`): the line it wrote, or why it wrote none ([RecapCard.notice]). */
-@Serializable
-data class RecapOutcome(val written: Boolean, val recapText: String? = null, val reason: String? = null)
 @Serializable
 data class DirectorySession(
     val id: String, val title: String? = null, val status: String = "UNKNOWN",
@@ -53,10 +52,14 @@ data class DirectorySession(
      *  Null for anybody else's words, and from an older server. Kept as the JSON it came as, so a shape this build cannot read is no
      *  mark rather than a list that fails to decode. */
     val lastUserFromOrbit: JsonElement? = null,
-    /** Who sent [lastUserText] when somebody outside Orbit did — a connected Feishu group's member (docs/feishu-bot-design.md §8.2):
-     *  the row says `From Feishu · <name>` instead of "You" ([SessionLine.externalLine], read by [ExternalSender.parse]). Null for anybody
+    /** Who sent [lastUserText] when somebody other than the owner did — a connected Feishu group's member (docs/feishu-bot-design.md
+     *  §8.2) or a guest the owner invited (docs/session-guests-design.md §3): the row says `From Feishu · <name>` or `From <name>` instead
+     *  of "You" ([SessionLine.externalLine], read by [ExternalSender.parse]). Null for anybody
      *  else, and from an older server. Kept as the JSON it came as, so a source this build does not know is no sender. */
     val lastUserFromExternal: JsonElement? = null,
+    /** The session's permission mode (`default`, `auto`, `bypassPermissions`…), which Share's People who can reply says a guest's
+     *  message runs in. Null from an older server. */
+    val permissionMode: String? = null,
     /** The rolling recap the server wrote about this session and when it wrote it (0418), clipped like the previews beside it; the
      *  line the list prefers to [lastAssistantText]. Both null on a session no pass has recapped yet, and from a server that writes
      *  no recaps (`ORBIT_RECAP_ENABLED=0`) — exactly what the row falls back from. The account's Session recaps switch can also hold
@@ -67,6 +70,11 @@ data class DirectorySession(
     val runStatus: String? = null, val endReason: String? = null, val error: String? = null, val retryAt: String? = null,
     val completedAt: String? = null, val deletedAt: String? = null, val lastToolUse: String? = null,
     val runningBgCount: Int? = null, val runningSubagentCount: Int? = null, val engineTurnActive: Boolean? = null,
+    /** What the newest running sub-agent is doing, as its launch call described it; null when none is or it said nothing. */
+    val runningSubagentTitle: String? = null,
+    /** What a parked session is still doing (`TURN`, `BACKGROUND_JOB`, `WAITING`), as the server decides it; null when none and
+     *  from an older server. See [resumesOnItsOwn]. */
+    val activity: String? = null,
     val waitingKind: String? = null, val ownerItems: JsonArray? = null,
     /** The project this session belongs to in any role; null for an ordinary conversation and from an older server. */
     val projectMembership: SessionProjectMembership? = null,
@@ -74,9 +82,18 @@ data class DirectorySession(
     val sessionKind: String? = null,
     /** What a LANDING row says about its subject, on `GET /sessions?projectId=&includeLanding=1` only; absent everywhere else. */
     val landing: SessionLandingSummary? = null,
+    /** Which gate the server found holding a queued row (web `QueuedGate`): `runner_updating` is the one this build words for itself
+     *  ([RunnerUpdating]). [queuedActive] is the turns in flight that gate judged on. All absent from an older server. */
+    val queuedReason: String? = null, val queuedActive: Int? = null, val queuedLimit: Int? = null,
+    /** Of [queuedActive], the slots background jobs hold; beside `runner_at_capacity` only ([QueuedCapacity]). */
+    val queuedHeldByJobs: Int? = null,
+    /** Beside queuedReason `runner_updating` only, kept as the JSON it came as and read by [QueuedRunnerUpdate.of]. */
+    val queuedRunnerUpdate: JsonElement? = null,
+    val runSource: String? = null,
 ) {
     /** Whether this row is a landing session (platform work), not a conversation. */
     val isLanding get() = sessionKind == "LANDING"
+    val isScheduledRun get() = runSource == "SCHEDULE"
     val workspace get() = workspaceId ?: agentId ?: agent?.id
     val name get() = title?.takeIf(String::isNotBlank) ?: "Untitled session"
 }
@@ -147,6 +164,28 @@ private fun <T> workspaceOrder(runnerId: (T) -> String?, position: (T) -> Int?, 
 enum class SessionView(val query: String, val label: String) { OPEN("open", "Open"), COMPLETED("completed", "Completed"), TRASH("trash", "Trash") }
 enum class Grouping { RECENCY, TAG }
 data class SessionGroup(val id: String, val title: String, val sessions: List<DirectorySession>)
+
+internal fun listShowsFolders(isFolder: Boolean, view: SessionView, tag: String?, grouping: Grouping) =
+    !isFolder && view != SessionView.TRASH && tag == null && grouping != Grouping.TAG
+
+internal fun List<DirectorySession>.withoutScheduledRuns() = filterNot { it.isScheduledRun }
+
+internal data class FolderRowSummary(val count: Int, val needsYou: Int, val running: Boolean, val jobs: Boolean = false)
+
+internal fun List<DirectorySession>.folderNeedsYouCount() = count { it.pendingApprovals > 0 && it.waitingKind != "START_REQUEST" }
+
+internal object ScheduledRunsFolder {
+    const val ID = "scheduled"
+    const val POLL_INTERVAL_MS = 30_000L
+
+    fun sessions(rows: List<DirectorySession>, workspace: String) =
+        rows.filter { it.isScheduledRun && ObjectId.same(it.workspace, workspace) }
+
+    fun row(sessions: List<DirectorySession>, showFolders: Boolean): FolderRowSummary? =
+        if (showFolders && sessions.isNotEmpty())
+            FolderRowSummary(sessions.size, sessions.folderNeedsYouCount(), sessions.any { it.status == "RUNNING" })
+        else null
+}
 
 fun directoryGroups(sessions: List<DirectorySession>, view: SessionView, grouping: Grouping,
     now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()): List<SessionGroup> {

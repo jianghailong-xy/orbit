@@ -6,6 +6,7 @@ import io.orbitd.android.core.protocol.SessionSummary
 import io.orbitd.android.core.protocol.User
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.core.protocol.WorkspaceSummary
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.builtins.ListSerializer
 
 suspend fun OrbitApi.me(handle: SessionHandle): User =
@@ -17,3 +18,11 @@ suspend fun OrbitApi.workspaces(handle: SessionHandle): List<WorkspaceSummary> =
 suspend fun OrbitApi.sessions(handle: SessionHandle, view: String = "open"): List<SessionSummary> =
     Wire.decode(request(handle, ApiRequest(listOf("sessions"), query = listOf("view" to view))).body,
         ListSerializer(SessionSummary.serializer()))
+
+/** The scheduled runs folder always reads a full workspace list, including in Open. */
+suspend fun <T> OrbitApi.scheduledSessions(
+    handle: SessionHandle, workspaceId: String, view: String, row: KSerializer<T>,
+): List<T> = Wire.decode(
+    request(handle, ApiRequest(listOf("sessions"), query = listOf("workspaceId" to workspaceId, "view" to view, "scheduled" to "1"))).body,
+    ListSerializer(row),
+)
