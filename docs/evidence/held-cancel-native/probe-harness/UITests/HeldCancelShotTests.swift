@@ -40,10 +40,13 @@ final class HeldCancelShotTests: ProbeCase {
         return cancels.first { $0.exists && abs($0.frame.midY - tag.frame.midY) < 12 && $0.frame.minX > tag.frame.maxX }
     }
 
-    /// The composer's text, wherever the platform keeps it.
+    /// The composer's text: the lowest text input on screen. On iOS a bubble's selectable words are a
+    /// text view too (the first run's pre-press check matched the bubble itself), so only the lowest counts.
     private func composerHolds(_ app: XCUIApplication, _ words: String) -> Bool {
-        let byValue = NSPredicate(format: "value CONTAINS %@", words)
-        return app.textViews.matching(byValue).firstMatch.exists || app.textFields.matching(byValue).firstMatch.exists
+        let inputs = (app.textViews.allElementsBoundByIndex + app.textFields.allElementsBoundByIndex).filter(\.exists)
+        guard let composer = inputs.max(by: { $0.frame.minY < $1.frame.minY }) else { return false }
+        note("composer: \(describe(composer))")
+        return (composer.value as? String)?.contains(words) == true
     }
 
     private func run(_ prefix: String) {
