@@ -124,6 +124,8 @@ async function coordinatorWrites(stack: Stack, w: World, integration: Record<str
 
 interface ChangeRow {
   id: string;
+  origin: string;
+  reverts_change_id: string | null;
   project_id: string;
   task_id: string | null;
   field: string;
@@ -139,6 +141,33 @@ function revert(stack: Stack, ownerId: string, projectId: string, changeId: stri
   return (stack.projects as unknown as {
     revertSettingChange(o: string, p: string, c: string, s?: string): Promise<unknown>;
   }).revertSettingChange(ownerId, projectId, changeId, sessionId);
+}
+
+/** The refusal an owner's revert met, as status and code. */
+async function revertRefusal(stack: Stack, w: World, changeId: string): Promise<string> {
+  try {
+    await revert(stack, w.ownerId, w.projectId, changeId);
+    return 'ok';
+  } catch (error) {
+    const status = (error as { getStatus?: () => number }).getStatus?.();
+    const code = (error as { getResponse?: () => { code?: string } }).getResponse?.()?.code;
+    return `${status} ${code}`;
+  }
+}
+
+interface ListedChange {
+  id: string;
+  origin: string;
+  revertedAt: string | null;
+  revertible: boolean;
+  revertsChangeId: string | null;
+  reason: string | null;
+  writtenBySessionId: string | null;
+}
+
+async function listed(stack: Stack, w: World): Promise<ListedChange[]> {
+  const read = await stack.projects.get(w.ownerId, w.projectId) as unknown as { settingChanges: ListedChange[] };
+  return read.settingChanges;
 }
 
 async function changes(stack: Stack, w: World): Promise<ChangeRow[]> {
@@ -194,12 +223,40 @@ test('P-R1 needs postgres; every case below is a skip without it', { skip, timeo
     assert.deepEqual(rows[1].old_value, rows[0].new_value);
     assert.deepEqual(rows[1].new_value, { command: 'npm run build', timeoutSeconds: 900, none: false });
 
-    // project_get: newest first.
-    const read = await stack.projects.get(w.ownerId, w.projectId) as unknown as { settingChanges: Array<{ id: string; reason: string }> };
-    assert.deepEqual(read.settingChanges.map((c) => c.id), [rows[1].id, rows[0].id]);
+    assert.equal(rows[0].origin, 'COORDINATOR');
+    // project_get: newest first, each with whether it was reverted and whether Revert is still offered. The
+    // first change's new value is no longer the field's value; the second's is.
+    const read = await listed(stack, w);
+    assert.deepEqual(read.map((c) => c.id), [rows[1].id, rows[0].id]);
+    assert.deepEqual(read.map((c) => [c.origin, c.revertedAt, c.revertible]),
+      [['COORDINATOR', null, true], ['COORDINATOR', null, false]]);
   });
 
-  await t.test('an owner write and a card write leave nothing; the owner revert refuses a session, puts the value back, and the coordinator then needs the card', async () => {
+  await t.test('the owner\'s own and a card\'s writes are listed with their origin and are never revertible', async () => {
+    const w = await world(stack, 'origins');
+    await stack.projects.configureIntegration(w.ownerId, w.projectId, { landingCheckCommand: 'npm run lint' } as never);
+    // The same value again is not a change.
+    await stack.projects.configureIntegration(w.ownerId, w.projectId, { landingCheckCommand: 'npm run lint' } as never);
+    const card = await stack.db.approval.create({
+      data: {
+        sessionId: w.coordinatorSessionId, toolName: PROJECT_INTEGRATION_APPROVAL_TOOL_NAME,
+        input: { projectId: uuidToBase62(w.projectId), projectTitle: 'project', landingCheckCommand: 'npm run e2e' },
+      },
+    });
+    await stack.sessions.decideApproval(w.ownerId, w.coordinatorSessionId, card.id, { behavior: 'allow' });
+    assert.equal(await coordinatorWrites(stack, w, { landingCheckCommand: 'npm run e2e', landingCheckReason: 'Card.' }), 'ok');
+
+    const rows = await changes(stack, w);
+    assert.deepEqual(rows.map((r) => [r.origin, r.reason, r.written_by_session_id]),
+      [['OWNER', null, null], ['CARD', null, null]]);
+    assert.deepEqual(rows[0].old_value, { command: null, timeoutSeconds: null, none: false });
+    assert.deepEqual(rows[1].new_value, { command: 'npm run e2e', timeoutSeconds: null, none: false });
+    assert.deepEqual((await listed(stack, w)).map((c) => [c.origin, c.revertible]), [['CARD', false], ['OWNER', false]]);
+    assert.equal(await revertRefusal(stack, w, rows[1].id), '409 SETTING_CHANGE_NOT_REVERTIBLE');
+    assert.equal(await revertRefusal(stack, w, rows[0].id), '409 SETTING_CHANGE_NOT_REVERTIBLE');
+  });
+
+  await t.test('the owner revert refuses a session, is its own record, goes once, and the coordinator then needs the card', async () => {
     const w = await world(stack, 'revert');
     assert.equal(await coordinatorWrites(stack, w,
       { landingCheckCommand: 'npm run build', landingCheckReason: 'Start with the build.' }), 'ok');
@@ -211,36 +268,47 @@ test('P-R1 needs postgres; every case below is a skip without it', { skip, timeo
       (error: { getStatus?: () => number; getResponse?: () => { code?: string } }) =>
         error.getStatus?.() === 403 && error.getResponse?.().code === 'INTEGRATION_SETTINGS_OWNER_ONLY');
     assert.equal((await landing(stack, w)).command, 'npm run build');
+    assert.equal((await changes(stack, w)).length, 1, 'a refused revert wrote nothing');
 
     await revert(stack, w.ownerId, w.projectId, first.id);
     assert.deepEqual(await landing(stack, w), { command: null, timeout: null, none: false, setBy: 'OWNER' });
-    assert.equal((await changes(stack, w)).length, 1, 'the revert is an owner write: no record, and the record stays');
+    // The revert is an OWNER row naming the change, from what the field held to the old value.
+    const rows = await changes(stack, w);
+    assert.equal(rows.length, 2);
+    assert.equal(rows[1].origin, 'OWNER');
+    assert.equal(rows[1].reverts_change_id, first.id);
+    assert.deepEqual(rows[1].old_value, { command: 'npm run build', timeoutSeconds: null, none: false });
+    assert.deepEqual(rows[1].new_value, { command: null, timeoutSeconds: null, none: false });
+    const read = await listed(stack, w);
+    const original = read.find((c) => c.id === first.id)!;
+    assert.ok(original.revertedAt, 'the change reads as reverted, with the time');
+    assert.equal(original.revertible, false);
+    assert.equal(read.find((c) => c.revertsChangeId === first.id)?.revertible, false);
 
-    // The coordinator's next cardless write of that field is refused...
+    // A second revert of the same change is refused, and writes nothing.
+    assert.equal(await revertRefusal(stack, w, first.id), '409 SETTING_CHANGE_ALREADY_REVERTED');
+    assert.equal((await changes(stack, w)).length, 2);
+
+    // The coordinator's next cardless write of the field is refused.
     assert.equal(await coordinatorWrites(stack, w, { landingCheckCommand: 'npm run lint', landingCheckReason: 'Lint instead.' }),
       '403 INTEGRATION_SETTINGS_OWNER_ONLY');
     assert.equal((await landing(stack, w)).command, null);
-
-    // ...and goes through only on a card, which is a card write and leaves no record.
-    const card = await stack.db.approval.create({
-      data: {
-        sessionId: w.coordinatorSessionId, toolName: PROJECT_INTEGRATION_APPROVAL_TOOL_NAME,
-        input: { projectId: uuidToBase62(w.projectId), projectTitle: 'project', landingCheckCommand: 'npm run lint' },
-      },
-    });
-    await stack.sessions.decideApproval(w.ownerId, w.coordinatorSessionId, card.id, { behavior: 'allow' });
-    assert.equal(await coordinatorWrites(stack, w, { landingCheckCommand: 'npm run lint', landingCheckReason: 'Lint instead.' }), 'ok');
-    const after = await landing(stack, w);
-    assert.equal(after.command, 'npm run lint');
-    assert.equal(after.setBy, 'CARD');
-    assert.equal((await changes(stack, w)).length, 1, 'a card write leaves no record');
-
-    // An owner write at their own door leaves none either.
-    await stack.projects.configureIntegration(w.ownerId, w.projectId, { landingCheckTimeoutSeconds: 300 } as never);
-    assert.equal((await changes(stack, w)).length, 1);
   });
 
-  await t.test('a task exemption by the coordinator is recorded; the owner\'s own write is not, and after the owner revert the coordinator is refused', async () => {
+  await t.test('a change whose new value is no longer the field\'s value is refused 409 and offers no Revert', async () => {
+    const w = await world(stack, 'stale');
+    assert.equal(await coordinatorWrites(stack, w, { landingCheckCommand: 'npm run build', landingCheckReason: 'One.' }), 'ok');
+    assert.equal(await coordinatorWrites(stack, w, { landingCheckCommand: 'npm run lint', landingCheckReason: 'Two.' }), 'ok');
+    const [one, two] = await changes(stack, w);
+    assert.equal(await revertRefusal(stack, w, one.id), '409 SETTING_CHANGE_NOT_CURRENT');
+    assert.equal((await landing(stack, w)).command, 'npm run lint');
+    assert.equal((await changes(stack, w)).length, 2);
+    // Reverting the latest one first makes the earlier one's new value current again.
+    assert.equal(await revertRefusal(stack, w, two.id), 'ok');
+    assert.equal((await landing(stack, w)).command, 'npm run build');
+  });
+
+  await t.test('a task exemption: the coordinator\'s and the owner\'s writes are listed, the owner revert refuses a stale or repeated one, and the coordinator is then refused', async () => {
     const w = await world(stack, 'exempt');
     const taskId = (await stack.tasks.create(w.ownerId, { title: 'docs', projectId: w.projectId } as never)).id;
     const update = (dto: Record<string, unknown>, sessionId?: string) =>
@@ -256,6 +324,7 @@ test('P-R1 needs postgres; every case below is a skip without it', { skip, timeo
     const rows = await changes(stack, w);
     assert.equal(rows.length, 2);
     assert.equal(rows[0].field, 'TASK_LANDING_CHECK_EXEMPT');
+    assert.equal(rows[0].origin, 'COORDINATOR');
     assert.equal(rows[0].task_id, taskId);
     assert.deepEqual(rows[0].old_value, { exempt: false, reason: null });
     assert.deepEqual(rows[0].new_value, { exempt: true, reason: 'Docs only.' });
@@ -263,15 +332,21 @@ test('P-R1 needs postgres; every case below is a skip without it', { skip, timeo
     assert.equal(rows[0].written_by_session_id, w.coordinatorSessionId);
     assert.deepEqual(rows[1].old_value, { exempt: true, reason: 'Docs only.' });
     assert.deepEqual(rows[1].new_value, { exempt: false, reason: null });
+    // The first change's value is no longer current; the second's is.
+    assert.deepEqual((await listed(stack, w)).map((c) => c.revertible), [true, false]);
+    assert.equal(await revertRefusal(stack, w, rows[0].id), '409 SETTING_CHANGE_NOT_CURRENT');
 
-    // The owner's write: no record.
+    // The owner's own write is a row, never revertible.
     await update({ landingCheckExempt: true, landingCheckExemptReason: 'Owner says so.' });
-    assert.equal((await changes(stack, w)).length, 2);
-    // Revert the coordinator's second record (exempt back to true with its old reason), as the owner.
-    await revert(stack, w.ownerId, w.projectId, rows[1].id);
-    assert.deepEqual(await exemption(stack, taskId), { exempt: true, reason: 'Docs only.', by: null });
-    assert.equal((await changes(stack, w)).length, 2);
-    // The coordinator can no longer write that field without a card.
+    const afterOwner = await changes(stack, w);
+    assert.equal(afterOwner.length, 3);
+    assert.deepEqual([afterOwner[2].origin, afterOwner[2].reason, afterOwner[2].written_by_session_id],
+      ['OWNER', 'Owner says so.', null]);
+    assert.equal(await revertRefusal(stack, w, afterOwner[2].id), '409 SETTING_CHANGE_NOT_REVERTIBLE');
+
+    // The coordinator's second change is stale now (the owner exempted it again); a fresh coordinator row, once
+    // the owner has let go of the field, would be revertible. Here: the field is the owner's, so the
+    // coordinator is refused without a card.
     await update({ landingCheckExempt: false, landingCheckExemptReason: 'Again.' }, w.coordinatorSessionId).then(
       () => assert.fail('refused'),
       (error: { getStatus?: () => number; getResponse?: () => { code?: string } }) => {
@@ -279,5 +354,29 @@ test('P-R1 needs postgres; every case below is a skip without it', { skip, timeo
         assert.equal(error.getResponse?.().code, 'LANDING_CHECK_EXEMPT_SET_BY_OWNER');
       });
     assert.equal((await exemption(stack, taskId)).exempt, true);
+  });
+
+  await t.test('an exemption revert is its own record, goes once, and stamps the task as the owner\'s', async () => {
+    const w = await world(stack, 'exempt-revert');
+    const taskId = (await stack.tasks.create(w.ownerId, { title: 'docs', projectId: w.projectId } as never)).id;
+    const update = (dto: Record<string, unknown>, sessionId?: string) =>
+      stack.tasks.update(w.ownerId, taskId, dto as never, sessionId);
+    await update({ landingCheckExempt: true, landingCheckExemptReason: 'Docs only.' }, w.coordinatorSessionId);
+    const [change] = await changes(stack, w);
+    assert.equal((await listed(stack, w))[0].revertible, true);
+
+    assert.equal(await revertRefusal(stack, w, change.id), 'ok');
+    assert.deepEqual(await exemption(stack, taskId), { exempt: false, reason: null, by: null });
+    const rows = await changes(stack, w);
+    assert.equal(rows.length, 2);
+    assert.equal(rows[1].origin, 'OWNER');
+    assert.equal(rows[1].reverts_change_id, change.id);
+    assert.deepEqual(rows[1].old_value, { exempt: true, reason: 'Docs only.' });
+    assert.deepEqual(rows[1].new_value, { exempt: false, reason: null });
+    assert.equal(await revertRefusal(stack, w, change.id), '409 SETTING_CHANGE_ALREADY_REVERTED');
+    await update({ landingCheckExempt: true, landingCheckExemptReason: 'Again.' }, w.coordinatorSessionId).then(
+      () => assert.fail('refused'),
+      (error: { getResponse?: () => { code?: string } }) =>
+        assert.equal(error.getResponse?.().code, 'LANDING_CHECK_EXEMPT_SET_BY_OWNER'));
   });
 });

@@ -43,8 +43,17 @@ export interface LandingCheckExemptColumns {
 /** What `landingCheckExemptWrite` decided: the columns to write and, for the coordinator's write, its record. */
 export interface LandingCheckExemptWrite {
   columns: LandingCheckExemptColumns;
-  /** Set when the coordinator wrote it: the one row P-R1 keeps, written in the same transaction. */
-  record: { sessionId: string; reason: string; oldValue: LandingCheckExemptValue; newValue: LandingCheckExemptValue } | null;
+  /**
+   * The row P-R1 keeps for this write, in the same transaction: COORDINATOR with the reason and session when the
+   * coordinator wrote it, OWNER when the owner did (their reason, if they gave one).
+   */
+  record: {
+    origin: 'COORDINATOR' | 'OWNER';
+    sessionId: string | null;
+    reason: string | null;
+    oldValue: LandingCheckExemptValue;
+    newValue: LandingCheckExemptValue;
+  } | null;
 }
 
 /**
@@ -130,8 +139,8 @@ export async function landingCheckExemptWrite(
   }
   const before: LandingCheckExemptValue = { exempt: input.currentlyExempt, reason: input.currentReason ?? null };
   const recordOf = (after: LandingCheckExemptValue): LandingCheckExemptWrite['record'] => bySession
-    ? { sessionId: input.actingSessionId!, reason: reason!, oldValue: before, newValue: after }
-    : null;
+    ? { origin: 'COORDINATOR', sessionId: input.actingSessionId!, reason: reason!, oldValue: before, newValue: after }
+    : { origin: 'OWNER', sessionId: null, reason, oldValue: before, newValue: after };
   if (!exempt) {
     // The coordinator's taking it back is a recorded write too, and says why.
     if (bySession) requiredChangeReason(reason, LANDING_CHECK_EXEMPT_REASON_REQUIRED, 'landingCheckExemptReason');

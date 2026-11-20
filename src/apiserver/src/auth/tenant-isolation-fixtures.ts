@@ -350,7 +350,7 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
     })).id;
     const settingChangeId = (await db.projectSettingChange.create({
       data: {
-        ownerId, projectId, field: 'LANDING_CHECK', reason: 'CENSUS', writtenBySessionId: randomUUID(),
+        ownerId, projectId, field: 'LANDING_CHECK', origin: 'COORDINATOR', reason: 'CENSUS', writtenBySessionId: randomUUID(),
         oldValue: { command: null, timeoutSeconds: null, none: false },
         newValue: { command: 'true', timeoutSeconds: null, none: false },
       },

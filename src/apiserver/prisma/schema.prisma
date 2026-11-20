@@ -7887,22 +7887,28 @@ model ProjectRuling {
   @@map("project_ruling")
 }
 
-/// One cardless landing-check change by the project's coordinator (migration 1390, §12.15 P-R1). Insert-only.
-/// LANDING_CHECK | TASK_LANDING_CHECK_EXEMPT (a CHECK); `taskId` is set exactly for the second.
+/// One write of a project's landing check or of a task's exemption (migration 1390, §12.15 P-R1). Insert-only.
+/// `field` LANDING_CHECK | TASK_LANDING_CHECK_EXEMPT and `origin` COORDINATOR | OWNER | CARD are CHECKs; `taskId`
+/// is set exactly for the second field; a COORDINATOR row has a reason and a session; `revertsChangeId` names the
+/// change an owner's revert put back (a partial unique index: once), and only an OWNER row carries it.
 model ProjectSettingChange {
-  id                 String   @id @default(uuid(7)) @db.Uuid
-  ownerId            String   @map("owner_id") @db.Uuid
-  projectId          String   @map("project_id") @db.Uuid
-  project            Project  @relation(fields: [projectId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "project_setting_change_project_fkey")
+  id                 String                @id @default(uuid(7)) @db.Uuid
+  ownerId            String                @map("owner_id") @db.Uuid
+  projectId          String                @map("project_id") @db.Uuid
+  project            Project               @relation(fields: [projectId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "project_setting_change_project_fkey")
   /// No foreign key: the record outlives the task it is about.
-  taskId             String?  @map("task_id") @db.Uuid
+  taskId             String?               @map("task_id") @db.Uuid
   field              String
-  oldValue           Json     @map("old_value")
-  newValue           Json     @map("new_value")
-  reason             String
-  /// The coordinator conversation that wrote it. No foreign key.
-  writtenBySessionId String   @map("written_by_session_id") @db.Uuid
-  createdAt          DateTime @default(now()) @map("created_at")
+  origin             String
+  oldValue           Json                  @map("old_value")
+  newValue           Json                  @map("new_value")
+  reason             String?
+  /// The coordinator conversation that wrote it; null for an owner or card write. No foreign key.
+  writtenBySessionId String?               @map("written_by_session_id") @db.Uuid
+  revertsChangeId    String?               @map("reverts_change_id") @db.Uuid
+  reverts            ProjectSettingChange? @relation("SettingChangeReverts", fields: [revertsChangeId], references: [id], onDelete: Cascade, map: "project_setting_change_reverts_fkey")
+  revertedBy         ProjectSettingChange[] @relation("SettingChangeReverts")
+  createdAt          DateTime              @default(now()) @map("created_at")
 
   @@index([projectId, createdAt])
   @@map("project_setting_change")
