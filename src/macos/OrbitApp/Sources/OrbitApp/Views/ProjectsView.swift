@@ -571,7 +571,11 @@ struct ProjectDetailView: View {
                         projectTitle: document.title,
                         changes: store.document?.settingChanges ?? [],
                         taskTitles: Dictionary(store.tasks.map { ($0.id, $0.title) }, uniquingKeysWith: { first, _ in first }),
-                        revert: { changeID in try await store.revertSettingChange(changeID) })
+                        revert: { changeID in try await store.revertSettingChange(changeID) },
+                        openTask: { taskID in
+                            pageSheet = nil
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { openTask(taskID) }
+                        })
                 case .landingCheck:
                     if let view = store.integration {
                         MergeCheckEditor(store: store, view: view,

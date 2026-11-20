@@ -163,6 +163,26 @@ public enum LandingProvenanceCopy {
     public static let coordinatorHint = "\(LandingCheckCopy.hint) \(commandNote)"
     /// The board's explanation of the four badges; web keeps the words, neither client draws it.
     public static let whoCanSet = "Who can set it"
+    /// Under "Who can set it": each badge and what it means, in web's order and words
+    /// (`LANDING_CHECK_ORIGIN_NOTES`). `kind` is the badge's, as `ProvenanceBadge` draws it.
+    public struct OriginNote: Equatable, Sendable, Identifiable {
+        public let by: String
+        public let kind: String
+        public let label: String
+        public let note: String
+        public var id: String { by }
+    }
+    public static let originNotes: [OriginNote] = [
+        OriginNote(by: "OWNER", kind: "you", label: you,
+                   note: "Anything you set; the coordinator then needs a card to change it."),
+        OriginNote(by: "COORDINATOR", kind: "coordinator", label: coordinator,
+                   note: "No card, while the merge check exists."),
+        OriginNote(by: "CARD", kind: "card", label: card, note: "A change you confirmed on a card."),
+        OriginNote(by: "START", kind: "start", label: start,
+                   note: "The coordinator proposed it and you pressed Start; it may still change without a card. A value you typed on the start card reads as You."),
+    ]
+    /// The link an exemption row in the change list carries to its task.
+    public static let openTask = "Open task"
 
     // The change list (D6, D7).
     public static let changesTitle = "Coordinator’s changes"
@@ -234,7 +254,9 @@ public struct LandingCheckSetting: Equatable, Sendable {
     /// fields every server has (`landingCheckCommand`, `landingCheckCommandAbsentReason`).
     public static func of(_ view: ProjectIntegrationView, now: Date = Date()) -> LandingCheckSetting {
         let check = view.landingCheck
-        let command = check?.command ?? view.landingCheckCommand
+        // Where the server sends `landingCheck`, it decides, a null command included (web's
+        // `landingCheckModeOf`); the older field is read only without it.
+        let command: String? = check.map { $0.command } ?? view.landingCheckCommand
         let mode: Mode
         if command == "NONE" || view.landingCheckCommandAbsentReason == "NONE" {
             mode = .none
@@ -295,14 +317,20 @@ public struct SettingChangeRow: Equatable, Sendable, Identifiable {
     public let note: String?
     /// The row was put back: drawn dimmed.
     public let reverted: Bool
+    /// The task an exemption row is about, which the row opens ("Open task", as web's list links it).
+    public var taskID: String? = nil
 }
 
 public enum CoordinatorChanges {
+    /// The fields this build can say something true about. `field` stays a string, so a server that
+    /// records a new one still decodes; its rows are left out rather than drawn as a landing check.
+    public static let drawnFields: Set<String> = ["LANDING_CHECK", "TASK_LANDING_CHECK_EXEMPT"]
+
     /// The page's rows, newest first. The owner's revert is not a row of its own: it is the line on
     /// the change it put back.
     public static func rows(_ changes: [ProjectSettingChange], taskTitles: [String: String] = [:],
                             now: Date = Date()) -> [SettingChangeRow] {
-        changes.filter { $0.revertsChangeId == nil }.map { change in
+        changes.filter { $0.revertsChangeId == nil && drawnFields.contains($0.field) }.map { change in
             let exempt = change.field == "TASK_LANDING_CHECK_EXEMPT"
             let title = exempt
                 ? LandingProvenanceCopy.checkExempt(taskTitles[change.taskId ?? ""].map(shortTitle) ?? "a task")
@@ -319,7 +347,9 @@ public enum CoordinatorChanges {
             let note: String?
             if let at = change.revertedAt {
                 note = LandingProvenanceCopy.revertedByYou(RelativeTime.ago(at, now: now) ?? "just now")
-            } else if kind == "you" {
+            } else if kind != "coordinator" {
+                // The owner's own and the ones the owner approved on a card: nothing to revert (web's
+                // `change.origin !== 'COORDINATOR'`).
                 note = LandingProvenanceCopy.yourChange
             } else {
                 note = nil
@@ -330,13 +360,13 @@ public enum CoordinatorChanges {
                 reason: change.reason.flatMap { $0.isEmpty ? nil : $0 },
                 originKind: kind, originLabel: label,
                 revertible: change.revertible && kind == "coordinator" && !reverted,
-                note: note, reverted: reverted)
+                note: note, reverted: reverted, taskID: exempt ? change.taskId : nil)
         }
     }
 
     /// How many rows the Settings entry counts.
     public static func count(_ changes: [ProjectSettingChange]) -> Int {
-        changes.filter { $0.revertsChangeId == nil }.count
+        changes.filter { $0.revertsChangeId == nil && drawnFields.contains($0.field) }.count
     }
 
     /// A value as the row says it: a command in the mono face, or the words for the other values.

@@ -309,7 +309,10 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
         doneAt = try? c.decodeIfPresent(String.self, forKey: .doneAt)
         acceptedGaps = ((try? c.decodeIfPresent([AcceptedGap].self, forKey: .acceptedGaps)) ?? nil) ?? []
         followUps = (try? ProjectDoneFollowUpFields(from: decoder)) ?? ProjectDoneFollowUpFields()
-        settingChanges = try? c.decodeIfPresent([ProjectSettingChange].self, forKey: .settingChanges)
+        // Each record decoded on its own: one this build cannot read is left out rather than taking
+        // the whole list with it (as the second port on main did; kept when the two were merged).
+        settingChanges = ((try? c.decodeIfPresent([LossyDecodable<ProjectSettingChange>].self,
+                                                  forKey: .settingChanges)) ?? nil)?.compactMap(\.value)
     }
 
     public func encode(to encoder: Encoder) throws {

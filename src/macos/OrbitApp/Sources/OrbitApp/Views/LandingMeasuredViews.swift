@@ -11,6 +11,9 @@ import SwiftUI
 struct ProvenanceBadge: View {
     let kind: String
     let label: String
+    /// The badge's accessibility identifier. The "Who can set it" key passes its own, so a badge in that
+    /// legend is never taken for the one that says who set the value.
+    var identifier: String? = nil
 
     var body: some View {
         Text(label)
@@ -19,7 +22,7 @@ struct ProvenanceBadge: View {
             .padding(.horizontal, 7)
             .padding(.vertical, 2)
             .background(fill, in: Capsule())
-            .accessibilityIdentifier("provenance-\(kind)")
+            .accessibilityIdentifier(identifier ?? "provenance-\(kind)")
     }
 
     /// The board's amber ink, lifted in dark mode where the light one would not read on its fill.
@@ -95,6 +98,21 @@ struct LandingCheckSettingRow: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("landing-check-none")
             }
+            if setting.mode == .none {
+                // Who can set it (web's LANDING_CHECK_ORIGIN_NOTES, under No check).
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(LandingProvenanceCopy.whoCanSet).font(.orbitLabel.weight(.semibold))
+                    ForEach(LandingProvenanceCopy.originNotes) { entry in
+                        HStack(alignment: .firstTextBaseline, spacing: 6) {
+                            ProvenanceBadge(kind: entry.kind, label: entry.label, identifier: "who-can-set-\(entry.kind)")
+                            Text(entry.note).font(.orbitLabel).foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("landing-check-who-can-set")
+            }
             if let origin = setting.origin {
                 HStack(spacing: 6) {
                     ProvenanceBadge(kind: origin.kind, label: origin.label)
@@ -147,6 +165,8 @@ struct CoordinatorChangesPage: View {
     let taskTitles: [String: String]
     /// The owner's revert; throws what the door answered.
     let revert: (String) async throws -> Void
+    /// Opens the task an exemption row is about.
+    var openTask: ((String) -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
     @State private var confirming: ProjectSettingChange?
     @State private var reverting = false
@@ -221,6 +241,12 @@ struct CoordinatorChangesPage: View {
             if let reason = row.reason {
                 Text(reason).font(.orbitSubtext)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+            if let taskID = row.taskID, let openTask {
+                Button(LandingProvenanceCopy.openTask) { openTask(taskID) }
+                    .font(.orbitLabel)
+                    .buttonStyle(.borderless)
+                    .accessibilityIdentifier("open-task-\(row.id)")
             }
             HStack(spacing: 8) {
                 ProvenanceBadge(kind: row.originKind, label: row.originLabel)

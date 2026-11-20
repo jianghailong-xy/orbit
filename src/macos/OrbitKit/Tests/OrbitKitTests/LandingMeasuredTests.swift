@@ -91,6 +91,32 @@ final class LandingMeasuredTests: XCTestCase {
         XCTAssertFalse(items.contains { $0.text.contains("main") }, "a merge is listed: \(items.map(\.text))")
     }
 
+    /// What main's second port asserted beside these (StartProjectTests, 111357a5bc), held on this
+    /// side's types: the request is complete as it is, a merge check left empty goes as null, neither
+    /// Automatic setting lists a merge, and a request that names the project branch still says it merges.
+    func testANoLineRequestIsCompleteAndNamesNoMergeEitherWay() throws {
+        let settings = try decode(ProjectStartSettings.self,
+                                  #"{"automatic":true,"maxConcurrentTasks":3,"mergeCheckCommand":null}"#)
+        let standing = ProjectIntegrationView(upstreamRef: "main", repository: "acme/app", deliveryMode: .platform)
+        let draft = StartSettingsDraft(settings, standing: standing)
+        XCTAssertTrue(draft.complete, "a request with no line can be started as it is")
+        XCTAssertNil(draft.upstream, "a request with no line offers no main branch")
+        let request = ProjectStartRequest(settings: settings, criteriaDigest: String(repeating: "a", count: 64))
+        let body = StartProject.body(request: request, draft: draft, requestId: "item-1")
+        let sent = try XCTUnwrap(try JSONSerialization.jsonObject(with: JSONEncoder().encode(body)) as? [String: Any])
+        XCTAssertTrue(sent["mergeCheckCommand"] is NSNull, "no merge check goes as null: \(sent)")
+        XCTAssertNil(sent["line"])
+        XCTAssertNil(sent["upstreamRef"])
+        for automatic in [true, false] {
+            let items = StartProject.comesToYou(automatic: automatic, line: draft.line, ownerConfirmed: [],
+                                                evidenceJudged: 0, escalationSeconds: 7_200, linePending: true)
+            let text = items.map(\.text).joined(separator: " ")
+            XCTAssertNil(text.range(of: "\\bmain\\b|merge", options: [.regularExpression, .caseInsensitive]), text)
+        }
+        XCTAssertTrue(RunSettings.automaticSays(automatic: true, line: .projectBranch, hasMergeCheck: false)
+            .contains("merges into main by itself"))
+    }
+
     func testARequestThatNamesALineStillSendsIt() throws {
         let settings = ProjectStartSettings(line: .projectBranch, automatic: true, maxConcurrentTasks: 2)
         let request = ProjectStartRequest(settings: settings, criteriaDigest: String(repeating: "a", count: 64))

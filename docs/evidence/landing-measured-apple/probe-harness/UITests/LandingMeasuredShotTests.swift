@@ -111,6 +111,12 @@ final class LandingMeasuredShotTests: ProbeCase {
         XCTAssertTrue(sent.contains { $0.hasSuffix("{\"landingCheck\": \"NONE\"}") }, "No check wrote \(sent)")
         expect(app, "Tasks land with only their own acceptance.", "03c")
         XCTAssertTrue(identified(app, "provenance-you").waitForExistence(timeout: 10), "03c: no You badge")
+        // Who can set it, under No check (web's LANDING_CHECK_ORIGIN_NOTES; kept from main's second port).
+        let who = identified(app, "landing-check-who-can-set")
+        bring(app, who, between: 160, and: 760, "03c-who")
+        XCTAssertTrue(who.exists, "03c: no Who can set it under No check")
+        expect(app, "No card, while the merge check exists.", "03c")
+        XCTAssertTrue(identified(app, "who-can-set-start").exists, "03c: the legend has no Set at start badge")
         bring(app, identified(app, "landing-check-mode"), between: 160, and: 420, "03c-mode")
         picture(app, "03c-no-check")
     }
@@ -166,6 +172,8 @@ final class LandingMeasuredShotTests: ProbeCase {
         expect(app, "What the coordinator changed on its own", "05b", timeout: 20)
         expect(app, "This project only changes infrastructure", "05b")
         expect(app, "Check exempt · Move cron jobs…", "05b")
+        // The exemption row opens its task, as the web's list links it (kept from main's second port).
+        XCTAssertTrue(identified(app, "open-task-c2").waitForExistence(timeout: 10), "05b: the exemption row opens no task")
         expect(app, "Your change · nothing to revert", "05b")
         picture(app, "05b-changes")
 
