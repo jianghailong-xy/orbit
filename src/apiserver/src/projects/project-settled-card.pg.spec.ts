@@ -344,6 +344,23 @@ async function mergeSession(
 }
 
 /**
+ * The task's work ran on a worktree branch and reported changes: it has commits to land, so until a
+ * receipt puts them on the branch its criterion is not landed. (Work that never ran a branch and
+ * reported nothing delivered no commit and has nothing to land, §12.15 P-M3.)
+ */
+async function ranOnABranch(stack: Stack, f: Fixture, taskId: string, label: string): Promise<void> {
+  await stack.db.session.create({
+    data: {
+      id: randomUUID(), ownerId: f.ownerId, creatorId: f.ownerId, taskId, workspaceId: f.workspaceId,
+      assignedRunnerId: f.runnerId, title: `${label}-work`, prompt: `${label}-work`, provider: 'claude',
+      status: RunStatus.SUCCEEDED, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+      isolationStatus: 'worktree', branch: `orbit/${label}-work`, changedFiles: ['src/work.ts'],
+      finishedAt: new Date(),
+    },
+  });
+}
+
+/**
  * The same landing, recorded through the door that PRODUCTION records one through.
  *
  * `recordLanding` above writes the row directly, which is right for every case whose subject is
@@ -631,6 +648,7 @@ test('a criterion that is not landed gets no card, and the same fixture gets one
 
       const onMain = await serve(stack, f, landed!.key, '已经合进 main 的那件活');
       const onBranch = await serve(stack, f, offBranch!.key, '还在分支上的那件活');
+      await ranOnABranch(stack, f, onBranch, 'off-branch');
       await recordLanding(stack, f, onMain, 'on-main');
       await completeHumanTaskForPgTest(stack.db, f.ownerId, onMain, 'on-main-work');
       await completeHumanTaskForPgTest(stack.db, f.ownerId, onBranch, 'on-branch-work');
@@ -753,6 +771,7 @@ test('the receipt alone cards the project, with no task row touched',
 
       const onMain = await serve(stack, f, landed!.key, '已经合进 main 的那件活');
       const onBranch = await serve(stack, f, offBranch!.key, '回执还没到的那件活');
+      await ranOnABranch(stack, f, onBranch, 'off-branch');
       await recordLanding(stack, f, onMain, 'on-main');
       await completeHumanTaskForPgTest(stack.db, f.ownerId, onMain, 'on-main-work');
       await completeHumanTaskForPgTest(stack.db, f.ownerId, onBranch, 'on-branch-work');
@@ -839,6 +858,7 @@ test('recording the last receipt through the door that writes one is what sends 
 
       const onMain = await serve(stack, f, landed!.key, '已经合进 main 的那件活');
       const onBranch = await serve(stack, f, offBranch!.key, '回执还没录的那件活');
+      await ranOnABranch(stack, f, onBranch, 'off-branch');
       await recordLanding(stack, f, onMain, 'on-main');
       await completeHumanTaskForPgTest(stack.db, f.ownerId, onMain, 'on-main-work');
       await completeHumanTaskForPgTest(stack.db, f.ownerId, onBranch, 'on-branch-work');
