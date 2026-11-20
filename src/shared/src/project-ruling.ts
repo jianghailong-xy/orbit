@@ -53,3 +53,21 @@ export const PROJECT_RULING_COPY = {
   fromQuestion: 'From an answered question',
   fromConversation: 'From the coordinator conversation',
 } as const;
+
+/**
+ * One cardless landing-check change by a project's coordinator, as `project_get.settingChanges` lists it,
+ * newest first (contract §12.15 P-R1). `oldValue` and `newValue` are the project's landing check
+ * (`LANDING_CHECK`) or one task's exemption (`TASK_LANDING_CHECK_EXEMPT`); the owner puts a record's old value
+ * back with `POST /projects/:id/setting-changes/:id/revert`.
+ */
+export interface ProjectSettingChangeView {
+  id: string;
+  projectId: string;
+  taskId: string | null;
+  field: 'LANDING_CHECK' | 'TASK_LANDING_CHECK_EXEMPT';
+  oldValue: { command: string | null; timeoutSeconds: number | null; none: boolean } | { exempt: boolean; reason: string | null };
+  newValue: { command: string | null; timeoutSeconds: number | null; none: boolean } | { exempt: boolean; reason: string | null };
+  reason: string;
+  writtenBySessionId: string;
+  createdAt: string;
+}

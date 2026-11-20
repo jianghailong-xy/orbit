@@ -3,25 +3,22 @@ import type { Prisma } from '@prisma/client';
 import { sessionReportedWork } from '../projects/landing-source-branch';
 
 /**
- * Turning an existing task `codeless` (SR5's escape hatch, migration 0231) — the one edit that takes
- * work out of its criterion's landing conjunction (§1.4 `taskHasNothingToLand`).
+ * Turning an existing task `codeless` (SR5's escape hatch, migration 0231).
+ *
+ * Since contract revision 42 (§12.15 P-M3) the flag no longer decides landing: Orbit measures
+ * whether work lands from its commits. What it does is shape the run: a codeless task resolves no
+ * source and its run gets a checkout with no branch until it has something to commit.
  *
  * Declaring it when the task is CREATED is the first statement of what the task is, and costs
- * nothing, exactly as declaring a completion criterion at creation does. Declaring it LATER changes
- * what the project's done is allowed to stand on: a criterion stops waiting for this task's work to
- * reach main. So the edit is allowed — a rollout or verification task filed without the declaration
- * is ordinary, and one that cannot be corrected holds its criterion off LANDED for ever, which is
- * what happened to the rollout task of project 34WzvgkHWbY1VwXmSPUZi on 2026-10-01 — at two prices:
+ * nothing. Declaring it LATER needs:
  *
  *  - a reason, stored on the row beside the declaration (`task.codeless_reason`, 0346), because a
- *    later reader of a LANDED criterion is owed why one of its tasks never had to land; and
- *  - the task having no commits of its own. That one is not a price but a wall: a task with commits
- *    is a task with work that has to reach main, and the declaration would let a criterion read
- *    LANDED over it — the false green §1.4 exists to refuse, bought with one sentence.
+ *    later reader is owed why the task was declared to produce no code; and
+ *  - the task having no commits of its own: a task with commits has work that lands the ordinary
+ *    way, so the declaration is refused for it.
  *
  * Only the change is questioned, in one direction. Re-sending `codeless: true` to a task that is
- * already codeless changes nothing, and taking the declaration back puts the task back into the
- * conjunction, which only ever withholds.
+ * already codeless changes nothing, and taking the declaration back needs no reason.
  */
 
 export const MAX_TASK_CODELESS_REASON_CHARS = 2_000;

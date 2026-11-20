@@ -2137,6 +2137,11 @@ var integrationMergeCheckFields = []string{"mergeCheckCommand", "mergeCheckTimeo
 // runner only tries the write without a card first (landingCheckWithoutCard).
 var integrationLandingCheckFields = map[string]bool{"landingCheckCommand": true, "landingCheckTimeoutSeconds": true, "landingCheck": true}
 
+// landingCheckReasonField is the words of a cardless landing-check write (contract §12.15 P-R1): required
+// by the server on that write, at most 280 characters. It is not a setting, so it is neither a landing-check
+// field nor part of any card's proposal.
+const landingCheckReasonField = "landingCheckReason"
+
 // waitsForTheOwner says whether a call puts a card in front of the owner and blocks until it is
 // answered.
 func waitsForTheOwner(name string, args map[string]interface{}) bool {
@@ -2567,12 +2572,17 @@ func landingCheckOnly(settings map[string]interface{}) bool {
 	if len(settings) == 0 {
 		return false
 	}
+	named := 0
 	for key := range settings {
+		if key == landingCheckReasonField {
+			continue
+		}
 		if !integrationLandingCheckFields[key] {
 			return false
 		}
+		named++
 	}
-	return true
+	return named > 0
 }
 
 // landingCheckWithoutCard writes a project_update whose integration object names only the landing
@@ -2653,7 +2663,7 @@ func mergeCheckProposal(settings map[string]interface{}) (map[string]interface{}
 		return nil, false
 	}
 	for key := range settings {
-		if !isMergeCheckField(key) {
+		if key != landingCheckReasonField && !isMergeCheckField(key) {
 			return nil, false
 		}
 	}
