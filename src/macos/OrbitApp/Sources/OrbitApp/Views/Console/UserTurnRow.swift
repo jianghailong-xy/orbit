@@ -159,16 +159,20 @@ struct UserTurnRow: View {
             // note once delivered and the turn's own words while it waits, folded at the card's foot.
             EvidenceToReviewCardView(card: card, told: told(b), ts: b.ts,
                                      undelivered: undelivered, onCancelQueued: cancel)
+                .orbitCardWidth()
         } else if let card = b.evidenceSendBack {
             EvidenceSentBackCardView(card: card, text: b.text, ts: b.ts,
                                      undelivered: undelivered,
                                      onCancelQueued: cancel)
+                .orbitCardWidth()
         } else if let card = b.runQuestion {
             RunQuestionCardView(card: card, told: told(b), ts: b.ts,
                                 undelivered: undelivered, onCancelQueued: cancel)
+                .orbitCardWidth()
         } else if let card = b.runNotice {
             RunNoticeCardView(card: card, told: told(b), ts: b.ts,
                               undelivered: undelivered, onCancelQueued: cancel)
+                .orbitCardWidth()
         } else if let card = b.sessionOpening {
             // The opening of a session Orbit opened with a brief of its own: one row saying why.
             SessionOpeningRowView(card: card, text: b.text,
@@ -193,6 +197,7 @@ struct UserTurnRow: View {
                 }
                 SessionReplyCardsView(replies: replies, ts: b.ts,
                                       undelivered: undelivered, onCancelQueued: cancel)
+                .orbitCardWidth()
             }
         } else if let line = RunnerUpdateNow.resumeLine(b.text) {
             // The turn Orbit sent to continue a turn the owner's Update Now cut (D4): nobody typed it,
