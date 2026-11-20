@@ -185,7 +185,7 @@ class ComposerStackDeviceTest {
         }
         fun pickEngine(engine: String, name: String) {
             engineList(); compose.onNodeWithTag("engine:$engine").performScrollTo().performClick()
-            compose.waitUntil(30_000) { has(hasText("$name ⌄")) }
+            compose.waitUntil(30_000) { has((hasTestTag("new-session-engine") and hasText("$name"))) }
         }
         /** The model menu's Provider section, below its heading and the current credential beside it. */
         fun providerRows(): List<String> {
@@ -204,7 +204,7 @@ class ComposerStackDeviceTest {
         capture("a07c-stack-engine-list")
         // A new session starts on the engine its workspace last ran (the seed's Codex session's): Claude Code is picked here.
         compose.onNodeWithTag("engine:claude").performScrollTo().performClick()
-        compose.waitUntil(30_000) { has(hasText("Claude Code ⌄")) }
+        compose.waitUntil(30_000) { has((hasTestTag("new-session-engine") and hasText("Claude Code"))) }
 
         val claude = providerRows()
         File(output, "a07c-stack-menu.txt").writeText(claude.joinToString("\n"))

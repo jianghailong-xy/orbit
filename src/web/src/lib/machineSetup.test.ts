@@ -57,11 +57,11 @@ describe('a machine’s new session page', () => {
   });
 
   it("says Orbit Cloud for the row GET /runners marks managed, with no managed status yet; the owner's name still wins", () => {
-    expect(machineName({ id: RUNNER, name: 'orbit-managed', displayName: null, managed: true })).toBe('Orbit Cloud');
-    expect(machineName({ id: RUNNER, name: 'orbit-managed', displayName: 'Team cloud', managed: true })).toBe('Team cloud');
+    expect(machineName({ id: RUNNER, name: 'orbit-cloud', displayName: null, managed: true })).toBe('Orbit Cloud');
+    expect(machineName({ id: RUNNER, name: 'orbit-cloud', displayName: 'Team cloud', managed: true })).toBe('Team cloud');
     expect(machineName({ id: 'r2', name: 'build-box', displayName: null, managed: false })).toBe('build-box');
     // An older server sends no flag: the managed status's runnerId still says which runner it is.
-    expect(machineName({ id: RUNNER, name: 'orbit-managed', displayName: null }, RUNNER)).toBe('Orbit Cloud');
+    expect(machineName({ id: RUNNER, name: 'orbit-cloud', displayName: null }, RUNNER)).toBe('Orbit Cloud');
     expect(isManagedRunner({ id: RUNNER, managed: true }, null)).toBe(true);
     expect(isManagedRunner({ id: 'r2', managed: false }, RUNNER)).toBe(false);
   });

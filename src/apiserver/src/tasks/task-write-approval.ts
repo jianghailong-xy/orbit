@@ -100,6 +100,8 @@ const ID_FIELDS: ReadonlySet<string> = new Set([
   'listId',
   'parentTaskId',
   'projectId',
+  // A forked create's `fork.sessionId`: base62 on the card, a uuid once TaskForkDto's @IsPublicId has read it.
+  'sessionId',
   'supersedesTaskId',
   'taskId',
   'verifiesTaskId',

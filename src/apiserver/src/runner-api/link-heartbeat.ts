@@ -1,6 +1,6 @@
 import { hash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
-import type { PlanUsage, RunnerHeartbeatRequest, RunnerHeartbeatResponse, RunnerResources } from '@orbit/shared';
+import type { BackgroundJobLimits, PlanUsage, RunnerHeartbeatRequest, RunnerHeartbeatResponse, RunnerResources } from '@orbit/shared';
 import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
 import { sanitizeRunnerRepoHealth } from '../common/runner-repo-health';
 import { sanitizeRunnerSelfUpdate } from '../common/runner-self-update';
@@ -164,6 +164,7 @@ export const HEARTBEAT_DELIVERIES = {
     how: 'EVERY_BEAT',
     reads: 'runner.min_free_disk_mb, which the quiet answer carries; the default floor of a managed runner whose owner set none is stated by the full reconcile alone, which every beat of a managed runner is',
   },
+  backgroundJobLimits: { how: 'EVERY_BEAT', reads: 'runner.bg_job_cpus and runner.bg_job_memory_mb, which the quiet answer carries' },
   storageBudget: {
     how: 'FULL_ONLY',
     reads: 'only a managed runner has one (managed-runners/managed-runner-storage.ts), and a managed runner is admitted by RunnerAuthGuard and reconciles in full on every beat',
@@ -192,6 +193,7 @@ export const HEARTBEAT_DELIVERIES = {
   },
   accountRemoveRequest: { how: 'MARKED', writers: ['runners/runners.service.ts#removeAccount'], pending: 'a removal pending' },
   codexAccountRemoveRequest: { how: 'MARKED', writers: ['runners/runners.service.ts#removeAccount'], pending: 'a removal pending' },
+  claudeAccountSwapRequest: { how: 'MARKED', writers: ['runners/runners.service.ts#setDefaultAccount'], pending: 'a Set as default swap pending' },
   installRequest: {
     how: 'MARKED',
     writers: ['runners/runners.service.ts#startInstall', 'runners/runners.service.ts#startEngineUpdate'],
@@ -431,6 +433,8 @@ export interface LinkBeatRow extends RunnerLinkHintColumns {
   landingNamed: boolean;
   maxConcurrent: number;
   minFreeDiskMb: number | null;
+  bgJobCpus: number | null;
+  bgJobMemoryMb: number | null;
   /** Whether the presence row was written: false for a caller refused above, and for a managed runner. */
   beaten: boolean;
   inserted: boolean | null;
@@ -474,6 +478,7 @@ export async function readLinkBeat(prisma: Pick<PrismaService, '$queryRaw'>, inp
   const rows = await prisma.$queryRaw<LinkBeatRow[]>`${Prisma.raw(PREPARED_STATEMENT)}
     WITH caller AS (
       SELECT r."id", r."max_concurrent" AS "maxConcurrent", r."min_free_disk_mb" AS "minFreeDiskMb",
+             r."bg_job_cpus" AS "bgJobCpus", r."bg_job_memory_mb" AS "bgJobMemoryMb",
              ${credentialHeld} AS "credentialHeld", u."disabled_at" IS NOT NULL AS "ownerDisabled",
              EXISTS (SELECT 1 FROM "managed_runner" m WHERE m."runner_id" = r."id") AS "managed", ${landingNamed} AS "landingNamed"
         FROM "runner" r JOIN "user" u ON u."id" = r."owner_id"
@@ -507,7 +512,7 @@ export async function readLinkBeat(prisma: Pick<PrismaService, '$queryRaw'>, inp
                 (extract(epoch FROM "reconciled_at") * 1000)::float8 AS "reconciledMs",
                 (xmax = 0) AS "inserted"
     )
-    SELECT c."credentialHeld", c."ownerDisabled", c."managed", c."landingNamed", c."maxConcurrent", c."minFreeDiskMb",
+    SELECT c."credentialHeld", c."ownerDisabled", c."managed", c."landingNamed", c."maxConcurrent", c."minFreeDiskMb", c."bgJobCpus", c."bgJobMemoryMb",
            (b."changes" IS NOT NULL) AS "beaten", b."inserted", b."changes", b."factsHash", b."reconcileHash", b."reconciledMs",
            (extract(epoch FROM now()) * 1000)::float8 AS "nowMs",
            (SELECT count(*)::int FROM "session" s
@@ -566,12 +571,25 @@ export function linkBeatVerdict(
 }
 
 /**
+ * The heartbeat answer's `backgroundJobLimits` field for a runner's two columns: present only when one is set, carrying
+ * only the set ones; absent means limits are off (the runner reads absence as off).
+ */
+export function backgroundJobLimitsField(
+  row: { bgJobCpus?: number | null; bgJobMemoryMb?: number | null },
+): { backgroundJobLimits?: BackgroundJobLimits } {
+  const cpus = row.bgJobCpus ?? null;
+  const memoryMb = row.bgJobMemoryMb ?? null;
+  if (cpus === null && memoryMb === null) return {};
+  return { backgroundJobLimits: { ...(cpus !== null ? { cpus } : {}), ...(memoryMb !== null ? { memoryMb } : {}) } };
+}
+
+/**
  * The answer to a beat that reconciled nothing: what a full reconcile answers a runner it has nothing for, so the
  * runner, applying it as any heartbeat answer, changes nothing. No command; the runner's own settings as they stand;
  * and no `agentDirs`, which a runner reads as "keep scanning the directories you have" — a full reconcile names them.
  */
 export function quietHeartbeatAnswer(
-  row: Pick<LinkBeatRow, 'maxConcurrent' | 'minFreeDiskMb'>,
+  row: Pick<LinkBeatRow, 'maxConcurrent' | 'minFreeDiskMb'> & Partial<Pick<LinkBeatRow, 'bgJobCpus' | 'bgJobMemoryMb'>>,
   extra: Pick<RunnerHeartbeatResponse, 'cursorKeyChecks'> & { linkHints?: RunnerLinkHints; draining?: boolean },
 ): RunnerHeartbeatResponse & { linkHints?: RunnerLinkHints } {
   return {
@@ -579,6 +597,7 @@ export function quietHeartbeatAnswer(
     leaseLostSessionIds: [],
     maxConcurrent: row.maxConcurrent,
     minFreeDiskMb: row.minFreeDiskMb,
+    ...backgroundJobLimitsField(row),
     mergeRequests: [],
     commitRequests: [],
     artifactRequests: [],
@@ -924,6 +943,7 @@ export async function readLinkReconcilePending(prisma: Pick<PrismaService, '$que
            AND (r."login_status" IN ('pending', 'awaiting_code', 'awaiting_approval', 'cancelling')
              OR r."install_status" IN ('pending', 'installing')
              OR r."codex_account_remove_status" = 'pending'
+             OR r."claude_account_swap_status" = 'pending'
              OR r."repo_cleanup_status" = 'pending'
              OR r."claude_history_status" IN ('pending', 'scanning')
              OR r."dir_probe_status" IN ('pending', 'probing')
@@ -956,6 +976,7 @@ export function heartbeatAnswerHandsOut(answer: RunnerHeartbeatResponse): boolea
     || answer.loginRequest !== undefined
     || answer.accountRemoveRequest !== undefined
     || answer.codexAccountRemoveRequest !== undefined
+    || answer.claudeAccountSwapRequest !== undefined
     || answer.installRequest !== undefined
     || answer.repoCleanupRequest !== undefined
     || answer.claudeHistoryRequest !== undefined

@@ -58,15 +58,18 @@ export interface StatusEntry {
   url: string;
 }
 
-/** `status`: what waits on the owner, each with Open in Orbit (§7.3). */
-export function renderStatusCard(entries: readonly StatusEntry[]): FeishuDirectCard {
+/**
+ * `status`: what waits on the owner, each with Open in Orbit (§7.3); with no button at all when Show Orbit in Feishu is
+ * off (`showOrbit`, §15.2).
+ */
+export function renderStatusCard(entries: readonly StatusEntry[], showOrbit: boolean): FeishuDirectCard {
   if (entries.length === 0) return card('Nothing is waiting on you', 'grey', [text('Nothing in Orbit is waiting on you right now.')]);
   const shown = entries.slice(0, DIRECT_CARD_MAX_ENTRIES);
   const elements: Element[] = [];
   for (const entry of shown) {
     elements.push(text(entry.title));
     for (const item of entry.ownerItems) elements.push(text(`• ${item}`));
-    elements.push(openInOrbit(entry.url));
+    if (showOrbit) elements.push(openInOrbit(entry.url));
   }
   const more = entries.length - shown.length;
   if (more > 0) elements.push(text(`And ${more} more in Orbit.`));

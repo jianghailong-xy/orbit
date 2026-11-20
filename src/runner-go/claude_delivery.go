@@ -385,7 +385,7 @@ func failUndeliveredTurn(turnID string, cause error, job *ClaimedSession, comple
 		Result:           "message not delivered to the engine: " + cause.Error(),
 		Subtype:          "delivery_failed",
 		RuntimeSessionID: currentRuntimeSessionID(job),
-		BranchSha:        effectiveBranchSha(job.WT),
+		BranchSha:        effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT),
 	}); err != nil {
 		logln("delivery-failure turn-complete failed for", job.SessionID+":", err)
 	}
@@ -405,7 +405,7 @@ func refuseRegionTurn(turnID, refusal string, job *ClaimedSession, completeTurn 
 		Error:            refusal,
 		Subtype:          claudeRegionRefusedSubtype,
 		RuntimeSessionID: currentRuntimeSessionID(job),
-		BranchSha:        effectiveBranchSha(job.WT),
+		BranchSha:        effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT),
 	}); err != nil {
 		logln("region refusal turn-complete failed for", job.SessionID+":", err)
 	}
@@ -431,9 +431,9 @@ func stopRegionTurn(turnID, sentence string, job *ClaimedSession, completeTurn t
 		ChangedDiff:      livePatches,
 		BaseSha:          job.WT.baseSha(),
 		WorktreeDirty:    worktreeIsDirty(job.WT),
-		BranchSha:        effectiveBranchSha(job.WT),
-		BranchMerged:     branchMergedInto(job.WT),
-		WorktreeBranch:   currentBranch(job.WT),
+		BranchSha:        effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT),
+		BranchMerged:   branchMergedInto(job.WT),
+		WorktreeBranch: currentBranch(job.WT),
 	}); err != nil {
 		logln("region stop turn-complete failed for", job.SessionID+":", err)
 	}

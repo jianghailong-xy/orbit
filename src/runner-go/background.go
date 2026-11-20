@@ -140,7 +140,9 @@ const bgJobHeartbeatInterval = time.Minute
 // The doors record the same hold and differ in what the pool keeps beside it:
 // whether the runner spawned this writer itself. A runner-hosted one outlives
 // engine eviction, so it is also the one a capacity ledger has to count — unless
-// it is a watch, which only waits and costs the machine nothing (bgKindWatch).
+// it is a watch, which only waits and costs the machine nothing (bgKindWatch), or a
+// job its own cgroup holds to a CPU and a memory limit (bgJob.boundedLocked), which
+// costs the machine no more than those. Both go through holdRunnerWatch.
 type worktreeHoldRegistry interface {
 	holdWorktree(jobID, name string)
 	holdRunnerJob(jobID, name string)
@@ -292,9 +294,9 @@ func (b *bgTailer) holdFor(toolUseID, shellID string, engineOwned bool) {
 		b.holds.holdWorktree(toolUseID, shellID)
 		return
 	}
-	// A job the runner hosts is in b.jobs before its tail starts. One that only waits holds the
-	// checkout through the door that costs no capacity.
-	if job := b.jobs[toolUseID]; job != nil && job.kind == bgKindWatch {
+	// A job the runner hosts is in b.jobs before its tail starts. One that only waits, or one bounded
+	// by its own limits, holds the checkout through the door that costs no capacity.
+	if job := b.jobs[toolUseID]; job != nil && (job.kind == bgKindWatch || job.boundedLocked()) {
 		b.holds.holdRunnerWatch(toolUseID, shellID)
 		return
 	}

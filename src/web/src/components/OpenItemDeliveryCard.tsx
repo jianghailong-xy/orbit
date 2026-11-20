@@ -3,6 +3,7 @@ import { CheckCircleFilled, ExclamationCircleFilled } from '@ant-design/icons';
 import type { OpenItemAction, OpenItemDeliveryCard as Delivery, OpenItemKind } from '@orbit/shared';
 import { routeId } from '../lib/idCodec';
 import { AppLink } from './AppLink';
+import { revealOpenItemCard } from './DecisionRail';
 import { relTime } from './Transcript';
 
 /**
@@ -37,11 +38,12 @@ const KIND_LABEL: Partial<Record<OpenItemKind, string>> = {
 };
 
 /**
- * What each door is called on the card. `OPEN_COORDINATOR` and `OPEN_TASK_SESSION` are absent on
- * purpose: the first is the conversation this card is drawn in — a link to where the reader already
- * is — and the second is a link, drawn below as one.
+ * The card's earlier words, which the native ends still draw (OrbitKit's `OpenItemDeliveryCard`,
+ * held to this file by `OpenItemDeliveryCopyParityTests`) until they follow board card-ui-polish ②.
+ * The browser no longer draws them: the doors are pressed on the item's own card, the footer says
+ * when the item was sent, and the agent's "will not retry" half stays in the disclosure.
  */
-const ACTION_LABEL: Partial<Record<OpenItemAction, string>> = {
+export const ACTION_LABEL: Partial<Record<OpenItemAction, string>> = {
   RETRY: 'Retry the task',
   CANCEL_TASK: 'Cancel the task',
   ASK_COORDINATOR_AGAIN: 'Ask the coordinator again',
@@ -49,6 +51,16 @@ const ACTION_LABEL: Partial<Record<OpenItemAction, string>> = {
   ANSWER: 'Answer the question',
   RESUME: 'Resume the project',
 };
+export const NATIVE_DOORS_LEAD = 'The coordinator can:';
+export const NATIVE_NOTIFICATION = 'a notification, not an interruption';
+export const NATIVE_CONFLICT_TAIL = '; the target branch did not move. '
+  + 'The platform will not retry it by itself.';
+
+/** The link to the item's own card, where its doors are pressed (board card-ui-polish ②): this
+ *  card is the notice, that one is where the item is acted on. */
+export const GO_TO_ITEM_CARD = 'Go to the item card ↑';
+export const ITEM_CARD_NOT_HERE = 'The item card is not in this conversation.';
+export const SENT_TO_COORDINATOR = 'Sent to the coordinator';
 
 /** Why an attempt failed, in the words a reader acts on. */
 function howInEnglish(how: string | null): string {
@@ -83,8 +95,12 @@ function headline(card: Delivery): string | null {
       + `${card.failure.limit} in this chain.`;
   }
   if (card.kind === 'INTEGRATION_CONFLICT') {
-    return `git refused the merge${target}; the target branch did not move. `
-      + 'The platform will not retry it by itself.';
+    // The "will not retry" half the agent reads stays in the disclosure: to a person it reads as
+    // stuck, while the coordinator is already the one handling it.
+    const branch = card.targetRef?.replace(/^refs\/heads\//u, '');
+    return branch
+      ? `git refused the merge into ${branch}; ${branch} did not move.`
+      : 'git refused the merge; the target branch did not move.';
   }
   if (card.kind === 'INTEGRATION_CHECK_FAILED' && card.check) {
     return `Check ${card.check.name} exited ${card.check.exitCode ?? '?'} where `
@@ -155,13 +171,11 @@ export function OpenItemDeliveryCard({
   queued?: ReactNode;
 }) {
   const [allFiles, setAllFiles] = useState(false);
+  const [cardMissing, setCardMissing] = useState(false);
   const files = allFiles ? card.files : card.files.slice(0, FILES_SHOWN);
   const label = KIND_LABEL[card.kind] ?? 'Exception item';
   const why = headline(card);
   const landing = landingLine(card);
-  const chips = card.actions
-    .map((action) => ACTION_LABEL[action])
-    .filter((text): text is string => text != null);
   // The ids come out of a payload read defensively, so they go through the normalizing codec that
   // degrades on a spelling it does not know instead of the one that throws — a card must not be
   // able to take the transcript down with it.
@@ -215,28 +229,29 @@ export function OpenItemDeliveryCard({
             <span>{landing.text}</span>
           </div>
         )}
-        {chips.length > 0 && (
-          <div className="oic-actions">
-            <span className="oic-actions-label">The coordinator can:</span>
-            {chips.map((chip) => <span className="oic-chip" key={chip}>{chip}</span>)}
-          </div>
-        )}
-        {(taskHref || sessionHref || landingHref) && (
-          <div className="oic-links">
+        <div className="oic-links">
+          {cardMissing ? (
+            <span className="oic-missing">{ITEM_CARD_NOT_HERE}</span>
+          ) : (
+            <button
+              type="button"
+              className="oic-goto"
+              onClick={() => setCardMissing(!revealOpenItemCard(card.itemId))}
+            >
+              {GO_TO_ITEM_CARD}
+            </button>
+          )}
             {taskHref && <AppLink to={taskHref}>Open the task ↗</AppLink>}
             {sessionHref && <AppLink to={sessionHref}>Open the failed session ↗</AppLink>}
             {landingHref && <AppLink to={landingHref}>Open the landing ↗</AppLink>}
-          </div>
-        )}
-        <div className="oic-meta">
-          Item {routeId(card.itemId)} · a notification, not an interruption
-          {ts ? ` · ${relTime(ts)}` : ''}
         </div>
+        {ts ? <div className="oic-meta">{`${SENT_TO_COORDINATOR} · ${relTime(ts)}`}</div> : null}
         {undelivered && (
           <div className="oic-undelivered">The session has not confirmed it received this.</div>
         )}
         <details className="oic-raw">
           <summary>What the coordinator was told</summary>
+          <div className="oic-raw-id">Item {routeId(card.itemId)}</div>
           <pre>{text}</pre>
         </details>
         {queued && <div className="oic-queued">{queued}</div>}

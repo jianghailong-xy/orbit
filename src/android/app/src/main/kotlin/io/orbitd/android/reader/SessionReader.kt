@@ -851,6 +851,12 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 // What this session waits on, the tasks it created and its code output: folded to no height while a
                 // phone's composer holds the keyboard (iOS `TypingFold`), so an open list or a sheet comes back as it was.
                 Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) { SessionWatches(app, handle, route.id!!, open = open) }
+                // The session's background processes, by the shared row rule (board v2; iOS `BackgroundTrayView`): between what it
+                // waits on and the tasks it created. Its names stop rotating while the band is folded away.
+                val lastUserMessageAt = remember(state.window.events) { BackgroundTrayLogic.lastUserMessageAt(state.window.events) }
+                Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) {
+                    BackgroundTray(background.orEmpty(), lastUserMessageAt, BackgroundTrayLogic.sessionLive(detail), folded = foldsChrome)
+                }
                 Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) { SessionTasksCard(app, handle, route.id!!, cards, openLink) }
                 // The composer's send in flight holds Merge as a queued turn does (A06-14, iOS `console.sending`).
                 Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) { Column(Modifier.padding(horizontal = 16.dp)) {

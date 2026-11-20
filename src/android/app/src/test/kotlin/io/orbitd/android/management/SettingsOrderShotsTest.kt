@@ -123,7 +123,8 @@ class SettingsOrderShotsTest {
     @Test fun theGeneralPageHoldsTheSettings() {
         open("sessions")
         await(SESSION_RECAPS)
-        compose.onNode(hasText(SMART_MODEL_SELECTION) and isToggleable()).assertIsOff()
+        // The fixture sets no modelRouting, which reads as on (smartModelSelection), so Optimize For shows, on Balance.
+        compose.onNode(hasText(SMART_MODEL_SELECTION) and isToggleable()).assertIsOn()
         compose.onNode(hasText("Balance") and isSelectable()).assertIsSelected()
         compose.onNode(hasText(SESSION_RECAPS) and isToggleable()).assertIsOn()
         shot("settings-sessions")

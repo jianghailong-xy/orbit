@@ -5,6 +5,7 @@ import {
   ClockCircleOutlined,
   QuestionCircleFilled,
   RightOutlined,
+  UpOutlined,
   RollbackOutlined,
 } from '@ant-design/icons';
 import Markdown from './Markdown';
@@ -401,6 +402,8 @@ export const YOU_WITHDREW = 'You withdrew it';
 export const YOUR_NOTE = 'Your note';
 /** The card's last row. */
 export const VIEW_DETAILS = 'View details';
+/** The expanded card's last row, folding it back (board card-ui-polish ③). */
+export const HIDE_DETAILS = 'Hide details';
 
 const withdrawn = (record: ProjectClosedQuestion): boolean => record.resolution === 'WITHDRAWN';
 
@@ -593,52 +596,56 @@ export function AnsweredQuestionCard({
   const said = isWithdrawn ? null : wordsOf(record);
   const { question } = record;
   const choseOther = option === null && said !== null && question.options.length > 0;
+  // Opened in place, not in a sheet (board card-ui-polish ③): the record stays in the conversation
+  // it belongs to, and the reader keeps reading around it.
   return (
-    <ReviewCard
-      title={heading}
-      summary={lead}
-      id={`question-record-${record.itemId}`}
-      open={open}
-      onOpenChange={setOpen}
-      preview={{
-        className: `answered-question-card${isWithdrawn ? ' is-withdrawn' : ''}${handover?.queued ? ' is-queued' : ''}`,
-        content: (
-          <>
-            <span className="answered-question-head">
-              <span className="answered-question-icon" aria-hidden="true"><QuestionCircleFilled /></span>
-              <span className="answered-question-heading">{heading}</span>
-              <span className="answered-question-time">{decisionReceiptTime(record.resolvedAt, now)}</span>
-            </span>
-            <span className="answered-question-lead">{lead}</span>
-            {lines.answer ? (
-              <span className="answered-question-answer">
-                <span className="answered-question-tick" aria-hidden="true"><CheckCircleFilled /></span>
-                <span>{lines.answer}</span>
-              </span>
-            ) : null}
-            {lines.note ? <span className="answered-question-note">{lines.note}</span> : null}
-            {lines.waiting ? (
-              <span className="answered-question-waiting">
-                <ClockCircleOutlined aria-hidden="true" /> {lines.waiting}
-              </span>
-            ) : null}
-            {handover?.queued ? (
-              <span className="answered-question-waiting">
-                <ClockCircleOutlined aria-hidden="true" /> {QUEUED_FOR_COORDINATOR}
-              </span>
-            ) : null}
-            {handover?.notice ? <span className="answered-question-waiting">{handover.notice}</span> : null}
-            {lines.withdrew ? <span className="answered-question-withdrew">{lines.withdrew}</span> : null}
-            {lines.reason ? <span className="answered-question-reason">{lines.reason}</span> : null}
-            <span className="answered-question-open">
-              {VIEW_DETAILS}
-              <RightOutlined aria-hidden="true" />
-            </span>
-          </>
-        ),
-      }}
-    >
-      <div className="approval-card coordinator-question answered-question" data-question-record={record.itemId}>
+    <div className={`review-card answered-question-inline${open ? ' is-open' : ''}`} id={`question-record-${record.itemId}`}>
+      <button
+        type="button"
+        className={`review-card-preview answered-question-card${isWithdrawn ? ' is-withdrawn' : ''}${handover?.queued ? ' is-queued' : ''}`}
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      >
+        <span className="answered-question-head">
+          <span className="answered-question-icon" aria-hidden="true"><QuestionCircleFilled /></span>
+          <span className="answered-question-heading">{heading}</span>
+          <span className="answered-question-time">{decisionReceiptTime(record.resolvedAt, now)}</span>
+        </span>
+        <span className="answered-question-lead">{lead}</span>
+        {lines.answer ? (
+          <span className="answered-question-answer">
+            <span className="answered-question-tick" aria-hidden="true"><CheckCircleFilled /></span>
+            <span>{lines.answer}</span>
+          </span>
+        ) : null}
+        {lines.note ? <span className="answered-question-note">{lines.note}</span> : null}
+        {lines.waiting ? (
+          <span className="answered-question-waiting">
+            <ClockCircleOutlined aria-hidden="true" /> {lines.waiting}
+          </span>
+        ) : null}
+        {handover?.queued ? (
+          <span className="answered-question-waiting">
+            <ClockCircleOutlined aria-hidden="true" /> {QUEUED_FOR_COORDINATOR}
+          </span>
+        ) : null}
+        {handover?.notice ? <span className="answered-question-waiting">{handover.notice}</span> : null}
+        {lines.withdrew ? <span className="answered-question-withdrew">{lines.withdrew}</span> : null}
+        {lines.reason ? <span className="answered-question-reason">{lines.reason}</span> : null}
+        {open ? null : (
+          <span className="answered-question-open">
+            {VIEW_DETAILS}
+            <RightOutlined aria-hidden="true" />
+          </span>
+        )}
+      </button>
+      {/* Mounted while folded, as the sheet kept it: what a test or the page reads off the record does
+          not depend on whether it is open. */}
+      <div
+        className="approval-card coordinator-question answered-question"
+        data-question-record={record.itemId}
+        hidden={!open}
+      >
         <div className="approval-body is-questions coordinator-question-body">
           <div className="answered-question-provenance">
             <span className="criteria-provenance prov-brand" title={FROM_COORDINATOR_TITLE}>
@@ -691,7 +698,11 @@ export function AnsweredQuestionCard({
             </span>
           ) : null}
         </div>
+        <button type="button" className="answered-question-hide" aria-expanded onClick={() => setOpen(false)}>
+          {HIDE_DETAILS}
+          <UpOutlined aria-hidden="true" />
+        </button>
       </div>
-    </ReviewCard>
+    </div>
   );
 }

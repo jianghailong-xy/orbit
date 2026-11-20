@@ -135,7 +135,7 @@ test('the Pod is deploy/managed-runner/runner-pod.yaml.example, filled in and no
     __INIT_CPU_LIMIT__: profile.runner.resources.init.limits.cpu,
     __INIT_MEMORY_LIMIT__: profile.runner.resources.init.limits.memory,
     __AUTHORIZED_TEST_ORBIT_HTTPS_URL__: profile.runner.serverUrl,
-    __STABLE_USER_RUNNER_NAME__: 'orbit-managed',
+    __STABLE_USER_RUNNER_NAME__: 'Orbit Cloud',
     __AUTHORIZED_SESSION_CONCURRENCY__: String(profile.runner.maxConcurrent),
     __RUNNER_CPU_REQUEST__: profile.runner.resources.runner.requests.cpu,
     __RUNNER_MEMORY_REQUEST__: profile.runner.resources.runner.requests.memory,

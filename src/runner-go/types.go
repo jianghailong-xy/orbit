@@ -497,6 +497,9 @@ type HeartbeatResponse struct {
 	// every engine whose accounts this runner can remove, including Codex. The codex-named field
 	// above stays for a control plane older than accounts-per-engine.
 	AccountRemoveRequest *AccountRemoveCommand `json:"accountRemoveRequest,omitempty"`
+	// ClaudeAccountSwapRequest makes an added Claude account the Default (claude-account-swap/v1,
+	// docs/claude-default-swap-contract.md §5): redelivered on every heartbeat while the swap is pending.
+	ClaudeAccountSwapRequest *ClaudeAccountSwapCommand `json:"claudeAccountSwapRequest,omitempty"`
 	// An engine CLI the user asked to install from the web. Nil on older control planes, and
 	// whenever no install is in flight for this runner.
 	InstallRequest *InstallCommand `json:"installRequest,omitempty"`
@@ -569,6 +572,9 @@ type HeartbeatResponse struct {
 	// states the floor states the budget too, the link's quiet answer included. Nil from older
 	// control planes and for every runner the control plane has no measurement for.
 	StorageBudget *StorageBudget `json:"storageBudget,omitempty"`
+	// BackgroundJobLimits is the owner's ceiling for this runner's background jobs (bg_limits.go), set on its
+	// Settings → Machine page. Absence replaces, as MinFreeDiskMb's does: no field is limits off.
+	BackgroundJobLimits *bgJobLimits `json:"backgroundJobLimits,omitempty"`
 	// The one Codex rate-limit reset step claimed for this process
 	// (docs/codex-rate-limit-reset-contract.md §6). Nil from older control planes and whenever no
 	// operation is claimed for it; nothing acts on it until this binary declares
@@ -1116,6 +1122,52 @@ type AccountRemoveResultRequest struct {
 	SessionIDs []string `json:"sessionIds,omitempty"`
 }
 
+// ClaudeAccountSwapCommand mirrors the contract's ClaudeAccountSwapCommand: the added Claude account to
+// make the Default. Carrying it out twice is the same as carrying it out once.
+type ClaudeAccountSwapCommand struct {
+	// The added account's slot id under claude-accounts.
+	Account string `json:"account"`
+	// Identifies this swap; echoed in every result.
+	Attempt string `json:"attempt"`
+	// The accountUuid each folder held when the server asked: tells a redelivery of a swap this runner
+	// already finished from a new request.
+	Expect *ClaudeAccountSwapExpect `json:"expect,omitempty"`
+}
+
+type ClaudeAccountSwapExpect struct {
+	DefaultAccountUUID string `json:"defaultAccountUuid"`
+	AccountAccountUUID string `json:"accountAccountUuid"`
+}
+
+// ClaudeAccountSwapResult is the runner's word on a swap (POST /runner/claude-account-swap-result), the
+// same body every time, latest wins.
+type ClaudeAccountSwapResult struct {
+	Account string `json:"account"`
+	Attempt string `json:"attempt"`
+	Status  string `json:"status"` // "pending" | "done" | "failed"
+	// failed: the one line the page shows.
+	Message string `json:"message,omitempty"`
+	// pending: the Orbit sessions with a turn in progress on either folder.
+	WaitingOn []string `json:"waitingOn,omitempty"`
+	// pending: Claude processes on either folder that are not Orbit's (a terminal `claude`).
+	ForeignProcesses []ClaudeSwapProcess `json:"foreignProcesses,omitempty"`
+	// done: the accountUuid now in each folder.
+	Now *ClaudeAccountSwapNow `json:"now,omitempty"`
+}
+
+type ClaudeSwapProcess struct {
+	PID     int    `json:"pid"`
+	Command string `json:"command"`
+}
+
+type ClaudeAccountSwapNow struct {
+	DefaultAccountUUID string `json:"defaultAccountUuid"`
+	AccountAccountUUID string `json:"accountAccountUuid"`
+	// AccountEmail is the emailAddress of the account now in the added folder — the former Default —
+	// which the page names it by until the owner renames it. Empty when its .claude.json names none.
+	AccountEmail string `json:"accountEmail,omitempty"`
+}
+
 // LoginResultRequest is the runner's progress report for a sign-in, POSTed back so the web card
 // can show the URL to approve and then the outcome. `URL` is set with "awaiting_code" and
 // "awaiting_approval"; `UserCode` only with the latter (the device flow's one-time code, which
@@ -1370,6 +1422,9 @@ type DiffResultRequest struct {
 	BaseSha string `json:"baseSha,omitempty"`
 	// BranchSha is the tip of the effective branch (see SessionLiveState.BranchSha).
 	BranchSha string `json:"branchSha,omitempty"`
+	// BranchCommits are the branch's commits from its base to BranchSha, newest first (branch_commits.go); null
+	// when the runner could not read them, which leaves the stored list as it was.
+	BranchCommits []BranchCommit `json:"branchCommits"`
 	// BranchMerged: the branch already landed in the default merge target (see SessionLiveState).
 	// Recomputed with the diff, so opening the drawer refreshes it for an idle session.
 	BranchMerged bool `json:"branchMerged"`
@@ -1483,6 +1538,10 @@ type ClaimedSession struct {
 	// every engine but Claude, whose child keeps the parent's mode without edit tools; Codex alone reads this too, since its plan mode refuses every command and a shell
 	// is the only way Codex reads a repository (codexPermissionMode).
 	readonlySubagent bool
+	// readonlyParentMode is the parent session's permission mode as it stands now, on a read-only SubAgent's
+	// child claim on an engine other than Claude (subagentChildJob); nil on every other claim. Kimi reads it to
+	// answer its plan mode's shell requests the way the parent runs (kimiReadonlyShellFollowsParent).
+	readonlyParentMode func() string
 	// WorkDir is the coding engine's cwd for this session, from the session's agent.
 	WorkDir string `json:"workDir,omitempty"`
 	// HelpAsk marks the help center's Ask (help_ask.go): started read-only in a scratch folder of help articles,
@@ -1843,6 +1902,9 @@ type TurnCompleteRequest struct {
 	BaseSha string `json:"baseSha,omitempty"`
 	// BranchSha is the tip of the effective branch (see SessionLiveState.BranchSha).
 	BranchSha string `json:"branchSha,omitempty"`
+	// BranchCommits are the branch's commits from its base to BranchSha, newest first (branch_commits.go); null
+	// when the runner could not read them, which leaves the stored list as it was.
+	BranchCommits []BranchCommit `json:"branchCommits"`
 	// Per-file unified diffs (capped) for the same uncommitted worktree state, so the web
 	// can open a file's diff on demand without a round-trip back to this runner.
 	ChangedDiff []FilePatch `json:"changedDiff,omitempty"`
@@ -1946,6 +2008,9 @@ type RunFinalizeRequest struct {
 	// (contract §10.5 O-L4). Empty on a park checkpoint (a CANCELLED end), which the next resume
 	// undoes, and whenever git cannot resolve the tip.
 	BranchSha string `json:"branchSha,omitempty"`
+	// BranchCommits are the branch's commits from its base to BranchSha, newest first (branch_commits.go); null
+	// when the runner could not read them, which leaves the stored list as it was.
+	BranchCommits []BranchCommit `json:"branchCommits"`
 	// CaptureError is why the session's work did NOT reach its branch: finalizeWorktree could not
 	// stage or could not commit. Empty on every finalize that captured the work.
 	//

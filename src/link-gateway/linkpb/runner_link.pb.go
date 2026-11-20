@@ -1084,9 +1084,9 @@ func (x *WriteContract) GetContractDigest() string {
 // credential only from this instance, as it does over HTTPS today.
 type ManagedInstance struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The instance's generation, today's X-Orbit-Managed-Runner-Generation header.
+	// The instance's generation, today's X-Orbit-Cloud-Runner-Generation header.
 	Generation string `protobuf:"bytes,1,opt,name=generation,proto3" json:"generation,omitempty"`
-	// The instance's pod UID, today's X-Orbit-Managed-Runner-Pod-Uid header.
+	// The instance's pod UID, today's X-Orbit-Cloud-Runner-Pod-Uid header.
 	PodUid        string `protobuf:"bytes,2,opt,name=pod_uid,json=podUid,proto3" json:"pod_uid,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

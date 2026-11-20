@@ -25,8 +25,8 @@ public struct UserPreferences: Codable, Equatable, Sendable {
     /// Whether an agent may push a line of its own (the `notify` tool / `orbit notify`) to this
     /// account's devices. Absent means on; only opting out is ever written.
     public let notifyAgentMessage: Bool?
-    /// The account's master switch for smart model selection (docs/model-routing-design.md). Off
-    /// unless it is exactly `true`: absent, or anything but a boolean, decodes nil and reads as off
+    /// The account's master switch for smart model selection (docs/model-routing-design.md). On
+    /// unless it is exactly `false`: absent, or anything but a boolean, decodes nil and reads as on
     /// (`smartModelSelection`), so a stray value never fails the whole `me` payload.
     public let modelRouting: Bool?
     /// Whether this account's Claude sessions offer the next message it would probably type once a
@@ -60,8 +60,8 @@ public struct UserPreferences: Codable, Equatable, Sendable {
     /// "intelligence". Absent means Balance; kept as a String so an unknown future value decodes.
     public let optimizeFor: String?
 
-    /// Whether smart model selection is on for this account — only an explicit `true` turns it on.
-    public var smartModelSelection: Bool { modelRouting == true }
+    /// Whether smart model selection is on for this account — on unless explicitly turned off.
+    public var smartModelSelection: Bool { modelRouting != false }
     /// Whether suggested replies are on for this account — on unless explicitly turned off.
     public var suggestedReplies: Bool { promptSuggestions != false }
     /// Whether session recaps are on for this account — on unless explicitly turned off.

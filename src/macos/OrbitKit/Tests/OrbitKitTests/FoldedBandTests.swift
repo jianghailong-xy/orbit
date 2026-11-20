@@ -20,14 +20,24 @@ final class FoldedBandTests: XCTestCase {
         XCTAssertEqual(FoldedBand.lead(draft: nil, hasMarks: false), .placeholder)
     }
 
-    private func proc(_ id: String, _ status: String) -> BackgroundProc {
-        BackgroundProc(id: id, command: "sleep 1", status: status, outputTail: "")
+    private func proc(_ id: String, _ status: String, endedAt: String? = nil) -> BackgroundProc {
+        BackgroundProc(id: id, command: "sleep 1", status: status, outputTail: "", endedAt: endedAt)
     }
 
-    func testTheTraySaysWhatStillRunsOrHowManyThereAre() {
-        XCTAssertEqual(FoldedBand.processes([proc("a", "running"), proc("b", "completed"), proc("c", "running")]),
+    /// The Background row's mark counts what the row shows (`BackgroundRowRule`), and is gone with it.
+    func testTheTraySaysWhatStillRunsOrHowManyItStillShows() {
+        let asked = "2026-11-16T02:40:00.000Z"
+        let after = "2026-11-16T02:45:00.000Z"
+        XCTAssertEqual(FoldedBand.processes([proc("a", "running"), proc("b", "completed", endedAt: after),
+                                             proc("c", "running")], lastUserMessageAt: asked, sessionLive: true),
                        "2 running")
-        XCTAssertEqual(FoldedBand.processes((0..<10).map { proc("\($0)", "completed") }), "10")
+        XCTAssertEqual(FoldedBand.processes((0..<10).map { proc("\($0)", "completed", endedAt: after) },
+                                            lastUserMessageAt: asked, sessionLive: true), "10")
+        // Ended before the person's last message: no row, so no mark.
+        XCTAssertNil(FoldedBand.processes([proc("a", "completed", endedAt: "2026-11-16T02:39:00.000Z")],
+                                          lastUserMessageAt: asked, sessionLive: true))
+        // A session that is not live runs nothing, whatever its list last said.
+        XCTAssertNil(FoldedBand.processes([proc("a", "running")], lastUserMessageAt: asked, sessionLive: false))
     }
 
     private func card(running: Int = 0, failed: Int = 0, done: Int, total: Int) throws -> SessionTaskCard {
