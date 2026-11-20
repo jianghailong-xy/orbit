@@ -128,8 +128,9 @@ export class CriterionUnlandedProducer {
 
     const [definitions, codebases] = await Promise.all([
       this.prisma.projectAcceptanceCriterionDefinition.findMany({
-        // A project marked non-code reads no landing (0535), so none of its criteria is unlanded.
-        where: { projectId: { in: ids }, project: { nonCode: false } },
+        // The non-code mark (0535) is not read (§12.15 P-M3): a criterion whose work delivered no
+        // commit reads LANDED from that fact, marked or not.
+        where: { projectId: { in: ids } },
         select: {
           id: true,
           projectId: true,

@@ -439,9 +439,9 @@ export class ProjectAcceptanceService {
     }
     const requestId = input.requestId ?? null;
     return withTransactionRetry(this.prisma, async (tx) => {
-      const [project] = await tx.$queryRaw<Array<{ status: ProjectStatus; non_code: boolean }>>(
+      const [project] = await tx.$queryRaw<Array<{ status: ProjectStatus }>>(
         Prisma.sql`
-        SELECT "status", "non_code"
+        SELECT "status"
           FROM "project"
          WHERE "id" = ${projectId}::uuid AND "owner_id" = ${ownerId}::uuid
            FOR NO KEY UPDATE`);
@@ -491,12 +491,9 @@ export class ProjectAcceptanceService {
       const findings = requestId === null
         ? doneReadiness(await readDoneState(tx, ownerId, projectId, null), [])
         : [];
-      // A project marked non-code reads no landing (0535), so it stores no landing gap either: the
-      // check above finds none, and one a card read before the mark was set is not kept.
-      const given = project.non_code
-        ? input.acceptedGaps.filter((gap) => gap.finding?.code !== 'DONE_CRITERION_UNLANDED')
-        : input.acceptedGaps;
-      const acceptedGaps = [...given, ...findings.map((finding) => ({
+      // The non-code mark (0535) is not read (§12.15 P-M3): the gaps the owner accepted are kept as
+      // given, and a project whose work delivered no commit has no landing gap to accept.
+      const acceptedGaps = [...input.acceptedGaps, ...findings.map((finding) => ({
         criterionKey: finding.criterion?.key ?? `project:${projectId}`,
         scope: finding.criterion ? 'CRITERION' as const : 'PROJECT' as const,
         title: finding.message,
