@@ -33,8 +33,9 @@ jobs:
     env:
       SCENARIO: ${{ inputs.scenario }}
       # On the root disk: /mnt is not mounted on these runners, and a systemd unit naming a path under it
-      # fails on its mnt.mount dependency.
-      LAB_DIR: /opt/managed-runner-lab
+      # fails on its mnt.mount dependency. Not under /opt either, whose default ACL leaves the lab's SSH
+      # key readable by others, which ssh refuses.
+      LAB_DIR: /var/lib/managed-runner-lab
       LAB_OUT: ${{ github.workspace }}/lab-out
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.ms-playwright
     steps:
@@ -57,6 +58,9 @@ jobs:
         run: |
           sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/share/swift
           sudo install -d -m 0755 "$LAB_DIR"
+          # No inherited ACL: the lab's private files (its SSH key) must stay 0600.
+          sudo setfacl -b -k "$LAB_DIR" 2>/dev/null || true
+          getfacl -p "$(dirname "$LAB_DIR")" "$LAB_DIR" 2>/dev/null || true
           df -h /
           free -m
           nproc
