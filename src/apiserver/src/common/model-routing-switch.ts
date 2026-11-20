@@ -6,10 +6,10 @@ import { Prisma } from '@prisma/client';
  *
  * Off, and the feature is as if it did not exist: a coordinator's standing instructions say nothing
  * about suggesting a tier, a task's fresh run records no Route Decision and is dispatched exactly as
- * before routing — whatever its Agent's own switch (`workspace.modelRouting`) says — and the sweep's
- * quota gate judges the engine the run's pins give it. On, and each Agent's own switch decides as
- * before. Nothing is cleared by turning it off: a task's suggestion and an Agent's switch and engines
- * are kept, so turning it back on restores them.
+ * before routing, a SubAgent runs on its parent's model, and the sweep's quota gate judges the engine
+ * the run's pins give it. On, and every task run on every Agent is routed: there is no per-Agent
+ * switch (owner, 2026-11-20; `workspace.modelRouting` is no longer read). Nothing is cleared by
+ * turning it off: a task's suggestion is kept, so turning it back on restores it.
  *
  * On unless the owner turned it off (owner, 2026-11-20): an account that never wrote it reads on, like
  * the orchestration and notification switches. `owner` is the row's own read, null when there is none,

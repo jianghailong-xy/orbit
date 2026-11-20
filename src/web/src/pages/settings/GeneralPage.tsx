@@ -20,7 +20,7 @@ export const GENERAL_HINTS = {
   },
   modelRouting: {
     short: S.modelRouting.description,
-    full: "Coordinators suggest a tier for each task, and a SubAgent's size sets its own. Every SubAgent, and the task runs of Agents you turn this on for, run on a model of that tier from your providers. Off: tasks keep their Agent's model and SubAgents their parent session's.",
+    full: "Coordinators suggest a tier for each task, and a SubAgent's size sets its own. Task runs and SubAgents run on a model of that tier from your providers. Off: tasks keep their Agent's model and SubAgents their parent session's.",
   },
   optimizeFor: {
     short: S.optimizeFor.description,

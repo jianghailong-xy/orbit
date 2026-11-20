@@ -186,8 +186,8 @@ func (h worktreeHolder) String() string { return h.kind + " " + h.name }
 type bgHold struct {
 	name         string
 	runnerHosted bool
-	// watch marks a runner-hosted job that only waits (bgKindWatch): it holds the checkout like
-	// any other, and is no capacity.
+	// watch marks a runner-hosted job that takes no capacity: one that only waits (bgKindWatch), or one
+	// held to its own CPU and memory limits (bgJob.boundedLocked). It holds the checkout like any other.
 	watch bool
 }
 
@@ -389,7 +389,8 @@ func (p *sessionPool) backgroundJobCountsLocked() map[string]int {
 // this runner may be given, counting a session as occupying a slot while it holds a
 // turn permit OR while runner-hosted jobs of its own are still running. Per session
 // and not per job — several jobs of one session share one checkout, and a session is
-// the unit that new work displaces. A watch is not among those jobs: it only waits.
+// the unit that new work displaces. A watch is not among those jobs: it only waits. Nor is a job held
+// to its own CPU and memory limits: what it may take is bounded, and the owner set the bound.
 func (p *sessionPool) admissionIdleCapacity() int {
 	idle, _ := p.admissionOccupancy()
 	return idle
@@ -1328,6 +1329,12 @@ func (p *sessionPool) activatePrepared(job *ClaimedSession, prepare func()) (*li
 		job.IsolationStatus = s.job.IsolationStatus
 		job.CheckoutCreation = s.job.CheckoutCreation
 		job.SourceRefusal = s.job.SourceRefusal
+		// The session's live mode, too: the job service started for this run (startSessionBgJobService) keeps the
+		// first claim's job and reads the mode from this holder, for its Plan gate and for what a read-only Kimi
+		// SubAgent's shell calls follow. A mode the owner chose while the engine was cold arrives only in this
+		// claim, so it is published here; left alone, the holder would go on saying the mode the run began in.
+		job.liveMode = s.job.liveMode
+		job.notePermissionMode(job.Agent.PermissionMode)
 	}
 	s.job = job
 	var cancels []context.CancelFunc

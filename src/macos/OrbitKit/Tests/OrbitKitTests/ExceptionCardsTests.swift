@@ -668,10 +668,12 @@ final class ExceptionCardsTests: XCTestCase {
     /// is the browser's, taken from mock 5 through `ItemFactRows`.
     private func requireTheBrowsersWords() throws {
         let web = try webSource()
-        for label in ["Task", "Into", "Files", "After a fix", "Check", "Branch", "How", "Retries",
-                      "Error"] {
+        for label in ["Task", "Into", "After a fix", "Check", "Branch", "How", "Retries", "Error"] {
             try require(web, "label=\"\(label)\"")
         }
+        // Files counts its paths once they fold (`Files (9)`), so the browser spells the bare label
+        // inside that choice rather than as `label="Files"`.
+        try require(web, "`Files (${facts.files.length})` : 'Files'}")
         try require(web, "' · nothing landed'")
         try require(web, ExceptionCards.afterAFix)
         try require(web, ExceptionCards.branchUnchanged)

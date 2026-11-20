@@ -27,7 +27,7 @@ const LABEL = 'Smart model selection';
 /** The one line the board shortens it to, and the full text kept as the control's tooltip. */
 const HINT = 'Task runs and SubAgents get a model matched to how hard the work is.';
 const FULL_HINT =
-  "Coordinators suggest a tier for each task, and a SubAgent's size sets its own. Every SubAgent, and the task runs of Agents you turn this on for, run on a model of that tier from your providers. Off: tasks keep their Agent's model and SubAgents their parent session's.";
+  "Coordinators suggest a tier for each task, and a SubAgent's size sets its own. Task runs and SubAgents run on a model of that tier from your providers. Off: tasks keep their Agent's model and SubAgents their parent session's.";
 
 const me = (preferences: UserPreferences): Me => ({
   id: 'u1',

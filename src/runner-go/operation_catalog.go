@@ -3752,7 +3752,11 @@ func bgToolDescriptors(obj func(map[string]interface{}, ...string) map[string]in
 				" accepts a message mid-turn; new output and silence always wait for your next turn. Whether a job" +
 				" may start follows this session's permission mode: Plan and Don't Ask refuse it, Default and Accept" +
 				" Edits show the owner a card first, in which case this may answer that the job is waiting for them" +
-				" (status waiting_for_owner), and Auto and Bypass start it.",
+				" (status waiting_for_owner), and Auto and Bypass start it. CPU and memory limits (cpus, memoryMb) are" +
+				" off unless the machine's owner has turned them on; then the owner's ceiling applies to every job, and" +
+				" you may ask for less, never more. The result's limits say what the job runs under, and limitsNote why" +
+				" an ask was lowered or not applied. A job running under limits does not count against this machine's" +
+				" capacity, as a watch does not.",
 			"inputSchema": obj(map[string]interface{}{
 				"command": map[string]interface{}{
 					"type":        "string",
@@ -3813,6 +3817,16 @@ func bgToolDescriptors(obj func(map[string]interface{}, ...string) map[string]in
 				"env": map[string]interface{}{
 					"type":        "object",
 					"description": "Extra environment variables, layered over the agent's own.",
+				},
+				"cpus": map[string]interface{}{
+					"type": "number",
+					"description": "Most CPUs' worth of time the job may use, fractions allowed (0.5, 2). Applied only where" +
+						" the owner has turned limits on, and never above their ceiling; see the tool description.",
+				},
+				"memoryMb": map[string]interface{}{
+					"type": "integer",
+					"description": fmt.Sprintf("Most memory the job may hold, in megabytes (at least %d). Past it the whole job"+
+						" is killed and its output ends with a line saying so. Applied as cpus is.", bgMemoryMBMin),
 				},
 			}, "command", "kind"),
 		},
