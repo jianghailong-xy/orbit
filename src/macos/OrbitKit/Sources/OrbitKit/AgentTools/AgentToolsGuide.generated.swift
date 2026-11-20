@@ -780,6 +780,7 @@ let agentToolsGuideJSON = #"""
       "id": "browser",
       "label": "Orbit Cloud browser",
       "tools": [
+        "browser_open",
         "browser_request_sign_in",
         "browser_status"
       ]

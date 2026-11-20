@@ -1,7 +1,7 @@
-import { BadRequestException, Body, Controller, ForbiddenException, Get, Headers, Post, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, ForbiddenException, Get, Headers, HttpCode, Post, UseGuards } from '@nestjs/common';
 import { IsOptional, IsString, MaxLength } from 'class-validator';
 import { Runner } from '@prisma/client';
-import { toUuid, type RunnerBrowserStatus } from '@orbit/shared';
+import { toUuid, type RunnerBrowserOpenRequest, type RunnerBrowserOpenResponse, type RunnerBrowserStatus } from '@orbit/shared';
 
 import { ManagedRunnerBrowserEnabledGuard, ManagedRunnerBrowserService } from '../managed-runners/browser-state';
 import { OwnerRequestsService } from '../owner-requests/owner-requests.service';
@@ -20,11 +20,16 @@ export class BrowserSignInRequestDto {
 }
 
 /**
- * browser_status and `orbit browser status` (docs/mocks/runner-browser/03-agent-tools.html ②): the account's Orbit
- * Cloud browser, read by any session of the account (Q3 = A) through its runner's credential.
+ * browser_status and browser_open, and `orbit browser status` and `orbit browser open [--url]`
+ * (docs/mocks/runner-browser/03-agent-tools.html ②): the account's Orbit Cloud browser, read and opened by any session
+ * of the account (Q3 = A) through its runner's credential.
  *
- *   GET /runner/browser   whether the browser is running, the session holding the lease, how many viewers are
- *                         connected and whether saved logins exist (never which sites): RunnerBrowserStatus
+ *   GET  /runner/browser        whether the browser is running, the session holding the lease, how many viewers are
+ *                               connected and whether saved logins exist (never which sites): RunnerBrowserStatus
+ *   POST /runner/browser/open   start the browser if it is not running and, with `url`, open that page in it; answers
+ *                               the browser's tab on this server (RunnerBrowserOpenResponse). 409 while another
+ *                               session holds the browser and a url is asked for, or when the account has no Orbit
+ *                               Cloud runner or it is too old; 400 for a url that is not http(s)
  *
  *   - Behind the browser switch: off, 404 before anything else, as for a path the apiserver does not have.
  *   - The asking session is X-Orbit-Session-Id, and must be one of the runner's owner that this runner hosts: another
@@ -55,6 +60,17 @@ export class RunnerBrowserController {
   ): Promise<RunnerBrowserStatus> {
     await this.callingSession(runner, sessionHeader);
     return this.browser.accountStatus(runner.ownerId);
+  }
+
+  @Post('open')
+  @HttpCode(202)
+  async open(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') sessionHeader: string | undefined,
+    @Body() body: RunnerBrowserOpenRequest | undefined,
+  ): Promise<RunnerBrowserOpenResponse> {
+    const sessionId = await this.callingSession(runner, sessionHeader);
+    return this.browser.open(runner.ownerId, sessionId, body?.url);
   }
 
   @Post('sign-in-requests')

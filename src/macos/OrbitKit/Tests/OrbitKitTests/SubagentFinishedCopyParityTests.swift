@@ -2,17 +2,14 @@ import Foundation
 import XCTest
 @testable import OrbitKit
 
-/// The two clients read a SubAgent's end the same way and say the same words about it.
+/// The two clients read the same SubAgent wake block, including its status, result, and remaining note.
 ///
-/// `SubagentFinished.swift` is a hand-copy of the browser's reading (`lib/subagentFinished.ts`) and of
-/// the line it draws (`SubagentFinishedCard.tsx`, landed first, board docs/mocks/subagent-finished-line).
-/// Neither end compiles the other, so a pattern or a word changed at one end would simply never reach
-/// the other — and a wording only one end reads turns the turn back into the reader's own bubble under
-/// "Orbit attached: context". A missing counterpart is a FAILURE, never an `XCTSkip`.
+/// The browser uses that block on the run's existing card. Its copy, preview, and fold rules are
+/// pinned here independently of the native finish line. A missing source is a failure.
 final class SubagentFinishedCopyParityTests: XCTestCase {
 
     private static let webReader = "src/web/src/lib/subagentFinished.ts"
-    private static let webCard = "src/web/src/components/SubagentFinishedCard.tsx"
+    private static let webCard = "src/web/src/components/SubagentCardEnd.tsx"
     private static let webTranscript = "src/web/src/components/Transcript.tsx"
     private static let webCss = "src/web/src/index.css"
 
@@ -64,54 +61,51 @@ final class SubagentFinishedCopyParityTests: XCTestCase {
         }
     }
 
-    func testTheLineSaysTheWebsWords() throws {
+    func testTheWebShowsTheWakeOnTheRunsCard() throws {
         let card = try source(Self.webCard)
-        for word in [SubagentFinishedCard.noResult, SubagentFinishedCard.showFullResult,
-                     SubagentFinishedCard.showLess, SubagentFinishedCard.details,
-                     SubagentFinishedCard.cardLink, SubagentFinishedCard.changes,
-                     SubagentFinishedCard.queuedBy, SubagentFinishedCard.rawSummary,
-                     "SubAgent finished", "SubAgent did not finish", "done", "✦", "✓", "✕"] {
+        for word in [SubagentFinishedCard.rawSummary, "Show files", "Stopped by the agent.",
+                     "It did not finish its work.",
+                     "The runner hosting it stopped (a restart, an update or a crash) before it finished."] {
             assertWritten(card, word, Self.webCard)
         }
-        // `Run <span className="sawake-run-id">…`, and the separators around the card link.
-        XCTAssertTrue(card.contains("\(SubagentFinishedCard.run) <span className=\"sawake-run-id\">"))
-        XCTAssertTrue(card.contains("<span className=\"sawake-meta-name\">{run.description} · </span>"))
-        // The templates, filled the way this end fills them.
-        XCTAssertTrue(card.contains("`${wake.runs.length} SubAgents finished`"))
-        XCTAssertTrue(card.contains("`${failed} of ${wake.runs.length} failed`"))
-        XCTAssertTrue(card.contains("return wake.runs[0].status.toLowerCase();"))
-        XCTAssertTrue(card.contains("{run.status.toLowerCase()}"))
-        // One of several says its first line, else why it ended, else No result.
-        XCTAssertTrue(card.contains("const line = first || run.reason || 'No result';"))
-        // A lone run that finished with nothing to hand back has no box under its line.
-        XCTAssertTrue(card.contains("if (ok && run.result === '') return null;"))
-        // The undelivered sentence and the steer's state are the background wake's own.
-        XCTAssertTrue(card.contains("<div className=\"bgwake-undelivered\">\(BackgroundWakeCard.undelivered)</div>"))
+        XCTAssertTrue(card.contains("\(SubagentFinishedCard.run) {runId}"))
+        XCTAssertTrue(card.contains("const word = run.status.toLowerCase();"))
+        XCTAssertTrue(card.contains("aria-label=\"done\""))
+        XCTAssertTrue(card.contains("if (!run.resultSummary) return null;"))
+        XCTAssertTrue(card.contains("<pre>{wake.text}</pre>"))
+
         let transcript = try source(Self.webTranscript)
         XCTAssertTrue(transcript.contains(
-            "const steer = node.steer && !undelivered ? steerDeliveryState(node.delivery).label : undefined;"))
-        XCTAssertEqual(SteerDelivery.state("acknowledged").label, "Read in this turn")
+            "for (const run of wake.runs) out.set(run.runId, { text: wake.text, readAt: read ? node.ts : undefined });"))
     }
 
-    func testTheResultShowsThreeLinesAsTheWebsDoes() throws {
+    func testTheWebFoldedCardPreviewsTwoLinesOfResult() throws {
         let css = try source(Self.webCss)
-        guard let start = css.range(of: ".sawake-result-md.is-clamped > .md {"),
+        guard let start = css.range(of: ".chat-subagent-ending-md > .md {"),
               let end = css.range(of: "}", range: start.upperBound..<css.endIndex) else {
-            return XCTFail("\(Self.webCss) no longer clamps the result")
+            return XCTFail("\(Self.webCss) no longer styles the folded card's result")
         }
-        XCTAssertTrue(css[start.upperBound..<end.lowerBound]
-            .contains("-webkit-line-clamp: \(SubagentFinishedCard.previewLines);"))
+        XCTAssertTrue(css[start.upperBound..<end.lowerBound].contains("-webkit-line-clamp: 2;"))
     }
 
-    func testTheFoldNamesTheTurnAsTheWebsDoes() throws {
+    func testTheWebOnlyFoldsJobNewsFromASubagentWake() throws {
         let transcript = try source(Self.webTranscript)
-        guard let start = transcript.range(of: "const subagent = parseSubagentFinished(node.note);"),
-              let end = transcript.range(of: "const background = parseBackgroundWake(node.note);",
-                                         range: start.upperBound..<transcript.endIndex) else {
-            return XCTFail("\(Self.webTranscript) no longer folds a SubAgent's end")
+        guard let turn = transcript.range(of: "function orbitTurnOf("),
+              let end = transcript.range(of: "\n}", range: turn.upperBound..<transcript.endIndex),
+              let start = transcript.range(of: "const subagent = parseSubagentFinished(node.note);",
+                                           range: turn.upperBound..<end.lowerBound) else {
+            return XCTFail("\(Self.webTranscript) no longer handles SubAgent wakes in the fold classifier")
         }
-        let fold = transcript[start.lowerBound..<end.lowerBound]
-        XCTAssertTrue(fold.contains("if (subagent.runs.some((run) => !subagentFinishedOk(run))) return null;"))
-        XCTAssertTrue(fold.contains("what: name ? `${title}: ${name}` : title, category: 'job'"))
+        XCTAssertEqual(String(transcript[start.lowerBound..<end.lowerBound]), """
+        const subagent = parseSubagentFinished(node.note);
+          const background = parseBackgroundWake(subagent ? subagent.rest : node.note);
+          if (background) {
+            if (background.jobs.some((job) => job.status === 'failed' || job.status === 'killed')) return null;
+            const title = backgroundWakeTitle(background);
+            const name = backgroundWakeName(background);
+            return { ts, what: name ? `${title}: ${name}` : title, category: 'job', target: null };
+          }
+          return null;
+        """)
     }
 }

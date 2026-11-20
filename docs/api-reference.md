@@ -45,10 +45,10 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `public` | 37 |
 | `user` | 482 |
 | `admin` | 31 |
-| `runner` | 207 |
+| `runner` | 208 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **761** |
+| **Total** | **762** |
 
 ## Public routes
 
@@ -625,6 +625,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/runner/agents` | body `Object` | `RunnerAgentsController.createWorkspace` |
 | `PATCH` | `/api/runner/agents/:id` | body `Object`; path `id` | `RunnerAgentsController.updateWorkspace` |
 | `GET` | `/api/runner/browser` | — | `RunnerBrowserController.status` |
+| `POST` | `/api/runner/browser/open` | body `Object` | `RunnerBrowserController.open` |
 | `POST` | `/api/runner/browser/sign-in-requests` | body `BrowserSignInRequestDto` | `RunnerBrowserController.requestSignIn` |
 | `POST` | `/api/runner/claude-account-swap-result` | body `Object` | `RunnerApiController.claudeAccountSwapResult` |
 | `POST` | `/api/runner/claude-history-result` | body `Object` | `RunnerApiController.claudeHistoryResult` |
