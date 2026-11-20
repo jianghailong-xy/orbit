@@ -238,7 +238,7 @@ async function workSession(stack: Stack, w: World, taskId: string, s: Work): Pro
       branch: s.branch, branchSha: s.branchSha, baseSha: s.baseSha,
       changedFiles: (s.changedFiles ?? []) as Prisma.InputJsonValue,
       numTurns: 1, startedAt: minutesAgo(s.createdMinutesAgo ?? 30), createdAt: minutesAgo(s.createdMinutesAgo ?? 30),
-      ...(finished ? { finishedAt: minutesAgo(s.finishedMinutesAgo!) } : {}),
+      ...(finished ? { finishedAt: minutesAgo(s.finishedMinutesAgo!), releaseCause: 'engine_exited' } : {}),
     },
   });
   return id;
@@ -258,7 +258,7 @@ async function finishDispatchedWork(stack: Stack, taskId: string, s: Omit<Work, 
     data: {
       status: RunStatus.SUCCEEDED, isolationStatus: 'worktree', branch: `orbit/${taskId.slice(0, 8)}`,
       branchSha: s.branchSha, baseSha: s.baseSha, changedFiles: (s.changedFiles ?? []) as Prisma.InputJsonValue,
-      finishedAt: new Date(),
+      finishedAt: new Date(), releaseCause: 'engine_exited',
     },
   });
   await stack.db.task.update({ where: { id: taskId }, data: { status: TaskStatus.IN_PROGRESS } });
@@ -575,8 +575,10 @@ test('(9) the reaper\'s forced finish runs the same route: an empty branch queue
       const w = await world(stack, 'reaper', 'NONE');
       const forceFinalize = (sessionId: string, taskId: string) => (stack.reaper as unknown as {
         forceFinalize(sessionId: string, runnerId: string | null, taskId: string | null, reason: string,
-          opts: { status?: RunStatus }): Promise<void>;
-      }).forceFinalize(sessionId, w.runnerId, taskId, 'runner lost', { status: RunStatus.CANCELLED });
+          opts: { status: typeof RunStatus.CANCELLED; releaseCause: 'cancelled' }): Promise<void>;
+      }).forceFinalize(sessionId, w.runnerId, taskId, 'runner lost', {
+        status: RunStatus.CANCELLED, releaseCause: 'cancelled',
+      });
 
       const empty = await task(stack, w, 'reaped-empty');
       const emptyLive = await workSession(stack, w, empty, { branch: 'orbit/reaped-empty', branchSha: sha('e'), baseSha: sha('e') });

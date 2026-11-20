@@ -1000,6 +1000,21 @@ test('the badge says Record as done… once a finished-looking project has waite
       acceptanceExpectedExitCode: 0,
     },
   });
+  await db.session.create({
+    data: {
+      ownerId: f.ownerId,
+      creatorId: f.ownerId,
+      workspaceId: f.workspaceId,
+      taskId: served.id,
+      title: 'The work the ruler asks for',
+      prompt: 'Do the work',
+      status: RunStatus.SUCCEEDED,
+      startsTaskWork: true,
+      finishedAt: new Date(),
+      releaseCause: 'engine_exited',
+      changedFiles: ['work.md'],
+    },
+  });
   const settled = await sql.query(
     `UPDATE "task" SET "status" = 'DONE' WHERE "id" = $1::uuid AND "status" = 'OPEN'`, [served.id],
   );

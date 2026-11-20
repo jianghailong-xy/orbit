@@ -355,7 +355,7 @@ async function ranOnABranch(stack: Stack, f: Fixture, taskId: string, label: str
       assignedRunnerId: f.runnerId, title: `${label}-work`, prompt: `${label}-work`, provider: 'claude',
       status: RunStatus.SUCCEEDED, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
       isolationStatus: 'worktree', branch: `orbit/${label}-work`, changedFiles: ['src/work.ts'],
-      finishedAt: new Date(),
+      finishedAt: new Date(), releaseCause: 'engine_exited',
     },
   });
 }

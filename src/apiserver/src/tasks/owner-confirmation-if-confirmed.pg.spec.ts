@@ -746,7 +746,7 @@ test('(8) DONE on a branch with no changes queues nothing while its work moves, 
       await s.db.$transaction(async (tx) => {
         const finished = await tx.session.update({
           where: { id: sessionId },
-          data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), branchSha: 'b'.repeat(40) },
+          data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited', branchSha: 'b'.repeat(40) },
           select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
         });
         await settleDeliveredIdentityAfterFinish(tx, finished);

@@ -354,14 +354,14 @@ async function workSession(
       prompt: 'do the work',
       provider: 'claude',
       status,
-      ...(isReleasedStatus(status) ? { finishedAt: new Date(), releaseCause: status === 'CANCELLED' ? 'cancelled' : 'engine_exited' } : {}),
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       startedAt: new Date(),
       // A run that ended has finished: its finish is what settles the work (§10.5 O-L4 3), and a DONE
       // over work that has not finished decides its landing at that finish (§12.15 P-M1).
-      ...(([RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED] as RunStatus[]).includes(status)
-        ? { finishedAt: new Date() } : {}),
+      ...(isReleasedStatus(status)
+        ? { finishedAt: new Date(), releaseCause: status === RunStatus.CANCELLED ? 'cancelled' : 'engine_exited' }
+        : {}),
       ...(branch ? { branch, isolationStatus: 'worktree', baseSha: sha('b') } : {}),
       ...(reported ? { changedFiles: reported } : {}),
     },
@@ -1141,8 +1141,10 @@ test('(6) the reaper\'s forced finish of the last task\'s work, with nothing to 
 
   await (stack.reaper as unknown as {
     forceFinalize(sessionId: string, runnerId: string | null, taskId: string | null, reason: string,
-      opts: { status?: RunStatus }): Promise<void>;
-  }).forceFinalize(sessionId, w.runnerId, task.id, 'runner lost', { status: RunStatus.CANCELLED });
+      opts: { status: RunStatus; releaseCause: 'cancelled' }): Promise<void>;
+  }).forceFinalize(sessionId, w.runnerId, task.id, 'runner lost', {
+    status: RunStatus.CANCELLED, releaseCause: 'cancelled',
+  });
 
   const frozen = await stack.db.task.findUniqueOrThrow({ where: { id: task.id }, select: { deliveredAt: true } });
   assert.ok(frozen.deliveredAt, 'CONTROL: the reaper\'s finish froze the identity');
@@ -1163,7 +1165,10 @@ test('a settled-project fact refused during FAILED recovers on the reconcile tic
     // Ran without a branch and reported changes: the criterion is unlanded (NO_BRANCH), which is what
     // makes the settled fact say "looks finished, but Orbit…".
     await workSession(stack, w, task.id, null, RunStatus.SUCCEEDED, ['walkthrough.md']);
-    await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED } });
+    await stack.db.session.update({
+      where: { id: w.coordinatorSessionId },
+      data: { status: RunStatus.FAILED, finishedAt: new Date(), releaseCause: 'engine_exited' },
+    });
     await settleExecutable(stack, task.id);
     const prisma = stack.db as unknown as PrismaService;
     const convergence = new CoordinatorConvergenceService(prisma);

@@ -224,14 +224,20 @@ test('a candidate is not frozen before the work it offers has stopped moving', {
    */
   async function enqueueOverMovingWork(tx: Prisma.TransactionClient, taskId: string) {
     const moving = (await tx.session.findMany({
-      where: { taskId, startsTaskWork: true, deletedAt: null, finishedAt: null }, select: { id: true },
+      where: { taskId, startsTaskWork: true, deletedAt: null, status: RunStatus.RUNNING }, select: { id: true },
     })).map((row) => row.id);
     if (moving.length > 0) {
-      await tx.session.updateMany({ where: { id: { in: moving } }, data: { finishedAt: new Date() } });
+      await tx.session.updateMany({
+        where: { id: { in: moving } },
+        data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited' },
+      });
     }
     const queued = await enqueueForDoneTask(tx, ownerId, taskId);
     if (moving.length > 0) {
-      await tx.session.updateMany({ where: { id: { in: moving } }, data: { finishedAt: null } });
+      await tx.session.updateMany({
+        where: { id: { in: moving } },
+        data: { status: RunStatus.RUNNING, finishedAt: null, releaseCause: null },
+      });
       await tx.task.update({ where: { id: taskId }, data: DELIVERED_IDENTITY_CLEARED });
     }
     return queued;

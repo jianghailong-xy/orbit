@@ -393,6 +393,8 @@ async function settleByAcceptance(stack: Stack, f: Fixture, taskId: string, labe
       status: RunStatus.RUNNING,
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
+      // The run reports work whose landing is still unknown.
+      changedFiles: ['work.md'],
     },
   });
   await stack.db.conversationTurn.create({
@@ -449,6 +451,10 @@ async function settleByAcceptance(stack: Stack, f: Fixture, taskId: string, labe
     subtype: 'shell',
     shellExitCode: shell.status!,
     shellOutput: `${shell.stdout}${shell.stderr}`,
+  });
+  await stack.db.session.update({
+    where: { id: sessionId },
+    data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited' },
   });
 
   assert.equal(

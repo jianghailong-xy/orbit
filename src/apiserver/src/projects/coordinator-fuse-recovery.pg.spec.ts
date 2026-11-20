@@ -362,6 +362,28 @@ async function finishServingWork(db: PrismaClient, f: Fixture, n: number): Promi
       autoRunWhenReady: false,
     },
   });
+  await db.session.create({
+    data: {
+      id: randomUUID(),
+      ownerId: f.ownerId,
+      creatorId: f.ownerId,
+      taskId,
+      workspaceId: f.workspaceId,
+      assignedRunnerId: f.runnerId,
+      title: 'finished serving work',
+      prompt: 'finish the serving work',
+      provider: 'claude',
+      status: RunStatus.SUCCEEDED,
+      finishedAt: new Date(),
+      releaseCause: 'engine_exited',
+      dispatchOrigin: SessionDispatchOrigin.USER,
+      startsTaskWork: true,
+      isolationStatus: 'worktree',
+      branch: `orbit/serving-${taskId}`,
+      branchSha: 'a'.repeat(40),
+      baseSha: 'b'.repeat(40),
+    },
+  });
   return taskId;
 }
 

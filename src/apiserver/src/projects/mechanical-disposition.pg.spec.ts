@@ -503,6 +503,12 @@ async function finishRound(
   if (how === 'RED') assert.equal(exitCode, 1, 'the round was supposed to come back red');
   if (how === 'KILLED') assert.equal(exitCode, -1, 'the round was supposed to be killed');
 
+  if (how === 'PASS') {
+    await stack.db.session.update({
+      where: { id: queued.sessionId },
+      data: { branch: `orbit/${queued.sessionId}`, isolationStatus: 'worktree', baseSha: 'b'.repeat(40) },
+    });
+  }
   await stack.api.turnComplete({ id: f.runnerId }, queued.sessionId, {
     turnId: queued.turnId,
     status: SharedRunStatus.SUCCEEDED,
@@ -510,6 +516,14 @@ async function finishRound(
     shellExitCode: exitCode,
     shellOutput: `${ran.stdout ?? ''}${ran.stderr ?? ''}`,
   });
+  if (how === 'PASS') {
+    // The passing turn settles the task. The worktree's final commit is reported at session finish.
+    await stack.api.finalize({ id: f.runnerId }, queued.sessionId, {
+      status: SharedRunStatus.SUCCEEDED,
+      isolationStatus: 'worktree',
+      branchSha: 'a'.repeat(40),
+    });
+  }
   return exitCode;
 }
 

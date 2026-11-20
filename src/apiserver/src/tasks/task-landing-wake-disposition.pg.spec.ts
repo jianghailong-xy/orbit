@@ -393,6 +393,8 @@ async function runAcceptance(
       status: RunStatus.RUNNING,
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
+      // The run reports work whose landing is still unknown.
+      changedFiles: ['work.md'],
     },
   });
   await stack.db.conversationTurn.create({
@@ -450,7 +452,14 @@ async function runAcceptance(
     shellExitCode: shell.status!,
     shellOutput: `${shell.stdout}${shell.stderr}`,
   });
-  return (await stack.db.task.findUniqueOrThrow({ where: { id: taskId } })).status;
+  const { status } = await stack.db.task.findUniqueOrThrow({ where: { id: taskId } });
+  if (status === TaskStatus.DONE) {
+    await stack.db.session.update({
+      where: { id: sessionId },
+      data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited' },
+    });
+  }
+  return status;
 }
 
 /** Drive one serving task to DONE and assert that is what the comparison derived. */

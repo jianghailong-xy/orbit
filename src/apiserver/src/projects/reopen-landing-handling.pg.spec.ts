@@ -527,7 +527,10 @@ test('an owner\'s Confirm that writes the reopened DONE while the run is open: t
       await stack.db.$transaction(async (tx) => {
         const finished = await tx.session.update({
           where: { id: sessionId },
-          data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), worktreeBranch: branch, worktreeDirty: false },
+          data: {
+            status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited',
+            worktreeBranch: branch, worktreeDirty: false,
+          },
           select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
         });
         await settleDeliveredIdentityAfterFinish(tx, finished);

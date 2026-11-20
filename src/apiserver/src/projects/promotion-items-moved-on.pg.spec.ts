@@ -45,6 +45,7 @@ import {
   enqueueForDoneTask,
   integrationDedupeKey,
   integrationItemTitle,
+  settleDeliveredIdentityAfterFinish,
 } from './project-integration-job';
 import { configureProjectIntegration } from './project-integration-line';
 import { recordIntegrationFailure, recordPromotionApproval } from './project-open-item';
@@ -389,9 +390,13 @@ async function doneCodeTask(stack: Stack, w: World, label: string): Promise<stri
   const task = await db.task.findUniqueOrThrow({ where: { id: declared.id }, select: { status: true } });
   assert.equal(task.status, TaskStatus.DONE, 'the acceptance command agreed');
   // The task's work stopped a minute ago (§2.6 J-T1a), before any integration claim.
-  await db.session.update({
-    where: { id: sessionId },
-    data: { status: RunStatus.SUCCEEDED, finishedAt, releaseCause: 'engine_exited' },
+  await db.$transaction(async (tx) => {
+    const finished = await tx.session.update({
+      where: { id: sessionId },
+      data: { status: RunStatus.SUCCEEDED, finishedAt, releaseCause: 'engine_exited' },
+      select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
+    });
+    await settleDeliveredIdentityAfterFinish(tx, finished);
   });
   return declared.id;
 }

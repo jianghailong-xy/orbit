@@ -281,11 +281,17 @@ test('a landing is not judged before the work it is about has stopped moving', {
       where: { taskId, startsTaskWork: true, deletedAt: null, finishedAt: null }, select: { id: true },
     })).map((row) => row.id);
     if (moving.length > 0) {
-      await tx.session.updateMany({ where: { id: { in: moving } }, data: { finishedAt: new Date() } });
+      await tx.session.updateMany({
+        where: { id: { in: moving } },
+        data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited' },
+      });
     }
     const queued = await enqueueForDoneTask(tx, ownerId, taskId);
     if (moving.length > 0) {
-      await tx.session.updateMany({ where: { id: { in: moving } }, data: { finishedAt: null } });
+      await tx.session.updateMany({
+        where: { id: { in: moving } },
+        data: { status: RunStatus.RUNNING, finishedAt: null, releaseCause: null },
+      });
       await tx.task.update({ where: { id: taskId }, data: DELIVERED_IDENTITY_CLEARED });
     }
     return queued;

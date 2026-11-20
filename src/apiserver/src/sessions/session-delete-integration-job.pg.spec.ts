@@ -64,7 +64,7 @@ import {
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
 import { readLandingJobsByTask } from '../projects/project-criterion-landing';
-import { INTEGRATION_JOB_CLAIM } from '../projects/project-integration-job';
+import { INTEGRATION_JOB_CLAIM, settleDeliveredIdentityAfterFinish } from '../projects/project-integration-job';
 import { configureProjectIntegration } from '../projects/project-integration-line';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import { QueueService } from '../queue/queue.service';
@@ -255,6 +255,7 @@ async function doneCodeTask(stack: Stack, w: World, label: string): Promise<{ ta
   });
   const sessionId = randomUUID();
   const turnId = randomUUID();
+  const branch = `orbit/${label}`;
   const finishedAt = new Date(Date.now() - 60_000);
   await db.session.create({
     data: {
@@ -271,7 +272,7 @@ async function doneCodeTask(stack: Stack, w: World, label: string): Promise<{ ta
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       startedAt: new Date(),
-      branch: `orbit/${label}`,
+      branch,
       isolationStatus: 'worktree',
       baseSha: 'b'.repeat(40),
     },
@@ -312,9 +313,16 @@ async function doneCodeTask(stack: Stack, w: World, label: string): Promise<{ ta
   });
   const task = await db.task.findUniqueOrThrow({ where: { id: declared.id }, select: { status: true } });
   assert.equal(task.status, TaskStatus.DONE, 'the acceptance command agreed');
-  await db.session.update({
-    where: { id: sessionId },
-    data: { status: RunStatus.SUCCEEDED, finishedAt, releaseCause: 'engine_exited' },
+  await db.$transaction(async (tx) => {
+    const finished = await tx.session.update({
+      where: { id: sessionId },
+      data: {
+        status: RunStatus.SUCCEEDED, finishedAt, releaseCause: 'engine_exited',
+        branchSha: TASK_BRANCH_TIP, worktreeBranch: branch, worktreeDirty: false,
+      },
+      select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
+    });
+    await settleDeliveredIdentityAfterFinish(tx, finished);
   });
   return { taskId: declared.id, sessionId };
 }

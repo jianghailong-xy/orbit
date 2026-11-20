@@ -78,7 +78,7 @@ import { establishProjectContractForPgTest } from '../projects/project-contract-
 import { ProjectAcceptanceService } from '../projects/project-acceptance.service';
 import { ProjectFuseService } from '../projects/project-fuse.service';
 import { ProjectHandoffService } from '../projects/project-handoff.service';
-import { INTEGRATION_JOB_CLAIM, PROMOTION_AUTOMATIC_LAND } from '../projects/project-integration-job';
+import { INTEGRATION_JOB_CLAIM, PROMOTION_AUTOMATIC_LAND, settleDeliveredIdentityAfterFinish } from '../projects/project-integration-job';
 import { configureProjectIntegration } from '../projects/project-integration-line';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import { ProjectPromotionService } from '../projects/project-promotion.service';
@@ -913,13 +913,14 @@ async function doneCodeTask(stack: Stack, w: LineWorld): Promise<string> {
   });
   const sessionId = randomUUID();
   const turnId = randomUUID();
+  const branch = `orbit/${w.label}`;
   await db.session.create({
     data: {
       id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, taskId: declared.id,
       workspaceId: w.workspaceId, assignedRunnerId: w.runnerId, title, prompt: title,
       provider: 'claude', status: RunStatus.RUNNING, dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true, startedAt: new Date(),
-      branch: `orbit/${w.label}`, isolationStatus: 'worktree', baseSha: 'b'.repeat(40),
+      branch, isolationStatus: 'worktree', baseSha: 'b'.repeat(40),
     },
   });
   await db.conversationTurn.create({
@@ -946,9 +947,16 @@ async function doneCodeTask(stack: Stack, w: LineWorld): Promise<string> {
   });
   const task = await db.task.findUniqueOrThrow({ where: { id: declared.id }, select: { status: true } });
   assert.equal(task.status, TaskStatus.DONE, 'the acceptance command agreed');
-  await db.session.update({
-    where: { id: sessionId },
-    data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(Date.now() - 60_000), releaseCause: 'engine_exited' },
+  await db.$transaction(async (tx) => {
+    const finished = await tx.session.update({
+      where: { id: sessionId },
+      data: {
+        status: RunStatus.SUCCEEDED, finishedAt: new Date(Date.now() - 60_000), releaseCause: 'engine_exited',
+        branchSha: TASK_BRANCH_TIP, worktreeBranch: branch, worktreeDirty: false,
+      },
+      select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
+    });
+    await settleDeliveredIdentityAfterFinish(tx, finished);
   });
   return declared.id;
 }

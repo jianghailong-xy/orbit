@@ -655,8 +655,7 @@ async function queuedLanding(
   // The session that produced this branch has stopped moving: the runner commits a worktree when it
   // FINISHES the session (SR13), and a landing is not handed over before that (J-T1a,
   // `task-landing-races-final-commit.pg.spec.ts` — a landing judged earlier answers ALREADY_LANDED
-  // about a branch that is about to grow). The status is left as it was: what the queue reads is
-  // the finish and where HEAD ended, and this spec's cases are about the items a landing opens.
+  // about a branch that is about to grow). Record the release and where HEAD ended.
   await stack.db.$transaction(async (tx) => {
     // The finish settles the DONE's delivered identity in the transaction that writes it, as every
     // finish door does — and decides the route a DONE written while this work moved left to it
@@ -1481,8 +1480,8 @@ async function claimed(stack: Stack, sessionId: string): Promise<void> {
  *
  * The doors are the two `claimedLanding` walked the first time — a message turn of the run that ends
  * SUCCEEDED is what queues the reserved shell turn, and the shell's exit code is what derives DONE —
- * over a task that has been DONE once already. That DONE transaction is what queues the task's next
- * landing generation: a task whose landing stopped is integrated again by being completed again.
+ * over a task that has been DONE once already. The next landing generation queues when that work
+ * finishes.
  */
 async function rework(stack: Stack, w: World, a: Attempt, label: string): Promise<void> {
   // The run finished (queuedLanding), so the session is released; the owner's reply revives it, which clears the
@@ -1517,10 +1516,13 @@ async function rework(stack: Stack, w: World, a: Attempt, label: string): Promis
     shellOutput: '',
   });
   assert.equal(await taskStatus(stack.db, a.taskId), TaskStatus.DONE, 'the second acceptance held too');
-  // The reworked run has stopped moving again, as queuedLanding leaves the first: a landing waits for the finish.
-  await stack.db.session.update({
-    where: { id: a.sessionId },
-    data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited' },
+  await stack.db.$transaction(async (tx) => {
+    const finished = await tx.session.update({
+      where: { id: a.sessionId },
+      data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited' },
+      select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
+    });
+    await settleDeliveredIdentityAfterFinish(tx, finished);
   });
 }
 
@@ -1555,8 +1557,7 @@ test('a landing answers the conflict item an earlier generation of the same task
       const item = await onlyItemFor(stack.db, w, task.taskId, 'the first landing conflicted');
       assert.equal(item.state, 'OPEN');
 
-      // The task is put back to work and passes its acceptance again, so its next generation is
-      // queued by that DONE (J-T1a) — and this one lands.
+      // The task passes its acceptance again and finishes, so its next generation queues and lands.
       await stack.tasks.update(w.ownerId, task.taskId, { status: DeclaredTaskStatus.IN_PROGRESS });
       await rework(stack, w, task, 'landed-after-conflict');
       const [claimed] = await stack.jobs.dispatch({
