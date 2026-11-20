@@ -273,7 +273,7 @@ class CardIncrementsDeviceTest : IncrementDeviceTest() {
         capture("02-session-reply")
         scrollTranscriptTo(hasText("Task started"))
         verify("the task-start card names the task", exists(hasText("Wire the checks"), unmerged = true))
-        scrollTranscriptTo(hasText("Project item delivered"))
+        scrollTranscriptTo(hasText("Wire the checks failed"))
         verify("the delivery's two doors", exists(hasText("Open the failed session ↗"), unmerged = true) && exists(hasText("Open the landing ↗"), unmerged = true))
         capture("03-delivery")
         scrollTranscriptTo(hasText("Project started"))

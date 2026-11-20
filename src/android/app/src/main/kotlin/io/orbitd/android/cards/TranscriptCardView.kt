@@ -83,12 +83,16 @@ internal fun TranscriptCardView(card: InteractionCard, open: (String) -> Unit, e
     if (card.key.endsWith(":coordinatorDelivery")) {
         CoordinatorDeliveryLineView(card, event, open); return
     }
+    // An exception item delivered to the coordinator is its own card, pointing at the item's card (board card-ui-polish ②).
+    if (card.key.endsWith(":openItemDelivery")) {
+        OpenItemDeliveryCardView(card, event, open); return
+    }
     // Another session's message is a bubble on the left (docs/mocks/session-message-bubble), queued or not.
     if (card.key.endsWith(":sessionMessage")) {
         SessionMessageBubble(card.source, event, open); return
     }
     // Orbit's cards on the left stop at 720 dp, as the message bubble beside them does (owner 2026-11-12).
-    val capped = listOf(":taskStart", ":projectStarted", ":openItemDelivery").any { card.key.endsWith(it) }
+    val capped = listOf(":taskStart", ":projectStarted").any { card.key.endsWith(it) }
     Surface(if (capped) Modifier.widthIn(max = 720.dp) else Modifier, shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.secondaryContainer) {
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(card.title, style = MaterialTheme.typography.titleSmall)
@@ -98,16 +102,6 @@ internal fun TranscriptCardView(card: InteractionCard, open: (String) -> Unit, e
                 "differsFromRequest", "startedAt", "outcome", "replyOptionLabel", "replyText", "excerpt", "closeReason", "closedAt", "status", "command", "outputTail", "progress", "state", "generation", "changedTargets", "jobs", "wakeups"), open)
             listOf("fromSessionId" to "Open sender session", "runSessionId" to "Open task session", "reviewerSessionId" to "Open reviewer session").forEach { (field, label) ->
                 card.source.text(field)?.let { LinkButton(label, "orbit-session:$it", open) }
-            }
-            // An open-item delivery's two ways into the record (iOS `OpenItemDeliveryCardView`, board v4 06 b): the session whose
-            // failure opened the item, and the landing it belongs to (§2.9 LS6). Either is drawn only where the payload names it.
-            if (card.key.endsWith(":openItemDelivery")) {
-                card.source.obj("task")?.text("sessionId")?.takeIf { it.isNotEmpty() }?.let {
-                    LinkButton(OpenItemDeliveryCopy.openSession, "orbit-session:$it", open)
-                }
-                card.source.text("landingSessionId")?.takeIf { it.isNotEmpty() }?.let {
-                    LinkButton(OpenItemDeliveryCopy.openLanding, "orbit-session:$it", open)
-                }
             }
             if (card.source.text("taskId") != null || card.source.text("projectId") != null) {
                 Text("Task and project details are not connected yet.", style = MaterialTheme.typography.bodySmall)
