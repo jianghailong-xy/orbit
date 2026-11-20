@@ -2731,6 +2731,7 @@ P-M1 不加列：它读的 `delivered_sha` 与 `delivered_base_sha` 是修订 29
 - `delivered_sha = delivered_base_sha`（分支上没有自己的提交）：**不入队**。不写 `LAND_TASK`、不建晋升候选、不入队观测，不经 runner，也不为此开始一条线。同一事务按 §10.5 O-L7 今天对空分支的那条规则收口：该任务没有任何会话报告过工作，就是「没有东西要落」，J9 对它的下游读作满足，下游在这个 DONE 的边沿上派发（J10 的第二条边沿）；有会话报告过工作，照旧开 `LANDING_UNOBSERVED`（原因 `WORK_ELSEWHERE`），那是「工作不在分支上」，要有人看。
 - `delivered_sha ≠ delivered_base_sha`：照今天入队。
 - 身份还没冻结（工作仍在移动，O-L4 第 3 条）：照今天等补冻结，补冻结的那个事务里做同一个判断。身份不明：照 O-T1。
+- （2026-11-20 补记）DONE 落在工作会话还开着的时候，其下游在**那个会话的 finish** 上放行，而这个 finish 由 DONE 自己请求。真 runner 上这是常态：EXECUTABLE 的 DONE 写在验收那一轮的 turn-complete 里，会话还没 finish。每个写 DONE 的门提交后都走完成边沿（`dispatchDependentsAfterCompletion`），它当即请求该任务空闲工作会话的结束（`endIdleWorkOfDoneTask`，与 reaper 同一个认领写 `claimParkedSessionEnd`）；DONE 时还在一轮里的会话由那一轮的 park 请求。runner 收尾写 `finished_at`，补冻结、本条的判断与下游派发都在那个 finish 上，中间没有计时器、没有扫描。有排队的轮、未答的请求或其它唤醒源（`hasPendingWakeSource`）的会话不在此时结束，照旧留给 reaper（每 30 s 一次的扫描，作为兜底）。实测（端到端 `scripts/acceptance/landing-measured/run.sh`，项目 A，三层六条零提交任务，真 runner）：改之前每个下游在前置 DONE 之后约 29 s 才开始（等 reaper 结束会话），六条任务约 90 s；改之后前置会话的 finish 与轮询所见的 DONE 相差不到 1 s，每个下游在其最后一个前置的 DONE（每秒轮询所见）之后 −0.2–0.7 s 开始，六条任务约 7 s。项目判据「下游在那个 DONE 上派发」读作：由那个 DONE 引起、中间没有计时器或扫描，不要求在 DONE 的事务里。
 
 这与 J-S2（修订 33）在 runner 上答的 `NOTHING_TO_LAND` 是同一个判定，提前到 DONE，由 apiserver 从已提交的行算。读口不变：任务行的集成三段（§7.3）显示 `Nothing to land`，§1.4 的判据落地折叠照 `NOTHING_TO_LAND` 读。J-S2 的那一支保留，接住旧 runner 没报 `branch_sha` 的会话。
 

@@ -560,9 +560,11 @@ async function answerTurn(
   sessionId: string,
   turnId: string,
   text: string,
+  leaseOwner?: string,
 ): Promise<void> {
   const last = await stack.db.runEvent.aggregate({ where: { sessionId }, _max: { seq: true } });
   await stack.api.events({ id: runnerId }, sessionId, {
+    ...(leaseOwner ? { leaseOwner } : {}),
     events: [{
       seq: (last._max.seq ?? 0) + 1,
       type: RunEventType.ASSISTANT,
@@ -1470,9 +1472,15 @@ test('an integration failure with no coordinator to hand it to is the owner\'s',
  * the session row it starts from: the fixture stands in for the runner, not for the product.
  */
 async function claimed(stack: Stack, sessionId: string): Promise<void> {
-  await stack.db.session.updateMany({
-    where: { id: sessionId, status: RunStatus.PENDING },
-    data: { status: RunStatus.RUNNING },
+  // In one transaction with what the database asks of a claim (QueueService.trySessionClaim; migrations 0080,
+  // 0367, 0377, 0414, 0426, as test-support/dequeue-under-lease.ts sets them): without it the guard triggers drop
+  // PENDING -> RUNNING silently, which a revived session (`rework`) runs into.
+  await stack.db.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT set_config('orbit.runner_supports_opencode', '1', true), set_config('orbit.runner_supports_antigravity', '1', true), set_config('orbit.runner_supports_dsh', '1', true), set_config('orbit.runner_supports_cursor', '1', true), set_config('orbit.claim_reads_session_engine', '1', true)`;
+    await tx.session.updateMany({
+      where: { id: sessionId, status: RunStatus.PENDING },
+      data: { status: RunStatus.RUNNING },
+    });
   });
 }
 
@@ -1485,7 +1493,12 @@ async function claimed(stack: Stack, sessionId: string): Promise<void> {
  * landing generation: a task whose landing stopped is integrated again by being completed again.
  */
 async function rework(stack: Stack, w: World, a: Attempt, label: string): Promise<void> {
-  const asked = await stack.sessions.createTurn(w.ownerId, a.sessionId, {
+  // The DONE asked for its work session's end (§12.15 P-M1, `endIdleWorkOfDoneTask`), and the runner drains that
+  // end with its finalize — in production within a second, long before a landing answers. Then `resume`, the door a
+  // task's own session is sent back to work through (session_send resumeIfEnded): it revives the ended session, and
+  // is `createTurn` itself for a live one.
+  await drainRequestedEnd(stack, w, a.sessionId);
+  const asked = await stack.sessions.resume(w.ownerId, a.sessionId, {
     clientTurnId: randomUUID(),
     content: `${label}: the conflict is resolved on the branch`,
     intent: 'NEXT_TURN',
@@ -1496,14 +1509,22 @@ async function rework(stack: Stack, w: World, a: Attempt, label: string): Promis
   await claimed(stack, a.sessionId);
   const delivered = await dequeue(stack, a.sessionId, w.runnerId);
   assert.equal(delivered?.turnId, asked.turnId, 'the rework turn was handed to the runner');
-  await answerTurn(stack, w.runnerId, a.sessionId, asked.turnId, 'the fix is pushed');
+  // A revived run is held by the runner process that claimed it, and its reports name that process.
+  const { inboxLeaseOwner } = await stack.db.session.findUniqueOrThrow({
+    where: { id: a.sessionId },
+    select: { inboxLeaseOwner: true },
+  });
+  const leaseOwner = inboxLeaseOwner ?? undefined;
+  await answerTurn(stack, w.runnerId, a.sessionId, asked.turnId, 'the fix is pushed', leaseOwner);
   await stack.api.turnComplete({ id: w.runnerId }, a.sessionId, {
     turnId: asked.turnId,
     status: SharedRunStatus.SUCCEEDED,
+    leaseOwner,
   });
   const acceptance = await dequeue(stack, a.sessionId, w.runnerId);
   assert.equal(acceptance?.taskAcceptance, true, 'the reworked task runs its acceptance command again');
   await stack.api.turnComplete({ id: w.runnerId }, a.sessionId, {
+    leaseOwner,
     turnId: acceptance!.turnId,
     status: SharedRunStatus.SUCCEEDED,
     subtype: 'shell',
@@ -1511,6 +1532,29 @@ async function rework(stack: Stack, w: World, a: Attempt, label: string): Promis
     shellOutput: '',
   });
   assert.equal(await taskStatus(stack.db, a.taskId), TaskStatus.DONE, 'the second acceptance held too');
+  // That DONE came while the revived session was open, so its landing is decided at the session's finish (§12.15
+  // P-M1), which the DONE requested; the runner's finalize is that finish.
+  assert.ok(await drainRequestedEnd(stack, w, a.sessionId, leaseOwner), 'the second DONE asked for its session\'s end');
+}
+
+/**
+ * The runner draining an end the DONE requested (`endIdleWorkOfDoneTask`): its finalize, the finish that freezes the
+ * delivered identity and decides the landing a DONE over open work left to it. False when no end was requested.
+ */
+async function drainRequestedEnd(stack: Stack, w: World, sessionId: string, leaseOwner?: string): Promise<boolean> {
+  const row = await stack.db.session.findUniqueOrThrow({
+    where: { id: sessionId },
+    select: { cancelRequestedAt: true, status: true },
+  });
+  if (!row.cancelRequestedAt || row.status !== RunStatus.AWAITING_INPUT) return false;
+  await stack.api.finalize({ id: w.runnerId }, sessionId, {
+    status: SharedRunStatus.SUCCEEDED,
+    subtype: 'success',
+    numTurns: 2,
+    costUsd: 0,
+    ...(leaseOwner ? { leaseOwner } : {}),
+  });
+  return true;
 }
 
 /** What a runner reports for a job that landed: one tree tested and landed, as J2 demands. */

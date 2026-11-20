@@ -112,6 +112,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { FilesService } from '../files/files.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { endIdleWorkOfDoneTask } from '../realtime/parked-session-end';
 import { ConditionsService, type ConditionFiring } from '../conditions/conditions.service';
 import {
   START_WHEN_VIEW_SELECT,
@@ -11300,6 +11301,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * task knowing it did, and it answers there, where it writes.
    */
   async dispatchDependentsAfterCompletion(ownerId: string, doneTaskId: string): Promise<void> {
+    // §12.15 P-M1: a DONE over an open work session decides its landing, and releases its
+    // dependents, at that session's finish — which the DONE requests here, rather than leaving it
+    // to the reaper's next sweep. Every DONE door comes through this edge after its commit. The
+    // finish arrives through the runner's finalize (`dispatchDependentsOfSettledWork`).
+    await this.requestEndOfIdleWork(ownerId, doneTaskId);
     let undecided: string[] = [];
     try {
       undecided = await this.dispatchDependentsOf(ownerId, doneTaskId);
@@ -11344,6 +11350,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // an unrelated blocker from some earlier episode goes on releasing its work.
       if (!stopped) await this.dispatchIndependentSiblingsOf(ownerId, doneTaskId);
     }
+  }
+
+  /**
+   * Ask for the end of a DONE task's idle work sessions now (`endIdleWorkOfDoneTask`): what the DONE
+   * edge above does, and what a work session's park does when its task became DONE during the turn.
+   * Best effort; anything it leaves, the reaper ends.
+   */
+  async requestEndOfIdleWork(ownerId: string, taskId: string): Promise<void> {
+    await endIdleWorkOfDoneTask(this.prisma, this.realtime, this.logger, { ownerId, taskId }).catch((error) =>
+      this.logger.warn(`the end of task ${taskId}'s idle work was not requested: ${
+        error instanceof Error ? error.message : error}`));
   }
 
   /**

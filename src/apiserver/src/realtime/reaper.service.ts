@@ -4,14 +4,12 @@ import {
   AgentProvider,
   RunEventType,
   SessionEndReason,
-  SessionLifecycleState,
   TRASH_RETENTION_DAYS,
   gracefulEndStatus,
   isApiErrorText,
   isAuthErrorText,
   isConnectionFailureText,
 } from '@orbit/shared';
-import { randomUUID } from 'crypto';
 import { initializesRuntimeDynamically } from '../common/runtime-provider';
 import { sessionEngine } from '../providers/session-engine';
 import { runnerOfflineIsFatal } from '../common/session-scheduling';
@@ -19,6 +17,7 @@ import { retireSessionInboxGeneration } from '../common/session-inbox-fence';
 import { PrismaService } from '../prisma/prisma.service';
 import { postRunFailureComment, reclaimStalledTask } from '../tasks/reclaim-stalled-task';
 import { RealtimeService } from './realtime.service';
+import { announceParkedSessionEnd, claimParkedSessionEnd } from './parked-session-end';
 import { readRuntimeStartupFacts, runtimeStartupClock, runtimeStartupOverdue } from './runtime-startup-clock';
 import {
   classifyTransactionFault,
@@ -1041,63 +1040,22 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     runnerId: string | null,
     reason: SessionEndReason,
   ): Promise<void> {
-    const taskStatus =
-      reason === SessionEndReason.TASK_DONE ? TaskStatus.DONE : TaskStatus.CANCELLED;
     // Claim the teardown atomically: re-evaluate the trigger at execution time and put
     // the cancelRequestedAt flip + the 'end' turn in ONE transaction so a seq P2002
     // rolls BOTH back (no half-ended, wedged session). Retried next sweep if so. The
     // re-check mirrors sweep() — still parked and its task is terminal — so a turn
-    // that arrived since the sweep read doesn't get cut off.
+    // that arrived since the sweep read doesn't get cut off. The same claim a DONE
+    // makes at once for its task's idle work (parked-session-end.ts, §12.15 P-M1);
+    // this sweep is the backstop for what that one left.
     // Retried whole, for the same reason as forceFinalize above.
-    const done = await withTransactionRetry(this.prisma, async (tx) => {
-      const now = new Date();
-      const claimed = await tx.session.updateMany({
-        where: {
-          id: sessionId,
-          status: RunStatus.AWAITING_INPUT,
-          cancelRequestedAt: null,
-          // Re-check the exact terminal outcome, not merely "some terminal state": a
-          // stale sweep must never turn a cancelled task into task_done/SUCCEEDED.
-          task: { status: taskStatus },
-          // Trash remains authoritative over Completed even for an anomalous live row.
-          ...(reason === SessionEndReason.TASK_DONE ? { deletedAt: null } : {}),
-        },
-        data: {
-          cancelRequestedAt: now,
-          endReason: reason,
-          ...(reason === SessionEndReason.TASK_DONE
-            ? { completedAt: now, archivedAt: now }
-            : {}),
-        },
-      });
-      if (claimed.count === 0) return false;
-      const last = await tx.conversationTurn.findFirst({
-        where: { sessionId },
-        orderBy: { seq: 'desc' },
-        select: { seq: true },
-      });
-      await tx.conversationTurn.create({
-        data: {
-          sessionId,
-          seq: (last?.seq ?? 0) + 1,
-          clientTurnId: randomUUID(),
-          kind: 'end',
-          status: 'PENDING',
-        },
-      });
-      return true;
-    }, loggedRetry(this.log, 'reaper.endParked'));
+    const done = await withTransactionRetry(
+      this.prisma,
+      (tx) => claimParkedSessionEnd(tx, sessionId, reason),
+      loggedRetry(this.log, 'reaper.endParked'),
+    );
     if (!done) return;
-    if (reason === SessionEndReason.TASK_DONE) {
-      this.realtime.publishSessionLifecycleChanged(
-        sessionId,
-        RunStatus.AWAITING_INPUT,
-        reason,
-        SessionLifecycleState.COMPLETED,
-      );
-    }
     if (runnerId) this.realtime.requestCancel(runnerId, sessionId);
-    this.realtime.notifyInbox(sessionId);
+    announceParkedSessionEnd(this.realtime, { sessionId, reason });
     this.log.log(`recycling parked session ${sessionId}`);
   }
 }
