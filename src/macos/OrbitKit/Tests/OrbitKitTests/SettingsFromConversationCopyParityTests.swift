@@ -56,6 +56,20 @@ final class SettingsFromConversationCopyParityTests: XCTestCase {
         XCTAssertEqual(SettingsChangeCopy.heading(2), "⚙️ Confirm: change 2 settings?")
     }
 
+    /// The third fold: a 409 SETTINGS_STALE keeps the card PENDING, says the stale line and offers Decline, which sends
+    /// that same line as the reason. Both clients are read, so neither can drop the fold alone.
+    func testTheStaleFoldIsTheSameOnBothClients() throws {
+        let web = try read(Self.card)
+        assertSays(web, "{COPY.stale}", in: Self.card)
+        assertSays(web, "decline.mutate(COPY.stale)", in: Self.card)
+        assertSays(web, "=== 'SETTINGS_STALE'", in: Self.card)
+        let native = try read("src/macos/OrbitApp/Sources/OrbitApp/Views/SettingsChangeViews.swift")
+        assertSays(native, "Text(SettingsChangeCopy.stale)", in: "SettingsChangeViews.swift")
+        assertSays(native, "decline(SettingsChangeCopy.stale)", in: "SettingsChangeViews.swift")
+        assertSays(native, "SettingsFromConversation.isStale(error)", in: "SettingsChangeViews.swift")
+        XCTAssertEqual(SettingsChangeCopy.stale, "This setting changed since it was proposed.")
+    }
+
     func testTheCardHasNoAlwaysAllowAndTheSameTwoButtons() throws {
         let web = try read(Self.card)
         assertSays(web, "{COPY.save}", in: Self.card)

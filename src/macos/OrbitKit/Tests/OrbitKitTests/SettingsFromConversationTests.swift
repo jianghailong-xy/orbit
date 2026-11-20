@@ -165,6 +165,28 @@ final class SettingsFromConversationTests: XCTestCase {
         XCTAssertFalse(SettingsFromConversation.isStale(APIError.http(status: 500, body: "SETTINGS_STALE")))
     }
 
+    /// A value moved since the card was proposed: the door answers 409 SETTINGS_STALE, the card stays PENDING and folds
+    /// to the stale line with a Decline link (design §5.2, §8.1).
+    func testAStaleApplyThrowsTheRefusalTheCardFoldsOn() async throws {
+        SettingsDoorProtocol.handler = { _ in
+            (409, Data(#"{"code":"SETTINGS_STALE","message":"This setting changed since it was proposed."}"#.utf8))
+        }
+        do {
+            _ = try await client().applyOwnerRequestSettings("r1")
+            XCTFail("a stale apply must be refused")
+        } catch {
+            XCTAssertTrue(SettingsFromConversation.isStale(error))
+        }
+        SettingsDoorProtocol.handler = { _ in (500, Data("boom".utf8)) }
+        do {
+            _ = try await client().applyOwnerRequestSettings("r1")
+            XCTFail("a server error must throw")
+        } catch {
+            XCTAssertFalse(SettingsFromConversation.isStale(error), "only SETTINGS_STALE folds the card")
+        }
+        XCTAssertEqual(SettingsChangeCopy.stale, "This setting changed since it was proposed.")
+    }
+
     func testALoneSettingsLinkBecomesTheOpenInSettingsRow() {
         let linked = OrbitLinkPlacement.place(
             [.paragraph(text: "[Let sessions orchestrate](orbit-settings:enableOrchestration)")], host: "https://orbit.test")
