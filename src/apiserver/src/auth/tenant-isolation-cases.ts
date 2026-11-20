@@ -889,6 +889,12 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
  * that shows the route finds its object only under the caller's own account. Kept as short as it can be.
  */
 export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
+  // ── the owner's tier for a built-in engine's model (docs/subagent-design.md §7) ─────────────────────────
+  'PATCH /providers/builtin/:engine/model-tier':
+    'the path names an engine (claude, cursor, …), which every account shares, not an object of any account: the write '
+    + 'is one UPDATE of the caller\'s own user row (WHERE "id" = the caller, providers/providers.service.ts:793 '
+    + 'in setBuiltinModelTier), and the model is checked against the caller\'s own runners; no other account\'s row can be '
+    + 'named. subagent-settings.pg.spec.ts section 5 sets and clears it and reads the caller\'s preferences back',
   // ── the managed runner browser (docs/runner-browser-design.md §5, §6) ──────────────────────────────────
   'GET /runners/:id/browser':
     'behind the browser switch, which the census server leaves off (every caller 404 there); on, the runner is read by '

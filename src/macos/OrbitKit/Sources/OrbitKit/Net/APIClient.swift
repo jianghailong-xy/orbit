@@ -1838,10 +1838,10 @@ public final class APIClient: @unchecked Sendable {
     /// Every provider with its models' SubAgent tiers and prices (GET /providers/subagent-tiers): the
     /// Providers page's Model tiers table and the SubAgents settings' provider list.
     public func subagentTiers() async throws -> SubagentTiersResponse { try await get("providers/subagent-tiers") }
-    /// Set or clear (nil) the owner's tier for one model of their own key.
-    public func setModelTier(providerID: String, model: String, tier: String?) async throws {
-        _ = try await send(makeRequest("providers/mine/\(providerID)/model-tier", method: "PATCH",
-                                       body: ProviderModelTierUpdate(model: model, tier: tier)))
+    /// Set or clear (nil) the owner's tier for one model, at the path SubagentSettings.tierPath names: a key of
+    /// their own, or a built-in engine's catalogue.
+    public func setModelTier(path: String, model: String, tier: String?) async throws {
+        _ = try await send(makeRequest(path, method: "PATCH", body: ProviderModelTierUpdate(model: model, tier: tier)))
     }
 
     /// The whole DeepSeek account's balance behind one of the account's own DeepSeek keys (GET

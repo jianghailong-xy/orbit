@@ -28,6 +28,11 @@ adds to revision 3:
 | 6 | Approvals answered with "don't ask again" hold for later runs (existing workspace rules) | §6.4 | |
 | 7 | Which of Orbit's four timers an agent should reach for | §1 | |
 
+**Sub-daily and planned end** (owner, 2026-11-18; project *Sub-daily schedules and planned end*) add to revision 4:
+the `EVERY` rule (§3, §5.1) inside the same runs-per-week envelope (§4), a run limit shorter than the interval and a
+one-interval catch-up (§5.2, §7.2), `maxRuns` beside `endAt` with a suggested 7-day end for sub-daily rules (§8.5),
+what clients already shipped need (§9.3), and missed slots collapsed in the run list (§9.2).
+
 ## 1. Why, and which timer
 
 A user wants recurring work that outlives any conversation:
@@ -98,11 +103,13 @@ Schedule
   rule          { kind: ONCE, at }
                 { kind: DAILY, time }
                 { kind: WEEKLY, time, weekdays[] }
+                { kind: EVERY, minutes, time, weekdays[], until? }   sub-daily, §5.1
                 { kind: CRON, expr }                   P3
   timezone      IANA name
-  startAt, endAt?
+  startAt, endAt?                                      endAt: the planned end by time, §8.5
+  maxRuns?                                             the planned end by count of started runs, §8.5
   accessLevel   CHECK_ONLY | OPEN_PR
-  runLimitMinutes                                      default 30
+  runLimitMinutes                                      default 30; EVERY: min(30, minutes / 2), always < minutes
   envelope      { workspaceId, accessLevel, runsPerWeek, runLimitMinutes }     §4, written only by a press
   state         ACTIVE | PAUSED | HELD | ENDED
   heldReason?, endedReason?                            DELETED | END_REACHED | GOAL_REACHED
@@ -147,6 +154,25 @@ writes the schedule. A newer UPDATE request for the same schedule supersedes the
 Rule encoding: weekdays are `MON` … `SUN`; `ONCE.at` is a local `YYYY-MM-DDTHH:mm` in the schedule's time zone;
 `DAILY` and `WEEKLY` take `time` as a local `HH:mm`.
 
+`EVERY` is the sub-daily rule ("every 30 minutes from 9 to 6 on weekdays", "every 2 hours"):
+
+- `minutes` is one of 30, 60, 120, 180, 240, 360, 480, 720; anything else is refused. A rhythm of a day or more is
+  `DAILY` or `WEEKLY`.
+- `time` is the window start, a local `HH:mm`: the day's first slot.
+- `until` is the optional window end, a local `HH:mm` later than `time` on the same day, and inclusive: a slot that
+  falls exactly on it fires. Without `until` the window runs to the end of the day (23:59), so the slots go round the
+  clock from `time`.
+- Every day starts again at `time`; a window never crosses midnight. Every allowed interval divides 24 hours, so a
+  rule with no `until` whose `time` is less than one interval past midnight ("every 2 hours" is `time` 00:00) is evenly
+  spaced across midnight too. "Every 3 hours from 10:00" is 10:00, 13:00, 16:00, 19:00 and 22:00, then 10:00 the next
+  day: the agent that writes the rule reads it back on the card, so the person sees which they get.
+- `weekdays` is always written out, all seven when the person named none.
+- The server always writes `time` and `weekdays` on an `EVERY` rule, whatever the input omitted. That is a hard
+  requirement of the clients already shipped (§9.3), not a convenience.
+- `maxRuns` is an integer of at least 1 and is allowed on every rule kind; it is the only schedule field §8.5 adds.
+  `CRON` stays P3: `EVERY` covers the sub-daily rhythms people ask for, with a window and weekdays, and nothing in it needs an
+  expression.
+
 There is no notify field and no runner field: §7.3 decides who hears, and a run goes to any online runner the
 workspace can use.
 
@@ -168,8 +194,8 @@ The envelope is what a person agreed to on a card. It has four parts and nothing
 | --- | --- | --- |
 | workspace | a different workspace | *Runs in* |
 | access level | `CHECK_ONLY` → `OPEN_PR` | *May* |
-| runs per week | more of them (weekly → daily is 1 → 7) | *Costs* |
-| run limit | a longer run (default 30 minutes, at most 2 hours) | *Costs* |
+| runs per week | more of them (weekly → daily is 1 → 7; every 30 minutes, 09:00–18:00, Mon–Fri is 95) | *Costs* |
+| run limit | a longer run (default 30 minutes, at most 2 hours; under an `EVERY` interval, §7.2) | *Costs* |
 
 The rule, checked by the server on every `schedule_create` and `schedule_update`:
 
@@ -197,6 +223,26 @@ The rule, checked by the server on every `schedule_create` and `schedule_update`
 - Undo works on any revision whose fields have not changed since (otherwise `SCHEDULE_UNDO_STALE`), once per
   revision (`SCHEDULE_ALREADY_UNDONE`); revision 1, the creation, cannot be undone. Bringing an ENDED schedule back
   counts against `SCHEDULE_LIMIT`.
+
+**Runs per week of an `EVERY` rule** is its slots per day times its distinct weekdays:
+
+```text
+slotsPerDay  = floor((windowEnd - time) / minutes) + 1        windowEnd = until, or 23:59 without one
+runsPerWeek  = slotsPerDay × |weekdays|
+```
+
+Worked example: every 30 minutes from 09:00 until 18:00, Monday to Friday. The slots are 09:00, 09:30, … 17:30,
+18:00 (`until` is inclusive): floor(540 / 30) + 1 = 19 a day, and 19 × 5 = **95** runs a week, which is what the card's
+*Costs* line says ("Up to 95 runs a week, 15 min each"). Every hour round the clock is 24 × 7 = 168; every 12 hours from
+09:00 is 2 × 7 = 14. The count is of the rule's slots on an ordinary day; a daylight-saving day that loses or gains an
+hour (§5.1) does not change it.
+
+There is no new authority concept for sub-daily rules: a shorter interval, a wider window or another weekday is more
+runs per week, and grows the envelope like daily → weekly does. So for an `EVERY` rule the time of day, the window and
+the weekdays are inside the envelope only while `runsPerWeek` stays at or below `envelope.runsPerWeek`; "make it every
+15 minutes" is refused (not an allowed interval), "make it every 30 minutes" from hourly waits on the widen card, and
+"only until 17:00" applies at once. Moving between kinds is judged the same way: `DAILY` → `EVERY 60` is 7 → 168 and
+waits; `EVERY 720` → `DAILY` applies at once.
 
 The budget is counted in runs and minutes, not in money, because a subscription account reports no cost per run.
 The inspector shows what was used: "This month: 14 runs · 41 min", with a cost where the engine reports one.
@@ -230,7 +276,8 @@ A worker reads `Schedule WHERE state = 'ACTIVE' AND nextDueAt <= now()`. For eac
 1. Insert the run for `plannedAt = nextDueAt`. A conflict on `(scheduleId, plannedAt)` means another worker already
    fired this slot: stop there.
 2. Advance `nextDueAt` to the next slot after now, in the schedule's time zone. Past `endAt`, or after a `ONCE`
-   rule's only slot, the schedule becomes ENDED (`END_REACHED`).
+   rule's only slot, the schedule becomes ENDED (`END_REACHED`). Reaching `maxRuns` ends it too, at the start that
+   reaches it (§8.5).
 3. Apply overlap: when a run is RUNNING or AWAITING_APPROVAL, the new run is QUEUED. When one is already QUEUED, the
    older queued run becomes SKIPPED and the new one takes its place. There is never more than one waiting.
 
@@ -248,6 +295,23 @@ started when the schedule already started its runs per week in the 7 days before
 - `ONCE` is a schedule with one slot: "check at 18:00 whether the deploy is healthy and tell me". It differs
   from `Task.runAt` in what it produces: a report, not a deliverable.
 
+**`EVERY` slots** are on the local wall clock of the schedule's time zone, never counted as elapsed time from the
+previous run, so a late or long run never shifts the ones after it:
+
+- On each local day whose weekday is in `weekdays`, the slots are `time`, `time + minutes`, `time + 2 × minutes`, …
+  while the local time is at or before the window end (`until`, inclusive; 23:59 without one). A day not in
+  `weekdays` has none. Each day starts again at `time` (§3).
+- Each local slot is turned into an instant with the same rules as `DAILY`: a slot in the hour a spring-forward
+  skips moves to the first valid minute after it, and a slot in the hour a fall-back repeats fires on the first
+  occurrence only. Two slots that land on the same instant are one slot (`unique(scheduleId, plannedAt)` already
+  says so). So every 30 minutes on a day 02:00 jumps to 03:00 has 02:00 and 02:30 both moved to 03:00 and runs once
+  there: that day has two runs fewer. On the day 02:00 falls back to 01:00, 01:00 and 01:30 fire once, at their first
+  occurrence, and the repeated hour has no slots: still one slot per wall-clock time, never one per elapsed half-hour.
+- `nextDueAt` is the first such instant strictly after now, also inside `startAt` and `endAt` (both inclusive, as for
+  every rule). The search reaches 8 local days ahead, enough for any non-empty `weekdays`.
+- Example, every 30 minutes from 09:00 until 18:00 on Mon–Fri, Asia/Shanghai: on Friday at 17:40 the next slot is
+  18:00; at 18:00:01 it is Monday 09:00.
+
 ### 5.2 Missed slots
 
 A slot is missed when its run could not start near its time: the runner was offline, the apiserver was down,
@@ -257,6 +321,12 @@ dispatch was paused, the account's quota was exhausted.
   recorded MISSED. Nothing replays a backlog.
 - Catch-up reaches back one period (24 hours for `ONCE`). An older slot is recorded MISSED and the schedule waits
   for its next slot. A missed `ONCE` notifies, because nothing else will run.
+- For `EVERY` the period is **one interval** (`minutes`), not 24 hours: a slot is caught up only while its next
+  slot has not come yet, so a catch-up never runs beside, or instead of, a newer slot. Every 30 minutes round the clock,
+  the apiserver down from 00:50 to 09:20: on recovery the 09:00 slot runs as `CATCH_UP`, the 16 slots 01:00 … 08:30
+  are MISSED (the run list shows them as one row, §9.2), and 09:30 runs as usual. Back at 09:35 instead, 09:30 would
+  run and 09:00 be MISSED too. The window of the start retries (§7.2) is the same interval, so on a
+  30-minute rule they are after 1, 5 and 15 minutes and then MISSED.
 - A run shows both `plannedAt` and `startedAt`, so a late run says it was late.
 - The same holds for a run already written whose start meets the outage. A runner that is offline (a managed runner
   asleep is not: opening the session wakes it) leaves the run QUEUED, without spending an attempt, looking again
@@ -535,6 +605,14 @@ run (`LANDING_FAILED`) with its reason, through the same push and **Waiting on y
   session; a newer run already waiting takes its place instead.
 - The run limit counts the engine's working time from `delivered_at`: time a card kept the run waiting is left out,
   so the 2-hour approval timeout can be reached under a run limit of at most 2 hours.
+- **On an `EVERY` rule the run limit is shorter than the interval.** `runLimitMinutes >= minutes` is refused on
+  `schedule_create` and `schedule_update` (`SCHEDULE_RUN_LIMIT_NOT_SHORTER_THAN_INTERVAL`, naming both numbers), before
+  any card: a change of interval that would leave the limit too long has to shorten the limit in the same call. When
+  the input names no limit, an `EVERY` rule gets **min(30, minutes / 2)**: 15 minutes every 30 minutes, 30 every hour
+  or longer. A rule changed to `EVERY` from another kind without a limit in the patch gets the same default if its old
+  limit is not shorter than the new interval, and keeps its limit otherwise. So a run normally ends before its next
+  slot fires, and the overlap rule of §5 (one QUEUED, the older SKIPPED) is for runs held up by a card, not for every
+  run. A shorter limit is always inside the envelope (§4), so this default never needs a card.
 - SKIPPED, MISSED and HELD runs are not failures.
 
 ### 7.3 Who hears
@@ -548,6 +626,7 @@ run (`LANDING_FAILED`) with its reason, through the same push and **Waiting on y
 | HELD, AWAITING_APPROVAL | yes | push and **Waiting on you** |
 | the run ended its own schedule (§8.3) | once | push, opens the schedule |
 | a slot MISSED over the weekly budget (§4) | once, not for the next slots in a row | push, opens the schedule |
+| the schedule reached its planned end, `endAt` or `maxRuns` (§8.5) | once | push, opens the schedule |
 
 - "Tell me every day" needs no setting: the agent writes a prompt that reports each run as CHANGED with a key per day
   (`summary@2026-11-15`).
@@ -577,8 +656,8 @@ run (`LANDING_FAILED`) with its reason, through the same push and **Waiting on y
 2. When the session can, the agent **does the check once, right there**, and answers with today's result. This is
    the baseline.
 3. The agent calls `schedule_create({intent, title, prompt, rule, timezone?, accessLevel, runLimitMinutes?,
-   baseline?: {key, summary, links?}})`. Workspace and agent are the calling session's. It asks back only when
-   something a person owns is missing ("how often?"), never for a field.
+   endAt?, maxRuns?, baseline?: {key, summary, links?}})`. Workspace and agent are the calling session's. It asks
+   back only when something a person owns is missing ("how often?"), never for a field.
 4. The session shows one card. It has no fields and one press:
 
    ```text
@@ -648,6 +727,65 @@ Each is a `ScheduleRevision` with `changedBy = RUN` and **Undo**. A run asking t
 
 Agents have the same five as tools, so "pause the Codex check until Monday" works from a chat.
 
+### 8.5 Planned end
+
+A schedule may stop on its own, by time, by count, or by whichever comes first:
+
+- **`endAt`** (exists): an instant; no slot after it fires (a slot exactly at it does). "Every hour for the next 6
+  hours" is `EVERY 60` with `endAt` 6 hours out; "until 18:00 today" is `endAt` today at 18:00 in the schedule's time
+  zone.
+- **`maxRuns`** (new, optional, at least 1, on every kind of rule): the schedule stops after this many runs have
+  **started**. Starts are counted as §4 counts them: runs of every trigger (SCHEDULED, CATCH_UP and MANUAL) that
+  actually started, a retried undelivered start counted once; SKIPPED, MISSED, HELD and CANCELLED-before-start runs
+  are not counted. The count is over the schedule's whole life. "Check the next 10 releases" or "the next 3 mornings"
+  is `maxRuns`.
+
+Reaching either ends the schedule ENDED (`END_REACHED`), the reason a `ONCE` rule already ends with:
+
+- `endAt`: when the worker advances `nextDueAt` (§5 step 2) and finds no slot at or before `endAt`.
+- `maxRuns`: in the transaction that starts the run reaching it, under the schedule lock §4's count already takes, so
+  two replicas cannot both start a last run. `nextDueAt` becomes NULL and a QUEUED run is CANCELLED. The run that
+  reached it goes on and reports as usual.
+- One push, **"Stopped as planned after N runs"** (N the runs started in all, "after 1 run" for one), opening the
+  schedule. It is sent once the schedule is ENDED and no run of it is still running, so the last run's own push, if it
+  found something, comes first. A `ONCE` schedule, whose end is its only slot, sends none.
+- `endAt` and `maxRuns` are inside the envelope (§4): setting, moving or removing either applies at once with
+  **Undo**. A patch that sets `maxRuns` at or below the runs already started is refused
+  (`SCHEDULE_MAX_RUNS_ALREADY_REACHED`): ending now is `schedule_end`.
+
+**Suggested end for sub-daily rules.** A schedule that runs several times a day and is forgotten costs the most, so
+a create card for an `EVERY` rule that names neither `endAt` nor `maxRuns` carries a suggested end of **7 days**: the
+same local time 7 days after **Create** is pressed, in the schedule's time zone. The card shows it on its own line,
+with the one press that removes it:
+
+```text
+When      Every 30 min · 09:00–18:00 · Mon–Fri · Asia/Shanghai
+Ends      In 7 days, Nov 27 (suggested)                                   [No end]
+Costs     Up to 95 runs a week, 15 min each
+```
+
+**No end** strikes the line on the card; **Create** then writes no end. The press travels with Create
+(`POST /api/schedule-requests/:id/allow {dropSuggestedEnd: true}`), so it writes nothing on its own, and a client that
+does not know the field creates with the suggestion kept. The suggestion is the server's (the card's `proposed` carries
+`suggestedEnd: true`), never the agent's, and an end the person or agent named is never marked suggested and has no
+**No end**. `DAILY`, `WEEKLY` and `ONCE` rules get no suggestion.
+
+**How the end reads on clients.** Every client draws the same words, from one function in `@orbit/shared` (and its
+Swift and Kotlin twins), from the view's `endAt`, `maxRuns` and a new `runsLeft` (`maxRuns` minus the runs started,
+computed by the server; NULL without `maxRuns`):
+
+| Planned end | Reads |
+| --- | --- |
+| `endAt` today, local | "until 18:00 today" |
+| `endAt` tomorrow | "until 18:00 tomorrow" |
+| `endAt` later | "until Nov 27, 18:00" ("until Nov 27" at 00:00) |
+| `maxRuns` | "3 runs left", "1 run left" |
+| both | "until 18:00 today · 3 runs left" |
+| ENDED `END_REACHED` with a planned end | "Stopped as planned after 12 runs" |
+
+The read appears after the rule on a schedule's row, as the *Ends* line of the inspector, and on the create and change
+cards. A schedule with no planned end shows nothing.
+
 ## 9. Surfaces
 
 ### 9.1 API and tools
@@ -688,6 +826,15 @@ As decided in revision 3, modelled on Reminders' *Scheduled* list:
   and a failing one is tagged on its own row, on the day of its next run. While a run of it is under way (Run now,
   or its next slot) the tag is off: a failure puts it back, a run that did not fail clears it. A held schedule has no
   next run and is listed under **Paused**, before the paused ones, with its Held tag. **Show past runs** puts earlier runs back, ticked off. A workspace filter sits in the header.
+- **Rule sentence** for `EVERY` (the server's `ruleText`, and `scheduleRuleText` on clients): "Every 30 min,
+  09:00–18:00, Mon–Fri"; "Every hour"; "Every 2 hours from 08:00, weekends"; seven weekdays are left unsaid. The
+  timeline lists a sub-daily schedule once per day, at its next slot that day, not once per slot.
+- **Missed slots, collapsed:** in a run list (the inspector's history, `GET /api/schedules/:id/runs` as clients draw
+  it) consecutive MISSED runs of one schedule, with no other run between them, are one row: "16 slots missed,
+  01:00–08:30" (the first and last `plannedAt`, local; with dates when they span days: "Nov 19, 22:00–Nov 20, 06:30").
+  A single MISSED run is its own row as before. The row expands to the runs it covers, and the reason line is the
+  newest run's (§5.2, §4). The rows stay one per slot on the server: collapsing is drawing, done the same on every
+  client by a shared function.
 - **Inspector** (beside the list on web and macOS, a sheet on iOS): the read-back sentence, next run, last result,
   *What was asked* (the intent), *Notes for the next run*, this month's use, history (runs and revisions with
   **Undo**, each naming who made it: you, a session, or a run), the controls of §8.4 and **Change…**.
@@ -698,10 +845,25 @@ As decided in revision 3, modelled on Reminders' *Scheduled* list:
 
 Mocks first, with iOS as the reference. Client work starts after the owner approves them.
 
+### 9.3 Clients already shipped
+
+`EVERY` and `maxRuns` reach clients that predate them, and those must keep working:
+
+- shipped macOS and iOS clients decode a rule of an unknown `kind` as `WEEKLY`, and throw when it has no `time`,
+  which fails the whole schedule list;
+- shipped Android drops a rule without `time`.
+
+So every `EVERY` rule the server writes or returns carries `time` and `weekdays` (§3), and an old client reads it as
+"weekly at `time` on `weekdays`": one row it shows wrongly, never a list it cannot read. The server's `ruleText`
+carries the true sentence for a client that shows it. `maxRuns` and `runsLeft` are extra fields old clients ignore.
+A spec on the server asserts that every `EVERY` rule it writes has both fields; each client keeps a decoding test of
+an `EVERY` fixture through its old path.
+
 ## 10. Out of scope for v1
 
 - A deploy access level. Pausing automatically after failures. A form.
-- Cron and sub-daily rules (P3). The envelope already counts runs per week, so they need no new rule.
+- Cron rules (P3). Sub-daily rhythms are `EVERY` (§3), so nothing that needs an expression is left.
+- Raising the `WHEN` rule's 7-runs-a-week cap.
 - Pinning a runner.
 - A cheap pre-check before starting a model ("only start a session if this URL's hash changed"). The Watch contract
   keeps shell out of the server; if wanted later it belongs on the runner. That pre-check is now designed in
@@ -714,7 +876,8 @@ Mocks first, with iOS as the reference. Client work starts after the owner appro
 | --- | --- |
 | P1 server | migration and model; envelope rule; firing worker with overlap, catch-up and retry; start checks; run block; report, note and findings; run limit; notifications into push and Waiting on you; run sessions hidden and completed; revisions with undo; MCP tools with the create and widen cards; read-only REST and controls; pg specs for every rule in §4–§8 |
 | P2 clients | boards → owner approval → left-drawer page, inspector and session cards on iOS, then web, macOS, Android |
-| P3 | cron and sub-daily rules |
+| Sub-daily | `EVERY` rules (§3, §5.1), their runs per week (§4), run limit and catch-up (§5.2, §7.2), the planned end (§8.5), shipped-client compatibility (§9.3) and the collapsed missed row (§9.2): server and shared first, then the clients independently |
+| P3 | cron rules |
 
 ## 12. Open points for P1, settled (S2, 2026-11-15)
 
@@ -856,7 +1019,8 @@ session's or a personal access token's Run now over it is refused (`SCHEDULE_OVE
 reuses the run row and clears `startedAt`). No migration: `schedule_run.planned_at`, `started_at` and `failure_reason` carry it.
 
 **3. The defaults** stay: approval timeout 2 hours; retries after 1, 5 and 15 minutes, then hourly inside the
-catch-up window (§5.2, §7.2); run limit 30 minutes, at most 120. One change: the run limit counts working time only, without
+catch-up window (§5.2, §7.2); run limit 30 minutes, at most 120 (an `EVERY` rule: min(30, interval / 2) and always
+shorter than the interval, §7.2). One change: the run limit counts working time only, without
 the time a card waited (§7.2), or the approval timeout could never fire. A first turn not delivered within 10
 minutes is `RUNNER_UNAVAILABLE`; a slot fired within 10 minutes of its time is SCHEDULED, later it is CATCH_UP.
 

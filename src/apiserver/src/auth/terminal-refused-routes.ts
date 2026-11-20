@@ -251,6 +251,7 @@ export const TERMINAL_REFUSED_ROUTES: readonly string[] = [
   'PATCH /integrations/feishu/chats/:id',
   'PATCH /projects/:id',
   'PATCH /projects/:id/integration',
+  'PATCH /providers/builtin/:engine/model-tier',
   'PATCH /providers/mine/:id',
   'PATCH /providers/mine/:id/model-tier',
   'PATCH /providers/shared-pools/:id',

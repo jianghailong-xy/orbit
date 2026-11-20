@@ -1,8 +1,10 @@
 package io.orbitd.android.management
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -53,6 +55,8 @@ internal object Subagents {
     const val NOT_SET = "Not set"
     const val SUBSCRIPTION = "Subscription"
     const val CLEAR = "Clear"
+    /** The tag after a tier the owner set (board 2026-11-20). */
+    const val YOURS = "Yours"
     const val EDIT = "Edit"
     const val PROVIDERS_LOAD_FAILED = "Couldn't load providers"
     const val SAVE_BLOCKED_FAILED = "Couldn't save blocked providers"
@@ -77,6 +81,20 @@ internal object Subagents {
         levels.containsAll(LEVELS) -> "S–XL by effort"
         else -> levels.joinToString(" · ")
     }
+
+    /** Where a model's tier is written: a built-in engine's catalogue, or a key of the owner's own; null when it is not the owner's to set. */
+    fun tierPath(provider: SubagentProvider, model: SubagentTierModel): String? = when {
+        !model.editable -> null
+        provider.kind == "builtin" -> "providers/builtin/${provider.slug}/model-tier"
+        else -> provider.providerId?.let { "providers/mine/$it/model-tier" }
+    }
+
+    /** Whether the menu offers Clear: a key's model with a tier, or a built-in engine's model the owner tiered. */
+    fun offersClear(provider: SubagentProvider, model: SubagentTierModel) =
+        if (provider.kind == "builtin") model.source == "owner" else model.levels.isNotEmpty()
+
+    /** Whether the Tier cell carries the Yours tag: a tier the owner set. */
+    fun showsYours(model: SubagentTierModel) = model.source == "owner"
 
     fun priceText(model: SubagentTierModel, billing: String) = when {
         model.outputPricePerMTok != null -> String.format(Locale.US, "$%.2f", model.outputPricePerMTok)
@@ -207,8 +225,9 @@ internal fun SubagentProvidersDialog(providers: List<SubagentProvider>, blocked:
 
 /**
  * The Providers page's Model tiers (docs/subagent-design.md §7): each provider's models with the tiers routing reads for them and their
- * price per million output tokens. A model the owner may tier opens a menu of the four, and Clear once set. On a phone the provider sits
- * above its model in one cell.
+ * price per million output tokens. A model the owner may tier (a key's own, or any of a built-in engine's catalogue) opens a menu of the
+ * four, and Clear where the owner's tier can be cleared; a tier the owner set carries a Yours tag. On a phone the provider sits above its
+ * model in one cell.
  */
 @Composable
 internal fun ModelTiersSection(api: ManagementApi, revision: Long) {
@@ -238,10 +257,10 @@ internal fun ModelTiersSection(api: ManagementApi, revision: Long) {
                             provider = { Text(provider.label, style = it, maxLines = 1) },
                             model = { Text(model.model, style = it.copy(fontFamily = FontFamily.Monospace), maxLines = 1) },
                             tier = { style ->
-                                TierCell(model, provider.providerId, style) { tier ->
+                                TierCell(provider, model, style) { path, tier ->
                                     scope.launch {
                                         try {
-                                            api.patch("providers/mine/${provider.providerId}/model-tier", buildJsonObject {
+                                            api.patch(path, buildJsonObject {
                                                 put("model", model.model); put("tier", tier?.let(::JsonPrimitive) ?: JsonNull)
                                             })
                                             reads++; failure = null
@@ -284,20 +303,33 @@ private fun TierRow(wide: Boolean, header: Boolean, provider: @Composable (andro
 }
 
 @Composable
-private fun TierCell(model: SubagentTierModel, providerId: String?, style: androidx.compose.ui.text.TextStyle, set: (String?) -> Unit) {
+private fun TierCell(provider: SubagentProvider, model: SubagentTierModel, style: androidx.compose.ui.text.TextStyle,
+                     set: (String, String?) -> Unit) {
     val text = Subagents.tierText(model.levels)
     val color = if (model.levels.isEmpty()) Ink.amber else MaterialTheme.colorScheme.onSurface
-    if (!model.editable || providerId == null) { Text(text, style = style, color = color, maxLines = 1); return }
-    var open by remember { mutableStateOf(false) }
-    Box {
-        Text("$text ▾", Modifier.clickable(role = Role.DropdownList) { open = true }.testTag("tier:${model.model}"), style = style,
-            color = color, maxLines = 1)
-        DropdownMenu(open, { open = false }) {
-            Subagents.LEVELS.forEach { level ->
-                DropdownMenuItem(text = { Text(level) }, trailingIcon = if (model.levels == listOf(level)) { { Text("✓") } } else null,
-                    onClick = { open = false; set(level) })
+    val path = Subagents.tierPath(provider, model)
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (path == null) Text(text, style = style, color = color, maxLines = 1)
+        else {
+            var open by remember { mutableStateOf(false) }
+            Box {
+                Text("$text ▾", Modifier.clickable(role = Role.DropdownList) { open = true }.testTag("tier:${provider.slug}:${model.model}"),
+                    style = style, color = color, maxLines = 1)
+                DropdownMenu(open, { open = false }) {
+                    Subagents.LEVELS.forEach { level ->
+                        DropdownMenuItem(text = { Text(level) }, trailingIcon = if (model.levels == listOf(level)) { { Text("✓") } } else null,
+                            onClick = { open = false; set(path, level) })
+                    }
+                    if (Subagents.offersClear(provider, model)) {
+                        DropdownMenuItem(text = { Text(Subagents.CLEAR) }, onClick = { open = false; set(path, null) })
+                    }
+                }
             }
-            if (model.levels.isNotEmpty()) DropdownMenuItem(text = { Text(Subagents.CLEAR) }, onClick = { open = false; set(null) })
         }
+        // A tier the owner set (board 2026-11-20), as iOS draws it.
+        if (Subagents.showsYours(model)) Text(Subagents.YOURS,
+            Modifier.border(1.dp, Ink.muted.copy(alpha = 0.35f), RoundedCornerShape(4.dp)).padding(horizontal = 5.dp)
+                .testTag("tier-yours:${provider.slug}:${model.model}"),
+            style = MaterialTheme.typography.labelSmall, color = Ink.muted, maxLines = 1)
     }
 }
