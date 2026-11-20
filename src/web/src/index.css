@@ -21429,6 +21429,12 @@ div.landing-jobs-open {
 .landing-timeline-glyph.is-takeover {
   color: var(--warning-solid);
 }
+.landing-timeline-glyph.is-skipped {
+  color: var(--warning-solid);
+}
+.chat-tool-status.skipped {
+  color: var(--warning-solid);
+}
 .landing-timeline-glyph.is-queued {
   color: var(--text-4);
 }
@@ -29990,4 +29996,24 @@ button.agent-progress-agent:hover {
     grid-template-columns: 1fr;
     gap: 6px;
   }
+}
+.task-landing-exempt {
+  padding: 10px 12px;
+  margin-top: 8px;
+  border-radius: 8px;
+  background: var(--fill-1, rgba(127, 127, 127, 0.08));
+  font-size: 13px;
+}
+.task-landing-exempt-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 600;
+}
+.task-landing-exempt-reason {
+  margin: 6px 0;
+  font-weight: 500;
+}
+.task-landing-exempt .orbit-button {
+  margin-top: 8px;
 }
