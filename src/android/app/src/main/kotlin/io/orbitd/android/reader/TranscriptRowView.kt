@@ -248,7 +248,8 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
     val dshRepair = if (event.type == "error") DshRuntime.repair(shown.body().trim())?.takeIf { console?.executesDsh == true } else null
     // A reply is the page's own text (iOS `AssistantBubbleView`): no heading, copied by selecting it, or by TalkBack's Copy message.
     val plainReply = event.type == "assistant" && !detailOnly && cards.isEmpty() && repair == null
-    Column(Modifier.fillMaxWidth().background(bg).padding(10.dp).testTag(row.key)
+    // A person's bubble and a plain reply sit on the list's own 16dp margin, as iOS's 16pt; other rows keep their 10dp inset.
+    Column(Modifier.fillMaxWidth().background(bg).padding(horizontal = if (userBubble || plainReply) 0.dp else 10.dp, vertical = 10.dp).testTag(row.key)
         .then(if (plainReply) Modifier.semantics { customActions = listOf(CustomAccessibilityAction("Copy message") { loadFull(copy = true); true }) }
             else Modifier), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (answerLine != null) { cards.forEach { TranscriptCardView(it, open, shown) }; return@Column }
