@@ -90,7 +90,7 @@ const VIEW = {
   // CONDITION_* items (migration 1030, conditions/condition-attention.ts): the condition a can't-read card or the
   // 30-day question is about, which a client reads to name its schedule or task.
   conditionId: true,
-  // BROWSER_SIGN_IN (migration 1263): the site the agent named and the Orbit Cloud runner whose browser it is.
+  // BROWSER_SIGN_IN (migration 1273): the site the agent named and the Orbit Cloud runner whose browser it is.
   browserSite: true,
   browserRunnerId: true,
   expiresAt: true,

@@ -950,9 +950,6 @@ func cmdRun() {
 	// anything runs Git there, it looks at what the last stop left.
 	recoverManagedRepositories()
 	logManagedVolumeSyncs()
-	// Whether this machine can limit background jobs, for its Settings → Machine page: checked without
-	// changing anything, before the first call declares it (bg_cgroup_linux.go).
-	runnerCapabilitiesV1 += "," + bgJobLimitsCapability()
 	runWithSelfUpdates(cfg, selfUpdate, func() (bool, func()) { return runLoop(cfg) })
 	// Its Pod ends Failed, not Succeeded: the instance did not finish, it was retired or fenced.
 	if managedInstanceRevokedSeen.Load() {

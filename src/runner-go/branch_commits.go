@@ -64,13 +64,15 @@ func branchCommits(wt *Worktree) []BranchCommit {
 	return branchCommitsBetween(wt.RepoDir, base, tip)
 }
 
-// branchCommitsBetween is branchCommits over a range of a repository. --first-parent keeps a merge of the target into
-// the branch to its one merge commit, rather than listing every commit that merge brought in.
+// branchCommitsBetween is branchCommits over a range of a repository. --first-parent leaves out the commits a merge of
+// the target into the branch brought in, and --no-merges the merge commit itself: bringing main in is no step of the
+// session's own work, and its diff against the branch is everything main changed meanwhile (on 2026-11-20 one such
+// merge listed 100 files beside a 6-file fix).
 func branchCommitsBetween(dir, base, tip string) []BranchCommit {
 	if base == tip {
 		return []BranchCommit{}
 	}
-	out, err := git(dir, "log", "--first-parent", "--no-color", "-n", strconv.Itoa(branchCommitsMax),
+	out, err := git(dir, "log", "--first-parent", "--no-merges", "--no-color", "-n", strconv.Itoa(branchCommitsMax),
 		"--format=%x1e%H%x1f%cI%x1f%s%x1f%b%x1d", "--numstat", base+".."+tip)
 	if err != nil {
 		logln("branch commits failed in", dir+":", err)
