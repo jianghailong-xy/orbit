@@ -584,7 +584,10 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
             // The task landing on the project branch as a card of its own, under the progress card and only while something is in
             // flight (iOS 749d995c5, owner decision 2026-10-11, docs/mocks/project-landing-card). A press opens the jobs it counts — or,
             // from a server that lists none, the project page; a merge job's line is the merge card's, below.
-            if (ending == null) state.integration?.let { integration ->
+            // A project that started with no line has no landing to show (§12.16, board docs/mocks/landing-measured ②, ruling D2):
+            // no card, no Landings row, and nothing in their place, until its first task with commits starts the line.
+            val noLine = io.orbitd.android.projects.ProjectLine.none(state.integration, project?.let(ProjectDoc::started))
+            if (ending == null && !noLine) state.integration?.let { integration ->
                 ProjectMergeCard.taskLandingCard(integration, now, state.integrationReadAt, state.integrationReadFailed)?.let { card ->
                     item(key = "landing") {
                         ProjectLandingCardView(card, onOpenJobs = if (ProjectPage.inFlightJobs(integration) != null) ({ showsJobs = true }) else null,
@@ -639,7 +642,7 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
             // The project's landings, summed up in one row (owner 2026-10-27, board docs/mocks/landings-one-window 01 b): under the
             // coordinator, above the timeline, and absent for a project that has never had a landing. The whole row opens the project's
             // Landings window, at its bottom; the window lists every landing, and the merges into main among them.
-            SessionProjectLandings.rowSummary(state.landings, merge.merged, now,
+            if (!noLine) SessionProjectLandings.rowSummary(state.landings, merge.merged, now,
                 main = RunSettings.mainBranchName(state.integration?.text("upstreamRef")))?.let { summary ->
                 item(key = "heading:landings") { SectionHeading(SessionLandingsCopy.title) }
                 item(key = "landings") {

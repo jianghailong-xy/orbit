@@ -8,9 +8,9 @@ export const SCHEDULE_WORKER_POLL_INTERVAL_MS = 15_000;
 /**
  * The scheduled tasks' clock (docs/scheduled-tasks-design.md §5–§7), one loop per replica, shaped like the
  * scheduled-wakeup worker's: a pass at boot finds everything that came due while no replica ran, then one pass per
- * interval. Each pass fires the due schedules, starts the runs that may start, watches the ones in progress and
- * completes the sessions of NO_CHANGE runs. Replicas racing each other is safe: every step is a compare-and-set
- * under the schedule's row lock.
+ * interval. Each pass fires the due schedules, starts the runs that may start, watches the ones in progress,
+ * completes the sessions of NO_CHANGE runs and tells the owner of a planned end reached (§8.5). Replicas racing each
+ * other is safe: every step is a compare-and-set under the schedule's row lock.
  */
 @Injectable()
 export class ScheduleWorker implements OnModuleInit, OnModuleDestroy {
@@ -33,13 +33,14 @@ export class ScheduleWorker implements OnModuleInit, OnModuleDestroy {
     await this.pass;
   }
 
-  /** One pass, in the order a run moves through: fired, started, watched, its session completed. */
+  /** One pass, in the order a run moves through: fired, started, watched, its session completed, the end told. */
   async runPass(): Promise<void> {
     await this.runs.fireDue();
     await this.runs.startDue();
     await this.runs.reconcile();
     await this.runs.landReportedRuns();
     await this.runs.completeNoChangeSessions();
+    await this.runs.tellPlannedEnds();
   }
 
   private tick(): void {

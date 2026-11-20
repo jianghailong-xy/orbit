@@ -3545,9 +3545,15 @@ export function WorkspaceView({
     : null;
   // The Landings row (owner 2026-10-27, board 01 b): the mark of the most urgent landing and the
   // day's counts, over the project's landing sessions and its merges into main.
+  // No Landings row while the project's line has not started (revision 42 §12.16, ruling D2): the
+  // integration read says so with `line: null`; an unanswered read draws as it always did.
+  const pageIntegrationQ = useQuery({ ...projectIntegrationQuery(openProjectId ?? ''), enabled: !!openProjectId });
+  const pageLineNotStarted = pageIntegrationQ.data != null && typeof pageIntegrationQ.data === 'object'
+    && pageIntegrationQ.data.line === null;
   const landingsSummary = useMemo(
-    () => (openProjectId ? landingsRowSummary(landingMembers, pageMerges, { main: mainBranchName(pageProject?.mainBranch) }) : null),
-    [openProjectId, landingMembers, pageMerges, pageProject?.mainBranch],
+    () => (openProjectId && !pageLineNotStarted
+      ? landingsRowSummary(landingMembers, pageMerges, { main: mainBranchName(pageProject?.mainBranch) }) : null),
+    [openProjectId, pageLineNotStarted, landingMembers, pageMerges, pageProject?.mainBranch],
   );
   // The folder page the list is on: `?folder=<id>` on whichever route the console is at, so it
   // survives a reload and Back leaves it. Only a folder of this workspace, and only where the list

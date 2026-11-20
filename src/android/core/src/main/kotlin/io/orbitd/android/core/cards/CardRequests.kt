@@ -57,11 +57,13 @@ object CardRequests {
             CardVerb.START -> {
                 val original = requireNotNull(row.obj("startRequest"))
                 val settings = input.settings ?: Wire.json.decodeFromJsonElement(ProjectStartSettings.serializer(), requireNotNull(original.obj("settings")))
-                require(settings.line in setOf("MAIN", "PROJECT_BRANCH") && settings.maxConcurrentTasks in 1..100)
+                require((settings.line == null || settings.line in setOf("MAIN", "PROJECT_BRANCH")) && settings.maxConcurrentTasks in 1..100)
                 val body = buildJsonObject {
                     put("criteriaDigest", requireNotNull(original.text("criteriaDigest")))
                     put("requestId", card.objectId)
-                    put("line", settings.line); put("automatic", settings.automatic); put("maxConcurrentTasks", settings.maxConcurrentTasks)
+                    // A request with no line (§12.15 P-M2) is answered with none: the line is decided when the first task commits.
+                    settings.line?.let { put("line", it) }
+                    put("automatic", settings.automatic); put("maxConcurrentTasks", settings.maxConcurrentTasks)
                     put("mergeCheckCommand", settings.mergeCheckCommand?.trim()?.takeIf { it.isNotBlank() }?.let(::JsonPrimitive) ?: JsonNull)
                     if (settings.line == "PROJECT_BRANCH") settings.projectBranchName?.trim()?.takeIf { it.isNotBlank() }?.let { put("projectBranchName", it) }
                     if (settings.line == "PROJECT_BRANCH") {
@@ -71,7 +73,7 @@ object CardRequests {
                     put("mergeCheckTimeoutSeconds", settings.mergeCheckTimeoutSeconds?.let(::JsonPrimitive) ?: JsonNull)
                     // The main branch rides only as the card showed it: a press that brings no settings of its own names none, and
                     // the project keeps the one it stands on rather than taking the coordinator's suggestion as the owner's choice.
-                    input.settings?.upstreamRef?.trim()?.takeIf { it.isNotBlank() }?.let { put("upstreamRef", it) }
+                    if (settings.line != null) input.settings?.upstreamRef?.trim()?.takeIf { it.isNotBlank() }?.let { put("upstreamRef", it) }
                     // How the work reaches main, the same way, and with a main line only: the door refuses AGENT_PUSH anywhere else
                     // (409 DELIVERY_MODE_NEEDS_MAIN_LINE), and a card that offered no choice records none.
                     if (settings.line == "MAIN") input.settings?.deliveryMode?.let { put("deliveryMode", it) }

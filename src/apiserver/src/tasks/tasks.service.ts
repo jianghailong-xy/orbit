@@ -11372,7 +11372,20 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // The whole DONE edge, again: its facts were read while the landing was still undecided — the
     // settled project held as work still landing (`landingDeferred`) — and are re-derived now that it
     // is decided. Each step reads committed rows, so the parts the DONE already delivered answer
-    // nothing the second time.
+    // nothing the second time. The promotion candidate that landing held back first (M-F1), so the
+    // settled facts read the check it may queue as work in flight.
+    // A failure is logged: the finish is committed, and the next landing asks the same.
+    if (this.completionInputs) {
+      try {
+        const task = await this.prisma.task.findFirst({
+          where: { id: doneTaskId, ownerId }, select: { projectId: true },
+        });
+        await this.completionInputs.considerPromotionAfterSettledWork([task?.projectId]);
+      } catch (e) {
+        this.logger.error(`promotion candidate not considered after task ${doneTaskId}'s work settled: ${
+          e instanceof Error ? e.message : e}`);
+      }
+    }
     await this.dispatchDependentsAfterCompletion(ownerId, doneTaskId);
   }
 
