@@ -978,6 +978,13 @@ export function landingCheckPassed(entry: IntegrationTimelineEntry): boolean {
     && data.exitCode === data.expectedExitCode;
 }
 
+/** A finished landing check that was not run because its task is exempt (§12.15 P-C2): the reason the
+ *  server recorded, or null for any other line. It is skipped, not failed. */
+export function landingCheckTaskExempt(entry: IntegrationTimelineEntry): { reason: string } | null {
+  if (entry.kind !== 'CHECK_FINISHED' || entry.data?.skipped !== 'TASK_EXEMPT') return null;
+  return { reason: typeof entry.data.reason === 'string' ? entry.data.reason : '' };
+}
+
 /**
  * A check or result line that ended well draws ✓, and one that did not draws ✗ (05 a/e/g). `kind`
  * is the job kind of the section the line is in: a merge check that ends READY passed, and its
