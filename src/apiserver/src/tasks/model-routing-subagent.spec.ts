@@ -392,7 +392,7 @@ test('an engine with no tier table of its own is tiered by family: the newest of
   assert.ok(cursorDrop.some((c) => c.model === 'default' && c.reason === 'The model has no tier'));
 });
 
-test('familyTier: a key's model of a known family takes the family's lowest tier; any other none', () => {
+test('familyTier: a key model of a known family takes the lowest tier of the family; any other none', () => {
   assert.equal(familyTier('claude-opus-5-6'), 'L');
   assert.equal(familyTier('claude-sonnet-4-5'), 'S');
   assert.equal(familyTier('gemini-3.8-flash'), 'S');
