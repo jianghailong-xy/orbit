@@ -106,6 +106,11 @@ class BackgroundTrayTest {
             settle()
             val name = c["case"]!!.jsonPrimitive.content
             val expect = c["expect"]!!.jsonObject
+            // A case that carries its transcript is read through the reader, as every client must.
+            c["events"]?.jsonArray?.map { it.jsonObject }?.let { raw ->
+                val events = raw.map { e -> RunEvent(e["type"]!!.jsonPrimitive.content, e["seq"]!!.jsonPrimitive.long, e["payload"]!!, ts = e["ts"]?.jsonPrimitive?.contentOrNull) }
+                assertEquals(name, c["lastUserMessageAt"]?.jsonPrimitive?.contentOrNull, BackgroundTrayLogic.lastUserMessageAt(events))
+            }
             if (expect["hidden"]?.jsonPrimitive?.boolean == true) {
                 compose.onAllNodesWithTag("background-tray").assertCountEquals(0)
                 return@forEachIndexed

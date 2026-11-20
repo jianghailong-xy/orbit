@@ -164,6 +164,7 @@ export class WorkspacesService {
         modelRoutingProviders: modelRoutingEngines(dto.modelRoutingProviders) ?? [],
         subagentsEnabled: dto.subagentsEnabled ?? true,
         subagentsMaxRunning: dto.subagentsMaxRunning ?? 8,
+        workflowsEnabled: dto.workflowsEnabled ?? true,
         // A clone (§5.3): its repository and PENDING, which the runner's next reconcile asks it to clone, and which
         // holds the workspace's sessions until it is READY.
         ...(cloned?.clone ? { ...cloned.clone, cloneState: 'PENDING' as const } : {}),
@@ -405,6 +406,7 @@ export class WorkspacesService {
       modelRoutingProviders: modelRoutingEngines(dto.modelRoutingProviders),
       subagentsEnabled: dto.subagentsEnabled,
       subagentsMaxRunning: dto.subagentsMaxRunning,
+      workflowsEnabled: dto.workflowsEnabled,
     };
     if (dto.disallowedTools) data.disallowedTools = dto.disallowedTools as Prisma.InputJsonValue;
     if (dto.providerFallbacks) {

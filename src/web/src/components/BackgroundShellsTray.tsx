@@ -23,6 +23,7 @@ import {
 } from '@orbit/shared';
 import { splitRecordedNote } from '../lib/deliveredMessage';
 import { parseWatchWake } from '../lib/watches';
+import { parseSessionMessage } from '../lib/sessionMessage';
 import { EMPTY_LIVE_TASK_PROGRESS, type LiveTaskProgress } from '../lib/liveTaskProgress';
 import { TaskProgressBlock } from './TaskProgressBlock';
 
@@ -125,13 +126,15 @@ export function BackgroundShellsTray({
 /**
  * When the person last wrote: the newest `user` event with words they typed. A turn Orbit opened
  * itself (a background job's or a SubAgent's wake: nothing typed, only the recorded note) or a
- * watch's wake is not their message, so it clears nothing (decision D1).
+ * watch's wake is not their message, so it clears nothing (decision D1); nor is a message another
+ * Orbit session sent (`sessionMessage` card).
  */
 export function lastUserMessageAt(events: RunEvent[]): string | null {
   for (let i = events.length - 1; i >= 0; i--) {
     const ev = events[i];
     if (ev.type !== 'user' || !ev.ts) continue;
     const p = (ev.payload ?? {}) as { text?: unknown };
+    if (parseSessionMessage(p)) continue;
     const recorded = splitRecordedNote(p);
     const text = recorded ? recorded.text : typeof p.text === 'string' ? p.text : '';
     if (text.trim() === '' || parseWatchWake(text)) continue;

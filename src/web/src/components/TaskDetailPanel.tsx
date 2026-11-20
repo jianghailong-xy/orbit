@@ -104,6 +104,7 @@ import {
 } from './OwnerConfirmationCard';
 import { UNDER_REVIEW } from './OwnerConfirmationReview';
 import { useMachineName } from '../lib/managedRunner';
+import { taskDocumentReach, taskGraphReach, type SessionReachDeclaration } from '../lib/sessionReach';
 
 // Graph rendering pulls in React Flow + dagre. Keep that weight out of the initial task-list
 // bundle; it is fetched only when someone opens a task with dependencies and selects Graph.
@@ -794,7 +795,7 @@ export function TaskDetailPanel({
     // One cache entry with ProjectTaskPanel's and TaskRoute's reads of the same key; all three
     // declare the same entities so whichever observer sets the entry's options last says the same
     // thing.
-    meta: { entities: ['task', 'session'] },
+    meta: { entities: ['task', 'session'], sessionReach: taskDocumentReach(taskId ?? '') satisfies SessionReachDeclaration },
     queryFn: () => api<any>(`/tasks/${taskId}`),
     // While the task has a busy (queued/running) session, poll so the 开始执行 button
     // leaves its running state once the run ends; stay idle otherwise.
@@ -846,8 +847,8 @@ export function TaskDetailPanel({
   const dependencyGraphQ = useQuery({
     queryKey: ['task', taskId, 'dependency-graph'],
     // The graph's nodes carry live run state (`running` / `queued`) from their sessions; a run
-    // starting or ending writes no task row.
-    meta: { entities: ['task', 'session'] },
+    // starting or ending writes no task row. So a run of one of its tasks reads it (lib/sessionReach).
+    meta: { entities: ['task', 'session'], sessionReach: taskGraphReach satisfies SessionReachDeclaration },
     queryFn: () =>
       api<TaskDependencyGraphResponse>(
         `/tasks/${taskId}/dependency-graph?direction=both&pairUnary=true&maxNodes=500`,
@@ -890,7 +891,7 @@ export function TaskDetailPanel({
   const dependencyGraphNodesQ = useQuery({
     queryKey: ['task', taskId, 'dependency-graph-nodes', dependencyGraphKnownTaskIds],
     // Same nodes, same live run state, read again for the expanded branches.
-    meta: { entities: ['task', 'session'] },
+    meta: { entities: ['task', 'session'], sessionReach: taskGraphReach satisfies SessionReachDeclaration },
     queryFn: () =>
       api<TaskDependencyGraphNodesResponse>(`/tasks/${taskId}/dependency-graph/nodes`, {
         method: 'POST',
