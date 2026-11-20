@@ -639,7 +639,10 @@ public enum TranscriptRows {
             // rendered below while the prompt still awaits an answer — show only the interactive
             // card until it resolves, after which this one is the historical record (web parity:
             // Transcript.tsx hides the read-only copy while `live && !result`).
-            if !Approvals.duplicatesPendingApproval(item, pendingApprovals: state.pendingApprovals) {
+            // A SubAgent's end turn draws nothing: its card is the end (`SubagentCardEnd`). Its turn's
+            // head still follows, as it follows every turn that opened one.
+            if case .user(let bubble) = item, SubagentCardEnd.drawsNothing(bubble, queued: false) {
+            } else if !Approvals.duplicatesPendingApproval(item, pendingApprovals: state.pendingApprovals) {
                 rows.append(.item(item))
             }
             // Only a head with something to say gets a row: an empty one would still hold its insets.
@@ -657,7 +660,9 @@ public enum TranscriptRows {
         // carries the id the echo takes over (`appendUser`), so the echo replaces it in place rather
         // than removing one row and inserting another (web parity: `acceptedUserTurnEvent`, appended
         // after the last event).
-        rows.append(contentsOf: state.accepted.map { TranscriptRow.item(.user($0)) })
+        rows.append(contentsOf: state.accepted
+            .filter { !SubagentCardEnd.drawsNothing($0, queued: true) && !SubagentCardEnd.drawsNothing($0, queued: false) }
+            .map { TranscriptRow.item(.user($0)) })
         // An anchor no longer in the window (its item was dropped — e.g. an optimistic bubble whose
         // send failed) would otherwise take the card down with it. Trail those instead of losing them.
         for card in statusCards where card.afterItemID.map({ anchored[$0] != nil }) == true {
@@ -683,8 +688,11 @@ public enum TranscriptRows {
         rows.append(contentsOf: state.pendingApprovals.map(TranscriptRow.approval))
         if showWorkingIndicator { rows.append(.working) }
         // …except the reader's own messages still on their way, which the tray above the composer
-        // holds instead (`PendingTray.holds`); what Orbit queued keeps its card here.
-        rows.append(contentsOf: state.queued.filter { !PendingTray.holds($0) }.map(TranscriptRow.queued))
+        // holds instead (`PendingTray.holds`); what Orbit queued keeps its card here — but a SubAgent's
+        // end waits on its own card (`SubagentCardEnd.queuedWake`), so the tail draws nothing for it.
+        rows.append(contentsOf: state.queued
+            .filter { !PendingTray.holds($0) && !SubagentCardEnd.drawsNothing($0, queued: true) }
+            .map(TranscriptRow.queued))
         // Zero-height tail row: a stable `scrollTo` target that always sits below the last message
         // (the last item's own id moves as it streams).
         rows.append(.bottom)

@@ -142,6 +142,30 @@ final class StartProjectCardCopyParityTests: XCTestCase {
         assertDeclares(web, "START_CHANGE_LATER", StartProject.changeLater)
     }
 
+    /// A request with no line (rulings D1, D8): one sentence in place of the line, main branch,
+    /// delivery and landing check rows, sentences that name no branch, and a press that sends no line.
+    func testARequestWithNoLineIsDrawnAndSentAsTheWebDoes() throws {
+        let web = try flat(Self.words)
+        assertDeclares(web, "START_NO_LINE", StartProject.noLine)
+        XCTAssertTrue(web.contains("return automatic ? '\(RunSettings.automaticOnNoLine)' : '\(RunSettings.automaticOffNoLine)';"),
+                      "the web no longer says the no-line Automatic sentences this end says")
+        XCTAssertTrue(web.contains("if (line === null) {"), "the web no longer words a request with no line on its own")
+        XCTAssertTrue(web.contains("input.line === null ? [] : input.line === 'MAIN'"),
+                      "the web no longer lists no merge for a request with no line")
+        let card = try flat(Self.card)
+        for literal in [
+            "line: settings.line ?? null,",
+            "...(draft.line ? { line: draft.line } : {}),",
+            "...(draft.line === 'PROJECT_BRANCH' ? {",
+            "{draft.line === null ? (",
+            "<div className=\"start-card-hint\">{START_NO_LINE}</div>",
+            "{draft.line !== null && draft.deliveryMode !== null ? (",
+            "{draft.line !== null ? <div className=\"start-card-row\" data-landing-check=\"true\">",
+        ] {
+            XCTAssertTrue(card.contains(literal), "\(Self.card) no longer says \(literal)")
+        }
+    }
+
     func testTheSectionHeadsAndTheHeaderLineMatchTheWebWhole() throws {
         let web = try flat(Self.words)
         let criteria = "${count === 1 ? 'criterion' : 'criteria'}"
