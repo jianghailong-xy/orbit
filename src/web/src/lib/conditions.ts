@@ -15,6 +15,7 @@ import {
 } from '@orbit/shared';
 import { api } from '../api';
 import { streamPoll } from './listBudget';
+import type { SessionReachDeclaration } from './sessionReach';
 import { sameResourceId } from './watches';
 
 /**
@@ -96,7 +97,15 @@ export type ConditionRead = ConditionView & { runnerName?: string | null };
 export const conditionQuery = (id: string) =>
   queryOptions({
     queryKey: ['conditions', id] as const,
-    meta: { entities: ['task', 'session'] },
+    // What it reads moves on its probe's samples, which no event announces (its poll reads them); a session event
+    // can move it only as the run of the task it starts (lib/sessionReach).
+    meta: {
+      entities: ['task', 'session'],
+      sessionReach: ((data: unknown) => {
+        const taskId = (data as { taskId?: string | null } | undefined)?.taskId;
+        return taskId ? { task: taskId } : 'none';
+      }) satisfies SessionReachDeclaration,
+    },
     queryFn: () => api<ConditionRead>(`/conditions/${encodeURIComponent(id)}`),
     refetchInterval: streamPoll(30_000),
   });

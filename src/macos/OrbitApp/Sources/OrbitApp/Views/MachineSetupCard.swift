@@ -112,7 +112,8 @@ struct MachineDraftPage: View {
                     return
                 }
                 // More often while it is still connecting: its first heartbeat opens the folder field.
-                try? await Task.sleep(for: .seconds(MachineSetup.refreshSeconds(for: runner)))
+                // Not while the app cannot be seen (§4 R3): shown again, it reads once, at once.
+                await VisibilityGate.app.pause(MachineSetup.refreshSeconds(for: runner))
             }
         }
         .onChange(of: runner, initial: true) { _, _ in adopt() }

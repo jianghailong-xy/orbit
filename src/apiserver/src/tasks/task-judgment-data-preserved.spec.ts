@@ -3234,7 +3234,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1393 restates owner_request's kind CHECK to admit BROWSER_SIGN_IN beside 1273's SETTINGS_CHANGE and adds two
       // nullable columns with a CHECK that every existing row passes; no row is written, and no preserved relation,
       // trigger, function or DONE fence changes.
-      '1393_owner_request_browser_sign_in'],
+      '1393_owner_request_browser_sign_in',
+      // 1400 adds three nullable columns, a foreign key and a partial index on owner_request_secret and account_secret;
+      // no row is written, and no preserved relation, trigger, function or DONE fence changes.
+      '1400_owner_secret_saved_links'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

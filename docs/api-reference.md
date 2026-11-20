@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 37 |
-| `user` | 487 |
+| `user` | 490 |
 | `admin` | 31 |
 | `runner` | 210 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **769** |
+| **Total** | **772** |
 
 ## Public routes
 
@@ -103,8 +103,11 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/access-tokens/device/:userCode/approve` | path `userCode` | `PatDeviceLoginController.approve` |
 | `POST` | `/api/access-tokens/device/:userCode/deny` | path `userCode` | `PatDeviceLoginController.deny` |
 | `GET` | `/api/account-secrets` | — | `AccountSecretsController.list` |
-| `DELETE` | `/api/account-secrets/:id` | path `id` | `AccountSecretsController.remove` |
+| `POST` | `/api/account-secrets` | body `CreateAccountSecretDto` | `AccountSecretsController.create` |
+| `DELETE` | `/api/account-secrets/:id` | path `id`; query `revokeCopies` | `AccountSecretsController.remove` |
 | `PUT` | `/api/account-secrets/:id` | body `ReplaceAccountSecretDto`; path `id` | `AccountSecretsController.replace` |
+| `GET` | `/api/account-secrets/grants` | query `removed` | `AccountSecretsController.grants` |
+| `POST` | `/api/account-secrets/grants/:id/revoke` | path `id` | `AccountSecretsController.revokeGrant` |
 | `GET` | `/api/agents` | — | `WorkspacesController.list` |
 | `POST` | `/api/agents` | body `CreateWorkspaceDto` | `WorkspacesController.create` |
 | `DELETE` | `/api/agents/:id` | path `id` | `WorkspacesController.remove` |
