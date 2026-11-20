@@ -1468,7 +1468,9 @@ export async function settleDeliveredIdentity(
   },
 ): Promise<DeliveredIdentitySettlement> {
   const { ownerId, taskId } = input;
-  const finishSource: DoneTaskSource | null = input.finishedSessionId ? { sessionId: input.finishedSessionId } : null;
+  const finishedBy: DoneTaskSource | null = input.finishedSessionId ? { sessionId: input.finishedSessionId } : null;
+  // Read only when the route is decided here, and after the freeze UPDATE has taken the task row.
+  const finishSource = () => doneSourceFromRecord(tx, taskId, finishedBy);
   const task = await tx.task.findFirst({
     where: { id: taskId, ownerId },
     select: { status: true, projectId: true, deliveredAt: true },
@@ -1491,7 +1493,7 @@ export async function settleDeliveredIdentity(
       // §12.15 P-M1: a DONE written while this work still moved queued nothing and started no line
       // (`queueForDoneTask` answered WORK_MOVING), so the route it owes is decided here, on the
       // identity just frozen — nothing for a branch with no commit of its own, today's route else.
-      if (input.after === 'WORK_FINISHED') await queueForDoneTask(tx, ownerId, taskId, finishSource);
+      if (input.after === 'WORK_FINISHED') await queueForDoneTask(tx, ownerId, taskId, await finishSource());
       await deliveredIdentityFrozen(tx, { ownerId, projectId: reading.projectId, taskId });
     }
     return 'FROZEN';
@@ -1501,7 +1503,7 @@ export async function settleDeliveredIdentity(
   // session), which the DONE transaction holds when it queues and the generation counter is read under.
   if (input.after === 'WORK_FINISHED') {
     await tx.$queryRaw(Prisma.sql`SELECT 1 FROM "task" WHERE "id" = ${taskId}::uuid FOR NO KEY UPDATE`);
-    await queueForDoneTask(tx, ownerId, taskId, finishSource);
+    await queueForDoneTask(tx, ownerId, taskId, await finishSource());
   }
   const binding = await tx.projectCodebase.findFirst({
     where: { projectId: reading.projectId, slot: 'primary' },
@@ -1621,6 +1623,42 @@ export type EnqueueOutcome =
 export type DoneTaskSource =
   | { sessionId: string; userId?: never }
   | { userId: string; sessionId?: never };
+
+/**
+ * Who wrote the DONE whose route a finish decides (§4.7 H1), from rows already committed — no column of
+ * its own. The newest CONFIRM written after the task's reopen: the coordinator's evidence decision names
+ * its deciding session, the owner's confirmation names the owner. A DONE derived from the run's own
+ * acceptance (turnComplete) leaves no such row, and the session that finished stands for it, as it
+ * always did. Called under the task row, which the DONE's writers hold, so the rows are settled.
+ */
+async function doneSourceFromRecord(
+  tx: Prisma.TransactionClient,
+  taskId: string,
+  fallback: DoneTaskSource | null,
+): Promise<DoneTaskSource | null> {
+  const intent = await tx.taskReopenIntent.findUnique({ where: { taskId }, select: { createdAt: true } });
+  if (!intent) return fallback;
+  const since = { gte: intent.createdAt };
+  const [evidence, owner] = await Promise.all([
+    tx.taskEvidenceDecision.findFirst({
+      where: { taskId, decision: 'CONFIRM', decidedAt: since },
+      orderBy: { decidedAt: 'desc' },
+      select: { decidedAt: true, decidedByType: true, decidedById: true, decidingSessionId: true },
+    }),
+    tx.taskOwnerDecision.findFirst({
+      where: { taskId, decision: 'CONFIRM', decidedAt: since },
+      orderBy: { decidedAt: 'desc' },
+      select: { decidedAt: true, decidedById: true },
+    }),
+  ]);
+  if (owner && (!evidence || owner.decidedAt >= evidence.decidedAt)) return { userId: owner.decidedById };
+  if (evidence) {
+    return evidence.decidedByType === 'USER'
+      ? { userId: evidence.decidedById }
+      : { sessionId: evidence.decidingSessionId };
+  }
+  return fallback;
+}
 
 /** H1's reason for the generation queued after a task was reopened for delivery work. */
 export const REOPEN_LANDING_HANDLING_REASON = 'A new landing generation after the task was reopened for rework';
