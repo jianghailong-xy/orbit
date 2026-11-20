@@ -68,6 +68,9 @@ type RunnerConfig struct {
 	// itself, the first time a session needs one. `orbit register` turns it on unless
 	// --no-auto-install-engines is passed; absent in an older config reads as "no".
 	AutoInstallEngines bool `json:"autoInstallEngines,omitempty"`
+	// BackgroundJobLimits is the owner's CPU and memory ceiling for each background job (bg_limits.go),
+	// set with `orbit bg-limits`; absent is none.
+	BackgroundJobLimits *bgJobLimits `json:"backgroundJobLimits,omitempty"`
 }
 
 // machineHome is where the runner stores its config + run scratch. One runner per
