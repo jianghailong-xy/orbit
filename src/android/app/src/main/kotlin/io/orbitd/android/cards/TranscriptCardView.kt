@@ -76,7 +76,7 @@ internal fun TranscriptCardView(card: InteractionCard, open: (String) -> Unit, e
     }
     // The owner's answer handed to the coordinator is one line that opens to the words the agent read, not a card of fields.
     if (card.key.endsWith(":ownerAnswer")) {
-        OwnerAnswerLineView(card, event, open = open); return
+        OwnerAnswerLineView(card, event, openLink = open); return
     }
     // So is a fact told to this session — the coordinator told of one, or the answer to its criteria proposal: its sentence, then when it
     // was sent, opening to the words the agent read.
@@ -148,7 +148,7 @@ internal val LocalAnsweredQuestions = compositionLocalOf<AnsweredQuestions?> { n
  * `OwnerAnswerLine.tsx`, iOS `OwnerAnswerLineView`).
  */
 @Composable
-internal fun OwnerAnswerLineView(card: InteractionCard, event: RunEvent?, queued: Boolean = false, open: (String) -> Unit = {}) {
+internal fun OwnerAnswerLineView(card: InteractionCard, event: RunEvent?, queued: Boolean = false, openLink: (String) -> Unit = {}) {
     var open by rememberSaveable(card.key) { mutableStateOf(false) }
     val undelivered = event?.fields?.text("delivery") in setOf("failed", "unconfirmed")
     val answered = LocalAnsweredQuestions.current
@@ -156,7 +156,7 @@ internal fun OwnerAnswerLineView(card: InteractionCard, event: RunEvent?, queued
     if (answered != null && record != null) {
         Box(Modifier.fillMaxWidth().testTag(card.key)) {
             QuestionRecordCard(record, queued = queued && !undelivered, notice = OwnerAnswerLine.undelivered.takeIf { undelivered },
-                told = event, open = open)
+                told = event, open = openLink)
         }
         return
     }
