@@ -13,7 +13,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { machineName } from '../../lib/machineSetup';
 import { managedRowOf, useManagedRunner, useManagedRunnerId } from '../../lib/managedRunner';
-import { AgentProvider, ENGINE_CLI_NAMES, type MainCheckoutRepoHealth, type RunnerRepoHealth } from '@orbit/shared';
+import { type MainCheckoutRepoHealth, type RunnerRepoHealth } from '@orbit/shared';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
@@ -41,7 +41,7 @@ import { REPO_CLEANUP_QUEUED, repoCleanupConfirm } from '../../lib/repoCleanup';
 import { runnerIsOffline } from '../../lib/runnerAttention';
 import { ago } from '../../lib/runnerEngines';
 import { CLAUDE_SESSION_ID_RE, importClaudeSessionAndWait } from '../../lib/sessionImport';
-import { defaultModelLabel, engineTitleFor, engineVia } from '../../lib/sessionProviderChoices';
+import { defaultModelLabel, engineVia } from '../../lib/sessionProviderChoices';
 import { useToast } from '../../lib/toast';
 import { useRefreshSessionLists } from '../../lib/useControlPlane';
 import { sessionEngineOf } from '../../lib/workspaceDefaults';
@@ -49,10 +49,8 @@ import { AccountSelect, offersAccount } from '../AccountSelect';
 import { AUTO_COMPACT_VARIABLE, AutoCompactSelect, withAutoCompact } from '../AutoCompactSelect';
 import { ClaudeHistoryOffer, type ImportMode } from '../ClaudeHistoryOffer';
 import { useMainCheckoutController } from '../MainCheckoutDrawer';
-import { BrandMark } from '../NewSessionProviderHero';
 import type { Runner } from '../TasksSidePanel';
 import { Button } from '../ui/Button';
-import { Checkbox } from '../ui/Checkbox';
 import { useConfirm } from '../ui/ConfirmDialog';
 import { Drawer } from '../ui/Drawer';
 import { Input } from '../ui/Input';
@@ -97,10 +95,6 @@ export interface SettingsWorkspace {
   runner?: { id: string; name?: string; displayName?: string | null } | null;
   enabled?: boolean;
   enableWorktree?: boolean;
-  /** Smart model selection (docs/model-routing-design.md §7.2). */
-  modelRouting?: boolean;
-  /** The other engines smart selection may move this Agent's task runs to (§6). */
-  modelRoutingProviders?: string[];
   /** SubAgents (docs/subagent-design.md §7): on by default, 4 of one session's at once. */
   subagentsEnabled?: boolean;
   subagentsMaxRunning?: number;
@@ -128,8 +122,6 @@ type WorkspacePatch = Partial<
     | 'workDir'
     | 'repoUrl'
     | 'enableWorktree'
-    | 'modelRouting'
-    | 'modelRoutingProviders'
     | 'subagentsEnabled'
     | 'subagentsMaxRunning'
     | 'env'
@@ -616,38 +608,13 @@ function WorkspaceSettingsPage({ id }: { id: string }) {
             }}
           />
           {isolationCheckout.drawer}
-          {/* Off by default, and only the owner's to turn on: it decides what task runs cost, so the
-              agent tools cannot set it (docs/model-routing-design.md §7.2). */}
-          {smartSelection && (
-            <>
-              <SettingsRow
-                title="Smart model selection for tasks"
-                description="Task runs use the suggested tier’s model and effort."
-                tooltip="Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. Sessions you open yourself are not affected."
-                control={
-                  <Switch
-                    aria-label="Smart model selection for tasks"
-                    checked={workspace.modelRouting ?? false}
-                    onCheckedChange={(modelRouting) => save({ modelRouting })}
-                  />
-                }
-              />
-              <div className="settings-row settings-row--block">
-                <RoutingEngines
-                  own={engine}
-                  value={workspace.modelRoutingProviders ?? []}
-                  onChange={(modelRoutingProviders) => save({ modelRoutingProviders })}
-                />
-              </div>
-            </>
-          )}
           {/* Model is not a workspace field: it resolves from the engine and provider this project last
               ran on. Said read-only, because a new session's composer is where it is picked. */}
           <SettingsRow
             title="Model"
             description={
               <span className="rd-form-derived">
-                {smartSelection && workspace.modelRouting ? (
+                {smartSelection ? (
                   <>
                     Task runs: model picked per task by smart selection. Sessions you open yourself:{' '}
                     <b>{model || '—'}</b> · {via} on this runner.
@@ -1147,56 +1114,6 @@ function WorkspacePermissionRules({ workspaceId }: { workspaceId: string }) {
           </div>
         </>
       )}
-    </div>
-  );
-}
-
-/** The engines a task run can be routed onto: the ones with a tier table
- *  (docs/model-routing-design.md §4.3). */
-const ROUTING_ENGINES: readonly AgentProvider[] = [AgentProvider.CLAUDE, AgentProvider.CODEX];
-
-/**
- * The engines smart selection may move this Agent's task runs to (docs/model-routing-design.md §6),
- * saved as `modelRoutingProviders`. The Agent's own engine comes first, ticked, and cannot be
- * unticked; every other one is a tick the owner makes here.
- */
-function RoutingEngines({
-  own,
-  value,
-  onChange,
-}: {
-  own: AgentProvider;
-  value: string[];
-  onChange: (next: string[]) => void;
-}) {
-  const engines = [own, ...ROUTING_ENGINES.filter((engine) => engine !== own)];
-  return (
-    <div className="rd-route-engines">
-      <div className="rd-engines-label">Engines it may use</div>
-      <div className="rd-engines-list">
-        {engines.map((engine) => {
-          const on = engine === own || value.includes(engine);
-          return (
-            <Checkbox
-              key={engine}
-              className={on ? 'is-on' : undefined}
-              checked={on}
-              disabled={engine === own}
-              onCheckedChange={(checked) => onChange(checked ? [...value, engine] : value.filter((v) => v !== engine))}
-            >
-              <span className="rd-engine-option">
-                <BrandMark choice={engineTitleFor(engine)} size={16} />
-                {ENGINE_CLI_NAMES[engine]}
-                {engine === own && <span className="rd-engine-own">this agent's engine</span>}
-              </span>
-            </Checkbox>
-          );
-        })}
-      </div>
-      <div className="rd-engines-note">
-        Only this agent's own engine is ticked by default, so a task never moves to another engine unless you tick
-        it here.
-      </div>
     </div>
   );
 }

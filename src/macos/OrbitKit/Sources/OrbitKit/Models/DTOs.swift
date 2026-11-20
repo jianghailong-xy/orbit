@@ -150,10 +150,6 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
     public var cursorAccount: String? = nil
 
     public let enableWorktree: Bool?
-    /// Smart model selection (docs/model-routing-design.md §7.2): on, a fresh task run here gets the
-    /// model and effort of its tier; off (the default), routing is only recorded in shadow. Only the
-    /// owner's user API writes it.
-    public let modelRouting: Bool?
     /// Whether this Agent's sessions may hand work to SubAgents (docs/subagent-design.md §7). Nil reads as on.
     public var subagentsEnabled: Bool? = nil
     /// How many of one session's SubAgents run at once. Nil reads as 4 (`SubagentSettings.maxRunning`).
@@ -178,7 +174,7 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         case maxTurns, maxBudgetUsd, targetRunnerId, targetLabels, runnerId, env, enabled
         case antigravityKeyAvailableByRunner
         case autoInitGit, codexAccount, claudeAccount, antigravityAccount, kimiAccount, cursorAccount
-        case enableWorktree, modelRouting, subagentsEnabled, subagentsMaxRunning
+        case enableWorktree, subagentsEnabled, subagentsMaxRunning
         case workDirExists, workDirIsGit
         case workDirFreeBytes, workDirTotalBytes, repoHealth, repoCleanup, mainCheckoutActions
     }
@@ -216,7 +212,6 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         kimiAccount = try c.decodeIfPresent(String.self, forKey: .kimiAccount)
         cursorAccount = try c.decodeIfPresent(String.self, forKey: .cursorAccount)
         enableWorktree = try c.decodeIfPresent(Bool.self, forKey: .enableWorktree)
-        modelRouting = try c.decodeIfPresent(Bool.self, forKey: .modelRouting)
         subagentsEnabled = try c.decodeIfPresent(Bool.self, forKey: .subagentsEnabled)
         subagentsMaxRunning = try c.decodeIfPresent(Int.self, forKey: .subagentsMaxRunning)
         workDirExists = try c.decodeIfPresent(Bool.self, forKey: .workDirExists)

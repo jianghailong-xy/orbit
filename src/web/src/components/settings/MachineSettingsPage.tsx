@@ -22,6 +22,16 @@ import {
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { bgJobLimitSupportOf, engineUpdateFailedLines, engineUpdateLineFailed, type LoginEngine } from '@orbit/shared';
+import {
+  RUNNER_JOB_CPU,
+  RUNNER_JOB_LIMIT_OFF,
+  RUNNER_JOB_LIMITS_FOOTER,
+  RUNNER_JOB_LIMITS_OLD,
+  RUNNER_JOB_MEMORY,
+  runnerJobCpus,
+  runnerJobLimitsUnavailable,
+  runnerJobMemory,
+} from '../../lib/bgJobLimitsCopy';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, cleanUpWorkspaceRepo } from '../../api';
@@ -89,16 +99,8 @@ import {
   RUNNER_ENGINES_FOOTER,
   RUNNER_ENGINES_MANAGED_FOOTER,
   RUNNER_ENGINES_OFFLINE_FOOTER,
-  RUNNER_JOB_CPU,
-  RUNNER_JOB_LIMIT_OFF,
-  RUNNER_JOB_LIMITS_FOOTER,
-  RUNNER_JOB_LIMITS_OLD,
-  RUNNER_JOB_MEMORY,
   RUNNER_KEEP_FREE,
   RUNNER_LINE_SEPARATOR,
-  runnerJobCpus,
-  runnerJobLimitsUnavailable,
-  runnerJobMemory,
   RUNNER_MAX_CONCURRENT,
   RUNNER_MAX_CONCURRENT_HINT,
   RUNNER_MAX_CONCURRENT_UNIT,

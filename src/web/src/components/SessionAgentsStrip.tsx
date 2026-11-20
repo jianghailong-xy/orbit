@@ -72,6 +72,7 @@ export function SessionAgentsStrip({
           <RunGlyph
             running={run.status === "RUNNING"}
             failed={subagentRunFailed(run)}
+            stopped={run.status === "STOPPED"}
           />
           <span
             className="bg-shell-cmd ag-title"
@@ -129,11 +130,12 @@ export function SessionAgentsStrip({
   );
 }
 
-/** Running, failed or done, in the tool cards' own marks. */
-function RunGlyph({ running, failed }: { running: boolean; failed: boolean }) {
+/** Running, failed, stopped or done, in the tool cards' own marks. */
+function RunGlyph({ running, failed, stopped = false }: { running: boolean; failed: boolean; stopped?: boolean }) {
   if (running)
     return <LoadingOutlined spin className="chat-tool-status running" />;
   if (failed) return <CloseCircleFilled className="chat-tool-status err" />;
+  if (stopped) return <span className="chat-tool-status stopped" role="img" aria-label="stopped" />;
   return <CheckCircleFilled className="chat-tool-status ok" />;
 }
 

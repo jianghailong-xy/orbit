@@ -1536,7 +1536,7 @@ export function TaskDetailPanel({
       label: 'Model',
       value: q.data?.model
         ? modelLabel(q.data.model)
-        : smartSelection && assigneeWorkspace?.modelRouting ? SMART_SELECTION_PLACEHOLDER : 'Provider default',
+        : smartSelection ? SMART_SELECTION_PLACEHOLDER : 'Provider default',
     },
   ];
   const inputCount = (q.data?.attachments ?? []).length;
@@ -2451,7 +2451,7 @@ export function TaskDetailPanel({
                     value={q.data?.model ?? null}
                     // Unpinned on an assignee with smart selection on, each run's model is picked for it.
                     placeholder={
-                      smartSelection && assigneeWorkspace?.modelRouting ? SMART_SELECTION_PLACEHOLDER : 'Provider default'
+                      smartSelection ? SMART_SELECTION_PLACEHOLDER : 'Provider default'
                     }
                     clearable
                     loading={runnersQ.isLoading || updateRunTarget.isPending}
