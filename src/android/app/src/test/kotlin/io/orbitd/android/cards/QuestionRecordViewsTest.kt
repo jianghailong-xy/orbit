@@ -2,6 +2,9 @@ package io.orbitd.android.cards
 
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.height
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Modifier
@@ -47,10 +50,9 @@ class QuestionRecordViewsTest {
         "openItems" to buildJsonObject { putJsonArray("needsYou") {}; putJsonArray("closedQuestions") { add(record) } })).single()
 
     @Test fun theFoldedRecordSaysWhatWasAskedAndHowItEnded() {
-        var opened = 0
         val card = card(closed(option = 1, text = " After 22:00. ", delivered = false))
         assertEquals(CardFamily.QUESTION_RECORD, card.family)
-        compose.runOnUiThread { compose.activity.setContent { MaterialTheme { QuestionRecordCard(card) { opened++ } } } }
+        compose.runOnUiThread { compose.activity.setContent { MaterialTheme { QuestionRecordCard(card) } } }
         compose.onNodeWithTag("$key:heading", useUnmergedTree = true).assertTextEquals("Answered")
         compose.onNodeWithText(CoordinatorQuestions.time(card.source)!!, useUnmergedTree = true).assertExists()
         compose.onNodeWithTag("$key:lead", useUnmergedTree = true)
@@ -60,13 +62,43 @@ class QuestionRecordViewsTest {
         compose.onNodeWithTag("$key:waiting", useUnmergedTree = true).assertTextEquals("Waiting for this project’s next coordinator")
         compose.onNodeWithTag("$key:withdrew", useUnmergedTree = true).assertDoesNotExist()
         compose.onNodeWithText("View details", useUnmergedTree = true).assertExists()
-        compose.onNodeWithTag(key).performClick()
-        assertEquals(1, opened)
+        compose.onNodeWithTag("$key:unfolded", useUnmergedTree = true).assertDoesNotExist()
     }
+
+    /** Board card-ui-polish ③ (iOS `CoordinatorQuestionRecordView`, web `AnsweredQuestionCard`): tapping the record unfolds it in place —
+     * the question, every option with the chosen one ticked, the note, and the footer — no sheet opens, and its last row says Hide details
+     * until it is folded again. Both words are OrbitKit's and the web's. */
+    @Test fun tappingTheRecordUnfoldsItInPlaceAndHideDetailsFoldsItBack() {
+        val card = card(closed(option = 1, text = " After 22:00. ", delivered = false))
+        compose.runOnUiThread { compose.activity.setContent { MaterialTheme { Column(Modifier.verticalScroll(rememberScrollState())) { QuestionRecordCard(card) } } } }
+        compose.onNodeWithText(CoordinatorQuestions.viewDetails, useUnmergedTree = true).performClick()
+        compose.waitForIdle()
+        compose.onAllNodes(isDialog()).assertCountEquals(0)
+        compose.onNode(hasTestTag("$key:option:1:chosen") and hasAnyAncestor(hasTestTag("$key:unfolded")), useUnmergedTree = true).assertExists()
+        compose.onNode(hasTestTag("$key:footer-line") and hasAnyAncestor(hasTestTag("$key:unfolded")), useUnmergedTree = true).assertExists()
+        compose.onAllNodesWithText(CoordinatorQuestions.viewDetails, useUnmergedTree = true).assertCountEquals(0)
+        compose.onNodeWithTag("$key:hide", useUnmergedTree = true).assert(hasAnyDescendant(hasText(CoordinatorQuestions.hideDetails)))
+        assertTrue("the record stays where it was, its unfolded part under its lines", top("$key:answer") < top("$key:unfolded"))
+        compose.onNodeWithTag("$key:hide").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("$key:unfolded", useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithText(CoordinatorQuestions.viewDetails, useUnmergedTree = true).assertExists()
+
+        val root = generateSequence(java.io.File(System.getProperty("user.dir"))) { it.parentFile }
+            .first { java.io.File(it, "src/macos/OrbitKit/Sources/OrbitKit").isDirectory }
+        val swift = java.io.File(root, "src/macos/OrbitKit/Sources/OrbitKit/App/OwnerItemCards.swift").readText()
+        val web = java.io.File(root, "src/web/src/components/CoordinatorQuestionCard.tsx").readText()
+        assertTrue(swift.contains("public static let viewDetails = \"${CoordinatorQuestions.viewDetails}\""))
+        assertTrue(swift.contains("public static let hideDetails = \"${CoordinatorQuestions.hideDetails}\""))
+        assertTrue(web.contains("export const VIEW_DETAILS = '${CoordinatorQuestions.viewDetails}';"))
+        assertTrue(web.contains("export const HIDE_DETAILS = '${CoordinatorQuestions.hideDetails}';"))
+    }
+
+    private fun top(tag: String) = compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.top
 
     @Test fun aWithdrawnRecordSaysWhoTookItBackAndWhy() {
         val card = card(closed(option = null, text = null, delivered = false, withdrawnBy = "USER"))
-        compose.runOnUiThread { compose.activity.setContent { MaterialTheme { QuestionRecordCard(card) {} } } }
+        compose.runOnUiThread { compose.activity.setContent { MaterialTheme { QuestionRecordCard(card) } } }
         compose.onNodeWithTag("$key:heading", useUnmergedTree = true).assertTextEquals("Withdrawn")
         compose.onNodeWithTag("$key:withdrew", useUnmergedTree = true).assertTextEquals("You withdrew it")
         compose.onNodeWithTag("$key:reason", useUnmergedTree = true).assertTextEquals("“Not needed after the rollback.”")

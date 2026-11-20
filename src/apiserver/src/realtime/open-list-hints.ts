@@ -151,6 +151,11 @@ export class OpenListHints {
 }
 /** Whether a `GET /api/events?hints=` value declares `list_changed`. */
 export function declaresListChanged(hints: string | string[] | undefined): boolean {
+  return declaresHint(hints, 'list_changed');
+}
+
+/** Whether a `GET /api/events?hints=` value declares `hint`. */
+export function declaresHint(hints: string | string[] | undefined, hint: string): boolean {
   const values = Array.isArray(hints) ? hints : hints === undefined ? [] : [hints];
-  return values.some((value) => value.split(',').some((hint) => hint.trim() === 'list_changed'));
+  return values.some((value) => value.split(',').some((declared) => declared.trim() === hint));
 }

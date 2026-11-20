@@ -373,6 +373,12 @@ model User {
   /// The drive's chunk manifest and its writes not committed yet (migration 1283).
   driveStagings      DriveStaging[]
   driveVersionChunks DriveVersionChunk[]
+  /// The drive's name layer (migration 1327): folders and files, their versions, Trash, commits and the change feed.
+  driveEntries       DriveEntry[]
+  driveVersions      DriveVersion[]
+  driveTrashGroups   DriveTrashGroup[]
+  driveCommits       DriveCommit[]
+  driveChanges       DriveChange[]
 
   /// The account's one managed runner mapping, when it has one (migration 0399).
   managedRunner    ManagedRunner?
@@ -2754,6 +2760,8 @@ model SessionMergeReceipt {
   @@index([projectId, createdAt])
   @@index([ownerId, createdAt])
   @@index([checkpointId, createdAt(sort: Desc)], map: "session_merge_receipt_checkpoint_idx")
+  /// 1270: a COMMIT citation asks whether a sha is recorded under another task (`resolveCommit`).
+  @@index([sourceSha], map: "session_merge_receipt_source_sha_idx")
   /// CP4 is enforced by a PARTIAL unique index this schema cannot spell
   /// (`session_merge_receipt_checkpoint_key` on `(checkpoint_id, idempotency_key)`,
   /// `WHERE checkpoint_id IS NOT NULL`), the same trade `task_attempt_one_open_key` carries. It has
@@ -3539,9 +3547,14 @@ model DriveStaging {
   touchedAt    DateTime  @default(now()) @map("touched_at") @db.Timestamptz(3)
   committedAt  DateTime? @map("committed_at") @db.Timestamptz(3)
   chunks       DriveStagingChunk[]
+  /// The foreign keys 1327 adds: the entry a mount handle is bound to, and the folder an upload lands in.
+  entry        DriveEntry? @relation("DriveStagingEntry", fields: [entryId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "drive_staging_entry_fkey")
+  parent       DriveEntry? @relation("DriveStagingParent", fields: [parentId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "drive_staging_parent_fkey")
 
   @@unique([id, ownerId], map: "drive_staging_id_owner_id_key")
   @@index([touchedAt], map: "drive_staging_touched_at_idx")
+  @@index([entryId], map: "drive_staging_entry_idx")
+  @@index([parentId], map: "drive_staging_parent_idx")
   @@map("drive_staging")
 }
 
@@ -3573,10 +3586,150 @@ model DriveVersionChunk {
   sizeBytes Int      @map("size_bytes")
   sha256    String
   blob      FileBlob @relation(fields: [sha256], references: [sha256], onDelete: Restrict, map: "drive_version_chunk_sha256_fkey")
+  version   DriveVersion @relation(fields: [versionId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "drive_version_chunk_version_fkey")
 
   @@id([versionId, idx], map: "drive_version_chunk_pkey")
   @@index([sha256], map: "drive_version_chunk_sha256_idx")
   @@map("drive_version_chunk")
+}
+
+/// What one deletion (`DELETE`) or one overwrite (`VERSION`) put in Trash (1327, docs/orbit-files-drive-technical-design.md
+/// §1.1, §3.3–§3.5). A `DELETE` group from the mount stays open for a burst of deletes (`burst_key`, joined while
+/// `last_added_at` is under 10 s old); an owner's deletion is closed at once. `folder_id` has no foreign key: it is the
+/// folder the items were deleted from, for display, and `folder_path` keeps its path as it was.
+/// Partial index: drive_trash_group_burst_idx (owner_id, burst_key) WHERE burst_key IS NOT NULL AND closed_at IS NULL.
+model DriveTrashGroup {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  ownerId        String    @map("owner_id") @db.Uuid
+  owner          User      @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "drive_trash_group_owner_id_fkey")
+  /// `DELETE` | `VERSION` (drive_trash_group_kind_chk).
+  kind           String
+  folderId       String?   @map("folder_id") @db.Uuid
+  folderPath     String    @map("folder_path")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  lastAddedAt    DateTime  @default(now()) @map("last_added_at") @db.Timestamptz(3)
+  closedAt       DateTime? @map("closed_at") @db.Timestamptz(3)
+  burstKey       String?   @map("burst_key")
+  /// `OWNER` | `AGENT`.
+  actorKind      String    @map("actor_kind")
+  actorSessionId String?   @map("actor_session_id") @db.Uuid
+  actorRunnerId  String?   @map("actor_runner_id") @db.Uuid
+  itemCount      Int       @default(0) @map("item_count")
+  sizeBytes      BigInt    @default(0) @map("size_bytes")
+  entries        DriveEntry[]
+  versions       DriveVersion[]
+
+  @@unique([id, ownerId], map: "drive_trash_group_id_owner_id_key")
+  @@index([ownerId, createdAt], map: "drive_trash_group_owner_created_idx")
+  @@map("drive_trash_group")
+}
+
+/// One folder or file of an account's drive, live or in Trash (1327, docs/orbit-files-drive-technical-design.md §1.1).
+/// The root is the one row with no parent, named ''. A file always has a current version (drive_entry_version_chk; the
+/// foreign key to it is DEFERRABLE INITIALLY DEFERRED, so a file and its first version are written in one transaction).
+/// A folder in Trash marks every descendant with the same `trashed_at` and `trash_group_id`.
+/// Partial unique indexes: drive_entry_live_name_key (owner_id, parent_id, name) WHERE trashed_at IS NULL, and
+/// drive_entry_root_key (owner_id) WHERE parent_id IS NULL.
+model DriveEntry {
+  id                  String    @id @default(uuid(7)) @db.Uuid
+  ownerId             String    @map("owner_id") @db.Uuid
+  owner               User      @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "drive_entry_owner_id_fkey")
+  parentId            String?   @map("parent_id") @db.Uuid
+  parent              DriveEntry?  @relation("DriveEntryParent", fields: [parentId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "drive_entry_parent_fkey")
+  children            DriveEntry[] @relation("DriveEntryParent")
+  /// `FOLDER` | `FILE`.
+  kind                String
+  /// Exact bytes of the name, not normalised.
+  name                String
+  currentVersionId    String?   @map("current_version_id") @db.Uuid
+  currentVersion      DriveVersion? @relation("DriveEntryCurrentVersion", fields: [currentVersionId, ownerId], references: [id, ownerId], onDelete: Restrict, map: "drive_entry_current_version_fkey")
+  sizeBytes           BigInt    @default(0) @map("size_bytes")
+  mtime               DateTime  @default(now()) @db.Timestamptz(3)
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime  @default(now()) @map("updated_at") @db.Timestamptz(3)
+  /// `OWNER` | `AGENT`.
+  lastWriterKind      String    @map("last_writer_kind")
+  lastWriterSessionId String?   @map("last_writer_session_id") @db.Uuid
+  lastWriterRunnerId  String?   @map("last_writer_runner_id") @db.Uuid
+  lastWrittenAt       DateTime  @default(now()) @map("last_written_at") @db.Timestamptz(3)
+  trashedAt           DateTime? @map("trashed_at") @db.Timestamptz(3)
+  trashGroupId        String?   @map("trash_group_id") @db.Uuid
+  trashGroup          DriveTrashGroup? @relation(fields: [trashGroupId, ownerId], references: [id, ownerId], onDelete: Restrict, map: "drive_entry_trash_group_fkey")
+  /// A top-level item of its Trash group: its parent is not in the same group.
+  trashTop            Boolean   @default(false) @map("trash_top")
+  /// The drive_change.seq of its last change, appends included: the cache key.
+  seq                 BigInt    @default(0)
+  versions            DriveVersion[] @relation("DriveVersionEntry")
+  commits             DriveCommit[]
+  stagings            DriveStaging[] @relation("DriveStagingEntry")
+  uploadsHere         DriveStaging[] @relation("DriveStagingParent")
+
+  @@unique([id, ownerId], map: "drive_entry_id_owner_id_key")
+  @@index([ownerId, trashGroupId], map: "drive_entry_trash_group_idx")
+  @@index([parentId], map: "drive_entry_parent_idx")
+  @@map("drive_entry")
+}
+
+/// One content a file has had (1327): the current one, or a replaced one (`replaced_at`) in Trash (`trash_group_id`).
+/// `handle_id` is the writer's handle still writing it, so a later commit of that handle continues it (§3.1).
+model DriveVersion {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  ownerId         String    @map("owner_id") @db.Uuid
+  owner           User      @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "drive_version_owner_id_fkey")
+  entryId         String    @map("entry_id") @db.Uuid
+  entry           DriveEntry @relation("DriveVersionEntry", fields: [entryId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "drive_version_entry_fkey")
+  sizeBytes       BigInt    @default(0) @map("size_bytes")
+  chunkCount      Int       @default(0) @map("chunk_count")
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  handleId        String?   @map("handle_id")
+  /// `OWNER` | `AGENT`.
+  writerKind      String    @map("writer_kind")
+  writerSessionId String?   @map("writer_session_id") @db.Uuid
+  writerRunnerId  String?   @map("writer_runner_id") @db.Uuid
+  replacedAt      DateTime? @map("replaced_at") @db.Timestamptz(3)
+  trashGroupId    String?   @map("trash_group_id") @db.Uuid
+  trashGroup      DriveTrashGroup? @relation(fields: [trashGroupId, ownerId], references: [id, ownerId], onDelete: Restrict, map: "drive_version_trash_group_fkey")
+  chunks          DriveVersionChunk[]
+  currentOf       DriveEntry[] @relation("DriveEntryCurrentVersion")
+
+  @@unique([id, ownerId], map: "drive_version_id_owner_id_key")
+  @@index([entryId], map: "drive_version_entry_idx")
+  @@index([ownerId, trashGroupId], map: "drive_version_trash_group_idx")
+  @@map("drive_version")
+}
+
+/// The answer to one commit, by the writer's own `commit_id` within its owner, kept a day so a retried commit is answered
+/// and never applied twice (1327, §3.1). The retention sweep's step 0 prunes it.
+model DriveCommit {
+  ownerId   String     @map("owner_id") @db.Uuid
+  owner     User       @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "drive_commit_owner_id_fkey")
+  commitId  String     @map("commit_id")
+  entryId   String     @map("entry_id") @db.Uuid
+  entry     DriveEntry @relation(fields: [entryId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "drive_commit_entry_fkey")
+  result    Json
+  createdAt DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@id([ownerId, commitId], map: "drive_commit_pkey")
+  @@index([createdAt], map: "drive_commit_created_at_idx")
+  @@map("drive_commit")
+}
+
+/// The drive's change feed (1327, §5.4): one row per change to an entry, kept a day. `at` is the clock when the row was
+/// inserted, which the feed's look-back reads. No foreign key to the entry: a REMOVE outlives it.
+model DriveChange {
+  seq      BigInt   @id @default(autoincrement())
+  ownerId  String   @map("owner_id") @db.Uuid
+  owner    User     @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "drive_change_owner_id_fkey")
+  entryId  String   @map("entry_id") @db.Uuid
+  parentId String?  @map("parent_id") @db.Uuid
+  /// `UPSERT` | `REMOVE`.
+  op       String
+  at       DateTime @default(dbgenerated("clock_timestamp()")) @db.Timestamptz(3)
+
+  @@index([ownerId, seq], map: "drive_change_owner_seq_idx")
+  @@index([ownerId, at], map: "drive_change_owner_at_idx")
+  @@index([at], map: "drive_change_at_idx")
+  @@map("drive_change")
 }
 
 // Lightweight activity feed (no FKs, append-only).
@@ -6474,6 +6627,8 @@ model Task {
   /// Created PARTIAL (`WHERE project_id IS NOT NULL`, migration 0361), which this schema cannot
   /// spell — the predicate the covering index above carries, for the same reason.
   @@index([ownerId, projectId, updatedAt], map: "task_project_activity_idx")
+  /// 1270: the wiki maintenance facts read's settled-task arm, bounded below by the space's cursor (`factsSql`).
+  @@index([ownerId, updatedAt], map: "task_owner_updated_idx")
   @@index([status])
   /// The scheduled sweep's way in: the due tasks, in the order they came due. Created PARTIAL
   /// (`WHERE run_at IS NOT NULL`, see migration 0110) — a predicate this schema cannot spell, the

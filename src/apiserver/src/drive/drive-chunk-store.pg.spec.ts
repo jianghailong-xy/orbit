@@ -53,6 +53,7 @@ import {
   DRIVE_STAGING_NOT_FOUND,
   DriveChunksService,
 } from './drive-chunks.service';
+import { DriveService } from './drive.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -354,7 +355,8 @@ function storeCases(leg: Leg) {
       const versioned = randomBytes(5000);
       const versionStaging = await chunks.openStaging(owner, { source: 'TOOL' });
       await chunks.putChunk(owner, versionStaging.id, 0, sha256(versioned), Readable.from([versioned]));
-      const versionId = randomUUID();
+      // A file's version for the chunk row to belong to (its foreign key, migration 1327).
+      const versionId = (await new DriveService(db as never).createFile(owner, { name: `held-${leg.storage}-${RUN}.bin` })).currentVersionId!;
       await db.driveVersionChunk.create({
         data: { versionId, idx: 0, ownerId: owner, offset: 0n, sizeBytes: versioned.length, sha256: sha256(versioned) },
       });

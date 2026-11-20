@@ -21,10 +21,15 @@ const DELETE_TRANSACTION_TIMEOUT_MS = 65_000;
 /** How long a drive write may go untouched before its staging, and the chunks only it held, are let go. */
 export const DRIVE_STAGING_IDLE_MS = 7 * 24 * 60 * 60 * 1000;
 
+/** How long the drive keeps a commit's answer and a change-feed row (docs/orbit-files-drive-technical-design.md §1.1). */
+export const DRIVE_FEED_KEEP_MS = 24 * 60 * 60 * 1000;
+
 /** What one sweep did. */
 export interface FileSweepResult {
   /** Drive stagings removed because nothing had touched them for DRIVE_STAGING_IDLE_MS. */
   stagingsRemoved: number;
+  /** Drive commit answers and change-feed rows removed because they were older than DRIVE_FEED_KEEP_MS. */
+  feedRowsRemoved: number;
   /** Rows given a date: those whose task was deleted, and those no date was ever written for. */
   dated: number;
   tombstoned: number;
@@ -39,7 +44,9 @@ export interface FileSweepResult {
  * instant and is carried on from by the next sweep:
  *
  *   0. A drive staging (docs/orbit-files-drive-technical-design.md §2.4), a write no commit has taken, is removed once
- *      nothing has touched it for seven days; its chunk rows go with it, and step 3 then finds what only they held.
+ *      nothing has touched it for seven days; its chunk rows go with it, and step 3 then finds what only they held. A
+ *      drive commit's answer and a change-feed row go once they are a day old: a retried commit or a feed reader older
+ *      than that starts again from the tree.
  *   1. A file its task's deletion let go of gets its date. Nothing else writes one then: the deletion takes the versions
  *      that held the row with it, whichever door or cascade it came through, and a row that evidence held has no date and
  *      names a version that is no longer there. Other rows of that task keep the date they have. An upload no evidence
@@ -100,9 +107,9 @@ export class FileRetentionSweep implements OnApplicationBootstrap, OnModuleDestr
     if (this.running) return;
     this.running = this.sweep()
       .then((done) => {
-        if (done.stagingsRemoved + done.dated + done.tombstoned + done.deleted + done.failed > 0) {
+        if (done.stagingsRemoved + done.feedRowsRemoved + done.dated + done.tombstoned + done.deleted + done.failed > 0) {
           this.logger.log(
-            `removed ${done.stagingsRemoved} idle drive write(s), gave ${done.dated} file(s) a date, tombstoned ${done.tombstoned}, deleted the bytes of ${done.deleted}, and could `
+            `removed ${done.stagingsRemoved} idle drive write(s) and ${done.feedRowsRemoved} old drive feed row(s), gave ${done.dated} file(s) a date, tombstoned ${done.tombstoned}, deleted the bytes of ${done.deleted}, and could `
               + `not reach the store of ${done.failed}`,
           );
         }
@@ -116,11 +123,34 @@ export class FileRetentionSweep implements OnApplicationBootstrap, OnModuleDestr
   /** One sweep, as of `now`: a spec's clock, or the time it runs. */
   async sweep(now: Date = new Date()): Promise<FileSweepResult> {
     const stagingsRemoved = await this.removeIdleStagings(now);
+    const feedRowsRemoved = await this.pruneDriveFeed(now);
     const dated = await this.dateUndatedFiles(now);
     const tombstoned = await this.tombstoneDue(now);
     await this.markReleased(now);
     const { deleted, failed } = await this.deleteReleased(now);
-    return { stagingsRemoved, dated, tombstoned, deleted, failed };
+    return { stagingsRemoved, feedRowsRemoved, dated, tombstoned, deleted, failed };
+  }
+
+  /** Step 0's second half: drive commit answers and change-feed rows older than a day, a batch at a time. */
+  private async pruneDriveFeed(now: Date): Promise<number> {
+    const before = new Date(now.getTime() - DRIVE_FEED_KEEP_MS).toISOString();
+    let total = 0;
+    for (;;) {
+      const removed = await this.prisma.$executeRaw`
+        DELETE FROM drive_commit
+         WHERE (owner_id, commit_id) IN (
+           SELECT owner_id, commit_id FROM drive_commit WHERE created_at < ${before}::timestamptz LIMIT ${SWEEP_BATCH}
+         )`;
+      total += removed;
+      if (removed < SWEEP_BATCH) break;
+    }
+    for (;;) {
+      const removed = await this.prisma.$executeRaw`
+        DELETE FROM drive_change
+         WHERE seq IN (SELECT seq FROM drive_change WHERE at < ${before}::timestamptz ORDER BY seq LIMIT ${SWEEP_BATCH})`;
+      total += removed;
+      if (removed < SWEEP_BATCH) return total;
+    }
   }
 
   /** Step 0, a batch at a time. A staging a chunk is arriving for is skipped, and its touch moves it out of reach. */

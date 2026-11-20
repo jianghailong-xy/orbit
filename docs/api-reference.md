@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 37 |
-| `user` | 482 |
+| `user` | 497 |
 | `admin` | 31 |
 | `runner` | 205 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **759** |
+| **Total** | **774** |
 
 ## Public routes
 
@@ -133,6 +133,21 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/auth/google/link` | body `GoogleLinkDto` | `GoogleAuthController.link` |
 | `POST` | `/api/auth/google/link/confirm` | body `GoogleExchangeDto` | `GoogleAuthController.confirmLink` |
 | `GET` | `/api/conditions/:id` | path `id` | `ConditionsController.get` |
+| `GET` | `/api/drive/changes` | query `since` | `DriveController.changes` |
+| `GET` | `/api/drive/entries` | query `cursor`, `limit`, `parentId` | `DriveController.list` |
+| `DELETE` | `/api/drive/entries/:id` | path `id` | `DriveController.moveToTrash` |
+| `GET` | `/api/drive/entries/:id` | path `id` | `DriveController.get` |
+| `PATCH` | `/api/drive/entries/:id` | body `UpdateDriveEntryDto`; path `id` | `DriveController.update` |
+| `GET` | `/api/drive/entries/:id/versions` | path `id` | `DriveController.versions` |
+| `POST` | `/api/drive/folders` | body `CreateDriveFolderDto` | `DriveController.createFolder` |
+| `GET` | `/api/drive/resolve` | query `path` | `DriveController.resolve` |
+| `DELETE` | `/api/drive/trash` | — | `DriveController.emptyTrash` |
+| `GET` | `/api/drive/trash` | query `cursor`, `limit` | `DriveController.trash` |
+| `DELETE` | `/api/drive/trash/groups/:id` | path `id` | `DriveController.deleteGroup` |
+| `GET` | `/api/drive/trash/groups/:id` | path `id`; query `cursor`, `limit`, `parentId` | `DriveController.trashGroup` |
+| `POST` | `/api/drive/trash/groups/:id/restore` | path `id` | `DriveController.restoreGroup` |
+| `DELETE` | `/api/drive/versions/:id` | path `id` | `DriveController.deleteVersion` |
+| `POST` | `/api/drive/versions/:id/restore` | body `RestoreDriveVersionDto`; path `id` | `DriveController.restoreVersion` |
 | `GET` | `/api/events` | query `hints` | `EventsController.events` |
 | `GET` | `/api/guest-sessions` | — | `GuestSessionsController.list` |
 | `GET` | `/api/guest-sessions/:id` | path `id`; query `limit`, `maxPayload` | `GuestSessionsController.get` |
