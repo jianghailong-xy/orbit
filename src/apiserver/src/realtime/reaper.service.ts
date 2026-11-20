@@ -908,7 +908,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
       const delivered = taskId
         ? await settleDeliveredIdentityAfterFinish(tx, await tx.session.findUnique({
           where: { id: sessionId },
-          select: { ownerId: true, taskId: true, startsTaskWork: true },
+          select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
         }))
         : null;
       await retireSessionInboxGeneration(tx, sessionId);

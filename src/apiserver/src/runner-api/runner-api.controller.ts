@@ -4746,7 +4746,7 @@ export class RunnerApiController {
           // waiting for (§10.5 O-L4 3). Here rather than in the freeze, after the project is taken.
           await settleDeliveredIdentityAfterFinish(tx, await tx.session.findUnique({
             where: { id: sessionId },
-            select: { ownerId: true, taskId: true, startsTaskWork: true },
+            select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
           }));
         }
         return frozen;

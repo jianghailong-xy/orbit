@@ -3,7 +3,7 @@ import type { Prisma } from '@prisma/client';
 import type { PrismaService } from '../prisma/prisma.service';
 import {
   LANDING_SERVING_WORK_SELECT,
-  NEWEST_WORK_REPOSITORY,
+  WORK_SESSIONS_NEWEST_FIRST,
   readLandingJobsByTask,
   taskHasNothingToLand,
   taskLanding,
@@ -77,11 +77,12 @@ export interface InFlightLandingJob {
  *  session — §1.1 `isCodeTask`'s second half, which the landing fold deliberately does not read. */
 export interface LandingReasonServingTask extends LandingServingTask {
   id: string;
-  /** At most one: the newest session that started this task's work, with the repository its
-   *  workspace names (the fold's O-L7 reading). */
+  /** The sessions that started this task's work, newest first — the first with the repository its
+   *  workspace names (the fold's O-L7 reading), every one with what it reported (§12.15 P-M1). */
   sessions: ReadonlyArray<{
     isolationStatus: string | null;
     branch: string | null;
+    changedFiles?: Prisma.JsonValue | null;
     workspace?: { repoUrl: string | null } | null;
   }>;
 }
@@ -166,11 +167,9 @@ export function criterionLandingReason(
   return PRECEDENCE.find((reason) => reasons.has(reason)) ?? 'NO_RECEIPT';
 }
 
-/** The newest session that started a task's work, the one §1.1 `isCodeTask` reads. */
-const NEWEST_WORK_SESSION = {
-  ...NEWEST_WORK_REPOSITORY,
-  select: { ...NEWEST_WORK_REPOSITORY.select, isolationStatus: true, branch: true },
-} satisfies Prisma.Task$sessionsArgs;
+/** The sessions that started a task's work, newest first: the first is the one §1.1 `isCodeTask`
+ *  reads, and all of them are what §12.15 P-M1 reads. */
+const NEWEST_WORK_SESSION = WORK_SESSIONS_NEWEST_FIRST;
 
 /** What the reading needs about one serving task, as a Prisma `select`: the landing lane's own
  *  select, spread so that whatever it reads this reads too, plus the task's id and newest work

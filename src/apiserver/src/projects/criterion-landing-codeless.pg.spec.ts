@@ -604,11 +604,12 @@ test('work with nothing to land stops holding its criterion — on a declaration
     await twoPiecesOnMain(projectId, sessionDiedAt.key, 'died');
     const died = await settledTask(projectId, 'the work whose session died', sessionDiedAt.key);
     await workSession(died, 'orbit/session-died', 'DIED');
-    const jobId = await queuedFor(died);
-
-    assert.equal((await heartbeat('died')).find((command) => command.jobId === jobId), undefined,
+    // §12.15 P-M1: a DONE whose work has not finished decides nothing yet — the finish that freezes its
+    // identity does — so no landing is queued and there is nothing for the line to be handed.
+    const queued = await prisma.$transaction((tx) => enqueueForDoneTask(tx, ownerId, died));
+    assert.deepEqual(queued, { enqueued: false, reason: 'WORK_MOVING', projectId },
       'a branch whose session never finished is not handed to the line: it may still grow');
-    assert.deepEqual((await jobsOf(died)).map((job) => job.state), ['QUEUED']);
+    assert.deepEqual(await jobsOf(died), []);
     assert.equal(await landingOf(projectId, SESSION_DIED), 'UNKNOWN',
       'no answer, no measurement, no declaration: nothing lets this task out, and no session or task '
         + 'status stands in for one');

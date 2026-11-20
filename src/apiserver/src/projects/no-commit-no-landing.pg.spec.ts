@@ -319,7 +319,7 @@ async function readings(stack: Stack, taskId: string) {
     where: { id: taskId },
     select: {
       deliveredSha: true, deliveredBaseSha: true,
-      _count: criterionLanding.LANDING_SERVING_WORK_SELECT._count,
+      sessions: criterionLanding.WORK_SESSIONS_NEWEST_FIRST,
     },
   });
   return { landed: row!.landed, nothing: row!.nothing, nothingTs: criterionLanding.deliveredNothingOfItsOwn(facts) };

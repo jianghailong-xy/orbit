@@ -95,6 +95,7 @@ import { ProjectsService } from './projects.service';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
 import '../test-support/dequeue-under-lease';
+import { settleDeliveredIdentityAfterFinish } from './project-integration-job';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -540,9 +541,16 @@ async function claimedLanding(
   assert.equal(settled.status, TaskStatus.DONE, 'the acceptance command agreed');
   // The runner commits a worktree when it FINISHES the session, and a landing is not handed over
   // before that (J-T1a): the finish, and where HEAD ended, are what the queue reads.
-  await stack.db.session.update({
-    where: { id: sessionId },
-    data: { finishedAt: new Date(), worktreeBranch: branch, worktreeDirty: false },
+  await stack.db.$transaction(async (tx) => {
+    // The finish settles the DONE's delivered identity in the transaction that writes it, as every
+    // finish door does — and decides the route a DONE written while this work moved left to it
+    // (§10.5 O-L4 3, §12.15 P-M1).
+    const finished = await tx.session.update({
+      where: { id: sessionId },
+      data: { finishedAt: new Date(), worktreeBranch: branch, worktreeDirty: false },
+      select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
+    });
+    await settleDeliveredIdentityAfterFinish(tx, finished);
   });
   const claimed = await stack.jobs.dispatch({
     runnerId: w.runnerId,

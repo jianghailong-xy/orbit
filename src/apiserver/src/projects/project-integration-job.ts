@@ -9,7 +9,7 @@ import {
   openTaskLanding,
   type OpenedLanding,
 } from './landing-session';
-import { LANDING_SERVING_WORK_SELECT, taskLandingSql, workOnProjectRepository } from './project-criterion-landing';
+import { WORK_REPORTED_WHERE, taskLandingSql, workOnProjectRepository } from './project-criterion-landing';
 import { isCodeTask, startOnFirstIntegration } from './project-integration-line';
 import {
   appendIntegrationJobEvent,
@@ -1421,9 +1421,20 @@ export type DeliveredIdentitySettlement =
  */
 export async function settleDeliveredIdentity(
   tx: Prisma.TransactionClient,
-  input: { ownerId: string; taskId: string; after: 'DONE' | 'WORK_FINISHED' | 'DEPLOY' },
+  input: {
+    ownerId: string;
+    taskId: string;
+    after: 'DONE' | 'WORK_FINISHED' | 'DEPLOY';
+    /**
+     * WORK_FINISHED only: the work session whose finish this is. The DONE whose route the finish
+     * decides is not this transaction's, so its actor is gone; the session that finished the work
+     * stands for it in the H1 mark of a reopened task's earlier landing cards (§4.7).
+     */
+    finishedSessionId?: string | null;
+  },
 ): Promise<DeliveredIdentitySettlement> {
   const { ownerId, taskId } = input;
+  const finishSource: DoneTaskSource | null = input.finishedSessionId ? { sessionId: input.finishedSessionId } : null;
   const task = await tx.task.findFirst({
     where: { id: taskId, ownerId },
     select: { status: true, projectId: true, deliveredAt: true },
@@ -1446,7 +1457,7 @@ export async function settleDeliveredIdentity(
       // §12.15 P-M1: a DONE written while this work still moved queued nothing and started no line
       // (`queueForDoneTask` answered WORK_MOVING), so the route it owes is decided here, on the
       // identity just frozen — nothing for a branch with no commit of its own, today's route else.
-      if (input.after === 'WORK_FINISHED') await queueForDoneTask(tx, ownerId, taskId, null);
+      if (input.after === 'WORK_FINISHED') await queueForDoneTask(tx, ownerId, taskId, finishSource);
       await deliveredIdentityFrozen(tx, { ownerId, projectId: reading.projectId, taskId });
     }
     return 'FROZEN';
@@ -1456,7 +1467,7 @@ export async function settleDeliveredIdentity(
   // session), which the DONE transaction holds when it queues and the generation counter is read under.
   if (input.after === 'WORK_FINISHED') {
     await tx.$queryRaw(Prisma.sql`SELECT 1 FROM "task" WHERE "id" = ${taskId}::uuid FOR NO KEY UPDATE`);
-    await queueForDoneTask(tx, ownerId, taskId, null);
+    await queueForDoneTask(tx, ownerId, taskId, finishSource);
   }
   const binding = await tx.projectCodebase.findFirst({
     where: { projectId: reading.projectId, slot: 'primary' },
@@ -1488,11 +1499,11 @@ export async function settleDeliveredIdentity(
  */
 export async function settleDeliveredIdentityAfterFinish(
   tx: Prisma.TransactionClient,
-  session: { ownerId: string; taskId: string | null; startsTaskWork: boolean } | null,
+  session: { id?: string; ownerId: string; taskId: string | null; startsTaskWork: boolean } | null,
 ): Promise<DeliveredIdentitySettlement | null> {
   if (!session?.taskId || !session.startsTaskWork) return null;
   return settleDeliveredIdentity(tx, {
-    ownerId: session.ownerId, taskId: session.taskId, after: 'WORK_FINISHED',
+    ownerId: session.ownerId, taskId: session.taskId, after: 'WORK_FINISHED', finishedSessionId: session.id ?? null,
   });
 }
 
@@ -1812,7 +1823,6 @@ async function deliveredRoute(
       deliveredBaseSha: true,
       deliveredBranch: true,
       deliveredSessionId: true,
-      _count: LANDING_SERVING_WORK_SELECT._count,
     },
   });
   if (!task?.projectId) return 'QUEUE';
@@ -1831,9 +1841,7 @@ async function deliveredRoute(
     if (reading.kind === 'KNOWN') identity = reading.identity;
   }
   if (!identity) return 'QUEUE';
-  return emptyBranchRoute(tx, {
-    taskId, projectId: task.projectId, identity, sessionsReportingWork: task._count.sessions,
-  });
+  return emptyBranchRoute(tx, { taskId, projectId: task.projectId, identity });
 }
 
 /**
@@ -1847,11 +1855,17 @@ async function deliveredRoute(
  */
 async function emptyBranchRoute(
   tx: Prisma.TransactionClient,
-  input: { taskId: string; projectId: string; identity: DeliveredIdentity; sessionsReportingWork: number },
+  input: { taskId: string; projectId: string; identity: DeliveredIdentity },
 ): Promise<'QUEUE' | 'NOTHING_TO_LAND' | 'WORK_ELSEWHERE'> {
   const { identity } = input;
   if (identity.sha !== identity.baseSha) return 'QUEUE';
-  if (input.sessionsReportingWork === 0) return 'NOTHING_TO_LAND';
+  // Asked only of an empty branch, by the task's own session index: did any of its work sessions report
+  // work (J8's question, `WORK_REPORTED_WHERE`)?
+  const reported = await tx.session.findFirst({
+    where: { taskId: input.taskId, ...WORK_REPORTED_WHERE },
+    select: { id: true },
+  });
+  if (!reported) return 'NOTHING_TO_LAND';
   const line = await tx.projectCodebase.findFirst({
     where: { projectId: input.projectId, slot: 'primary', integrationStartedAt: { not: null } },
     select: { id: true },
@@ -2185,7 +2199,6 @@ async function backfillFinishedCodeTasks(
       deliveredBaseSha: true,
       deliveredBranch: true,
       deliveredSessionId: true,
-      _count: LANDING_SERVING_WORK_SELECT._count,
       mergeReceipts: {
         where: { targetBranch: { in: landedBranches }, result: { in: ['MERGED', 'ALREADY_MERGED'] } },
         take: 1,
@@ -2212,7 +2225,6 @@ async function backfillFinishedCodeTasks(
           branch: candidate.deliveredBranch,
           sessionId: candidate.deliveredSessionId,
         },
-        sessionsReportingWork: candidate._count.sessions,
       });
       if (route !== 'QUEUE') continue;
     }

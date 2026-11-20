@@ -35,6 +35,7 @@ import { openItemOwed } from './project-open-item';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { readTaskIntegrationViews } from './project-task-integration';
 import '../test-support/dequeue-under-lease';
+import { settleDeliveredIdentityAfterFinish } from './project-integration-job';
 
 /**
  * The landing generation created by a real DONE after task_reopen is an H1 hand-off, not a fresh
@@ -319,15 +320,22 @@ async function completeTask(stack: Stack, w: World, taskId: string, label: strin
   );
   // Integration conflict happens after the task work session has ended. Keep the fixture's old run
   // out of the execution-claim index before the task_reopen analogue creates the next run.
-  await stack.db.session.update({
-    where: { id: sessionId },
-    data: {
-      status: RunStatus.CANCELLED,
-      completedAt: new Date(),
-      finishedAt: new Date(),
-      worktreeBranch: branch,
-      worktreeDirty: false,
-    },
+  await stack.db.$transaction(async (tx) => {
+    // The finish settles the DONE's delivered identity in the transaction that writes it, as every
+    // finish door does — and decides the route a DONE written while this work moved left to it
+    // (§10.5 O-L4 3, §12.15 P-M1).
+    const finished = await tx.session.update({
+      where: { id: sessionId },
+      data: {
+        status: RunStatus.CANCELLED,
+        completedAt: new Date(),
+        finishedAt: new Date(),
+        worktreeBranch: branch,
+        worktreeDirty: false,
+      },
+      select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
+    });
+    await settleDeliveredIdentityAfterFinish(tx, finished);
   });
   return { sessionId, branch };
 }

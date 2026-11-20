@@ -3454,19 +3454,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           // §1.1 reads the NEWEST work session, so a task whose first attempt ran in a worktree and
           // whose latest one did not is judged by the latest — and by the repository its workspace
           // names (O-L7).
-          // Every one of them, newest first, for whether any is still moving (§12.15 P-M1): no
-          // `changed_files` here, which `_count` below answers for without reading the lists.
+          // Every one of them, newest first: whether any is still moving, and what each reported
+          // (§12.15 P-M1, `deliveredNothingOfItsOwn`).
           sessions: {
             where: { startsTaskWork: true, deletedAt: null },
             orderBy: { createdAt: 'desc' },
             select: {
-              isolationStatus: true, branch: true, finishedAt: true, workspace: { select: { repoUrl: true } },
+              isolationStatus: true, branch: true, finishedAt: true, changedFiles: true,
+              workspace: { select: { repoUrl: true } },
             },
           },
           mergeReceipts: LANDING_SERVING_WORK_SELECT.mergeReceipts,
           deliveredSha: true,
           deliveredBaseSha: true,
-          _count: LANDING_SERVING_WORK_SELECT._count,
         },
       });
       for (const row of rows) {
@@ -3485,7 +3485,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           receipts: row.mergeReceipts ?? [],
           deliveredSha: row.deliveredSha,
           deliveredBaseSha: row.deliveredBaseSha,
-          _count: row._count,
+          sessions: row.sessions,
           workStillMoving: (row.sessions ?? []).some((session) => session.finishedAt === null),
         }));
       }
@@ -11290,11 +11290,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   /**
    * §12.15 P-M1: the finish that froze a DONE task's identity decided the route its DONE had left to
    * it, and a task that delivered nothing of its own releases its dependents on that finish (J10's
-   * second edge, moved from the DONE to where the fact became known). The dependency dispatch and its
-   * decisions only: the DONE's own edge already delivered the completion's facts.
+   * second edge, moved from the DONE to where the fact became known).
    */
   async dispatchDependentsOfSettledWork(ownerId: string, doneTaskId: string): Promise<void> {
-    await this.deliverReadyDependents(await this.dispatchDependentsOf(ownerId, doneTaskId));
+    // The whole DONE edge, again: its facts were read while the landing was still undecided — the
+    // settled project held as work still landing (`landingDeferred`) — and are re-derived now that it
+    // is decided. Each step reads committed rows, so the parts the DONE already delivered answer
+    // nothing the second time.
+    await this.dispatchDependentsAfterCompletion(ownerId, doneTaskId);
   }
 
   /**

@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import type { PrismaService } from '../prisma/prisma.service';
+import { sessionReportedWork } from './landing-source-branch';
 
 /**
  * "Did the work land?" — a fourth fact about a stated criterion, read from merge receipts and
@@ -310,13 +311,12 @@ export interface LandingServingTask {
    *  session — the workspace whose `repo_url` it ran in — and the binding of the project the task is
    *  filed under (`workInAnotherRepository`). A reader that did not select them has nothing to say
    *  about the repository, which reads as work in the project's own. */
-  sessions?: ReadonlyArray<{ workspace?: { repoUrl: string | null } | null }>;
+  sessions?: ReadonlyArray<{ workspace?: { repoUrl: string | null } | null } & WorkReport>;
   project?: { codebases: ReadonlyArray<{ canonicalRepoUrl: string }> } | null;
   /** §12.15 P-M1's facts (`deliveredNothingOfItsOwn`). A reader that did not select them reads as a
    *  task that delivered something. */
   deliveredSha?: string | null;
   deliveredBaseSha?: string | null;
-  _count?: { sessions?: number } | null;
 }
 
 /** The rows the fold needs: one criterion's identity and its serving work's receipts. */
@@ -598,10 +598,9 @@ export function lineStartedSql(alias: string): string {
 /**
  * The work sessions of a task that reported work of their own (`sessionReportedWork`, J8): the
  * sessions `workSessionsReportingWork` in the relay reads, with a `changed_files` that is a list with
- * something in it. As a Prisma filter, for the readers that count them in their own select.
- *
- * The runner writes `changed_files` as a JSON list or not at all, so "not null, not `null`, not `[]`"
- * is the same set as the TypeScript and SQL spellings' "a list with at least one entry".
+ * something in it. As a Prisma filter, for the one-task reads of the write path; the runner writes
+ * `changed_files` as a JSON list or not at all, so "not null, not `null`, not `[]`" is the same set as
+ * the TypeScript and SQL spellings' "a list with at least one entry".
  */
 export const WORK_REPORTED_WHERE = {
   startsTaskWork: true,
@@ -611,13 +610,20 @@ export const WORK_REPORTED_WHERE = {
   NOT: [{ changedFiles: { equals: Prisma.AnyNull } }, { changedFiles: { equals: [] } }],
 } satisfies Prisma.SessionWhereInput;
 
+/** One work session of a task, as far as whether it reported work is concerned. */
+export interface WorkReport {
+  isolationStatus?: string | null;
+  branch?: string | null;
+  changedFiles?: Prisma.JsonValue | null;
+}
+
 /** The facts §12.15 P-M1 reads about one DONE task, as the readers select them. */
 export interface DeliveredNothingFacts {
   /** The frozen delivered identity (§10.5 O-L4): the commit, and the commit it forked from. */
   deliveredSha?: string | null;
   deliveredBaseSha?: string | null;
-  /** How many of its work sessions reported work (`WORK_REPORTED_WHERE`). */
-  _count?: { sessions?: number } | null;
+  /** EVERY work session of the task (`WORK_SESSIONS_NEWEST_FIRST`), with what it reported. */
+  sessions?: ReadonlyArray<WorkReport>;
 }
 
 /**
@@ -629,13 +635,19 @@ export interface DeliveredNothingFacts {
  * leaves DONE). And no work session of the task reported work (J8's condition, O-L7): a session
  * that did means the work is on some other branch, which is `WORK_ELSEWHERE` and not nothing.
  *
+ * Read off the task's work sessions rather than counted in SQL: a filtered relation count is an
+ * aggregate over the whole session table in the statement Prisma writes for it. A reader that did not
+ * select `changed_files` cannot tell, and gets `false` — the withholding answer.
+ *
  * The enqueue (`enqueueForDoneTask`), the dependency predicate (§2.5 J9), and the landing fold
  * (`taskHasNothingToLand`) all read this, in this spelling or `deliveredNothingOfItsOwnSql`.
  */
 export function deliveredNothingOfItsOwn(task: DeliveredNothingFacts): boolean {
-  return typeof task.deliveredSha === 'string'
-    && task.deliveredSha === task.deliveredBaseSha
-    && (task._count?.sessions ?? 0) === 0;
+  if (typeof task.deliveredSha !== 'string' || task.deliveredSha !== task.deliveredBaseSha) return false;
+  const sessions = task.sessions;
+  if (!sessions || sessions.some((session) => !('changedFiles' in session))) return false;
+  return !sessions.some((session) => session.isolationStatus === 'worktree' && !!session.branch
+    && sessionReportedWork({ changedFiles: session.changedFiles ?? null }));
 }
 
 /** `deliveredNothingOfItsOwn` as SQL, correlated to a TASK alias. */
@@ -1091,12 +1103,17 @@ export async function readCriterionLandingFacts(
   }));
 }
 
-/** The newest session that started a task's work, with the repository its workspace names (O-L7). */
-export const NEWEST_WORK_REPOSITORY = {
+/**
+ * Every session that started a task's work, newest first: the first is §1.1's newest work session,
+ * with the repository its workspace names (O-L7); all of them carry what they reported, which §12.15
+ * P-M1's `deliveredNothingOfItsOwn` reads.
+ */
+export const WORK_SESSIONS_NEWEST_FIRST = {
   where: { startsTaskWork: true, deletedAt: null },
   orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-  take: 1,
-  select: { workspace: { select: { repoUrl: true } } },
+  select: {
+    isolationStatus: true, branch: true, changedFiles: true, workspace: { select: { repoUrl: true } },
+  },
 } satisfies Prisma.Task$sessionsArgs;
 
 /**
@@ -1120,13 +1137,11 @@ export const LANDING_SERVING_WORK_SELECT = {
   mergeReceipts: { select: { result: true, targetBranch: true, sourceSha: true, createdAt: true, detail: true, targetShaAfter: true } },
   // §1.1's repository condition (O-L7): where the newest work session ran, and where the project's
   // line is bound. Two relation levels each, not a statement per task (`workInAnotherRepository`).
-  sessions: NEWEST_WORK_REPOSITORY,
+  sessions: WORK_SESSIONS_NEWEST_FIRST,
   project: { select: { codebases: { where: { slot: 'primary' }, select: { canonicalRepoUrl: true } } } },
-  // §12.15 P-M1 (`deliveredNothingOfItsOwn`): the frozen identity, and a count rather than the lists
-  // themselves, since a `changed_files` can hold thousands of entries and only "any?" is asked.
+  // §12.15 P-M1 (`deliveredNothingOfItsOwn`): the frozen identity, beside the sessions above.
   deliveredSha: true,
   deliveredBaseSha: true,
-  _count: { select: { sessions: { where: WORK_REPORTED_WHERE } } },
 } as const;
 
 /**
