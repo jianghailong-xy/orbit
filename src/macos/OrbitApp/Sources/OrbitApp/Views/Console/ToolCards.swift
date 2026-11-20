@@ -673,7 +673,7 @@ struct ToolCardView: View {
             // An interrupted run's result is only the runner saying it was interrupted: its end says that, once.
             if let result = displayResult, !result.isEmpty,
                !(isLaunchReceipt && (taskProgress != nil || card.name != "Workflow")),
-               questionOutcome == nil, endedRun?.status != "INTERRUPTED" {
+               endedRun?.status != "INTERRUPTED", questionOutcome == nil {
                 let isErr = card.status == .error
                 // Mirrors web `.chat-result`: a tinted panel (red on error, neutral otherwise) with a
                 // small uppercase label. The output text itself stays muted even on error (only the
