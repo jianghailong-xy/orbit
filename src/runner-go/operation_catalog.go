@@ -3814,6 +3814,18 @@ func bgToolDescriptors(obj func(map[string]interface{}, ...string) map[string]in
 					"type":        "object",
 					"description": "Extra environment variables, layered over the agent's own.",
 				},
+				"cpus": map[string]interface{}{
+					"type": "number",
+					"description": "Most CPUs' worth of time the job may use, fractions allowed (0.5, 2). The machine's" +
+						" owner may set a ceiling for every job, which also applies when you leave this out; asking for" +
+						" more is lowered to it. The result's limits say what the job runs under, and limitsNote why" +
+						" they were lowered or could not be applied on this machine.",
+				},
+				"memoryMb": map[string]interface{}{
+					"type": "integer",
+					"description": fmt.Sprintf("Most memory the job may hold, in megabytes (at least %d). Past it the whole job"+
+						" is killed and its output ends with a line saying so. Capped by the owner's ceiling, as cpus is.", bgMemoryMBMin),
+				},
 			}, "command", "kind"),
 		},
 		{

@@ -168,6 +168,7 @@ export async function subagentRouteInput(
       account: {
         quota: states[slug].quota ?? null, paused: states[slug].paused === true, unreadable: states[slug].quotaUnread === true,
         expiresAt: states[slug].expiresAt ?? null, nearLimit: states[slug].nearLimit === true,
+        opusUtilization: states[slug].opusUtilization ?? null,
       },
     } : {}),
   }));

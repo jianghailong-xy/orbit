@@ -8578,6 +8578,26 @@ button.chat-jump-start:hover {
   text-decoration: underline dotted;
   text-underline-offset: 3px;
 }
+/* The held tag with Cancel beside it, on a message no runner has taken yet. */
+.chat-held-foot {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--text-3);
+}
+.chat-held-cancel {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--brand);
+  cursor: pointer;
+}
+.chat-held-cancel:hover {
+  text-decoration: underline;
+}
 .runner-updating-pop {
   max-width: 420px;
   font-size: 13px;
@@ -25121,6 +25141,19 @@ a.smc-from:hover {
 .src-body,
 .src-excerpt {
   margin-top: 6px;
+}
+/* The reply's own size and line height (those of the .md inside it), so its height can be read in
+   lines: a long reply shows its first 4, fading out, until "Show more" (SessionReplyCard). */
+.src-body {
+  font-size: 14px;
+  line-height: 1.6;
+}
+.src-body.is-clamped {
+  max-height: 6.4em;
+  max-height: 4lh;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent);
+  mask-image: linear-gradient(to bottom, #000 55%, transparent);
 }
 .src-excerpt {
   padding-left: 8px;

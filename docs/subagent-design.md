@@ -130,7 +130,7 @@ Optimize For 只在第 5 条（没人给档位）时抬档：Balance 至少 M，
 | Optimize For | 规则 |
 |---|---|
 | Cost（默认） | 订阅先于计费 key；订阅里额度已知的先，再**先过期的先**，再余量多的先；key 里便宜的先 |
-| Balance | 额度已知的先（key 算已知），再**先过期的先**（key 和不知道何时重置的订阅算永不过期），再余量多的先，并列时便宜的先 |
+| Balance | 与 Cost 相同：可用的订阅（读得到额度与否）都先于计费 key（owner，2026-11-19）；与 Cost 只差在没给档位时抬到 M |
 | Intelligence | 档位上限高的模型先（例如 L 档里 Opus 先于 Sonnet-high），再额度已知的先，再先过期的先，并列时便宜的先 |
 
 **先过期的先**（owner，2026-11-19）：和 runner 上选账号同一条规则（`planUsage.ts` `rankAccounts`）——快用完的
@@ -138,6 +138,16 @@ Optimize For 只在第 5 条（没人给档位）时抬档：Balance 至少 M，
 有周窗口就是周窗口）早的先。号池选它的成员也按这条。Kimi 的月窗口算在内。
 
 最后按 owner 在 Providers 页排的顺序打破平局。结果和理由冻结在 `subagent_run` 里，续跑不重算。
+
+**点名的模型**（调用或定义文件里写的）：列出它、且在这台 runner 上跑得起来（上面 1–4 条）的 Provider × 引擎，按 owner 的顺序，
+第一个是选中的，其余是它的候选；跑不起来的都记为去掉。有人列出但都跑不起来：调用被拒（`No usable provider on … offers …`），
+定义文件里写的则按 auto 路由。没人列出：照旧在父会话的 Provider 上按名字跑。
+
+**续跑**（`resume`）：在它上次跑的引擎、Provider、模型和 effort 上接着跑，不再路由——对话是那个引擎的，换引擎只会拿到模型却没有对话。
+那个目标现在起不来就拒绝（`SUBAGENT_RESUME_CANNOT_START`），不换到别处；runner 把 `resumeOf` 带上，服务端据此识别本机续跑。
+
+**Opus 的周窗口**：Claude 账号的 Opus 周额度 ≥ 90% 时，该账号上的 Opus 行去掉（`Opus's weekly quota is at …`），Sonnet 照常；
+模型家族的窗口不算进账号的「快用完」和过期时刻。runner 自己的登录报「未登录」只去掉那个登录，订阅 token 的 key 用自己的 token，不受影响。
 
 ### 4.3 失败
 
