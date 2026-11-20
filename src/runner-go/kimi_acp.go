@@ -644,6 +644,8 @@ func startKimiACP(ctx context.Context, t *Transport, job *ClaimedSession, execDi
 	// The session's private Kimi home (see kimi_home.go), so runner-owned
 	// configuration never lands in the user's own ~/.kimi-code.
 	cmd.Env = envWithValue(cmd.Env, "KIMI_CODE_HOME", kimiHome)
+	// On the Orbit Cloud runner with the browser on, a tool the agent runs opens its pages there (browser_opener.go).
+	cmd.Env = browserOpenerEnv(cmd.Env, job.BrowserEnabled)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		cancel()

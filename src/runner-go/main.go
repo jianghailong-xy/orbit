@@ -361,6 +361,10 @@ func main() {
 		cmdBrowserMCP()
 		return
 	}
+	// BROWSER's and xdg-open's command for an engine on the Orbit Cloud runner (browser_opener.go).
+	if len(os.Args) > 1 && os.Args[1] == browserOpenerCommand {
+		os.Exit(runBrowserOpener(os.Args[2:], os.Stdout, os.Stderr))
+	}
 	// The credential helper every network git command is given (network_git.go). git runs it, and it
 	// answers git and does nothing else.
 	if len(os.Args) > 1 && os.Args[1] == gitCredentialReadOnlyCommand {
