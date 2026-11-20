@@ -28,6 +28,7 @@ import { Menu, type MenuItem } from '../components/ui/Menu';
 import {
   createDriveFolder,
   driveBlob,
+  downloadDriveFile,
   driveEntryQuery,
   driveFolderQuery,
   driveShareLinksQuery,
@@ -49,7 +50,7 @@ import {
 import { addUploads, useDriveUploads, type UploadRequest } from '../lib/driveUploads';
 import { showToast } from '../lib/toastStore';
 import { useToast } from '../lib/toast';
-import { saveUserFile, userFileUrl } from '../lib/userFile';
+import { userFileUrl } from '../lib/userFile';
 import './FilesPage.css';
 
 // ── drag and drop ──────────────────────────────────────────────────────────────────────────────
@@ -249,15 +250,10 @@ function Preview({ file }: { file: DriveEntry }) {
   return null;
 }
 
-/** Save a file's bytes (or one version's) under its name; a failure is said in a toast. */
-async function download(
-  toast: ReturnType<typeof useToast>,
-  path: 'entries' | 'versions',
-  id: string,
-  name: string,
-): Promise<void> {
+/** Download a file (or one version) through the browser's own download; a failure is said in a toast. */
+async function download(toast: ReturnType<typeof useToast>, fileId: string, name: string, versionId?: string): Promise<void> {
   try {
-    saveUserFile(await userFileUrl(await driveBlob(path, id)), name);
+    await downloadDriveFile(fileId, versionId);
   } catch (error) {
     toast.error(`Couldn't download ${name}`, messageOf(error));
   }
@@ -304,7 +300,7 @@ function EarlierVersions({ file }: { file: DriveEntry }) {
                   variant="text"
                   icon={<DownloadOutlined />}
                   aria-label={`Download the version of ${formatWhen(version.createdAt)}`}
-                  onClick={() => void download(toast, 'versions', version.id, file.name)}
+                  onClick={() => void download(toast, file.id, file.name, version.id)}
                 />
               </div>
             </li>
@@ -372,7 +368,7 @@ function DetailsPane({
       <div className="files-pane-actions">
         {isFile ? (
           <>
-            <Button icon={<DownloadOutlined />} onClick={() => void download(toast, 'entries', entry.id, entry.name)}>
+            <Button icon={<DownloadOutlined />} onClick={() => void download(toast, entry.id, entry.name)}>
               Download
             </Button>
             <Button variant="primary" icon={<LinkOutlined />} onClick={() => onShare(false)}>
@@ -550,7 +546,7 @@ function FilesBrowser() {
       : { key: 'open', label: 'Open', onSelect: () => select(entry.id) },
     ...(entry.kind === 'FILE'
       ? [
-          { key: 'download', label: 'Download', onSelect: () => void download(toast, 'entries', entry.id, entry.name) },
+          { key: 'download', label: 'Download', onSelect: () => void download(toast, entry.id, entry.name) },
           {
             key: 'share',
             label: 'Share link…',

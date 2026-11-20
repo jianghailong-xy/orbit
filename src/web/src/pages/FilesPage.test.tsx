@@ -184,6 +184,10 @@ function serve(): void {
       entries.push(made);
       return { ...view(made), path: pathOf(made.id) };
     }
+    m = /^\/drive\/entries\/([^/]+)\/download-link$/.exec(p);
+    if (m && method === 'POST') return { path: `/api/drive/dl/token-for-${m[1]}`, expiresAt: AT };
+    m = /^\/drive\/trash\/groups\/([^/]+)\/items\/([^/]+)\/restore$/.exec(p);
+    if (m) return { entryIds: [m[2]] };
     if (p === '/drive/trash' && method === 'GET') return { groups, nextCursor: null };
     m = /^\/drive\/trash\/groups\/([^/]+)\/restore$/.exec(p);
     if (m) return { entryIds: ['x'] };
@@ -264,6 +268,7 @@ async function click(element: Element): Promise<void> {
   await act(async () => (element as HTMLElement).click());
   await settle();
 }
+const click_ = click;
 
 async function type(input: HTMLInputElement, value: string): Promise<void> {
   await act(async () => {
@@ -451,6 +456,29 @@ describe('upload', () => {
   });
 });
 
+describe('download', () => {
+  it('navigates to a minted URL for the browser to stream, rather than reading the file into the page', async () => {
+    const opened: string[] = [];
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      opened.push(this.getAttribute('href') ?? '');
+    });
+    try {
+      await visit('/files?folder=f-ui&file=deploy');
+      await until(() => expect(document.querySelector('.files-pane')).toBeTruthy());
+      await click_(button('Download', document.querySelector('.files-pane')!));
+      await until(() => expect(opened).toEqual(['/api/drive/dl/token-for-deploy']));
+      expect(calls.find((c) => c.path === '/drive/entries/deploy/download-link')).toEqual({
+        method: 'POST', path: '/drive/entries/deploy/download-link', body: {},
+      });
+      // No byte of it went through the page: the one read of its content is the Markdown preview's, bounded by a Range.
+      const reads = vi.mocked(authedFetch).mock.calls.filter(([input]) => String(input).includes('/content'));
+      expect(reads.map(([, init]) => (init as RequestInit).headers)).toEqual([{ range: 'bytes=0-1048575' }]);
+    } finally {
+      click.mockRestore();
+    }
+  });
+});
+
 describe('rename and move', () => {
   it('renames in the row: Enter sends the new name', async () => {
     await visit('/files?folder=f-ui');
@@ -540,6 +568,10 @@ describe('Trash', () => {
     expect(heads[1]).toContain('From Orbit UI migration · replaced');
     expect(heads[2]).toContain('From Datasets');
     const [, versionGroup, dataGroup] = document.querySelectorAll<HTMLElement>('.files-trash-group');
+    // One item out of a group, leaving the rest (rule 3).
+    await click(dataGroup.querySelector('button[aria-label="Restore eval-runs-draft.zip"]')!);
+    expect(calls.some((c) => c.method === 'POST' && c.path === '/drive/trash/groups/g-data/items/draft/restore')).toBe(true);
+    expect(calls.some((c) => c.path === '/drive/trash/groups/g-data/restore')).toBe(false);
     await click(button('Restore all', dataGroup));
     expect(calls.some((c) => c.method === 'POST' && c.path === '/drive/trash/groups/g-data/restore')).toBe(true);
     await click(button('Restore as current', versionGroup));

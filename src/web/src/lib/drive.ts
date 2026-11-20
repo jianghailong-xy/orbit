@@ -171,6 +171,10 @@ export const moveDriveEntry = (id: string, parentId: string) =>
 export const trashDriveEntry = (id: string) =>
   api<{ trashGroupId: string }>(`/drive/entries/${enc(id)}`, { method: 'DELETE' });
 
+/** Restore one item of a group (and what hangs under it), leaving the rest in Trash (board frame 6, rule 3). */
+export const restoreDriveItem = (groupId: string, entryId: string) =>
+  api<{ entryIds: string[] }>(`/drive/trash/groups/${enc(groupId)}/items/${enc(entryId)}/restore`, { method: 'POST' });
+
 export const restoreDriveGroup = (groupId: string) =>
   api<{ entryIds: string[] }>(`/drive/trash/groups/${enc(groupId)}/restore`, { method: 'POST' });
 
@@ -191,7 +195,25 @@ export const shareDriveFile = (fileId: string) =>
 
 export const stopSharing = (linkId: string) => api<void>(`/share-links/${enc(linkId)}`, { method: 'DELETE' });
 
-/** A file's bytes (the current version, or one version), as a blob. `maxBytes` reads only the start, for a preview. */
+/**
+ * Download a file (its current version, or `versionId`) as the browser's own download: the server mints a short-lived URL
+ * that needs no login header, and the page navigates to it, so the browser streams the bytes to disk with its download
+ * manager however large the file is (D12). Nothing is read into the page.
+ */
+export async function downloadDriveFile(fileId: string, versionId?: string): Promise<void> {
+  const { path } = await api<{ path: string; expiresAt: string }>(`/drive/entries/${enc(fileId)}/download-link`, {
+    method: 'POST',
+    body: versionId ? { versionId } : {},
+  });
+  const a = document.createElement('a');
+  a.href = path;
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+/** A file's bytes (or one version's) as a blob, for a preview: `maxBytes` reads only the start. Never a download. */
 export async function driveBlob(path: 'entries' | 'versions', id: string, maxBytes?: number): Promise<Blob> {
   const res = await authedFetch(`/api/drive/${path}/${enc(id)}/content`, {
     headers: maxBytes ? { range: `bytes=0-${maxBytes - 1}` } : {},

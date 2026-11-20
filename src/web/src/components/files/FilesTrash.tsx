@@ -15,7 +15,9 @@ import {
   groupEndsALink,
   messageOf,
   restoreDriveGroup,
+  restoreDriveItem,
   restoreDriveVersion,
+  type DriveEntry,
   type DriveTrashGroup,
 } from '../../lib/drive';
 import { useToast } from '../../lib/toast';
@@ -58,6 +60,17 @@ export function FilesTrash() {
       toast.success(`Restored ${items(entryIds.length || group.itemCount)}`, `To ${folderLabel(group.folderPath)}`);
     } catch (error) {
       toast.error("Couldn't restore", messageOf(error));
+    }
+  };
+
+  // One item back without the rest (rule 3): a file out of an agent's `rm -rf`.
+  const restoreOne = async (group: DriveTrashGroup, item: DriveEntry) => {
+    try {
+      await restoreDriveItem(group.id, item.id);
+      await refresh();
+      toast.success(`Restored ${item.name}`, `To ${folderLabel(group.folderPath)}`);
+    } catch (error) {
+      toast.error(`Couldn't restore ${item.name}`, messageOf(error));
     }
   };
 
@@ -202,6 +215,9 @@ export function FilesTrash() {
                   )}
                   <span className="files-name">{item.name}</span>
                   <span className="files-trash-size">{item.kind === 'FILE' ? formatSize(item.sizeBytes) : ''}</span>
+                  <Button size="small" aria-label={`Restore ${item.name}`} onClick={() => void restoreOne(group, item)}>
+                    Restore
+                  </Button>
                 </div>
               ))}
             </section>
