@@ -57,6 +57,7 @@ import {
 
 import { readDerivedProjectDoneReading } from './project-done-derived';
 import { taskLanding } from './project-criterion-landing';
+import { landingDeferred } from './project-looks-finished';
 
 const logger = new Logger('ProjectPromotion');
 
@@ -194,6 +195,10 @@ export class ProjectPromotionService {
     });
     // The queue is not empty, so the tip is not what the owner would be confirming.
     if (queued > 0) return null;
+    // Nor is it while a DONE task's landing is deferred (§12.15 P-M1): its DONE queued nothing because
+    // its work still moved, and the finish that freezes it queues the landing then — work moving towards
+    // the line exactly as a queued job is. That finish considers the candidate again (`routeSettledWork`).
+    if (await landingDeferred(tx, projectId)) return null;
 
     const landed = await tx.projectIntegrationJob.findFirst({
       where: { projectId, kind: 'LAND_TASK', state: 'LANDED', landedSha: { not: null } },

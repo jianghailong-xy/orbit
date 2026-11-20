@@ -528,7 +528,9 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
                 // Read at the press: a merge still live asks before the agent takes over. One that cannot be read asks too.
                 mergeLive = {
                     try { RunSettings.mergeLive(api.currentPromotion(id)) } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { true }
-                })
+                },
+                // The owner's Revert on the coordinator's changes list; the page reads the project again whichever way it went.
+                revertChange = { change -> attempt("${LandingMeasuredCopy.notReverted} — ") { api.revertSettingChange(id, change.id) } })
         }
         doc.text("goal")?.trim()?.takeIf { it.isNotEmpty() }?.let { goal -> item(key = "goal") { SectionHead("Goal"); Folded(goal, 132, link) } }
         state.graph?.takeIf { it.objects("marks").isNotEmpty() }?.let { graph -> item(key = "graph") {
@@ -914,13 +916,14 @@ private fun LazyListScope.overviewSection(state: ProjectPageState, doc: JsonObje
     val paused = doc.text("pausedAt") != null
     val manual = if ((buckets.number("ready") ?: 0) > 0) ProjectPage.manualReady(if (state.queueUnread) null else state.queue, status, started, paused) else null
     val cells = ProjectPage.overviewCells(buckets, panorama.obj("shape")?.number("taskCount") ?: ProjectDoc.taskCount(doc), doc.obj("integration")?.text("line"),
-        started, paused, manual?.number("count") ?: 0, RunSettings.mainBranchName(doc.obj("integration")?.text("upstreamRef")))
+        started, paused, manual?.number("count") ?: 0, RunSettings.mainBranchName(doc.obj("integration")?.text("upstreamRef")),
+        noLine = ProjectLine.none(state.integration, started))
     item(key = "overview") {
         SectionHead("Work overview", panorama.obj("shape")?.let(ProjectPage::overviewSubtitle))
         Column(Modifier.testTag("project-overview"), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             // The same card the project's sessions page draws (iOS 22124bb0a): on a server that lists its jobs a press opens them; on an
             // older one the card is a read — there is no second door on the project's own page. Its Retry is the jobs list's.
-            state.integration?.let { view -> ProjectPage.landingCard(view, now, state.integrationReadAt, state.integrationReadFailed)?.let {
+            state.integration?.takeUnless { ProjectLine.none(it, started) }?.let { view -> ProjectPage.landingCard(view, now, state.integrationReadAt, state.integrationReadFailed)?.let {
                 ProjectLandingCardView(it, onOpenJobs = if (ProjectPage.inFlightJobs(view) != null) openJobs else null, onOpenProject = null,
                     openLanding = openLanding, retry = retry, skipCheck = skipCheck) } }
             cells.chunked(2).forEach { pair -> Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1257,7 +1260,8 @@ private fun LazyListScope.tasksSection(state: ProjectPageState, doc: JsonObject,
     groups.forEach { group ->
         item(key = "group:${group.key}") { GroupLabel(group.heading) }
         items(group.tasks, key = { "task:${group.key}:${it.text("id")}" }) { task ->
-            val tags = ProjectPage.rowTags(task, group.heading, doc.obj("integration")?.text("ref"), doc.obj("integration")?.text("upstreamRef"))
+            val tags = ProjectPage.rowTags(task, group.heading, doc.obj("integration")?.text("ref"), doc.obj("integration")?.text("upstreamRef"),
+                noLine = ProjectLine.none(state.integration, ProjectDoc.started(doc)))
             Row(Modifier.fillMaxWidth().clickable(role = Role.Button) { task.text("id")?.let(openTask) }.padding(vertical = 6.dp).testTag("project-task:${task.text("id")}"),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 val glyph = ProjectPage.taskGlyph(task)
