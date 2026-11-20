@@ -96,7 +96,7 @@ abstract class SubagentsShots {
         val api = api()
         page {
             Column(Modifier.padding(horizontal = 16.dp)) {
-                SubagentsSection(api, true, {}, "cost", {}, 4, {})
+                SubagentsSection(api, true, {}, 4, {})
             }
         }
         await("5 of 6 · Edit")

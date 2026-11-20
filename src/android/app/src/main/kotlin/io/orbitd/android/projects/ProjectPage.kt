@@ -175,6 +175,9 @@ object ProjectPage {
     const val landingTakenOver = "Taken over"
     const val landingFirstStarted = "first started"
     const val landingUsually = "usually"
+    /** The state word of a claimed job waiting for its runner's local lock: it has not started its work, so it is not fetching and has
+     * no output to be quiet about (web `LANDING_LIVENESS_WORDS.WAITING`). */
+    const val landingWaiting = "waiting"
     /** "round 2 of 3" for a task's landing, "round 1" for a merge check or a merge into main (iOS `landingRoundClause`): the M is the
      * kind's own most rounds per claim (`ExceptionCards.landTaskRoundsPerClaim`), never the check's count, and a kind with one round —
      * or one this client does not know — names no M. */
@@ -234,7 +237,7 @@ object ProjectPage {
         return liveLine(word, what, running, inFlight.text("phase"), inFlight.text("startedAt"), inFlight.text("heartbeatAt"), now, updatedAt, unavailable, main,
             silent, wait, inFlight.text("runner"), inFlight.text("kind"), inFlight.number("claim"), inFlight.number("round"), inFlight.obj("check"),
             inFlight.text("stepStartedAt"), inFlight.text("outputMovedAt"), inFlight.number("typicalMs"), inFlight.text("liveness"),
-            firstStartedAt(view, inFlight.text("jobId")))
+            firstStartedAt(view, inFlight.text("jobId")), inFlight.obj("blockingReason"))
     }
 
     /** When the attempt behind a job FIRST started: the `landTask` row's own `startedAt` is the column a claim leaves alone across
@@ -306,7 +309,7 @@ object ProjectPage {
                     job.text("heartbeatAt"), now, updatedAt, unavailable, main, runner = job.text("runnerName"), kind = job.text("kind"),
                     claim = job.number("claim"), round = job.number("round"), check = job.obj("check"), stepStartedAt = job.text("stepStartedAt"),
                     outputMovedAt = job.text("outputMovedAt"), typicalMs = job.number("typicalMs"), livenessWord = job.text("liveness"),
-                    firstStartedAt = firstStartedAt(view, job.text("jobId")))
+                    firstStartedAt = firstStartedAt(view, job.text("jobId")), blockingReason = job.obj("blockingReason"))
             LandingJobLine(job.text("jobId").orEmpty(), job.text("taskId"), line, landingJobDetail(job, zone, main), job.flag("retryable"),
                 job.text("landingSessionId")?.takeIf { it.isNotEmpty() }, mergeJob, job.flag("skippable"), job.text("skipCheck"))
         }
@@ -321,7 +324,7 @@ object ProjectPage {
      * than 90 s; SILENT freezes it at the runner's last word, and LEGACY at the read it came with (iOS `landingLiveness`). */
     private fun landingLiveness(liveness: String?, running: Boolean, startedAt: String?, heartbeatAt: String?, kind: String?, claim: Int?, round: Int?,
         check: JsonObject?, stepStartedAt: String?, outputMovedAt: String?, typicalMs: Int?, runner: String?, firstStartedAt: String?,
-        now: Instant, updatedAt: Instant?): LandingLiveness? {
+        now: Instant, updatedAt: Instant?, lockWait: String? = null): LandingLiveness? {
         if (liveness == null || liveness == "LEASE_EXPIRED" || !running) return null
         val stepStart = ProjectTime.parse(stepStartedAt ?: startedAt.orEmpty())
         val heartbeat = heartbeatAt?.let(ProjectTime::parse)
@@ -340,7 +343,9 @@ object ProjectPage {
         // the 360 dp Android card) elide everything past it, and the board says the liveness there — "checking · output 1s ago"
         // (v4 04 and 07). The claim, round and the usual duration follow it and are read in full on the wider rows.
         val clauses = mutableListOf<String>()
-        when (liveness) {
+        // A job waiting for its runner's local lock has not started: what holds it leads the line, and the step's clock is the wait's.
+        if (lockWait != null) clauses += lockWait
+        else when (liveness) {
             "LIVE" -> if (outputMoved != null) clauses += "${landingOutput.replaceFirstChar { it.lowercase() }} " +
                 "${max(0, Math.round(seconds(outputMoved, now)))}s ago"
             "QUIET" -> {
@@ -369,13 +374,21 @@ object ProjectPage {
         return LandingLiveness(if (budget != null) "$stepClock $landingOf ${budget}m" else stepClock, clauses, ticking)
     }
 
+    /** The server's sentence about a claimed job waiting for its runner's local lock, naming the job holding it — or null for any
+     * other job. A SILENT runner keeps its own words (web `localLockWait`). */
+    private fun localLockWait(running: Boolean, liveness: String?, blockingReason: JsonObject?): String? {
+        if (!running || liveness == "SILENT" || liveness == "LEASE_EXPIRED") return null
+        return if (blockingReason?.text("code") == "WAITING_LOCAL_LOCK") blockingReason.text("summary") else null
+    }
+
     /** A job running or waiting its turn. `unavailable` freezes the clock at the last update the app had and stops the row claiming
      * activity; `silent` freezes it at the last REPORT instead — the same freeze, reached from the runner's silence rather than this
      * app's read — and the freshness slot then says where the reports stand rather than a false "Updated". */
     private fun liveLine(word: String, what: String?, running: Boolean, phase: String?, startedAt: String?, heartbeatAt: String?, now: Instant,
         updatedAt: Instant?, unavailable: Boolean, main: String, silent: Boolean = false, wait: String? = null, runner: String? = null,
         kind: String? = null, claim: Int? = null, round: Int? = null, check: JsonObject? = null, stepStartedAt: String? = null, outputMovedAt: String? = null,
-        typicalMs: Int? = null, livenessWord: String? = null, firstStartedAt: String? = null): LandingLine {
+        typicalMs: Int? = null, livenessWord: String? = null, firstStartedAt: String? = null, blockingReason: JsonObject? = null): LandingLine {
+        val lockWait = localLockWait(running, livenessWord, blockingReason)
         // A queued job's heartbeat and phase can be an earlier claim's: only a running job's count.
         val reported = heartbeatAt?.let(ProjectTime::parse)
         val lastUpdate = if (running) reported ?: updatedAt else updatedAt
@@ -384,9 +397,10 @@ object ProjectPage {
         val elapsed = startedAt?.let(ProjectTime::parse)?.let { seconds(it, elapsedAt) } ?: 0.0
         val report = if (silent) (if (reported != null) age?.let { landingNoReportFor(it) } else null) ?: landingNoReportYet
             else age?.let { if (it == 0) "Updated just now" else "Updated ${it}m ago" }
-        val state = when { unavailable -> "Update unavailable"; silent -> landingNoReport; running -> phaseWords(main)[phase] ?: "running"; else -> "queued" }
+        val state = when { unavailable -> "Update unavailable"; silent -> landingNoReport; running && lockWait != null -> landingWaiting
+            running -> phaseWords(main)[phase] ?: "running"; else -> "queued" }
         val v6 = if (unavailable) null else landingLiveness(livenessWord, running, startedAt, heartbeatAt, kind, claim, round, check, stepStartedAt,
-            outputMovedAt, typicalMs, runner, firstStartedAt, now, updatedAt)
+            outputMovedAt, typicalMs, runner, firstStartedAt, now, updatedAt, lockWait)
         // A legacy claim's runner reports only between steps, so its quiet is not a stall: the ring keeps turning and the line says
         // why. SILENT is the state that stops it.
         return LandingLine(word, what, running && !unavailable && !silent && livenessWord != "SILENT", state,
@@ -540,21 +554,16 @@ object ProjectPage {
     // MARK: open items
     const val openItemsHeading = "Open items"
     const val needsYouGroup = "Needs you"
-    const val withCoordinatorGroup = "With the coordinator"
     const val noOpenItems = "No open items"
-    const val noActionNeeded = "No action needed from you"
-    const val nothingWaiting = "Nothing is waiting on you or the coordinator."
     const val openItemsUnread = "Open items couldn't be loaded"
     /** What the toolbar's Open items says aloud before its read has answered, or once it has failed. */
     const val openItemsLoading = "Loading"
     const val openItemsCantLoad = "Couldn't load open items"
     const val closeOpenItems = "Close open items"
-    /** The toolbar counts every open item; only the owner's share raises a reminder on the page (`OpenItemsSummary`). */
-    data class OpenItemsSummary(val needsYou: Int, val withCoordinator: Int) {
-        val count get() = needsYou + withCoordinator
+    data class OpenItemsSummary(val needsYou: Int) {
+        val count get() = needsYou
         val attention get() = if (needsYou <= 0) null else if (needsYou == 1) "1 item needs you" else "$needsYou items need you"
-        val subtitle get() = if (count == 0) noOpenItems
-            else (attention ?: noActionNeeded).let { if (withCoordinator > 0) "$it · $withCoordinator with the coordinator" else it }
+        val subtitle get() = attention ?: noOpenItems
     }
     /** A missing read is not an empty inbox. A start request counts only while the page can answer it, and the coordinator's
      * request to record the project done while it is OPEN; the owner's own Start… and Record as done… are actions nobody waits on. */
@@ -562,7 +571,7 @@ object ProjectPage {
         if (items == null) return null
         val asked = StartProjectCopy.pageRow(ProjectDoc.status(doc), ProjectDoc.started(doc), items) is StartProjectCopy.PageRow.Asked
         val done = ProjectDone.live(items, ProjectDoc.status(doc)) != null
-        return OpenItemsSummary(needsYouRows(items).size + (if (asked) 1 else 0) + (if (done) 1 else 0), items.objects("withCoordinator").size)
+        return OpenItemsSummary(needsYouRows(items).size + (if (asked) 1 else 0) + (if (done) 1 else 0))
     }
     /** The owner's rows, without the request to record the project done should a server ever list it there too: it has a row of
      * its own (`ProjectDone.PageRow`). */

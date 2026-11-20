@@ -34,8 +34,10 @@ function makeHarness() {
   };
   // Model the database row lock by running transactions in acquisition order.
   let tail: Promise<void> = Promise.resolve();
+  const transactionOptions: unknown[] = [];
   const prisma = {
-    $transaction: async (fn: (client: typeof tx) => unknown) => {
+    $transaction: async (fn: (client: typeof tx) => unknown, options?: unknown) => {
+      transactionOptions.push(options);
       const previous = tail;
       let release!: () => void;
       tail = new Promise<void>((resolve) => {
@@ -60,6 +62,7 @@ function makeHarness() {
     state,
     deletes: () => deletes,
     restoreEvents: () => restoreEvents,
+    transactionOptions,
   };
 }
 
@@ -99,4 +102,12 @@ test('purge winning the row lock deletes Trash and the following restore returns
   assert.equal(h.state.exists, false);
   assert.equal(h.deletes(), 1);
   assert.equal(h.restoreEvents(), 0);
+});
+
+test('purge gives its cascading delete longer than the 5s interactive default', async () => {
+  const h = makeHarness();
+
+  await h.service.purge(OWNER_ID, SESSION_ID);
+
+  assert.deepEqual(h.transactionOptions, [{ timeout: 60_000, maxWait: 10_000 }]);
 });

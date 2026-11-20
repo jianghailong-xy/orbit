@@ -59,6 +59,9 @@ data class OrbitNavigation(
     fun push(route: OrbitRoute): OrbitNavigation = if (current == route) this
         else copy(stacks = stacks + (section to (frames + route)))
     fun back(): OrbitNavigation = if (!canGoBack) this else copy(stacks = stacks + (section to frames.dropLast(1)))
+    /** The page on top gives way to [route] in its place (iOS `NavState.replaceTop`): a draft becomes the session it created,
+     * so Back goes where the draft would have, never to the draft again. */
+    fun replaceTop(route: OrbitRoute): OrbitNavigation = copy(stacks = stacks + (section to (frames.dropLast(1) + route)))
     /** A drawer row's tap (iOS `openDrawerDestination`, 3d50935b4): the row of the destination already showing leaves
      * its page as it is — the tap only closes the drawer — and any other lands on its destination's root page, the
      * stack being left going with it. A workspace's lands on the folder page its list was left on, while [hasFolder]

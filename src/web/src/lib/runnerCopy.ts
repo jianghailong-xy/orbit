@@ -259,7 +259,7 @@ export function runnerVersionUpdatingTo(version: string): string {
   return `updating to ${version}`;
 }
 /** A managed runner — the machine Orbit runs for the account — wherever its name is shown, unless the owner
- *  renamed it. Its stored name (`orbit-managed`) is the server's, not a word for anyone to read. */
+ *  renamed it. Its stored name (`orbit-managed` on a server before migration 1250) is the server's, not a word for anyone to read. */
 export const MANAGED_RUNNER_LABEL = 'Orbit Cloud';
 /** A managed runner's version, when it reports none that is a release (its image is `managed-<sha>`). */
 export const MANAGED_RUNNER_KEPT_UP_TO_DATE = 'Kept up to date by Orbit';

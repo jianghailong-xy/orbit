@@ -51,6 +51,7 @@ output into a public report: expanded values can contain secrets.
 | `ORBIT_WATCHES_CANARY_OWNERS` | `string` | Optional; empty | Comma-separated account IDs enabled in Watch canary mode. | No; account identifiers are private diagnostic data | Recreate API |
 | `ORBIT_WIKI_MODE` → container `ORBIT_WIKI` | `enum`: `on`, `canary`, `off` | Optional; `on` | Wiki rollout. Disabled accounts receive `WIKI_DISABLED` and no Wiki tools/context. | No | Recreate API; no migration or runner release |
 | `ORBIT_WIKI_CANARY_OWNERS` | `string` | Optional; empty | Comma-separated account IDs enabled in Wiki canary mode. | No; account identifiers are private diagnostic data | Recreate API |
+| `ORBIT_RUN_STOPPED_WAKE_MODE` → container `ORBIT_RUN_STOPPED_WAKE` | `enum`: `on`, `off` | Optional; `on` | `off` stops the "Run stopped" wake (`TASK_RUN_STOPPED`), which tells a project's lead session when a task's run parks with nothing to wake it. | No | Recreate API; no migration or runner release |
 | `DEEPSEEK_API_KEY` | `secret` | Optional; empty names sessions with their own provider | Asynchronous session title/tag enrichment. When empty, a session is named by its own provider instead: on a configured API key the server holds (title and tags; not a Claude subscription token or an internal-host endpoint), or, for an engine's own sign-in, by Claude Code or Codex from inside the process running the session (title only). | Yes | Recreate API |
 | `DEEPSEEK_BASE_URL` | `URL` | Optional; `https://api.deepseek.com` | Endpoint for title/tag enrichment. | No; avoid credential-bearing URLs | Recreate API |
 | `DEEPSEEK_MODEL` | `string` | Optional; `deepseek-chat` | Model used for title/tag enrichment. | No | Recreate API |
@@ -197,7 +198,7 @@ so a deployment installed before them keeps managed runners off.
 
 `profile.json` chooses the Docker backend (`"backend": "docker"`) and sets each runner's CPU, memory, process and
 volume limits, its image (by local image ID) and the address it reaches the deployment at. `channel.json` names
-the same image and the network `orbit-managed-runners`, and caps what a runner may be given. After editing either,
+the same image and the network `orbit-cloud-runners`, and caps what a runner may be given. After editing either,
 run `docker compose up -d --force-recreate docker-channel apiserver`.
 
 ### Runner link
@@ -303,7 +304,7 @@ network.
 | `8443/tcp` | `link-gateway` | The host, bound by `RUNNER_LINK_BIND`, published as `RUNNER_LINK_PORT` | The link gateway's own WebSocket listener on a link with a host name of its own. A same-origin link sets `RUNNER_LINK_PORT=0` and binds loopback, so nothing useful is published. |
 | `9464/tcp` | `link-gateway` | Host loopback only | `/metrics`. Keep it closed to the internet. |
 | `7300/tcp` | `docker-channel` on a channel host | Only the private addresses named by `--allow-peer` | The remote channel host's control API, over a private link. |
-| none | managed runner containers | The `orbit-managed-runners` network | Runners reach the deployment through the gateway's published port; they publish nothing themselves. |
+| none | managed runner containers | The `orbit-cloud-runners` network | Runners reach the deployment through the gateway's published port; they publish nothing themselves. |
 
 On the runner machine, Orbit publishes no port: the runner makes outbound HTTPS and WebSocket connections only.
 

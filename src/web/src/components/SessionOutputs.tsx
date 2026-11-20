@@ -1,7 +1,7 @@
 import { type MouseEvent as ReactMouseEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { ExclamationCircleFilled, FullscreenExitOutlined, FullscreenOutlined } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import type { RunnerRepoHealth, MergeRecoveryAction } from '@orbit/shared';
+import type { BranchCommit, RunnerRepoHealth, MergeRecoveryAction } from '@orbit/shared';
 import { MAIN_CHECKOUT_COPY } from '@orbit/shared';
 import { MergeOperationLine, MergeRepairStrip, mergeRecoveryChecking, mergeRecoveryFastForward } from './MergeRecoveryPanel';
 import { MainCheckoutBar } from './MainCheckout';
@@ -20,6 +20,15 @@ import { Menu, type MenuItem } from './ui/Menu';
 import { Segmented } from './ui/Segmented';
 import { Tooltip } from './ui/Tooltip';
 import { WorktreeFilePreview } from './WorktreeFilePreview';
+import {
+  CommitHead,
+  CommitList,
+  CommitRail,
+  CommitRailTabs,
+  CommitSummary,
+  commitChangedFiles,
+  shortSha,
+} from './SessionCommits';
 import hljs from 'highlight.js/lib/core';
 import typescript from 'highlight.js/lib/languages/typescript';
 import javascript from 'highlight.js/lib/languages/javascript';
@@ -154,13 +163,25 @@ export function SessionOutputs({
   // The changed file whose diff is shown in the drawer (null = drawer closed). Reset when the
   // open session changes so a switched-to session never inherits the previous one's open file.
   const [openFile, setOpenFile] = useState<string | null>(null);
-  useEffect(() => setOpenFile(null), [detail?.id]);
+  // The commit the drawer shows (null = the whole branch, "All changes"), and whether the bar's
+  // commit list is open. Both reset with the session, as the open file does.
+  const [openCommit, setOpenCommit] = useState<string | null>(null);
+  const [commitsOpen, setCommitsOpen] = useState(false);
+  useEffect(() => {
+    setOpenFile(null);
+    setOpenCommit(null);
+    setCommitsOpen(false);
+  }, [detail?.id]);
   // The session whose no-branch notice was closed with ✕ (a repository git could not branch: the
   // workspace has nothing to change, so closing only hides it here).
   const [noticeHiddenFor, setNoticeHiddenFor] = useState<string | null>(null);
   const firstChanged = detail?.changedFiles?.[0]?.path ?? null;
   useEffect(() => {
-    if (openDiffSignal && firstChanged) setOpenFile(firstChanged);
+    // An open that names no commit is the whole branch: All changes, never the commit last looked at.
+    if (openDiffSignal && firstChanged) {
+      setOpenCommit(null);
+      setOpenFile(firstChanged);
+    }
     // Only a new signal opens it; a file list that changes underneath must not reopen a closed drawer.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openDiffSignal]);
@@ -231,6 +252,27 @@ export function SessionOutputs({
   // inline list) straight to the first viewable file, in the same order the tree shows them.
   const navFiles = treeFiles(buildFileTree(files));
   const firstFile = (navFiles.find((f) => f.additions >= 0 && f.deletions >= 0) ?? navFiles[0])?.path ?? null;
+  // The branch's commits, when the runner reports them: the bar then counts commits, and its row
+  // opens the commit list instead of the drawer. Null from an older runner keeps the file count.
+  const commits: BranchCommit[] | null = Array.isArray(detail.branchCommits) ? detail.branchCommits : null;
+  const dirtyNow = detail.worktreeDirty === true;
+  const openAll = () => {
+    setOpenCommit(null);
+    setOpenFile(firstFile);
+  };
+  const openCommitDiff = (sha: string) => {
+    const commit = commits?.find((c) => c.sha === sha);
+    const first = commit ? treeFiles(buildFileTree(commitChangedFiles(commit)))[0]?.path ?? null : null;
+    if (!first) return;
+    setOpenCommit(sha);
+    setOpenFile(first);
+  };
+  const toggleCommits = () => {
+    const next = !commitsOpen;
+    setCommitsOpen(next);
+    // A live session's agent may have committed since the last turn ended: read the branch again.
+    if (next && !committed) void refreshSessionDiff(detail.id).catch(() => {});
+  };
   // A merge/commit failure has recovery info (reason + manual command) worth surfacing inline.
   const failed =
     detail.mergeStatus === 'conflict' || detail.mergeStatus === 'error' || detail.commitStatus === 'error';
@@ -276,7 +318,11 @@ export function SessionOutputs({
     <div className="wt-bar">
       {/* Clicking the row opens the review drawer (whose tree is the file browser); the
           branch-copy and action buttons stop propagation so they don't trigger it. */}
-      <div className="wt-row wt-row-toggle" onClick={() => firstFile && setOpenFile(firstFile)}>
+      <div
+        className="wt-row wt-row-toggle"
+        onClick={() => (commits ? toggleCommits() : firstFile && setOpenFile(firstFile))}
+        aria-expanded={commits ? commitsOpen : undefined}
+      >
         <button
           type="button"
           className="wt-branch"
@@ -289,15 +335,28 @@ export function SessionOutputs({
           <span className="wt-branch-ico">⎇</span>
           <BranchLabel branch={displayBranch} />
         </button>
-        <span className="wt-stat">
-          <span className="wt-add">+{add}</span>
-          <span className="wt-del">−{del}</span>
-          <span className="wt-files">
-            · {files.length} {files.length === 1 ? 'file' : 'files'}
-            {showMerge ? ' · committed' : ''}
-          </span>
-        </span>
-        <span className="wt-spacer" />
+        {commits ? (
+          <>
+            <CommitSummary commits={commits} dirty={dirtyNow} fileCount={files.length} />
+            <span className="wt-spacer" />
+            <span className="wt-stat">
+              <span className="wt-add">+{add}</span>
+              <span className="wt-del">−{del}</span>
+            </span>
+          </>
+        ) : (
+          <>
+            <span className="wt-stat">
+              <span className="wt-add">+{add}</span>
+              <span className="wt-del">−{del}</span>
+              <span className="wt-files">
+                · {files.length} {files.length === 1 ? 'file' : 'files'}
+                {showMerge ? ' · committed' : ''}
+              </span>
+            </span>
+            <span className="wt-spacer" />
+          </>
+        )}
         {/* Divergence takes over the merge slot: while the worktree is on an untracked branch,
             Merge / "✓ In main" would act on the wrong (tracked) branch, so we show Adopt instead.
             Commit still works (it commits the real HEAD), so it's left available while dirty. */}
@@ -338,7 +397,22 @@ export function SessionOutputs({
               resolving={resolving}
             />
           ))}
+        {commits && (
+          <span className="wt-commits-caret" aria-hidden="true">
+            {commitsOpen ? '▾' : '▸'}
+          </span>
+        )}
       </div>
+      {commits && commitsOpen && (
+        <CommitList
+          commits={commits}
+          dirty={dirtyNow}
+          fileCount={files.length}
+          baseLabel={detail.baseSha ? `${mergeTargetName} @ ${shortSha(detail.baseSha)}` : null}
+          onOpenCommit={openCommitDiff}
+          onOpenAll={openAll}
+        />
+      )}
       {recovery && recoveryOperating && <MergeOperationLine action={detail.mergeRecoveryAction}
         target={recovery.targetBranch} requestedAt={detail.mergeRequestedAt} runner={detail.assignedRunner && {
           ...detail.assignedRunner,
@@ -428,7 +502,15 @@ export function SessionOutputs({
         committed={committed}
         openPath={openFile}
         onSelect={setOpenFile}
-        onClose={() => setOpenFile(null)}
+        onClose={() => {
+          // The drawer opens again on All changes unless a commit is chosen.
+          setOpenFile(null);
+          setOpenCommit(null);
+        }}
+        commits={commits}
+        openCommit={openCommit}
+        onSelectCommit={(sha) => (sha ? openCommitDiff(sha) : openAll())}
+        worktreeDirty={dirtyNow}
       />
     </>
   );
@@ -1257,6 +1339,10 @@ export function WorktreeDiffDrawer({
   onSelect,
   onClose,
   source,
+  commits,
+  openCommit,
+  onSelectCommit,
+  worktreeDirty,
 }: {
   sessionId: string;
   files: SessionChangedFile[];
@@ -1266,6 +1352,13 @@ export function WorktreeDiffDrawer({
   onSelect: (path: string) => void;
   onClose: () => void;
   source?: DiffDrawerSource;
+  /** The branch's commits: the rail then switches between one commit's files and All changes. */
+  commits?: BranchCommit[] | null;
+  /** The commit shown (null = All changes, the whole branch against its base). */
+  openCommit?: string | null;
+  onSelectCommit?: (sha: string | null) => void;
+  /** Uncommitted work: a commit's file diff may then hold more than that commit. */
+  worktreeDirty?: boolean;
 }) {
   const qc = useQueryClient();
   const q = useQuery({ ...sessionDiffQuery(sessionId), enabled: openPath != null && !source });
@@ -1275,7 +1368,16 @@ export function WorktreeDiffDrawer({
     return m;
   }, [q.data]);
   const patchByPath = source?.patches ?? sessionPatches;
-  const active = files.find((f) => f.path === openPath) ?? null;
+  // One commit at a time: its own files, each shown with the branch's diff of that file (the
+  // runner sends patches for the whole branch, not per commit — CommitHead says when they differ).
+  const commitMode = !source && !!commits && commits.length > 0;
+  const commit = commitMode ? (commits!.find((c) => c.sha === openCommit) ?? null) : null;
+  const commitFiles = useMemo(() => (commit ? commitChangedFiles(commit) : null), [commit]);
+  const shown = commitFiles ?? files;
+  const active = shown.find((f) => f.path === openPath) ?? null;
+  const mixed =
+    !!commit && !!active &&
+    (!!worktreeDirty || commits!.some((c) => c.sha !== commit.sha && c.files.some((f) => f.path === active.path)));
 
   // Drag the drawer's left edge to widen it for a roomier review; the width persists, and a
   // double-click on the handle resets to the default. null → the responsive CSS default.
@@ -1336,8 +1438,8 @@ export function WorktreeDiffDrawer({
 
   // Prev/next file nav follows the grouped display order, binary files included: they preview too.
   const orderedPaths = useMemo(
-    () => (source ? files : treeFiles(buildFileTree(files))).map((f) => f.path),
-    [files, source],
+    () => (source ? shown : treeFiles(buildFileTree(shown))).map((f) => f.path),
+    [shown, source],
   );
   const navIdx = active ? orderedPaths.indexOf(active.path) : -1;
   const prevPath = navIdx > 0 ? orderedPaths[navIdx - 1] : null;
@@ -1352,7 +1454,7 @@ export function WorktreeDiffDrawer({
   useEffect(() => {
     if (!readAhead) return;
     for (const path of [prevPath, nextPath]) {
-      const file = path ? files.find((f) => f.path === path) : undefined;
+      const file = path ? shown.find((f) => f.path === path) : undefined;
       if (file && isDrawnPicture(file)) void qc.prefetchQuery(worktreeFileQuery(sessionId, file.path));
     }
     // Not keyed on `files`: the list is a new array on every heartbeat, while the neighbours it names rarely change.
@@ -1365,8 +1467,10 @@ export function WorktreeDiffDrawer({
   // and binary/too-large files (which have their own placeholders).
   const activePatch = active ? patchByPath.get(active.path) : undefined;
   const activeBinary = active ? active.additions < 0 || active.deletions < 0 : false;
+  // A commit's file the branch no longer changes (added, then removed again) has no patch to wait for.
+  const onBranch = !!active && (!commit || files.some((f) => f.path === active.path));
   const stale =
-    !source && !committed && !!active && !activeBinary && !activePatch?.patch && !activePatch?.truncated;
+    !source && !committed && onBranch && !activeBinary && !activePatch?.patch && !activePatch?.truncated;
   const [refreshing, setRefreshing] = useState(false);
   useEffect(() => {
     if (!stale) {
@@ -1447,11 +1551,24 @@ export function WorktreeDiffDrawer({
               </div>
               {source.listFoot}
             </>
+          ) : commitMode ? (
+            <>
+              <CommitRailTabs
+                commitCount={commits!.length}
+                fileCount={files.length}
+                showingCommits={!!commit}
+                onCommits={() => onSelectCommit?.(commits![0].sha)}
+                onAll={() => onSelectCommit?.(null)}
+              />
+              {commit && <CommitRail commits={commits!} activeSha={commit.sha} onSelect={(sha) => onSelectCommit?.(sha)} />}
+              <FileTree files={shown} activePath={openPath} onSelect={onSelect} />
+            </>
           ) : (
             <FileTree files={files} activePath={openPath} onSelect={onSelect} />
           )}
         </div>
         <div className="wt-diff-pane">
+          {commit && <CommitHead commit={commit} mixed={mixed} />}
           {active ? (
             <DiffPane
               sessionId={sessionId}

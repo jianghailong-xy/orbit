@@ -45,16 +45,16 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 cd "$REPO_ROOT"
 
 MR_DIR="${ORBIT_CHANNEL_HOST_DIR:-data/channel-host}"
-MR_NETWORK=orbit-managed-runners
+MR_NETWORK=orbit-cloud-runners
 # The firewall leaves a runner one port of this host's address on its network: on a single host, the gateway's. Nothing
 # of Orbit listens there on a channel host, and the channel's own port must not be it.
 MR_API_PORT=2086
-MR_TAG=orbit-managed-runner:local
-FW_IMAGE=orbit-managed-runner-firewall:local
+MR_TAG=orbit-cloud-runner:local
+FW_IMAGE=orbit-cloud-runner-firewall:local
 FW_LOCK_LINE=""
 FIREWALL_HELP="Fix that first: a channel host always firewalls its managed runners (docs/self-hosting.md, \"Isolation and its limits\")."
 COMPOSE_FILE=deploy/managed-runner/remote-host/compose.yml
-MOUNT=/var/lib/orbit-managed-runners
+MOUNT=/var/lib/orbit-cloud-runners
 # shellcheck source=../host.sh
 source "$REPO_ROOT/deploy/managed-runner/host.sh"
 
@@ -180,7 +180,7 @@ install() {
   local peer_list=""
   for peer in "${peers[@]}"; do peer_list="${peer_list:+$peer_list, }\"$peer\""; done
   # The same limits as a single host's install. channel.json names paths inside the channel's container, where
-  # compose.yml mounts this directory at /var/lib/orbit-managed-runners.
+  # compose.yml mounts this directory at /var/lib/orbit-cloud-runners.
   ( umask 077 && cat >"$MR_DIR/channel.json.new" <<EOF
 {
   "schemaVersion": 1,

@@ -323,6 +323,27 @@ class ProjectPageTest {
         put("integratingCount", 1); put("queuedCount", 0); put("inFlight", job); put("inFlightJobs", JsonArray(listOf(job)))
     }
 
+    /** 2026-11-19: a merge waiting for its runner's local lock read "fetching · no output for 78m". It is waiting, behind the job
+     * the server names, on the wait's own clock (web and iOS: the same case). */
+    @Test fun aJobWaitingForTheRunnersLocalLockSaysSoAndNamesTheHolder() {
+        val holder = "Waiting for runner workstation-gpu’s repository lock: the merge check of project “Wiki” holds it"
+        fun waiting(liveness: String, heartbeat: Long = 0) = buildJsonObject {
+            v6Job(liveness, kind = "LAND_PROMOTION", title = null, phase = "FETCH", checkCount = null,
+                stepStarted = 78 * 60, outputMoved = 78 * 60, heartbeat = heartbeat).forEach { (k, v) -> put(k, v) }
+            put("runner", "workstation-gpu"); put("runnerName", "workstation-gpu")
+            put("blockingReason", Json.parseToJsonElement("""{"code":"WAITING_LOCAL_LOCK","summary":"$holder","jobId":"j-holder"}"""))
+        }
+        val line = ProjectPage.landingLine(v6View(waiting("QUIET")), now, now, false)!!
+        assertEquals(ProjectPage.landingWaiting, line.state)
+        assertEquals(LandingHead("78m 0s", true, "waiting · $holder · claim 1 · round 1"), line.head)
+        val job = ProjectPage.landingJobLines(v6View(waiting("QUIET")), now, now, false).single()
+        assertEquals("waiting", job.line.state)
+        assertEquals("waiting · $holder · claim 1 · round 1", job.line.head.detail)
+        // A runner gone silent is the runner's fact, not the lock's.
+        val silent = ProjectPage.landingLine(v6View(waiting("SILENT", heartbeat = 9 * 60)), now, now, false)!!
+        assertEquals("fetching · no word from runner workstation-gpu for 9m · claim 1 · round 1", silent.head.detail)
+    }
+
     @Test fun theHeadDrawsTheStepClockAgainstItsBudgetAndTheServersLiveness() {
         // LIVE and QUIET: the local clock runs; the step's own clock against its budget is the main number.
         val live = ProjectPage.landingLine(v6View(v6Job("LIVE")), now, now, false)!!
@@ -507,18 +528,20 @@ class ProjectPageTest {
         startRequest?.let { put("startRequest", it) }; doneRequest?.let { put("doneRequest", it) }
     }
 
-    @Test fun openItemsSummaryKeepsCoordinatorItemsQuietUntilTheServerReassignsThem() {
+    @Test fun openItemsShowsOnlyOwnerRows() {
         val coordinator = item("INTEGRATION_CHECK_FAILED", "COORDINATOR", 3_600, escalateIn = -60)
         val quiet = ProjectPage.openItemsSummary(page(), items(withCoordinator = listOf(coordinator)))!!
-        assertEquals(1, quiet.count); assertEquals(0, quiet.needsYou)
+        assertEquals(0, quiet.count); assertEquals(0, quiet.needsYou)
         assertNull("a local countdown reaching zero does not reassign an item", quiet.attention)
-        assertEquals("No action needed from you · 1 with the coordinator", quiet.subtitle)
+        assertEquals("No open items", quiet.subtitle)
         val owner = item("INTEGRATION_CHECK_FAILED", "OWNER", 3_600)
         val escalated = ProjectPage.openItemsSummary(page(), items(needsYou = listOf(owner)))!!
         assertEquals(1, escalated.count); assertEquals("1 item needs you", escalated.attention); assertEquals("1 item needs you", escalated.subtitle)
         val pause = item("FUSE_PAUSED", "OWNER", 60, actions = listOf("RESUME"), fuse = "f1")
-        val mixed = ProjectPage.openItemsSummary(page(), items(needsYou = listOf(owner, pause), withCoordinator = listOf(coordinator)))!!
-        assertEquals(3, mixed.count); assertEquals("2 items need you", mixed.attention); assertEquals("2 items need you · 1 with the coordinator", mixed.subtitle)
+        val mixedItems = items(needsYou = listOf(owner, pause), withCoordinator = listOf(coordinator))
+        assertEquals(listOf(owner, pause), ProjectPage.needsYouRows(mixedItems))
+        val mixed = ProjectPage.openItemsSummary(page(), mixedItems)!!
+        assertEquals(2, mixed.count); assertEquals("2 items need you", mixed.attention); assertEquals("2 items need you", mixed.subtitle)
     }
 
     @Test fun openItemsSummaryDoesNotTurnAnUnreadInboxIntoAnEmptyOne() {

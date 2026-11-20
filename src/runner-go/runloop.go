@@ -1721,6 +1721,13 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// Which engines are installed and signed in here (started below). Made before the quota probes,
 	// since they read by it while idle.
 	engineHealth := &engineHealthProbe{}
+	// Set as default for Claude Code (claude_account_swap_relay.go): once a swap has ended either way the
+	// Claude engine is probed again and the runner beats at once, as after a removal, so the page shows
+	// the exchanged accounts now.
+	claudeSwaps := newClaudeAccountSwapRelay(pool, t.claudeAccountSwapResult, func() {
+		engineHealth.refreshEngine(providerClaude)
+		beatNow()
+	})
 
 	// Where Claude's connection to Anthropic comes out (claude_region.go): checked at the start and
 	// on the engine probe's clock, on the owner's Check again, and by any Anthropic-bound Claude turn
@@ -2491,6 +2498,14 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					beatNow()
 				}()
 			}
+			// A session's browser_open: start the browser and open the page asked for, on its own goroutine like the
+			// clear, since a Chrome just started takes a moment to answer; the beat it asks for reports it running.
+			if resp.OpenBrowser != nil {
+				go func(cmd BrowserOpenCommand) {
+					handleBrowserOpen(context.Background(), runnerBrowser(), cmd)
+					beatNow()
+				}(*resp.OpenBrowser)
+			}
 			// The owner's Update Now: install the waiting release now, interrupting the turns in flight
 			// (selfUpdateGate.updateNow). The check it asks for takes it.
 			if resp.SelfUpdateNow {
@@ -2608,6 +2623,11 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				if err := t.codexAccountRemoveResult(res); err != nil {
 					logln("codex-account-remove-result POST failed:", err)
 				}
+			}
+			// Make an added Claude account the Default. Never waited for here: the swap waits for the turns on
+			// both folders off this goroutine, and each redelivery is answered with where it stands.
+			if sr := resp.ClaudeAccountSwapRequest; sr != nil {
+				claudeSwaps.handle(*sr)
 			}
 			// Report what Claude Code history sits under a directory someone is typing into the
 			// new-workspace form. On its own goroutine: reading a directory's transcripts takes a

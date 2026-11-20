@@ -7,7 +7,10 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
+	"runtime"
 	"strings"
+	"time"
 )
 
 // The Orbit Cloud browser's agent tools (docs/runner-browser-design.md; board docs/mocks/runner-browser/03-agent-tools.html
@@ -45,6 +48,7 @@ func browserToolsEnabledFromEnv() bool {
 // browserToolNames is the set callBrowserTool answers for, and what `orbit mcp` leaves out while the switch is off.
 var browserToolNames = map[string]bool{
 	"browser_status":       true,
+	"browser_open":         true,
 	"browser_clear_logins": true,
 }
 
@@ -105,6 +109,26 @@ func browserToolDescriptors(obj func(map[string]interface{}, ...string) map[stri
 			"annotations": map[string]interface{}{"readOnlyHint": true},
 		},
 		{
+			"name": "browser_open",
+			"description": "Open this account's Orbit Cloud browser, the one shared Chrome on the Orbit Cloud runner: start it " +
+				"if it is not running, and answer the address of its browser tab on this Orbit server (tabUrl), where a " +
+				"person can watch it or take control. Give url to have the browser open that page (http or https); that is " +
+				"refused while another session holds the browser, which is then left as it is. Hand tabUrl to the user " +
+				"when they should look at the browser. Any session of the account may call it; it never signs in anywhere.",
+			"inputSchema": obj(map[string]interface{}{
+				"url": map[string]interface{}{"type": "string", "description": "A page for the browser to open (http or https). Leave it out to start the browser and leave it on its page."},
+			}),
+			"outputSchema": obj(map[string]interface{}{
+				"enabled":     map[string]interface{}{"type": "boolean", "description": "The browser feature is on on this Orbit server. false: nothing else is said."},
+				"runnerId":    nullableStr,
+				"tabUrl":      map[string]interface{}{"type": []string{"string", "null"}, "description": "The browser's tab on this Orbit server (/runners/:id/browser)."},
+				"url":         map[string]interface{}{"type": []string{"string", "null"}, "description": "The page asked for, or null."},
+				"requestedAt": nullableStr,
+				"running":     map[string]interface{}{"type": "boolean", "description": "The runner has reported the browser running since the open was asked for."},
+				"message":     str,
+			}, "enabled"),
+		},
+		{
 			"name": "browser_clear_logins",
 			"description": "Clear the saved logins of this account's Orbit Cloud browser: stop the browser and delete its " +
 				"saved profile, signing every site out for the owner and for every agent on the runner. It first puts a " +
@@ -137,6 +161,13 @@ var browserCLICapabilities = []cliCapabilitySpec{
 		SessionOnly: true,
 	},
 	{
+		Tool:        "browser_open",
+		Argv:        []string{"orbit", "browser", "open"},
+		Usage:       "orbit browser open [--url <url>] [--no-open] [--json]",
+		Arguments:   []string{"--url <url>", "--no-open", "--json"},
+		SessionOnly: true,
+	},
+	{
 		Tool:        "browser_clear_logins",
 		Argv:        []string{"orbit", "browser", "clear-logins"},
 		Usage:       "orbit browser clear-logins [--json]",
@@ -154,20 +185,22 @@ func (s *mcpServer) callBrowserTool(name string, args map[string]interface{}) (m
 	if !s.browserOn {
 		return toolResult(browserOffMessage(name), true), true
 	}
-	if name == "browser_clear_logins" {
-		cleared, err := runBrowserClearLogins(s.t, s.sessionID)
-		if err != nil {
-			return toolResult(err.Error(), true), true
-		}
-		text, _ := json.MarshalIndent(cleared, "", "  ")
-		return toolResultWithData(string(text), cleared, false), true
+	var data interface{}
+	var err error
+	switch name {
+	case "browser_open":
+		target, _ := args["url"].(string)
+		data, err = runBrowserOpen(s.t, s.sessionID, target)
+	case "browser_clear_logins":
+		data, err = runBrowserClearLogins(s.t, s.sessionID)
+	default:
+		data, err = runBrowserStatus(s.t, s.sessionID)
 	}
-	status, err := runBrowserStatus(s.t, s.sessionID)
 	if err != nil {
 		return toolResult(err.Error(), true), true
 	}
-	text, _ := json.MarshalIndent(status, "", "  ")
-	return toolResultWithData(string(text), status, false), true
+	text, _ := json.MarshalIndent(data, "", "  ")
+	return toolResultWithData(string(text), data, false), true
 }
 
 // browserClearLogins is browser_clear_logins' answer: which of the card's three ends happened, and on a yes what the
@@ -264,14 +297,107 @@ func runBrowserStatus(t *Transport, sessionID string) (*browserStatus, error) {
 	return &out, nil
 }
 
+// browserOpenResult is browser_open's answer: RunnerBrowserOpenResponse as POST /runner/browser/open sends it, with
+// whether the runner has since reported the browser running; or `enabled: false` when the server has the switch off.
+type browserOpenResult struct {
+	Enabled     bool    `json:"enabled"`
+	RunnerID    *string `json:"runnerId"`
+	TabURL      *string `json:"tabUrl"`
+	URL         *string `json:"url"`
+	RequestedAt *string `json:"requestedAt"`
+	Running     bool    `json:"running"`
+	Message     string  `json:"message,omitempty"`
+	// OpenedLocally: `orbit browser open` started a browser on this machine on tabUrl. Only the command says it.
+	OpenedLocally *bool `json:"openedLocally,omitempty"`
+}
+
+// How long browser_open waits for the runner to report the browser running, and how often it reads.
+var (
+	browserOpenRunningWait = 30 * time.Second
+	browserOpenPoll        = time.Second
+)
+
+// runBrowserOpen is one browser_open call, from either door: ask the server to open the browser (and the page), then
+// read the status until the runner reports the browser running or browserOpenRunningWait passes.
+func runBrowserOpen(t *Transport, sessionID, target string) (*browserOpenResult, error) {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return nil, errors.New("browser_open opens the Orbit Cloud browser of the account of the session it is called " +
+			"from, and this is not running inside one (ORBIT_SESSION_ID is unset)")
+	}
+	body := map[string]interface{}{}
+	if target = strings.TrimSpace(target); target != "" {
+		body["url"] = target
+	}
+	var out browserOpenResult
+	err := t.doHeaders(nil, "POST", "/runner/browser/open", body, &out, taskOpTimeout, sessionHeader(sessionID))
+	var httpErr *transportHTTPError
+	if errors.As(err, &httpErr) && httpErr.statusCode == http.StatusNotFound {
+		return &browserOpenResult{Enabled: false, Message: "The Orbit Cloud browser is switched off on this Orbit server."}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("browser_open failed: %w", err)
+	}
+	out.Enabled = true
+	deadline := time.Now().Add(browserOpenRunningWait)
+	for {
+		status, err := runBrowserStatus(t, sessionID)
+		if err == nil && status.Running && status.ReportedAt != nil && out.RequestedAt != nil && *status.ReportedAt >= *out.RequestedAt {
+			out.Running = true
+			break
+		}
+		if time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(browserOpenPoll)
+	}
+	switch {
+	case !out.Running:
+		out.Message = "The Orbit Cloud runner has been asked to open the browser and has not yet reported it running; " +
+			"read browser_status in a moment."
+	case out.URL != nil:
+		out.Message = "The browser is running and has been asked to open the page."
+	default:
+		out.Message = "The browser is running."
+	}
+	return &out, nil
+}
+
+// openTabLocally starts this machine's browser on link, and reports whether there was one to start: $BROWSER, else
+// the platform's opener (on Linux only with a display). A var so a test can stand in for it.
+var openTabLocally = func(link string) bool {
+	if b := strings.TrimSpace(os.Getenv("BROWSER")); b != "" {
+		return exec.Command(b, link).Start() == nil
+	}
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", link)
+	case "windows":
+		cmd = exec.Command("cmd", "/c", "start", "", link)
+	default:
+		if os.Getenv("DISPLAY") == "" && os.Getenv("WAYLAND_DISPLAY") == "" {
+			return false
+		}
+		if _, err := exec.LookPath("xdg-open"); err != nil {
+			return false
+		}
+		cmd = exec.Command("xdg-open", link)
+	}
+	return cmd.Start() == nil
+}
+
 const browserHelp = `orbit browser — the account's Orbit Cloud browser
 
 Usage:
   orbit browser status [--json]
+  orbit browser open [--url <url>] [--no-open] [--json]
   orbit browser clear-logins [--json]
 
   status         Whether the browser is running, which session holds it, how many viewers are
                  connected, and whether saved logins exist (never which sites).
+  open           Start the browser if it is not running, open its tab here, and with --url
+                 have it open that page.
   clear-logins   Stop the browser and delete every saved login on the runner, after the
                  account owner confirms on a card.
 
@@ -288,6 +414,20 @@ Usage:
 Prints whether the browser feature is on, whether the browser is running, which session holds it
 (one session uses it at a time), how many viewers are connected, and whether saved logins exist.
 It never says which sites the logins are for. Read-only; any session of the account may run it.
+`,
+	"open": `orbit browser open — open the account's Orbit Cloud browser
+
+Usage:
+  orbit browser open [--url <url>] [--no-open] [--json]
+
+Starts the browser if it is not running and prints the address of its tab on this Orbit server
+(/runners/:id/browser), which it opens in this machine's browser; with no browser to open it in,
+it prints the address to open yourself. With --url the remote browser opens that page (http or
+https), unless another session holds the browser. Any session of the account may run it.
+
+  --url <url>   a page for the remote browser to open
+  --no-open     print the tab's address without opening it here
+  --json        emit compact JSON
 `,
 	"clear-logins": `orbit browser clear-logins — clear the saved logins of the account's Orbit Cloud browser
 
@@ -362,6 +502,38 @@ func cmdBrowserCLI(args []string, out io.Writer) error {
 			return err
 		}
 		raw, _ := json.Marshal(cleared)
+		return writeCLIRawJSON(out, raw, *jsonOut)
+	case "open":
+		fs := newCLIFlagSet("orbit browser open")
+		target := fs.String("url", "", "a page for the remote browser to open")
+		noOpen := fs.Bool("no-open", false, "print the tab's address without opening it here")
+		jsonOut := fs.Bool("json", false, "emit compact JSON")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if err := rejectTrailing(fs); err != nil {
+			return err
+		}
+		t, err := cliTransport()
+		if err != nil {
+			return err
+		}
+		res, err := runBrowserOpen(t, os.Getenv("ORBIT_SESSION_ID"), *target)
+		if err != nil {
+			return err
+		}
+		if res.TabURL != nil {
+			opened := !*noOpen && openTabLocally(*res.TabURL)
+			res.OpenedLocally = &opened
+			if !*jsonOut {
+				if opened {
+					fmt.Fprintf(out, "Opened the browser tab: %s\n", *res.TabURL)
+				} else {
+					fmt.Fprintf(out, "Open the browser tab: %s\n", *res.TabURL)
+				}
+			}
+		}
+		raw, _ := json.Marshal(res)
 		return writeCLIRawJSON(out, raw, *jsonOut)
 	}
 	return fmt.Errorf("unknown command %q", action)

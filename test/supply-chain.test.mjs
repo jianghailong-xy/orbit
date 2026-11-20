@@ -134,9 +134,9 @@ The previous tag.
 /** One representative artifact set, as the release workflow stages it. */
 function writeArtifacts(root, { version = VERSION, build = 10729, source = SOURCE } = {}) {
   mkdirSync(root, { recursive: true });
-  writeFileSync(path.join(root, `Orbit-v${version}-arm64.dmg`), 'dmg bytes\n');
-  writeFileSync(path.join(root, `Orbit-v${version}-arm64.zip`),
-    storedZip({ 'Orbit.app/Contents/Info.plist': infoPlist(version, build) }));
+  writeFileSync(path.join(root, `Orbitd-v${version}-arm64.dmg`), 'dmg bytes\n');
+  writeFileSync(path.join(root, `Orbitd-v${version}-arm64.zip`),
+    storedZip({ 'Orbitd.app/Contents/Info.plist': infoPlist(version, build) }));
   writeFileSync(path.join(root, 'appcast.xml'), '<rss/>\n');
   const apk = Buffer.from('apk bytes\n');
   writeFileSync(path.join(root, `orbit-android-${version}.apk`), apk);
@@ -203,7 +203,7 @@ test('generate writes a bundle that ties version, checksums, SBOM and provenance
     assert.equal(manifest.build.kind, 'github-actions');
     assert.equal(manifest.build.builder, `https://github.com/${REPOSITORY}/actions/runs/4242`);
     assert.deepEqual(manifest.artifacts.map((artifact) => artifact.name).sort(), [
-      `Orbit-v${VERSION}-arm64.dmg`, `Orbit-v${VERSION}-arm64.zip`, 'android-identity.json',
+      `Orbitd-v${VERSION}-arm64.dmg`, `Orbitd-v${VERSION}-arm64.zip`, 'android-identity.json',
       'appcast.xml', 'orbit-linux-x64.gz', `orbit-android-${VERSION}.apk`, 'version.json',
     ].sort());
     for (const artifact of manifest.artifacts) {
@@ -235,8 +235,8 @@ test('generate writes a bundle that ties version, checksums, SBOM and provenance
     assert.match(sbom.serialNumber, /^urn:uuid:/);
     assert.equal(sbom.metadata.component.version, VERSION);
     const components = new Map(sbom.components.map((component) => [component['bom-ref'], component]));
-    assert.equal(components.get(`file:Orbit-v${VERSION}-arm64.zip`).hashes[0].content,
-      manifest.artifacts.find((artifact) => artifact.name === `Orbit-v${VERSION}-arm64.zip`).sha256);
+    assert.equal(components.get(`file:Orbitd-v${VERSION}-arm64.zip`).hashes[0].content,
+      manifest.artifacts.find((artifact) => artifact.name === `Orbitd-v${VERSION}-arm64.zip`).sha256);
     assert.equal(components.get('urn:orbit:image:orbit-apiserver').properties
       .find((property) => property.name === 'orbit:base-image').value, 'node:26-slim');
 
@@ -266,7 +266,7 @@ test('verify refuses a byte that changed after the bundle was written', () => {
   const f = fixture();
   try {
     assert.equal(run(generateArgs(f)).status, 0);
-    writeFileSync(path.join(f.out, `Orbit-v${VERSION}-arm64.dmg`), 'other bytes\n');
+    writeFileSync(path.join(f.out, `Orbitd-v${VERSION}-arm64.dmg`), 'other bytes\n');
     const verified = run(['verify', '--dir', f.out]);
     assert.equal(verified.status, 1);
     assert.match(verified.stderr, /hashes to .*, the manifest says/);
@@ -294,7 +294,7 @@ test('verify refuses a missing SBOM and a rewritten SBOM', () => {
     assert.equal(run(generateArgs(f)).status, 0);
     const sbomFile = path.join(f.out, `orbit-v${VERSION}-sbom.cdx.json`);
     const sbom = JSON.parse(readFileSync(sbomFile, 'utf8'));
-    sbom.components.find((component) => component['bom-ref'] === `file:Orbit-v${VERSION}-arm64.dmg`)
+    sbom.components.find((component) => component['bom-ref'] === `file:Orbitd-v${VERSION}-arm64.dmg`)
       .hashes[0].content = '0'.repeat(64);
     writeFileSync(sbomFile, `${JSON.stringify(sbom)}\n`);
     const verified = run(['verify', '--dir', f.out]);
@@ -344,8 +344,8 @@ test('generation refuses version evidence that disagrees with the tag', () => {
     const root = mkdtempSync(path.join(tmpdir(), 'orbit-supply-chain-'));
     try {
       const artifacts = writeArtifacts(path.join(root, 'artifacts'));
-      writeFileSync(path.join(artifacts, `Orbit-v${VERSION}-arm64.zip`),
-        storedZip({ 'Orbit.app/Contents/Info.plist': infoPlist('0.1.256', '10729') }));
+      writeFileSync(path.join(artifacts, `Orbitd-v${VERSION}-arm64.zip`),
+        storedZip({ 'Orbitd.app/Contents/Info.plist': infoPlist('0.1.256', '10729') }));
       const result = run(['generate', '--version', VERSION, '--tag', TAG, '--source-sha', SOURCE,
         '--repository', REPOSITORY, '--artifacts', artifacts, '--out', path.join(root, 'out')]);
       assert.equal(result.status, 1);
@@ -422,7 +422,7 @@ test('generation refuses to publish a bundle that omits a surface the release re
   try {
     const artifacts = path.join(root, 'artifacts');
     mkdirSync(artifacts, { recursive: true });
-    writeFileSync(path.join(artifacts, `Orbit-v${VERSION}-arm64.dmg`), 'dmg bytes\n');
+    writeFileSync(path.join(artifacts, `Orbitd-v${VERSION}-arm64.dmg`), 'dmg bytes\n');
     const result = run(['generate', '--version', VERSION, '--tag', TAG, '--source-sha', SOURCE,
       '--repository', REPOSITORY, '--artifacts', artifacts, '--out', path.join(root, 'out'),
       '--require-surface', 'macos', '--require-surface', 'runner']);
@@ -470,8 +470,8 @@ test('known late release assets are checked against the APK, and nothing else is
 });
 
 test('surface names follow the artifact names the release publishes', () => {
-  assert.equal(surfaceOf(`Orbit-v${VERSION}-arm64.dmg`), 'macos');
-  assert.equal(surfaceOf(`Orbit-v${VERSION}-arm64.zip`), 'macos');
+  assert.equal(surfaceOf(`Orbitd-v${VERSION}-arm64.dmg`), 'macos');
+  assert.equal(surfaceOf(`Orbitd-v${VERSION}-arm64.zip`), 'macos');
   assert.equal(surfaceOf('orbit-darwin-arm64.gz'), 'runner');
   assert.equal(surfaceOf('version.json'), 'runner');
   assert.equal(surfaceOf(`orbit-android-${VERSION}.apk`), 'android');
@@ -484,8 +484,8 @@ test('readZipEntry reads a stored entry and reports a missing one as null', () =
   const root = mkdtempSync(path.join(tmpdir(), 'orbit-zip-'));
   try {
     const file = path.join(root, 'payload.zip');
-    writeFileSync(file, storedZip({ 'Orbit.app/Contents/Info.plist': infoPlist(VERSION, '1'), 'other.txt': 'x' }));
-    assert.equal(readZipEntry(file, 'Orbit.app/Contents/Info.plist').toString(), infoPlist(VERSION, '1'));
+    writeFileSync(file, storedZip({ 'Orbitd.app/Contents/Info.plist': infoPlist(VERSION, '1'), 'other.txt': 'x' }));
+    assert.equal(readZipEntry(file, 'Orbitd.app/Contents/Info.plist').toString(), infoPlist(VERSION, '1'));
     assert.equal(readZipEntry(file, 'missing.txt'), null);
   } finally {
     rmSync(root, { recursive: true, force: true });

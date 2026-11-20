@@ -109,8 +109,11 @@ if [[ "$("$adb" -s "$serial" shell getprop ro.kernel.qemu | tr -d '\r')" == 1 ]]
   old_density="$("$adb" -s "$serial" shell wm density | sed -n 's/Override density: //p' | tr -d '\r')"
   old_font="$("$adb" -s "$serial" shell settings get system font_scale | tr -d '\r')"
   old_night="$("$adb" -s "$serial" shell cmd uimode night | awk '{print $NF}' | tr -d '\r')"
-  "$adb" -s "$serial" shell wm size 720x1280
-  "$adb" -s "$serial" shell wm density 320
+  # A07_DISPLAY=WIDTHxHEIGHT@DPI picks another phone's display, e.g. 1280x2856@480 (Pixel 10 Pro) for screenshots.
+  display="${A07_DISPLAY:-720x1280@320}"
+  [[ "$display" =~ ^[0-9]+x[0-9]+@[0-9]+$ ]] || { echo "A07_DISPLAY must be WIDTHxHEIGHT@DPI, not $display" >&2; exit 2; }
+  "$adb" -s "$serial" shell wm size "${display%@*}"
+  "$adb" -s "$serial" shell wm density "${display#*@}"
   "$adb" -s "$serial" shell settings put system font_scale "${A07_FONT_SCALE:-1.0}"
   "$adb" -s "$serial" shell cmd uimode night "${A07_NIGHT:-no}"
   if (( api >= 34 )); then

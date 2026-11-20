@@ -571,6 +571,32 @@ describe('the blocked merge card’s way to where its handling is shown', { time
   });
 });
 
+it('shows only owner exception cards in the coordinator conversation', async () => {
+  const coordinatorRow: ProjectOpenItemRow = {
+    ...TASK_ROW, itemId: 'coordinator-open', assignee: 'COORDINATOR', assigneeReason: 'DEFAULT', escalatedAt: null,
+  };
+  const outcome: NonNullable<ProjectOpenItemRow['outcome']> = {
+    state: 'RESOLVED', resolution: 'HANDLED', resolvedAt: TASK_ROW.waitingSince,
+    resolvedBy: 'COORDINATOR', resolvedBySessionId: COORDINATOR_PUBLIC, resolvedByUserId: null,
+    note: 'Handled', jobId: null, supersededByItemId: null,
+  };
+  openItems = {
+    needsYou: [TASK_ROW],
+    withCoordinator: [coordinatorRow],
+    settled: [
+      { ...coordinatorRow, itemId: 'coordinator-settled', outcome },
+      { ...TASK_ROW, itemId: 'owner-settled', outcome: { ...outcome, resolvedBy: 'USER' } },
+    ],
+  };
+  await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+  await waitForUi(() => {
+    expect(mounted().querySelector(`[data-open-item="${TASK_ITEM}"]`)).not.toBeNull();
+    expect(mounted().querySelector('[data-open-item="owner-settled"].is-settled')).not.toBeNull();
+  });
+  expect(mounted().querySelector('[data-open-item="coordinator-open"]')).toBeNull();
+  expect(mounted().querySelector('[data-open-item="coordinator-settled"]')).toBeNull();
+});
+
 describe('what the send carries is read at the send', { timeout: 60_000 }, () => {
   it('handed back to the coordinator after the press: says where the item stands now', async () => {
     await armOnTheTaskCard();

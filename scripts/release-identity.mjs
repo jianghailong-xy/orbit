@@ -70,8 +70,8 @@ export function releaseIdentity(version, build) {
       channel: prerelease ? 'beta' : 'stable',
       shortVersionString: version,
       build,
-      dmg: `Orbit-${tag}-arm64.dmg`,
-      zip: `Orbit-${tag}-arm64.zip`,
+      dmg: `Orbitd-${tag}-arm64.dmg`,
+      zip: `Orbitd-${tag}-arm64.zip`,
     },
     ios: {
       // CFBundleShortVersionString must be numeric, so the suffix is stripped; the commit count carries

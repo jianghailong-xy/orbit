@@ -99,12 +99,12 @@ interface Fixture {
 
 type TaskSeed = { provider?: string | null; model?: string | null; modelHint?: string | null };
 
-/** An Agent with smart selection on — unless `routing` says otherwise — and its tasks. */
+/** An account with smart selection on, an Agent, and its tasks. The Agent has no switch of its own
+ *  any more (owner, 2026-11-20): the account's alone routes and applies every task run. */
 async function fixture(
   services: Services,
   label: string,
   tasks: TaskSeed[] = [{}],
-  routing = true,
 ): Promise<Fixture> {
   const { db } = services;
   const ownerId = randomUUID();
@@ -115,7 +115,8 @@ async function fixture(
   await db.user.create({
     data: {
       id: ownerId, email: `${label}-${RUN}-${ownerId}@routing.invalid`, name: label, passwordHash: 'x',
-      preferences: { modelRouting: true },
+      // Optimize For is the account's (owner, 2026-11-19); Cost, the mode these runs were written against.
+      preferences: { modelRouting: true, optimizeFor: 'cost' },
     },
   });
   await db.runner.create({
@@ -134,11 +135,6 @@ async function fixture(
   await db.workspace.create({
     data: { id: agentId, ownerId, runnerId, name: `${label}-agent`, enabled: true, effort: AGENT_EFFORT },
   });
-  if (routing) {
-    // The owner's door, and the only one: what `PATCH /workspaces/:id` reaches.
-    const turnedOn = await services.workspaces.update(ownerId, agentId, { modelRouting: true });
-    assert.equal(turnedOn.modelRouting, true);
-  }
   // LEGACY dispatch authority: these presses go through `execute`, not through a Coordinator.
   await db.project.create({ data: { id: projectId, ownerId, title: label, coordinatorEnabled: false } });
   const taskIds: string[] = [];
@@ -224,6 +220,12 @@ async function pause(db: PrismaClient, sessionId: string) {
   });
 }
 
+/** The account's Optimize For (UserPreferences.optimizeFor), merged into what its preferences hold. */
+async function setOptimizeFor(db: PrismaClient, ownerId: string, mode: 'cost' | 'balance' | 'intelligence'): Promise<void> {
+  const { preferences } = await db.user.findUniqueOrThrow({ where: { id: ownerId }, select: { preferences: true } });
+  await db.user.update({ where: { id: ownerId }, data: { preferences: { ...(preferences as object), optimizeFor: mode } } });
+}
+
 test('smart selection on: a fresh run is created on the routed model and effort, and the task keeps its pins',
   { skip, timeout: 120_000 }, async () => {
     assertCoordinatorPgUrlIsIsolated(URL!);
@@ -242,7 +244,8 @@ test('smart selection on: a fresh run is created on the routed model and effort,
         { applied: row.applied, level: row.level, provider: row.provider, model: row.model, effort: row.effort },
         { applied: true, level: 'M', provider: 'claude', model: SONNET, effort: 'medium' },
       );
-      assert.equal((row.features as Record<string, unknown>).modelRouting, true);
+      assert.equal('modelRouting' in (row.features as Record<string, unknown>), false,
+        'the Agent\'s old switch is no longer read, so no longer recorded');
       // The baseline is still recorded as what would have run without routing.
       assert.deepEqual(row.baseline, {
         // The task pins only the provider, so its engine is the one that provider runs on by default.
@@ -270,15 +273,26 @@ test('smart selection on: a fresh run is created on the routed model and effort,
       const summary = detail.sessions.find((s) => s.id === sessionId)?.route;
       assert.deepEqual({ applied: summary?.applied, level: summary?.level }, { applied: true, level: 'M' });
 
-      // Turned off again by the owner: the next fresh run is the baseline, routed in shadow only.
+      // The Agent's old switch, written on or off, is no longer read: the next fresh run is routed and applied.
       await services.db.session.update({
         where: { id: sessionId }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date() },
       });
       await services.workspaces.update(target.ownerId, target.agentId, { modelRouting: false });
       const next = await runNow(services, target, taskId, randomUUID());
-      assert.deepEqual(await sessionOf(services.db, next), { provider: 'claude', model: null, effort: AGENT_EFFORT });
-      const shadow = (await decisionsOf(services.db, taskId)).find((r) => r.sessionId === next)!;
-      assert.deepEqual({ applied: shadow.applied, level: shadow.level }, { applied: false, level: 'M' });
+      assert.deepEqual(await sessionOf(services.db, next), { provider: 'claude', model: SONNET, effort: 'medium' });
+      const still = (await decisionsOf(services.db, taskId)).find((r) => r.sessionId === next)!;
+      assert.deepEqual({ applied: still.applied, level: still.level }, { applied: true, level: 'M' });
+
+      // Only the account's switch turns it off: the next fresh run is the baseline, and nothing is recorded.
+      await services.db.session.update({
+        where: { id: next }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date() },
+      });
+      await services.db.user.update({
+        where: { id: target.ownerId }, data: { preferences: { modelRouting: false, optimizeFor: 'cost' } },
+      });
+      const off = await runNow(services, target, taskId, randomUUID());
+      assert.deepEqual(await sessionOf(services.db, off), { provider: 'claude', model: null, effort: AGENT_EFFORT });
+      assert.equal((await decisionsOf(services.db, taskId)).some((r) => r.sessionId === off), false);
     } finally {
       await services.db.$disconnect();
     }
@@ -369,7 +383,7 @@ test('a model pinned on the task wins: the run is created on the pin, and the de
     try {
       // XL would route to Opus at max; the pin says Sonnet.
       const target = await fixture(services, 'pin', [{ model: SONNET, modelHint: 'XL' }]);
-      await services.workspaces.update(target.ownerId, target.agentId, { modelRoutingOptimizeFor: 'intelligence' });
+      await setOptimizeFor(services.db, target.ownerId, 'intelligence');
       const [taskId] = target.taskIds;
       const press = randomUUID();
 
@@ -399,7 +413,7 @@ test('continuing a paused run is not routed again, with smart selection on',
       assert.deepEqual(await sessionOf(services.db, run), { provider: 'claude', model: SONNET, effort: 'low' });
       await pause(services.db, run);
       // Changing the mode and suggestion affects only later CREATE plans.
-      await services.workspaces.update(target.ownerId, target.agentId, { modelRoutingOptimizeFor: 'intelligence' });
+      await setOptimizeFor(services.db, target.ownerId, 'intelligence');
       await services.db.task.update({ where: { id: taskId }, data: { modelHint: 'XL' } });
       const press = randomUUID();
 
@@ -532,6 +546,8 @@ test('a routed run refused by a run already holding the task names no pin the ta
     }
   });
 
+// The Agent's switch is no longer read (owner, 2026-11-20), but the API still accepts and returns it, and
+// still keeps it out of the agent tools' reach.
 test('the switch is the owner\'s: the user API turns it on and off, the agent tools cannot touch it',
   { skip, timeout: 120_000 }, async () => {
     assertCoordinatorPgUrlIsIsolated(URL!);
@@ -553,7 +569,7 @@ test('the switch is the owner\'s: the user API turns it on and off, the agent to
         assert.deepEqual(refused.map((error) => error.property), ['modelRouting']);
       }
 
-      const target = await fixture(services, 'switch', [], false);
+      const target = await fixture(services, 'switch', []);
       const { db, workspaces } = services;
       const routingOf = async (id: string) =>
         (await db.workspace.findUniqueOrThrow({ where: { id }, select: { modelRouting: true } })).modelRouting;
@@ -621,7 +637,7 @@ test('Optimize For is frozen with CREATE; changed modes affect only later fresh 
       const target = await fixture(services, 'optimize', [{ modelHint: null }]);
       const [taskId] = target.taskIds;
       for (const [mode, level] of [['cost', null], ['balance', 'M'], ['intelligence', 'L']] as const) {
-        await services.workspaces.update(target.ownerId, target.agentId, { modelRoutingOptimizeFor: mode });
+        await setOptimizeFor(services.db, target.ownerId, mode);
         const press = randomUUID();
         const run = await runNow(services, target, taskId, press);
         const row = (await decisionsOf(services.db, taskId)).find((r) => r.sessionId === run)!;
@@ -629,7 +645,7 @@ test('Optimize For is frozen with CREATE; changed modes affect only later fresh 
         assert.equal((row.features as Record<string, unknown>).optimizeFor, mode);
         const bound = await receipt(services.db, target.ownerId, TASK_RUN_ACTION.execute, press);
         assert.equal(bound.target.route.features.optimizeFor, mode);
-        await services.workspaces.update(target.ownerId, target.agentId, { modelRoutingOptimizeFor: 'intelligence' });
+        await setOptimizeFor(services.db, target.ownerId, 'intelligence');
         assert.equal(await runNow(services, target, taskId, press), run);
         assert.equal((await receipt(services.db, target.ownerId, TASK_RUN_ACTION.execute, press)).target.route.features.optimizeFor, mode);
         await services.db.session.update({ where: { id: run }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date() } });

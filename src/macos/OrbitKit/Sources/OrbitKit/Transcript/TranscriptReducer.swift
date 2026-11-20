@@ -892,6 +892,23 @@ public struct TranscriptReducer: Sendable, Codable {
         state.queued.removeAll { $0.id == id }
     }
 
+    /// Take down a message the held tag's Cancel withdrew (`HeldCancel`) once the server said yes:
+    /// the accepted head another client's listing drew, or this console's own send, still pending
+    /// in the conversation with no echo. A turn drawn nowhere is a no-op. Web parity:
+    /// `setAcceptedUserTurns(current ⇒ current.filter(…))`.
+    public mutating func removeAcceptedTurn(turnId: String) {
+        state.accepted.removeAll { $0.turnId == turnId }
+        heldAt.removeValue(forKey: turnId)
+        guard let i = state.items.firstIndex(where: {
+            if case .user(let b) = $0 { return b.turnId == turnId && b.pending }
+            return false
+        }) else { return }
+        state.items.remove(at: i)
+        // The open-bubble cursors are item INDICES: close the gap, as `removeOptimisticUser` does.
+        if let o = openAssistant, o > i { openAssistant = o - 1 }
+        if let o = openThinking, o > i { openThinking = o - 1 }
+    }
+
     /// A queued message the tray's Steer sent into the running turn (`POST …/steer`): a steer now, on
     /// its way into that turn, until the runner's echo takes it over (`appendUser`).
     public mutating func markQueuedSteered(turnId: String) {
@@ -1039,6 +1056,7 @@ public struct TranscriptReducer: Sendable, Codable {
                 bubble.cards = turn.cards
                 bubble.translation = turn.turnTranslation
                 bubble.authoredByOrbit = turn.authoredByOrbit == true
+                bubble.opening = turn.opening == true
                 accepted.append(bubble)
                 continue
             }
@@ -2128,7 +2146,10 @@ public struct TranscriptReducer: Sendable, Codable {
                 if state.background[i].startedAt == nil { state.background[i].startedAt = proc.startedAt }
                 if state.background[i].kind == nil { state.background[i].kind = proc.kind }
                 if state.background[i].taskId == nil { state.background[i].taskId = proc.taskId }
+                if state.background[i].endedAt == nil { state.background[i].endedAt = proc.endedAt }
                 if state.background[i].status == "running" { state.background[i].status = proc.status }
+                // The server knows a bg_run by its job record, which a live launch does not carry.
+                if proc.kind == "job" { state.background[i].kind = "job" }
             } else {
                 state.background.append(proc)
             }
@@ -2156,8 +2177,19 @@ public struct TranscriptReducer: Sendable, Codable {
         }
         let index = toolUseID.flatMap { id in state.background.firstIndex { $0.id == id } }
             ?? taskID.flatMap { tid in state.background.firstIndex { $0.taskId == tid || $0.id == tid } }
+        // A runner-hosted bg_run's own record states its kind (an engine's shell, agent or workflow
+        // states none, and a SubAgent's report is not about a launch listed here): a `service` is
+        // not listed, a `job` or `watch` is a `job` (shared `deriveBackgroundShells`).
+        let runnerKind = ev.payload["subagentRunId"] == nil ? nonEmpty(str(ev, "kind")) : nil
+        if runnerKind == "service" {
+            if let i = index { state.background.remove(at: i) }
+            return
+        }
+        let ended = ["completed", "done", "failed", "killed", "stopped"].contains(status)
         if let i = index {
             state.background[i].status = status
+            if ended { state.background[i].endedAt = ev.ts ?? state.background[i].endedAt }
+            if runnerKind != nil { state.background[i].kind = "job" }
             if let command { state.background[i].command = command }
             if state.background[i].taskId == nil { state.background[i].taskId = taskID }
         } else {
@@ -2168,7 +2200,8 @@ public struct TranscriptReducer: Sendable, Codable {
             state.background.append(BackgroundProc(id: id, command: command,
                                                    description: launch?.description ?? named?.title,
                                                    status: status, outputTail: "", startedAt: ev.ts,
-                                                   kind: named?.kind, taskId: taskID))
+                                                   kind: runnerKind != nil ? "job" : named?.kind, taskId: taskID,
+                                                   endedAt: ended ? ev.ts : nil))
         }
     }
 

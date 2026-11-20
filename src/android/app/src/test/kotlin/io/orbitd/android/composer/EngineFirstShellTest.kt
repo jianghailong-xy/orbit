@@ -119,10 +119,20 @@ class EngineFirstShellTest : ComposerShellTest() {
         engineList()
         assertEquals(emptyList<String>(), names.mapNotNull { (engine, name) -> misfit(engine, name) })
         compose.onNodeWithTag("engine:dsh").performClick()
-        await { has(hasText("DeepSeek Harness ⌄")) }
+        await { has((hasTestTag("new-session-engine") and hasText("DeepSeek Harness"))) }
         engineList()
         assertTrue(has(hasTestTag("engine:dsh") and hasText("✓")))
         assertEquals(emptyList<String>(), names.mapNotNull { (engine, name) -> misfit(engine, name) })
+    }
+
+    /** The new session page as iOS's draft opens: back alone in the bar (no drawer, no refresh) and the box focused for typing. */
+    @Test fun theNewSessionPageOpensFocusedWithBackAloneInTheBar() {
+        signIn(); openDraft()
+        await { has(hasTestTag("new-session-engine") and isEnabled()) }
+        await { has(hasTestTag("composer-input") and isFocused()) }
+        compose.onNodeWithContentDescription("Back").assertExists()
+        compose.onAllNodesWithContentDescription("Open navigation").assertCountEquals(0)
+        compose.onAllNodesWithContentDescription("Refresh directory").assertCountEquals(0)
     }
 
     /** An engine picked lands on the workspace's lastModel only where it is the workspace's lastEngine and lastProvider: Codex on
@@ -136,12 +146,12 @@ class EngineFirstShellTest : ComposerShellTest() {
         compose.onNodeWithTag("new-session-engine").performClick()
         await { has(hasTestTag("engine:codex") and hasClickAction()) }
         compose.onNodeWithTag("engine:codex").performClick()
-        await { has(hasText("Codex ⌄")) }
+        await { has((hasTestTag("new-session-engine") and hasText("Codex"))) }
         await { has(hasContentDescription("Model GPT-6, effort Default")) }
         compose.onNodeWithTag("new-session-engine").performClick()
         await { has(hasTestTag("engine:claude") and hasClickAction()) }
         compose.onNodeWithTag("engine:claude").performClick()
-        await { has(hasText("Claude Code ⌄")) }
+        await { has((hasTestTag("new-session-engine") and hasText("Claude Code"))) }
         await { has(hasContentDescription("Model Sonnet 5.5, effort Default")) }
     }
 }

@@ -127,14 +127,14 @@ class A13dStackDeviceTest {
 
         // A13-14: the switch is written alone, and the server keeps what was written.
         val routingBefore = read("users/me").jsonObject["preferences"]?.jsonObject?.get("modelRouting")
-        ok("smart model selection starts off on the server ($routingBefore)", routingBefore == null || routingBefore == JsonPrimitive(false))
+        ok("smart model selection starts on on the server ($routingBefore)", routingBefore == null || routingBefore == JsonPrimitive(true))
         // The switch is on Sessions' page (docs/mocks/ios-settings-order).
         click(hasText("Sessions") and hasClickAction()); await("Smart model selection")
         click(hasText("Smart model selection") and isToggleable())
-        eventually("preferences.modelRouting is true") { read("users/me").jsonObject["preferences"]!!.jsonObject["modelRouting"] == JsonPrimitive(true) }
-        capture("stack-smart-selection-on")
+        eventually("preferences.modelRouting is false") { read("users/me").jsonObject["preferences"]!!.jsonObject["modelRouting"] == JsonPrimitive(false) }
         click(hasText("Smart model selection") and isToggleable())
-        eventually("preferences.modelRouting is false again") { read("users/me").jsonObject["preferences"]!!.jsonObject["modelRouting"] == JsonPrimitive(false) }
+        eventually("preferences.modelRouting is true again") { read("users/me").jsonObject["preferences"]!!.jsonObject["modelRouting"] == JsonPrimitive(true) }
+        capture("stack-smart-selection-on")
         back(); await("Appearance")
 
         // A13-7: the tokens the account issued on the web, and one revoked from here.

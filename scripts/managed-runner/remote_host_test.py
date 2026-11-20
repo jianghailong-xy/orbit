@@ -26,7 +26,7 @@ COPIED = [KIT, "deploy/managed-runner/remote-host/compose.yml", "deploy/managed-
 IMAGE_ID = "sha256:" + "ab" * 32
 NEW_IMAGE_ID = "sha256:" + "cd" * 32
 DIRECTORY = "data/channel-host"
-MOUNT = "/var/lib/orbit-managed-runners"
+MOUNT = "/var/lib/orbit-cloud-runners"
 
 
 def load(name, relative):
@@ -48,7 +48,7 @@ case "$*" in
   "container inspect orbit-docker-channel") log "$*"; [ -n "${FAKE_CHANNEL_EXISTS:-}" ] && exit 0; exit 1 ;;
   "run --rm --network none -v "*" orbit-docker-channel:local check-config --config "*) log "$*"; exit "${FAKE_CHECK_FAIL:-0}" ;;
   "run --rm --network none -v "*" --entrypoint python3 orbit-docker-channel:local -I -c "*)
-    log "$*"; host="${6%%:*}"; code="${*: -1}"; exec python3 -I -c "${code//\/var\/lib\/orbit-managed-runners/$host}" ;;
+    log "$*"; host="${6%%:*}"; code="${*: -1}"; exec python3 -I -c "${code//\/var\/lib\/orbit-cloud-runners/$host}" ;;
 esac
 exec "$(dirname "$0")/docker-shared" "$@"
 """
@@ -112,7 +112,7 @@ class RemoteHostTest(unittest.TestCase):
 
     def runner_build(self, sha):
         return (f"build --provenance=false -f deploy/managed-runner/image/Dockerfile --build-arg ORBIT_SOURCE_SHA={sha} "
-                "-t orbit-managed-runner:local .")
+                "-t orbit-cloud-runner:local .")
 
     def compose(self, rest):
         return f"compose -f deploy/managed-runner/remote-host/compose.yml --env-file {DIRECTORY}/compose.env {rest}"
@@ -134,18 +134,18 @@ class RemoteHostTest(unittest.TestCase):
         config = CHANNEL.parse_config(json.loads((directory / "channel.json").read_text()))
         self.assertEqual(config["instanceId"], "orbit-far")
         self.assertEqual(config["listen"], {"tcp": {"host": "10.66.0.3", "port": 7300}, "allowPeers": ["10.66.0.1"]})
-        self.assertEqual((config["image"], config["network"], config["tokenFile"]), (IMAGE_ID, "orbit-managed-runners", f"{MOUNT}/token"))
+        self.assertEqual((config["image"], config["network"], config["tokenFile"]), (IMAGE_ID, "orbit-cloud-runners", f"{MOUNT}/token"))
         self.assertEqual((directory / "compose.env").read_text().splitlines()[1:], [f"ORBIT_CHANNEL_HOST_DIR={directory}"])
 
         # The firewall's configuration, its rules applied and checked from the network, as a single host's install does.
         firewall = json.loads((directory / "firewall/config.json").read_text())
         self.assertEqual((firewall["network"], firewall["bridge"], firewall["gateway"]),
-                         ("orbit-managed-runners", "br-0123456789ab", "172.30.0.1"))
+                         ("orbit-cloud-runners", "br-0123456789ab", "172.30.0.1"))
         calls = self.calls()
         head = self.git("rev-parse", "HEAD")
         order = [
-            "build -f deploy/managed-runner/firewall/Dockerfile -t orbit-managed-runner-firewall:local .",
-            "network create --driver bridge --ipv6=false --opt com.docker.network.bridge.enable_icc=false orbit-managed-runners",
+            "build -f deploy/managed-runner/firewall/Dockerfile -t orbit-cloud-runner-firewall:local .",
+            "network create --driver bridge --ipv6=false --opt com.docker.network.bridge.enable_icc=false orbit-cloud-runners",
             self.runner_build(head),
             self.compose("build docker-channel"),
             f"run --rm --network none -v {directory}:{MOUNT}:ro orbit-docker-channel:local check-config --config {MOUNT}/channel.json.new",
@@ -153,7 +153,7 @@ class RemoteHostTest(unittest.TestCase):
         ]
         positions = [calls.index(call) for call in order]
         self.assertEqual(positions, sorted(positions), calls)
-        applied = [c for c in calls if " orbit-managed-runner-firewall:local apply " in c]
+        applied = [c for c in calls if " orbit-cloud-runner-firewall:local apply " in c]
         self.assertEqual(len(applied), 1, calls)
         self.assertLess(calls.index(applied[0]), calls.index(order[-1]))
         self.assertTrue([c for c in calls if "probe --blocked 172.30.0.1:1" in c], calls)

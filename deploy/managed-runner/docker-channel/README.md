@@ -217,8 +217,8 @@ restart loses beyond what is in `stateDir` and Docker.
 
 In a Compose deployment, `scripts/install-server.sh` writes both files, the token and the network:
 `data/managed-runners/` holds `channel.json`, `profile.json` and `token` (the state directory and the
-socket are made there too), mounted at `/var/lib/orbit-managed-runners` in `docker-channel` and,
-read-only, in the apiserver; the network is `orbit-managed-runners`, with inter-container traffic
+socket are made there too), mounted at `/var/lib/orbit-cloud-runners` in `docker-channel` and,
+read-only, in the apiserver; the network is `orbit-cloud-runners`, with inter-container traffic
 off, and a runner reaches the apiserver through the gateway's published port at that network's
 gateway address. Unless installed with `--no-managed-runner-firewall`, `data/managed-runners/firewall/`
 holds the host firewall's configuration and status, which the rule above reads. Each upgrade rebuilds the image and names its new ID in both files, then recreates

@@ -1,7 +1,10 @@
 import {
-  ArrayMaxSize, IsArray, IsBoolean, IsEmail, IsEnum, IsIn, IsOptional, IsString, MaxLength, MinLength, ValidateBy,
+  ArrayMaxSize, IsArray, IsBoolean, IsEmail, IsEnum, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength,
+  ValidateBy,
 } from 'class-validator';
 import { PermissionMode, TRANSLATION_LANGUAGES, type TranslationLanguage } from '@orbit/shared';
+
+import { MAX_CARD_FREE_TASK_CREATES } from '../runner-api/session-create-allowance';
 
 export class CreateUserDto {
   @IsEmail()
@@ -125,6 +128,15 @@ export class UpdatePreferencesDto {
   modelRouting?: boolean;
 
   /**
+   * Optimize For, account-wide (owner, 2026-11-19; board docs/mocks/routing-mode-account): how SubAgents and
+   * smart-selected task runs on every Agent rank providers (common/model-routing-switch.ts optimizeForOf).
+   * Absent means Balance.
+   */
+  @IsOptional()
+  @IsIn(['cost', 'balance', 'intelligence'])
+  optimizeFor?: 'cost' | 'balance' | 'intelligence';
+
+  /**
    * Whether this account's Claude sessions offer the engine's guess at the next message once a
    * turn ends (common/prompt-suggestions-switch.ts). Each guess is one more request on the
    * session's account, so it can be turned off. Default on (absent = on), so the switch is only
@@ -193,6 +205,17 @@ export class UpdatePreferencesDto {
   @IsString({ each: true })
   @MaxLength(200, { each: true })
   subagentBlockedProviders?: string[];
+
+  /**
+   * How many tasks a session may create before its creates are put to the owner on a card
+   * (runner-api/session-create-allowance.ts). Absent = unchanged; null = back to the default; 0 = every create
+   * is carded.
+   */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(MAX_CARD_FREE_TASK_CREATES)
+  cardFreeTaskCreates?: number | null;
 }
 
 /** Set a user's access role (admin area). */

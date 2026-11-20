@@ -101,6 +101,8 @@ internal object ProjectShell {
     @Volatile var landings: String? = null
     /** The owner's open items on Launch, as `open-items.needsYou` lists them (A-2's X-E5 card and the Landings group's holders). */
     @Volatile var needsYouItems: String? = null
+    /** The project's answered questions (`closedQuestions` of the open-items read), as a JSON array. */
+    @Volatile var closedQuestions: String = "[]"
     /** The code session's derived `sourceLanding` (A-2's label at its bottom); null for a conversation that produced none. */
     @Volatile var sourceLanding: String? = null
     /** What `GET sessions/<LANDING>/landing/log` answers, one page. */
@@ -180,7 +182,7 @@ internal object ProjectShell {
         done = false; doneBy = "DERIVED"; doneCounts = true; completedMembers = emptySet()
         promotion = null; merged = "[]"; mergeCheck = false; mergeJobKind = "CHECK_PROMOTION"; holder = null; criteria = null; pressStatus = 200; mergeWaiting = false; bodies.clear()
         landTasks = null; plan = null; documentStatus = 200; holdDocument = null; landing = null; landingById = emptyMap(); landingTitle = null; inFlightJobs = null
-        landings = null; needsYouItems = null; sourceLanding = null
+        landings = null; needsYouItems = null; closedQuestions = "[]"; sourceLanding = null
         landingLog = """{"jobId":"j-1","entries":[],"nextCursor":null}"""; taskTitle = "Wire the page"
         landingStatus = 200; landingLogStatus = 200
         coordinatorStatus = "{\"state\":\"NEVER_OPENED\"}"; doorStatus = 200; doorMessage = "The job is no longer running."
@@ -255,8 +257,8 @@ internal object ProjectShell {
         "inFlight":${if (mergeCheck) """{"kind":"$mergeJobKind","state":"RUNNING","phase":"CHECK","startedAt":"${ago(7)}","heartbeatAt":"${ago(0)}"}"""
             else """{"kind":"LAND_TASK","state":"RUNNING","phase":"CHECK","taskTitle":"Wire the page","startedAt":"${ago(3)}","heartbeatAt":"${ago(0)}"}"""}${
             landTasks?.let { ""","landTasks":$it""" }.orEmpty()}${inFlightJobs?.let { ""","inFlightJobs":$it""" }.orEmpty()}}"""
-    private val openItems get() = if (!startRequest) """{"needsYou":${needsYouItems ?: "[]"},"withCoordinator":[${holder.orEmpty()}]}""" else
-        """{"needsYou":${needsYouItems ?: "[]"},"withCoordinator":[],
+    private val openItems get() = if (!startRequest) """{"needsYou":${needsYouItems ?: "[]"},"withCoordinator":[${holder.orEmpty()}],"closedQuestions":$closedQuestions}""" else
+        """{"needsYou":${needsYouItems ?: "[]"},"withCoordinator":[],"closedQuestions":$closedQuestions,
         "startRequest":{"itemId":"start-1","waitingSince":"${ago(130)}","startRequest":{"criteriaDigest":"digest-1","why":"Everything is filed.",
         "settings":{"line":"PROJECT_BRANCH","automatic":true,"maxConcurrentTasks":3,"mergeCheckCommand":null,"projectBranchName":"project/launch"}}}}"""
     /** The projection a current server carries for a done project: six criteria, five on main and one with no code to land — or,

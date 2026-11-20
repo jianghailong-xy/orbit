@@ -948,6 +948,23 @@ export interface RunnerBrowserStatus {
   reportedAt: string | null;
 }
 
+/** The body of POST /runner/browser/open (browser_open, `orbit browser open [--url]`). */
+export interface RunnerBrowserOpenRequest {
+  /** A page for the remote Chrome to open (http or https). Absent: the browser is started and left on its page. */
+  url?: string;
+}
+
+/** Its answer: the open is handed to the Orbit Cloud runner's next heartbeat, which the runner is woken for at once. */
+export interface RunnerBrowserOpenResponse {
+  /** The account's Orbit Cloud runner. */
+  runnerId: string;
+  /** The browser's tab on this server (`/runners/:id/browser`, absolute), for a person to watch or take control in. */
+  tabUrl: string;
+  /** The page asked for, or null when none was. */
+  url: string | null;
+  requestedAt: string;
+}
+
 /** POST /runners/:id/browser/clear: Clear saved logins, accepted and waiting for the runner's next heartbeat. */
 export interface RunnerBrowserClearResponse {
   requestedAt: string;
@@ -1554,6 +1571,10 @@ export interface RunnerHeartbeatResponse {
   /** The same request on Codex's historical field, which is all a control plane older than
    *  accounts-per-engine knows how to send. Absent from current control planes. */
   codexAccountRemoveRequest?: CodexAccountRemoveCommand;
+  /** Make an added Claude account the Default (docs/claude-default-swap-contract.md §5): swap its login
+   *  with the one in ~/.claude. Redelivered every heartbeat while the swap is pending, and only to a
+   *  runner that declares claude-account-swap/v1. Absent otherwise, and from an older control plane. */
+  claudeAccountSwapRequest?: ClaudeAccountSwapCommand;
   /** An engine install the user started from the web. Absent on older control planes, and
    *  whenever no install is in flight for this runner. */
   installRequest?: InstallCommand;
@@ -1602,6 +1623,11 @@ export interface RunnerHeartbeatResponse {
    *  Set once per request and cleared as it is handed over, like `checkSelfUpdate`; only a runner that declares
    *  BROWSER_CLEAR_V1 is asked, and its `browser.profileClearedAt` is the answer. */
   clearBrowserProfile?: boolean;
+  /** A session's browser_open (POST /runner/browser/open): start the browser if it is not running, and when `url` is
+   *  set open that page in it, unless another session than `sessionId` holds the browser's lease. Set once per request
+   *  and cleared as it is handed over, like `clearBrowserProfile`; only a runner that declares BROWSER_OPEN_V1 is
+   *  asked. */
+  openBrowser?: { sessionId: string; url?: string };
   /** This machine's free-space floor in MB (Runner.minFreeDiskMb), the same number the auto-run
    *  disk gate reads. Sent so the runner can apply it to work only it can see — reclaiming the
    *  session checkouts on its own disk — without keeping a second copy of the setting.
@@ -1710,6 +1736,11 @@ export const SELF_UPDATE_NOW_V1 = 'self-update-now/v1';
  *  on each heartbeat (`browser`) and honours Clear saved logins (`clearBrowserProfile`). A runner without it is
  *  refused a clear. runner-go asserts the same string. */
 export const BROWSER_CLEAR_V1 = 'browser-clear/v1';
+
+/** Declared by a managed runner that honours a session's browser_open (`openBrowser`): it starts the browser and opens
+ *  the page asked for through Chrome's DevTools. A runner without it is refused an open as too old. runner-go asserts
+ *  the same string. */
+export const BROWSER_OPEN_V1 = 'browser-open/v1';
 
 /** Declared by a runner that keeps a remote SubAgent's conversation when the run ends and continues it on a claim's
  *  `resumeOf` (docs/subagent-design.md §10.2). A resume is refused for a target runner without it, which would start
@@ -1823,7 +1854,7 @@ export interface RunnerRegion {
  *  clients fall back to comparing the id with the managed status's runnerId. */
 export interface RunnerRowIdentity {
   id: string;
-  /** The name it registered with. A managed runner's is `orbit-managed`, which no client shows. */
+  /** The name it registered with. A managed runner's is `Orbit Cloud` (`orbit-managed` before migration 1250). */
   name: string;
   /** The name its owner gave it, which wins over both. */
   displayName: string | null;
@@ -2232,6 +2263,43 @@ export interface AccountRemoveResult {
 /** @deprecated The same result on the codex-named route; read AccountRemoveResult. */
 export type CodexAccountRemoveResult = AccountRemoveResult;
 
+/**
+ * Control plane → runner: make an added Claude account the Default — swap its login with the one in
+ * ~/.claude (docs/claude-default-swap-contract.md §5, `claude-account-swap/v1`). Redelivered every
+ * heartbeat while the swap is pending, so carrying it out twice must be the same as carrying it out once.
+ */
+export interface ClaudeAccountSwapCommand {
+  /** The added account to make the Default: its slot id under claude-accounts. Never `default`. */
+  account: string;
+  /** Identifies this swap (Runner.claudeAccountSwapAt), echoed in every result. */
+  attempt: string;
+  /** The accountUuid each folder held when the server asked, as the runner last reported them. Absent
+   *  while the runner reports none; the runner then tells a redelivery from a new request by `attempt`. */
+  expect?: { defaultAccountUuid: string; accountAccountUuid: string };
+}
+
+/** A Claude process on either folder of a swap that is not an Orbit session (a terminal `claude`). */
+export interface ClaudeAccountSwapForeignProcess {
+  pid: number;
+  command: string;
+}
+
+/** Runner → control plane: where one swap stands. The same body every time; the latest wins. */
+export interface ClaudeAccountSwapResult {
+  account: string;
+  attempt: string;
+  status: 'pending' | 'done' | 'failed';
+  /** failed: the machine's own one-line reason. Omitted otherwise. */
+  message?: string;
+  /** pending: the Orbit sessions with a turn in progress on either folder, which the swap waits on. */
+  waitingOn?: string[];
+  /** pending: Claude processes on either folder that are not Orbit sessions; the swap waits for them too. */
+  foreignProcesses?: ClaudeAccountSwapForeignProcess[];
+  /** done: the accountUuid now in each folder, and the emailAddress now in the added one — the former Default's,
+   *  which names it until the owner renames it (absent where its .claude.json names none, and from an older runner). */
+  now?: { defaultAccountUuid: string; accountAccountUuid: string; accountEmail?: string };
+}
+
 /** Runner → control plane: progress of a sign-in relay. */
 export interface LoginResult {
   /** `awaiting_code` (paste-back flow) and `awaiting_approval` (device flow) carry `url`; only
@@ -2344,10 +2412,12 @@ export interface DshRuntimeHealth {
  * Code's CLAUDE_CONFIG_DIR, an Antigravity Google sign-in's Gemini directory, a Kimi Code
  * KIMI_CODE_HOME, a Cursor CLI account's directory — which the runner signs in and runs sessions on.
  *
- * Nothing here names the account itself. Neither its email nor its account id leaves the machine
- * (docs/codex-rate-limit-reset-contract.md §3): `name` is what the user called the slot, and
- * `fingerprintPrefix`, where an engine reports one, is the start of a non-reversible fingerprint
- * the runner computed locally.
+ * Nothing the runner reports here names the account itself. Neither its email nor its account id leaves
+ * the machine in a report (docs/codex-rate-limit-reset-contract.md §3): `name` is what the user called
+ * the slot, and `fingerprintPrefix`, where an engine reports one, is the start of a non-reversible
+ * fingerprint the runner computed locally. The one exception is Orbit's, not the report's: `email` on a
+ * Claude Code former Default, which the owner chose to name it by (the Set as default swap's `done`
+ * carries it once).
  */
 export interface RunnerEngineAccount {
   /** Manual pause in Orbit. Sign-in and quota remain unchanged; expires automatically. */
@@ -2384,6 +2454,13 @@ export interface RunnerEngineAccount {
    *  refreshTokenExpiresAt, which the CLI warns about three days ahead). Absent where the CLI recorded
    *  none, for an account not signed in, and for every engine but Claude Code. */
   loginExpiresAt?: string;
+  /** Claude Code only: this added slot holds the account that was the Default before a Set as default
+   *  moved it here. Served by Orbit, never reported. Unless the owner renamed it, it has no `name`, and
+   *  is called by `email`, else "Former default" (runnerAccountCopy formerDefaultAccountName). */
+  formerDefault?: boolean;
+  /** With `formerDefault`: the account's email as Claude reported it at the swap. Absent where none was
+   *  known. */
+  email?: string;
 }
 
 /**
@@ -2618,6 +2695,23 @@ export interface RunnerAccountRemoveSession {
 /** @deprecated Codex's name for the same state; read RunnerAccountRemoveState, whose `engine` says
  *  which account store it is about. */
 export type RunnerCodexAccountRemoveState = RunnerAccountRemoveState;
+
+/**
+ * Browser-facing view of a runner's Set as default relay for Claude Code (docs/claude-default-swap-contract.md §5):
+ * which added account is becoming the Default, and where that stands.
+ */
+export interface RunnerClaudeAccountSwapState {
+  /** The added account being made the Default, or null when nothing was asked. */
+  account: string | null;
+  status: 'pending' | 'done' | 'failed' | null;
+  /** The reason it failed; null otherwise. */
+  message: string | null;
+  /** With `pending`: the sessions with a turn in progress the swap waits on ("waiting for N sessions to
+   *  finish their turns"), as far as the viewer can see them. Empty otherwise. */
+  waitingOn: RunnerAccountRemoveSession[];
+  /** With `pending`: Claude processes on either folder that are not Orbit sessions. Empty otherwise. */
+  foreignProcesses: ClaudeAccountSwapForeignProcess[];
+}
 
 /** Control plane → runner: merge one session's worktree branch into a target branch. */
 export interface MergeCommand {
@@ -3641,6 +3735,9 @@ export interface TurnCompleteRequest {
   branchMerged?: boolean;
   /** Exact tip SHA of the effective worktree branch (see SessionLiveState.branchSha). */
   branchSha?: string;
+  /** The branch's commits from its base to `branchSha`, newest first (runner branch_commits.go). Null or
+   *  absent when the runner did not read them, which keeps the stored list. */
+  branchCommits?: BranchCommit[] | null;
   /** The worktree's actual current HEAD branch (see SessionLiveState.worktreeBranch). */
   worktreeBranch?: string;
 }
@@ -3746,6 +3843,22 @@ export interface ChangedFile {
   status: string;
 }
 
+/** One commit of a session's branch, as the runner reads it between the branch's base and tip
+ *  (runner branch_commits.go). The status bar lists these, newest first. */
+export interface BranchCommit {
+  sha: string;
+  subject: string;
+  body?: string;
+  /** ISO 8601, the committer date. */
+  committedAt: string;
+  /** Set when the runner made the commit itself: 'session-end' (work left uncommitted when the
+   *  session ended), 'commit-button' (the owner's Commit), 'checkpoint' (a park checkpoint undone
+   *  on resume). Absent for a commit the agent made. */
+  savedBy?: string;
+  files: Array<{ path: string; additions: number; deletions: number }>;
+  filesTruncated?: boolean;
+}
+
 /** One changed file's full unified-diff text (git diff vs base), reported by the runner
  *  alongside the ChangedFile stats so the web can show a file's diff on demand. `patch` is
  *  absent for binary/omitted files; `truncated` marks a diff dropped for exceeding the size
@@ -3807,6 +3920,9 @@ export interface RunFinalizeRequest {
    *  park checkpoint, which the next resume undoes, and from older runners — the tip the last live
    *  report gave then stands. */
   branchSha?: string;
+  /** The branch's commits from its base to `branchSha`, newest first (runner branch_commits.go). Null or
+   *  absent when the runner did not read them, which keeps the stored list. */
+  branchCommits?: BranchCommit[] | null;
   /** Why the session's work did NOT reach its branch — the runner could not stage or could not
    *  commit it. Absent on every finalize that captured the work, and from runners too old to say.
    *
@@ -3951,6 +4067,9 @@ export interface SessionDiffResultRequest {
   branchMerged?: boolean;
   /** Exact tip SHA of the effective worktree branch (see SessionLiveState.branchSha). */
   branchSha?: string;
+  /** The branch's commits from its base to `branchSha`, newest first (runner branch_commits.go). Null or
+   *  absent when the runner did not read them, which keeps the stored list. */
+  branchCommits?: BranchCommit[] | null;
   /** The worktree's actual current HEAD branch (see SessionLiveState.worktreeBranch). */
   worktreeBranch?: string;
 }

@@ -1,6 +1,8 @@
 import { ForbiddenException, HttpException, ServiceUnavailableException } from '@nestjs/common';
 import type { ManagedRunnerManagementState } from '@prisma/client';
 import {
+  LEGACY_MANAGED_RUNNER_GENERATION_HEADER,
+  LEGACY_MANAGED_RUNNER_POD_UID_HEADER,
   MANAGED_RUNNER_GENERATION_HEADER,
   MANAGED_RUNNER_INSTANCE_CAPABILITY,
   MANAGED_RUNNER_INSTANCE_FENCED,
@@ -89,8 +91,9 @@ export function managedRunnerInstanceOffer(headers: Record<string, string | stri
     .some((value) => value.split(',').some((item) => item.trim().toLowerCase() === MANAGED_RUNNER_INSTANCE_CAPABILITY));
   return {
     declared,
-    generation: one(headers[MANAGED_RUNNER_GENERATION_HEADER]),
-    podUid: one(headers[MANAGED_RUNNER_POD_UID_HEADER])?.toLowerCase(),
+    // A runner image from before the headers were renamed sends them under their old names until it rolls.
+    generation: one(headers[MANAGED_RUNNER_GENERATION_HEADER]) ?? one(headers[LEGACY_MANAGED_RUNNER_GENERATION_HEADER]),
+    podUid: (one(headers[MANAGED_RUNNER_POD_UID_HEADER]) ?? one(headers[LEGACY_MANAGED_RUNNER_POD_UID_HEADER]))?.toLowerCase(),
   };
 }
 

@@ -99,11 +99,11 @@ cd "$REPO_ROOT"
 
 STAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 MR_DIR=data/managed-runners
-MR_NETWORK=orbit-managed-runners
+MR_NETWORK=orbit-cloud-runners
 # The gateway's published port in docker-compose.yml: how a managed runner reaches the apiserver, at the host's
 # address on its network, and the one port of this host the firewall leaves it.
 MR_API_PORT=2086
-FW_IMAGE=orbit-managed-runner-firewall:local
+FW_IMAGE=orbit-cloud-runner-firewall:local
 FW_PROFILE=managed-runner-firewall
 FW_SERVICE=managed-runner-firewall
 FW_LOCK_LINE=""
@@ -301,6 +301,9 @@ runner_link_warning() {
 # ── an administrator adds the firewall to a deployment that has managed runners ─────────────────────
 
 if [ "$ENABLE_FIREWALL" -eq 1 ]; then
+  # The network channel.json names: an install from before the rename made orbit-managed-runners, and its runners are there.
+  configured_network="$(grep -oE '"network"[[:space:]]*:[[:space:]]*"[^"]*"' "$MR_DIR/channel.json" 2>/dev/null | sed -E 's/.*"([^"]*)"$/\1/' || true)"
+  MR_NETWORK="${configured_network:-$MR_NETWORK}"
   docker network inspect "$MR_NETWORK" >/dev/null 2>&1 || die "network $MR_NETWORK does not exist"
   server="$(grep -oE '"serverUrl"[[:space:]]*:[[:space:]]*"[^"]*"' "$MR_DIR/profile.json" | sed -E 's/.*"([^"]*)"$/\1/')"
   gateway=""
@@ -351,7 +354,7 @@ prepare_managed_runners() {
     [[ "$source_sha" =~ ^[0-9a-f]{40}$ ]] \
       || die "the managed runner image is stamped with its full source commit: run from a Git checkout, or set ORBIT_SOURCE_SHA"
     managed_runner_image_build_from "$source_sha"
-    RUNNER_IMAGE=orbit-managed-runner:local
+    RUNNER_IMAGE=orbit-cloud-runner:local
   fi
   local image_id
   image_id="$(docker image inspect -f '{{.Id}}' "$RUNNER_IMAGE")" || die "no local image $RUNNER_IMAGE"
@@ -366,17 +369,17 @@ prepare_managed_runners() {
   chmod 700 "$MR_DIR"
   ( umask 077 && openssl rand -hex 32 >"$MR_DIR/token" )
   # Both files name paths inside the containers, where root Compose mounts this directory at
-  # /var/lib/orbit-managed-runners. A runner may ask for no more than the channel's limits; the
+  # /var/lib/orbit-cloud-runners. A runner may ask for no more than the channel's limits; the
   # profile's amounts are what each runner is given, and the pool is what the host has, less a quarter
   # of its CPU and memory and a tenth of its disk.
   ( umask 077 && cat >"$MR_DIR/channel.json" <<EOF
 {
   "schemaVersion": 1,
   "instanceId": "$instance",
-  "listen": { "unixSocket": "/var/lib/orbit-managed-runners/channel.sock" },
-  "tokenFile": "/var/lib/orbit-managed-runners/token",
+  "listen": { "unixSocket": "/var/lib/orbit-cloud-runners/channel.sock" },
+  "tokenFile": "/var/lib/orbit-cloud-runners/token",
   "dockerSocket": "/var/run/docker.sock",
-  "stateDir": "/var/lib/orbit-managed-runners/state",
+  "stateDir": "/var/lib/orbit-cloud-runners/state",
   "image": "$image_id",
   "network": "$MR_NETWORK",
   "limits": {
@@ -402,8 +405,8 @@ EOF
   "resourceProfileId": "docker-default",
   "docker": {
     "instanceId": "$instance",
-    "channel": { "socketPath": "/var/lib/orbit-managed-runners/channel.sock" },
-    "tokenFile": "/var/lib/orbit-managed-runners/token"
+    "channel": { "socketPath": "/var/lib/orbit-cloud-runners/channel.sock" },
+    "tokenFile": "/var/lib/orbit-cloud-runners/token"
   },
   "storage": { "capacity": "20Gi" },
   "runner": {

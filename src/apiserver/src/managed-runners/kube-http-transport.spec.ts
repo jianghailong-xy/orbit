@@ -23,7 +23,7 @@ const PSK = {
 } as unknown as KubeTls;
 
 function request(port: number, timeoutMs = 2_000): KubeTransportRequest {
-  return { method: 'GET', url: new URL(`https://127.0.0.1:${port}/api/v1/namespaces/orbit-managed-test/pods/mr-x`), headers: {}, timeoutMs, tls: PSK };
+  return { method: 'GET', url: new URL(`https://127.0.0.1:${port}/api/v1/namespaces/orbit-cloud-test/pods/mr-x`), headers: {}, timeoutMs, tls: PSK };
 }
 
 async function listening<T extends TcpServer>(server: T): Promise<{ port: number; close(): Promise<void> }> {

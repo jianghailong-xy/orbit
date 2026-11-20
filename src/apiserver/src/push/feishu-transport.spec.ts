@@ -15,6 +15,7 @@ import {
   approvalOutcome,
   FEISHU_ALERT_ATTEMPTS,
   FeishuTransport,
+  feishuStartedBy,
   ownerItemOutcome,
   type FeishuCardSpec,
   type FeishuTarget,
@@ -33,6 +34,7 @@ const TARGET: FeishuTarget = {
   openId: 'ou_owner',
   detail: 'TITLES_ONLY',
   approvalsInFeishu: true,
+  showOrbit: true,
 };
 
 interface Posted { spec: FeishuCardSpec; alert: FeishuAlert | null; card: FeishuCard | null }
@@ -45,7 +47,7 @@ function fakeFeishu(prisma: unknown, target: FeishuTarget | null = TARGET) {
     target: async () => target,
     post: async (t: FeishuTarget, spec: FeishuCardSpec) => {
       const alert = await spec.render();
-      posted.push({ spec, alert, card: alert ? renderFeishuCard(alert, { detail: t.detail, approvalsInFeishu: t.approvalsInFeishu, openUrl: spec.openUrl }) : null });
+      posted.push({ spec, alert, card: alert ? renderFeishuCard(alert, { detail: t.detail, approvalsInFeishu: t.approvalsInFeishu, showOrbit: t.showOrbit, openUrl: spec.openUrl }) : null });
       return alert !== null;
     },
     joinApprovalStretch: async (_t: FeishuTarget, sessionId: string, approvalId: string) => {
@@ -421,20 +423,37 @@ test('an alert whose caller awaits it is not held by Feishu: the devices are, Fe
 
 // ── F1-5: a card whose matter was settled elsewhere (§6.2) ───────────────────────────────────────────────────────────
 
-test('an approval card says how its approvals were settled, at the time they were (UTC)', () => {
+test('an approval card says how its approvals were settled, where and at the time they were (UTC)', () => {
   const now = new Date('2026-11-08T12:00:00Z');
   const at = new Date('2026-11-08T10:32:10Z');
   const later = new Date('2026-11-08T10:40:00Z');
-  assert.equal(approvalOutcome([{ toolName: 'Bash', status: 'ALLOWED', decidedAt: at }], now), 'Allowed in Orbit · 10:32 UTC');
+  const web = 'LOGIN';
+  // A click on the Feishu card (decidedCredentialKind FEISHU) says Feishu; an answer in the web app or on a phone, Orbit.
+  assert.equal(approvalOutcome([{ toolName: 'Bash', status: 'ALLOWED', decidedAt: at, decidedCredentialKind: 'FEISHU' }], now), 'Allowed in Feishu · 10:32 UTC');
+  assert.equal(approvalOutcome([{ toolName: 'Bash', status: 'DENIED', decidedAt: at, decidedCredentialKind: 'FEISHU' }], now), 'Denied in Feishu · 10:32 UTC');
+  assert.equal(approvalOutcome([{ toolName: 'Bash', status: 'ALLOWED', decidedAt: at, decidedCredentialKind: web }], now), 'Allowed in Orbit · 10:32 UTC');
   assert.equal(approvalOutcome([
-    { toolName: 'Bash', status: 'DENIED', decidedAt: at }, { toolName: 'Edit', status: 'DENIED', decidedAt: later },
+    { toolName: 'Bash', status: 'DENIED', decidedAt: at, decidedCredentialKind: web },
+    { toolName: 'Edit', status: 'DENIED', decidedAt: later, decidedCredentialKind: 'PAT' },
   ], now), 'Denied in Orbit · 10:40 UTC', 'the last answer');
   assert.equal(approvalOutcome([
-    { toolName: 'Bash', status: 'ALLOWED', decidedAt: at }, { toolName: 'Edit', status: 'DENIED', decidedAt: at },
+    { toolName: 'Bash', status: 'ALLOWED', decidedAt: at, decidedCredentialKind: web },
+    { toolName: 'Edit', status: 'DENIED', decidedAt: at, decidedCredentialKind: web },
   ], now), 'Answered in Orbit · 10:32 UTC');
-  assert.equal(approvalOutcome([{ toolName: 'AskUserQuestion', status: 'ALLOWED', decidedAt: at }], now), 'Answered in Orbit · 10:32 UTC');
-  assert.equal(approvalOutcome([{ toolName: 'Bash', status: 'ABANDONED', decidedAt: null }], now), 'No longer waiting in Orbit · 12:00 UTC');
-  assert.equal(approvalOutcome([{ toolName: 'Bash', status: 'PENDING', decidedAt: null }], now), 'No longer waiting in Orbit · 12:00 UTC',
+  assert.equal(approvalOutcome([
+    { toolName: 'Bash', status: 'ALLOWED', decidedAt: at, decidedCredentialKind: 'FEISHU' },
+    { toolName: 'Edit', status: 'DENIED', decidedAt: at, decidedCredentialKind: 'FEISHU' },
+  ], now), 'Answered in Feishu · 10:32 UTC');
+  assert.equal(approvalOutcome([
+    { toolName: 'Bash', status: 'ALLOWED', decidedAt: at, decidedCredentialKind: 'FEISHU' },
+    { toolName: 'Edit', status: 'ALLOWED', decidedAt: at, decidedCredentialKind: web },
+  ], now), 'Allowed · 10:32 UTC', 'answered in both: no one place');
+  assert.equal(approvalOutcome([{ toolName: 'Bash', status: 'DENIED', decidedAt: at, decidedCredentialKind: null }], now), 'Denied in Orbit · 10:32 UTC',
+    'no credential recorded: not a Feishu click, which always records FEISHU');
+  assert.equal(approvalOutcome([{ toolName: 'AskUserQuestion', status: 'ALLOWED', decidedAt: at, decidedCredentialKind: web }], now), 'Answered in Orbit · 10:32 UTC');
+  assert.equal(approvalOutcome([{ toolName: 'AskUserQuestion', status: 'ALLOWED', decidedAt: at, decidedCredentialKind: 'FEISHU' }], now), 'Answered in Feishu · 10:32 UTC');
+  assert.equal(approvalOutcome([{ toolName: 'Bash', status: 'ABANDONED', decidedAt: null, decidedCredentialKind: null }], now), 'No longer waiting in Orbit · 12:00 UTC');
+  assert.equal(approvalOutcome([{ toolName: 'Bash', status: 'PENDING', decidedAt: null, decidedCredentialKind: null }], now), 'No longer waiting in Orbit · 12:00 UTC',
     'a session that left needs-you with the approval unanswered');
   assert.equal(ownerItemOutcome({ resolution: 'ANSWERED', resolvedAt: at }, now), 'Answered in Orbit · 10:32 UTC');
   assert.equal(ownerItemOutcome({ resolution: 'LANDED', resolvedAt: at }, now), 'Resolved in Orbit · 10:32 UTC');
@@ -465,4 +484,41 @@ test('the badge reconcile runs with Feishu as the only channel, and hands the tr
   const quiet = new PushService(prisma as never, NO_DEVICES);
   quiet.scheduleBadgeSync(OWNER);
   await new Promise((r) => setTimeout(r, 400));
+});
+
+test('an approval card of a session someone else started says who and where; the owner\'s own says nothing', async () => {
+  const sessionId = randomUUID();
+  const world = (turn: { externalSenderSource: string | null; externalSenderName: string | null } | null, chatId: string | null, chatName: string | null | undefined) => ({
+    session: { findFirst: async () => ({ title: 'Fix the build' }) },
+    approval: { findMany: async () => [{ id: randomUUID(), toolName: 'Bash', input: { command: 'ls' } }] },
+    conversationTurn: { findFirst: async (q: { orderBy: unknown }) => {
+      assert.deepEqual(q.orderBy, [{ seq: 'asc' }], 'the session\'s first turn');
+      return turn;
+    } },
+    feishuThread: { findFirst: async () => (chatId ? { chatId } : null) },
+    feishuChatRoute: { findFirst: async (q: { where: { chatId: string; appId: string } }) => {
+      assert.equal(q.where.appId, TARGET.appId);
+      return chatName === undefined ? null : { chatName };
+    } },
+  });
+  const draw = async (prisma: unknown) => {
+    const alert = await FeishuTransport.prototype.approvalCard.call({ prisma } as unknown as FeishuTransport, TARGET, sessionId, null).render();
+    assert.ok(alert && alert.kind === 'approval');
+    return { alert, card: texts(renderFeishuCard(alert, { detail: 'TITLES_ONLY', approvalsInFeishu: true, showOrbit: true, openUrl: 'u' })) };
+  };
+  const someone = { externalSenderSource: 'FEISHU', externalSenderName: 'Li Lei' };
+
+  const group = await draw(world(someone, 'oc_group', 'Release crew'));
+  assert.equal(group.alert.startedBy, 'Started by Li Lei in Release crew');
+  assert.match(group.card, /Started by Li Lei in Release crew/, 'TITLES_ONLY shows it');
+
+  const direct = await draw(world(someone, 'oc_p2p', undefined));
+  assert.equal(direct.alert.startedBy, 'Started by Li Lei in a direct message');
+
+  const own = await draw(world({ externalSenderSource: null, externalSenderName: null }, 'oc_group', 'Release crew'));
+  assert.equal(own.alert.startedBy, undefined);
+  assert.doesNotMatch(own.card, /Started by/);
+
+  // A lookup that fails costs the card the line, not the card.
+  assert.equal(await feishuStartedBy({ conversationTurn: { findFirst: async () => { throw new Error('gone'); } } } as never, TARGET, sessionId), null);
 });

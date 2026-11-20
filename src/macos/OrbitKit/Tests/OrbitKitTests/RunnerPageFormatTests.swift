@@ -136,7 +136,7 @@ final class RunnerPageFormatTests: XCTestCase {
     }
 
     func testManagedFirstKeepsTheSavedOrderWithoutAManagedRunner() throws {
-        let runners = [try macMini(), try runner(Self.wikovaJSON, ["name": "orbit-managed"])]
+        let runners = [try macMini(), try runner(Self.wikovaJSON, ["name": "orbit-cloud"])]
         XCTAssertEqual(RunnerPageFormat.managedFirst(runners, managedRunnerID: nil), runners)
     }
 
