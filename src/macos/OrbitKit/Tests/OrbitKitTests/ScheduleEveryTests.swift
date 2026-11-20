@@ -90,9 +90,9 @@ final class ScheduleEveryTests: XCTestCase {
         }
         // Newest first, as a run list reads.
         let runs = [run("r5", "2025-11-14T09:00", "NO_CHANGE"),
-                    run("r4", "2025-11-14T08:30", "MISSED"), run("r3", "2025-11-14 04:00", "MISSED"),
+                    run("r4", "2025-11-14T08:30", "MISSED"), run("r3", "2025-11-14T04:00", "MISSED"),
                     run("r2", "2025-11-14T01:00", "MISSED"),
-                    run("r1", "2025-11-13T22:00", "NO_CHANGE"), run("r0", "2025-11-13 21:00", "MISSED")]
+                    run("r1", "2025-11-13T22:00", "NO_CHANGE"), run("r0", "2025-11-13T21:00", "MISSED")]
         let collapsed = ScheduleDisplay.collapseMissed(runs)
         XCTAssertEqual(collapsed.count, 4)
         guard case .missed(let streak) = collapsed[1] else { return XCTFail("the streak is one row") }

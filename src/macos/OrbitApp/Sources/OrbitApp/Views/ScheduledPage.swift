@@ -179,7 +179,7 @@ enum ScheduleTimelineRows {
                     id: "\(group.id)-\(item.id)",
                     circle: ScheduleDisplay.scheduleCircle(state: "ACTIVE", consecutiveFailures: 0, draft: true),
                     title: card.title ?? "",
-                    line: Self.withEnd(wide
+                    line: wide
                         ? ScheduleDisplay.rowLine(rule: rule, workspaceName: card.runsIn?.workspaceName,
                                                   accessLevel: accessLevel, state: "ACTIVE", heldReason: nil, draft: true)
                         : ScheduleDisplay.phoneRowLine(rule: rule, workspaceName: card.runsIn?.workspaceName,
@@ -249,7 +249,7 @@ enum ScheduleTimelineRows {
                     id: "\(group.id)-\(item.id)",
                     circle: circle,
                     title: s.title,
-                    line: wide
+                    line: Self.withEnd(wide
                         ? ScheduleDisplay.rowLine(rule: s.rule, workspaceName: s.workspaceName, accessLevel: s.accessLevel,
                                                   state: s.state, heldReason: s.heldReason, agentName: s.agentName,
                                                   pausedAt: pausedAt, timezone: scheduled.timezone)
