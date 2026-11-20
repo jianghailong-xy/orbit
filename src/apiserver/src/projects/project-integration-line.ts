@@ -13,6 +13,7 @@ import {
   type ProjectIntegrationView as SharedProjectIntegrationView,
   type ProjectLastMainBranch,
   type ProjectListIntegration,
+  type ProjectStartRecord,
   type ProjectIntegrationInFlight,
   type ProjectIntegrationJob,
   type ProjectIntegrationCheck,
@@ -1786,6 +1787,9 @@ export async function rememberedUpstreamRef(
  * first integration of a project nobody started all bind through here. The binding does not
  * record a choice of its own: it carries one, and `upstream_ref_chosen_at` stays null until the
  * owner names this project's upstream.
+ *
+ * A project started with no line (P-M2, D8) had no binding to hold the merge check its owner set on
+ * the start card, so the start recorded it (`startedWithMergeCheck`) and the binding starts from it.
  */
 async function bind(
   tx: Prisma.TransactionClient,
@@ -1793,6 +1797,7 @@ async function bind(
 ): Promise<ProjectCodebaseLine> {
   const upstreamRef = await rememberedUpstreamRef(tx, binding.ownerId, binding.canonicalRepoUrl)
     ?? DEFAULT_UPSTREAM_REF;
+  const mergeCheck = await startedWithMergeCheck(tx, binding.projectId);
   await tx.projectCodebase.createMany({
     data: [{
       ownerId: binding.ownerId,
@@ -1802,10 +1807,34 @@ async function bind(
       integrationRef: upstreamRef,
       refAuthority: 'REMOTE',
       remoteName: 'origin',
+      ...mergeCheck,
     }],
     skipDuplicates: true,
   });
   return (await lockCodebase(tx, binding.projectId))!;
+}
+
+/**
+ * The merge check a start with no line recorded (D8): where a project that started before it had a
+ * binding keeps the check its owner chose on the start card, until `bind` makes the binding that
+ * carries it. Nothing for a project not started, or started with a line — that start wrote its
+ * check on the binding it made.
+ */
+async function startedWithMergeCheck(
+  tx: Prisma.TransactionClient,
+  projectId: string,
+): Promise<{ mergeCheckCommand: string | null; mergeCheckTimeoutSeconds: number | null } | Record<string, never>> {
+  const start = await tx.projectStandardSetConfirmation.findFirst({
+    where: { projectId, startedWith: { not: Prisma.DbNull } },
+    orderBy: [{ confirmedAt: 'desc' }, { id: 'desc' }],
+    select: { startedWith: true },
+  });
+  const settings = (start?.startedWith as unknown as ProjectStartRecord | null)?.settings;
+  if (!settings || settings.line !== undefined) return {};
+  return {
+    mergeCheckCommand: settings.mergeCheckCommand ?? null,
+    mergeCheckTimeoutSeconds: settings.mergeCheckTimeoutSeconds ?? null,
+  };
 }
 
 function repositoryUnknown(message: string): ConflictException {
@@ -2173,8 +2202,11 @@ export async function defaultStartLine(
  * A participant, like `configureProjectIntegration`, which does the writing: the caller owns the
  * transaction and holds the project row. Four ways it goes:
  *
- *   * NO LINE NAMED (P-M2). Nothing is written and no repository is needed; the answer carries no
- *     line, and the default rule decides it when the first task with commits is done.
+ *   * NO LINE NAMED (P-M2). Nothing about the line or the landing check is written and no
+ *     repository is needed; the answer carries no line, and the default rule decides it when the
+ *     first task with commits is done. The merge check is kept (D8): written on the binding when the
+ *     project has one, and otherwise only answered, for the start to record — the binding the
+ *     first committing DONE makes starts from that record (`bind`).
  *   * THE LINE HAS STARTED. It is locked (L4), so the start leaves it where it is and writes only the
  *     merge check — its command and the budget that check runs on — and the delivery mode it names,
  *     which L4 does not lock (O-L1), and says so — `locked`, with the line the project is actually
@@ -2205,12 +2237,26 @@ export async function startProjectLine(
   },
 ): Promise<StartLineSettings & { locked: boolean }> {
   const { ownerId, projectId, settings } = input;
-  // P-M2: a start that names no line writes nothing about it or the checks, and needs no
-  // repository. The line is decided by the default rule when the first task with commits is done.
-  if (settings.line === undefined) {
-    return { mergeCheckCommand: null, mergeCheckTimeoutSeconds: null, locked: false };
-  }
   const mergeCheckCommand = settings.mergeCheckCommand?.trim() || null;
+  // P-M2: a start that names no line writes nothing about the line or the landing check, and needs
+  // no repository. The line is decided by the default rule when the first task with commits is
+  // done. The merge check the owner set on the card is kept (D8): on the binding when the project
+  // has one, and otherwise in the start's own record, which `bind` starts the binding from.
+  if (settings.line === undefined) {
+    const namedBudget = settings.mergeCheckTimeoutSeconds !== undefined
+      ? { mergeCheckTimeoutSeconds: settings.mergeCheckTimeoutSeconds } : {};
+    if (!(await lockCodebase(tx, projectId))) {
+      return { mergeCheckCommand, mergeCheckTimeoutSeconds: settings.mergeCheckTimeoutSeconds ?? null, locked: false };
+    }
+    const written = await configureProjectIntegration(tx, {
+      ownerId, projectId, settings: { mergeCheckCommand, ...namedBudget },
+    });
+    return {
+      mergeCheckCommand: written.mergeCheckCommand,
+      mergeCheckTimeoutSeconds: written.mergeCheckTimeoutSeconds,
+      locked: false,
+    };
+  }
   // Only when the start NAMED a budget: absent is a client that does not know the field, and
   // reading that as "no budget" would clear one its owner never saw (`StartProjectDto`). `null` is
   // the naming that says "back to the default", and it is written like any other value.
