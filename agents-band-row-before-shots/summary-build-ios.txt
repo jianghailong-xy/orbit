@@ -1,0 +1,7 @@
+Test Case '-[LandingSessionProbeUITests.AgentsBandRowTests testRunningOnAnotherModelWithAFailure]' started.
+/Users/runner/work/orbit/orbit/.ls-probe/UITests/ProbeCase.swift:54: error: -[LandingSessionProbeUITests.AgentsBandRowTests testRunningOnAnotherModelWithAFailure] : failed - ios-band: I'll hand this to a SubAgent never showed — the app did not render the stub's state
+Test Case '-[LandingSessionProbeUITests.AgentsBandRowTests testRunningOnAnotherModelWithAFailure]' failed (139.577 seconds).
+	 Executed 1 test, with 1 failure (0 unexpected) in 139.577 (139.585) seconds
+	 Executed 1 test, with 1 failure (0 unexpected) in 139.577 (139.587) seconds
+	 Executed 1 test, with 1 failure (0 unexpected) in 139.577 (139.596) seconds
+** TEST FAILED **

@@ -1,0 +1,34 @@
+==> iPhone 6478AFFB-AE17-412A-A1E5-51BCFFD300B6
+==> stub ready on 127.0.0.1:8765 (pid 6035, after 6s); {"line": "PROJECT_BRANCH", "ref": "project/P1", "upstreamRef": "main", "integrat
+==> ios
+Test Case '-[LandingSessionProbeUITests.AgentsBandRowTests testRunningOnAnotherModelWithAFailure]' started.
+/Users/runner/work/orbit/orbit/.ls-probe/UITests/ProbeCase.swift:54: error: -[LandingSessionProbeUITests.AgentsBandRowTests testRunningOnAnotherModelWithAFailure] : failed - ios-band: I'll hand this to a SubAgent never showed — the app did not render the stub's state
+Test Case '-[LandingSessionProbeUITests.AgentsBandRowTests testRunningOnAnotherModelWithAFailure]' failed (139.577 seconds).
+	 Executed 1 test, with 1 failure (0 unexpected) in 139.577 (139.585) seconds
+	 Executed 1 test, with 1 failure (0 unexpected) in 139.577 (139.587) seconds
+	 Executed 1 test, with 1 failure (0 unexpected) in 139.577 (139.596) seconds
+** TEST FAILED **
+.ls-probe/run.sh: line 80:  6035 Terminated: 15          python3 -u stub.py 8765 "$1" > "$1.out" 2>&1
+grep: /Users/runner/work/orbit/orbit/.ls-probe/shots/mac/requests.log: No such file or directory
+grep: /Users/runner/work/orbit/orbit/.ls-probe/shots/mac/requests.log: No such file or directory
+/Users/runner/work/orbit/orbit/.ls-probe/shots/ios:
+total 2072
+drwxr-xr-x  12 runner  staff     384 Nov 20 11:45 .
+drwxr-xr-x   4 runner  staff     128 Nov 20 11:23 ..
+-rw-r--r--@  1 runner  staff       0 Nov 20 11:43 AgentsBandRowTeststestRunningOnAnotherModelWithAFailure-notes.txt
+drwxr-xr-x   9 runner  staff     288 Nov 20 11:45 attachments
+-rw-r--r--   1 runner  staff  254991 Nov 20 11:43 ios-1-agents-row.png
+-rw-r--r--@  1 runner  staff   20139 Nov 20 11:43 missing-ios-band.txt
+-rw-r--r--   1 runner  staff     726 Nov 20 11:45 not-served.txt
+-rw-r--r--   1 runner  staff   10524 Nov 20 11:43 requests.log
+-rw-r--r--   1 runner  staff       0 Nov 20 11:27 requests.log.out
+-rw-r--r--@  1 runner  staff   20138 Nov 20 11:43 tree-ios-band.txt
+-rw-r--r--   1 runner  staff      40 Nov 20 11:45 writes.txt
+-rw-r--r--   1 runner  staff  737829 Nov 20 11:45 xcodebuild-ios.log
+
+/Users/runner/work/orbit/orbit/.ls-probe/shots/mac:
+total 0
+drwxr-xr-x  4 runner  staff  128 Nov 20 11:45 .
+drwxr-xr-x  4 runner  staff  128 Nov 20 11:23 ..
+-rw-r--r--  1 runner  staff    0 Nov 20 11:45 not-served.txt
+-rw-r--r--  1 runner  staff    0 Nov 20 11:45 writes.txt
