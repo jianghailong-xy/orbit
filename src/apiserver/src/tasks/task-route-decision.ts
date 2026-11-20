@@ -73,7 +73,7 @@ export function taskRouteReads(prisma: PrismaService, ownerId: string, now: Date
     workspace: (id: string) => once(`workspace:${id}`, () => prisma.workspace.findFirst({
       where: { id, ownerId },
       select: {
-        runnerId: true, effort: true, modelRouting: true, modelRoutingProviders: true,
+        runnerId: true, effort: true,
         env: true, codexAccount: true, claudeAccount: true, kimiAccount: true, antigravityAccount: true, cursorAccount: true,
       },
     })),
@@ -251,9 +251,21 @@ function windowName(window: PlanUsageWindow | undefined, slot: string): string {
  * When an account's quota goes to waste and whether it is nearly spent, as account selection weighs them
  * (quotaExpiresAt, quotaNearLimit in planUsage.ts): what the SubAgent router spends first (§4.2).
  */
-export function quotaTiming(snapshot: PlanUsageSnapshot | null | undefined, now: Date): { expiresAt: number | null; nearLimit: boolean } {
-  const at = quotaExpiresAt(snapshot, now);
-  return { expiresAt: Number.isFinite(at) ? at : null, nearLimit: quotaNearLimit(snapshot, now) };
+export function quotaTiming(
+  snapshot: PlanUsageSnapshot | null | undefined,
+  now: Date,
+): { expiresAt: number | null; nearLimit: boolean; opusUtilization: number | null } {
+  // A model family's own window (Opus or Sonnet weekly) caps that family, not the account: it moves the family's
+  // rows (opusUtilization), never the account's place.
+  const account = snapshot ? { ...snapshot, sevenDayOpus: undefined, sevenDaySonnet: undefined } : snapshot;
+  const at = quotaExpiresAt(account, now);
+  const opus = snapshot?.sevenDayOpus;
+  const live = opus && !(Date.parse(opus.resetsAt ?? '') <= now.getTime());
+  return {
+    expiresAt: Number.isFinite(at) ? at : null,
+    nearLimit: quotaNearLimit(account, now),
+    opusUtilization: live ? opus.utilization : null,
+  };
 }
 
 /**
@@ -443,14 +455,12 @@ export interface TaskRouteSubject {
  * Route one fresh run: read the router's inputs, call it, and return the decision with the
  * baseline and features it is recorded with (§7.3).
  *
- * `applied` when the Agent has smart selection on (`workspace.modelRouting`) and a tier was decided:
- * the run is then created on the routed provider, model and effort (§7.4). Otherwise it is the
- * shadow — the run is dispatched exactly as it was before routing existed, and the decision records
- * what routing would have picked.
+ * `applied` whenever a tier was decided: the run is then created on the routed provider, model and
+ * effort (§7.4). There is no per-Agent switch any more (owner, 2026-11-20; `workspace.modelRouting`
+ * is no longer read): the account's switch alone decides.
  *
  * Null when the account has smart model selection off (common/model-routing-switch.ts): routing
- * does not exist then, so there is no decision to record, shadow or not, and the run is dispatched
- * as before routing whatever the Agent's own switch says.
+ * does not exist then, so there is no decision to record, and the run is dispatched as before routing.
  */
 export async function planTaskRunRoute(
   reads: TaskRouteReads,
@@ -525,9 +535,9 @@ export async function planTaskRunRoute(
     : null;
   return {
     policyVersion: decision.policyVersion,
-    // Only a decided tier is applied: one that kept the baseline (a model pin, no tier table, no
-    // suggestion, no catalogue) changes nothing whether the switch is on or not.
-    applied: agent?.modelRouting === true && decision.level !== null,
+    // Only a decided tier is applied: one that kept the baseline (a model pin, no suggestion, no
+    // provider that can take it) changes nothing.
+    applied: decision.level !== null,
     level: decision.level,
     engine: decision.engine,
     provider: decision.provider,
@@ -563,7 +573,6 @@ export async function planTaskRunRoute(
         : null,
       escalatedFrom,
       opusWeeklyUtilization: env.planUsage?.claude?.sevenDayOpus?.utilization ?? null,
-      modelRouting: agent?.modelRouting === true,
       verifiedRunEngine: engines.verifiedRunEngine ?? null,
     },
     reasons: decision.reasons,

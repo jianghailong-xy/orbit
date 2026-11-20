@@ -699,6 +699,16 @@ class ComposerDeviceTest {
         assertEquals("no engine's name is cut with Harness ticked: $report", emptyList<String>(), ticked.filterValues { it }.keys.toList())
     }
 
+    /** The session page with one finished exchange, to set beside iOS's (compare-android-ios: the iOS probe's S2, same words). */
+    @Test fun sessionPageWithOneFinishedExchange() = journey("session-page") {
+        login("""{"rows":[{"seq":1,"type":"user","turnId":"t1","payload":{"text":"Highlight the matches in wiki search results."}},
+              {"seq":2,"type":"assistant","turnId":"t1","payload":{"text":"Done — matches are highlighted in titles and in the body excerpt.","messageId":"m2"}},
+              {"seq":3,"type":"result","turnId":"t1","payload":{"subtype":"success","result":"done"}}]}""")
+        awaitText("Done — matches are highlighted in titles and in the body excerpt.")
+        compose.waitForIdle()
+        capture("session-page")
+    }
+
     /** The auto-retry card (baseline): a spent quota counts down to its reset, and its switch turns the armed retry off. */
     @Test fun a07cAutoRetryCardCountsDownAndItsSwitchTurnsItOff() = journey("a07c-auto-retry") {
         login("""{"rows":[{"seq":1,"type":"user","payload":{"text":"Ship the release notes"}},

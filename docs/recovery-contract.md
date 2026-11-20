@@ -603,11 +603,12 @@ the blockers in `resources`. A resume refusal also keeps the session-state reaso
 | `WORKSPACE_NAME_NOT_FOUND` | 400 | CALLER | NEVER | `FIX_REQUEST` | | | spawn |
 | `ENGINE_SIGNED_OUT` | 409 | USER | AFTER_STATE_CHANGE | `AWAIT_USER_FIX` | | runner | create |
 | `MANAGED_RUNNER_FAILED` | 409 | USER | AFTER_STATE_CHANGE | `AWAIT_USER_FIX` | | named workspace or session, runner | spawn (before any child), resume |
+| `RUNNER_DISK_BELOW_FLOOR` | 409 | USER | AFTER_STATE_CHANGE | `AWAIT_USER_FIX` | | workspace, runner | spawn (before any child) |
 | `SESSION_TRASHED` | 409 | USER | AFTER_STATE_CHANGE | `AWAIT_USER_FIX` | | session | resume, send, interrupt with a message |
 | `SESSION_ENDING` | 409 | SYSTEM | AFTER_STATE_CHANGE | `POLL_STATE` | 5 s | session | resume |
 | `SESSION_NOT_TERMINAL` | 409 | SYSTEM | AFTER_STATE_CHANGE | `POLL_STATE` | 5 s | session | resume |
 | `SESSION_NOT_STARTED`, `SESSION_MISSING_CONTEXT`, `SESSION_NO_RUNNER` | 409 | CALLER | NEVER | `CREATE_REPLACEMENT` | | session | resume |
-| `SESSION_RUNNER_OFFLINE` | 409 | SYSTEM | AFTER_STATE_CHANGE | `AWAIT_SYSTEM_FIX` | 60 s | session, runner | resume |
+| `SESSION_RUNNER_OFFLINE` | 409 | SYSTEM | AFTER_STATE_CHANGE | `AWAIT_SYSTEM_FIX` | 60 s | session, runner (a spawn: workspace, runner) | resume, spawn (before any child) |
 | `SESSION_ENDED` | 409 | CALLER | NEVER | `FIX_REQUEST` (send with `resumeIfEnded`, or to a new session) | | session | send, interrupt |
 | `SESSION_NEXT_TURN_STARTING` | 409 | SYSTEM | SAFE | `RETRY` | 2 s | session | interrupt |
 
@@ -636,7 +637,7 @@ fields alone (`LOOP_OR_DEPTH_STOPS`, `THE_STATE_MOVES`, and `AWAIT_USER_FIX` und
 
 | Code | Disposition | `next.type` |
 | --- | --- | --- |
-| `ORCHESTRATION_DISABLED`, `ENGINE_SIGNED_OUT`, `MANAGED_RUNNER_FAILED`, `SESSION_TRASHED` | `HUMAN` | `ask_user` |
+| `ORCHESTRATION_DISABLED`, `ENGINE_SIGNED_OUT`, `MANAGED_RUNNER_FAILED`, `RUNNER_DISK_BELOW_FLOOR`, `SESSION_TRASHED` | `HUMAN` | `ask_user` |
 | `CALLER_SESSION_NOT_LIVE`, `SPAWN_DEPTH_LIMIT`, `SPAWN_TREE_RATE_LIMIT` | `STOP` | `stop` |
 | `SPAWN_TREE_OUTSTANDING_LIMIT`, `SESSION_ENDING`, `SESSION_NOT_TERMINAL`, `SESSION_RUNNER_OFFLINE` | `WAIT` | `wait` |
 | `WORKSPACE_NAME_*`, `SESSION_NOT_STARTED`, `SESSION_MISSING_CONTEXT`, `SESSION_NO_RUNNER`, `SESSION_ENDED` | `AUTOMATIC` | `manual` (the caller changes its request or makes a new session; never the same one again) |
