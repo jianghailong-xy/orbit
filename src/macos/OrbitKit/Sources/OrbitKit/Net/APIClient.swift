@@ -1302,6 +1302,13 @@ public final class APIClient: @unchecked Sendable {
         try await postEmpty("projects/\(projectID)/integration/jobs/\(jobID)/retry")
     }
 
+    /// Revert, on a coordinator's change in the project's landing-check history (§12.15 P-R1): the
+    /// server puts the change's old value back and the field then needs a card from the coordinator.
+    /// The answer is not read: the page reads the project again.
+    public func revertSettingChange(projectID: String, changeID: String) async throws {
+        _ = try await postRaw("projects/\(projectID)/setting-changes/\(changeID)/revert", body: Optional<Empty>.none)
+    }
+
     /// The owner's "Land without the check" on a landing in flight (§2.4 J-S5): the server stops it
     /// and lands it again with the landing check not run, recorded as skipped by the owner. The
     /// answer is not read: the card redraws from the integration view read again.
