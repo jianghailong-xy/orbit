@@ -544,28 +544,35 @@ private fun LandingStepRow(section: LandingSection, step: LandingStep, status: S
     Column(Modifier.fillMaxWidth().clip(shape).background(if (open) muted.copy(alpha = 0.06f) else Color.Transparent)
         .drawBehind { drawRect(tone, size = androidx.compose.ui.geometry.Size(3.dp.toPx(), size.height)) }
         .testTag(if (open) "landing:step-open:${step.key}" else "landing:step:${step.key}")) {
+        val exempt = LandingSteps.taskExempt(step)
         Row(Modifier.fillMaxWidth().clickable(onClickLabel = step.name) { pressed = !open }
             .padding(start = 11.dp, end = 8.dp, top = 6.dp, bottom = 6.dp).testTag("landing:step-row:${step.key}"),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
             Icon(painterResource(R.drawable.ic_chevron_forward), null, Modifier.size(12.dp).rotate(if (open) 90f else 0f), tint = muted.copy(alpha = 0.6f))
-            // A task exempt from the landing check (board docs/mocks/landing-measured ④, D5): "Landing check · Skipped", amber, and
-            // why — the step did not fail.
-            val exempt = LandingSteps.taskExempt(step)
-            Text(if (exempt != null) LandingMeasuredCopy.skippedCheck(step.name) else step.name, Modifier.testTag("landing:step-name"),
-                style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
-                fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false, color = if (exempt != null) skippedInk() else Color.Unspecified)
-            Text(exempt?.let { LandingMeasuredCopy.exemptBecause(LandingSteps.exemptReason(it)) } ?: LandingSessionModel.timelineText(step.summary),
-                Modifier.weight(1f).testTag("landing:step-summary"), style = MaterialTheme.typography.bodyMedium, color = muted,
-                maxLines = if (exempt != null) 3 else 1, overflow = TextOverflow.Ellipsis)
-            Text(when (status) {
-                StepStatus.FAILED -> LandingStepWords.FAILED
-                StepStatus.RUNNING -> LandingStepWords.RUNNING
-                StepStatus.PENDING -> LandingStepWords.QUEUED
-                StepStatus.SKIPPED -> LandingMeasuredCopy.skipped
-                StepStatus.OK -> LandingStepWords.COMPLETE
-            }, Modifier.testTag("landing:step-status"), style = MaterialTheme.typography.bodySmall,
-                color = when (status) { StepStatus.FAILED -> MaterialTheme.colorScheme.error; StepStatus.SKIPPED -> skippedInk(); else -> muted },
-                maxLines = 1, softWrap = false)
+            // A task exempt from the landing check (board docs/mocks/landing-measured ④, D5): "Landing check · Skipped" in amber — the
+            // name says how it stands, so no status word beside it — and why, whole, on its own line under it. The step did not fail.
+            if (exempt != null) {
+                Text(LandingMeasuredCopy.skippedCheck(step.name), Modifier.weight(1f).testTag("landing:step-name"),
+                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                    fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, color = skippedInk())
+            } else {
+                Text(step.name, Modifier.testTag("landing:step-name"), style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                    fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
+                Text(LandingSessionModel.timelineText(step.summary), Modifier.weight(1f).testTag("landing:step-summary"), style = MaterialTheme.typography.bodyMedium, color = muted,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(when (status) {
+                    StepStatus.FAILED -> LandingStepWords.FAILED
+                    StepStatus.RUNNING -> LandingStepWords.RUNNING
+                    StepStatus.PENDING -> LandingStepWords.QUEUED
+                    StepStatus.SKIPPED -> LandingMeasuredCopy.skipped
+                    StepStatus.OK -> LandingStepWords.COMPLETE
+                }, Modifier.testTag("landing:step-status"), style = MaterialTheme.typography.bodySmall,
+                    color = if (status == StepStatus.FAILED) MaterialTheme.colorScheme.error else muted, maxLines = 1, softWrap = false)
+            }
+        }
+        exempt?.let {
+            Text(LandingMeasuredCopy.exemptBecause(LandingSteps.exemptReason(it)), Modifier.fillMaxWidth().padding(start = 30.dp, end = 8.dp, bottom = 6.dp)
+                .testTag("landing:step-summary"), style = MaterialTheme.typography.bodySmall, color = muted)
         }
         if (open) Column(Modifier.fillMaxWidth().padding(start = 28.dp, end = 8.dp, bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp),
             content = content)

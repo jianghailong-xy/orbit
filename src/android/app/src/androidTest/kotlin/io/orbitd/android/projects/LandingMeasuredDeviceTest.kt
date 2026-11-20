@@ -144,6 +144,9 @@ class LandingMeasuredDeviceTest {
                 await { writes.any { it.first == "PATCH /api/projects/$branch/integration" } }
                 assertEquals(buildJsonObject { put("landingCheck", "NONE") }, writes.last { it.first == "PATCH /api/projects/$branch/integration" }.second)
                 awaitScrollTo("project-detail", hasTestTag("project-landing-check-none"))
+                // The page reads the project again after the write; the frame is the page once it is live again, not mid-read.
+                await { compose.onAllNodesWithTag("project-landing-check-mode:MERGE_CHECK", useUnmergedTree = true).onFirst()
+                    .fetchSemanticsNode().config.getOrNull(SemanticsProperties.Disabled) == null }
                 capture("03c-no-check-by-you")
 
                 // ④ A task exempt from the landing check: on its page, with the reason, who and when, and Remove exemption (D5).
@@ -154,6 +157,7 @@ class LandingMeasuredDeviceTest {
                 // …and in the landing's check list: Skipped, with the reason, not failed.
                 open("orbit-session:$landing"); await { exists(hasTestTag("landing:step-row:check:LANDING_CHECK")) }
                 assertTrue(exists(hasTestTag("landing:step-name") and hasText("Landing check · Skipped"), unmerged = true))
+                assertTrue(exists(hasTestTag("landing:step-summary") and hasText("Exempt: $reason"), unmerged = true))
                 assertFalse(exists(hasTestTag("landing:step-status") and hasText("Failed"), unmerged = true))
                 capture("04b-landing-check-skipped")
                 open("orbit-task:$task"); await { exists(hasTestTag("task-landing-exempt-remove")) }
