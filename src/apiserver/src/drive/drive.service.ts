@@ -468,6 +468,36 @@ export class DriveService {
   }
 
   /**
+   * The live folder at `segments` below `parentId` (the root when none), each missing folder made: what a dropped folder's
+   * files are placed by (§4.1). A folder already there is used, not suffixed; a file of the same name refuses 409.
+   */
+  async ensureFolderPath(ownerId: string, parentId: string | null, segments: string[]): Promise<EntryRow> {
+    let current: EntryRow | null = parentId
+      ? await this.prisma.driveEntry.findFirst({ where: { id: parentId, ownerId, kind: 'FOLDER', trashedAt: null } })
+      : await this.ensureRoot(ownerId);
+    if (!current) throw parentGone();
+    for (const raw of segments) {
+      const name = assertDriveName(raw);
+      const find = () =>
+        this.prisma.driveEntry.findFirst({ where: { ownerId, parentId: current!.id, name, kind: 'FOLDER', trashedAt: null } });
+      let next = await find();
+      if (!next) {
+        try {
+          const made = await this.createFolder(ownerId, { parentId: current.id, name, onClash: 'REFUSE' });
+          next = await this.prisma.driveEntry.findFirst({ where: { id: made.id, ownerId } });
+        } catch (error) {
+          // A concurrent file of the drop made it first.
+          next = await find();
+          if (!next) throw error;
+        }
+      }
+      current = next;
+      if (!current) throw parentGone();
+    }
+    return current;
+  }
+
+  /**
    * A new file with an empty first version written by `handleId` (§3.1), so the handle's first commit (CONTINUE) fills
    * it. What the mount's `open(O_CREAT)`, a drive tool's `put` of a new path and an upload's completion begin with.
    */

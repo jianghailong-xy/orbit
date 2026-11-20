@@ -143,6 +143,8 @@ export interface Tenant {
   driveFileId: string;
   driveVersionId: string;
   driveTrashGroupId: string;
+  /** An upload in progress (OWNER_UPLOAD staging) with no chunks yet. */
+  driveUploadId: string;
   /** Objects a destructive route takes away, one each, so that no other case loses its own. */
   spare: {
     accessTokenId: string;
@@ -174,6 +176,9 @@ export interface Tenant {
     driveVersionId: string;
     driveTrashGroupId: string;
     driveRestoreGroupId: string;
+    /** An empty upload that completes, and one that is abandoned. */
+    driveCompleteUploadId: string;
+    driveAbandonUploadId: string;
   };
 }
 
@@ -301,6 +306,15 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'PATCH /drive/entries/:id': { request: (of) => ({ params: { id: of.driveFileId }, body: { name: 'renamed by the census.txt' } }) },
   'DELETE /drive/entries/:id': { request: (of) => ({ params: { id: of.spare.driveEntryId } }) },
   'GET /drive/entries/:id/versions': { request: (of) => ({ params: { id: of.driveFileId } }) },
+  'GET /drive/entries/:id/content': { request: (of) => ({ params: { id: of.driveFileId } }) },
+  'GET /drive/versions/:id/content': { request: (of) => ({ params: { id: of.driveVersionId } }) },
+  'GET /drive/uploads/:id': { request: (of) => ({ params: { id: of.driveUploadId } }) },
+  // An empty body is answered 400 for A (a chunk holds at least one byte): not a 404, and B is refused before anything else is read.
+  'PUT /drive/uploads/:id/chunks/:idx': {
+    request: (of) => ({ params: { id: of.driveUploadId, idx: 0 }, headers: { 'x-orbit-chunk-sha256': 'a'.repeat(64) } }),
+  },
+  'POST /drive/uploads/:id/complete': { request: (of) => ({ params: { id: of.spare.driveCompleteUploadId } }) },
+  'DELETE /drive/uploads/:id': { request: (of) => ({ params: { id: of.spare.driveAbandonUploadId } }) },
   // As a copy: the owner's own restore leaves the version in Trash for the cases after it.
   'POST /drive/versions/:id/restore': { request: (of) => ({ params: { id: of.driveVersionId }, body: { as: 'COPY' } }) },
   'DELETE /drive/versions/:id': { request: (of) => ({ params: { id: of.spare.driveVersionId } }) },
@@ -1245,6 +1259,10 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
     request: (of, mine) => ({ params: { id: mine.driveTrashGroupId }, query: { parentId: of.driveFolderId } }),
   },
   'POST /drive/folders body parentId': { request: (of) => ({ params: {}, body: { parentId: of.driveFolderId, name: 'census folder' } }) },
+  'POST /drive/uploads body parentId': { request: (of) => ({ params: {}, body: { parentId: of.driveFolderId, name: 'census.bin', size: 1 } }) },
+  'POST /drive/uploads body dropRootId': {
+    request: (of, mine) => ({ params: {}, body: { parentId: mine.driveFolderId, name: 'census.bin', size: 1, relativePath: 'Dir/census.bin', dropRootId: of.driveFolderId } }),
+  },
   'PATCH /drive/entries/:id body parentId': {
     request: (of, mine) => ({ params: { id: mine.driveFileId }, body: { parentId: of.driveFolderId } }),
   },
