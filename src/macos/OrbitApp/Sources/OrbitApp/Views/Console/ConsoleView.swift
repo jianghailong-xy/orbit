@@ -1086,6 +1086,8 @@ struct TranscriptView: View {
         // Held by its runner's update (board 5 of docs/mocks/runner-update-drain): the foot row of
         // the reader's last message says so, or, before there is one, the queued page does.
         .environment(\.runnerUpdatingFoot, runnerUpdatingFoot)
+        // …and where that message is one no runner has taken, Cancel beside the tag (`HeldCancel`).
+        .environment(\.heldCancel, { [console] bubble in Task { await console.cancelHeld(bubble) } })
         .overlay { runnerUpdatingPage }
         // macOS shows the session state in this band. iOS gave the state up with the nav-bar title,
         // for reading space (see `ConsoleView`'s toolbar), so the band is retired there.
@@ -1669,16 +1671,16 @@ struct TranscriptView: View {
             // BELOW it — which is why the bar at the top of this console points down at it.
             #if os(iOS)
             if let run = folds[card.id] {
-                settledFoldRow(run, card: card)
+                settledFoldRow(run, card: card).orbitCardWidth()
             } else {
-                DeliveredDecisionCardView(console: console, card: card)
+                DeliveredDecisionCardView(console: console, card: card).orbitCardWidth()
             }
             #else
-            DeliveredDecisionCardView(console: console, card: card)
+            DeliveredDecisionCardView(console: console, card: card).orbitCardWidth()
             #endif
         case .approval(let approval):
             // No `AnchorRow`: an approval isn't a "Your question" the sticky header names.
-            ApprovalCard(console: console, approval: approval)
+            ApprovalCard(console: console, approval: approval).orbitCardWidth()
         case .recap(let card):
             // No `AnchorRow`: the recap sums the conversation up; it asks nothing.
             RecapCardView(card: card, onHide: hideRecap)
@@ -1697,7 +1699,8 @@ struct TranscriptView: View {
                 Task { await console.cancelQueued(bubble) }
             }, steer: SteerControls(bubble: bubble, withdrawing: console.withdrawingSteers) {
                 Task { await console.withdrawSteer(bubble) }
-            }, putBack: putBack(bubble))
+            }, putBack: putBack(bubble),
+               revealItemCard: { console.revealOpenItemCard($0) })
             .environment(\.runnerUpdatingQueued, runnerUpdatingQueued(bubble))
         case .bottom:
             // Both shapes end in the room the list's fade lies over (`fadesIntoComposerBand`), so a list
@@ -2175,7 +2178,7 @@ struct SessionStatusCardView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
         }
-        .frame(maxWidth: 560, alignment: .leading)
+        .frame(maxWidth: ConversationCardWidth.max, alignment: .leading)
         .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 8))
         .overlay {
             RoundedRectangle(cornerRadius: 8)
@@ -2555,7 +2558,7 @@ struct TranscriptItemView: View {
         case .user(let b):
             // Which card a user turn is — or the owner's bubble — is decided in one place, for the
             // transcript and the queued tail alike (`UserTurnRow`).
-            UserTurnRow(bubble: b, steer: steerControls(b), putBack: putBack(b))
+            UserTurnRow(bubble: b, steer: steerControls(b), putBack: putBack(b), revealItemCard: { console?.revealOpenItemCard($0) ?? false })
         case .assistant(let b): AssistantBubbleView(bubble: b)
         case .thinking(let b):  ThinkingView(block: b)
         case .toolCall(let c):
@@ -2581,18 +2584,18 @@ struct TranscriptItemView: View {
             }
         case .error(_, let message):
             if let console, console.executesDsh, let repair = DshRuntime.repair(message) {
-                DshRepairCardView(console: console, repair: repair)
+                DshRepairCardView(console: console, repair: repair).orbitCardWidth()
             } else if let repair = EngineAuth.antigravityRepair(message), let console, console.executesAntigravity {
-                AntigravityRepairCardView(console: console, repair: repair)
+                AntigravityRepairCardView(console: console, repair: repair).orbitCardWidth()
             } else if let summary = ToolFailureSummary.parse(message) {
-                ToolFailureCardView(message: message, summary: summary)
+                ToolFailureCardView(message: message, summary: summary).orbitCardWidth()
             } else {
                 Label(message, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red).textSelection(.enabled)
             }
         case .authError(let id, let message):
             if let console {
-                AuthErrorCardView(console: console, message: message, settled: console.settlement.auth[id])
+                AuthErrorCardView(console: console, message: message, settled: console.settlement.auth[id]).orbitCardWidth()
             } else {
                 // No console to act through (a preview / detached render): the diagnosis alone,
                 // which is what the runtime said in the first place.
@@ -2601,7 +2604,7 @@ struct TranscriptItemView: View {
             }
         case .autoRetry(let notice):
             if let console {
-                AutoRetryCardView(console: console, notice: notice)
+                AutoRetryCardView(console: console, notice: notice).orbitCardWidth()
             } else {
                 // Same as above: with no session to read the armed retry off, or to retry through,
                 // what's left is the runtime's own sentence.
@@ -2622,7 +2625,7 @@ struct TranscriptItemView: View {
             // The main checkout's card (board 01) or one action's line (board 03). Without a console to
             // act through, the event's own sentence, as the notice it used to be.
             if let console, let changed = item.changed {
-                MainCheckoutCardView(console: console, item: item, notice: changed)
+                MainCheckoutCardView(console: console, item: item, notice: changed).orbitCardWidth()
             } else if let console, let result = item.result {
                 MainCheckoutResultRow(console: console, result: result)
             } else {

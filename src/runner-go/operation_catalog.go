@@ -2839,7 +2839,7 @@ func buildOperationCatalog() []*operation {
 						"description": strings.TrimSpace("How much the sub-session may do without a human: \"plan\" investigates and proposes without touching anything, \"default\" asks before each unapproved action, \"acceptEdits\" pre-approves file edits only, \"auto\" lets the model decide when to ask and is the mode for unattended work that has to run commands, \"dontAsk\" never asks but refuses anything not already approved, commands and background jobs included, \"bypassPermissions\" never asks and allows everything. Omit to use the owner's account default. It can never be wider than this session's own mode: a wider mode is refused, and when the default is wider the sub-session runs in this session's own mode. A mode that asks parks the sub-session on an approval card until a human answers, so pick one only if someone is watching. "),
 					},
 					"worktree":  map[string]interface{}{"type": "boolean", "description": "Pass false to run the session in the agent's own checkout, with no branch and no worktree, even when the agent isolates each session in a worktree. For work that changes no code (investigating, reading logs, answering a question, read-only queries): it leaves no unmerged branch behind. Not for code changes: the session edits the checkout every other non-isolated session shares, and has no branch to merge. Omit it to follow the agent's own setting; true cannot turn isolation on for an agent that has it off."},
-					"wait":      map[string]interface{}{"type": "boolean", "description": "Wait for the new session's first turn to settle and return its full state inline: up to about 10 minutes, less when this session was itself spawned by a wait. The wait is recorded on Orbit's server as a watch before it starts, so when that time runs out or the connection drops, the call returns the session as last seen with the watch under \"watch\", and the watch wakes this session when the turn settles; end your turn then instead of polling. If the server does not record the watch, the result says no server-held watch backs the wait, and a refused watch returns at once. Default false: returns immediately. Whatever happens while waiting, the session is created: an answer that has not settled names it under \"wait\" with session_get as the next step, never session_create."},
+					"wait":      map[string]interface{}{"type": "boolean", "description": "Wait for the new session to finish all its work and return its full state inline: its first turn settled and nothing it started still runs (no background job, subagent or turn the engine started itself) or is set to wake it. Up to about 10 minutes, less when this session was itself spawned by a wait. The wait is recorded on Orbit's server as a watch before it starts, so when that time runs out or the connection drops, the call returns the session as last seen with the watch under \"watch\", and the watch wakes this session when it has; end your turn then instead of polling. If the server does not record the watch, the result says no server-held watch backs the wait, and a refused watch returns at once. Default false: returns immediately. Whatever happens while waiting, the session is created: an answer that has not settled names it under \"wait\" with session_get as the next step, never session_create."},
 					"requestId": map[string]interface{}{"type": "string", "description": "Leave it out on a first call. When a call failed with an UNKNOWN outcome and its answer named a requestId, send the same arguments again with that requestId: Orbit answers with what that request created, or creates it once, so a lost answer never becomes a duplicate. The same requestId with different arguments is refused."},
 				}, "prompt"),
 			},
@@ -3139,7 +3139,7 @@ func watchToolDescriptors(obj func(map[string]interface{}, ...string) map[string
 	predicateVersionProp := map[string]interface{}{
 		"type": "integer",
 		"enum": watchPredicateVersions,
-		"description": "The grammar version the predicate is written in: 1, 2 or 3, as described under predicate. Omit it " +
+		"description": "The grammar version the predicate is written in: 1, 2, 3 or 4, as described under predicate. Omit it " +
 			"and the lowest version that has every term the predicate uses is sent.",
 	}
 	keyProp := map[string]interface{}{"type": "string", "minLength": 1, "maxLength": 200, "description": watchIdempotencyKeyDescription}
@@ -3270,8 +3270,10 @@ func watchToolDescriptors(obj func(map[string]interface{}, ...string) map[string
 func sessionAwaitDescriptor(obj func(map[string]interface{}, ...string) map[string]interface{}) map[string]interface{} {
 	return map[string]interface{}{
 		"name": "session_await",
-		"description": "Be woken when other Orbit sessions finish their turn, need a person, or end: the sub-sessions you " +
-			"started with session_create, for instance. It asks Orbit's server to watch exactly these sessions for this " +
+		"description": "Be woken when other Orbit sessions finish their work, need a person, or end: the sub-sessions you " +
+			"started with session_create, for instance. By default it waits until each one's turn is over and nothing " +
+			"it started still runs or is set to wake it, so a session that ended its turn to wait for its own " +
+			"background job or subagent is not reported finished. It asks Orbit's server to watch exactly these sessions for this " +
 			"session and returns at once, so end your turn then. When the condition holds, Orbit starts a turn here with " +
 			"each session's state; if the watch expires first, one turn says so. Use it instead of polling session_get, " +
 			"sleeping, or looping in Bash. A session cannot await itself.",
@@ -3752,11 +3754,7 @@ func bgToolDescriptors(obj func(map[string]interface{}, ...string) map[string]in
 				" accepts a message mid-turn; new output and silence always wait for your next turn. Whether a job" +
 				" may start follows this session's permission mode: Plan and Don't Ask refuse it, Default and Accept" +
 				" Edits show the owner a card first, in which case this may answer that the job is waiting for them" +
-				" (status waiting_for_owner), and Auto and Bypass start it. CPU and memory limits (cpus, memoryMb) are" +
-				" off unless the machine's owner has turned them on; then the owner's ceiling applies to every job, and" +
-				" you may ask for less, never more. The result's limits say what the job runs under, and limitsNote why" +
-				" an ask was lowered or not applied. A job running under limits does not count against this machine's" +
-				" capacity, as a watch does not.",
+				" (status waiting_for_owner), and Auto and Bypass start it.",
 			"inputSchema": obj(map[string]interface{}{
 				"command": map[string]interface{}{
 					"type":        "string",
@@ -3817,16 +3815,6 @@ func bgToolDescriptors(obj func(map[string]interface{}, ...string) map[string]in
 				"env": map[string]interface{}{
 					"type":        "object",
 					"description": "Extra environment variables, layered over the agent's own.",
-				},
-				"cpus": map[string]interface{}{
-					"type": "number",
-					"description": "Most CPUs' worth of time the job may use, fractions allowed (0.5, 2). Applied only where" +
-						" the owner has turned limits on, and never above their ceiling; see the tool description.",
-				},
-				"memoryMb": map[string]interface{}{
-					"type": "integer",
-					"description": fmt.Sprintf("Most memory the job may hold, in megabytes (at least %d). Past it the whole job"+
-						" is killed and its output ends with a line saying so. Applied as cpus is.", bgMemoryMBMin),
 				},
 			}, "command", "kind"),
 		},
@@ -4127,10 +4115,10 @@ var runnerCLICapabilities = []cliCapabilitySpec{
 // watchCLICapabilities are listed inside a session only (SessionOnly). session_await is not here: it sits
 // with the session commands, behind the orchestration gate session_get is behind.
 var watchCLICapabilities = []cliCapabilitySpec{
-	{Tool: "watch_create", Argv: []string{"orbit", "watch", "create"}, Usage: "orbit watch create --target KIND:ID [--target KIND:ID ...] (--predicate JSON | --predicate-file -) [options]", Arguments: []string{"--target <TASK|SESSION>:<id> (targets; repeatable, at least one)", "--predicate <json> | --predicate-file - (required; grammar versions 1 to 3)", "--predicate-version <n> (predicateVersion 1, 2 or 3; default: the lowest the predicate needs)", "--action <RESUME_SESSION|NOTIFY_USER> (default RESUME_SESSION)", "--ttl-seconds <n> (60-2592000; default 86400)", "--idempotency-key <key>", "--json"}, Mutates: true, SessionOnly: true},
+	{Tool: "watch_create", Argv: []string{"orbit", "watch", "create"}, Usage: "orbit watch create --target KIND:ID [--target KIND:ID ...] (--predicate JSON | --predicate-file -) [options]", Arguments: []string{"--target <TASK|SESSION>:<id> (targets; repeatable, at least one)", "--predicate <json> | --predicate-file - (required; grammar versions 1 to 4)", "--predicate-version <n> (predicateVersion 1 to 4; default: the lowest the predicate needs)", "--action <RESUME_SESSION|NOTIFY_USER> (default RESUME_SESSION)", "--ttl-seconds <n> (60-2592000; default 86400)", "--idempotency-key <key>", "--json"}, Mutates: true, SessionOnly: true},
 	{Tool: "watch_get", Argv: []string{"orbit", "watch", "get"}, Usage: "orbit watch get WATCH_ID [--json]", Arguments: []string{"[watch-id] (required)", "--json"}, SessionOnly: true},
 	{Tool: "watch_list", Argv: []string{"orbit", "watch", "list"}, Usage: "orbit watch list [--state STATE] [--json]", Arguments: []string{"--state <" + strings.Join(watchStates, "|") + ">", "--json"}, SessionOnly: true},
-	{Tool: "watch_update", Argv: []string{"orbit", "watch", "update"}, Usage: "orbit watch update WATCH_ID [--predicate JSON | --predicate-file -] [--ttl-seconds N] [--json]", Arguments: []string{"[watch-id] (required)", "--predicate <json> | --predicate-file -", "--predicate-version <n> (predicateVersion 1, 2 or 3; default: the lowest the predicate needs)", "--ttl-seconds <n> (60-2592000, counted from now)", "--json"}, Mutates: true, SessionOnly: true},
+	{Tool: "watch_update", Argv: []string{"orbit", "watch", "update"}, Usage: "orbit watch update WATCH_ID [--predicate JSON | --predicate-file -] [--ttl-seconds N] [--json]", Arguments: []string{"[watch-id] (required)", "--predicate <json> | --predicate-file -", "--predicate-version <n> (predicateVersion 1 to 4; default: the lowest the predicate needs)", "--ttl-seconds <n> (60-2592000, counted from now)", "--json"}, Mutates: true, SessionOnly: true},
 	{Tool: "watch_cancel", Argv: []string{"orbit", "watch", "cancel"}, Usage: "orbit watch cancel WATCH_ID [--json]", Arguments: []string{"[watch-id] (required)", "--json"}, Mutates: true, SessionOnly: true},
 	{Tool: "task_await", Argv: []string{"orbit", "task", "await"}, Usage: "orbit task await --task-id ID[,ID...] [--until PRESET] [--ttl-seconds N] [--idempotency-key KEY] [--json]", Arguments: awaitCLIArguments("task-id", "taskIds", taskAwaitPresets), Mutates: true, SessionOnly: true},
 }

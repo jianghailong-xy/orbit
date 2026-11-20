@@ -872,8 +872,8 @@ model Runner {
   // One knob per machine, but evaluated against each workspace's own measured filesystem —
   // "keep this much headroom wherever you are writing" is the same policy on every mount.
   minFreeDiskMb     Int?         @default(10240) @map("min_free_disk_mb")
-  // Limits on each background job (bg_run) this machine runs, set by its owner and handed to the runner
-  // in every heartbeat answer. NULL is no limit on that dimension; both NULL (the default) is limits off.
+  // Unused: the background job limits these held were withdrawn on 2026-11-20. They stay because
+  // migration 1260 already added them to production's database; nothing reads or writes them.
   bgJobCpus         Float?       @map("bg_job_cpus")
   bgJobMemoryMb     Int?         @map("bg_job_memory_mb")
   version           String?
@@ -2764,6 +2764,8 @@ model SessionMergeReceipt {
   @@index([projectId, createdAt])
   @@index([ownerId, createdAt])
   @@index([checkpointId, createdAt(sort: Desc)], map: "session_merge_receipt_checkpoint_idx")
+  /// 1270: a COMMIT citation asks whether a sha is recorded under another task (`resolveCommit`).
+  @@index([sourceSha], map: "session_merge_receipt_source_sha_idx")
   /// CP4 is enforced by a PARTIAL unique index this schema cannot spell
   /// (`session_merge_receipt_checkpoint_key` on `(checkpoint_id, idempotency_key)`,
   /// `WHERE checkpoint_id IS NOT NULL`), the same trade `task_attempt_one_open_key` carries. It has
@@ -6419,6 +6421,8 @@ model Task {
   /// Created PARTIAL (`WHERE project_id IS NOT NULL`, migration 0361), which this schema cannot
   /// spell — the predicate the covering index above carries, for the same reason.
   @@index([ownerId, projectId, updatedAt], map: "task_project_activity_idx")
+  /// 1270: the wiki maintenance facts read's settled-task arm, bounded below by the space's cursor (`factsSql`).
+  @@index([ownerId, updatedAt], map: "task_owner_updated_idx")
   @@index([status])
   /// The scheduled sweep's way in: the due tasks, in the order they came due. Created PARTIAL
   /// (`WHERE run_at IS NOT NULL`, see migration 0110) — a predicate this schema cannot spell, the

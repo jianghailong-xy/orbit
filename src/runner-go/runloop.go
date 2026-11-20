@@ -2131,8 +2131,6 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			diskFloorMb.Store(floorMb)
 			// The storage budget is replaced the same way: an answer without one means there is none.
 			storage.budget.Store(resp.StorageBudget)
-			// The background job limits are replaced the same way: an answer without them turns them off.
-			runnerBgJobLimits.Store(resp.BackgroundJobLimits)
 			// Process ownership loss first. A terminal row can appear in both lists;
 			// marking its exact advertised epoch detaching before a durable cancel
 			// makes that overlap take the no-finalize path.

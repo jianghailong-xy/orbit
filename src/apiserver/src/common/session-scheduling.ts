@@ -17,10 +17,13 @@ export const OPEN_SESSION_STATUSES: RunStatus[] = [...HELD_SESSION_STATUSES];
  * "open" — an AWAITING_INPUT session has already produced its result and is merely parked in
  * case someone replies, and INTERRUPTED is a turn that was abandoned.
  *
- * This is the definition the rest of orchestration already used: session_create(wait) returns
- * the moment a child leaves PENDING/RUNNING ("result ready"), and the claim's supervisor
- * exemption asks the same question of a parent's children. Anything counting a tree's
- * unfinished work must use it too, or it contradicts what the caller was told.
+ * This is the definition the rest of orchestration already used: the watch leaf
+ * SESSION_TURN_SETTLED is a child leaving PENDING/RUNNING ("result ready"), and the claim's
+ * supervisor exemption asks the same question of a parent's children. Anything counting a tree's
+ * unfinished turns must use it too. `session_await` and `session_create(wait)` now wait by default
+ * for SESSION_QUIESCENT (watches/watch-predicate.ts), which also waits out a child's own background
+ * job, subagent and armed wake-ups; those hold no runner slot, so the spawn-tree allowance keeps
+ * counting turns with this set.
  */
 export const UNSETTLED_SESSION_STATUSES: RunStatus[] = [RunStatus.PENDING, RunStatus.RUNNING];
 

@@ -3,11 +3,9 @@ import {
   IsArray,
   IsIn,
   IsInt,
-  IsNumber,
   IsOptional,
   IsString,
   Matches,
-  Max,
   MaxLength,
   Min,
   MinLength,
@@ -31,14 +29,6 @@ export class UpdateRunnerDto {
   // disabling value, so "gate at zero bytes" can never be typed by accident. No ceiling — the
   // right reserve on a 30TB archive volume is not the right one on a laptop.
   @IsOptional() @IsInt() @Min(1) minFreeDiskMb?: number | null;
-  // Limits on each background job this machine runs; null clears one (no limit on that dimension), and
-  // both null is limits off. CPUs may be fractional (0.5 is half a core).
-  @IsOptional() @IsNumber({ allowNaN: false, allowInfinity: false }, { message: 'bgJobCpus must be a number' })
-  @Min(Number.MIN_VALUE, { message: 'bgJobCpus must be greater than 0' }) @Max(1024, { message: 'bgJobCpus must not be more than 1024' })
-  bgJobCpus?: number | null;
-  @IsOptional() @IsInt({ message: 'bgJobMemoryMb must be an integer' })
-  @Min(16, { message: 'bgJobMemoryMb must not be less than 16' }) @Max(2147483647, { message: 'bgJobMemoryMb must not be more than 2147483647' })
-  bgJobMemoryMb?: number | null;
 }
 
 // The requested runner order, in the public ids GET /runners hands out — decoded to the UUIDs the

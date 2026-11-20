@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>New workspace · 01 设置卡和 Settings 共用一个表单</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/foundation.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/Button.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/TextControls.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/ChoiceControls.css">
+<link rel="stylesheet" href="../../../src/web/src/components/MachineSetupCard.css">
+<link rel="stylesheet" href="../../../src/web/src/components/settings/Settings.css">
+<link rel="stylesheet" href="../github-workspace/board.css">
+<style>
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; align-items: start; }
+.app .msc { max-width: none; }
+.app.setf { padding: 26px 26px 22px; }
+.app .settings-header { margin-bottom: 18px; }
+.app .settings-header-title { font-size: 20px; }
+.app .settings-row-control .workspace-text-setting { width: 260px; }
+.app .settings-section + .settings-section { margin-top: 20px; }
+.app .msc-prefix, .app .orbit-input-field.mono { font-family: "JetBrains Mono", monospace; }
+.newstr { background: #fff3c4; border-radius: 3px; padding: 0 2px; }
+.gone { position: relative; }
+.gone::after { content: ""; position: absolute; inset: -4px; border: 2px dashed #e5372b; border-radius: 10px; pointer-events: none; }
+.b-hist { margin-top: 0; }
+.b-hist-head { display: flex; gap: 6px; align-items: baseline; color: var(--text-2); font-size: 13px; }
+.b-hist-head .ic { color: var(--success); }
+.msc-github-row > .ic { font-size: 16px; margin-top: 2px; flex: none; }
+.b-hist-head b { color: var(--text-1); }
+.b-radio { display: flex; gap: 8px; margin-top: 8px; font-size: 13px; }
+.b-radio i.r { flex: none; width: 14px; height: 14px; margin-top: 3px; border-radius: 50%; border: 1px solid var(--border-strong, #c9c9d0); background: var(--bg-raised); }
+.b-radio i.r.on { border: 4px solid var(--brand); }
+.b-radio .d { display: block; color: var(--text-3); font-size: 12px; }
+.b-flow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 14px; margin: 6px 0 10px; }
+.b-step { background: #fff; border: 1px solid #dcdce3; border-radius: 8px; padding: 5px 11px; }
+.b-step.hl2 { border-color: #3c6fd8; background: #eef3ff; }
+.b-arrow { color: #8a8a94; }
+.b-conv { background: var(--bg-base); border-radius: 10px; padding: 14px 18px 10px; box-shadow: 0 0 0 1px rgba(0,0,0,.12); font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; color: var(--text-1); }
+.b-composer { margin-top: 70px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-raised); padding: 10px 12px; color: var(--text-3); font-size: 13px; }
+.b-recap { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; }
+.b-dec { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+.b-pick { display: inline-block; font-size: 12px; font-weight: 700; border-radius: 999px; padding: 0 9px; margin-right: 6px; }
+.b-pick.rec { background: #d9e6ff; color: #14428f; }
+.b-pick.alt { background: #ececf1; color: #4a4a54; }
+.tile.dec { margin-bottom: 22px; }
+.tile.dec > .tile-title { font-size: 17px; }
+</style>
+<body>
+<div class="board">
+<h1>New workspace · 01 设置卡和 Settings → New workspace 共用一个表单（含 From GitHub）</h1>
+<div class="lede">
+所有者 11-20 的两条要求：① Settings 里的 New workspace 和「机器注册好、还没有 workspace」时的设置卡共用一个页面；② 要支持 GitHub。
+设置卡（<code>MachineSetupCard</code>）已经有 From GitHub，Settings 那张表单（<code>NewWorkspacePage</code>）是更早的写法，没跟上。
+两边都调同一个 <code>POST /workspaces</code>（<code>newFolder | github | workDir</code> 三选一），<b>服务端不用改</b>，这是纯客户端的事。
+帧是手写 DOM，但引的是 app 自己的样式表（<code>index.css</code>、<code>ui/*.css</code>、<code>MachineSetupCard.css</code>、<code>Settings.css</code>），类名照抄组件；
+历史导入那段的单选框是示意（<code>b-</code> 前缀）。界面文案全部英文，<span class="newstr">黄底</span>是要新加或改动的英文句子，其余是今天的原文。机器 orbit@austin，home 是 <code>/Users/austin</code>。
+</div>
+
+<div class="section"><span class="sec now">今天</span><span class="sec-sub">同一件事，两个入口，两套表单</span></div>
+<div class="grid2">
+  <figure class="tile">
+    <div class="tile-title">机器的页面 · 还没有 workspace 时的设置卡</div>
+    <div class="app"><span class="fr-label">today · machine page</span><div class="msc" id="card-today"></div></div>
+  </figure>
+  <figure class="tile">
+    <div class="tile-title">Settings → Workspaces 的 + → New workspace（你的截图）</div>
+    <div class="app setf"><span class="fr-label">today · settings</span><div id="settings-today"></div></div>
+  </figure>
+</div>
+<figure class="tile wide">
+  <table class="cmp">
+    <tr><th></th><th>设置卡</th><th>Settings → New workspace</th></tr>
+    <tr><td>目录</td><td>只输一个名字，放在 home 下；边输边让机器查；没有就建</td><td>任意完整路径，不查，打错了也能建</td></tr>
+    <tr><td>名字</td><td>在目录下面，默认跟着目录名走</td><td>第一项，要自己起</td></tr>
+    <tr><td>GitHub</td><td>or · From GitHub：挑仓库、可选分支，clone 好再开始</td><td>没有</td></tr>
+    <tr><td>Repository URL</td><td>不问（从 origin 读，GitHub 的直接写好）</td><td>手填，选填</td></tr>
+    <tr><td>Claude Code 历史</td><td>不提</td><td>目录里有就问要不要导入</td></tr>
+    <tr><td>建好以后</td><td>进新 workspace 的对话</td><td>进新 workspace 的设置页</td></tr>
+  </table>
+</figure>
+
+<div class="section"><span class="sec after">方案 · 推荐</span><span class="sec-sub">把设置卡的主体抽成一个表单组件，两处都用它；Settings 只换外框（标题 + On machine · Change machine），机器页的卡完全不变</span></div>
+<div class="grid3" id="after"></div>
+<figure class="tile wide">
+  <ul class="notes">
+    <li><span class="num">1</span><span class="t"><b>Settings 帧里的卡和机器页上的是同一个组件</b>，只是去掉了卡自己的标题（Settings 的页头已经说了 New workspace 和哪台机器）。字段顺序、目录检查、名字跟随、From GitHub、出错的话，两处一字不差。
+      选机器那一步（多台机器时的列表）和 <i>Change machine</i> 不变。Settings 帧不再要 Cancel：左边导航就是退出。</span></li>
+    <li><span class="num">2</span><span class="t"><b>完整路径</b>（见 ②，待定 2）：输入以 <code>/</code> 或 <code>~</code> 开头，前缀 <code>/Users/austin/</code> 消失，按完整路径去查。
+      完整路径必须已经存在（home 外面不替你建目录），不存在就是今天的 <i>No such directory on orbit@austin.</i>；提示行改成 <span class="newstr"><i>A name in /Users/austin, or a full path. Uses the folder if it exists, otherwise creates it.</i></span></span></li>
+    <li><span class="num">3</span><span class="t"><b>Claude Code 历史</b>：机器说这个已有目录里有历史，卡下面才多出这一段（今天 Settings 表单那段，原样搬过来）。新建目录和 GitHub 永远没有，所以机器页的卡看起来不变。</span></li>
+    <li><span class="num">4</span><span class="t"><b>Repository URL 不在建的时候问了</b>：从 origin 读，GitHub 的直接写好；要改去 workspace 的设置页（今天就有这一行）。</span></li>
+    <li><span class="num">5</span><span class="t"><b>From GitHub 从 Settings 进来</b>：<i>Connect GitHub</i> 去 GitHub 授权，回来要落回 <code>/settings/workspaces/new?machine=…</code> 并保持 From GitHub 选中（今天只记得回机器页）。</span></li>
+  </ul>
+</figure>
+
+<div class="section"><span class="sec now">待你定</span><span class="sec-sub">三项，每项第一个是推荐</span></div>
+<figure class="tile dec">
+  <div class="tile-title">待定 1 · 「共用一个页面」指什么</div>
+  <div class="b-dec">
+    <div>
+      <div><span class="b-pick rec">A 推荐</span><b>一个表单，两个外框</b></div>
+      <div class="b-flow"><span class="b-step">Settings → Workspaces +</span><span class="b-arrow">→</span><span class="b-step">选机器</span><span class="b-arrow">→</span><span class="b-step hl2">Settings · New workspace（共用表单）</span></div>
+      <div class="b-flow"><span class="b-step">机器页（没有 workspace）</span><span class="b-arrow">→</span><span class="b-step hl2">设置卡（共用表单）</span></div>
+      <ul class="notes"><li><span class="num">a</span><span class="t">从 Settings 来就留在 Settings 的样子里；规则只有一份，以后改一处两边一起变。</span></li></ul>
+    </div>
+    <div>
+      <div><span class="b-pick alt">B</span><b>一个路由</b></div>
+      <div class="b-flow"><span class="b-step">Settings → Workspaces +</span><span class="b-arrow">→</span><span class="b-step">选机器</span><span class="b-arrow">→</span><span class="b-step hl2">跳到机器页，显示设置卡（就算这台机器已经有 workspace）</span></div>
+      <ul class="notes"><li><span class="num">b</span><span class="t">字面意义上真的是同一页，但人从 Settings 被带出去，左边的导航整个换掉；机器页还要多一种「已有 workspace 也显示卡」的状态。</span></li></ul>
+    </div>
+  </div>
+</figure>
+<figure class="tile dec">
+  <div class="tile-title">待定 2 · home 外面已有的目录怎么选（碰到 11-16「目录只输一个名字」的决定）</div>
+  <div class="b-dec">
+    <div>
+      <div><span class="b-pick rec">A 推荐</span><b>同一个输入框，以 / 或 ~ 开头就是完整路径</b>（上面 ②）</div>
+      <ul class="notes"><li><span class="num">a</span><span class="t">不加任何控件，11-16 定的「一个输入框」的样子不变；只改一句提示，让人知道能输完整路径。今天 Settings 表单能选 <code>/srv/app</code> 这类目录，这样不会丢掉。</span></li></ul>
+    </div>
+    <div>
+      <div><span class="b-pick alt">B</span><b>输入框下一个链接</b></div>
+      <div class="app" style="margin-top:8px"><div class="msc" id="dec2b"></div></div>
+      <ul class="notes"><li><span class="num">b</span><span class="t">更显眼，但又回到「两种目录」的选择；不做（只认名字）则 Settings 会少掉今天能做的事。</span></li></ul>
+    </div>
+  </div>
+</figure>
+<figure class="tile dec">
+  <div class="tile-title">待定 3 · 从 Settings 按 Create workspace 以后去哪（GitHub 的 clone 进度只画在对话第一行）</div>
+  <div class="b-dec">
+    <div>
+      <div><span class="b-pick rec">A 推荐</span><b>进新 workspace 的对话，和第一个 workspace 一样</b></div>
+      <div class="b-conv" style="margin-top:8px" id="dec3a"></div>
+      <ul class="notes"><li><span class="num">a</span><span class="t">clone 进度、失败和 Retry 都是现成的；建 workspace 本来就是为了开始干活。要改设置，第一行有 <i>Settings</i>。</span></li></ul>
+    </div>
+    <div>
+      <div><span class="b-pick alt">B</span><b>留在 Settings，进新 workspace 的设置页，加一行 Clone</b></div>
+      <div class="app setf" style="margin-top:8px" id="dec3b"></div>
+      <ul class="notes"><li><span class="num">b</span><span class="t">不跳出 Settings，但要新做一行（进度、失败原因、Retry），三个原生客户端也要跟着做。</span></li></ul>
+    </div>
+  </div>
+</figure>
+<figure class="tile wide">
+  <div class="tile-title">分期</div>
+  <ul class="notes">
+    <li><span class="num">1</span><span class="t">Web：抽出表单组件，Settings → New workspace 换成它（含 Claude Code 历史、GitHub 回跳、完整路径）。机器页的卡行为不变，现有测试都应保持绿色。</span></li>
+    <li><span class="num">2</span><span class="t">iOS / macOS / Android 照 Web 定稿跟进，同一结构，文案一字不差（parity 测试锁着）。</span></li>
+  </ul>
+</figure>
+</div>
+
+<script>
+const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+const M = 'orbit@austin';
+const input = (cls, inner, attrs = '') => `<span class="orbit-text-control orbit-input orbit-input-affix msc-input" ${attrs}>${inner}</span>`;
+const folderField = (value, line, { prefix = true, mono = false } = {}) => `
+  <div class="msc-field" data-field="folder">
+    <div class="msc-step-title">Folder</div>
+    ${input('', `${prefix ? '<span class="orbit-input-prefix"><span class="msc-prefix">/Users/austin/</span></span>' : ''}<input class="orbit-input-field${mono ? ' mono' : ''}" placeholder="name" value="${esc(value)}">`)}
+    <div class="msc-line">${line}</div>
+  </div>`;
+const nameField = (value, hint, on) => `
+  <div class="msc-field" data-field="name">
+    <div class="msc-step-title">Name</div>
+    <div class="msc-row">
+      ${input('', `<input class="orbit-input-field" placeholder="Same as the folder" value="${esc(value)}">`)}
+      <button class="orbit-button orbit-button-primary orbit-button-middle" type="button" ${on ? '' : 'disabled'}>Create workspace</button>
+    </div>
+    <div class="msc-line"><span class="msc-meta">${hint}</span></div>
+  </div>`;
+const ghRow = `
+  <div class="msc-field" data-field="github">
+    <div class="msc-or">or</div>
+    <button class="msc-github-row" type="button"><i data-ic="github" class="msc-github-mark"></i>
+      <span><span class="msc-github-title">From GitHub<span class="msc-new-tag">NEW</span></span>
+      <span class="msc-meta">Clone a repository you can reach on GitHub. Orbit signs in for the clone and when it lands your work — nothing is saved on the machine.</span></span></button>
+  </div>`;
+const head = `<div class="msc-head"><span class="msc-head-icon"><i data-ic="desktop"></i></span><div>
+  <div class="msc-title">New workspace on ${M}</div>
+  <div class="msc-sub">Pick the folder on ${M} this workspace works in. Its sessions can read and change everything in it.</div></div></div>`;
+const NAME_HINT = 'Same as the folder unless you change it. Shown in the sidebar.';
+const HINT_TODAY = 'Uses this folder if it exists, otherwise creates it.';
+const HINT_NEW = `<span class="newstr">A name in /Users/austin, or a full path. Uses the folder if it exists, otherwise creates it.</span>`;
+const body = (inner) => `<div class="msc-body" style="margin-top:0;padding-top:0;border-top:0">${inner}</div>`;
+
+document.getElementById('card-today').innerHTML = head +
+  `<div class="msc-body">${folderField('', `<span class="msc-meta">${HINT_TODAY}</span>`)}${nameField('', NAME_HINT, false)}${ghRow}</div>`;
+
+const sHeader = `<header class="settings-header"><div class="settings-header-text"><h1 class="settings-header-title">New workspace</h1>
+  <p class="settings-header-description">On ${M} · <button type="button" class="workspace-change-machine">Change machine</button></p></div></header>`;
+const sRow = (title, desc, control) => `<div class="settings-row"><div class="settings-row-text"><div class="settings-row-title">${title}</div>${desc ? `<div class="settings-row-description">${desc}</div>` : ''}</div><div class="settings-row-control">${control}</div></div>`;
+const sInput = (ph, mono) => `<input class="orbit-text-control orbit-input workspace-text-setting${mono ? ' workspace-text-setting--mono' : ''}" placeholder="${ph}">`;
+document.getElementById('settings-today').innerHTML = `<div class="settings-page workspace-new">${sHeader}
+  <section class="settings-section"><div class="settings-section-head"><h2 class="settings-section-title">Location</h2></div>
+  <div class="settings-card">
+    ${sRow('Name', '', sInput('e.g. tea-cli builder'))}
+    ${sRow('Working directory', '', sInput('/path/to/project on the runner', true))}
+    ${sRow('Repository URL', 'Used for project integration. Detected from origin when empty.', sInput('https://github.com/owner/repo (optional)', true))}
+  </div></section>
+  <div class="workspace-new-actions"><span class="settings-row-description">Have a Claude Code session on this runner? You can import it later from workspace settings.</span><div style="flex:1"></div>
+  <button class="orbit-button orbit-button-default orbit-button-middle">Cancel</button><button class="orbit-button orbit-button-primary orbit-button-middle" disabled>Create</button></div></div>`;
+
+const history = `<section class="settings-section"><div class="settings-section-head"><h2 class="settings-section-title">Claude Code history</h2></div>
+  <div class="settings-card"><div class="settings-row settings-row--block b-hist">
+    <div class="b-hist-head"><i data-ic="check"></i><span><b>4 Claude Code conversations</b> in this directory · last 30 days · 2.1 MB</span></div>
+    <div class="b-radio"><i class="r on"></i><span>Don't import<span class="d">They stay on the runner. You can import later from workspace settings.</span></span></div>
+    <div class="b-radio"><i class="r"></i><span>Only the one I'm in the middle of<span class="d">Fix the release script · last active 2 hours ago · 38 messages</span></span></div>
+  </div></div></section>`;
+const ghPicked = `
+  <div class="msc-field msc-github" data-field="folder">
+    <div class="msc-step-title">Folder</div>
+    <span class="msc-github-title"><i data-ic="github"></i> From GitHub<span class="msc-new-tag">NEW</span></span>
+    <div class="ghp-row"><span class="ghp-repo"><i data-ic="lock" class="ghp-mark"></i>orbit-labs/orbit-web</span>
+      <span class="msc-meta"><i data-ic="branch"></i> main</span><button class="msc-change" type="button">Change</button></div>
+    <div class="msc-line"><span class="msc-done-line"><span class="msc-path">orbit-labs/orbit-web → ~/orbit-repos/orbit-web</span><span class="msc-meta">cloned before the session starts</span></span></div>
+    <div class="msc-back"><button class="msc-change" type="button">Type a folder name instead</button></div>
+  </div>`;
+const settingsFrame = (cardInner, after = '') => `<div class="settings-page workspace-new">${sHeader}<div class="msc">${body(cardInner)}</div>${after ? `<div style="margin-top:20px">${after}</div>` : ''}</div>`;
+const A = [
+  ['① 刚打开', settingsFrame(folderField('', `<span class="msc-meta">${HINT_NEW}</span>`) + nameField('', NAME_HINT, false) + ghRow)],
+  ['② 输了完整路径：机器查到已有仓库，下面多出历史导入', settingsFrame(
+    folderField('/srv/app', `<span class="msc-verdict ok">Found · git repository · main</span>`, { prefix: false, mono: true }) + nameField('app', NAME_HINT, true), history)],
+  ['③ From GitHub：选好仓库', settingsFrame(ghPicked + nameField('orbit-web', NAME_HINT, true))],
+];
+document.getElementById('after').innerHTML = A.map(([t, inner], i) => `
+  <figure class="tile"><div class="tile-title">${t}</div><div class="app setf"><span class="fr-label">proposal · settings</span>${inner}</div></figure>`).join('');
+
+document.getElementById('dec2b').innerHTML = body(folderField('', `<span class="msc-meta">${HINT_TODAY}</span> <button class="msc-change newstr" type="button">Use a folder elsewhere</button>`));
+
+document.getElementById('dec3a').innerHTML = `
+  <div class="msc-created"><i data-ic="loading" class="msc-clone-spin"></i><span>Cloning <a>orbit-labs/orbit-web</a> on <b>${M}</b></span>
+    <span class="msc-clone-bar"><i style="width:42%"></i></span><span class="msc-clone-pct">42%</span></div>
+  <div class="b-composer">Send ${M} a task…</div>`;
+document.getElementById('dec3b').innerHTML = `<div class="settings-page"><header class="settings-header"><div class="settings-header-text"><h1 class="settings-header-title">orbit-web</h1>
+  <p class="settings-header-description">On ${M}</p></div></header>
+  <section class="settings-section"><div class="settings-section-head"><h2 class="settings-section-title">Location</h2></div><div class="settings-card">
+    ${sRow('Working directory', '', '<span class="msc-path">~/orbit-repos/orbit-web</span>')}
+    ${sRow('<span class="newstr">Clone</span>', '<span class="newstr">Cloning orbit-labs/orbit-web · 42%</span>', '<span class="msc-clone-bar"><i style="width:42%"></i></span>')}
+    ${sRow('Repository URL', '', '<span class="msc-path">https://github.com/orbit-labs/orbit-web.git</span>')}
+  </div></section></div>`;
+</script>
+<script src="../github-workspace/icons.js"></script>
+</body>
+</html>

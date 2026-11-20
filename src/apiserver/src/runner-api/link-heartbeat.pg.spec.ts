@@ -592,17 +592,6 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
       assert.equal(next.answer.maxConcurrent, 6);
       assert.equal(next.answer.minFreeDiskMb, 4096);
     });
-    await t3.test('backgroundJobLimits (RunnersService.updateRunner): every beat states the ones set, and none once cleared', async () => {
-      assert.equal('backgroundJobLimits' in (await beat()).answer, false, 'off by default: absent');
-      await runners.updateRunner(ownerId, runnerId, { bgJobCpus: 1.5, bgJobMemoryMb: 2048 } as never);
-      const both = await beat();
-      assert.equal(isFull(both.answer), false);
-      assert.deepEqual(both.answer.backgroundJobLimits, { cpus: 1.5, memoryMb: 2048 });
-      await runners.updateRunner(ownerId, runnerId, { bgJobCpus: null } as never);
-      assert.deepEqual((await beat()).answer.backgroundJobLimits, { memoryMb: 2048 });
-      await runners.updateRunner(ownerId, runnerId, { bgJobMemoryMb: null } as never);
-      assert.equal('backgroundJobLimits' in (await beat()).answer, false, 'both cleared: absent');
-    });
     await t3.test('linkHints: what waits, on every beat', async () => {
       await prisma.conversationTurn.create({
         data: { sessionId: idle, seq: 901, clientTurnId: `link-heartbeat-${randomUUID()}`, status: 'PENDING', content: 'a message' },
@@ -736,12 +725,8 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
   await t.test('8. a presence table a crash or a failover emptied: the next beat reconciles in full', async () => {
     assert.equal(isFull((await beat()).answer), false);
     await sql.query(`TRUNCATE "runner_presence"`);
-    assert.equal('backgroundJobLimits' in (await beat()).answer, false);
-    await prisma.runner.update({ where: { id: runnerId }, data: { bgJobCpus: 0.5, bgJobMemoryMb: 256 } });
-    await sql.query(`TRUNCATE "runner_presence"`);
     const after = await beat();
     assert.ok(isFull(after.answer), 'no row: a full reconcile');
-    assert.deepEqual(after.answer.backgroundJobLimits, { cpus: 0.5, memoryMb: 256 }, 'the full answer states the limits too');
     assert.equal(isFull((await beat()).answer), false, 'and the record it leaves answers the next');
   });
 
@@ -753,7 +738,6 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
       const row = await prisma.runner.findUniqueOrThrow({ where: { id: runnerId } });
       const answer = await door.heartbeat(row as never, body, CAPABILITIES, 'claude,codex', 'linux') as Answer;
       assert.ok(isFull(answer), 'in full, every beat');
-      assert.deepEqual(answer.backgroundJobLimits, { cpus: 0.5, memoryMb: 256 }, 'the HTTPS answer states the limits');
       assert.equal('linkHints' in answer, false);
       assert.notEqual(await runnerTuple(), before, 'the runner row rewritten, every beat');
       const p = await presence();
@@ -762,10 +746,6 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
     }
     assert.ok(isFull((await beat()).answer), 'the link beat after an HTTPS one finds no record');
     assert.equal(isFull((await beat()).answer), false);
-    await prisma.runner.update({ where: { id: runnerId }, data: { bgJobCpus: null, bgJobMemoryMb: null } });
-    const cleared = await prisma.runner.findUniqueOrThrow({ where: { id: runnerId } });
-    const clearedAnswer = await door.heartbeat(cleared as never, body, CAPABILITIES, 'claude,codex', 'linux') as Answer;
-    assert.equal('backgroundJobLimits' in clearedAnswer, false, 'cleared: absent over HTTPS too');
   });
 
   // ── 10 ─────────────────────────────────────────────────────────────────────────────────────────────────

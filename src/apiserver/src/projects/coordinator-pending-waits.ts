@@ -21,6 +21,7 @@ function leafPhrase(leaf: WatchLeaf, params?: WatchLeafParams): string {
     case 'SESSION_LIFECYCLE_TERMINAL': return 'to be completed';
     case 'SESSION_NEEDS_ATTENTION': return 'to need attention';
     case 'SESSION_JOB_NO_OUTPUT_FOR': return `to have a job go quiet for ${seconds}s`;
+    case 'SESSION_QUIESCENT': return 'to finish all its work';
     default: return 'to change';
   }
 }

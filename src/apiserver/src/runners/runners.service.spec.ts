@@ -175,8 +175,6 @@ test('reorderRunners handles workspaceless runners, filters invalid ids, and app
       // Why this machine is or isn't updating itself (runner-self-update.ts).
       selfUpdate: true,
       minFreeDiskMb: true,
-      bgJobCpus: true,
-      bgJobMemoryMb: true,
       reposRoot: true,
       // Where `orbit register` ran (docs/first-workspace-contract.md §1).
       registerDir: true,
