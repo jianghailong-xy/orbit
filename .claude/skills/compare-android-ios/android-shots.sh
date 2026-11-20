@@ -37,7 +37,12 @@ for mode in $modes; do
       bash src/android/scripts/composer-device-test.sh 36 src/android/app/build/outputs/apk/debug/app-debug.apk \
       src/android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk "$out" > "$root/.compare-android-$mode.log" 2>&1
     rc=$?
-    grep -q 'failed to attach' "$out/instrumentation.txt" 2>/dev/null && { echo "RETRY $mode: process failed to attach"; continue; }
+    # "failed to attach", or "Process crashed" before the journey wrote a result: another task on the shared emulator
+    # (re)installed the debug app mid-run, which kills the instrumentation. Not this journey's fault: one retry.
+    if grep -q 'failed to attach' "$out/instrumentation.txt" 2>/dev/null ||
+       { grep -q 'shortMsg=Process crashed' "$out/instrumentation.txt" 2>/dev/null && ! ls "$out"/a07-composer/*-result.txt >/dev/null 2>&1; }; then
+      echo "RETRY $mode: $(grep -o 'failed to attach\|Process crashed' "$out/instrumentation.txt" | head -1)"; continue
+    fi
     # Another task on the shared emulator installed the debug app signed with its own debug key: the update is refused.
     # Uninstall both packages under ui.lock (nobody's round is using them then) and go again.
     if grep -q 'INSTALL_FAILED_UPDATE_INCOMPATIBLE' "$root/.compare-android-$mode.log"; then

@@ -201,7 +201,7 @@ object ManagementFixture {
     private fun user() = """{"id":"$ME","email":"a13@example.test","name":"Fixture","role":"MEMBER","avatarUpdatedAt":null,
         "preferences":{"theme":"$theme","defaultPermissionMode":"auto","enableOrchestration":true${modelRouting?.let { ",\"modelRouting\":$it" }.orEmpty()}${optimizeFor?.let { ",\"optimizeFor\":\"$it\"" }.orEmpty()}${recaps?.let { ",\"recaps\":$it" }.orEmpty()}${subagentBlocked?.let { ",\"subagentBlockedProviders\":" + JsonArray(it.map(::JsonPrimitive)) }.orEmpty()}}}"""
     private fun workspace() = """{"id":"$WORKSPACE","name":"$workspaceName","runnerId":"$RUNNER","enabled":true,"workDir":"/srv/alpha",
-        "lastProvider":"claude","effort":"","modelRouting":false,"env":{},"position":0,"createdAt":"2026-09-01T00:00:00Z"$workspaceExtra}"""
+        "lastProvider":"claude","effort":"","env":{},"position":0,"createdAt":"2026-09-01T00:00:00Z"$workspaceExtra}"""
     private fun runners() = runnerOrder.filter { (it == RUNNER || secondRunner) && it !in removedRunners }.joinToString(",", "[", "]") {
         when (it) {
             RUNNER -> runner()

@@ -97,10 +97,10 @@ class SubagentsTest {
     @Test fun workspacePatchSendsSubagentFieldsOnlyWhenTheyMoved() {
         val saved = buildJsonObject { put("name", "app") }
         assertEquals(buildJsonObject { put("name", "app"); put("effort", ""); put("enabled", true) },
-            workspacePatch(saved, "app", "", "", "", true, false, SubagentSettings(true, 4)))
+            workspacePatch(saved, "app", "", "", "", true, SubagentSettings(true, 4)))
         assertEquals(buildJsonObject { put("name", "app"); put("effort", ""); put("enabled", true); put("subagentsEnabled", false)
             put("subagentsMaxRunning", 16) },
-            workspacePatch(saved, "app", "", "", "", true, false, SubagentSettings(false, 16)))
+            workspacePatch(saved, "app", "", "", "", true, SubagentSettings(false, 16)))
     }
 
     @Test fun theGroupsRowsSayTheMocksWordsAndDoneSendsWhatMoved() {

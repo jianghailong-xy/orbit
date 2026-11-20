@@ -124,5 +124,3 @@ function parseRuns(body: string): SubagentFinishedRun[] | null {
   return runs;
 }
 
-/** Whether a run came to its end on its own. */
-export const subagentFinishedOk = (run: SubagentFinishedRun): boolean => run.status === 'DONE';

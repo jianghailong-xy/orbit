@@ -887,8 +887,7 @@
 .settings-row--block {
   display: block;
 }
-.settings-row--block > .rd-form-field,
-.settings-row--block > .rd-route-engines {
+.settings-row--block > .rd-form-field {
   margin: 0;
 }
 .workspace-text-setting.orbit-input,

@@ -35,6 +35,20 @@ internal object RelativeTime {
         val diff = seconds(date, now)
         return if (diff < 10) "just now" else "${span(diff)} ago"
     }
+    /** OrbitKit `RelativeTime.format`, the time under a message: "just now", "12m ago", "3h ago", "2d ago", "1w ago", then "M/d". */
+    fun format(iso: String?, now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()): String? {
+        val date = parse(iso) ?: return null
+        val diff = seconds(date, now)
+        val minute = 60.0; val hour = 3600.0; val day = 86_400.0; val week = 604_800.0
+        return when {
+            diff < minute -> "just now"
+            diff < hour -> "${(diff / minute).toInt()}m ago"
+            diff < day -> "${(diff / hour).toInt()}h ago"
+            diff < week -> "${(diff / day).toInt()}d ago"
+            diff < 4 * week -> "${(diff / week).toInt()}w ago"
+            else -> date.atZone(zone).let { "${it.monthValue}/${it.dayOfMonth}" }
+        }
+    }
 }
 
 /** A part of the Wiki home's status line (OrbitKit `WikiStatusPart`). */

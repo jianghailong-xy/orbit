@@ -126,7 +126,7 @@ internal const val SUGGESTED_REPLIES_HINT = "When a Claude turn ends, the empty 
 /** SettingsCopy's smart model selection switch: its name doesn't say what it does, so the web's hint is its footer on the Sessions
  * page. */
 internal const val SMART_MODEL_SELECTION = "Smart model selection"
-internal const val SMART_MODEL_SELECTION_HINT = "Coordinators suggest a tier for each task, and a SubAgent's size sets its own. Every SubAgent, and the task runs of Agents you turn this on for, run on a model of that tier from your providers. Off: tasks keep their Agent's model and SubAgents their parent session's."
+internal const val SMART_MODEL_SELECTION_HINT = "Coordinators suggest a tier for each task, and a SubAgent's size sets its own. Task runs and SubAgents run on a model of that tier from your providers. Off: tasks keep their Agent's model and SubAgents their parent session's."
 
 /** UserPreferences.smartModelSelection: off only for an explicit boolean false; absent, or anything else, reads as on. */
 internal fun smartModelSelection(preferences: JsonObject?): Boolean =
