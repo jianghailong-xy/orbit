@@ -3196,7 +3196,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '1240_project_coordinator_wake_key_idx',
       // 1250 renames each account's managed runner from orbit-managed to Orbit Cloud: an UPDATE of runner.name joined to
       // managed_runner; runner is not a preserved relation, and no trigger, function or DONE fence changes.
-      '1250_managed_runner_name_orbit_cloud'],
+      '1250_managed_runner_name_orbit_cloud',
+      // 1260 adds session.listed_at (backfilled from last_turn_at/created_at, then defaulted) and conversation_turn.by_person,
+      // and a BEFORE UPDATE trigger on session (status, completed_at) that writes listed_at alone. session is not a
+      // preserved relation, none of the six preserved triggers/functions is named or replaced, and no DONE fence changes.
+      '1260_session_listed_at'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

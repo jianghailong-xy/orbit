@@ -263,6 +263,10 @@ export interface ControlSessionSummary {
   /** The sessions waiting on a reply from this one, oldest first. Same `[]` convention. */
   owesReplyTo?: SessionRequestPeer[];
   lastTurnAt: string | null;
+  /** Where the row sits in the session list (session.listed_at, migration 1260): moved only when the session changes
+   *  for its owner — created, a person's message, a turn ending on them, ended or completed — never by streamed
+   *  activity, which moves lastTurnAt. Clients sort by this. Absent from an older control plane. */
+  listedAt?: string;
   /** When the server will re-send the message this run's failure killed, or null if nothing is
    *  armed. Part of the summary because it is part of what `runState: FAILED` means here: a
    *  failure with a retry armed is one the server intends to undo, which the clients draw as

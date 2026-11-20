@@ -3405,6 +3405,7 @@ export class SessionsService {
       taskId: string | null;
       taskTitle: string | null;
       lastTurnAt: Date | null;
+      listedAt: Date | null;
       createdAt: Date;
       completedAt: Date | null;
       archivedAt: Date | null;
@@ -3670,6 +3671,7 @@ export class SessionsService {
               s.task_id AS "taskId",
               t.title   AS "taskTitle",
               s.last_turn_at AS "lastTurnAt",
+              COALESCE(s.listed_at, s.created_at) AS "listedAt",
               s.created_at   AS "createdAt",
               COALESCE(s.completed_at, s.archived_at) AS "completedAt",
               COALESCE(s.completed_at, s.archived_at) AS "archivedAt",
@@ -3744,13 +3746,13 @@ export class SessionsService {
               count(*) FILTER (WHERE is_conversation) OVER () AS conv_total,
               row_number() OVER (
                 PARTITION BY is_conversation
-                ORDER BY score DESC, "lastTurnAt" DESC NULLS LAST, "createdAt" DESC
+                ORDER BY score DESC, "listedAt" DESC, "createdAt" DESC
               ) AS group_rn
             FROM scored
           )
           SELECT
             id, title, status, "workspaceId", "workspaceName", "runnerId", "taskId", "taskTitle",
-            "lastTurnAt", "createdAt", "completedAt", "archivedAt", "deletedAt", "endReason",
+            "lastTurnAt", "listedAt", "createdAt", "completedAt", "archivedAt", "deletedAt", "endReason",
             "matchField", "snippet", total::int AS "total"
           FROM ranked
           -- The name tier cannot take the whole page. Weights alone don't prevent that: a common
@@ -3760,7 +3762,7 @@ export class SessionsService {
           -- name tier takes what's left, which is all of it when there is nothing to reserve for.
           WHERE is_conversation
              OR group_rn <= ${take}::int - LEAST(conv_total, ${take}::int / 2)
-          ORDER BY score DESC, "lastTurnAt" DESC NULLS LAST, "createdAt" DESC
+          ORDER BY score DESC, "listedAt" DESC, "createdAt" DESC
           LIMIT ${take}::int
         `)
       : await this.prisma.$queryRaw<Row[]>(Prisma.sql`
@@ -3772,6 +3774,7 @@ export class SessionsService {
             s.task_id AS "taskId",
             t.title   AS "taskTitle",
             s.last_turn_at AS "lastTurnAt",
+            COALESCE(s.listed_at, s.created_at) AS "listedAt",
             s.created_at   AS "createdAt",
             COALESCE(s.completed_at, s.archived_at) AS "completedAt",
             COALESCE(s.completed_at, s.archived_at) AS "archivedAt",
@@ -3785,7 +3788,8 @@ export class SessionsService {
           WHERE s.owner_id = ${ownerId}::uuid
             AND s.kind = 'CONVERSATION' AND s.run_source <> 'SCHEDULE'
             AND s.deleted_at IS NULL
-          ORDER BY s.last_turn_at DESC NULLS LAST, s.created_at DESC
+          -- Recent is the list's own order (session.listed_at, session-listed-at.ts), not the liveness clock.
+          ORDER BY COALESCE(s.listed_at, s.created_at) DESC, s.created_at DESC
           LIMIT ${take}::int
         `);
 
@@ -3799,6 +3803,7 @@ export class SessionsService {
         taskId: r.taskId,
         taskTitle: r.taskTitle,
         lastTurnAt: r.lastTurnAt,
+        listedAt: r.listedAt,
         createdAt: r.createdAt,
         completedAt: r.completedAt,
         archivedAt: r.archivedAt,
@@ -10356,7 +10361,7 @@ export class SessionsService {
     dto: SessionResumeDto,
     taskId: string | null,
     workspaceId: string | null,
-    opts?: { routeToCurrentRun?: boolean; translate?: boolean },
+    opts?: { routeToCurrentRun?: boolean; translate?: boolean; listed?: boolean },
   ): Promise<SessionResumeAnswer> {
     if (taskId !== null) {
       // `NOT: { id }` is belt-and-braces — every path here arrives with THIS row terminal, so it

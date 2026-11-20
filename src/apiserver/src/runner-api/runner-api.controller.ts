@@ -7062,10 +7062,9 @@ export class RunnerApiController {
           status: true,
           taskId: true,
           startsTaskWork: true,
-          // Whose opening this session's first turn is, for `answeredPerson` below.
+          // Whose opening this session's first turn is, for `answeredPerson` below (parentSessionId is read further down).
           openedBy: true,
           promptByOrbit: true,
-          parentSessionId: true,
           ownerId: true,
           creatorId: true,
           workspaceId: true,

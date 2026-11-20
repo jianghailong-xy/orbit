@@ -1703,6 +1703,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         sourceRefusalCode: true,
         sourceRefusalDetail: true,
         lastTurnAt: true,
+        listedAt: true,
+        createdAt: true,
         // What the row previews, and the recap the list prefers to it: an already-open list
         // learns a new reply (or a fresh recap) from this event alone, so a summary that omitted
         // them would leave every row on screen previewing the turn before the one just finished.
@@ -1800,6 +1802,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       awaitingReplyFrom: peers?.awaitingReplyFrom ?? [],
       owesReplyTo: peers?.owesReplyTo ?? [],
       lastTurnAt: s.lastTurnAt ? s.lastTurnAt.toISOString() : null,
+      // The list's order key; NULL only on a row an older server inserted mid-deploy, read as its creation.
+      listedAt: (s.listedAt ?? s.createdAt).toISOString(),
       // The two previews, clipped the way the list's own query clips them, and the recap beside
       // them. Null as a value, not "unchanged": a preview the server cleared has to clear on the
       // row holding this summary, and a recap the session does not have is a null.
