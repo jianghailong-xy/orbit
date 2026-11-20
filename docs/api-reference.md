@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 37 |
-| `user` | 483 |
+| `user` | 484 |
 | `admin` | 31 |
 | `runner` | 205 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **760** |
+| **Total** | **761** |
 
 ## Public routes
 
@@ -483,6 +483,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/tasks/evidence-decisions/pending` | query `decidingSessionId` | `PendingEvidenceJudgmentsController.pending` |
 | `GET` | `/api/tasks/labels` | query `assigneeId`, `listId`, `projectId` | `TasksController.labelSummary` |
 | `GET` | `/api/tasks/model-routing/report` | query `agentId`, `since` | `TaskModelRoutingReportController.read` |
+| `GET` | `/api/tasks/model-routing/report/subagents` | query `agentId`, `since` | `TaskModelRoutingReportController.readSubagents` |
 | `GET` | `/api/tasks/page` | query `assigneeId`, `counts`, `creatorSessionId`, `cursor`, `labels`, `limit`, `listId`, `minPriority`, `projectId`, `q`, `status` | `TasksController.listPage` |
 | `GET` | `/api/terminals` | — | `TerminalsController.list` |
 | `DELETE` | `/api/terminals/:id` | path `id` | `TerminalsController.revoke` |

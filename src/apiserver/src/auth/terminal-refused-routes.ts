@@ -203,6 +203,7 @@ export const TERMINAL_REFUSED_ROUTES: readonly string[] = [
   'GET /tasks/evidence-decisions/pending',
   'GET /tasks/labels',
   'GET /tasks/model-routing/report',
+  'GET /tasks/model-routing/report/subagents',
   'GET /tasks/page',
   'GET /terminals',
   'GET /terminals/requests',
