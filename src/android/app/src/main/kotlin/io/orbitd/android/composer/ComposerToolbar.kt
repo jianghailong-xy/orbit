@@ -59,7 +59,7 @@ internal fun composerCardColor(): Color = MaterialTheme.colorScheme.let { if (it
  *  dark, where iOS shows none on black. */
 @Composable
 internal fun Modifier.composerCardLift(): Modifier =
-    if (MaterialTheme.colorScheme.surface.luminance() > 0.5f) glow(Color.Black.copy(alpha = 0.065f), blur = 28.dp, dy = 2.dp, corner = 24.dp) else this
+    if (MaterialTheme.colorScheme.surface.luminance() > 0.5f) glow(Color.Black.copy(alpha = 0.05f), blur = 20.dp, dy = 2.dp, corner = 24.dp) else this
 
 /** The card's hairline, deeper while the box is being typed in (iOS: 0.22 focused, 0.10 at rest). */
 @Composable

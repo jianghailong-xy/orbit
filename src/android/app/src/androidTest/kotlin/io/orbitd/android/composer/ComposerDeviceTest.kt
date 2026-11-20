@@ -705,6 +705,18 @@ class ComposerDeviceTest {
               {"seq":2,"type":"assistant","turnId":"t1","payload":{"text":"Done — matches are highlighted in titles and in the body excerpt.","messageId":"m2"}},
               {"seq":3,"type":"result","turnId":"t1","payload":{"subtype":"success","result":"done"}}]}""")
         awaitText("Done — matches are highlighted in titles and in the body excerpt.")
+        // The page as it rests: the composer drawn and the stream connected. Sign-in's keyboard can still be closing as the page
+        // opens, and the page folds its composer away while the window reports one; the fixture also drops its stream now and then.
+        fun composerShown() = compose.onAllNodes(hasTestTag("composer-input")).fetchSemanticsNodes().any { it.size.height > 0 }
+        if (runCatching { compose.waitUntil(5000) { composerShown() } }.isFailure) {
+            compose.activityRule.scenario.onActivity { activity ->
+                (activity.currentFocus ?: activity.window.decorView).let { view ->
+                    activity.getSystemService(android.view.inputmethod.InputMethodManager::class.java)?.hideSoftInputFromWindow(view.windowToken, 0)
+                    view.clearFocus()
+                }
+            }
+        }
+        compose.waitUntil(15000) { composerShown() && compose.onAllNodes(hasText("Reconnect", substring = true)).fetchSemanticsNodes().isEmpty() }
         compose.waitForIdle()
         capture("session-page")
     }
