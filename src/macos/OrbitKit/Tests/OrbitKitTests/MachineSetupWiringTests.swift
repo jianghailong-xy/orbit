@@ -179,7 +179,8 @@ final class MachineSetupWiringTests: XCTestCase {
                                    "MachineSetupCopy.setupNeedsUpdate(machine: machine)"],
                           "connecting before offline, and only a machine that is here is said to update itself")
         let loop = try slice(page, from: ".task(id: runnerID) {", to: ".onChange(of: runner, initial: true)")
-        XCTAssertTrue(loop.contains("try? await Task.sleep(for: .seconds(MachineSetup.refreshSeconds(for: runner)))"))
+        XCTAssertTrue(loop.contains("await VisibilityGate.app.pause(MachineSetup.refreshSeconds(for: runner))"),
+                      "its own beat, and none while the app cannot be seen")
         XCTAssertFalse(loop.contains(".seconds(5)"), "a fixed beat would hold a connecting machine's folder step back")
     }
 
