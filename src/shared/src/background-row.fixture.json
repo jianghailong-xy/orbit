@@ -23,7 +23,11 @@
     "(error colour), zero parts left out, joined by \" · \"; null when no part is left.",
     "`accessibilityLabel`: \"Background processes, \" + countLine, or the one named item's name.",
     "",
-    "`covers` tags each case with the rules it pins; the shared test requires every tag in `rules`."
+    "`covers` tags each case with the rules it pins; the shared test requires every tag in `rules`.",
+    "",
+    "`events`, where present, is the session's transcript the clients read `lastUserMessageAt` from: every",
+    "client's own reader must return exactly the case's `lastUserMessageAt` from it (the newest user turn",
+    "the person typed; wake notes, watch wakes and session-to-session messages do not count)."
   ],
   "rules": {
     "hidden": "No shown items: no row.",
@@ -38,7 +42,8 @@
     "nothingRunningLastEnded": "Nothing running: the last ended is shown, failure first.",
     "a11yCount": "Accessibility label \"Background processes, \" + the count.",
     "a11yName": "Accessibility label \"Background processes, \" + the one name.",
-    "notLive": "A non-live session's stale running items are dropped."
+    "notLive": "A non-live session's stale running items are dropped.",
+    "sessionMessage": "A message another Orbit session sent (session_send / project_send, a `sessionMessage` card on the turn) is not the person's message: it does not clear an ended item."
   },
   "rotation": {
     "perNameMs": 3000,
@@ -890,6 +895,65 @@
       "sessionLive": false,
       "expect": {
         "hidden": true
+      }
+    },
+    {
+      "case": "a session-to-session message after the end does not clear it",
+      "covers": [
+        "sessionMessage",
+        "endedAfterLastUserMessage",
+        "single"
+      ],
+      "events": [
+        {
+          "seq": 1,
+          "type": "user",
+          "ts": "2026-11-16T02:40:00.000Z",
+          "payload": {
+            "text": "Run the swift tests"
+          }
+        },
+        {
+          "seq": 2,
+          "type": "user",
+          "ts": "2026-11-16T02:46:00.000Z",
+          "payload": {
+            "text": "Please report when the suite is green",
+            "sessionMessage": {
+              "fromSessionId": "coord_1",
+              "fromTitle": "Coordinator",
+              "fromAgentName": "orbit-ws01"
+            }
+          }
+        }
+      ],
+      "list": [
+        {
+          "shellId": "bgj_s",
+          "command": "",
+          "startedSeq": 10,
+          "status": "failed",
+          "description": "OrbitKit swift test (swift:6.1) on the full HEAD tree",
+          "endedAt": "2026-11-16T02:45:00.000Z"
+        }
+      ],
+      "lastUserMessageAt": "2026-11-16T02:40:00.000Z",
+      "sessionLive": true,
+      "expect": {
+        "hidden": false,
+        "label": "Background",
+        "name": {
+          "mode": "one",
+          "item": {
+            "id": "bgj_s",
+            "name": "OrbitKit swift test (swift:6.1) on the full HEAD tree",
+            "truncate": "tail",
+            "mark": "failed"
+          }
+        },
+        "countParts": [],
+        "countLine": null,
+        "accessibilityLabel": "Background processes, OrbitKit swift test (swift:6.1) on the full HEAD tree"
       }
     }
   ]
