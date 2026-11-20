@@ -85,8 +85,9 @@ import { sessionReportedWork } from './landing-source-branch';
  *
  * §2.5 J9 already exempts the very same tasks from a dependent's wait, in SR27's words: a "write the
  * docs" prerequisite must not make the task after it demand a checkpoint that was never going to
- * exist. This lane reads the same declaration through `taskHasNothingToLand`, and the line's answer
- * beside it, and lets such work out of the roll-up. Neither is a way round the landing judgment: a
+ * exist. This lane reads the same facts through `taskHasNothingToLand`, and the line's answer
+ * beside it, and lets such work out of the roll-up. Since revision 42 (§12.15 P-M3) the declaration
+ * itself is no longer read: what keeps such work out is that it ran no branch or committed nothing. Neither is a way round the landing judgment: a
  * task that ran a branch and HAS commits of its own keeps participating, whatever its newest session
  * looks like and whatever its title says, and work on the project branch keeps reading
  * ON_INTEGRATION_LINE. `taskHasNothingToLand` is the whole of what gets anything out.
@@ -300,11 +301,12 @@ export interface LandingJobSessionFacts {
  * identity on purpose — a task is named here only when something can be said about it, and "has no
  * receipt" is not something that can be said.
  *
- * `codeless` is §1.1 `isCodeTask`'s first half, and `taskHasNothingToLand` below is what reads it,
- * together with the repository condition revision 29 added to that same half (O-L7).
+ * `taskHasNothingToLand` below reads it; no label the task carries takes part (§12.15 P-M3).
  */
 export interface LandingServingTask {
-  codeless: boolean;
+  /** The task's status: only a DONE task has delivered, so only a DONE one can have delivered
+   *  nothing (`ranNoBranch`). A reader that did not select it reads as one that has not. */
+  status?: string;
   mergeReceipts: ReadonlyArray<LandingReceiptFacts>;
   integrationJobs: ReadonlyArray<LandingJobFacts>;
   /** §1.1's repository condition (revision 29, O-L7) as this lane reads it: the task's newest work
@@ -515,7 +517,8 @@ export function taskLandingSql(alias: string): string {
  * `isCodeTask` (§1.1) as SQL: work that has a commit to land at all.
  *
  * Its newest work session ran in a worktree on a branch, in no repository known to differ from the
- * one the project's line is bound to (revision 29, §10.5 O-L7), and the row is not declared codeless. The negation of the
+ * one the project's line is bound to (revision 29, §10.5 O-L7). The `codeless` flag is not read (revision 42,
+ * §12.15 P-M3): a codeless task with commits lands like any other. The negation of the
  * middle two disjuncts of `prerequisiteLandedSql`, stated positively because this asks the question
  * the other way round — that one asks "is there nothing left to wait for", this asks "is this the
  * kind of work that lands".
@@ -523,7 +526,6 @@ export function taskLandingSql(alias: string): string {
 export function isCodeTaskSql(alias: string): string {
   return `(
       ${alias}."project_id" IS NOT NULL
-      AND ${alias}."codeless" = false
       AND EXISTS (
         SELECT 1 FROM "session" code_work
           LEFT JOIN "workspace" code_workspace ON code_workspace."id" = code_work."workspace_id"
@@ -921,80 +923,80 @@ export function lineSawNothingToLand(task: LandingServingTask): boolean {
 }
 
 /**
- * Whether this work has nothing to land at all — and there are four ways for that to be true: the
- * task DECLARES it needs no code, its work was done in another repository than the one its line is
- * bound to (`workInAnotherRepository`), the line's own record says it never had a commit of its
- * own, or its DONE measured that (§12.15 P-M1, `deliveredNothingOfItsOwn`) and so queued nothing for
- * the line to answer.
+ * Whether this work has nothing to land at all — and there are four ways for that to be true, each a
+ * fact Orbit measured rather than a label somebody wrote: no work session of the task ever ran a
+ * branch (`ranNoBranch`), its work was done in another repository than the one its line is bound to
+ * (`workInAnotherRepository`), the line's own record says it never had a commit of its own, or its
+ * DONE measured that (§12.15 P-M1, `deliveredNothingOfItsOwn`) and so queued nothing for the line to
+ * answer.
  *
- * §1.1 `isCodeTask` has two halves and the first is the declaration: a task that declares itself
- * `codeless` "needs no code, even though its project is bound to a codebase", which is SR5's escape
- * hatch for the research, documentation and evidence work inside an otherwise code-bearing project.
- * Its schema comment says what that buys here: "a codeless task resolves no SOURCE" — so it has no
- * branch, no commit of its own, and no receipt can ever put its work on `main`. A criterion that
- * demanded a landing from one would be demanding something that was never going to exist, which is
- * SR27's rule one contract over: "a 'write the docs' prerequisite must not make the task after it
- * demand a checkpoint that was never going to exist". §2.5 J9 exempts the very same tasks from a
- * dependent's wait, and `ProjectIntegrationBuckets.doneNotIntegrated` already calls them "DONE work
- * with nothing to land". This is that same answer arriving at §1.4.
+ * NO LABEL DECIDES IT (revision 42, §12.15 P-M3, P-M4)
+ * ---------------------------------------------------
+ * Until revision 42 the first way was a declaration: a task flagged `codeless` left the conjunction
+ * whatever it did, and a project marked `non_code` read no landing at all. Both were labels, and a
+ * label can disagree with the work — a codeless task with commits left work on its branch that no
+ * criterion asked after. Neither is read now. A codeless run that changed nothing never makes a
+ * branch (its checkout is detached until it has something to commit, design §3 B2), so it is out by
+ * `ranNoBranch`; one that committed has commits, and is in like any other. A project whose tasks
+ * never ran a branch reads every criterion LANDED for the same reason, with no mark needed.
  *
- * THE SECOND WAY, AND WHY IT HAD TO BE ADDED
- * ------------------------------------------
- * The declaration is a fact about an intention, and it is the ONLY fact of its kind: `codeless` was
- * written only when a task was created, so a task created without it could never gain it (0346 gave
- * the edit doors it too — with a reason, and never for a task that has commits of its own). On
- * 2026-09-22 that cost a project of 48 finished tasks its DONE a second time: its criterion 12 was
- * served by a finished acceptance task that ran a branch, committed nothing to it and declared
- * nothing, and no receipt could ever put its work on `main` — the same deadlock the declaration had
- * just been taught to break, one task over, with no declaration anywhere to read.
- *
- * What that task has instead is the line's own answer, and it is the better fact of the two: the
+ * THE LINE'S OWN ANSWER
+ * ---------------------
+ * On 2026-09-22 a project of 48 finished tasks could not reach DONE: its criterion 12 was served by
+ * a finished acceptance task that ran a branch, committed nothing to it and declared nothing, and no
+ * receipt could ever put its work on `main`. What that task has is the line's own answer: the
  * task's branch was offered to the line after its session had finished with it, and the line replied
  * that the tip was already on the upstream (`jobFoundNothingOfItsOwn`). A task whose whole record at
  * the line is that answer has no commit of its own — see `lineSawNothingToLand` for why that is the
  * whole of the claim and not a guess from it.
  *
- * WHY §1.1's SECOND HALF IS STILL NOT READ HERE
- * ---------------------------------------------
- * `isCodeTask`'s other half — whether the NEWEST work session ran in a worktree on a branch — is
- * deliberately NOT read, and the difference is what this lane is FOR. §1.1 asks it to decide
- * dispatch and closure, where "the latest attempt is not a branch-bearing one" is the right input.
- * This lane is an audit of where work IS, and a receipt is attached to the TASK rather than to the
- * session it was recorded against: a task that landed from one attempt and then ran another without
- * a worktree is a task whose work is really on the integration line, and reading it as "nothing to
- * land" would say LANDED over it. That is the false green this lane exists to break up.
+ * WHY §1.1's NEWEST-SESSION HALF IS NOT READ HERE
+ * -----------------------------------------------
+ * `isCodeTask` asks whether the NEWEST work session ran in a worktree on a branch, and that is the
+ * right input for dispatch and closure. This lane is an audit of where work IS, and a receipt is
+ * attached to the TASK rather than to the session it was recorded against: a task that landed from
+ * one attempt and then ran another without a worktree is a task whose work is really on the
+ * integration line, and reading it as "nothing to land" would say LANDED over it. That is the false
+ * green this lane exists to break up — which is why `ranNoBranch` asks about EVERY work session, and
+ * about the receipts and the line's answers beside them, not about the newest one.
  *
- * The line's answer has no such gap, and the guard is where the difference shows. That same task —
- * landed from one attempt, then run again — has a MERGED receipt, because the landing it did is a
- * target that moved, and that alone keeps it in the roll-up whatever its sessions look like. And it
- * has commits of its own in every other sense this lane can see: a branch the line was handed and
- * found something on answers `LANDED`, `CONFLICT`, `CHECK_FAILED`, `ERROR` or `READY`, none of which
- * is `ALREADY_LANDED`-on-the-upstream, and none of which this exemption overlooks. Only work whose
- * whole record is "there was nothing of it to land" gets anything out — and a declaration, which is
- * §1.1's first half and authoritative wherever this lane reads it.
- *
- * The sessions this does read are not that half either. `jobSawTheFinishedBranch` looks at the
- * session a landing was queued FOR, never at which session is newest, and it can only keep a task in.
- * `workInAnotherRepository` reads the newest work session for its REPOSITORY alone (O-L7), never
- * for whether it ran a branch, and it takes a task out as the declaration does. It reads the newest
- * session because §1.1 does, and no receipt overrides it: a task that landed on the project branch
- * from one attempt and ran its newest attempt in another repository leaves the conjunction, MERGED
- * receipt and all.
+ * `workInAnotherRepository` reads the newest work session for its REPOSITORY alone (O-L7), because
+ * §1.1 does, and no receipt overrides it: a task that landed on the project branch from one attempt
+ * and ran its newest attempt in another repository leaves the conjunction, MERGED receipt and all.
  */
 export function taskHasNothingToLand(task: LandingServingTask): boolean {
-  return task.codeless || workInAnotherRepository(task) || lineSawNothingToLand(task)
+  return ranNoBranch(task) || workInAnotherRepository(task) || lineSawNothingToLand(task)
     // §12.15 P-M1: the DONE measured no commit of its own and queued nothing, so there is no job for
     // the line's answer to come from; the fact the DONE decided on is read instead.
     || deliveredNothingOfItsOwn(task);
 }
 
 /**
+ * Whether a DONE task's work sessions never ran a branch or reported changed files, and nothing at the
+ * line or in a receipt says otherwise: such work delivered no commit Orbit can see, and so has none
+ * to land (§12.15 P-M3). A task that is not DONE has delivered nothing yet, which is not the same as
+ * delivering nothing, and stays in — which is what a project with no repository, or one whose work is documents
+ * and accounts, is made of. A session with no branch that DID report changed files is work Orbit
+ * knows of and cannot place, and keeps the task in (it reads NO_BRANCH). A reader that did not select
+ * the sessions' `isolationStatus` and `branch` cannot tell, and gets `false` — the withholding answer.
+ */
+export function ranNoBranch(task: LandingServingTask): boolean {
+  const sessions = task.sessions;
+  if (task.status !== 'DONE' || !sessions
+    || sessions.some((session) => !('isolationStatus' in session) || !('branch' in session))) {
+    return false;
+  }
+  return task.mergeReceipts.length === 0 && task.integrationJobs.length === 0
+    && !sessions.some((session) => (session.isolationStatus === 'worktree' && !!session.branch)
+      || sessionReportedWork({ changedFiles: session.changedFiles ?? null }));
+}
+
+/**
  * Whether the task's work was done in another repository than the one its project's line is bound to
  * (§1.1 `isCodeTask`'s repository condition, revision 29 §10.5 O-L7), read off the NEWEST work
  * session as §1.1 reads it. No commit of such work can ever be on this line, and the task cannot be
- * declared codeless either — it has commits (`TASK_CODELESS_HAS_COMMITS`) — so without this a criterion
- * it serves would wait for a landing that never comes. It leaves the conjunction exactly as codeless
- * work does (§1.4 "有提交可落"). A task with no work session, one whose newest work session names no
+ * left out by any label either — it has commits — so without this a criterion it serves would wait for
+ * a landing that never comes. It leaves the conjunction exactly as work with no branch does (§1.4). A task with no work session, one whose newest work session names no
  * repository (no workspace, or no `repo_url`), or one in a project with no binding has none KNOWN to
  * differ, and stays in.
  */
@@ -1068,9 +1070,8 @@ export async function readLandingBranches(
  * rather than borrowing the work side's, which keeps this lane genuinely bolted on: the three clauses
  * are untouched, and nothing here can change the answer they fold.
  *
- * `codeless` rides along as a scalar on the same `task` row the receipts hang off, so reading what
- * `taskHasNothingToLand` needs costs this read no statement at all — which is why the project detail
- * page's fixed cost does not move for it. The jobs are the second read rather than a nested relation
+ * The work sessions ride along one relation below the same `task` row the receipts hang off, so
+ * reading what `taskHasNothingToLand` needs costs this read no statement of its own. The jobs are the second read rather than a nested relation
  * because `task_id` is a history reference with no foreign key (0423) and Prisma has nothing to nest;
  * they and the sessions they were queued for still cost one statement each for the whole project's
  * serving tasks (`project-get-query-count.pg.spec.ts` carries the number and the argument).
@@ -1123,8 +1124,9 @@ export const WORK_SESSIONS_NEWEST_FIRST = {
  * shows, the facts the coordinator is woken for, the settled card, and the mirror those are asserted
  * against. A reader that wrote its own copy would be a second author of the fold's input, and the
  * copy that drifts is the one that quietly keeps answering a question the fold stopped asking —
- * which is what these facts are: SR5's escape hatch, the merges recorded against the task, and
- * where its newest work ran beside where its project's line is bound (O-L7).
+ * which is what these facts are: the merges recorded against the task, whether any of its work
+ * sessions ran a branch, and where its newest work ran beside where its project's line is bound
+ * (O-L7).
  *
  * The last one, the answers the line gave about its branches (§2.2 J-T5), is not here: it is about
  * the task rather than ON it, and it is read beside this select by `readLandingJobsByTask`. An empty
@@ -1133,7 +1135,8 @@ export const WORK_SESSIONS_NEWEST_FIRST = {
  * function that ran the select.
  */
 export const LANDING_SERVING_WORK_SELECT = {
-  codeless: true,
+  // Only a DONE task has delivered (`ranNoBranch`).
+  status: true,
   mergeReceipts: { select: { result: true, targetBranch: true, sourceSha: true, createdAt: true, detail: true, targetShaAfter: true } },
   // §1.1's repository condition (O-L7): where the newest work session ran, and where the project's
   // line is bound. Two relation levels each, not a statement per task (`workInAnotherRepository`).
