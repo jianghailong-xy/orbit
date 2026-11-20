@@ -44,7 +44,8 @@ servers whose tools the engine offered (mcpServers).
       "FAKE-GET <session id> <word>": mcp__orbit__session_get of that session;
       "FAKE-NAV <url> <word>": mcp__browser__browser_navigate to <url>, which takes the runner's browser lease (with
         FAKE-HOLD in the same message, the answer to its result is held open, and the turn with the lease);
-      "FAKE-BSTATUS <word>": mcp__orbit__browser_status.
+      "FAKE-BSTATUS <word>": mcp__orbit__browser_status;
+      "FAKE-BCLEAR <word>": mcp__orbit__browser_clear_logins, in the turn, so its card is read by the turn that asked.
     A call is made only in a request that offers its tool, or once a ToolSearch call of this conversation has loaded it
     (Claude Code defers MCP tools: the request lists only their names, and the answer calls ToolSearch with
     "select:<tool>" first). The log keeps those tools' results whole (toolResults), and
@@ -134,10 +135,10 @@ def loop_state(messages):
     return None
 
 
-PLAN_TOOLS = ('mcp__orbit__schedule_wakeup', 'mcp__orbit__bg_run', 'mcp__orbit__session_get', 'mcp__orbit__browser_status',
+PLAN_TOOLS = ('mcp__orbit__schedule_wakeup', 'mcp__orbit__bg_run', 'mcp__orbit__session_get', 'mcp__orbit__browser_status', 'mcp__orbit__browser_clear_logins',
               'mcp__browser__browser_navigate')
 PLAN = re.compile(r'FAKE-RECUR (\d+) (\d+) (\w+)(?: (\d+) (\d+)\b)?|FAKE-STALL (\d+) (\d+) (\w+)|FAKE-STOP (\d+) (\w+)|'
-                  r'FAKE-GET (\S+) (\w+)|FAKE-NAV (\S+) (\w+)|FAKE-BSTATUS (\w+)')
+                  r'FAKE-GET (\S+) (\w+)|FAKE-NAV (\S+) (\w+)|FAKE-BSTATUS (\w+)|FAKE-BCLEAR (\w+)')
 
 
 def turn_message(messages):
@@ -173,8 +174,10 @@ def plan_steps(text, now):
             steps.append(('mcp__orbit__session_get', {'sessionId': hit[11]}))
         elif hit[13]:
             steps.append(('mcp__browser__browser_navigate', {'url': hit[13]}))
-        else:
+        elif hit[15]:
             steps.append(('mcp__orbit__browser_status', {}))
+        else:
+            steps.append(('mcp__orbit__browser_clear_logins', {}))
     return steps
 
 
