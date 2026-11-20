@@ -1,10 +1,17 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body, Controller, Delete, Get, Headers, HttpCode, HttpException, HttpStatus, Param, ParseIntPipe, Patch, Post, Put, Query, Req, Res,
+  StreamableFile, UseGuards,
+} from '@nestjs/common';
+import type { Request, Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatScope } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PublicIdPipe } from '../common/public-id';
+import { DRIVE_CHUNK_MAX, DRIVE_CHUNK_TOO_LARGE, DriveChunksService } from './drive-chunks.service';
+import { DriveContentService, type DriveContent } from './drive-content.service';
+import { DriveUploadsService } from './drive-uploads.service';
 import { DriveService } from './drive.service';
-import { CreateDriveFolderDto, RestoreDriveVersionDto, UpdateDriveEntryDto } from './dto';
+import { CreateDriveFolderDto, OpenDriveUploadDto, RestoreDriveVersionDto, UpdateDriveEntryDto } from './dto';
 
 /** What every drive route declares for a token: the files scope; a drive holds no workspace, so a confined token is refused. */
 export const DRIVE_PAT = () => PatScope('files', { workspaceConfinable: false });
@@ -14,13 +21,18 @@ const limitOf = (limit?: string) => (limit === undefined ? undefined : Number.pa
 /**
  * The owner's drive routes (docs/orbit-files-drive-technical-design.md §4.1), under the owner's login: folders and files,
  * versions, Trash and the change feed. The owner is always the credential's; another account's entry, version or group
- * is not found. Uploads and downloads, usage and the share check are their own tasks' routes. A token reaches them with the
+ * is not found. Usage and the share check are their own tasks' routes. A token reaches them with the
  * `files` scope (DRIVE_PAT), declared on each handler like every scope; without it the guard refuses with the scope's 403.
  */
 @UseGuards(JwtAuthGuard)
 @Controller('drive')
 export class DriveController {
-  constructor(private readonly drive: DriveService) {}
+  constructor(
+    private readonly drive: DriveService,
+    private readonly uploads: DriveUploadsService,
+    private readonly chunks: DriveChunksService,
+    private readonly content: DriveContentService,
+  ) {}
 
   @DRIVE_PAT()
   @Get('entries')
@@ -128,4 +140,95 @@ export class DriveController {
   changes(@CurrentUser() user: AuthUser, @Query('since') since?: string) {
     return this.drive.changes(user.userId, since);
   }
+
+  // ── uploads and downloads (§4.1) ──────────────────────────────────────────────────────────────
+
+  /** Open a resumable upload: answers the staging id and the chunk size every chunk but the last must have. */
+  @DRIVE_PAT()
+  @Post('uploads')
+  openUpload(@CurrentUser() user: AuthUser, @Body() dto: OpenDriveUploadDto) {
+    return this.uploads.open(user.userId, {
+      parentId: dto.parentId ?? null, name: dto.name, size: dto.size, relativePath: dto.relativePath, dropRootId: dto.dropRootId ?? null,
+    });
+  }
+
+  /** Which chunks have arrived. */
+  @DRIVE_PAT()
+  @Get('uploads/:id')
+  uploadStatus(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.uploads.status(user.userId, id);
+  }
+
+  /** One chunk, at most 8 MiB, as the raw request body, with its sha256 in `X-Orbit-Chunk-Sha256`. Sent again, it replaces. */
+  @DRIVE_PAT()
+  @Put('uploads/:id/chunks/:idx')
+  async putChunk(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('idx', ParseIntPipe) idx: number,
+    @Headers('x-orbit-chunk-sha256') sha256: string | undefined,
+    @Req() req: Request,
+  ) {
+    await this.uploads.assertOpen(user.userId, id);
+    if (Number(req.headers['content-length'] ?? 0) > DRIVE_CHUNK_MAX) {
+      req.resume();
+      throw new HttpException(
+        { code: DRIVE_CHUNK_TOO_LARGE, message: `A chunk is at most ${DRIVE_CHUNK_MAX} bytes (8 MiB); cut the file into smaller parts.` },
+        HttpStatus.PAYLOAD_TOO_LARGE,
+      );
+    }
+    return this.chunks.putChunk(user.userId, id, idx, (sha256 ?? '').toLowerCase(), req);
+  }
+
+  /** Create the file and commit it; sent again after it applied, it answers the same file. */
+  @DRIVE_PAT()
+  @Post('uploads/:id/complete')
+  @HttpCode(HttpStatus.OK)
+  completeUpload(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.uploads.complete(user.userId, id);
+  }
+
+  @DRIVE_PAT()
+  @Delete('uploads/:id')
+  abandonUpload(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.uploads.abandon(user.userId, id);
+  }
+
+  /** Download the current version, with `Range` (206) and an ETag of `"<versionId>.<seq>"`. */
+  @DRIVE_PAT()
+  @Get('entries/:id/content')
+  async download(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Headers('range') range: string | undefined,
+    @Headers('if-range') ifRange: string | undefined,
+    @Headers('if-none-match') ifNoneMatch: string | undefined,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    return send(await this.content.ofEntry(user.userId, id, { range, ifRange, ifNoneMatch }), res);
+  }
+
+  /** Download one version, current or replaced. */
+  @DRIVE_PAT()
+  @Get('versions/:id/content')
+  async downloadVersion(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Headers('range') range: string | undefined,
+    @Headers('if-range') ifRange: string | undefined,
+    @Headers('if-none-match') ifNoneMatch: string | undefined,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    return send(await this.content.ofVersion(user.userId, id, { range, ifRange, ifNoneMatch }), res);
+  }
+}
+
+function send(content: DriveContent, res: Response): StreamableFile | undefined {
+  res.status(content.status);
+  for (const [name, value] of Object.entries(content.headers)) res.setHeader(name, value);
+  if (!content.stream) return undefined;
+  // A client that leaves early does not hold the store open.
+  const stream = content.stream;
+  res.once('close', () => stream.destroy());
+  return new StreamableFile(stream);
 }
