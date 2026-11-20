@@ -1473,6 +1473,12 @@ async function claimed(stack: Stack, sessionId: string): Promise<void> {
  * landing generation: a task whose landing stopped is integrated again by being completed again.
  */
 async function rework(stack: Stack, w: World, a: Attempt, label: string): Promise<void> {
+  // The run finished (queuedLanding), so the session is released; the owner's reply revives it, which clears the
+  // release column and its cause (session_release_fact_chk).
+  await stack.db.session.update({
+    where: { id: a.sessionId },
+    data: { status: RunStatus.AWAITING_INPUT, finishedAt: null, releaseCause: null },
+  });
   const asked = await stack.sessions.createTurn(w.ownerId, a.sessionId, {
     clientTurnId: randomUUID(),
     content: `${label}: the conflict is resolved on the branch`,
@@ -1499,6 +1505,11 @@ async function rework(stack: Stack, w: World, a: Attempt, label: string): Promis
     shellOutput: '',
   });
   assert.equal(await taskStatus(stack.db, a.taskId), TaskStatus.DONE, 'the second acceptance held too');
+  // The reworked run has stopped moving again, as queuedLanding leaves the first: a landing waits for the finish.
+  await stack.db.session.update({
+    where: { id: a.sessionId },
+    data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited' },
+  });
 }
 
 /** What a runner reports for a job that landed: one tree tested and landed, as J2 demands. */
