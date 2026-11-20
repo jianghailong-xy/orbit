@@ -98,8 +98,17 @@ struct LandingCheckSettingRow: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("landing-check-none")
             }
+            if let origin = setting.origin {
+                HStack(spacing: 6) {
+                    ProvenanceBadge(kind: origin.kind, label: origin.label)
+                    if let when = origin.when {
+                        Text(when).font(.orbitMeta).foregroundStyle(.secondary)
+                    }
+                }
+                .accessibilityElement(children: .combine)
+            }
             if setting.mode == .none {
-                // Who can set it (web's LANDING_CHECK_ORIGIN_NOTES, under No check).
+                // Who can set it, under the value's own origin (web's LANDING_CHECK_ORIGIN_NOTES, under No check).
                 VStack(alignment: .leading, spacing: 6) {
                     Text(LandingProvenanceCopy.whoCanSet).font(.orbitLabel.weight(.semibold))
                     ForEach(LandingProvenanceCopy.originNotes) { entry in
@@ -112,15 +121,6 @@ struct LandingCheckSettingRow: View {
                 }
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("landing-check-who-can-set")
-            }
-            if let origin = setting.origin {
-                HStack(spacing: 6) {
-                    ProvenanceBadge(kind: origin.kind, label: origin.label)
-                    if let when = origin.when {
-                        Text(when).font(.orbitMeta).foregroundStyle(.secondary)
-                    }
-                }
-                .accessibilityElement(children: .combine)
             }
             if setting.mode != .none {
                 Text(setting.origin?.kind == "coordinator" ? LandingProvenanceCopy.coordinatorHint : LandingCheckCopy.hint)
