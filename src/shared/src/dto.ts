@@ -4145,8 +4145,11 @@ export interface IntegrationCheckResult extends Omit<IntegrationCheckSpec, 'time
   scope?: 'COMBINED' | 'BASELINE';
   /** The exact tree measured by the baseline check, before it ran (K4). */
   treeSha?: string;
-  skipped?: 'PATHS_EXEMPT';
+  /** A landing check not run: PATHS_EXEMPT names the `files` that changed (§11 K2), TASK_EXEMPT the
+   *  `reason` its task is exempt (§12.15 P-C2). */
+  skipped?: 'PATHS_EXEMPT' | 'TASK_EXEMPT';
   files?: string[];
+  reason?: string;
   exitCode: number | null;
   timedOut: boolean;
   durationMs: number;
@@ -4200,6 +4203,11 @@ export interface IntegrationJobCommand {
    *  `promotion-automatic-land/v1`; absent on every other job. */
   automatic?: boolean;
   checks: IntegrationCheckSpec[];
+  /** LAND_TASK of a task exempt from the project's landing check (§12.15 P-C2): why. `checks` already
+   *  leaves the landing check out; this is only what the runner records as the skipped
+   *  `{ name: 'LANDING_CHECK', skipped: 'TASK_EXEMPT', reason }`. An older runner ignores it, and the
+   *  control plane records that skip itself when the landing lands. */
+  landingCheckExemptReason?: string;
   /** Somebody asked for this job to stop. Today's runner reads it once, when it starts the job (and
    *  a takeover's new process reads the request its claim carries), so a request written while a
    *  legacy job runs only takes effect if the job is claimed again; the progress protocol adds it to

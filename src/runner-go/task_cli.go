@@ -276,6 +276,12 @@ Options:
                               optional for everybody else
   --codeless[=BOOL]           This work produces no code (a rollout, a walkthrough, research):
                               it takes no part in its criterion's landing (see below)
+  --landing-check-exempt[=BOOL]
+                              Skip the project's landing check when this task lands on its
+                              project branch; its own acceptance still runs. Needs
+                              --landing-check-exempt-reason; project branch, coordinator or owner only
+  --landing-check-exempt-reason TEXT
+                              Why the landing check has nothing to say about it (max 280 characters)
   --completion-criterion EXECUTABLE|VERIFICATION|EVIDENCE_JUDGMENT|OWNER_CONFIRMED
 				              Required for every runner-created task; EVIDENCE_JUDGMENT must be explicit.
 				              OWNER_CONFIRMED is confirmed only by the account owner in the app, never by an agent
@@ -726,6 +732,13 @@ Options:
                               --codeless-reason, and is refused for a task with commits of its own
   --codeless-reason TEXT      Why this task produces no code; required with --codeless, and
                               stored on the task beside the declaration
+  --landing-check-exempt[=BOOL]
+                              Exempt this task from its project's landing check (=false takes it
+                              back); its own acceptance still runs. Needs
+                              --landing-check-exempt-reason; project branch, coordinator or owner only
+  --landing-check-exempt-reason TEXT
+                              Why the landing check has nothing to say about it (max 280
+                              characters); alone, replaces the reason of an exempt task
   --completion-criterion EXECUTABLE|VERIFICATION|EVIDENCE_JUDGMENT
                               Replace the task's one normal completion criterion
   --completion-criterion-override-reason TEXT
@@ -1800,6 +1813,8 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	acceptanceCriteriaFile := fs.String("acceptance-criteria-file", "", "read the acceptance criteria from stdin (-)")
 	criterionKey := fs.String("criterion-key", "", "which of the project's acceptance criteria this work serves")
 	codeless := fs.Bool("codeless", false, "this work produces no code, so it takes no part in its criterion's landing")
+	landingCheckExempt := fs.Bool("landing-check-exempt", false, "skip the project's landing check when this task lands on its project branch (needs --landing-check-exempt-reason)")
+	landingCheckExemptReason := fs.String("landing-check-exempt-reason", "", "why the project's landing check has nothing to say about this task (at most 280 characters)")
 	completionCriterion := fs.String("completion-criterion", "", "completion criterion (EXECUTABLE|VERIFICATION|EVIDENCE_JUDGMENT)")
 	completionCriterionOverrideReason := fs.String("completion-criterion-override-reason", "", "why this task keeps a criterion after TASK_CRITERION_SHAPE_ADVICE")
 	ownerConfirmationReason := fs.String("owner-confirmation-reason", "", "why only the account owner can settle this OWNER_CONFIRMED task (DEPLOY|IRREVERSIBLE|OWNER_DEVICE_OR_ACCOUNT|OWNER_TRADE_OFF)")
@@ -1952,6 +1967,17 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	// was before the flag existed, and `--codeless=false` says the default out loud.
 	if flagWasSet(fs, "codeless") {
 		body["codeless"] = *codeless
+	}
+	// §12.15 P-C2, present-only like --codeless. Who may write it, the reason it needs and the line it
+	// needs are the server's to judge; a blank reason is caught before the round trip.
+	if flagWasSet(fs, "landing-check-exempt") {
+		body["landingCheckExempt"] = *landingCheckExempt
+	}
+	if flagWasSet(fs, "landing-check-exempt-reason") {
+		if strings.TrimSpace(*landingCheckExemptReason) == "" {
+			return fmt.Errorf("--landing-check-exempt-reason cannot be blank")
+		}
+		body["landingCheckExemptReason"] = strings.TrimSpace(*landingCheckExemptReason)
 	}
 	// The server checks the parent against the projectId sent on THIS request and never infers one
 	// from the parent, so a subtask of a project's task has to name both. Same present-only rule as
@@ -2585,6 +2611,8 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 	clearCriterionKey := fs.Bool("clear-criterion-key", false, "take back this task's criterion declaration")
 	codeless := fs.Bool("codeless", false, "declare (or, =false, take back) that this task produces no code")
 	codelessReason := fs.String("codeless-reason", "", "why this task produces no code (required with --codeless)")
+	landingCheckExempt := fs.Bool("landing-check-exempt", false, "exempt (or, =false, take back) this task from its project's landing check")
+	landingCheckExemptReason := fs.String("landing-check-exempt-reason", "", "why the project's landing check has nothing to say about this task (at most 280 characters)")
 	completionCriterion := fs.String("completion-criterion", "", "replace the completion criterion (EXECUTABLE|VERIFICATION|EVIDENCE_JUDGMENT)")
 	completionCriterionOverrideReason := fs.String("completion-criterion-override-reason", "", "why this edit changes the completion criterion")
 	ownerConfirmationReason := fs.String("owner-confirmation-reason", "", "replace why only the account owner can settle this OWNER_CONFIRMED task (DEPLOY|IRREVERSIBLE|OWNER_DEVICE_OR_ACCOUNT|OWNER_TRADE_OFF)")
@@ -2908,6 +2936,16 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 			return fmt.Errorf("--codeless-reason cannot be blank")
 		}
 		body["codelessReason"] = strings.TrimSpace(*codelessReason)
+	}
+	// §12.15 P-C2 on the edit door; the server judges the writer, the reason and the line.
+	if flagWasSet(fs, "landing-check-exempt") {
+		body["landingCheckExempt"] = *landingCheckExempt
+	}
+	if flagWasSet(fs, "landing-check-exempt-reason") {
+		if strings.TrimSpace(*landingCheckExemptReason) == "" {
+			return fmt.Errorf("--landing-check-exempt-reason cannot be blank")
+		}
+		body["landingCheckExemptReason"] = strings.TrimSpace(*landingCheckExemptReason)
 	}
 	if flagWasSet(fs, "completion-criterion") {
 		body["completionCriterion"] = *completionCriterion

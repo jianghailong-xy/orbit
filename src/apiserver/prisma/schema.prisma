@@ -6239,6 +6239,13 @@ model Task {
   /// declaration takes the task out of its criterion's landing conjunction. NULL on a task that is
   /// not codeless, and on one created codeless — creating it so is the first statement, not a change.
   codelessReason     String?  @map("codeless_reason")
+  /// True: when this task lands on its project's branch, the project's landing check is not run; its
+  /// own acceptance still is, and the merge check before upstream is untouched (1350, §12.15 P-C2).
+  landingCheckExempt            Boolean @default(false) @map("landing_check_exempt")
+  /// Why, at most 280 characters; set exactly when `landingCheckExempt` is.
+  landingCheckExemptReason      String? @map("landing_check_exempt_reason")
+  /// The coordinator conversation that wrote the exemption; NULL when the owner did.
+  landingCheckExemptBySessionId String? @map("landing_check_exempt_by_session_id") @db.Uuid
   /// The session this task was forked from (migration 0615, SOURCE row PF, SR55): the session whose
   /// create call filed it, on that call's runner credential. The five fork columns are all NULL or
   /// all set, written by the create doors in the task's own INSERT and never afterwards (0615's

@@ -397,6 +397,7 @@ import {
   taskCodelessHasCommitsBody,
   taskCodelessReasonRequiredBody,
 } from './task-codeless';
+import { type LandingCheckExemptColumns, landingCheckExemptWrite } from './task-landing-check-exempt';
 import {
   assertForkCallerOnRunner,
   assertForkPlacement,
@@ -4224,6 +4225,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const forkColumns = await resolveTaskFork(
       this.prisma, ownerId, creatorSessionId, { ...dto, projectId: scopedProjectId }, null,
     );
+    // §12.15 P-C2, over the project the scope admitted, before any transaction.
+    const landingCheckExempt = await landingCheckExemptWrite(this.prisma, {
+      ownerId, projectId: scopedProjectId, actingSessionId: creatorSessionId,
+      exempt: dto.landingCheckExempt, reason: dto.landingCheckExemptReason, currentlyExempt: false,
+    });
     // Against the project this write was ADMITTED into, for the reason stated above: a coordinator
     // that names no project still files its work under the one it coordinates, and refusing that
     // request on the DTO's empty `projectId` would be a refusal of a task that lands in a project.
@@ -4297,6 +4303,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       await this.pausedListIds(ownerId, [dto.listId]),
       criterionDeclaration,
       forkColumns,
+      landingCheckExempt,
     );
     // Initial edges and their task must become visible atomically. Taking the same owner lock
     // used by add/replace prevents a concurrent reverse-edge write from observing the new task
@@ -4719,6 +4726,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     criterionDeclaration: { criterionDefinitionId: string; criterionRevision: number } | null,
     /** Migration 0615: the fork `resolveTaskFork` checked, or null/absent for a task not forked. */
     fork?: TaskForkColumns | null,
+    /** Migration 1350: the landing-check exemption `landingCheckExemptWrite` admitted, or null/absent. */
+    landingCheckExempt?: LandingCheckExemptColumns | null,
   ): Prisma.TaskUncheckedCreateInput {
     const sessionId = origin?.sessionId;
     return {
@@ -4770,6 +4779,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // SR55's five facts, in this INSERT and never again (0615's `task_fork_guard`). Absent on a task
       // that was not forked, so the columns stay out of the statement, as on every task before them.
       ...(fork ?? {}),
+      // §12.15 P-C2, judged by the door before this (writer, reason, line). Absent leaves the defaults.
+      ...(landingCheckExempt ?? {}),
       dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
       // Omitted means unscheduled. The `undefined` is what makes that true without a default:
       // Prisma leaves the column out of the INSERT, so the row is born NULL exactly as every task
@@ -5400,6 +5411,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       const fork = await resolveTaskFork(this.prisma, ownerId, creatorSessionId, item, index);
       if (fork) forkColumns.set(index, fork);
     }
+    // §12.15 P-C2, per item and over the project each was admitted into, like the fork above.
+    const exemptions = new Map<number, LandingCheckExemptColumns>();
+    for (const [index, item] of items.entries()) {
+      if (frozen.has(index)) continue;
+      const exemption = await landingCheckExemptWrite(this.prisma, {
+        ownerId, projectId: item.projectId, actingSessionId: creatorSessionId,
+        exempt: item.landingCheckExempt, reason: item.landingCheckExemptReason, currentlyExempt: false,
+      });
+      if (exemption) exemptions.set(index, exemption);
+    }
     // Item by item, over the project each one was ADMITTED into, and above the dry run for the
     // same reason the bound below is. A frozen item is a replay whose row already exists:
     // re-judging it could only refuse a write that already happened.
@@ -5623,6 +5644,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
               heldListIds,
               criterionDeclarations.get(index) ?? null,
               forkColumns.get(index) ?? null,
+              exemptions.get(index) ?? null,
             ),
           }));
         if (!existing) {
@@ -10165,6 +10187,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       const commits = await readTaskCommitEvidence(this.prisma, id);
       if (commits.length > 0) throw new ConflictException(taskCodelessHasCommitsBody(commits));
     }
+    // §12.15 P-C2: the landing-check exemption, over the project the task is in after this write.
+    // Before the transaction, like every refusal on this path.
+    const landingCheckExempt = await landingCheckExemptWrite(this.prisma, {
+      ownerId,
+      projectId: dto.projectId === undefined ? before.projectId : dto.projectId,
+      actingSessionId,
+      exempt: dto.landingCheckExempt,
+      reason: dto.landingCheckExemptReason,
+      currentlyExempt: before.landingCheckExempt,
+    });
     if (dto.assigneeId) await this.assertOwnedWorkspace(ownerId, dto.assigneeId);
     if (dto.listId) await this.assertOwnedList(ownerId, dto.listId);
     if (dto.projectId) await this.assertOwnedProject(ownerId, dto.projectId);
@@ -10352,6 +10384,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // explaining a declaration it no longer makes.
       codeless: declaresCodeless || withdrawsCodeless ? dto.codeless : undefined,
       codelessReason: declaresCodeless ? codelessReason : withdrawsCodeless ? null : undefined,
+      // The exemption and its reason and writer move together (§12.15 P-C2); absent when not named.
+      ...(landingCheckExempt ?? {}),
       // Three-state like the pins above: omitted keeps the conclusion, null revokes it. Revoking is
       // a real operation rather than an undo — a subject completed by VERIFICATION_PASSED goes back
       // to OPEN on the next reconcile, which is the point of storing the verdict rather than
