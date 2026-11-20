@@ -1,4 +1,4 @@
-# TEMPORARY evidence probe workflow (never merged; it lives on `probe/agents-band-row-after` as
+# TEMPORARY evidence probe workflow (never merged; it lives on `probe/agents-band-row-before` as
 # `.github/workflows/client.yml`). Builds the iPhone and Mac probe apps from the real shared sources
 # and photographs conversation S4 ending on a SubAgent finished wake (DONE, did not finish, two
 # runs, steer) on both.
@@ -6,7 +6,7 @@ name: Agents band row probe (iPhone shots)
 
 on:
   push:
-    branches: ["probe/agents-band-row-after"]
+    branches: ["probe/agents-band-row-before"]
   workflow_dispatch:
 
 jobs:
@@ -64,7 +64,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: agents-band-row-shots
+          name: agents-band-row-before-shots
           path: .ls-probe/shots
           include-hidden-files: true
       - name: Fail as the capture did
@@ -82,7 +82,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: out
-      - name: Push to probe/agents-band-row-after-results
+      - name: Push to probe/agents-band-row-before-results
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -100,4 +100,4 @@ jobs:
           git add -A
           git commit -q -m "subagent finished line probe results for ${{ github.sha }} (run ${{ github.run_id }})"
           git push -q -f "https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git" \
-            results:refs/heads/probe/agents-band-row-after-results
+            results:refs/heads/probe/agents-band-row-before-results

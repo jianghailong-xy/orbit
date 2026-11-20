@@ -282,13 +282,9 @@ struct AgentsBandRow: View {
             Button { showing = true } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "sparkle").font(.orbitMeta).foregroundStyle(.purple)
-                    // One line, as the Background row's label: never broken into "Ag / ent / s".
-                    Text("Agents").font(.orbitLabel.weight(.semibold)).lineLimit(1).fixedSize()
+                    Text("Agents").font(.orbitLabel.weight(.semibold))
                     if summary.running > 0 {
-                        // The title keeps a readable stub; when the model's name would leave it less,
-                        // the chip gives way to the agent's mark alone (board ④).
                         Text(summary.band).font(.orbitMeta).foregroundStyle(.secondary).lineLimit(1)
-                            .frame(minWidth: 80, alignment: .leading)
                         AgentsBandCurrent(summary: summary).layoutPriority(1)
                         Spacer(minLength: 4)
                     } else {
