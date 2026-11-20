@@ -88,7 +88,6 @@ export interface DriveShareAnswer extends Omit<DriveShareCheck, 'versionId'> {
 }
 
 const enc = encodeURIComponent;
-const DRIVE = { entities: ['drive'] };
 
 // ── reads ──────────────────────────────────────────────────────────────────────────────────────
 
@@ -110,14 +109,14 @@ export async function listFolder(parentId: string | null): Promise<DriveListing>
 export const driveFolderQuery = (parentId: string | null) =>
   queryOptions({
     queryKey: ['drive', 'folder', parentId] as const,
-    meta: DRIVE,
+    meta: { entities: ['drive'] },
     queryFn: () => listFolder(parentId),
   });
 
 export const driveEntryQuery = (id: string | null) =>
   queryOptions({
     queryKey: ['drive', 'entry', id] as const,
-    meta: DRIVE,
+    meta: { entities: ['drive'] },
     queryFn: () => api<DriveEntry>(`/drive/entries/${enc(id!)}`),
     enabled: id != null,
   });
@@ -125,7 +124,7 @@ export const driveEntryQuery = (id: string | null) =>
 export const driveVersionsQuery = (fileId: string | null) =>
   queryOptions({
     queryKey: ['drive', 'versions', fileId] as const,
-    meta: DRIVE,
+    meta: { entities: ['drive'] },
     queryFn: () => api<{ entry: DriveEntry; versions: DriveVersion[] }>(`/drive/entries/${enc(fileId!)}/versions`),
     enabled: fileId != null,
   });
@@ -144,13 +143,13 @@ export async function listTrash(): Promise<DriveTrashGroup[]> {
 }
 
 export const driveTrashQuery = () =>
-  queryOptions({ queryKey: ['drive', 'trash'] as const, meta: DRIVE, queryFn: listTrash });
+  queryOptions({ queryKey: ['drive', 'trash'] as const, meta: { entities: ['drive'] }, queryFn: listTrash });
 
 /** The drive files' links, asked for by name: Settings → Shared links does not ask for this kind. */
 export const driveShareLinksQuery = () =>
   queryOptions({
     queryKey: ['drive', 'share-links'] as const,
-    meta: { entities: ['drive', 'share-link'] },
+    meta: { entities: ['drive'] },
     queryFn: async () =>
       (await api<{ links: DriveShareLink[] }>('/share-links?kind=DRIVE_FILE')).links.filter(
         (link) => link.kind === 'DRIVE_FILE' && link.state !== 'ENDED',

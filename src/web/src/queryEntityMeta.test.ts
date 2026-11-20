@@ -50,7 +50,7 @@ import { describe, expect, it } from 'vitest';
 const WEB_SRC = fileURLToPath(new URL('./', import.meta.url));
 
 /** The control-plane entities, as `entitiesFor` (lib/useControlPlane.tsx) names its events. */
-const ENTITIES = new Set(['task', 'session', 'project', 'workspace', 'checkout', 'tag', 'folder', 'provider', 'watch', 'wiki', 'terminal']);
+const ENTITIES = new Set(['task', 'session', 'project', 'workspace', 'checkout', 'tag', 'folder', 'provider', 'watch', 'wiki', 'terminal', 'drive']);
 
 /**
  * Sites that derive from no control-plane entity, with the reason. Frozen: every key must name a

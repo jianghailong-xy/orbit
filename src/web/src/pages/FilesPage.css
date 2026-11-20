@@ -218,7 +218,7 @@
 }
 
 .files-pane {
-  width: 300px;
+  width: 336px;
   overflow: auto;
   padding: 16px;
   border-left: 1px solid var(--border-subtle);
@@ -286,7 +286,6 @@
 .files-pane-actions {
   display: flex;
   gap: 8px;
-  flex-wrap: wrap;
 }
 .files-link-button {
   border: 0;

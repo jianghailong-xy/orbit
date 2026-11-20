@@ -231,6 +231,7 @@ function PicturePreview({ file }: { file: DriveEntry }) {
 function MarkdownPreview({ file }: { file: DriveEntry }) {
   const text = useQuery({
     queryKey: ['drive', 'preview-text', file.id, file.currentVersionId, file.seq],
+    meta: { entities: ['drive'] },
     queryFn: async () => (await driveBlob('entries', file.id, MARKDOWN_PREVIEW_BYTES)).text(),
   });
   if (text.isError) return <div className="files-preview-none">Couldn't load the preview.</div>;
@@ -444,10 +445,12 @@ function FilesBrowser() {
     return () => document.removeEventListener('mousedown', away);
   }, [renaming]);
 
-  // The root opens with the drive.
+  // The root opens with the drive, and the open folder opens in the tree to show what is in it.
+  const folderShown = folder?.id ?? null;
   useEffect(() => {
-    if (rootId) setOpen((was) => (was.has(rootId) ? was : new Set([...was, rootId])));
-  }, [rootId]);
+    const shown = [rootId, folderShown].filter((id): id is string => id != null);
+    setOpen((was) => (shown.every((id) => was.has(id)) ? was : new Set([...was, ...shown])));
+  }, [rootId, folderShown]);
 
   // A finished upload is in the folder now.
   const seenCompleted = useRef(completed);

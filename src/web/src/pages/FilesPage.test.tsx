@@ -341,7 +341,7 @@ describe('the folder tree and the list', () => {
     expect(writer('deploy-checklist.md')).toBe('You');
     // The tree has the drive's folders, from its root.
     const tree = [...document.querySelectorAll('.files-tree .files-tree-name')].map((n) => n.textContent);
-    expect(tree).toEqual(['Files', 'Datasets', 'Orbit UI migration']);
+    expect(tree).toEqual(['Files', 'Datasets', 'Orbit UI migration', 'screens']);
   });
 
   it('opens a folder from the tree', async () => {
