@@ -344,6 +344,7 @@ export const TERMINAL_REFUSED_ROUTES: readonly string[] = [
   'POST /projects/:id/promotions/:promotionId/integration/retry',
   'POST /projects/:id/resume',
   'POST /projects/:id/sessions/complete',
+  'POST /projects/:id/setting-changes/:changeId/revert',
   'POST /projects/:id/start',
   'POST /projects/:id/tasks/:taskId/checkpoints',
   'POST /projects/:id/tasks/:taskId/integration/retry',

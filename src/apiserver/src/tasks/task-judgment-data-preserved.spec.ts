@@ -3210,7 +3210,19 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1304 adds two nullable columns on schedule, max_runs (with a CHECK that NULL passes) and planned_end_told_at,
       // marks every ENDED schedule told (an UPDATE of schedule rows only), and adds two partial indexes; schedule and
       // schedule_run are not preserved relations, and no trigger, function or DONE fence changes.
-      '1304_schedule_max_runs'],
+      '1304_schedule_max_runs',
+      // 1310 adds four columns and two CHECKs on project_codebase (landing_check_none, landing_check_set_by and the
+      // session and time of the last write), and marks OWNER the bindings whose landing check was already
+      // set; project_codebase is not a preserved relation, and no trigger, function or DONE fence changes.
+      '1310_project_landing_check_set_by',
+      // 1350 adds three columns and two CHECKs on task (landing_check_exempt, its reason and the coordinator session
+      // that wrote it, §12.14 P-C2); every existing row satisfies both CHECKs with the defaults, no row is written,
+      // and no trigger, function or DONE fence changes.
+      '1350_task_landing_check_exempt',
+      // 1390 adds the project_setting_change table (the coordinator's cardless landing-check changes, §12.15 P-R1)
+      // and task.landing_check_exempt_owner_set_at; neither table is a preserved relation, and no trigger,
+      // function or DONE fence changes.
+      '1390_project_setting_change'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

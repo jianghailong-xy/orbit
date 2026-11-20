@@ -416,6 +416,11 @@ test('the owner channel refuses a personal access token door by door and field b
       login: 404,
     },
     {
+      route: 'POST /projects/:id/setting-changes/:changeId/revert',
+      path: `/projects/${anyProject}/setting-changes/${nobody()}/revert`,
+      login: 404,
+    },
+    {
       route: 'POST /projects/:id/open-items/:itemId/accept',
       path: `/projects/${anyProject}/open-items/${nobody()}/accept`,
       login: 404,

@@ -903,6 +903,14 @@ describe('landingLine, from a server that lists its jobs', () => {
   });
 });
 
+describe('landingCard for a project with no line', () => {
+  it('is null while the integration read says line: null, whatever is queued', () => {
+    const queued = { ...listing([merge()]), line: null, lineAbsentReason: 'NOT_DECIDED' as const, ref: null };
+    expect(landingCard(queued, NOW, { updatedAt: NOW })).toBeNull();
+    expect(landingCard({ ...queued, line: 'PROJECT_BRANCH', lineAbsentReason: null }, NOW, { updatedAt: NOW })).not.toBeNull();
+  });
+});
+
 describe('landingJobLines', () => {
   it('is empty from a server that does not list its jobs', () => {
     expect(landingJobLines(integration(), NOW, { updatedAt: NOW })).toEqual([]);

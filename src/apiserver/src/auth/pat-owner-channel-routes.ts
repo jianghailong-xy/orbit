@@ -76,6 +76,8 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   // §10.8's "look again", the owner's door annotated and registered as the abandon door is: it refuses
   // an acting session, and a coordinator asks through `integration_observe`.
   'POST /projects/:id/integration/observe',
+  // §12.15 P-R1: the owner putting a coordinator's recorded landing-check change back. Refuses an acting session.
+  'POST /projects/:id/setting-changes/:changeId/revert',
   // The wiki's owner channel: each refuses an agent session WIKI_OWNER_CHANNEL_ONLY.
   'POST /wiki/entries/:id/reject',
   'POST /wiki/entries/:id/confirm',
