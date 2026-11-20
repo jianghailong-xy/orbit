@@ -530,13 +530,19 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     // The SubAgent runs by `delegate` call (GET /sessions/:id/subagents), which each SubAgent block draws its tier, model, duration,
     // cost and Why from: read again when a delegate call starts or ends (iOS `refreshSubagentRunsIfNeeded`). A session that never
     // delegated reads nothing, and a failed read is left alone until the transcript moves again.
-    val subagentSignature = remember(state.window.events, background) { SubagentRuns.signature(state.window.events, background.orEmpty()) }
+    // So are the session's Orbit workflows (GET /sessions/:id/workflows), read with the runs whenever a workflow, or one of its calls, moves
+    // (`WorkflowRuns.signature`); a workflow's calls' runs are among the SubAgent runs, under `<workflow call>#<callIndex>`.
+    val delegateSignature = remember(state.window.events, background) { SubagentRuns.signature(state.window.events, background.orEmpty()) }
+    val workflowSignature = remember(state.window.events, background) { WorkflowRuns.signature(state.window.events, background.orEmpty()) }
     var subagentRuns by remember(handle, route.id) { mutableStateOf<Map<String, SubagentRun>>(emptyMap()) }
-    LaunchedEffect(handle, route.id, subagentSignature) {
-        if (subagentSignature.isEmpty()) { subagentRuns = emptyMap(); return@LaunchedEffect }
+    var workflowRuns by remember(handle, route.id) { mutableStateOf<Map<String, WorkflowRun>>(emptyMap()) }
+    LaunchedEffect(handle, route.id, delegateSignature, workflowSignature) {
+        if (delegateSignature.isEmpty() && workflowSignature.isEmpty()) { subagentRuns = emptyMap(); workflowRuns = emptyMap(); return@LaunchedEffect }
+        suspend fun rows(path: String) = (Wire.decode(app.session.request(handle, io.orbitd.android.core.net.ApiRequest(listOf("sessions", route.id!!, path))).body,
+            JsonElement.serializer()) as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
         try {
-            val body = app.session.request(handle, io.orbitd.android.core.net.ApiRequest(listOf("sessions", route.id!!, "subagents"))).body
-            subagentRuns = SubagentRun.byCall((Wire.decode(body, JsonElement.serializer()) as? JsonArray).orEmpty().filterIsInstance<JsonObject>())
+            subagentRuns = SubagentRun.byCall(rows("subagents"))
+            if (workflowSignature.isNotEmpty()) workflowRuns = WorkflowRun.byCall(rows("workflows"))
         } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { }
     }
     LaunchedEffect(cards, console.engine) { cards.engine = console.engine }
@@ -575,10 +581,19 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     val subagentQueued = remember(queuedTurns, queuedCancelEnabled, liveTail) {
         if (!liveTail) emptyMap() else subagentQueuedWakes(queuedTurns, queuedCancelEnabled) { turnId -> composer.control("turns/$turnId", HttpMethod.DELETE) }
     }
+    // A workflow's finished strip points back at its block, when that block is drawn.
+    val workflowCalls = remember(state.window.events) {
+        state.window.events.filter { it.type == "tool_use" && it.parent() == null && it.fields.string("name") == WorkflowBlock.TOOL_NAME }
+            .mapNotNull { e -> e.toolId()?.let { it to e.seq } }.toMap()
+    }
+    val workflowJump: (String) -> (() -> Unit)? = { toolUseId ->
+        workflowCalls[toolUseId]?.takeIf { seq -> currentRows.any { it.contains(seq) } }?.let { seq -> { model.show(seq) } }
+    }
     CompositionLocalProvider(LocalMainCheckoutResults provides mainCheckoutResults, LocalReaderResources provides resources, LocalShownOriginals provides shownOriginals, LocalTaskActivity provides taskActivity, LocalSteerDeliveries provides steerDeliveries,
         LocalSessionConsole provides console, LocalMainCheckout provides mainCheckout, LocalWatchTargetNames provides targetNames, LocalAnsweredQuestions provides answeredQuestions,
         LocalRevealItemCard provides revealItemCard, LocalExchangeTree provides exchangeTree, LocalSubagentRuns provides subagentRuns,
-        LocalSubagentWakes provides subagentWakes, LocalSubagentQueuedWakes provides subagentQueued) {
+        LocalSubagentWakes provides subagentWakes, LocalSubagentQueuedWakes provides subagentQueued,
+        LocalWorkflowRuns provides workflowRuns, LocalWorkflowCardJump provides workflowJump) {
         SessionCardsReads(cards)
         BoxWithConstraints(Modifier.fillMaxSize()) {
         val view = LocalView.current

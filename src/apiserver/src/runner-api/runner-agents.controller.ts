@@ -51,6 +51,7 @@ export const HUMAN_ONLY_WORKSPACE_FIELDS = [
   'modelRoutingProviders',
   'subagentsEnabled',
   'subagentsMaxRunning',
+  'workflowsEnabled',
 ] as const;
 
 export type OrchestratorWorkspaceInput = {

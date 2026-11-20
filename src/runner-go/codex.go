@@ -381,14 +381,15 @@ func codexProviderArgs(agentEnv map[string]string) []string {
 // does not reach `orbit mcp` however carefully the spawn sets it, and the bg_*
 // tools would report the transport as unavailable on a session that is serving
 // it perfectly well. ORBIT_WATCHES is here for the same reason: without it `orbit mcp` would list the
-// watch tools in a session whose owner has Watch off (watch_rollout.go). The managed runner's
+// watch tools in a session whose owner has Watch off (watch_rollout.go), and ORBIT_WORKFLOWS so that it does not list
+// the workflow tool in a session whose Agent has Workflows off (subagent_workflow.go). The managed runner's
 // instance identity is here for the same reason: `orbit mcp` sends it with the runner credential,
 // which a managed runner's control plane refuses without it (managed_instance.go). ORBIT_SPAWN_DEPTH is here
 // because `orbit mcp` halves its session_create(wait) budget per level of nesting (sessionWaitPolls): without it a
 // Codex session started by another session waits as long as a root one, and can outlast the wait above it.
 // ORBIT_RUNNER_CHILD is the runner's mark on the processes it starts (runnerChildEnv): it is how Orbit's Plan gate
 // tells a session process with no socket, whose writes it refuses, from a terminal the runner did not start.
-const codexOrbitMCPEnvVarsConfig = `mcp_servers.orbit.env_vars=["ORBIT_HOME","ORBIT_SESSION_ID","ORBIT_AGENT_ID","ORBIT_TASK_ID","ORBIT_ALLOW_ORCHESTRATION","ORBIT_WATCHES","ORBIT_WIKI","ORBIT_SCHEDULE_RUN","ORBIT_MCP_PERMISSION_PROMPT","ORBIT_SPAWN_DEPTH","ORBIT_RUNNER_CHILD","ORBIT_BG_SOCKET","ORBIT_BG_TOKEN","ORBIT_MANAGED_RUNNER_GENERATION","ORBIT_MANAGED_RUNNER_POD_UID","ORBIT_SUBAGENT_RUN_ID"]`
+const codexOrbitMCPEnvVarsConfig = `mcp_servers.orbit.env_vars=["ORBIT_HOME","ORBIT_SESSION_ID","ORBIT_AGENT_ID","ORBIT_TASK_ID","ORBIT_ALLOW_ORCHESTRATION","ORBIT_WATCHES","ORBIT_WIKI","ORBIT_WORKFLOWS","ORBIT_SCHEDULE_RUN","ORBIT_MCP_PERMISSION_PROMPT","ORBIT_SPAWN_DEPTH","ORBIT_RUNNER_CHILD","ORBIT_BG_SOCKET","ORBIT_BG_TOKEN","ORBIT_MANAGED_RUNNER_GENERATION","ORBIT_MANAGED_RUNNER_POD_UID","ORBIT_SUBAGENT_RUN_ID"]`
 
 // codexOrbitSessionEnv is the session context both Codex spawn paths export, for `orbit mcp` to read: which
 // session, agent and task it acts for, what it may orchestrate, which optional tools it serves, that Claude's
@@ -403,6 +404,7 @@ func codexOrbitSessionEnv(job *ClaimedSession) []string {
 		"ORBIT_ALLOW_ORCHESTRATION=" + orchestrationEnv(job.AllowOrchestration),
 		envWatches + "=" + watchesEnv(job.WatchesDisabled),
 		envWiki + "=" + wikiEnv(job.WikiDisabled),
+		envWorkflows + "=" + workflowsEnv(job.WorkflowsDisabled),
 		envScheduleRun + "=" + scheduleRunEnv(job.ScheduleRun),
 		envMCPPermissionPrompt + "=0",
 		envSpawnDepth + "=" + strconv.Itoa(job.SpawnDepth),

@@ -31,7 +31,8 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
 
-/** NATIVE frames of the SubAgents group, its Providers list and Model tiers with the mock's data (docs/mocks/subagent/05.png), written
+/** NATIVE frames of the SubAgents group (with its Workflows row, docs/mocks/subagent-workflow part 5), its Providers list and Model
+ * tiers with the mock's data (docs/mocks/subagent/05.png), written
  * under `src/android/build/evidence/subagent-android/`; a dialog's or a menu's window is drawn over the page it opened on. */
 abstract class SubagentsShots {
     @get:Rule(order = 0) val host = object : ExternalResource() {
@@ -96,7 +97,7 @@ abstract class SubagentsShots {
         val api = api()
         page {
             Column(Modifier.padding(horizontal = 16.dp)) {
-                SubagentsSection(api, true, {}, 4, {})
+                SubagentsSection(api, true, {}, true, {}, 8, {})
             }
         }
         await("5 of 6 · Edit")
