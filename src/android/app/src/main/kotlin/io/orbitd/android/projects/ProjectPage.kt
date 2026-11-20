@@ -95,10 +95,11 @@ object ProjectPage {
 
     /** The lanes; the two that say where work is name the project's main branch, `main` (web's `integrationLanes`). */
     fun overviewCells(b: JsonObject, taskCount: Int, line: String?, started: Boolean?, paused: Boolean = false, manualReadyCount: Int = 0,
-        main: String = RunSettings.defaultMainBranch): List<OverviewCell> {
+        main: String = RunSettings.defaultMainBranch, noLine: Boolean = false): List<OverviewCell> {
         val readyFootnote = if (started == false) readyUntilStarted else if (paused) readyWhilePaused
             else if (b.n("ready") > 0 && manualReadyCount == b.n("ready")) "can start manually" else "can start now"
-        if (reportsIntegrationLanes(b)) {
+        // A project that started with no line has no landing to count (§12.16): the lanes without the landing ones.
+        if (reportsIntegrationLanes(b) && !noLine) {
             val landing = b.n("waitingForLanding")
             val lanes = mutableListOf(
                 OverviewCell("running", "Running", b.n("running"), "task work in progress", Glyph.DISC),
@@ -704,9 +705,10 @@ object ProjectPage {
             add("settled", "Done / Cancelled", settled, settled = true)
         }
     }
-    fun rowTags(task: JsonObject, heading: String, ref: String?, upstreamRef: String?): List<Tag> = buildList {
+    /** [noLine]: the project started with no line (§12.16), and its rows have no landing segment. */
+    fun rowTags(task: JsonObject, heading: String, ref: String?, upstreamRef: String?, noLine: Boolean = false): List<Tag> = buildList {
         workTag(task)?.let { lane -> if (lane.text != heading && !heading.startsWith(lane.text + " · ")) add(lane) }
-        integrationTag(task, ref, upstreamRef)?.let(::add)
+        if (!noLine) integrationTag(task, ref, upstreamRef)?.let(::add)
     }
     fun taskGlyph(t: JsonObject) = when (t.text("status")) { "IN_PROGRESS" -> Glyph.DISC; "OPEN" -> Glyph.TRIANGLE; "DONE" -> Glyph.CHECK; "FAILED" -> Glyph.CROSS; else -> Glyph.SQUARE }
 
@@ -970,7 +972,7 @@ object StartProjectCopy {
      * Merge check: Set · At most 2 tasks at a time". [branch] is the project branch, named when tasks land on it. */
     fun settingsLine(draft: Draft, branch: String): String = listOfNotNull(
         if (draft.automatic) RunSettings.automatic else "${RunSettings.automatic} off",
-        if (draft.line == "MAIN") RunSettings.lineMain(draft.main) else branch,
+        when (draft.line) { null -> LandingMeasuredCopy.landsWhenATaskCommits; "MAIN" -> RunSettings.lineMain(draft.main); else -> branch },
         draft.upstream?.let { "${RunSettings.mainBranch}: $it" },
         "${RunSettings.mergeCheck}: ${if (draft.hasMergeCheck) RunSettings.mergeCheckSet else RunSettings.mergeCheckNone}",
         "${RunSettings.atMost} ${draft.maxConcurrentTasks} ${RunSettings.tasksAtATime(draft.maxConcurrentTasks)}",
@@ -996,7 +998,7 @@ object StartProjectCopy {
     data class ComesToYouItem(val text: String, val detail: String? = null)
     /** The Automatic switch's consequence, listed (`StartProject.comesToYou`); the merges name the project's main branch. An agent
      * that pushes its own work to main ([deliveryMode] AGENT_PUSH) asks nobody to merge it (§10.5 O-L2): no merge comes to the owner. */
-    fun comesToYou(automatic: Boolean, line: String, ownerConfirmed: List<NamedTask>, evidenceJudged: Int, escalationSeconds: Int,
+    fun comesToYou(automatic: Boolean, line: String?, ownerConfirmed: List<NamedTask>, evidenceJudged: Int, escalationSeconds: Int,
         main: String = RunSettings.defaultMainBranch, deliveryMode: String? = null): List<ComesToYouItem> {
         val confirms = if (ownerConfirmed.size > 3) listOf(ComesToYouItem(tasksYouConfirm(ownerConfirmed.size)))
             else ownerConfirmed.map { ComesToYouItem("${it.label} · ${it.title}", youConfirm) }
@@ -1142,8 +1144,9 @@ object StartProjectCopy {
         val live = graph.marks.filter { status(it) != "CANCELLED" }.map { it.id }.toSet()
         return graph.marks.any { it.kind == MarkKind.RUN } || graph.edges.any { it.source in live && it.target in live }
     }
-    /** `upstreamRef` is the main branch as a full ref: a coordinator's suggestion, or the one the project already stands on. */
-    data class Settings(val line: String, val projectBranchName: String?, val automatic: Boolean, val maxConcurrentTasks: Int, val mergeCheckCommand: String?,
+    /** `upstreamRef` is the main branch as a full ref: a coordinator's suggestion, or the one the project already stands on. `line` is
+     * null on a coordinator's request that names none (§12.15 P-M2). */
+    data class Settings(val line: String?, val projectBranchName: String?, val automatic: Boolean, val maxConcurrentTasks: Int, val mergeCheckCommand: String?,
         val upstreamRef: String? = null, val landingCheckCommand: String? = null,
         val landingCheckTimeoutSeconds: Int? = null, val mergeCheckTimeoutSeconds: Int? = null)
     /** `StartProject.defaultSettings`: the decided line, else a branch when the plan has dependencies — and the main branch the
@@ -1170,7 +1173,9 @@ object StartProjectCopy {
     fun request(row: JsonObject?): Request? {
         val asked = row?.obj("startRequest") ?: return null
         val settings = asked.obj("settings") ?: return null
-        val line = settings.text("line")?.takeIf { it == "MAIN" || it == "PROJECT_BRANCH" } ?: return null
+        // No line is a request of its own (§12.15 P-M2); a line this build cannot name is not.
+        val line = when (val named = settings["line"]) { null, JsonNull -> null
+            else -> (named as? JsonPrimitive)?.contentOrNull?.takeIf { it == "MAIN" || it == "PROJECT_BRANCH" } ?: return null }
         val automatic = (settings["automatic"] as? JsonPrimitive)?.booleanOrNull ?: return null
         val count = settings.number("maxConcurrentTasks")?.takeIf { it >= 0 } ?: return null
         val check = when (val value = settings["mergeCheckCommand"]) { null, JsonNull -> null; is JsonPrimitive -> if (value.isString) value.content else return null; else -> return null }
@@ -1182,10 +1187,10 @@ object StartProjectCopy {
      * the main branch by name, `refs/heads/` left off: what the row shows and the picker takes — null for a project with no
      * repository, which has no main branch to choose, and for an integration read that did not answer. `deliveryMode` is how the work
      * reaches it (§10.5 O-L1, A-Q21) — null where the card offers no choice: a read that does not say, or a server that predates it. */
-    data class Draft(val line: String, val automatic: Boolean, val maxConcurrentTasks: Int, val mergeCheckCommand: String = "",
+    data class Draft(val line: String?, val automatic: Boolean, val maxConcurrentTasks: Int, val mergeCheckCommand: String = "",
         val upstream: String? = null, val deliveryMode: String? = null, val landingCheckCommand: String = "",
         val landingCheckTimeoutSeconds: Int? = null, val mergeCheckTimeoutSeconds: Int? = null) {
-        val complete get() = (line == "MAIN" || line == "PROJECT_BRANCH") && maxConcurrentTasks in 1..StartProjectCopy.maxConcurrentTasks && (landingCheckTimeoutSeconds == null || landingCheckTimeoutSeconds > 0)
+        val complete get() = (line == null || line == "MAIN" || line == "PROJECT_BRANCH") && maxConcurrentTasks in 1..StartProjectCopy.maxConcurrentTasks && (landingCheckTimeoutSeconds == null || landingCheckTimeoutSeconds > 0)
         val hasMergeCheck get() = mergeCheckCommand.isNotBlank()
         /** The branch every sentence about where work goes names: the one on the card, or main for a project with none. */
         val main get() = upstream ?: RunSettings.defaultMainBranch
@@ -1196,7 +1201,8 @@ object StartProjectCopy {
              * that says how the work reaches it offers that choice — opened on what the project already chose when that is AGENT_PUSH
              * on a line that stays main, and otherwise on PLATFORM, the default. */
             fun of(settings: Settings, view: JsonObject? = null) = Draft(settings.line, true, settings.maxConcurrentTasks, settings.mergeCheckCommand.orEmpty(),
-                if (ProjectMainBranch.repository(view) != null) startMainBranch(settings.upstreamRef, view) else null,
+                // A request with no line offers no main branch: nothing about the line is written at the start.
+                if (settings.line != null && ProjectMainBranch.repository(view) != null) startMainBranch(settings.upstreamRef, view) else null,
                 view?.text("deliveryMode")?.let { RunSettings.delivery(settings.line, it) }, settings.landingCheckCommand.orEmpty(),
                 settings.landingCheckTimeoutSeconds, settings.mergeCheckTimeoutSeconds)
         }
@@ -1206,7 +1212,9 @@ object StartProjectCopy {
     fun body(request: Request, draft: Draft, requestId: String?): JsonObject = buildJsonObject {
         val branch = request.settings.projectBranchName.orEmpty()
         val check = draft.mergeCheckCommand.trim()
-        put("criteriaDigest", request.criteriaDigest); put("line", draft.line)
+        put("criteriaDigest", request.criteriaDigest)
+        // A request with no line is answered with none (§12.15 P-M2), and nothing that only a line means rides with it.
+        draft.line?.let { put("line", it) }
         if (draft.line == "PROJECT_BRANCH" && branch.isNotEmpty()) put("projectBranchName", branch)
         draft.upstream?.let { put("upstreamRef", RunSettings.mainBranchRef(it)) }
         put("automatic", draft.automatic); put("maxConcurrentTasks", draft.maxConcurrentTasks)
@@ -1319,7 +1327,7 @@ object RunSettings {
     const val automaticOff = "You decide when each task is done and when the branch goes into main."
     const val automaticOffMain = "You decide when each task is done, and each merge into main asks you."
     /** …said of the project's main branch: the five constants above, for a project on main. */
-    fun automaticSays(automatic: Boolean, line: String, hasMergeCheck: Boolean, main: String = defaultMainBranch) = when {
+    fun automaticSays(automatic: Boolean, line: String?, hasMergeCheck: Boolean, main: String = defaultMainBranch) = when {
         !automatic -> if (line == "MAIN") "You decide when each task is done, and each merge into $main asks you."
             else "You decide when each task is done and when the branch goes into $main."
         line == "MAIN" -> "The coordinator decides when each task is done. Each merge into $main still asks you."

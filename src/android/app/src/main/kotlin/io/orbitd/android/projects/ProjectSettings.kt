@@ -17,6 +17,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -44,7 +45,11 @@ import java.time.Instant
 @Composable
 internal fun RunSettingsSection(state: ProjectPageState, doc: JsonObject, now: Instant, enabled: Boolean, editMergeCheck: () -> Unit,
     integration: (JsonObject?) -> Unit, automatic: (Boolean) -> Unit, stepConcurrency: (Int) -> Unit, pause: (Boolean) -> Unit,
-    nonCode: (Boolean) -> Unit = {}, mergeLive: suspend () -> Boolean = { false }) {
+    nonCode: (Boolean) -> Unit = {}, mergeLive: suspend () -> Boolean = { false },
+    revertChange: suspend (ProjectSettingChanges.Change) -> String? = { null }) {
+    // The coordinator's changes (board docs/mocks/landing-measured ⑤, D6): a row here, the list a page of its own over this one.
+    var changesOpen by remember { mutableStateOf(false) }
+    val changes = ProjectSettingChanges.of(doc)
     Column(Modifier.testTag("project-settings"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SectionHead(StartProjectCopy.howItRuns, RunSettings.appliesFromNextTask)
         val view = state.integration
@@ -71,7 +76,9 @@ internal fun RunSettingsSection(state: ProjectPageState, doc: JsonObject, now: I
                 AtMostSetting(state, doc, enabled, stepConcurrency)
                 if (!marked) {
                     HorizontalDivider()
-                    LandingCheckSetting(view, enabled, integration)
+                    LandingCheckSetting(view, enabled, now, changes != null, integration)
+                    // A server that predates the record sends no list, and draws no row.
+                    changes?.let { HorizontalDivider(); CoordinatorChangesRow(it.size) { changesOpen = true } }
                     HorizontalDivider()
                     MergeCheckSetting(view, doc, enabled, main, editMergeCheck)
                 }
@@ -88,6 +95,9 @@ internal fun RunSettingsSection(state: ProjectPageState, doc: JsonObject, now: I
             else -> CircularProgressIndicator(Modifier.size(20.dp).align(Alignment.CenterHorizontally))
         }
     }
+    if (changesOpen && changes != null) CoordinatorChangesPage(doc.text("title").orEmpty(), changes,
+        taskTitle = { id -> state.tasks.firstOrNull { io.orbitd.android.navigation.ObjectId.same(it.text("id"), id) }?.text("title") },
+        now = now, enabled = enabled, close = { changesOpen = false }, revert = revertChange)
 }
 
 @Composable
@@ -592,19 +602,44 @@ internal fun ProjectDoneSheet(api: ProjectApi, id: String, state: ProjectPageSta
     }
 }
 
-/** Landing settings use the same integration PATCH as merge settings. Null inherits independently. */
+/** The landing check (board docs/mocks/landing-measured ③, rulings D3, D4, D9): its three values on one switch — the merge check,
+ * a command, or no check — the command in its box, who set it and when, and what No check means. Command opens the editor; the
+ * other two write at the press. A MAIN line has no landing check of its own to set. [listed] says the coordinator's changes have a
+ * row under it, which the hint names. */
 @Composable
-private fun LandingCheckSetting(view: JsonObject, enabled: Boolean, write: (JsonObject?) -> Unit) {
+private fun LandingCheckSetting(view: JsonObject, enabled: Boolean, now: Instant, listed: Boolean, write: (JsonObject?) -> Unit) {
     var editing by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxWidth().testTag("project-landing-check"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    val read = ProjectLandingCheck.of(view)
+    Column(Modifier.fillMaxWidth().testTag("project-landing-check"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(LandingCheckCopy.label)
-        if (view.text("line") == "MAIN") Note(LandingCheckCopy.main) else {
-            TextButton(onClick = { editing = true }, enabled = enabled) {
-                Text(view.text("landingCheckCommand") ?: LandingCheckCopy.inheritedCommand(view.text("mergeCheckCommand")))
+        if (view.text("line") == "MAIN" || read == null) Note(LandingCheckCopy.main) else {
+            LandingCheckSegments(read.mode, enabled, "project-landing-check-mode") { mode ->
+                when (mode) {
+                    ProjectLandingCheck.Mode.COMMAND -> editing = true
+                    else -> write(landingCheckModeWrite(view, mode))
+                }
             }
-            Note(view.number("landingCheckTimeoutSeconds")?.let { "$it seconds" }
-                ?: LandingCheckCopy.inheritedTimeout(view.number("mergeCheckTimeoutSeconds")))
-            Note(LandingCheckCopy.hint)
+            when (read.mode) {
+                ProjectLandingCheck.Mode.COMMAND -> Box(Modifier.clickable(enabled = enabled, role = Role.Button) { editing = true }) {
+                    CommandBox(read.command.orEmpty(), "project-landing-check-command") }
+                ProjectLandingCheck.Mode.MERGE_CHECK -> Note(LandingCheckCopy.inheritedCommand(view.text("mergeCheckCommand")))
+                ProjectLandingCheck.Mode.NONE -> NoCheckSays("project-landing-check-none")
+            }
+            // Who set it (D3): the four pills, and when; a value nobody is named for, or a server that predates the field, draws none.
+            read.setBy?.let { setBy -> WhoLine(setBy, read.setAt?.let { ProjectTime.ago(it, now) }?.let { LandingMeasuredCopy.setAgo(setBy, it) },
+                "project-landing-check-by") }
+            if (read.mode != ProjectLandingCheck.Mode.NONE) {
+                if (read.mode == ProjectLandingCheck.Mode.COMMAND) Note(view.number("landingCheckTimeoutSeconds")?.let { "$it seconds" }
+                    ?: LandingCheckCopy.inheritedTimeout(view.number("mergeCheckTimeoutSeconds")))
+                Text(androidx.compose.ui.text.buildAnnotatedString {
+                    append(LandingCheckCopy.hint)
+                    if (listed) {
+                        append(" ${LandingMeasuredCopy.hintChanges} ")
+                        withStyle(androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.SemiBold)) { append(LandingMeasuredCopy.changesTitle) }
+                        append(".")
+                    }
+                }, Modifier.testTag("project-landing-check-hint"), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
     if (editing) {
@@ -624,6 +659,17 @@ private fun LandingCheckSetting(view: JsonObject, enabled: Boolean, write: (Json
                 write(landingCheckWrite(view, command, timeout.toIntOrNull())); editing = false
             }, enabled = enabled && valid && landingCheckWrite(view, command, timeout.toIntOrNull()) != null) { Text(RunSettings.save) } },
             dismissButton = { TextButton(onClick = { editing = false }) { Text("Cancel") } })
+    }
+}
+
+/** The switch's two values that write at the press: the merge check is no command of the project's own (null, §11 K1), No check
+ * is the explicit `NONE` (§12.15 P-C1). Null when it is already the value. */
+internal fun landingCheckModeWrite(view: JsonObject, mode: ProjectLandingCheck.Mode): JsonObject? {
+    if (ProjectLandingCheck.of(view)?.mode == mode) return null
+    return when (mode) {
+        ProjectLandingCheck.Mode.MERGE_CHECK -> buildJsonObject { put("landingCheckCommand", JsonNull) }
+        ProjectLandingCheck.Mode.NONE -> buildJsonObject { put("landingCheck", "NONE") }
+        ProjectLandingCheck.Mode.COMMAND -> null
     }
 }
 
