@@ -11,6 +11,9 @@ name: Managed-runner lab
 # managed-runner-lab-<scenario>; the job fails when the scenario does. See
 # scripts/managed-runner/lab/scenarios/README.md.
 on:
+  # TEMPORARY, this throwaway branch only: a push registers the workflow so it can be dispatched.
+  push:
+    branches: [probe/managed-runner-lab-register]
   workflow_dispatch:
     inputs:
       scenario:
