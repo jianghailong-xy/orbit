@@ -82,6 +82,7 @@ export interface Tenant {
   doneRequestItemId: string;
   blockerId: string;
   fuseEpisodeId: string;
+  settingChangeId: string;
   handoffId: string;
   promotionId: string;
   /** A queued landing of `projectTaskId`. */
@@ -367,6 +368,10 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'POST /projects/:id/fuse/:episodeId/resume': {
     request: (of) => ({ params: { id: of.projectId, episodeId: of.fuseEpisodeId }, body: {} }),
     nested: ['episodeId'],
+  },
+  'POST /projects/:id/setting-changes/:changeId/revert': {
+    request: (of) => ({ params: { id: of.projectId, changeId: of.settingChangeId } }),
+    nested: ['changeId'],
   },
   'POST /projects/:id/open-items/:itemId/answer': {
     request: (of) => ({ params: { id: of.projectId, itemId: of.openItemId }, body: { text: 'the census' } }),

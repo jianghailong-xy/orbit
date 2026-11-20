@@ -29,6 +29,13 @@ import {
 
 import type { PrismaService } from '../prisma/prisma.service';
 import { baselineHoldSql } from './baseline-hold';
+import {
+  landingCheckValueOf,
+  recordSettingChange,
+  requiredChangeReason,
+  sameSettingValue,
+  type LandingCheckValue,
+} from './project-setting-change';
 import { runnerOfflineSql } from '../runners/runner-presence';
 import { branchName, canonicalRepoUrl, workOnProjectRepository } from './project-criterion-landing';
 import {
@@ -1592,6 +1599,11 @@ export interface IntegrationSettings {
    * `landingCheckCommand` later (a command, or null to fall back to the merge check) lifts it.
    */
   landingCheck?: 'NONE';
+  /**
+   * Why the project's coordinator is changing the landing check without a card (§12.15 P-R1): required
+   * and at most 280 characters on that cardless write, ignored on every other. Not a setting.
+   */
+  landingCheckReason?: string;
   mergeCheckCommand?: string | null;
   mergeCheckTimeoutSeconds?: number | null;
   /** This project's escalation window in seconds (§4.6). The column's CHECK bounds it, 300 to a week. */
@@ -1687,6 +1699,37 @@ function landingCheckProvenance(
     landingCheckSetBySessionId: writer.by === 'COORDINATOR' ? writer.sessionId : null,
     landingCheckSetAt: new Date(),
   };
+}
+
+/**
+ * The owner putting a recorded landing check back (§12.15 P-R1): under the binding's lock, when the field still
+ * holds `ifCurrent` it is written as `value`, with the owner's provenance, so the coordinator's next cardless
+ * write is refused and goes to the card. Returns the value it replaced, or null (nothing written) when the field
+ * has moved on. `beforeWrite` runs under the lock, for the caller's own refusals.
+ */
+export async function restoreLandingCheck(
+  tx: Prisma.TransactionClient,
+  projectId: string,
+  ifCurrent: LandingCheckValue,
+  value: LandingCheckValue,
+  beforeWrite: () => Promise<void>,
+): Promise<LandingCheckValue | null> {
+  const row = await lockCodebase(tx, projectId);
+  if (!row) throw new ConflictException({ code: 'SETTING_CHANGE_NO_BINDING', message: 'this project has no code binding any more' });
+  await beforeWrite();
+  const now = landingCheckValueOf(row);
+  if (!sameSettingValue('LANDING_CHECK', ifCurrent, now)) return null;
+  await tx.projectCodebase.update({
+    where: { id: row.id },
+    data: {
+      landingCheckCommand: value.command,
+      landingCheckTimeoutSeconds: value.timeoutSeconds,
+      landingCheckNone: value.none,
+      ...landingCheckProvenance({ by: 'OWNER' }),
+    },
+    select: { id: true },
+  });
+  return now;
 }
 
 /** The binding, locked for the rest of this transaction. Rank 55: after `task`, before its children. */
@@ -1842,6 +1885,9 @@ export async function configureProjectIntegration(
   if (settings.line === 'MAIN' && settings.projectBranchName !== undefined) {
     throw new BadRequestException('a project that integrates straight into main has no project branch to name');
   }
+  const cardlessReason = input.landingCheckWriter?.by === 'COORDINATOR'
+    ? requiredChangeReason(settings.landingCheckReason, 'LANDING_CHECK_REASON_REQUIRED', 'landingCheckReason')
+    : null;
 
   // The escalation window is the PROJECT's column, not the binding's (§4.1): it says how long a
   // person waits, and a project with no code at all still has exceptions waiting on somebody. So it
@@ -1954,6 +2000,22 @@ export async function configureProjectIntegration(
   });
   if (settings.deliveryMode === 'AGENT_PUSH' && row.deliveryMode !== 'AGENT_PUSH') {
     await deliveryModeTurnedAgentPush(tx, { ownerId, projectId });
+  }
+  // §12.15 P-R1: the history of the landing check, in this transaction, under the lock. The coordinator's cardless
+  // write is always one row, with its reason and session; the owner's own write and a card's are rows when they
+  // change the value, and are never revertible. A Start press (START) is the owner confirming the coordinator's
+  // proposal, which the start card already shows, and writes none.
+  const writer = input.landingCheckWriter ?? { by: 'OWNER' as const };
+  if (landingNamed && writer.by !== 'START') {
+    const oldValue = landingCheckValueOf(row);
+    const newValue = landingCheckValueOf(written);
+    if (writer.by === 'COORDINATOR' || !sameSettingValue('LANDING_CHECK', oldValue, newValue)) {
+      await recordSettingChange(tx, {
+        ownerId, projectId, field: 'LANDING_CHECK', origin: writer.by, oldValue, newValue,
+        reason: writer.by === 'COORDINATOR' ? cardlessReason : null,
+        sessionId: writer.by === 'COORDINATOR' ? writer.sessionId : null,
+      });
+    }
   }
   return projectIntegrationView(written, await escalationWindow(tx, projectId));
 }

@@ -236,6 +236,9 @@ export class UpdateProjectIntegrationDto implements IntegrationSettings {
   /** `NONE`: run no project landing check, only each task's own acceptance (§12.15 P-C1). Writing
    *  `landingCheckCommand` lifts it. */
   @IsOptional() @IsIn(['NONE']) landingCheck?: 'NONE';
+  /** Why the project's coordinator writes the landing check without a card (§12.15 P-R1): required there,
+   *  at most 280 characters, ignored on any other write. */
+  @IsOptional() @IsString() landingCheckReason?: string;
   /**
    * How long one of this project's exception items may wait on its coordinator before it becomes
    * yours (§4.6). Five minutes to a week, the same range the column's CHECK holds; two hours unless

@@ -1527,7 +1527,7 @@ func buildOperationCatalog() []*operation {
 					"description": "Where this project's finished tasks land, and what is " +
 						"checked before they do, as {line: MAIN | PROJECT_BRANCH, " +
 						"projectBranchName, upstreamRef, mergeCheckCommand, " +
-						"mergeCheckTimeoutSeconds, landingCheckCommand, landingCheckTimeoutSeconds, landingCheck}. " +
+						"mergeCheckTimeoutSeconds, landingCheckCommand, landingCheckTimeoutSeconds, landingCheck, landingCheckReason}. " +
 						"Landing settings fall back to the merge settings when null; landingCheck: NONE runs no landing " +
 						"check at all, so a task landing on the project branch runs only its own acceptance, and sending " +
 						"landingCheckCommand later (a command, or null) lifts it. The two halves are not the same decision. " +
@@ -1553,7 +1553,10 @@ func buildOperationCatalog() []*operation {
 						"integration.landingCheck {command, setBy: OWNER | CARD | START | COORDINATOR, " +
 						"setBySessionId, setAt}: a value the owner confirmed on the start card as you " +
 						"proposed it (START) stays yours to change, one they wrote themselves (OWNER) or " +
-						"approved on a card (CARD) does not. The merge check itself always needs the card. Once a project has started integrating the line is locked, and " +
+						"approved on a card (CARD) does not. A card-less write also needs landingCheckReason, at most 280 " +
+						"characters: Orbit records it with the old and new value, your session and the time, " +
+						"project_get lists the records newest first as settingChanges, and the owner can put one " +
+						"back, after which that field needs the card again. The merge check itself always needs the card. Once a project has started integrating the line is locked, and " +
 						"a request to move it is refused even from the owner: to change it, its " +
 						"project branch reaches main first.",
 				},
