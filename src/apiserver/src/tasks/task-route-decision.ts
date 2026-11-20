@@ -9,6 +9,7 @@ import {
   quotaExpiresAt,
   quotaNearLimit,
   spentPlanUsage,
+  withEnginePlanUsage,
   type AccountEngine,
   type PlanUsage,
   type PlanUsageSnapshot,
@@ -16,6 +17,7 @@ import {
   type RunnerModelCatalog,
 } from '@orbit/shared';
 import { runnerAccountPausedUntil } from '../common/account-pause';
+import { sanitizeRunnerEngines } from '../common/runner-engines';
 import { modelRoutingEnabled, optimizeForOf } from '../common/model-routing-switch';
 import { resolvePermissionMode } from '../common/permission-mode';
 import { firstRuntimeCatalogModel, sanitizeRuntimeDefaultModels } from '../common/runtime-model';
@@ -328,7 +330,9 @@ export function engineState(
     nowMs: now.getTime(),
   }) !== null;
   const account = runAccount(engine, agent.env, accounts, runner, now);
-  const snapshot = account === null ? undefined : spentPlanUsage(runner.planUsage as PlanUsage | null, engine, account);
+  // Antigravity's reading travels with its engine health, not in planUsage: folded in as every quota reader does.
+  const usage = withEnginePlanUsage(runner.planUsage as PlanUsage | null, sanitizeRunnerEngines(runner.engines));
+  const snapshot = account === null ? undefined : spentPlanUsage(usage, engine, account);
   const quota = fullestWindow(snapshot, now);
   // No reading at all, or one without a window fullestWindow reads (a runner that fetched nothing for it).
   // Antigravity reads as read once it reports any bucket (one of a model's own is a reading too); Cursor once it

@@ -12,6 +12,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
+    "ops:files-integrity": "node dist/files/file-integrity.cli.js",
     "ops:task-signoff-migration": "node dist/tasks/task-signoff-migration.cli.js",
     "ops:task-judgment-repair": "node dist/tasks/task-judgment-repair.cli.js",
     "ops:wiki-backfill": "node dist/wiki/wiki-backfill.cli.js",

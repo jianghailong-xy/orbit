@@ -20,14 +20,14 @@ import { ShareLinksService } from './share-links.service';
 function contentOf(parts: Buffer[]) {
   let offset = 0;
   const chunks = parts.map((bytes, idx) => {
-    const chunk = { idx, offset: BigInt(offset), sizeBytes: bytes.length, sha256: `sha-${idx}`, blob: { storage: 'local' } };
+    const chunk = { idx, offset: BigInt(offset), sizeBytes: bytes.length, sha256: `sha-${idx}` };
     offset += bytes.length;
     return chunk;
   });
   const prisma = {
-    driveVersion: {
-      findFirst: async () => ({ sizeBytes: BigInt(offset), chunks }),
-    },
+    driveVersion: { findFirst: async () => ({ sizeBytes: BigInt(offset) }) },
+    driveVersionChunk: { findMany: async () => chunks },
+    fileBlob: { findUnique: async () => ({ storage: 'local' }) },
   };
   const files = {
     storeOf: () => ({

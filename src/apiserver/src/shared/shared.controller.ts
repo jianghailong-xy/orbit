@@ -17,7 +17,7 @@ import {
 import type { Response } from 'express';
 import type { Observable } from 'rxjs';
 import { PublicIdPipe } from '../common/public-id';
-import { DriveContentService } from '../drive/drive-content.service';
+import { DriveContentService, parseRange } from '../drive/drive-content.service';
 import { AttachmentsService } from '../attachments/attachments.service';
 import { publicOrigin } from '../email/email-settings.service';
 import { streamable } from '../files/files.service';
@@ -108,7 +108,7 @@ export class SharedController {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('ETag', `"${file.versionId}"`);
     const range = parseRange(rangeHeader, file.sizeBytes);
-    if (range === 'UNSATISFIABLE') {
+    if (range === 'unsatisfiable') {
       res.status(416).setHeader('Content-Range', `bytes */${file.sizeBytes}`);
       return new StreamableFile(Buffer.alloc(0), { type, length: 0 });
     }
@@ -356,21 +356,4 @@ const FILE_TYPES: Record<string, string> = {
 function driveFileType(name: string): string {
   const dot = name.lastIndexOf('.');
   return (dot >= 0 && FILE_TYPES[name.slice(dot + 1).toLowerCase()]) || 'application/octet-stream';
-}
-
-/** One `bytes=a-b`, `bytes=a-` or `bytes=-n` range of a content of `size` bytes: null for none (or one we do not honour). */
-function parseRange(header: string | undefined, size: number): { start: number; end: number } | 'UNSATISFIABLE' | null {
-  const match = /^bytes=(\d*)-(\d*)$/.exec(header?.trim() ?? '');
-  if (!match || (match[1] === '' && match[2] === '')) return null;
-  let start: number;
-  let end: number;
-  if (match[1] === '') {
-    start = Math.max(0, size - Number(match[2]));
-    end = size - 1;
-  } else {
-    start = Number(match[1]);
-    end = match[2] === '' ? size - 1 : Math.min(Number(match[2]), size - 1);
-  }
-  if (size === 0 || start >= size || end < start) return 'UNSATISFIABLE';
-  return { start, end };
 }
