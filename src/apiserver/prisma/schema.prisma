@@ -10156,8 +10156,9 @@ enum ScheduleChangeRequestState {
 
 /// A goal, a rhythm and an envelope (schedules/schedules.service.ts). `workspaceId`, `agentId` and
 /// `createdFromSessionId` are history references, not foreign keys. The envelope (`envelope*`) is written only by a
-/// press on the owner channel, or narrowed by a person's own narrowing (§4). The partial index `schedule_due_idx`
-/// (WHERE state = 'ACTIVE') and the CHECKs live in the migration.
+/// press on the owner channel, or narrowed by a person's own narrowing (§4). The partial indexes `schedule_due_idx`
+/// (WHERE state = 'ACTIVE') and `schedule_planned_end_untold_idx` (ENDED END_REACHED, not yet told; migration 1304) and
+/// the CHECKs live in the migrations.
 model Schedule {
   id                       String              @id @default(uuid(7)) @db.Uuid
   ownerId                  String              @map("owner_id") @db.Uuid
@@ -10174,6 +10175,11 @@ model Schedule {
   timezone                 String
   startAt                  DateTime            @map("start_at") @db.Timestamptz(3)
   endAt                    DateTime?           @map("end_at") @db.Timestamptz(3)
+  /// The planned end by count (§8.5, migration 1304): ENDED (END_REACHED) at the start of the run that reaches it.
+  /// At least 1 (CHECK schedule_max_runs_positive); NULL for none.
+  maxRuns                  Int?                @map("max_runs")
+  /// When the one "Stopped as planned" push was sent, or decided against (a ONCE rule). Bookkeeping, set by the worker.
+  plannedEndToldAt         DateTime?           @map("planned_end_told_at") @db.Timestamptz(3)
   accessLevel              ScheduleAccessLevel @map("access_level")
   runLimitMinutes          Int                 @default(30) @map("run_limit_minutes")
   envelopeWorkspaceId      String              @map("envelope_workspace_id") @db.Uuid
@@ -10226,7 +10232,8 @@ model ScheduleRevision {
 }
 
 /// One firing. Its partial unique indexes (one per SCHEDULED/CATCH_UP slot, one in progress, one queued) live in
-/// the migration. `sessionId` is a history reference.
+/// the migration, and so does `schedule_run_started_idx` (WHERE started_at IS NOT NULL, migration 1304), the started
+/// runs a planned end by count reads. `sessionId` is a history reference.
 model ScheduleRun {
   id               String             @id @default(uuid(7)) @db.Uuid
   scheduleId       String             @map("schedule_id") @db.Uuid

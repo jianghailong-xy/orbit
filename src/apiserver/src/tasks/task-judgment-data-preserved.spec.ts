@@ -3206,7 +3206,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1273 widens owner_request's kind check for SETTINGS_CHANGE, adds a nullable JSONB payload with a CHECK every
       // stored row passes and a partial unique index; no row is written, and no preserved relation, trigger, function
       // or DONE fence changes.
-      '1273_owner_request_settings_change'],
+      '1273_owner_request_settings_change',
+      // 1304 adds two nullable columns on schedule, max_runs (with a CHECK that NULL passes) and planned_end_told_at,
+      // marks every ENDED schedule told (an UPDATE of schedule rows only), and adds two partial indexes; schedule and
+      // schedule_run are not preserved relations, and no trigger, function or DONE fence changes.
+      '1304_schedule_max_runs'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
