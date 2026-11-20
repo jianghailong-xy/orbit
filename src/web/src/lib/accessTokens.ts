@@ -16,10 +16,17 @@ export const SCOPE_GROUPS: readonly { resource: string; read: string; write?: st
   { resource: 'Events', read: 'events:read' },
 ];
 
+/**
+ * The one scope that is not read/write by resource: Files (the Orbit Files drive) is a single grant that
+ * reads and changes it, so the Read-only preset leaves it out and Read & write includes it.
+ */
+export const FILES_SCOPE = 'files';
+
 export const READ_SCOPES: readonly string[] = SCOPE_GROUPS.map((group) => group.read);
-export const ALL_SCOPES: readonly string[] = SCOPE_GROUPS.flatMap((group) =>
-  group.write ? [group.read, group.write] : [group.read],
-);
+export const ALL_SCOPES: readonly string[] = [
+  ...SCOPE_GROUPS.flatMap((group) => (group.write ? [group.read, group.write] : [group.read])),
+  FILES_SCOPE,
+];
 
 export type ScopePreset = 'read' | 'readWrite' | 'custom';
 
@@ -40,14 +47,15 @@ const sameSet = (scopes: readonly string[], of: readonly string[]) =>
 export function scopeSummary(scopes: readonly string[]): string {
   if (sameSet(scopes, ALL_SCOPES)) return 'Read & write · everything';
   if (sameSet(scopes, READ_SCOPES)) return 'Read-only · everything';
-  return SCOPE_GROUPS.flatMap((group) => {
+  const files = scopes.includes(FILES_SCOPE) ? ['Files: read & write'] : [];
+  return [...SCOPE_GROUPS.flatMap((group) => {
     const read = scopes.includes(group.read);
     const write = !!group.write && scopes.includes(group.write);
     if (read && write) return [`${group.resource}: read & write`];
     if (read) return [`${group.resource}: read`];
     if (write) return [`${group.resource}: write`];
     return [];
-  }).join(' · ');
+  }), ...files].join(' · ');
 }
 
 /** The lifetimes a token is issued with (§11.1); 90 days unless another is chosen. */
