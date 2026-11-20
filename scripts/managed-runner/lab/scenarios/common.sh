@@ -140,6 +140,10 @@ lab_collect() {
     [ -n "${POD:-}" ] && K logs "$POD" -c runner > "$LOGS/runner-final.log" 2>&1
   fi
   { free -m; df -h; } > "$LOGS/host.txt" 2>&1
+  # What systemd and the kernel saw of the lab's units (a unit that would not start, an OOM kill).
+  journalctl --no-pager -b -o short-iso -u 'orbit-mr-lab*' > "$LOGS/journal-units.txt" 2>&1
+  journalctl --no-pager -b -o short-iso -n 600 > "$LOGS/journal.txt" 2>&1
+  dmesg -T 2>/dev/null | tail -n 200 > "$LOGS/dmesg.txt"
   docker rm -f orbit-mr-lab-web-nginx >/dev/null 2>&1
   python3 "$L/login-lab.py" gate stop >/dev/null 2>&1
   "$L/stop.sh" >/dev/null 2>&1
