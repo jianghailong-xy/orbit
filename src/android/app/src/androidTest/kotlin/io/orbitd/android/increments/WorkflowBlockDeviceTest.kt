@@ -16,8 +16,8 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 class WorkflowBlockDeviceTest : IncrementDeviceTest() {
-    private val running = "34WorkflowBlockRunning1"
-    private val finished = "34WorkflowBlockFinished"
+    private val running = "34WorkflowBlockRunning"
+    private val finished = "34WorkflowBlockFinishd"
     override val ids get() = listOf(workspace, runner, running, finished)
 
     private fun detail(id: String, title: String) = Json.parseToJsonElement("""{"id":"$id","title":"$title","status":"RUNNING",
