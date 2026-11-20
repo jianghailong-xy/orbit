@@ -75,10 +75,18 @@ for domain in com.apple.Preferences com.apple.keyboard.preferences; do
   xcrun simctl spawn "$IPHONE_UDID" defaults write "$domain" DidShowContinuousPathIntroduction -bool true 2>/dev/null || true
 done
 
-serve "$OUT/ios/requests.log"
-run_pass ios NwProbe "id=$IPHONE_UDID" "$OUT/ios"
-serve "$OUT/mac/requests.log"
-run_pass mac NwMacProbe "platform=macOS" "$OUT/mac"
+# Which passes run: PASSES (or a PASSES file beside this script) narrows a round to one platform.
+[ -f PASSES ] && PASSES=$(cat PASSES)
+PASSES="${PASSES:-ios mac}"
+echo "==> passes: $PASSES"
+if [[ " $PASSES " == *" ios "* ]]; then
+  serve "$OUT/ios/requests.log"
+  run_pass ios NwProbe "id=$IPHONE_UDID" "$OUT/ios"
+fi
+if [[ " $PASSES " == *" mac "* ]]; then
+  serve "$OUT/mac/requests.log"
+  run_pass mac NwMacProbe "platform=macOS" "$OUT/mac"
+fi
 kill "$STUB_PID" 2>/dev/null || true
 
 for p in ios mac; do

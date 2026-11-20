@@ -200,12 +200,18 @@ final class NewWorkspaceShotTests: ProbeCase {
         // The sidebar folds its section header and the + into one element as wide as the header (run 44704121881), and
         // under the pointer it narrows to make room for the section's disclosure triangle, the + moving left beside it
         // (run 44710605671). So: hover, read the frame again, and click just inside its trailing edge.
-        let begins = NSPredicate(format: "title BEGINSWITH %@", "orbit@austin")
-        for dx in [-12.0, -8, -16, -5] {
+        let begins = NSPredicate(format: "title CONTAINS %@ OR label CONTAINS %@", "orbit@austin", "orbit@austin")
+        for (i, dx) in [-12.0, -8, -16, -5].enumerated() {
             plus.hover()
             settle(0.8)
             note("mac: hovered + element label=\(plus.label) frame=\(plus.frame); click at maxX\(dx)")
             plus.coordinate(withNormalizedOffset: CGVector(dx: 1, dy: 0.5)).withOffset(CGVector(dx: dx, dy: 0)).click()
+            settle(1)
+            // The whole screen: an open menu is a window of its own, outside the app window's picture.
+            screen("mac-click-\(i)")
+            let open = app.menus.allElementsBoundByIndex.filter { $0.exists && $0.frame.minY < 700 && $0.frame.width > 0 }
+            note("mac: after click \(i): \(open.count) menu(s) on screen \(open.map { "\($0.frame)" })")
+            if i == 0 { write(app.debugDescription, "tree-after-click-0.txt") }
             if app.menuItems.matching(begins).firstMatch.waitForExistence(timeout: 2) {
                 note("mac: the menu opened from a click \(dx) pt inside the header's trailing edge")
                 break
