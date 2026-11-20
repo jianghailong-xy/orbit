@@ -141,6 +141,8 @@ struct ScheduleRowModel: Identifiable {
     let circle: ScheduleDisplay.CircleView
     let title: String
     let line: String
+    /// The planned end, on its own line so the row's line never cuts it off.
+    var end: String? = nil
     let repeats: Bool
     let time: String
     let draft: Bool
@@ -262,7 +264,7 @@ enum ScheduleTimelineRows {
                     id: "\(group.id)-\(item.id)",
                     circle: circle,
                     title: s.title,
-                    line: Self.withEnd(wide
+                    line: wide
                         ? ScheduleDisplay.rowLine(rule: s.rule, workspaceName: s.workspaceName, accessLevel: s.accessLevel,
                                                   state: s.state, heldReason: s.heldReason, agentName: s.agentName,
                                                   pausedAt: pausedAt, timezone: scheduled.timezone)
@@ -270,18 +272,13 @@ enum ScheduleTimelineRows {
                                                        accessLevel: s.accessLevel, state: s.state,
                                                        heldReason: s.heldReason, pausedAt: pausedAt,
                                                        timezone: scheduled.timezone),
-                        s, now: now, timezone: scheduled.timezone),
+                    end: ScheduleDisplay.endText(s, now: now, timezone: scheduled.timezone),
                     repeats: ScheduleDisplay.ruleRepeats(s.rule), time: time, draft: false, paused: inPaused,
                     scheduleID: s.id,
                     kind: .schedule(s),
                     open: { Self.select(s.id, scheduled) })
             }
         }
-    }
-
-    /// A row's second line with the schedule's planned end after it: "… · until Nov 25", "… · 3 runs left".
-    private static func withEnd(_ line: String, _ s: ScheduleView, now: Date, timezone: String) -> String {
-        ScheduleDisplay.endText(s, now: now, timezone: timezone).map { line + SC.separator + $0 } ?? line
     }
 
     @MainActor
@@ -543,6 +540,10 @@ struct ScheduledPage: View {
                     .font(.orbitLabel)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                    // The planned end on its own line: "until 23:00 today · 3 runs left" is never the part cut off.
+                    if let end = row.end {
+                        Text(end).font(.orbitLabel).foregroundStyle(.secondary).accessibilityIdentifier("schedule-row-end")
+                    }
                 }
             }
             .padding(.vertical, 4)

@@ -88,7 +88,7 @@ const rows = () => [...host.querySelectorAll<HTMLElement>('.sched-row')];
 const row = (title: string) => rows().find((r) => r.querySelector('.sched-row-title')!.textContent === title)!;
 const line = (title: string) => rows()
   .filter((r) => r.querySelector('.sched-row-title')!.textContent === title)
-  .map((r) => r.querySelector('.sched-row-line')!.textContent!)
+  .map((r) => [...r.querySelectorAll('.sched-row-line')].map((l) => l.textContent!).join('\n'))
   .filter((text) => !text.includes('slots missed'))
   .join('\n');
 const click = async (el: Element) => {

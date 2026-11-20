@@ -144,7 +144,9 @@ internal fun scheduleClock(iso: String?, timezone: String): String =
 private data class ScheduleRowModel(val id: String, val circle: ScheduleDisplay.CircleView, val title: String, val line: String,
     val repeats: Boolean, val time: String, val draft: Boolean, val paused: Boolean,
     /** A condition's row: the newest reading and its age, where a timed row shows its time (board ④ ②). */
-    val reading: ConditionDisplay.RowReading? = null, val open: () -> Unit)
+    val reading: ConditionDisplay.RowReading? = null,
+    /** The planned end, on its own line so the row's line never cuts it off. */
+    val end: String? = null, val open: () -> Unit)
 
 /**
  * The Scheduled page: "Scheduled 6" and the workspace filter, the timeline's groups, the line at the end, and the detail sheet of
@@ -311,10 +313,9 @@ private fun rows(group: ScheduleDisplay.TimelineGroup, state: ScheduledStore.Sta
                     store.inspect(s.id); store.loadDetail(s.id)
                 }
             }
-            val line = listOfNotNull(ScheduleDisplay.phoneRowLine(s.rule, s.workspaceName, s.accessLevel, s.state, s.heldReason, pausedAt, zone),
-                ScheduleDisplay.endText(s, now, zone)).joinToString(SC.separator)
+            val line = ScheduleDisplay.phoneRowLine(s.rule, s.workspaceName, s.accessLevel, s.state, s.heldReason, pausedAt, zone)
             ScheduleRowModel("${group.id}-${item.id}", circle, s.title, line,
-                ScheduleDisplay.ruleRepeats(s.rule), time, draft = false, paused = inPaused) {
+                ScheduleDisplay.ruleRepeats(s.rule), time, draft = false, paused = inPaused, end = ScheduleDisplay.endText(s, now, zone)) {
                 store.inspect(s.id); store.loadDetail(s.id)
             }
         }
@@ -351,6 +352,8 @@ private fun ScheduleRow(row: ScheduleRowModel) {
                 // One line, the phone's short grammar; the tail gives way if it must.
                 Text((if (row.repeats) "↻ " else "") + row.line, style = MaterialTheme.typography.bodySmall, color = secondary,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
+                // The planned end on its own line: "until 23:00 today · 3 runs left" is the part a reader must not lose.
+                row.end?.let { Text(it, Modifier.testTag("schedule-row-end"), style = MaterialTheme.typography.bodySmall, color = secondary) }
             }
         }
     }

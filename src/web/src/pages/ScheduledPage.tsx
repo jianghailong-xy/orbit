@@ -114,12 +114,15 @@ function Circle({ view }: { view: ScheduleCircleView }): JSX.Element {
   );
 }
 
-function RowLine({ repeats, text }: { repeats: boolean; text: string }): JSX.Element {
+function RowLine({ repeats, text, end }: { repeats: boolean; text: string; end?: string | null }): JSX.Element {
   return (
-    <div className="sched-row-line">
-      {repeats ? <span className="sched-repeat" aria-hidden="true">{REPEAT}</span> : null}
-      {text}
-    </div>
+    <>
+      <div className="sched-row-line">
+        {repeats ? <span className="sched-repeat" aria-hidden="true">{REPEAT}</span> : null}
+        {text}
+      </div>
+      {end ? <div className="sched-row-line sched-row-end">{end}</div> : null}
+    </>
   );
 }
 
@@ -128,6 +131,8 @@ interface RowView {
   circle: ScheduleCircleView;
   title: string;
   line: string;
+  /** The planned end, on its own line so it is never the part that is cut off. */
+  end?: string | null;
   repeats: boolean;
   time: string;
   cls: string;
@@ -153,7 +158,7 @@ function Row({ row }: { row: RowView }): JSX.Element {
       <span className="sched-row-body">
         <span className="sched-row-text">
           <span className="sched-row-title">{row.title}</span>
-          <RowLine repeats={row.repeats} text={row.line} />
+          <RowLine repeats={row.repeats} text={row.line} end={row.end} />
         </span>
         {row.circle.tag ? <span className="sched-tag" data-tone={row.circle.tag.tone}>{row.circle.tag.text}</span> : null}
         {row.reading ? (
@@ -168,10 +173,9 @@ function Row({ row }: { row: RowView }): JSX.Element {
   );
 }
 
-/** A row's second line with the schedule's planned end after it: "… · until Nov 25", "… · 3 runs left". */
-function withEnd(line: string, schedule: Pick<ScheduleListRow, 'endAt' | 'maxRuns' | 'runsLeft'>, now: Date, timezone: string): string {
-  const end = scheduleEndText(schedule, now, timezone);
-  return end ? `${line}${C.separator}${end}` : line;
+/** A schedule's planned end for its row's own line: "until Nov 25", "3 runs left"; null without an end. */
+function endOf(schedule: Pick<ScheduleListRow, 'endAt' | 'maxRuns' | 'runsLeft'>, now: Date, timezone: string): string | null {
+  return scheduleEndText(schedule, now, timezone);
 }
 
 const OPEN_CIRCLE: ScheduleCircleView = { circle: 'open', mark: null, tag: null };
@@ -285,8 +289,9 @@ export function ScheduledPage(): JSX.Element {
         circle: scheduleRunCircle(run, { newFinding: facts.newFinding }),
         title: schedule.title,
         line: underWay
-          ? withEnd(scheduleRowLine(schedule, { agentName: schedule.agentName, runningMinutes: minutes }), schedule, now, timezone)
+          ? scheduleRowLine(schedule, { agentName: schedule.agentName, runningMinutes: minutes })
           : scheduleRunLine(run, { notified: facts.notified }),
+        end: underWay ? endOf(schedule, now, timezone) : null,
         repeats: underWay && scheduleRuleRepeats(schedule.rule),
         time: scheduleClock(run.plannedAt, timezone),
         cls: underWay ? '' : ' is-past',
@@ -299,11 +304,12 @@ export function ScheduledPage(): JSX.Element {
       key: `${group.key}:${schedule.id}`,
       circle: scheduleRowCircle(schedule, runs),
       title: schedule.title,
-      line: withEnd(scheduleRowLine(schedule, {
+      line: scheduleRowLine(schedule, {
         agentName: schedule.agentName,
         pausedAt: schedule.pausedAt ? new Date(schedule.pausedAt) : null,
         timezone,
-      }), schedule, now, timezone),
+      }),
+      end: endOf(schedule, now, timezone),
       repeats: scheduleRuleRepeats(schedule.rule),
       time: item.at && !inPaused ? scheduleClock(item.at, timezone) : '',
       cls: inPaused ? ' is-paused' : '',
