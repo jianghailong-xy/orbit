@@ -456,14 +456,14 @@ export const WriteContractSchema: GenMessage<WriteContract> = /*@__PURE__*/
  */
 export type ManagedInstance = Message<"orbit.runnerlink.v1.ManagedInstance"> & {
   /**
-   * The instance's generation, today's X-Orbit-Managed-Runner-Generation header.
+   * The instance's generation, today's X-Orbit-Cloud-Runner-Generation header.
    *
    * @generated from field: string generation = 1;
    */
   generation: string;
 
   /**
-   * The instance's pod UID, today's X-Orbit-Managed-Runner-Pod-Uid header.
+   * The instance's pod UID, today's X-Orbit-Cloud-Runner-Pod-Uid header.
    *
    * @generated from field: string pod_uid = 2;
    */

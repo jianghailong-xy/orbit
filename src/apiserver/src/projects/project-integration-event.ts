@@ -254,7 +254,8 @@ export function checkStartedText(
 
 export function checkFinishedText(check: {
   scope?: 'COMBINED' | 'BASELINE';
-  skipped?: 'PATHS_EXEMPT';
+  skipped?: 'PATHS_EXEMPT' | 'TASK_EXEMPT';
+  reason?: string;
   name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK' | 'LANDING_CHECK';
   exitCode: number | null;
   expectedExitCode: number;
@@ -265,6 +266,7 @@ export function checkFinishedText(check: {
     ? 'Checked the project branch with main, without this task'
     : checkLabel(check.name);
   if (check.skipped === 'PATHS_EXEMPT') return `${label} skipped · only exempt paths changed`;
+  if (check.skipped === 'TASK_EXEMPT') return `${label} skipped · this task is exempt: ${check.reason ?? ''}`;
   if (check.timedOut) return `${label} timed out after ${durationText(check.durationMs)}`;
   if (check.scope === 'BASELINE' && check.exitCode != null) {
     return `${label} · ${check.exitCode === check.expectedExitCode ? 'passes' : 'also fails'}`;

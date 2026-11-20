@@ -75,7 +75,8 @@ export function observationErrorDedupeKey(projectId: string): string {
 /**
  * The tasks waiting to be observed (§10.6), as SQL over a TASK alias: in a project, DONE, code work
  * of this line (`isCodeTask`, O-L7's repository condition included), with a frozen delivered identity
- * (O-L4), and not known to be on the line yet (§1.4 `NOT_KNOWN`). A PLATFORM project's tasks are among
+ * (O-L4) naming a commit past its base (§12.15 P-M1: a branch with no commit of its own is not
+ * observed — its DONE decided it), and not known to be on the line yet (§1.4 `NOT_KNOWN`). A PLATFORM project's tasks are among
  * them too: its observation only recognises work that reached the line outside its own pipeline.
  */
 export function landingPendingObservationSql(alias: string): string {
@@ -83,6 +84,7 @@ export function landingPendingObservationSql(alias: string): string {
       ${alias}."status" = 'DONE'
       AND ${alias}."delivered_at" IS NOT NULL
       AND ${alias}."delivered_sha" IS NOT NULL
+      AND ${alias}."delivered_sha" IS DISTINCT FROM ${alias}."delivered_base_sha"
       AND ${isCodeTaskSql(alias)}
       AND (${taskLandingSql(alias)}) = 'NOT_KNOWN'
     )`;

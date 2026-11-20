@@ -248,11 +248,11 @@ struct HugWidthLayout: Layout {
 
 /// The widest an Orbit card in a conversation draws: on the agent's side, from the leading edge, and
 /// no wider than this however wide the window (docs/mocks/session-message-bubble, owner 2026-11-12;
-/// web's `max-width: 720px` on `.oic/.tsc/.psc/.crc` and `.smc-wrap`). A phone's column is narrower,
+/// web's `--chat-card-max: 720px` on `.oic/.tsc/.psc/.crc` and `.smc-wrap`). A phone's column is narrower,
 /// and there a card takes the column.
 extension View {
     func orbitCardWidth() -> some View {
-        frame(maxWidth: 720, alignment: .leading)
+        frame(maxWidth: ConversationCardWidth.max, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

@@ -242,6 +242,8 @@ final class SettingsStackWiringTests: XCTestCase {
         XCTAssertEqual(page.components(separatedBy: "translationSection").count - 1, 2,
                        "Translation is drawn once, from the groups, and defined once")
         XCTAssertTrue(page.contains("Text(SessionSettings.footer(row))"), "each row's hint is its footer")
+        XCTAssertTrue(page.contains("if SessionSettings.shows(row, smartModelSelection: modelRouting) {"),
+                      "Optimize For is drawn only while the switch on the page is on")
         XCTAssertTrue(page.contains(".navigationTitle(SettingsPage.general.title)"))
         let controls = try slice(page, from: "@ViewBuilder private func control(_ row: SessionSettings.Row) -> some View {",
                                  to: "private func seed()")

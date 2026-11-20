@@ -82,6 +82,7 @@ export interface Tenant {
   doneRequestItemId: string;
   blockerId: string;
   fuseEpisodeId: string;
+  settingChangeId: string;
   handoffId: string;
   promotionId: string;
   /** A queued landing of `projectTaskId`. */
@@ -368,6 +369,10 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
     request: (of) => ({ params: { id: of.projectId, episodeId: of.fuseEpisodeId }, body: {} }),
     nested: ['episodeId'],
   },
+  'POST /projects/:id/setting-changes/:changeId/revert': {
+    request: (of) => ({ params: { id: of.projectId, changeId: of.settingChangeId } }),
+    nested: ['changeId'],
+  },
   'POST /projects/:id/open-items/:itemId/answer': {
     request: (of) => ({ params: { id: of.projectId, itemId: of.openItemId }, body: { text: 'the census' } }),
     nested: ['itemId'],
@@ -536,8 +541,10 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'DELETE /runners/:id/accounts/:engine/:account': {
     request: (of) => ({ params: { id: of.runnerId, ...of.runnerAccount } }),
   },
+  // Claude Code only (setDefaultAccount refuses any other engine with a 400 before it reads the runner), so the probe
+  // names a Claude account to reach the owner check.
   'POST /runners/:id/accounts/:engine/:account/set-default': {
-    request: (of) => ({ params: { id: of.runnerId, ...of.runnerAccount } }),
+    request: (of) => ({ params: { id: of.runnerId, engine: 'claude', account: of.runnerAccount.account } }),
   },
   'POST /runners/:id/accounts/:engine/default/restore': {
     request: (of) => ({ params: { id: of.runnerId, engine: of.runnerAccount.engine } }),
@@ -882,6 +889,12 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
  * that shows the route finds its object only under the caller's own account. Kept as short as it can be.
  */
 export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
+  // ── the owner's tier for a built-in engine's model (docs/subagent-design.md §7) ─────────────────────────
+  'PATCH /providers/builtin/:engine/model-tier':
+    'the path names an engine (claude, cursor, …), which every account shares, not an object of any account: the write '
+    + 'is one UPDATE of the caller\'s own user row (WHERE "id" = the caller, providers/providers.service.ts:793 '
+    + 'in setBuiltinModelTier), and the model is checked against the caller\'s own runners; no other account\'s row can be '
+    + 'named. subagent-settings.pg.spec.ts section 5 sets and clears it and reads the caller\'s preferences back',
   // ── the managed runner browser (docs/runner-browser-design.md §5, §6) ──────────────────────────────────
   'GET /runners/:id/browser':
     'behind the browser switch, which the census server leaves off (every caller 404 there); on, the runner is read by '
@@ -996,6 +1009,8 @@ export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
     'deleted by (id, the caller) only, and 404 when that matched nothing (owner-requests/owner-secrets.service.ts:412); owner-secrets.pg.spec.ts (h) sends another account\'s',
   'POST /owner-requests/:id/create-wiki':
     'read by (id, the caller) first, 404 for another account\'s id (owner-requests/owner-requests.service.ts:306); the wiki is made under the caller\'s account through wiki.createSpace from that row\'s repository and workspace, never from the body, and the card is settled by a compare-and-set on (id, the caller, PENDING) (owner-requests/owner-requests.service.ts:521)',
+  'POST /owner-requests/:id/apply-settings':
+    'read by (id, the caller) first, 404 for another account\'s id (owner-requests/owner-requests.service.ts:509); the preferences read FOR NO KEY UPDATE and written are the caller\'s own user row, never one the body names (owner-requests/settings-apply.ts:21, owner-requests/settings-apply.ts:39), and the card is settled by a compare-and-set on (id, the caller, PENDING) (owner-requests/owner-requests.service.ts:820)',
   'POST /owner-requests/:id/decline':
     'read by (id, the caller) first, 404 for another account\'s id (owner-requests/owner-requests.service.ts:193), and the write is a compare-and-set on (id, the caller, PENDING) (owner-requests/owner-requests.service.ts:270)',
   'POST /admin/managed-runners/:id/volume-switch':

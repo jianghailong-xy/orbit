@@ -21,7 +21,7 @@ import { encryptSecret } from './provider-crypto';
 import { LANDING_PROVIDER_SLUG } from './provider-slug';
 import { ProvidersService } from './providers.service';
 import { readBatchPlan, readExecuteTarget, taskRunEngine } from '../tasks/task-run-receipt';
-import { routeTaskRun, type ModelRoutingInput } from '../tasks/model-routing';
+import { routeTaskRun, type ModelRoutingInput, type SubagentProvider } from '../tasks/model-routing';
 import { TasksService } from '../tasks/tasks.service';
 
 process.env.PROVIDER_SECRET_KEY ??= 'engine-provider-spec';
@@ -375,45 +375,43 @@ test('T3 receipts: v3 is read as written, v1 and v2 with no engine, the engine p
   assert.equal(taskRunEngine({ engine: 'claude', provider: 'deepseek' }, { engine: 'dsh', provider: 'deepseek' }), 'claude');
 });
 
-/** A routed run on Claude at tier M whose own engine is ruled out, with Codex allowed and reported. */
-function routedAway(baseline: ModelRoutingInput['baseline']): ModelRoutingInput {
+const CATALOG = {
+  claude: [{ value: 'claude-sonnet-5-5', label: 'Sonnet', priority: 0 }],
+  codex: [{ value: 'gpt-default', label: 'GPT', priority: 0 }],
+};
+
+/** A run at tier M on an Agent on Claude, picked from `providers` on a runner whose Claude sign-in is signed out. */
+function routedAway(providers: SubagentProvider[]): ModelRoutingInput {
   return {
     task: { modelHint: 'M' },
-    baseline,
+    baseline: { engine: 'claude', provider: providers[0].slug, model: null, effort: null },
     history: [],
-    environment: {
-      runtime: 'claude',
-      modelCatalog: {
-        claude: [{ value: 'claude-sonnet-5-5', label: 'Sonnet', priority: 0 }],
-        codex: [{ value: 'gpt-default', label: 'GPT', priority: 0 }],
-      },
-      runtimeDefaultModels: { codex: 'gpt-default' },
+    environment: { runtime: 'claude', modelCatalog: CATALOG, runtimeDefaultModels: { codex: 'gpt-default' } },
+    pool: {
+      type: 'task', definitionName: 'the task', caller: {}, definition: {}, optimizeFor: 'cost',
+      parent: { engine: 'claude', provider: providers[0].slug, model: '', effort: null },
+      providers, blockedProviders: [],
+      engines: { claude: { installed: true, signedOut: true }, codex: { installed: true } },
+      modelCatalog: CATALOG, runtimeDefaultModels: { codex: 'gpt-default' },
     },
-    engines: { allowed: ['codex'], states: { claude: { signedOut: true }, codex: {} }, verifiedRunEngine: 'claude' },
   };
 }
 
-test('T3 routing: a run moved to another engine keeps a key that engine can run, and otherwise takes its sign-in', () => {
-  // A credential the routed engine runs keeps going (§4.4): the key is not swapped for the runner's login.
-  const kept = routeTaskRun(routedAway({ engine: 'claude', engines: ['claude', 'codex'], provider: 'gateway-key', model: null, effort: null }));
-  assert.deepEqual([kept.engine, kept.provider], ['codex', 'gateway-key']);
-  // One it cannot run gives way to that engine's own sign-in, named by the engine.
-  const login = routeTaskRun(routedAway({ engine: 'claude', engines: ['claude', 'opencode'], provider: 'anthropic-2', model: null, effort: null }));
-  assert.deepEqual([login.engine, login.provider], ['codex', 'codex']);
-  // Staying on its own engine, it stays on its own key.
-  const stays = routeTaskRun({ ...routedAway({ engine: 'claude', provider: 'anthropic-2', model: null, effort: null }), engines: { allowed: [] } });
-  assert.deepEqual([stays.engine, stays.provider, stays.level], ['claude', 'anthropic-2', 'M']);
+const signIn = (engine: string): SubagentProvider => ({
+  slug: engine, billing: 'subscription', inScope: true, credential: { kind: 'login', engine }, engines: [{ engine }],
 });
+const gatewayKey: SubagentProvider = {
+  slug: 'gateway-key', billing: 'key', inScope: true, credential: { kind: 'key', presetSlug: null }, engines: [{ engine: 'claude' }],
+};
 
 test("T3 routing: a run on a key is never moved off its engine by the runner's report on its sign-in", () => {
-  const value = routedAway({ engine: 'claude', engines: ['claude', 'opencode'], provider: 'anthropic-2', model: null, effort: null });
-  value.engines!.verifiedRunEngine = null;
-  const decision = routeTaskRun(value);
-  assert.deepEqual([decision.engine, decision.provider], ['claude', 'anthropic-2']);
-  assert.ok(decision.reasons.includes("Engine claude: this agent's own engine"));
-  // The same report rules out a run on that sign-in itself.
-  const onLogin = routeTaskRun({ ...value, baseline: { ...value.baseline, provider: 'claude', engines: ['claude'] } });
-  assert.deepEqual([onLogin.engine, onLogin.provider], ['codex', 'codex']);
+  const decision = routeTaskRun(routedAway([gatewayKey, signIn('claude')]));
+  assert.deepEqual([decision.engine, decision.provider, decision.level], ['claude', 'gateway-key', 'M']);
+});
+
+test('T3 routing: a signed-out sign-in gives way to another engine\'s sign-in, named by the engine', () => {
+  const decision = routeTaskRun(routedAway([signIn('claude'), signIn('codex')]));
+  assert.deepEqual([decision.engine, decision.provider, decision.level], ['codex', 'codex', 'M']);
 });
 
 test('T3 quota gate: a run on a key is neither held by the runner report nor blind for want of one', async () => {

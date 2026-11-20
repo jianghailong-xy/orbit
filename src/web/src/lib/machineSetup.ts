@@ -162,6 +162,17 @@ export function newFolderPick(probe: DirProbe, name: string, root: string, machi
     : { kind: 'new', name, path: newFolderPath(root, name) };
 }
 
+/** A folder field's text that names a whole path (`/srv/app`, `~/code/app`) rather than one folder in the machine's home
+ *  (docs/mocks/new-workspace-form, decision 2 A): the machine is asked about that path itself. */
+export const isFolderPath = (typed: string): boolean => /^[~/]/.test(typed);
+
+/** What Create workspace picks on a full path's answer: the directory as it stands. Nothing is made for a path outside
+ *  the machine's home, so one that isn't there is refused as any folder is. */
+export function folderPathPick(probe: DirProbe, machine: string): PickedFolder | null {
+  const verdict = folderVerdict(probe, machine);
+  return verdict.usable ? { kind: 'existing', path: probe.path, note: verdict.short } : null;
+}
+
 /** The folder step's answer, once the person has pressed Use this folder. */
 export type PickedFolder =
   | { kind: 'existing'; path: string; note: string }

@@ -2039,13 +2039,20 @@ final class ConsoleModel {
                                       tick: scrollTick)
     }
 
-    /// The `delegate` call a SubAgent run was started from, by the run its result names — what a
-    /// SubAgent's finished line links back to — or nil where the loaded transcript holds none.
-    func delegateCard(forRun runId: String) -> String? {
-        for case .toolCall(let card) in reducer.state.items where card.name == SubagentBlock.toolName {
-            if SubagentFinishedText.delegateRunId(card.result) == runId { return card.id }
+    /// Each SubAgent end turn loaded, by run id: its card draws the end and keeps the block the agent read
+    /// (`SubagentCardEnd.wakes`), so the turn itself draws nothing.
+    var subagentWakes: [String: SubagentCardEnd.WakeSeen] { SubagentCardEnd.wakes(state.items) }
+
+    /// Each SubAgent end turn still on the queue, by run id: its card says the agent has not read it yet,
+    /// and its `Don't send` takes the turn off the queue, as the queue's own Cancel did.
+    var subagentQueuedWakes: SubagentQueuedWakes {
+        var out: [String: @MainActor () -> Void] = [:]
+        for bubble in state.queued {
+            for runId in SubagentCardEnd.queuedWake(bubble)?.runIds ?? [] {
+                out[runId] = { [weak self] in Task { await self?.cancelQueued(bubble) } }
+            }
         }
-        return nil
+        return SubagentQueuedWakes(dontSend: out)
     }
 
     /// The transcript scrolled to the record's row: mark it for a moment, and consume the request so a
@@ -4130,6 +4137,30 @@ final class ConsoleModel {
             }
         } catch {
             showTransientStatus("This message is already being processed and can't be withdrawn")
+        }
+    }
+
+    /// Messages under the held tag whose Cancel is out, by turn id: a second press waits for the first.
+    private var cancellingHeld: Set<String> = []
+
+    /// The held tag's Cancel (`Queued · runner full · Cancel`, web parity: `cancelHeldTurn`): withdraw
+    /// a message the server accepted but no runner has taken, through the queued Cancel's DELETE —
+    /// the session goes back to awaiting input. Unlike that Cancel nothing leaves the screen until
+    /// the server answers; then the bubble goes and its words come back under any draft. Refused,
+    /// a runner has it, and it stays. Attachments aren't rehydrated, as with Cancel.
+    func cancelHeld(_ bubble: UserBubble) async {
+        guard let turnId = bubble.turnId, !cancellingHeld.contains(turnId) else { return }
+        cancellingHeld.insert(turnId)
+        defer { cancellingHeld.remove(turnId) }
+        let api = self.api
+        let sessionID = self.sessionID
+        switch await HeldCancel.press(bubble, withdraw: { try await api.withdrawTurn(sessionID: sessionID, turnId: $0) }) {
+        case .withdrawn(let words):
+            reducer.removeAcceptedTurn(turnId: turnId)
+            publishStateNow()
+            composerText = HeldCancel.composer(composerText, restoring: words)
+        case .refused:
+            showTransientStatus(HeldCancel.refused)
         }
     }
 
@@ -6524,6 +6555,21 @@ final class ConsoleModel {
             return false
         }) else { return }
         requestScroll(to: card.id)
+    }
+
+    /// Scroll to an exception item's own card in this conversation, where the read still draws one —
+    /// the delivery card's `Go to the item card ↑` (board card-ui-polish ②). False when the
+    /// conversation holds no card for the item, which is what the delivery card then says.
+    @discardableResult
+    func revealOpenItemCard(_ itemID: String) -> Bool {
+        guard let card = decisionCards.first(where: {
+            switch $0.kind {
+            case .escalatedItem(let id), .fusePause(let id): return id == itemID
+            default: return false
+            }
+        }) else { return false }
+        requestScroll(to: card.id)
+        return true
     }
 
     /// Lift the pause (§6.3 F-T4, mock 6 ①) — the owner's alone, and the one press that starts a

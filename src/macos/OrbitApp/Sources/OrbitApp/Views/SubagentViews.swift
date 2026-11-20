@@ -218,15 +218,30 @@ struct InfrastructureModelTiersSection: View {
     }
 
     @ViewBuilder private func tierCell(_ provider: ProviderTierRow, _ model: ProviderModelTier) -> some View {
+        HStack(spacing: 6) {
+            tierControl(provider, model)
+            if SubagentSettings.showsYours(model) {
+                // A tier the owner set (board 2026-11-20).
+                Text(SubagentSettings.yours)
+                    .font(.orbitLabel)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 5)
+                    .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.secondary.opacity(0.35)))
+                    .fixedSize()
+            }
+        }
+    }
+
+    @ViewBuilder private func tierControl(_ provider: ProviderTierRow, _ model: ProviderModelTier) -> some View {
         let text = Text(SubagentSettings.tierText(model.levels))
             .foregroundStyle(SubagentSettings.tierIsUnset(model.levels) ? Color.orange : Color.primary)
-        if model.editable, let providerID = provider.providerId {
+        if let path = SubagentSettings.tierPath(provider, model) {
             Menu {
                 ForEach(SubagentSettings.tiers, id: \.self) { tier in
-                    Button(tier) { write(providerID, model.model, tier) }
+                    Button(tier) { write(path, model.model, tier) }
                 }
-                if SubagentSettings.menuOffersClear(model.levels) {
-                    Button(SubagentSettings.clear, role: .destructive) { write(providerID, model.model, nil) }
+                if SubagentSettings.menuOffersClear(provider, model) {
+                    Button(SubagentSettings.clear, role: .destructive) { write(path, model.model, nil) }
                 }
             } label: {
                 HStack(spacing: 3) {
@@ -239,15 +254,15 @@ struct InfrastructureModelTiersSection: View {
             .menuStyle(.button)
             .buttonStyle(.borderless)
             .fixedSize()
-            .accessibilityIdentifier("tier.\(model.model)")
+            .accessibilityIdentifier("tier.\(provider.slug).\(model.model)")
         } else {
             text
         }
     }
 
-    private func write(_ providerID: String, _ model: String, _ tier: String?) {
+    private func write(_ path: String, _ model: String, _ tier: String?) {
         Task {
-            if let failure = await agents.setModelTier(providerID: providerID, model: model, tier: tier) {
+            if let failure = await agents.setModelTier(path: path, model: model, tier: tier) {
                 app.showToast(failure, tone: .error)
             }
         }
