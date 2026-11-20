@@ -2054,8 +2054,9 @@ function deliveryModeNeedsMainLine(
 
 /**
  * The session that did a code task's work, when the task is one (§1.1 `isCodeTask`): filed under a
- * project, not codeless, and its latest work session ran in a worktree on a branch, in no
- * repository known to differ from the one the project's line is bound to (O-L7).
+ * project, and its latest work session ran in a worktree on a branch, in no repository known to
+ * differ from the one the project's line is bound to (O-L7). `codeless` is not read: since revision
+ * 42 (§12 P-M3) a task flagged codeless that has commits lands like any other.
  */
 async function codeTaskWork(
   db: Pick<Prisma.TransactionClient, 'task'>,
@@ -2066,7 +2067,6 @@ async function codeTaskWork(
     where: { id: taskId, ownerId },
     select: {
       projectId: true,
-      codeless: true,
       project: {
         select: { codebases: { where: { slot: 'primary' }, select: { canonicalRepoUrl: true } } },
       },
@@ -2079,7 +2079,7 @@ async function codeTaskWork(
     },
   });
   const work = task?.sessions[0];
-  if (!task?.projectId || task.codeless || work?.isolationStatus !== 'worktree' || !work.branch) {
+  if (!task?.projectId || work?.isolationStatus !== 'worktree' || !work.branch) {
     return null;
   }
   const repoUrl = work.workspace?.repoUrl ?? null;
@@ -2099,8 +2099,8 @@ export async function projectDefaultLine(
   // two `IN` lists. Large projects can exceed PostgreSQL's bind-parameter limit that way.
   const edge = await db.taskDependency.findFirst({
     where: {
-      task: { projectId, codeless: false, status: { not: TaskStatus.CANCELLED } },
-      dependsOnTask: { projectId, codeless: false, status: { not: TaskStatus.CANCELLED } },
+      task: { projectId, status: { not: TaskStatus.CANCELLED } },
+      dependsOnTask: { projectId, status: { not: TaskStatus.CANCELLED } },
     },
     select: { id: true },
   });

@@ -3441,7 +3441,6 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         where: { id: { in: uniqueIds.slice(offset, offset + TASK_ID_QUERY_CHUNK) }, ownerId },
         select: {
           id: true,
-          codeless: true,
           projectId: true,
           project: {
             select: {
@@ -3478,7 +3477,6 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // fixture says nothing about landing" into a crash on the task page.
         const work = row.sessions?.[0];
         landed.set(row.id, prerequisiteLanded({
-          codeless: row.codeless,
           projectId: row.projectId,
           codebase: row.project?.codebases?.[0] ?? null,
           work: work

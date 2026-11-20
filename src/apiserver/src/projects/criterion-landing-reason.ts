@@ -140,8 +140,7 @@ function heldTaskReason(
  * One criterion's reason, or null when it is on the upstream by work of its own.
  *
  * A criterion that is LANDED has a reason only when nothing of its work had to land: CODELESS when
- * every serving task declares it or did its work in another repository (O-L7), NOTHING_TO_LAND
- * otherwise. One that is not LANDED is held by the
+ * every serving task did its work in another repository (O-L7), NOTHING_TO_LAND otherwise. One that is not LANDED is held by the
  * serving tasks that have something to land and are not on the upstream — the same tasks the
  * landing fold is held by — and takes the first of their reasons in `PRECEDENCE`. A criterion
  * nothing is filed under has no receipt to stand on: NO_RECEIPT.
@@ -155,9 +154,9 @@ export function criterionLandingReason(
   const delivery = criterion.servingTasks.filter((task) => !taskHasNothingToLand(task));
   if (criterion.landing === 'LANDED') {
     if (delivery.length > 0) return null;
-    // Work in another repository is out of the conjunction exactly as codeless work is (O-L7), and
-    // reads the same reason.
-    return criterion.servingTasks.every((task) => task.codeless || workInAnotherRepository(task))
+    // Work in another repository is out of the conjunction (O-L7) and reads CODELESS: nothing of it
+    // lands here. The task's `codeless` flag is not read (§12.15 P-M3).
+    return criterion.servingTasks.every((task) => workInAnotherRepository(task))
       ? 'CODELESS'
       : 'NOTHING_TO_LAND';
   }

@@ -358,7 +358,8 @@ export class UpdateProjectDto {
    *  marks the project non-code, false clears it. Written by the account owner, or by the
    *  conversation the project is coordinated from (`project_update`); any other session is refused.
    *  Each write records who and when (`nonCodeSetBy`, `nonCodeSetBySessionId`, `nonCodeSetAt`).
-   *  A marked project reads no landing; whether its criteria are met is unchanged. */
+   *  Since revision 42 (§12.15 P-M3) the write is accepted and stored but has no effect: Orbit
+   *  measures whether work lands from its commits, and nothing reads the mark. */
   @IsSent() @IsBoolean() nonCode?: boolean;
   /** An optional short reason for the mark, sent with `nonCode` and stored with it (migration
    *  0555): every `nonCode` write replaces it, null or blank when none is given. Refused 400 sent

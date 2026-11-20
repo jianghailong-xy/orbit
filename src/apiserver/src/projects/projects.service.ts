@@ -3074,7 +3074,6 @@ export class ProjectsService {
         landingAnswers,
         independence,
         standardSetConfirmation,
-        project.nonCode,
       ),
     };
   }
@@ -3925,8 +3924,9 @@ export class ProjectsService {
   /**
    * Who writes the non-code mark on this request, or null when it carries none. The account owner
    * (no acting session) or the conversation this project is coordinated from (COORDINATOR, with its
-   * session id); any other session is refused whole before anything is written — the mark decides
-   * whether a project reads landing at all, so it is not a side effect of some task's edit.
+   * session id); any other session is refused whole before anything is written. Since revision 42
+   * (§12.15 P-M3) the mark is stored and returned but decides nothing: landing follows from the
+   * commits the project's tasks delivered.
    */
   static nonCodeWriter(
     dto: Pick<UpdateProjectDto, 'nonCode' | 'nonCodeReason'>,
@@ -4260,8 +4260,7 @@ export class ProjectsService {
       // this write is the only thing that moves them — when it moves them at all. A HELD edit
       // moved none of them, so there is nothing to re-project and no reason to re-decide a column
       // the owner may have just written by hand.
-      // So is the non-code mark: a marked project's criteria are no longer withheld for landing.
-      if ((dto.acceptanceCriteriaItems !== undefined && !held) || nonCodeWriter) {
+      if (dto.acceptanceCriteriaItems !== undefined && !held) {
         await this.reprojectProjectStatus(ownerId, id);
         // And the same applied edit may have reworded or deleted a criterion some task's unanswered
         // evidence is bound to: told to whoever can file it again, after the commit.

@@ -11,8 +11,11 @@ import { doneReadiness, type DoneState, type DoneStateCriterion } from './projec
 /**
  * CODELESS used to mean two things: work with really nothing to land (declared codeless, or done in
  * another repository), and work that ran without a worktree branch, about which Orbit has no
- * evidence either way. The second now reads NO_BRANCH, stays delivery in the landing fold, and an
- * unmet criterion is reported once — unsatisfied — never also unlanded.
+ * evidence either way. The second reads NO_BRANCH when it reported changes, stays delivery in the
+ * landing fold, and an unmet criterion is reported once — unsatisfied — never also unlanded.
+ *
+ * Since revision 42 (§12.15 P-M3) no label decides it: the `codeless` flag is not read, and work that
+ * ran no branch and reported nothing delivered no commit, so it has nothing to land.
  */
 
 const BRANCHES: LandingBranches = { upstream: ['main'], integration: ['project/p'] };
@@ -23,11 +26,11 @@ function servingTask(
 ): LandingReasonServingTask {
   return {
     id,
-    codeless: false,
+    status: 'DONE',
     mergeReceipts: [],
     integrationJobs: [],
-    // A shared-isolation run: no worktree, no branch.
-    sessions: [{ isolationStatus: 'shared', branch: null, workspace: null }],
+    // A shared-isolation run: no worktree, no branch, and it reported changed files.
+    sessions: [{ isolationStatus: 'shared', branch: null, changedFiles: ['notes.md'], workspace: null }],
     project: null,
     ...over,
   };
@@ -39,16 +42,35 @@ function read(servingTasks: LandingReasonServingTask[]) {
   return { landing, reason: criterionLandingReason({ landing, servingTasks }, BRANCHES, []) };
 }
 
-test('declared codeless work is LANDED and reads CODELESS', () => {
-  assert.deepEqual(read([servingTask('t1', { codeless: true })]), { landing: 'LANDED', reason: 'CODELESS' });
+test('work done in another repository is LANDED and reads CODELESS', () => {
+  const elsewhere = servingTask('t1', {
+    sessions: [{ isolationStatus: 'worktree', branch: 'orbit/x', workspace: { repoUrl: 'https://example.com/other.git' } }],
+    project: { codebases: [{ canonicalRepoUrl: 'https://example.com/this' }] },
+  });
+  assert.deepEqual(read([elsewhere]), { landing: 'LANDED', reason: 'CODELESS' });
 });
 
-test('work that ran without a branch stays delivery and reads NO_BRANCH, not CODELESS', () => {
-  assert.deepEqual(read([servingTask('t1')]), { landing: 'UNKNOWN', reason: 'NO_BRANCH' });
-  assert.deepEqual(read([servingTask('t1', { sessions: [] })]), { landing: 'UNKNOWN', reason: 'NO_BRANCH' },
-    'no work session at all is no branch too');
+test('work that ran no branch and reported nothing has nothing to land (P-M3)', () => {
+  const quiet = { isolationStatus: 'shared', branch: null, changedFiles: null, workspace: null };
+  assert.deepEqual(read([servingTask('t1', { sessions: [quiet] })]), { landing: 'LANDED', reason: 'NOTHING_TO_LAND' });
+  assert.deepEqual(read([servingTask('t1', { sessions: [] })]), { landing: 'LANDED', reason: 'NOTHING_TO_LAND' },
+    'no work session at all delivered nothing either');
   assert.deepEqual(
-    read([servingTask('t1', { sessions: [{ isolationStatus: 'worktree', branch: null, workspace: null }] })]),
+    read([servingTask('t1', { sessions: [{ ...quiet, isolationStatus: 'worktree' }] })]),
+    { landing: 'LANDED', reason: 'NOTHING_TO_LAND' },
+    'a detached checkout that never made a branch (a codeless run that changed nothing) is the same');
+  assert.deepEqual(
+    read([servingTask('t1', { sessions: [quiet], mergeReceipts: [{ result: 'MERGED', targetBranch: 'x', sourceSha: null, createdAt: new Date(0), detail: null, targetShaAfter: null }] as never })]),
+    { landing: 'UNKNOWN', reason: 'NO_RECEIPT' },
+    'a receipt against it keeps it in');
+  assert.deepEqual(read([servingTask('t1', { sessions: [], status: 'IN_PROGRESS' })]), { landing: 'UNKNOWN', reason: 'NO_BRANCH' },
+    'a task that is not DONE has not delivered yet: it is not let out');
+});
+
+test('work that ran without a branch but reported changes stays delivery and reads NO_BRANCH', () => {
+  assert.deepEqual(read([servingTask('t1')]), { landing: 'UNKNOWN', reason: 'NO_BRANCH' });
+  assert.deepEqual(
+    read([servingTask('t1', { sessions: [{ isolationStatus: 'worktree', branch: null, changedFiles: ['a'], workspace: null }] })]),
     { landing: 'UNKNOWN', reason: 'NO_BRANCH' },
     'a worktree that names no branch is no branch');
   // A worktree branch with no receipt is still NO_RECEIPT.
@@ -57,8 +79,8 @@ test('work that ran without a branch stays delivery and reads NO_BRANCH, not COD
       sessions: [{ isolationStatus: 'worktree', branch: 'orbit/x', workspace: null }],
     })]),
     { landing: 'UNKNOWN', reason: 'NO_RECEIPT' });
-  // Beside declared-codeless work, the branchless work still holds the criterion.
-  assert.deepEqual(read([servingTask('t1', { codeless: true }), servingTask('t2')]),
+  // Beside work with nothing to land, the branchless work that reported changes still holds it.
+  assert.deepEqual(read([servingTask('t1', { sessions: [] }), servingTask('t2')]),
     { landing: 'UNKNOWN', reason: 'NO_BRANCH' });
 });
 

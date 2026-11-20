@@ -867,26 +867,27 @@ func buildOperationCatalog() []*operation {
 	}
 	// SR5's escape hatch (`codeless`), on the three task doors. Stated here once per door so what it
 	// costs to declare cannot drift between task_create, the batch items and task_update: nothing at
-	// creation, and on an existing task a reason — and never for one that already has commits.
+	// creation, and on an existing task a reason — and never for one that already has commits. Since
+	// contract revision 42 (§12.15 P-M3) it no longer decides landing; it only shapes the checkout.
 	createCodelessProp := map[string]interface{}{
 		"type": "boolean",
 		"description": "Declare that this task produces no code — a rollout, a walkthrough, a verification, " +
 			"research — even though its project is bound to a codebase. A codeless task resolves no source " +
-			"and takes no part in its acceptance criterion's landing: the criterion does not wait for its " +
-			"work to reach main, where a task with no commit to land would hold it off LANDED, and the project " +
-			"off done. Omit it for work that commits code. No reason is needed here; turning an existing task " +
-			"codeless later is task_update with codeless and codelessReason, and is refused for a task that " +
-			"already has commits of its own.",
+			"and its run gets a checkout with no branch until it has something to commit. It does not decide " +
+			"landing: Orbit measures whether work lands from its commits, so a task that commits nothing has " +
+			"nothing to land whether or not it is codeless, and one that commits lands like any other. No " +
+			"reason is needed here; turning an existing task codeless later is task_update with codeless and " +
+			"codelessReason, and is refused for a task that already has commits of its own.",
 	}
 	updateCodelessProp := map[string]interface{}{
 		"type": "boolean",
-		"description": "true declares that this task produces no code, so it takes no part in its " +
-			"acceptance criterion's landing and the criterion stops waiting for its work to reach main. It " +
-			"needs codelessReason in the same call (refused TASK_CODELESS_REASON_REQUIRED without it), and " +
-			"is refused TASK_CODELESS_HAS_COMMITS for a task that already has commits of its own — a merge " +
-			"that moved a target, or a work session that reported changes on its branch: that work has to " +
-			"land. false takes the declaration back and needs no reason. Omit to leave it; re-sending the " +
-			"value the task already has changes nothing.",
+		"description": "true declares that this task produces no code, so it resolves no source and its run " +
+			"gets a checkout with no branch until it has something to commit. It does not decide landing: " +
+			"Orbit measures whether work lands from its commits. It needs codelessReason in the same call " +
+			"(refused TASK_CODELESS_REASON_REQUIRED without it), and is refused TASK_CODELESS_HAS_COMMITS " +
+			"for a task that already has commits of its own — a merge that moved a target, or a work session " +
+			"that reported changes on its branch: that work lands. false takes the declaration back and needs " +
+			"no reason. Omit to leave it; re-sending the value the task already has changes nothing.",
 	}
 	codelessReasonProp := map[string]interface{}{
 		"type":      "string",
@@ -1561,21 +1562,19 @@ func buildOperationCatalog() []*operation {
 				},
 				"nonCode": map[string]interface{}{
 					"type": "boolean",
-					"description": "Mark this project non-code (true) or clear the mark (false). A project is " +
-						"non-code only by this explicit mark, never inferred: set it when the project's goal is " +
-						"met by work that changes no code in this repository (a filing, an approval, research). " +
-						"A marked project reads no landing — its criteria carry no landingReason, the done check " +
-						"reports nothing unlanded, and recording it done stores no landing gaps — while whether " +
-						"each criterion is met is unchanged. Only the conversation this project is coordinated " +
-						"from may write it; project_get returns it with nonCodeSetBy (OWNER or COORDINATOR), " +
-						"nonCodeSetBySessionId, nonCodeSetAt and nonCodeReason.",
+					"description": "No longer decides anything; you do not need to send it. Orbit measures whether " +
+						"work lands from its commits: a project none of whose tasks delivered a commit has nothing " +
+						"to land — its criteria read landed and the done check reports nothing unlanded — and a " +
+						"task that commits lands whether or not the project is marked. The write is still " +
+						"accepted (true marks, false clears) and stored, from the conversation this project is " +
+						"coordinated from or the owner, and project_get returns it with nonCodeSetBy (OWNER or " +
+						"COORDINATOR), nonCodeSetBySessionId, nonCodeSetAt and nonCodeReason.",
 				},
 				"nonCodeReason": map[string]interface{}{
 					"type": "string",
 					"description": "Optional, sent only with nonCode: one short sentence (at most 280 characters) " +
-						"saying why, e.g. \"All work is documents and vendor accounts; no repository.\" The owner " +
-						"sees it under \"Marked by the coordinator\" on the project page and the done card. Each " +
-						"nonCode write replaces it; omit it to store none.",
+						"saying why. Stored and returned by project_get, and like nonCode it decides nothing: " +
+						"Orbit measures landing from commits. Each nonCode write replaces it; omit it to store none.",
 				},
 				"expectedConfigRevision": map[string]interface{}{
 					"type": "string",
@@ -1917,7 +1916,7 @@ func buildOperationCatalog() []*operation {
 				"a merge into main queued or running. Fix them all and call again. If it is ready, the " +
 				"request is filed and this returns AT ONCE — it does not wait for the owner — with the " +
 				"request's itemId and a warning for every criterion not landed on main, with why (in " +
-				"flight, on the project branch, nothing to land, no receipt, codeless), which the owner " +
+				"flight, on the project branch, nothing to land, no receipt, work in another repository), which the owner " +
 				"reads beside your gaps. The owner then sees an \"Is this project done?\" card and " +
 				"records the project done on it, and your conversation shows Ready to close. Asking " +
 				"again replaces the open request, and the project moving before the owner answers — its " +
