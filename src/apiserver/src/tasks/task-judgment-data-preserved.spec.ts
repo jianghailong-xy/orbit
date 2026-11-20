@@ -3203,6 +3203,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1270 adds two plain indexes, session_merge_receipt (source_sha) and task (owner_id, updated_at); no row is
       // written, and no preserved relation, trigger, function or DONE fence changes.
       '1270_receipt_source_sha_task_updated_idx',
+      // 1273 widens owner_request's kind check for SETTINGS_CHANGE, adds a nullable JSONB payload with a CHECK every
+      // stored row passes and a partial unique index; no row is written, and no preserved relation, trigger, function
+      // or DONE fence changes.
+      '1273_owner_request_settings_change',
       // 1310 adds four columns and two CHECKs on project_codebase (landing_check_none, landing_check_set_by and the
       // session and time of the last write), and marks OWNER the bindings whose landing check was already
       // set; project_codebase is not a preserved relation, and no trigger, function or DONE fence changes.

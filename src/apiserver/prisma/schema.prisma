@@ -8166,6 +8166,9 @@ model OwnerRequest {
   scheduleChangeRequestId String?   @map("schedule_change_request_id") @db.Uuid
   /// CONDITION_UNKNOWN (migration 1030): the condition that cannot be read. History, no FK.
   conditionId             String?   @map("condition_id") @db.Uuid
+  /// SETTINGS_CHANGE (migration 1273): `{ changes: [{ key, from, to, tier }] }`, written by the server. NULL otherwise.
+  /// Its partial unique `owner_request_settings_change_pending_key` holds a session to one PENDING SETTINGS_CHANGE.
+  payload             Json?
   expiresAt           DateTime? @map("expires_at") @db.Timestamptz(3)
   clientRequestId     String?   @map("client_request_id")
   resolvedAt          DateTime? @map("resolved_at") @db.Timestamptz(3)

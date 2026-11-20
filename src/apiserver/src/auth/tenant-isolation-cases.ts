@@ -1003,6 +1003,8 @@ export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
     'deleted by (id, the caller) only, and 404 when that matched nothing (owner-requests/owner-secrets.service.ts:412); owner-secrets.pg.spec.ts (h) sends another account\'s',
   'POST /owner-requests/:id/create-wiki':
     'read by (id, the caller) first, 404 for another account\'s id (owner-requests/owner-requests.service.ts:306); the wiki is made under the caller\'s account through wiki.createSpace from that row\'s repository and workspace, never from the body, and the card is settled by a compare-and-set on (id, the caller, PENDING) (owner-requests/owner-requests.service.ts:521)',
+  'POST /owner-requests/:id/apply-settings':
+    'read by (id, the caller) first, 404 for another account\'s id (owner-requests/owner-requests.service.ts:509); the preferences read FOR NO KEY UPDATE and written are the caller\'s own user row, never one the body names (owner-requests/settings-apply.ts:21, owner-requests/settings-apply.ts:39), and the card is settled by a compare-and-set on (id, the caller, PENDING) (owner-requests/owner-requests.service.ts:820)',
   'POST /owner-requests/:id/decline':
     'read by (id, the caller) first, 404 for another account\'s id (owner-requests/owner-requests.service.ts:193), and the write is a compare-and-set on (id, the caller, PENDING) (owner-requests/owner-requests.service.ts:270)',
   'POST /admin/managed-runners/:id/volume-switch':

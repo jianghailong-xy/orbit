@@ -215,6 +215,11 @@ object OrbitLinks {
         val scheme = uri.scheme?.lowercase().orEmpty()
         var kind: Destination? = null
         var id: String? = null
+        // `orbit-settings:<key>` opens Settings at that row (design §6): its page, the row asked for in recordId. Theme has no page.
+        if (scheme == "orbit-settings") {
+            val place = io.orbitd.android.core.cards.SettingsFromConversation.place(uri.schemeSpecificPart) ?: return null
+            return OrbitRoute(Destination.SETTINGS, place.page, recordId = place.key, origin = origin)
+        }
         if (scheme.startsWith("orbit-")) {
             kind = references[scheme.removePrefix("orbit-")]
             id = if (kind == Destination.SESSION) uri.schemeSpecificPart.substringBefore('?') else uri.schemeSpecificPart
