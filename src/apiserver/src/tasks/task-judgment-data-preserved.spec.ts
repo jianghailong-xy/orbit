@@ -3266,7 +3266,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1421 to 1425 replace the bodies of the session-dispatch guards and re-create three ended-triggers so they
       // read session.finished_at instead of the terminal status set (plan step 4.4), and add finished_at to five
       // trigger column lists on session; every guard answers what it did for every row session_release_fact_chk
-      // admits. No row is written, no preserved relation is read or dropped, and the DONE fence is unchanged.
+      // admits. 1425 was restated in place before it was deployed (removal step R4): its three WHEN clauses ask the
+      // release module's failure question (finished_at, end_reason, last_turn_outcome, the status bridge) and list
+      // last_turn_outcome. No row is written, no preserved relation is read or dropped, and the DONE fence is unchanged.
       // Written as 1411 to 1416 on the project line, the six were renumbered after main took 1411.
       '1421_supersession_capacity_guards_read_release',
       '1422_admission_aggregate_guards_read_release',
