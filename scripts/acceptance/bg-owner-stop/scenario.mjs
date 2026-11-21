@@ -79,13 +79,14 @@ check('the owner-stopped job has an exit wake with reason stopped_by_owner',
   new RegExp(`${stopped}\\s*\\|\\s*exit\\s*\\|\\s*killed\\s*\\|\\s*stopped_by_owner`).test(wakes));
 check('the agent\'s own bg_kill sent no exit wake', !new RegExp(`${killed}\\s*\\|\\s*exit`).test(wakes));
 
-// The block the runner handed the engine for that wake, as the session's events carry it.
+// The block the runner handed the engine for that exit wake, as the session's events carry it: not the output wake
+// the card's answer sent before it.
 const block = await until('the wake block to reach the engine', async () => {
   const page = await call('GET', `/sessions/${session.id}/events/page?tail=200`, T);
   const events = page.events ?? page;
   for (const ev of events) {
     const text = JSON.stringify(ev.payload ?? '');
-    if (text.includes('<background-job-wake>') && text.includes(stopped)) return JSON.parse(text);
+    if (text.includes('<background-job-wake>') && text.includes(`${stopped}｜`) && text.includes('reason stopped_by_owner')) return JSON.parse(text);
   }
   return null;
 }, { timeoutMs: 120_000 });
