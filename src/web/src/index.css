@@ -29179,6 +29179,10 @@ button.agent-progress-agent:hover {
 .model-tiers-set.model-tiers-unset {
   color: var(--warning);
 }
+.model-tiers-older,
+.model-tiers-set.model-tiers-older {
+  color: var(--text-3);
+}
 .model-tiers-yours {
   margin-left: 8px;
   padding: 0 5px;

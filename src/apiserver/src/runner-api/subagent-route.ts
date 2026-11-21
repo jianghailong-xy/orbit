@@ -418,14 +418,20 @@ export async function subagentTierView(db: Prisma.TransactionClient, ownerId: st
         for (const model of models.values()) {
           model.levels.sort((a, b) => MODEL_ROUTING_LEVELS.indexOf(a) - MODEL_ROUTING_LEVELS.indexOf(b));
         }
+        // A built-in engine's older family models sort after its tiered ones and before the plain Not set ones.
         if (builtin) markSuperseded([...models.values()], catalogInput.modelCatalog?.[entry.provider.slug as AgentProvider] ?? []);
+        const ordered = [...models.values()];
+        if (builtin) {
+          const rank = (model: ProviderModelTier) => (model.levels.length > 0 ? 0 : model.supersededBy ? 1 : 2);
+          ordered.sort((a, b) => rank(a) - rank(b));
+        }
         return {
           slug: entry.provider.slug,
           label: entry.label,
           kind: builtin ? 'builtin' : entry.kind,
           providerId: entry.providerId,
           billing: entry.provider.billing,
-          models: [...models.values()],
+          models: ordered,
         };
       }),
   };
