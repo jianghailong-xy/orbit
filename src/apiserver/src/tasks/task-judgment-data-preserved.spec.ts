@@ -3266,19 +3266,20 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // successor runs on); no row is written, and coordinator_handoff is not a preserved relation — no trigger,
       // function or DONE fence changes.
       '1411_coordinator_handoff_successor',
-      // 1411 to 1415 replace the bodies of the session-dispatch guards and re-create three ended-triggers so they
+      // 1421 to 1425 replace the bodies of the session-dispatch guards and re-create three ended-triggers so they
       // read session.finished_at instead of the terminal status set (plan step 4.4), and add finished_at to five
       // trigger column lists on session; every guard answers what it did for every row session_release_fact_chk
       // admits. No row is written, no preserved relation is read or dropped, and the DONE fence is unchanged.
-      '1411_supersession_capacity_guards_read_release',
-      '1412_admission_aggregate_guards_read_release',
-      '1413_project_move_guard_reads_release',
-      '1414_acquisition_revive_reads_release',
-      '1415_ended_triggers_read_release',
-      // 1416 builds the partial unique index session_task_execution_claim_idx_finished_at on session(task_id) CONCURRENTLY
+      // Written as 1411 to 1416 on the project line, the six were renumbered after main took 1411.
+      '1421_supersession_capacity_guards_read_release',
+      '1422_admission_aggregate_guards_read_release',
+      '1423_project_move_guard_reads_release',
+      '1424_acquisition_revive_reads_release',
+      '1425_ended_triggers_read_release',
+      // 1426 builds the partial unique index session_task_execution_claim_idx_finished_at on session(task_id) CONCURRENTLY
       // beside 0130's claim index (plan step 4.5, release A), dropping a leftover INVALID one first. Session is not a
       // preserved relation, and no function, trigger, type, constraint or DONE fence changes. No INSERT, UPDATE or DELETE.
-      '1416_session_task_execution_claim_finished_at_idx'],
+      '1426_session_task_execution_claim_finished_at_idx'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

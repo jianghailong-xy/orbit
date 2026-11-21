@@ -176,7 +176,7 @@ test('a revive that loses the execution claim is a 409 naming the session that h
       return true;
     },
   );
-  // The predicate the read asks by has to be the index's own: 1416's, the sessions not released
+  // The predicate the read asks by has to be the index's own: 1426's, the sessions not released
   // (plan step 4.5; 0130's four statuses before it), and no narrowing to the rows somebody guessed
   // were the interesting ones.
   const where = holderReads[0] as {

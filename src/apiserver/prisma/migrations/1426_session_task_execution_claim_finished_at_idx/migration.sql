@@ -1,5 +1,5 @@
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
--- 1416: the one-live-run-per-task index, read from the release column. Release A of two
+-- 1426: the one-live-run-per-task index, read from the release column. Release A of two
 -- (docs/session-three-state-plan.md §7 step 4.5; project 3508bDBDE5xPH43TYuiqP).
 --
 -- WHAT IT ADDS
@@ -20,7 +20,7 @@
 -- new index covers. Were there one (task set, not in the Trash): the build fails, leaving an INVALID index (below), if
 -- its task holds another live row as well; otherwise it succeeds, and that row then counts as its task's live run and
 -- refuses every new run of the task until it is moved to CANCELLED. scripts/session-claim-index-precheck.sql counts
--- such rows. 1416 runs after 1402 in the same deploy or a later one (migrations apply in order), so the CHECK is
+-- such rows. 1426 runs after 1402 in the same deploy or a later one (migrations apply in order), so the CHECK is
 -- already validated when this build scans, and the build cannot meet any other duplicate the old index did not
 -- already refuse.
 --
@@ -72,7 +72,7 @@
 -- maintain it depends on how far the build got (indisready), so it does not count as built; 0130's index goes on
 -- enforcing the claim either way. Prisma records the migration as failed, and every later deploy stops on P3009 until
 -- an operator runs
---   prisma migrate resolve --rolled-back 1416_session_task_execution_claim_finished_at_idx
+--   prisma migrate resolve --rolled-back 1426_session_task_execution_claim_finished_at_idx
 -- and deploys again. The re-run's DROP INDEX IF EXISTS removes the INVALID index and the build makes it again, valid
 -- (drilled in the spec: a build held behind an open writer, cancelled, P3009, resolve, deploy, valid). By hand, the
 -- same two statements do it. To find one:
@@ -81,7 +81,7 @@
 --
 -- NUMBERING, RE-RUNNABILITY
 -- -------------------------
--- 1416: main, origin/orbit/* and origin/project/* use up to 1415 (rescanned 2026-11-21). Not a multiple of 10.
+-- 1426: after 1425, the last of the six; main uses up to 1411 (rescanned 2026-11-21). Not a multiple of 10.
 -- Can run twice: the drop, then the build.
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
 

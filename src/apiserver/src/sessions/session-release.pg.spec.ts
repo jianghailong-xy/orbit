@@ -24,7 +24,7 @@
  *       failures) are zero, both CHECKs are listed validated, and for every cause of SESSION_RELEASE_CAUSES the
  *       database takes it with FAILED exactly when isFailedRelease says it is a failure, and refuses it with the
  *       other statuses then
- *  (12) migrations 1411 to 1415 (plan step 4.4), re-applied by the real `prisma migrate deploy` on a database that
+ *  (12) migrations 1421 to 1425 (plan step 4.4), re-applied by the real `prisma migrate deploy` on a database that
  *       holds rows: they write none; then a write of the release fact alone, `finished_at` and `release_cause` with
  *       the status word left as it was, fires every guard and ended-trigger that used to read the status, and each
  *       decides from the release fact
@@ -774,7 +774,7 @@ test('(12) the release fact alone fires every guard and ended-trigger (plan step
     `SELECT "reviewer_ended_at" FROM "task_owner_confirmation_review" WHERE "id" = $1::uuid`, [reviewId],
   )).rows[0] as { reviewer_ended_at: Date | null }).reviewer_ended_at instanceof Date;
 
-  await t.test('1411-1415 apply by the real prisma migrate deploy on a database holding rows', async () => {
+  await t.test('1421-1425 apply by the real prisma migrate deploy on a database holding rows', async () => {
     // Rows of every shape the guards and triggers read, written before the five files run again: held work on a
     // task in a project, a confirmation review, an open request, and released rows of each kind.
     const w = await world(db, 'g-deploy');
@@ -796,8 +796,8 @@ test('(12) the release fact alone fires every guard and ended-trigger (plan step
     const before = await rows();
 
     const five = [
-      '1411_supersession_capacity_guards_read_release', '1412_admission_aggregate_guards_read_release',
-      '1413_project_move_guard_reads_release', '1414_acquisition_revive_reads_release', '1415_ended_triggers_read_release',
+      '1421_supersession_capacity_guards_read_release', '1422_admission_aggregate_guards_read_release',
+      '1423_project_move_guard_reads_release', '1424_acquisition_revive_reads_release', '1425_ended_triggers_read_release',
     ];
     await deployAgain(sql, url, five);
 
@@ -842,7 +842,7 @@ test('(12) the release fact alone fires every guard and ended-trigger (plan step
     const row = async (id: string) => (await sql.query(
       `SELECT status::text AS status, end_reason, retry_at, retry_attempts, retry_claimed_at, deleted_at, completed_at,
               archived_at FROM "session" WHERE "id" = $1::uuid`, [id])).rows[0] as Row;
-    // The clauses 1415 replaced, as 0350, 0366 and 0507 wrote them, over the statement's OLD and NEW rows. A trigger
+    // The clauses 1425 replaced, as 0350, 0366 and 0507 wrote them, over the statement's OLD and NEW rows. A trigger
     // also fires only if the statement names a column of its OLD list (each new list is that list plus finished_at).
     const filed = (n: Row) => n.deleted_at != null || n.completed_at != null || n.archived_at != null;
     const ended = (n: Row) => (n.end_reason ?? '') !== '';

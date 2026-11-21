@@ -614,7 +614,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
               //
               // Arming the other case does NOT put two retries on one task if the opt-in flips
               // to true in between. `session_task_execution_claim_idx_finished_at` (migration
-              // 1416) is a partial UNIQUE index on `session(task_id)` over the sessions not
+              // 1426) is a partial UNIQUE index on `session(task_id)` over the sessions not
               // released (`finished_at IS NULL`), which session_release_fact_chk makes exactly the
               // TASK_OCCUPYING statuses of 0130's index beside it, so a task can hold ONE live
               // session and no more: whichever starts

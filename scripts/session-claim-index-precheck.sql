@@ -1,4 +1,4 @@
--- Before deploy 2: can migration 1416 build session_task_execution_claim_idx_finished_at on this database?
+-- Before deploy 2: can migration 1426 build session_task_execution_claim_idx_finished_at on this database?
 -- (docs/session-three-state-plan.md §7 step 4.5, release A; the migration's header says why each count matters.)
 --
 -- One read-only SELECT, safe on production as it stands today (deploy 1: no session_release_fact_chk yet). It takes
@@ -16,7 +16,7 @@
 --                                PARKED rows (above) or an old index that is not valid.
 --   tasks_doubled_as_stored      0, or any number when tasks_doubled_after_1402 is 0: the same count read from
 --                                finished_at as stored today. Rows a hand-over window left terminal with finished_at NULL
---                                are counted here, and 1402 (which runs before 1416) sets their finished_at.
+--                                are counted here, and 1402 (which runs before 1426) sets their finished_at.
 --   terminal_rows_unreleased     0 or a handful: terminal rows with finished_at NULL, which 1402 writes.
 --   held_rows_released           0 or a handful: held rows with finished_at set, which 1402 clears.
 --   old_index_valid              true.
