@@ -153,8 +153,8 @@ func orbitDriveInstructions() string {
 			"deletes go to a Trash agents cannot see. " + readOnly + "\n\n"
 	}
 	return "~/Files is the owner's permanent Orbit Files drive; link its files by path. Give ls, find, du ~/Files/ (a " +
-		"symlink). Copy in with cp -r or rsync -rt (no modes: -a, -p, tar x fail on executables). No links, locks, " +
-		"in-place writes or exec; see /run/orbit-files/errors.log. " + readOnly + "\n\n"
+		"symlink). Copy in with cp -r or rsync -rt (no modes: -a, -p fail on executables; tar x drops the x bit). No " +
+		"links, locks, in-place writes or exec; see /run/orbit-files/errors.log. " + readOnly + "\n\n"
 }
 
 // orbitDriveGuide is the drive's rule in the guide's files topic: the whole of §7.3, which orbitDriveInstructions says
@@ -170,7 +170,8 @@ func orbitDriveGuide() string {
 	return "~/Files (/home/orbit/Files, mounted at /run/orbit-files/drive) is the owner's permanent Orbit Files drive, " +
 		"shared across sessions and runners; link a drive file in a reply by its path. ~/Files is a symlink: give ls -l, " +
 		"find and du ~/Files/ with the trailing slash. Copy in with cp -r or rsync -rt: the drive keeps no modes, so cp -a, " +
-		"cp -p, rsync -a and tar x report an error and exit non-zero for executables, though the contents are copied. Not " +
+		"cp -p and rsync -a report an error and exit non-zero for executables, though the contents are copied, and tar x " +
+		"extracts them without the executable bit. Not " +
 		"supported: hard and symbolic links, mode and owner changes, file locks, shared mmap of a file open for writing, " +
 		"writing inside an existing file (write a new file and rename it over), fallocate, executing a file (run it with " +
 		"bash), special files and xattrs. Each refusal is logged in /run/orbit-files/errors.log; status.json there says " +
