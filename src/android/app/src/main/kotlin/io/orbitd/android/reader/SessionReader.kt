@@ -912,10 +912,10 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 val handoffProject = detail?.let(CoordinatorHandoff::projectId)
                 val handoffApi = remember(handle) { CoordinatorHandoffApi(app.session, handle) }
                 var handoffBusy by remember(handle, route.id) { mutableStateOf(false) }
-                HandoffStatus(handoff, busy = handoffBusy, act = { action ->
+                if (detail != null) HandoffStatus(handoff, composer, composerState, detail, busy = handoffBusy, act = { action, successor ->
                     if (handoffProject != null) scope.launch {
                         handoffBusy = true
-                        try { handoffApi.post(handoffProject, action) }
+                        try { handoffApi.post(handoffProject, action, successor) }
                         catch (cancel: CancellationException) { throw cancel }
                         catch (e: Exception) { OrbitToasts.show(CoordinatorHandoff.refusal(e), tone = ToastTone.ERROR) }
                         finally { handoffBusy = false; app.realtime.refreshSession() }
