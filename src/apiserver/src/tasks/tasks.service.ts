@@ -251,7 +251,15 @@ import {
   QUOTA_BLIND_RETRY_BACKOFF_MS,
   autoRunEnd,
 } from './task-retry-policy';
-import { heldFilter, heldStatusFilter, sessionHeldSql } from '../common/session-release';
+import {
+  FAILURE_RELEASE_CAUSES,
+  WORK_FINISHED_RELEASE_CAUSES,
+  failedReleaseFilter,
+  heldFilter,
+  heldStatusFilter,
+  releasedFilter,
+  sessionHeldSql,
+} from '../common/session-release';
 
 export {
   AUTO_RUN_RETRY_BACKOFF_MS,
@@ -1472,6 +1480,7 @@ interface EndedAutoRunMoment {
   sessionId: string | null;
   /** The run's own row, read for autoRunEnd; all null once that row is gone. */
   sessionStatus: RunStatus | null;
+  releaseCause: string | null;
   endReason: string | null;
   completedAt: Date | null;
   archivedAt: Date | null;
@@ -13057,8 +13066,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * this exemption exists to prevent.
    *
    * `countUnrequestedEnds` is the retry policy's question (autoRunRetryDecisions), not the
-   * dispatch's: it also counts the runs that ended CANCELLED without anybody asking, which that
-   * policy retries like failed ones and so has to count like them. A task reaching a new moment any
+   * dispatch's: it also counts the runs released without a failure and without anybody asking (no
+   * end reason, not for the work being finished: a cancel with no reason, an engine that exited by
+   * itself), which that policy retries like failed ones and so has to count like them. A task reaching a new moment any
    * other way has never had a cancelled run held against it, and still does not.
    */
   private async autoRunHoldOff(
@@ -13081,7 +13091,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         by: ['taskId'],
         where: {
           taskId: { in: ids },
-          status: RunStatus.FAILED,
+          // Released by a failure: the status FAILED, which session_release_failure_chk holds to the cause.
+          releaseCause: failedReleaseFilter(),
           // A run that failed with no error text matches no usage-limit marker, so it is an
           // ordinary failure and counts. Said explicitly: the runner's /finalize omits `error` when
           // its engine died without a message, and a negated match alone is not true of a NULL.
@@ -13109,13 +13120,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       };
       spend(failures);
       if (countUnrequestedEnds) {
-        // autoRunEnd's UNREQUESTED cancels: no end reason, never filed away. Counted into the same
+        // autoRunEnd's UNREQUESTED ends that were not failures: released neither by a failure (counted
+        // above) nor for the work being finished, no end reason, never filed away. Counted into the same
         // budget, because a retried end that spends none is a retry with no brake.
         const cancels = await this.prisma.session.groupBy({
           by: ['taskId'],
           where: {
             taskId: { in: ids },
-            status: RunStatus.CANCELLED,
+            ...releasedFilter(),
+            releaseCause: { notIn: [...FAILURE_RELEASE_CAUSES, ...WORK_FINISHED_RELEASE_CAUSES] },
             endReason: null,
             completedAt: null,
             archivedAt: null,
@@ -13146,7 +13159,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         by: ['taskId'],
         where: {
           taskId: { in: blindIds },
-          status: RunStatus.FAILED,
+          releaseCause: failedReleaseFilter(),
           ...usageLimitIs(false),
         },
         _max: { createdAt: true },
@@ -13181,7 +13194,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       SELECT t.id, t.owner_id AS "ownerId", t.assignee_id AS "workspaceId",
              a.runner_id AS "runnerId", current_moment.epoch AS "dispatchEpoch",
              receipt.result->>'sessionId' AS "sessionId", run.status AS "sessionStatus",
-             run.end_reason AS "endReason", run.completed_at AS "completedAt",
+             run.release_cause AS "releaseCause", run.end_reason AS "endReason", run.completed_at AS "completedAt",
              run.archived_at AS "archivedAt", run.deleted_at AS "deletedAt",
              run.retry_at AS "retryAt", t.engine AS "taskEngine", t.provider AS "taskProvider",
              ${modelRoutingEnabledSql('t.owner_id')} AS "modelRouting"

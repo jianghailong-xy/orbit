@@ -272,7 +272,7 @@ async function checkRun(
       prompt: label,
       provider: 'claude',
       status: shape.settled ? RunStatus.SUCCEEDED : RunStatus.RUNNING,
-      ...(shape.settled ? { finishedAt: new Date(), releaseCause: 'engine_exited' } : {}),
+      ...(shape.settled ? { finishedAt: new Date(), releaseCause: 'task_done' } : {}),
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       // §4.2: only a natural `task_done` run that reached COMPLETED is evidence a check concluded.
@@ -286,7 +286,7 @@ async function checkRun(
 async function settleRun(stack: Stack, checkId: string): Promise<void> {
   const ended = await stack.db.session.updateMany({
     where: { taskId: checkId, deletedAt: null },
-    data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited', endReason: 'task_done', completedAt: new Date() },
+    data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'task_done', endReason: 'task_done', completedAt: new Date() },
   });
   assert.equal(ended.count, 1, 'the check had no live run to settle');
 }

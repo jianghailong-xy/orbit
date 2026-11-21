@@ -1,4 +1,4 @@
-import { RunStatus } from '@prisma/client';
+import { isWorkFinishedRelease } from '../common/session-release';
 
 // One retry policy, for the task sweep and everything that schedules off it
 // (`TasksService.autoRunHoldOff`, `quotaGate` and the `rearmEndedAutoRuns` loop that drives them).
@@ -41,16 +41,25 @@ export function retryBackoffUntil(
  *    revive clears it. A run filed into Completed or Trash after it had already ended keeps a null
  *    reason and says the same through its filing timestamps. A run whose row is gone was purged
  *    from Trash, the one path that deletes a Session.
- *  - `UNREQUESTED`: FAILED or CANCELLED with none of those: a crash, a failed turn, the reaper
- *    giving up on an offline runner, a cancel the runner reported without being asked. Retried
- *    under the backoff and the failure limit. `cancel_requested_at` is deliberately not read: the
- *    reaper and a failed turn set it too, so it says a teardown was wanted, not who wanted it.
- *  - `FINISHED`: SUCCEEDED without being asked to end. Not a failure, so not a retry's to repeat.
+ *  - `UNREQUESTED`: released with none of those, and not for the work being finished: a crash, a
+ *    failed turn, the reaper giving up on an offline runner (a failure cause), an engine that exited
+ *    without being asked (`engine_exited`, whatever word the runner reported with it), a cancel
+ *    with no reason. Retried under the backoff and the failure limit. `cancel_requested_at` is
+ *    deliberately not read: the reaper and a failed turn set it too, so it says a teardown was
+ *    wanted, not who wanted it.
+ *  - `FINISHED`: released because the work finished (isWorkFinishedRelease), without an end reason;
+ *    or still held, which the retry policy's candidates never are. Not a retry's to repeat.
+ *
+ * What became of the work is read off the release cause (decision D5 of
+ * docs/session-three-state-design.md), never off the terminal status value. Until 2026-11-21 a
+ * runner-reported SUCCEEDED with no end requested (`engine_exited`) read FINISHED here.
  */
 export type AutoRunEnd = 'REQUESTED' | 'UNREQUESTED' | 'FINISHED';
 
 export function autoRunEnd(run: {
+  /** Only whether the run's row is still there: null once it was purged. */
   sessionStatus: string | null;
+  releaseCause: string | null;
   endReason: string | null;
   completedAt: Date | null;
   archivedAt: Date | null;
@@ -63,7 +72,6 @@ export function autoRunEnd(run: {
   ) {
     return 'REQUESTED';
   }
-  return run.sessionStatus === RunStatus.FAILED || run.sessionStatus === RunStatus.CANCELLED
-    ? 'UNREQUESTED'
-    : 'FINISHED';
+  if (run.releaseCause == null || isWorkFinishedRelease(run.releaseCause)) return 'FINISHED';
+  return 'UNREQUESTED';
 }

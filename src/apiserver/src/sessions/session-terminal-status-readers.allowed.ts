@@ -33,6 +33,15 @@
  * Plan step 4.5 (release A) moved queue/dispatch-pause.service.ts onto sessionHeldIndexedSql and deleted heldSql, and
  * the readers whose access path is the execution claim index onto its new predicate (`finished_at IS NULL`). Neither
  * was a hit: heldSql's list is one constant, and the claim readers spread TASK_OCCUPYING, so no number falls.
+ *
+ * Plan step 4.6 moved the readers of what became of the work (decision D5) onto the release cause: a failure is a
+ * failure cause (isFailedRelease / failedReleaseFilter / failedReleaseSql), and the work finished exactly when the cause
+ * is task_done or landing_settled (isWorkFinishedRelease); every other release is a stop. It deleted the rows it took
+ * to zero (help-ask-marker.ts, auto-retry.service.ts, session-move.ts, task-retry-policy.ts, task-route-decision.ts,
+ * verification-dependency.ts). Left in the files it lowered: the old runner protocol's turn words in
+ * coordinator-handoff.service.ts afterTurn (the runner's turn-complete status, as in turn-outcome.ts), the held
+ * INTERRUPTED and the activity set in schedule-runs.service.ts, and in sessions.service.ts and tasks.service.ts the
+ * release writers, the LANDING detail's legacy status, and activity or held-idle sets.
  */
 export const SESSION_TERMINAL_STATUS_READERS: Readonly<Record<string, number>> = {
   'src/apiserver/src/common/session-scheduling.ts': 2,
@@ -42,13 +51,13 @@ export const SESSION_TERMINAL_STATUS_READERS: Readonly<Record<string, number>> =
   // (HELD_STATUS_LIST_SQL), which the scan does not count as a hit because no `IN` stands beside it.
   'src/apiserver/src/common/session-release.ts': 6,
   'src/apiserver/src/common/session-tree-sql.ts': 1,
-  'src/apiserver/src/help/help-ask-marker.ts': 1,
   'src/apiserver/src/help/help-ask-reads.ts': 1,
   'src/apiserver/src/projects/coordinator-evidence-queue.service.ts': 2,
   // 5 hits arrived from main at 6905964d65 (coordinator hand-over when a model no longer works), written before this
   // guard reached main, and were admitted as found in the merge of 2026-11-21. Plan step 4.2 moved the sweep's ended
-  // set onto the release column. One of them (a FAILED read) is among the 4 left.
-  'src/apiserver/src/projects/coordinator-handoff.service.ts': 4,
+  // set onto the release column, and 4.6 its two FAILED reads onto the failure cause. The 2 left are afterTurn's
+  // reading of the runner's turn-complete status word (old protocol), which goes with plan phase 6.
+  'src/apiserver/src/projects/coordinator-handoff.service.ts': 2,
   'src/apiserver/src/projects/landing-session.ts': 4,
   'src/apiserver/src/projects/pending-addressees.ts': 1,
   'src/apiserver/src/projects/project-done-request.ts': 1,
@@ -60,19 +69,14 @@ export const SESSION_TERMINAL_STATUS_READERS: Readonly<Record<string, number>> =
   'src/apiserver/src/runner-api/runner-link-hints.ts': 1,
   // The old runner protocol's turn status words translated into the turn outcome; goes when plan phase 6 lets the runner report the outcome itself.
   'src/apiserver/src/runner-api/turn-outcome.ts': 4,
-  'src/apiserver/src/schedules/schedule-runs.service.ts': 10,
-  'src/apiserver/src/sessions/auto-retry.service.ts': 9,
-  'src/apiserver/src/sessions/session-move.ts': 1,
-  'src/apiserver/src/sessions/sessions.service.ts': 9,
+  'src/apiserver/src/schedules/schedule-runs.service.ts': 2,
+  'src/apiserver/src/sessions/sessions.service.ts': 5,
   'src/apiserver/src/sessions/task-work-carrier.ts': 2,
   'src/apiserver/src/share-links/public-task.ts': 1,
   'src/apiserver/src/task-lists/task-lists.service.ts': 1,
   'src/apiserver/src/tasks/evidence-review.service.ts': 1,
   'src/apiserver/src/tasks/reference-expansion.ts': 1,
-  'src/apiserver/src/tasks/task-retry-policy.ts': 2,
-  'src/apiserver/src/tasks/task-route-decision.ts': 3,
-  'src/apiserver/src/tasks/tasks.service.ts': 5,
-  'src/apiserver/src/tasks/verification-dependency.ts': 2,
+  'src/apiserver/src/tasks/tasks.service.ts': 2,
   'src/apiserver/src/watches/watch-predicate.ts': 4,
   'src/shared/src/enums.ts': 25,
   'src/web/src/lib/sessionState.ts': 3,

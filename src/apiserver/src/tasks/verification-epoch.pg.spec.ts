@@ -226,7 +226,7 @@ async function addCheck(
          CASE WHEN $7 THEN now() END, CASE WHEN $8 THEN now() END,
          CASE WHEN $9 THEN now() END, true, 'USER'::"session_dispatch_origin", now(),
              CASE WHEN $5::run_status IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN now() END,
-             CASE WHEN $5::run_status = 'CANCELLED' THEN 'cancelled' WHEN $5::run_status = 'FAILED' THEN 'engine_failed' WHEN $5::run_status = 'SUCCEEDED' THEN 'engine_exited' END)`,
+             CASE WHEN $5::run_status = 'CANCELLED' THEN 'cancelled' WHEN $5::run_status = 'FAILED' THEN 'engine_failed' WHEN $5::run_status = 'SUCCEEDED' AND $6 = 'task_done' THEN 'task_done' WHEN $5::run_status = 'SUCCEEDED' THEN 'engine_exited' END)`,
       randomUUID(), OWNER, agentId, checkId, run.status ?? 'SUCCEEDED',
       run.endReason === undefined ? 'task_done' : run.endReason,
       run.completedAt ?? true, run.archivedAt ?? false, run.deleted ?? false,
@@ -648,7 +648,7 @@ test('§13.3 DEP on real PostgreSQL', { skip, concurrency: 1 }, async (t) => {
       // The whole turn's landing, in ONE transaction: the run settles and the verdict is written.
       await writer.query('BEGIN');
       await writer.query(
-        `UPDATE "session" SET "status" = 'SUCCEEDED', "finished_at" = COALESCE("finished_at", now()), "release_cause" = 'engine_exited', "end_reason" = 'task_done',
+        `UPDATE "session" SET "status" = 'SUCCEEDED', "finished_at" = COALESCE("finished_at", now()), "release_cause" = 'task_done', "end_reason" = 'task_done',
                 "completed_at" = now(), "updated_at" = now() WHERE "task_id" = $1::uuid`,
         [w.checkId],
       );
@@ -765,7 +765,7 @@ test('§13.3 DEP on real PostgreSQL', { skip, concurrency: 1 }, async (t) => {
            "creator_id","provider","status","end_reason","completed_at","starts_task_work",
            "dispatch_origin","updated_at","finished_at","release_cause")
          VALUES ($1,$2,$3,$4,'forged run','x',$2,'claude','SUCCEEDED'::"run_status",'task_done',
-           now(),true,'USER'::"session_dispatch_origin",now(),now(),'engine_exited')`,
+           now(),true,'USER'::"session_dispatch_origin",now(),now(),'task_done')`,
         randomUUID(), scope.ownerId, scope.agentId, id,
       );
     }

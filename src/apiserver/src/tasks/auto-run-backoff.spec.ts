@@ -676,7 +676,7 @@ test('the sweep selects candidates on all five READY conditions, anchored on a p
   );
   assert.match(
     sql,
-    /AND EXISTS \(\s*SELECT 1 FROM "session" passed_run[\s\S]*passed_run\."status"::text = 'SUCCEEDED'[\s\S]*passed_run\."end_reason" = 'task_done'/,
+    /AND EXISTS \(\s*SELECT 1 FROM "session" passed_run[\s\S]*passed_run\."release_cause" = 'task_done'[\s\S]*passed_run\."end_reason" = 'task_done'/,
   );
   // Load-bearing, and the SHAPE is the whole of why: this is where the plan enters the
   // deployment's dependency graph, or nowhere. "HAS an edge" is 110,872 edges over 110,502 tasks

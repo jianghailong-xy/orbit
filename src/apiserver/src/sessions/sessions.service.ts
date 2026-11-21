@@ -318,10 +318,13 @@ import {
 import {
   HELD_SESSION_STATUSES,
   RELEASED_SESSION_STATUSES,
+  failedReleaseFilter,
   heldFilter,
+  isFailedRelease,
   isHeld,
   isHeldPastClaim,
   isReleased,
+  isWorkFinishedRelease,
   releaseCauseOfEndReason,
 } from '../common/session-release';
 import { GENERATING_SESSION_FILTER, isSessionGenerating } from '../common/session-generating';
@@ -5793,7 +5796,8 @@ export class SessionsService {
     if (latest && (latest.status === RunStatus.PENDING || latest.status === RunStatus.RUNNING)) {
       return withSessionState(latest);
     }
-    if (latest && latest.status !== RunStatus.FAILED) {
+    // A repair that was not released by a failure (status FAILED, held to the cause by session_release_failure_chk).
+    if (latest && !isFailedRelease(latest.releaseCause)) {
       const continued = await this.continueMergeRepair(ownerId, latest, mergeRecoveryContinuePrompt(recovery, preparePR));
       if (continued) return withSessionState(continued);
     }
@@ -5962,7 +5966,8 @@ export class SessionsService {
           taskId: target.taskId,
           OR: [
             { status: RunStatus.AWAITING_INPUT, cancelRequestedAt: null },
-            { status: RunStatus.FAILED },
+            // Released by a failure: the status FAILED, which session_release_failure_chk holds to the cause.
+            { releaseCause: failedReleaseFilter() },
           ],
         },
         // Armed for a LATER instant, so any claim the sweep had in flight is over: the session waits
@@ -9760,8 +9765,9 @@ export class SessionsService {
    *
    * - nothing owed → nothing is written;
    * - the turn that ended did not succeed (`turnSucceeded` false: it failed or was stopped), or the
-   *   session ended FAILED or CANCELLED → the request is dropped: the turn that asked did not finish, so
-   *   its work is not merged on its word;
+   *   session was released for anything but its work finishing (a failure, a stop, an engine that exited by
+   *   itself; isWorkFinishedRelease) → the request is dropped: the turn that asked did not finish, so its
+   *   work is not merged on its word;
    * - another turn already running (a queued follow-up started) → nothing is written, and that turn's
    *   end asks again;
    * - a merge already in flight, or the work already in the target → the request is answered by it, and
@@ -9782,7 +9788,7 @@ export class SessionsService {
       const session = await tx.session.findUniqueOrThrow({
         where: { id },
         select: {
-          ownerId: true, status: true, finishedAt: true, cancelRequestedAt: true, mergeStatus: true,
+          ownerId: true, status: true, finishedAt: true, releaseCause: true, cancelRequestedAt: true, mergeStatus: true,
           mergeAfterTurnAt: true, mergeAfterTurnTarget: true,
         },
       });
@@ -9792,7 +9798,9 @@ export class SessionsService {
         await tx.session.update({ where: { id }, data });
         wrote = true;
       };
-      if (!turnSucceeded || session.status === RunStatus.FAILED || session.status === RunStatus.CANCELLED) {
+      // Released for anything but its work finishing (decision D5: the release cause, never the terminal status): a
+      // failure, a stop, or an engine that exited by itself.
+      if (!turnSucceeded || (isReleased(session) && !isWorkFinishedRelease(session.releaseCause))) {
         await clear();
         return 'DROPPED' as const;
       }
@@ -13186,8 +13194,9 @@ export class SessionsService {
     status: true,
     // A region sentence says the session waits on its machine's region (session-move.ts regionHeld).
     error: true,
-    // The release column: only an ended session moves (session-move.ts).
+    // The release column: only an ended session moves (session-move.ts); its cause, whether a retry is armed on a failure.
     finishedAt: true,
+    releaseCause: true,
     deletedAt: true,
     completedAt: true,
     importSourceCwd: true,

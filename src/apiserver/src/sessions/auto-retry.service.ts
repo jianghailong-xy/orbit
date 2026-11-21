@@ -70,6 +70,7 @@ import {
   withTransactionRetry,
 } from '../common/transaction-retry';
 import { RUNNER_BEATS } from '../runners/runner-presence';
+import { failedReleaseFilter, isFailedRelease } from '../common/session-release';
 import { ControlPlaneLeader } from '../realtime/control-plane-leader';
 
 const SWEEP_INTERVAL_MS = 30_000;
@@ -281,6 +282,12 @@ const NOT_IN_CANCELLED_PROJECT: Prisma.SessionWhereInput = {
  */
 type AggregateSettleOutcome = 'SETTLED' | 'RELEASED' | 'BUSY';
 
+/** A session parked waiting on its retry, as read: its status for the compare-and-set, its release cause for whether it failed. */
+interface ParkedRow {
+  status: RunStatus;
+  releaseCause: string | null;
+}
+
 @Injectable()
 export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
   private readonly log = new Logger('AutoRetry');
@@ -362,7 +369,8 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         sessionKind: 'CONVERSATION',
         OR: [
           { status: RunStatus.AWAITING_INPUT, cancelRequestedAt: null },
-          { status: RunStatus.FAILED },
+          // Released by a failure: the status FAILED, which session_release_failure_chk holds to the cause.
+          { releaseCause: failedReleaseFilter() },
         ],
         AND: [NOT_DISPATCH_HELD, NOT_IN_CANCELLED_PROJECT],
       },
@@ -376,6 +384,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         retryAt: true,
         retryAttempts: true,
         status: true,
+        releaseCause: true,
         taskId: true,
         startsTaskWork: true,
         assignedRunnerId: true,
@@ -457,7 +466,8 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         sessionKind: 'CONVERSATION',
         OR: [
           { status: RunStatus.AWAITING_INPUT, cancelRequestedAt: null },
-          { status: RunStatus.FAILED },
+          // Released by a failure: the status FAILED, which session_release_failure_chk holds to the cause.
+          { releaseCause: failedReleaseFilter() },
         ],
         // A held task's work is not a candidate at all (see NOT_DISPATCH_HELD). Filtered here
         // rather than skipped in the loop, and that is not only tidiness: a row skipped in the
@@ -484,6 +494,8 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         retryAt: true,
         assignedRunnerId: true,
         status: true,
+        // Whether the row is parked released by a failure (FAILED) or idle: what giving the retry up announces.
+        releaseCause: true,
         // §13.6 SU6's two columns, so the sweep can answer "is this task's work still this task's
         // to do" itself instead of finding out from a trigger that refuses the write.
         taskId: true,
@@ -590,7 +602,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
             ?? (session.task.verifies ? taskRetirement(session.task.verifies) : null))
           : null;
         if (retirement) {
-          await this.disarm(session.id, session.status, session.retryAt,
+          await this.disarm(session.id, session, session.retryAt,
             `task was ${retirement.toLowerCase()}; the attempt that replaced it holds this work`);
           continue;
         }
@@ -609,7 +621,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
           if (outcome === 'SETTLED') {
             this.log.warn(`auto-retry of ${session.id} disarmed: task is completed by `
               + 'aggregating its subtasks, so it has no work of its own to retry');
-            this.announceSettled(session.id, session.status);
+            this.announceSettled(session.id, session);
             continue;
           }
           // ANY other answer leaves this row exactly as it was found and waits for the next sweep
@@ -656,7 +668,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         if (capabilities.resumeBlockedReason === 'RUNNER_OFFLINE') {
           const waited = session.finishedAt ? now.getTime() - session.finishedAt.getTime() : 0;
           if (waited > MAX_OFFLINE_WAIT_MS) {
-            await this.disarm(session.id, session.status, session.retryAt, 'runner never came back');
+            await this.disarm(session.id, session, session.retryAt, 'runner never came back');
           } else {
             await this.rearm(
               session.id,
@@ -743,7 +755,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         }
 
         if (attempts >= BACKOFF_MS.length) {
-          await this.disarm(session.id, session.status, session.retryAt, `gave up after ${attempts} attempts`);
+          await this.disarm(session.id, session, session.retryAt, `gave up after ${attempts} attempts`);
           continue;
         }
 
@@ -766,7 +778,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
           // had something to say, and nothing of it is left. A continue would be a turn about
           // nothing, so the retry ends as it always has.
           if (message.sessionReplies || message.confirmationReviewTurn || message.runNotifyTurn) {
-            await this.disarm(session.id, session.status, session.retryAt, 'nothing to re-send');
+            await this.disarm(session.id, session, session.retryAt, 'nothing to re-send');
             continue;
           }
           // Nothing of the person's is waiting to go out and this failure held back no turn of the
@@ -889,7 +901,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
           // there is nothing left to retry — and the attempt the claim spent goes back, which is what
           // says the retry is over rather than under way (`giveUpClaim`).
           if (error instanceof NothingHeldToResend) {
-            await this.giveUpClaim(session.id, session.status, attempts, claim, 'its outcomes were said on another turn');
+            await this.giveUpClaim(session.id, session, attempts, claim, 'its outcomes were said on another turn');
             continue;
           }
           // §13.6 SU6, at the only point left where it can still surprise this sweep: the claim
@@ -1011,16 +1023,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
           // that has ended. Guarded on the CAS so a concurrent writer that moved the row on is not
           // announced over, and so a re-entry publishes nothing twice.
           if (refunded.count > 0) {
-            if (session.status === RunStatus.FAILED) {
-              this.realtime.publish(session.id, {
-                seq: Number.MAX_SAFE_INTEGER,
-                type: RunEventType.STATUS,
-                ts: new Date().toISOString(),
-                payload: { status: RunStatus.FAILED, final: true },
-              });
-            } else {
-              this.realtime.publishSessionUpdated(session.id);
-            }
+            this.announceSettled(session.id, session);
           }
           continue;
         }
@@ -1197,10 +1200,10 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
   ): Promise<boolean> {
     const session = await db.session.findUnique({
       where: { id: sessionId },
-      select: { status: true, retryAt: true, retryClaimedAt: true, cancelRequestedAt: true },
+      select: { status: true, releaseCause: true, retryAt: true, retryClaimedAt: true, cancelRequestedAt: true },
     });
     if (!session) return false;
-    if (session.status === RunStatus.FAILED) return true;
+    if (isFailedRelease(session.releaseCause)) return true;
     if (session.status !== RunStatus.AWAITING_INPUT || session.cancelRequestedAt) return false;
     if (session.retryAt != null) return true;
     if (session.retryClaimedAt && Date.now() - session.retryClaimedAt.getTime() < RETRY_CLAIM_WINDOW_MS) {
@@ -1923,19 +1926,19 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
    */
   private async giveUpClaim(
     sessionId: string,
-    parkedAs: RunStatus,
+    parked: ParkedRow,
     attempts: number,
     claimedAt: Date,
     why: string,
   ): Promise<void> {
     const { count } = await this.prisma.session.updateMany({
-      where: { id: sessionId, status: parkedAs, retryAt: null, retryAttempts: attempts + 1, retryClaimedAt: claimedAt },
+      where: { id: sessionId, status: parked.status, retryAt: null, retryAttempts: attempts + 1, retryClaimedAt: claimedAt },
       // The attempt goes back in the same statement that drops the claim: from here the sweep is not
       // going to write the turn, so the session must not read as on its way to one (migration 0354).
       data: { retryAttempts: attempts, retryClaimedAt: null },
     });
     this.log.warn(`auto-retry of ${sessionId} given up after its claim: ${why}`);
-    if (count > 0) this.announceSettled(sessionId, parkedAs);
+    if (count > 0) this.announceSettled(sessionId, parked);
   }
 
   /**
@@ -1988,11 +1991,12 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         completedAt: null,
         // Only a conversation can hold a retry claim; the landing container never gets one.
         sessionKind: 'CONVERSATION',
-        status: { in: [RunStatus.FAILED, RunStatus.AWAITING_INPUT] },
+        // Parked: idle, or released by a failure (FAILED, which session_release_failure_chk holds to the cause).
+        OR: [{ status: RunStatus.AWAITING_INPUT }, { releaseCause: failedReleaseFilter() }],
       },
       orderBy: { retryClaimedAt: 'asc' },
       take: MAX_PER_SWEEP,
-      select: { id: true, status: true, retryAttempts: true, retryClaimedAt: true },
+      select: { id: true, status: true, releaseCause: true, retryAttempts: true, retryClaimedAt: true },
     });
     const released: string[] = [];
     for (const session of lapsed) {
@@ -2009,7 +2013,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
       if (count === 0) continue;
       released.push(session.id);
       this.log.warn(`auto-retry of ${session.id} given up: its claim's re-send was never written`);
-      this.announceSettled(session.id, session.status);
+      this.announceSettled(session.id, session);
     }
     return released;
   }
@@ -2020,34 +2024,35 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
    * the other) clears it once and announces it once, and an arm somebody set since — a re-arm, a press of
    * Retry — is a different retry, which the next sweep decides about.
    */
-  private async disarm(sessionId: string, parkedAs: RunStatus, armedAt: Date | null, why: string): Promise<void> {
+  private async disarm(sessionId: string, parked: ParkedRow, armedAt: Date | null, why: string): Promise<void> {
     // A row read with no arm has no retry of this sweep's to end (the due read selects armed rows only).
     if (armedAt === null) return;
     const cleared = await this.prisma.session.updateMany({
-      where: { id: sessionId, status: parkedAs, retryAt: armedAt },
+      where: { id: sessionId, status: parked.status, retryAt: armedAt },
       // The retry is over, so nothing is on its way to a turn any more: a claim that had not been
       // resolved yet ends here too (migration 0354).
       data: { retryAt: null, retryClaimedAt: null },
     });
     if (cleared.count === 0) return;
     this.log.warn(`auto-retry of ${sessionId} disarmed: ${why}`);
-    this.announceSettled(sessionId, parkedAs);
+    this.announceSettled(sessionId, parked);
   }
 
   /** What a row that has stopped waiting owes its clients; see `disarm` for why it is published. */
-  private announceSettled(sessionId: string, parkedAs: RunStatus): void {
+  private announceSettled(sessionId: string, parked: ParkedRow): void {
     // Giving up is the moment the failure becomes the outcome, so this is where it is announced.
     // The row moves no status — it has been FAILED since the turn died — but the clients have
     // been drawing it as "Retrying" off the `retryAt` that just went away, so they need to be
     // told that the wait is over as much as the owner's phone does. Publishing the STATUS does
     // both: `final` with no `retryAt` beside it is exactly the settlement signal the failing
     // turn withheld, and RealtimeService.publish turns it into the one push notification.
-    if (parkedAs === RunStatus.FAILED) {
+    // Released by a failure: the stored status is FAILED (session_release_failure_chk), and that is the word sent.
+    if (isFailedRelease(parked.releaseCause)) {
       this.realtime.publish(sessionId, {
         seq: Number.MAX_SAFE_INTEGER,
         type: RunEventType.STATUS,
         ts: new Date().toISOString(),
-        payload: { status: RunStatus.FAILED, final: true },
+        payload: { status: parked.status, final: true },
       });
       return;
     }

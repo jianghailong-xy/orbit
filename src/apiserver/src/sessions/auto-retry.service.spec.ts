@@ -74,6 +74,7 @@ function matchesBranch(row: SessionRow, cond: Record<string, unknown>): boolean 
 function matchesField(actual: unknown, expected: unknown): boolean {
   if (expected !== null && typeof expected === 'object' && !(expected instanceof Date)) {
     if ('not' in expected) return (actual ?? null) !== (expected as { not: unknown }).not;
+    if ('in' in expected) return (expected as { in: unknown[] }).in.includes(actual ?? null);
     const related = actual as Record<string, unknown> | null | undefined;
     if (!related) return false;
     return Object.entries(expected as Record<string, unknown>)
@@ -452,6 +453,10 @@ function row(over: SessionRow = {}): SessionRow {
     assignedRunner: { planUsage: null, status: 'ONLINE', lastHeartbeatAt: NOW },
     status: RunStatus.AWAITING_INPUT,
     ...over,
+    // A FAILED row is released by a failure cause (session_release_failure_chk); the rest are held.
+    releaseCause: over.releaseCause !== undefined
+      ? over.releaseCause
+      : (over.status === RunStatus.FAILED ? 'turn_failed' : null),
   };
 }
 
