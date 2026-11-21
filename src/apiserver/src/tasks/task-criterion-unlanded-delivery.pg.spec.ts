@@ -422,8 +422,13 @@ async function settleByAcceptance(stack: Stack, f: Fixture, taskId: string, labe
       status: RunStatus.RUNNING,
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
-      // The run reports work whose landing is still unknown.
-      changedFiles: ['work.md'],
+      // The work ran in the task's own worktree and changed files. Revision 42 (§12.15 P-M3) reads
+      // landing from the delivered commit: a DONE task whose sessions ran no branch and reported
+      // nothing has nothing to land and is out of its criterion's conjunction, so a fixture about
+      // work that is finished and only on its branch must record the branch it is on.
+      isolationStatus: 'worktree',
+      branch: `orbit/${sessionId}`,
+      changedFiles: ['src/work.ts'],
     },
   });
   await stack.db.conversationTurn.create({

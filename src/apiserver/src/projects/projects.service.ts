@@ -55,6 +55,8 @@ export interface CoordinatorHandoffBinding {
   note: string | null;
   /** The pending-waits preview read before the swap, for the moved waits' labels. */
   waits: readonly CoordinatorPendingWait[];
+  /** What the owner named for the successor to run on; null keeps the previous coordinator's. */
+  successor?: CoordinatorHandoffSuccessor | null;
 }
 import { MergeReceiptRow, mergeReceiptRow } from '../sessions/merge-receipt';
 import {
@@ -75,7 +77,7 @@ import {
   verificationEpochNeedsHumanSql,
   verificationEpochOpenSql,
 } from '../tasks/verification-dependency';
-import { ProjectStatus as SharedProjectStatus, uuidToBase62 } from '@orbit/shared';
+import { type CoordinatorHandoffSuccessor, ProjectStatus as SharedProjectStatus, uuidToBase62 } from '@orbit/shared';
 import {
   CRITERIA_DECISIONS,
   CreateProjectDto,
@@ -5049,6 +5051,11 @@ export class ProjectsService {
         ownerId,
         {
           workspaceId: runIn,
+          // A handoff's successor on what the owner named, when they named something: the previous
+          // coordinator's model may be the very reason for handing over. Otherwise the anchor below.
+          ...(handoff?.successor?.engine ? { engine: handoff.successor.engine } : {}),
+          ...(handoff?.successor?.provider ? { provider: handoff.successor.provider } : {}),
+          ...(handoff?.successor?.model ? { model: handoff.successor.model } : {}),
           title: coordinatorSessionTitle(project.title),
           prompt: buildCoordinatorOpening(
             project.title,
