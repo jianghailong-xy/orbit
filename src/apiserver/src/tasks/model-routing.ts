@@ -51,12 +51,20 @@ export const MODEL_FAMILY_TIERS: ReadonlyArray<{
   family: string;
   match: RegExp;
   tiers: Partial<Record<ModelRoutingLevel, string>>;
+  /** The rule stands in only while the catalogue lists no model matching this. */
+  unless?: RegExp;
 }> = [
   { family: 'Claude Sonnet', match: /^claude-sonnet-\d/, tiers: { S: 'low', M: 'medium' } },
   { family: 'Claude Opus', match: /^claude-opus-\d/, tiers: { L: 'high', XL: 'max' } },
   { family: 'Gemini Flash', match: /^gemini-\d[\d.]*-flash$/, tiers: { S: 'low', M: 'medium' } },
   { family: 'Gemini', match: /^gemini-\d[\d.]*-(?!flash$)[a-z]+$/, tiers: { L: 'high', XL: 'max' } },
   { family: 'Composer', match: /^composer-\d/, tiers: { S: 'low' } },
+  // Claude Haiku and Kimi go last so they never displace a Claude or Gemini pick in the same tier.
+  { family: 'Claude Haiku', match: /^claude-haiku-\d/, tiers: { S: 'low' } },
+  // Kimi as Cursor lists it, mirroring the Kimi Code table: K3 at S/M, K3.1 Pro at L/XL, K3 standing in for it.
+  { family: 'Kimi K3', match: /^kimi-k3(?!\.)/, tiers: { S: 'low', M: 'high' } },
+  { family: 'Kimi K3.1 Pro', match: /^kimi-k3\.\d+-pro/, tiers: { L: 'high', XL: 'max' } },
+  { family: 'Kimi K3 (no Pro listed)', match: /^kimi-k3(?!\.)/, tiers: { L: 'high', XL: 'max' }, unless: /^kimi-k3\.\d+-pro/ },
 ];
 
 const EFFORT_ORDER = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
@@ -91,9 +99,10 @@ function familyTierRows(catalog: readonly RunnerModelInfo[]): SubagentModelRow[]
   const rows: SubagentModelRow[] = [];
   const tiered = new Set<string>();
   for (const level of MODEL_ROUTING_LEVELS) {
-    for (const { match, tiers } of MODEL_FAMILY_TIERS) {
+    for (const { match, tiers, unless } of MODEL_FAMILY_TIERS) {
       const wanted = tiers[level];
       if (!wanted) continue;
+      if (unless && catalog.some((row) => unless.test(row.value))) continue;
       const newest = catalog.filter((row) => match.test(row.value)).sort((a, b) => newerFirst(a.value, b.value))[0];
       if (!newest) continue;
       rows.push({ model: newest.value, effort: clampEffort(wanted, newest.reasoningLevels), level });

@@ -2,7 +2,8 @@
 # D3 acceptance: a DeepSeek Harness task whose completion criterion is EXECUTABLE runs through the real apiserver
 # (PostgreSQL) and a runner built from this tree, on the pinned dsh 0.2.0-rc.2 against a local mock model; its
 # acceptance command is run by the runner in the worktree (never by dsh or the model) and derives DONE / FAILED,
-# a person's `!` shell on a Harness session is still refused, and Claude's EXECUTABLE path is unchanged.
+# a person's `!` shell on a Harness session runs on the runner in the worktree too, and Claude's EXECUTABLE path is
+# unchanged.
 # Named scenarios: scripts/test-dsh-executable-acceptance.mjs.
 #
 #   bash scripts/test-dsh-executable-acceptance.sh

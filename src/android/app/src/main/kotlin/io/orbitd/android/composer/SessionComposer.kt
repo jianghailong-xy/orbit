@@ -362,7 +362,7 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
                                 }
                                 DropdownMenuItem(text = { Text("Shell command") }, onClick = {
                                     menu = false
-                                    if (dsh) model.refuse(DshRuntime.SHELL_REFUSAL) else if (!draft.text.startsWith("!")) model.edit("!${draft.text}", 1, 1)
+                                    if (!draft.text.startsWith("!")) model.edit("!${draft.text}", 1, 1)
                                 })
                                 if (target == null) DropdownMenuItem(text = { Text("Queued messages (${waiting.size})") }, onClick = { menu = false; queued = true })
                                 // A pick held for this session travels with the re-send, which would otherwise run on what it already has.
