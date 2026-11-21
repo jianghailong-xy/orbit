@@ -202,9 +202,11 @@ export function finalizeReleaseCause(
 
 /**
  * Whether this finalize is a runner reporting success with no end requested: released `engine_exited`, which is a
- * stop and not finished work (isWorkFinishedRelease), whatever the runner said. No current runner reports it (the
- * runner says SUCCEEDED only for an `end` turn, which the server writes with the end request); the finalize logs it,
- * so that one in the field is seen.
+ * stop and not finished work (isWorkFinishedRelease), whatever the runner said. No runner the server accepts reports
+ * it: a finalize needs runner-link v1 (runner 0.1.238 and later), and every engine supervisor since then says SUCCEEDED
+ * only for an inbox `end` turn, which the server writes together with the end request (traced 2026-11-21; the one-shot
+ * mode that reported success on its own went with 463f89061d, 2026-06-16). The finalize logs it, so one in the field is
+ * seen.
  */
 export function reportsSuccessWithNoEnd(current: { cancelRequestedAt: Date | null }, reported: string): boolean {
   return !current.cancelRequestedAt && reported === 'SUCCEEDED';
