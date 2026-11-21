@@ -698,7 +698,7 @@ test("a Claude session on Automatic goes as soon as another of its runner's acco
 // the session to the user having never once tried it.
 test('waits for an offline runner without spending an attempt', async () => {
   const { service, resumed, rows } = makeService([
-    row({ status: RunStatus.FAILED, cancelRequestedAt: PAST, assignedRunner: offlineRunner }),
+    row({ status: RunStatus.FAILED, finishedAt: NOW, cancelRequestedAt: PAST, assignedRunner: offlineRunner }),
   ]);
   await service.sweep(NOW);
   assert.deepEqual(resumed, [], 'resume() would only refuse it as RUNNER_OFFLINE');

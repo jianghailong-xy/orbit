@@ -30,7 +30,7 @@ import {
   type WikiJobKind,
   type WikiSimilar,
 } from '@orbit/shared';
-import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
+import { isHeld } from '../common/session-release';
 import type { PrismaService } from '../prisma/prisma.service';
 import { readWikiRepoReadiness } from '../wiki-worker/wiki-repo-ops';
 import { readWikiDocsFollowRewrites, type WikiDocsFollowRewrite, type WikiDocsFollowRewriteSection } from './wiki-docs-follow';
@@ -145,7 +145,7 @@ const sectionId = (doc: string, key: string): string => `${doc}\u0000${key}`;
 
 /** What `wikiChatDraftState` reads of a set of cards, beside their own columns: their chats, their successors, their bases. */
 export interface DraftFacts {
-  /** The chats that are open: one of OPEN_SESSION_STATUSES, and not in Trash. */
+  /** The chats that are open: held (common/session-release.ts), and not in Trash. */
   openChats: ReadonlySet<string>;
   /** Each card a newer one replaced, with the newer one. */
   replacedBy: ReadonlyMap<string, string>;
@@ -168,9 +168,9 @@ export async function draftFacts(db: Reader, ownerId: string, rows: readonly Dra
   if (rows.length === 0) return { openChats: new Set(), replacedBy: new Map(), moved: new Set(), planMoved: new Set() };
   const chats = await db.session.findMany({
     where: { ownerId, id: { in: [...new Set(rows.map((row) => row.sessionId))] } },
-    select: { id: true, status: true, deletedAt: true },
+    select: { id: true, finishedAt: true, deletedAt: true },
   });
-  const openChats = new Set(chats.filter((chat) => chat.deletedAt === null && OPEN_SESSION_STATUSES.includes(chat.status)).map((chat) => chat.id));
+  const openChats = new Set(chats.filter((chat) => chat.deletedAt === null && isHeld(chat)).map((chat) => chat.id));
   const successors = await db.wikiChatDraft.findMany({
     where: { ownerId, replacesId: { in: rows.map((row) => row.id) } },
     select: { id: true, replacesId: true },

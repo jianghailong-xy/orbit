@@ -12,14 +12,12 @@ import { sanitizeRunnerEngines } from '../common/runner-engines';
 import { reportedRunAccount } from '../providers/plan-usage-accounts';
 import { makeBranchName } from './naming';
 import { branchName } from '../projects/project-criterion-landing';
-import { RELEASED_SESSION_STATUSES } from '../common/session-release';
+import { isReleased } from '../common/session-release';
 
 /** What a runner declares when it can take in a session moved from another workspace: it checks an
  *  old checkout's repository and branch before reusing it, and carries a Claude conversation over to
  *  the new directory (runner session_move.go). Only such a runner is offered as a place to move to. */
 export const SESSION_MOVE_V1 = 'session-move/v1';
-
-const ENDED: readonly RunStatus[] = RELEASED_SESSION_STATUSES;
 
 const RUNTIME_LABEL: Record<AgentProvider, string> = {
   [AgentProvider.CLAUDE]: 'Claude',
@@ -54,6 +52,8 @@ export const MOVE_REFUSAL = {
 /** The session's own state, as §5.2 judges it. */
 export interface SessionMoveFacts {
   status: RunStatus;
+  /** The release column (common/session-release.ts): set on an ended session. */
+  finishedAt: Date | null;
   deletedAt: Date | null;
   completedAt: Date | null;
   importSourceCwd: string | null;
@@ -119,7 +119,7 @@ export function sessionMoveVerdict(s: SessionMoveFacts): SessionMoveVerdict {
   ) {
     return refuse(`Moving ${RUNTIME_LABEL[s.runtime]} sessions isn't supported yet.`);
   }
-  const ended = ENDED.includes(s.status);
+  const ended = isReleased(s);
   // Held for its runner's region: its queue is what moves with it.
   const regionHeld = !!s.regionHeld && s.status === RunStatus.PENDING && s.liveApprovals === 0;
   if (!ended) {

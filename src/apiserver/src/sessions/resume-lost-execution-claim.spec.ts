@@ -90,6 +90,7 @@ function fixture(
     taskId: TASK,
     workspaceId: WORKSPACE,
     status: RunStatus.FAILED,
+    finishedAt: now,
     startsTaskWork: true,
     startedAt: now,
     numTurns: 3,

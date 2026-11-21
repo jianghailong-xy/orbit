@@ -204,6 +204,10 @@ import {
   finalizeReleaseCause,
   HELD_SESSION_STATUSES,
   RELEASED_SESSION_STATUSES,
+  heldFilter,
+  isHeld,
+  isReleased,
+  releasedFilter,
 } from '../common/session-release';
 import { assertValidUpload, MAX_UPLOAD_BYTES } from '../attachments/attachments.media';
 import { FileUploadCleanupInterceptor } from '../files/file-upload-cleanup.interceptor';
@@ -680,6 +684,8 @@ const INGEST_SESSION_SELECT = {
   // Whose rows a control-plane turn's card may be read from (project-started.ts).
   ownerId: true,
   status: true,
+  // The release column: a released session's events are refused (common/session-release.ts).
+  finishedAt: true,
   runtimeSessionId: true,
   // Read under the row lock so the three conditional writes this transaction used to
   // issue as separate guarded statements can be decided here instead. Nothing can move
@@ -4075,7 +4081,7 @@ export class RunnerApiController {
     const held = sessionIds ?? (await this.prisma.session.findMany({
       where: {
         assignedRunnerId: runnerId, provider: 'claude', providerBuiltin: true, sessionKind: 'CONVERSATION',
-        status: { notIn: [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED] },
+        ...heldFilter(),
       },
       select: { id: true },
     })).map((row) => row.id);
@@ -4677,7 +4683,7 @@ export class RunnerApiController {
         s.assignedRunnerId === runner.id &&
         s.deletedAt === null &&
         s.cancelRequestedAt === null &&
-        OPEN.includes(s.status) &&
+        isHeld(s) &&
         workspace?.deletedAt === null &&
         orchestrationEnabled(s.owner);
       out.push({
@@ -4859,6 +4865,7 @@ export class RunnerApiController {
           inboxLeaseGeneration: string | null;
           inboxLeaseOwner: string | null;
           status: RunStatus;
+          finishedAt: Date | null;
           mergeStatus: string | null;
           mergeOperationId: string | null;
           mergeOperationOwner: string | null;
@@ -4870,7 +4877,7 @@ export class RunnerApiController {
         }>
       >`
         SELECT id, provider, "provider_builtin" AS "providerBuiltin", engine, "owner_id" AS "ownerId", "inbox_lease_generation" AS "inboxLeaseGeneration",
-               "inbox_lease_owner" AS "inboxLeaseOwner", status,
+               "inbox_lease_owner" AS "inboxLeaseOwner", status, "finished_at" AS "finishedAt",
                "merge_status" AS "mergeStatus",
                "merge_operation_id" AS "mergeOperationId",
                "merge_operation_owner" AS "mergeOperationOwner",
@@ -4887,7 +4894,7 @@ export class RunnerApiController {
         throw new ForbiddenException('session does not belong to this runner');
       }
       const declared = await assertDeclaredLeaseSupport(tx, runner.id, owned[0], providerHeader);
-      if (!OPEN.includes(owned[0].status)) {
+      if (!isHeld(owned[0])) {
         throw new ConflictException('session is no longer open');
       }
       const currentOwner = owned[0].inboxLeaseOwner;
@@ -5084,6 +5091,7 @@ export class RunnerApiController {
           inboxLeaseGeneration: string | null;
           inboxLeaseOwner: string | null;
           status: RunStatus;
+          finishedAt: Date | null;
           mergeStatus: string | null;
           mergeOperationId: string | null;
           mergeOperationOwner: string | null;
@@ -5095,7 +5103,7 @@ export class RunnerApiController {
         }>
       >`
         SELECT id, provider, "provider_builtin" AS "providerBuiltin", engine, "owner_id" AS "ownerId", "inbox_lease_generation" AS "inboxLeaseGeneration",
-               "inbox_lease_owner" AS "inboxLeaseOwner", status,
+               "inbox_lease_owner" AS "inboxLeaseOwner", status, "finished_at" AS "finishedAt",
                "merge_status" AS "mergeStatus",
                "merge_operation_id" AS "mergeOperationId",
                "merge_operation_owner" AS "mergeOperationOwner",
@@ -5133,7 +5141,7 @@ export class RunnerApiController {
           continue;
         }
         const conflict = (message: string) => answers.set(sessionId, { sessionId, error: { statusCode: 409, message } });
-        if (!OPEN.includes(row.status)) {
+        if (!isHeld(row)) {
           conflict('session is no longer open');
           continue;
         }
@@ -5270,14 +5278,14 @@ export class RunnerApiController {
     // below is: a session of another runner is one this one has never heard of.
     const preflight = await this.prisma.session.findFirst({
       where: { id: sessionId, assignedRunnerId: runner.id },
-      select: { inboxLeaseOwner: true, inboxLeaseGeneration: true, status: true, provider: true, providerBuiltin: true, engine: true, ownerId: true },
+      select: { inboxLeaseOwner: true, inboxLeaseGeneration: true, status: true, finishedAt: true, provider: true, providerBuiltin: true, engine: true, ownerId: true },
     });
     const preflightEngine = preflight ? await sessionEngine(this.prisma, preflight) : undefined;
     if (
       preflight &&
       preflightEngine !== AgentProvider.DSH &&
       preflightEngine !== AgentProvider.CURSOR &&
-      OPEN.includes(preflight.status) &&
+      isHeld(preflight) &&
       preflight.inboxLeaseOwner === leaseOwner &&
       preflight.inboxLeaseGeneration === generation
     ) {
@@ -5301,10 +5309,11 @@ export class RunnerApiController {
           inboxLeaseGeneration: string | null;
           inboxLeaseOwner: string | null;
           status: RunStatus;
+          finishedAt: Date | null;
         }>
       >`
         SELECT id, provider, "provider_builtin" AS "providerBuiltin", engine, "owner_id" AS "ownerId", "inbox_lease_generation" AS "inboxLeaseGeneration",
-               "inbox_lease_owner" AS "inboxLeaseOwner", status
+               "inbox_lease_owner" AS "inboxLeaseOwner", status, "finished_at" AS "finishedAt"
         FROM "session"
         WHERE id = ${sessionId}::uuid AND "assigned_runner_id" = ${runner.id}::uuid
         FOR UPDATE
@@ -5313,7 +5322,7 @@ export class RunnerApiController {
         throw new ForbiddenException('session does not belong to this runner');
       }
       const declared = await assertDeclaredLeaseSupport(tx, runner.id, owned[0], providerHeader);
-      if (!OPEN.includes(owned[0].status)) {
+      if (!isHeld(owned[0])) {
         throw new ConflictException('session is no longer open');
       }
       if (owned[0].inboxLeaseOwner !== leaseOwner) {
@@ -5723,6 +5732,7 @@ export class RunnerApiController {
           inboxLeaseGeneration: string | null;
           inboxLeaseOwner: string | null;
           status: RunStatus;
+          finishedAt: Date | null;
           ownerId: string;
           provider: string;
           providerBuiltin: boolean;
@@ -5738,7 +5748,7 @@ export class RunnerApiController {
         }>
       >`
         SELECT id, "inbox_lease_generation" AS "inboxLeaseGeneration",
-               "inbox_lease_owner" AS "inboxLeaseOwner", status,
+               "inbox_lease_owner" AS "inboxLeaseOwner", status, "finished_at" AS "finishedAt",
                "owner_id" AS "ownerId", provider, "provider_builtin" AS "providerBuiltin", engine
                , "task_id" AS "taskId", ${DISPATCH_PAUSED} AS "dispatchPaused"
                , "inbox_request_id" AS "inboxRequestId", "inbox_request_turn_id" AS "inboxRequestTurnId"
@@ -5751,7 +5761,7 @@ export class RunnerApiController {
       if (owned.length === 0) {
         throw new ForbiddenException('session does not belong to this runner');
       }
-      if (!OPEN.includes(owned[0].status)) {
+      if (!isHeld(owned[0])) {
         throw new ConflictException('session is no longer open');
       }
       if (owned[0].inboxLeaseGeneration !== leaseGeneration) {
@@ -8930,7 +8940,7 @@ export class RunnerApiController {
       const sessions = new Map(rows.map(({ id, ...session }) => [id, session as IngestSessionRow]));
       // A session no longer open is refused there too, before anything is written.
       const open = fenced
-        .filter(({ batch }) => OPEN.includes(sessions.get(batch.sessionId)!.status))
+        .filter(({ batch }) => isHeld(sessions.get(batch.sessionId)!))
         .sort((x, y) => (x.batch.sessionId < y.batch.sessionId ? -1 : x.batch.sessionId > y.batch.sessionId ? 1 : 0));
       const stored = await storedLinkCallSeqs(tx, open.map(({ batch }) => ({
         sessionId: batch.sessionId,
@@ -9018,7 +9028,7 @@ export class RunnerApiController {
         // answered. One that fails fails the call, once the rest is announced: every batch is then forwarded alone,
         // finds its seqs stored, and is announced again (restated).
         const told = this.realtime.sendNotices(committed.ingested.flatMap(({ batch, outcome }) => (
-          OPEN.includes(outcome.session.status)
+          isHeld(outcome.session)
             ? this.realtime.batchNotices(batch.sessionId, outcome.events.filter((e) => !isNoiseSystemEvent(e)), outcome.engineStarted, outcome.restated)
             : []
         ))).then(() => null, (error: unknown) => error);
@@ -9165,7 +9175,7 @@ export class RunnerApiController {
       // survives a control-plane terminal transition. Reject before every event-
       // derived write, including empty and streaming-only batches. The runner drains
       // a task-failure tail through a bounded send barrier before terminalizing it.
-      if (!OPEN.includes(session.status)) {
+      if (!isHeld(session)) {
         throw new ConflictException('session is no longer open');
       }
       // ONE write of this Session row, accumulated here and issued once at the end
@@ -9941,7 +9951,7 @@ export class RunnerApiController {
     if (eventOutcome.currentWorkAcknowledged > 0) {
       this.realtime.publishQueuedTurnsChanged(sessionId);
     }
-    if (OPEN.includes(eventOutcome.session.status)) {
+    if (isHeld(eventOutcome.session)) {
       // Persisted above either way — but a `system` progress ping renders as nothing on every
       // client, so spending a frame on it only costs the reader bandwidth. The replay paths
       // drop the same events (notNoiseSql), so live and replayed transcripts agree. Published
@@ -10653,6 +10663,7 @@ export class RunnerApiController {
             completedAt: true,
             archivedAt: true,
             deletedAt: true,
+            finishedAt: true,
             cancelRequestedAt: true,
             startedAt: true,
             numTurns: true,
@@ -10702,7 +10713,7 @@ export class RunnerApiController {
                 id: { in: ids },
                 ownerId,
                 assignedRunnerId: runner.id,
-                status: { in: TERMINAL },
+                ...releasedFilter(),
               },
               select: { id: true },
             })
@@ -10816,6 +10827,7 @@ export class RunnerApiController {
       const locked = await tx.$queryRaw<
         Array<{
           status: RunStatus;
+          finishedAt: Date | null;
           inboxLeaseOwner: string | null;
           mergeStatus: string | null;
           mergeOperationId: string | null;
@@ -10830,7 +10842,7 @@ export class RunnerApiController {
           mergeRequestedBy: string | null;
         }>
       >`
-        SELECT status, "inbox_lease_owner" AS "inboxLeaseOwner",
+        SELECT status, "finished_at" AS "finishedAt", "inbox_lease_owner" AS "inboxLeaseOwner",
                "merge_status" AS "mergeStatus",
                "merge_operation_id" AS "mergeOperationId",
                "merge_operation_owner" AS "mergeOperationOwner",
@@ -10862,7 +10874,7 @@ export class RunnerApiController {
         current.mergeStatus === 'pending' &&
         current.mergeOperationId === operationId &&
         current.mergeOperationOwner === leaseOwner &&
-        (!OPEN.includes(current.status) || current.inboxLeaseOwner === leaseOwner);
+        (!isHeld(current) || current.inboxLeaseOwner === leaseOwner);
       if (!legacyAttempt && !modernAttempt) {
         throw new ConflictException('merge operation is no longer current');
       }
@@ -11110,13 +11122,14 @@ export class RunnerApiController {
       const locked = await tx.$queryRaw<
         Array<{
           status: RunStatus;
+          finishedAt: Date | null;
           inboxLeaseOwner: string | null;
           commitStatus: string | null;
           commitOperationId: string | null;
           commitOperationOwner: string | null;
         }>
       >`
-        SELECT status, "inbox_lease_owner" AS "inboxLeaseOwner",
+        SELECT status, "finished_at" AS "finishedAt", "inbox_lease_owner" AS "inboxLeaseOwner",
                "commit_status" AS "commitStatus",
                "commit_operation_id" AS "commitOperationId",
                "commit_operation_owner" AS "commitOperationOwner"
@@ -11144,7 +11157,7 @@ export class RunnerApiController {
         // The command was admitted while idle. Lifecycle terminalization may win
         // before its receipt POST; accept that exact process/epoch so Resume can
         // safely wait for completion instead of stranding a claimed operation.
-        (TERMINAL.includes(current.status) ||
+        (isReleased(current) ||
           (current.status === RunStatus.AWAITING_INPUT && current.inboxLeaseOwner === leaseOwner));
       if (!legacyAttempt && !modernAttempt) {
         throw new ConflictException('commit operation is no longer current');
@@ -11218,7 +11231,7 @@ export class RunnerApiController {
       where: {
         id: sessionId,
         assignedRunnerId: runner.id,
-        status: { in: OPEN },
+        ...heldFilter(),
       },
       data: {
         ...(changedFilesSnapshot !== undefined
