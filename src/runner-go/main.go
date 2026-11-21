@@ -947,6 +947,8 @@ func cmdRun() {
 		fmt.Fprintln(os.Stderr, "managed runner instance:", err)
 		os.Exit(1)
 	}
+	// A runner that receives the Orbit Files drive shows it to its agents as ~/Files (drive_link.go).
+	ensureDriveLink(func(format string, args ...interface{}) { fmt.Fprintf(os.Stderr, format+"\n", args...) })
 	// A managed runner's volume has to survive its node's power loss (volume_durability.go): before
 	// anything runs Git there, it looks at what the last stop left.
 	recoverManagedRepositories()
