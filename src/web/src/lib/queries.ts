@@ -517,6 +517,39 @@ export const projectSessionsQuery = (opts: {
     staleTime: 15_000,
   });
 
+/** One project's answer in `GET /sessions/project-placement`: what a workspace list places its row with. */
+export interface ProjectPlacement {
+  projectId: string;
+  /** Open or Completed, wherever it runs; null for a project with none (or one in Trash). */
+  coordinator: SessionListItem | null;
+  /** The project's sessions in the list's view that are waiting on the owner, in any workspace. */
+  waiting: SessionListItem[];
+  /** How many sessions the project has in the list's view, in any workspace, its coordinator counted. */
+  sessionCount: number;
+}
+
+/**
+ * Where a workspace list's project rows go, for every project it shows, in one read
+ * (useSessionProjectData). It used to be one or two `projectSessionsQuery` reads a project, which the
+ * server builds every time: some sixty requests for thirty projects on a page load (2026-11-21). The
+ * key holds the projects sorted, so the same list reads the same query whatever order it shows them in.
+ *
+ * Its stream reads are its own (useControlPlane schedulePlacement): an event about a session of one of
+ * its projects, or about one of the projects, reads it once a coalescing window. The answer carries an
+ * ETag, so the safety read is answered 304 when nothing moved.
+ */
+export const projectPlacementQuery = (opts: { view: 'open' | 'completed'; projectIds: readonly string[] }) => {
+  const ids = [...new Set(opts.projectIds)].sort().join(',');
+  return queryOptions({
+    queryKey: ['project-placement', opts.view, ids] as const,
+    meta: { entities: ['session', 'workspace', 'project'] },
+    queryFn: async () => (await api<{ projects: ProjectPlacement[] }>(
+      `/sessions/project-placement?${new URLSearchParams({ view: opts.view, projectIds: ids })}`,
+    )).projects,
+    staleTime: streamStaleTime,
+  });
+};
+
 /** One workspace's Open-session tallies, as returned by `GET /sessions/counts`. */
 export interface WorkspaceSessionCounts {
   workspaceId: string;
