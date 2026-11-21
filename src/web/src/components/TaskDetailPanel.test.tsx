@@ -172,6 +172,36 @@ describe('the landing of a DONE task, apart from its status (§2.7a)', () => {
     /<section class="tdp-section" aria-label="Task landing">([\s\S]*?)<\/section>/.exec(html)?.[1];
   const meta = (html: string) => /<div class="tdp-meta">([\s\S]*?)<\/div>/.exec(html)?.[1];
 
+  it('draws a task exempt from the landing check as Exempt with its reason, who marked it and when, and a way to remove it (D5)', () => {
+    const PROJECT_ID = '34WvwUS8YMXfOfWbMqVuu';
+    const reason = 'Only moves cron entries; the landing check needs a database this task cannot reach.';
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnMount: false, retryOnMount: false } } });
+    qc.setQueryData(['project', PROJECT_ID], {
+      id: PROJECT_ID, title: 'P',
+      settingChanges: [{
+        id: 'c1', projectId: PROJECT_ID, taskId: TASK_ID, field: 'TASK_LANDING_CHECK_EXEMPT', origin: 'COORDINATOR',
+        oldValue: { exempt: false, reason: null }, newValue: { exempt: true, reason }, reason,
+        writtenBySessionId: 's', revertsChangeId: null, revertedAt: null, revertible: true,
+        createdAt: new Date(Date.now() - 20 * 60_000).toISOString(),
+      }],
+    });
+    const html = renderPanel(task({
+      status: 'DONE', projectId: PROJECT_ID, landingCheckExempt: true, landingCheckExemptReason: reason,
+      integration: integration('LANDED'),
+    }), false, qc);
+    const block = section(html)!;
+    expect(block).toContain('data-task-exempt="true"');
+    expect(block).toContain('>Exempt</span>');
+    expect(block).toContain(reason);
+    expect(block).toContain('>Coordinator</span>');
+    expect(block).toContain('marked 20m ago');
+    expect(block).toContain('<span>Remove exemption</span></button>');
+    // A task that is not exempt draws none of it.
+    expect(section(renderPanel(task({ status: 'DONE', integration: integration('LANDED') })))).not.toContain('data-task-exempt');
+    // An exempt task with no landing yet still has the section, for its exemption.
+    expect(section(renderPanel(task({ status: 'OPEN', landingCheckExempt: true, landingCheckExemptReason: reason })))).toContain('data-task-exempt="true"');
+  });
+
   it.each([
     ['QUEUED', 'Waiting to land', 'tone-amber'],
     ['RUNNING', 'Landing', 'tone-blue'],

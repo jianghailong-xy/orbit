@@ -2,6 +2,7 @@ import {
   COORDINATOR_HANDOFF_COPY,
   managedSetupState,
   firstSessionProvider,
+  type CoordinatorHandoffSuccessor,
   type MergeRecoveryAction,
   type ProjectSidebarTaskCounts,
   type SessionCoordinatorHandoff,
@@ -164,7 +165,16 @@ import {
   projectDependencyGraphQuery,
 } from '../lib/queries';
 import { SEARCH_HINT, openSessionSearch } from './SessionSearch';
-import { SessionMoveModal, type MoveDialogSession } from './SessionMoveModal';
+import { SessionMoveModal, useSessionFolderFiling, type MoveDialogSession } from './SessionMoveModal';
+import {
+  SESSION_DRAG_TYPE,
+  dragCarriesFiles,
+  dragCarriesSession,
+  dragEdgeScrollStep,
+  folderDropVerdict,
+  sessionRowDraggable,
+  type DraggedSession,
+} from '../lib/sessionDrag';
 import {
   FOLDER_COPY,
   MOVE_COPY,
@@ -299,6 +309,7 @@ import {
   type SessionWatching,
 } from '../lib/watches';
 import { isQueuedWatchWake, queuedSubagentWake, returnsToComposer } from '../lib/queuedTurnRestore';
+import { queuedJobWake } from '../lib/bgJobCard';
 import {
   api,
   ApiError,
@@ -3437,7 +3448,7 @@ export function WorkspaceView({
   // frame, not a render later when `projectsShown` catches up: the landing waits on these reads.
   const projectData = useSessionProjectData({
     sessions: visibleSessions, view: effectiveView, enabled: listShowsProjects(effectiveView, listByTag) && !listProjectId,
-    controlLive, needsYou: (s) => sessionLine(s, true, sessionWatching(watchingBySession, s.id)).tone === 'approval',
+    controlLive,
   });
   // `includeLanding`: the page's Landings group lists the project's LANDING sessions, and no other
   // read ever sees one (§2.9 LS6). `priority`: the page is waiting on these two, so they do not
@@ -3545,9 +3556,15 @@ export function WorkspaceView({
     : null;
   // The Landings row (owner 2026-10-27, board 01 b): the mark of the most urgent landing and the
   // day's counts, over the project's landing sessions and its merges into main.
+  // No Landings row while the project's line has not started (revision 42 §12.16, ruling D2): the
+  // integration read says so with `line: null`; an unanswered read draws as it always did.
+  const pageIntegrationQ = useQuery({ ...projectIntegrationQuery(openProjectId ?? ''), enabled: !!openProjectId });
+  const pageLineNotStarted = pageIntegrationQ.data != null && typeof pageIntegrationQ.data === 'object'
+    && pageIntegrationQ.data.line === null;
   const landingsSummary = useMemo(
-    () => (openProjectId ? landingsRowSummary(landingMembers, pageMerges, { main: mainBranchName(pageProject?.mainBranch) }) : null),
-    [openProjectId, landingMembers, pageMerges, pageProject?.mainBranch],
+    () => (openProjectId && !pageLineNotStarted
+      ? landingsRowSummary(landingMembers, pageMerges, { main: mainBranchName(pageProject?.mainBranch) }) : null),
+    [openProjectId, pageLineNotStarted, landingMembers, pageMerges, pageProject?.mainBranch],
   );
   // The folder page the list is on: `?folder=<id>` on whichever route the console is at, so it
   // survives a reload and Back leaves it. Only a folder of this workspace, and only where the list
@@ -3591,6 +3608,7 @@ export function WorkspaceView({
       coordinators: projectData.coordinators,
       workspaceId: resolvedWorkspaceId,
       contentSessions: projectData.contentSessions,
+      sessionCounts: projectData.sessionCounts,
       runnerOffline: runner.online === false,
       needsYou: sessionNeedsYou,
       motion: (s) => statusGlyphMotion(s, sessionWatching(watchingBySession, s.id)?.word),
@@ -3598,7 +3616,7 @@ export function WorkspaceView({
         effectiveView !== 'trash', sessionWatching(watchingBySession, s.id), recapsEnabled, runnerShownName),
     }),
     [openFolder, visibleSessions, workspaceFolders, projectsQ.data, projectData.coordinators, projectData.contentSessions,
-      effectiveView, listByTag, runner.online, runnerShownName, watchingBySession, selectedSession, recapsEnabled,
+      projectData.sessionCounts, effectiveView, listByTag, runner.online, runnerShownName, watchingBySession, selectedSession, recapsEnabled,
       resolvedWorkspaceId],
   );
   // A project's entry is in the list only where its coordinator runs (owner 2026-11-07), so it stands
@@ -4830,7 +4848,13 @@ export function WorkspaceView({
     () =>
       visibleQueuedTurns
         // A SubAgent's end turn waits on its card instead (`subagentQueuedWakes`): the tail draws nothing for it.
-        .filter((turn) => !inPendingTray(turn) && !queuedSubagentWake(turn)?.alone)
+        // So does a background job's news (`jobQueuedWakes`, JobCard).
+        .filter(
+          (turn) =>
+            !inPendingTray(turn) &&
+            !queuedSubagentWake(turn)?.alone &&
+            !(!turn.sessionMessage && queuedJobWake(turn.content)?.alone),
+        )
         .map((turn) => ({ turn, event: queuedTurnEvent(turn) })),
     [visibleQueuedTurns],
   );
@@ -6250,9 +6274,15 @@ export function WorkspaceView({
       if (queuedItem)
         setQueued((current) =>
           current.some((turn) => turn.turnId === queuedItem.turnId)
-            ? current.map((turn) =>
-                turn.turnId === queuedItem.turnId ? { ...turn, ...queuedItem } : turn,
-              )
+            ? current.map((turn) => {
+                if (turn.turnId !== queuedItem.turnId) return turn;
+                // The active snapshot can see the translation settle before the send returns.
+                if (
+                  queuedItem.translation?.state === 'TRANSLATING' &&
+                  turn.translation && turn.translation.state !== 'TRANSLATING'
+                ) return turn;
+                return { ...turn, ...queuedItem };
+              })
             : [...current, queuedItem],
         );
       else {
@@ -7427,12 +7457,6 @@ export function WorkspaceView({
     // context on the next message. A bare `!` is a no-op; images are ignored. A terminal
     // session is capability-checked in the mutation; without resumable context it starts fresh.
     if (c.startsWith('!')) {
-      // DeepSeek Harness has no shell bridge (the runner settles such a turn as a refusal), so the
-      // command is kept in the composer rather than sent to fail.
-      if (shownEngine === AgentProvider.DSH) {
-        message.warning('DeepSeek Harness sessions don’t run ! shell commands', 'Ask the agent to run it instead.');
-        return;
-      }
       const cmd = c.slice(1).trim();
       if (cmd) sendFromComposer({ content: cmd, images: [], shell: true, intent: 'NEXT_TURN' });
       else setText('');
@@ -7553,8 +7577,7 @@ export function WorkspaceView({
   // events) so the drop hint doesn't flicker as the pointer crosses messages, the textarea, etc.
   const dragDepth = useRef(0);
   const [dragging, setDragging] = useState(false);
-  const dragHasFiles = (e: ReactDragEvent): boolean =>
-    Array.from(e.dataTransfer?.types ?? []).includes('Files');
+  const dragHasFiles = (e: ReactDragEvent): boolean => dragCarriesFiles(e.dataTransfer?.types);
   const onSessionDragEnter = (e: ReactDragEvent): void => {
     if (!canAttach || !dragHasFiles(e)) return;
     e.preventDefault();
@@ -7636,11 +7659,16 @@ export function WorkspaceView({
     !!selected && !selectedTrashed && !selectedMissing && !handingOver && !coordinatorHandedOver
     && slashItems.some((it) => it.type === 'command' && it.name === 'compact');
   const [handoffConfirm, setHandoffConfirm] = useState<{ projectId: string; projectTitle: string; running: boolean } | null>(null);
+  const handoffEngines = useMemo(() => engineChoices(choiceSources), [choiceSources]);
   // The outgoing coordinator the owner handed over from here: once its successor exists, go there.
   const [followHandoff, setFollowHandoff] = useState<string | null>(null);
   const handoffAction = useMutation({
-    mutationFn: ({ projectId, action }: { projectId: string; action: CoordinatorHandoffAction; sessionId: string }) =>
-      coordinatorHandoffRequest(projectId, action),
+    mutationFn: ({ projectId, action, successor }: {
+      projectId: string;
+      action: CoordinatorHandoffAction;
+      sessionId: string;
+      successor?: CoordinatorHandoffSuccessor | null;
+    }) => coordinatorHandoffRequest(projectId, action, successor),
     onSuccess: (view, { sessionId, action }) => {
       qc.invalidateQueries({ queryKey: ['session', sessionId] });
       refreshSessionLists();
@@ -7649,10 +7677,10 @@ export function WorkspaceView({
     },
     onError: (e: Error) => message.error(COORDINATOR_HANDOFF_COPY.refused, e.message),
   });
-  const runHandoffAction = (action: CoordinatorHandoffAction): void => {
+  const runHandoffAction = (action: CoordinatorHandoffAction, successor?: CoordinatorHandoffSuccessor | null): void => {
     const projectId = handoffRow?.projectMembership?.projectId ?? handoffRow?.projectId;
     if (!projectId || !selectedId || handoffAction.isPending) return;
-    handoffAction.mutate({ projectId, action, sessionId: selectedId });
+    handoffAction.mutate({ projectId, action, sessionId: selectedId, successor });
   };
   useEffect(() => {
     if (!followHandoff || followHandoff !== selectedId) return;
@@ -8228,6 +8256,19 @@ export function WorkspaceView({
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- cancelQueued is rebuilt each render; it reads the latest queue itself
   }, [visibleQueuedTurns, selectedTrashed]);
+  // A background job's wake still on the queue, by job id: its card says the agent has not read it yet, and its
+  // `Don't send` does what the tail's Cancel did (JobCard, board E1).
+  const jobQueuedWakes = useMemo(() => {
+    const out = new Map<string, () => void>();
+    if (selectedTrashed) return out;
+    for (const turn of visibleQueuedTurns) {
+      // A steer is on its way into the running turn and cannot be withdrawn (409): only a queued wake has a Don't send.
+      if (turn.sessionMessage || turn.placement === 'steer') continue;
+      for (const jobId of queuedJobWake(turn.content)?.jobIds ?? []) out.set(jobId, () => void cancelQueued(turn.turnId));
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- cancelQueued is rebuilt each render; it reads the latest queue itself
+  }, [visibleQueuedTurns, selectedTrashed]);
   // Take back a message whose delivery settled undelivered. Nothing read it, so this bubble is
   // the only copy of what was typed: hand it back the way the transcript's own undelivered card
   // does (appended, never overwriting a draft), then discard the row so the pane stops carrying a
@@ -8682,6 +8723,91 @@ export function WorkspaceView({
     setMoveTarget({ id: s.id, title: s.title, folderId: s.folderId ?? null, workspace: s.workspace,
       projectId: s.projectMembership?.projectId });
   };
+  // ── Drag a row onto a folder (lib/sessionDrag): Move…'s first group, as a shortcut ──
+  // Somewhere to drop: the workspace's folder rows, or on a folder's page its head (No Folder).
+  const dropTargetsShown = !listProjectId && !onScheduledRuns && !!scopeWorkspaceId &&
+    (!!openFolder || (folderListing?.folders.length ?? 0) > 0);
+  const { fileInFolder } = useSessionFolderFiling();
+  const [draggedSession, setDraggedSession] = useState<DraggedSession | null>(null);
+  // The target under the pointer that would take the drop: a folder's id, or null for No Folder.
+  const [dropHover, setDropHover] = useState<string | null | undefined>(undefined);
+  const knownFolderIds = useMemo(() => new Set(workspaceFolders.map((f) => f.id)), [workspaceFolders]);
+  const startSessionDrag = (e: ReactDragEvent, s: any): void => {
+    const workspaceId = s.workspaceId ?? s.workspace?.id ?? scopeWorkspaceId;
+    if (!workspaceId) return;
+    // Only the session's own type: no text, so neither the composer nor drop-to-upload takes it.
+    e.dataTransfer.setData(SESSION_DRAG_TYPE, s.id);
+    e.dataTransfer.effectAllowed = 'move';
+    setSwipeOpen(null);
+    setMenuOpenId(null);
+    setDraggedSession({ id: s.id, title: s.title, workspaceId, folderId: s.folderId ?? null,
+      projectId: s.projectMembership?.projectId });
+  };
+  const endSessionDrag = (): void => {
+    setDraggedSession(null);
+    setDropHover(undefined);
+  };
+  // A folder row or a folder page's head, as a place to drop the dragged row: only one where it
+  // would move (not its own folder, not another workspace's), and only that one lights up.
+  const folderDropProps = (folder: SessionFolder | null) => {
+    const folderId = folder?.id ?? null;
+    const takes = (e: ReactDragEvent): boolean =>
+      !!draggedSession && !!scopeWorkspaceId && dragCarriesSession(e.dataTransfer?.types) &&
+      folderDropVerdict(draggedSession, { workspaceId: scopeWorkspaceId, folderId }, knownFolderIds) === 'move';
+    return {
+      onDragEnter: (e: ReactDragEvent) => {
+        if (!takes(e)) return;
+        e.preventDefault();
+        setDropHover(folderId);
+      },
+      onDragOver: (e: ReactDragEvent) => {
+        if (!takes(e)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        if (dropHover !== folderId) setDropHover(folderId);
+      },
+      onDragLeave: (e: ReactDragEvent) => {
+        if (e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget)) return;
+        setDropHover((hover) => (hover === folderId ? undefined : hover));
+      },
+      onDrop: (e: ReactDragEvent) => {
+        const dragged = draggedSession;
+        if (!dragged || !takes(e)) return;
+        e.preventDefault();
+        endSessionDrag();
+        const origin = workspaceFolders.find((f) => f.id === dragged.folderId) ?? null;
+        void fileInFolder(dragged, folder, origin);
+      },
+    };
+  };
+  // Held near the list's top or bottom edge, a drag scrolls it, so the folders at the top are in
+  // reach from a row far down. The pointer is read on every dragover; a frame loop scrolls.
+  const dragPointerY = useRef<number | null>(null);
+  useEffect(() => {
+    if (!draggedSession) return;
+    let frame = 0;
+    const tick = (): void => {
+      const list = listRef.current;
+      const y = dragPointerY.current;
+      if (list && y !== null) {
+        const step = dragEdgeScrollStep(y, list.getBoundingClientRect());
+        if (step) list.scrollTop += step;
+      }
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(frame);
+      dragPointerY.current = null;
+    };
+  }, [draggedSession]);
+  const listDragProps = draggedSession ? {
+    onDragOver: (e: ReactDragEvent) => { dragPointerY.current = e.clientY; },
+    onDragLeave: (e: ReactDragEvent) => {
+      if (e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget)) return;
+      dragPointerY.current = null;
+    },
+  } : {};
   // A folder row: the folder, who in it waits on you, how many sessions it holds. Activity sits on
   // the folder itself as on the sidebar's Workspace rows: a still dot while a session runs, a
   // breathing one while only a background job does. Its ⋯ takes the chevron's place on hover.
@@ -8692,10 +8818,12 @@ export function WorkspaceView({
     return (
       <div
         key={row.folder.id}
-        className={`session-folder-row${folderMenuOpenId === row.folder.id ? ' menu-open' : ''}`}
+        className={`session-folder-row${folderMenuOpenId === row.folder.id ? ' menu-open' : ''}${
+          dropHover === row.folder.id ? ' drop-target' : ''}`}
         role="button"
         tabIndex={0}
         onClick={enter}
+        {...folderDropProps(row.folder)}
         onKeyDown={(e) => {
           if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return;
           e.preventDefault();
@@ -9918,10 +10046,16 @@ export function WorkspaceView({
                 menuItem('delete', close, kebab),
               ];
         const renaming = renamingId === s.id;
+        const draggable = !pageProjectId && sessionRowDraggable(s, {
+          view: memberView, dropTargets: dropTargetsShown, touch: isMobile, renaming,
+        });
         return (
           <div
-            className={`session-row${openable ? '' : ' no-open'}${s.id === selectedId ? ' active' : ''}${menuOpenId === s.id ? ' menu-open' : ''}${renaming ? ' renaming' : ''}`}
+            className={`session-row${openable ? '' : ' no-open'}${s.id === selectedId ? ' active' : ''}${menuOpenId === s.id ? ' menu-open' : ''}${renaming ? ' renaming' : ''}${draggedSession?.id === s.id ? ' dragging' : ''}`}
             key={s.id}
+            draggable={draggable || undefined}
+            onDragStart={draggable ? (e) => startSessionDrag(e, actionSession) : undefined}
+            onDragEnd={draggable ? endSessionDrag : undefined}
             // While it is renamed, a press anywhere else on the row keeps the field's focus
             // (leaving the field saves), and a click there doesn't open the row.
             onMouseDown={(e) => {
@@ -10101,7 +10235,11 @@ export function WorkspaceView({
         {listProjectId ? projectPageHead(leaveProjectSessions, FOLDER_COPY.back(headWorkspaceName), <LeftOutlined />) : openFolder ? (
           // A folder's page: back to the workspace's list, the folder (and the workspace it is in),
           // and the folder's own two entries. It lists the view it was opened from.
-          <div className="session-col-head session-folder-head">
+          // A row dragged onto the head — the back control or the title — leaves the folder (No Folder).
+          <div
+            className={`session-col-head session-folder-head${dropHover === null ? ' drop-target' : ''}`}
+            {...folderDropProps(null)}
+          >
             <button
               type="button"
               className="session-folder-back"
@@ -10226,9 +10364,10 @@ export function WorkspaceView({
           {!isMobile && <kbd className="session-search-kbd">{SEARCH_HINT}</kbd>}
         </div>}
         <div
-          className="workspace-sessions session-col-list autohide-scrollbar"
+          className={`workspace-sessions session-col-list autohide-scrollbar${draggedSession ? ' dragging-session' : ''}`}
           ref={listRef}
           onScroll={onSessionListScroll}
+          {...listDragProps}
         >
           {listProjectId && projectPageTop(listProjectId)}
           {listProjectId
@@ -10955,6 +11094,8 @@ export function WorkspaceView({
                 subagentWaiting={subagentWaiting}
                 subagentRuns={subagentRuns}
                 subagentQueuedWakes={subagentQueuedWakes}
+                jobQueuedWakes={jobQueuedWakes}
+                jobWhere={shownWorkspaceName ?? null}
               />
               </QueuedFootCtx.Provider>
               </MainCheckoutCtx.Provider>
@@ -11160,10 +11301,12 @@ export function WorkspaceView({
               )}
               {selected && !selectedTrashed && coordinatorHandoff?.state === 'FAILED' && (
                 <CoordinatorHandoffFailure
+                  key={`${selectedId}:${coordinatorHandoff.startedAt}`}
                   handoff={coordinatorHandoff}
+                  engines={handoffEngines}
                   busy={handoffAction.isPending}
-                  onRetry={() => runHandoffAction('retry')}
-                  onSkip={() => runHandoffAction('skip')}
+                  onRetry={(successor) => runHandoffAction('retry', successor)}
+                  onSkip={(successor) => runHandoffAction('skip', successor)}
                   onKeep={() => runHandoffAction('cancel')}
                 />
               )}
@@ -11377,6 +11520,7 @@ export function WorkspaceView({
             otherwise. Derived from this session's events; hidden when there are none. */}
         {selectedId && !selectedTrashed && (
           <BackgroundShellsTray
+            sessionId={selectedId}
             events={events}
             live={live}
             serverShells={serverBgShells}
@@ -11656,11 +11800,12 @@ export function WorkspaceView({
             projectId={handoffConfirm.projectId}
             projectTitle={handoffConfirm.projectTitle}
             running={handoffConfirm.running}
+            engines={handoffEngines}
             onClose={() => setHandoffConfirm(null)}
-            onHandOver={async () => {
+            onHandOver={async (successor) => {
               if (!selectedId) return;
               const sessionId = selectedId;
-              const view = await coordinatorHandoffRequest(handoffConfirm.projectId, 'handoff');
+              const view = await coordinatorHandoffRequest(handoffConfirm.projectId, 'handoff', successor);
               setFollowHandoff(sessionId);
               qc.invalidateQueries({ queryKey: ['session', sessionId] });
               refreshSessionLists();

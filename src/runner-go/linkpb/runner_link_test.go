@@ -112,6 +112,14 @@ func samples(t *testing.T) []proto.Message {
 		Thinking:       "The user wants",
 		ThroughLiveSeq: 8,
 	}
+	backgroundJobTailRequest := &linkpb.BackgroundJobTailRequest{
+		RequestId: "req-3", SessionId: "ses-1", JobId: "bgj_0000000000a1", MaxLines: 200, MaxBytes: 32768,
+	}
+	backgroundJobTailResponse := &linkpb.BackgroundJobTailResponse{
+		RequestId: "req-3", SessionId: "ses-1", JobId: "bgj_0000000000a1",
+		Outcome: linkpb.BackgroundJobTailOutcome_BACKGROUND_JOB_TAIL_OUTCOME_OK,
+		Status:  "running", Exited: true, ExitCode: 7, Text: "building\nexit 7\n", Truncated: true, OutputBytes: 4096,
+	}
 	chunk := &linkpb.Chunk{FrameId: 12, Index: 1, Last: true, Data: []byte{0x0a, 0x0b, 0x0c}}
 	streamOpen := &linkpb.StreamOpen{StreamId: "0190a0b0-0000-7000-8000-0000000000e1", Kind: linkpb.StreamKind_STREAM_KIND_VNC}
 	streamOpened := &linkpb.StreamOpened{StreamId: "0190a0b0-0000-7000-8000-0000000000e1"}
@@ -137,6 +145,7 @@ func samples(t *testing.T) []proto.Message {
 		&linkpb.RpcResult{RequestId: "req-1", Outcome: &linkpb.RpcResult_Failure{Failure: failure}},
 		tunnelResponse, failure, heartbeat, fact, heartbeatAck, eventBatch, event, eventAck, rejected,
 		credit, liveBatch, liveEvent, turnPrefixRequest, turnPrefixResponse,
+		backgroundJobTailRequest, backgroundJobTailResponse,
 		streamOpen, streamOpened, streamData, streamCredit, streamClose, streamPaste, streamPasted,
 	}
 

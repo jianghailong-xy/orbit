@@ -626,6 +626,9 @@ export function sessionProjectListing<T extends SessionProjectSession>(
     workspaceId?: string | null;
     /** Same-view sessions across workspaces, used for the waiting line and tooltip count. */
     contentSessions?: readonly T[];
+    /** Each project's same-view session count across workspaces, as the server counted it; the tooltip
+     *  says at least this many. */
+    sessionCounts?: ReadonlyMap<string, number>;
     line: (session: T) => SessionProjectLine;
   } & FolderSessionReadings<T>,
 ): SessionProjectListing<T> {
@@ -659,7 +662,20 @@ export function sessionProjectListing<T extends SessionProjectSession>(
     const id = heldBy(session);
     return id ? { ...session, folderId: coordinators.get(id)?.folderId ?? null } : session;
   });
-  const folderListing = sessionFolderListing(assigned, folders, opts);
+  const grouped = sessionFolderListing(assigned, folders, opts);
+  // A folder's count is the rows its page lists: a project is one row, however many members it holds.
+  const rowsByFolder = new Map<string, Set<string>>();
+  for (const session of assigned) {
+    if (!session.folderId) continue;
+    const rows = rowsByFolder.get(session.folderId) ?? new Set<string>();
+    const projectId = heldBy(session);
+    rows.add(projectId ? `project:${projectId}` : session.id);
+    rowsByFolder.set(session.folderId, rows);
+  }
+  const folderListing = {
+    ...grouped,
+    folders: grouped.folders.map((row) => ({ ...row, sessionCount: rowsByFolder.get(row.folder.id)?.size ?? 0 })),
+  };
   const knownFolders = new Set(folders.map((folder) => folder.id));
   const inScope = (folderId: string | null | undefined) => opts.folderId
     ? folderId === opts.folderId
@@ -750,7 +766,10 @@ export function sessionProjectListing<T extends SessionProjectSession>(
       title: summary?.title ?? membership.projectTitle,
       status: summary?.status ?? membership.projectStatus,
       members: [...members],
-      sessionCount: new Set([...content.map((session) => session.id), ...(coordinator ? [coordinator.id] : [])]).size,
+      sessionCount: Math.max(
+        new Set([...content.map((session) => session.id), ...(coordinator ? [coordinator.id] : [])]).size,
+        opts.sessionCounts?.get(projectId) ?? 0,
+      ),
       coordinator,
       folderId,
       pinnedAt: coordinator?.pinnedAt ?? null,

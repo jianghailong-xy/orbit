@@ -53,3 +53,35 @@ export const PROJECT_RULING_COPY = {
   fromQuestion: 'From an answered question',
   fromConversation: 'From the coordinator conversation',
 } as const;
+
+/** One landing-check field's value, as a change's `oldValue` and `newValue` hold it. */
+export type ProjectLandingCheckValue = { command: string | null; timeoutSeconds: number | null; none: boolean };
+/** One task's exemption as a change's `oldValue` and `newValue` hold it. */
+export type ProjectTaskExemptValue = { exempt: boolean; reason: string | null };
+
+/**
+ * One record in a project's landing-check history, as `project_get.settingChanges` lists it, newest first
+ * (contract §12.15 P-R1). `oldValue` and `newValue` are the project's landing check (`LANDING_CHECK`) or one
+ * task's exemption (`TASK_LANDING_CHECK_EXEMPT`). `origin` says who wrote it: the coordinator with no card, the
+ * owner, or a card the owner answered. Only a `COORDINATOR` row that nothing reverted and whose new value is
+ * still current is `revertible`; the owner puts its old value back with
+ * `POST /projects/:id/setting-changes/:id/revert`, which writes an `OWNER` row naming it in `revertsChangeId`.
+ */
+export interface ProjectSettingChangeView {
+  id: string;
+  projectId: string;
+  taskId: string | null;
+  field: 'LANDING_CHECK' | 'TASK_LANDING_CHECK_EXEMPT';
+  origin: 'COORDINATOR' | 'OWNER' | 'CARD';
+  oldValue: ProjectLandingCheckValue | ProjectTaskExemptValue;
+  newValue: ProjectLandingCheckValue | ProjectTaskExemptValue;
+  /** Always set for a COORDINATOR change; an owner may give one with an exemption. */
+  reason: string | null;
+  writtenBySessionId: string | null;
+  /** The change an owner's revert put back, on the revert's own row; null on every other. */
+  revertsChangeId: string | null;
+  /** When an owner's revert put this change back; null when none did. */
+  revertedAt: string | null;
+  revertible: boolean;
+  createdAt: string;
+}

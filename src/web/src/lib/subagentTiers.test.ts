@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { priceText, providersCountText, tierText } from './subagentTiers';
+import { modelTierText, priceText, providersCountText, tierText } from './subagentTiers';
 
 const model = (outputPricePerMTok: number | null) => ({
   model: 'm', levels: [], source: null, editable: false, outputPricePerMTok,
@@ -11,6 +11,13 @@ describe('the Tier column and the SubAgents Providers button (docs/subagent-desi
     expect(tierText(['S', 'M', 'L', 'XL'])).toBe('S–XL by effort');
     expect(tierText(['L', 'XL'])).toBe('L · XL');
     expect(tierText(['M'])).toBe('M');
+  });
+
+  it('reads an older family member as Older · uses the newest, until the owner tiers it', () => {
+    const older = { ...model(null), supersededBy: 'claude-opus-5-5' };
+    expect(modelTierText(older)).toBe('Older · uses claude-opus-5-5');
+    expect(modelTierText({ ...older, levels: ['M'] })).toBe('M');
+    expect(modelTierText(model(null))).toBe('Not set');
   });
 
   it('prices a key per million output tokens, a subscription as such, and an unknown as a dash', () => {

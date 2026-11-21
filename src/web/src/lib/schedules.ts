@@ -12,6 +12,14 @@ import {
 } from '@orbit/shared';
 import { api } from '../api';
 import { streamPoll } from './listBudget';
+import type { SessionReach, SessionReachDeclaration } from './sessionReach';
+
+/** The sessions a sentence on the Scheduled page opened, whose agent's card the drafts list waits for. */
+const draftsAwaited = new Set<string>();
+/** The Scheduled page sent a sentence: the session it opened is one the drafts list follows. */
+export const awaitDraftFrom = (sessionId: string): void => {
+  draftsAwaited.add(sessionId);
+};
 import { SCHEDULED_RUNS_FOLDER } from './sessionFolders';
 
 /**
@@ -37,7 +45,8 @@ export function scheduleClock(at: string | Date, timezone: string): string {
 export const schedulesQuery = (workspaceId?: string | null, state?: 'all') =>
   queryOptions({
     queryKey: ['schedules', 'list', workspaceId ?? 'any', state ?? 'open'] as const,
-    meta: { entities: ['session', 'workspace'] },
+    // Owner-wide: no one session's event moves it (lib/sessionReach). Its own poll is its safety read.
+    meta: { entities: ['session', 'workspace'], sessionReach: 'none' satisfies SessionReach },
     queryFn: () => {
       const params = new URLSearchParams();
       if (workspaceId) params.set('workspaceId', workspaceId);
@@ -51,7 +60,20 @@ export const schedulesQuery = (workspaceId?: string | null, state?: 'all') =>
 export const scheduleDetailQuery = (id: string) =>
   queryOptions({
     queryKey: ['schedules', 'detail', id] as const,
-    meta: { entities: ['session', 'workspace'] },
+    // Its runs are scheduled runs of its workspace (lib/sessionReach), and its cards the asking sessions'.
+    meta: {
+      entities: ['session', 'workspace'],
+      sessionReach: ((data: unknown) => {
+        const detail = data as ScheduleDetailResponse | undefined;
+        if (!detail) return { sessions: [] };
+        return {
+          scheduledRuns: detail.schedule.workspaceId,
+          holds: [detail.lastRun, ...detail.recentRuns].map((run) => run?.sessionId ?? '')
+            .concat(detail.pendingCards.map((card) => card.askedBySessionId ?? ''))
+            .filter(Boolean),
+        };
+      }) satisfies SessionReachDeclaration,
+    },
     queryFn: () => api<ScheduleDetailResponse>(`/schedules/${encodeURIComponent(id)}`),
     refetchInterval: streamPoll(30_000),
   });
@@ -59,7 +81,17 @@ export const scheduleDetailQuery = (id: string) =>
 export const scheduleDraftsQuery = () =>
   queryOptions({
     queryKey: ['schedules', 'drafts'] as const,
-    meta: { entities: ['session'] },
+    // A draft comes from a session's agent: the sessions its cards were asked by, and the ones this tab is waiting on
+    // for a card (awaitDraftFrom), are the ones whose events can move it (lib/sessionReach).
+    meta: {
+      entities: ['session'],
+      sessionReach: ((data: unknown) => ({
+        sessions: [
+          ...((data as ScheduleDraftsResponse | undefined)?.drafts ?? []).map((card) => card.askedBySessionId ?? ''),
+          ...draftsAwaited,
+        ].filter(Boolean),
+      })) satisfies SessionReachDeclaration,
+    },
     queryFn: () => api<ScheduleDraftsResponse>('/schedules/drafts'),
     refetchInterval: streamPoll(15_000),
   });
@@ -67,14 +99,21 @@ export const scheduleDraftsQuery = () =>
 export const scheduleRequestQuery = (id: string) =>
   queryOptions({
     queryKey: ['schedules', 'request', id] as const,
-    meta: { entities: ['session'] },
+    // The asking session's events are the ones that can move it (lib/sessionReach).
+    meta: {
+      entities: ['session'],
+      sessionReach: ((data: unknown) => {
+        const asker = (data as ScheduleCard | undefined)?.askedBySessionId;
+        return asker ? { session: asker } : 'none';
+      }) satisfies SessionReachDeclaration,
+    },
     queryFn: () => api<ScheduleCard>(`/schedule-requests/${encodeURIComponent(id)}`),
   });
 
 export const sessionScheduleCardsQuery = (sessionId: string) =>
   queryOptions({
     queryKey: ['schedules', 'session', sessionId] as const,
-    meta: { entities: ['session'] },
+    meta: { entities: ['session'], sessionReach: { session: sessionId } satisfies SessionReach },
     queryFn: () => api<SessionScheduleCardsResponse>(`/sessions/${encodeURIComponent(sessionId)}/schedule-cards`),
     refetchInterval: streamPoll(20_000),
   });

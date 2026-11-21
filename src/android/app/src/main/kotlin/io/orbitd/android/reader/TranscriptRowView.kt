@@ -41,6 +41,7 @@ import io.orbitd.android.core.cards.QuestionRecords
 import io.orbitd.android.core.cards.transcriptCards
 import io.orbitd.android.core.cards.SessionMessageNote
 import io.orbitd.android.core.cards.BackgroundWakeCard
+import io.orbitd.android.core.cards.BgJob
 import io.orbitd.android.core.cards.OrbitEvent
 import io.orbitd.android.core.cards.OwnerRequests
 import io.orbitd.android.cards.OrbitEventLine
@@ -78,7 +79,7 @@ internal fun interface FullEvents { suspend fun full(seq: Long): RunEvent }
 internal val LocalOwnerHeading = staticCompositionLocalOf { ExternalSender.you }
 
 /** The cards that are lines in the agent's stream, each the whole of a turn Orbit opened for its own news. */
-private val WAKE_LINE_KEYS = listOf(":subagent", ":wake", ":watch")
+private val WAKE_LINE_KEYS = listOf(":workflow", ":subagent", ":wake", ":watch")
 
 @Composable
 internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Transcript?, open: (String) -> Unit, highlighted: Boolean = false,
@@ -98,6 +99,22 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
     // Orbit's own SubAgent is one folded block of its own (board docs/mocks/subagent/03.png).
     if (!detailOnly && event.type == "tool_use" && (event.fields.string("name") ?: event.fields.string("toolName")) == SubagentBlock.TOOL_NAME) {
         SubagentBlockView(row, highlighted) { child -> TranscriptRowView(child, model, live, open) }
+        return
+    }
+    // A bg_run call is its job's card from start to end (board 350t1lTONlrPMjilBdXx7, web `JobCard`); one refused, or whose answer names
+    // no job, stays a call.
+    if (!detailOnly && event.type == "tool_use" && (event.fields.string("name") ?: event.fields.string("toolName")) == BgJob.TOOL) {
+        val result = row.result
+        val failed = result?.fields?.string("isError") == "true" || result?.fields?.string("is_error") == "true"
+        val receipt = result?.let { BgJob.receipt(contentText(it.fields["content"]) ?: it.fields.string("result")) }
+        if (!failed && (result == null || receipt != null)) {
+            JobCardView(event, receipt, highlighted)
+            return
+        }
+    }
+    // So is an Orbit workflow, which opens to its calls by phase (board docs/mocks/subagent-workflow part 4).
+    if (!detailOnly && event.type == "tool_use" && (event.fields.string("name") ?: event.fields.string("toolName")) == WorkflowBlock.TOOL_NAME) {
+        WorkflowBlockView(row, highlighted) { child -> TranscriptRowView(child, model, live, open) }
         return
     }
     val clipboard = LocalClipboardManager.current
@@ -126,7 +143,10 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
         // A SubAgent's end draws nothing: like Claude Code's built-in Agent, the SubAgent is one card from start to end, and that card
         // draws how it ended (SubagentCardEnd, joined by run id). Its card still keeps the turn from being the reader's bubble or the From
         // Orbit line; only a job's news written beside it draws, as it always has.
-        val drawn = if (wakeLines) cards.filterNot { it.key.endsWith(":subagent") } else cards
+        // So does a background job's end, new output or stall (board C1): the job is one card from start to end (JobCardView, joined by
+        // job id). Only a wakeup that came due beside it draws its line.
+        val drawn = if (wakeLines) cards.filterNot { it.key.endsWith(":subagent") || it.key.endsWith(":wake") && BgJob.wakeupsOnly(it.source) == null }
+            else cards
         if (wakeLines && drawn.isEmpty()) return
         if (wakeLines || orbitOnly) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp).testTag(row.key), verticalArrangement = Arrangement.spacedBy(6.dp)) {

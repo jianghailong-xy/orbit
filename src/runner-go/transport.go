@@ -133,6 +133,8 @@ func init() {
 		helpAskCapabilityV1,
 		subagentRemoteResumeCapabilityV1,
 		subagentRemoteInPlaceCapabilityV1,
+		bgOwnerStopCapabilityV1,
+		bgOutputTailCapabilityV1,
 	}, cursorAccountCapabilities()...), declaredSteerCapabilities()...), ",")
 	// Where 0600 means something (secret_file_unix.go); a Windows runner is never handed a secret.
 	if secretFilesSupported {

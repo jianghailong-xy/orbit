@@ -11,6 +11,9 @@
  *       with the same status or the same refusal, side by side in one call, and leaves the same rows behind: the
  *       lease owner, the retired predecessor generation, the expired in-flight turn and the reaped approval card.
  *   (2) 300 sessions taken over in one batch call, timed against 300 single calls on the same database.
+ *   (3) The SubAgent and workflow runs the replaced process hosted end INTERRUPTED owing their wakes, in the batch as in
+ *       the single route (plan step 1.7): before, the batch emptied running_subagents and left the runs RUNNING, with no
+ *       wake for the parent and no sweep to end them. A remote run, which its target runner hosts, is left alone.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/batch-takeover.pg.spec.ts
  *
@@ -210,6 +213,56 @@ test('the batch takeover answers each row as the single takeover does, and takes
     );
     const refused = await after(byBatch[3].sessionId);
     assert.notEqual(refused.owner, process, 'the conflicted row kept its owner');
+  });
+
+  await t.test('(3) the SubAgent and workflow runs a replaced process hosted end INTERRUPTED owing their wakes, as the single route ends them', async () => {
+    const mine = await account('subagents');
+    const process = randomUUID();
+    const predecessor = randomUUID();
+    /** An idle session the predecessor held, with a local SubAgent run, a remote one and a workflow still RUNNING. */
+    async function hosted() {
+      const sessionId = await session(mine, { status: RunStatus.AWAITING_INPUT, owner: predecessor, generation: randomUUID() });
+      await sql.query(`UPDATE "session" SET "running_subagents" = '{toolu_local,toolu_remote}' WHERE id = $1::uuid`, [sessionId]);
+      const local = await db.subagentRun.create({ data: {
+        ownerId: mine.ownerId, sessionId, toolUseId: 'toolu_local', type: 'general', definitionSource: 'builtin', background: true, decision: {},
+      } });
+      const remote = await db.subagentRun.create({ data: {
+        ownerId: mine.ownerId, sessionId, toolUseId: 'toolu_remote', type: 'general', definitionSource: 'builtin', background: true, decision: {},
+        targetRunnerId: mine.otherRunnerId,
+      } });
+      const workflow = await db.subagentWorkflowRun.create({ data: {
+        ownerId: mine.ownerId, sessionId, toolUseId: 'toolu_workflow', name: 'wf', script: 'x', scriptSha256: 'x',
+      } });
+      return { sessionId, local: local.id, remote: remote.id, workflow: workflow.id };
+    }
+    const runs = async (w: Awaited<ReturnType<typeof hosted>>) => {
+      const r = await sql.query(
+        `SELECT id::text, status, wake_owed AS "wakeOwed" FROM "subagent_run" WHERE session_id = $1::uuid ORDER BY tool_use_id`, [w.sessionId]);
+      const wf = await sql.query(`SELECT status, wake_owed AS "wakeOwed" FROM "subagent_workflow_run" WHERE id = $1::uuid`, [w.workflow]);
+      const s = await sql.query(`SELECT running_subagents AS subagents FROM "session" WHERE id = $1::uuid`, [w.sessionId]);
+      const local = r.rows.find((x) => x.id === w.local);
+      return {
+        local: { status: local.status, wakeOwed: local.wakeOwed },
+        remote: { status: r.rows.find((x) => x.id === w.remote).status },
+        workflow: wf.rows[0],
+        subagents: s.rows[0].subagents,
+      };
+    };
+    const bySingle = await hosted();
+    const byBatch = await hosted();
+    await api.takeoverLeases(mine.runner, bySingle.sessionId, { leaseOwner: process, expectedLeaseOwner: predecessor });
+    const answer = await api.takeoverLeasesBatch(mine.runner, {
+      leaseOwner: process, sessions: [{ sessionId: byBatch.sessionId, expectedLeaseOwner: predecessor }],
+    });
+    assert.deepEqual(answer.results.map((r) => r.status), ['AWAITING_INPUT']);
+    const expected = {
+      local: { status: 'INTERRUPTED', wakeOwed: true },
+      remote: { status: 'RUNNING' },
+      workflow: { status: 'INTERRUPTED', wakeOwed: true },
+      subagents: [],
+    };
+    assert.deepEqual(await runs(bySingle), expected, 'the single route: the local run and the workflow end owing wakes; the remote run is its target\'s');
+    assert.deepEqual(await runs(byBatch), expected, 'the batch leaves the same rows');
   });
 
   await t.test('(2) 300 sessions: one batch call against 300 single calls', async () => {

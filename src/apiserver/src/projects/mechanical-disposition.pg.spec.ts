@@ -425,6 +425,12 @@ async function queueRound(stack: Stack, f: Fixture, taskId: string, label: strin
       status: RunStatus.RUNNING,
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
+      // The work ran in the task's own worktree and reported files: revision 42 (§12.15 P-M3) reads
+      // landing from the delivered commit, and a DONE task with no branch and nothing reported has
+      // nothing to land — it would leave its criterion's landing conjunction, not enter it.
+      isolationStatus: 'worktree',
+      branch: `orbit/${sessionId}`,
+      changedFiles: ['src/work.ts'],
     },
   });
   await stack.db.conversationTurn.create({

@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { Prisma, TaskStatus } from '@prisma/client';
 import {
   uuidToBase62,
@@ -6,6 +6,7 @@ import {
   type IntegrationCheckResult,
   type IntegrationJobGeneration,
   type IntegrationJobState,
+  type LandingCheckSetBy,
   type ProjectBranchCandidates,
   type ProjectIntegrationRead,
   type ProjectIntegrationSettings as SharedProjectIntegrationSettings,
@@ -28,6 +29,13 @@ import {
 
 import type { PrismaService } from '../prisma/prisma.service';
 import { baselineHoldSql } from './baseline-hold';
+import {
+  landingCheckValueOf,
+  recordSettingChange,
+  requiredChangeReason,
+  sameSettingValue,
+  type LandingCheckValue,
+} from './project-setting-change';
 import { runnerOfflineSql } from '../runners/runner-presence';
 import { branchName, canonicalRepoUrl, workOnProjectRepository } from './project-criterion-landing';
 import {
@@ -149,6 +157,10 @@ const LINE_COLUMNS = {
   integrationStartedAt: true,
   landingCheckCommand: true,
   landingCheckTimeoutSeconds: true,
+  landingCheckNone: true,
+  landingCheckSetBy: true,
+  landingCheckSetBySessionId: true,
+  landingCheckSetAt: true,
   mergeCheckCommand: true,
   mergeCheckTimeoutSeconds: true,
   deliveryMode: true,
@@ -254,7 +266,7 @@ async function escalationWindow(
 }
 
 /** The line a binding states, when somebody decided it: the owner, or the default rule at the start. */
-function decidedLine(row: ProjectCodebaseLine): IntegrationLine | null {
+export function decidedLine(row: ProjectCodebaseLine): IntegrationLine | null {
   if (row.integrationRefSource !== 'EXPLICIT' && !row.integrationStartedAt) return null;
   return row.integrationRef === row.upstreamRef ? 'MAIN' : 'PROJECT_BRANCH';
 }
@@ -290,7 +302,15 @@ export function projectIntegrationView(
     startedAt: row?.integrationStartedAt ?? null,
     landingCheckCommand: row?.landingCheckCommand ?? null,
     landingCheckTimeoutSeconds: row?.landingCheckTimeoutSeconds ?? null,
-    landingCheckCommandAbsentReason: row?.landingCheckCommand == null ? 'FALLS_BACK_TO_MERGE_CHECK' : null,
+    landingCheckCommandAbsentReason: row?.landingCheckNone
+      ? 'NONE'
+      : row?.landingCheckCommand == null ? 'FALLS_BACK_TO_MERGE_CHECK' : null,
+    landingCheck: {
+      command: row?.landingCheckNone ? 'NONE' : row?.landingCheckCommand ?? null,
+      setBy: (row?.landingCheckSetBy ?? null) as LandingCheckSetBy | null,
+      setBySessionId: row?.landingCheckSetBySessionId ?? null,
+      setAt: row?.landingCheckSetAt ?? null,
+    },
     mergeCheckCommand: row?.mergeCheckCommand ?? null,
     mergeCheckCommandAbsentReason: row?.mergeCheckCommand ? null : 'NOT_CONFIGURED',
     mergeCheckTimeoutSeconds: row?.mergeCheckTimeoutSeconds ?? null,
@@ -792,6 +812,7 @@ function inFlightJobOf(row: InFlightJobRow, typicalMs: Map<string, number>): Pro
       pushReportedGeneration: row.pushReportedGeneration,
       claimGeneration: row.claimGeneration,
       landingCheckCommand: row.landingCheckCommand ?? null,
+      landingCheckNone: row.landingCheckNone ?? false,
       mergeCheckCommand: row.mergeCheckCommand,
     }) === null,
     skipCheck: row.skipMergeCheck ? 'SKIPPED' : row.stoppingToSkip ? 'STOPPING' : null,
@@ -953,6 +974,7 @@ async function readInFlightJobsForProjects(
            st."acceptance_timeout_seconds" AS "acceptanceTimeoutSeconds",
            cb."landing_check_command" AS "landingCheckCommand",
            cb."landing_check_timeout_seconds" AS "landingCheckTimeoutSeconds",
+           cb."landing_check_none" AS "landingCheckNone",
            cb."merge_check_command" AS "mergeCheckCommand",
            cb."merge_check_timeout_seconds" AS "mergeCheckTimeoutSeconds",
            j."skip_merge_check" AS "skipMergeCheck",
@@ -1435,7 +1457,7 @@ export function lastLandingCheck(checks: unknown): 'PASSING' | 'FAILING' | 'UNKN
   let complete = true;
   for (const check of checks) {
     if (!check || typeof check !== 'object') { complete = false; continue; }
-    if (check.name === 'LANDING_CHECK' && check.skipped === 'PATHS_EXEMPT') continue;
+    if (check.name === 'LANDING_CHECK' && (check.skipped === 'PATHS_EXEMPT' || check.skipped === 'TASK_EXEMPT')) continue;
     if (check.timedOut === true) return 'FAILING';
     if (typeof check.expectedExitCode !== 'number' || typeof check.exitCode !== 'number'
       || check.timedOut !== false) { complete = false; continue; }
@@ -1571,12 +1593,143 @@ export interface IntegrationSettings {
   upstreamRef?: string;
   landingCheckCommand?: string | null;
   landingCheckTimeoutSeconds?: number | null;
+  /**
+   * `NONE`: run no project landing check, so a landing runs only the task's own acceptance
+   * (§12.15 P-C1). A landing-check command written in the same request is refused; writing
+   * `landingCheckCommand` later (a command, or null to fall back to the merge check) lifts it.
+   */
+  landingCheck?: 'NONE';
+  /**
+   * Why the project's coordinator is changing the landing check without a card (§12.15 P-R1): required
+   * and at most 280 characters on that cardless write, ignored on every other. Not a setting.
+   */
+  landingCheckReason?: string;
   mergeCheckCommand?: string | null;
   mergeCheckTimeoutSeconds?: number | null;
   /** This project's escalation window in seconds (§4.6). The column's CHECK bounds it, 300 to a week. */
   exceptionEscalationSeconds?: number;
   /** How finished work reaches the upstream (§10.5 O-L1). Not locked by L4; `AGENT_PUSH` needs `MAIN`. */
   deliveryMode?: DeliveryMode;
+}
+
+/**
+ * Who writes a landing check (§12.14): the account owner at their own door, a session through a
+ * merge-check card the owner answered, the project's coordinator with no card (§12.15 P-C1), or the
+ * owner's Start press confirming the value the coordinator proposed (`START`, §12.12 P2). A Start
+ * press that writes a value of the owner's own is `OWNER` (`startLandingCheckWriter`).
+ */
+export type LandingCheckWriter =
+  | { by: 'OWNER' }
+  | { by: 'CARD' }
+  | { by: 'COORDINATOR'; sessionId: string }
+  | { by: 'START' };
+
+/**
+ * Who a Start press writes the landing check as: `START` when every landing-check field it names is
+ * the value the start request it answers proposed — the owner confirmed the coordinator's running
+ * mode, which stays the coordinator's to change (§12.12 P2) — and `OWNER` when one differs or no
+ * request was named, because then the value is the owner's own words. A command is compared as it
+ * is written (trimmed, blank as none) and a missing field as null.
+ */
+export function startLandingCheckWriter(
+  started: Pick<StartLineSettings, 'landingCheckCommand' | 'landingCheckTimeoutSeconds'>,
+  proposed: Pick<StartLineSettings, 'landingCheckCommand' | 'landingCheckTimeoutSeconds'> | undefined,
+): LandingCheckWriter {
+  if (!proposed) return { by: 'OWNER' };
+  const command = (value: string | null | undefined) => value?.trim() || null;
+  const sameCommand = started.landingCheckCommand === undefined
+    || command(started.landingCheckCommand) === command(proposed.landingCheckCommand);
+  const sameTimeout = started.landingCheckTimeoutSeconds === undefined
+    || (started.landingCheckTimeoutSeconds ?? null) === (proposed.landingCheckTimeoutSeconds ?? null);
+  return sameCommand && sameTimeout ? { by: 'START' } : { by: 'OWNER' };
+}
+
+/** Why the project's coordinator may not write its landing check without a card (§12.15 P-C1). */
+export type CoordinatorLandingCheckRefusal = 'NOT_PROJECT_BRANCH' | 'NO_MERGE_CHECK' | 'SET_BY_OWNER';
+
+/**
+ * Whether the project's coordinator may write this binding's landing check with no card, read off
+ * the binding alone (P-C1): the line is `PROJECT_BRANCH`, so the landing check guards the project
+ * branch rather than main; a merge check is configured, so a gate still stands before main; and the
+ * owner has not written the landing check themselves or through a card, which keeps it theirs
+ * (§12.15 P-R1). Null when it may. That the writer is the project's current coordinator is the
+ * caller's to check, against the project row it holds.
+ */
+export function coordinatorLandingCheckRefusal(
+  row: ProjectCodebaseLine | null,
+): CoordinatorLandingCheckRefusal | null {
+  if (!row || decidedLine(row) !== 'PROJECT_BRANCH') return 'NOT_PROJECT_BRANCH';
+  if (!row.mergeCheckCommand) return 'NO_MERGE_CHECK';
+  if (row.landingCheckSetBy === 'OWNER' || row.landingCheckSetBy === 'CARD') return 'SET_BY_OWNER';
+  return null;
+}
+
+/** The sentence a refused cardless landing-check write is answered with, per reason. */
+export function coordinatorLandingCheckRefusalReason(refusal: CoordinatorLandingCheckRefusal): string {
+  switch (refusal) {
+    case 'NOT_PROJECT_BRANCH':
+      return 'this project does not land on a project branch, so its landing check is the check work '
+        + 'passes on its way to main';
+    case 'NO_MERGE_CHECK':
+      return 'this project has no merge check, so its landing check is the only check before main';
+    case 'SET_BY_OWNER':
+      return 'the account owner set this landing check, at their own door or on a card, so it stays '
+        + 'theirs';
+  }
+}
+
+/** 403 for a cardless landing-check write that lost one of P-C1's conditions under the lock. */
+export function coordinatorLandingCheckRefused(refusal: CoordinatorLandingCheckRefusal): ForbiddenException {
+  return new ForbiddenException({
+    statusCode: 403,
+    code: 'INTEGRATION_SETTINGS_OWNER_ONLY',
+    message: `the landing check cannot be changed from this session without the owner's card: `
+      + `${coordinatorLandingCheckRefusalReason(refusal)}. Nothing was written. Call project_update `
+      + 'with the change: it puts the question in front of them and performs the write once they answer',
+  });
+}
+
+/** The provenance columns a landing-check write leaves on the binding: who, and always when; the
+ *  session only for the coordinator's cardless write. */
+function landingCheckProvenance(
+  writer: LandingCheckWriter = { by: 'OWNER' },
+): Prisma.ProjectCodebaseUpdateInput {
+  return {
+    landingCheckSetBy: writer.by,
+    landingCheckSetBySessionId: writer.by === 'COORDINATOR' ? writer.sessionId : null,
+    landingCheckSetAt: new Date(),
+  };
+}
+
+/**
+ * The owner putting a recorded landing check back (§12.15 P-R1): under the binding's lock, when the field still
+ * holds `ifCurrent` it is written as `value`, with the owner's provenance, so the coordinator's next cardless
+ * write is refused and goes to the card. Returns the value it replaced, or null (nothing written) when the field
+ * has moved on. `beforeWrite` runs under the lock, for the caller's own refusals.
+ */
+export async function restoreLandingCheck(
+  tx: Prisma.TransactionClient,
+  projectId: string,
+  ifCurrent: LandingCheckValue,
+  value: LandingCheckValue,
+  beforeWrite: () => Promise<void>,
+): Promise<LandingCheckValue | null> {
+  const row = await lockCodebase(tx, projectId);
+  if (!row) throw new ConflictException({ code: 'SETTING_CHANGE_NO_BINDING', message: 'this project has no code binding any more' });
+  await beforeWrite();
+  const now = landingCheckValueOf(row);
+  if (!sameSettingValue('LANDING_CHECK', ifCurrent, now)) return null;
+  await tx.projectCodebase.update({
+    where: { id: row.id },
+    data: {
+      landingCheckCommand: value.command,
+      landingCheckTimeoutSeconds: value.timeoutSeconds,
+      landingCheckNone: value.none,
+      ...landingCheckProvenance({ by: 'OWNER' }),
+    },
+    select: { id: true },
+  });
+  return now;
 }
 
 /** The binding, locked for the rest of this transaction. Rank 55: after `task`, before its children. */
@@ -1592,6 +1745,10 @@ async function lockCodebase(
            "integration_started_at" AS "integrationStartedAt",
            "landing_check_command" AS "landingCheckCommand",
            "landing_check_timeout_seconds" AS "landingCheckTimeoutSeconds",
+           "landing_check_none" AS "landingCheckNone",
+           "landing_check_set_by" AS "landingCheckSetBy",
+           "landing_check_set_by_session_id" AS "landingCheckSetBySessionId",
+           "landing_check_set_at" AS "landingCheckSetAt",
            "merge_check_command" AS "mergeCheckCommand",
            "merge_check_timeout_seconds" AS "mergeCheckTimeoutSeconds",
            "delivery_mode" AS "deliveryMode",
@@ -1704,15 +1861,33 @@ export async function projectRepository(
  */
 export async function configureProjectIntegration(
   tx: Prisma.TransactionClient,
-  input: { ownerId: string; projectId: string; settings: IntegrationSettings },
+  input: {
+    ownerId: string;
+    projectId: string;
+    settings: IntegrationSettings;
+    /**
+     * Who is writing the landing check, recorded on the binding when the settings name it
+     * (§12.14). Left out is the account owner at their own door.
+     */
+    landingCheckWriter?: LandingCheckWriter;
+  },
 ): Promise<ProjectIntegrationSettingsView> {
   const { ownerId, projectId, settings } = input;
   if (Object.values(settings).every((value) => value === undefined)) {
     throw new BadRequestException('name at least one integration setting to change');
   }
+  if (settings.landingCheck !== undefined && settings.landingCheck !== 'NONE') {
+    throw new BadRequestException('landingCheck takes one value, NONE: send landingCheckCommand to set a command, or null to fall back to the merge check');
+  }
+  if (settings.landingCheck === 'NONE' && settings.landingCheckCommand) {
+    throw new BadRequestException('landingCheck NONE runs no landing check, so it cannot be sent with a landingCheckCommand');
+  }
   if (settings.line === 'MAIN' && settings.projectBranchName !== undefined) {
     throw new BadRequestException('a project that integrates straight into main has no project branch to name');
   }
+  const cardlessReason = input.landingCheckWriter?.by === 'COORDINATOR'
+    ? requiredChangeReason(settings.landingCheckReason, 'LANDING_CHECK_REASON_REQUIRED', 'landingCheckReason')
+    : null;
 
   // The escalation window is the PROJECT's column, not the binding's (§4.1): it says how long a
   // person waits, and a project with no code at all still has exceptions waiting on somebody. So it
@@ -1726,11 +1901,13 @@ export async function configureProjectIntegration(
     });
   }
   // `!== undefined` rather than a falsy test, because `null` is a setting: it clears the merge check.
+  const landingNamed = settings.landingCheckCommand !== undefined
+    || settings.landingCheckTimeoutSeconds !== undefined
+    || settings.landingCheck !== undefined;
   const bindingNamed = settings.line !== undefined
     || settings.projectBranchName !== undefined
     || settings.upstreamRef !== undefined
-    || settings.landingCheckCommand !== undefined
-    || settings.landingCheckTimeoutSeconds !== undefined
+    || landingNamed
     || settings.mergeCheckCommand !== undefined
     || settings.mergeCheckTimeoutSeconds !== undefined
     || settings.deliveryMode !== undefined;
@@ -1742,6 +1919,12 @@ export async function configureProjectIntegration(
   }
 
   let row = await lockCodebase(tx, projectId);
+  // A cardless coordinator write (P-C1) is decided before the transaction, and decided again here,
+  // under the binding's lock: an owner write or a line change that committed in between wins.
+  if (input.landingCheckWriter?.by === 'COORDINATOR') {
+    const refusal = coordinatorLandingCheckRefusal(row);
+    if (refusal) throw coordinatorLandingCheckRefused(refusal);
+  }
   if (!row) {
     const repository = await coordinationRepository(tx, ownerId, projectId);
     if (!repository) {
@@ -1796,9 +1979,12 @@ export async function configureProjectIntegration(
       integrationRef,
       ...(chosen ? { integrationRefSource: 'EXPLICIT' } : {}),
       ...(settings.landingCheckCommand !== undefined
-        ? { landingCheckCommand: settings.landingCheckCommand?.trim() || null } : {}),
+        ? { landingCheckCommand: settings.landingCheckCommand?.trim() || null, landingCheckNone: false } : {}),
+      // After the command, so NONE beside a null command (both clear it) ends with NONE.
+      ...(settings.landingCheck === 'NONE' ? { landingCheckCommand: null, landingCheckNone: true } : {}),
       ...(settings.landingCheckTimeoutSeconds !== undefined
         ? { landingCheckTimeoutSeconds: settings.landingCheckTimeoutSeconds } : {}),
+      ...(landingNamed ? landingCheckProvenance(input.landingCheckWriter) : {}),
       ...(settings.mergeCheckCommand !== undefined
         ? { mergeCheckCommand: settings.mergeCheckCommand?.trim() || null }
         : {}),
@@ -1814,6 +2000,22 @@ export async function configureProjectIntegration(
   });
   if (settings.deliveryMode === 'AGENT_PUSH' && row.deliveryMode !== 'AGENT_PUSH') {
     await deliveryModeTurnedAgentPush(tx, { ownerId, projectId });
+  }
+  // §12.15 P-R1: the history of the landing check, in this transaction, under the lock. The coordinator's cardless
+  // write is always one row, with its reason and session; the owner's own write and a card's are rows when they
+  // change the value, and are never revertible. A Start press (START) is the owner confirming the coordinator's
+  // proposal, which the start card already shows, and writes none.
+  const writer = input.landingCheckWriter ?? { by: 'OWNER' as const };
+  if (landingNamed && writer.by !== 'START') {
+    const oldValue = landingCheckValueOf(row);
+    const newValue = landingCheckValueOf(written);
+    if (writer.by === 'COORDINATOR' || !sameSettingValue('LANDING_CHECK', oldValue, newValue)) {
+      await recordSettingChange(tx, {
+        ownerId, projectId, field: 'LANDING_CHECK', origin: writer.by, oldValue, newValue,
+        reason: writer.by === 'COORDINATOR' ? cardlessReason : null,
+        sessionId: writer.by === 'COORDINATOR' ? writer.sessionId : null,
+      });
+    }
   }
   return projectIntegrationView(written, await escalationWindow(tx, projectId));
 }
@@ -1852,8 +2054,9 @@ function deliveryModeNeedsMainLine(
 
 /**
  * The session that did a code task's work, when the task is one (§1.1 `isCodeTask`): filed under a
- * project, not codeless, and its latest work session ran in a worktree on a branch, in no
- * repository known to differ from the one the project's line is bound to (O-L7).
+ * project, and its latest work session ran in a worktree on a branch, in no repository known to
+ * differ from the one the project's line is bound to (O-L7). `codeless` is not read: since revision
+ * 42 (§12 P-M3) a task flagged codeless that has commits lands like any other.
  */
 async function codeTaskWork(
   db: Pick<Prisma.TransactionClient, 'task'>,
@@ -1864,7 +2067,6 @@ async function codeTaskWork(
     where: { id: taskId, ownerId },
     select: {
       projectId: true,
-      codeless: true,
       project: {
         select: { codebases: { where: { slot: 'primary' }, select: { canonicalRepoUrl: true } } },
       },
@@ -1877,7 +2079,7 @@ async function codeTaskWork(
     },
   });
   const work = task?.sessions[0];
-  if (!task?.projectId || task.codeless || work?.isolationStatus !== 'worktree' || !work.branch) {
+  if (!task?.projectId || work?.isolationStatus !== 'worktree' || !work.branch) {
     return null;
   }
   const repoUrl = work.workspace?.repoUrl ?? null;
@@ -1897,8 +2099,8 @@ export async function projectDefaultLine(
   // two `IN` lists. Large projects can exceed PostgreSQL's bind-parameter limit that way.
   const edge = await db.taskDependency.findFirst({
     where: {
-      task: { projectId, codeless: false, status: { not: TaskStatus.CANCELLED } },
-      dependsOnTask: { projectId, codeless: false, status: { not: TaskStatus.CANCELLED } },
+      task: { projectId, status: { not: TaskStatus.CANCELLED } },
+      dependsOnTask: { projectId, status: { not: TaskStatus.CANCELLED } },
     },
     select: { id: true },
   });
@@ -1907,7 +2109,8 @@ export async function projectDefaultLine(
 
 /** The line half of a start's settings — what `startProjectLine` is asked for and answers with. */
 export interface StartLineSettings {
-  line: IntegrationLine;
+  /** Left out, the start writes nothing about the line or the checks (P-M2). */
+  line?: IntegrationLine;
   /** A full `refs/heads/…` ref, only with `PROJECT_BRANCH`. */
   projectBranchName?: string;
   /**
@@ -1943,7 +2146,7 @@ export async function defaultStartLine(
   tx: Prisma.TransactionClient,
   ownerId: string,
   projectId: string,
-): Promise<StartLineSettings> {
+): Promise<StartLineSettings & { line: IntegrationLine }> {
   const row = await readProjectCodebase(tx, projectId);
   const mergeCheckCommand = row?.mergeCheckCommand ?? null;
   const mergeCheckTimeoutSeconds = row?.mergeCheckTimeoutSeconds ?? null;
@@ -1968,8 +2171,10 @@ export async function defaultStartLine(
  * A start's line and merge check, applied under the binding's lock (rank 55) as the owner's choice.
  *
  * A participant, like `configureProjectIntegration`, which does the writing: the caller owns the
- * transaction and holds the project row. Three ways it goes:
+ * transaction and holds the project row. Four ways it goes:
  *
+ *   * NO LINE NAMED (P-M2). Nothing is written and no repository is needed; the answer carries no
+ *     line, and the default rule decides it when the first task with commits is done.
  *   * THE LINE HAS STARTED. It is locked (L4), so the start leaves it where it is and writes only the
  *     merge check — its command and the budget that check runs on — and the delivery mode it names,
  *     which L4 does not lock (O-L1), and says so — `locked`, with the line the project is actually
@@ -1990,9 +2195,21 @@ export async function defaultStartLine(
  */
 export async function startProjectLine(
   tx: Prisma.TransactionClient,
-  input: { ownerId: string; projectId: string; settings: StartLineSettings },
+  input: {
+    ownerId: string;
+    projectId: string;
+    settings: StartLineSettings;
+    /** Who the landing check the start names is written as (`startLandingCheckWriter`); left out,
+     *  the owner's own. */
+    landingCheckWriter?: LandingCheckWriter;
+  },
 ): Promise<StartLineSettings & { locked: boolean }> {
   const { ownerId, projectId, settings } = input;
+  // P-M2: a start that names no line writes nothing about it or the checks, and needs no
+  // repository. The line is decided by the default rule when the first task with commits is done.
+  if (settings.line === undefined) {
+    return { mergeCheckCommand: null, mergeCheckTimeoutSeconds: null, locked: false };
+  }
   const mergeCheckCommand = settings.mergeCheckCommand?.trim() || null;
   // Only when the start NAMED a budget: absent is a client that does not know the field, and
   // reading that as "no budget" would clear one its owner never saw (`StartProjectDto`). `null` is
@@ -2024,6 +2241,7 @@ export async function startProjectLine(
   await configureProjectIntegration(tx, {
     ownerId,
     projectId,
+    landingCheckWriter: input.landingCheckWriter ?? { by: 'OWNER' },
     settings: locked
       ? { mergeCheckCommand, ...namedLanding, ...namedTimeout, ...namedDelivery }
       : {

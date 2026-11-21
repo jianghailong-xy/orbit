@@ -67,14 +67,20 @@ class OrbitExchangeFoldTest {
         assertNull("a steer", OrbitExchangeFold.turnOf(user { put("text", watchText("TASK", b4)); put("steer", true) }))
     }
 
-    @Test fun aWatchAJobAndAReplyFoldUnderTheirOwnWords() {
+    @Test fun aWatchAWakeupAndAReplyFoldUnderTheirOwnWords() {
         val watched = OrbitExchangeFold.turnOf(user { put("text", watchText("SESSION", runOfB4)) }) { _, _ -> "B4 run" }!!
         assertEquals("Watch triggered: B4 run", watched.what)
         assertEquals("Watch triggered", watched.whatInTask)
         assertEquals(OrbitExchangeFold.Target("SESSION", runOfB4, "B4 run"), watched.target)
+        // A job's end folds under no line: it draws nothing, its Job card says it (board C1). A wakeup coming due does.
         val ended = job.replace("STATUS", "completed")
-        val woke = OrbitExchangeFold.turnOf(user { put("text", ended); put("controlPlaneNote", ended) })!!
-        assertEquals("Background job finished: Wait for runner 0.1.237 to reach main", woke.what)
+        assertNull(OrbitExchangeFold.turnOf(user { put("text", ended); put("controlPlaneNote", ended) }))
+        val wakeup = "<scheduled-wakeup>\n  The wakeup you asked for with schedule_wakeup is due; the control plane opened this turn for it:\n" +
+            "    2026-09-15T18:00:00.000Z scheduled 600 seconds out, due 2026-09-15T18:10:00.000Z\n    reason: waiting for CI run 4242\n" +
+            "  The control plane recorded this for you; the user did not say it.\n</scheduled-wakeup>"
+        val woke = OrbitExchangeFold.turnOf(user { put("text", wakeup); put("controlPlaneNote", "$ended\n\n$wakeup") })!!
+        assertEquals("Scheduled wakeup: waiting for CI run 4242", woke.what)
+        assertEquals("job", woke.category)
         assertNull(woke.target)
         val replied = OrbitExchangeFold.turnOf(user {
             put("text", ""); putJsonArray("sessionReplies") { addJsonObject { put("requestId", "r"); put("fromSessionId", runOfB4); put("fromTitle", "B4 run"); put("outcome", "REPLIED") } }

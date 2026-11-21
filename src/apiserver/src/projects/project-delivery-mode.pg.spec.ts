@@ -403,6 +403,9 @@ test('a project’s delivery mode is the owner’s to choose, unlocked by the li
         startsTaskWork: true,
         isolationStatus: 'worktree',
         branch: `orbit/first-integration-${f.publicId}`,
+        // The DONE of finished work: a work session still moving reads WORK_MOVING at the enqueue
+        // door, so the identity a landing is frozen from has to be settled here.
+        finishedAt: new Date(),
       },
     });
     await prisma.task.update({ where: { id: created.id }, data: { status: TaskStatus.DONE } });
