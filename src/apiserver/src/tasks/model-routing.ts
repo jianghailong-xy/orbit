@@ -112,6 +112,15 @@ function familyTierRows(catalog: readonly RunnerModelInfo[]): SubagentModelRow[]
   return [...rows, ...catalog.filter((row) => !tiered.has(row.value)).map((row) => ({ model: row.value, effort: null, level: null }))];
 }
 
+/** The newest model of `model`'s family in a catalogue (the one familyTierRows tiers), or null for a model of no
+ *  family. It is `model` itself when nothing newer is reported. */
+export function familyNewest(model: string, catalog: readonly RunnerModelInfo[]): string | null {
+  const rule = MODEL_FAMILY_TIERS.find(({ match }) => match.test(model));
+  if (!rule) return null;
+  const newest = catalog.filter((row) => rule.match.test(row.value)).sort((a, b) => newerFirst(a.value, b.value))[0];
+  return newest?.value ?? null;
+}
+
 /** The effort each tier asks of a model the owner tiers: clamped to the model's own levels (clampEffort). */
 const OWNER_TIER_EFFORT: Record<ModelRoutingLevel, string> = { S: 'low', M: 'medium', L: 'high', XL: 'max' };
 
