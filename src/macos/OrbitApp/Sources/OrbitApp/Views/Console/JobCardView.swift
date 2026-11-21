@@ -259,8 +259,9 @@ struct JobCardView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityIdentifier("job-live-line")
         case .killedBy(let line):
+            // The card's second-level size and grey (web `.chat-job-ending`), as the lines under the other ends.
             Text(line)
-                .font(.orbitSubtext).foregroundStyle(.tertiary)
+                .font(.orbitLabel).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         case .ending(let lines, let failed):
@@ -286,14 +287,16 @@ struct JobCardView: View {
                 .font(.orbitMeta).foregroundStyle(.tertiary)
                 .textSelection(.enabled)
             if let killedBy = look.killedBy {
-                Text(killedBy).font(.orbitSubtext).foregroundStyle(.tertiary)
+                Text(killedBy).font(.orbitLabel).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             if !shown.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(shown.joined(separator: "\n"))
                         .font(.orbitMono)
-                        .foregroundStyle(look.phase == .failed ? AnyShapeStyle(Color.red) : AnyShapeStyle(.secondary))
+                        // Output's own colour whatever the end: only the folded card's last lines turn red (web
+                        // `.chat-job-output .chat-pre`).
+                        .foregroundStyle(.secondary)
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
