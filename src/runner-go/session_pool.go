@@ -130,6 +130,9 @@ type liveSession struct {
 	// (subagent.go), nil where no job service is at stake. Lock-free on the service's side, like
 	// monitorProbe, because it is called under p.mu.
 	subagentProbe func() bool
+	// executingProbe is this run's "what is executing in it" (session_executing.go), nil until the run has its
+	// tailer and adopted jobs. Unlike the two above it is never called under p.mu (executingEntries).
+	executingProbe func(resident bool) executingSnapshot
 }
 
 // heartbeatSupervisorSnapshot binds a heartbeat response to the exact local

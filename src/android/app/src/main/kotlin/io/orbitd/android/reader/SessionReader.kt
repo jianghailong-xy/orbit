@@ -45,6 +45,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.perf.OrbitPerf
+import io.orbitd.android.realtime.PagePoll
 import io.orbitd.android.realtime.restoredFields
 import io.orbitd.android.R
 import io.orbitd.android.composer.CoordinatorHandoff
@@ -497,9 +498,11 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     LaunchedEffect(console, model) {
         refreshWhileStreaming(model.state.map { it.session?.connection == ConnectionState.CONNECTED }, console::refreshRunner)
     }
-    LaunchedEffect(worktree, state.denied) {
-        if (!state.denied) worktree.poll { (worktree.state.value.detail ?: snapshotDetail)?.let { it.string("runStatus") ?: it.string("status") } in
-            setOf("RUNNING", "AWAITING_INPUT", "INTERRUPTED") }
+    // The bar's detail follows the account stream like every page's poll: a read on a connect, the store's snapshot reads in between
+    // ([WorktreeModel.offer]), a minute's safety read, and its own bounded cadence only while a merge or commit is in flight. It stops with
+    // the Activity.
+    PagePoll(app, handle, emptySet(), worktree, state.denied, inFlightMs = { worktree.inFlightMs() }) {
+        if (!state.denied) worktree.loadDetail()
     }
     // A06-5: the viewport changing size under a pinned reader (keyboard, a taller composer, the reconnect
     // line) asks for the tail again; nothing else re-anchors the bottom of a list that shrank.
@@ -530,13 +533,19 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     // The SubAgent runs by `delegate` call (GET /sessions/:id/subagents), which each SubAgent block draws its tier, model, duration,
     // cost and Why from: read again when a delegate call starts or ends (iOS `refreshSubagentRunsIfNeeded`). A session that never
     // delegated reads nothing, and a failed read is left alone until the transcript moves again.
-    val subagentSignature = remember(state.window.events, background) { SubagentRuns.signature(state.window.events, background.orEmpty()) }
+    // So are the session's Orbit workflows (GET /sessions/:id/workflows), read with the runs whenever a workflow, or one of its calls, moves
+    // (`WorkflowRuns.signature`); a workflow's calls' runs are among the SubAgent runs, under `<workflow call>#<callIndex>`.
+    val delegateSignature = remember(state.window.events, background) { SubagentRuns.signature(state.window.events, background.orEmpty()) }
+    val workflowSignature = remember(state.window.events, background) { WorkflowRuns.signature(state.window.events, background.orEmpty()) }
     var subagentRuns by remember(handle, route.id) { mutableStateOf<Map<String, SubagentRun>>(emptyMap()) }
-    LaunchedEffect(handle, route.id, subagentSignature) {
-        if (subagentSignature.isEmpty()) { subagentRuns = emptyMap(); return@LaunchedEffect }
+    var workflowRuns by remember(handle, route.id) { mutableStateOf<Map<String, WorkflowRun>>(emptyMap()) }
+    LaunchedEffect(handle, route.id, delegateSignature, workflowSignature) {
+        if (delegateSignature.isEmpty() && workflowSignature.isEmpty()) { subagentRuns = emptyMap(); workflowRuns = emptyMap(); return@LaunchedEffect }
+        suspend fun rows(path: String) = (Wire.decode(app.session.request(handle, io.orbitd.android.core.net.ApiRequest(listOf("sessions", route.id!!, path))).body,
+            JsonElement.serializer()) as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
         try {
-            val body = app.session.request(handle, io.orbitd.android.core.net.ApiRequest(listOf("sessions", route.id!!, "subagents"))).body
-            subagentRuns = SubagentRun.byCall((Wire.decode(body, JsonElement.serializer()) as? JsonArray).orEmpty().filterIsInstance<JsonObject>())
+            subagentRuns = SubagentRun.byCall(rows("subagents"))
+            if (workflowSignature.isNotEmpty()) workflowRuns = WorkflowRun.byCall(rows("workflows"))
         } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { }
     }
     LaunchedEffect(cards, console.engine) { cards.engine = console.engine }
@@ -575,10 +584,36 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     val subagentQueued = remember(queuedTurns, queuedCancelEnabled, liveTail) {
         if (!liveTail) emptyMap() else subagentQueuedWakes(queuedTurns, queuedCancelEnabled) { turnId -> composer.control("turns/$turnId", HttpMethod.DELETE) }
     }
+    // Each bg_run job's card reads its job by id: its row of the Background list, its wake turns, a wake still on the queue, and the
+    // tail and stop routes (JobCardView; board 350t1lTONlrPMjilBdXx7, rulings R1-R4).
+    val jobApi = remember(handle, route.id) { BackgroundJobApi(app.session, handle, route.id!!) }
+    val jobWakes = remember(state.window.events, steerDeliveries) { JobCards.wakes(state.window.events, steerDeliveries) }
+    val jobQueued = remember(queuedTurns, queuedCancelEnabled, liveTail) {
+        if (!liveTail) emptyMap() else jobQueuedWakes(queuedTurns, queuedCancelEnabled) { turnId -> composer.control("turns/$turnId", HttpMethod.DELETE) }
+    }
+    val jobSessionLive = BackgroundTrayLogic.sessionLive(sessionDetail)
+    val jobWhere = (sessionDetail?.get("workspace") as? JsonObject)?.string("name") ?: worktreeState.workspace?.string("name")
+    val jobCards = remember(background, jobWakes, jobQueued, jobSessionLive, jobWhere, jobApi) {
+        JobCards(JobCards.shells(background.orEmpty()), jobWakes, jobQueued, jobSessionLive, jobWhere, jobApi::tail, jobApi::stop)
+    }
+    // A job's row in the opened Background list goes to its card, when that card is drawn (R1).
+    val jobCalls = remember(state.window.events) { jobCallsById(state.window.events) }
+    val jobJump: (String) -> (() -> Unit)? = { jobId ->
+        jobCalls[jobId]?.takeIf { seq -> currentRows.any { it.contains(seq) } }?.let { seq -> { model.show(seq) } }
+    }
+    // A workflow's finished strip points back at its block, when that block is drawn.
+    val workflowCalls = remember(state.window.events) {
+        state.window.events.filter { it.type == "tool_use" && it.parent() == null && it.fields.string("name") == WorkflowBlock.TOOL_NAME }
+            .mapNotNull { e -> e.toolId()?.let { it to e.seq } }.toMap()
+    }
+    val workflowJump: (String) -> (() -> Unit)? = { toolUseId ->
+        workflowCalls[toolUseId]?.takeIf { seq -> currentRows.any { it.contains(seq) } }?.let { seq -> { model.show(seq) } }
+    }
     CompositionLocalProvider(LocalMainCheckoutResults provides mainCheckoutResults, LocalReaderResources provides resources, LocalShownOriginals provides shownOriginals, LocalTaskActivity provides taskActivity, LocalSteerDeliveries provides steerDeliveries,
         LocalSessionConsole provides console, LocalMainCheckout provides mainCheckout, LocalWatchTargetNames provides targetNames, LocalAnsweredQuestions provides answeredQuestions,
         LocalRevealItemCard provides revealItemCard, LocalExchangeTree provides exchangeTree, LocalSubagentRuns provides subagentRuns,
-        LocalSubagentWakes provides subagentWakes, LocalSubagentQueuedWakes provides subagentQueued) {
+        LocalSubagentWakes provides subagentWakes, LocalSubagentQueuedWakes provides subagentQueued,
+        LocalWorkflowRuns provides workflowRuns, LocalWorkflowCardJump provides workflowJump, LocalJobCards provides jobCards) {
         SessionCardsReads(cards)
         BoxWithConstraints(Modifier.fillMaxSize()) {
         val view = LocalView.current
@@ -869,7 +904,11 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 // waits on and the tasks it created. Its names stop rotating while the band is folded away.
                 val lastUserMessageAt = remember(state.window.events) { BackgroundTrayLogic.lastUserMessageAt(state.window.events) }
                 Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) {
-                    BackgroundTray(background.orEmpty(), lastUserMessageAt, BackgroundTrayLogic.sessionLive(detail), folded = foldsChrome)
+                    // A running job's row takes Stop through the same routes as its card (R3).
+                    CompositionLocalProvider(LocalJobCards provides jobCards) {
+                        BackgroundTray(background.orEmpty(), lastUserMessageAt, BackgroundTrayLogic.sessionLive(detail), folded = foldsChrome,
+                            jumpToJob = jobJump)
+                    }
                 }
                 Box(Modifier.conversationCard().typingFold(foldsChrome)) { SessionTasksCard(app, handle, route.id!!, cards, openLink) }
                 // The composer's send in flight holds Merge as a queued turn does (A06-14, iOS `console.sending`).
@@ -894,10 +933,10 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 val handoffProject = detail?.let(CoordinatorHandoff::projectId)
                 val handoffApi = remember(handle) { CoordinatorHandoffApi(app.session, handle) }
                 var handoffBusy by remember(handle, route.id) { mutableStateOf(false) }
-                HandoffStatus(handoff, busy = handoffBusy, act = { action ->
+                if (detail != null) HandoffStatus(handoff, composer, composerState, detail, busy = handoffBusy, act = { action, successor ->
                     if (handoffProject != null) scope.launch {
                         handoffBusy = true
-                        try { handoffApi.post(handoffProject, action) }
+                        try { handoffApi.post(handoffProject, action, successor) }
                         catch (cancel: CancellationException) { throw cancel }
                         catch (e: Exception) { OrbitToasts.show(CoordinatorHandoff.refusal(e), tone = ToastTone.ERROR) }
                         finally { handoffBusy = false; app.realtime.refreshSession() }

@@ -1,15 +1,16 @@
 import SwiftUI
 import OrbitKit
 
-// SubAgents (docs/subagent-design.md §7, board docs/mocks/subagent/05.png): an Agent's SubAgents group,
-// the provider list it opens, and the Infrastructure page's Model tiers table. Words and rules are
-// OrbitKit's `SubagentSettings`.
+// SubAgents (docs/subagent-design.md §7, board docs/mocks/subagent/05.png, its Workflows row from board
+// docs/mocks/subagent-workflow part 5): an Agent's SubAgents group, the provider list it opens, and the
+// Infrastructure page's Model tiers table. Words and rules are OrbitKit's `SubagentSettings`.
 
 /// An Agent's SubAgents group. The workspace fields are the form's working copy, written by Done with the
 /// rest; the blocked providers are the account's, written as each switch moves (the sheet).
 struct SubagentSettingsSection: View {
     let agents: AgentsModel
     @Binding var enabled: Bool
+    @Binding var workflowsEnabled: Bool
     @Binding var maxRunning: Int
     @Environment(AppModel.self) private var app
     @State private var editingProviders = false
@@ -21,6 +22,16 @@ struct SubagentSettingsSection: View {
             Toggle(isOn: $enabled) {
                 SubagentRowLabel(title: SubagentSettings.enabledTitle, detail: SubagentSettings.enabledDetail)
             }
+
+            // It follows SubAgents: off and not to be turned on while SubAgents is off (SubagentSettings.workflowsOn).
+            Toggle(isOn: Binding(
+                get: { SubagentSettings.workflowsOn(subagentsEnabled: enabled, workflowsEnabled: workflowsEnabled) },
+                set: { workflowsEnabled = $0 }
+            )) {
+                SubagentRowLabel(title: SubagentSettings.workflowsTitle, detail: SubagentSettings.workflowsDetail)
+            }
+            .disabled(!enabled)
+            .accessibilityIdentifier("subagents.workflows")
 
             HStack(spacing: 12) {
                 SubagentRowLabel(title: SubagentSettings.providers, detail: SubagentSettings.providersDetail)
@@ -218,15 +229,30 @@ struct InfrastructureModelTiersSection: View {
     }
 
     @ViewBuilder private func tierCell(_ provider: ProviderTierRow, _ model: ProviderModelTier) -> some View {
+        HStack(spacing: 6) {
+            tierControl(provider, model)
+            if SubagentSettings.showsYours(model) {
+                // A tier the owner set (board 2026-11-20).
+                Text(SubagentSettings.yours)
+                    .font(.orbitLabel)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 5)
+                    .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.secondary.opacity(0.35)))
+                    .fixedSize()
+            }
+        }
+    }
+
+    @ViewBuilder private func tierControl(_ provider: ProviderTierRow, _ model: ProviderModelTier) -> some View {
         let text = Text(SubagentSettings.tierText(model.levels))
             .foregroundStyle(SubagentSettings.tierIsUnset(model.levels) ? Color.orange : Color.primary)
-        if model.editable, let providerID = provider.providerId {
+        if let path = SubagentSettings.tierPath(provider, model) {
             Menu {
                 ForEach(SubagentSettings.tiers, id: \.self) { tier in
-                    Button(tier) { write(providerID, model.model, tier) }
+                    Button(tier) { write(path, model.model, tier) }
                 }
-                if SubagentSettings.menuOffersClear(model.levels) {
-                    Button(SubagentSettings.clear, role: .destructive) { write(providerID, model.model, nil) }
+                if SubagentSettings.menuOffersClear(provider, model) {
+                    Button(SubagentSettings.clear, role: .destructive) { write(path, model.model, nil) }
                 }
             } label: {
                 HStack(spacing: 3) {
@@ -239,15 +265,15 @@ struct InfrastructureModelTiersSection: View {
             .menuStyle(.button)
             .buttonStyle(.borderless)
             .fixedSize()
-            .accessibilityIdentifier("tier.\(model.model)")
+            .accessibilityIdentifier("tier.\(provider.slug).\(model.model)")
         } else {
             text
         }
     }
 
-    private func write(_ providerID: String, _ model: String, _ tier: String?) {
+    private func write(_ path: String, _ model: String, _ tier: String?) {
         Task {
-            if let failure = await agents.setModelTier(providerID: providerID, model: model, tier: tier) {
+            if let failure = await agents.setModelTier(path: path, model: model, tier: tier) {
                 app.showToast(failure, tone: .error)
             }
         }

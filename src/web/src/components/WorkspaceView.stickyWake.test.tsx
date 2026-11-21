@@ -308,7 +308,9 @@ describe('the sticky bar over a background job’s news', { timeout: 60_000 }, (
   // person's question — and with a run of jobs the question was never on screen at all.
   it('keeps naming the question the answer around it belongs to', async () => {
     vi.mocked(getSessionEventPage).mockResolvedValue({ events: JOB_EVENTS, hasMore: false } as never);
-    await mountTranscript('.bgwake');
+    await mountTranscript(null);
+    // The news itself draws nothing now (job-card board C1): the job's own card says it (JobCard).
+    expect(mounted().querySelector('.bgwake')).toBeNull();
 
     expect(text('.chat-sticky-label')).toBe('↑ Your question');
     expect(text('.chat-sticky-text')).toBe(TYPED);

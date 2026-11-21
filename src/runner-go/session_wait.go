@@ -163,9 +163,19 @@ func waitForSessionDurably(t *Transport, ctx cliOrchestrationContext, created js
 		}
 		wait.session = raw
 		if sessionRawSettled(raw) {
-			wait.settled, wait.outcome = true, waitOutcomeSettled
-			wait.watch = releaseSessionWaitWatch(t, ctx, watchID)
-			return wait
+			// The status alone says only that the turn settled. Whether the child has finished all its work (no job,
+			// subagent or wake left) is the watch's own leaf, so the inline answer waits for the same verdict.
+			done, err := sessionWaitWatchDone(t, ctx, watchID)
+			if err != nil {
+				wait.outcome, wait.getError = waitOutcomeGetFailed, err.Error()
+				wait.watch = handedBackWatch(watchID, "TRANSPORT_ERROR", err)
+				return wait
+			}
+			if done {
+				wait.settled, wait.outcome = true, waitOutcomeSettled
+				wait.watch = releaseSessionWaitWatch(t, ctx, watchID)
+				return wait
+			}
 		}
 		if final {
 			wait.outcome = waitOutcomeTimeout
@@ -209,12 +219,13 @@ func (w sessionWait) report() *sessionWaitReport {
 	}
 }
 
-// sessionWaitWatchBody is the watch a wait records: the line session_create(wait) always waited for, a
-// settled turn, waking the calling session.
+// sessionWaitWatchBody is the watch a wait records: the new session has finished all its work (SESSION_QUIESCENT:
+// its turn settled, nothing it started still runs and nothing is set to wake it), waking the calling session.
 func sessionWaitWatchBody(sessionID string) map[string]interface{} {
+	predicate := watchAggregate("ALL", "SESSION_QUIESCENT")
 	return map[string]interface{}{
-		"predicateVersion": watchPredicateVersion,
-		"predicate":        watchAggregate("ALL", "SESSION_TURN_SETTLED"),
+		"predicateVersion": minimalWatchPredicateVersion(predicate),
+		"predicate":        predicate,
 		"targets":          []watchTargetRef{{Kind: "SESSION", ID: sessionID}},
 		"action":           "RESUME_SESSION",
 		"idempotencyKey":   sessionWaitWatchKeyPrefix + sessionID,
@@ -241,12 +252,29 @@ func recordSessionWaitWatch(t *Transport, ctx cliOrchestrationContext, sessionID
 	return "", fmt.Errorf("the server answered without a watch id")
 }
 
+// sessionWaitWatchDone reports whether the watch behind a wait has decided the session is finished: it MATCHED,
+// or it ended some other way (cancelled, expired), after which the settled status is all that is left to go by.
+// While it is ACTIVE or PAUSED the session still has work running or armed, and the wait goes on.
+func sessionWaitWatchDone(t *Transport, ctx cliOrchestrationContext, watchID string) (bool, error) {
+	raw, err := t.getWatch(ctx.sessionID, ctx.token, watchID)
+	if err != nil {
+		return false, err
+	}
+	var watch struct {
+		State string `json:"state"`
+	}
+	if err := json.Unmarshal(raw, &watch); err != nil {
+		return false, fmt.Errorf("the watch answer is not JSON: %w", err)
+	}
+	return watch.State != "ACTIVE" && watch.State != "PAUSED", nil
+}
+
 func handedBackWatch(watchID, why string, cause error) *sessionWaitWatch {
 	watch := &sessionWaitWatch{
 		ID:         watchID,
 		HandedBack: why,
-		Note: "Orbit's server keeps waiting: this watch starts a turn in the calling session when the new session's turn " +
-			"settles, or once if the watch expires first. End the turn instead of polling for it.",
+		Note: "Orbit's server keeps waiting: this watch starts a turn in the calling session when the new session has " +
+			"finished all its work (its turn settled and nothing it started still runs), or once if the watch expires first. End the turn instead of polling for it.",
 	}
 	if cause != nil {
 		watch.Error = cause.Error()
@@ -324,7 +352,7 @@ func (w sessionWait) text() string {
 			why = "the Orbit server stopped answering (" + w.watch.Error + ")"
 		}
 		return fmt.Sprintf("Stopped waiting before session %s settled: %s. The wait is not lost: watch %s is held by "+
-			"Orbit's server and starts a turn in this session when that session's turn settles, or once if the watch "+
+			"Orbit's server and starts a turn in this session when that session has finished all its work, or once if the watch "+
 			"expires first. End your turn now; do not poll session_get or sleep to wait for it.\n%s",
 			w.sessionID, why, w.watch.ID, body)
 	case w.unbacked():

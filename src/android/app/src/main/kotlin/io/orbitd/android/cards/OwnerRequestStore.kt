@@ -13,6 +13,7 @@ import io.orbitd.android.core.cards.TerminalsApi
 import io.orbitd.android.core.cards.text
 import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.net.ApiRequest
+import io.orbitd.android.core.net.HttpMethod
 import io.orbitd.android.core.net.NetworkException
 import io.orbitd.android.core.protocol.ProtocolException
 import io.orbitd.android.core.protocol.Wire
@@ -70,6 +71,29 @@ class OwnerRequestStore internal constructor(private val auth: AuthSession, val 
 
     private val mutable = MutableStateFlow(State())
     val state: StateFlow<State> = mutable.asStateFlow()
+
+    private val accountState = MutableStateFlow<JsonObject?>(null)
+    /** `GET /users/me` as last read: the marks (`changedBy`) a SETTINGS_CHANGE card's Undo reads (design §5.3). */
+    val account: StateFlow<JsonObject?> = accountState.asStateFlow()
+
+    /** The account read again, for the marks a just-applied card wrote. A failed read keeps what was drawn. */
+    suspend fun loadAccount() {
+        try {
+            val me = Wire.decode(auth.request(handle, ApiRequest(listOf("users", "me"))).requireSuccess().body, JsonObject.serializer())
+            if (live()) accountState.value = me
+        } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { /* The card shows no Undo until it can be read. */ }
+    }
+
+    /** Undo of a change made from a conversation (design §5.3): the owner's own preferences PATCH with each key's `from`. Null when
+     * it went through, else what to say. */
+    suspend fun undoSettings(values: JsonObject): String? {
+        if (values.isEmpty()) return null
+        return try {
+            val bytes = values.toString().encodeToByteArray()
+            auth.request(handle, ApiRequest(listOf("users", "me", "preferences"), HttpMethod.PATCH, body = bytes)).requireSuccess()
+            loadAccount(); null
+        } catch (cancel: CancellationException) { throw cancel } catch (error: Exception) { message(error) }
+    }
 
     private fun live() = (auth.state.value as? AuthState.SignedIn)?.handle === handle
 

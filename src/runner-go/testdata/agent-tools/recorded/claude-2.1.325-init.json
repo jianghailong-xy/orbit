@@ -83,6 +83,8 @@
   "mcp__orbit__schedule_end",
   "mcp__orbit__schedule_get",
   "mcp__orbit__condition_get",
+  "mcp__orbit__settings_get",
+  "mcp__orbit__settings_propose",
   "mcp__orbit__schedule_list",
   "mcp__orbit__schedule_pause",
   "mcp__orbit__schedule_resume",

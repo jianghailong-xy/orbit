@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
+import { renderRawQuery } from '../test-support/prisma-transaction-double';
 
 const PROJECT = randomUUID();
 const OWNER = randomUUID();
@@ -24,6 +25,8 @@ function producerFixture(
     tallyMissesOpenWork?: boolean;
     /** A landing or a merge into the upstream queued or running in the project. */
     landingInFlight?: boolean;
+    /** A DONE code task whose landing waits for its work to finish (§12.15 P-M1, `landingDeferred`). */
+    landingDeferred?: boolean;
     /** An open item in the project — somebody already handling something. */
     openItem?: boolean;
   } = {},
@@ -127,7 +130,13 @@ function producerFixture(
     },
     // The guardrail's one statement about open items: whether any is open that is still owed
     // (`project-looks-finished.ts`, `openItemOwed`).
-    $queryRaw: async () => {
+    // ...and, by its own statement, whether a DONE's landing still waits for its work to finish
+    // (`landingDeferred`, §12.15 P-M1), which counts as a landing in flight.
+    $queryRaw: async (...args: unknown[]) => {
+      if (renderRawQuery(args).text.includes('moving_work')) {
+        order.push('deferred-read');
+        return [{ deferred: options.landingDeferred === true }];
+      }
       order.push('open-items-read');
       return [{ owed: options.openItem === true }];
     },
@@ -269,7 +278,7 @@ test('committed terminal rows deliver one project fact and authorize only after 
   assert.equal(fixture.facts[0].projectId, PROJECT);
   assert.deepEqual(
     fixture.order,
-    ['tally-read', 'tasks-read', 'criteria-read', 'inflight-read', 'wake-claimed',
+    ['tally-read', 'tasks-read', 'criteria-read', 'inflight-read', 'deferred-read', 'wake-claimed',
       'authorization-read', 'convergence', 'authorized'],
     'T2 requires claim before authorization, and neither the criteria read nor the in-flight '
     + 'read is an authorization',
@@ -283,7 +292,7 @@ test('a disabled coordinator refuses after claim instead of opening a judgment',
     { projectId: PROJECT, outcome: 'REFUSED' },
   ]);
   assert.deepEqual(fixture.order, [
-    'tally-read', 'tasks-read', 'criteria-read', 'inflight-read', 'wake-claimed',
+    'tally-read', 'tasks-read', 'criteria-read', 'inflight-read', 'deferred-read', 'wake-claimed',
     'authorization-read', 'authorized',
   ]);
 });
@@ -340,8 +349,8 @@ test('a project that looks finished is handed to its standing coordinator, not j
   assert.equal(fixture.queued[0].event, 'PROJECT_TASKS_SETTLED',
     'the fact the judgment would have spent, not a new kind of wake');
   assert.deepEqual(
-    fixture.order.slice(0, 5),
-    ['tally-read', 'tasks-read', 'criteria-read', 'inflight-read', 'finish-read'],
+    fixture.order.slice(0, 6),
+    ['tally-read', 'tasks-read', 'criteria-read', 'inflight-read', 'deferred-read', 'finish-read'],
     'nothing is landing is asked first, then whether the project still looks finished',
   );
   assert.deepEqual(
@@ -363,6 +372,21 @@ test('while a landing is in flight, a settled project is neither judged nor told
     assert.deepEqual([fixture.facts, fixture.carded, fixture.queued], [[], [], []],
       'nothing was claimed, so no key is spent');
     assert.deepEqual(fixture.order, ['tally-read', 'tasks-read', 'criteria-read', 'inflight-read']);
+  }
+});
+
+test('while a DONE waits for its work to finish before its landing is decided, a settled project is neither judged nor told anything', async () => {
+  // §12.15 P-M1: such a DONE has queued nothing yet, and the finish that decides it re-derives this
+  // fact; until then the work is still on its way exactly as it is with a job queued.
+  for (const criteria of [MET_ONE_OFF_THE_BRANCH, []]) {
+    const fixture = producerFixture(['DONE', 'CANCELLED'], true, criteria, { landingDeferred: true });
+
+    assert.deepEqual(await fixture.producer.afterCommit([PROJECT]), [
+      { projectId: PROJECT, outcome: 'LANDING_IN_FLIGHT' },
+    ]);
+    assert.deepEqual([fixture.facts, fixture.carded, fixture.queued], [[], [], []],
+      'nothing was claimed, so no key is spent');
+    assert.deepEqual(fixture.order, ['tally-read', 'tasks-read', 'criteria-read', 'inflight-read', 'deferred-read']);
   }
 });
 

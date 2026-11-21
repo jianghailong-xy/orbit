@@ -807,7 +807,7 @@ export const RUNNER_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
   'GET /runner/owner-requests/:id':
     'read by (id, the runner\'s owner) and nothing else, so another account\'s id answers 404 (owner-requests/owner-requests.service.ts:193); owner-requests.pg.spec.ts (f) sends it',
   'POST /runner/owner-requests/:id/withdraw':
-    'the calling session must be one this runner hosts for its owner (runner-api/runner-owner-requests.controller.ts:66), the request is read by (id, that owner) (owner-requests/owner-requests.service.ts:193), and only the session that filed it may withdraw it (owner-requests/owner-requests.service.ts:233)',
+    'the calling session must be one this runner hosts for its owner (runner-api/runner-owner-requests.controller.ts:100), the request is read by (id, that owner) (owner-requests/owner-requests.service.ts:193), and only the session that filed it may withdraw it (owner-requests/owner-requests.service.ts:233)',
   'PATCH /runner/sessions/:id/subagents/:runId':
     'the session must be one of the runner\'s owner that this runner hosts, else 404 as for an id that names nothing '
     + '(runner-api/runner-subagents.controller.ts:137), and the run is matched by (id, that session) only, on an end '
@@ -1008,6 +1008,12 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
       params: {},
       body: heartbeat({ sessions: [{ sessionId: of.runner.machineSessionId, isolationStatus: 'worktree', changedFiles: [], worktreeDirty: true }] }),
     }),
+  },
+  // What a runner states is executing in a session is written only to a session assigned to it and leased to its process
+  // (runners/runner-executing-sets.ts): another account's session under that id matches no row and is left as it is.
+  'POST /runner/heartbeat body executing[].sessionId': {
+    as: RUNNER,
+    request: (of) => ({ params: {}, body: heartbeat({ executing: [{ sessionId: of.runner.machineSessionId, jobs: [], shells: [], subagents: [], engineTurnActive: false }] }) }),
   },
   'POST /runner/heartbeat body expiredCommitErrors[].sessionId': {
     as: RUNNER,
@@ -1632,15 +1638,19 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
   'POST /runner/owner-requests body blocksTaskIds[]':
     'counted among the runner owner\'s own tasks before anything is written; one that is not answers 404 (owner-requests/owner-requests.service.ts:128); owner-requests.pg.spec.ts (f) sends another account\'s',
   'POST /runner/owner-requests body secretSpec.runnerId':
-    'never used: the runner is the asking session\'s own (design §4.1), and any other one is refused 400 before anything is written (owner-requests/owner-secrets.service.ts:182); owner-requests.pg.spec.ts (c) sends another account\'s',
+    'never used: the runner is the asking session\'s own (design §4.1), and any other one is refused 400 before anything is written (owner-requests/owner-secrets.service.ts:187); owner-requests.pg.spec.ts (c) sends another account\'s',
   'POST /runner/owner-requests body clientRequestId':
     'the caller\'s own idempotency key, unique per asking session, and read back only by (the runner\'s owner, the asking session, the key) (owner-requests/owner-requests.service.ts:169); it names nothing of anybody else\'s',
   'POST /runner/owner-requests body projectId':
     'counted among the runner owner\'s own projects before anything is written; one that is not answers 404 (owner-requests/owner-requests.service.ts:132); owner-requests.pg.spec.ts (f) sends another account\'s',
   'POST /runner/owner-requests header x-orbit-session-id':
-    'must be a session of the runner\'s owner that this runner hosts, else 403 (runner-api/runner-owner-requests.controller.ts:66); owner-requests.pg.spec.ts (f) sends another account\'s',
+    'must be a session of the runner\'s owner that this runner hosts, else 403 (runner-api/runner-owner-requests.controller.ts:100); owner-requests.pg.spec.ts (f) sends another account\'s',
+  'POST /runner/settings-proposals header x-orbit-session-id':
+    'must be a session of the runner\'s owner that this runner hosts, else 403 before anything is read or written (runner-api/runner-owner-requests.controller.ts:100); the proposal acts on that owner\'s own preferences only, and settings-proposals.pg.spec.ts (t) sends another account\'s session',
+  'GET /runner/settings header x-orbit-session-id':
+    'must be a session of the runner\'s owner that this runner hosts, else 403 before anything is read (runner-api/runner-owner-requests.controller.ts:100); the answer is that owner\'s own preferences, read by the runner\'s owner, never by the header, and settings-cli.pg.spec.ts sends another account\'s session',
   'POST /runner/owner-requests/:id/withdraw header x-orbit-session-id':
-    'must be a session of the runner\'s owner that this runner hosts, else 403 (runner-api/runner-owner-requests.controller.ts:66), and must be the session that filed the request (owner-requests/owner-requests.service.ts:233)',
+    'must be a session of the runner\'s owner that this runner hosts, else 403 (runner-api/runner-owner-requests.controller.ts:100), and must be the session that filed the request (owner-requests/owner-requests.service.ts:233)',
   // ── the wiki's import on the server ──────────────────────────────────────────────────────────────
   'POST /runner/wiki/spaces/:id/import-jobs body id':
     'the id the command names for the job it is making: the insert does nothing when the id is taken, and the job '

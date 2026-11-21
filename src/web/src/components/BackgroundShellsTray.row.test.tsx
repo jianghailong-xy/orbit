@@ -15,6 +15,12 @@ import {
 import type { RunEvent } from './Transcript';
 import { BackgroundShellsTray, lastUserMessageAt } from './BackgroundShellsTray';
 
+vi.mock('../api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../api')>();
+  return { ...actual, stopBackgroundJob: vi.fn() };
+});
+const { stopBackgroundJob } = await import('../api');
+
 /**
  * The folded Background row draws what the shared rule says (src/shared backgroundRow.ts). Its
  * cases are read out of `background-row.fixture.json`, the file OrbitKit and Android read too, so
@@ -25,6 +31,7 @@ import { BackgroundShellsTray, lastUserMessageAt } from './BackgroundShellsTray'
 interface RowCase {
   case: string;
   list: BackgroundRowInput[];
+  events?: RunEvent[];
   lastUserMessageAt: string | null;
   sessionLive: boolean;
   expect: BackgroundRow;
@@ -100,7 +107,9 @@ describe('the folded row, by background-row.fixture.json', () => {
   });
 
   it.each(fixture.cases.map((c) => [c.case, c] as const))('%s', (_name, c) => {
-    render(c.list.map(shell), userAt(c.lastUserMessageAt), c.sessionLive);
+    // A case that carries its transcript is read through the reader, as every client must.
+    if (c.events) expect(lastUserMessageAt(c.events)).toBe(c.lastUserMessageAt);
+    render(c.list.map(shell), c.events ?? userAt(c.lastUserMessageAt), c.sessionLive);
     const want = c.expect;
     if (want.hidden) {
       expect(container.innerHTML).toBe('');
@@ -133,6 +142,24 @@ describe('the folded row, by background-row.fixture.json', () => {
       const failed = want.countParts.find((p) => p.kind === 'failed');
       expect(one('.bg-tray-count .ct-failed')?.textContent ?? null).toBe(failed?.text ?? null);
     }
+
+    // As the Agents row: the name, then past the spacer the count, the mark, the arrow at the edge.
+    const name = one(want.name.mode === 'rotate' ? '.bg-rot' : '.bg-tray-name')!;
+    const order = [name, one('.wt-spacer')!, one('.bg-tray-count'), marks[0], one('.wt-expand')!].filter(
+      (el): el is HTMLElement => el !== null,
+    );
+    const rowChildren = [...one('.bg-tray-row')!.children];
+    expect(order.map((el) => rowChildren.indexOf(el))).toEqual(
+      [...order.map((el) => rowChildren.indexOf(el))].sort((a, b) => a - b),
+    );
+    expect(order.every((el) => rowChildren.includes(el))).toBe(true);
+    expect(rowChildren.slice(-2)).toEqual([marks[0], one('.wt-expand')]);
+    if (want.countLine !== null) expect(rowChildren.slice(-3, -2)).toEqual([one('.bg-tray-count')]);
+  });
+
+  it('lets the rotating names, not the spacer, take the free space', () => {
+    expect(css).toMatch(/\.bg-rot\s*\{[^}]*flex:\s*1 1 auto/);
+    expect(css).toMatch(/\.bg-rot \+ \.wt-spacer\s*\{[^}]*flex:\s*none/);
   });
 
   it('draws the one name in the brand tint, as the Tasks card draws its .ct-one', () => {
@@ -315,5 +342,70 @@ describe('the opened list', () => {
     expect(one('.bg-shell-kind')).toBeNull();
     expect(one('.wt-expand')?.getAttribute('aria-label')).toBe('Hide background processes');
     expect(container.textContent).not.toMatch(/total/);
+  });
+});
+
+// Ruling R1 (2026-11-21): the row stays as it is, and from the board's D1 only two things: a failed job counts in
+// red, and a job's row in the opened list goes to its Job card. R3: a running job's row can stop it.
+describe('a bg_run job in the opened list', () => {
+  const JOBS = [
+    shell({ shellId: 'bgj_run', kind: 'job', command: 'npm test -w @orbit/web', description: 'web suite', startedSeq: 20, status: 'running', endedAt: null, stoppable: true }),
+    shell({ shellId: 'bgj_bad', kind: 'job', command: 'swift test', description: 'OrbitKit swift test', startedSeq: 30, status: 'failed', endedAt: '2026-11-16T02:45:00.000Z' }),
+  ];
+  const rowOf = (id: string) => all('.bg-shell').find((r) => r.querySelector('.bg-shell-id')?.textContent === id)!;
+
+  it('counts a failed job in red', () => {
+    render(JOBS, SINCE, true);
+    expect(one('.bg-tray-count')?.textContent).toBe('1 running · 1 failed');
+    expect(one('.bg-tray-count .ct-failed')?.textContent).toBe('1 failed');
+    expect(css).toMatch(/\.ct-failed\s*\{[^}]*color:\s*var\(--error/);
+  });
+
+  it('scrolls to its Job card when tapped, and folds the list', () => {
+    const cardEl = document.createElement('div');
+    cardEl.dataset.bgJob = 'bgj_bad';
+    const scrolled = vi.fn();
+    cardEl.scrollIntoView = scrolled;
+    document.body.appendChild(cardEl);
+    try {
+      render(JOBS, SINCE, true);
+      toggle();
+      act(() => rowOf('bgj_bad').querySelector<HTMLElement>('.bg-shell-head')!.click());
+      expect(scrolled).toHaveBeenCalledWith({ block: 'center', behavior: 'smooth' });
+      expect(one('.bg-tray-list'), 'the list folds').toBeNull();
+    } finally {
+      cardEl.remove();
+    }
+  });
+
+  it('opens its details as before when its card is not on the page', () => {
+    render(JOBS, SINCE, true);
+    toggle();
+    act(() => rowOf('bgj_bad').querySelector<HTMLElement>('.bg-shell-head')!.click());
+    expect(rowOf('bgj_bad').classList.contains('bg-shell-open')).toBe(true);
+  });
+
+  it('offers Stop on a running job its runner can stop, behind a confirm that calls the stop route', async () => {
+    vi.mocked(stopBackgroundJob).mockReset().mockResolvedValue({ jobId: 'bgj_run', status: 'stopping' });
+    act(() => root.render(<BackgroundShellsTray sessionId="34ySession" events={SINCE} live serverShells={JOBS} />));
+    toggle();
+    expect(rowOf('bgj_bad').querySelector('.bg-shell-stop'), 'not on a job that ended').toBeNull();
+    const stop = rowOf('bgj_run').querySelector<HTMLElement>('.bg-shell-stop button')!;
+    expect(stop.textContent).toBe('Stop');
+    await act(async () => stop.click());
+    expect(stopBackgroundJob).not.toHaveBeenCalled();
+    const popup = document.body.querySelector<HTMLElement>('.orbit-popconfirm')!;
+    expect(popup.querySelector('.orbit-popconfirm-title')?.textContent).toBe('Stop this job?');
+    await act(async () => [...popup.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === 'Stop')!.click());
+    expect(stopBackgroundJob).toHaveBeenCalledWith('34ySession', 'bgj_run');
+    // The press did not open the row.
+    expect(rowOf('bgj_run').classList.contains('bg-shell-open')).toBe(false);
+  });
+
+  it('hides Stop where the list marks the job not stoppable (an older runner)', () => {
+    const older = JOBS.map((j) => ({ ...j, stoppable: false }));
+    act(() => root.render(<BackgroundShellsTray sessionId="34ySession" events={SINCE} live serverShells={older} />));
+    toggle();
+    expect(one('.bg-shell-stop')).toBeNull();
   });
 });

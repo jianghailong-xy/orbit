@@ -14,13 +14,10 @@ final class MachineSetupCopyParityTests: XCTestCase {
     private static let webCopy = "src/web/src/lib/machineSetupCopy.ts"
     private static let swiftCopy = "src/macos/OrbitKit/Sources/OrbitKit/App/MachineSetupCopy.swift"
 
-    /// Sentences of pages these clients don't have: the web's approval page, its register guide's Settings
-    /// variant (these clients register from the machine's own card, which says `REGISTER_NEXT`), and the
-    /// full-path folder lines of the web's Settings → New workspace (docs/mocks/new-workspace-form, decision 2 A),
-    /// until these clients' card takes a full path too.
+    /// Sentences of pages these clients don't have: the web's approval page, and its register guide's Settings
+    /// variant (these clients register from the machine's own card, which says `REGISTER_NEXT`).
     private static let webOnly: Set<String> = ["ENROLL_NEXT_TITLE", "ENROLL_NEXT_BODY", "ENROLL_OPEN_MACHINE",
-                                               "REGISTER_NEXT_IN_SETTINGS", "machineEmpty",
-                                               "setupFolderOrPathHint", "setupPathUnchecked"]
+                                               "REGISTER_NEXT_IN_SETTINGS", "machineEmpty"]
 
     /// Sentences these clients say and the web doesn't, each checked on its own terms below.
     private static let thisClientsOwn: Set<String> = [
@@ -147,6 +144,8 @@ final class MachineSetupCopyParityTests: XCTestCase {
         ("setupConnectingCreate", MachineSetupCopy.setupConnectingCreate(machine: "${machine}")),
         ("setupUpdatingCreate", MachineSetupCopy.setupUpdatingCreate(machine: "${machine}")),
         ("setupCreateFailed", MachineSetupCopy.setupCreateFailed(why: "${why}")),
+        ("setupFolderOrPathHint", MachineSetupCopy.setupFolderOrPathHint(root: "${root}")),
+        ("setupPathUnchecked", MachineSetupCopy.setupPathUnchecked(machine: "${machine}")),
         ("composerPlaceholderFor", MachineSetupCopy.composerPlaceholderFor(machine: "${machine}")),
         ("heldWaiting", MachineSetupCopy.heldWaiting(machine: "${machine}")),
         ("setupGithubSignInAgain", MachineSetupCopy.setupGithubSignInAgain(login: "${login}")),

@@ -175,7 +175,24 @@ const gateway = schedule({
   id: 'sch-gateway', title: 'Gateway CSP report digest', rule: { kind: 'DAILY', time: '08:00' }, ws: WS.web, state: 'PAUSED',
 });
 
+// An EVERY rule with a planned end by time, and one with an end by count; the second has missed slots overnight.
+const sweep = schedule({
+  id: 'sch-sweep', title: 'Queue depth sweep', rule: { kind: 'EVERY', minutes: 30, time: '09:00', until: '18:00', weekdays: ['MON', 'TUE', 'WED', 'THU', 'FRI'] },
+  ws: WS.apiserver, endAt: sh(14, '18:00'), nextDueAt: sh(14, '13:00'),
+});
+const burst = schedule({
+  id: 'sch-burst', title: 'Canary burst watch', rule: { kind: 'EVERY', minutes: 60, time: '00:00', weekdays: ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'] },
+  ws: WS.web, maxRuns: 6, runsStarted: 3, runsLeft: 3, nextDueAt: sh(14, '14:00'),
+});
+const burstMissed = ['01:00', '02:00', '03:00', '04:00'].map((t, i) => run({
+  id: `run-burst-missed-${i}`, scheduleId: burst.id, plannedAt: sh(14, t), startedAt: null, state: 'MISSED',
+}));
+
 export const SCHEDULES: Record<string, ScheduleView> = { pg, audit, docs, notes, deploy, codex, claude, cost, gateway };
+/** The EVERY schedules above, kept out of SCHEDULES so the older specs' rows and counts stay as they were. */
+export const EVERY_SCHEDULES = { sweep, burst };
+export const EVERY_ROWS: ScheduleListRow[] = [sweep, burst].map((s) => ({ ...s, lastRun: null }));
+export const BURST_MISSED_RUNS = burstMissed;
 
 const LAST: Record<string, ScheduleRunView | null> = {
   [pg.id]: pgFailed, [codex.id]: codexToday, [claude.id]: claudeToday,
@@ -245,8 +262,8 @@ const READ_BACK: Record<string, string> = {
 };
 
 export function scheduleDetail(id: string): ScheduleDetailResponse {
-  const s = Object.values(SCHEDULES).find((row) => row.id === id)!;
-  const runs = RUNS[id] ?? [];
+  const s = [...Object.values(SCHEDULES), sweep, burst].find((row) => row.id === id)!;
+  const runs = id === burst.id ? burstMissed : RUNS[id] ?? [];
   return {
     schedule: s,
     readBack: READ_BACK[id] ?? s.intent,
@@ -267,7 +284,7 @@ export function listAnswer(rows: ScheduleListRow[] = LIST_ROWS): ScheduleListRes
   const since = Date.parse(SCHEDULE_NOW) - 24 * 60 * 60_000;
   const under = ['QUEUED', 'RUNNING', 'AWAITING_APPROVAL'];
   const ids = new Set(rows.map((r) => r.id));
-  const runs: ScheduleTimelineRun[] = Object.values(RUNS).flat()
+  const runs: ScheduleTimelineRun[] = [...Object.values(RUNS).flat(), ...burstMissed]
     .filter((r) => ids.has(r.scheduleId) && (under.includes(r.state) || Date.parse(r.plannedAt) >= since))
     .map((r) => {
       const f = (FINDINGS[r.scheduleId] ?? []).find((x) => x.firstRunId === r.id && x.key === r.key);

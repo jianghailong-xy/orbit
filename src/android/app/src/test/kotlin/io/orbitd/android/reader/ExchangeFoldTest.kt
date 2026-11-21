@@ -75,13 +75,14 @@ class ExchangeFoldTest {
     }
 
     @Test fun onlyAShortAnswerFolds() {
+        // A wakeup coming due is the `job` turn that folds; a job's own news draws nothing and folds under no line (board C1).
         fun job(id: String) = listOf(
-            "<background-job-wake>",
-            "  A background job you started with bg_run has news you were waiting for; the control plane opened this turn for it:",
-            "    $id｜query｜bash q.sh｜$id",
-            "      ended｜completed｜exit code 0",
-            "  The control plane recorded this for you; the user did not write it.",
-            "</background-job-wake>",
+            "<scheduled-wakeup>",
+            "  The wakeup you asked for with schedule_wakeup is due; the control plane opened this turn for it:",
+            "    2026-11-10T10:00:00.000Z scheduled 600 seconds out, due 2026-11-10T10:10:00.000Z",
+            "    reason: check $id",
+            "  The control plane recorded this for you; the user did not say it.",
+            "</scheduled-wakeup>",
         ).joinToString("\n").let { wake -> buildJsonObject { put("text", wake); put("controlPlaneNote", wake) } }
         val watchId = "0195c0de-0000-7000-8000-0000000000c3"
         val watch = buildJsonObject { put("text", listOf(

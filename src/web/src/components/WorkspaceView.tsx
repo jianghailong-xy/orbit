@@ -2,6 +2,7 @@ import {
   COORDINATOR_HANDOFF_COPY,
   managedSetupState,
   firstSessionProvider,
+  type CoordinatorHandoffSuccessor,
   type MergeRecoveryAction,
   type ProjectSidebarTaskCounts,
   type SessionCoordinatorHandoff,
@@ -299,6 +300,7 @@ import {
   type SessionWatching,
 } from '../lib/watches';
 import { isQueuedWatchWake, queuedSubagentWake, returnsToComposer } from '../lib/queuedTurnRestore';
+import { queuedJobWake } from '../lib/bgJobCard';
 import {
   api,
   ApiError,
@@ -3437,7 +3439,7 @@ export function WorkspaceView({
   // frame, not a render later when `projectsShown` catches up: the landing waits on these reads.
   const projectData = useSessionProjectData({
     sessions: visibleSessions, view: effectiveView, enabled: listShowsProjects(effectiveView, listByTag) && !listProjectId,
-    controlLive, needsYou: (s) => sessionLine(s, true, sessionWatching(watchingBySession, s.id)).tone === 'approval',
+    controlLive,
   });
   // `includeLanding`: the page's Landings group lists the project's LANDING sessions, and no other
   // read ever sees one (§2.9 LS6). `priority`: the page is waiting on these two, so they do not
@@ -3545,9 +3547,15 @@ export function WorkspaceView({
     : null;
   // The Landings row (owner 2026-10-27, board 01 b): the mark of the most urgent landing and the
   // day's counts, over the project's landing sessions and its merges into main.
+  // No Landings row while the project's line has not started (revision 42 §12.16, ruling D2): the
+  // integration read says so with `line: null`; an unanswered read draws as it always did.
+  const pageIntegrationQ = useQuery({ ...projectIntegrationQuery(openProjectId ?? ''), enabled: !!openProjectId });
+  const pageLineNotStarted = pageIntegrationQ.data != null && typeof pageIntegrationQ.data === 'object'
+    && pageIntegrationQ.data.line === null;
   const landingsSummary = useMemo(
-    () => (openProjectId ? landingsRowSummary(landingMembers, pageMerges, { main: mainBranchName(pageProject?.mainBranch) }) : null),
-    [openProjectId, landingMembers, pageMerges, pageProject?.mainBranch],
+    () => (openProjectId && !pageLineNotStarted
+      ? landingsRowSummary(landingMembers, pageMerges, { main: mainBranchName(pageProject?.mainBranch) }) : null),
+    [openProjectId, pageLineNotStarted, landingMembers, pageMerges, pageProject?.mainBranch],
   );
   // The folder page the list is on: `?folder=<id>` on whichever route the console is at, so it
   // survives a reload and Back leaves it. Only a folder of this workspace, and only where the list
@@ -3591,6 +3599,7 @@ export function WorkspaceView({
       coordinators: projectData.coordinators,
       workspaceId: resolvedWorkspaceId,
       contentSessions: projectData.contentSessions,
+      sessionCounts: projectData.sessionCounts,
       runnerOffline: runner.online === false,
       needsYou: sessionNeedsYou,
       motion: (s) => statusGlyphMotion(s, sessionWatching(watchingBySession, s.id)?.word),
@@ -3598,7 +3607,7 @@ export function WorkspaceView({
         effectiveView !== 'trash', sessionWatching(watchingBySession, s.id), recapsEnabled, runnerShownName),
     }),
     [openFolder, visibleSessions, workspaceFolders, projectsQ.data, projectData.coordinators, projectData.contentSessions,
-      effectiveView, listByTag, runner.online, runnerShownName, watchingBySession, selectedSession, recapsEnabled,
+      projectData.sessionCounts, effectiveView, listByTag, runner.online, runnerShownName, watchingBySession, selectedSession, recapsEnabled,
       resolvedWorkspaceId],
   );
   // A project's entry is in the list only where its coordinator runs (owner 2026-11-07), so it stands
@@ -4830,7 +4839,13 @@ export function WorkspaceView({
     () =>
       visibleQueuedTurns
         // A SubAgent's end turn waits on its card instead (`subagentQueuedWakes`): the tail draws nothing for it.
-        .filter((turn) => !inPendingTray(turn) && !queuedSubagentWake(turn)?.alone)
+        // So does a background job's news (`jobQueuedWakes`, JobCard).
+        .filter(
+          (turn) =>
+            !inPendingTray(turn) &&
+            !queuedSubagentWake(turn)?.alone &&
+            !(!turn.sessionMessage && queuedJobWake(turn.content)?.alone),
+        )
         .map((turn) => ({ turn, event: queuedTurnEvent(turn) })),
     [visibleQueuedTurns],
   );
@@ -7427,12 +7442,6 @@ export function WorkspaceView({
     // context on the next message. A bare `!` is a no-op; images are ignored. A terminal
     // session is capability-checked in the mutation; without resumable context it starts fresh.
     if (c.startsWith('!')) {
-      // DeepSeek Harness has no shell bridge (the runner settles such a turn as a refusal), so the
-      // command is kept in the composer rather than sent to fail.
-      if (shownEngine === AgentProvider.DSH) {
-        message.warning('DeepSeek Harness sessions don’t run ! shell commands', 'Ask the agent to run it instead.');
-        return;
-      }
       const cmd = c.slice(1).trim();
       if (cmd) sendFromComposer({ content: cmd, images: [], shell: true, intent: 'NEXT_TURN' });
       else setText('');
@@ -7636,11 +7645,16 @@ export function WorkspaceView({
     !!selected && !selectedTrashed && !selectedMissing && !handingOver && !coordinatorHandedOver
     && slashItems.some((it) => it.type === 'command' && it.name === 'compact');
   const [handoffConfirm, setHandoffConfirm] = useState<{ projectId: string; projectTitle: string; running: boolean } | null>(null);
+  const handoffEngines = useMemo(() => engineChoices(choiceSources), [choiceSources]);
   // The outgoing coordinator the owner handed over from here: once its successor exists, go there.
   const [followHandoff, setFollowHandoff] = useState<string | null>(null);
   const handoffAction = useMutation({
-    mutationFn: ({ projectId, action }: { projectId: string; action: CoordinatorHandoffAction; sessionId: string }) =>
-      coordinatorHandoffRequest(projectId, action),
+    mutationFn: ({ projectId, action, successor }: {
+      projectId: string;
+      action: CoordinatorHandoffAction;
+      sessionId: string;
+      successor?: CoordinatorHandoffSuccessor | null;
+    }) => coordinatorHandoffRequest(projectId, action, successor),
     onSuccess: (view, { sessionId, action }) => {
       qc.invalidateQueries({ queryKey: ['session', sessionId] });
       refreshSessionLists();
@@ -7649,10 +7663,10 @@ export function WorkspaceView({
     },
     onError: (e: Error) => message.error(COORDINATOR_HANDOFF_COPY.refused, e.message),
   });
-  const runHandoffAction = (action: CoordinatorHandoffAction): void => {
+  const runHandoffAction = (action: CoordinatorHandoffAction, successor?: CoordinatorHandoffSuccessor | null): void => {
     const projectId = handoffRow?.projectMembership?.projectId ?? handoffRow?.projectId;
     if (!projectId || !selectedId || handoffAction.isPending) return;
-    handoffAction.mutate({ projectId, action, sessionId: selectedId });
+    handoffAction.mutate({ projectId, action, sessionId: selectedId, successor });
   };
   useEffect(() => {
     if (!followHandoff || followHandoff !== selectedId) return;
@@ -8224,6 +8238,19 @@ export function WorkspaceView({
     for (const turn of visibleQueuedTurns) {
       const wake = queuedSubagentWake(turn);
       for (const runId of wake?.runIds ?? []) out.set(runId, () => void cancelQueued(turn.turnId));
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- cancelQueued is rebuilt each render; it reads the latest queue itself
+  }, [visibleQueuedTurns, selectedTrashed]);
+  // A background job's wake still on the queue, by job id: its card says the agent has not read it yet, and its
+  // `Don't send` does what the tail's Cancel did (JobCard, board E1).
+  const jobQueuedWakes = useMemo(() => {
+    const out = new Map<string, () => void>();
+    if (selectedTrashed) return out;
+    for (const turn of visibleQueuedTurns) {
+      // A steer is on its way into the running turn and cannot be withdrawn (409): only a queued wake has a Don't send.
+      if (turn.sessionMessage || turn.placement === 'steer') continue;
+      for (const jobId of queuedJobWake(turn.content)?.jobIds ?? []) out.set(jobId, () => void cancelQueued(turn.turnId));
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- cancelQueued is rebuilt each render; it reads the latest queue itself
@@ -10955,6 +10982,8 @@ export function WorkspaceView({
                 subagentWaiting={subagentWaiting}
                 subagentRuns={subagentRuns}
                 subagentQueuedWakes={subagentQueuedWakes}
+                jobQueuedWakes={jobQueuedWakes}
+                jobWhere={shownWorkspaceName ?? null}
               />
               </QueuedFootCtx.Provider>
               </MainCheckoutCtx.Provider>
@@ -11160,10 +11189,12 @@ export function WorkspaceView({
               )}
               {selected && !selectedTrashed && coordinatorHandoff?.state === 'FAILED' && (
                 <CoordinatorHandoffFailure
+                  key={`${selectedId}:${coordinatorHandoff.startedAt}`}
                   handoff={coordinatorHandoff}
+                  engines={handoffEngines}
                   busy={handoffAction.isPending}
-                  onRetry={() => runHandoffAction('retry')}
-                  onSkip={() => runHandoffAction('skip')}
+                  onRetry={(successor) => runHandoffAction('retry', successor)}
+                  onSkip={(successor) => runHandoffAction('skip', successor)}
                   onKeep={() => runHandoffAction('cancel')}
                 />
               )}
@@ -11377,6 +11408,7 @@ export function WorkspaceView({
             otherwise. Derived from this session's events; hidden when there are none. */}
         {selectedId && !selectedTrashed && (
           <BackgroundShellsTray
+            sessionId={selectedId}
             events={events}
             live={live}
             serverShells={serverBgShells}
@@ -11656,11 +11688,12 @@ export function WorkspaceView({
             projectId={handoffConfirm.projectId}
             projectTitle={handoffConfirm.projectTitle}
             running={handoffConfirm.running}
+            engines={handoffEngines}
             onClose={() => setHandoffConfirm(null)}
-            onHandOver={async () => {
+            onHandOver={async (successor) => {
               if (!selectedId) return;
               const sessionId = selectedId;
-              const view = await coordinatorHandoffRequest(handoffConfirm.projectId, 'handoff');
+              const view = await coordinatorHandoffRequest(handoffConfirm.projectId, 'handoff', successor);
               setFollowHandoff(sessionId);
               qc.invalidateQueries({ queryKey: ['session', sessionId] });
               refreshSessionLists();
