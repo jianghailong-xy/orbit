@@ -1,6 +1,6 @@
 // The owner stops one running bg_run job through POST /sessions/:id/background/jobs/:jobId/stop, on the isolated stack
 // run.sh brings up. The fake engine starts two real `sleep 600` jobs with bg_run (wakeOnExit) through the session's own
-// `orbit mcp`; the owner stops the first; the agent kills the second with bg_kill. Checked: the stop's answer, the
+// `orbit mcp`, the owner allows each job's card, and stops the first; the agent kills the second with bg_kill. Checked: the stop's answer, the
 // background list (killed, reason stopped_by_owner, not stoppable; the agent's kill keeps `requested`), the job's
 // wake row, the wake block the runner delivered to the engine (it names the person), and a repeat stop (200 killed).
 import { attempt, call, evidence, login, publicIdToUuid, readState, sendTurn, until } from '../landing-measured/lib.mjs';
@@ -31,6 +31,15 @@ const stopped = jobIdOf(await mcpAnswer(`stop-${run}`));
 const killed = jobIdOf(await mcpAnswer(`kill-${run}`));
 say(`bg_run jobs: owner-stopped ${stopped}, agent-killed ${killed}`);
 if (!stopped || !killed) throw new Error('bg_run did not answer with job ids');
+
+// The session's agent asks before a background job starts (Default mode): the owner allows each job's card.
+for (const jobId of [stopped, killed]) {
+  const card = await until(`the card for ${jobId}`, async () =>
+    (await call('GET', `/sessions/${session.id}/approvals`, T)).find((a) => a.backgroundJobId === jobId && a.status === 'PENDING'),
+  { timeoutMs: 60_000 });
+  await call('POST', `/sessions/${session.id}/approvals/${card.id}/decision`, T, { behavior: 'allow' });
+  say(`allowed the card for ${jobId}`);
+}
 
 const list = async () => new Map((await call('GET', `/sessions/${session.id}/background`, T)).map((row) => [row.shellId, row]));
 const running = await until('both jobs to be listed running', async () => {
@@ -68,7 +77,7 @@ const wakes = query('wake rows', `select job_id, trigger, status, reason from ba
 say(`wake rows:\n${wakes}`);
 check('the owner-stopped job has an exit wake with reason stopped_by_owner',
   new RegExp(`${stopped}\\s*\\|\\s*exit\\s*\\|\\s*killed\\s*\\|\\s*stopped_by_owner`).test(wakes));
-check('the agent-killed job woke nobody', !wakes.includes(killed));
+check('the agent\'s own bg_kill sent no exit wake', !new RegExp(`${killed}\\s*\\|\\s*exit`).test(wakes));
 
 // The block the runner handed the engine for that wake, as the session's events carry it.
 const block = await until('the wake block to reach the engine', async () => {
