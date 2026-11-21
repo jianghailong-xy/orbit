@@ -12,7 +12,7 @@
  *   (5) a `!`-shell turn                   → ANSWERED: a turn of work, answered by its exit code
  *   (6) a steer folded into a running turn → nothing: it is not a turn of its own
  *   (7) a retried completion               → the first one's outcome stands
- *   (8) migration 1202's backfill, applied as prisma applies it (one transaction), over one session per status,
+ *   (8) migration 1202's backfill, re-applied by the real `prisma migrate deploy` over one session per status,
  *       counted per status against design §4.3
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/turn-complete-outcome.pg.spec.ts
@@ -20,8 +20,8 @@
  * Not destructive: every id is freshly generated and every assertion is scoped to the rows it made.
  */
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
@@ -140,13 +140,28 @@ function say(api: RunnerApiController, f: Fixture, seq: number, type: RunEventTy
 }
 
 /**
- * Migration 1202 applied the way `prisma migrate deploy` applies it: the whole file sent as one query string, which
- * PostgreSQL runs as ONE transaction (and in which a COMMIT is refused, 2D000). Splitting it into statements, as
- * this spec once did, is what hid that the 1202 procedure's per-batch COMMIT fails on any populated database
- * (production's deploy of af55a2fb38).
+ * Re-apply migration 1202 with the real `prisma migrate deploy`, on this database as it stands: its row in
+ * `_prisma_migrations` is forgotten first, so deploy finds it pending and applies it the way it does on an
+ * installation (prisma decides per file whether to send it whole, as one transaction, or statement by statement).
+ * This spec once split the file into statements itself, while prisma sends a file with a CREATE PROCEDURE whole, in
+ * which the old procedure's per-batch COMMIT is refused (production's deploy of af55a2fb38 failed with 2D000).
  */
-function migrationSql(migration: string): string {
-  return readFileSync(join(__dirname, '..', '..', 'prisma', 'migrations', migration, 'migration.sql'), 'utf8');
+async function deployAgain(sql: Client, url: string, migration: string): Promise<void> {
+  await sql.query(`DELETE FROM _prisma_migrations WHERE migration_name = $1`, [migration]);
+  try {
+    execFileSync(process.execPath, [require.resolve('prisma/build/index.js'), 'migrate', 'deploy'], {
+      cwd: join(__dirname, '..', '..'), env: { ...process.env, DATABASE_URL: url }, encoding: 'utf8', stdio: 'pipe',
+    });
+  } catch (error) {
+    const e = error as { stdout?: string; stderr?: string };
+    assert.fail(`prisma migrate deploy of ${migration} failed:\n${e.stdout ?? ''}${e.stderr ?? ''}`);
+  }
+  const applied = (await sql.query(
+    `SELECT count(*)::int AS n FROM _prisma_migrations
+      WHERE migration_name = $1 AND finished_at IS NOT NULL AND rolled_back_at IS NULL`,
+    [migration],
+  )).rows[0] as { n: number };
+  assert.equal(applied.n, 1, 'prisma recorded it applied');
 }
 
 test('turn-complete records the turn outcome on the turn and on the session', {
@@ -321,7 +336,7 @@ test('turn-complete records the turn outcome on the turn and on the session', {
     const ids = made.map((m) => m.id);
     await sql.query(`UPDATE "session" SET last_turn_outcome = NULL WHERE id = ANY($1::uuid[])`, [ids]);
 
-    await sql.query(migrationSql('1202_turn_outcome_backfill'));
+    await deployAgain(sql, url, '1202_turn_outcome_backfill');
 
     const counts = (await sql.query(
       `SELECT status::text AS status, coalesce(end_reason, '-') AS end_reason,

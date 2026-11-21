@@ -14,8 +14,8 @@
  *   (6) the reaper's other three causes              → runner_lost, setup_failed, turn_failed
  *   (7) ending a session still queued                → CANCELLED, ended
  *   (8) the revive                                   → PENDING, finished_at and release_cause both null
- *   (9) migrations 1202 and 1262 applied as prisma applies them (each file one transaction) on a database that
- *       holds rows: 1262's backfill, one session per rule, then the two counts of plan step 3.3 over the database
+ *   (9) migrations 1202 and 1262 re-applied by the real `prisma migrate deploy` on a database that holds rows:
+ *       1262's backfill, one session per rule, then the two counts of plan step 3.3 over the database
  *
  * The other three writers are asserted where they are already driven: turn-complete's failed turn in
  * runner-api/turn-complete-outcome.pg.spec.ts (2), the landing container in projects/landing-session.pg.spec.ts
@@ -28,8 +28,8 @@
  * two counts of (9), which are over the whole disposable database by design.
  */
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
@@ -165,14 +165,30 @@ function assertReleased(row: Released, status: string, cause: string): void {
 }
 
 /**
- * A migration applied the way `prisma migrate deploy` applies it: the whole file sent as one query string, which
- * PostgreSQL runs as ONE transaction (and in which a COMMIT is refused, 2D000). Splitting it into statements and
- * sending each on its own, as this spec once did, is what hid that the 1262 procedure's per-batch COMMIT fails on
- * any database holding a terminal row (production's deploy of af55a2fb38).
+ * Re-apply migrations with the real `prisma migrate deploy`, on this database as it stands: their rows in
+ * `_prisma_migrations` are forgotten first, so deploy finds them pending and applies them, in order, the way it
+ * applies them on an installation (prisma decides per file whether to send it whole, as one transaction, or
+ * statement by statement). Replaying a file by any other path is what hid that 1262's per-batch COMMIT is refused
+ * on a database holding a terminal row: this spec once split it into statements itself, while prisma sends a file
+ * with a CREATE PROCEDURE whole (production's deploy of af55a2fb38 failed on 1202 with 2D000).
  */
-async function applyAsPrismaDoes(sql: Client, migration: string): Promise<void> {
-  const file = join(__dirname, '..', '..', 'prisma', 'migrations', migration, 'migration.sql');
-  await sql.query(readFileSync(file, 'utf8'));
+async function deployAgain(sql: Client, url: string, migrations: string[]): Promise<void> {
+  await sql.query(`DELETE FROM _prisma_migrations WHERE migration_name = ANY($1::text[])`, [migrations]);
+  const api = join(__dirname, '..', '..');
+  try {
+    execFileSync(process.execPath, [require.resolve('prisma/build/index.js'), 'migrate', 'deploy'], {
+      cwd: api, env: { ...process.env, DATABASE_URL: url }, encoding: 'utf8', stdio: 'pipe',
+    });
+  } catch (error) {
+    const e = error as { stdout?: string; stderr?: string };
+    assert.fail(`prisma migrate deploy of ${migrations.join(', ')} failed:\n${e.stdout ?? ''}${e.stderr ?? ''}`);
+  }
+  const applied = (await sql.query(
+    `SELECT count(*)::int AS n FROM _prisma_migrations
+      WHERE migration_name = ANY($1::text[]) AND finished_at IS NOT NULL AND rolled_back_at IS NULL`,
+    [migrations],
+  )).rows[0] as { n: number };
+  assert.equal(applied.n, migrations.length, 'prisma recorded every one of them applied');
 }
 
 test('every release writes the release column and its cause, and the revive clears both', {
@@ -311,7 +327,7 @@ test('every release writes the release column and its cause, and the revive clea
     assert.equal(row.release_cause, null, 'and no cause');
   });
 
-  await t.test('(9) migrations 1202 and 1262, each one transaction, backfill every terminal row; the two counts are zero', async () => {
+  await t.test('(9) prisma migrate deploy of 1202 and 1262 on a populated database backfills every terminal row; the counts are zero', async () => {
     const w = await world(s.db, 'backfill');
     const now = new Date();
     // One row per rule of 1262's table, written as a row from before 1261: no cause, and no release column where
@@ -367,9 +383,8 @@ test('every release writes the release column and its cause, and the revive clea
     // A cause a writer recorded after 1261 is not the backfill's to change.
     const written = await session(s.db, w, { status: RunStatus.FAILED, finishedAt: now, releaseCause: 'runner_lost' });
 
-    // Both backfills of this project, in deploy order, on a database holding every row the cases above wrote.
-    await applyAsPrismaDoes(sql, '1202_turn_outcome_backfill');
-    await applyAsPrismaDoes(sql, '1262_session_release_backfill');
+    // Both backfills of this project, by prisma, on a database holding every row the cases above wrote.
+    await deployAgain(sql, url, ['1202_turn_outcome_backfill', '1262_session_release_backfill']);
 
     for (const m of made) {
       const row = await released(sql, m.id);
