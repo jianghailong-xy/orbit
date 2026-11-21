@@ -1347,6 +1347,12 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  /** One of the owner's requests changed (filed, answered, expired, withdrawn, settled). Only a nudge,
+   *  sent to streams that declared `hints=owner_requests`. */
+  publishOwnerRequestsChanged(ownerId: string): void {
+    this.publishForUser(ownerId, RunEventType.OWNER_REQUESTS_CHANGED, 'owner_requests');
+  }
+
   /** A workspace's checkout reads differently on its runner's heartbeat (repoHealth: counts, branch, state). Keyed by
    *  the owner, since a heartbeat has no session; `repoHealth` tells a client only the workspace list moved, so it need
    *  not read its session lists again, and `affectsTaskRows: false` tells the Apple apps the same of their task rows. */
@@ -1444,9 +1450,11 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   // never enter (the sync controlTypeFor() filter drops them before owner resolution).
   // See docs/realtime-control-plane-stream.md.
 
-  streamForUser(userId: string, options: { listChanged?: boolean } = {}): Observable<ControlEvent> {
+  streamForUser(userId: string, options: { listChanged?: boolean; ownerRequests?: boolean } = {}): Observable<ControlEvent> {
     const events$ = this.hub.asObservable().pipe(
       filter((m) => controlTypeFor(m.event.type) !== null),
+      // `owner_requests.changed` only for a stream that declared `?hints=owner_requests`.
+      filter((m) => m.event.type !== RunEventType.OWNER_REQUESTS_CHANGED || options.ownerRequests === true),
       mergeMap((m) => this.toControlEvent(userId, m)),
       filter((e): e is ControlEvent => e !== null),
     );

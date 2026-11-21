@@ -262,6 +262,7 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
       // Told after the row is committed, and never awaited: the request is the fact, the banner a reader of it.
       void this.push?.notifyOwnerRequest(created.id);
       this.realtime?.publishSessionUpdated(created.askedBySessionId);
+      this.realtime?.publishOwnerRequestsChanged(ownerId);
       // And translated for the owner in the background, when their translation is on (decision 1A).
       void translationLanguages(this.prisma, ownerId)
         .then((langs) => { if (langs) this.queueTranslation(ownerId, created, langs); })
@@ -400,6 +401,7 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
     const { created, withdrawn } = filed;
     void this.push?.notifyOwnerRequest(created.id);
     this.realtime?.publishSessionUpdated(created.askedBySessionId);
+    this.realtime?.publishOwnerRequestsChanged(ownerId);
     void translationLanguages(this.prisma, ownerId)
       .then((langs) => { if (langs) this.queueTranslation(ownerId, created, langs); })
       .catch((error: Error) => this.logger.warn(`translating request ${created.id} failed to queue: ${error.message}`));
@@ -483,7 +485,10 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
         where: { id: request.id, ownerId, state: 'PENDING' },
         data: { translation: translation as unknown as Prisma.InputJsonValue },
       })).count > 0,
-      published: () => this.realtime?.publishSessionUpdated(request.askedBySessionId),
+      published: () => {
+        this.realtime?.publishSessionUpdated(request.askedBySessionId);
+        this.realtime?.publishOwnerRequestsChanged(ownerId);
+      },
     }, langs);
   }
 
@@ -714,7 +719,7 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
    */
   async settleMadeWikis(ownerId: string | null): Promise<string[]> {
     const settled = await withTransactionRetry(this.prisma, async (tx) => {
-      const rows = await tx.$queryRaw<Array<{ id: string; askedBySessionId: string }>>`
+      const rows = await tx.$queryRaw<Array<{ id: string; askedBySessionId: string; ownerId: string }>>`
         UPDATE "owner_request" AS r
            SET "state" = 'DONE', "resolved_at" = now(), "updated_at" = now(),
                "answer" = jsonb_build_object('spaceId', s."id", 'name', s."title")
@@ -722,7 +727,7 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
          WHERE r."kind" = 'WIKI_CREATE' AND r."state" = 'PENDING'
            AND (${ownerId}::uuid IS NULL OR r."owner_id" = ${ownerId}::uuid)
            AND s."owner_id" = r."owner_id" AND s."repo_url_norm" = r."repo_url_norm" AND s."deleted_at" IS NULL
-        RETURNING r."id", r."asked_by_session_id" AS "askedBySessionId"`;
+        RETURNING r."id", r."asked_by_session_id" AS "askedBySessionId", r."owner_id" AS "ownerId"`;
       await enqueueResolutions(tx, rows.map((row) => row.id));
       return rows;
     }, loggedRetry(this.logger, 'ownerRequests.settleMadeWikis'));
@@ -730,6 +735,7 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
     for (const sessionId of new Set(settled.map((row) => row.askedBySessionId))) {
       this.realtime?.publishSessionUpdated(sessionId);
     }
+    for (const owner of new Set(settled.map((row) => row.ownerId))) this.realtime?.publishOwnerRequestsChanged(owner);
     return settled.map((row) => row.id);
   }
 
@@ -787,7 +793,7 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
       const rows = await tx.ownerRequest.updateManyAndReturn({
         where: { state: 'PENDING', expiresAt: { lte: now } },
         data: { state: 'EXPIRED', resolvedAt: now },
-        select: { id: true, askedBySessionId: true },
+        select: { id: true, askedBySessionId: true, ownerId: true },
       });
       const ids = rows.map((row) => row.id);
       await enqueueResolutions(tx, ids);
@@ -798,6 +804,7 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
     for (const sessionId of new Set(expired.map((row) => row.askedBySessionId))) {
       this.realtime?.publishSessionUpdated(sessionId);
     }
+    for (const owner of new Set(expired.map((row) => row.ownerId))) this.realtime?.publishOwnerRequestsChanged(owner);
     return expired.map((row) => row.id);
   }
 
@@ -834,6 +841,7 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
     const request = await this.get(ownerId, id);
     if (settled.count === 1) {
       this.realtime?.publishSessionUpdated(request.askedBySessionId);
+      this.realtime?.publishOwnerRequestsChanged(ownerId);
       return request;
     }
     if (request.state === 'PENDING') {
