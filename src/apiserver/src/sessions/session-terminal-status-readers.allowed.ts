@@ -46,8 +46,9 @@
  * Plan step 4.8 split this list by kind. Only (a) and (b) decide from a terminal value, beside two named transitions
  * that end with later steps, (c) and (d); (e) names none. A file may sit in more than one section; its allowance is
  * the sum. (a) RELEASE_WRITERS: the writers of design §6.3 that record a release, which still write the legacy
- * `status` beside the release fact, and decide in the same statement from the status they write (the reaper's forceFinalize, the runner's finalize and its failed turn, the import, the
- * end of a queued session, the landing container and the refused source), with the one vocabulary they share
+ * `status` beside the release fact, and decide in the same statement from the status they write (the reaper's
+ * forceFinalize, the runner's finalize and its failed turn, the import, the end of a queued session, the landing
+ * container and the refused source), with the one vocabulary they share
  * (RELEASED_SESSION_STATUSES, which the finalize also checks the runner's word against, and gracefulEndStatus).
  * (b) PROJECTOR: the derive functions that produce the legacy wire fields `runState`, `sessionState` and
  * `filingState` from the stored facts, which withSessionState (sessions/session-state.ts) puts on every payload beside

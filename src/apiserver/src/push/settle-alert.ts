@@ -35,7 +35,8 @@ const MAX_ERROR_CHARS = 120;
 const MAX_BODY_CHARS = 200;
 
 /**
- * Whether a session that was just released is worth pushing to its owner's phone, and what to say. Pure so the edge cases below are testable without Prisma or APNs.
+ * Whether a session that was just released is worth pushing to its owner's phone, and what to say.
+ * Pure so the edge cases below are testable without Prisma or APNs.
  *
  * The rule is "did this happen on its own, and is it over": a notification exists to pull
  * someone back who has walked away, so anything they did themselves — ending the session,
