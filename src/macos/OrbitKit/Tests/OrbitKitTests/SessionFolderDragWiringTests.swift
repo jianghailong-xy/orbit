@@ -59,6 +59,14 @@ final class SessionFolderDragWiringTests: XCTestCase {
             XCTAssertTrue(row.contains("SessionFolderDrag.draggable("), relative)
             XCTAssertTrue(row.contains(".sessionDragSource(s, enabled: draggable, drag: drag)"), relative)
         }
+        // A project's row is picked up by its coordinator, as its Move files it.
+        for relative in ["Views/AgentsView.swift", "Views/SessionFolderPage.swift"] {
+            let source = try appSource(relative)
+            let row = try slice(source, from: "private func projectRow(_ row: SessionProjectRow)", to: "movingSession = coordinator } })")
+            XCTAssertTrue(row.contains("SessionFolderDrag.draggable("), relative)
+            XCTAssertTrue(row.contains("projectCoordinator: row.coordinator"), relative)
+            XCTAssertTrue(row.contains(".sessionDragSource(row.coordinator, enabled: draggable, drag: drag)"), relative)
+        }
         let page = try appSource("Views/SessionFolderPage.swift")
         let back = try slice(page, from: "if rowNavigation == .selection {", to: "\n            }")
         XCTAssertTrue(back.contains(".modifier(noFolderDropTarget)"), "the back button means No Folder")

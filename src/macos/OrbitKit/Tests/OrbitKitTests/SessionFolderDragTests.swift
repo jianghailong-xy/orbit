@@ -50,11 +50,18 @@ final class SessionFolderDragTests: XCTestCase {
                                                   dropTargets: true))
     }
 
-    func testLeavesCoordinatorsMembersTrashAndListsWithoutFoldersAlone() {
-        XCTAssertFalse(SessionFolderDrag.draggable(session("s", role: .coordinator), view: .open,
-                                                   hasProjectMark: false, dropTargets: true))
-        XCTAssertFalse(SessionFolderDrag.draggable(session("s", role: .coordinator), view: .open,
-                                                   hasProjectMark: true, dropTargets: true))
+    func testPicksUpAProjectRowByItsCoordinator() {
+        let coordinator = session("c", role: .coordinator)
+        XCTAssertTrue(SessionFolderDrag.draggable(coordinator, view: .open, hasProjectMark: false, dropTargets: true))
+        XCTAssertTrue(SessionFolderDrag.draggable(projectCoordinator: coordinator, view: .open, dropTargets: true))
+        XCTAssertTrue(SessionFolderDrag.draggable(projectCoordinator: coordinator, view: .completed, dropTargets: true))
+        XCTAssertFalse(SessionFolderDrag.draggable(projectCoordinator: nil, view: .open, dropTargets: true),
+                       "no coordinator, no Move, no drag")
+        XCTAssertFalse(SessionFolderDrag.draggable(projectCoordinator: coordinator, view: .trash, dropTargets: true))
+        XCTAssertFalse(SessionFolderDrag.draggable(projectCoordinator: coordinator, view: .open, dropTargets: false))
+    }
+
+    func testLeavesMembersTrashAndListsWithoutFoldersAlone() {
         XCTAssertFalse(SessionFolderDrag.draggable(session("s", role: .task), view: .open,
                                                    hasProjectMark: false, dropTargets: true))
         XCTAssertFalse(SessionFolderDrag.draggable(session("s"), view: .trash, hasProjectMark: false, dropTargets: true))

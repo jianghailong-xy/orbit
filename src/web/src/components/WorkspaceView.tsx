@@ -1678,6 +1678,7 @@ export function SessionProjectListRow({
   menuOpen,
   onMenuOpenChange,
   swipe,
+  drag,
 }: {
   project: SessionProjectRow<any>;
   active: boolean;
@@ -1694,12 +1695,17 @@ export function SessionProjectListRow({
     onCancel: () => void;
     onAction: (action: 'pin' | 'move') => void;
   };
+  /** Present when the row can be picked up (desktop, folder drop targets shown). */
+  drag?: { dragging: boolean; onStart: (e: ReactDragEvent) => void; onEnd: () => void };
 }) {
   const counts = project.taskCounts;
   return (
     <div
-      className={`session-row session-project-row${active ? ' active' : ''}${menuOpen ? ' menu-open' : ''}`}
+      className={`session-row session-project-row${active ? ' active' : ''}${menuOpen ? ' menu-open' : ''}${drag?.dragging ? ' dragging' : ''}`}
       data-project-id={project.projectId}
+      draggable={drag ? true : undefined}
+      onDragStart={drag?.onStart}
+      onDragEnd={drag?.onEnd}
       role="button"
       tabIndex={0}
       onClick={onOpen}
@@ -9937,6 +9943,13 @@ export function WorkspaceView({
                 onStart: (e) => onRowTouchStart(e, coordinator, false, s.id),
                 onMove: onRowTouchMove, onEnd: onRowTouchEnd, onCancel: onRowTouchCancel,
                 onAction: (action) => runSwipeAction(action, coordinator),
+              } : undefined}
+              drag={coordinator && !pageProjectId && sessionRowDraggable(s, {
+                view: effectiveView, dropTargets: dropTargetsShown, touch: isMobile, renaming: false,
+              }) ? {
+                dragging: draggedSession?.id === coordinator.id,
+                onStart: (e) => startSessionDrag(e, coordinator),
+                onEnd: endSessionDrag,
               } : undefined}
               // The menu stops its own clicks before they reach the row, which would open it.
               menu={[
