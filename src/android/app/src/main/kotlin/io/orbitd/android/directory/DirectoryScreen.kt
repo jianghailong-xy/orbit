@@ -45,7 +45,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 /** What a page's list draws, worked out once per change of what it is worked out from: the body also runs for what moves no row.
  * [marks]: the project of each member that is a row of its own here, its project's row being where its coordinator runs. */
 private class ListContent(val groups: List<SessionGroup>, val projects: Map<String, SessionProjectRow>, val marks: Map<String, SessionProjectMark>,
-    val folders: List<Pair<Folder, List<DirectorySession>>>)
+    val folders: List<Pair<Folder, List<DirectorySession>>>, val held: Map<String, String>)
 
 /** How long a pull's spinner stays for a read that has not answered: a read gets 10 s, and past that the store keeps retrying by itself. */
 private const val PULL_WAIT_MS = 12_000L
@@ -127,7 +127,7 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
     val content = remember(sessions, openRows, data.folders, sidebar, view, workspace, folderId, onScheduledRuns,
         showFolders, tag, grouping, runnerOffline, watching, recaps) {
         if (onScheduledRuns) return@remember ListContent(
-            directoryGroups(sessions, view, Grouping.RECENCY), emptyMap(), emptyMap(), emptyList())
+            directoryGroups(sessions, view, Grouping.RECENCY), emptyMap(), emptyMap(), emptyList(), emptyMap())
         // This workspace's rows, by the few spellings of a workspace there are: `ObjectId.same` parses both ids, and an owner's Completed
         // has thousands of rows, mostly in other workspaces.
         val spellings = sessions.mapTo(HashSet()) { it.workspace }.filterTo(HashSet()) { ObjectId.same(it, workspace) }
@@ -149,7 +149,7 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
         val folders = if (!showFolders) emptyList() else data.folders.filter { f ->
             ObjectId.same(f.workspaceId, workspace) && (view == SessionView.OPEN || counted.any { ObjectId.same(it.folderId, f.id) })
         }.sortedBy { it.name.lowercase() }.map { f -> f to counted.filter { ObjectId.same(it.folderId, f.id) } }
-        ListContent(groups, listing?.projects.orEmpty().associateBy { it.projectId }, listing?.marks.orEmpty(), folders)
+        ListContent(groups, listing?.projects.orEmpty().associateBy { it.projectId }, listing?.marks.orEmpty(), folders, listing?.held.orEmpty())
     }
     val failure = when {
         onScheduledRuns -> scheduledList.error(view).takeIf { scheduledSnapshot == null }
@@ -215,7 +215,8 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
                                 RowDivider()
                             }
                             items(content.folders, key = { "folder:${it.first.id}" }) { (f, children) ->
-                                FolderRow(f, children, runnerOffline, watching,
+                                // A project is one row on the folder's page, so it counts once.
+                                FolderRow(f, children, children.distinctBy { content.held[it.id]?.let { p -> "project:$p" } ?: it.id }.size, runnerOffline, watching,
                                     onOpen = { open(OrbitRoute(Destination.FOLDER, f.id, workspace, origin = Origin.LIST, sessionView = view.query)) },
                                     onOptions = { action = DirectoryDialog.EditFolder(f) })
                                 RowDivider()

@@ -662,7 +662,20 @@ export function sessionProjectListing<T extends SessionProjectSession>(
     const id = heldBy(session);
     return id ? { ...session, folderId: coordinators.get(id)?.folderId ?? null } : session;
   });
-  const folderListing = sessionFolderListing(assigned, folders, opts);
+  const grouped = sessionFolderListing(assigned, folders, opts);
+  // A folder's count is the rows its page lists: a project is one row, however many members it holds.
+  const rowsByFolder = new Map<string, Set<string>>();
+  for (const session of assigned) {
+    if (!session.folderId) continue;
+    const rows = rowsByFolder.get(session.folderId) ?? new Set<string>();
+    const projectId = heldBy(session);
+    rows.add(projectId ? `project:${projectId}` : session.id);
+    rowsByFolder.set(session.folderId, rows);
+  }
+  const folderListing = {
+    ...grouped,
+    folders: grouped.folders.map((row) => ({ ...row, sessionCount: rowsByFolder.get(row.folder.id)?.size ?? 0 })),
+  };
   const knownFolders = new Set(folders.map((folder) => folder.id));
   const inScope = (folderId: string | null | undefined) => opts.folderId
     ? folderId === opts.folderId
