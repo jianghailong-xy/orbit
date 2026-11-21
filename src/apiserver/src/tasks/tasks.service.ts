@@ -257,6 +257,7 @@ import {
   failedReleaseFilter,
   heldFilter,
   heldStatusFilter,
+  isReleased,
   releasedFilter,
   sessionHeldSql,
 } from '../common/session-release';
@@ -15205,10 +15206,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       if (!(error instanceof SessionNotSendable)) {
         const now = await this.prisma.session.findFirst({
           where: { id: sessionId },
-          select: { status: true, deletedAt: true, cancelRequestedAt: true },
+          select: { finishedAt: true, deletedAt: true, cancelRequestedAt: true },
         });
-        const spent = !now || now.deletedAt != null || now.cancelRequestedAt != null
-          || SessionsService.TERMINAL.includes(now.status);
+        const spent = !now || now.deletedAt != null || now.cancelRequestedAt != null || isReleased(now);
         if (!spent) throw error;
       }
       throw new MentionUndeliverable(
@@ -15549,9 +15549,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // By id, as the plan named it; `updateConfig` itself is owner-scoped.
     const paused = await this.prisma.session.findUnique({
       where: { id: sessionId },
-      select: { model: true, status: true },
+      select: { model: true, finishedAt: true },
     });
-    if (!paused || paused.model === model || SessionsService.TERMINAL.includes(paused.status)) return;
+    if (!paused || paused.model === model || isReleased(paused)) return;
     await this.sessions.updateConfig(ownerId, sessionId, { model });
   }
 

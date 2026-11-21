@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { CreatorType, Prisma, RunStatus } from '@prisma/client';
+import { CreatorType, Prisma } from '@prisma/client';
 import {
   classifyFailure,
   FailureCause,
@@ -8,6 +8,7 @@ import {
   uuidToBase62,
 } from '@orbit/shared';
 import { lockOwnerTaskGraph } from '../common/lock-order';
+import { failedReleaseFilter } from '../common/session-release';
 import { SingleFlight } from '../common/single-flight';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
@@ -594,7 +595,7 @@ export class TaskListsService {
       // Error text only — the classifier reads nothing else, and a list can have thousands of
       // failed runs whose bodies are of no use here.
       this.prisma.session.findMany({
-        where: { task: { listId: id }, status: RunStatus.FAILED },
+        where: { task: { listId: id }, releaseCause: failedReleaseFilter() },
         select: { error: true },
       }),
       // Bounded by kinds, not by occurrences: one row per condition, bumped in place.
