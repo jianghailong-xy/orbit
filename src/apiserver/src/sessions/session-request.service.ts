@@ -295,7 +295,7 @@ export class SessionRequestService {
       const asker = await tx.session.findFirst({
         where: { id: request.fromSessionId, ownerId: request.ownerId },
         select: {
-          status: true, retryAt: true, retryClaimedAt: true, cancelRequestedAt: true,
+          status: true, finishedAt: true, retryAt: true, retryClaimedAt: true, cancelRequestedAt: true,
           completedAt: true, archivedAt: true, deletedAt: true,
         },
       });
@@ -332,7 +332,7 @@ export class SessionRequestService {
     const asker = await this.prisma.session.findFirst({
       where: { id: request.fromSessionId, ownerId: request.ownerId },
       select: {
-        title: true, taskId: true, status: true, endReason: true, cancelRequestedAt: true, retryAt: true,
+        title: true, taskId: true, status: true, finishedAt: true, endReason: true, cancelRequestedAt: true, retryAt: true,
         retryClaimedAt: true, completedAt: true, archivedAt: true, deletedAt: true,
       },
     });
@@ -377,7 +377,7 @@ export class SessionRequestService {
       const asker = await tx.session.findFirst({
         where: { id: request.fromSessionId, ownerId: request.ownerId },
         select: {
-          status: true, retryAt: true, retryClaimedAt: true, cancelRequestedAt: true,
+          status: true, finishedAt: true, retryAt: true, retryClaimedAt: true, cancelRequestedAt: true,
           completedAt: true, archivedAt: true, deletedAt: true,
         },
       });
@@ -425,7 +425,7 @@ export class SessionRequestService {
     const asker = await this.prisma.session.findFirst({
       where: { id: request.fromSessionId, ownerId: request.ownerId },
       select: {
-        title: true, taskId: true, status: true, endReason: true, cancelRequestedAt: true, retryAt: true,
+        title: true, taskId: true, status: true, finishedAt: true, endReason: true, cancelRequestedAt: true, retryAt: true,
         retryClaimedAt: true, completedAt: true, archivedAt: true, deletedAt: true,
       },
     });

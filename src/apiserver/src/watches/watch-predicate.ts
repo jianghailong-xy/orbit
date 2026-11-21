@@ -136,6 +136,8 @@ export type WatchTargetFact =
       /** CONVERSATION, or LANDING for the platform-driven container a landing subject opens. */
       sessionKind: string;
       status: string;
+      /** `session.finished_at`: the release column. */
+      finishedAt: Date | null;
       endReason: string | null;
       completedAt: Date | null;
       archivedAt: Date | null;

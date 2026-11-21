@@ -8,7 +8,7 @@ const readAt = new Date(dueAt.getTime() - 1);
 const facts: RunItemFacts = {
   kind: 'CONFIRMATION', project: { automatic: true, coordinatorEnabled: true },
   coordinatorSessionId: 'coordinator', coordinatorSession: {
-    status: 'AWAITING_INPUT', endReason: null, completedAt: null, archivedAt: null,
+    status: 'AWAITING_INPUT', finishedAt: null, releaseCause: null, endReason: null, completedAt: null, archivedAt: null,
     deletedAt: null, cancelRequestedAt: null, retryAt: null,
   },
   answered: false, delivery: 'PENDING', deliveryRefusal: null, deliveredTurn: null,
@@ -58,7 +58,7 @@ test('F2 delivery refusal mapping, deleted session, stopped and unread delivery'
 });
 
 test('F3 paused confirmation holds even when drained unread, but only until F4 deadline', () => {
-  for (const pause of [{ status: 'FAILED' }, { retryAt: new Date() }]) {
+  for (const pause of [{ status: 'FAILED', finishedAt: new Date(), releaseCause: 'turn_failed' }, { retryAt: new Date() }]) {
     const paused = { ...facts, coordinatorSession: { ...facts.coordinatorSession!, ...pause }, delivery: 'DELIVERED' as const };
     assert.deepEqual(runItemHold(paused, readAt), { place: 'HELD', coordinatorSessionId: 'coordinator', dueAt });
     assert.deepEqual(runItemHold(paused, dueAt), { place: 'FALLBACK', reason: 'TIMED_OUT' });

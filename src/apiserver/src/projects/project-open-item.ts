@@ -11,9 +11,7 @@ import {
   OwnerItemKind,
   OwnerWordsTranslation,
   SessionLifecycleState,
-  SessionRunState,
   deriveSessionLifecycleState,
-  deriveSessionRunState,
   uuidToBase62,
 } from '@orbit/shared';
 
@@ -24,7 +22,12 @@ import {
   taskLanding,
   taskLandingSql,
 } from './project-criterion-landing';
-import { sessionHeldSql } from '../common/session-release';
+import {
+  isFailedRelease,
+  isReleased,
+  sessionHasEnded as releasedSessionHasEnded,
+  sessionHeldSql,
+} from '../common/session-release';
 import { evidenceUndecidedOwed } from './evidence-undecided';
 import { LIVE_PROMOTION_STATES } from './project-promotion';
 import {
@@ -787,6 +790,8 @@ const BLOCKING_TASKS_NAMED = 5;
 /** The columns "has this conversation ended" is decided from. */
 export const SESSION_ENDING_SELECT = {
   status: true,
+  finishedAt: true,
+  releaseCause: true,
   endReason: true,
   completedAt: true,
   archivedAt: true,
@@ -796,6 +801,8 @@ export const SESSION_ENDING_SELECT = {
 
 export interface SessionEnding {
   status: string;
+  finishedAt: Date | null;
+  releaseCause: string | null;
   endReason: string | null;
   completedAt: Date | null;
   archivedAt: Date | null;
@@ -810,12 +817,7 @@ export interface SessionEnding {
  * onto, because from the outside those are conversations somebody closed.
  */
 export function sessionHasEnded(session: SessionEnding): boolean {
-  if (session.cancelRequestedAt) return true;
-  if (deriveSessionLifecycleState(session) !== SessionLifecycleState.OPEN) return true;
-  const run = deriveSessionRunState(session);
-  return run === SessionRunState.ENDED
-    || run === SessionRunState.SUCCEEDED
-    || run === SessionRunState.FAILED;
+  return Boolean(session.cancelRequestedAt) || releasedSessionHasEnded(session);
 }
 
 /** Read whether the chat can send now and whether Ask again can queue on this conversation. */
@@ -860,7 +862,7 @@ export function coordinatorUnreachable(reach: { askable: boolean; coordinator: {
  * the runner tear the process down, and neither is anybody ending the conversation.
  */
 export function conversationIsDown(session: SessionEnding): boolean {
-  return deriveSessionRunState(session) === SessionRunState.FAILED
+  return isReleased(session) && isFailedRelease(session.releaseCause)
     && !session.endReason
     && deriveSessionLifecycleState(session) === SessionLifecycleState.OPEN;
 }

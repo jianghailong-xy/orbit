@@ -1,4 +1,5 @@
 import { Prisma, RunStatus } from '@prisma/client';
+import { deriveSessionLifecycleState, SessionLifecycleState } from '@orbit/shared';
 
 /**
  * "Released" and "held", the release fact of docs/session-three-state-design.md §4.2 (decision D1, plan
@@ -208,4 +209,27 @@ export function finalizeReleaseCause(
 ): SessionReleaseCause {
   if (current.cancelRequestedAt) return releaseCauseOfEndReason(current.endReason);
   return reported === 'FAILED' ? 'engine_failed' : 'engine_exited';
+}
+
+/** What a machine wake or a credential gate reads of a session to decide whether it has ended. */
+export interface SessionEndedRow extends SessionReleaseColumn {
+  status: RunStatus | string;
+  endReason: string | null;
+  completedAt: Date | null;
+  archivedAt: Date | null;
+  deletedAt: Date | null;
+}
+
+/**
+ * Whether a session has ended in any of the ways a machine wake must not undo (decision D4: today's rule, kept):
+ * filed in Trash or Completed, released (any release cause: a person's end, a failed turn, an engine that
+ * exited), or parked interrupted with an end recorded and not yet released. A session still held, whatever
+ * end reason it carries while it runs, has not ended: its end is in flight. Whether the release was a failure
+ * is not asked here; the scheduled wake-up asks it (`isFailedRelease`) to revive a failed one.
+ */
+export function sessionHasEnded(session: SessionEndedRow): boolean {
+  if (deriveSessionLifecycleState(session) !== SessionLifecycleState.OPEN) return true;
+  if (isReleased(session)) return true;
+  // INTERRUPTED is a held status: the turn was abandoned. With an end reason, the session itself was ended.
+  return session.status === 'INTERRUPTED' && Boolean(session.endReason);
 }

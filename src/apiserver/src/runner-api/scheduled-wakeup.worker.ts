@@ -15,6 +15,7 @@ import { PushService, type WakeupMissedReason } from '../push/push.service';
 import { RUNNER_BEATS, runnerIsOnline } from '../runners/runner-presence';
 import { RETRY_CLAIM_WINDOW_MS } from '../sessions/session-request';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
+import { failedReleaseFilter, isFailedRelease, releasedFilter } from '../common/session-release';
 import { BACKGROUND_WAKE_TURN_PREFIX, sessionHasEnded, undeliveredWakeTurn } from './background-job-wake';
 import { fileSubagentWake, fileWorkflowWake, type SubagentWakeOutcome, unfiledSubagentWakes, unfiledWorkflowWakes } from './subagent-wake';
 import { interruptRunsOfOfflineTargets } from './subagent-remote';
@@ -113,7 +114,8 @@ export type ScheduledWakeupOutcome =
 /** A FAILED session the auto-retry sweep is to bring back: armed, or claimed a moment ago, and still open. */
 function recoveringByRetry(now: Date): Prisma.SessionWhereInput {
   return {
-    status: RunStatus.FAILED,
+    ...releasedFilter(),
+    releaseCause: failedReleaseFilter(),
     deletedAt: null,
     completedAt: null,
     archivedAt: null,
@@ -523,8 +525,8 @@ export class ScheduledWakeupWorker implements OnModuleInit, OnModuleDestroy {
       if (!(error instanceof HttpException)) throw error;
       // Refused: the runner is offline, the task's run was replaced, the session cannot be resumed. Unless
       // it is no longer FAILED — somebody else brought it back meanwhile — which the next pass files.
-      const current = await this.prisma.session.findUnique({ where: { id: tick.sessionId }, select: { status: true } });
-      if (current && current.status !== RunStatus.FAILED) return 'RETRY';
+      const current = await this.prisma.session.findUnique({ where: { id: tick.sessionId }, select: { releaseCause: true } });
+      if (current && !isFailedRelease(current.releaseCause)) return 'RETRY';
       this.log.warn(`tick ${tick.id} of wakeup loop ${tick.loopId} could not revive session ${tick.sessionId}, so it is counted missed: ${messageOf(error)}`);
       return this.missTick(tick, 'keep');
     }
