@@ -693,13 +693,32 @@ func reclaimInitiallyActive(status string) bool {
 // reclaimStatusOpen is a second, runner-side terminal fence. Current servers
 // reject takeover for terminal rows, but an older server may return a status from
 // the row lock; never build a worktree/supervisor for one of those rows.
-func reclaimStatusOpen(status string) bool {
+// SUCCEEDED, FAILED and CANCELLED are therefore closed whatever else is known.
+//
+// A status word this binary does not know is not read as terminal, which would
+// drop every session a newer server describes with a new word at each restart.
+// It is open only when leaseHeld: the server's own answer says this process
+// holds the session. On every reclaim path that is the takeover-leases answer
+// itself, which a server gives only after making this process the session's
+// inbox lease owner under the row lock (a refusal comes back as an error, and
+// the status is never judged). An older server that answers a takeover of a
+// terminal row knows only the seven words, so it never reaches the unknown case.
+func reclaimStatusOpen(status string, leaseHeld bool) bool {
 	switch status {
 	case "", stPending, stRunning, stAwaitingInput, stInterrupted:
 		return true
-	default:
+	case stSucceeded, stFailed, stCancelled:
 		return false
+	default:
+		return leaseHeld
 	}
+}
+
+// reclaimStatusEnded says a snapshot row, not taken over yet, names one of the
+// terminal words. A word this binary does not know is not ended here: the row
+// stays waiting for its takeover, whose answer decides it (reclaimStatusOpen).
+func reclaimStatusEnded(status string) bool {
+	return status == stSucceeded || status == stFailed || status == stCancelled
 }
 
 func claimedSessionFromReclaim(r ReclaimSession) *ClaimedSession {
@@ -1107,7 +1126,8 @@ func reclaimSessions(
 					endTakeoversExcept(nil)
 					return nil, nil, false, takeoverErr
 				}
-				if !reclaimStatusOpen(status) {
+				// Answered without an error: the takeover made this process the lease owner.
+				if !reclaimStatusOpen(status, true) {
 					continue
 				}
 				if c.locallyKnown && !reclaimInitiallyActive(status) {
@@ -3163,7 +3183,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			}
 			continue
 		}
-		if reclaimStatusOpen(status) {
+		// The takeover answered without an error: this process holds the lease.
+		if reclaimStatusOpen(status, true) {
 			startSession(job, reclaimInitiallyActive(status))
 		}
 		endTakeover()

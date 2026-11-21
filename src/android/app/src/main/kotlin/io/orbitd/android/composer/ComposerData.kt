@@ -648,6 +648,9 @@ internal fun retryIdentityOf(config: JsonObject) =
 internal fun terminal(detail: JsonObject) = detail.text("status") in setOf("ENDED", "FAILED", "CANCELLED", "COMPLETED") ||
     detail.text("runStatus") in setOf("ENDED", "FAILED", "CANCELLED", "COMPLETED")
 
+/** The seven run status words this build knows (`RunStatus`). */
+private val KNOWN_RUN_STATUSES = setOf("PENDING", "RUNNING", "SUCCEEDED", "FAILED", "CANCELLED", "AWAITING_INPUT", "INTERRUPTED")
+
 internal fun sendEndpoint(detail: JsonObject): String {
     val caps = detail["capabilities"] as? JsonObject
     if (caps != null) {
@@ -656,6 +659,8 @@ internal fun sendEndpoint(detail: JsonObject): String {
         error(caps.text("resumeBlockedReason") ?: "This session cannot receive messages.")
     }
     check(detail.text("lifecycleState") !in setOf("TRASHED", "COMPLETED")) { "Restore this session before sending." }
+    // A status outside the seven known words, or none at all, is never sent a turn in place: it is offered what an ended session is.
+    if (detail.text("status") !in KNOWN_RUN_STATUSES) return "resume"
     check(detail.text("status") in setOf("PENDING", "RUNNING", "AWAITING_INPUT", "ENDED", "FAILED", "CANCELLED")) { "Session state is unavailable." }
     return if (terminal(detail)) "resume" else "turns"
 }

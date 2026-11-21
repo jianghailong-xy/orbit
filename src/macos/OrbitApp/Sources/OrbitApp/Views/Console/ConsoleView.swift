@@ -2011,7 +2011,10 @@ struct TranscriptView: View {
         guard let session = app.session(id: console.sessionID),
               let subtitle = SessionHeader.subtitle(for: session, watching: watching, now: now,
                                                     machine: console.runnerName) else {
-            return Text(console.state.status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized)
+            // A status word this build does not know reads as the neutral ended wording.
+            let status = console.state.status
+            return Text(status == .unknown ? "Ended"
+                        : status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized)
                 .foregroundColor(.secondary)
         }
         let word = SessionHeader.headerWord(for: session, watching: watching, now: now, machine: console.runnerName)

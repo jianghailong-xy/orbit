@@ -1,5 +1,7 @@
 import { RunStatus } from '@prisma/client';
 
+import { HELD_SESSION_STATUSES } from './session-release';
+
 /**
  * A runner slot represents active execution, not a resident (warm) runtime process.
  * Keep this separate from the broader "open/live session" sets used by streaming,
@@ -7,23 +9,21 @@ import { RunStatus } from '@prisma/client';
  */
 export const ACTIVE_TURN_STATUSES: RunStatus[] = [RunStatus.RUNNING];
 
-/** Non-terminal sessions retained across runner restart (active ones plus cold/warm state). */
-export const OPEN_SESSION_STATUSES: RunStatus[] = [
-  RunStatus.PENDING,
-  RunStatus.RUNNING,
-  RunStatus.AWAITING_INPUT,
-  RunStatus.INTERRUPTED,
-];
+/** Non-terminal sessions retained across runner restart (active ones plus cold/warm state): the held ones. */
+export const OPEN_SESSION_STATUSES: RunStatus[] = [...HELD_SESSION_STATUSES];
 
 /**
  * A session that still owes an answer: queued for a turn, or running one. NOT the same as
  * "open" — an AWAITING_INPUT session has already produced its result and is merely parked in
  * case someone replies, and INTERRUPTED is a turn that was abandoned.
  *
- * This is the definition the rest of orchestration already used: session_create(wait) returns
- * the moment a child leaves PENDING/RUNNING ("result ready"), and the claim's supervisor
- * exemption asks the same question of a parent's children. Anything counting a tree's
- * unfinished work must use it too, or it contradicts what the caller was told.
+ * This is the definition the rest of orchestration already used: the watch leaf
+ * SESSION_TURN_SETTLED is a child leaving PENDING/RUNNING ("result ready"), and the claim's
+ * supervisor exemption asks the same question of a parent's children. Anything counting a tree's
+ * unfinished turns must use it too. `session_await` and `session_create(wait)` now wait by default
+ * for SESSION_QUIESCENT (watches/watch-predicate.ts), which also waits out a child's own background
+ * job, subagent and armed wake-ups; those hold no runner slot, so the spawn-tree allowance keeps
+ * counting turns with this set.
  */
 export const UNSETTLED_SESSION_STATUSES: RunStatus[] = [RunStatus.PENDING, RunStatus.RUNNING];
 

@@ -1,10 +1,11 @@
-import { Prisma, RunStatus, TaskStatus } from '@prisma/client';
+import { Prisma, TaskStatus } from '@prisma/client';
 import { uuidToBase62, type MoveCriterionRefusal } from '@orbit/shared';
 
 import type { AuthCredential } from '../common/current-user.decorator';
 import { IN_FLIGHT_JOB_STATES, LANDING_JOB_KINDS } from './criterion-landing-reason';
 import { criteriaFromDefinitions, standardSetVersion } from './project-acceptance';
 import { readCriterionSatisfaction } from './project-criterion-satisfaction';
+import { HELD_SESSION_STATUSES } from '../common/session-release';
 
 /**
  * The done card's "Move to a follow-up…" (owner decision 2026-11-11): one unmet acceptance criterion
@@ -66,12 +67,7 @@ import { readCriterionSatisfaction } from './project-criterion-satisfaction';
 export const OPEN_ITEM_KINDS_MOVING_WITH_TASK: ReadonlySet<string> = new Set(['TASK_FAILED']);
 
 /** The live-claim statuses 0389's guard refuses a project move over. */
-export const LIVE_RUN_STATUSES = [
-  RunStatus.PENDING,
-  RunStatus.RUNNING,
-  RunStatus.AWAITING_INPUT,
-  RunStatus.INTERRUPTED,
-] as const;
+export const LIVE_RUN_STATUSES = HELD_SESSION_STATUSES;
 
 const SETTLED: ReadonlySet<string> = new Set([TaskStatus.DONE, TaskStatus.CANCELLED]);
 
