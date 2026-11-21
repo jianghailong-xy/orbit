@@ -3230,7 +3230,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '1390_project_setting_change',
       // 1400 adds three nullable columns, a foreign key and a partial index on owner_request_secret and account_secret;
       // no row is written, and no preserved relation, trigger, function or DONE fence changes.
-      '1400_owner_secret_saved_links'],
+      '1400_owner_secret_saved_links',
+      // 1420 adds six nullable rating columns, a check on rating_score and an (owner_id, created_at) index on
+      // subagent_run; no row is written, and no preserved relation, trigger, function or DONE fence changes.
+      '1420_subagent_run_rating'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
