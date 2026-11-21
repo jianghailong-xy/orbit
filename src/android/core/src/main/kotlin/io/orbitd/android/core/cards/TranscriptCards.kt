@@ -124,11 +124,13 @@ fun transcriptCards(event: RunEvent): List<InteractionCard> = buildList {
                 buildJsonObject { put("note", note) }, "", objectId = "${event.seq}", binding = "", status = "Recorded"))
         }
         // A SubAgent's end: Orbit's turn, never the reader's bubble or the From Orbit line, and drawn as nothing — its card is the end
-        // (docs/mocks/subagent-card-and-end-line). A job's news the same note carries keeps its own line.
+        // (docs/mocks/subagent-card-and-end-line). A wakeup the same note carries keeps its own line.
         payload.text("controlPlaneNote")?.takeIf { SubagentFinished.parse(it) != null }?.let { note ->
             add(InteractionCard("record:${event.seq}:subagent", CardFamily.BACKGROUND, "SubAgent ended",
                 buildJsonObject { put("note", note) }, "", objectId = "${event.seq}", binding = "", status = "Recorded"))
         }
+        // A background job's news or a wakeup coming due: Orbit's turn. Only the wakeup draws a line; a job's end, new output or stall
+        // draws nothing, as its card says it (board C1, BgJob.wakeupsOnly).
         backgroundWake(payload.text("controlPlaneNote").orEmpty())?.let { wake ->
             add(InteractionCard("record:${event.seq}:wake", CardFamily.BACKGROUND, "Background update", wake, "", objectId = "${event.seq}", binding = "", status = "Recorded"))
         }

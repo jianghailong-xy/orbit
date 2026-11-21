@@ -296,14 +296,22 @@ class SubagentCardEndTest {
         allText("Sending…").assertCountEquals(0)
     }
 
-    @Test fun keepsABackgroundJobsNewsWrittenBesideTheEndAsItsOwnLineAndOnlyThat() {
+    @Test fun keepsAWakeupWrittenBesideTheEndAsItsOwnLineAndOnlyThat() {
         val job = listOf("<background-job-wake>",
             "  A background job you started with bg_run has news you were waiting for; the control plane opened this turn for it:",
             "    bgj_13c53745a88a｜job｜make test｜unit tests", "      ended｜completed｜exit code 0",
             "      output /root/.orbit/runs/4f50733a/bgj_13c53745a88a.output｜this covers bytes 0–10", "      (no output)",
             "  The control plane recorded this for you; the user did not say it.", "</background-job-wake>").joinToString("\n")
+        val wakeup = listOf("<scheduled-wakeup>",
+            "  The wakeup you asked for with schedule_wakeup is due; the control plane opened this turn for it:",
+            "    2026-09-17T06:00:00.000Z scheduled 600 seconds out, due 2026-09-17T06:10:00.000Z", "    reason: watching CI run",
+            "  The control plane recorded this for you; the user did not say it.", "</scheduled-wakeup>").joinToString("\n")
         val (events, view) = oneRun(DONE)
+        // A job's news beside the end draws nothing either: its Job card says it (board C1).
         mount(events.map { if (it.seq == 9L) wake(9, "$DONE\n\n$job") else it }, listOf(view))
+        all("background-wake").assertCountEquals(0)
+        all("subagent-row").assertCountEquals(1)
+        mount(events.map { if (it.seq == 9L) wake(9, "$DONE\n\n$job\n\n$wakeup") else it }, listOf(view))
         all("background-wake").assertCountEquals(1)
         all("subagent-row").assertCountEquals(1)
         allText("SubAgent finished").assertCountEquals(0)
@@ -341,7 +349,7 @@ class SubagentCardEndTest {
         assertOneElementPerRun(1)
     }
 
-    @Test fun theQueuedTailLeavesASubagentOnlyEndToItsCardAndKeepsOneWithJobNews() {
+    @Test fun theQueuedTailLeavesASubagentsEndAndAJobsNewsToTheirCards() {
         fun listed(id: String, content: String, kind: String = "message") = buildJsonObject {
             put("turnId", id); put("content", content); put("kind", kind); put("authoredByOrbit", true) }
         val job = "<background-job-wake>\n  A background job you started with bg_run has news you were waiting for; the control plane opened this turn for it:\n" +
@@ -349,7 +357,9 @@ class SubagentCardEndTest {
             "      output /root/.orbit/runs/4f50733a/bgj_13c53745a88a.output｜this covers bytes 0–10\n      (no output)\n" +
             "  The control plane recorded this for you; the user did not say it.\n</background-job-wake>"
         val tail = queuedTail(listOf(listed("turn-two", TWO), listed("turn-job", "$DONE\n\n$job"), listed("turn-steer", STEER, "steer")), emptyList())
-        assertEquals(listOf(false, true, false), tail.map { it.inTail() })
+        // A job's news beside the end waits on its Job card too (board E1): the tail draws neither.
+        assertEquals(listOf(false, false, false), tail.map { it.inTail() })
+        assertEquals(listOf("bgj_13c53745a88a"), tail[1].jobIds)
         assertTrue(tail.none { it.readersOwn || it.inTray })
         val cancelled = mutableListOf<String>()
         val wakes = subagentQueuedWakes(tail, cancelEnabled = true) { cancelled += it }
