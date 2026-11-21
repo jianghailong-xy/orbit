@@ -45,10 +45,10 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `public` | 39 |
 | `user` | 519 |
 | `admin` | 31 |
-| `runner` | 223 |
+| `runner` | 224 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **816** |
+| **Total** | **817** |
 
 ## Public routes
 
@@ -687,6 +687,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `PUT` | `/api/runner/drive/stagings/:id/chunks/:idx` | path `id`, `idx` | `RunnerDriveController.putChunk` |
 | `POST` | `/api/runner/drive/stagings/:id/keepalive` | body `RunnerDriveKeepaliveDto`; path `id` | `RunnerDriveController.keepalive` |
 | `GET` | `/api/runner/drive/stat` | query `id`, `path` | `RunnerDriveController.stat` |
+| `GET` | `/api/runner/drive/usage` | — | `RunnerDriveController.usage` |
 | `POST` | `/api/runner/drive/utimens` | body `RunnerDriveUtimensDto` | `RunnerDriveController.utimens` |
 | `GET` | `/api/runner/files` | query `evidenceId`, `sessionId`, `taskId` | `RunnerFilesController.list` |
 | `POST` | `/api/runner/git-credential` | body `RunnerGitCredentialDto` | `RunnerGitCredentialController.credential` |

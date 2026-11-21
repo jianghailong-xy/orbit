@@ -532,6 +532,14 @@ export class DriveService {
     return Boolean(version ?? staging);
   }
 
+  /** The bytes of the account's live files, their current versions: what the mount's `df` shows as used (§5.6). */
+  async usage(ownerId: string): Promise<{ driveBytes: number }> {
+    const rows = await this.prisma.$queryRaw<Array<{ bytes: bigint | null }>>`
+      SELECT coalesce(sum("size_bytes"), 0) AS "bytes" FROM "drive_entry"
+       WHERE "owner_id" = ${ownerId}::uuid AND "kind" = 'FILE' AND "trashed_at" IS NULL`;
+    return { driveBytes: num(rows[0]?.bytes ?? 0n) };
+  }
+
   /** The answer a commit got, by the writer's own commit id within its owner (§5.7): whether it applied. */
   async commitStatus(ownerId: string, commitId: string) {
     const answered = await this.prisma.driveCommit.findUnique({ where: { ownerId_commitId: { ownerId, commitId } } });

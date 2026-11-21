@@ -10,8 +10,8 @@
  *       whole and by Range, overwrite making a version, a retried commit applied once, rename, utimens, delete to Trash;
  *   (2) the door has no Trash and no share operation: no route of it names either, a Trash path is not a route, a deleted
  *       entry is reached by no path or id, and the share-link routes refuse a runner credential;
- *   (3) another account is answered as nothing: its entry by id, its chunk by sha256, its staging, its commit id, and a
- *       commit naming its chunk;
+ *   (3) another account is answered as nothing: its entry by id, its chunk by sha256, its staging, its commit id, a
+ *       commit naming its chunk, and its bytes in the usage the mount's df shows;
  *   (4) a mount credential: accepted only here and only from the instance the manager recorded; a superseded generation
  *       loses write access (the guard, and the commit fence in the commit's own transaction); issuing a newer
  *       generation's credential revokes the older one;
@@ -268,6 +268,11 @@ test('Orbit Files drive: the runner drive door — drive tools by path, no Trash
     const written = await put(aliceRunner.token, '/Private/secret.txt', secret);
     ok(written.reply, 'alice writes');
     const entryId = written.entry.id;
+
+    // What the mount's df shows as used: this account's live files, never another's.
+    const live = await db.driveEntry.aggregate({ where: { ownerId: alice, kind: 'FILE', trashedAt: null }, _sum: { sizeBytes: true } });
+    assert.equal(ok(await as(aliceRunner.token, 'GET', '/usage'), 'alice\'s usage').json.driveBytes, Number(live._sum.sizeBytes ?? 0));
+    assert.equal(ok(await as(bobRunner.token, 'GET', '/usage'), 'bob\'s usage').json.driveBytes, 0, 'alice\'s bytes are not bob\'s');
 
     const unknown = await as(bobRunner.token, 'GET', `/stat?id=${randomUUID()}`);
     refused(unknown, 404, 'DRIVE_ENTRY_NOT_FOUND', 'an id that names nothing');

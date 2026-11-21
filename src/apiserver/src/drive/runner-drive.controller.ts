@@ -309,6 +309,12 @@ export class RunnerDriveController {
     return this.drive.setMtime(runner.ownerId, entry.id, new Date(dto.mtime), this.writer(runner, dto.writer));
   }
 
+  /** The account's drive bytes, what the mount shows `df` as used (§5.6). */
+  @Get('usage')
+  usage(@CurrentRunner() runner: Runner) {
+    return this.drive.usage(runner.ownerId);
+  }
+
   /** The change feed (§5.4), held open up to `wait` seconds (at most 25) until something after `since` changed. */
   @Get('changes')
   async changes(@CurrentRunner() runner: Runner, @Query('since') since?: string, @Query('wait') wait?: string) {
