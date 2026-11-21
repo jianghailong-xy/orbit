@@ -370,9 +370,10 @@ export function routeTaskRun(input: ModelRoutingInput): ModelRoutingDecision {
     reasons.push(`[default] Tier ${floor}: ${mode === 'balance' ? 'Balance' : 'Intelligence'} minimum for a task without a suggestion`);
   }
   const lastLevel = last ? priorLevel(last, runtime) : null;
-  const failure = last?.outcome && last.outcome !== 'OK'
-    ? last.outcome
-    : last?.status === 'FAILED' ? 'FAILED' : null;
+  // How the last run ended is its outcome (task-route-decision.ts readRunHistory reads it off the release, design
+  // §12.3), never its terminal status word: an end that was asked for and not honoured left the status FAILED and
+  // reads OK there (W7, removal step R4).
+  const failure = last?.outcome && last.outcome !== 'OK' ? last.outcome : null;
   if (last && lastLevel && failure) {
     const next = Math.min(MODEL_ROUTING_LEVELS.indexOf(lastLevel) + 1, 3);
     level = MODEL_ROUTING_LEVELS[Math.max(next, level ? MODEL_ROUTING_LEVELS.indexOf(level) : 0)];
