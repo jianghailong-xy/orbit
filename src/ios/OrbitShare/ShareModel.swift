@@ -12,8 +12,7 @@ import OrbitKit
 /// (docs/share-to-orbit-design.md §3.1). Nothing here holds a credential or touches the network:
 /// the picker reads the app's snapshot and Add writes one inbox entry, then hands off: on iOS it
 /// opens the app with the link if `openApp` can, else posts a local notification; on macOS it
-/// opens the app with the link (§3.3). The macOS Share-menu
-/// extension hosts this same model and view.
+/// opens the app with the link (§3.3). The macOS Share-menu extension hosts this same model and view.
 @MainActor
 @Observable
 final class ShareModel {
@@ -172,8 +171,8 @@ final class ShareModel {
     // MARK: Add
 
     /// Writes the inbox entry, then opens Orbit on it; on iOS, where that is not a supported API and
-    /// may fail, it posts "N files ready … tap to finish" instead. Nothing is uploaded or sent: the app stages the items in the composer and the
-    /// person sends from there.
+    /// may fail, it posts "N files ready … tap to finish" instead. Nothing is uploaded or sent: the
+    /// app stages the items in the composer and the person sends from there.
     func add() async {
         guard canAdd, let destination, let container else { return }
         phase = .adding
