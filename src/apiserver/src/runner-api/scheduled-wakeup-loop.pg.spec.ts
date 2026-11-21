@@ -244,7 +244,7 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
         ...data,
         ...(isReleasedStatus(fixtureStatus) ? {
           finishedAt: data.finishedAt ?? new Date(),
-          releaseCause: fixtureStatus === RunStatus.CANCELLED ? 'cancelled' : 'engine_exited',
+          releaseCause: fixtureStatus === RunStatus.CANCELLED ? 'cancelled' : fixtureStatus === RunStatus.FAILED ? 'engine_failed' : 'engine_exited',
         } : {}),
       },
     });
@@ -378,7 +378,7 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
       [sessionId],
     );
     await sql.query(
-      `UPDATE "session" SET "status" = 'FAILED', "release_cause" = 'engine_exited', "finished_at" = clock_timestamp(), "cancel_requested_at" = clock_timestamp(),
+      `UPDATE "session" SET "status" = 'FAILED', "release_cause" = 'engine_failed', "finished_at" = clock_timestamp(), "cancel_requested_at" = clock_timestamp(),
               "error" = 'Prompt is too long', "retry_at" = $2::timestamptz(3)
         WHERE "id" = $1::uuid`,
       [sessionId, retryAt],
@@ -1041,7 +1041,7 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
 
     const ways: Array<[string, Partial<Prisma.SessionUncheckedUpdateInput>]> = [
       ['ended by its owner (CANCELLED)', { status: RunStatus.CANCELLED, releaseCause: 'cancelled', endReason: 'ended', finishedAt: new Date() }],
-      ['FAILED and moved to Completed', { status: RunStatus.FAILED, releaseCause: 'engine_exited', finishedAt: new Date(), completedAt: new Date() }],
+      ['FAILED and moved to Completed', { status: RunStatus.FAILED, releaseCause: 'engine_failed', finishedAt: new Date(), completedAt: new Date() }],
     ];
     for (const [how, end] of ways) {
       const id = await session(m);

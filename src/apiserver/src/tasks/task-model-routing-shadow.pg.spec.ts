@@ -494,12 +494,12 @@ test('earlier work runs feed the decision; task and session details carry each r
       const run1 = await runNow(services, target, taskId, randomUUID());
       await services.db.session.update({
         where: { id: run1 },
-        data: { status: RunStatus.FAILED, releaseCause: 'engine_exited', finishedAt: new Date(), model: SONNET, error: 'the engine exited 1' },
+        data: { status: RunStatus.FAILED, releaseCause: 'engine_failed', finishedAt: new Date(), model: SONNET, error: 'the engine exited 1' },
       });
       const run2 = await runNow(services, target, taskId, randomUUID());
       await services.db.session.update({
         where: { id: run2 },
-        data: { status: RunStatus.FAILED, releaseCause: 'engine_exited', finishedAt: new Date(), model: OPUS,
+        data: { status: RunStatus.FAILED, releaseCause: 'engine_failed', finishedAt: new Date(), model: OPUS,
           error: "You've hit your weekly limit · resets 1pm" },
       });
       const run3 = await runNow(services, target, taskId, randomUUID());

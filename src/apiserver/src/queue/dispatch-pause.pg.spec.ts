@@ -125,7 +125,7 @@ test('the runner dispatch pause holds new work, lets running work finish, and ha
         ...(lease ? { inboxLeaseOwner: lease.owner, inboxLeaseGeneration: lease.generation } : {}),
         ...extra,
         ...(status === RunStatus.SUCCEEDED || status === RunStatus.FAILED
-          ? { finishedAt: (extra.finishedAt as Date | undefined) ?? new Date(), releaseCause: 'engine_exited' }
+          ? { finishedAt: (extra.finishedAt as Date | undefined) ?? new Date(), releaseCause: status === RunStatus.FAILED ? 'engine_failed' : 'engine_exited' }
           : status === RunStatus.CANCELLED ? { finishedAt: (extra.finishedAt as Date | undefined) ?? new Date(), releaseCause: 'cancelled' } : {}),
       },
     });

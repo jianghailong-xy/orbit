@@ -235,7 +235,7 @@ async function sessionOn(
       title: 'pool security',
       prompt: 'hello',
       status,
-      ...(isReleasedStatus(status) ? { finishedAt: new Date(), releaseCause: status === 'CANCELLED' ? 'cancelled' : 'engine_exited' } : {}),
+      ...(isReleasedStatus(status) ? { finishedAt: new Date(), releaseCause: status === 'CANCELLED' ? 'cancelled' : status === 'FAILED' ? 'engine_failed' : 'engine_exited' } : {}),
       ownerId,
       creatorId: ownerId,
       workspaceId: at.workspaceId,
@@ -910,7 +910,7 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
           provider, providerBuiltin: provider === 'codex', model: 'gpt-5.5', permissionMode: 'default',
           usesRuntimeDefaultModel: true, poolCodexAccountId: naming,
           ...(isReleasedStatus(status) ? {
-            finishedAt: new Date(), releaseCause: status === RunStatus.CANCELLED ? 'cancelled' : 'engine_exited',
+            finishedAt: new Date(), releaseCause: status === RunStatus.CANCELLED ? 'cancelled' : status === RunStatus.FAILED ? 'engine_failed' : 'engine_exited',
           } : {}),
           ...(status === RunStatus.PENDING ? {} : { numTurns: 1, runtimeSessionId: randomUUID(), startedAt: new Date() }),
         },

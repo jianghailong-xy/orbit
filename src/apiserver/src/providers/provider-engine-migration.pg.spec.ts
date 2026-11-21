@@ -168,7 +168,7 @@ test('T4 provider-engine migration on PostgreSQL', { timeout: 900_000 }, async (
       status, usesRuntimeDefaultModel: true,
       ...(isReleasedStatus(status) ? {
         finishedAt: new Date(),
-        releaseCause: status === RunStatus.CANCELLED ? 'cancelled' : 'engine_exited',
+        releaseCause: status === RunStatus.CANCELLED ? 'cancelled' : status === RunStatus.FAILED ? 'engine_failed' : 'engine_exited',
       } : {}),
       model: opts.model === undefined ? 'pinned-model' : opts.model,
       runtimeSessionId: opts.runtimeSessionId === undefined ? `runtime-${randomUUID()}` : opts.runtimeSessionId,

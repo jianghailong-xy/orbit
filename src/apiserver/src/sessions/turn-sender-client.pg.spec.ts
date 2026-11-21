@@ -133,7 +133,7 @@ test('each turn says which client sent it, on the events page and the SSE, and n
         dispatchOrigin: SessionDispatchOrigin.USER, runSource: SessionRunSource.MANUAL,
         ...data,
         ...(['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(data.status ?? RunStatus.AWAITING_INPUT)
-          ? { finishedAt: data.finishedAt ?? new Date(), releaseCause: data.status === 'CANCELLED' ? 'cancelled' : 'engine_exited' }
+          ? { finishedAt: data.finishedAt ?? new Date(), releaseCause: data.status === 'CANCELLED' ? 'cancelled' : data.status === 'FAILED' ? 'engine_failed' : 'engine_exited' }
           : {}),
       },
     });

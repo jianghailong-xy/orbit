@@ -152,7 +152,7 @@ async function conversation(
       prompt: title,
       provider: 'claude',
       status,
-      ...(isReleasedStatus(status) ? { finishedAt: new Date(), releaseCause: status === 'CANCELLED' ? 'cancelled' : 'engine_exited' } : {}),
+      ...(isReleasedStatus(status) ? { finishedAt: new Date(), releaseCause: status === 'CANCELLED' ? 'cancelled' : status === 'FAILED' ? 'engine_failed' : 'engine_exited' } : {}),
       dispatchOrigin: SessionDispatchOrigin.USER,
       ...(options.at ? { createdAt: options.at, lastTurnAt: options.at } : { lastTurnAt: new Date() }),
       ...(options.ended ? { completedAt: new Date() } : {}),

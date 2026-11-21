@@ -214,7 +214,7 @@ async function world(
       assignedRunnerId: shape.offlineRunner ? offlineRunnerId : runnerId,
       title: `coordinator: ${label}`, prompt: `coordinator: ${label}`, provider: 'claude',
       status,
-      ...(isReleasedStatus(status) ? { finishedAt: new Date(), releaseCause: status === 'CANCELLED' ? 'cancelled' : 'engine_exited' } : {}),
+      ...(isReleasedStatus(status) ? { finishedAt: new Date(), releaseCause: status === 'CANCELLED' ? 'cancelled' : status === 'FAILED' ? 'engine_failed' : 'engine_exited' } : {}),
       startedAt: shape.startedAt === undefined ? new Date() : shape.startedAt,
       completedAt: shape.completedAt ?? null,
       numTurns: shape.numTurns ?? 1,

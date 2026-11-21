@@ -48,7 +48,7 @@ const SHA = (c: string) => c.repeat(40);
 const REPAIR_SQL = readFileSync(
   path.resolve(__dirname, '../../prisma/migrations/0394_close_refused_running_shells/migration.sql'),
   'utf8',
-).replace(`SET "status" = 'FAILED',`, `SET "status" = 'FAILED', "release_cause" = 'engine_exited',`);
+).replace(`SET "status" = 'FAILED',`, `SET "status" = 'FAILED', "release_cause" = 'engine_failed',`);
 
 interface World {
   ownerId: string;

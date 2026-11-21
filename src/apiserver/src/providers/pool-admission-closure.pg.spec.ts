@@ -216,7 +216,7 @@ async function sessionOn(
       title: 'pool closure',
       prompt: 'hello',
       status,
-      ...(isReleasedStatus(status) ? { finishedAt: new Date(), releaseCause: status === 'CANCELLED' ? 'cancelled' : 'engine_exited' } : {}),
+      ...(isReleasedStatus(status) ? { finishedAt: new Date(), releaseCause: status === 'CANCELLED' ? 'cancelled' : status === 'FAILED' ? 'engine_failed' : 'engine_exited' } : {}),
       ownerId,
       creatorId: ownerId,
       workspaceId: at.workspaceId,

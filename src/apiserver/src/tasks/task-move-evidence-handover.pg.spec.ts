@@ -197,7 +197,7 @@ async function conversation(
       provider: 'claude',
       status: options.status ?? RunStatus.AWAITING_INPUT,
       ...(['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(options.status ?? RunStatus.AWAITING_INPUT)
-        ? { finishedAt: new Date(), releaseCause: options.status === 'CANCELLED' ? 'cancelled' : 'engine_exited' }
+        ? { finishedAt: new Date(), releaseCause: options.status === 'CANCELLED' ? 'cancelled' : options.status === 'FAILED' ? 'engine_failed' : 'engine_exited' }
         : {}),
       dispatchOrigin: SessionDispatchOrigin.USER,
       ...(options.taskId === undefined ? { titleManagedByProject: true } : {}),

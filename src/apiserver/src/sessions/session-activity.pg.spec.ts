@@ -96,7 +96,7 @@ async function world(
       ...parked,
       ...(isReleasedStatus(fixtureStatus) ? {
         finishedAt: parked.finishedAt ?? new Date(),
-        releaseCause: fixtureStatus === RunStatus.CANCELLED ? 'cancelled' : 'engine_exited',
+        releaseCause: fixtureStatus === RunStatus.CANCELLED ? 'cancelled' : fixtureStatus === RunStatus.FAILED ? 'engine_failed' : 'engine_exited',
       } : {}),
     },
   });

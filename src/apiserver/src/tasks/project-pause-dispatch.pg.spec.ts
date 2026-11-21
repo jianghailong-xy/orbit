@@ -503,7 +503,7 @@ async function failFirstRuns(
   for (const run of [heldRun, twinRun]) {
     await s.db.session.update({
       where: { id: run.id },
-      data: { status: RunStatus.FAILED, releaseCause: 'engine_exited', error: null, finishedAt: new Date() },
+      data: { status: RunStatus.FAILED, releaseCause: 'engine_failed', error: null, finishedAt: new Date() },
     });
   }
   return {

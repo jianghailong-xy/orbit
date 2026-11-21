@@ -224,7 +224,7 @@ async function harness(t: { after(fn: () => Promise<void> | void): void }) {
         changedFiles: (finish.changedFiles ?? []) as never,
         createdAt: new Date(Date.now() - minutesAgo * 60_000),
         finishedAt: new Date(Date.now() - minutesAgo * 60_000),
-        releaseCause: 'engine_exited',
+        releaseCause: finish.status === RunStatus.FAILED ? 'engine_failed' : 'engine_exited',
       },
     });
     return id;

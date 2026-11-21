@@ -160,7 +160,7 @@ const workRuns = (db: PrismaClient, taskId: string) =>
 async function failRun(db: PrismaClient, sessionId: string, error: string | null): Promise<void> {
   await db.session.update({
     where: { id: sessionId },
-    data: { status: RunStatus.FAILED, releaseCause: 'engine_exited', error, finishedAt: new Date() },
+    data: { status: RunStatus.FAILED, releaseCause: 'engine_failed', error, finishedAt: new Date() },
   });
 }
 
