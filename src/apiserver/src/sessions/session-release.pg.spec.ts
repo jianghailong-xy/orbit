@@ -5,11 +5,12 @@
  * column and `session.release_cause` (migration 1261) says why. Each case drives a real writer against PostgreSQL
  * and reads the row back:
  *
- *   (1) runner finalize, no end requested            → the runner's status, engine_exited
+ *   (1) runner finalize, no end requested            → the runner's status: engine_exited, or engine_failed for FAILED
  *   (2) runner finalize after a task-done end        → SUCCEEDED, task_done
  *   (3) runner finalize after a cancel with no reason → CANCELLED, cancelled
  *   (4) a transcript import that failed              → FAILED, import_failed (plan step 3.1: it set no finished_at)
- *   (5) the reaper, through its sweep: an end not honoured → that end's status, its reason
+ *   (5) the reaper, through its sweep: an end settled late → that end's status, its reason; a cancel never
+ *       honoured → FAILED, end_not_honored
  *   (6) the reaper's other three causes              → runner_lost, setup_failed, turn_failed
  *   (7) ending a session still queued                → CANCELLED, ended
  *   (8) the revive                                   → PENDING, finished_at and release_cause both null
@@ -197,11 +198,16 @@ test('every release writes the release column and its cause, and the revive clea
     await sql.end().catch(() => undefined);
   });
 
-  await t.test('(1) finalize with no end requested: the runner\'s status, engine_exited', async () => {
+  await t.test('(1) finalize with no end requested: the runner\'s status, engine_exited or engine_failed', async () => {
     const w = await world(s.db, 'finalize-exited');
     const failed = await session(s.db, w);
     await s.api.finalize({ id: w.runnerId }, failed, { status: SharedRunStatus.FAILED, error: 'engine crashed' } as never);
-    assertReleased(await released(sql, failed), 'FAILED', 'engine_exited');
+    const failedRow = await released(sql, failed);
+    assertReleased(failedRow, 'FAILED', 'engine_failed');
+    assert.equal(failedRow.end_reason, null, 'end_reason is written exactly as before: not at all');
+    const cancelled = await session(s.db, w);
+    await s.api.finalize({ id: w.runnerId }, cancelled, { status: SharedRunStatus.CANCELLED } as never);
+    assertReleased(await released(sql, cancelled), 'CANCELLED', 'engine_exited');
     const succeeded = await session(s.db, w, { status: RunStatus.AWAITING_INPUT });
     await s.api.finalize({ id: w.runnerId }, succeeded, { status: SharedRunStatus.SUCCEEDED } as never);
     const row = await released(sql, succeeded);
@@ -239,7 +245,7 @@ test('every release writes the release column and its cause, and the revive clea
     assertReleased(await released(sql, id), 'FAILED', 'import_failed');
   });
 
-  await t.test('(5) the reaper\'s sweep settles an end not honoured with that end\'s reason', async () => {
+  await t.test('(5) the reaper\'s sweep: an end settled late keeps its reason, a cancel never honoured is a failure', async () => {
     const w = await world(s.db, 'reaper-end');
     const stale = new Date(Date.now() - 10 * 60_000);
     // A graceful end the runner never acknowledged, and a cancel that landed on a queued row.
@@ -250,10 +256,24 @@ test('every release writes the release column and its cause, and the revive clea
       status: RunStatus.PENDING, cancelRequestedAt: stale, endReason: SessionEndReason.CANCELLED,
     });
     const unhonoured = await session(s.db, w, { cancelRequestedAt: stale });
+    // A delete the runner never honoured: FAILED, and end_reason still says a delete was asked for.
+    const deleteUnhonoured = await session(s.db, w, {
+      cancelRequestedAt: stale, endReason: SessionEndReason.DELETED, deletedAt: stale,
+    });
+    // A graceful task-done end the runner never acknowledged: SUCCEEDED, as asked.
+    const doneLate = await session(s.db, w, {
+      status: RunStatus.AWAITING_INPUT, cancelRequestedAt: stale, endReason: SessionEndReason.TASK_DONE,
+    });
     await (s.reaper as unknown as { sweep(): Promise<void> }).sweep();
     assertReleased(await released(sql, ended), 'CANCELLED', 'ended');
     assertReleased(await released(sql, queued), 'CANCELLED', 'cancelled');
-    assertReleased(await released(sql, unhonoured), 'FAILED', 'cancelled');
+    const unhonouredRow = await released(sql, unhonoured);
+    assertReleased(unhonouredRow, 'FAILED', 'end_not_honored');
+    assert.equal(unhonouredRow.end_reason, null, 'end_reason is written exactly as before: not at all');
+    const deleteRow = await released(sql, deleteUnhonoured);
+    assertReleased(deleteRow, 'FAILED', 'end_not_honored');
+    assert.equal(deleteRow.end_reason, 'deleted', 'end_reason keeps the end that was asked for');
+    assertReleased(await released(sql, doneLate), 'SUCCEEDED', 'task_done');
   });
 
   await t.test('(6) the reaper\'s other causes: runner_lost, setup_failed, turn_failed', async () => {
@@ -292,7 +312,7 @@ test('every release writes the release column and its cause, and the revive clea
     const w = await world(s.db, 'revive');
     const id = await session(s.db, w);
     await s.api.finalize({ id: w.runnerId }, id, { status: SharedRunStatus.FAILED, error: 'engine crashed' } as never);
-    assertReleased(await released(sql, id), 'FAILED', 'engine_exited');
+    assertReleased(await released(sql, id), 'FAILED', 'engine_failed');
     await s.sessions.resume(w.ownerId, id, { clientTurnId: randomUUID(), content: 'Try again' });
     const row = await released(sql, id);
     assert.equal(row.status, 'PENDING');
