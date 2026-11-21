@@ -235,11 +235,14 @@ struct UserTurnRow: View {
                               queued: queued != nil)
         } else if queued == nil, let workflow = WorkflowFinishedText.parse(wakeNote) {
             // An Orbit workflow's end: one pale purple strip (board subagent-workflow part 4 ②); the
-            // parent's answer follows as its own reply. Anything else the note carried keeps its line.
+            // parent's answer follows as its own reply. Anything else the note carried keeps its line,
+            // except a SubAgent's end, which its own card draws (see the branch below).
             VStack(alignment: .leading, spacing: 6) {
                 WorkflowFinishedStripView(wake: workflow)
                 if let subagent = SubagentFinishedText.parse(workflow.rest) {
-                    SubagentFinishedLineView(wake: subagent, ts: b.ts)
+                    if let jobs = BackgroundWakeText.parse(subagent.rest) {
+                        BackgroundWakeCardView(wake: jobs, ts: b.ts)
+                    }
                 } else if let jobs = BackgroundWakeText.parse(workflow.rest) {
                     BackgroundWakeCardView(wake: jobs, ts: b.ts)
                 }
