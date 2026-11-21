@@ -112,7 +112,7 @@ async function session(h: Harness, workspaceId: string, over: { status?: 'RUNNIN
   await h.prisma.session.create({
     data: {
       id, title: 'a session', prompt: 'p', ownerId: h.ownerId, creatorId: h.ownerId, dispatchOrigin: 'USER', status: over.status ?? 'SUCCEEDED',
-      ...(over.status === 'RUNNING' ? {} : { finishedAt: new Date(), releaseCause: 'engine_exited' }),
+      ...(over.status === 'RUNNING' ? {} : { finishedAt: new Date()}),
       lastTurnAt: new Date(), workspaceId, ...(over.deleted ? { deletedAt: new Date() } : {}),
     },
   });

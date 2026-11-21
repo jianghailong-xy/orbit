@@ -201,7 +201,6 @@ import {
 } from '../common/runtime-provider';
 import { OPEN_SESSION_STATUSES, statusAfterTurnCompleted } from '../common/session-scheduling';
 import {
-  finalizeReleaseCause,
   reportsSuccessWithNoEnd,
   HELD_SESSION_STATUSES,
   RELEASED_SESSION_STATUSES,
@@ -8160,7 +8159,6 @@ export class RunnerApiController {
                 error: (acceptanceFailureReason ?? (swallowed ? swallowedMessageError(failureText) : failureText)) || 'run failed',
                 finishedAt: new Date(),
                 // Released for the turn that failed (design §4.2), in the statement that writes FAILED.
-                releaseCause: 'turn_failed',
                 cancelRequestedAt: new Date(),
                 // FAILED is where this session stops being live, so whatever it had running
                 // goes with it (CLEARED_RUNNING_WORK). This write is the reason the runner
@@ -10211,9 +10209,6 @@ export class RunnerApiController {
           // id, so it only serves as a fallback here and is never persisted on its own.
           runtimeSessionId: dto.runtimeSessionId ?? dto.claudeSessionId ?? undefined,
           finishedAt: new Date(),
-          // Why it was released: the requested end's reason, which also chose the status above, or the
-          // engine exiting by itself (engine_failed when the runner reported FAILED, the status written then).
-          releaseCause: finalizeReleaseCause(current, dto.status),
           // The engine failed with no end asked (design §12.1 W6): the failure is the carrying turn's, recorded below,
           // and copied here in the release's own write. A release with no end asked and no failure: the CANCELLED of the
           // turn it cut off, recorded below, when there is one.
@@ -10658,7 +10653,6 @@ export class RunnerApiController {
           deletedAt: new Date(),
           // Released with the status, as every terminal write is (design §4.2).
           finishedAt: new Date(),
-          releaseCause: 'import_failed',
         },
       });
       return { applied: false, failed: true, announced: true };

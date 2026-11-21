@@ -70,7 +70,7 @@ test('session guests: invite by email, a guest turn as ORBIT_GUEST, Shared with 
         provider: 'claude', providerBuiltin: true, model: 'claude-opus-4-1', permissionMode: 'acceptEdits',
         dispatchOrigin: SessionDispatchOrigin.USER, status, numTurns: 1, engineTurnActive: false,
         runtimeSessionId: randomUUID(), startedAt: new Date(),
-        ...(status === RunStatus.CANCELLED ? { finishedAt: new Date(), releaseCause: 'cancelled', endReason: 'USER_ENDED' } : {}),
+        ...(status === RunStatus.CANCELLED ? { finishedAt: new Date(), endReason: 'USER_ENDED' } : {}),
       },
     });
     return id;

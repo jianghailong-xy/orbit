@@ -214,7 +214,6 @@ test('which of its runner’s accounts a session runs on — picked by hand, or 
         ...extra,
         ...(isReleasedStatus(fixtureStatus) ? {
           finishedAt: extra.finishedAt ?? new Date(),
-          releaseCause: fixtureStatus === RunStatus.CANCELLED ? 'cancelled' : fixtureStatus === RunStatus.FAILED ? 'engine_failed' : 'engine_exited',
         } : {}),
       },
     });
@@ -842,7 +841,7 @@ test('which of its runner’s accounts a session runs on — picked by hand, or 
     }
     // A message somebody sends to one of them is not held back: an account with room beats the limit it
     // would meet here. (The rest let go of the runner's slots first, or nothing is claimed at all.)
-    await db.session.updateMany({ where: { id: { in: herd.slice(0, 7) } }, data: { status: RunStatus.AWAITING_INPUT, finishedAt: null, releaseCause: null } });
+    await db.session.updateMany({ where: { id: { in: herd.slice(0, 7) } }, data: { status: RunStatus.AWAITING_INPUT, finishedAt: null} });
     await messageMovesIt(m, herd[7], turns[7]);
   });
 
@@ -993,7 +992,7 @@ test('which of its runner’s accounts a session runs on — picked by hand, or 
     assert.deepEqual(await Promise.all([first, second, near, pinned].map(armedAt)), before);
 
     // They finish, and Work has room. The furthest reset goes first, and one a pass.
-    await db.session.updateMany({ where: { id: { in: full } }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited' } });
+    await db.session.updateMany({ where: { id: { in: full } }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date()} });
     const now = new Date();
     await retries.releaseHeldRetries(now);
     const after = await Promise.all([first, second, near, pinned].map(armedAt));

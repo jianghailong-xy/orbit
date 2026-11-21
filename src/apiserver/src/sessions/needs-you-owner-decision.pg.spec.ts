@@ -1013,7 +1013,6 @@ test('the badge says Record as done… once a finished-looking project has waite
       status: RunStatus.SUCCEEDED,
       startsTaskWork: true,
       finishedAt: new Date(),
-      releaseCause: 'engine_exited',
       changedFiles: ['work.md'],
     },
   });
@@ -1046,7 +1045,6 @@ test('the badge says Record as done… once a finished-looking project has waite
       startedAt: new Date(),
       // Released, so with its cause beside finished_at (session_release_fact_chk, 1401/1402).
       finishedAt: new Date(),
-      releaseCause: 'engine_exited',
     },
   });
 

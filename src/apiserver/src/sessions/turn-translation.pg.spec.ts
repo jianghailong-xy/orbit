@@ -137,7 +137,7 @@ async function liveSession(status: RunStatus): Promise<string> {
       title: 'translation', prompt: 'opening', provider: 'claude', providerBuiltin: true, engine: 'claude',
       status, numTurns: 1, dispatchOrigin: 'USER', startsTaskWork: false,
       ...(['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(status)
-        ? { finishedAt: new Date(), releaseCause: status === 'CANCELLED' ? 'cancelled' : status === 'FAILED' ? 'engine_failed' : 'engine_exited' }
+        ? { finishedAt: new Date()}
         : {}),
     },
   });
@@ -311,7 +311,7 @@ scenario('skipTranslation (the prompt optimizer\'s English): an opening message 
   // and the claim answers only whether this session's work is held.
   await prisma.session.updateMany({
     where: { ownerId, id: { not: created.id }, status: { in: [RunStatus.RUNNING, RunStatus.PENDING, RunStatus.AWAITING_INPUT] } },
-    data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited' },
+    data: { status: RunStatus.SUCCEEDED, finishedAt: new Date()},
   });
   const claimed = await queue.claimSessionForRunner({ id: runnerId });
   assert.equal(claimed?.sessionId, created.id, 'not held: the claim hands it out');

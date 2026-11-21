@@ -158,8 +158,8 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
         dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false, assignedRunnerId: runnerId, numTurns: 1,
         inboxLeaseOwner: process_, branch: `orbit/${id.slice(0, 8)}`, ...extra,
         ...(status === RunStatus.SUCCEEDED || status === RunStatus.FAILED
-          ? { finishedAt: new Date(), releaseCause: status === RunStatus.FAILED ? 'engine_failed' : 'engine_exited' }
-          : status === RunStatus.CANCELLED ? { finishedAt: new Date(), releaseCause: 'cancelled' } : {}),
+          ? { finishedAt: new Date()}
+          : status === RunStatus.CANCELLED ? { finishedAt: new Date()} : {}),
       },
     });
     return id;
@@ -534,7 +534,7 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
       });
       const work = await prisma.session.create({
         data: {
-          ownerId, creatorId: ownerId, title: 'the work', prompt: 'p', taskId, startsTaskWork: true, status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited',
+          ownerId, creatorId: ownerId, title: 'the work', prompt: 'p', taskId, startsTaskWork: true, status: RunStatus.SUCCEEDED, 
           workspaceId, assignedRunnerId: runnerId, finishedAt: new Date(),
         },
       });
@@ -624,8 +624,8 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
     // Another process takes a session over, and another writer ends one: no writer marks anything, and the next beat
     // reconciles anyway, because every beat reads the leases of what it supervises.
     await sql.query(`UPDATE "session" SET inbox_lease_owner = gen_random_uuid() WHERE id = $1`, [takenOver]);
-    await sql.query(`UPDATE "session" SET status = 'SUCCEEDED', finished_at = now() - interval '10 minutes', release_cause = 'engine_exited' WHERE id = $1`, [ended]);
-    await sql.query(`UPDATE "session" SET status = 'CANCELLED', finished_at = now() - interval '10 minutes', release_cause = 'cancelled' WHERE id = $1`, [cancelled]);
+    await sql.query(`UPDATE "session" SET status = 'SUCCEEDED', finished_at = now() - interval '10 minutes' WHERE id = $1`, [ended]);
+    await sql.query(`UPDATE "session" SET status = 'CANCELLED', finished_at = now() - interval '10 minutes' WHERE id = $1`, [cancelled]);
     const next = await beat();
     assert.ok(isFull(next.answer));
     assert.deepEqual([...(next.answer.leaseLostSessionIds ?? [])].sort(), [cancelled, takenOver, ended].sort());
@@ -843,7 +843,7 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
     assert.equal(queued.statements.length, 1, queued.statements.join('\n---\n'));
     assert.equal(drainPushes.length, 0, 'the web\'s update indicator says it; nothing is pushed (docs/mocks/runner-update-indicator)');
 
-    await prisma.session.update({ where: { id: waiting }, data: { status: RunStatus.CANCELLED, finishedAt: new Date(), releaseCause: 'cancelled' } });
+    await prisma.session.update({ where: { id: waiting }, data: { status: RunStatus.CANCELLED, finishedAt: new Date()} });
     for (let i = 0; i < 4 && isFull((await beat()).answer); i += 1);
     await settle();
   });
@@ -969,7 +969,7 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
       CAPABILITIES, 'claude,codex', 'linux',
     );
     assert.deepEqual(without(await sets(lost)), { jobs: [], shells: [], subagents: [], activity: {}, turn: false });
-    for (const id of [lost, elsewhere, otherProcess]) await prisma.session.update({ where: { id }, data: { status: RunStatus.CANCELLED, finishedAt: new Date(), releaseCause: 'cancelled' } });
+    for (const id of [lost, elsewhere, otherProcess]) await prisma.session.update({ where: { id }, data: { status: RunStatus.CANCELLED, finishedAt: new Date()} });
     for (let i = 0; i < 4 && isFull((await beat()).answer); i += 1);
     await settle();
   });
@@ -1014,7 +1014,7 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
     await report(job('running'), composed + 5_000);
     await beat({ executing: [nothing] });
     assert.deepEqual(await sets(s), { jobs: [], shells: [] }, 'without executingAt the beat replaces');
-    await prisma.session.update({ where: { id: s }, data: { status: RunStatus.CANCELLED, finishedAt: new Date(), releaseCause: 'cancelled' } });
+    await prisma.session.update({ where: { id: s }, data: { status: RunStatus.CANCELLED, finishedAt: new Date()} });
     await settle();
   });
 

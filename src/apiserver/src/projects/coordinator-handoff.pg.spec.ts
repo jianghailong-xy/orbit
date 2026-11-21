@@ -126,7 +126,7 @@ function services(f: Fixture) {
       await db.session.updateMany({
         where: { id: sessionId, status: { in: ['SUCCEEDED', 'FAILED', 'CANCELLED'] } },
         // As the real revive: held again, so the release column and its cause go with the terminal status.
-        data: { status: 'PENDING', finishedAt: null, releaseCause: null },
+        data: { status: 'PENDING', finishedAt: null},
       });
       await db.conversationTurn.create({
         data: { sessionId, seq: seq++, clientTurnId: dto.clientTurnId, content: dto.content, kind: 'message', sendIntent: dto.intent ?? null },
@@ -569,7 +569,7 @@ test('an ended coordinator (FAILED, or recycled while idle) is revived for its n
     // a cause, a failure cause for FAILED.
     await f.db.session.update({
       where: { id: f.outgoing },
-      data: { status, finishedAt: new Date(), releaseCause: status === 'FAILED' ? 'turn_failed' : 'ended' },
+      data: { status, finishedAt: new Date()},
     });
     const s = services(f);
     const started = await s.handoffs.start(f.ownerId, f.projectId);
@@ -585,7 +585,7 @@ test('the revived coordinator fails again before answering: FAILED at the sweep,
   await s.handoffs.start(f.ownerId, f.projectId);
   // Its model cannot run: the claim fails and the conversation is FAILED, the note turn never delivered.
   await f.db.session.update({
-    where: { id: f.outgoing }, data: { status: 'FAILED', finishedAt: new Date(), releaseCause: 'setup_failed' },
+    where: { id: f.outgoing }, data: { status: 'FAILED', finishedAt: new Date()},
   });
   assert.equal(await s.handoffs.sweep(), 1);
   const { coordinatorHandoff } = await readSessionCoordinatorHandoffs(f.db as unknown as PrismaService, f.outgoing);

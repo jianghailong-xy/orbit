@@ -311,7 +311,7 @@ test('P2 Cursor API key on PostgreSQL', { timeout: 600_000 }, async (t) => {
     // A Claude Code session cannot move onto it either.
     const claude = (await viaApi(at, { engine: AgentProvider.CLAUDE })).id;
     await db.session.update({ where: { id: claude }, data: {
-      status: RunStatus.FAILED, releaseCause: 'engine_failed', numTurns: 1, runtimeSessionId: `runtime-${randomUUID()}`, startedAt: new Date(), finishedAt: new Date(),
+      status: RunStatus.FAILED, numTurns: 1, runtimeSessionId: `runtime-${randomUUID()}`, startedAt: new Date(), finishedAt: new Date(),
     } });
     const switched = await refusal(sessions.resume(owner, claude, { content: 'again', clientTurnId: randomUUID(), provider: key.slug } as never));
     assert.deepEqual([switched.status, switched.code], [400, 'PROVIDER_ENGINE_INCOMPATIBLE']);

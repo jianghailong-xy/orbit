@@ -183,8 +183,8 @@ test('Feishu: the owner replies to a session and starts one from their direct me
       dispatchOrigin: SessionDispatchOrigin.USER, runSource: SessionRunSource.MANUAL,
       ...(status === RunStatus.SUCCEEDED ? { completedAt: new Date() } : {}),
       ...(status === RunStatus.SUCCEEDED || status === RunStatus.FAILED
-        ? { finishedAt: new Date(), releaseCause: status === RunStatus.FAILED ? 'engine_failed' : 'engine_exited' }
-        : status === RunStatus.CANCELLED ? { finishedAt: new Date(), releaseCause: 'cancelled' } : {}),
+        ? { finishedAt: new Date()}
+        : status === RunStatus.CANCELLED ? { finishedAt: new Date()} : {}),
     },
   });
   /** An alert card the transport sent the owner about a session. */

@@ -321,7 +321,6 @@ import {
   isHeld,
   isHeldPastClaim,
   isReleased,
-  releaseCauseOfEndReason,
   releaseFinishedTheWork,
   RELEASE_WORK_SELECT,
   releaseWasFailure,
@@ -10496,8 +10495,6 @@ export class SessionsService {
           endReason: reason,
           cancelRequestedAt: now,
           finishedAt: now,
-          // Released for the reason the end recorded (design §4.2).
-          releaseCause: releaseCauseOfEndReason(reason),
           // A queued session can still be holding what its last run left running — a job parked
           // with the session and never reaped — and CANCELLED is the end of the line for it
           // (CLEARED_RUNNING_WORK). The runner is told to stop by the same cancelRequestedAt,
@@ -11719,9 +11716,8 @@ export class SessionsService {
           inboxLeaseOwner: newTerminalResumeHandoffOwner(),
           cancelRequestedAt: null,
           endReason: null,
-          // Held again: the release column and its cause go together.
+          // Held again (design §4.2).
           finishedAt: null,
-          releaseCause: null,
           error: null,
           result: null,
           lastTurnAt: new Date(),

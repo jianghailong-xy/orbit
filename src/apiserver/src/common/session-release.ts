@@ -5,7 +5,7 @@ import { deriveSessionLifecycleState, SessionLifecycleState } from '@orbit/share
  * "Released" and "held", the release fact of docs/session-three-state-design.md §4.2 (decision D1, plan
  * phase 3). A session is RELEASED when no runner holds it: it holds no task claim and no slot, and its
  * next message must be claimed again. It is HELD otherwise. `session.finished_at` is the release column:
- * set by every write that releases a session (with `release_cause`, migration 1261), cleared by the
+ * set by every write that releases a session, cleared by the
  * revive.
  *
  * Both are spelled here twice. On the column: `isReleased` / `isHeld`, the Prisma filters `releasedFilter` /
@@ -106,47 +106,9 @@ export function sessionHeldIndexedSql(sessionAlias: string): Prisma.Sql {
 }
 
 /**
- * Why a session was released: `session.release_cause`, held to these values by
- * `session_release_cause_chk` (migration 1261). Today's end reasons (SessionEndReason in @orbit/shared,
- * and the two legacy ones stored rows still carry), plus the causes no end reason records.
- */
-export const SESSION_RELEASE_CAUSES = [
-  // The end reasons.
-  'task_done',
-  'task_cancelled',
-  'ended',
-  'completed',
-  'deleted',
-  'cancelled',
-  // Legacy end reasons (LEGACY_END_REASONS): no code writes them, old rows carry them.
-  'idle',
-  'orphaned',
-  // The runner reported a failed turn; turn-complete releases the session with it.
-  'turn_failed',
-  // The runner holding a running turn went offline (the reaper).
-  'runner_lost',
-  // The run never started: the runner refused its source, or the engine's runtime never initialized.
-  'setup_failed',
-  // The runner finalized the session with no end requested: its engine exited, and the runner reported no
-  // failure (SUCCEEDED or CANCELLED).
-  'engine_exited',
-  // The runner finalized the session with no end requested and reported it FAILED: its engine failed.
-  'engine_failed',
-  // An end was asked for and the runner never honoured it: the reaper released the session FAILED once the
-  // grace ran out. end_reason still records which end was asked for.
-  'end_not_honored',
-  // The runner could not import the transcript the session was created from.
-  'import_failed',
-  // A LANDING container session whose landing settled.
-  'landing_settled',
-] as const;
-
-export type SessionReleaseCause = (typeof SESSION_RELEASE_CAUSES)[number];
-
-/**
  * The two questions a reader asks of a release (docs/session-three-state-design.md §12.2 and §12.3, decision D9,
  * removal steps R3 and R4): was the session released by a failure, and did the release finish the work. Neither reads
- * `release_cause`: a failure is a fact of the turn, not of the session. Every writer that releases a session after a
+ * a cause on the session: a failure is a fact of the turn, not of the session. Every writer that releases a session after a
  * failure records `FAILED` on the turn that carries it and copies it to `last_turn_outcome` in the release's own write
  * (§12.1, common/carrying-turn.ts), and the session keeps only `finished_at` (released) and `end_reason` (an end was
  * asked for). The readings:
@@ -273,33 +235,6 @@ export function releaseFinishedTheWorkFilter(): Prisma.SessionWhereInput {
 export function releaseFinishedTheWorkSql(sessionAlias: string): Prisma.Sql {
   const s = Prisma.raw(sessionAlias);
   return Prisma.sql`(${s}."finished_at" IS NOT NULL AND (${s}."end_reason" IS NOT DISTINCT FROM ${Prisma.raw(`'${WORK_FINISHED_END_REASON}'`)} OR (${s}."kind" = ${Prisma.raw(`'${LANDING_KIND}'`)} AND ${s}."end_reason" IS NULL)))`;
-}
-
-/**
- * The cause of a release somebody asked for: the end reason the request recorded, or `cancelled` when
- * the request recorded none (a cancel with no reason, or a reason this build does not know).
- */
-export function releaseCauseOfEndReason(endReason: string | null | undefined): SessionReleaseCause {
-  return endReason && (SESSION_RELEASE_CAUSES as readonly string[]).includes(endReason)
-    ? (endReason as SessionReleaseCause)
-    : 'cancelled';
-}
-
-/**
- * The cause the runner's finalize records, from the same inputs that decide the status it writes: the requested
- * end's when an end was requested (whose reason also decided the status: SUCCEEDED or CANCELLED, never FAILED),
- * else the engine exited by itself, failed when the runner reported FAILED. `reported` is the status word the
- * runner sent, the one the finalize writes when no end was requested.
- */
-export function finalizeReleaseCause(
-  current: {
-    cancelRequestedAt: Date | null;
-    endReason: string | null;
-  },
-  reported: string,
-): SessionReleaseCause {
-  if (current.cancelRequestedAt) return releaseCauseOfEndReason(current.endReason);
-  return reported === 'FAILED' ? 'engine_failed' : 'engine_exited';
 }
 
 /**

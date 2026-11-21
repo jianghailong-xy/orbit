@@ -663,7 +663,7 @@ async function queuedLanding(
     const finished = await tx.session.update({
       where: { id: a.sessionId },
       data: {
-        status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited', finishedAt: new Date(),
+        status: RunStatus.SUCCEEDED, finishedAt: new Date(),
         worktreeBranch: `orbit/${label}`,
         worktreeDirty: false,
       },
@@ -1403,7 +1403,7 @@ test('a claim with nowhere to run it opens an item the coordinator is told about
       const finished = await tx.session.update({
         where: { id: a.sessionId },
         data: {
-          status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited', finishedAt: new Date(),
+          status: RunStatus.SUCCEEDED, finishedAt: new Date(),
           worktreeBranch: 'orbit/unworkable',
           worktreeDirty: false,
         },
@@ -1488,7 +1488,7 @@ async function rework(stack: Stack, w: World, a: Attempt, label: string): Promis
   // release column and its cause (session_release_fact_chk).
   await stack.db.session.update({
     where: { id: a.sessionId },
-    data: { status: RunStatus.AWAITING_INPUT, finishedAt: null, releaseCause: null },
+    data: { status: RunStatus.AWAITING_INPUT, finishedAt: null},
   });
   const asked = await stack.sessions.createTurn(w.ownerId, a.sessionId, {
     clientTurnId: randomUUID(),
@@ -1519,7 +1519,7 @@ async function rework(stack: Stack, w: World, a: Attempt, label: string): Promis
   await stack.db.$transaction(async (tx) => {
     const finished = await tx.session.update({
       where: { id: a.sessionId },
-      data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited' },
+      data: { status: RunStatus.SUCCEEDED, finishedAt: new Date()},
       select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
     });
     await settleDeliveredIdentityAfterFinish(tx, finished);

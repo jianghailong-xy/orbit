@@ -383,7 +383,6 @@ async function finishServingWork(db: PrismaClient, f: Fixture, n: number): Promi
       branch: `orbit/serving-${n}-${taskId.slice(0, 8)}`,
       changedFiles: ['src/work.ts'],
       finishedAt: new Date(),
-      releaseCause: 'engine_exited',
     },
   });
   return taskId;
@@ -423,7 +422,7 @@ async function strandWork(db: PrismaClient, f: Fixture): Promise<string> {
       title: 'the attempt that failed',
       prompt: 'the attempt that failed',
       provider: 'claude',
-      status: RunStatus.FAILED, finishedAt: new Date(), releaseCause: 'engine_failed',
+      status: RunStatus.FAILED, finishedAt: new Date(), 
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
     },

@@ -199,7 +199,6 @@ test('a shared task: an explicit projection, the red line, its layers and its ru
         status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER, ...extra,
         ...(isReleasedStatus(fixtureStatus) ? {
           finishedAt: extra.finishedAt ?? new Date(),
-          releaseCause: fixtureStatus === RunStatus.CANCELLED ? 'cancelled' : fixtureStatus === RunStatus.FAILED ? 'engine_failed' : 'engine_exited',
         } : {}),
       } as never,
     });

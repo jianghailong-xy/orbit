@@ -355,7 +355,7 @@ suite('T8 replays create → auto-dispatch → failed attempt → judgment work 
     );
     await db.session.update({
       where: { id: failureJudgment.id },
-      data: { status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited', finishedAt: new Date() },
+      data: { status: RunStatus.SUCCEEDED, finishedAt: new Date() },
     });
 
     await (stack.tasks as unknown as { reconcileReadyTasks(): Promise<void> })

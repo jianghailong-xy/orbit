@@ -248,7 +248,7 @@ test('a landing is not judged before the work it is about has stopped moving', {
         ...(finish === 'NOT_FINISHED'
           ? { status: RunStatus.RUNNING }
           : {
-            status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited',
+            status: RunStatus.SUCCEEDED, 
             finishedAt: new Date(createdAt.getTime() + 60_000),
             worktreeBranch: finish.worktreeBranch ?? branch,
             worktreeDirty: finish.worktreeDirty ?? false,
@@ -283,14 +283,14 @@ test('a landing is not judged before the work it is about has stopped moving', {
     if (moving.length > 0) {
       await tx.session.updateMany({
         where: { id: { in: moving } },
-        data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited' },
+        data: { status: RunStatus.SUCCEEDED, finishedAt: new Date()},
       });
     }
     const queued = await enqueueForDoneTask(tx, ownerId, taskId);
     if (moving.length > 0) {
       await tx.session.updateMany({
         where: { id: { in: moving } },
-        data: { status: RunStatus.RUNNING, finishedAt: null, releaseCause: null },
+        data: { status: RunStatus.RUNNING, finishedAt: null},
       });
       await tx.task.update({ where: { id: taskId }, data: DELIVERED_IDENTITY_CLEARED });
     }
@@ -491,7 +491,7 @@ test('a landing is not judged before the work it is about has stopped moving', {
       await prisma.session.update({
         where: { id: runningSession },
         data: {
-          status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited',
+          status: RunStatus.SUCCEEDED, 
           finishedAt: new Date(),
           worktreeBranch: runningBranch,
           worktreeDirty: false,
@@ -561,7 +561,7 @@ test('a landing is not judged before the work it is about has stopped moving', {
       await prisma.session.update({
         where: { id: workSessionId },
         data: {
-          status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited',
+          status: RunStatus.SUCCEEDED, 
           finishedAt: new Date(),
           worktreeBranch: 'orbit/autorun-false-91f94d',
           worktreeDirty: false,
@@ -910,14 +910,14 @@ test('a landing is not judged before the work it is about has stopped moving', {
     // (`sessions.service.ts`), so while it runs its branch can move again…
     await prisma.session.update({
       where: { id: guardSession },
-      data: { status: RunStatus.PENDING, finishedAt: null, releaseCause: null },
+      data: { status: RunStatus.PENDING, finishedAt: null},
     });
     // …and its finalize commits what it did onto the branch it ends on and records a NEW finish
     // (SR13): the same branch, with more work on it.
     await prisma.session.update({
       where: { id: guardSession },
       data: {
-        status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited',
+        status: RunStatus.SUCCEEDED, 
         finishedAt: new Date(),
         worktreeBranch: guardEndedOn,
         worktreeDirty: false,

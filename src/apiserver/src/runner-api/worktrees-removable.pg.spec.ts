@@ -89,7 +89,7 @@ test('worktrees-removable: what is kept, and what of that is resumable', {
           branch: `orbit/${title.replace(/\W+/g, '-')}-${RUN}`,
           ...columns,
           ...(columns.status === RunStatus.SUCCEEDED || columns.status === RunStatus.FAILED || columns.status === RunStatus.CANCELLED
-            ? { finishedAt: new Date(), releaseCause: columns.status === RunStatus.CANCELLED ? 'cancelled' : columns.status === RunStatus.FAILED ? 'engine_failed' : 'engine_exited' }
+            ? { finishedAt: new Date()}
             : {}),
         } as never,
       })

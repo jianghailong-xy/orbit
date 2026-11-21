@@ -192,7 +192,6 @@ interface TurnRow { status: string; outcome: string | null; error: string | null
 interface SessionRow {
   status: string;
   finished_at: Date | null;
-  release_cause: string | null;
   end_reason: string | null;
   error: string | null;
   last_turn_outcome: string | null;
@@ -208,7 +207,7 @@ async function turnRow(sql: Client, id: string): Promise<TurnRow> {
 
 async function sessionRow(sql: Client, id: string): Promise<SessionRow> {
   const row = (await sql.query(
-    `SELECT status::text AS status, finished_at, release_cause, end_reason, error, last_turn_outcome
+    `SELECT status::text AS status, finished_at, end_reason, error, last_turn_outcome
        FROM "session" WHERE id = $1::uuid`,
     [id],
   )).rows[0] as SessionRow;
@@ -218,7 +217,7 @@ async function sessionRow(sql: Client, id: string): Promise<SessionRow> {
 
 /** The carrying turn and the session both read FAILED, the turn with `error`, and the session is released as today. */
 async function assertCarried(
-  sql: Client, sessionId: string, turnId: string, error: string, release: { status?: string; cause: string },
+  sql: Client, sessionId: string, turnId: string, error: string, release: { status?: string } = {},
 ): Promise<void> {
   const t = await turnRow(sql, turnId);
   assert.equal(t.outcome, 'FAILED', 'the carrying turn records the failure');
@@ -228,7 +227,6 @@ async function assertCarried(
   assert.equal(s.last_turn_outcome, 'FAILED', 'the session copies the outcome');
   assert.equal(s.status, release.status ?? 'FAILED', 'the status is written as before');
   assert.ok(s.finished_at instanceof Date, 'released');
-  assert.equal(s.release_cause, release.cause, 'the cause is written as before');
 }
 
 /** A queued turn the release drained: out of the queue, and no outcome, because it never ran. */
@@ -277,7 +275,7 @@ test('every failure writer records FAILED and the error on the turn that carries
       turnId: r.shellTurn, status: SharedRunStatus.SUCCEEDED, shellExitCode: 1, numTurns: 0, costUsd: 0,
     } as never);
     const error = 'acceptance command exited 1; expected 0';
-    await assertCarried(sql, r.sessionId, r.shellTurn, error, { cause: 'turn_failed' });
+    await assertCarried(sql, r.sessionId, r.shellTurn, error);
     assert.equal((await sessionRow(sql, r.sessionId)).error, error, 'the session error is written as before');
     const taskRow = await s.db.task.findUniqueOrThrow({ where: { id: r.taskId }, select: { status: true } });
     assert.equal(taskRow.status, TaskStatus.FAILED, 'and the task is judged as before');
@@ -290,7 +288,7 @@ test('every failure writer records FAILED and the error on the turn that carries
       turnId: r.shellTurn, status: SharedRunStatus.SUCCEEDED, numTurns: 0, costUsd: 0,
     } as never);
     const error = 'acceptance command result no longer matches the current declaration';
-    await assertCarried(sql, r.sessionId, r.shellTurn, error, { cause: 'turn_failed' });
+    await assertCarried(sql, r.sessionId, r.shellTurn, error);
     assert.equal((await sessionRow(sql, r.sessionId)).error, error);
   });
 
@@ -301,19 +299,19 @@ test('every failure writer records FAILED and the error on the turn that carries
     await s.api.turnComplete({ id: w.runnerId }, id, {
       turnId: control, status: SharedRunStatus.FAILED, error: 'compaction failed', numTurns: 0, costUsd: 0,
     } as never);
-    await assertCarried(sql, id, control, 'compaction failed', { cause: 'turn_failed' });
+    await assertCarried(sql, id, control, 'compaction failed');
   });
 
   await t.test('W2 the reaper, runner offline: the turn in flight, else the one the claim was for', async () => {
     const w = await world(s.db, 'w2');
     const opts = { expectedStatuses: [RunStatus.RUNNING], onlyIfNotCancelling: true, armRetry: true,
-      releaseCause: 'runner_lost', carryingTurn: { outcome: 'FAILED', orLatest: false } };
+      carryingTurn: { outcome: 'FAILED', orLatest: false } };
     const inFlight = await session(s.db, w);
     const answered = await turn(s.db, inFlight, 1, 'ANSWERED');
     const running = await turn(s.db, inFlight, 2, 'IN_FLIGHT');
     const queued = await turn(s.db, inFlight, 3, 'PENDING');
     await forceFinalize(inFlight, w.runnerId, null, 'runner offline', opts);
-    await assertCarried(sql, inFlight, running, 'runner offline', { cause: 'runner_lost' });
+    await assertCarried(sql, inFlight, running, 'runner offline');
     await assertDrainedUnrun(sql, queued);
     assert.equal((await turnRow(sql, answered)).outcome, 'ANSWERED', 'an earlier turn keeps its own outcome');
     // Lost between the claim and the inbox read: the first PENDING turn is the one the claim was for.
@@ -321,7 +319,7 @@ test('every failure writer records FAILED and the error on the turn that carries
     const first = await turn(s.db, claimed, 1, 'PENDING');
     const second = await turn(s.db, claimed, 2, 'PENDING');
     await forceFinalize(claimed, w.runnerId, null, 'runner offline', opts);
-    await assertCarried(sql, claimed, first, 'runner offline', { cause: 'runner_lost' });
+    await assertCarried(sql, claimed, first, 'runner offline');
     await assertDrainedUnrun(sql, second);
   });
 
@@ -331,10 +329,10 @@ test('every failure writer records FAILED and the error on the turn that carries
     const pending = await turn(s.db, id, 1, 'PENDING');
     await forceFinalize(id, w.runnerId, null, 'claude runtime not initialized', {
       expectedStatuses: [RunStatus.RUNNING], onlyIfNotCancelling: true,
-      taskFailure: 'ATTEMPT_LOST_RUNTIME_NOT_INITIALIZED', releaseCause: 'setup_failed',
+      taskFailure: 'ATTEMPT_LOST_RUNTIME_NOT_INITIALIZED', 
       carryingTurn: { outcome: 'FAILED', orLatest: false },
     });
-    await assertCarried(sql, id, pending, 'claude runtime not initialized', { cause: 'setup_failed' });
+    await assertCarried(sql, id, pending, 'claude runtime not initialized');
   });
 
   /** A RUNNING chat run whose source is SELECTED and not yet pinned, as a runner holds it right after the claim. */
@@ -358,7 +356,7 @@ test('every failure writer records FAILED and the error on the turn that carries
     ));
     assert.equal(out.wonRace, true);
     const error = `BASE_REF_NOT_FOUND: ${stderr}`;
-    await assertCarried(sql, id, dispatched, error, { cause: 'setup_failed' });
+    await assertCarried(sql, id, dispatched, error);
     assert.equal((await sessionRow(sql, id)).error, error, 'the session error is written as before');
     await assertDrainedUnrun(sql, followUp);
     const pending = (await sql.query(
@@ -378,7 +376,6 @@ test('every failure writer records FAILED and the error on the turn that carries
     assert.equal(answer.failed, true);
     const row = await sessionRow(sql, id);
     assert.equal(row.status, 'FAILED', 'released as before');
-    assert.equal(row.release_cause, 'import_failed');
     assert.equal(row.last_turn_outcome, null, 'no turn outcome on the session');
     assert.equal((await turnRow(sql, queued)).outcome, null, 'and none on the turn');
   });
@@ -390,7 +387,7 @@ test('every failure writer records FAILED and the error on the turn that carries
     const running = await turn(s.db, midTurn, 2, 'IN_FLIGHT');
     const queued = await turn(s.db, midTurn, 3, 'PENDING');
     await s.api.finalize({ id: w.runnerId }, midTurn, { status: SharedRunStatus.FAILED, error: 'engine crashed' } as never);
-    await assertCarried(sql, midTurn, running, 'engine crashed', { cause: 'engine_failed' });
+    await assertCarried(sql, midTurn, running, 'engine crashed');
     await assertDrainedUnrun(sql, queued);
     // Idle: the link gave up events with nothing queued (runner-go session.go, the periodic flusher). The last turn.
     const idle = await session(s.db, w, { status: RunStatus.AWAITING_INPUT });
@@ -398,7 +395,7 @@ test('every failure writer records FAILED and the error on the turn that carries
     const last = await turn(s.db, idle, 2, 'ANSWERED');
     const why = "the runner link gave up the session's events: the control plane refused the events after seq 41 5 times in a row";
     await s.api.finalize({ id: w.runnerId }, idle, { status: SharedRunStatus.FAILED, error: why } as never);
-    await assertCarried(sql, idle, last, why, { cause: 'engine_failed' });
+    await assertCarried(sql, idle, last, why);
     // Not a failure: a finalize after an end that was asked for writes no outcome.
     const ended = await session(s.db, w, { cancelRequestedAt: new Date(), endReason: SessionEndReason.ENDED });
     const endedTurn = await turn(s.db, ended, 1, 'IN_FLIGHT');
@@ -426,7 +423,6 @@ test('every failure writer records FAILED and the error on the turn that carries
     const row = await sessionRow(sql, running);
     assert.equal(row.last_turn_outcome, 'CANCELLED', 'and the session copies it: no FAILED');
     assert.equal(row.status, 'FAILED', 'the status is written as before');
-    assert.equal(row.release_cause, 'end_not_honored', 'and the cause');
     assert.equal((await turnRow(sql, before)).outcome, 'ANSWERED');
     await assertDrainedUnrun(sql, queued);
     const idleRow = await sessionRow(sql, idle);
@@ -453,7 +449,7 @@ test('every failure writer records FAILED and the error on the turn that carries
     const id = await session(s.db, w, { title: label });
     const failedTurn = await turn(s.db, id, 1, 'IN_FLIGHT');
     await s.api.finalize({ id: w.runnerId }, id, { status: SharedRunStatus.FAILED, error: 'engine crashed' } as never);
-    await assertCarried(sql, id, failedTurn, 'engine crashed', { cause: 'engine_failed' });
+    await assertCarried(sql, id, failedTurn, 'engine crashed');
     await s.sessions.resume(w.ownerId, id, { clientTurnId: `revive-${randomUUID()}`, content: 'Try again' });
     const revived = await sessionRow(sql, id);
     assert.equal(revived.status, 'PENDING', 'revived');
@@ -495,11 +491,10 @@ test('every failure writer records FAILED and the error on the turn that carries
     const row = await sessionRow(sql, revived.id);
     assert.equal(row.last_turn_outcome, 'CANCELLED', 'the session copies it: the FAILED of the run before is gone');
     assert.equal(row.status, 'CANCELLED', 'the status is written as before');
-    assert.equal(row.release_cause, 'engine_exited', 'and the cause');
     assert.equal(row.end_reason, null, 'no end was asked');
     assert.equal(releaseWasFailure({
       finishedAt: row.finished_at, endReason: row.end_reason, lastTurnOutcome: row.last_turn_outcome, status: row.status,
-    }), false, 'so the release reads as no failure (common/session-release.ts), as the cause read it');
+    }), false, 'so the release reads as no failure (common/session-release.ts), as nothing but the turn and the end reason say');
     assert.equal((await turnRow(sql, revived.failedTurn)).outcome, 'FAILED', 'the failed turn keeps its own');
 
     // A turn in flight and one queued, the runner's word SUCCEEDED: the one in flight is cut off, the queued one drained.
@@ -575,7 +570,7 @@ test('every failure writer records FAILED and the error on the turn that carries
       data: { sessionId: id, seq: 1, type: RunEventType.ASSISTANT, payload: { text: reply }, turnId: last },
     });
     await sweep();
-    await assertCarried(sql, id, last, reply, { cause: 'turn_failed' });
+    await assertCarried(sql, id, last, reply);
     assert.equal((await sessionRow(sql, id)).error, 'run failed (API error)', 'the session error is written as before');
     assert.equal((await turnRow(sql, first)).outcome, 'ANSWERED', 'an earlier turn keeps its own outcome');
   });
@@ -633,7 +628,7 @@ test('every failure writer records FAILED and the error on the turn that carries
     await turn(s.db, w2, 2, 'PENDING');
     await poison(w2, 'drain');
     await assert.rejects(forceFinalize(w2, w.runnerId, null, 'runner offline', {
-      expectedStatuses: [RunStatus.RUNNING], onlyIfNotCancelling: true, releaseCause: 'runner_lost',
+      expectedStatuses: [RunStatus.RUNNING], onlyIfNotCancelling: true, 
       carryingTurn: { outcome: 'FAILED', orLatest: false },
     }), /r2: the drain is refused/);
     await assertNeither(w2, w2Turn);

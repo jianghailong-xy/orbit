@@ -209,7 +209,7 @@ test('a task none of a settled project\'s criteria count leaves it by a confirme
     await prisma.session.create({
       data: {
         id: ran, ownerId, creatorId: ownerId, taskId, title: `ran ${title}`, prompt: 'do the work',
-        status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited', branch: `orbit/${nibble}`, isolationStatus: 'worktree',
+        status: RunStatus.SUCCEEDED, finishedAt: new Date(), branch: `orbit/${nibble}`, isolationStatus: 'worktree',
       },
     });
     await receipts.record(ownerId, ran, {

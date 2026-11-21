@@ -384,7 +384,7 @@ test('a coordinator asks its owner to record the project done, and the project i
         prompt: 'do the work',
         branch,
         isolationStatus: 'worktree',
-        status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited',
+        status: RunStatus.SUCCEEDED, 
         baseSha: sha('1'),
         changedFiles: [] as never,
         createdAt: new Date(Date.now() - 10 * 60_000),
@@ -608,7 +608,7 @@ test('a coordinator asks its owner to record the project done, and the project i
     assert.deepEqual(await requests(p.id), []);
 
     // The same project once its work has stopped moving is one a request can be filed about.
-    await sql.query(`UPDATE "session" SET "status" = 'SUCCEEDED', "release_cause" = 'engine_exited', "finished_at" = now()
+    await sql.query(`UPDATE "session" SET "status" = 'SUCCEEDED', "finished_at" = now()
                       WHERE "id" = ANY($1::uuid[])`, [[rerunning, waitingRun]]);
     await sql.query(`UPDATE "task" SET "status" = 'CANCELLED' WHERE "id" = ANY($1::uuid[])`,
       [[inProgress.id, waiting.id]]);
@@ -770,7 +770,7 @@ test('a coordinator asks its owner to record the project done, and the project i
     data: {
       id: randomUUID(), ownerId, creatorId: ownerId, taskId: branchlessTask.id, workspaceId: p.workspaceId,
       assignedRunnerId: runnerId, title: 'ran the walkthrough', prompt: 'do the work', isolationStatus: 'shared',
-      status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited',
+      status: RunStatus.SUCCEEDED, 
       startsTaskWork: true, changedFiles: ['walkthrough.md'] as never,
       createdAt: new Date(Date.now() - 10 * 60_000), finishedAt: new Date(Date.now() - 10 * 60_000),
     },
@@ -972,7 +972,7 @@ test('a coordinator asks its owner to record the project done, and the project i
       'and the refused press ended nothing — the next read supersedes it');
     assert.equal((await afterRead(filed.itemId)).row.state, 'SUPERSEDED');
 
-    await sql.query(`UPDATE "session" SET "status" = 'SUCCEEDED', "release_cause" = 'engine_exited', "finished_at" = now()
+    await sql.query(`UPDATE "session" SET "status" = 'SUCCEEDED', "finished_at" = now()
                       WHERE "id" = $1::uuid`, [started]);
   });
 

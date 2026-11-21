@@ -156,8 +156,8 @@ test('evidence that cites a file', { skip: !URL, concurrency: 1, timeout: 600_00
         id, title, prompt: title, ownerId: who.ownerId, creatorId: who.ownerId, workspaceId: who.workspaceId,
         assignedRunnerId: who.runnerId, status, startedAt: new Date(), runtimeSessionId: `runtime-${id}`,
         ...(status === 'SUCCEEDED' || status === 'FAILED'
-          ? { finishedAt: new Date(), releaseCause: status === 'FAILED' ? 'engine_failed' : 'engine_exited' }
-          : status === 'CANCELLED' ? { finishedAt: new Date(), releaseCause: 'cancelled' } : {}),
+          ? { finishedAt: new Date()}
+          : status === 'CANCELLED' ? { finishedAt: new Date()} : {}),
         provider: 'claude', taskId, startsTaskWork: taskId !== undefined,
       },
     });
@@ -481,7 +481,7 @@ test('evidence that cites a file', { skip: !URL, concurrency: 1, timeout: 600_00
     created(await submit(moving, [asFile(picture)]), 'the evidence');
     await reads(project.coordinator, picture, 'its coordinator, before it moves');
     // A task moves once its run has ended: a live claim holds it where it is.
-    await db.session.update({ where: { id: moving.sessionId }, data: { status: 'SUCCEEDED', finishedAt: new Date(), releaseCause: 'engine_exited' } });
+    await db.session.update({ where: { id: moving.sessionId }, data: { status: 'SUCCEEDED', finishedAt: new Date()} });
     const elsewhere = await projectOf('the project it moved to');
     await db.task.update({ where: { id: moving.taskId }, data: { projectId: elsewhere.id, criterionDefinitionId: elsewhere.definitionId } });
     await readsNothing(project.coordinator, picture, 'the coordinator of the project it left');

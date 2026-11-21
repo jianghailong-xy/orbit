@@ -503,7 +503,7 @@ async function failFirstRuns(
   for (const run of [heldRun, twinRun]) {
     await s.db.session.update({
       where: { id: run.id },
-      data: { status: RunStatus.FAILED, releaseCause: 'engine_failed', error: null, finishedAt: new Date() },
+      data: { status: RunStatus.FAILED, error: null, finishedAt: new Date() },
     });
   }
   return {
@@ -741,7 +741,7 @@ test('(4b) a prerequisite finishing starts no more of a project\'s tasks than it
       where: { taskId: { in: three.dependents }, startsTaskWork: true }, select: { id: true },
     });
     await s.db.session.update({
-      where: { id: running!.id }, data: { status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited', finishedAt: new Date() },
+      where: { id: running!.id }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date() },
     });
     await sweep(s.tasks);
     assert.deepEqual(await Promise.all(three.dependents.map((id) => runs(s.db, id))), [1, 1],
@@ -951,7 +951,7 @@ async function doneCodeTask(stack: Stack, w: LineWorld): Promise<string> {
     const finished = await tx.session.update({
       where: { id: sessionId },
       data: {
-        status: RunStatus.SUCCEEDED, finishedAt: new Date(Date.now() - 60_000), releaseCause: 'engine_exited',
+        status: RunStatus.SUCCEEDED, finishedAt: new Date(Date.now() - 60_000), 
         branchSha: TASK_BRANCH_TIP, worktreeBranch: branch, worktreeDirty: false,
       },
       select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },

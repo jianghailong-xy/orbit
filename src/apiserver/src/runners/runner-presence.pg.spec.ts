@@ -465,7 +465,7 @@ test('runner presence: an UNLOGGED table every heartbeat upserts, and the one so
     await db.session.create({
       data: {
         id: endedId, ownerId: carol.id, creatorId: carol.id, workspaceId, assignedRunnerId: r.id, title: 'ended',
-        prompt: 'ended', provider: 'claude', providerBuiltin: true, status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited',
+        prompt: 'ended', provider: 'claude', providerBuiltin: true, status: RunStatus.SUCCEEDED, 
         startedAt: new Date(Date.now() - 20 * MINUTE), finishedAt: new Date(Date.now() - 15 * MINUTE),
         numTurns: 1, runtimeSessionId: randomUUID(), dispatchOrigin: SessionDispatchOrigin.USER,
       },

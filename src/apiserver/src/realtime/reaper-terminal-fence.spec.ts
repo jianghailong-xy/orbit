@@ -61,10 +61,10 @@ test('reaper terminalization retires the generation then records leased CURRENT_
         runnerId: string | null,
         taskId: string | null,
         reason: string,
-        opts: { releaseCause: string },
+        opts: {},
       ): Promise<void>;
     }
-  ).forceFinalize(SESSION_ID, RUNNER_ID, null, 'runner offline', { releaseCause: 'runner_lost' });
+  ).forceFinalize(SESSION_ID, RUNNER_ID, null, 'runner offline', {});
 
   assert.deepEqual(order, ['terminal', 'retire', 'current-work', 'drain']);
   assert.equal(receiptWrites[0]?.deliveryStatus, 'UNCONFIRMED');

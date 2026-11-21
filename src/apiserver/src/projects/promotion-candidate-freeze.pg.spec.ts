@@ -193,7 +193,7 @@ test('a candidate is not frozen before the work it offers has stopped moving', {
         createdAt: when.createdAt,
         ...(when.finished
           ? {
-            status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited',
+            status: RunStatus.SUCCEEDED, 
             finishedAt: when.finished,
             worktreeBranch: when.worktreeBranch ?? branch,
             worktreeDirty: when.worktreeDirty ?? false,
@@ -229,14 +229,14 @@ test('a candidate is not frozen before the work it offers has stopped moving', {
     if (moving.length > 0) {
       await tx.session.updateMany({
         where: { id: { in: moving } },
-        data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited' },
+        data: { status: RunStatus.SUCCEEDED, finishedAt: new Date()},
       });
     }
     const queued = await enqueueForDoneTask(tx, ownerId, taskId);
     if (moving.length > 0) {
       await tx.session.updateMany({
         where: { id: { in: moving } },
-        data: { status: RunStatus.RUNNING, finishedAt: null, releaseCause: null },
+        data: { status: RunStatus.RUNNING, finishedAt: null},
       });
       await tx.task.update({ where: { id: taskId }, data: DELIVERED_IDENTITY_CLEARED });
     }
@@ -391,7 +391,7 @@ test('a candidate is not frozen before the work it offers has stopped moving', {
       await prisma.session.update({
         where: { id: runningSession },
         data: {
-          status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited',
+          status: RunStatus.SUCCEEDED, 
           finishedAt: new Date(),
           worktreeBranch: runningBranch,
           worktreeDirty: false,

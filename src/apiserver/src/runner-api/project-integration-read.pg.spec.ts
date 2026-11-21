@@ -124,7 +124,6 @@ async function account(db: PrismaClient, label: string): Promise<Account> {
         ...extra,
         ...(isReleasedStatus(status) ? {
           finishedAt: extra.finishedAt ?? new Date(),
-          releaseCause: status === RunStatus.CANCELLED ? 'cancelled' : status === RunStatus.FAILED ? 'engine_failed' : 'engine_exited',
         } : {}),
       },
     });

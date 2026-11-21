@@ -119,8 +119,8 @@ test('the batch takeover answers each row as the single takeover does, and takes
         assignedRunnerId: opts.runnerId ?? of.runnerId, title: 'batch takeover', prompt: 'hi', provider: 'claude',
         status: opts.status ?? RunStatus.RUNNING, dispatchOrigin: SessionDispatchOrigin.USER, startedAt: new Date(),
         ...(opts.status === RunStatus.SUCCEEDED || opts.status === RunStatus.FAILED
-          ? { finishedAt: new Date(), releaseCause: opts.status === RunStatus.FAILED ? 'engine_failed' : 'engine_exited' }
-          : opts.status === RunStatus.CANCELLED ? { finishedAt: new Date(), releaseCause: 'cancelled' } : {}),
+          ? { finishedAt: new Date()}
+          : opts.status === RunStatus.CANCELLED ? { finishedAt: new Date()} : {}),
         inboxLeaseOwner: opts.owner ?? null, inboxLeaseGeneration: opts.generation ?? null,
         ...(opts.pendingMerge ? { mergeStatus: 'pending', mergeOperationOwner: randomUUID(), mergeOperationId: randomUUID(), mergeRequestedAt: new Date() } : {}),
       },

@@ -5257,8 +5257,12 @@ button.toast--pill:focus-visible {
   flex-grow: 0;
 }
 /* The iOS system colours the native swipe buttons use. */
-.session-swipe-action.complete .session-swipe-glyph {
+.session-swipe-action.complete .session-swipe-glyph,
+.session-swipe-action.resume .session-swipe-glyph {
   background: #34c759;
+}
+.session-swipe-action.pause .session-swipe-glyph {
+  background: #ff9500;
 }
 .session-swipe-action.restore .session-swipe-glyph {
   background: #007aff;
@@ -5270,8 +5274,12 @@ button.toast--pill:focus-visible {
 .session-swipe-action.purge .session-swipe-glyph {
   background: #ff3b30;
 }
-:root[data-theme='dark'] .session-swipe-action.complete .session-swipe-glyph {
+:root[data-theme='dark'] .session-swipe-action.complete .session-swipe-glyph,
+:root[data-theme='dark'] .session-swipe-action.resume .session-swipe-glyph {
   background: #30d158;
+}
+:root[data-theme='dark'] .session-swipe-action.pause .session-swipe-glyph {
+  background: #ff9f0a;
 }
 :root[data-theme='dark'] .session-swipe-action.restore .session-swipe-glyph {
   background: #0a84ff;
@@ -5530,6 +5538,10 @@ button.toast--pill:focus-visible {
 }
 .session-project-progress-bar .failed {
   background: var(--error);
+}
+/* A paused project's bar goes grey (§4.2 2b). */
+.session-project-progress.paused .session-project-progress-bar > span {
+  background: var(--text-3);
 }
 /* The landing in flight, as a card of its own (owner decision 2026-10-11, mock board
    docs/mocks/project-landing-card): the merge card's shape, on the project's sessions page under
@@ -6206,6 +6218,13 @@ button.toast--pill:focus-visible {
    somebody is waiting on you, and a stopped runner is a fact rather than a question. */
 .session-preview.tone-warning {
   color: var(--warning-solid);
+}
+.session-preview.tone-paused {
+  color: var(--text-3);
+}
+.session-project-pause-glyph {
+  margin-right: 4px;
+  font-size: 10px;
 }
 .session-preview.tone-queued,
 .session-preview.tone-background,

@@ -19,8 +19,6 @@ import { runnerOfflineIsFatal } from '../common/session-scheduling';
 import { carryingTurnOf, recordCarryingTurnOutcome } from '../common/carrying-turn';
 import {
   HELD_SESSION_STATUSES,
-  releaseCauseOfEndReason,
-  type SessionReleaseCause,
 } from '../common/session-release';
 import { isSessionExecuting } from '../common/session-working';
 import { fileSubagentWake, fileWorkflowWake } from '../runner-api/subagent-wake';
@@ -533,10 +531,9 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
             {
               ...(status ? { status } : {}),
               expectedStatuses: [s.status],
-              // An end somebody asked for, released for the reason it recorded when it settles as asked (a
-              // graceful end, or a cancel that found the session still queued). Not honoured, it is released
-              // FAILED (forceFinalize's default), a failure: end_not_honored, with end_reason kept as asked.
-              releaseCause: status ? releaseCauseOfEndReason(s.endReason) : 'end_not_honored',
+              // An end somebody asked for settles as asked (a graceful end, or a cancel that found the session
+              // still queued). Not honoured, it is released FAILED (forceFinalize's default), with end_reason kept
+              // as asked.
               // Not honoured, the end still is one somebody asked for: the turn it cut off ends CANCELLED, and nothing
               // records a failure (design §12.1 W7). Only a RUNNING session had one: idle, none was in flight.
               ...(!status && s.status === RunStatus.RUNNING
@@ -637,7 +634,6 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
               // work left behind in the old one.
               armRetry: !s.taskId || !s.task?.autoRunWhenReady,
               taskFailure: 'ATTEMPT_LOST_RUNNER_OFFLINE',
-              releaseCause: 'runner_lost',
               carryingTurn: { outcome: 'FAILED', orLatest: false },
             });
           } else if (isSessionExecuting(s)) {
@@ -696,7 +692,6 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
               expectedStatuses: [RunStatus.RUNNING],
               onlyIfNotCancelling: true,
               taskFailure: 'ATTEMPT_LOST_RUNTIME_NOT_INITIALIZED',
-              releaseCause: 'setup_failed',
               carryingTurn: { outcome: 'FAILED', orLatest: false },
             },
           );
@@ -724,7 +719,6 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
               expectedStatuses: [RunStatus.AWAITING_INPUT],
               onlyIfNotCancelling: true,
               taskFailure: 'REAPED_API_ERROR',
-              releaseCause: 'turn_failed',
               // Nothing is in flight: the turn the error answered is the latest, and it fails with the reply as its error.
               carryingTurn: { outcome: 'FAILED', orLatest: true },
             });
@@ -964,8 +958,6 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
        * for: that ending says nothing about the work.
        */
       taskFailure?: TaskFailureHow;
-      /** Why the session is released (`session.release_cause`), written with the status. */
-      releaseCause: SessionReleaseCause;
       /**
        * How the turn that carries this release ends (design §12.1, `common/carrying-turn.ts`), recorded in this
        * transaction with its error (`failureDetail`, else `reason`), and copied to `last_turn_outcome` in the release's
@@ -1023,7 +1015,6 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           // rather than a fixed delay guessing when the runner returns.
           ...(retryAt ? { retryAt } : {}),
           finishedAt: new Date(),
-          releaseCause: opts.releaseCause,
           // The carrying turn's outcome, copied in the release's own write (design §12.1).
           ...(carrying ? { lastTurnOutcome: carrying.outcome } : {}),
           cancelRequestedAt: new Date(),

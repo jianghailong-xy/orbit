@@ -209,7 +209,7 @@ async function doneTask(stack: Stack, m: Machine, projectId: string, label: stri
     data: {
       ownerId: m.ownerId, creatorId: m.ownerId, taskId: created.id, workspaceId: m.workspaceId,
       assignedRunnerId: m.runnerId, title, prompt: title, branch, isolationStatus: 'worktree',
-      baseSha: sha('b'), status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited', startsTaskWork: true,
+      baseSha: sha('b'), status: RunStatus.SUCCEEDED, startsTaskWork: true,
       createdAt: new Date(Date.now() - 49 * HOUR), finishedAt: new Date(Date.now() - 48 * HOUR),
       worktreeBranch: branch, worktreeDirty: false,
       changedFiles: [{ path: 'src/the-work.ts' }] as never,

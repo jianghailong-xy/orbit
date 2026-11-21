@@ -184,8 +184,8 @@ async function fixture(
       numTurns: 1,
       engineTurnActive: false,
       ...(sessionStatus === RunStatus.SUCCEEDED || sessionStatus === RunStatus.FAILED
-        ? { finishedAt: new Date(), releaseCause: sessionStatus === RunStatus.FAILED ? 'engine_failed' : 'engine_exited' }
-        : sessionStatus === RunStatus.CANCELLED ? { finishedAt: new Date(), releaseCause: 'cancelled' } : {}),
+        ? { finishedAt: new Date()}
+        : sessionStatus === RunStatus.CANCELLED ? { finishedAt: new Date()} : {}),
     },
   });
   if (parked) {

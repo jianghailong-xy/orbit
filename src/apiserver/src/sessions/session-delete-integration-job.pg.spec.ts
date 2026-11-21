@@ -317,7 +317,7 @@ async function doneCodeTask(stack: Stack, w: World, label: string): Promise<{ ta
     const finished = await tx.session.update({
       where: { id: sessionId },
       data: {
-        status: RunStatus.SUCCEEDED, finishedAt, releaseCause: 'engine_exited',
+        status: RunStatus.SUCCEEDED, finishedAt, 
         branchSha: TASK_BRANCH_TIP, worktreeBranch: branch, worktreeDirty: false,
       },
       select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
@@ -413,7 +413,7 @@ test('(b) the hourly Trash purge takes a failed landing\'s session and its neigh
       const neighbour = await stack.db.session.create({
         data: {
           ownerId: w.ownerId, creatorId: w.ownerId, title: 'a chat', prompt: 'p',
-          status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited',
+          status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
         },
         select: { id: true },
       });

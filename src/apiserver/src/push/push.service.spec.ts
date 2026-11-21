@@ -7,7 +7,6 @@ import { test } from 'node:test';
 import { ConfigService } from '@nestjs/config';
 import { RunStatus } from '@prisma/client';
 import { PushService } from './push.service';
-import { releaseCauseOfEndReason } from '../common/session-release';
 import { releaseFactsOf } from '../common/session-release-shapes.fixture';
 import { findingCollapseId, findingCopy } from '../schedules/schedule-attention';
 
@@ -197,7 +196,7 @@ function settledSession(over: Record<string, unknown> = {}) {
     title: 'Fix the login bug',
     ownerId: 'owner-1',
     // Released having finished the work, as its writer stores it beside SUCCEEDED: the alert reads these (plan step 4.8).
-    ...releaseFactsOf('task_done'),
+    ...releaseFactsOf('finished work'),
     status: RunStatus.SUCCEEDED,
     retryAt: null,
     completedAt: null,
@@ -253,7 +252,7 @@ test('a settled session alerts its owner, collapsing on the session', async () =
 
 test('a failure carries its first error line', async () => {
   const { service, sent } = settleHarness(
-    settledSession({ ...releaseFactsOf('turn_failed'), status: RunStatus.FAILED, error: 'API Error: 529 overloaded_error' }),
+    settledSession({ ...releaseFactsOf('failed'), status: RunStatus.FAILED, error: 'API Error: 529 overloaded_error' }),
   );
 
   await service.notifySessionSettled('s-1');
@@ -264,7 +263,7 @@ test('a failure carries its first error line', async () => {
 });
 
 test('an ending not worth an interruption sends nothing', async () => {
-  const { service, sent } = settleHarness(settledSession({ ...releaseFactsOf(releaseCauseOfEndReason(SessionEndReason.ENDED)), status: RunStatus.CANCELLED }));
+  const { service, sent } = settleHarness(settledSession({ ...releaseFactsOf('ended'), status: RunStatus.CANCELLED }));
   await service.notifySessionSettled('s-1');
   assert.equal(sent.length, 0);
 });
@@ -1298,7 +1297,7 @@ test('an escalated item whose coordinator cannot be reached says so, not "no one
   });
   const live = { status: 'AWAITING_INPUT', endReason: null, completedAt: null, archivedAt: null, deletedAt: null, cancelRequestedAt: null };
   const cases = [
-    { what: 'reaped, runner away', session: { ...live, status: 'FAILED', finishedAt: new Date(), releaseCause: 'turn_failed', cancelRequestedAt: new Date() }, blocked: 'RUNNER_OFFLINE',
+    { what: 'reaped, runner away', session: { ...live, status: 'FAILED', finishedAt: new Date(), cancelRequestedAt: new Date() }, blocked: 'RUNNER_OFFLINE',
       title: 'Now yours — no one acted on this for 2h 56m' },
     { what: 'live, but no message reaches it', session: live, blocked: 'RUN_RETIRED',
       title: 'Now yours — the coordinator can’t take messages' },

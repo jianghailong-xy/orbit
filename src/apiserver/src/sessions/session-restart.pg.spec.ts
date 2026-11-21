@@ -182,7 +182,7 @@ suite('POST /sessions/:id/restart, on real PostgreSQL', async (t) => {
   await t.test('(3) an ended engine is refused 409 ENGINE_NOT_RUNNING and nothing is queued', async () => {
     const box = await machine(db, me, 'restart-ended');
     const ended = await liveSession(db, me, box);
-    await db.session.update({ where: { id: ended }, data: { status: RunStatus.CANCELLED, finishedAt: new Date(), releaseCause: 'cancelled' } });
+    await db.session.update({ where: { id: ended }, data: { status: RunStatus.CANCELLED, finishedAt: new Date()} });
 
     await assert.rejects(sessions.restart(me, ended), (error: unknown) => {
       assert.ok(error instanceof ConflictException, String(error));

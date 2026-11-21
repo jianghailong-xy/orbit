@@ -171,7 +171,7 @@ test('GET /projects/:id says whether the work settled AND whether it landed, sep
         taskId,
         title: `ran ${branch}`,
         prompt: 'do the work',
-        status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited',
+        status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
         branch,
         isolationStatus: 'worktree',
       },

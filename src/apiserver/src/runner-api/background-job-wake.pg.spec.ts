@@ -168,8 +168,8 @@ test('a background job wakes its session through the runner door', {
         numTurns: 1,
         ...data,
         ...(data.status === RunStatus.SUCCEEDED || data.status === RunStatus.FAILED
-          ? { finishedAt: data.finishedAt ?? new Date(), releaseCause: data.status === RunStatus.FAILED ? 'engine_failed' : 'engine_exited' }
-          : data.status === RunStatus.CANCELLED ? { finishedAt: data.finishedAt ?? new Date(), releaseCause: 'cancelled' } : {}),
+          ? { finishedAt: data.finishedAt ?? new Date()}
+          : data.status === RunStatus.CANCELLED ? { finishedAt: data.finishedAt ?? new Date()} : {}),
       },
     });
     return id;

@@ -42,7 +42,7 @@ import {
   releaseWasFailureFilter,
   releaseWasFailureSql,
 } from './session-release';
-import { CAUSE_READING, RELEASE_SHAPES } from './session-release-shapes.fixture';
+import { RELEASE_SHAPES } from './session-release-shapes.fixture';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -97,7 +97,6 @@ test('the release questions answer alike in every spelling, and the auto-retry s
             ? { sessionKind: 'LANDING', provider: 'orbit', providerBuiltin: true, engine: null, startsTaskWork: false }
             : { provider: 'claude', providerBuiltin: true, engine: 'claude', assignedRunnerId: w.runnerId }),
           finishedAt: shape.released ? new Date() : null,
-          releaseCause: shape.releaseCause,
           endReason: shape.endReason,
           ...(shape.endReason ? { cancelRequestedAt: new Date() } : {}),
           lastTurnOutcome: shape.lastTurnOutcome,
@@ -150,8 +149,8 @@ test('the release questions answer alike in every spelling, and the auto-retry s
     const service = new AutoRetryService(prisma, sessions, quiet);
     const now = new Date();
 
-    // The where clauses of the three queries (sessions/auto-retry.service.ts), with the failure arm given: before R4,
-    // the release cause; after, the module's filter. Their other halves are copied as they stand.
+    // The where clauses of the three queries (sessions/auto-retry.service.ts), with the failure arm given: the module's
+    // filter. Their other halves are copied as they stand.
     const NOT_DISPATCH_HELD: Prisma.SessionWhereInput = {
       OR: [{ taskId: null }, { startsTaskWork: false }, { task: { dispatchHold: false } }],
     };
@@ -159,7 +158,6 @@ test('the release questions answer alike in every spelling, and the auto-retry s
       OR: [{ taskId: null }, { startsTaskWork: false }, { task: { projectId: null } },
         { task: { project: { status: { not: ProjectStatus.CANCELLED } } } }],
     };
-    const BEFORE: Prisma.SessionWhereInput = { releaseCause: { in: [...CAUSE_READING.failureCauses] } };
     const AFTER: Prisma.SessionWhereInput = releaseWasFailureFilter();
     const queries = {
       sweep: {
@@ -211,17 +209,14 @@ test('the release questions answer alike in every spelling, and the auto-retry s
       assert.equal(found.length, 1, `one statement matches ${marker}: ${JSON.stringify(statements.map((s) => s.query))}`);
       return found[0];
     };
-    const captured: Record<string, { real: { query: string; params: string }; before: { query: string; params: string };
+    const captured: Record<string, { real: { query: string; params: string };
       after: { query: string; params: string } }> = {};
     for (const [name, q] of Object.entries(queries)) {
       // Before the table is filled: nothing is due, so the service reads and writes nothing else.
       const real = await take(q.run, q.marker);
       const after = await take(() => q.copy(AFTER), q.marker);
-      const before = await take(() => q.copy(BEFORE), q.marker);
       assert.equal(tail(after.query), tail(real.query), `${name}: the copy after R4 is the query the service sends`);
-      assert.match(tail(before.query), /"release_cause" IN \(/, `${name}: before, the release cause`);
-      assert.doesNotMatch(tail(after.query), /release_cause/, `${name}: after, no release cause`);
-      captured[name] = { real, before, after };
+      captured[name] = { real, after };
     }
 
     // A large session table: 200,000 rows, one in a hundred released by a failure, one in a hundred parked idle,
@@ -230,14 +225,13 @@ test('the release questions answer alike in every spelling, and the auto-retry s
     const bulk = await world(db, 'bulk');
     await sql.query(`
       INSERT INTO "session" ("id", "owner_id", "creator_id", "workspace_id", "title", "prompt", "status", "provider",
-                             "provider_builtin", "kind", "finished_at", "release_cause", "end_reason", "last_turn_outcome",
+                             "provider_builtin", "kind", "finished_at", "end_reason", "last_turn_outcome",
                              "retry_at", "retry_claimed_at", "cancel_requested_at", "created_at", "updated_at")
       SELECT gen_random_uuid(), $1::uuid, $1::uuid, $2::uuid, 'bulk', 'bulk',
              (CASE WHEN g % 100 = 0 THEN 'FAILED' WHEN g % 100 = 1 THEN 'AWAITING_INPUT'
                    WHEN g % 3 = 0 THEN 'SUCCEEDED' ELSE 'CANCELLED' END)::run_status,
              'claude', true, 'CONVERSATION',
              CASE WHEN g % 100 = 1 THEN NULL ELSE now() - make_interval(secs => g) END,
-             CASE WHEN g % 100 = 0 THEN 'turn_failed' WHEN g % 100 = 1 THEN NULL WHEN g % 3 = 0 THEN 'task_done' ELSE 'ended' END,
              CASE WHEN g % 100 IN (0, 1) THEN NULL WHEN g % 3 = 0 THEN 'task_done' ELSE 'ended' END,
              CASE WHEN g % 100 = 0 THEN 'FAILED' ELSE 'ANSWERED' END,
              CASE WHEN g % 100 IN (0, 1) AND g % 11 <> 0 THEN
@@ -250,16 +244,13 @@ test('the release questions answer alike in every spelling, and the auto-retry s
     const count = (await sql.query(`SELECT count(*)::int AS n FROM "session"`)).rows[0] as { n: number };
     assert.ok(count.n >= 200_000, `the table holds ${count.n} sessions`);
 
-    for (const [name, { before, after }] of Object.entries(captured)) {
+    for (const [name, { after }] of Object.entries(captured)) {
       const plan = async (statement: { query: string; params: string }) => (await sql.query(
         `EXPLAIN ${statement.query}`, JSON.parse(statement.params) as unknown[],
       )).rows.map((row: { 'QUERY PLAN': string }) => row['QUERY PLAN']).join('\n');
-      const planBefore = await plan(before);
       const planAfter = await plan(after);
-      console.log(`# ${name}, before R4:\n${planBefore.replace(/^/gm, '#   ')}`);
       console.log(`# ${name}, after R4:\n${planAfter.replace(/^/gm, '#   ')}`);
       const index = queries[name as keyof typeof queries].index;
-      assert.match(planBefore, new RegExp(`using ${index}`), `${name}: before, by ${index}`);
       assert.match(planAfter, new RegExp(`using ${index}`), `${name}: after, by ${index}`);
       assert.doesNotMatch(planAfter, /Seq Scan on session/, `${name}: after, no scan of the session table`);
     }

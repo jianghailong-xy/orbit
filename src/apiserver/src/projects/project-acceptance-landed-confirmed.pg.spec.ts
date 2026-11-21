@@ -309,7 +309,6 @@ async function serve(stack: Stack, f: Fixture, criterionKey: string, title: stri
       branch: `orbit/${declared.id.slice(0, 8)}`,
       changedFiles: ['src/work.ts'],
       finishedAt: new Date(),
-      releaseCause: 'engine_exited',
     },
   });
   return declared.id;
@@ -341,7 +340,7 @@ async function mergeSession(stack: Stack, f: Fixture, taskId: string, label: str
       title: `${label}-merge`,
       prompt: `${label}-merge`,
       provider: 'claude',
-      status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited',
+      status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       isolationStatus: 'worktree',
