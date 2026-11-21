@@ -3437,7 +3437,7 @@ export function WorkspaceView({
   // frame, not a render later when `projectsShown` catches up: the landing waits on these reads.
   const projectData = useSessionProjectData({
     sessions: visibleSessions, view: effectiveView, enabled: listShowsProjects(effectiveView, listByTag) && !listProjectId,
-    controlLive, needsYou: (s) => sessionLine(s, true, sessionWatching(watchingBySession, s.id)).tone === 'approval',
+    controlLive,
   });
   // `includeLanding`: the page's Landings group lists the project's LANDING sessions, and no other
   // read ever sees one (§2.9 LS6). `priority`: the page is waiting on these two, so they do not
@@ -3597,6 +3597,7 @@ export function WorkspaceView({
       coordinators: projectData.coordinators,
       workspaceId: resolvedWorkspaceId,
       contentSessions: projectData.contentSessions,
+      sessionCounts: projectData.sessionCounts,
       runnerOffline: runner.online === false,
       needsYou: sessionNeedsYou,
       motion: (s) => statusGlyphMotion(s, sessionWatching(watchingBySession, s.id)?.word),
@@ -3604,7 +3605,7 @@ export function WorkspaceView({
         effectiveView !== 'trash', sessionWatching(watchingBySession, s.id), recapsEnabled, runnerShownName),
     }),
     [openFolder, visibleSessions, workspaceFolders, projectsQ.data, projectData.coordinators, projectData.contentSessions,
-      effectiveView, listByTag, runner.online, runnerShownName, watchingBySession, selectedSession, recapsEnabled,
+      projectData.sessionCounts, effectiveView, listByTag, runner.online, runnerShownName, watchingBySession, selectedSession, recapsEnabled,
       resolvedWorkspaceId],
   );
   // A project's entry is in the list only where its coordinator runs (owner 2026-11-07), so it stands
