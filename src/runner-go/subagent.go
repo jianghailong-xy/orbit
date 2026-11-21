@@ -185,7 +185,7 @@ func delegateToolDescriptor(obj func(map[string]interface{}, ...string) map[stri
 			" records its cost and brings its result back even if this engine is recycled." +
 			" It sees your uncommitted changes, edits files directly and never commits;" +
 			" its edits stay in your working tree for you to review and commit. Its progress is shown nested under this" +
-			" call. In the foreground (the default) the call returns { runId, status, result, changedFiles, model, costUsd }" +
+			" call. In the foreground (the default) the call returns { runId, status, result, changedFiles, model, costUsd, rate }" +
 			" when it ends; if it runs longer than this call may wait, the call returns status \"running\" and Orbit starts" +
 			" a turn in this session with the result when it ends: end your turn then instead of polling. With" +
 			" background: true it returns { runId, status: \"running\" } at once and Orbit wakes this session with the" +
@@ -308,6 +308,9 @@ func delegateResult(r subagentReport) map[string]interface{} {
 	}
 	if r.Workspace != "" {
 		out["workspace"] = r.Workspace
+	}
+	if r.Status != subagentStatusRunning {
+		out["rate"] = "Once you have used this result, rate it with subagent_rate (runId, score 1-5, optional note): 1 discarded or redone, 3 usable after fixes, 5 used as-is. Optional; nothing waits on it."
 	}
 	return toolResult(prettyJSON(subagentJSON(out)), r.Status == subagentStatusFailed)
 }

@@ -1574,6 +1574,16 @@ func (t *Transport) scheduleWakeup(sessionID string, body map[string]interface{}
 	return receipt, err
 }
 
+func (t *Transport) rateSubagentRun(sessionID, runID string, body map[string]interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(runID); err != nil {
+		return nil, fmt.Errorf("runId: %w", err)
+	}
+	var out json.RawMessage
+	path := "/runner/sessions/" + url.PathEscape(sessionID) + "/subagents/" + url.PathEscape(runID) + "/rating"
+	err := t.do(nil, "POST", path, body, &out, taskOpTimeout)
+	return out, err
+}
+
 // listTaskPage returns one page of tasks plus the cursor that continues it — an empty cursor
 // means this was the last page. listTasks above can only ever answer with the newest `limit`
 // rows, so this is what makes walking an entire account possible.
