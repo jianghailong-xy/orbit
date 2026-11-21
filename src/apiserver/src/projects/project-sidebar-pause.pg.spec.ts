@@ -68,7 +68,8 @@ test('the sidebar says whether each project is paused by its owner, the old swit
           windowStart: new Date(pausedAt.getTime() - 24 * 3_600_000),
           spend: { selfStartedTurns: 6, sessionsOpened: 0, successorRetries: 0 },
           crossingFact: { table: 'task', id: randomUUID() },
-          pausedAt, resumedAt,
+          // A resumed episode names who resumed it (0284's project_fuse_episode_resumed_chk).
+          pausedAt, resumedAt, resumedByUserId: resumedAt ? ownerId : null,
         },
         select: { id: true },
       });
