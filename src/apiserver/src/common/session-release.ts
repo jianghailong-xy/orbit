@@ -7,9 +7,12 @@ import { Prisma, RunStatus } from '@prisma/client';
  * set by every write that releases a session (with `release_cause`, migration 1261), cleared by the
  * revive.
  *
- * Today both are still spelled as status sets, the same members every hand-copied live/terminal set
- * held; this is the one place that spells them. After plan step 3.4's CHECK, "released" and
- * "`finished_at` is set" are provably the same, and phase 4 moves the readers onto the column.
+ * Both are spelled here twice. On the column: `isReleased` / `isHeld` and the Prisma filters `releasedFilter` /
+ * `heldFilter`, which the TypeScript readers read (plan step 4.2). As status sets, the same members every
+ * hand-copied live/terminal set held, for the readers phase 4 has not moved yet: the raw SQL fragments below (plan
+ * step 4.3), and the Prisma filters whose status list is an index's access path (no index covers `finished_at`).
+ * session_release_fact_chk (migrations 1401, 1402) makes the two the same rows: a status is terminal exactly when
+ * `finished_at` is set.
  */
 
 /** Held: a runner holds the session, or a message waits for one to claim it. */
@@ -45,6 +48,36 @@ export function releasedStatusFilter(): Prisma.EnumRunStatusFilter<'Session'> {
 /** Prisma filter on `session.status`: held. */
 export function heldStatusFilter(): Prisma.EnumRunStatusFilter<'Session'> {
   return { in: [...HELD_SESSION_STATUSES] };
+}
+
+/** The release column, as a row read with it carries it. */
+export interface SessionReleaseColumn {
+  finishedAt: Date | string | null;
+}
+
+/** Whether this session is released: its release column is set. */
+export function isReleased(session: SessionReleaseColumn): boolean {
+  return session.finishedAt != null;
+}
+
+/** Whether this session is held: its release column is not set. */
+export function isHeld(session: SessionReleaseColumn): boolean {
+  return session.finishedAt == null;
+}
+
+/** Whether a runner holds this session past its claim: held, and not waiting in the queue to be claimed. */
+export function isHeldPastClaim(session: SessionReleaseColumn & { status: RunStatus | string }): boolean {
+  return isHeld(session) && session.status !== RunStatus.PENDING;
+}
+
+/** Prisma filter on a session: released, `finished_at IS NOT NULL`. */
+export function releasedFilter(): Prisma.SessionWhereInput {
+  return { finishedAt: { not: null } };
+}
+
+/** Prisma filter on a session: held, `finished_at IS NULL`. */
+export function heldFilter(): Prisma.SessionWhereInput {
+  return { finishedAt: null };
 }
 
 /**
