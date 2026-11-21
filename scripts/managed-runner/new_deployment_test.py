@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""A fresh install switches managed runners on; an upgrade leaves a deployment's switch as it was, and keeps
+"""A fresh install leaves managed runners off unless --managed-runners asks for them; an upgrade leaves a deployment's switch as it was, and keeps
 a new deployment's managed runner image current.
 
 The account owner's decision of 2026-10-17 (docs/managed-runner-design.md, "Implementation record: new
@@ -17,6 +17,9 @@ everything else it does, and everything it does where the profile is off, is wha
 Each case copies the scripts into a throwaway Git checkout and runs them with a fake `docker` first on PATH,
 which records every call and answers as a host with nothing on it would. Nothing is built, started or sent
 anywhere. channel.py's own parser checks the channel configuration the install and the upgrade write.
+
+The account owner's decision of 2026-11-22 turned the install's default around: managed runners (Orbit Cloud) are
+off in a new deployment, and --managed-runners is what writes those lines and prepares the host.
 """
 
 import importlib.util
@@ -188,7 +191,7 @@ class NewDeploymentTest(unittest.TestCase):
     # ── the fresh install ─────────────────────────────────────────────────────────────────────
 
     def test_a_fresh_install_writes_the_switch_the_directory_and_the_docker_profile(self):
-        run = self.run_script(INSTALL, "--managed-runner-image", "orbit-cloud-runner:fixture")
+        run = self.run_script(INSTALL, "--managed-runners", "--managed-runner-image", "orbit-cloud-runner:fixture")
         self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
         env_file = self.checkout / ".env"
         self.assertEqual(stat.S_IMODE(env_file.stat().st_mode), 0o600)
@@ -243,7 +246,7 @@ class NewDeploymentTest(unittest.TestCase):
                           and not re.fullmatch(r"build --provenance=false --build-arg ORBIT_SOURCE_SHA=\S* -t orbit-link-gateway:local src/link-gateway", c)], calls)
 
     def test_a_fresh_install_builds_the_managed_runner_image_here_and_pushes_nothing(self):
-        run = self.run_script(INSTALL, "--no-start")
+        run = self.run_script(INSTALL, "--managed-runners", "--no-start")
         self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
         head = self.git("rev-parse", "HEAD")
         calls = self.calls()
@@ -255,7 +258,12 @@ class NewDeploymentTest(unittest.TestCase):
                          IMAGE_ID)
 
     def test_an_install_without_managed_runners_writes_the_switch_off(self):
-        run = self.run_script(INSTALL, "--no-managed-runners", "--no-start")
+        for args in ((), ("--no-managed-runners",)):
+            with self.subTest(install=args):
+                (self.checkout / ".env").unlink(missing_ok=True)
+                self.assert_installed_without_managed_runners(self.run_script(INSTALL, *args, "--no-start"))
+
+    def assert_installed_without_managed_runners(self, run):
         self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
         live = self.live_lines((self.checkout / ".env").read_text())
         self.assertIn("ORBIT_MANAGED_RUNNERS_ENABLED=false", live)
@@ -473,7 +481,7 @@ class NewDeploymentTest(unittest.TestCase):
         for leftover in (self.checkout / ".env", self.log.with_name(self.log.name + ".apiserver")):
             leftover.unlink(missing_ok=True)
         shutil.rmtree(self.checkout / "data", ignore_errors=True)
-        run = self.run_script(INSTALL, "--no-start", FAKE_IMAGE_ID=IMAGE_ID)
+        run = self.run_script(INSTALL, "--managed-runners", "--no-start", FAKE_IMAGE_ID=IMAGE_ID)
         self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
         return self.managed_files()
 
@@ -729,7 +737,7 @@ class NewDeploymentTest(unittest.TestCase):
         return [c for c in self.calls() if c.startswith(f"run --rm --network {network} ") and FIREWALL_IMAGE in c]
 
     def test_a_fresh_install_checks_the_host_then_applies_the_rules_and_checks_them_from_the_network(self):
-        run = self.run_script(INSTALL, "--managed-runner-image", "orbit-cloud-runner:fixture", FAKE_DNS='["10.0.0.2"]')
+        run = self.run_script(INSTALL, "--managed-runners", "--managed-runner-image", "orbit-cloud-runner:fixture", FAKE_DNS='["10.0.0.2"]')
         self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
         calls = self.calls()
         def at(prefix):
@@ -778,7 +786,7 @@ class NewDeploymentTest(unittest.TestCase):
                 for leftover in (self.checkout / ".env",):
                     leftover.unlink(missing_ok=True)
                 shutil.rmtree(self.checkout / "data", ignore_errors=True)
-                run = self.run_script(INSTALL, "--no-managed-runner-firewall", "--managed-runner-image", "orbit-cloud-runner:fixture", *args)
+                run = self.run_script(INSTALL, "--managed-runners", "--no-managed-runner-firewall", "--managed-runner-image", "orbit-cloud-runner:fixture", *args)
                 self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
                 text = (self.checkout / ".env").read_text()
                 live = self.live_lines(text)
@@ -799,7 +807,7 @@ class NewDeploymentTest(unittest.TestCase):
         }
         for name, (env, needle) in cases.items():
             with self.subTest(name=name):
-                run = self.run_script(INSTALL, "--managed-runner-image", "orbit-cloud-runner:fixture", **env)
+                run = self.run_script(INSTALL, "--managed-runners", "--managed-runner-image", "orbit-cloud-runner:fixture", **env)
                 self.assertNotEqual(run.returncode, 0)
                 self.assertIn(needle, run.stderr)
                 self.assertIn("--no-managed-runner-firewall", run.stderr, "it says how to go without")
@@ -819,7 +827,7 @@ class NewDeploymentTest(unittest.TestCase):
                 shutil.rmtree(self.checkout / "data", ignore_errors=True)
                 self.log.with_name(self.log.name + ".network").unlink(missing_ok=True)
                 env = {"FAKE_FAIL": failing} if failing else {"FAKE_IPV6": "true"}
-                run = self.run_script(INSTALL, "--managed-runner-image", "orbit-cloud-runner:fixture", **env)
+                run = self.run_script(INSTALL, "--managed-runners", "--managed-runner-image", "orbit-cloud-runner:fixture", **env)
                 self.assertNotEqual(run.returncode, 0)
                 self.assertIn("--no-managed-runner-firewall", run.stderr)
                 self.assertFalse((self.checkout / ".env").exists())
@@ -828,26 +836,26 @@ class NewDeploymentTest(unittest.TestCase):
                 self.assertFalse([c for c in self.calls() if c.startswith(("compose build", "compose up"))])
 
     def test_dns_the_rules_break_stops_the_install(self):
-        run = self.run_script(INSTALL, "--managed-runner-image", "orbit-cloud-runner:fixture", FAKE_DNS_BROKEN_BY_RULES="1")
+        run = self.run_script(INSTALL, "--managed-runners", "--managed-runner-image", "orbit-cloud-runner:fixture", FAKE_DNS_BROKEN_BY_RULES="1")
         self.assertNotEqual(run.returncode, 0)
         self.assertIn("broke DNS", run.stderr)
         self.assertFalse((self.checkout / ".env").exists())
         self.assertFalse((self.checkout / self.FIREWALL_CONFIG).exists())
         # A host whose runners resolve nothing before the rules (offline, say) is not asked again after them.
         shutil.rmtree(self.checkout / "data", ignore_errors=True)
-        run = self.run_script(INSTALL, "--managed-runner-image", "orbit-cloud-runner:fixture",
+        run = self.run_script(INSTALL, "--managed-runners", "--managed-runner-image", "orbit-cloud-runner:fixture",
                               FAKE_FAIL=f"run --rm --network orbit-cloud-runners *{FIREWALL_IMAGE} probe --resolve *")
         self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
         self.assertEqual(len([c for c in self.calls() if c.endswith("probe --resolve registry-1.docker.io")]), 1)
 
     def test_a_gateway_the_runners_do_not_reach_through_the_rules_fails_the_install(self):
-        run = self.run_script(INSTALL, "--managed-runner-image", "orbit-cloud-runner:fixture",
+        run = self.run_script(INSTALL, "--managed-runners", "--managed-runner-image", "orbit-cloud-runner:fixture",
                               FAKE_FAIL=f"run --rm --network orbit-cloud-runners *{FIREWALL_IMAGE} probe --reach *")
         self.assertNotEqual(run.returncode, 0)
         self.assertIn(f"does not reach the gateway at {GATEWAY}:2086", run.stderr)
 
     def test_the_legacy_backend_shares_the_hosts_xtables_lock(self):
-        run = self.run_script(INSTALL, "--managed-runner-image", "orbit-cloud-runner:fixture", "--no-start", FAKE_FIREWALL_BACKEND="legacy")
+        run = self.run_script(INSTALL, "--managed-runners", "--managed-runner-image", "orbit-cloud-runner:fixture", "--no-start", FAKE_FIREWALL_BACKEND="legacy")
         if Path("/run/xtables.lock").is_file():
             self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
             self.assertIn("ORBIT_MANAGED_RUNNER_FIREWALL_XTABLES_LOCK=/run/xtables.lock", self.live_lines((self.checkout / ".env").read_text()))
@@ -877,7 +885,7 @@ class NewDeploymentTest(unittest.TestCase):
                     self.assertTrue((self.checkout / self.FIREWALL_CONFIG).exists())
 
     def test_an_administrator_adds_the_firewall_to_managed_runners_installed_without_it(self):
-        run = self.run_script(INSTALL, "--no-managed-runner-firewall", "--managed-runner-image", "orbit-cloud-runner:fixture", "--no-start")
+        run = self.run_script(INSTALL, "--managed-runners", "--no-managed-runner-firewall", "--managed-runner-image", "orbit-cloud-runner:fixture", "--no-start")
         self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
         before = (self.checkout / ".env").read_text()
         files = self.managed_files()
@@ -906,7 +914,7 @@ class NewDeploymentTest(unittest.TestCase):
         self.assertIn("on for this deployment already", run.stderr)
 
     def test_adding_the_firewall_to_an_install_from_before_the_rename_firewalls_the_network_its_runners_are_on(self):
-        run = self.run_script(INSTALL, "--no-managed-runner-firewall", "--managed-runner-image", "orbit-cloud-runner:fixture", "--no-start")
+        run = self.run_script(INSTALL, "--managed-runners", "--no-managed-runner-firewall", "--managed-runner-image", "orbit-cloud-runner:fixture", "--no-start")
         self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
         channel = self.checkout / "data/managed-runners/channel.json"
         channel.write_text(channel.read_text().replace('"orbit-cloud-runners"', '"orbit-managed-runners"'))
@@ -934,7 +942,7 @@ class NewDeploymentTest(unittest.TestCase):
                 self.assertFalse((self.checkout / "data/managed-runners/firewall").exists())
         # A runner server address that is not the gateway's port on the network: the rules would cut runners off.
         (self.checkout / ".env").unlink()
-        self.assertEqual(self.run_script(INSTALL, "--no-managed-runner-firewall", "--managed-runner-image", "x", "--no-start").returncode, 0)
+        self.assertEqual(self.run_script(INSTALL, "--managed-runners", "--no-managed-runner-firewall", "--managed-runner-image", "x", "--no-start").returncode, 0)
         profile = self.checkout / "data/managed-runners/profile.json"
         profile.write_text(profile.read_text().replace(f"http://{GATEWAY}:2086", "https://orbit.example.com"))
         run = self.run_script(INSTALL, "--enable-managed-runner-firewall")
@@ -947,10 +955,14 @@ class NewDeploymentTest(unittest.TestCase):
                 self.assertNotEqual(run.returncode, 0)
                 self.assertIn("takes no other option", run.stderr)
 
-    def test_no_firewall_option_without_managed_runners(self):
-        run = self.run_script(INSTALL, "--no-managed-runners", "--no-managed-runner-firewall", "--no-start")
-        self.assertNotEqual(run.returncode, 0)
-        self.assertFalse((self.checkout / ".env").exists())
+    def test_no_firewall_or_image_option_without_managed_runners(self):
+        for args in (["--no-managed-runners", "--no-managed-runner-firewall"], ["--no-managed-runner-firewall"],
+                     ["--managed-runner-image", "orbit-cloud-runner:fixture"]):
+            with self.subTest(args=args):
+                run = self.run_script(INSTALL, *args, "--no-start")
+                self.assertNotEqual(run.returncode, 0)
+                self.assertIn("--managed-runners", run.stderr)
+                self.assertFalse((self.checkout / ".env").exists())
 
     def test_an_upgrade_never_builds_starts_or_recreates_the_firewall_and_leaves_its_files(self):
         for upgrade in UPGRADES:
