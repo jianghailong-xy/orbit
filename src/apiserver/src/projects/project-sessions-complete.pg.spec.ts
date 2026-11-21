@@ -100,7 +100,7 @@ async function session(o: Owner, fields: Partial<Prisma.SessionUncheckedCreateIn
     data: {
       ownerId: o.id, creatorId: o.id, title: 'a session', prompt: 'p',
       status, dispatchOrigin: 'USER', ...fields,
-      ...(isReleasedStatus(status) ? { finishedAt: fields.finishedAt ?? new Date(), releaseCause: status === 'CANCELLED' ? 'cancelled' : 'engine_exited' } : {}),
+      ...(isReleasedStatus(status) ? { finishedAt: fields.finishedAt ?? new Date(), releaseCause: status === 'CANCELLED' ? 'cancelled' : status === 'FAILED' ? 'engine_failed' : 'engine_exited' } : {}),
     },
   });
   return row.id;

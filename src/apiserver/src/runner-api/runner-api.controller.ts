@@ -10173,8 +10173,8 @@ export class RunnerApiController {
           runtimeSessionId: dto.runtimeSessionId ?? dto.claudeSessionId ?? undefined,
           finishedAt: new Date(),
           // Why it was released: the requested end's reason, which also chose the status above, or the
-          // engine exiting by itself.
-          releaseCause: finalizeReleaseCause(current),
+          // engine exiting by itself (engine_failed when the runner reported FAILED, the status written then).
+          releaseCause: finalizeReleaseCause(current, dto.status),
           // Worktree isolation outcome reported by the runner: the branch it committed
           // the work to, the base it forked from, what it did (worktree/shared-nogit),
           // and the per-file diff summary. Each left untouched when the runner omits it.

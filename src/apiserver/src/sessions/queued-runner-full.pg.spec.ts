@@ -90,7 +90,7 @@ test('queuedReason runner_at_capacity: a runner full of turns and background-job
         prompt: title, provider: 'claude', providerBuiltin: true, status,
         ...(isReleasedStatus(status) ? {
           finishedAt: new Date(),
-          releaseCause: status === RunStatus.CANCELLED ? 'cancelled' : 'engine_exited',
+          releaseCause: status === RunStatus.CANCELLED ? 'cancelled' : status === RunStatus.FAILED ? 'engine_failed' : 'engine_exited',
         } : {}),
         dispatchOrigin: SessionDispatchOrigin.USER,
         ...(lastTurnAt ? { lastTurnAt } : {}),

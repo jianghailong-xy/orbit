@@ -309,7 +309,7 @@ test('a live fix has no escalation deadline, then one quiet window after it ends
       await stack.db.task.update({ where: { id: fix.id }, data: { status: PrismaTaskStatus.IN_PROGRESS } });
       await ageItem(stack, item.id, 3 * 60 * 60 * 1_000);
       // Keep this case about the live-fix exemption rather than the taken-up exemption.
-      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED, finishedAt: new Date(), releaseCause: 'engine_exited' } });
+      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED, finishedAt: new Date(), releaseCause: 'engine_failed' } });
       assert.deepEqual(await stack.escalation.sweep(), [], 'an in-progress fix suppresses the clock');
       const liveRead = await stack.openItems.list(w.ownerId, w.projectId);
       assert.equal(liveRead.withCoordinator.find((row) => row.itemId === item.id)?.escalateAt, null,

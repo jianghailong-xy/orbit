@@ -150,7 +150,7 @@ test('two sweeps meeting over one database write once', {
     await one.session.create({
       data: {
         id: sessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId, title: 'reaped as offline',
-        prompt: 'reaped as offline', provider: 'claude', providerBuiltin: true, status: RunStatus.FAILED, releaseCause: 'engine_exited',
+        prompt: 'reaped as offline', provider: 'claude', providerBuiltin: true, status: RunStatus.FAILED, releaseCause: 'engine_failed',
         error: 'runner offline', runtimeSessionId: randomUUID(), startedAt: new Date(Date.now() - 50 * MINUTE),
         finishedAt: new Date(Date.now() - 40 * MINUTE), retryAt: new Date(Date.now() - MINUTE),
         dispatchOrigin: SessionDispatchOrigin.USER,

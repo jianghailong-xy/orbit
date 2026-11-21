@@ -153,7 +153,7 @@ async function session(w: World, fields: Partial<Prisma.SessionUncheckedCreateIn
       status: 'AWAITING_INPUT', dispatchOrigin: 'USER', ...fields,
       ...(isReleasedStatus(fixtureStatus) ? {
         finishedAt: fields.finishedAt ?? new Date(),
-        releaseCause: fixtureStatus === 'CANCELLED' ? 'cancelled' : 'engine_exited',
+        releaseCause: fixtureStatus === 'CANCELLED' ? 'cancelled' : fixtureStatus === 'FAILED' ? 'engine_failed' : 'engine_exited',
       } : {}),
     },
   });

@@ -370,7 +370,7 @@ test('the link Welcome: each session\'s durable seq and lease, and the release t
         status,
         ...(isReleasedStatus(status) ? {
           finishedAt: new Date(),
-          releaseCause: status === RunStatus.CANCELLED ? 'cancelled' : 'engine_exited',
+          releaseCause: status === RunStatus.CANCELLED ? 'cancelled' : status === RunStatus.FAILED ? 'engine_failed' : 'engine_exited',
         } : {}),
         dispatchOrigin: 'USER',
         startsTaskWork: false,

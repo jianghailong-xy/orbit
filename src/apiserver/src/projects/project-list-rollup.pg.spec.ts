@@ -381,7 +381,7 @@ test('a dispatched task is running in the index rather than ready, and the page 
       await db.session.create({
         data: {
           ownerId, creatorId: ownerId, taskId, title: `run of ${taskId}`, prompt: 'do it', status,
-          ...(isReleasedStatus(status) ? { finishedAt: new Date(), releaseCause: status === 'CANCELLED' ? 'cancelled' : 'engine_exited' } : {}),
+          ...(isReleasedStatus(status) ? { finishedAt: new Date(), releaseCause: status === 'CANCELLED' ? 'cancelled' : status === 'FAILED' ? 'engine_failed' : 'engine_exited' } : {}),
           dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
         },
       });
@@ -734,7 +734,7 @@ test('the rail reaches the index’s running count from the rows that can be run
           ...extra,
           ...(isReleasedStatus(sessionStatus) ? {
             finishedAt: extra.finishedAt ?? new Date(),
-            releaseCause: sessionStatus === RunStatus.CANCELLED ? 'cancelled' : 'engine_exited',
+            releaseCause: sessionStatus === RunStatus.CANCELLED ? 'cancelled' : sessionStatus === RunStatus.FAILED ? 'engine_failed' : 'engine_exited',
           } : {}),
         },
       });
