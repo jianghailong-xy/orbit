@@ -45,14 +45,15 @@ export interface TurnOutcomeInput {
  */
 export function turnOutcomeOf(input: TurnOutcomeInput): { outcome: TurnOutcome; error: string | null } | null {
   if (input.acceptanceFailure) return { outcome: 'FAILED', error: input.acceptanceFailure };
+  const failed = input.status === RunStatus.FAILED;
   if (input.kind !== 'message' && input.kind !== 'shell') {
-    return input.status === RunStatus.FAILED && !input.regionStopped
+    return failed && !input.regionStopped
       ? { outcome: 'FAILED', error: input.failureError }
       : null;
   }
   const outcome: TurnOutcome | null = input.regionStopped
     ? 'INTERRUPTED'
-    : input.swallowed || input.status === RunStatus.FAILED
+    : input.swallowed || failed
       ? 'FAILED'
       : input.status === RunStatus.INTERRUPTED
         ? 'INTERRUPTED'

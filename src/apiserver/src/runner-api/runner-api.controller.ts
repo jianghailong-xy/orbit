@@ -10113,8 +10113,9 @@ export class RunnerApiController {
       // prose inside `error`. Arm the same retry from it, so `retryAt` answers "when does this come
       // back" for every quota failure rather than only the ones that got far enough to talk. Never
       // an overwrite: an ingestion-armed retry already knows more than the terminal message does.
+      const failedRun = effectiveStatus === RunStatus.FAILED;
       const quotaSpent =
-        effectiveStatus === RunStatus.FAILED && current.retryAt == null && isUsageLimitErrorText(dto.error);
+        failedRun && current.retryAt == null && isUsageLimitErrorText(dto.error);
       // A run that ended because its account refused the sign-in, on the runner's own login for its
       // engine. Most often the runner's check before it starts the engine (engineAuthPreflight) finds
       // the account signed out and ends the run with the message it took undelivered. Moved below.
@@ -10189,7 +10190,7 @@ export class RunnerApiController {
         : {};
 
       // The runner failed the session with no end asked: released by the engine's failure (design §12.1 W6).
-      const engineFailed = !current.cancelRequestedAt && effectiveStatus === RunStatus.FAILED;
+      const engineFailed = !current.cancelRequestedAt && failedRun;
       // Only a LIVE session is finalized (updateMany count); duplicate/late completion
       // is a safe no-op but still returns the result derived from this locked snapshot.
       const res = await tx.session.updateMany({

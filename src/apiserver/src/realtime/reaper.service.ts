@@ -538,8 +538,10 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
               // FAILED (forceFinalize's default), a failure: end_not_honored, with end_reason kept as asked.
               releaseCause: status ? releaseCauseOfEndReason(s.endReason) : 'end_not_honored',
               // Not honoured, the end still is one somebody asked for: the turn it cut off ends CANCELLED, and nothing
-              // records a failure (design §12.1 W7).
-              ...(status ? {} : { carryingTurn: { outcome: 'CANCELLED' as const, orLatest: false } }),
+              // records a failure (design §12.1 W7). Only a RUNNING session had one: idle, none was in flight.
+              ...(!status && s.status === RunStatus.RUNNING
+                ? { carryingTurn: { outcome: 'CANCELLED' as const, orLatest: false } }
+                : {}),
             },
           );
           continue;
@@ -966,9 +968,9 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
       releaseCause: SessionReleaseCause;
       /**
        * How the turn that carries this release ends (design §12.1, `common/carrying-turn.ts`), recorded in this
-       * transaction with its error (`failureDetail`, else `reason`). FAILED is copied to `last_turn_outcome` in the
-       * release's own write whether or not a turn is found; CANCELLED, an end nobody honoured, ends only a turn
-       * IN_FLIGHT, and is copied only when there is one. Absent, no turn outcome is written.
+       * transaction with its error (`failureDetail`, else `reason`), and copied to `last_turn_outcome` in the release's
+       * own write. FAILED for a failure; CANCELLED for the turn an end nobody honoured cut off, asked only of a RUNNING
+       * session, the one that has such a turn. Absent, no turn outcome is written.
        */
       carryingTurn?: { outcome: 'FAILED' | 'CANCELLED'; orLatest: boolean };
     },
@@ -1001,22 +1003,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           return { ok: false, taskReclaimed: false, currentWorkTerminalized: 0, recanted: true };
         }
       }
-      // The turn that carries this release, read under the Session row lock the release's write takes anyway (taken
-      // here, in the mode that write takes it, so the turn read is the one the write releases). CANCELLED is only for
-      // the turn the end cut off.
       const carrying = opts.carryingTurn;
-      let carryingTurnId: string | null = null;
-      if (carrying) {
-        await tx.$queryRaw`SELECT id FROM "session" WHERE id = ${sessionId}::uuid FOR NO KEY UPDATE`;
-        carryingTurnId = carrying.outcome === 'CANCELLED'
-          ? (await tx.conversationTurn.findFirst({
-              where: { sessionId, kind: { in: ['message', 'shell'] }, status: 'IN_FLIGHT' },
-              orderBy: { seq: 'asc' },
-              select: { id: true },
-            }))?.id ?? null
-          : await carryingTurnOf(tx, sessionId, { orLatest: carrying.orLatest });
-      }
-      const lastTurnOutcome = carrying && (carrying.outcome === 'FAILED' || carryingTurnId) ? carrying.outcome : null;
       const res = await tx.session.updateMany({
         where: {
           id: sessionId,
@@ -1038,7 +1025,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           finishedAt: new Date(),
           releaseCause: opts.releaseCause,
           // The carrying turn's outcome, copied in the release's own write (design §12.1).
-          ...(lastTurnOutcome ? { lastTurnOutcome } : {}),
+          ...(carrying ? { lastTurnOutcome: carrying.outcome } : {}),
           cancelRequestedAt: new Date(),
           // Every status this writes is terminal, so the run this reaps stops being live here and
           // what it had running goes with it (CLEARED_RUNNING_WORK). A runner that is merely
@@ -1049,6 +1036,9 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         },
       });
       if (res.count === 0) return { ok: false, taskReclaimed: false, currentWorkTerminalized: 0 };
+      // The turn that carries it, read under the Session row lock the write above took, before the drain below
+      // answers it.
+      const carryingTurnId = carrying ? await carryingTurnOf(tx, sessionId, { orLatest: carrying.orLatest }) : null;
       if (carrying && carryingTurnId) {
         await recordCarryingTurnOutcome(tx, carryingTurnId, carrying.outcome, opts.failureDetail ?? reason);
       }
