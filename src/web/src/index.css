@@ -6346,6 +6346,27 @@ button.toast--pill:focus-visible {
   background: var(--bg-hover);
   --row-bg: var(--bg-hover);
 }
+/* A session row dragged over a folder that would take it (lib/sessionDrag): the folder lights up
+   in Move's indigo. A folder's page head takes the same light while the drop would leave the folder. */
+.session-folder-row.drop-target,
+.session-folder-head.drop-target {
+  background: rgba(88, 86, 214, 0.14);
+  box-shadow: inset 0 0 0 1.5px #5856d6;
+  --row-bg: rgba(88, 86, 214, 0.14);
+}
+:root[data-theme='dark'] .session-folder-row.drop-target,
+:root[data-theme='dark'] .session-folder-head.drop-target {
+  background: rgba(94, 92, 230, 0.22);
+  box-shadow: inset 0 0 0 1.5px #5e5ce6;
+  --row-bg: rgba(94, 92, 230, 0.22);
+}
+.session-folder-head.drop-target {
+  border-radius: 8px;
+}
+/* The row being dragged stays in place, dimmed, while its image follows the pointer. */
+.session-row.dragging {
+  opacity: 0.5;
+}
 /* Keyboard focus takes the hover tint, as a project row's does, not a ring. */
 .session-folder-row:focus-visible {
   outline: none;
