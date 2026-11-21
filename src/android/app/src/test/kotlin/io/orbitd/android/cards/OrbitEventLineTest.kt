@@ -120,15 +120,29 @@ class OrbitEventLineTest {
     }
 
     @Test fun knownBlocksKeepTheirLinesHeadinglessBetweenTheAssistantRows() {
-        listOf(turn("", job) to "background-wake", turn("", wakeup) to "background-wake",
+        listOf(turn("", wakeup) to "background-wake",
             RunEvent("user", 9, buildJsonObject { put("text", watch) }, "turn-9", ago) to "watch-wake").forEachIndexed { i, (event, tag) ->
             show(event)
             assertTrue("$tag is drawn", compose.onAllNodes(hasTestTag(tag) and hasAnyAncestor(hasTestTag("event:9")), useUnmergedTree = true)
                 .fetchSemanticsNodes().isNotEmpty())
             compose.onAllNodesWithTag("orbit-event", useUnmergedTree = true).assertCountEquals(0)
             assertHeadingless("event:9")
-            shot("0${i + 3}-${listOf("job", "wakeup", "watch")[i]}")
+            shot("0${i + 4}-${listOf("wakeup", "watch")[i]}")
         }
+    }
+
+    // A job's end, new output or stall is drawn on its Job card (JobCardView, board C1), so its turn draws nothing at all: not a line, not
+    // the From Orbit line, not the reader's row (web `Transcript.backgroundWake.test.tsx`).
+    @Test fun aJobsNewsDrawsNothingWhichItsCardDraws() {
+        val event = turn("", job)
+        show(event)
+        compose.onAllNodesWithTag("event:9", useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodesWithTag("background-wake", useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodesWithTag("orbit-event", useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodesWithText("From Orbit", useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodesWithText("web suite", substring = true, useUnmergedTree = true).assertCountEquals(0)
+        assertFalse(SteerDelivery.readersOwn(event))
+        assertFalse(SteerDelivery.orbitOnly(event))
     }
 
     // A SubAgent's end is drawn on its card (SubagentCardEnd), so its turn draws nothing at all: not a line of its own, not the From Orbit
@@ -160,7 +174,7 @@ class OrbitEventLineTest {
     }
 
     @Test fun aWakeCardKeepsItsContentWithoutTheLeftoverNoteOrFold() {
-        val note = "$job\n\n$future"
+        val note = "$job\n\n$wakeup\n\n$future"
         show(turn("", note))
         compose.onNodeWithTag("background-wake", useUnmergedTree = true).assertExists()
         compose.onAllNodesWithText("Orbit attached", substring = true, useUnmergedTree = true).assertCountEquals(0)

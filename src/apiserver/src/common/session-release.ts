@@ -8,10 +8,11 @@ import { deriveSessionLifecycleState, SessionLifecycleState } from '@orbit/share
  * set by every write that releases a session (with `release_cause`, migration 1261), cleared by the
  * revive.
  *
- * Both are spelled here twice. On the column: `isReleased` / `isHeld` and the Prisma filters `releasedFilter` /
- * `heldFilter`, which the TypeScript readers read (plan step 4.2). As status sets, the same members every
- * hand-copied live/terminal set held, for the readers phase 4 has not moved yet: the raw SQL fragments below (plan
- * step 4.3), and the Prisma filters whose status list is an index's access path (no index covers `finished_at`).
+ * Both are spelled here twice. On the column: `isReleased` / `isHeld`, the Prisma filters `releasedFilter` /
+ * `heldFilter`, which the TypeScript readers read (plan step 4.2), and the raw SQL fragments `sessionReleasedSql` /
+ * `sessionHeldSql` (plan step 4.3). As status sets, the same members every hand-copied live/terminal set held, for
+ * the readers phase 4 has not moved yet: `heldSql` (queue/dispatch-pause.service.ts only), and the Prisma filters
+ * whose status list is an index's access path (no index covers `finished_at`).
  * session_release_fact_chk (migrations 1401, 1402) makes the two the same rows: a status is terminal exactly when
  * `finished_at` is set.
  */
@@ -77,17 +78,40 @@ export function heldFilter(): Prisma.SessionWhereInput {
 }
 
 /**
- * Raw SQL: the status column `column`, as the query spells it (for example `s."status"`; a constant, never
- * input), is released. The words are literals in the text, so the statement reads exactly as the
- * hand-written lists did and compares against the run_status enum the same way.
+ * Raw SQL: the session row the query names `sessionAlias` (for example `s`; a constant, never input) is released:
+ * its release column is set. Plan step 4.3.
  */
-export function releasedSql(column: string): Prisma.Sql {
-  return Prisma.sql`${Prisma.raw(column)} IN ('SUCCEEDED', 'FAILED', 'CANCELLED')`;
+export function sessionReleasedSql(sessionAlias: string): Prisma.Sql {
+  return Prisma.sql`${Prisma.raw(sessionAlias)}."finished_at" IS NOT NULL`;
 }
 
-/** Raw SQL: the status column `column` is held. */
+/** Raw SQL: the session row the query names `sessionAlias` is held: its release column is not set. */
+export function sessionHeldSql(sessionAlias: string): Prisma.Sql {
+  return Prisma.sql`${Prisma.raw(sessionAlias)}."finished_at" IS NULL`;
+}
+
+/** The held statuses as an SQL list, for the two fragments below and nothing else. */
+const HELD_STATUS_LIST_SQL = Prisma.raw(`('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED')`);
+
+/**
+ * Raw SQL: `sessionHeldSql`, for a query whose access path is an index led by another column and then `status`
+ * (`session_assigned_runner_id_status_idx`): the release column decides, and the held statuses are stated beside it,
+ * which session_release_fact_chk makes the same rows. The status list decides nothing; it is there because the
+ * planner can read it as an index condition and cannot read `finished_at` as one (no index covers it). Without it a
+ * runner's query reads every session the runner ever had (measured in plan step 4.3: 44,000 index entries for 73 rows).
+ */
+export function sessionHeldIndexedSql(sessionAlias: string): Prisma.Sql {
+  return Prisma.sql`(${sessionHeldSql(sessionAlias)} AND ${Prisma.raw(sessionAlias)}."status" IN ${HELD_STATUS_LIST_SQL})`;
+}
+
+/**
+ * Raw SQL, as a status set: the status column `column`, as the query spells it (for example `s."status"`; a
+ * constant, never input), is held. Its one caller left is queue/dispatch-pause.service.ts, which plan step 4.3 does
+ * not touch (the queue is out of its scope); the one-live-run-per-task index task (plan step 4.5, "dispatch states the
+ * new predicate") moves that caller onto `sessionHeldSql` and removes this. Everything else reads `sessionHeldSql`.
+ */
 export function heldSql(column: string): Prisma.Sql {
-  return Prisma.sql`${Prisma.raw(column)} IN ('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED')`;
+  return Prisma.sql`${Prisma.raw(column)} IN ${HELD_STATUS_LIST_SQL}`;
 }
 
 /**

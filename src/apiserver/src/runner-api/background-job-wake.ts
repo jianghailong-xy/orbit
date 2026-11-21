@@ -1,4 +1,5 @@
 import { BackgroundJobWake, ConversationTurn, Prisma } from '@prisma/client';
+import { BG_JOB_STOPPED_BY_OWNER } from '@orbit/shared';
 import { IsIn, IsInt, IsOptional, IsString, Matches, MaxLength, Min, ValidateIf } from 'class-validator';
 import { stripNul } from './strip-nul';
 
@@ -454,6 +455,7 @@ const BACKGROUND_JOB_NOT_ALLOWED = 'not_allowed';
 
 /** What the kill reasons a runner reports mean for somebody deciding whether to wait again. */
 const KILLED_BECAUSE: Record<string, string> = {
+  [BG_JOB_STOPPED_BY_OWNER]: 'the person who owns this session stopped it from the app; you did not stop it, so do not start it again unless they ask',
   runner_shutdown: 'the runner process hosting it stopped — a restart or a self-update — and the job was killed with it',
   session_cancelled: 'the session was cancelled, or handed to another runner process, and the job was killed with it',
   [BACKGROUND_JOB_NOT_ALLOWED]:
@@ -505,8 +507,10 @@ export function buildBackgroundWakeBlock(wakes: StoredWake[], turnKind: string =
   if (wakes.some((wake) => wake.trigger === 'exit')) {
     lines.push('  If the person asked to hear when this was done, tell them with mcp__orbit__notify: a reply here reaches them only when they next look.');
   }
-  // Not for one the owner refused: nothing was cut short, and asking again is what they just answered.
-  if (wakes.some((wake) => wake.status === 'killed' && wake.reason !== BACKGROUND_JOB_NOT_ALLOWED)) {
+  // Not for one the owner refused: nothing was cut short, and asking again is what they just answered. Nor for one
+  // the owner stopped: starting it again would undo what they just did.
+  if (wakes.some((wake) => wake.status === 'killed' && wake.reason !== BACKGROUND_JOB_NOT_ALLOWED
+    && wake.reason !== BG_JOB_STOPPED_BY_OWNER)) {
     lines.push('  A killed job does not come back on its own: to keep waiting, start it again with bg_run.');
   }
   lines.push('</background-job-wake>');

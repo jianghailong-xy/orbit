@@ -22,8 +22,13 @@ import {
   taskLanding,
   taskLandingSql,
 } from './project-criterion-landing';
-import { isFailedRelease, isReleased, sessionHasEnded as releasedSessionHasEnded } from '../common/session-release';
-import { PROJECT_LIVE_SESSION_STATUS_SQL } from './live-session-status';
+import {
+  failedReleaseSql,
+  isFailedRelease,
+  isReleased,
+  sessionHasEnded as releasedSessionHasEnded,
+  sessionHeldSql,
+} from '../common/session-release';
 import { evidenceUndecidedOwed } from './evidence-undecided';
 import { LIVE_PROMOTION_STATES } from './project-promotion';
 import {
@@ -939,7 +944,9 @@ export function openItemCoordinatorCanTake(alias: string): Prisma.Sql {
  * coordinator conversation is switched on, not filed, trashed or completed, and live or FAILED with an
  * auto-retry pending. The one definition, shared by the open-item clock and the evidence clock
  * (`evidence-undecided.ts`), so the two cannot come to disagree about whether a coordinator can still
- * take its turn. Parameter-free when `projectId` is.
+ * take its turn. Parameter-free when `projectId` is. Live is the release column and FAILED the release
+ * cause (plan step 4.3), the same rows as the status under session_release_fact_chk and
+ * session_release_failure_chk.
  */
 export function projectCoordinatorCanTake(projectId: Prisma.Sql): Prisma.Sql {
   return Prisma.sql`EXISTS (
@@ -951,8 +958,8 @@ export function projectCoordinatorCanTake(projectId: Prisma.Sql): Prisma.Sql {
        AND taker."deleted_at" IS NULL
        AND taker."completed_at" IS NULL
        AND taker."archived_at" IS NULL
-       AND (taker."status" IN (${Prisma.raw(PROJECT_LIVE_SESSION_STATUS_SQL)})
-            OR (taker."status" = 'FAILED' AND taker."retry_at" IS NOT NULL)))`;
+       AND (${sessionHeldSql('taker')}
+            OR (${failedReleaseSql('taker."release_cause"')} AND taker."retry_at" IS NOT NULL)))`;
 }
 
 /** Owner-facing lists omit coordinator items still waiting in the queue of a conversation that can
@@ -1021,7 +1028,6 @@ export function openItemOwed(alias: string): Prisma.Sql {
   const item = Prisma.raw(`"${alias}"`);
   const integration = Prisma.raw(INTEGRATION_ITEM_KINDS.map((kind) => `'${kind}'`).join(', '));
   const live = Prisma.raw(LIVE_PROMOTION_STATES.map((state) => `'${state}'`).join(', '));
-  const liveSessions = Prisma.raw(PROJECT_LIVE_SESSION_STATUS_SQL);
   const notKnown = Prisma.raw(`(${taskLandingSql('owed_task')}) = 'NOT_KNOWN'`);
   return Prisma.sql`(CASE
       WHEN ${item}."kind" = 'INTEGRATION_CHECK_FAILED' AND ${item}."dedupe_key" LIKE 'ICB:%' THEN true
@@ -1070,7 +1076,7 @@ export function openItemOwed(alias: string): Prisma.Sql {
              SELECT 1 FROM "session" owed_session
               WHERE owed_session."task_id" = owed_task."id"
                 AND owed_session."starts_task_work"
-                AND owed_session."status" IN (${liveSessions})
+                AND ${sessionHeldSql('owed_session')}
                 AND (owed_session."id" IS DISTINCT FROM ${item}."session_id"
                      OR EXISTS (
                        SELECT 1 FROM "conversation_turn" resumed_turn

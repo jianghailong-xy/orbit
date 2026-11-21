@@ -86,6 +86,13 @@ const (
 	// the person interrupted can be followed by another turn in the same session.
 	bgStopReason = "stop"
 
+	// bgStoppedByOwnerReason marks a kill the session's owner asked for from the app, one job at a
+	// time (POST /sessions/:id/background/jobs/:jobId/stop, delivered on the heartbeat as
+	// stopBackgroundJobs). Not bg_kill's "requested": the agent did not ask, so unlike that kill this
+	// one wakes the session when the job asked to be woken, and the wake says a person stopped it.
+	// Not bgStopReason either, which ends all of a session's background work with its turn.
+	bgStoppedByOwnerReason = "stopped_by_owner"
+
 	// bgJobOutputCap bounds one bg_output read.
 	bgJobOutputCap = 256 * 1024
 
@@ -196,6 +203,9 @@ type bgJobStatus struct {
 	WakeOnStall   *bgStallConfig `json:"wakeOnStall,omitempty"`
 	// Note says what to do about a job that is waiting for its card (bgGateWaitingNote).
 	Note string `json:"note,omitempty"`
+	// Reason is why a killed job was killed (killReason): "requested" for bg_kill,
+	// bgStoppedByOwnerReason for the owner's stop, and so on. Empty for a job that was not killed.
+	Reason string `json:"reason,omitempty"`
 }
 
 // bgJobOutput is one incremental read of a job's output file.
@@ -317,6 +327,9 @@ func (j *bgJob) statusLocked() bgJobStatus {
 	if j.awaitingOwner {
 		st.Status = bgStatusWaitingForOwner
 		st.Note = bgGateWaitingNote
+	}
+	if j.status == bgStatusKilled {
+		st.Reason = j.killReason
 	}
 	return st
 }
@@ -1197,6 +1210,13 @@ func (b *bgTailer) jobOutput(jobID string, tail int, sinceOffset int64) (bgJobOu
 // that already finished by itself is reported as it actually ended, never
 // relabelled as killed to match the request.
 func (b *bgTailer) killJob(jobID string, grace time.Duration) (bgJobStatus, error) {
+	return b.killJobFor(jobID, grace, "requested")
+}
+
+// killJobFor is killJob for whoever asked: bg_kill's "requested", or the owner's stop
+// (bgStoppedByOwnerReason). A job already being killed keeps the reason it is being killed for,
+// so a stop that arrives again, or after the agent's bg_kill, does not rename that kill.
+func (b *bgTailer) killJobFor(jobID string, grace time.Duration, reason string) (bgJobStatus, error) {
 	b.mu.Lock()
 	job, ok := b.jobs[jobID]
 	if !ok {
@@ -1208,7 +1228,9 @@ func (b *bgTailer) killJob(jobID string, grace time.Duration) (bgJobStatus, erro
 		b.mu.Unlock()
 		return status, nil
 	}
-	job.killReason = "requested"
+	if job.killReason == "" {
+		job.killReason = reason
+	}
 	cancel := job.cancel
 	done := job.done
 	b.mu.Unlock()

@@ -134,9 +134,9 @@ final class SubagentFinishedCopyParityTests: XCTestCase {
     func testTheEndTurnDrawsNothingAsTheWebsDoes() throws {
         let transcript = try source(Self.webTranscript)
         XCTAssertFalse(transcript.contains("SubagentFinishedCard"), "the web draws the end turn again")
-        XCTAssertTrue(transcript.contains("const background = parseBackgroundWake(subagent ? subagent.rest : node.note);"))
+        XCTAssertTrue(transcript.contains("const background = wakeupsOnly(parseBackgroundWake(subagent ? subagent.rest : node.note));"))
         let queue = try source(Self.webQueue)
-        XCTAssertTrue(queue.contains("alone: parseBackgroundWake(wake.rest) === null"))
+        XCTAssertTrue(queue.contains("alone: wakeupsOnly(parseBackgroundWake(wake.rest)) === null"))
         XCTAssertTrue(queue.contains("if (turn.sessionMessage) return null;"))
         let runs = try source(Self.webRuns)
         XCTAssertTrue(runs.contains("run.status === 'FAILED' || run.status === 'INTERRUPTED';"))
