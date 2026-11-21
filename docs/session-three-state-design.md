@@ -112,6 +112,32 @@ runner tear the engine down (`runner-api.controller.ts:7810-7832`).
 Invariant: a released session is always `IDLE`. Sending to it clears `releasedAt` and makes it
 `PENDING` in one write, as the revive does today.
 
+**The release causes, and which are failures** (`session.release_cause`, values in
+`common/session-release.ts` `SESSION_RELEASE_CAUSES`, CHECK `session_release_cause_chk`, migrations
+1261 and 1403). Each cause is a failure or not, never both, so "did the run fail" is read off the
+cause (`FAILURE_RELEASE_CAUSES`: `isFailedRelease`, `failedReleaseFilter`, `failedReleaseSql`) and
+not off the terminal status value. The CHECK `session_release_failure_chk` (1406, validated by 1407)
+holds the stored status to it: `FAILED` exactly when the cause is a failure.
+
+| Cause | Failure | Written when | Status written with it |
+|---|---|---|---|
+| `task_done` | no | an end for a task that is `DONE` | `SUCCEEDED` |
+| `task_cancelled`, `ended` | no | an end for a cancelled task; a person or agent ends the session | `CANCELLED` |
+| `completed`, `deleted`, `cancelled` | no | a person completes, deletes or stops it, and it settles as asked (the runner's finalize, or the end found it still queued); `cancelled` too for an end with no reason | `CANCELLED` |
+| `idle`, `orphaned` | no | legacy end reasons: no writer, old rows only | as stored |
+| `engine_exited` | no | the runner finalized with no end requested and reported `SUCCEEDED` or `CANCELLED` | the runner's |
+| `landing_settled` | no | a landing container is created settled, or settles | `SUCCEEDED` or `CANCELLED` |
+| `turn_failed` | yes | the runner reports a failed turn; the reaper's API-error backstop | `FAILED` |
+| `runner_lost` | yes | the runner holding a running turn went offline (reaper) | `FAILED` |
+| `setup_failed` | yes | the runner refused the source; the engine's runtime never initialized (reaper) | `FAILED` |
+| `engine_failed` | yes | the runner finalized with no end requested and reported `FAILED` | `FAILED` |
+| `end_not_honored` | yes | an end was asked for and the runner never honoured it: the reaper releases it once the cancel grace runs out (`end_reason` keeps the end that was asked for) | `FAILED` |
+| `import_failed` | yes | the runner could not import the transcript the session was made from | `FAILED` |
+
+Before 1403, `engine_exited` was also written for a `FAILED` finalize, and the end's own cause for
+the reaper's `FAILED` "cancel not honored"; 1405 rewrote those rows (and the `FAILED` rows 1262 gave
+an end reason) to the failure cause their own facts name.
+
 ### 4.3 Today's rows in the new model
 
 | Today | Activity | Released | Cause | Last turn |
@@ -232,16 +258,19 @@ the status or one of its modifiers.
 
 ### 6.3 Where a terminal status is written
 
-| Site | Writes | Trigger |
-|---|---|---|
-| `apiserver/src/runner-api/runner-api.controller.ts:7818` | `FAILED`, `finishedAt`, `cancelRequestedAt` | the runner reports a failed turn |
-| `apiserver/src/runner-api/runner-api.controller.ts:9824` | `SUCCEEDED` / `FAILED` / `CANCELLED`, `finishedAt` | runner finalize; the value is the runner's, or the end reason's when an end was requested |
-| `apiserver/src/runner-api/runner-api.controller.ts:10234` | `FAILED`, `deletedAt` | a transcript import failed |
-| `apiserver/src/realtime/reaper.service.ts:890` | `FAILED`, `CANCELLED` or `SUCCEEDED` | six cases: cancel not honoured, cancel on a queued row, an unacknowledged graceful end, runner offline, runtime never initialized, an idle task session whose last reply is an API error |
-| `apiserver/src/sessions/sessions.service.ts:9731` | `CANCELLED` | end, complete or delete of a queued session |
-| `apiserver/src/projects/landing-session.ts:256`, `:373` | `SUCCEEDED` or `CANCELLED` | a landing container is created settled, or settles |
-| `apiserver/src/projects/session-source.ts:692` | `FAILED`, `finishedAt` | the runner refuses the source |
-| `apiserver/src/sessions/sessions.service.ts:10942` | back to `PENDING` | the revive: a person, an agent, the auto-retry sweep, merge repair, a scheduled wake-up |
+| Site | Writes | Release cause (failure in bold) | Trigger |
+|---|---|---|---|
+| `apiserver/src/runner-api/runner-api.controller.ts:7818` | `FAILED`, `finishedAt`, `cancelRequestedAt` | **`turn_failed`** | the runner reports a failed turn |
+| `apiserver/src/runner-api/runner-api.controller.ts:9824` | `SUCCEEDED` / `FAILED` / `CANCELLED`, `finishedAt` | end requested: the end reason's (`task_done` with `SUCCEEDED`, else `CANCELLED` with that reason or `cancelled`); none requested: `engine_exited`, or **`engine_failed`** when the runner reported `FAILED` (`finalizeReleaseCause`) | runner finalize; the value is the runner's, or the end reason's when an end was requested |
+| `apiserver/src/runner-api/runner-api.controller.ts:10234` | `FAILED`, `deletedAt` | **`import_failed`** | a transcript import failed |
+| `apiserver/src/realtime/reaper.service.ts:890` | `FAILED`, `CANCELLED` or `SUCCEEDED` | an unacknowledged graceful end and a cancel on a queued row: the end reason's; cancel not honoured: **`end_not_honored`**; runner offline: **`runner_lost`**; runtime never initialized: **`setup_failed`**; API-error reply: **`turn_failed`** | six cases: cancel not honoured, cancel on a queued row, an unacknowledged graceful end, runner offline, runtime never initialized, an idle task session whose last reply is an API error |
+| `apiserver/src/sessions/sessions.service.ts:9731` | `CANCELLED` | the end reason's | end, complete or delete of a queued session |
+| `apiserver/src/projects/landing-session.ts:256`, `:373` | `SUCCEEDED` or `CANCELLED` | `landing_settled` | a landing container is created settled, or settles |
+| `apiserver/src/projects/session-source.ts:692` | `FAILED`, `finishedAt` | **`setup_failed`** | the runner refuses the source |
+| `apiserver/src/sessions/sessions.service.ts:10942` | back to `PENDING` | cleared | the revive: a person, an agent, the auto-retry sweep, merge repair, a scheduled wake-up |
+
+Each writer decides the cause in the statement that writes the status, and `FAILED` is written with a
+failure cause and nothing else (§4.2; `session_release_failure_chk`).
 
 The runner sends `SUCCEEDED`, `FAILED` or `INTERRUPTED` on turn-complete (and `CANCELLED` from
 two engines), and `SUCCEEDED`, `FAILED` or `CANCELLED` on finalize
