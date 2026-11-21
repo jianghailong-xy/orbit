@@ -170,9 +170,9 @@ extension View {
     /// A session row that can be picked up and dropped on a folder (the Mac only): `enabled` is
     /// `SessionFolderDrag.draggable` for it.
     @ViewBuilder
-    func sessionDragSource(_ session: Session, enabled: Bool, drag: SessionDragState) -> some View {
+    func sessionDragSource(_ session: Session?, enabled: Bool, drag: SessionDragState) -> some View {
         #if os(macOS)
-        if enabled {
+        if enabled, let session {
             self
                 .background(EnclosingScrollViewProbe(drag: drag))
                 .onDrag {

@@ -1034,7 +1034,13 @@ struct AgentPanes: View {
             case .sessions: app.openProjectSessions(address)
             }
         }
+        // Dragged by its coordinator, as the row's Move files it (members follow).
+        let draggable = rowNavigation == .selection && SessionFolderDrag.draggable(
+            projectCoordinator: row.coordinator, view: view,
+            dropTargets: !isSearching && SessionFolderGrouping.listShowsFolders(view: view, byTag: tagFilter != nil || groupByTag)
+                && app.sessionFolders.contains { $0.workspaceId == agent.id })
         return SessionProjectRowView(row: row, onOpen: onTap)
+        .sessionDragSource(row.coordinator, enabled: draggable, drag: drag)
         .sessionProjectRowActions(row, view: view, onOpen: onOpen, onSessions: { app.openProjectSessions(address) }, onProject: {
             app.openProject(row.projectId)
         }, onMove: { if let coordinator = row.coordinator { movingSession = coordinator } })

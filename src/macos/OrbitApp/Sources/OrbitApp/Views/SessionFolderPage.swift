@@ -499,7 +499,12 @@ struct SessionFolderPage: View {
             case .sessions: app.openProjectSessions(projectAddress)
             }
         }
+        // Dragged by its coordinator, as the row's Move files it (members follow).
+        let draggable = rowNavigation == .selection && SessionFolderDrag.draggable(
+            projectCoordinator: row.coordinator, view: address.view,
+            dropTargets: !address.isScheduledRuns && !isSearching)
         return SessionProjectRowView(row: row, onOpen: onTap)
+        .sessionDragSource(row.coordinator, enabled: draggable, drag: drag)
         .sessionProjectRowActions(row, view: address.view, onOpen: onOpen, onSessions: { app.openProjectSessions(projectAddress) }, onProject: {
             app.openProject(row.projectId)
         }, onMove: { if let coordinator = row.coordinator { movingSession = coordinator } })

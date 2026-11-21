@@ -58,9 +58,16 @@ describe('sessionRowDraggable', () => {
     expect(sessionRowDraggable({ projectMembership: { role: 'TASK' }, projectMark: { projectId: 'p' } }, canDrag)).toBe(true);
   });
 
-  it('leaves coordinators, project rows and members that follow their coordinator where they are', () => {
-    expect(sessionRowDraggable({ projectMembership: { role: 'COORDINATOR' } }, canDrag)).toBe(false);
+  it('picks up a project row by its coordinator, pinned or not', () => {
+    expect(sessionRowDraggable({ kind: 'project', coordinator: { id: 'c' } }, canDrag)).toBe(true);
+    expect(sessionRowDraggable({ kind: 'project', coordinator: { id: 'c', pinnedAt: '2026-11-01T00:00:00Z' } }, canDrag)).toBe(true);
+    expect(sessionRowDraggable({ projectMembership: { role: 'COORDINATOR' } }, canDrag)).toBe(true);
+    expect(sessionRowDraggable({ kind: 'project', coordinator: { id: 'c' } }, { ...canDrag, view: 'trash' })).toBe(false);
+  });
+
+  it('leaves a project row with no coordinator and members that follow their coordinator where they are', () => {
     expect(sessionRowDraggable({ kind: 'project' }, canDrag)).toBe(false);
+    expect(sessionRowDraggable({ kind: 'project', coordinator: null }, canDrag)).toBe(false);
     expect(sessionRowDraggable({ projectMembership: { role: 'TASK' } }, canDrag)).toBe(false);
   });
 
