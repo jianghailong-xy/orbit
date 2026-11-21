@@ -10191,6 +10191,14 @@ export class RunnerApiController {
 
       // The runner failed the session with no end asked: released by the engine's failure (design §12.1 W6).
       const engineFailed = !current.cancelRequestedAt && failedRun;
+      // Released with no end asked and no failure (the runner's word SUCCEEDED or CANCELLED): the turn the release cuts
+      // off ends CANCELLED, as the one an end nobody honoured cut off does (design §12.1 W7), so the session's copy of
+      // the last outcome is this run's, not one a revive kept from the run before (R3/R4, the coordinator's option A,
+      // 2026-11-21). R2's rule without its last resort: the work turn in flight, else the oldest queued one; read here,
+      // under the Session lock lockSessionLeaseOwner took, so the copy below is written only when there is one.
+      const cutOffTurn = !current.cancelRequestedAt && !failedRun
+        ? await carryingTurnOf(tx, sessionId, { orLatest: false })
+        : null;
       // Only a LIVE session is finalized (updateMany count); duplicate/late completion
       // is a safe no-op but still returns the result derived from this locked snapshot.
       const res = await tx.session.updateMany({
@@ -10207,8 +10215,9 @@ export class RunnerApiController {
           // engine exiting by itself (engine_failed when the runner reported FAILED, the status written then).
           releaseCause: finalizeReleaseCause(current, dto.status),
           // The engine failed with no end asked (design §12.1 W6): the failure is the carrying turn's, recorded below,
-          // and copied here in the release's own write.
-          ...(engineFailed ? { lastTurnOutcome: 'FAILED' } : {}),
+          // and copied here in the release's own write. A release with no end asked and no failure: the CANCELLED of the
+          // turn it cut off, recorded below, when there is one.
+          ...(engineFailed ? { lastTurnOutcome: 'FAILED' } : cutOffTurn ? { lastTurnOutcome: 'CANCELLED' } : {}),
           // Worktree isolation outcome reported by the runner: the branch it committed
           // the work to, the base it forked from, what it did (worktree/shared-nogit),
           // and the per-file diff summary. Each left untouched when the runner omits it.
@@ -10266,8 +10275,11 @@ export class RunnerApiController {
         const carrying = await carryingTurnOf(tx, sessionId, { orLatest: true });
         if (carrying) await recordCarryingTurnOutcome(tx, carrying, 'FAILED', dto.error ?? null);
       }
+      // The turn a release with no end asked and no failure cut off, read above, before the drain below answers it.
+      if (cutOffTurn) await recordCarryingTurnOutcome(tx, cutOffTurn, 'CANCELLED', dto.error ?? null);
       // A runner that reports success on a finalize nobody asked for: released engine_exited, which no reader takes for
-      // finished work (common/session-release.ts isWorkFinishedRelease). No current runner sends it; said here if one does.
+      // finished work (common/session-release.ts releaseFinishedTheWork: no end reason). No current runner sends it;
+      // said here if one does.
       if (reportsSuccessWithNoEnd(current, dto.status)) {
         this.logger.warn(`session ${sessionId}: the runner reported success with no end requested; released engine_exited`);
       }
