@@ -41,11 +41,19 @@ func newSpool(dir string, limit int64) (*spool, error) {
 	return &spool{dir: dir, limit: limit, clean: list.New()}, nil
 }
 
-// fits reports whether need more bytes fit under the limit.
-func (s *spool) fits(need int64) bool {
+// tryTake accounts for need more bytes if they fit under the limit: checked and taken at once, so two writers never
+// both take the last room.
+func (s *spool) tryTake(need int64) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.used+need <= s.limit
+	if need > 0 && s.used+need > s.limit {
+		return false
+	}
+	s.used += need
+	if s.used > s.peak {
+		s.peak = s.used
+	}
+	return true
 }
 
 // take accounts for need more bytes. It never refuses: the caller made room first, as far as room could be made.

@@ -325,15 +325,25 @@ func hexSHA(data []byte) string {
 // other and never forever (§5.3); when nothing can be uploaded the room is taken anyway, by one chunk at most.
 func (wf *wfile) reserveLocked(need int64) {
 	sp := wf.fs.spool
-	for tries := 0; !sp.fits(need) && tries < 8; tries++ {
-		if sp.evict(need, wf) {
+	if need <= 0 || need > sp.limit {
+		sp.take(need)
+		return
+	}
+	deadline := time.Now().Add(60 * time.Second)
+	for !sp.tryTake(need) {
+		if sp.evict(need, wf) || wf.uploadOldestLocked(wf.fs.ctx) {
 			continue
 		}
-		if !wf.uploadOldestLocked(wf.fs.ctx) {
-			break
+		if wf.fs.door.Health().Offline() || time.Now().After(deadline) {
+			// Nothing makes room: taken anyway, a chunk at most, rather than a writer waiting forever.
+			sp.take(need)
+			return
 		}
+		// Other writers' uploads in flight make room as they end.
+		wf.mu.Unlock()
+		time.Sleep(20 * time.Millisecond)
+		wf.mu.Lock()
 	}
-	sp.take(need)
 }
 
 // ── writes ───────────────────────────────────────────────────────────────────────────────────────

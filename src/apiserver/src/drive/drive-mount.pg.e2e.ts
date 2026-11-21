@@ -1462,19 +1462,26 @@ f = open('$F/long52.log', 'w'); f.write('one line\\n'); f.flush(); time.sleep(70
   });
 
   await row('53', 'daemon SIGKILLed', async (d) => {
+    ok(await sh(a, 'echo held > $F/r53.txt'), 'a file');
+    // A descriptor opened before the kill is the dead connection's: what reads it fails at once. A path looked up
+    // after it reaches the new mount, which the parent puts over the dead one.
+    const run = sh(a, `exec 3< $F/r53.txt
+      sleep 2
+      s=$(date +%s%N); cat <&3 2>&1; echo "held rc=$? ms=$(( ($(date +%s%N) - s) / 1000000 ))"
+      for i in $(seq 1 150); do if cat $F/r53.txt >/dev/null 2>&1; then echo "back ms=$(( ($(date +%s%N) - s) / 1000000 ))"; break; fi; sleep 0.1; done`, { timeoutMs: 60_000 });
+    await sleep(800);
     const pid = Number(rootSh(`pgrep -u 65532 -f "serve.*--state-dir=${a.root}" | head -1`).stdout.trim());
     assert.ok(pid > 0);
-    process.kill(pid, 'SIGKILL');
-    const s = await sh(a, 'ls $F/ 2>&1 | head -1');
-    let back = 0;
     const killed = Date.now();
-    await waitFor('the drive is back', async () => {
-      const r = await sh(a, 'ls $F/b.txt');
-      if (r.code === 0) back = Date.now() - killed;
-      return back > 0;
-    }, 15_000, 100);
-    assert.match(s.out, /Transport endpoint is not connected/);
-    d.push(`calls failed "Transport endpoint is not connected" at once; the drive was back after ${back} ms, no runner restart`);
+    process.kill(pid, 'SIGKILL');
+    const s = await run;
+    assert.match(s.out, /Transport endpoint is not connected\nheld rc=1 ms=\d+/, `${s.out}${s.err}`);
+    const failedMs = Number(/held rc=1 ms=(\d+)/.exec(s.out)![1]);
+    assert.ok(failedMs < 1_000, 'at once');
+    const backMs = Number(/back ms=(\d+)/.exec(s.out)?.[1] ?? NaN);
+    assert.ok(backMs <= 15_000, `back after ${backMs} ms`);
+    assert.ok(Date.now() - killed < 30_000);
+    d.push(`a read of a descriptor opened before the kill failed "Transport endpoint is not connected" in ${failedMs} ms; a new lookup read the file ${backMs} ms after that, on the mount the parent put over the dead one, no runner restart`);
   });
 
   await row('54', 'daemon SIGSTOPped', async (d) => {
