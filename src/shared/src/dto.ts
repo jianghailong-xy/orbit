@@ -1742,6 +1742,37 @@ export interface BackgroundJobStopResponse {
   status: 'stopping' | 'killed';
 }
 
+/** Declared by a runner that answers the link's BackgroundJobTailRequest: the newest lines of one bg_run job's output,
+ *  read from its file for GET /sessions/:id/background/jobs/:jobId/tail. The read is refused for a session whose
+ *  runner does not declare it (RUNNER_CANNOT_READ_JOB_OUTPUT). runner-go declares the same string
+ *  (bgOutputTailCapabilityV1). */
+export const BG_OUTPUT_TAIL_V1 = 'bg-output-tail/v1';
+
+/** The most lines GET /sessions/:id/background/jobs/:jobId/tail answers with: what a job card's opened view shows. */
+export const BG_JOB_TAIL_MAX_LINES = 40;
+
+/** The most bytes of text (UTF-8, all lines together) that read answers with. */
+export const BG_JOB_TAIL_MAX_BYTES = 8 * 1024;
+
+/** The answer of GET /sessions/:id/background/jobs/:jobId/tail: the newest lines of a bg_run job's output, as the
+ *  runner hosting it read them from the job's file just now. */
+export interface BackgroundJobTailResponse {
+  jobId: string;
+  /** The job as its runner holds it: `running`, `completed`, `failed` or `killed`. */
+  status: string;
+  /** Its exit code once it has exited; null while it runs, and for a job killed before it exited. */
+  exitCode: number | null;
+  /** The output's last lines, oldest first, without terminal colour codes: at most BG_JOB_TAIL_MAX_LINES of them and
+   *  BG_JOB_TAIL_MAX_BYTES together. The last one may still be being written. */
+  lines: string[];
+  /** Whether the output holds older lines than `lines`. */
+  truncated: boolean;
+  /** How long the output file was when it was read, in bytes. */
+  outputBytes: number;
+  /** When the server had the runner's answer (ISO 8601). */
+  readAt: string;
+}
+
 /** The body of POST /runners/:id/self-update/now: the owner's explicit "interrupt these turns". */
 export interface RunnerSelfUpdateNowRequest {
   interruptTurns: true;
