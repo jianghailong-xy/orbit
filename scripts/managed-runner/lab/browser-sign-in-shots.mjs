@@ -7,8 +7,6 @@
 //   1. Waiting on you: the row "Sign in to SITE" opens the BROWSER_SIGN_IN card; its words are read and it is shot.
 //   2. Open browser opens /runners/:id/browser in a new tab, in control, and goes live; the remote Chrome is still on the
 //      page the agent was on (its title, read through DevTools inside the Pod). Shot.
-//   3. With CLICK_TO_TITLE set: the owner signs in on the remote page, a click on the viewer's middle (the lab's provider
-//      page is one button), and the remote Chrome's page comes to that title (the page after the sign-in). Shot.
 // Pressing nothing else: the answer is the driver's to give. Shots go to OUTDIR; one JSON object is printed. Tokens come
 // from the environment and are never printed.
 //
@@ -75,23 +73,6 @@ try {
     remotePages: pageTitles(),
   });
   await tab.screenshot({ path: `${out}/02-browser-tab-in-control.png` });
-
-  // ── 3. the owner signs in on the remote page, through the viewer ─────────────────────────────────────────────
-  const after = process.env.CLICK_TO_TITLE;
-  if (after) {
-    const screen = tab.locator('.rb-screen canvas').first();
-    await screen.waitFor({ timeout: 30_000 });
-    await screen.click();
-    let titles = [];
-    for (let i = 0; i < 60 && !titles.includes(after); i++) {
-      await tab.waitForTimeout(1000);
-      titles = pageTitles();
-    }
-    step('the owner clicked on the viewer', { remotePages: titles, reached: titles.includes(after) });
-    await tab.waitForTimeout(1500);
-    await tab.screenshot({ path: `${out}/03-after-owner-sign-in.png` });
-    if (!titles.includes(after)) throw new Error(`the remote page did not come to "${after}"`);
-  }
   await tab.close();
   report.ok = true;
 } catch (error) {

@@ -135,7 +135,6 @@ COPY --from=downloads /opt/agy/ /opt/agy/
 COPY --from=downloads /opt/orbit-engines/ /opt/orbit-engines/
 COPY --from=dsh /opt/orbit-engines/engines/ /opt/orbit-engines/engines/
 COPY --chmod=0644 deploy/managed-runner/image/pins.json /usr/local/share/orbit/pins.json
-COPY --chmod=0644 deploy/managed-runner/image/orbit-browser-opener.sh /etc/profile.d/orbit-browser-opener.sh
 ENV PATH="/usr/local/go/bin:${PATH}" \
     HOME=/home/orbit \
     ORBIT_HOME=/home/orbit/.orbit \
