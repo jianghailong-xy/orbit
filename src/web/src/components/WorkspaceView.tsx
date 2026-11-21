@@ -6267,9 +6267,15 @@ export function WorkspaceView({
       if (queuedItem)
         setQueued((current) =>
           current.some((turn) => turn.turnId === queuedItem.turnId)
-            ? current.map((turn) =>
-                turn.turnId === queuedItem.turnId ? { ...turn, ...queuedItem } : turn,
-              )
+            ? current.map((turn) => {
+                if (turn.turnId !== queuedItem.turnId) return turn;
+                // The active snapshot can see the translation settle before the send returns.
+                if (
+                  queuedItem.translation?.state === 'TRANSLATING' &&
+                  turn.translation && turn.translation.state !== 'TRANSLATING'
+                ) return turn;
+                return { ...turn, ...queuedItem };
+              })
             : [...current, queuedItem],
         );
       else {
