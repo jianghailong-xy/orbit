@@ -394,7 +394,8 @@ func (wf *wfile) write(ctx context.Context, off int64, data []byte) error {
 	if wf.failed != nil {
 		return wf.failed
 	}
-	if off < 0 {
+	atEnd := off < 0
+	if atEnd {
 		off = wf.size
 	}
 	switch wf.mode {
@@ -405,11 +406,12 @@ func (wf *wfile) write(ctx context.Context, off int64, data []byte) error {
 		if err := wf.becomeAppendLocked(ctx); err != nil {
 			return err
 		}
-		if off != wf.size {
-			return errInPlace
-		}
+		fallthrough
 	case modeAppend:
-		if off != wf.size {
+		// An O_APPEND write goes at the end as the server has it now, which another runner's append may have moved.
+		if atEnd {
+			off = wf.size
+		} else if off != wf.size {
 			return errInPlace
 		}
 	}
@@ -580,6 +582,13 @@ func (wf *wfile) setMtime(t *time.Time) bool {
 	wf.mu.Lock()
 	defer wf.mu.Unlock()
 	if !wf.dirty || wf.failed != nil {
+		// Nothing to commit: the caller sets it now, and stat shows it meanwhile.
+		if t != nil {
+			wf.mtime = *t
+		} else {
+			wf.mtime = time.Now()
+		}
+		wf.showLocked()
 		return false
 	}
 	if t == nil {
@@ -1317,15 +1326,6 @@ func (fs *FS) writeState(ctx context.Context, n *node, mode wmode, handleID stri
 	size, mtime, version := n.size, n.mtime, n.version
 	fs.mu.Unlock()
 	wf := fs.newWfile(n, mode, handleID, size, mtime, version)
-	if mode == modeAppend {
-		m, err := fs.manifest(ctx, n, true)
-		if err != nil {
-			return nil, err
-		}
-		wf.mu.Lock()
-		wf.setBaseLocked(m)
-		wf.mu.Unlock()
-	}
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 	if other := n.wf; other != nil && !other.gaveUp.Load() {

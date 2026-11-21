@@ -32,6 +32,8 @@ type Reporter struct {
 	since      time.Time
 	fenced     string
 	dirty      int
+	spoolUsed  int64
+	spoolPeak  int64
 	feedAt     time.Time
 	statusText string
 }
@@ -255,6 +257,13 @@ func (r *Reporter) SetUncommitted(n int) {
 	r.mu.Unlock()
 }
 
+// SetSpool records the spool's bytes now and at most since the daemon started (§5.3).
+func (r *Reporter) SetSpool(used, peak int64) {
+	r.mu.Lock()
+	r.spoolUsed, r.spoolPeak = used, peak
+	r.mu.Unlock()
+}
+
 // FeedSeen records that the change feed answered.
 func (r *Reporter) FeedSeen() {
 	r.mu.Lock()
@@ -268,6 +277,8 @@ type Status struct {
 	Since              *time.Time `json:"since"`
 	UncommittedHandles int        `json:"uncommittedHandles"`
 	UnsentFiles        int        `json:"unsentFiles"`
+	SpoolBytes         int64      `json:"spoolBytes"`
+	SpoolPeakBytes     int64      `json:"spoolPeakBytes"`
 	Fenced             string     `json:"fenced,omitempty"`
 	ChangeFeedAt       *time.Time `json:"changeFeedAt,omitempty"`
 	UpdatedAt          time.Time  `json:"updatedAt"`
@@ -278,7 +289,8 @@ func (r *Reporter) CurrentStatus() Status {
 	unsent := len(r.unsentRecords())
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	s := Status{Connected: r.connected && r.fenced == "", UncommittedHandles: r.dirty, UnsentFiles: unsent, Fenced: r.fenced, UpdatedAt: r.opts.Now().UTC()}
+	s := Status{Connected: r.connected && r.fenced == "", UncommittedHandles: r.dirty, UnsentFiles: unsent, Fenced: r.fenced,
+		SpoolBytes: r.spoolUsed, SpoolPeakBytes: r.spoolPeak, UpdatedAt: r.opts.Now().UTC()}
 	if !r.connected && !r.since.IsZero() {
 		t := r.since.UTC()
 		s.Since = &t

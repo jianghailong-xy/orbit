@@ -3,8 +3,9 @@
 //
 //   - Every request carries the mount credential and the managed-runner instance it was issued for (generation and
 //     instance UID), so the door can tell a superseded instance from the current one (§8.2).
-//   - Every request has a deadline: 10 s for metadata, 60 s for a chunk, whose headers must still come within 10 s
-//     (§5.7). The change feed's long poll is the one request allowed to wait longer, by the wait it asks for.
+//   - Every request has a deadline: 9 s for metadata, 60 s for a chunk, whose headers must still come within 9 s, so a
+//     read that needs an unreachable server fails within the 10 s §5.7 allows. The change feed's long poll is the one
+//     request allowed to wait longer, by the wait it asks for.
 //   - Health counts failures: three within 10 s and the client is offline, failing every request at once until a probe
 //     answers (§5.7). A refusal the server answered (a 4xx) is not a failure of reachability.
 //   - A superseded, fenced or revoked instance is fenced for good: the daemon stops (§8.2).
@@ -285,9 +286,9 @@ type Config struct {
 	Generation string
 	PodUID     string
 
-	MetaTimeout        time.Duration // 10 s
+	MetaTimeout        time.Duration // 9 s
 	ChunkTimeout       time.Duration // 60 s
-	ChunkHeaderTimeout time.Duration // 10 s
+	ChunkHeaderTimeout time.Duration // 9 s
 	FailureWindow      time.Duration // 10 s
 	FailuresOffline    int           // 3
 	ProbeInterval      time.Duration // 5 s
@@ -296,13 +297,13 @@ type Config struct {
 
 func (c *Config) defaults() {
 	if c.MetaTimeout == 0 {
-		c.MetaTimeout = 10 * time.Second
+		c.MetaTimeout = 9 * time.Second
 	}
 	if c.ChunkTimeout == 0 {
 		c.ChunkTimeout = 60 * time.Second
 	}
 	if c.ChunkHeaderTimeout == 0 {
-		c.ChunkHeaderTimeout = 10 * time.Second
+		c.ChunkHeaderTimeout = 9 * time.Second
 	}
 	if c.FailureWindow == 0 {
 		c.FailureWindow = 10 * time.Second
@@ -633,7 +634,7 @@ func (c *Client) PutChunk(ctx context.Context, stagingID string, idx int, sha256
 	return nil
 }
 
-// Chunk is the bytes of a chunk this account names, read whole into buf's storage when it is large enough.
+// Chunk is the bytes of a chunk this account names.
 func (c *Client) Chunk(ctx context.Context, sha256 string, size int64) ([]byte, error) {
 	return c.readBlob(ctx, "/chunks/"+url.PathEscape(sha256), size)
 }

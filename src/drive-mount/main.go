@@ -236,6 +236,7 @@ func mount(args []string) int {
 	uid := flags.Int("daemon-uid", 65532, "the daemon's uid")
 	gid := flags.Int("daemon-gid", 65532, "the daemon's gid")
 	watchdog := flags.Duration("watchdog", 10*time.Second, "how often the mount is checked")
+	attributeIn := flags.String("attribute-cgroup", "", "attribute only processes whose cgroup names this (default: --pod-uid; - for any)")
 	f.register(flags)
 	_ = flags.Parse(args)
 	logger := log.New(os.Stderr, "orbit-files-mount: ", log.LstdFlags)
@@ -261,17 +262,21 @@ func mount(args []string) int {
 	pass := []string{}
 	flags.Visit(func(fl *flag.Flag) {
 		switch fl.Name {
-		case "root", "token-file", "daemon-uid", "daemon-gid", "watchdog", "fuse-fd", "errors-fd", "status-fd",
-			"whois-fd", "token-fd", "state-dir", "spool", "mountpoint":
+		case "root", "token-file", "daemon-uid", "daemon-gid", "watchdog", "attribute-cgroup", "fuse-fd", "errors-fd",
+			"status-fd", "whois-fd", "token-fd", "state-dir", "spool", "mountpoint":
 			return
 		}
 		pass = append(pass, "--"+fl.Name+"="+fl.Value.String())
 	})
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer cancel()
+	podCgroup := f.podUID
+	if *attributeIn != "" {
+		podCgroup = *attributeIn
+	}
 	err = parent.Run(ctx, parent.Config{
 		Root: *root, SpoolDir: f.spool, Daemon: self, Args: pass, Token: token, UID: *uid, GID: *gid,
-		PodUID: f.podUID, Watchdog: *watchdog, Log: logger,
+		PodUID: podCgroup, Watchdog: *watchdog, Log: logger,
 	})
 	if err != nil && !errors.Is(err, context.Canceled) {
 		logger.Printf("%v", err)

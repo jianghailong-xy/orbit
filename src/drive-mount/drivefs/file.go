@@ -144,28 +144,22 @@ func (fs *FS) open(ctx context.Context, n *node, flags uint32, pid uint32, handl
 				return fs.failed("open", drivePath, err)
 			}
 		}
-		fh := fs.addHandle(&handle{node: n})
-		out.Fh = fh
-		if writing {
-			// A reader beside a writer on this mount reads what is being written, not pages cached before it.
-			out.OpenFlags |= fuse.FOPEN_DIRECT_IO
-		}
+		// Not direct I/O, so a read-only mmap works (§5.6); a reader beside a writer on this mount still reads what
+		// is being written, as the kernel drops the cached pages a direct write covers.
+		out.Fh = fs.addHandle(&handle{node: n})
 		return fuse.OK
 	}
 	if fs.door.Fenced() != nil {
 		return fuse.EIO
 	}
-	if fs.door.Health().Offline() {
-		return fs.offline("open", fs.pathForLog(n.ino, ""))
-	}
+	// Offline, an existing file still opens for writing: the open needs nothing of the server, and write() is what
+	// fails, so that a caller ignoring close() still sees it (§5.7). An append learns its base at its first write.
 	mode := modeExisting
 	switch {
 	case handleID != "":
 		mode = modeNew
 	case flags&syscall.O_TRUNC != 0:
 		mode = modeTrunc
-	case flags&syscall.O_APPEND != 0:
-		mode = modeAppend
 	}
 	wf, err := fs.writeState(ctx, n, mode, handleID)
 	if err != nil {

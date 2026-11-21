@@ -842,6 +842,11 @@ func (fs *FS) ListXAttr(cancel <-chan struct{}, header *fuse.InHeader, dest []by
 }
 
 func (fs *FS) SetXAttr(cancel <-chan struct{}, input *fuse.SetXAttrIn, attr string, data []byte) fuse.Status {
+	if strings.HasPrefix(attr, "system.posix_acl_") {
+		// cp, sed -i, vim and install copy a file's ACL when they can and carry on when they cannot, as on any file
+		// system without ACLs: refused, but not worth a line an agent would read as its own failure.
+		return fuse.Status(syscall.ENOTSUP)
+	}
 	return fs.refuse(fuse.Status(syscall.ENOTSUP), "setxattr", fs.pathForLog(input.NodeId, ""), attr,
 		"the drive keeps no extended attributes")
 }
@@ -946,6 +951,7 @@ func (fs *FS) runStatus() {
 			}
 		}
 		fs.rep.SetUncommitted(dirty)
+		fs.rep.SetSpool(fs.spool.usage())
 		fs.rep.WriteStatus()
 		select {
 		case <-fs.ctx.Done():

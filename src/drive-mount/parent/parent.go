@@ -50,7 +50,8 @@ type Config struct {
 	Token string
 	// UID and GID are the daemon's (65532).
 	UID, GID int
-	// PodUID, when set, is the runner Pod's UID: only a process whose cgroup names it is attributed (§5.8).
+	// PodUID, when set, is the runner Pod's UID: only a process whose cgroup names it is attributed (§5.8). "-" checks
+	// nothing (a runner that is not a Pod).
 	PodUID string
 	// Watchdog is how often the mount is checked (10 s); WatchdogDeadline how long an answer may take (5 s).
 	Watchdog         time.Duration
@@ -244,7 +245,7 @@ func start(ctx context.Context, cfg *Config, who *whois) (*daemon, error) {
 		var exit *exec.ExitError
 		if errors.As(err, &exit) {
 			if ws, ok := exit.Sys().(syscall.WaitStatus); ok && ws.Signaled() {
-				d.status, d.how = -1, "killed by "+ws.Signal().String()
+				d.status, d.how = -1, "killed by "+unix.SignalName(ws.Signal())
 			} else {
 				d.status, d.how = exit.ExitCode(), fmt.Sprintf("exit %d", exit.ExitCode())
 			}
@@ -383,7 +384,12 @@ type whois struct {
 	cache  map[string]string
 }
 
-func newWhois(podUID string) *whois { return &whois{podUID: podUID, cache: map[string]string{}} }
+func newWhois(podUID string) *whois {
+	if podUID == "-" {
+		podUID = ""
+	}
+	return &whois{podUID: podUID, cache: map[string]string{}}
+}
 
 func (w *whois) serve(conn *os.File) {
 	defer conn.Close()
