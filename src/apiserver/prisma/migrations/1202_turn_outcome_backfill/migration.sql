@@ -17,40 +17,43 @@
 -- Only rows still null are written, so a value turn-complete wrote after 1201 is never overwritten.
 -- conversation_turn rows are not backfilled: old turns stay null.
 --
--- HOW IT RUNS, LOCKS
--- ------------------
--- `prisma migrate deploy` sends this whole file to PostgreSQL as one query string, so every statement in it runs
--- in ONE transaction, which commits only after the last statement (and rolls back whole if any statement fails).
--- An earlier version of this file assumed that, with no DO block, Prisma sends it statement by statement, and
--- backfilled through a procedure that COMMITted after each batch: a COMMIT is refused inside that transaction
--- (2D000 invalid transaction termination), which an empty table never reached and production's did. So there is
--- no procedure and no COMMIT here; the SETs are SET LOCAL, which last until this file's transaction ends.
+-- HOW PRISMA RUNS IT, LOCKS
+-- --------------------------
+-- How `prisma migrate deploy` (7.10, this repository's) sends a file was tested on PostgreSQL 16 for this fix: a
+-- file containing a DO block or a CREATE PROCEDURE is sent whole and runs as ONE transaction; a file with neither,
+-- like this one, is sent statement by statement, and each statement commits on its own. The earlier version of this
+-- file created a procedure that COMMITted after each 5000-row batch and CALLed it, believing it would be sent
+-- statement by statement because it had no DO block; its CREATE PROCEDURE made Prisma send it whole, the CALL ran
+-- inside that transaction, and its first COMMIT failed (2D000 invalid transaction termination) on any database
+-- with a row to backfill: production's deploy of af55a2fb38 on 2026-11-21. An empty table never reached the COMMIT.
+-- This version has no procedure and no COMMIT and is correct either way a file is sent: one UPDATE, bracketed by a
+-- SET and a RESET (not SET LOCAL, which does nothing to a statement sent on its own; SET ... RESET also holds inside
+-- one transaction).
 --
--- What it holds, for how long. The VALIDATEs take SHARE UPDATE EXCLUSIVE on conversation_turn and session; the
--- UPDATE takes ROW EXCLUSIVE on session and a row lock on every row it writes. All of it is held until this
--- file's transaction commits. None of it blocks a reader, nor a writer of a row the UPDATE does not write; it
--- blocks other schema changes and VACUUM of the two tables, and a write to a row the UPDATE wrote waits for the
--- commit. 1201's ACCESS EXCLUSIVE locks are not among them: 1201 is a separate file and so a separate
--- transaction, committed before this one starts. Measured with 100,000 sessions and 100,000 turns (on an idle
--- PostgreSQL 16; see the task's evidence), the whole file runs in about a second, so that is how long a write
--- to one of the backfilled sessions can wait: acceptable for a migration that runs once at deploy, well inside
--- lock_timeout (30 s in docker-compose.yml) for anyone waiting on it.
--- statement_timeout (300 s there) is lifted for the UPDATE only, by SET LOCAL; lock_timeout is 0 for the
--- VALIDATEs, as before, and back to the server's for the UPDATE.
+-- What it holds, for how long, as Prisma sends it. Each VALIDATE holds SHARE UPDATE EXCLUSIVE on its table while it
+-- scans and commits: it blocks no reader or writer, only schema changes and VACUUM of that table. Neither runs under
+-- 1201's ACCESS EXCLUSIVE locks: 1201 is a file of its own, committed before this one starts. The UPDATE holds ROW
+-- EXCLUSIVE on session, which blocks no reader or writer, and a row lock on each row it writes until it commits, so
+-- a write to one of those rows waits for it. Measured with 100,000 sessions and 100,000 turns, at load 15-20 on the
+-- build host: each VALIDATE under 50 ms, the UPDATE 1.1 s (the whole file 9.7 s during heavier load). Production
+-- holds about 12,000 sessions. A wait of that length once per deploy is acceptable, and well inside the 30 s
+-- lock_timeout (docker-compose.yml) of anyone waiting on a row. statement_timeout (300 s there) is lifted for the
+-- UPDATE only; lock_timeout is 0 for the VALIDATEs and the server's for the UPDATE. If a later Prisma sent this file
+-- whole, the same statements would be one transaction holding all of this for the file's duration: still acceptable.
 --
--- A much larger session table. If this would hold its row locks for longer than the installation tolerates,
--- an operator runs the same UPDATE before deploying, outside Prisma, in autocommitted batches by id range
--- (`psql` with each batch a statement of its own); this file's UPDATE then finds no null row and writes nothing,
--- and only its scan remains.
+-- A much larger session table. If the UPDATE would hold its row locks longer than the installation tolerates, an
+-- operator runs the same UPDATE before deploying, outside Prisma, in autocommitted batches by id range (`psql`, each
+-- batch a statement of its own); this file's UPDATE then finds no null row, writes nothing and only scans.
 --
 -- RE-RUNNABILITY
 -- --------------
--- Can run twice: VALIDATE on a valid constraint is a no-op, and the UPDATE writes null rows only. If any statement
--- fails (a timeout, a deadlock with a live writer, a crash), the whole file rolls back and Prisma records 1202 as
--- failed, after which `prisma migrate deploy` stops with P3009: `prisma migrate resolve --rolled-back
--- 1202_turn_outcome_backfill`, then deploy again. This version also applies where the earlier one is recorded as
--- failed (production on 2026-11-21: nothing of it stayed) and, once resolved, writes the value per row the earlier
--- version meant to. Where the earlier version is recorded as applied, `migrate deploy` does not run it again.
+-- Can run twice: VALIDATE on a valid constraint is a no-op, and the UPDATE writes null rows only. If a statement
+-- fails (a timeout, a deadlock with a live writer, a crash), the statements before it stay committed, Prisma records
+-- 1202 as failed, and `prisma migrate deploy` stops with P3009 until `prisma migrate resolve --rolled-back
+-- 1202_turn_outcome_backfill`, after which deploy runs the whole file again. That is also production's state on
+-- 2026-11-21: the earlier version failed as one transaction, so nothing of it stayed, and once resolved this
+-- version writes the value per row the earlier one meant to. Where the earlier version is recorded as applied (it
+-- was, on every database migrated while its tables were empty), `migrate deploy` does not run this file again.
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
 
 SET lock_timeout = 0;

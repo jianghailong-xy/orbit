@@ -29,35 +29,36 @@
 -- engine returned on an inbox `end` turn (design §9 D2), and with no end requested on the server that is the
 -- engine exiting by itself. A plain conversation is never stored SUCCEEDED by current code.
 --
--- HOW IT RUNS, LOCKS
--- ------------------
--- As 1202: `prisma migrate deploy` sends this whole file as one query string, so it runs in ONE transaction. An
--- earlier version assumed Prisma sends it statement by statement and backfilled through a procedure that
--- COMMITted per batch, which that transaction refuses (2D000) on any table holding a terminal row. So there is no
--- procedure and no COMMIT here; the SETs are SET LOCAL, which last until this file's transaction ends.
+-- HOW PRISMA RUNS IT, LOCKS
+-- --------------------------
+-- As 1202 (whose header has the test): `prisma migrate deploy` sends a file with a DO block or a CREATE PROCEDURE
+-- whole, as one transaction, and any other file statement by statement, each statement committing on its own. The
+-- earlier version of this file, believing it was sent statement by statement, backfilled through a procedure that
+-- COMMITted per batch; the CREATE PROCEDURE made Prisma send it whole, and the COMMIT is refused there (2D000) on
+-- any database holding a terminal row. This version has no procedure and no COMMIT and is correct either way: one
+-- UPDATE, bracketed by a SET and a RESET.
 --
--- What it holds, for how long. The VALIDATE takes SHARE UPDATE EXCLUSIVE on session; the UPDATE takes ROW
--- EXCLUSIVE on session and a row lock on every terminal row it writes. All of it is held until this file's
--- transaction commits. None of it blocks a reader, nor a writer of a row the UPDATE does not write; it blocks other
--- schema changes and VACUUM of session, and a write to a row the UPDATE wrote waits for the commit. 1261's ACCESS
--- EXCLUSIVE lock is not among them: 1261 is a separate file and so a separate transaction, committed before this
--- one starts. Measured with 100,000 sessions (on an idle PostgreSQL 16; see the task's evidence), the whole file
--- runs in about a second, so that is how long a write to a backfilled session can wait: acceptable for a
--- migration that runs once at deploy, and the rows it writes are released sessions, which few writers touch.
--- statement_timeout (300 s in docker-compose.yml) is lifted for the UPDATE only, by SET LOCAL; lock_timeout is 0
--- for the VALIDATE, as before, and back to the server's (30 s there) for the UPDATE. No status is written, so no
--- UPDATE OF status trigger fires.
+-- What it holds, for how long, as Prisma sends it. The VALIDATE holds SHARE UPDATE EXCLUSIVE on session while it
+-- scans and commits: it blocks no reader or writer, only schema changes and VACUUM of session, and it does not run
+-- under 1261's ACCESS EXCLUSIVE lock (1261 is a file of its own, committed before this one starts). The UPDATE holds
+-- ROW EXCLUSIVE on session, which blocks no reader or writer, and a row lock on each terminal row it writes until it
+-- commits, so a write to one of those rows waits for it. Measured with 100,000 sessions, at load 15-20 on the build
+-- host: the VALIDATE under 50 ms, the UPDATE 0.8 s (the whole file 4.1 s during heavier load). Production holds about
+-- 12,000 sessions. A wait of that length once per deploy is acceptable: the rows it writes are released sessions,
+-- which few writers touch, and it is well inside the 30 s lock_timeout (docker-compose.yml) of anyone waiting.
+-- statement_timeout (300 s there) is lifted for the UPDATE only; lock_timeout is 0 for the VALIDATE and the
+-- server's for the UPDATE. No status is written, so no UPDATE OF status trigger fires.
 --
 -- A much larger session table: as 1202, an operator runs the same UPDATE before deploying, outside Prisma, in
 -- autocommitted batches by id range; this file's UPDATE then finds nothing to write.
 --
 -- RE-RUNNABILITY
 -- --------------
--- Can run twice: VALIDATE on a valid constraint is a no-op, and the UPDATE writes null columns only. If any
--- statement fails (a timeout, a deadlock with a live writer, a crash), the whole file rolls back and Prisma records
--- 1262 as failed, after which `prisma migrate deploy` stops with P3009: `prisma migrate resolve --rolled-back
--- 1262_session_release_backfill`, then deploy again. Where the earlier version is recorded as applied, `migrate
--- deploy` does not run it again.
+-- Can run twice: VALIDATE on a valid constraint is a no-op, and the UPDATE writes null columns only. If a statement
+-- fails (a timeout, a deadlock with a live writer, a crash), the statements before it stay committed, Prisma records
+-- 1262 as failed, and `prisma migrate deploy` stops with P3009 until `prisma migrate resolve --rolled-back
+-- 1262_session_release_backfill`, after which deploy runs the whole file again. Where the earlier version is
+-- recorded as applied (on every database migrated while its tables were empty), deploy does not run this again.
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
 
 SET lock_timeout = 0;
