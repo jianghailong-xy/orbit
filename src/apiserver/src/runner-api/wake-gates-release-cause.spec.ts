@@ -176,3 +176,34 @@ test('every gate answers from the release column what it answered from the statu
     writeFileSync(out, `${lines.join('\n')}\n`);
   }
 });
+
+test('named cases: a FAILED session with a retry armed, and a session a person ended', () => {
+  // FAILED, retry_at armed: it will be retried, so a scheduled wake-up misses its tick and a machine wake may still revive it.
+  const failed = rowOf('FAILED', 'turn_failed', null, true, 'open', 'armed');
+  assert.equal(oldTickStanding(failed, NOW), 'FAILED_RECOVERING');
+  assert.equal(tickStanding(failed, NOW), 'FAILED_RECOVERING');
+  assert.equal(oldSessionHasEnded(failed), true);
+  assert.equal(sessionHasEnded(failed), true);
+  // Ended by a person ('ended', CANCELLED): a stale PENDING wake-up row on it is dropped, never delivered.
+  const ended = rowOf('CANCELLED', 'ended', 'ended', false, 'open', 'none');
+  for (const gate of [oldSessionHasEnded, sessionHasEnded, oldProjectSessionHasEnded, projectSessionHasEnded]) {
+    assert.equal(gate(ended), true);
+  }
+  assert.equal(oldTickStanding(ended, NOW), 'ENDED');
+  assert.equal(tickStanding(ended, NOW), 'ENDED');
+});
+
+test('rows deploy 1 leaves until migration 1405 heals them: FAILED with a clean-end cause reads as ended, not failed', () => {
+  // 1405 rewrites these causes to a failure cause at boot, in the same deploy and before the server serves, so these
+  // answers hold only for the window in which an older database meets this code. Printed so the difference is on record.
+  for (const cause of ['engine_exited', 'completed', 'cancelled']) {
+    const row = rowOf('FAILED', cause, null, true, 'open', 'none');
+    assert.equal(oldTickStanding(row, NOW), 'FAILED', cause);
+    assert.equal(tickStanding(row, NOW), 'ENDED', cause);
+    assert.equal(oldConversationIsDown(row), true, cause);
+    assert.equal(conversationIsDown(row), false, cause);
+    // The wake rule and the credential gates do not read the cause: unchanged.
+    assert.equal(sessionHasEnded(row), oldSessionHasEnded(row), cause);
+    assert.equal(newGatewayOpen(row), oldGatewayOpen(row), cause);
+  }
+});
