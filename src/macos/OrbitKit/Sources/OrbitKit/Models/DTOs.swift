@@ -1650,6 +1650,12 @@ public struct BgShellDTO: Decodable, Sendable {
     public let endedAt: String?
     /// An agent's or workflow's last progress, carried by the notification that ended it.
     public let progress: JSONValue?
+    /// Why a killed one was killed (`requested`, `stopped_by_owner`, `runner_shutdown`, …).
+    public let reason: String?
+    /// A runner-hosted job's exit code, once it exited.
+    public let exitCode: Int?
+    /// Whether the owner can stop it from the app; absent from older servers, which reads as not.
+    public let stoppable: Bool?
 
     /// Map to the reducer's `BackgroundProc`: key by `toolUseId`, translate the web status vocab to
     /// the native one, and default a missing output to empty (the tray shows "No output captured yet").
@@ -1662,7 +1668,10 @@ public struct BgShellDTO: Decodable, Sendable {
                        startedAt: startedTs,
                        kind: kind,
                        taskId: shellId,
-                       endedAt: endedAt)
+                       endedAt: endedAt,
+                       reason: reason,
+                       exitCode: exitCode,
+                       stoppable: stoppable)
     }
 
     /// The progress this row ended with, for `seedBackground`.
