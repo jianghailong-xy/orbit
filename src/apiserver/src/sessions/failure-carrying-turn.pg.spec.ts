@@ -444,10 +444,12 @@ test('every failure writer records FAILED and the error on the turn that carries
   /**
    * A failure release revived, as the owner's message revives it, then claimed again: the revive keeps
    * last_turn_outcome (FAILED, the copy of the failed turn) and queues its message as a PENDING turn. The claim is
-   * written as the queue writes it (RUNNING, the claim's markers); the runner process holds no inbox lease generation
-   * here, as in every finalize of this file.
+   * written as the queue writes it: RUNNING, the claim's markers, and the inbox lease owned by the runner process
+   * that took it, which that process names in its finalize (`leaseOwner`).
    */
-  async function revivedFailure(w: World, label: string): Promise<{ id: string; failedTurn: string; revivedTurn: string }> {
+  async function revivedFailure(w: World, label: string): Promise<{
+    id: string; failedTurn: string; revivedTurn: string; leaseOwner: string;
+  }> {
     const id = await session(s.db, w, { title: label });
     const failedTurn = await turn(s.db, id, 1, 'IN_FLIGHT');
     await s.api.finalize({ id: w.runnerId }, id, { status: SharedRunStatus.FAILED, error: 'engine crashed' } as never);
@@ -461,17 +463,20 @@ test('every failure writer records FAILED and the error on the turn that carries
       `SELECT id FROM "conversation_turn" WHERE session_id = $1::uuid AND status = 'PENDING' AND kind = 'message'`, [id],
     )).rows as Array<{ id: string }>;
     assert.equal(queued.length, 1, 'the revive queued its message');
+    const leaseOwner = randomUUID();
     await sql.query(
-      `UPDATE "session" SET status = 'RUNNING', engine_turn_active = true, run_claimed_at = now(), inbox_lease_owner = NULL
-        WHERE id = $1::uuid`, [id]);
-    return { id, failedTurn, revivedTurn: queued[0].id };
+      `UPDATE "session" SET status = 'RUNNING', engine_turn_active = true, run_claimed_at = now(), inbox_lease_owner = $2::uuid
+        WHERE id = $1::uuid`, [id, leaseOwner]);
+    return { id, failedTurn, revivedTurn: queued[0].id, leaseOwner };
   }
 
   await t.test('A the runner finalize with no end asked and no failure: the turn it cuts off CANCELLED (option A)', async () => {
     const w = await world(s.db, 'option-a');
     // The coordinator's shape: a failure release, revived, finalized CANCELLED with no end asked before a turn completed.
     const revived = await revivedFailure(w, 'revived');
-    await s.api.finalize({ id: w.runnerId }, revived.id, { status: SharedRunStatus.CANCELLED } as never);
+    await s.api.finalize({ id: w.runnerId }, revived.id, {
+      status: SharedRunStatus.CANCELLED, leaseOwner: revived.leaseOwner,
+    } as never);
     const cut = await turnRow(sql, revived.revivedTurn);
     assert.equal(cut.outcome, 'CANCELLED', 'the queued turn the release cut off ends CANCELLED');
     assert.equal(cut.status, 'ANSWERED', 'and is drained as before');
@@ -535,8 +540,9 @@ test('every failure writer records FAILED and the error on the turn that carries
     // A second queued turn, which the drain answers after the cut-off one is recorded: refused.
     await turn(s.db, revived.id, 3, 'PENDING');
     await sql.query(`INSERT INTO option_a_poison (session_id) VALUES ($1::uuid)`, [revived.id]);
-    await assert.rejects(s.api.finalize({ id: w.runnerId }, revived.id, { status: SharedRunStatus.CANCELLED } as never),
-      /option a: the drain is refused/);
+    await assert.rejects(s.api.finalize({ id: w.runnerId }, revived.id, {
+      status: SharedRunStatus.CANCELLED, leaseOwner: revived.leaseOwner,
+    } as never), /option a: the drain is refused/);
     const row = await sessionRow(sql, revived.id);
     assert.equal(row.finished_at, null, 'the release rolled back');
     assert.equal(row.status, 'RUNNING');

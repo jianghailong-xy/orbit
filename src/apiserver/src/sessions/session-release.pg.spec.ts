@@ -802,11 +802,13 @@ test('(12) the release fact alone fires every guard and ended-trigger (plan step
       }
     }
     // Where the answer is not the old clauses', it is one of the two differences design §12.3 names. W7's rule: a
-    // release with an end asked for is a stop, so with a retry armed recipient_ended and asker_stopped no longer wait
-    // for that retry. The residual shape: a failed turn's copy kept through a release that is no failure reads as a
-    // failure, so the three wait where the old clauses, reading SUCCEEDED or CANCELLED, fired.
+    // release with an end asked for is a stop, so for every row released FAILED with an end reason (W7, W4 after an
+    // end, and the old FAILED rows 1262 left with one, B1) recipient_ended and asker_stopped no longer wait for a retry
+    // armed on it; 1425 as the project branch had it, reading the cause, already fired for B1. The residual shape: a
+    // failed turn's copy kept through a release that is no failure reads as a failure, so the three wait where the old
+    // clauses, reading SUCCEEDED or CANCELLED, fired.
     const named = [
-      ...RELEASE_SHAPES.filter((shape) => shape.released && shape.failureChange === 'END_ASKED')
+      ...RELEASE_SHAPES.filter((shape) => shape.released && shape.status === 'FAILED' && shape.endReason !== null)
         .flatMap((shape) => [`${shape.name}, retry armed: recipient fires`, `${shape.name}, retry armed: asker fires`]),
       ...RELEASE_SHAPES.filter((shape) => shape.released && shape.failureChange === 'RESIDUAL')
         .flatMap((shape) => [`${shape.name}: reviewer waits`, `${shape.name}, retry armed: recipient waits`,
@@ -845,7 +847,8 @@ test('(12) the release fact alone fires every guard and ended-trigger (plan step
     for (const { tgname, def } of defs) {
       console.log(`# ${tgname}: ${def}`);
       assert.doesNotMatch(def, /release_cause/, `${tgname}: reads no release cause`);
-      assert.match(def, /last_turn_outcome IS NOT DISTINCT FROM 'FAILED'::text/, `${tgname}: reads the turn outcome`);
+      // PostgreSQL deparses `x IS NOT DISTINCT FROM y` as `NOT (x IS DISTINCT FROM y)`.
+      assert.match(def, /NOT \(new\.last_turn_outcome IS DISTINCT FROM 'FAILED'::text\)/, `${tgname}: reads the turn outcome`);
     }
   });
 
