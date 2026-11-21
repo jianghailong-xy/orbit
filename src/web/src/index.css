@@ -24198,62 +24198,13 @@ div.landing-jobs-open {
   border-left: 2px solid var(--border-subtle);
   font-size: 12px;
 }
-.bgwake-jobs,
 .bgwake-wakeups {
   margin: 0 0 6px;
   padding: 0;
   list-style: none;
 }
-.bgwake-job + .bgwake-job,
 .bgwake-wakeup + .bgwake-wakeup {
   margin-top: 8px;
-}
-.bgwake-job-head {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  color: var(--text-2);
-}
-.bgwake-job-mark {
-  flex: none;
-}
-.bgwake-job-mark.is-ok {
-  color: var(--success-solid);
-}
-.bgwake-job-mark.is-failed {
-  color: var(--error-solid);
-}
-.bgwake-job-mark.is-running {
-  color: var(--text-3);
-}
-.bgwake-job-name {
-  flex: 1;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-.bgwake-job-exit {
-  flex: none;
-  padding: 0 6px;
-  border-radius: 4px;
-  background: var(--fill-inset);
-  color: var(--text-2);
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 11px;
-}
-.bgwake-job-cmd,
-.bgwake-job-meta {
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 11px;
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-}
-.bgwake-job-cmd {
-  margin-top: 2px;
-  color: var(--text-2);
-}
-.bgwake-job-meta {
-  margin-top: 2px;
-  color: var(--text-3);
 }
 .bgwake-wakeup-reason {
   margin-bottom: 2px;
@@ -24282,67 +24233,6 @@ div.landing-jobs-open {
   font-size: 11px;
   white-space: pre-wrap;
   word-break: break-word;
-}
-.bgwake-tail {
-  margin: 6px 0 6px 22px;
-  padding: 10px 12px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 6px;
-  background: var(--bg-sunken);
-}
-.bgwake-tail-name {
-  margin-bottom: 2px;
-  color: var(--text-2);
-  font-size: 12px;
-}
-/* A quiet job's last output, inside the fold under its row (it stays out of the fold only on a failure). */
-.bgwake-job > .bgwake-output {
-  margin-top: 6px;
-}
-.bgwake-output > summary {
-  list-style: none;
-  cursor: pointer;
-}
-.bgwake-output > summary::-webkit-details-marker {
-  display: none;
-}
-.bgwake-output-label {
-  display: block;
-  margin-bottom: 6px;
-  font-size: 12px;
-  color: var(--text-3);
-}
-/* Clamp visual lines: one long JSON line must be as compact as multiline output. */
-.bgwake-output-preview {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  line-height: 1.6;
-  max-height: 4.8em;
-  overflow: hidden;
-}
-.bgwake-output-action {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 6px;
-  color: var(--brand);
-  font-size: 12px;
-}
-.bgwake-output-collapse,
-.bgwake-output[open] .bgwake-output-preview,
-.bgwake-output[open] .bgwake-output-expand {
-  display: none;
-}
-.bgwake-output[open] .bgwake-output-collapse {
-  display: inline;
-}
-.bgwake-output[open] .bgwake-output-action .anticon {
-  transform: rotate(180deg);
-}
-.bgwake-output-full {
-  margin-top: 6px;
-  line-height: 1.6;
 }
 .bgwake-undelivered {
   margin: 2px 0 0 22px;
@@ -24495,6 +24385,103 @@ div.landing-jobs-open {
 .chat-subagent-end-run {
   font-size: 11.5px;
   color: var(--text-3);
+}
+/* A bg_run job as one card from start to end (JobCard; the owner's job-card board, rulings R1-R4 of
+   2026-11-21): a tool card in the exec tone, its kind and run time as chips, its end as the SubAgent card's
+   word chip and mark. Amber while it has gone quiet; the folded tail red for a failure, grey otherwise. */
+.chat-job-title {
+  color: var(--text-1);
+}
+.chat-job-chip.is-quiet {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+/* At phone width the kind and the run time leave the first line for a second, grey one (R4). */
+.chat-job-sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px 6px 58px;
+}
+.chat-job-sub .chat-tool-tag,
+.chat-job-sub .chat-tool-meta {
+  background: var(--fill-muted);
+  color: var(--text-3);
+}
+.chat-job-ending {
+  padding: 0 10px 6px 58px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+.chat-job-detail > .chat-job-ending {
+  padding: 4px 0 0;
+}
+.chat-job-tail {
+  margin: 0;
+  overflow: hidden;
+  white-space: pre;
+  text-overflow: ellipsis;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.chat-job-ending.is-failed .chat-job-tail {
+  color: var(--error);
+}
+.chat-job-meta {
+  margin: 4px 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--text-3);
+  overflow-wrap: anywhere;
+}
+.chat-job-output {
+  margin-top: 6px;
+}
+.chat-job-output .chat-pre {
+  max-height: 480px;
+  margin: 0 0 4px;
+  padding: 8px 10px;
+  overflow: auto;
+  border-radius: 6px;
+  background: var(--bg-sunken);
+  font-size: 11px;
+  line-height: 1.6;
+}
+.chat-job-wake-list {
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.chat-job-wake + .chat-job-wake {
+  margin-top: 4px;
+}
+.chat-job-stop {
+  flex: none;
+  font-size: 12px;
+}
+.chat-job-detail > .chat-job-stop {
+  display: inline-block;
+  margin-top: 4px;
+}
+/* The folded card's Stop is its hover menu; where nothing hovers (a phone), it stays drawn. */
+.chat-job-stop.is-hover {
+  visibility: hidden;
+}
+.chat-tool-row:hover .chat-job-stop.is-hover,
+.chat-job-stop.is-hover:focus-within {
+  visibility: visible;
+}
+@media (hover: none) {
+  .chat-job-stop.is-hover {
+    visibility: visible;
+  }
+}
+.bg-shell-stop {
+  flex: none;
+  margin-left: 6px;
+  font-size: 12px;
 }
 /* An exception item's delivery to the coordinator (components/OpenItemDeliveryCard.tsx): the same
    card shape as a watch's wake — right-aligned, control-plane-owned — with the item's own fields

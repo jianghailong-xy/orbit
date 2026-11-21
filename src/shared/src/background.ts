@@ -72,6 +72,8 @@ export interface BgShell {
   /** Why a killed one was killed, as the terminal background_task names it: a runner-hosted job's `requested` (the
    *  agent's bg_kill), `stopped_by_owner` (BG_JOB_STOPPED_BY_OWNER), `runner_shutdown`, `session_cancelled`, ... */
   reason?: string;
+  /** A runner-hosted job's exit code, as its terminal background_task names it; absent for one killed before it exited. */
+  exitCode?: number;
   /** Whether its session's owner can stop it from the app (POST /sessions/:id/background/jobs/:jobId/stop): a running
    *  `job` whose session's runner declares BG_OWNER_STOP_V1. Stated only by GET /sessions/:id/background; a client
    *  deriving the list itself leaves it out, which reads as not stoppable. */
@@ -271,6 +273,7 @@ export function deriveBackgroundShells(
         shell.terminal = t;
         shell.endedAt = ev.ts ?? undefined;
         if (t === 'killed' && typeof p.reason === 'string' && p.reason !== '') shell.reason = p.reason;
+        if (typeof p.exitCode === 'number') shell.exitCode = p.exitCode;
       }
       // Only a runner-hosted job's record states a kind; an engine's own shell, agent or workflow
       // reports none, a SubAgent's report (subagentRunId) is not about a launch listed here, and

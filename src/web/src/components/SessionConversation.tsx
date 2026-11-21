@@ -1,4 +1,4 @@
-import type { ComponentProps, ContextType } from 'react';
+import { useMemo, type ComponentProps, type ContextType } from 'react';
 import type { SubagentRunView } from '@orbit/shared';
 import { useNavigate } from 'react-router-dom';
 import { encodeId } from '../lib/idCodec';
@@ -6,6 +6,7 @@ import { useSubagentRuns } from '../lib/subagentRuns';
 import { useWorkflowRuns, WorkflowRunsCtx } from '../lib/workflowRuns';
 import type { SessionStream } from '../lib/useSessionStream';
 import { OrbitLinkCardsProvider } from './OrbitLinkCard';
+import { BgJobHostCtx, JobQueuedWakesCtx } from './JobCard';
 import { AnsweredQuestionsCtx } from './OwnerAnswerLine';
 import { SubagentQueuedWakesCtx } from './SubagentCardEnd';
 import { WikiDraftCardCtx, type WikiDraftCardHost } from './WikiDraftCard';
@@ -58,6 +59,7 @@ export function SessionConversation({
   subagentWaiting = NO_SUBAGENT_WAITING,
   subagentRuns: givenRuns,
   subagentQueuedWakes = NO_QUEUED_WAKES,
+  jobQueuedWakes = NO_QUEUED_WAKES,
 }: {
   sessionId: string;
   stream: SessionStream;
@@ -84,11 +86,15 @@ export function SessionConversation({
   subagentRuns?: ReadonlyMap<string, SubagentRunView>;
   /** Each SubAgent end turn still on the queue, by run id: its `Don't send` (`SubagentQueuedWakesCtx`). */
   subagentQueuedWakes?: ReadonlyMap<string, () => void>;
+  /** Each background job's wake still on the queue, by job id: its `Don't send` (`JobQueuedWakesCtx`). */
+  jobQueuedWakes?: ReadonlyMap<string, () => void>;
 }) {
   const navigate = useNavigate();
   const ownRuns = useSubagentRuns(sessionId, givenRuns ? NO_EVENTS : stream.transcriptEvents);
   const subagentRuns = givenRuns ?? ownRuns;
   const workflowRuns = useWorkflowRuns(sessionId, stream.transcriptEvents);
+  // Where a bg_run job's card reads its tail and asks to stop it, and the list that says whether it can be.
+  const jobHost = useMemo(() => ({ sessionId, serverShells: stream.serverBgShells }), [sessionId, stream.serverBgShells]);
   return (
     <SessionNavCtx.Provider value={(rawId) => navigate(`/sessions/${encodeId(rawId)}`)}>
       <EventFullCtx.Provider value={stream.fetchEventFull}>
@@ -102,6 +108,8 @@ export function SessionConversation({
                     <WorkflowRunsCtx.Provider value={workflowRuns}>
                     <SubagentWaitingCtx.Provider value={subagentWaiting}>
                     <SubagentQueuedWakesCtx.Provider value={subagentQueuedWakes}>
+                    <BgJobHostCtx.Provider value={jobHost}>
+                    <JobQueuedWakesCtx.Provider value={jobQueuedWakes}>
                     <StreamingDraftsCtx.Provider value={stream.streamingDrafts}>
                       {/* The links in this conversation, drawn as cards. The provider is what makes a
                           card possible at all — the shared page and the export mount none — and it
@@ -122,6 +130,8 @@ export function SessionConversation({
                         </AnsweredQuestionsCtx.Provider>
                       </OrbitLinkCardsProvider>
                     </StreamingDraftsCtx.Provider>
+                    </JobQueuedWakesCtx.Provider>
+                    </BgJobHostCtx.Provider>
                     </SubagentQueuedWakesCtx.Provider>
                     </SubagentWaitingCtx.Provider>
                     </WorkflowRunsCtx.Provider>

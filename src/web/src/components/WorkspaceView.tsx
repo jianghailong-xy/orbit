@@ -300,6 +300,7 @@ import {
   type SessionWatching,
 } from '../lib/watches';
 import { isQueuedWatchWake, queuedSubagentWake, returnsToComposer } from '../lib/queuedTurnRestore';
+import { queuedJobWake } from '../lib/bgJobCard';
 import {
   api,
   ApiError,
@@ -4838,7 +4839,13 @@ export function WorkspaceView({
     () =>
       visibleQueuedTurns
         // A SubAgent's end turn waits on its card instead (`subagentQueuedWakes`): the tail draws nothing for it.
-        .filter((turn) => !inPendingTray(turn) && !queuedSubagentWake(turn)?.alone)
+        // So does a background job's news (`jobQueuedWakes`, JobCard).
+        .filter(
+          (turn) =>
+            !inPendingTray(turn) &&
+            !queuedSubagentWake(turn)?.alone &&
+            !(!turn.sessionMessage && queuedJobWake(turn.content)?.alone),
+        )
         .map((turn) => ({ turn, event: queuedTurnEvent(turn) })),
     [visibleQueuedTurns],
   );
@@ -8235,6 +8242,19 @@ export function WorkspaceView({
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- cancelQueued is rebuilt each render; it reads the latest queue itself
   }, [visibleQueuedTurns, selectedTrashed]);
+  // A background job's wake still on the queue, by job id: its card says the agent has not read it yet, and its
+  // `Don't send` does what the tail's Cancel did (JobCard, board E1).
+  const jobQueuedWakes = useMemo(() => {
+    const out = new Map<string, () => void>();
+    if (selectedTrashed) return out;
+    for (const turn of visibleQueuedTurns) {
+      // A steer is on its way into the running turn and cannot be withdrawn (409): only a queued wake has a Don't send.
+      if (turn.sessionMessage || turn.placement === 'steer') continue;
+      for (const jobId of queuedJobWake(turn.content)?.jobIds ?? []) out.set(jobId, () => void cancelQueued(turn.turnId));
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- cancelQueued is rebuilt each render; it reads the latest queue itself
+  }, [visibleQueuedTurns, selectedTrashed]);
   // Take back a message whose delivery settled undelivered. Nothing read it, so this bubble is
   // the only copy of what was typed: hand it back the way the transcript's own undelivered card
   // does (appended, never overwriting a draft), then discard the row so the pane stops carrying a
@@ -10962,6 +10982,7 @@ export function WorkspaceView({
                 subagentWaiting={subagentWaiting}
                 subagentRuns={subagentRuns}
                 subagentQueuedWakes={subagentQueuedWakes}
+                jobQueuedWakes={jobQueuedWakes}
               />
               </QueuedFootCtx.Provider>
               </MainCheckoutCtx.Provider>
@@ -11386,6 +11407,7 @@ export function WorkspaceView({
             otherwise. Derived from this session's events; hidden when there are none. */}
         {selectedId && !selectedTrashed && (
           <BackgroundShellsTray
+            sessionId={selectedId}
             events={events}
             live={live}
             serverShells={serverBgShells}
