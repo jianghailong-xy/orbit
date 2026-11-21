@@ -56,6 +56,7 @@ internal class SessionActions(private val api: DirectoryApi, private val scope: 
                 undo = ToastUndo(ProjectPauseCopy.undoDescription) { resumeProject(row.copy(pause = ProjectPause.NONE)) })
         } catch (cancel: CancellationException) { throw cancel }
         catch (failure: Exception) { refused(row, false, failure) }
+        ProjectSidebarNudge.nudge()
         changed()
     }
 
@@ -70,6 +71,7 @@ internal class SessionActions(private val api: DirectoryApi, private val scope: 
             } else api.resumeProject(row.projectId)
         } catch (cancel: CancellationException) { throw cancel }
         catch (failure: Exception) { refused(row, true, failure) }
+        ProjectSidebarNudge.nudge()
         changed()
     }
 

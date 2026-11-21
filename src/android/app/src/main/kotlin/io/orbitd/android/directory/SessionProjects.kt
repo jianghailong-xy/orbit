@@ -408,7 +408,8 @@ object SessionProjectMembers {
 @Composable
 internal fun rememberProjectSidebar(app: OrbitApplication, handle: SessionHandle, api: DirectoryApi): State<List<JsonObject>> {
     val rows = remember(api) { mutableStateOf<List<JsonObject>>(emptyList()) }
-    PagePoll(app, handle, PagePolls.PROJECT_EVENTS, api) {
+    val nudge by ProjectSidebarNudge.version.collectAsState()
+    PagePoll(app, handle, PagePolls.PROJECT_EVENTS, api, nudge) {
         try { rows.value = api.read(listOf("projects", "sidebar"), JsonArray.serializer()).filterIsInstance<JsonObject>() }
         catch (cancel: CancellationException) { throw cancel }
         catch (_: Exception) { }
@@ -481,4 +482,11 @@ object ProjectRowActions {
     /** The long press's Pin and Move group, led by Pause or Resume; Complete leads the whole menu apart, as before. */
     fun menuGroup(row: SessionProjectRow, view: SessionView) =
         listOfNotNull(stateAction(row, view)?.takeIf { it != ProjectRowAction.COMPLETE }, pin(row), if (row.coordinator != null) ProjectRowAction.MOVE else null)
+}
+
+/** A write this device made to a project the rail draws (Pause, Resume) reads the sidebar again at once, rather than waiting on the
+ * `project.changed` event the server publishes for it. */
+internal object ProjectSidebarNudge {
+    val version = kotlinx.coroutines.flow.MutableStateFlow(0)
+    fun nudge() { version.value += 1 }
 }
