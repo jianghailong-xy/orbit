@@ -20,6 +20,7 @@ import {
   StreamableFile,
   UseGuards,
 } from '@nestjs/common';
+import { createHash } from 'node:crypto';
 import type { Response } from 'express';
 import { ModuleRef } from '@nestjs/core';
 import { ProjectsService } from '../projects/projects.service';
@@ -294,6 +295,53 @@ export class SessionsController {
   counts(@CurrentUser() user: AuthUser) {
     return this.sessions.workspaceSessionCounts(user.userId);
   }
+
+  /**
+   * Where a workspace list's project rows go, for every project it names at once
+   * (SessionsService.projectPlacement): each one's coordinator, Open or Completed, the sessions in
+   * `view` waiting on the owner, and how many sessions in `view` it has. `projectIds` is a
+   * comma-separated list of public ids. One read for the whole list, where it used to make one or two
+   * `GET /sessions?projectId=` a project (docs/list-freshness-design.md W4); that read stays, and its
+   * shape, for every client that still sends it.
+   *
+   * Conditional: the answer carries an ETag of its own bytes and a read that names it is answered 304,
+   * decided here for the reason the Open list's is (Express's own check refuses `Cache-Control:
+   * no-cache`). Above `@Get(':id')` for the reason `search` is.
+   */
+  @PatScope('sessions:read', { workspaceConfinable: 'LIST' })
+  @Get('project-placement')
+  async projectPlacement(
+    @CurrentUser() user: AuthUser,
+    @Query('projectIds') projectIdsParam?: string,
+    @Query('view') view?: string,
+    @Headers('if-none-match') ifNoneMatch?: string,
+    @Res({ passthrough: true }) res?: Response,
+  ) {
+    const lifecycle = view === undefined || view === 'open' ? 'open' : view === 'completed' ? 'completed' : null;
+    if (!lifecycle) throw new BadRequestException('view must be open or completed');
+    const parts = (projectIdsParam ?? '').split(',').map((part) => part.trim()).filter(Boolean);
+    if (parts.length > SessionsController.PLACEMENT_MAX_PROJECTS) {
+      throw new BadRequestException(`at most ${SessionsController.PLACEMENT_MAX_PROJECTS} projectIds`);
+    }
+    const pipe = new PublicIdPipe();
+    const projectIds = parts.map((part) => pipe.transform(part, { type: 'query', data: 'projectIds' }) as string);
+    const projects = await this.sessions.projectPlacement(user.userId, {
+      projectIds, view: lifecycle, confinedTo: workspaceConfinement(user),
+    });
+    const body = { projects };
+    if (res) {
+      const etag = `W/"pp1-${createHash('sha256').update(JSON.stringify(body)).digest('base64url').slice(0, 27)}"`;
+      res.setHeader('ETag', etag);
+      if (ifNoneMatchHits(ifNoneMatch, etag)) {
+        res.status(304);
+        return undefined;
+      }
+    }
+    return body;
+  }
+
+  /** More project ids than any workspace list shows; a longer list is refused rather than read. */
+  private static readonly PLACEMENT_MAX_PROJECTS = 500;
 
   // Cross-scope search for the clients' ⌘K palette. MUST stay above `@Get(':id')` — Nest matches
   // routes in declaration order, so below it the literal path would be swallowed as an id.

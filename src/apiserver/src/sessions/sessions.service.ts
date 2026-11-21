@@ -52,7 +52,9 @@ import {
   STEER_WITHDRAW_POLL_MS,
   STEER_WITHDRAW_WAIT_MS,
 } from './steer-withdraw';
-import { readSessionProjectMembership, sessionInProjectSql, sessionProjectMembershipSql } from './session-project-membership';
+import {
+  projectsMembershipCandidatesSql, readSessionProjectMembership, sessionInProjectSql, sessionProjectMembershipSql,
+} from './session-project-membership';
 import {
   externalSenderColumns,
   externalSenderOf,
@@ -477,6 +479,14 @@ type ListOverlayInput = {
   taskId: string | null;
   runningBgShells: string[];
   runningSubagentCount: number;
+};
+
+/** One project's answer in `SessionsService.projectPlacement`. */
+export type ProjectPlacement = {
+  projectId: string;
+  coordinator: Awaited<ReturnType<SessionsService['listRowsByIds']>>[number] | null;
+  waiting: Awaited<ReturnType<SessionsService['listRowsByIds']>>[number][];
+  sessionCount: number;
 };
 
 /** The part of a list row `listOverlay` reads, keyed in the order the row carries them. */
@@ -4671,6 +4681,87 @@ export class SessionsService {
       visibility: Prisma.sql`s.deleted_at IS NULL`,
       orderBy: Prisma.sql`s.created_at DESC`,
       pageLimit: Prisma.empty,
+    });
+  }
+
+  /**
+   * Where each of these projects' rows goes in a workspace list, read for all of them at once
+   * (`GET /sessions/project-placement`): each project's coordinator, Open or Completed, which decides
+   * whether the project is a row in that workspace or its members are rows of their own (owner
+   * 2026-11-07); the project's sessions in `view` that are waiting on the owner, in any workspace,
+   * which the row's line names; and how many sessions in `view` the project has, its coordinator
+   * counted, for the row's tooltip.
+   *
+   * The workspace list used to ask `GET /sessions?projectId=` for each project it showed, and again in
+   * Completed for a coordinator the Open read did not find: some sixty reads for thirty projects on
+   * every page load (2026-11-21). This is a fixed number of statements however many projects it names:
+   * the projects, their members' overlay inputs, the overlay, and the rows of the coordinators and the
+   * waiting members alone. A project's whole member list is still the per-project read's.
+   *
+   * Only `ownerId`'s projects are answered; an id that names none is left out of the answer.
+   */
+  async projectPlacement(
+    ownerId: string,
+    opts: { projectIds: readonly string[]; view: 'open' | 'completed'; confinedTo?: readonly string[] },
+  ): Promise<ProjectPlacement[]> {
+    const requested = [...new Set(opts.projectIds)];
+    if (requested.length === 0) return [];
+    const projects = await this.prisma.$queryRaw<Array<{ id: string; coordinatorSessionId: string | null }>>(Prisma.sql`
+      SELECT p.id, p.coordinator_session_id AS "coordinatorSessionId"
+        FROM project p
+       WHERE p.owner_id = ${ownerId}::uuid AND p.id = ANY(${requested}::uuid[])
+    `);
+    if (projects.length === 0) return [];
+    const ids = projects.map((project) => project.id);
+    // The view's own rules, as the per-project read applies them: its lifecycle, conversations only, no
+    // Ask, no scheduled run, and a confined token's workspaces.
+    const { query } = this.listShape(ownerId, { view: opts.view, confinedTo: opts.confinedTo });
+    const members = await this.prisma.$queryRaw<Array<ListOverlayInput & { projectId: string }>>(Prisma.sql`
+      SELECT s.id, s.status,
+             s.engine_turn_active AS "engineTurnActive",
+             s.task_id AS "taskId",
+             s.running_bg_shells AS "runningBgShells",
+             cardinality(s.running_subagents)::int AS "runningSubagentCount",
+             m.membership ->> 'projectId' AS "projectId"
+        FROM session s
+        CROSS JOIN LATERAL (SELECT ${sessionProjectMembershipSql('s')} AS membership) m
+       WHERE s.owner_id = ${ownerId}::uuid
+         ${query.scope}
+         AND (${query.visibility})
+         AND s.id = ANY(ARRAY(${projectsMembershipCandidatesSql(ids)}))
+         AND (m.membership ->> 'projectId')::uuid = ANY(${ids}::uuid[])
+    `);
+    const overlay = members.length === 0 ? new Map<string, ListOverlay>() : await this.listOverlay(ownerId, members);
+    const waiting = members.filter((member) => (overlay.get(member.id)?.pendingApprovals ?? 0) > 0);
+    const coordinatorIds = projects.flatMap((project) => project.coordinatorSessionId ? [project.coordinatorSessionId] : []);
+    const confined = opts.confinedTo
+      ? Prisma.sql`AND s.workspace_id = ANY(${[...opts.confinedTo]}::uuid[])`
+      : Prisma.empty;
+    const shown = [...new Set([...coordinatorIds, ...waiting.map((member) => member.id)])];
+    // A coordinator in either lifecycle, never one in Trash: what the per-project Open and Completed reads
+    // found between them.
+    const rows = shown.length === 0 ? [] : await this.listRows(ownerId, {
+      scope: Prisma.sql`AND s.help_ask IS NULL ${confined} AND s.id = ANY(${shown}::uuid[])`,
+      visibility: Prisma.sql`s.deleted_at IS NULL AND s.kind = 'CONVERSATION'`,
+      orderBy: Prisma.sql`s.id`,
+      pageLimit: Prisma.empty,
+    }, overlay);
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const byProject = new Map(projects.map((project) => [project.id, project]));
+    return requested.flatMap((projectId) => {
+      const project = byProject.get(projectId);
+      if (!project) return [];
+      const found = project.coordinatorSessionId ? byId.get(project.coordinatorSessionId) : undefined;
+      // The coordinator as its own rows say it: one that coordinates another project first is that one's.
+      const coordinator = found?.projectMembership?.role === 'COORDINATOR'
+        && found.projectMembership.projectId === projectId ? found : null;
+      const own = members.filter((member) => member.projectId === projectId);
+      return [{
+        projectId,
+        coordinator,
+        waiting: waiting.flatMap((member) => member.projectId === projectId && byId.has(member.id) ? [byId.get(member.id)!] : []),
+        sessionCount: new Set([...own.map((member) => member.id), ...(coordinator ? [coordinator.id] : [])]).size,
+      }];
     });
   }
 
