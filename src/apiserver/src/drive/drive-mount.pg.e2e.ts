@@ -672,6 +672,18 @@ test('Orbit Files drive: the mount daemon passes the shell-operation list (§5.9
     if (FULL) assert.ok(s.ms < 120_000, 'cp -r of 1,000 small files within the budget (tar x of 2,000 in 2 min, §5.5)');
   });
 
+  await row('5.5', 'create-write-close of a 4 KiB file, 200 times (§5.5 budget)', async (d) => {
+    const s = ok(await sh(a, `mkdir -p $F/lat55 && head -c 4096 /dev/urandom > ~/k4 && python3 -c "
+import shutil, time
+ms = []
+for i in range(200):
+    t = time.monotonic(); shutil.copyfile('$HOME/k4', '$F/lat55/f%d' % i); ms.append((time.monotonic() - t) * 1000)
+ms.sort(); print('%.1f %.1f' % (ms[100], ms[190]))"`), 'latency');
+    const [p50, p95] = s.out.trim().split(' ').map(Number);
+    d.push(`p50 ${p50} ms, p95 ${p95} ms on this host (§5.5's production budget: ≤ 60 ms p50, ≤ 250 ms p95); a new file is three door requests in sequence, create at the open and chunk and commit at the close, the staging opening while it is written`);
+    if (FULL) assert.ok(p95 <= 250, `p95 ${p95} ms`);
+  });
+
   await row('9', 'cp -p ~/x $F/ (mode 0644)', async (d) => {
     const s = ok(await sh(a, "echo x > ~/x && chmod 644 ~/x && touch -d '2021-03-04 05:06:07.250' ~/x && cp -p ~/x $F/ && stat -c %Y.%y ~/x $F/x"), 'cp -p');
     const [mine, theirs] = s.out.trim().split('\n');
@@ -994,12 +1006,14 @@ test('Orbit Files drive: the mount daemon passes the shell-operation list (§5.9
 
   await row('32', 'concurrent: owner and session move folders into each other; owner trashes r while a session creates r/s/new.txt', async (d) => {
     let moveOutcomes = '';
-    for (let i = 0; i < 5; i += 1) {
+    const stagger = [0, 30, 60, 120, 240, 0, 45, 90, 180, 360];
+    for (let i = 0; i < stagger.length; i += 1) {
       ok(await sh(a, `mkdir -p $F/p32-${i} $F/q32-${i} && ls $F/p32-${i}/ $F/q32-${i}/`), 'setup');
       const p = await mustEntry(`/p32-${i}`);
       const q = await mustEntry(`/q32-${i}`);
+      // Started apart by a little more each time, so either side gets there first.
       const [web, mount] = await Promise.all([
-        api('PATCH', `/drive/entries/${p.id}`, { parentId: q.id }),
+        sleep(stagger[i]).then(() => api('PATCH', `/drive/entries/${p.id}`, { parentId: q.id })),
         sh(a, `mv $F/q32-${i} $F/p32-${i}/ 2>&1; echo "rc=$?"`),
       ]);
       const webOk = web.status === 200;
@@ -1019,23 +1033,23 @@ test('Orbit Files drive: the mount daemon passes the shell-operation list (§5.9
       const said = `web ${web.status} ${web.text.slice(0, 200)}; mount ${mount.out.trim()} ${mount.err.trim()}; parents ${chain.join(' < ')}`;
       assert.ok(!(webOk && mountOk), `not both: ${said}`);
       assert.ok(webOk || mountOk, `one of them: ${said}`);
-      moveOutcomes += `${webOk ? 'web' : 'mount'} won (${webOk ? mount.out.trim().split('\n')[0] : `409 ${web.json?.code}`}); `;
+      moveOutcomes += `${webOk ? 'web' : 'mount'} first, the other refused (${webOk ? (/: ([^:\n]+)\nrc=/.exec(mount.out)?.[1] ?? mount.out.trim()) : `${web.status} ${web.json?.code}`}); `;
     }
     let trashOutcomes = '';
-    for (let i = 0; i < 5; i += 1) {
+    for (let i = 0; i < stagger.length; i += 1) {
       ok(await sh(a, `mkdir -p $F/r32-${i}/s && ls $F/r32-${i}/s/`), 'setup');
       const r = await mustEntry(`/r32-${i}`);
       const [web, mount] = await Promise.all([
-        api('DELETE', `/drive/entries/${r.id}`),
+        sleep(stagger[i]).then(() => api('DELETE', `/drive/entries/${r.id}`)),
         sh(a, `echo n > $F/r32-${i}/s/new.txt 2>&1; echo "rc=$?"`),
       ]);
       assert.equal(web.status, 200, web.text);
       const rows = await db.driveEntry.findMany({ where: { ownerId: owner, name: 'new.txt', parent: { name: 's', parent: { id: toUuid(r.id) } } } });
       for (const row of rows) assert.ok(row.trashedAt, 'never a live new.txt under a trashed r');
-      trashOutcomes += rows.length ? 'created first, in Trash with r; ' : `refused (${mount.out.trim().split('\n')[0]}); `;
+      trashOutcomes += rows.length ? 'created first, in Trash with r; ' : `open refused (${(/: ([^:\n]+)\nrc=/.exec(mount.out)?.[1] ?? mount.out.trim())}); `;
     }
-    d.push(`moves ×5: ${moveOutcomes}no cycle`);
-    d.push(`trash vs create ×5: ${trashOutcomes}never live under a trashed r`);
+    d.push(`moves ×${stagger.length}: ${moveOutcomes}no folder inside itself`);
+    d.push(`trash vs create ×${stagger.length}: ${trashOutcomes}never a live new.txt under a trashed r`);
   });
 
   await row('33', 'mkdir -p $F/p/q/r; rmdir $F/p/q/r; rmdir $F/p', async (d) => {
