@@ -233,7 +233,7 @@ test('an unchanged pending queue answers 304 to its ETag, and a changed one answ
   queueState.claim = 'the suite failed';
   const changed = await fetch(url, { headers: { ...AUTH, 'if-none-match': etag } });
   assert.equal(changed.status, 200);
-  assert.equal((await changed.json()).pending[0].claim, 'the suite failed');
+  assert.equal(((await changed.json()) as { pending: Array<{ claim: string }> }).pending[0].claim, 'the suite failed');
   assert.notEqual(changed.headers.get('etag'), etag);
 });
 
