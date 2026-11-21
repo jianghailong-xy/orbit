@@ -110,6 +110,57 @@ const taskIdsOf = (data: { taskId?: unknown; taskIds?: unknown } | null | undefi
 ];
 
 /**
+ * What `GET /sessions/counts` counts a session in (SessionsService.workspaceSessionCounts), as far as a summary or a
+ * list row says it. The server counts an Open conversation of a workspace: in `active` while it is RUNNING or
+ * PENDING; in `running` for a dispatched turn (RUNNING); in `needsYou` while a person has to answer it, which takes it
+ * out of `running` and `jobs`. The rest of `running` (the engine's own turn, a sub-agent) and of `jobs` (a bg_run job
+ * or watch in flight) is held by columns no summary carries, and counts only while the session is held (PENDING,
+ * RUNNING, AWAITING_INPUT, INTERRUPTED): a released one has them cleared. So those two can move only with that class,
+ * or with a process starting or ending (`background.task`), and the rest waits for the safety read.
+ */
+type TallyFacts = { workspace: string; open: boolean; status: string; needsYou: boolean };
+/** The fields of a summary, or of a session row this tab read, that `TallyFacts` is made from. */
+type TallyRow = {
+  id?: unknown;
+  status?: unknown;
+  runStatus?: unknown;
+  lifecycleState?: unknown;
+  sessionKind?: unknown;
+  agentId?: unknown;
+  agent?: { id?: unknown } | null;
+  pendingApprovals?: unknown;
+  waitingKind?: unknown;
+} | null | undefined;
+/** The statuses whose session holds no process and whose turn is over. */
+const RELEASED_STATUSES = new Set(['SUCCEEDED', 'FAILED', 'CANCELLED']);
+/** The `background.task` statuses that end a process (runner-api's bgEnded). */
+const PROCESS_ENDED = new Set(['completed', 'failed', 'killed', 'stopped']);
+/** Statuses that count alike: AWAITING_INPUT and INTERRUPTED are counted by the same rules, and so are the released. */
+const tallyClass = (status: string): string =>
+  status === 'AWAITING_INPUT' || status === 'INTERRUPTED' ? 'held' : RELEASED_STATUSES.has(status) ? 'released' : status;
+/** A start request lights no tally (owner-decision-signal.ts START_REQUEST), as the Session list's bar leaves it out. */
+const needsYouOf = (pendingApprovals: unknown, waitingKind: unknown): boolean =>
+  Number(pendingApprovals ?? 0) > 0 && waitingKind !== 'START_REQUEST';
+const tallyFactsOf = (row: TallyRow, workspaceId: string): TallyFacts => {
+  // The summary's own workspace before the envelope's, which the server resolves through a cache of its own.
+  const workspace = row?.agentId || row?.agent?.id || workspaceId;
+  return {
+    workspace: typeof workspace === 'string' ? workspace : '',
+    // A landing is in no tally, and neither is a session outside the Open list.
+    open: (row?.lifecycleState ?? 'OPEN') === 'OPEN' && row?.sessionKind !== 'LANDING',
+    status: String(row?.runStatus ?? row?.status ?? ''),
+    needsYou: needsYouOf(row?.pendingApprovals, row?.waitingKind),
+  };
+};
+/** A session's share of its workspace's tallies, '' when it is in none. Two facts with the same share move no tally. */
+const tallyShare = (facts: TallyFacts): string => {
+  if (!facts.open || !facts.workspace) return '';
+  const counted = tallyClass(facts.status);
+  if (counted === 'released' && !facts.needsYou) return '';
+  return `${facts.workspace} ${counted}${facts.needsYou ? ' needs-you' : ''}`;
+};
+
+/**
  * Opens one per-tab control-plane stream and turns it into liveness for the session-list queries,
  * mirroring the "snapshot + follow" model the iOS/macOS clients use. The control plane carries no
  * `sinceSeq` replay, so a fresh `GET /sessions` snapshot on (re)connect plus a coalesced refetch on
@@ -246,25 +297,80 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       if (!hinted) return;
       refresh({ predicate: ({ queryKey }) => isOpenList(queryKey) });
     };
-    // The sidebar's tallies (queries.ts workspaceSessionCountsQuery), read when an event can have moved one: a session
-    // made, ended or deleted, an approval asked or answered, a background job reporting, or a summary that says a
-    // different state or workspace than that session's last. Anything else leaves them to the safety read.
+    // The sidebar's tallies (queries.ts workspaceSessionCountsQuery), read at the end of a window in which some
+    // session's share of them moved (`tallyShare`), a session's process may have started or ended, or this tab wrote.
+    // Anything else leaves them to the safety read.
     const refetchCounts = (): void => {
       refresh({ queryKey: ['session-counts'] });
     };
-    // What each session's last summary said of what the tallies count.
-    const tallied = new Map<string, string>();
-    const countsMoved = (type: string, sessionId: string, data: EventData, workspaceId: string): boolean => {
-      if (type === 'session.ended' || type.startsWith('approval.') || type === 'background.task') {
-        if (sessionId) tallied.delete(sessionId);
-        return true;
+    // What each session counts in, as the stream last described it, and the processes each was last reported
+    // running by: a runner-hosted job re-reports itself `running` once a minute.
+    const tallies = new Map<string, TallyFacts>();
+    const processes = new Map<string, Set<string>>();
+    // This window's sessions, each with its share as the window found it (null: unknown), and whether a process
+    // started or ended in it.
+    const sharesBefore = new Map<string, string | null>();
+    let processMoved = false;
+    // What a session counts in when the stream has not described it yet: what this tab last read of it.
+    const readFacts = (sessionId: string): TallyFacts | undefined => {
+      for (const [key, cached] of qc.getQueriesData<unknown>({ predicate: ({ queryKey }) => queryKey[0] === 'sessions' || (queryKey[0] === 'session' && queryKey.length === 2) })) {
+        const rows = (Array.isArray(cached) ? cached : key[0] === 'session' && cached ? [cached] : []) as TallyRow[];
+        const row = rows.find((candidate) => candidate?.id === sessionId);
+        if (row) return tallyFactsOf(row, '');
       }
-      if ((type !== 'session.updated' && type !== 'session.created') || !sessionId) return false;
-      const summary = data as { status?: unknown; runState?: unknown; lifecycleState?: unknown; pendingApprovals?: unknown } | null | undefined;
-      const signature = JSON.stringify([workspaceId, summary?.status, summary?.runState, summary?.lifecycleState, summary?.pendingApprovals]);
-      const before = tallied.get(sessionId);
-      tallied.set(sessionId, signature);
-      return type === 'session.created' || before !== signature;
+      return undefined;
+    };
+    const noteTallies = (type: string, sessionId: string, data: EventData, workspaceId: string): void => {
+      if (!sessionId) return;
+      if (type === 'background.task') {
+        const task = data as { status?: unknown; name?: unknown; toolUseId?: unknown; kind?: unknown } | null | undefined;
+        const status = String(task?.status ?? '');
+        // A `service` is never in `jobs`; an older server sends no kind, nor an id, so a name stands in for one.
+        const process = typeof task?.toolUseId === 'string' && task.toolUseId ? task.toolUseId : `name:${String(task?.name ?? '')}`;
+        const running = processes.get(sessionId) ?? new Set<string>();
+        if (status === 'running' && task?.kind !== 'service') {
+          if (!running.has(process)) processMoved = true;
+          running.add(process);
+          processes.set(sessionId, running);
+        } else if (PROCESS_ENDED.has(status)) {
+          // Not only a job: an Agent call the engine ran in the background ends the same way, and leaves `running`.
+          running.delete(process);
+          processMoved = true;
+        }
+        return;
+      }
+      const summary = type === 'session.created' || type === 'session.updated';
+      if (!summary && type !== 'session.ended' && !type.startsWith('approval.')) return;
+      // A created session was in no Open list a moment ago, so it was in no tally.
+      const created = type === 'session.created';
+      const before = created ? undefined : tallies.get(sessionId) ?? readFacts(sessionId);
+      if (!sharesBefore.has(sessionId)) sharesBefore.set(sessionId, created ? '' : before ? tallyShare(before) : null);
+      const approval = data as { pendingApprovals?: unknown; waitingKind?: unknown } | null | undefined;
+      // An approval's event that says no count (an older server) says nothing of what the session needs.
+      if (!summary && type !== 'session.ended' && typeof approval?.pendingApprovals !== 'number') {
+        sharesBefore.set(sessionId, null);
+        return;
+      }
+      const next: TallyFacts | undefined = summary
+        ? tallyFactsOf(data as TallyRow, workspaceId)
+        : type === 'session.ended'
+          ? { workspace: before?.workspace ?? workspaceId, open: false, status: before?.status ?? '', needsYou: false }
+          : before && { ...before, needsYou: needsYouOf(approval?.pendingApprovals, approval?.waitingKind) };
+      if (!next) return;
+      tallies.set(sessionId, next);
+      // A session that ended or left the Open list had its processes taken off it (sessions/running-work.ts).
+      if (!next.open || tallyClass(next.status) === 'released') processes.delete(sessionId);
+    };
+    // Whether this window moved a tally; it starts the next window afresh.
+    const talliesMoved = (): boolean => {
+      let moved = processMoved;
+      for (const [sessionId, before] of sharesBefore) {
+        const now = tallies.get(sessionId);
+        if (before === null || !now || tallyShare(now) !== before) moved = true;
+      }
+      sharesBefore.clear();
+      processMoved = false;
+      return moved;
     };
     // The project pages on screen: the events below name the project, or ('') every project, and
     // the entities they say moved. Which of a page's reads that dirties is their own declaration —
@@ -559,7 +665,8 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
         if (pending.has('project')) refetchProjects();
         if (pending.has('watch') || pendingFlags.has('watches')) refetchWatches();
         if (pendingFlags.has('openList')) refetchOpenList();
-        if (pendingFlags.has('counts')) refetchCounts();
+        // Decided once the window's events are all in: an approval asked and answered inside it moved nothing.
+        if (talliesMoved() || pendingFlags.has('counts')) refetchCounts();
         for (const id of pendingSessions) refetchSessionDetail(id);
         for (const id of pendingProjects) refetchCriteriaDecisions(id);
         pending.clear();
@@ -632,7 +739,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
           pendingAnySession = true;
         }
       }
-      if (countsMoved(type, sessionId, data, workspaceId)) pendingFlags.add('counts');
+      noteTallies(type, sessionId, data, workspaceId);
       if (watchFollows(type, sessionId, data)) pendingFlags.add('watches');
       // Only the `session.*` family: those are the events that can move a session's run state,
       // and so the ones a frozen detail has to be corrected by. An approval or a background task
@@ -692,6 +799,10 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       dropped = true;
       if (!missedEvents) droppedAt = Date.now();
       missedEvents = true;
+      // What the stream said of each session stops being what the tallies count once events go missing; the
+      // reconnect reads them again, and each session is judged against what this tab reads of it from then on.
+      tallies.clear();
+      processes.clear();
       es?.close();
       setLive(false); // the gated interval polls take back over meanwhile
       streamReport.dropped();
