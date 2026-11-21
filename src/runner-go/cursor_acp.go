@@ -1192,6 +1192,7 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 	bridge := newCursorPermissionBridge(policy, mapper.permissionAsk, mapper.refuse, mapper.withdraw, func(ask cursorPermissionAsk) bool {
 		return cursorPreApproved(preApproved, ask)
 	}, bridgeCursorCard(p.t, p.job.SessionID), p.emitFor, launch.Cwd)
+	bridge.uploads = uploadsDir(p.job.SessionID)
 	bridge.prepareSandbox(p.ctx, p.job, runnerCursorSandboxInstaller, detectCursorSandbox, installCursorBubblewrap)
 	app, err := startCursorACP(p.ctx, *launch, mapper, bridge, p.emit)
 	if err != nil {
