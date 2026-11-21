@@ -380,6 +380,11 @@ export interface ControlBackgroundTask {
   name: string;
   status: string;
   exitCode?: number;
+  /** The launching call's id, which names the process across its reports. Absent when the runner sent
+   *  none, and from an older control plane. */
+  toolUseId?: string;
+  /** A runner-hosted job's kind (`job`, `watch`, `service`, `subagent`); absent for an engine's own shell. */
+  kind?: string;
 }
 
 /** `data` for `task.changed`.

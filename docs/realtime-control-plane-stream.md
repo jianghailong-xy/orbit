@@ -164,7 +164,7 @@ export enum ControlEventType {
 - `SESSION_ENDED`:`{ status, runStatus, sessionState, runState, lifecycleState, endReason }`。例如运行中的 Session 被用户 Complete 后,是 `runState=ENDED`(中性终态)、`lifecycleState=COMPLETED`;新客户端分别展示执行结果与所在位置,"是哪个动作结束的"读 `endReason` 而不是读 `runState`(见 [session-lifecycle-design.md](./session-lifecycle-design.md) §2.1)。兼容 payload 可额外携带 `filingState=ARCHIVED`。
 - `SESSION_ERROR`(决议 Q3):`{ message, recoverable }`。`recoverable=false` 通常伴随 status→FAILED 的 `session.updated`(列表行由后者更新);`recoverable=true` 是中途错误(如内容过滤),status 仍可能停在 `AWAITING_INPUT`,此事件携带 `session.updated` 没有的信息。**客户端通知去重见 §5.2**。
 - `APPROVAL_*`:`{ approvalId, pendingApprovals }`(计数用于角标/红点;明细仍走现有 approvals 端点)。
-- `BACKGROUND_TASK`:`{ name, status, exitCode? }`。
+- `BACKGROUND_TASK`:`{ name, status, exitCode?, toolUseId?, kind? }`。`toolUseId` and `kind` are sent when the runner reported them: a runner-hosted job re-reports itself `running` once a minute, and they are what lets a client tell that heartbeat (same `toolUseId`) and a `service` (which no tally counts) from a counted job starting.
 
 ### 4.3 控制面事件子集(从 hub 里筛什么)
 
