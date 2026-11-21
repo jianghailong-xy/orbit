@@ -17,70 +17,62 @@
 -- Only rows still null are written, so a value turn-complete wrote after 1201 is never overwritten.
 -- conversation_turn rows are not backfilled: old turns stay null.
 --
--- BATCHES, LOCKS
--- --------------
--- No DO block in this file, so Prisma sends it statement by statement and none runs inside another's
--- transaction. The VALIDATEs take SHARE UPDATE EXCLUSIVE, which blocks no reader or writer. The backfill is a
--- procedure that walks session by id, 5000 rows at a time, and COMMITs after each batch, so it holds the row
--- locks of one batch at a time; it is dropped after its CALL. statement_timeout is lifted around the CALL only:
--- the CALL is one statement however many batches it commits.
+-- HOW IT RUNS, LOCKS
+-- ------------------
+-- `prisma migrate deploy` sends this whole file to PostgreSQL as one query string, so every statement in it runs
+-- in ONE transaction, which commits only after the last statement (and rolls back whole if any statement fails).
+-- An earlier version of this file assumed that, with no DO block, Prisma sends it statement by statement, and
+-- backfilled through a procedure that COMMITted after each batch: a COMMIT is refused inside that transaction
+-- (2D000 invalid transaction termination), which an empty table never reached and production's did. So there is
+-- no procedure and no COMMIT here; the SETs are SET LOCAL, which last until this file's transaction ends.
+--
+-- What it holds, for how long. The VALIDATEs take SHARE UPDATE EXCLUSIVE on conversation_turn and session; the
+-- UPDATE takes ROW EXCLUSIVE on session and a row lock on every row it writes. All of it is held until this
+-- file's transaction commits. None of it blocks a reader, nor a writer of a row the UPDATE does not write; it
+-- blocks other schema changes and VACUUM of the two tables, and a write to a row the UPDATE wrote waits for the
+-- commit. 1201's ACCESS EXCLUSIVE locks are not among them: 1201 is a separate file and so a separate
+-- transaction, committed before this one starts. Measured with 100,000 sessions and 100,000 turns (on an idle
+-- PostgreSQL 16; see the task's evidence), the whole file runs in about a second, so that is how long a write
+-- to one of the backfilled sessions can wait: acceptable for a migration that runs once at deploy, well inside
+-- lock_timeout (30 s in docker-compose.yml) for anyone waiting on it.
+-- statement_timeout (300 s there) is lifted for the UPDATE only, by SET LOCAL; lock_timeout is 0 for the
+-- VALIDATEs, as before, and back to the server's for the UPDATE.
+--
+-- A much larger session table. If this would hold its row locks for longer than the installation tolerates,
+-- an operator runs the same UPDATE before deploying, outside Prisma, in autocommitted batches by id range
+-- (`psql` with each batch a statement of its own); this file's UPDATE then finds no null row and writes nothing,
+-- and only its scan remains.
 --
 -- RE-RUNNABILITY
 -- --------------
--- Can run twice: VALIDATE on a valid constraint is a no-op, CREATE OR REPLACE, the backfill writes null rows
--- only, DROP PROCEDURE IF EXISTS. If a statement_timeout or a crash stops it halfway, the batches already
--- committed stay: `prisma migrate resolve --rolled-back 1202_turn_outcome_backfill`, then deploy again.
+-- Can run twice: VALIDATE on a valid constraint is a no-op, and the UPDATE writes null rows only. If any statement
+-- fails (a timeout, a deadlock with a live writer, a crash), the whole file rolls back and Prisma records 1202 as
+-- failed, after which `prisma migrate deploy` stops with P3009: `prisma migrate resolve --rolled-back
+-- 1202_turn_outcome_backfill`, then deploy again. This version also applies where the earlier one is recorded as
+-- failed (production on 2026-11-21: nothing of it stayed) and, once resolved, writes the value per row the earlier
+-- version meant to. Where the earlier version is recorded as applied, `migrate deploy` does not run it again.
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
 
-SET lock_timeout = 0;
+SET LOCAL lock_timeout = 0;
 
 ALTER TABLE "conversation_turn" VALIDATE CONSTRAINT "conversation_turn_outcome_chk";
 
 ALTER TABLE "session" VALIDATE CONSTRAINT "session_last_turn_outcome_chk";
 
-RESET lock_timeout;
+SET LOCAL lock_timeout TO DEFAULT;
 
-CREATE OR REPLACE PROCEDURE "orbit_1202_backfill_last_turn_outcome"()
-LANGUAGE plpgsql
-AS $$
-DECLARE
-  after_id uuid := '00000000-0000-0000-0000-000000000000';
-  batch_last uuid;
-BEGIN
-  LOOP
-    -- The last id of the next 5000 (uuid has no max()).
-    SELECT b."id" INTO batch_last
-      FROM (
-        SELECT "id" FROM "session" WHERE "id" > after_id ORDER BY "id" LIMIT 5000
-      ) b
-     ORDER BY b."id" DESC
-     LIMIT 1;
-    EXIT WHEN batch_last IS NULL;
-    UPDATE "session" s
-       SET "last_turn_outcome" = CASE
-             WHEN s."status"::text = 'AWAITING_INPUT' THEN 'ANSWERED'
-             WHEN s."status"::text = 'INTERRUPTED' AND s."end_reason" IS NULL THEN 'INTERRUPTED'
-             WHEN s."status"::text = 'FAILED' THEN 'FAILED'
-             WHEN s."status"::text = 'SUCCEEDED' AND s."end_reason" = 'task_done' THEN 'ANSWERED'
-           END
-     WHERE s."id" > after_id
-       AND s."id" <= batch_last
-       AND s."last_turn_outcome" IS NULL
-       AND (
-         s."status"::text IN ('AWAITING_INPUT', 'FAILED')
-         OR (s."status"::text = 'INTERRUPTED' AND s."end_reason" IS NULL)
-         OR (s."status"::text = 'SUCCEEDED' AND s."end_reason" = 'task_done')
-       );
-    COMMIT;
-    after_id := batch_last;
-  END LOOP;
-END;
-$$;
+SET LOCAL statement_timeout = 0;
 
-SET statement_timeout = 0;
-
-CALL "orbit_1202_backfill_last_turn_outcome"();
-
-RESET statement_timeout;
-
-DROP PROCEDURE IF EXISTS "orbit_1202_backfill_last_turn_outcome"();
+UPDATE "session" s
+   SET "last_turn_outcome" = CASE
+         WHEN s."status"::text = 'AWAITING_INPUT' THEN 'ANSWERED'
+         WHEN s."status"::text = 'INTERRUPTED' AND s."end_reason" IS NULL THEN 'INTERRUPTED'
+         WHEN s."status"::text = 'FAILED' THEN 'FAILED'
+         WHEN s."status"::text = 'SUCCEEDED' AND s."end_reason" = 'task_done' THEN 'ANSWERED'
+       END
+ WHERE s."last_turn_outcome" IS NULL
+   AND (
+     s."status"::text IN ('AWAITING_INPUT', 'FAILED')
+     OR (s."status"::text = 'INTERRUPTED' AND s."end_reason" IS NULL)
+     OR (s."status"::text = 'SUCCEEDED' AND s."end_reason" = 'task_done')
+   );
