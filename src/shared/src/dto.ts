@@ -1484,6 +1484,10 @@ export interface RunnerHeartbeatResponse {
   /** Remote SubAgent runs on this runner to stop, because their parent stopped them or ended (§10.3): stop the
    *  child (10 s grace, then kill) and report STOPPED. Absent when there are none. */
   stopSubagentRunIds?: string[];
+  /** bg_run jobs on this runner its sessions' owners asked to stop from the app, listed on every full answer while
+   *  the job still runs (Session.runningBgJobs): kill each as bg_kill does, under BG_JOB_STOPPED_BY_OWNER. Sent only
+   *  to a runner that declares BG_OWNER_STOP_V1; absent when there are none. */
+  stopBackgroundJobs?: BackgroundJobStopCommand[];
   /** Supervised sessions that no longer belong to this exact runner process.
    *  Kept separate from durable user cancellation: a cold supervisor detaches
    *  without finalizing, while active/warm engines observe their endpoint fence. */
@@ -1687,6 +1691,31 @@ export const SUBAGENT_REMOTE_RESUME_V1 = 'subagent-remote-resume/v1';
  *  runner without it, which would refuse the claim with SUBAGENT_WORKSPACE_NOT_GIT. runner-go declares the same string
  *  (subagentRemoteInPlaceCapabilityV1). */
 export const SUBAGENT_REMOTE_IN_PLACE_V1 = 'subagent-remote-in-place/v1';
+
+/** Declared by a runner that carries out the owner's stop of one bg_run job (`stopBackgroundJobs`, POST
+ *  /sessions/:id/background/jobs/:jobId/stop): it kills the job as bg_kill does, under the reason
+ *  BG_JOB_STOPPED_BY_OWNER. The stop is refused for a session whose runner does not declare it, and that runner's
+ *  jobs are listed as not stoppable. runner-go declares the same string (bgOwnerStopCapabilityV1). */
+export const BG_OWNER_STOP_V1 = 'bg-owner-stop/v1';
+
+/** The reason a bg_run job killed by its session's owner from the app carries, on its terminal background_task, its
+ *  wake and its row of GET /sessions/:id/background. runner-go names the kill the same (bgStoppedByOwnerReason). */
+export const BG_JOB_STOPPED_BY_OWNER = 'stopped_by_owner';
+
+/** One bg_run job the owner asked to stop, as a heartbeat answer lists it (`stopBackgroundJobs`). */
+export interface BackgroundJobStopCommand {
+  sessionId: string;
+  /** The id bg_run returned (`bgj_…`). */
+  jobId: string;
+}
+
+/** The answer of POST /sessions/:id/background/jobs/:jobId/stop. `stopping`: the runner has been asked and the job
+ *  still runs; its end arrives as the job's terminal background_task. `killed`: the job has already ended stopped by
+ *  the owner, so a repeat of the stop changes nothing. */
+export interface BackgroundJobStopResponse {
+  jobId: string;
+  status: 'stopping' | 'killed';
+}
 
 /** The body of POST /runners/:id/self-update/now: the owner's explicit "interrupt these turns". */
 export interface RunnerSelfUpdateNowRequest {

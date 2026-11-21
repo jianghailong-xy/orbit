@@ -2136,6 +2136,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			}
 			// Remote SubAgents this runner is the target of: claimed while it takes work, stopped whenever asked.
 			remoteSubagents.onHeartbeat(t, resp.RemoteSubagentRuns, resp.StopSubagentRunIDs, draining)
+			// The owner's stop of single bg_run jobs, carried out as bg_kill does under its own reason.
+			stopBackgroundJobsForOwner(resp.StopBackgroundJobs)
 			if loopCtx.Err() != nil {
 				// Drain began after the server claimed this cycle's git commands, so nothing
 				// below will run them and this process image is about to be replaced. Hand
