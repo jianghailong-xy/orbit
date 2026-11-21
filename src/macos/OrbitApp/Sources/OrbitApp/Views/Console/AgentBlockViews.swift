@@ -330,17 +330,22 @@ struct AgentsBandRow: View {
     }
 }
 
-/// The running Agent's title, then where it runs. The whole title and the model's name when both fit;
-/// else the model gives way to its mark and the title takes the rest of the line, cut at its end
-/// (board ④). Never a gap before the failures while the title is cut.
+/// The running Agent's title, then where it runs (board ④): the whole title and the model's name when
+/// both fit; else the title is cut first, down to a readable stub, and the name stays; else the name
+/// gives way to the mark, beside the whole title or after a cut one. A cut title fills the line up to
+/// the chip, so no gap sits before the failures.
 private struct AgentsBandRunning: View {
     let summary: SubagentSessionSummary
 
     var body: some View {
         let title = Text(summary.band).font(.orbitMeta).foregroundStyle(.secondary).lineLimit(1)
+        // Measured at its stub (idealWidth), laid out over all the room the chip leaves.
+        let cut = title.frame(minWidth: 80, idealWidth: 80, maxWidth: .infinity, alignment: .leading)
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 8) { title.fixedSize(); AgentsBandCurrent(summary: summary, named: true) }
-            HStack(spacing: 8) { title; AgentsBandCurrent(summary: summary, named: false) }
+            HStack(spacing: 8) { cut; AgentsBandCurrent(summary: summary, named: true) }
+            HStack(spacing: 8) { title.fixedSize(); AgentsBandCurrent(summary: summary, named: false) }
+            HStack(spacing: 8) { cut; AgentsBandCurrent(summary: summary, named: false) }
         }
     }
 }
