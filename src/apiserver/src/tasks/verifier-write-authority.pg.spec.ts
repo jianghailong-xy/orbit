@@ -38,6 +38,7 @@ import { call, startApiserver, type Apiserver, type Reply } from '../auth/pat-te
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import '../test-support/daemon-routes-over-http';
+import { pastCreateAllowance } from '../test-support/past-create-allowance';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -381,6 +382,9 @@ test('who may write the verification relation', { skip: !URL, concurrency: 1, ti
   await t.test('(5) a run files a verifier only on the owner\'s answered card', async (t) => {
     const cardProject = await projectOf('a project of cards');
     const cardPeer = await workOf('a peer', cardProject);
+    // Past the session's card-free creates (session-create-allowance.ts): these cases are about the card a person
+    // answers, and by the card-route case this peer has filed 7 tasks, which the default of 8 would answer itself.
+    await pastCreateAllowance(db, ownerId, cardPeer.sessionId);
     const cardSubject = await workOf('a subject', cardProject);
     const createdTitled = (title: string) => db.task.count({ where: { ownerId, title } });
     const create = (sessionId: string | undefined, body: unknown) => call(api, 'POST', '/api/runner/tasks', token, body, {

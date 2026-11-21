@@ -61,6 +61,7 @@ export function SessionCreatedTasksStrip({
   const single = card.counts.total === 1 && card.rows.length === 1 ? card.rows[0] : undefined;
   // More than one: what is running, or the newest task and how it stands, as the Agents line says it.
   const band = sessionTaskBand(card);
+  const pill = single ? single.standing : band?.row.standing;
   const toggle = () => setOpen((o) => !o);
 
   return (
@@ -74,7 +75,6 @@ export function SessionCreatedTasksStrip({
               {single.title}
             </span>
             {single.watched && <WatchEye stale={single.stale} />}
-            {single.standing && <TaskStatusPill {...single.standing} />}
           </>
         ) : (
           <>
@@ -94,12 +94,13 @@ export function SessionCreatedTasksStrip({
                   )}
                   {band.text}
                 </span>
-                {band.row.standing && <TaskStatusPill {...band.row.standing} />}
               </>
             )}
           </>
         )}
         <span className="wt-spacer" />
+        {/* The pill sits at the right edge, as the Agents line's failed count and the branch bar's state do. */}
+        {pill && <TaskStatusPill {...pill} />}
         <button
           type="button"
           className="wt-expand"

@@ -154,7 +154,7 @@ public enum RunnerPageCopy {
     }
     public static let RUNNER_VERSION_NOT_ROLLED_OUT = "not rolled out to it yet"
     /// A managed runner — the machine Orbit runs for the account — wherever its name is shown, unless the
-    /// owner renamed it. Its stored name (`orbit-managed`) is the server's, not a word for anyone to read.
+    /// owner renamed it. Its stored name (`orbit-managed` on a server before migration 1250) is the server's, not a word for anyone to read.
     public static let MANAGED_RUNNER_LABEL = "Orbit Cloud"
     /// A managed runner's version, when it reports none that is a release (its image is `managed-<sha>`).
     public static let MANAGED_RUNNER_KEPT_UP_TO_DATE = "Kept up to date by Orbit"

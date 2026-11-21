@@ -31,6 +31,7 @@ import {
   type WatchTargetStatusView,
   type WatchTargetTaskView,
 } from '@orbit/shared';
+import { PENDING_WAKEUP, RESUME_WATCH } from '../common/session-working';
 import { loggedRetry, transactionRetryDelayMs, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -712,6 +713,10 @@ export class WatchesService {
         completedAt: true, archivedAt: true, deletedAt: true,
         // The job leaf's columns: the jobs in flight and when each one's output last moved. Never their output.
         runningBgJobs: true, runningBgJobActivity: true,
+        // SESSION_QUIESCENT's columns (common/session-working.ts): work outside a turn, and what is armed to wake it.
+        engineTurnActive: true, runningSubagents: true, retryAt: true,
+        observingWatches: { where: RESUME_WATCH.where.observingWatches!.some, select: { id: true }, take: 1 },
+        scheduledWakeups: { where: PENDING_WAKEUP.where.scheduledWakeups!.some, select: { id: true }, take: 1 },
       },
     });
     const unreadable = request.targets.length - tasks.length - sessions.length;
@@ -768,6 +773,11 @@ export class WatchesService {
           deletedAt: session.deletedAt,
           pendingApproval: awaitingAnswer.has(target.id),
           jobs: sessionJobsOf(session.runningBgJobs, session.runningBgJobActivity),
+          engineTurnActive: session.engineTurnActive,
+          runningSubagents: session.runningSubagents,
+          retryAt: session.retryAt,
+          hasResumeWatch: session.observingWatches.length > 0,
+          hasPendingWakeup: session.scheduledWakeups.length > 0,
         },
       };
     });

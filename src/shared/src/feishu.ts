@@ -39,6 +39,8 @@ export interface FeishuAppSettings {
   enabled: boolean;
   messageDetail: FeishuMessageDetail;
   approvalsInFeishu: boolean;
+  /** "Show Orbit in Feishu" (§15.2): off, the owner's cards and replies carry no Open in Orbit button and no Orbit link. */
+  showOrbit: boolean;
   defaultWorkspaceId: string | null;
   /** The owner's open_id in this app and their name, once bound (§5). */
   ownerOpenId: string | null;
@@ -50,9 +52,61 @@ export interface FeishuAppSettings {
   lastError: string | null;
   /** How many apiserver replicas hold a live long connection of this app now (§4.4): one per replica when all is well. */
   connectedReplicas: number;
+  /** Who can use the bot, and the settings of the sessions other people start (§14.1). */
+  access: FeishuAccessSettings;
   createdAt: string;
   updatedAt: string;
 }
+
+/**
+ * Who can use the bot (§14.1): only the owner (`OWNER_ONLY`, the default, what every app did before), or everyone the
+ * app is available to in Feishu (`AVAILABILITY_SCOPE`), as Feishu's developer console sets that availability.
+ */
+export const FEISHU_ACCESS_MODES = ['OWNER_ONLY', 'AVAILABILITY_SCOPE'] as const;
+export type FeishuAccessMode = (typeof FEISHU_ACCESS_MODES)[number];
+
+/** What a new app reads back (§14.1): only the owner; others' sessions in Auto, 1 / 10 each, 3 / 50 together. */
+export const FEISHU_OPEN_DEFAULTS = {
+  permissionMode: 'auto',
+  maxRunningPerPerson: 1,
+  sessionsPerDayPerPerson: 10,
+  maxRunningTotal: 3,
+  sessionsPerDayTotal: 50,
+} as const;
+
+/** The access part of the app, as `GET /api/integrations/feishu` answers it. */
+export interface FeishuAccessSettings {
+  mode: FeishuAccessMode;
+  /** Where sessions other people start open; null until chosen, and when that workspace was removed. */
+  workspaceId: string | null;
+  /** A PermissionMode value. */
+  permissionMode: string;
+  /** Sessions one person may have PENDING or RUNNING at a time, and start since midnight UTC (§14.4). */
+  maxRunningPerPerson: number;
+  sessionsPerDayPerPerson: number;
+  /** The same, for everyone together. */
+  maxRunningTotal: number;
+  sessionsPerDayTotal: number;
+}
+
+/**
+ * `PUT /api/integrations/feishu/access` (owner channel: a personal access token is refused). `mode` is required; a field
+ * left out keeps what is saved. `AVAILABILITY_SCOPE` needs a workspace of the account's, given or already saved.
+ */
+export interface FeishuAccessChange {
+  mode: FeishuAccessMode;
+  workspaceId?: string | null;
+  permissionMode?: string;
+  maxRunningPerPerson?: number;
+  sessionsPerDayPerPerson?: number;
+  maxRunningTotal?: number;
+  sessionsPerDayTotal?: number;
+}
+
+/** The 400 an access save answers when it would open the bot with no workspace for others' sessions. Nothing is written. */
+export const FEISHU_OPEN_WORKSPACE_REQUIRED = 'FEISHU_OPEN_WORKSPACE_REQUIRED';
+export const FEISHU_OPEN_WORKSPACE_REQUIRED_MESSAGE =
+  'Choose the workspace that sessions other people start open in before opening the bot to them.';
 
 /** `GET /api/integrations/feishu`, and what `PUT`, `PATCH` and `DELETE` answer. */
 export interface FeishuIntegration {
@@ -76,6 +130,8 @@ export interface FeishuAppChange {
   messageDetail?: FeishuMessageDetail;
   /** Whether a tool approval's card has Allow once and Deny (§7.2). Off, it has only Open in Orbit. */
   approvalsInFeishu?: boolean;
+  /** "Show Orbit in Feishu" (§15.2). Off, no card or reply to the owner has Open in Orbit or an Orbit link. */
+  showOrbit?: boolean;
   /** Where a session started from the owner's direct messages opens (§7.3); null clears it. */
   defaultWorkspaceId?: string | null;
 }
@@ -128,6 +184,7 @@ export const FEISHU_APP_SCOPES = [
   'im:message.group_at_msg:readonly',
   'im:chat:readonly',
   'contact:user.base:readonly',
+  'application:application:self_manage',
 ] as const;
 export const FEISHU_APP_EVENTS = ['im.message.receive_v1', 'im.chat.member.bot.deleted_v1'] as const;
 export const FEISHU_APP_CALLBACKS = ['card.action.trigger'] as const;
@@ -172,8 +229,8 @@ export interface FeishuTestMessageResult {
 }
 
 /**
- * Group chats connected to Orbit (§8.1, §8.3). The owner sends `@<bot> connect` in a group; the bot answers with a card
- * whose button opens Orbit's confirm page with a one-time ticket, where the owner chooses the workspace, the permission
+ * Group chats connected to Orbit (§8.1, §8.3). The owner sends `@<bot> connect` in a group; the bot sends the owner, in
+ * their direct chat with it, a card (§15.1) whose button opens Orbit's confirm page with a one-time ticket, where the owner chooses the workspace, the permission
  * mode, who may start sessions and two limits. Confirming is an owner-channel action: a personal access token is refused.
  */
 export const FEISHU_CONNECT_GROUP_PATH = '/settings/integrations/feishu/connect-group';
@@ -188,15 +245,32 @@ export const FEISHU_CHAT_DEFAULT_SESSIONS_PER_DAY = 20;
 /** The most people a route may name as allowed senders. */
 export const FEISHU_CHAT_ALLOWED_MAX = 200;
 
+/**
+ * Where a group's route came from (§14.2): the owner's connect (`CONNECT`), or the first mention of the bot in an
+ * unconnected internal group while the bot was open (`OPEN_ACCESS`), which uses the app's access settings.
+ */
+export const FEISHU_CHAT_ROUTE_SOURCES = ['CONNECT', 'OPEN_ACCESS'] as const;
+export type FeishuChatRouteSource = (typeof FEISHU_CHAT_ROUTE_SOURCES)[number];
+
 /** Why a confirmed route is off: the bot was removed from the group, or the owner switched it off. */
 export const FEISHU_CHAT_DISABLED_REASONS = ['BOT_REMOVED', 'OWNER'] as const;
 export type FeishuChatDisabledReason = (typeof FEISHU_CHAT_DISABLED_REASONS)[number];
 
-/** One connected group, as `GET /api/integrations/feishu/chats` and the writes answer it. */
+/**
+ * One group, as `GET /api/integrations/feishu/chats` and the writes answer it: a connected group, or one that uses the
+ * settings above (`source` OPEN_ACCESS), whose workspace and permission mode are then empty and whose limits unused.
+ */
 export interface FeishuChatRoute {
   id: string;
   chatId: string;
   chatName: string | null;
+  source: FeishuChatRouteSource;
+  /** Who used the group first, and when: set on an OPEN_ACCESS row. */
+  firstUsedByOpenId: string | null;
+  firstUsedByName: string | null;
+  firstUsedAt: string | null;
+  /** Sessions started from the group since midnight UTC. */
+  sessionsToday: number;
   workspaceId: string;
   /** A PermissionMode value. */
   permissionMode: string;
@@ -231,7 +305,7 @@ export interface FeishuChatMember {
   name: string | null;
 }
 
-/** `GET /api/integrations/feishu/chats[?ticket=…]`: the confirmed groups, and the ticket's group when one was given and is live. */
+/** `GET /api/integrations/feishu/chats[?ticket=…]`: the confirmed groups and those using the settings above, and the ticket's group when one was given and is live. */
 export interface FeishuChatRoutes {
   routes: FeishuChatRoute[];
   pending: FeishuChatPending | null;
@@ -247,7 +321,7 @@ export interface FeishuChatConfirm {
   sessionsPerDay: number;
 }
 
-/** `PATCH /api/integrations/feishu/chats/:id`: every field optional. */
+/** `PATCH /api/integrations/feishu/chats/:id`: every field optional. A group using the settings above takes `enabled` only. */
 export interface FeishuChatChange {
   enabled?: boolean;
   permissionMode?: string;
@@ -264,5 +338,8 @@ export const FEISHU_CHAT_TICKET_INVALID_MESSAGE =
 export const FEISHU_CHAT_BOT_REMOVED = 'FEISHU_CHAT_BOT_REMOVED';
 export const FEISHU_CHAT_BOT_REMOVED_MESSAGE =
   'The bot was removed from this group. Add it back and send "@bot connect" in the group to connect it again.';
+/** The 400 changing anything but the switch of a group that uses the app's settings answers (§14.2). */
+export const FEISHU_CHAT_USES_APP_SETTINGS_MESSAGE =
+  'This group uses the settings of "Who can use the bot". To give it its own, send "@bot connect" in the group.';
 /** The 404 a route answers for a group the account has not connected. */
 export const FEISHU_CHAT_NOT_FOUND_MESSAGE = 'No such connected group.';

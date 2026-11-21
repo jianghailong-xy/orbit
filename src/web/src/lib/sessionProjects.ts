@@ -33,7 +33,9 @@ export interface SessionProjectLine {
   text: string;
   /** `warning` is a fact the row states in amber without asking anything: a landing the server
    *  judged timed out. It is deliberately not `approval`, which lights the row's needs-you dot. */
-  tone: 'preview' | 'running' | 'approval' | 'queued' | 'background' | 'watching' | 'review' | 'warning';
+  tone: 'preview' | 'running' | 'approval' | 'queued' | 'background' | 'watching' | 'review' | 'warning' | 'paused';
+  /** A pause glyph leads the line (§4.2 2a/2b). */
+  glyph?: 'pause';
 }
 
 export interface SessionProjectRow<T> extends GroupableSession {
@@ -52,7 +54,32 @@ export interface SessionProjectRow<T> extends GroupableSession {
   target: { kind: 'session' | 'project'; id: string };
   taskCounts?: ProjectSidebarTaskCounts;
   runningCount: number;
+  /** Null for a project nobody has started. */
+  startedAt: string | null;
+  /** How the project is paused (§4.2): the daily limit wins over the owner's own pause. */
+  pause: ProjectRowPause | null;
 }
+
+/** A paused project, and what Resume has to call (§4.3). */
+export type ProjectRowPause = { kind: 'fuse'; episodeId: string } | { kind: 'owner' };
+
+export type ProjectStateAction = 'pause' | 'resume' | 'complete';
+
+/** The first swipe slot / first menu item that is about the project's state (§4.3). Null for a project
+ *  nobody has started (starting spends money and stays in the conversation), and for a finished one
+ *  outside the Open view. */
+export function projectStateAction(
+  project: Pick<SessionProjectRow<unknown>, 'status' | 'startedAt' | 'pause'>,
+  view: SessionListView,
+): ProjectStateAction | null {
+  if (project.status === 'DONE' || project.status === 'CANCELLED') return view === 'open' ? 'complete' : null;
+  if (project.pause) return 'resume';
+  return project.startedAt ? 'pause' : null;
+}
+
+/** A project row never fires anything on a full swipe: dragging to the end stretches the row and
+ *  snaps back (§4.3). */
+export const PROJECT_ROW_FULL_SWIPE = false;
 
 /** The project an ordinary row belongs to where that project has no row: a member in a workspace its
  *  coordinator does not run in (owner 2026-11-07, docs/mocks/project-rows-by-workspace, option A). */
@@ -94,6 +121,24 @@ export const SESSION_PROJECT_COPY = {
   pin: 'Pin',
   unpin: 'Unpin',
   move: 'Move…',
+  pause: 'Pause',
+  resume: 'Resume',
+  pausedAtLimit: (observed: number | null, limit: number | null) =>
+    observed != null && limit != null ? `Paused at the daily limit · ${observed}/${limit} today` : 'Paused at the daily limit',
+  pausedRuns: (n: number) => `Paused · ${n} ${n === 1 ? 'run' : 'runs'} finishing`,
+  pausedAgo: (ago: string | null) => ago ? `Paused · ${ago}` : 'Paused',
+  pausedTitle: 'Project paused',
+  pausedStill: (n: number) => n > 0
+    ? `${n} ${n === 1 ? 'run' : 'runs'} still going · nothing new starts or merges`
+    : 'Nothing new starts or merges',
+  undo: 'Undo',
+  resumedTitle: 'Resumed',
+  resumedLimitNote: 'The daily limit was not raised · Change on the project page',
+  refusedTitle: (door: 'pause' | 'resume') => `Couldn't ${door} the project`,
+  refusedReason: (door: 'pause' | 'resume', status: number | undefined, code: string | undefined, fallback: string) =>
+    status === 403 ? `Only the project's owner can ${door} it`
+      : code === 'PROJECT_NOT_STARTED' ? 'The project hasn\'t started yet'
+        : fallback,
   pageSubtitle: (sessions: number) => `Project · ${sessions} sessions`,
   /** The page's subtitle before its members have been read: no count it cannot vouch for yet. */
   pageSubtitleLoading: 'Project',
@@ -626,6 +671,9 @@ export function sessionProjectListing<T extends SessionProjectSession>(
     workspaceId?: string | null;
     /** Same-view sessions across workspaces, used for the waiting line and tooltip count. */
     contentSessions?: readonly T[];
+    /** Each project's same-view session count across workspaces, as the server counted it; the tooltip
+     *  says at least this many. */
+    sessionCounts?: ReadonlyMap<string, number>;
     line: (session: T) => SessionProjectLine;
   } & FolderSessionReadings<T>,
 ): SessionProjectListing<T> {
@@ -659,7 +707,20 @@ export function sessionProjectListing<T extends SessionProjectSession>(
     const id = heldBy(session);
     return id ? { ...session, folderId: coordinators.get(id)?.folderId ?? null } : session;
   });
-  const folderListing = sessionFolderListing(assigned, folders, opts);
+  const grouped = sessionFolderListing(assigned, folders, opts);
+  // A folder's count is the rows its page lists: a project is one row, however many members it holds.
+  const rowsByFolder = new Map<string, Set<string>>();
+  for (const session of assigned) {
+    if (!session.folderId) continue;
+    const rows = rowsByFolder.get(session.folderId) ?? new Set<string>();
+    const projectId = heldBy(session);
+    rows.add(projectId ? `project:${projectId}` : session.id);
+    rowsByFolder.set(session.folderId, rows);
+  }
+  const folderListing = {
+    ...grouped,
+    folders: grouped.folders.map((row) => ({ ...row, sessionCount: rowsByFolder.get(row.folder.id)?.size ?? 0 })),
+  };
   const knownFolders = new Set(folders.map((folder) => folder.id));
   const inScope = (folderId: string | null | undefined) => opts.folderId
     ? folderId === opts.folderId
@@ -710,6 +771,16 @@ export function sessionProjectListing<T extends SessionProjectSession>(
       }
       return a.id.localeCompare(b.id);
     });
+    const now = opts.now ?? Date.now();
+    const fuse = summary?.fuse;
+    const pause: ProjectRowPause | null = fuse?.paused && fuse.episodeId ? { kind: 'fuse', episodeId: fuse.episodeId }
+      : summary?.pausedAt ? { kind: 'owner' } : null;
+    const runningNow = summary?.buckets.running ?? 0;
+    const pausedLine: SessionProjectLine | null = fuse?.paused
+      ? { text: SESSION_PROJECT_COPY.pausedAtLimit(fuse.observed, fuse.limit), tone: 'warning', glyph: 'pause' }
+      : summary?.pausedAt
+        ? { text: runningNow > 0 ? SESSION_PROJECT_COPY.pausedRuns(runningNow) : SESSION_PROJECT_COPY.pausedAgo(elapsedLabel(summary.pausedAt, now)), tone: 'paused', glyph: 'pause' }
+        : null;
     const landing = sessionProjectLandingLine(
       summary?.integration, opts.now ?? Date.now(), mainBranchName(summary?.mainBranch));
     let line: SessionProjectLine;
@@ -721,6 +792,9 @@ export function sessionProjectListing<T extends SessionProjectSession>(
       const lead = waiting[0];
       line = { text: SESSION_PROJECT_COPY.waitingSession(lines.get(lead.id)!.text, lead.title ?? ''), tone: 'approval' };
       target = { kind: 'session', id: lead.id };
+    } else if (pausedLine) {
+      line = pausedLine;
+      target = coordinator ? { kind: 'session', id: coordinator.id } : { kind: 'project', id: projectId };
     } else if (coordinator && summary?.attention?.coordinatorItems) {
       const held = summary.attention.coordinatorItems;
       const copy = SESSION_PROJECT_COORDINATOR_COPY[held.leadKind];
@@ -750,7 +824,10 @@ export function sessionProjectListing<T extends SessionProjectSession>(
       title: summary?.title ?? membership.projectTitle,
       status: summary?.status ?? membership.projectStatus,
       members: [...members],
-      sessionCount: new Set([...content.map((session) => session.id), ...(coordinator ? [coordinator.id] : [])]).size,
+      sessionCount: Math.max(
+        new Set([...content.map((session) => session.id), ...(coordinator ? [coordinator.id] : [])]).size,
+        opts.sessionCounts?.get(projectId) ?? 0,
+      ),
       coordinator,
       folderId,
       pinnedAt: coordinator?.pinnedAt ?? null,
@@ -764,6 +841,8 @@ export function sessionProjectListing<T extends SessionProjectSession>(
       target,
       taskCounts: summary?.taskCounts,
       runningCount: summary?.buckets.running ?? motions.filter((motion) => motion === 'spinner').length,
+      startedAt: summary?.startedAt ?? null,
+      pause,
     });
   }
   const entries: SessionProjectEntry<T>[] = [

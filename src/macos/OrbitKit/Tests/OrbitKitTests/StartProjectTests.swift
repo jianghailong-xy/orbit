@@ -327,6 +327,53 @@ final class StartProjectTests: XCTestCase {
         XCTAssertTrue(main["requestId"] is NSNull)
     }
 
+    /// A request that names no line (P-M2) decodes, opens the card on no line and no main branch, and
+    /// the press sends no `line`, no `upstreamRef` and no landing check — web's
+    /// "opens a request with no line on no line, and the body carries no line key".
+    func testARequestWithNoLineOpensOnNoLineAndThePressSendsNoLineKey() throws {
+        let settings = try JSONDecoder().decode(ProjectStartSettings.self, from: Data("""
+            {"automatic":true,"maxConcurrentTasks":3,"mergeCheckCommand":null}
+            """.utf8))
+        XCTAssertNil(settings.line)
+        let standing = ProjectIntegrationView(upstreamRef: "main", repository: "acme/app", deliveryMode: .platform)
+        let draft = StartSettingsDraft(settings, standing: standing)
+        XCTAssertNil(draft.line)
+        XCTAssertNil(draft.upstream, "a request with no line offers no main branch")
+        XCTAssertTrue(draft.complete)
+        let request = ProjectStartRequest(settings: settings, why: "", criteriaDigest: Self.seal)
+        let body = try object(StartProject.body(request: request, draft: draft, requestId: "item-1"))
+        XCTAssertNil(body["line"])
+        XCTAssertNil(body["upstreamRef"])
+        XCTAssertNil(body["projectBranchName"])
+        XCTAssertNil(body["landingCheckCommand"])
+        XCTAssertNil(body["landingCheckTimeoutSeconds"])
+        XCTAssertNil(body["deliveryMode"])
+        XCTAssertEqual(body["requestId"] as? String, "item-1")
+        XCTAssertTrue(body["mergeCheckCommand"] is NSNull)
+        // A line this build does not know is still not settings.
+        XCTAssertThrowsError(try JSONDecoder().decode(ProjectStartSettings.self, from: Data("""
+            {"line":"SIDEWAYS","automatic":true,"maxConcurrentTasks":3}
+            """.utf8)))
+    }
+
+    /// With no line, the Automatic sentence and what comes to the owner name no branch.
+    func testARequestWithNoLineNamesNoBranchInItsSentences() {
+        XCTAssertEqual(RunSettings.automaticSays(automatic: true, line: nil, hasMergeCheck: false),
+                       "The coordinator decides when each task is done.")
+        XCTAssertEqual(RunSettings.automaticSays(automatic: false, line: nil, hasMergeCheck: true),
+                       "You decide when each task is done.")
+        for automatic in [true, false] {
+            let list = StartProject.comesToYou(automatic: automatic, line: nil, ownerConfirmed: [],
+                                               evidenceJudged: 0, escalationSeconds: 7_200)
+            let text = list.map(\.text).joined(separator: " ")
+            XCTAssertNil(text.range(of: "\\bmain\\b|merge", options: [.regularExpression, .caseInsensitive]), text)
+        }
+        XCTAssertTrue(RunSettings.automaticSays(automatic: true, line: .projectBranch, hasMergeCheck: false)
+            .contains("merges into main by itself"))
+        let draft = StartSettingsDraft(line: nil, automatic: true, maxConcurrentTasks: 3)
+        XCTAssertEqual(draft.automaticSays, "The coordinator decides when each task is done.")
+    }
+
     func testTheDraftIsCompleteOnlyInsideTheDoorsLimits() {
         var draft = StartSettingsDraft(request().settings)
         XCTAssertTrue(draft.complete)

@@ -159,6 +159,21 @@ class StartProjectCardTest {
         compose.onNodeWithText(StartProjectCopy.opensCoordinator).assertDoesNotExist()
     }
 
+    @Test fun aRequestWithNoLineDrawsOneSentenceInPlaceOfTheLandingRows() {
+        val request = request(check = null)
+        card(request.copy(settings = request.settings.copy(line = null)), asked = true)
+        shows(StartProjectCopy.noLine)
+        shows(RunSettings.automaticOnNoLine)
+        for (row in listOf(RunSettings.tasksLandOn, RunSettings.mainBranch, RunSettings.delivery, LandingCheckCopy.label)) {
+            compose.onNodeWithText(row).assertDoesNotExist()
+        }
+        compose.onNodeWithTag("$tag-automatic").performScrollTo().performClick()
+        shows(RunSettings.automaticOffNoLine)
+        compose.onNodeWithText(StartProjectCopy.mergingIntoMain).assertDoesNotExist()
+        compose.onNodeWithTag("$tag-confirm").performScrollTo().assertIsEnabled().performClick()
+        assertEquals(1, started)
+    }
+
     @Test fun aRequestThatNoLongerStandsIsDimmedWithStartDeadAndSaysWhy() {
         card(request(), asked = true, standing = StartProjectCopy.Standing.GONE)
         shows(StartProjectCopy.requestGone)

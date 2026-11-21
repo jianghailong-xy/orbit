@@ -60,6 +60,7 @@ import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
 import '../test-support/dequeue-under-lease';
+import { settleDeliveredIdentityAfterFinish } from './project-integration-job';
 
 /**
  * Landing subjects and LANDING sessions (docs/project-integration-line-contract.md §2.9 LS1–LS3,
@@ -351,9 +352,16 @@ async function doneTask(stack: Stack, w: World, label: string): Promise<Attempt>
     shellOutput: '',
   });
   assert.equal(await taskStatus(stack.db, declared.id), TaskStatus.DONE, 'the acceptance command agreed');
-  await stack.db.session.update({
-    where: { id: sessionId },
-    data: { finishedAt: new Date(), worktreeBranch: branch, worktreeDirty: false },
+  await stack.db.$transaction(async (tx) => {
+    // The finish settles the DONE's delivered identity in the transaction that writes it, as every
+    // finish door does — and decides the route a DONE written while this work moved left to it
+    // (§10.5 O-L4 3, §12.15 P-M1).
+    const finished = await tx.session.update({
+      where: { id: sessionId },
+      data: { finishedAt: new Date(), worktreeBranch: branch, worktreeDirty: false },
+      select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
+    });
+    await settleDeliveredIdentityAfterFinish(tx, finished);
   });
   return { taskId: declared.id, title, sessionId, branch };
 }
@@ -851,6 +859,9 @@ test('ensure writes the LS1 row — LANDING, AWAITING_INPUT, no engine, creator,
       const settledSession = await stack.db.session.findUniqueOrThrow({ where: { id: landing.sessionId } });
       assert.equal(settledSession.status, RunStatus.SUCCEEDED);
       assert.ok(settledSession.completedAt);
+      // Released in the same write (plan step 3.1): the release column and its cause beside the status.
+      assert.equal(settledSession.finishedAt?.getTime(), settledSession.completedAt.getTime());
+      assert.equal(settledSession.releaseCause, 'landing_settled');
       const settledLanding = await stack.db.projectLanding.findUniqueOrThrow({ where: { id: landing.id } });
       assert.equal(settledLanding.settledAs, 'LANDED');
 
@@ -874,6 +885,8 @@ test('ensure writes the LS1 row — LANDING, AWAITING_INPUT, no engine, creator,
       const cancelled = await stack.db.session.findUniqueOrThrow({ where: { id: episode2.sessionId } });
       assert.equal(cancelled.status, RunStatus.CANCELLED);
       assert.ok(cancelled.completedAt);
+      assert.equal(cancelled.finishedAt?.getTime(), cancelled.completedAt.getTime());
+      assert.equal(cancelled.releaseCause, 'landing_settled');
       assert.equal((await stack.db.projectLanding.findUniqueOrThrow({ where: { id: episode2.id } })).settledAs, 'CANCELLED');
 
       // A PROMOTION subject takes the project's coordinator workspace and its own title.

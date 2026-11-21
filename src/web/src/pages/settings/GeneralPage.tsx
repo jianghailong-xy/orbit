@@ -20,11 +20,11 @@ export const GENERAL_HINTS = {
   },
   modelRouting: {
     short: S.modelRouting.description,
-    full: "Coordinators suggest a tier for each task, and Agents you turn this on for run their tasks on that tier's model and effort. Off: tasks run exactly as before.",
+    full: "Coordinators suggest a tier for each task, and a SubAgent's size sets its own. Task runs and SubAgents run on a model of that tier from your providers. Off: tasks keep their Agent's model and SubAgents their parent session's.",
   },
   optimizeFor: {
     short: S.optimizeFor.description,
-    full: 'Cost spends subscriptions before metered keys. Balance spends the quota that expires first, then the most room. Intelligence puts the strongest model first. For every Agent, its SubAgents and its smart-selected task runs.',
+    full: 'Cost spends subscriptions before metered keys. Balance spends the quota that expires first, then the most room. Intelligence puts the strongest model first.',
   },
   promptSuggestions: {
     short: S.promptSuggestions.description,
@@ -85,7 +85,7 @@ export function GeneralSettingsPage() {
               />
             }
           />
-          {/* Absent means OFF, unlike the switches below — only turning it on has to be written. */}
+          {/* Absent means on, like the switches below. */}
           <SettingsRow
             anchor={S.modelRouting.anchor}
             title={S.modelRouting.title}
@@ -94,31 +94,35 @@ export function GeneralSettingsPage() {
             control={
               <Switch
                 aria-label="Smart model selection"
-                checked={prefs.modelRouting === true}
+                checked={prefs.modelRouting !== false}
                 onCheckedChange={(v) => save.mutate({ modelRouting: v })}
                 loading={save.isPending}
               />
             }
           />
-          {/* Account-wide since 2026-11-19 (board docs/mocks/routing-mode-account); absent means Balance. */}
-          <SettingsRow
-            anchor={S.optimizeFor.anchor}
-            title={S.optimizeFor.title}
-            description={h.optimizeFor.short}
-            tooltip={h.optimizeFor.full}
-            control={
-              <Segmented<'cost' | 'balance' | 'intelligence'>
-                aria-label="Optimize For"
-                value={prefs.optimizeFor ?? 'balance'}
-                onValueChange={(v) => save.mutate({ optimizeFor: v })}
-                options={[
-                  { value: 'cost', label: 'Cost' },
-                  { value: 'balance', label: 'Balance' },
-                  { value: 'intelligence', label: 'Intelligence' },
-                ]}
-              />
-            }
-          />
+          {/* Account-wide since 2026-11-19 (board docs/mocks/routing-mode-account); absent means Balance. Only
+              smart model selection reads it, so it shows only while that is on (owner, 2026-11-20); the saved
+              value is kept while it is off. */}
+          {prefs.modelRouting !== false && (
+            <SettingsRow
+              anchor={S.optimizeFor.anchor}
+              title={S.optimizeFor.title}
+              description={h.optimizeFor.short}
+              tooltip={h.optimizeFor.full}
+              control={
+                <Segmented<'cost' | 'balance' | 'intelligence'>
+                  aria-label="Optimize For"
+                  value={prefs.optimizeFor ?? 'balance'}
+                  onValueChange={(v) => save.mutate({ optimizeFor: v })}
+                  options={[
+                    { value: 'cost', label: 'Cost' },
+                    { value: 'balance', label: 'Balance' },
+                    { value: 'intelligence', label: 'Intelligence' },
+                  ]}
+                />
+              }
+            />
+          )}
           {/* Absent means on, like the switches below. The engine reads it when it starts, so a
               session already running keeps what it started with. */}
           <SettingsRow

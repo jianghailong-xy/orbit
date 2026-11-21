@@ -3160,6 +3160,21 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1130 adds three partial indexes, one on `task` and two on `session`; no row is written, and no preserved
       // relation, trigger, function or DONE fence changes.
       '1130_rare_predicate_indexes',
+      // 1140 opens the Feishu bot to the app's availability (docs/feishu-bot-design.md §14): `feishu_app` gains
+      // access_mode, open_workspace_id (foreign key to `workspace`, ON DELETE SET NULL, with its index),
+      // open_permission_mode and four limits, all NOT NULL with constant defaults but the workspace; `feishu_chat_route`
+      // gains source (NOT NULL, constant default) and three nullable first-use columns, and its enabled CHECK is widened
+      // for OPEN_ACCESS rows; `feishu_thread` gains a nullable open_access_open_id with a partial index. Every CHECK and
+      // the foreign key are added NOT VALID and validated. None is a preserved relation, no `task`, `session`, `project`
+      // or `project_acceptance_*` object nor any of the six preserved triggers/functions is named, and no function,
+      // trigger or type is created, replaced or dropped, so it is not another writer of the DONE fence. No INSERT,
+      // UPDATE or DELETE: a constant default is a catalog change.
+      '1140_feishu_open_access',
+      // 1150 adds feishu_app.show_orbit, BOOLEAN NOT NULL with a constant default (catalog-only, no rewrite), for
+      // Show Orbit in Feishu (docs/feishu-bot-design.md §15.2). feishu_app is no preserved relation; no `task`,
+      // `session`, `project` or `project_acceptance_*` object, trigger, function or type is named, created or replaced,
+      // so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE.
+      '1150_feishu_show_orbit',
       // 1170 adds one partial index on `session`; no row is written, and no preserved relation, trigger, function or
       // DONE fence changes.
       '1170_session_open_list_owner_idx',
@@ -3170,12 +3185,77 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // each that NULL passes to project_standard_set_confirmation, which is not a preserved relation; no row is
       // written, and no trigger, function or DONE fence changes.
       '1200_standard_set_confirmation_wording',
+      // 1201 adds nullable conversation_turn.outcome and error and session.last_turn_outcome, with CHECKs every
+      // stored row passes (all NULL); 1202 validates them and writes session.last_turn_outcome only. Neither is a
+      // preserved relation, and no trigger, function or DONE fence changes.
+      '1201_turn_outcome',
+      '1202_turn_outcome_backfill',
+      // 1213 adds a nullable session.branch_commits (JSONB, no default); no row is written, and no preserved
+      // relation, trigger, function or DONE fence changes.
+      '1213_session_branch_commits',
       // 1220 sets fastupdate = off on run_event's trigram index and merges its pending list; no row is written, and
       // no preserved relation, trigger, function or DONE fence changes.
       '1220_run_event_text_trgm_fastupdate_off',
       // 1240 adds a plain index on project_coordinator_wake (idempotency_key); no row is written, and no preserved
       // relation, trigger, function or DONE fence changes.
-      '1240_project_coordinator_wake_key_idx'],
+      '1240_project_coordinator_wake_key_idx',
+      // 1250 renames each account's managed runner from orbit-managed to Orbit Cloud: an UPDATE of runner.name joined to
+      // managed_runner; runner is not a preserved relation, and no trigger, function or DONE fence changes.
+      '1250_managed_runner_name_orbit_cloud',
+      // 1260 adds two nullable columns on runner, bg_job_cpus and bg_job_memory_mb (no default); no row is written,
+      // and no preserved relation, trigger, function or DONE fence changes.
+      '1260_runner_bg_job_limits',
+      // 1261 adds nullable session.release_cause with a CHECK every stored row passes (all NULL); 1262 validates it and
+      // writes session.finished_at and release_cause on terminal rows only. Session is not a preserved relation, and no
+      // trigger, function or DONE fence changes.
+      '1261_session_release_cause',
+      '1262_session_release_backfill',
+      // 1267 adds nullable session.executing_event_at, written by the events path only; no row is written, and no
+      // preserved relation, trigger, function or DONE fence changes.
+      '1267_session_executing_event_at',
+      // 1270 adds two plain indexes, session_merge_receipt (source_sha) and task (owner_id, updated_at); no row is
+      // written, and no preserved relation, trigger, function or DONE fence changes.
+      '1270_receipt_source_sha_task_updated_idx',
+      // 1271 adds workspace.workflows_enabled, BOOLEAN NOT NULL with a constant default (catalog-only, no rewrite), for
+      // the Agent's Workflows switch. workspace is not a preserved relation; no `task`, `session`, `project` or
+      // `project_acceptance_*` object, trigger, function or type is named, created or replaced, so it is not another
+      // writer of the DONE fence. No INSERT, UPDATE or DELETE.
+      '1271_workspace_workflows_enabled',
+      // 1273 widens owner_request's kind check for SETTINGS_CHANGE, adds a nullable JSONB payload with a CHECK every
+      // stored row passes and a partial unique index; no row is written, and no preserved relation, trigger, function
+      // or DONE fence changes.
+      '1273_owner_request_settings_change',
+      // 1304 adds two nullable columns on schedule, max_runs (with a CHECK that NULL passes) and planned_end_told_at,
+      // marks every ENDED schedule told (an UPDATE of schedule rows only), and adds two partial indexes; schedule and
+      // schedule_run are not preserved relations, and no trigger, function or DONE fence changes.
+      '1304_schedule_max_runs',
+      // 1310 adds four columns and two CHECKs on project_codebase (landing_check_none, landing_check_set_by and the
+      // session and time of the last write), and marks OWNER the bindings whose landing check was already
+      // set; project_codebase is not a preserved relation, and no trigger, function or DONE fence changes.
+      '1310_project_landing_check_set_by',
+      // 1350 adds three columns and two CHECKs on task (landing_check_exempt, its reason and the coordinator session
+      // that wrote it, §12.14 P-C2); every existing row satisfies both CHECKs with the defaults, no row is written,
+      // and no trigger, function or DONE fence changes.
+      '1350_task_landing_check_exempt',
+      // 1390 adds the project_setting_change table (the coordinator's cardless landing-check changes, §12.15 P-R1)
+      // and task.landing_check_exempt_owner_set_at; neither table is a preserved relation, and no trigger,
+      // function or DONE fence changes.
+      '1390_project_setting_change',
+      // 1400 adds three nullable columns, a foreign key and a partial index on owner_request_secret and account_secret;
+      // no row is written, and no preserved relation, trigger, function or DONE fence changes.
+      '1400_owner_secret_saved_links',
+      // 1403 widens session_release_cause_chk with engine_failed and end_not_honored (NOT VALID) and 1404 validates it;
+      // no row is written. Session is not a preserved relation, and no trigger, function or DONE fence changes.
+      '1403_session_release_failure_causes',
+      '1404_session_release_failure_causes_validate',
+      // 1410 adds session.bg_job_stop_requests, a NOT NULL TEXT[] with a constant default (catalog-only, no rewrite),
+      // for the owner's bg-job stop requests; no row is written. Session is not a preserved relation, and no trigger,
+      // function or DONE fence changes.
+      '1410_session_bg_job_stop_requests',
+      // 1411 (renumbered from a second 1410) adds three nullable columns on coordinator_handoff (what a handoff's
+      // successor runs on); no row is written, and coordinator_handoff is not a preserved relation — no trigger,
+      // function or DONE fence changes.
+      '1411_coordinator_handoff_successor'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

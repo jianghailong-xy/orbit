@@ -81,10 +81,11 @@ import {
   claudeAccountSwapWaitingOf,
 } from './claude-account-swap';
 import { openCodeKeyRows, runsOnOpenCode } from '../providers/custom-provider';
+import { RELEASED_SESSION_STATUSES } from '../common/session-release';
 
 /** The statuses an abandoned checkout can belong to: a session that has stopped running for good.
  *  A parked one can be dirty between turns and is not abandoned, so it is not listed. */
-const FINISHED_SESSION_STATUSES = [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED];
+const FINISHED_SESSION_STATUSES = [...RELEASED_SESSION_STATUSES];
 
 // Cap device-enrollment userCode lookups per user, so an authenticated insider
 // cannot brute-force another user's pending enrollment code online.

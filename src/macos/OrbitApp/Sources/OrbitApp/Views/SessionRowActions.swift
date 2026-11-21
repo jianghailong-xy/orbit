@@ -23,31 +23,57 @@ import OrbitKit
 // safe. The Trash tab's Delete is instead a permanent purge — irreversible, so it's gated behind a
 // confirmation and offers no Undo.
 
-private struct SessionRowActions: ViewModifier {
+/// The Pin and Move a session row and a project's row both draw: a project row's subject is its
+/// coordinator, so the one implementation acts on whatever session the row is backed by.
+@MainActor
+enum SessionRowAction {
+    static func pin(_ session: Session, in model: AppModel) -> RowSwipeAction {
+        let pinned = session.pinnedAt != nil
+        return RowSwipeAction(title: pinned ? "Unpin" : "Pin",
+                              systemImage: pinned ? "pin.slash" : "pin", tint: .indigo) {
+            model.setPinned(session, pinned: !pinned)
+        }
+    }
+
+    static func move(_ perform: @escaping () -> Void) -> RowSwipeAction {
+        RowSwipeAction(title: "Move", systemImage: "folder", tint: .indigo, perform: perform)
+    }
+}
+
+/// A plain session's row: `AgentSessionRow` through the shared shell (`SessionListRow`), with this
+/// session's actions. The rename editor and the purge confirmation live here, at the row's level.
+struct SessionRow: View {
     @Environment(AppModel.self) private var model
-    #if os(iOS)
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    #endif
     let session: Session
+    /// How this row's container navigates (see `SessionRowNavigation`).
+    var navigation: SessionRowNavigation = .selection
     /// The tab this row is shown under; `nil` means an Open-list surface.
     /// `.completed` and `.trash` swap the positive action from Complete to Move to Open; `.trash` also
     /// swaps the destructive action from a soft-delete to an irreversible purge (behind a
     /// confirmation) and drops Pin — a trashed session isn't orderable.
-    let scope: SessionView?
+    var scope: SessionView? = nil
+    /// The project this row belongs to where the list has no row for that project (owner 2026-11-07,
+    /// option A): its progress leads the second line, as it leads a project row's.
+    var projectMark: SessionProjectMark? = nil
     /// Opens the tag picker for this row (set by the list, which owns the sheet). `nil` on surfaces
     /// without a tag library on hand, where the "Tags…" item is hidden.
-    let onTag: (() -> Void)?
+    var onTag: (() -> Void)? = nil
     /// Hands this row to the list, which owns the share panel's sheet. Read on iOS only — see
     /// `shareAction`.
-    let onShare: (() -> Void)?
+    var onShare: (() -> Void)? = nil
     /// Hands this row to the list, which owns the Move panel's sheet — see `moveAction`.
-    let onMove: (() -> Void)?
+    var onMove: (() -> Void)? = nil
     /// Opens the sessions page of the project this row belongs to, where the list has no row for that
     /// project: a member in a workspace its coordinator does not run in (owner 2026-11-07,
     /// docs/mocks/project-rows-by-workspace, option A). The long press's Sessions, since the progress
     /// mark that says so is too small to press on a phone. Such a member is a row of its own, so it also
     /// moves on its own. `nil` everywhere else.
-    let onSessions: (() -> Void)?
+    var onSessions: (() -> Void)? = nil
+    /// What a tap opens; nil opens this session itself.
+    var onOpen: (() -> Void)? = nil
+    /// Whether the row may be dragged onto a folder (the Mac only).
+    var draggable = false
+    var drag: SessionDragState? = nil
     /// Gates the irreversible "Delete Permanently" behind a confirmation (Trash only), mirroring
     /// web's modal. Per-row state: only the row whose button was tapped presents the dialog.
     @State private var confirmPurge = false
@@ -63,8 +89,15 @@ private struct SessionRowActions: ViewModifier {
     }
     private var isPinned: Bool { session.pinnedAt != nil }
 
-    func body(content: Content) -> some View {
-        swipeable(content)
+    var body: some View {
+        SessionListRow(
+            subject: session, navigation: navigation, onOpen: onOpen,
+            leading: leadingActions, trailing: trailingActions,
+            leadingFullSwipe: canPerformPositiveAction,
+            draggable: draggable, drag: drag,
+            dragTitle: session.title ?? "Untitled session",
+            content: { AgentSessionRow(session: session, deleted: isTrash, projectMark: projectMark) },
+            menu: { menu })
             .sessionRenameAlert(isPresented: $renaming, draft: $renameDraft, sessionID: session.id)
             .orbitConfirmation("Delete permanently?", isPresented: $confirmPurge) {
                 Button("Delete Permanently", role: .destructive) { model.purgeSession(session.id) }
@@ -72,36 +105,6 @@ private struct SessionRowActions: ViewModifier {
             } message: {
                 Text("This session and its full transcript will be permanently deleted. This can't be undone.")
             }
-    }
-
-    /// The compact list's rows draw their own circles on iOS 26. The regular-width list keeps the
-    /// system's buttons: its rows are selected in place, and the circles draw the row's separators
-    /// themselves, which a selected row's would need to follow.
-    @ViewBuilder private func swipeable(_ content: Content) -> some View {
-        #if os(iOS)
-        if #available(iOS 26.0, *),
-           SessionListPresentation.resolve(isCompactWidth: horizontalSizeClass == .compact) == .compact {
-            content
-                .contextMenu { menu }
-                .circleSwipeActions(id: session.id, leading: leadingActions, trailing: trailingActions,
-                                    leadingFullSwipe: canPerformPositiveAction)
-        } else {
-            systemSwipeActions(content)
-        }
-        #else
-        systemSwipeActions(content)
-        #endif
-    }
-
-    private func systemSwipeActions(_ content: Content) -> some View {
-        content
-            .swipeActions(edge: .leading, allowsFullSwipe: canPerformPositiveAction) {
-                ForEach(leadingActions) { button($0) }
-            }
-            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                ForEach(trailingActions) { button($0) }
-            }
-            .contextMenu { menu }
     }
 
     @ViewBuilder private var menu: some View {
@@ -115,11 +118,11 @@ private struct SessionRowActions: ViewModifier {
         // the action, which is not what a swipe promises. Trash matches web, where the
         // header title isn't editable for a trashed session.
         if !isTrash { renameButton }
-        if !isTrash { button(pinAction) }
+        if !isTrash { pinAction.menuItem }
         if !isTrash, let onTag {
             Button { onTag() } label: { Label("Tags…", systemImage: "tag") }
         }
-        button(positiveAction)
+        positiveAction.menuItem
         // Share…, as the task and project menus spell the item that opens this same panel.
         if let shareAction {
             Button(action: shareAction.perform) {
@@ -133,7 +136,7 @@ private struct SessionRowActions: ViewModifier {
             }
         }
         Divider()
-        button(deleteAction)
+        deleteAction.menuItem
     }
 
     /// Each side's swipe actions from the screen edge inward; the first leading one is what a full
@@ -164,7 +167,7 @@ private struct SessionRowActions: ViewModifier {
         guard !isTrash, let onMove else { return nil }
         // A member moves with its project's row, unless the list has no row for that project here.
         if onSessions == nil, let membership = session.projectMembership, membership.role != .coordinator { return nil }
-        return RowSwipeAction(title: "Move", systemImage: "folder", tint: .indigo, perform: onMove)
+        return SessionRowAction.move(onMove)
     }
 
     private var positiveAction: RowSwipeAction {
@@ -187,8 +190,7 @@ private struct SessionRowActions: ViewModifier {
     }
 
     private var pinAction: RowSwipeAction {
-        RowSwipeAction(title: isPinned ? "Unpin" : "Pin", systemImage: isPinned ? "pin.slash" : "pin",
-                       tint: .indigo) { model.setPinned(session, pinned: !isPinned) }
+        SessionRowAction.pin(session, in: model)
     }
 
     private var deleteAction: RowSwipeAction {
@@ -198,30 +200,5 @@ private struct SessionRowActions: ViewModifier {
         }
         return RowSwipeAction(title: "Delete", systemImage: "trash", tint: .red,
                               role: .destructive) { model.deleteSession(session.id) }
-    }
-
-    /// An action as a system button: a swipe button (a destructive one is the system's red) or a
-    /// context-menu item.
-    private func button(_ action: RowSwipeAction) -> some View {
-        Button(role: action.role, action: action.perform) {
-            Label(action.title, systemImage: action.systemImage)
-        }
-        .tint(action.role == .destructive ? nil : action.tint)
-        .disabled(!action.isEnabled)
-    }
-}
-
-extension View {
-    /// Attach the pin / complete-or-move-to-open / delete actions to a session row.
-    /// `onTag`, when provided, adds a "Tags…" context-menu item that opens the list-owned tag picker.
-    /// `onShare`, when provided, adds Share to the swipe and the menu on iOS, outside Trash; it hands
-    /// the row to the list that presents the share panel. `onMove` does the same for Move and the
-    /// Move panel. `onSessions`, for a member whose project has no row in the list, adds Sessions to
-    /// the menu and lets the member move on its own.
-    func sessionRowActions(_ session: Session, scope: SessionView? = nil,
-                           onTag: (() -> Void)? = nil, onShare: (() -> Void)? = nil,
-                           onMove: (() -> Void)? = nil, onSessions: (() -> Void)? = nil) -> some View {
-        modifier(SessionRowActions(session: session, scope: scope, onTag: onTag, onShare: onShare,
-                                   onMove: onMove, onSessions: onSessions))
     }
 }

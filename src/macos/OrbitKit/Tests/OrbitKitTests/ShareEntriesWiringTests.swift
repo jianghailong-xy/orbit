@@ -225,8 +225,9 @@ final class ShareEntriesWiringTests: XCTestCase {
         XCTAssertTrue(trailing.contains("[deleteAction] + [moveAction, shareAction].compactMap { $0 }"),
                       "Delete first and alone where there's no Share")
         XCTAssertTrue(actions.contains("trailing: trailingActions"))
-        let system = try slice(actions, from: ".swipeActions(edge: .trailing, allowsFullSwipe: false) {", to: "}")
-        XCTAssertTrue(system.contains("ForEach(trailingActions) { button($0) }"))
+        let shell = code(try appSource("Views/SessionListRow.swift"))
+        let system = try slice(shell, from: ".swipeActions(edge: .trailing, allowsFullSwipe: false) {", to: "}")
+        XCTAssertTrue(system.contains("ForEach(trailing) { $0.menuItem }"))
 
         // The long-press menu has it too, as Share…, only where the swipe has it.
         let menu = try slice(actions, from: "@ViewBuilder private var menu: some View {", to: "\n    }")
@@ -242,9 +243,8 @@ final class ShareEntriesWiringTests: XCTestCase {
         let presented = try slice(agents, from: ".sheet(item: $sharingSession)",
                                   to: "ShareSheet(kind: .session, rootID: s.id, baseURL: baseURL, tokenStore: app.tokenStore,")
         XCTAssertEqual(presented.components(separatedBy: ".sheet(").count, 2, "one sheet, the list's own")
-        let row = try slice(agents, from: "@ViewBuilder private func sessionRow(", to: "private func tagSectionHeader(")
-        XCTAssertEqual(row.components(separatedBy: "onShare: { sharingSession = s }").count - 1, 2,
-                       "both of the iOS list's row shapes hand their session over")
+        XCTAssertEqual(agents.components(separatedBy: "onShare: { sharingSession = $0 }").count - 1, 2,
+                       "the list's entries and its tag groups hand their session over")
         XCTAssertEqual(agents.components(separatedBy: "onShare:").count - 1, 2, "and nothing else does")
     }
 }

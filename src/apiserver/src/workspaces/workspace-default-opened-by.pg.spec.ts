@@ -232,7 +232,7 @@ test('only a conversation a person opened moves the workspace default, its model
     const direct = new FeishuDirectService(db, silent() as never, outbound as never, sessions, silent() as never);
     const messageId = `om_${randomBytes(8).toString('hex')}`;
     await direct.handleMessage(
-      { ownerId, appId: feishuApp.appId, platform: feishuApp.platform, appSecretEnc: encryptSecret(feishuApp.appSecret), ownerOpenId: ALICE, defaultWorkspaceId: workspaceId },
+      { ownerId, appId: feishuApp.appId, platform: feishuApp.platform, appSecretEnc: encryptSecret(feishuApp.appSecret), ownerOpenId: ALICE, defaultWorkspaceId: workspaceId, showOrbit: true },
       { userId: ownerId, credential: { kind: 'FEISHU', appId: feishuApp.appId, openId: ALICE, messageId } },
       `ev_${randomUUID()}`,
       { event: { message: { message_id: messageId, chat_id: `oc_${randomBytes(6).toString('hex')}`, message_type: 'text', content: JSON.stringify({ text: 'run the checks' }) } } },

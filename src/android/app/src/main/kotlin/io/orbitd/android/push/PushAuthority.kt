@@ -14,8 +14,9 @@ enum class PushCheck { ACTIVE, STALE, MISSING, FORBIDDEN, UNKNOWN }
 
 /** Push supplies identities only. Every decision here is read with the current authenticated handle. */
 class PushAuthority(private val api: OrbitApi, private val handle: SessionHandle) {
-    /** An unsuccessful/invalid read throws: an offline snapshot must never look like an empty set. */
-    suspend fun needsYou(): Set<String> = array(get(listOf("sessions"), listOf("view" to "open")))
+    /** The sessions waiting on the owner, from the Open rows the store holds (its `since=` delta reads): this class sends no
+     * `GET /sessions` of its own. An invalid row throws: a broken snapshot must never look like an empty set. */
+    fun needsYou(rows: List<JsonObject>): Set<String> = rows
         .mapNotNull { row ->
             val id = canonical(row.text("id"))
             val pending = row.number("pendingApprovals")

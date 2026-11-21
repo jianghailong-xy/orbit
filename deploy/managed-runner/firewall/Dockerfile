@@ -4,6 +4,6 @@
 #   docker build -f deploy/managed-runner/firewall/Dockerfile .
 FROM python:3.13-alpine
 RUN apk add --no-cache iptables iptables-legacy iproute2
-COPY deploy/managed-runner/firewall/firewall.py /opt/orbit-managed-runner-firewall/firewall.py
-ENTRYPOINT ["python3", "-I", "/opt/orbit-managed-runner-firewall/firewall.py"]
+COPY deploy/managed-runner/firewall/firewall.py /opt/orbit-cloud-runner-firewall/firewall.py
+ENTRYPOINT ["python3", "-I", "/opt/orbit-cloud-runner-firewall/firewall.py"]
 CMD ["serve"]

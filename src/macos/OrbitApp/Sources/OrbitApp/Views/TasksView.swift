@@ -497,7 +497,7 @@ struct TasksListView: View {
     }
     #endif
 
-    /// One row, wrapped for the container it is in — the same shape as `AgentPanes.sessionRow`. The
+    /// One row, wrapped for the container it is in — the same shape as `SessionListRow`. The
     /// row view itself is the same either way, actions included; what changes is who moves the
     /// screen: the three-column `List`'s selection, or the row's own destination value on the
     /// compact stack. There is no third state for "highlighted but not openable" to live in, because
@@ -1420,6 +1420,8 @@ private struct TaskDetailContent: View {
             do { try await Task.sleep(nanoseconds: 4_000_000_000) }
             catch { return }
             guard model.taskDetailIsOpen(taskID) else { return }
+            // A run in flight is read every 4 s — while the app can be seen (§4 R3).
+            if !model.appVisible { continue }
             _ = await tasks.loadDetail(taskID)
             guard let current = tasks.detail, TaskListLogic.isBusy(current) else { return }
         }
@@ -2037,7 +2039,7 @@ private struct TaskDetailContent: View {
             (TaskDetailCopy.engineLabel, ProviderEngines.cliName(runPin(task).runEngine)),
             (TaskDetailCopy.providerLabel, providerSummary(task)),
             (TaskDetailCopy.modelLabel, task.model.map { runModelName($0, task) }
-                ?? (smartSelection && assigneeAgent(task)?.modelRouting == true
+                ?? (smartSelection
                     ? TaskDetailCopy.smartSelectionPlaceholder : "Provider default")),
         ]
         return pairs.enumerated().reduce(Text("")) { line, entry in
@@ -2368,8 +2370,8 @@ private struct TaskDetailContent: View {
             engine: pin.runEngine, provider: pin.runProvider(firstDeepSeekKey: firstDeepSeekKey?.slug),
             catalog: model.agents?.modelCatalog(for: assigneeAgent(task)?.runnerId),
             configured: pinConfigured)
-        // Unpinned on an assignee with smart selection on, each run's model is picked for it.
-        let unpinned = smartSelection && assigneeAgent(task)?.modelRouting == true
+        // Unpinned with the account's smart selection on, each run's model is picked for it.
+        let unpinned = smartSelection
             ? TaskDetailCopy.smartSelectionPlaceholder : "Provider default"
         return Picker(TaskDetailCopy.modelLabel, selection: Binding(
             get: { task.model },

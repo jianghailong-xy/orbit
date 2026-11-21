@@ -19,7 +19,7 @@ import { answersFromForm } from './feishu-card-actions';
  */
 
 const URL = 'https://orbit.example/sessions/s1';
-const ctx = (detail: FeishuMessageDetail, approvalsInFeishu = true) => ({ detail, approvalsInFeishu, openUrl: URL });
+const ctx = (detail: FeishuMessageDetail, approvalsInFeishu = true) => ({ detail, approvalsInFeishu, showOrbit: true, openUrl: URL });
 
 const INPUT = {
   questions: [

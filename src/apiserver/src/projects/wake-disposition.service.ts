@@ -993,9 +993,8 @@ function changedPathsOf(reported: unknown): string[] {
 /** What one criterion's serving work has to carry for both halves of the rule to be answerable. */
 const SERVING_WORK = {
   id: true,
-  status: true,
-  // Everything the landing fold reads, from the module that decides what "landed" means: SR5's
-  // escape hatch, the merges recorded against the task, and the answers the line gave about its
+  // Everything the landing fold reads, from the module that decides what "landed" means: the
+  // task's status and work sessions, the merges recorded against the task, and the answers the line gave about its
   // branches. Spread rather than spelled, so this lane cannot come to read a fact the fold no
   // longer reads — a wake raised for a criterion the fold calls LANDED is a person woken for
   // nothing.

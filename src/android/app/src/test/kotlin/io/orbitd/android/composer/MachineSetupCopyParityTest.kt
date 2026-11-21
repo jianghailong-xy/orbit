@@ -122,6 +122,8 @@ class MachineSetupCopyParityTest {
         "setupOfflineCreate" to MachineSetupCopy.setupOfflineCreate("\\(machine)"),
         "setupConnectingCreate" to MachineSetupCopy.setupConnectingCreate("\\(machine)"),
         "setupUpdatingCreate" to MachineSetupCopy.setupUpdatingCreate("\\(machine)"),
+        "setupFolderOrPathHint" to MachineSetupCopy.setupFolderOrPathHint("\\(root)"),
+        "setupPathUnchecked" to MachineSetupCopy.setupPathUnchecked("\\(machine)"),
         "setupCreateFailed" to MachineSetupCopy.setupCreateFailed("\\(why)"),
         "setupGithubSignInAgain" to MachineSetupCopy.setupGithubSignInAgain("\\(login)"),
         "setupGithubConnectFailed" to MachineSetupCopy.setupGithubConnectFailed("\\(why)"),

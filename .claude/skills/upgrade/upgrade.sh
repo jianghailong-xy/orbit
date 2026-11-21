@@ -106,9 +106,9 @@ fi
 # moves to the new image with its next container, made when it wakes after it next sleeps. Nothing here
 # deletes the previous image, and Docker keeps what a container runs (docs/self-hosting.md, "What an
 # upgrade does").
-MR_TAG=orbit-managed-runner:local
+MR_TAG=orbit-cloud-runner:local
 # Where root Compose mounts the managed runners' directory: in the channel, and read-only in the apiserver.
-MR_MOUNT=/var/lib/orbit-managed-runners
+MR_MOUNT=/var/lib/orbit-cloud-runners
 MR_SWITCH=0
 
 # The managed runners' directory on this host: the source Compose binds at $MR_MOUNT in service $1 (the channel by

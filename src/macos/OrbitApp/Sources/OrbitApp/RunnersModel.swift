@@ -161,7 +161,7 @@ final class RunnersModel {
         let started = Date()
         while !RunnerUpdateNow.answered(runner(id)),
               Date().timeIntervalSince(started) < RunnerUpdateNow.answerWait {
-            try? await Task.sleep(for: .seconds(RunnerUpdateNow.answerPollInterval))
+            await VisibilityGate.app.pause(RunnerUpdateNow.answerPollInterval)   // not while hidden (§4 R3)
             await load()
         }
     }
@@ -187,7 +187,7 @@ final class RunnersModel {
         let askedAt = asked.requestedAt ?? ISO8601DateFormatter().string(from: Date())
         let started = Date()
         while !Task.isCancelled, Date().timeIntervalSince(started) < ClaudeRegion.checkWait {
-            try? await Task.sleep(for: .seconds(ClaudeRegion.checkPollInterval))
+            await VisibilityGate.app.pause(ClaudeRegion.checkPollInterval)   // not while hidden (§4 R3)
             await load()
             if ClaudeRegion.checkAnswered(checkedAt: runner(id)?.region?.checkedAt, askedAt: askedAt) { break }
         }

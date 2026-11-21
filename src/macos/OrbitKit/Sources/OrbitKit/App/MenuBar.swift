@@ -72,7 +72,8 @@ public enum MenuBar {
         // An idle recycle / user end settles CANCELLED just like a hard stop, so the raw
         // status would call a merely dormant session "Cancelled". Only `endReason` separates
         // them — defer to the reason-aware word rather than spell the rule out a third time.
-        case .cancelled: return SessionHeader.statusWord(for: s)
+        // An unknown status word resolves to the neutral ended run state; word it the same way.
+        case .cancelled, .unknown: return SessionHeader.statusWord(for: s)
         default: return s.effectiveRunStatus.rawValue.capitalized
         }
     }

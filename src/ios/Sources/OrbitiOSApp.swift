@@ -38,6 +38,8 @@ struct OrbitiOSApp: App {
                 // with a window-level UIKit recognizer instead.
                 .dismissesKeyboardOnBackgroundTap()
                 .onOpenURL { url in
+                    // `orbit-session://<id>?share=<entry>`: the Share extension's Add opening Orbit.
+                    if let entryID = ShareHandoffLink.entryID(in: url) { model.requestShareClaim(entryID: entryID); return }
                     // `orbit://owner-request/<id>`: the inbox, with that request's card open on its input.
                     if let request = OwnerRequestLink.parse(url) { model.openOwnerRequest(request); return }
                     if let route = DeepLink.parse(url) { model.route(to: route) }

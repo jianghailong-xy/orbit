@@ -37,6 +37,8 @@ final class ConsoleRegistry {
     /// The account's managed runner (docs/managed-runner-design.md), set once by `AppModel` and handed
     /// to every console this registry makes, as `onToast` is.
     @ObservationIgnored weak var managedRunner: ManagedRunnerModel?
+    /// The runners a console just read, handed to the app's runner snapshot (`ConsoleModel.onRunnersRead`).
+    @ObservationIgnored var onRunnersRead: ([Runner]) -> Void = { _ in }
 
     private var models: [String: ConsoleModel] = [:]
     /// The one session whose SSE stream is currently running (at most one), or nil when no console is
@@ -158,6 +160,7 @@ final class ConsoleRegistry {
         model.onToast = { [weak self] request in self?.onToast(request, nil) }
         wireAccountDefaults(model)
         model.managedRunner = managedRunner
+        model.onRunnersRead = { [weak self] rows in self?.onRunnersRead(rows) }
         return model
     }
 
@@ -279,6 +282,7 @@ final class ConsoleRegistry {
         }
         wireAccountDefaults(model)
         model.managedRunner = managedRunner
+        model.onRunnersRead = { [weak self] rows in self?.onRunnersRead(rows) }
         seedSessionContext(model)
         if let record = pendingRecords.removeValue(forKey: sessionID) { model.openRecord(record) }
         return model

@@ -183,7 +183,7 @@ describe('Machines in the account menu', () => {
   ])('shows the managed runner %s by its own state, never Ready', async (name, dot, text) => {
     managed = name;
     const id = managedState(name).runnerId!;
-    runners = [{ id, name: 'orbit-managed', online: name === 'available' }];
+    runners = [{ id, name: 'orbit-cloud', online: name === 'available' }];
     serve();
     await visit('/projects');
     await openAccountMenu();
@@ -197,7 +197,7 @@ describe('Machines in the account menu', () => {
   it('pins Orbit Cloud first, marked, with a line before your own machines in their order', async () => {
     runners = [
       { id: 'r1', name: 'mbp', displayName: 'MacBook Pro', online: true },
-      { id: 'r2', name: 'orbit-managed', online: true, managed: true },
+      { id: 'r2', name: 'orbit-cloud', online: true, managed: true },
       { id: 'r3', name: 'old-linux', online: false },
     ];
     serve();
@@ -219,7 +219,7 @@ describe('Machines in the account menu', () => {
 
   it('marks every other machine by the OS it reported, a monitor when it has not said', async () => {
     runners = [
-      { id: 'r2', name: 'orbit-managed', online: true, managed: true, capabilities: ['os:linux'] },
+      { id: 'r2', name: 'orbit-cloud', online: true, managed: true, capabilities: ['os:linux'] },
       { id: 'r1', name: 'mini', online: true, capabilities: ['session-worktree-ops-v1', 'os:darwin'] },
       { id: 'r3', name: 'hpc', online: true, capabilities: ['os:linux'] },
       { id: 'r4', name: 'win-box', online: true, capabilities: ['os:windows'] },
@@ -264,7 +264,7 @@ describe('Machines in the account menu', () => {
   });
 
   it('draws no line under Orbit Cloud when it is the only machine', async () => {
-    runners = [{ id: 'r2', name: 'orbit-managed', online: true, managed: true }];
+    runners = [{ id: 'r2', name: 'orbit-cloud', online: true, managed: true }];
     serve();
     await visit('/projects');
     await openAccountMenu();

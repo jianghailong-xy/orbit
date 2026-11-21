@@ -91,20 +91,25 @@ const ON_A_LINE_THAT_MOVED = { targetShaBefore: 'the-line-tip', upstreamSha: 'an
 
 /**
  * One serving task as the fold reads it: its receipts, the answers the line gave about its branches,
- * and whether it declares it needs no code (SR5's escape hatch) — the facts that say a task has
- * nothing to land.
+ * and whether it ran a branch at all — the facts that say a task has nothing to land. The `codeless`
+ * flag rides along only to show that it decides nothing (§12.15 P-M3).
  *
  * Every case below means real work unless it says otherwise, so a task that carries commits is the
- * default and the declaration is spelled out. A task that ran a branch and has commits of its own is
+ * default and work that ran no branch is spelled out. A task that ran a branch and has commits of its own is
  * a task that stays in the roll-up; nothing here is inferred from what a task looks like.
  */
 const serving = (
   receipts: Array<{ result: string; targetBranch: string }>,
-  facts: { codeless?: boolean; jobs?: Array<ReturnType<typeof job>> } = {},
+  facts: { codeless?: boolean; branchless?: boolean; jobs?: Array<ReturnType<typeof job>> } = {},
 ) => ({
+  // Carried only to show it is not read (§12.15 P-M3): the fold has no field for it.
   codeless: facts.codeless ?? false,
   mergeReceipts: receipts,
   integrationJobs: facts.jobs ?? [],
+  // Work that ran in shared isolation — no branch — and reported nothing: no commit was delivered.
+  ...(facts.branchless
+    ? { status: 'DONE', sessions: [{ isolationStatus: 'shared', branch: null, changedFiles: null }] }
+    : {}),
 });
 
 /** One criterion, stated as the rows the fold reads. */
@@ -228,31 +233,32 @@ test('a project that integrates straight into main never reads ON_INTEGRATION_LI
     'its integration line IS its upstream, so "landed, but not on main" is not a state it has');
 });
 
-test('work that declares it needs no code does not withhold LANDED', () => {
+test('work that delivered no commit does not withhold LANDED, and no codeless flag decides it', () => {
   assert.deepEqual(criterionLanding([
     // Two pieces landed, and a third that is an acceptance task whose deliverable is evidence: it
-    // resolves no SOURCE, so it has no branch, no commit of its own and no receipt. The criterion is
-    // on main as far as anything can be landed.
+    // ran no branch, so it has no commit of its own and no receipt. The criterion is on main as far
+    // as anything can be landed.
     { id: 'with-an-evidence-task', servingTasks: [
-      serving([MERGED_INTO_MAIN]), serving([MERGED_INTO_MAIN]), serving([], { codeless: true }),
+      serving([MERGED_INTO_MAIN]), serving([MERGED_INTO_MAIN]), serving([], { branchless: true }),
     ] },
-    // The same declaration on a task that DID run a branch, which is the shape the finished
-    // acceptance task of 2026-09-22 actually has: a receipt names the project line, and the
-    // declaration is what says none of that branch was its own work. §1.1 reads the declaration as
-    // authoritative wherever it reads it, and this lane does the same.
+    // A task flagged codeless that DID run a branch and has a receipt on the project line: since
+    // revision 42 (§12.15 P-M3) the flag is not read, so its work is on the line, not on main.
     { id: 'codeless-beside-a-line-receipt', servingTasks: [
       serving([MERGED_INTO_MAIN]), serving([ALREADY_MERGED_INTO_PROJECT_BRANCH], { codeless: true }),
     ] },
-    // Served only by such work: all of zero commits are on the upstream, which is §2.5 J9's answer
-    // one level down — "nothing left to wait for". A criterion NOBODY serves stays UNKNOWN.
-    { id: 'only-such-work', servingTasks: [serving([], { codeless: true })] },
+    // Served only by work that delivered nothing: all of zero commits are on the upstream, which is
+    // §2.5 J9's answer one level down — "nothing left to wait for". A criterion NOBODY serves stays
+    // UNKNOWN.
+    { id: 'only-such-work', servingTasks: [serving([], { branchless: true })] },
+    // The flag alone, on work whose sessions this read did not see, gets nothing out.
+    { id: 'flag-alone', servingTasks: [serving([], { codeless: true })] },
   ], PROJECT_BRANCH), [
     { definitionId: 'with-an-evidence-task', landing: 'LANDED' },
-    { definitionId: 'codeless-beside-a-line-receipt', landing: 'LANDED' },
+    { definitionId: 'codeless-beside-a-line-receipt', landing: 'ON_INTEGRATION_LINE' },
     { definitionId: 'only-such-work', landing: 'LANDED' },
-  ], 'before this rule the first criterion could not be LANDED at any time, by any receipt: it '
-    + 'was waiting for a commit that was never going to exist, which left every project holding one '
-    + 'unable to reach DONE');
+    { definitionId: 'flag-alone', landing: 'UNKNOWN' },
+  ], 'work with no commit to land is out of the conjunction because it delivered none, and a task '
+    + 'flagged codeless that has commits is held to them like any other');
 });
 
 test('work that ran a branch is not let out of the roll-up, whoever it is', () => {
@@ -464,18 +470,17 @@ test('a NOTHING_TO_LAND whose commits the base already had counts only where the
     + 'branch the work ended on, after it ended, with no work reported elsewhere — on nothing else');
 });
 
-test('a declaration is still the whole of §1.1’s first half, whatever the line says', () => {
+test('a codeless flag beside a landed job decides nothing: the line’s answer stands', () => {
   assert.deepEqual(criterionLanding([
-    // A declared task whose branch the line DID find work on: the declaration is authoritative
-    // wherever this lane reads it, and the second way to be exempt neither widens nor narrows it.
+    // A task flagged codeless whose branch the line DID find work on and landed on the project
+    // branch: since revision 42 (§12.15 P-M3) its work lands like any other, so it is on the line.
     { id: 'declared-beside-a-landed-job', servingTasks: [
       serving([MERGED_INTO_MAIN]), serving([MERGED_INTO_PROJECT_BRANCH],
         { codeless: true, jobs: [job({ state: 'LANDED' })] }),
     ] },
   ], PROJECT_BRANCH), [
-    { definitionId: 'declared-beside-a-landed-job', landing: 'LANDED' },
-  ], 'this is what the declaration always bought and still does: §1.1 reads it as authoritative, '
-    + 'and a lane that read the line’s answers BEFORE the declaration would take it back');
+    { definitionId: 'declared-beside-a-landed-job', landing: 'ON_INTEGRATION_LINE' },
+  ], 'the flag once took committed work out of the conjunction; now the commits decide');
 });
 
 test('an upstream receipt naming a line landing the task moved past does not cover the rework', () => {

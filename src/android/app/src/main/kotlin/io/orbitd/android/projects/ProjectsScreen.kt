@@ -266,10 +266,12 @@ private sealed interface ProjectDialog {
     data class ResumeList(val item: JsonObject) : ProjectDialog
     data object Start : ProjectDialog
     data object MergeCheck : ProjectDialog
+    data object LandingCheck : ProjectDialog
     data object Share : ProjectDialog
     data object Done : ProjectDialog
     data object OpenItems : ProjectDialog
     data object LandingJobs : ProjectDialog
+    data object LandingChanges : ProjectDialog
 }
 
 @Composable
@@ -525,6 +527,8 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
                 stepConcurrency = { stepConcurrency(it) },
                 pause = { next -> write("${if (next) RunSettings.notPaused else RunSettings.notResumed} — ") { api.pause(id, next, revision(doc)) } },
                 nonCode = { next -> write("${RunSettings.notSaved} — ") { api.setNonCode(id, next) } },
+                openLandingChanges = { dialog = ProjectDialog.LandingChanges },
+                editLandingCheck = { dialog = ProjectDialog.LandingCheck },
                 // Read at the press: a merge still live asks before the agent takes over. One that cannot be read asks too.
                 mergeLive = {
                     try { RunSettings.mergeLive(api.currentPromotion(id)) } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { true }
@@ -654,10 +658,18 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
                 if (body == null || body.isEmpty()) null else attempt("${RunSettings.notSaved} — ") { api.updateIntegration(id, body, revision(doc) + body) }
             }
         } ?: run { dialog = null }
+        ProjectDialog.LandingCheck -> state.integration?.let { view ->
+            LandingCheckEditor(view, now, enabled, close = { dialog = null }) { body ->
+                attempt("${RunSettings.notSaved} — ") { api.updateIntegration(id, body, revision(doc) + body) }
+            }
+        } ?: run { dialog = null }
         ProjectDialog.Share -> ShareSheet(app, handle, ShareRootKind.PROJECT, id, close = { dialog = null }) { state.share = it }
         ProjectDialog.Done -> ProjectDoneSheet(api, id, state, now, enabled, close = { dialog = null }, actions = criteriaActions) { refusal, body -> attempt(refusal, body) }
         // The jobs the landing card counts, read off the page's own integration read, which its polls keep current. Retry answers the
         // line read again, which the list redraws from at once; then the page reads everything again (iOS `retryIntegrationJob`).
+        ProjectDialog.LandingChanges -> LandingChangesSheet(ProjectSettingChange.read(doc), now, enabled,
+            revert = { changeId -> attempt("${LandingChangesCopy.revert} — ") { api.revertSettingChange(id, changeId) } },
+            openTask = { taskId -> dialog = null; openTask(taskId) }, close = { dialog = null })
         ProjectDialog.LandingJobs -> LandingJobsSheet(state.integration?.let { ProjectPage.landingJobLines(it, now, state.integrationReadAt, state.integrationReadFailed) }.orEmpty(),
             retry = { retryJob(it) }, openTask = { taskId -> dialog = null; openTask(taskId) },
             openLanding = { sessionId -> dialog = null; open(OrbitRoute(Destination.SESSION, sessionId)) }, close = { dialog = null })

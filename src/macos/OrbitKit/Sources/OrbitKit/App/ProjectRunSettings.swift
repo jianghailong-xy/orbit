@@ -189,8 +189,8 @@ extension RunSettings {
     public static let lineSuggested = "the coordinator suggests"
 
     /// A line as a sentence names it, mid-sentence: "a project branch", "directly into main" — into
-    /// the project's main branch, `main`.
-    public static func lineInSentence(_ line: IntegrationLine, main: String = defaultMainBranch) -> String {
+    /// the project's main branch, `main`. A request with no line reads as a project branch, as on web.
+    public static func lineInSentence(_ line: IntegrationLine?, main: String = defaultMainBranch) -> String {
         line == .main ? "directly into \(main)" : "a project branch"
     }
 
@@ -450,14 +450,12 @@ extension RunSettings {
         return UpdateProjectIntegrationRequest(upstreamRef: mainBranchRef(name))
     }
 
-    /// The merge check a Save writes: trimmed, blank is none — and nothing when it is what is stored.
+    /// The landing check a Save writes when only a command is typed: blank is the merge check, a
+    /// command is a command (`landingCheckWrite(_:mode:command:timeout:)`).
     public static func landingCheckWrite(_ view: ProjectIntegrationView, command: String,
                                          timeout: Int?) -> UpdateProjectIntegrationRequest? {
-        let next: String? = command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : command
-        guard next != view.landingCheckCommand || timeout != view.landingCheckTimeoutSeconds else { return nil }
-        return UpdateProjectIntegrationRequest(
-            landingCheckCommand: next != view.landingCheckCommand ? .some(next) : nil,
-            landingCheckTimeoutSeconds: timeout != view.landingCheckTimeoutSeconds ? .some(timeout) : nil)
+        let blank = command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        return landingCheckWrite(view, mode: blank ? .mergeCheck : .command, command: command, timeout: timeout)
     }
 
     public static func mergeCheckWrite(_ view: ProjectIntegrationView,

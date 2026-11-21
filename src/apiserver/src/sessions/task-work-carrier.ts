@@ -1,8 +1,16 @@
 import { Prisma, RunStatus } from '@prisma/client';
 import type { SessionActivity, TaskRunReason } from '@orbit/shared';
 
+import {
+  ARMED_RETRY,
+  bgJobsStalled,
+  ENGINE_TURN,
+  PENDING_WAKEUP,
+  RESUME_WATCH,
+  RUNNING_BG_JOB,
+  RUNNING_SUBAGENT,
+} from '../common/session-working';
 import type { PrismaService } from '../prisma/prisma.service';
-import { freshRunningBgJobs } from './background-job-activity';
 
 /**
  * Whether a work session is still CARRYING its task: the one definition behind every surface that
@@ -42,38 +50,24 @@ import { freshRunningBgJobs } from './background-job-activity';
  * session sent that has not been answered yet, and (5), an `ask_owner` question still open, join
  * this list once they can be read. Its NO_REPLY judgement asks the same question this list
  * answers, which is why the list lives here and not in any one reader.
+ *
+ * The facts themselves — the first three are what common/session-working.ts calls executing outside
+ * a turn, the last three what it calls willWake — are spelled there, once; this list adds only the
+ * carrier's own order and the reason each one gives.
  */
 const WAKE_SOURCES: ReadonlyArray<{ reason: TaskRunReason; sql: (session: string) => string }> = [
-  // The engine is generating while `status` stays AWAITING_INPUT: a background-task notification
-  // or the engine's own wake-up restarted the model without passing through the inbox.
-  { reason: 'TURN', sql: (s) => `${s}."engine_turn_active" = true` },
-  // A sub-agent (Task/Agent tool) still in flight, which reports back into this session.
-  { reason: 'TURN', sql: (s) => `cardinality(${s}."running_subagents") > 0` },
-  // §4.1 (2): a `bg_run` job or watch. Never `running_bg_shells`, which also holds a `service` left
-  // running on purpose — a dev server never ends, so it never wakes anyone — and the engine's own
-  // background shells, which carry no kind at all.
-  { reason: 'BACKGROUND_JOB', sql: (s) => `cardinality(${s}."running_bg_jobs") > 0` },
+  // The engine is generating while `status` stays AWAITING_INPUT.
+  { reason: 'TURN', sql: ENGINE_TURN.sql },
+  // A sub-agent still in flight, which reports back into this session.
+  { reason: 'TURN', sql: RUNNING_SUBAGENT.sql },
+  // §4.1 (2): a `bg_run` job or watch. Never `running_bg_shells` (common/session-working.ts says why).
+  { reason: 'BACKGROUND_JOB', sql: RUNNING_BG_JOB.sql },
   // §4.1 (1): what `task_await`, `session_await` and `watch_create` leave behind.
-  {
-    reason: 'WAITING',
-    sql: (s) => `EXISTS (
-      SELECT 1 FROM "watch" ${s}_watch
-       WHERE ${s}_watch."observer_session_id" = ${s}."id"
-         AND ${s}_watch."state" = 'ACTIVE'
-         AND ${s}_watch."action" = 'RESUME_SESSION'
-    )`,
-  },
+  { reason: 'WAITING', sql: RESUME_WATCH.sql },
   // §4.1 (3): `schedule_wakeup`.
-  {
-    reason: 'WAITING',
-    sql: (s) => `EXISTS (
-      SELECT 1 FROM "session_scheduled_wakeup" ${s}_wakeup
-       WHERE ${s}_wakeup."session_id" = ${s}."id"
-         AND ${s}_wakeup."state" = 'PENDING'
-    )`,
-  },
+  { reason: 'WAITING', sql: PENDING_WAKEUP.sql },
   // §4.1 (6): a failure the auto-retry sweep re-sends once it is likely to work.
-  { reason: 'WAITING', sql: (s) => `${s}."retry_at" IS NOT NULL` },
+  { reason: 'WAITING', sql: ARMED_RETRY.sql },
 ];
 
 /** At least one wake source is present on `session`. */
@@ -152,20 +146,15 @@ export interface RunStallFacts {
 }
 
 /**
- * A run held only by background jobs that have all stopped producing output.
- *
- * Deliberately NOT part of whether the task is running: a job that has written nothing for ten
- * minutes is still a process that will wake its session when it ends, and its known false positive —
- * a compile's silent phase, a `sleep` — is a job that is working (`BG_JOB_ACTIVITY_STALE_AFTER_MS`).
- * So the task stays RUNNING and this rides beside the reason, letting a surface say "no output for a
- * while" instead of either hiding the run or vouching for a job that may be hung. Only a
- * BACKGROUND_JOB reason can be stalled: a turn, or a wait for something else, is not held by the job.
+ * A run held only by background jobs that have all stopped producing output: the shared stall flag
+ * (`bgJobsStalled`, common/session-working.ts), which is deliberately not part of whether the task is
+ * running. The task stays RUNNING and this rides beside the reason, letting a surface say "no output
+ * for a while" instead of either hiding the run or vouching for a job that may be hung. The carrier's
+ * own addition is the reason: only a BACKGROUND_JOB reason can be stalled — a turn, or a wait for
+ * something else, is not held by the job.
  */
 export function runStalled(facts: RunStallFacts, nowMs: number): boolean {
-  const jobs = facts.runningBgJobs ?? [];
-  return facts.runReason === 'BACKGROUND_JOB'
-    && jobs.length > 0
-    && freshRunningBgJobs(jobs, facts.runningBgJobActivity, nowMs).length === 0;
+  return facts.runReason === 'BACKGROUND_JOB' && bgJobsStalled(facts, nowMs);
 }
 
 /** The work session carrying one task, as the surfaces that show the task read it. */

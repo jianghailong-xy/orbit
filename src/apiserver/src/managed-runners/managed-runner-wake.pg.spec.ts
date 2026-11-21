@@ -101,7 +101,7 @@ test('managed runners wake on demand and sleep through the real application', {
   await sql.connect();
   await verifyCoordinatorPgIdentity(sql);
   const db: PrismaClient = prismaClientFor(url);
-  const scratch = mkdtempSync(path.join(tmpdir(), 'orbit-managed-wake-'));
+  const scratch = mkdtempSync(path.join(tmpdir(), 'orbit-cloud-wake-'));
   const JWT_SECRET = randomBytes(32).toString('hex');
   const jwt = new JwtService({ secret: JWT_SECRET });
 
