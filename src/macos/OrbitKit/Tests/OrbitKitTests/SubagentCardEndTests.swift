@@ -257,17 +257,20 @@ final class SubagentCardEndTests: XCTestCase {
         XCTAssertEqual(userRows(rows).count, 1)
     }
 
-    func testAJobsNewsWrittenBesideTheEndKeepsItsOwnLine() throws {
+    /// A job's news written beside the end draws nothing either: the job is its own card (`BgJobCard`,
+    /// board C1), so the whole turn draws nothing (web parity: `wakeupsOnly`).
+    func testAJobsNewsWrittenBesideTheEndDrawsNothingEither() throws {
         _ = try oneRun("SUBAGENT_DONE")
+        let both = "\(try block("SUBAGENT_DONE"))\n\n\(Self.job)"
         events[4] = ["seq": 9, "type": "user", "turnId": "turn-wake-9", "ts": Self.ts,
-                     "payload": ["text": "", "controlPlaneNote": "\(try block("SUBAGENT_DONE"))\n\n\(Self.job)"]]
+                     "payload": ["text": both, "controlPlaneNote": both]]
         let rows = rows(try state())
-        let wakeRows = userRows(rows).filter { $0.text.isEmpty }
-        XCTAssertEqual(wakeRows.count + rows.filter { if case .exchanges = $0 { return true } else { return false } }.count, 1,
-                       "the job's line, and only that")
-        XCTAssertFalse(SubagentCardEnd.drawsNothing(UserBubble(id: "w", text: "", pending: false,
-                                                               note: "\(try block("SUBAGENT_DONE"))\n\n\(Self.job)"),
-                                                    queued: false))
+        XCTAssertFalse(rows.contains { if case .item(.user(let b)) = $0 { return b.id != "i1" } else { return false } },
+                       "no line for the end, none for the job's news")
+        XCTAssertFalse(rows.contains { if case .exchanges = $0 { return true } else { return false } })
+        XCTAssertTrue(SubagentCardEnd.drawsNothing(UserBubble(id: "w", text: "", pending: false,
+                                                              note: "\(try block("SUBAGENT_DONE"))\n\n\(Self.job)"),
+                                                   queued: false))
     }
 
     func testABlockInAWordingItDoesNotKnowIsTheFromOrbitLine() throws {
@@ -303,8 +306,8 @@ final class SubagentCardEndTests: XCTestCase {
         XCTAssertEqual(SubagentCardEnd.queuedWake(two)?.runIds, ["34y5Qcall0000000000001", "34y5Qspec0000000000002"])
         XCTAssertEqual(SubagentCardEnd.queuedWake(two)?.alone, true)
         let withJob = UserBubble(id: "q", text: "\(try block("SUBAGENT_DONE"))\n\n\(Self.job)", pending: true, queued: true)
-        XCTAssertEqual(SubagentCardEnd.queuedWake(withJob)?.alone, false)
-        XCTAssertFalse(SubagentCardEnd.drawsNothing(withJob, queued: true), "one with a job's news stays in the tail")
+        XCTAssertEqual(SubagentCardEnd.queuedWake(withJob)?.alone, true)
+        XCTAssertTrue(SubagentCardEnd.drawsNothing(withJob, queued: true), "a job's news waits on its own card too")
         XCTAssertNil(SubagentCardEnd.queuedWake(UserBubble(id: "q", text: "deploy it", pending: true, queued: true)))
         XCTAssertNil(ComposerLogic.restorableText(of: two), "never goes back to the composer")
     }

@@ -318,96 +318,23 @@ public enum BackgroundWakeText {
 }
 
 /// What the wake reads as on screen: web's `BackgroundWakeCard.tsx`, in the same words and the same
-/// order — one line in the agent's stream saying what happened, which job, how it came out and when,
-/// and folded under it a row per job or wakeup, who queued the turn, and the text the agent actually
-/// received.
+/// order — one line in the agent's stream saying a wakeup came due, why and when, and folded under it
+/// a row per wakeup, who queued the turn, and the text the agent actually received.
+///
+/// A background job's end, new output or stall draws no line any more (board C1): the job is one card
+/// from start to end (`BgJobCard`), and only a wakeup that came due beside it is drawn
+/// (`BgJobCard.wakeupsOnly`).
 public enum BackgroundWakeCard {
     /// How much of a scheduled wakeup's prompt is shown before folding the rest away.
     public static let tailLines = 8
 
-    /// A job the line draws in its error tone.
-    public static func isFailed(_ job: BackgroundWakeJob) -> Bool {
-        job.status == "failed" || job.status == "killed"
-    }
+    /// What happened, at a glance. Also what a folded exchange says (`OrbitExchangeFold`).
+    public static func title(_ wake: BackgroundWake) -> String { "Scheduled wakeup" }
 
-    /// Whether the line's mark is the clock: a wakeup, or a job that has only written something —
-    /// nothing has come out either way yet.
-    public static func isPending(_ wake: BackgroundWake) -> Bool {
-        !wake.jobs.contains(where: isFailed) && (wake.jobs.isEmpty || wake.jobs.contains { !$0.ended })
-    }
-
-    /// What happened, at a glance.
-    public static func title(_ wake: BackgroundWake) -> String {
-        guard let only = wake.jobs.first else { return "Scheduled wakeup" }
-        if wake.jobs.count > 1 {
-            return wake.jobs.allSatisfy { $0.stall != nil }
-                ? "\(wake.jobs.count) background jobs went quiet"
-                : "\(wake.jobs.count) background jobs finished"
-        }
-        if only.stall != nil { return "Background job went quiet" }
-        if !only.ended { return "Background job has new output" }
-        return isFailed(only) ? "Background job failed" : "Background job finished"
-    }
-
-    /// How one job came out, as the word its row closes on — how long it has been quiet when it went
-    /// quiet, nil while it has only written something.
-    public static func status(_ job: BackgroundWakeJob) -> String? {
-        if let stall = job.stall {
-            guard let ms = stall.quietForMs else { return "quiet" }
-            return "quiet \(WatchProjection.duration(TimeInterval(ms) / 1000))"
-        }
-        if job.status == "killed" {
-            guard let reason = job.killReason, !reason.isEmpty else { return "killed" }
-            return "killed: \(reason)"
-        }
-        if let code = job.exitCode { return "exit \(code)" }
-        return job.ended ? job.status : nil
-    }
-
-    /// What the line names after its title: the one job, or why the wakeup was asked for. Several
-    /// jobs are counted by the title and named in the fold.
+    /// What the line names after its title: why the wakeup was asked for.
     public static func lineName(_ wake: BackgroundWake) -> String? {
-        if wake.jobs.count == 1, let only = wake.jobs.first { return name(only) }
-        guard wake.jobs.isEmpty, let reason = wake.wakeups.first?.reason, !reason.isEmpty else { return nil }
+        guard let reason = wake.wakeups.first?.reason, !reason.isEmpty else { return nil }
         return reason
-    }
-
-    /// The word the line closes on: the one job's, or how many of several failed.
-    public static func lineStatus(_ wake: BackgroundWake) -> String? {
-        if wake.jobs.count == 1, let only = wake.jobs.first { return status(only) }
-        let failed = wake.jobs.filter(isFailed)
-        return failed.isEmpty ? nil : "\(failed.count) of \(wake.jobs.count) failed"
-    }
-
-    /// What a job's row is called: what it was for, or the command itself where it was started
-    /// without a description.
-    public static func name(_ job: BackgroundWakeJob) -> String {
-        job.description.flatMap { $0.isEmpty ? nil : $0 } ?? job.command
-    }
-
-    /// "bgj_13c53745a88a · 16.2 KB of output".
-    public static func jobMeta(_ job: BackgroundWakeJob) -> String {
-        guard let to = job.outputTo else { return job.id }
-        return "\(job.id) · \(to == 0 ? "no output" : "\(formatBytes(to)) of output")"
-    }
-
-    /// How much output a job wrote, as the card says it.
-    public static func formatBytes(_ n: Int) -> String {
-        if n < 1024 { return "\(n) B" }
-        if n < 1024 * 1024 { return String(format: "%.1f KB", Double(n) / 1024) }
-        return String(format: "%.1f MB", Double(n) / (1024 * 1024))
-    }
-
-    /// "Still running · 15m in · last wrote 15m ago" — how a quiet job stood, in its row in the fold.
-    public static func stallLine(_ stall: BackgroundJobStall, now: Date = Date()) -> String {
-        var parts = ["Still running"]
-        if let ms = stall.runningForMs { parts.append("\(WatchProjection.duration(TimeInterval(ms) / 1000)) in") }
-        if stall.wroteNothing {
-            parts.append("has written nothing yet")
-        } else if let at = stall.lastOutputAt, let relative = RelativeTime.format(at, now: now) {
-            parts.append("last wrote \(relative)")
-        }
-        return parts.joined(separator: " · ")
     }
 
     /// "Asked for 1h out · came due 4m ago".
@@ -426,13 +353,8 @@ public enum BackgroundWakeCard {
         return parts.joined(separator: " · ")
     }
 
-    /// "Queued by a background job, not typed by you" — who queued the turn, said in the fold. When is
-    /// on the line itself.
-    public static func meta(_ wake: BackgroundWake) -> String {
-        wake.jobs.isEmpty
-            ? "Queued by a scheduled wakeup, not typed by you"
-            : "Queued by a background job, not typed by you"
-    }
+    /// Who queued the turn, said in the fold. When is on the line itself.
+    public static let meta = "Queued by a scheduled wakeup, not typed by you"
 
     /// The runner never confirmed the engine received the turn.
     public static let undelivered = "The session has not confirmed it received this."

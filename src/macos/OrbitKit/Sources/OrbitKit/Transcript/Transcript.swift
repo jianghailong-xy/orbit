@@ -619,6 +619,17 @@ public struct BackgroundProc: Equatable, Sendable, Identifiable, Codable {
     /// runs and on rows from before this existed. The folded row shows an ended process until the
     /// person's next message (`BackgroundRowRule`). Web parity: `BgShell.endedAt`.
     public var endedAt: String? = nil
+    /// Why a killed one was killed, as its terminal background_task names it: a runner-hosted job's
+    /// `requested` (the agent's bg_kill), `stopped_by_owner`, `runner_shutdown`, `session_cancelled`, …
+    /// Web parity: `BgShell.reason`.
+    public var reason: String? = nil
+    /// A runner-hosted job's exit code, as its terminal background_task names it; nil for one killed
+    /// before it exited. Web parity: `BgShell.exitCode`.
+    public var exitCode: Int? = nil
+    /// Whether the session's owner can stop it from the app (POST /sessions/:id/background/jobs/:jobId/stop):
+    /// a running `job` whose runner can do it. Stated only by GET /sessions/:id/background; nil reads as
+    /// not stoppable. Web parity: `BgShell.stoppable`.
+    public var stoppable: Bool? = nil
 }
 
 /// A live tool-permission / question / plan prompt awaiting a human decision.

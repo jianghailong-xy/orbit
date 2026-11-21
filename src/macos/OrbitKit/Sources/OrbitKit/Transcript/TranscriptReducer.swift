@@ -2147,6 +2147,10 @@ public struct TranscriptReducer: Sendable, Codable {
                 if state.background[i].kind == nil { state.background[i].kind = proc.kind }
                 if state.background[i].taskId == nil { state.background[i].taskId = proc.taskId }
                 if state.background[i].endedAt == nil { state.background[i].endedAt = proc.endedAt }
+                if state.background[i].reason == nil { state.background[i].reason = proc.reason }
+                if state.background[i].exitCode == nil { state.background[i].exitCode = proc.exitCode }
+                // Only the server says whether its owner can stop it, so its word is kept on the live row.
+                if let stoppable = proc.stoppable { state.background[i].stoppable = stoppable }
                 if state.background[i].status == "running" { state.background[i].status = proc.status }
                 // The server knows a bg_run by its job record, which a live launch does not carry.
                 if proc.kind == "job" { state.background[i].kind = "job" }
@@ -2186,9 +2190,17 @@ public struct TranscriptReducer: Sendable, Codable {
             return
         }
         let ended = ["completed", "done", "failed", "killed", "stopped"].contains(status)
+        // How a runner-hosted job ended: why a killed one was killed, and its exit code (shared
+        // `deriveBackgroundShells`), which its card says.
+        let reason = ended && (status == "killed" || status == "stopped") ? nonEmpty(str(ev, "reason")) : nil
+        let exitCode = ended ? ev.payload["exitCode"]?.intValue : nil
         if let i = index {
             state.background[i].status = status
             if ended { state.background[i].endedAt = ev.ts ?? state.background[i].endedAt }
+            if let reason { state.background[i].reason = reason }
+            if let exitCode { state.background[i].exitCode = exitCode }
+            // An end is no longer stoppable, whatever the list said while it ran.
+            if ended { state.background[i].stoppable = false }
             if runnerKind != nil { state.background[i].kind = "job" }
             if let command { state.background[i].command = command }
             if state.background[i].taskId == nil { state.background[i].taskId = taskID }
@@ -2201,7 +2213,7 @@ public struct TranscriptReducer: Sendable, Codable {
                                                    description: launch?.description ?? named?.title,
                                                    status: status, outputTail: "", startedAt: ev.ts,
                                                    kind: runnerKind != nil ? "job" : named?.kind, taskId: taskID,
-                                                   endedAt: ended ? ev.ts : nil))
+                                                   endedAt: ended ? ev.ts : nil, reason: reason, exitCode: exitCode))
         }
     }
 
