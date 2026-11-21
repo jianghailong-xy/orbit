@@ -103,7 +103,8 @@ describe('session-counts', () => {
     ['a status change', 'session.updated', summary({ status: 'AWAITING_INPUT', runState: 'IDLE' })],
     ['a session created', 'session.created', summary()],
     ['an approval asked', 'approval.requested', {}],
-    ['a job reporting', 'background.task', {}],
+    ['a job starting', 'background.task', { status: 'running' }],
+    ['a job ending', 'background.task', { status: 'completed' }],
     ['a session ended', 'session.ended', {}],
   ])('is read once, inside the 1 s window, for %s', async (_name, type, data) => {
     await publish(type, data);
