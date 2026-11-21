@@ -94,7 +94,7 @@ import {
   runSessionScheduleId,
   type ScheduleActor,
 } from './schedules.service';
-import { RELEASED_SESSION_STATUSES } from '../common/session-release';
+import { heldFilter } from '../common/session-release';
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -209,7 +209,7 @@ const LIVE_SESSION: Prisma.SessionWhereInput = {
   archivedAt: null,
   cancelRequestedAt: null,
   OR: [
-    { status: { notIn: [...RELEASED_SESSION_STATUSES] } },
+    heldFilter(),
     { status: RunStatus.FAILED, retryAt: { not: null } },
   ],
 };

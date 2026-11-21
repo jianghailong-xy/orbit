@@ -14,14 +14,22 @@
  * schedule-runs.service.ts, sessions.service.ts, tasks.service.ts, task-work-carrier.ts), held-but-idle sets
  * (AWAITING_INPUT and INTERRUPTED, with or without PENDING or RUNNING: session-tree-sql.ts,
  * coordinator-evidence-queue.service.ts, providers/active-sessions.ts, evidence-review.service.ts, tasks.service.ts,
- * task-work-carrier.ts), the claimed-and-held set without PENDING (runner-link-hints.ts, main-checkout.service.ts),
+ * task-work-carrier.ts), the claimed-and-held set without PENDING (runner-link-hints.ts),
  * mixed sets (auto-retry.service.ts FAILED with AWAITING_INPUT; wiki-maintenance.ts), and the derived SessionRunState
  * and SessionState sets (share-links/public-task.ts, watch-predicate.ts, web sessionState.ts).
+ *
+ * Plan step 4.2 moved the TypeScript readers of "released" and "held" (appendix sections B and C, and those that
+ * arrived from main since) onto the release column, `finished_at`, through isReleased / isHeld / releasedFilter /
+ * heldFilter in common/session-release.ts, and deleted the rows it took to zero. Still counted below: the writers
+ * that record a release, the old runner protocol's status words, readers of FAILED as against the other terminal
+ * values (the release does not yet record whether it was a failure), activity sets, and readers other phase 4 steps
+ * own (raw SQL 4.3, work readers 4.6, wake rules 4.7, the projector 4.8).
  */
 export const SESSION_TERMINAL_STATUS_READERS: Readonly<Record<string, number>> = {
   'src/apiserver/src/common/session-scheduling.ts': 2,
   // The one definition of "held" and "released" (plan step 3.5): the two status sets, their SQL fragments, and the
-  // release causes. Phase 4 moves its readers onto `finished_at`; until then this is where the sets are spelled.
+  // release causes. Its TypeScript readers read `finished_at` since plan step 4.2; the sets stay for the raw SQL
+  // fragments (plan step 4.3) and for the filters whose status list is an index's access path.
   'src/apiserver/src/common/session-release.ts': 8,
   'src/apiserver/src/common/session-tree-sql.ts': 1,
   'src/apiserver/src/help/help-ask-marker.ts': 1,
@@ -59,7 +67,6 @@ export const SESSION_TERMINAL_STATUS_READERS: Readonly<Record<string, number>> =
   'src/apiserver/src/watches/watch-delivery.service.ts': 3,
   'src/apiserver/src/watches/watch-predicate.ts': 4,
   'src/apiserver/src/wiki/wiki-maintenance.ts': 2,
-  'src/apiserver/src/workspaces/main-checkout.service.ts': 1,
   'src/shared/src/enums.ts': 25,
   'src/web/src/lib/sessionState.ts': 3,
 };
