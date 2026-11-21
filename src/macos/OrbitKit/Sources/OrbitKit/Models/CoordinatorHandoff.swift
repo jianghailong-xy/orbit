@@ -65,6 +65,23 @@ public struct CoordinatorPendingWait: Codable, Equatable, Sendable, Identifiable
     }
 }
 
+/// The engine, provider slug and optional model requested for the new coordinator.
+public struct CoordinatorHandoffSuccessor: Codable, Hashable, Sendable {
+    public let engine: String?
+    public let provider: String?
+    public let model: String?
+
+    public init(engine: String? = nil, provider: String? = nil, model: String? = nil) {
+        self.engine = engine
+        self.provider = provider
+        self.model = model
+    }
+}
+
+struct CoordinatorHandoffRequest: Encodable {
+    let successor: CoordinatorHandoffSuccessor?
+}
+
 /// `coordinatorHandoff` on the OUTGOING coordinator's session.
 public struct SessionCoordinatorHandoff: Codable, Equatable, Sendable {
     public let state: CoordinatorHandoffState
@@ -73,15 +90,17 @@ public struct SessionCoordinatorHandoff: Codable, Equatable, Sendable {
     public let failureCode: CoordinatorHandoffFailureCode?
     public let failureReason: String?
     public let handedOverToSessionId: String?
+    public let successor: CoordinatorHandoffSuccessor?
 
     public init(state: CoordinatorHandoffState, startedAt: String,
                 failureCode: CoordinatorHandoffFailureCode? = nil, failureReason: String? = nil,
-                handedOverToSessionId: String? = nil) {
+                handedOverToSessionId: String? = nil, successor: CoordinatorHandoffSuccessor? = nil) {
         self.state = state
         self.startedAt = startedAt
         self.failureCode = failureCode
         self.failureReason = failureReason
         self.handedOverToSessionId = handedOverToSessionId
+        self.successor = successor
     }
 
     public init(from decoder: Decoder) throws {
@@ -92,6 +111,7 @@ public struct SessionCoordinatorHandoff: Codable, Equatable, Sendable {
         failureCode = try? c.decodeIfPresent(CoordinatorHandoffFailureCode.self, forKey: .failureCode)
         failureReason = try c.decodeIfPresent(String.self, forKey: .failureReason)
         handedOverToSessionId = try c.decodeIfPresent(String.self, forKey: .handedOverToSessionId)
+        successor = try c.decodeIfPresent(CoordinatorHandoffSuccessor.self, forKey: .successor)
     }
 }
 
@@ -130,4 +150,5 @@ public struct CoordinatorHandoffView: Codable, Equatable, Sendable {
     public let failureReason: String?
     public let handedOverToSessionId: String?
     public let movedWaits: [CoordinatorPendingWait]?
+    public let successor: CoordinatorHandoffSuccessor?
 }

@@ -380,8 +380,11 @@ struct ConsoleView: View {
             let handoffRow = CoordinatorHandoffRow.resolve(handoff, enginePhase: handoffSession?.enginePhase)
             if let handoffRow {
                 if case .completed = handoffRow {} else {
-                    CoordinatorHandoffStatusView(row: handoffRow) { handoffPress(console, $0) }
-                        .padding(.bottom, .composerBandGap)
+                    CoordinatorHandoffStatusView(row: handoffRow, savedSuccessor: handoff?.successor,
+                                                 choiceSources: console.choiceSources) { action, successor in
+                        handoffPress(console, action, successor: successor)
+                    }
+                    .padding(.bottom, .composerBandGap)
                 }
             }
             if case .completed(let successor)? = handoffRow {
@@ -404,10 +407,11 @@ struct ConsoleView: View {
 
     /// A press on the handoff's row: Skip the note, Cancel handover, or a failure's way out. The
     /// project is the one this conversation coordinates — or, once it no longer does, belongs to.
-    private func handoffPress(_ console: ConsoleModel, _ action: CoordinatorHandoffAction) {
+    private func handoffPress(_ console: ConsoleModel, _ action: CoordinatorHandoffAction,
+                              successor: CoordinatorHandoffSuccessor?) {
         let session = appModel.session(id: console.sessionID)
         guard let projectID = session?.projectId ?? session?.projectMembership?.projectId else { return }
-        Task { await console.coordinatorHandoff(projectID: projectID, action) }
+        Task { await console.coordinatorHandoff(projectID: projectID, action, successor: successor) }
     }
 
     private func consoleBody(navTitleWidth: CGFloat) -> some View {
