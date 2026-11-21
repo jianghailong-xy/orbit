@@ -155,7 +155,7 @@ func (fs *FS) readDir(cancel <-chan struct{}, input *fuse.ReadIn, out *fuse.DirE
 		i := int(off - 2)
 		if err := fs.fill(ctx, h, i+1); err != nil {
 			if off == input.Offset {
-				return errno(err)
+				return fs.failed("readdir", fs.pathForLog(h.node.ino, ""), err)
 			}
 			// What fits is answered; the kernel asks again from where it stopped.
 			return fuse.OK

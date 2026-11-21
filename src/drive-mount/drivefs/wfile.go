@@ -115,9 +115,10 @@ type wfile struct {
 	// modeNew and modeTrunc: the version this handle writes ("" for modeTrunc until its first commit makes one).
 	version string
 
-	staging    string
-	stagedRows map[int]string
-	zeroStaged map[int64]bool // a staging row holds that many zeros, until the next commit
+	staging     string
+	stagingWait chan struct{} // closed when a staging open in flight ends
+	stagedRows  map[int]string
+	zeroStaged  map[int64]bool // a staging row holds that many zeros, until the next commit
 
 	dirty      bool
 	gen        uint64
@@ -689,13 +690,29 @@ func minI(a, b int64) int64 {
 
 // ensureStagingLocked opens the write's staging the first time a chunk goes. The lock is let go meanwhile.
 func (wf *wfile) ensureStagingLocked(ctx context.Context) (string, error) {
+	for wf.staging == "" && wf.stagingWait != nil {
+		wait := wf.stagingWait
+		wf.mu.Unlock()
+		select {
+		case <-wait:
+		case <-ctx.Done():
+		}
+		wf.mu.Lock()
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
+	}
 	if wf.staging != "" {
 		return wf.staging, nil
 	}
+	wait := make(chan struct{})
+	wf.stagingWait = wait
 	entry := wf.entryID
 	wf.mu.Unlock()
 	id, err := wf.fs.door.OpenStaging(ctx, entry)
 	wf.mu.Lock()
+	close(wait)
+	wf.stagingWait = nil
 	if err != nil {
 		return "", err
 	}
@@ -705,16 +722,34 @@ func (wf *wfile) ensureStagingLocked(ctx context.Context) (string, error) {
 	return wf.staging, nil
 }
 
-// putLocked sends bytes as staging row idx, letting go of the lock while they travel.
+// openStagingSoon opens the staging while the writer is still writing, so a small file's close costs its chunk and
+// its commit only (§5.5's budget for create-write-close).
+func (wf *wfile) openStagingSoon() {
+	go func() {
+		wf.mu.Lock()
+		defer wf.mu.Unlock()
+		if wf.staging == "" && wf.failed == nil && !wf.fs.door.Health().Offline() {
+			_, _ = wf.ensureStagingLocked(wf.fs.ctx)
+		}
+	}()
+}
+
+// slotLocked waits for one of the upload slots, which bound the chunks travelling, and the memory their bytes take.
+// The lock is let go meanwhile; the caller gives the slot back with <-uploadSlots.
+func (wf *wfile) slotLocked() {
+	wf.mu.Unlock()
+	wf.fs.uploadSlots <- struct{}{}
+	wf.mu.Lock()
+}
+
+// putLocked sends bytes as staging row idx, letting go of the lock while they travel. The caller holds a slot.
 func (wf *wfile) putLocked(ctx context.Context, idx int, sha string, data []byte) error {
 	staging, err := wf.ensureStagingLocked(ctx)
 	if err != nil {
 		return err
 	}
 	wf.mu.Unlock()
-	wf.fs.uploadSlots <- struct{}{}
 	err = wf.fs.door.PutChunk(ctx, staging, idx, sha, data)
-	<-wf.fs.uploadSlots
 	wf.mu.Lock()
 	if err != nil {
 		return err
@@ -736,6 +771,23 @@ func (wf *wfile) uploadLocked(ctx context.Context, c *wchunk, j int) error {
 	if !c.dirty || c.uploading || c.file == "" || c.dropped {
 		return nil
 	}
+	c.uploading = true
+	wf.uploads++
+	defer func() {
+		c.uploading = false
+		wf.uploads--
+		wf.cond.Broadcast()
+	}()
+	// The slot first, then the bytes: a writer far ahead of its uploads holds no more than the slots' worth of them.
+	wf.slotLocked()
+	defer func() { <-wf.fs.uploadSlots }()
+	if !c.dirty || c.file == "" || c.dropped {
+		return nil
+	}
+	j = indexOf(wf.chunks, c)
+	if j < 0 {
+		return nil
+	}
 	idx := wf.firstIdx + j
 	data := make([]byte, c.length)
 	if err := pread(c.file, data, 0); err != nil {
@@ -743,13 +795,7 @@ func (wf *wfile) uploadLocked(ctx context.Context, c *wchunk, j int) error {
 	}
 	sha := hexSHA(data)
 	ver := c.ver
-	c.uploading = true
-	wf.uploads++
-	err := wf.putLocked(ctx, idx, sha, data)
-	c.uploading = false
-	wf.uploads--
-	wf.cond.Broadcast()
-	if err != nil {
+	if err := wf.putLocked(ctx, idx, sha, data); err != nil {
 		return err
 	}
 	if c.ver == ver && wf.stillAt(idx-wf.firstIdx, c) {
@@ -959,7 +1005,10 @@ func (wf *wfile) sendChunksLocked(ctx context.Context) error {
 		}
 		if !wf.zeroStaged[c.length] {
 			length := c.length
-			if err := wf.putLocked(ctx, wf.firstIdx+j, zeroSHA(length), make([]byte, length)); err != nil {
+			wf.slotLocked()
+			err := wf.putLocked(ctx, wf.firstIdx+j, zeroSHA(length), make([]byte, length))
+			<-wf.fs.uploadSlots
+			if err != nil {
 				return err
 			}
 			wf.zeroStaged[length] = true

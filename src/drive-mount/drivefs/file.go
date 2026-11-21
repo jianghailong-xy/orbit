@@ -165,6 +165,10 @@ func (fs *FS) open(ctx context.Context, n *node, flags uint32, pid uint32, handl
 	if err != nil {
 		return fs.failed("open", fs.pathForLog(n.ino, ""), err)
 	}
+	if mode == modeNew || mode == modeTrunc {
+		// Bytes are coming: the staging they go into is opened meanwhile.
+		wf.openStagingSoon()
+	}
 	session, _ := fs.opts.Attributor.Session(pid)
 	if session != "" {
 		wf.mu.Lock()

@@ -722,7 +722,7 @@ func (fs *FS) Lookup(cancel <-chan struct{}, header *fuse.InHeader, name string,
 			out.SetEntryTimeout(negativeTTL)
 			return fuse.OK
 		}
-		return errno(err)
+		return fs.failed("lookup", fs.pathForLog(header.NodeId, name), err)
 	}
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
