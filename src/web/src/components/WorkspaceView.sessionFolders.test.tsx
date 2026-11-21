@@ -715,6 +715,27 @@ describe('dragging a row onto a folder', { timeout: 60_000 }, () => {
     expect(listRow('Pinned loose').getAttribute('draggable')).toBe('true');
   });
 
+  it('takes a project row out of the open folder when it is dropped on the page’s head', async () => {
+    rows = [
+      LOOSE,
+      row(925, 'Coordinates a project', { folderId: RELEASE.id, projectMembership: { projectId: pid(960), role: 'COORDINATOR' } }),
+      row(926, 'A task of a project', { folderId: RELEASE.id, projectMembership: { projectId: pid(960), role: 'TASK' } }),
+    ];
+    await mount(`/sessions/${LOOSE.id}`, () => expect(folderRow('Release')).toBeTruthy());
+    await click(folderRow('Release'), 'the Release folder row');
+    await until(() => expect(mounted().querySelector('.session-project-row'), 'the project row').toBeTruthy());
+    const project = mounted().querySelector('.session-project-row')!;
+    expect(project.getAttribute('draggable')).toBe('true');
+
+    const dt = transfer();
+    await drag('dragstart', project, dt);
+    expect(await drag('dragover', mounted().querySelector('.session-folder-back')!, dt)).toBe(true);
+    await drag('drop', mounted().querySelector('.session-folder-back')!, dt);
+    await settle();
+    expect(apiModule.moveSession).toHaveBeenCalledWith(pid(925), { folderId: null });
+    await until(() => expect(document.body.textContent).toContain('Moved out of “Release”'));
+  });
+
   it('draws no row draggable where there is nowhere to drop it', async () => {
     folders = [ELSEWHERE];
     await mount(`/sessions/${LOOSE.id}`, () => expect(sessionTitles()).toHaveLength(4));
