@@ -280,8 +280,10 @@ type Status struct {
 	SpoolBytes         int64      `json:"spoolBytes"`
 	SpoolPeakBytes     int64      `json:"spoolPeakBytes"`
 	Fenced             string     `json:"fenced,omitempty"`
-	ChangeFeedAt       *time.Time `json:"changeFeedAt,omitempty"`
-	UpdatedAt          time.Time  `json:"updatedAt"`
+	// Locks says how file locks are handled: negotiated with the kernel, so none is granted locally, and refused.
+	Locks        string     `json:"locks"`
+	ChangeFeedAt *time.Time `json:"changeFeedAt,omitempty"`
+	UpdatedAt    time.Time  `json:"updatedAt"`
 }
 
 // CurrentStatus is what status.json says now.
@@ -290,7 +292,8 @@ func (r *Reporter) CurrentStatus() Status {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	s := Status{Connected: r.connected && r.fenced == "", UncommittedHandles: r.dirty, UnsentFiles: unsent, Fenced: r.fenced,
-		SpoolBytes: r.spoolUsed, SpoolPeakBytes: r.spoolPeak, UpdatedAt: r.opts.Now().UTC()}
+		SpoolBytes: r.spoolUsed, SpoolPeakBytes: r.spoolPeak, UpdatedAt: r.opts.Now().UTC(),
+		Locks: "refused: flock and fcntl locks are passed to the drive, which answers ENOLCK (none is granted locally)"}
 	if !r.connected && !r.since.IsZero() {
 		t := r.since.UTC()
 		s.Since = &t

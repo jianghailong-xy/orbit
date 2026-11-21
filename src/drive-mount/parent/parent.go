@@ -89,6 +89,7 @@ func Run(ctx context.Context, cfg Config) error {
 		return err
 	}
 	who := newWhois(cfg.PodUID)
+	layers := 0
 	for attempt := 0; ; attempt++ {
 		d, err := start(ctx, &cfg, who)
 		if err != nil {
@@ -126,7 +127,14 @@ func Run(ctx context.Context, cfg Config) error {
 			_ = d.cmd.Process.Kill()
 			<-d.exited
 		}
-		detach(cfg.MountPoint())
+		// The dead mount stays until the new one is mounted over it: a caller meets ENOTCONN or the new drive, never
+		// the empty directory below (§5.9 row 53). Dead layers go when the drive is unmounted; a daemon that keeps
+		// dying starts over clean rather than pile them up.
+		layers++
+		if layers >= 16 {
+			detach(cfg.MountPoint())
+			layers = 0
+		}
 	}
 }
 
@@ -366,7 +374,7 @@ func abort(conn int) {
 
 // detach lazily unmounts every mount stacked at mp.
 func detach(mp string) {
-	for i := 0; i < 8 && mounted(mp); i++ {
+	for i := 0; i < 64 && mounted(mp); i++ {
 		if err := unix.Unmount(mp, unix.MNT_DETACH); err != nil {
 			return
 		}
