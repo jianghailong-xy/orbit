@@ -305,37 +305,33 @@ describe('a session event reads only the views that can show that session', () =
     expect(new Set(made)).toEqual(new Set(['activeTasks', 'activeTasksP1', 'completedA', 'taskCounts']));
   });
 
-  it('the open owner requests follow every session event; the whole history only a request coming or going', async () => {
+  it('the open owner requests follow only owner_requests.changed; the whole history only a request coming or going', async () => {
     const client = await mount();
     await onScreen(client, ['ownerRequestsOpen', 'ownerRequests']);
     await openStream(true);
     h.asked = [];
 
-    // 3 s of other sessions' turns: the open list (small) once a window, the history (52 kB) never.
+    // 3 s of other sessions' turns: neither the open list nor the history is read.
     for (let i = 0; i < 30; i += 1) {
       await sessionEvent('session.updated', i % 2 ? 'S1' : 'S9', i % 2 ? 'A' : 'B');
       await advance(100);
     }
     await advance(1_000);
-    const made = reads();
-    expect(new Set(made)).toEqual(new Set(['ownerRequestsOpen']));
-    const open = made.filter((view) => view === 'ownerRequestsOpen').length;
-    expect(open).toBeGreaterThanOrEqual(1);
-    expect(open).toBeLessThanOrEqual(3);
+    expect(reads().filter((view) => view.startsWith('ownerRequests'))).toEqual([]);
 
-    // S5 files a request: the server publishes S5's session.updated. The open list is read in that window, shows the
-    // new request, and the history is read once after it.
+    // S5 files a request: the server says so. The open list is read once, shows the new request, and the history
+    // is read once after it.
     h.asked = [];
     h.openRequests = [...h.openRequests, { id: 'q2', state: 'PENDING', askedBySessionId: 'S5' }];
-    await sessionEvent('session.updated', 'S5', 'A');
-    await sessionEvent('session.updated', 'S5', 'A');
+    await publish('owner_requests.changed', '', null, { version: 'r2' });
+    await publish('owner_requests.changed', '', null, { version: 'r3' });
     await advance(1_000);
     expect(reads().filter((view) => view.startsWith('ownerRequests'))).toEqual(['ownerRequests', 'ownerRequestsOpen']);
 
-    // The owner answers it elsewhere: S5's session.updated again, and the request leaves the open list.
+    // The owner answers it elsewhere: the request leaves the open list.
     h.asked = [];
     h.openRequests = h.openRequests.filter((request) => request.id !== 'q2');
-    await sessionEvent('session.updated', 'S5', 'A');
+    await publish('owner_requests.changed', '', null, { version: 'r4' });
     await advance(1_000);
     expect(reads().filter((view) => view.startsWith('ownerRequests'))).toEqual(['ownerRequests', 'ownerRequestsOpen']);
   });

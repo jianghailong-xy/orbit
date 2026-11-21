@@ -75,7 +75,7 @@ const isOpenList = (queryKey: readonly unknown[]): boolean =>
 
 /** Every entity a control-plane event can move, as the query declarations name them. Used by the
  *  reconnect's sweep, which has to reach all of them at once. */
-const ENTITIES = ['task', 'session', 'project', 'workspace', 'checkout', 'tag', 'folder', 'provider', 'watch', 'wiki', 'terminal'] as const;
+const ENTITIES = ['task', 'session', 'project', 'workspace', 'checkout', 'tag', 'folder', 'provider', 'watch', 'wiki', 'terminal', 'ownerRequest'] as const;
 
 /**
  * Whether a cached query says, in `meta.entities`, that it derives from one of `entities`. Every
@@ -245,7 +245,26 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     const refetchOpenList = (): void => {
       if (!hinted) return;
       refresh({ predicate: ({ queryKey }) => isOpenList(queryKey) });
+    };
+    // The sidebar's tallies (queries.ts workspaceSessionCountsQuery), read when an event can have moved one: a session
+    // made, ended or deleted, an approval asked or answered, a background job reporting, or a summary that says a
+    // different state or workspace than that session's last. Anything else leaves them to the safety read.
+    const refetchCounts = (): void => {
       refresh({ queryKey: ['session-counts'] });
+    };
+    // What each session's last summary said of what the tallies count.
+    const tallied = new Map<string, string>();
+    const countsMoved = (type: string, sessionId: string, data: EventData, workspaceId: string): boolean => {
+      if (type === 'session.ended' || type.startsWith('approval.') || type === 'background.task') {
+        if (sessionId) tallied.delete(sessionId);
+        return true;
+      }
+      if ((type !== 'session.updated' && type !== 'session.created') || !sessionId) return false;
+      const summary = data as { status?: unknown; runState?: unknown; lifecycleState?: unknown; pendingApprovals?: unknown } | null | undefined;
+      const signature = JSON.stringify([workspaceId, summary?.status, summary?.runState, summary?.lifecycleState, summary?.pendingApprovals]);
+      const before = tallied.get(sessionId);
+      tallied.set(sessionId, signature);
+      return type === 'session.created' || before !== signature;
     };
     // The project pages on screen: the events below name the project, or ('') every project, and
     // the entities they say moved. Which of a page's reads that dirties is their own declaration —
@@ -311,9 +330,6 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       if (root === 'watches') return true;
       // The lists index: its own longer floor, refetchTaskLists.
       if (root === 'task-lists') return true;
-      // The sidebar's tallies: once the hint drives the Open lists, it reads them too
-      // (refetchOpenList), so an event's path must not ask for them a second time.
-      if (root === 'session-counts' && hinted) return true;
       // An evidence revision: an answered revision never changes.
       if (root === 'task-evidence') return true;
       // A search is a snapshot of a moving list, asked when its query changes and held for a
@@ -513,6 +529,8 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       // The owner's terminals: one asked to be approved, a request was decided or collected, or one was revoked
       // (`terminals.changed`). The approve card and Settings → Terminals both declare `terminal`.
       if (type === 'terminals.changed') return ['terminal'];
+      // A request was filed, answered, expired or withdrawn: the open list's nudge (`hints=owner_requests`).
+      if (type === 'owner_requests.changed') return ['ownerRequest'];
       // A session's state, its approvals, and a background job of its ending, which moves its row's
       // job mark and its workspace's tally.
       if (type.startsWith('session.') || type.startsWith('approval.') || type === 'background.task') {
@@ -527,7 +545,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     // session behind it (refetchEntities).
     const pendingSubjects = new Map<string, SessionSubject>();
     let pendingAnySession = false;
-    const pendingFlags = new Set<'openList' | 'watches'>();
+    const pendingFlags = new Set<'openList' | 'watches' | 'counts'>();
     const pendingSessions = new Set<string>();
     const pendingProjects = new Set<string>();
     const openWindow = (): void => {
@@ -541,6 +559,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
         if (pending.has('project')) refetchProjects();
         if (pending.has('watch') || pendingFlags.has('watches')) refetchWatches();
         if (pendingFlags.has('openList')) refetchOpenList();
+        if (pendingFlags.has('counts')) refetchCounts();
         for (const id of pendingSessions) refetchSessionDetail(id);
         for (const id of pendingProjects) refetchCriteriaDecisions(id);
         pending.clear();
@@ -613,6 +632,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
           pendingAnySession = true;
         }
       }
+      if (countsMoved(type, sessionId, data, workspaceId)) pendingFlags.add('counts');
       if (watchFollows(type, sessionId, data)) pendingFlags.add('watches');
       // Only the `session.*` family: those are the events that can move a session's run state,
       // and so the ones a frozen detail has to be corrected by. An approval or a background task
@@ -632,6 +652,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       pendingAnySession = true;
       // The server's hint for the write joins this read in the window.
       pendingFlags.add('openList');
+      pendingFlags.add('counts');
       openWindow();
     };
     // What a stream that opened after a gap reads again (W6): every cached read that declares a
@@ -683,7 +704,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       hinted = false;
       lastMsgAt = Date.now();
       // `hints=list_changed` asks for the Open list's hint (docs/realtime-control-plane-stream.md §4.8).
-      es = new EventSource(`/api/events?access_token=${encodeURIComponent(getToken() ?? '')}&hints=list_changed`);
+      es = new EventSource(`/api/events?access_token=${encodeURIComponent(getToken() ?? '')}&hints=list_changed,owner_requests`);
       es.onopen = () => {
         lastMsgAt = Date.now();
         setLive(true);
