@@ -6,9 +6,14 @@ import { MANAGED_RUNNER_COPY, MANAGED_RUNNER_REPOS_ROOT, managedSetupState, type
 import { githubIntegrationQuery } from '../lib/githubIntegration';
 import { encodeId } from '../lib/idCodec';
 import type { ManagedRunner } from '../lib/managedRunner';
+import { useClaudeHistory } from '../lib/claudeHistoryImport';
 import {
   answersDirProbe,
+  folderName,
+  folderPathPick,
+  folderVerdict,
   homeShortPath,
+  isFolderPath,
   isConnecting,
   isValidNewFolder,
   makesNewFolders,
@@ -42,15 +47,19 @@ import {
   setupChecking,
   setupConnectingCreate,
   setupCreateFailed,
+  setupFolderOrPathHint,
   setupGithubDonePath,
   setupNeedsUpdate,
   setupNewWorkspaceLead,
   setupNewWorkspaceTitle,
   setupNoAnswer,
   setupOfflineCreate,
+  setupPathUnchecked,
   setupUpdatingCreate,
 } from '../lib/machineSetupCopy';
+import type { ClaudeHistoryResult } from '../api';
 import type { ProviderChoice } from '../lib/sessionProviderChoices';
+import { ClaudeHistoryOffer, type ImportMode } from './ClaudeHistoryOffer';
 import { useDirProbe } from '../lib/useDirProbe';
 import { GithubFolderOption, takeGithubReturn } from './GithubFolderOption';
 import { probeReportsSignedIn } from './RunnerSignIn';
@@ -98,6 +107,9 @@ function NoAnswer({ machine, onAgain }: { machine: string; onAgain: () => void }
   );
 }
 
+/** The Claude Code history an existing folder holds, and how much of it to bring into the new workspace. */
+export type HistoryChoice = { history: ClaudeHistoryResult; mode: Exclude<ImportMode, 'none'> };
+
 /** What is typed, once the typing has stopped for a moment: what the machine is asked about. */
 function useSettled(value: string): string {
   const [settled, setSettled] = useState('');
@@ -121,6 +133,10 @@ function useSettled(value: string): string {
  * repository is cloned into the Repos Folder (`repo → ~/orbit-repos/<name>`), and the Name follows its folder as it
  * follows a typed one.
  *
+ * Settings → New workspace shows this same card, without its head (docs/mocks/new-workspace-form, decision 1 A). The
+ * field also takes a full path (`/srv/app`, `~/code/app`), which must already be there (decision 2 A); an existing
+ * folder with Claude Code history offers to import it, as Settings' form did.
+ *
  * The account's managed runner while it is being set up or asleep (docs/managed-runner-no-default-workspace.md) is
  * not offline here: it cannot check the folder, so the name goes unchecked, and the workspace is made all the same.
  */
@@ -131,18 +147,22 @@ export function MachineSetupCard({
   creating,
   createError,
   welcome,
+  headless,
 }: {
   runner: Runner;
   /** The account's managed runner, read once for the whole page: how the card treats this runner if it is that one. */
   managed?: ManagedRunner | null;
-  /** Make the workspace in this folder, under this name. */
-  onCreate: (folder: PickedFolder, name: string) => void;
+  /** Make the workspace in this folder, under this name, and bring in the folder's history if one was picked. */
+  onCreate: (folder: PickedFolder, name: string, history: HistoryChoice | null) => void;
   /** The workspace is being made: the fields and the button wait. */
   creating: boolean;
   /** Why the last Create workspace was refused, said on the card until the next try. */
   createError: string | null;
   /** A new account's first machine (docs/mocks/new-user-onboarding): the card greets it. */
   welcome?: boolean;
+  /** Settings → New workspace: its page header names the machine, so the card draws no head of its own, and its
+   *  folder hint says a full path is taken too (the machine page's card keeps the hint the native cards share). */
+  headless?: boolean;
 }) {
   // Orbit Cloud for the account's managed runner (machineName).
   const machineNameOf = useMachineName();
@@ -158,17 +178,22 @@ export function MachineSetupCard({
   const [typed, setTyped] = useState('');
   const folder = typed.trim();
   const settled = useSettled(folder);
-  // The name is asked about where it would go: a folder, or a file, may be there already.
-  const probe = useDirProbe(
-    runner.id,
-    !managedState && !disabled && isValidNewFolder(settled) ? newFolderPath(root, settled) : undefined,
-    true,
-  );
+  // A full path is asked about as typed; a name, where it would go: a folder, or a file, may be there already.
+  const fullPath = isFolderPath(folder);
+  const asked = isFolderPath(settled) ? settled : isValidNewFolder(settled) ? newFolderPath(root, settled) : undefined;
+  const probe = useDirProbe(runner.id, !managedState && !disabled ? asked : undefined, true);
   const found = settled === folder && probe.state === 'answered' ? probe.probe : null;
-  const verdict = found ? newFolderVerdict(found, machine) : null;
+  const verdict = found ? (fullPath ? folderVerdict(found, machine) : newFolderVerdict(found, machine)) : null;
+  // A managed runner that isn't up makes a named folder unchecked, but a full path is only taken once it's checked.
   const typedPick: PickedFolder | null = managedState
-    ? isValidNewFolder(folder) ? { kind: 'new', name: folder, path: newFolderPath(root, folder) } : null
-    : found && isValidNewFolder(folder) ? newFolderPick(found, folder, root, machine) : null;
+    ? !fullPath && isValidNewFolder(folder) ? { kind: 'new', name: folder, path: newFolderPath(root, folder) } : null
+    : !found
+      ? null
+      : fullPath
+        ? folderPathPick(found, machine)
+        : isValidNewFolder(folder)
+          ? newFolderPick(found, folder, root, machine)
+          : null;
 
   // From GitHub: offered only where the deployment has a GitHub App. A card come back from GitHub's sign-in opens on it.
   const github = useQuery(githubIntegrationQuery());
@@ -182,14 +207,20 @@ export function MachineSetupCard({
 
   // The workspace's name: the folder's until it is edited, and from then on what was typed, empty included.
   const [editedName, setEditedName] = useState<string | null>(null);
-  const followed = fromGithub ? (repository?.kind === 'github' ? repository.name : '') : folder;
+  const followed = fromGithub ? (repository?.kind === 'github' ? repository.name : '') : fullPath ? folderName(folder) : folder;
   const shownName = editedName ?? followed;
   const name = shownName.trim();
   const nameMissing = editedName !== null && !name;
 
+  // A folder already there may hold Claude Code history: offered under the name, imported once the workspace is made.
+  const existingPath = candidate?.kind === 'existing' ? candidate.path : '';
+  const history = useClaudeHistory(runner.id, existingPath, !!existingPath);
+  const [importMode, setImportMode] = useState<ImportMode>('none');
+  useEffect(() => setImportMode('none'), [history]);
+
   const canCreate = !!candidate && !!name && !locked && !creating;
   const create = () => {
-    if (canCreate && candidate) onCreate(candidate, name);
+    if (canCreate && candidate) onCreate(candidate, name, history && importMode !== 'none' ? { history, mode: importMode } : null);
   };
   const onFieldKey = (e: KeyboardEvent) => {
     if (e.key === 'Enter') create();
@@ -197,7 +228,7 @@ export function MachineSetupCard({
 
   return (
     <div className="msc">
-      {welcome ? (
+      {headless ? null : welcome ? (
         <WelcomeHead />
       ) : (
         <div className="msc-head">
@@ -278,7 +309,7 @@ export function MachineSetupCard({
             <Input
               className="msc-input"
               size="small"
-              prefix={<span className="msc-prefix">{newFolderPath(root, '')}</span>}
+              prefix={fullPath ? undefined : <span className="msc-prefix">{newFolderPath(root, '')}</span>}
               placeholder={SETUP_NEW_FOLDER_NAME}
               aria-label={SETUP_FOLDER}
               value={typed}
@@ -287,20 +318,22 @@ export function MachineSetupCard({
               spellCheck={false}
               onChange={(e) => setTyped(e.target.value)}
               onKeyDown={onFieldKey}
-              invalid={!!folder && !isValidNewFolder(folder)}
+              invalid={!!folder && !fullPath && !isValidNewFolder(folder)}
             />
             <div className="msc-line">
               {createError ? (
                 <span className="msc-verdict bad">{setupCreateFailed(createError)}</span>
               ) : !folder ? (
-                <span className="msc-meta">{SETUP_FOLDER_HINT}</span>
-              ) : !isValidNewFolder(folder) ? (
+                <span className="msc-meta">{headless ? setupFolderOrPathHint(root.replace(/[/\\]+$/, '')) : SETUP_FOLDER_HINT}</span>
+              ) : !fullPath && !isValidNewFolder(folder) ? (
                 <span className="msc-verdict bad">{SETUP_NEW_FOLDER_INVALID}</span>
+              ) : managedState && fullPath ? (
+                <span className="msc-meta">{setupPathUnchecked(machine)}</span>
               ) : managedState ? (
                 <span className="msc-meta">{MANAGED_RUNNER_COPY.setup.folderUnchecked[managedState]}</span>
               ) : verdict ? (
-                // Nothing there yet reads as a note; anything there, or a check that failed, says what it is.
-                found?.exists || found?.error ? (
+                // Nothing there yet reads as a note; anything there, a check that failed, or a full path, says what it is.
+                fullPath || found?.exists || found?.error ? (
                   <span className={`msc-verdict ${verdict.tone}`}>{verdict.text}</span>
                 ) : (
                   <span className="msc-meta">{SETUP_NEW_FOLDER_WITH_WORKSPACE}</span>
@@ -340,6 +373,12 @@ export function MachineSetupCard({
             )}
           </div>
         </div>
+
+        {history && !fromGithub && (
+          <div className="msc-field" data-field="history">
+            <ClaudeHistoryOffer history={history} value={importMode} onChange={setImportMode} />
+          </div>
+        )}
 
         {offersGithub && !fromGithub && (
           <div className="msc-field" data-field="github">

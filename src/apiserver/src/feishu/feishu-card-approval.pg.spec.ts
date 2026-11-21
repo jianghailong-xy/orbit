@@ -14,6 +14,9 @@
  *       app, open_id and message_id); the card's row is CLOSED, and nothing PATCHes it after;
  *   (2) what the runner gets is what a decision through the web app's route gives it, id aside;
  *   (3) Deny: the long poll gets deny, recorded as FEISHU;
+ *   (3b) Show Orbit in Feishu switched off through PATCH /api/integrations/feishu (§15.2): the next approval's card, as
+ *       Feishu receives it, has no Open in Orbit and no Orbit URL, and still Allow once and Deny; its click is answered
+ *       as in (1) and the settled card carries no link either;
  *   (4) a click that carries "always allow" (`rememberRules`) is refused with a toast and writes nothing: the
  *       approval stays PENDING, no standing grant is made — the write trap sees only the inbox's own record;
  *   (5) the same click's event handled a second time decides nothing more: one decision, its time unchanged, one
@@ -34,6 +37,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 
 import { JwtService } from '@nestjs/jwt';
 import { type PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { call, startApiserver, type Apiserver } from '../auth/pat-test-apiserver';
@@ -210,7 +214,8 @@ test('Feishu: the owner answers a tool approval on its card — Allow once and D
     assert.equal(c.answer.card?.type, 'raw');
     const drawn = c.answer.card.data;
     assert.deepEqual(callbacks(drawn), [], 'the card is drawn with no button');
-    assert.match(allText(drawn), /Allowed in Orbit · \d\d:\d\d UTC/);
+    assert.match(allText(drawn), /Allowed in Feishu · \d\d:\d\d UTC/, 'clicked in Feishu, so it says Feishu');
+    assert.doesNotMatch(JSON.stringify(drawn), /needs? your reply/i, 'a settled card asks for nothing');
     const decision = await waiting;
     assert.equal(decision.status, 200, decision.text);
     assert.equal(decision.json.behavior, 'allow');
@@ -248,7 +253,8 @@ test('Feishu: the owner answers a tool approval on its card — Allow once and D
     const waiting = poll(s, approvalId);
     const c = await click(messageId, callbacks(card)[1]!);
     assert.deepEqual(c.answer.toast, { type: 'success', content: 'Denied.' });
-    assert.match(allText(c.answer.card.data), /Denied in Orbit/);
+    assert.match(allText(c.answer.card.data), /Denied in Feishu · \d\d:\d\d UTC/);
+    assert.doesNotMatch(JSON.stringify(c.answer.card.data), /needs? your reply/i);
     const decision = await waiting;
     assert.equal(decision.json.behavior, 'deny');
     assert.equal(decision.json.status, 'DENIED');
@@ -260,6 +266,40 @@ test('Feishu: the owner answers a tool approval on its card — Allow once and D
     assert.equal(activity.length, 1);
     assert.equal(activity[0]!.credentialKind, 'FEISHU');
     assert.deepEqual(activity[0]!.payload, { sessionId: s, approvalId, behavior: 'deny', appId: X.appId, openId: ALICE, messageId });
+  });
+
+  await t.test('(3b) Show Orbit in Feishu off through PATCH: the real alert card has no Open in Orbit and no Orbit URL, and still answers', async () => {
+    // On, as every app was: the card's Open in Orbit is where the session lives, the Orbit URL this case looks for.
+    const before = await ask(await session('Before the switch'));
+    const [orbitUrl] = tagged(before.card, 'button').flatMap((b) => (b.behaviors as Json[]).filter((x) => x.type === 'open_url').map((x) => x.default_url as string));
+    assert.ok(orbitUrl, 'on: the card has Open in Orbit');
+    const origin = new URL(orbitUrl!).origin;
+    await db.approval.update({ where: { id: before.approvalId }, data: { status: 'DENIED', decidedAt: new Date() } });
+
+    const off = await call(server!, 'PATCH', '/api/integrations/feishu', bearer, { showOrbit: false });
+    assert.equal(off.status, 200, off.text);
+    assert.equal(off.json.app.showOrbit, false);
+    assert.equal((await call(server!, 'GET', '/api/integrations/feishu', bearer)).json.app.showOrbit, false, 'GET reads it back');
+
+    const s = await session('After the switch');
+    const { approvalId, messageId, card } = await ask(s);
+    const sent = allText(card);
+    assert.ok(!sent.includes('Open in Orbit'), 'no Open in Orbit');
+    assert.ok(!sent.includes('open_url'), 'no link button');
+    assert.ok(!sent.includes(origin), `no Orbit URL (${origin})`);
+    assert.ok(!sent.includes(uuidToBase62(s)), "not even the session's address");
+    assert.deepEqual(callbacks(card).map((b) => b.action), ['approval.allow', 'approval.deny'], 'Allow once and Deny stay');
+
+    const waiting = poll(s, approvalId);
+    const c = await click(messageId, callbacks(card)[0]!);
+    assert.deepEqual(c.answer.toast, { type: 'success', content: 'Allowed.' });
+    const drawn = allText(c.answer.card.data);
+    assert.match(drawn, /Allowed( in \w+)? · \d\d:\d\d UTC/);
+    assert.ok(!drawn.includes('Open in Orbit') && !drawn.includes(origin), 'the settled card carries no Orbit link either');
+    assert.equal((await waiting).json.behavior, 'allow');
+
+    const on = await call(server!, 'PATCH', '/api/integrations/feishu', bearer, { showOrbit: true });
+    assert.equal(on.json.app.showOrbit, true);
   });
 
   // ── the write trap, for what a refused click may write: the inbox's own record of it, and nothing else ───────────
@@ -342,7 +382,7 @@ test('Feishu: the owner answers a tool approval on its card — Allow once and D
     const c = await click(answered.messageId, callbacks(answered.card)[0]!);
     assert.deepEqual(c.answer.toast, { type: 'info', content: STALE });
     assert.deepEqual(callbacks(c.answer.card.data), []);
-    assert.match(allText(c.answer.card.data), /Denied in Orbit/);
+    assert.match(allText(c.answer.card.data), /Denied in Orbit · \d\d:\d\d UTC/, 'answered in the web app, so it says Orbit');
     const row = await approvalRow(answered.approvalId);
     assert.equal(row.status, 'DENIED', 'left as it was');
     assert.equal(row.decidedCredentialKind, null);
@@ -392,7 +432,7 @@ test('Feishu: the owner answers a tool approval on its card — Allow once and D
 
   await t.test('(8) an answer later than the budget: "Working…", then the card once through the update token', async () => {
     const prisma = db as unknown as PrismaService;
-    const router = new FeishuRouter(prisma, {} as FeishuOwnerService, {} as FeishuChatRouteService, { handleCardAction: async () => null } as unknown as FeishuDirectService, {} as FeishuGroupService);
+    const router = new FeishuRouter(prisma, {} as FeishuOwnerService, {} as FeishuChatRouteService, { handleCardAction: async () => null } as unknown as FeishuDirectService, {} as FeishuGroupService, {} as FeishuOutbound);
     const transport = new FeishuTransport(prisma, new FeishuAppService(prisma), new FeishuOutbound());
     const actions = new FeishuCardActions(prisma, router, {} as SessionsService, transport, new FeishuOutbound());
     const lateCard = { schema: '2.0', header: { title: { tag: 'plain_text', content: 'late' } } };

@@ -41,6 +41,7 @@ fun NewSessionComposer(
     data: DirectoryData,
     open: (OrbitRoute) -> Unit,
     land: (String, OrbitRoute) -> Unit = { _, next -> open(next) },
+    replace: (OrbitRoute) -> Unit = open,
 ) {
     val workspaceId = route.workspaceId
     if (workspaceId == null) {
@@ -68,7 +69,8 @@ fun NewSessionComposer(
     }
     LaunchedEffect(state.draft.createdSessionId, state.acknowledgementPending) {
         state.draft.createdSessionId?.takeUnless { state.acknowledgementPending }?.let { id ->
-            open(OrbitRoute(Destination.SESSION, id, workspaceId = workspaceId, origin = route.origin))
+            // The draft's page becomes the session's, as on iOS (`openCreatedAgentSession`): Back leaves for the page under it.
+            replace(OrbitRoute(Destination.SESSION, id, workspaceId = workspaceId, origin = route.origin))
             model.consumeCreated()
         }
     }
@@ -117,8 +119,10 @@ fun NewSessionComposer(
             val session = current?.let { SessionState(target.key, snapshot = SessionSnapshot(it, emptyList(), emptyList(), emptyList(), emptyMap()), fresh = fresh) }
             // The managed runner asleep is no fault: sending wakes it, and the composer says so (the shared composer line).
             ManagedRunnerAsleepLine(detail?.text("runnerId"), LocalManagedRunnerStatus.current)
+            // The page opens with the box focused and the keyboard up, as iOS's draft does (`focusesComposer`): asked for once the
+            // draft is restored, since the box can't take the focus before (it is disabled until then).
             Box(Modifier.heightIn(max = composerHeight)) {
-                SessionComposer(app, handle, target.key, session, target, openRunner = openRunner)
+                SessionComposer(app, handle, target.key, session, target, focusRequest = if (state.loaded) 1 else 0, openRunner = openRunner)
             }
         }
     }
@@ -126,7 +130,8 @@ fun NewSessionComposer(
 
 /**
  * A machine with no workspace (owner 2026-11-16, docs/mocks/new-folder-in-home/workspace-card-with-name): its page is the setup card
- * alone, which makes the workspace with `POST /workspaces`, and then moves on to the new workspace's new session page.
+ * alone, which makes the workspace with `POST /workspaces`, and then moves on to the new workspace's new session page. Opened as New
+ * workspace on a machine that has one ([addsWorkspace]), the same card makes one more.
  */
 @Composable
 private fun MachineDraftComposer(
@@ -162,8 +167,11 @@ private fun MachineDraftComposer(
     }
 
     val online = runner != null && !RunnerPage.isOffline(runner, nowMs)
+    // Opened as New workspace on a machine that has one (docs/mocks/new-workspace-form/02-apple-entry): the page makes one more, so it
+    // neither moves on to the first nor greets a new account.
+    val addsWorkspace = route.addsWorkspace
     val existingWorkspace = data.workspaces.firstOrNull { ObjectId.same(it.runnerId, runnerId) }
-    val bare = data.ready && existingWorkspace == null
+    val bare = data.ready && existingWorkspace == null && !addsWorkspace
     // A new account's first machine: the setup card greets it (docs/mocks/new-user-onboarding).
     val machineWelcome = rememberNewAccount(managementApi, bare) && bare
     val welcomeName = rememberAccountName(managementApi, machineWelcome)
@@ -171,7 +179,7 @@ private fun MachineDraftComposer(
     // The machine has a workspace (made here, or elsewhere meanwhile): on to its new session page.
     LaunchedEffect(existingWorkspace?.id, creating) {
         val ws = existingWorkspace ?: return@LaunchedEffect
-        if (creating) return@LaunchedEffect
+        if (creating || addsWorkspace) return@LaunchedEffect
         land(ws.id, OrbitRoute(Destination.DRAFT, workspaceId = ws.id, origin = route.origin))
     }
 
@@ -212,6 +220,7 @@ private fun MachineDraftComposer(
                 welcomeName = welcomeName,
                 github = remember(managementApi) { ManagementGithub(managementApi) },
                 onOpenGithubSettings = { open(OrbitRoute(Destination.SETTINGS, "github")) },
+                addsWorkspace = addsWorkspace,
             )
         } else if (data.ready) {
             Text("This runner is no longer on your account.", color = MaterialTheme.colorScheme.onSurfaceVariant)

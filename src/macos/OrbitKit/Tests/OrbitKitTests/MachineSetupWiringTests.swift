@@ -135,7 +135,7 @@ final class MachineSetupWiringTests: XCTestCase {
     func testThePageIsTheCardAlone() throws {
         let page = try app("Views/MachineSetupCard.swift")
         let content = try slice(page, from: "private struct MachineDraftContent: View {", to: "private struct MachineSetupCard: View {")
-        XCTAssertTrue(content.contains("MachineSetupCard(setup: setup, welcome: welcome)"))
+        XCTAssertTrue(content.contains("MachineSetupCard(setup: setup, welcome: welcome, addsWorkspace: addsWorkspace)"))
         for gone in ["ComposerView", "ComposerBand", "HeldFirstMessageView", "WelcomeExamplesStep"] {
             XCTAssertFalse(content.contains(gone), "the page still draws \(gone)")
         }
@@ -179,7 +179,8 @@ final class MachineSetupWiringTests: XCTestCase {
                                    "MachineSetupCopy.setupNeedsUpdate(machine: machine)"],
                           "connecting before offline, and only a machine that is here is said to update itself")
         let loop = try slice(page, from: ".task(id: runnerID) {", to: ".onChange(of: runner, initial: true)")
-        XCTAssertTrue(loop.contains("try? await Task.sleep(for: .seconds(MachineSetup.refreshSeconds(for: runner)))"))
+        XCTAssertTrue(loop.contains("await VisibilityGate.app.pause(MachineSetup.refreshSeconds(for: runner))"),
+                      "its own beat, and none while the app cannot be seen")
         XCTAssertFalse(loop.contains(".seconds(5)"), "a fixed beat would hold a connecting machine's folder step back")
     }
 
@@ -191,17 +192,16 @@ final class MachineSetupWiringTests: XCTestCase {
         XCTAssertTrue(card.contains("private var root: String { MachineSetup.setupFolderRoot(runner, managedState: managedState) }"))
         XCTAssertTrue(card.contains("private var disabled: Bool { managedState == nil && (offline || !checksFolders) }"),
                       "a machine that can't make a folder can't be typed into")
-        try assertInOrder(card, ["guard managedState == nil, !disabled, MachineSetup.isValidNewFolder(folder) else { return nil }",
-                                 "return MachineSetup.newFolderPath(root: root, name: folder)"],
-                          "the name's question")
+        XCTAssertTrue(card.contains("MachineSetup.folderQuestion(folder: folder, root: root, canAsk: managedState == nil && !disabled)"),
+                      "a name's question, or a full path's as typed")
         try assertInOrder(card, ["guard let answer, let question, answer.path == question else { return nil }",
                                  "case .answered(let probe)? = current",
-                                 "MachineSetup.newFolderPick(found, name: folder, root: root, machine: machine)",
+                                 "MachineSetup.typedPick(folder: folder, found: found, root: root, machine: machine, managedState: managedState)",
                                  "MachineSetup.canCreate(pick: candidate, name: setup.name.name(folder: followed), online: !offline,"],
                           "the folder is picked on the machine's answer to this name")
         try assertInOrder(card, [".task(id: Question(path: question, attempt: attempt)) {",
                                  "await app.probeDir(runnerID: runner.id, path: asked, ask: true)",
-                                 "Text(MachineSetup.newFolderPath(root: root, name: \"\"))",
+                                 "if !fullPath {", "Text(MachineSetup.newFolderPath(root: root, name: \"\"))",
                                  ".onSubmit { create() }", ".accessibilityLabel(MachineSetupCopy.SETUP_FOLDER)",
                                  ".disabled(disabled || setup.creating)",
                                  "MachineSetup.folderLine(folder: folder, createError: setup.createError, found: found,",
@@ -248,6 +248,48 @@ final class MachineSetupWiringTests: XCTestCase {
         XCTAssertTrue(model.contains("var githubOpen = false"), "kept with the page, so GitHub's sign-in comes back to it")
         try assertInOrder(model, ["var followed: String {", "if case .github(let pick)? = repository { return pick.name }",
                                   "name: name.name(folder: followed)"], "the Name follows the picked repository's folder")
+    }
+
+    // MARK: New workspace on a machine that has one (docs/mocks/new-workspace-form/02-apple-entry, owner A)
+
+    /// The + on the Workspaces group, in the phone's drawer and the Mac's sidebar, and a row at the end of the machine
+    /// page's Workspaces: all three open the machine's page as New workspace.
+    func testNewWorkspaceIsTheGroupsPlusAndTheMachinePagesRow() throws {
+        let drawer = try slice(try app("Views/CompactShell.swift"), from: "private var workspacesHeader: some View {", to: "\n    }\n")
+        try assertInOrder(drawer, ["Text(AppSection.agents.title)",
+                                   "NewWorkspaceButton(machines: model.agents?.newWorkspaceMachines ?? []) { runnerID in",
+                                   "model.openNewWorkspace(runnerID)", "close()"], "the drawer's +")
+        let sidebar = try slice(try app("Views/MainView.swift"), from: "Section(isExpanded: $workspacesExpanded) {", to: "if !projects.isEmpty {")
+        try assertInOrder(sidebar, ["workspaceRows(", "} header: {", "Text(AppSection.agents.title)",
+                                    "NewWorkspaceButton(machines: model.agents?.newWorkspaceMachines ?? []) { model.openNewWorkspace($0) }"],
+                          "the sidebar's +")
+        let page = try slice(try app("Views/SkillsRunnersView.swift"), from: "private func workspacesSection(", to: "} header: {")
+        try assertInOrder(page, ["ForEach(workspaces)", "if !workspaces.isEmpty {", "Button { newWorkspace() }",
+                                 "NewWorkspaceCopy.NEW_WORKSPACE"], "the machine page's row, after its workspaces")
+        XCTAssertTrue(try app("Views/SkillsRunnersView.swift").contains("model.openNewWorkspace(runner.id)"))
+        let button = try app("Views/NewWorkspaceButton.swift")
+        try assertInOrder(button, ["if machines.count == 1, let only = machines.first {", "open(only.id)", "Menu {",
+                                   "NewWorkspaceCopy.NEW_WORKSPACE_ON", "ForEach(machines)", "open(machine.id)"],
+                          "one machine goes straight to its page, more are a menu")
+    }
+
+    /// The page opened as New workspace makes one more: it doesn't move on to the first, its hint says a full path,
+    /// the phone's card has no head under a title bar naming the machine, and Create opens the new workspace.
+    func testThePageOpenedAsNewWorkspaceMakesOneMore() throws {
+        let model = try app("AppModel.swift")
+        let open = try slice(model, from: "func openNewWorkspace(_ runnerID: String) {", to: "\n    }\n")
+        try assertInOrder(open, ["settingsPresented = false", "if agents?.firstWorkspace(onRunner: runnerID) != nil {",
+                                 "newWorkspaceRunners.insert(key)", "newWorkspaceRunners.remove(key)", "openMachineDraft(runnerID)"],
+                          "a machine with a workspace is marked; one without gets its Set up page")
+        let moved = try slice(model, from: "func machineGotWorkspace(", to: "\n    }\n")
+        XCTAssertTrue(moved.contains("!addsWorkspace(on: runnerID)"), "New workspace doesn't move on to the first")
+        let page = try app("Views/MachineSetupCard.swift")
+        XCTAssertTrue(page.contains("guard !addsWorkspace, app.agents?.firstWorkspace(onRunner: runnerID) != nil else { return false }"))
+        XCTAssertTrue(page.contains("Text(addsWorkspace ? NewWorkspaceCopy.NEW_WORKSPACE : MachineSetupCopy.SETUP_PAGE_TITLE)"))
+        XCTAssertTrue(page.contains("pathHintRoot: addsWorkspace ? root : nil"))
+        try assertInOrder(page, ["private var headless: Bool {", "#if os(iOS)", "addsWorkspace", "#else", "false"],
+                          "headless only under the phone's title bar")
+        XCTAssertTrue(page.contains("if welcome { WelcomeHead() } else if !headless { head }"))
     }
 
     // MARK: the line a created workspace opens with

@@ -14,6 +14,7 @@ import {
   deriveSessionState,
 } from '@orbit/shared';
 import { runnerIsOnline, type RunnerBeats } from '../runners/runner-presence';
+import { RELEASED_SESSION_STATUSES } from '../common/session-release';
 
 /** The raw fields required to augment a Prisma/API session row. */
 export interface RawSessionStateFields {
@@ -47,7 +48,7 @@ export interface SessionCapabilityFields extends RawSessionStateFields {
     | null;
 }
 
-const TERMINAL_RUN_STATUSES = new Set(['SUCCEEDED', 'FAILED', 'CANCELLED']);
+const TERMINAL_RUN_STATUSES = new Set<string>(RELEASED_SESSION_STATUSES);
 
 /**
  * Single source of truth for both resume authorization and action affordances sent to

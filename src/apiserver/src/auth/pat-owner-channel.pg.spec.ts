@@ -164,10 +164,13 @@ test('the owner channel refuses a personal access token door by door and field b
   const secretToSubmit = await secretRequest();
   const secretToCancel = await secretRequest();
   const secretToRevoke = await secretRequest();
-  for (const requestId of [secretToCancel, secretToRevoke]) {
+  const secretToRevokeByGrant = await secretRequest();
+  for (const requestId of [secretToCancel, secretToRevoke, secretToRevokeByGrant]) {
     ok(await api('POST', `/owner-requests/${requestId}/secret`, login, { value: 'fixture-key' }), 'preparing a secret grant');
   }
   await db.ownerRequestSecret.update({ where: { requestId: secretToRevoke }, data: { state: 'ACTIVE', deliveredAt: new Date() } });
+  await db.ownerRequestSecret.update({ where: { requestId: secretToRevokeByGrant }, data: { state: 'ACTIVE', deliveredAt: new Date() } });
+  const grantToRevoke = (await db.ownerRequestSecret.findUniqueOrThrow({ where: { requestId: secretToRevokeByGrant } })).id;
   const grantRow = (requestId: string) => db.ownerRequestSecret.findUnique({ where: { requestId } });
   const savedSecret = await db.accountSecret.create({ data: { ownerId: userId, label: 'door fixture', valueEnc: 'to be replaced' } });
   const savedRow = () => db.accountSecret.findUnique({ where: { id: savedSecret.id } });
@@ -190,6 +193,19 @@ test('the owner channel refuses a personal access token door by door and field b
   const wikiCreated = async () => ({
     state: (await db.ownerRequest.findUniqueOrThrow({ where: { id: wikiToCreate } })).state,
     spaces: await db.wikiSpace.count({ where: { ownerId: userId, repoUrlNorm: wikiRepoUrlNorm, deletedAt: null } }),
+  });
+
+  // A real SETTINGS_CHANGE card (docs/settings-from-conversation-design.md §5.2): Save changes writes the account's theme
+  // and settles the card.
+  const settingsToApply = (await db.ownerRequest.create({
+    data: {
+      ownerId: userId, askedBySessionId: sessionId, kind: 'SETTINGS_CHANGE', title: 'Change 1 setting?',
+      why: 'the person asked for a dark theme', payload: { changes: [{ key: 'theme', from: 'system', to: 'dark', tier: 1 }] },
+    },
+  })).id;
+  const settingsApplied = async () => ({
+    state: (await db.ownerRequest.findUniqueOrThrow({ where: { id: settingsToApply } })).state,
+    preferences: (await db.user.findUniqueOrThrow({ where: { id: userId } })).preferences,
   });
 
   // A Feishu app of the account's (switched off, so nothing connects it) with a group waiting on a live ticket, and two
@@ -267,7 +283,21 @@ test('the owner channel refuses a personal access token door by door and field b
       route: 'POST /owner-requests/:id/create-wiki', path: `/owner-requests/${wikiToCreate}/create-wiki`,
       login: 200, observe: wikiCreated,
     },
+    {
+      route: 'POST /owner-requests/:id/apply-settings', path: `/owner-requests/${settingsToApply}/apply-settings`,
+      login: 200, observe: settingsApplied,
+    },
     { route: 'GET /account-secrets', path: '/account-secrets', login: 200 },
+    { route: 'GET /account-secrets/grants', path: '/account-secrets/grants?removed=30d', login: 200 },
+    {
+      route: 'POST /account-secrets/grants/:id/revoke', path: `/account-secrets/grants/${grantToRevoke}/revoke`,
+      login: 204, observe: () => grantRow(secretToRevokeByGrant),
+    },
+    {
+      route: 'POST /account-secrets', path: '/account-secrets',
+      body: { label: 'added key', value: 'added-key-value' }, login: 201,
+      observe: () => db.accountSecret.findUnique({ where: { ownerId_label: { ownerId: userId, label: 'added key' } } }),
+    },
     {
       route: 'PUT /account-secrets/:id', path: `/account-secrets/${savedSecret.id}`,
       body: { value: 'replacement-key' }, login: 204, observe: savedRow,
@@ -399,6 +429,11 @@ test('the owner channel refuses a personal access token door by door and field b
       login: 404,
     },
     {
+      route: 'POST /projects/:id/setting-changes/:changeId/revert',
+      path: `/projects/${anyProject}/setting-changes/${nobody()}/revert`,
+      login: 404,
+    },
+    {
       route: 'POST /projects/:id/open-items/:itemId/accept',
       path: `/projects/${anyProject}/open-items/${nobody()}/accept`,
       login: 404,
@@ -506,6 +541,18 @@ test('the owner channel refuses a personal access token door by door and field b
       path: `/integrations/feishu/chats/${chatToRemove}`,
       login: 200,
       observe: async () => (await chatRow(chatToRemove)) !== null,
+    },
+    // Opening the Feishu bot to everyone the app is available to (§14.1): the token writes no column of the app.
+    {
+      route: 'PUT /integrations/feishu/access',
+      path: '/integrations/feishu/access',
+      body: { mode: 'AVAILABILITY_SCOPE', workspaceId, permissionMode: 'acceptEdits', maxRunningPerPerson: 2, sessionsPerDayTotal: 40 },
+      login: 200,
+      observe: async () => {
+        const app = await db.feishuApp.findUniqueOrThrow({ where: { appId: feishuAppId } });
+        return [app.accessMode, app.openWorkspaceId, app.openPermissionMode, app.openMaxRunningPerPerson, app.openSessionsPerDayPerPerson,
+          app.openMaxRunningTotal, app.openSessionsPerDayTotal, app.updatedAt.toISOString()];
+      },
     },
     // A terminal asking to be approved (docs/terminal-session-design.md): two real requests on the account's runner.
     { route: 'GET /terminals/requests', path: '/terminals/requests', login: 200 },

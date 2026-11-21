@@ -662,6 +662,12 @@ func (w *linkWork) onFrame(conn *linkWorkConn, f *linkpb.Frame) {
 		go func() {
 			_, _ = conn.send(&linkpb.Frame{Body: &linkpb.Frame_TurnPrefixResponse{TurnPrefixResponse: resp}})
 		}()
+	case *linkpb.Frame_BackgroundJobTailRequest:
+		// The newest lines of a bg_run job's output, for its card in the app (background_owner_tail.go).
+		go func() {
+			resp := bgJobTailForOwner(body.BackgroundJobTailRequest)
+			_, _ = conn.send(&linkpb.Frame{Body: &linkpb.Frame_BackgroundJobTailResponse{BackgroundJobTailResponse: resp}})
+		}()
 	case *linkpb.Frame_EventAck:
 		w.m.events.onAck(conn, body.EventAck)
 	case *linkpb.Frame_Credit:

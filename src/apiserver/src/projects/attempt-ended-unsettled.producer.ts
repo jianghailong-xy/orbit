@@ -12,6 +12,8 @@ import {
   type JudgmentOutcome,
 } from './coordinator-judgment.service';
 import { attemptEndedUnsettledFact } from './coordinator-wake';
+import { releasedSql } from '../common/session-release';
+import { RELEASED_SESSION_STATUSES } from '../common/session-release';
 
 /** The project vanished between the committed attempt read and wake authorization. */
 export const ATTEMPT_WAKE_PROJECT_GONE = 'PROJECT_GONE';
@@ -61,11 +63,7 @@ export type AttemptEndedDelivery =
       signal?: AttemptHumanSignal;
     };
 
-const TERMINAL_SESSION_STATUSES: readonly RunStatus[] = [
-  RunStatus.SUCCEEDED,
-  RunStatus.FAILED,
-  RunStatus.CANCELLED,
-];
+const TERMINAL_SESSION_STATUSES: readonly RunStatus[] = RELEASED_SESSION_STATUSES;
 
 interface AttemptSessionSnapshot {
   id: string;
@@ -231,7 +229,7 @@ export class AttemptEndedUnsettledProducer {
               AND verifier."terminal_reason" IS NULL
               AND verifier."superseded_by_task_id" IS NULL
          )
-         AND s."status" IN ('SUCCEEDED', 'FAILED', 'CANCELLED')
+         AND ${releasedSql('s."status"')}
        ORDER BY s."task_id", s."updated_at" DESC, s."id" DESC
        LIMIT ${limit}
     `);

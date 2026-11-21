@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import type { RunnerDrainWaiting } from '@orbit/shared';
 import type { PrismaService } from '../prisma/prisma.service';
 import { runnerDrainIsStop, sanitizeRunnerSelfUpdate } from './runner-self-update';
+import { heldSql } from './session-release';
 
 /**
  * What of a runner's owner waits on the runner's drain for a self-update (docs/runner-update-drain-design.md
@@ -27,7 +28,7 @@ function waitingSql(runnerId: Prisma.Sql, ownerId: Prisma.Sql): Prisma.Sql {
       ) m
      WHERE s.assigned_runner_id = ${runnerId}
        AND s.owner_id = ${ownerId}
-       AND s.status IN ('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED')
+       AND ${heldSql('s.status')}
        AND s.cancel_requested_at IS NULL
        AND s.deleted_at IS NULL`;
 }

@@ -2,6 +2,7 @@ import { lazy, useEffect, useMemo, useRef, useState, type ReactNode } from 'reac
 import {
   SessionLifecycleState,
   type ProjectIntegrationSettings,
+  type ProjectSettingChangeView,
   type ProjectListIntegration,
   type ProjectListCoordinatorActivity,
   type TaskIntegrationView,
@@ -227,6 +228,8 @@ interface ProjectDetail extends Omit<Project, 'integration'> {
   nonCodeReason?: string | null;
   /** The criteria this project moved out to a follow-up (board 02 G). */
   criteriaMovedOut?: readonly CriterionMovedOut[];
+  /** The coordinator's and the owner's landing-check history, newest first (§12.15 P-R1). */
+  settingChanges?: ProjectSettingChangeView[];
 }
 
 export const STATUS_COLOR: Record<Project['status'], string> = {

@@ -2103,6 +2103,43 @@
         "disposition": "HUMAN"
       },
       "legacyText": "  refused: MANAGED_RUNNER_FAILED\n  what:    this workspace's managed runner is FAILED (PVC_MISSING: the data volume is gone) and will not come back by itself; it has to be repaired from its machine page before work can run there\n  owner:   USER\n  do:      AWAIT_USER_FIX\n"
+    },
+    {
+      "name": "session recovery: RUNNER_DISK_BELOW_FLOOR",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"statusCode\":409,\"error\":\"Conflict\",\"code\":\"RUNNER_DISK_BELOW_FLOOR\",\"message\":\"runner \\\"wikova\\\" has less free disk space than its Keep Free setting, so it starts no new sessions; nothing was created. Try again once space is freed there, or use an agent on another runner\",\"owner\":\"USER\",\"requiredAction\":\"AWAIT_USER_FIX\",\"retryable\":false,\"runnerId\":\"RUNNER_FIXTURE_1\",\"workspaceId\":\"WORKSPACE_FIXTURE_1\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"AFTER_STATE_CHANGE\",\"retryAfterSeconds\":null,\"actionCode\":\"AWAIT_USER_FIX\",\"actor\":\"USER\",\"userConfirmation\":\"NOT_REQUIRED\",\"disposition\":\"HUMAN\",\"resources\":[{\"type\":\"WORKSPACE\",\"id\":\"WORKSPACE_FIXTURE_1\"},{\"type\":\"RUNNER\",\"id\":\"RUNNER_FIXTURE_1\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "RUNNER_DISK_BELOW_FLOOR",
+        "message": "runner \"wikova\" has less free disk space than its Keep Free setting, so it starts no new sessions; nothing was created. Try again once space is freed there, or use an agent on another runner",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "AFTER_STATE_CHANGE",
+          "afterSeconds": null
+        },
+        "actor": "USER",
+        "owner": "USER",
+        "actionCode": "AWAIT_USER_FIX",
+        "requiredAction": "AWAIT_USER_FIX",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "WORKSPACE",
+            "id": "WORKSPACE_FIXTURE_1"
+          },
+          {
+            "type": "RUNNER",
+            "id": "RUNNER_FIXTURE_1"
+          }
+        ],
+        "disposition": "HUMAN"
+      },
+      "legacyText": "  refused: RUNNER_DISK_BELOW_FLOOR\n  what:    runner \"wikova\" has less free disk space than its Keep Free setting, so it starts no new sessions; nothing was created. Try again once space is freed there, or use an agent on another runner\n  owner:   USER\n  do:      AWAIT_USER_FIX\n"
     }
   ]
 }

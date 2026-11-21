@@ -14,17 +14,15 @@ import type { RunEvent } from './Transcript';
  * createTurn's `steerIfLive`) instead of queueing it behind the turn, where it used to wait minutes
  * and then open a whole turn of its own.
  *
- * So the same wake now has a steer's two states to be drawn in, and both have to keep the wake's own
- * shape — the one event line in the agent's stream that replaced the card on the reader's side on
- * 2026-09-29:
+ * A job's news draws nothing where it woke the agent (job-card board C1, 2026-11-20): the job is one card
+ * from start to end (JobCard). So neither of a steer's two states draws a line of its own any more —
+ * and, as before, none of it is ever a bubble in the reader's name:
  *
- *   - while it waits for the runner, the queued tail draws the line with a steer's state under it.
- *     A steer is on its way into the turn and the server refuses to withdraw it (409), so there is no
- *     Cancel and no Withdraw wake — only how far it has got.
- *   - once the runner has written it, its echo (`steer: true`, the block in `controlPlaneNote`) is the
- *     line, inside the running turn's stream where it landed, saying how far it got — and never a
- *     bubble in the reader's name. The block is the note, not the text: the text minus the note is
- *     empty, which is exactly what would draw an empty bubble if the note were not read.
+ *   - while it waits for the runner, the queued tail draws no row for it (E1), and nothing offers to
+ *     take it back: the server refuses to withdraw a steer (409).
+ *   - once the runner has written it, its echo (`steer: true`, the block in `controlPlaneNote`) draws
+ *     nothing in the running turn's stream. The block is the note, not the text: the text minus the
+ *     note is empty, which is exactly what would draw an empty bubble if the note were not read.
  */
 
 vi.mock('../api', async (importOriginal) => {
@@ -147,6 +145,7 @@ describe('a wake written into the running turn, while it waits for the runner', 
         createdAt: '2026-10-03T07:00:02.000Z',
         authoredByOrbit: true,
       },
+      { turnId: 'turn-typed', kind: 'message', placement: 'queued', content: TYPED, createdAt: '2026-10-03T07:00:03.000Z' },
     ];
     apiMock.mockReset();
     vi.mocked(listQueuedTurns).mockImplementation(async () => queue);
@@ -207,7 +206,7 @@ describe('a wake written into the running turn, while it waits for the runner', 
     }
   });
 
-  it('is the wake’s line with a steer’s state under it, and nothing to cancel or withdraw', async () => {
+  it('draws no row in the queued tail for a steered wake or a queued one, and nothing to withdraw', async () => {
     const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } } });
     const nextContainer = document.createElement('div');
     const nextRoot = createRoot(nextContainer);
@@ -224,31 +223,18 @@ describe('a wake written into the running turn, while it waits for the runner', 
         </QueryClientProvider>,
       );
     });
+    // The queue is in once the message typed behind the two wakes waits in the tray above the composer.
     await act(async () => {
       await vi.waitFor(
-        () => expect(mounted().querySelectorAll('.bgwake')).toHaveLength(2),
+        () => expect(mounted().querySelector('.pending-tray-row')).not.toBeNull(),
         { timeout: 20_000, interval: 20 },
       );
     });
 
-    const [steered, nextTurn] = [...mounted().querySelectorAll<HTMLElement>('.bgwake')];
-    expect(steered.querySelector('.bgwake-title')?.textContent).toBe('Background job failed');
-    expect(steered.querySelector('.bgwake-name')?.textContent).toBe('the release build');
-    expect(steered.classList.contains('is-queued'), 'drawn as not yet an event').toBe(true);
-
-    // How far it has got, in a steer's own words — and no way to take it back, because there is none.
-    const steerLine = steered.querySelector('.bgwake-queued .chat-queued-meta')!;
-    expect(steerLine.querySelector('.chat-queued-tag')?.textContent).toBe('Sending…');
-    expect(steerLine.textContent).not.toContain('Queued for next turn');
-    expect(steered.querySelectorAll('a')).toHaveLength(0);
-    expect(steered.textContent).not.toContain('Cancel');
-    expect(steered.textContent).not.toContain('Withdraw wake');
-
-    // The output wake beside it still waits for the next turn, and still leaves by an ordinary Cancel.
-    const nextLine = nextTurn.querySelector('.bgwake-queued .chat-queued-meta')!;
-    expect(nextLine.querySelector('.chat-queued-tag')?.textContent).toBe('Queued for next turn');
-    expect([...nextLine.querySelectorAll('a')].map((a) => a.textContent)).toEqual(['Cancel']);
-
+    // Neither wake draws a row in the tail: each waits on its job's card instead (board E1).
+    expect(mounted().querySelectorAll('.bgwake')).toHaveLength(0);
+    expect(mounted().textContent).not.toContain('the release build');
+    expect(mounted().textContent).not.toContain('Withdraw wake');
     // Neither is drawn as something the reader typed.
     expect(
       [...mounted().querySelectorAll('.chat-user')].some((bubble) => bubble.textContent?.includes('bgj_')),
@@ -315,77 +301,42 @@ describe('a wake written into the running turn, once the runner has written it',
     });
   }
 
-  const line = (): HTMLElement => {
-    const el = container.querySelector<HTMLElement>('.bgwake');
-    if (!el) throw new Error(`no wake line was rendered:\n${container.innerHTML}`);
-    return el;
-  };
-
-  it('is the wake’s event line inside the running turn, never a bubble in the reader’s name', async () => {
+  it('draws nothing inside the running turn, and never a bubble in the reader’s name', async () => {
     await mount([...RUNNING_TURN, steeredEcho('enqueued'), delivered(5, 'written'), ...AFTER]);
 
-    expect(line().getAttribute('data-seq')).toBe('4');
-    expect(line().classList.contains('is-queued'), 'an event now, not a queued row').toBe(false);
-    expect(line().querySelector('.bgwake-title')?.textContent).toBe('Background job failed');
-    expect(line().querySelector('.bgwake-status')?.textContent).toBe('exit 2');
-    // A failure's tail stays out of the fold, as for any wake line.
-    expect(line().querySelector('.bgwake-tail')?.textContent).toContain('make: *** [build] Error 2');
-
+    expect(container.querySelector('.bgwake'), 'no wake line').toBeNull();
+    expect(container.querySelector('[data-seq="4"]'), 'nothing drawn for the echo').toBeNull();
     // The reader's own message is the only bubble: the wake's echo has no words of anybody's in it.
     const bubbles = [...container.querySelectorAll<HTMLElement>('.chat-user')];
     expect(bubbles).toHaveLength(1);
     expect(bubbles[0].textContent).toContain(TYPED);
     expect(container.textContent).not.toContain('Orbit attached');
-
-    // In the turn it was written into: after the reply and the tool call it interrupted, before the
-    // rest of that same reply, with no turn boundary in between.
-    const reply = container.querySelector('[data-seq="2"]')!;
-    const rest = container.querySelector('[data-seq="7"]')!;
-    expect(reply.compareDocumentPosition(line()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(line().compareDocumentPosition(rest) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The turn it was written into carries on, with no turn boundary in between.
+    expect(container.querySelector('[data-seq="7"]')).not.toBeNull();
     expect(container.querySelector('.chat-turn-divider')).toBeNull();
-
-    // How far it got, in the words a steer's bubble uses.
-    expect(line().querySelector('.bgwake-steer')?.textContent).toBe('Waiting to be read');
   });
 
-  it('says how far it got, from the runner taking it to the engine reading it', async () => {
-    await mount([...RUNNING_TURN, steeredEcho('enqueued')]);
-    expect(line().querySelector('.bgwake-steer')?.textContent).toBe('Sending…');
+  it.each(['enqueued', 'written', 'acknowledged', 'requeued', 'failed'])(
+    'draws nothing at any point of its delivery (%s), and nothing when re-delivered as its own turn',
+    async (delivery) => {
+      await mount([...RUNNING_TURN, steeredEcho('enqueued'), delivered(5, delivery)]);
+      expect(container.querySelector('.bgwake')).toBeNull();
+      expect(container.querySelectorAll('.chat-user')).toHaveLength(1);
 
-    await mount([...RUNNING_TURN, steeredEcho('enqueued'), delivered(5, 'written')]);
-    expect(line().querySelector('.bgwake-steer')?.textContent).toBe('Waiting to be read');
-
-    await mount([...RUNNING_TURN, steeredEcho('enqueued'), delivered(5, 'written'), delivered(6, 'acknowledged')]);
-    expect(line().querySelector('.bgwake-steer')?.textContent).toBe('Read in this turn');
-    expect(container.querySelectorAll('.chat-user')).toHaveLength(1);
-  });
-
-  it('missed, says it comes back as a turn of its own; re-delivered, is the same one line', async () => {
-    await mount([...RUNNING_TURN, steeredEcho('enqueued'), delivered(5, 'requeued')]);
-    expect(line().querySelector('.bgwake-steer')?.textContent).toBe('Queued for next turn instead');
-
-    // The same row, delivered as the wake turn it became: one line, no longer a steer's.
-    const redelivered: RunEvent = {
-      seq: 9,
-      type: 'user',
-      turnId: 'turn-steered-wake',
-      ts: TS,
-      payload: { text: STEERED, controlPlaneNote: STEERED, delivery: 'enqueued' },
-    };
-    await mount([
-      ...RUNNING_TURN, steeredEcho('enqueued'), delivered(5, 'requeued'),
-      { seq: 8, type: 'turn_end', turnId: 'turn-running', ts: TS, payload: {} },
-      redelivered,
-    ]);
-    expect(container.querySelectorAll('.bgwake')).toHaveLength(1);
-    expect(line().querySelector('.bgwake-steer')).toBeNull();
-    expect(container.querySelectorAll('.chat-user')).toHaveLength(1);
-  });
-
-  it('that never arrived says so, and nothing else', async () => {
-    await mount([...RUNNING_TURN, steeredEcho('enqueued'), delivered(5, 'failed')]);
-    expect(line().querySelector('.bgwake-undelivered')?.textContent).toBe('The session has not confirmed it received this.');
-    expect(line().querySelector('.bgwake-steer')).toBeNull();
-  });
+      const redelivered: RunEvent = {
+        seq: 9,
+        type: 'user',
+        turnId: 'turn-steered-wake',
+        ts: TS,
+        payload: { text: STEERED, controlPlaneNote: STEERED, delivery: 'enqueued' },
+      };
+      await mount([
+        ...RUNNING_TURN, steeredEcho('enqueued'), delivered(5, delivery),
+        { seq: 8, type: 'turn_end', turnId: 'turn-running', ts: TS, payload: {} },
+        redelivered,
+      ]);
+      expect(container.querySelector('.bgwake')).toBeNull();
+      expect(container.querySelectorAll('.chat-user')).toHaveLength(1);
+    },
+  );
 });

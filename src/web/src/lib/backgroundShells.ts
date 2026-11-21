@@ -37,10 +37,15 @@ export function mergeBackgroundShells(server: BgShell[], live: BgShell[]): BgShe
     // that has left `running` also wins over a server row still in it; the two terminal rows
     // together still keep the server's authoritative copy, and its output is not lost either way
     // (keepNewerOutput).
-    if (s && (l.status === 'running' || s.status === 'running')) byId.set(l.shellId, keepNewerOutput(l, s));
+    if (s && (l.status === 'running' || s.status === 'running')) byId.set(l.shellId, keepServerFacts(keepNewerOutput(l, s), s));
     else if (!s) byId.set(l.shellId, l);
   }
   return [...byId.values()].sort((a, b) => a.startedSeq - b.startedSeq);
+}
+
+/** What only the server states about a shell, kept on the live row that wins: whether its owner can stop it. */
+function keepServerFacts(row: BgShell, server: BgShell): BgShell {
+  return server.stoppable === undefined ? row : { ...row, stoppable: server.stoppable };
 }
 
 /**

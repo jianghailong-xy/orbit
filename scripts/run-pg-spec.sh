@@ -118,7 +118,23 @@ PRISMA="$API/node_modules/.bin/prisma"; [ -x "$PRISMA" ] || PRISMA="$REPO/node_m
 
 echo "==> building the test tree (rm -rf build first)"
 rm -rf "$API/build"
-( cd "$API" && "$TSC" -p tsconfig.test.json ) || die "tsconfig.test.json failed to compile"
+# RUN_PG_SPEC_COMPILE=specs compiles only the named specs and what they import, into the same
+# build/ layout (rootDir is src). For machines whose memory cap kills the whole test tree's tsc;
+# the rest of the tree is then not type-checked by this run.
+case "${RUN_PG_SPEC_COMPILE:-}" in
+  '')
+    ( cd "$API" && "$TSC" -p tsconfig.test.json ) || die "tsconfig.test.json failed to compile"
+    ;;
+  specs)
+    SUBSET="$API/.tsconfig.pg-specs.$$.json"
+    "$NODE" -e 'require("node:fs").writeFileSync(process.argv[1], JSON.stringify({ extends: "./tsconfig.test.json", files: process.argv.slice(2), include: [] }))' \
+      "$SUBSET" "${SPECS[@]}" || die "could not write the subset tsconfig"
+    ( cd "$API" && "$TSC" -p "$SUBSET" ); status=$?
+    rm -f "$SUBSET"
+    [ "$status" = 0 ] || die "the named specs failed to compile"
+    ;;
+  *) die "RUN_PG_SPEC_COMPILE must be unset or specs" ;;
+esac
 # The overlay's `src/node_modules/@orbit/shared` already answers for everything under `build/`;
 # this one is here because it is nearer still, and because `build/` is this script's own to lay out.
 mkdir -p "$API/build/node_modules/@orbit"

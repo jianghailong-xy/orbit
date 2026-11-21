@@ -15,7 +15,7 @@ metadata:
   # Only an operator taking over from a node that cannot report removes it by hand (README).
   finalizers: [orbit.dev/managed-runner-stop-report]
   labels:
-    app.kubernetes.io/name: orbit-managed-runner
+    app.kubernetes.io/name: orbit-cloud-runner
     orbit-test-environment: __TEST_ENVIRONMENT_ID__
   annotations:
     orbit.dev/owner-id: __OWNER_UUID__

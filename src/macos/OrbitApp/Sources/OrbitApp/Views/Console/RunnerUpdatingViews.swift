@@ -23,11 +23,21 @@ private struct RunnerUpdatingFootKey: EnvironmentKey {
     static let defaultValue: RunnerUpdatingFoot? = nil
 }
 
+private struct HeldCancelKey: EnvironmentKey {
+    static let defaultValue: ((UserBubble) -> Void)? = nil
+}
+
 private struct RunnerUpdatingQueuedKey: EnvironmentKey {
     static let defaultValue: RunnerUpdatingFoot? = nil
 }
 
 extension EnvironmentValues {
+    /// Set by `TranscriptView`: the held tag's Cancel under a message no runner has taken yet
+    /// (`HeldCancel.offers`). Nil where there is no console to act through.
+    var heldCancel: ((UserBubble) -> Void)? {
+        get { self[HeldCancelKey.self] }
+        set { self[HeldCancelKey.self] = newValue }
+    }
     /// Set by `TranscriptView` while the session is held by its runner's update.
     var runnerUpdatingFoot: RunnerUpdatingFoot? {
         get { self[RunnerUpdatingFootKey.self] }
@@ -124,6 +134,9 @@ struct RunnerUpdatingQueuedView: View {
 /// A new session Keep Free holds reads `Queued · low disk space` (`QueuedDiskLow`), likewise.
 struct RunnerUpdatingTagView: View {
     let foot: RunnerUpdatingFoot
+    /// ` · Cancel` after the tag, under a message no runner has taken yet (`HeldCancel`): in the
+    /// tint, the tag staying muted. Nil draws the tag alone.
+    var onCancel: (() -> Void)? = nil
     @State private var open = false
 
     private var full: Bool { QueuedCapacity.holds(foot.session) }
@@ -139,6 +152,15 @@ struct RunnerUpdatingTagView: View {
             }
             .buttonStyle(.plain)
             .popover(isPresented: $open) { pop }
+            if let onCancel {
+                Text("·")
+                Button { onCancel() } label: {
+                    Text(HeldCancel.label)
+                }
+                .buttonStyle(.plain).foregroundStyle(.tint)
+                .contentShape(Rectangle())
+                .accessibilityIdentifier("held-cancel")
+            }
         }
         .font(.orbitMeta)
         .foregroundStyle(.secondary)

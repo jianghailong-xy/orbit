@@ -136,6 +136,7 @@ import { CLAUDE_REGION_CHECK_AGAIN, claudeRegionChecked } from '../../lib/claude
 import { ago, ENGINE_CLI_NAME } from '../../lib/runnerEngines';
 import { useToast } from '../../lib/toast';
 import { MachineResources } from './MachineResources';
+import { MachineSecrets } from './MachineSecrets';
 import { SettingsCard, SettingsRow, SettingsSection } from './SettingsBlocks';
 import './Settings.css';
 
@@ -1085,6 +1086,9 @@ export function MachineSettingsPage() {
           </SettingsCard>
         )}
       </SettingsSection>
+
+      {/* Copies of the owner's secrets on this machine (Settings → Secrets, filtered). Renders nothing while there are none. */}
+      <MachineSecrets runnerId={runner.id} />
 
       {/* What worktree GC may never remove: finished sessions' checkouts that still hold uncommitted
           work. Renders nothing while there are none. */}

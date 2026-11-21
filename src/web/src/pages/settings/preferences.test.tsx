@@ -111,7 +111,7 @@ afterEach(async () => {
 
 describe('each switch saves through the preference field it always had', () => {
   const cases: Array<[string, () => ReactElement, string, keyof UserPreferences, boolean]> = [
-    ['General', () => <GeneralSettingsPage />, 'Smart model selection', 'modelRouting', true],
+    ['General', () => <GeneralSettingsPage />, 'Smart model selection', 'modelRouting', false],
     ['General', () => <GeneralSettingsPage />, 'Suggested replies', 'promptSuggestions', false],
     ['General', () => <GeneralSettingsPage />, 'Session recaps', 'recaps', false],
     ['General', () => <GeneralSettingsPage />, 'Let sessions orchestrate', 'enableOrchestration', false],

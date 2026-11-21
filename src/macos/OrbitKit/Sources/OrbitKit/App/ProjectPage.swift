@@ -303,6 +303,18 @@ public enum ProjectPage {
     public static let landingTakenOver = "Taken over"
     public static let landingFirstStarted = "first started"
     public static let landingUsually = "usually"
+    /// The state word of a claimed job waiting for its runner's local lock: it has not started its
+    /// work, so it is not fetching and has no output to be quiet about. Web: `LANDING_LIVENESS_WORDS.WAITING`.
+    public static let landingWaiting = "waiting"
+
+    /// The server's sentence about a claimed job waiting for its runner's local lock, naming the job
+    /// holding it — or nil for any other job. A SILENT runner keeps its own words. Web: `localLockWait`.
+    private static func localLockWait(running: Bool, liveness: String?,
+                                      blockingReason: LandTaskBlockingReason?) -> String? {
+        guard running, liveness != "SILENT", liveness != "LEASE_EXPIRED",
+              let blockingReason, blockingReason.code == "WAITING_LOCAL_LOCK" else { return nil }
+        return blockingReason.summary
+    }
     /// The most rounds one claim of a `LAND_TASK` can run: the M of "round N of M" (§7.2 V6). The
     /// first round plus up to two refetches when the push loses a race (contract J5, appendix A-Q5;
     /// runner-go `integrate.go` `integrationRefetchRounds + 1`). Web: `LAND_TASK_ROUNDS_PER_CLAIM`.
@@ -434,7 +446,8 @@ public enum ProjectPage {
                         round: inFlight.round, check: inFlight.check, stepStartedAt: inFlight.stepStartedAt,
                         outputMovedAt: inFlight.outputMovedAt, typicalMs: inFlight.typicalMs,
                         livenessWord: inFlight.liveness,
-                        firstStartedAt: firstStartedAt(view, jobId: inFlight.jobId))
+                        firstStartedAt: firstStartedAt(view, jobId: inFlight.jobId),
+                        blockingReason: inFlight.blockingReason)
     }
 
     /// When the attempt behind a job FIRST started: the `landTask` row's own `startedAt` is the
@@ -515,7 +528,8 @@ public enum ProjectPage {
                            runner: job.runnerName, kind: job.kind, claim: job.claim, round: job.round,
                            check: job.check, stepStartedAt: job.stepStartedAt, outputMovedAt: job.outputMovedAt,
                            typicalMs: job.typicalMs, livenessWord: job.liveness,
-                           firstStartedAt: firstStartedAt(view, jobId: job.jobId))
+                           firstStartedAt: firstStartedAt(view, jobId: job.jobId),
+                           blockingReason: job.blockingReason)
             return LandingJobLine(
                 jobId: job.jobId, taskId: job.taskId, line: line,
                 detail: landingJobDetail(job, main: main), retryable: job.retryable,
@@ -543,7 +557,8 @@ public enum ProjectPage {
                                         heartbeatAt: String?, kind: String?, claim: Int?, round: Int?,
                                         check: ProjectIntegrationCheck?, stepStartedAt: String?,
                                         outputMovedAt: String?, typicalMs: Int?, runner: String?,
-                                        firstStartedAt: String?, now: Date, updatedAt: Date?) -> LandingLiveness? {
+                                        firstStartedAt: String?, now: Date, updatedAt: Date?,
+                                        lockWait: String? = nil) -> LandingLiveness? {
         guard let liveness, liveness != "LEASE_EXPIRED", running else { return nil }
         let stepStart = RelativeTime.parse(stepStartedAt ?? startedAt)
         let heartbeat = heartbeatAt.flatMap(RelativeTime.parse)
@@ -569,7 +584,11 @@ public enum ProjectPage {
         // board says the liveness there — "checking · output 1s ago" (v4 04 and 07). The claim,
         // round and the usual duration follow it and are read in full on the wider rows.
         var clauses: [String] = []
-        if liveness == "LIVE" {
+        // A job waiting for its runner's local lock has not started: what holds it leads the line,
+        // and the step's clock is the wait's.
+        if let lockWait {
+            clauses.append(lockWait)
+        } else if liveness == "LIVE" {
             if let outputMoved {
                 clauses.append("\(lowercasingFirst(landingOutput)) "
                     + "\(max(0, Int(now.timeIntervalSince(outputMoved).rounded())))s ago")
@@ -617,7 +636,9 @@ public enum ProjectPage {
                                  round: Int? = nil, check: ProjectIntegrationCheck? = nil,
                                  stepStartedAt: String? = nil, outputMovedAt: String? = nil,
                                  typicalMs: Int? = nil, livenessWord: String? = nil,
-                                 firstStartedAt: String? = nil) -> LandingLine {
+                                 firstStartedAt: String? = nil,
+                                 blockingReason: LandTaskBlockingReason? = nil) -> LandingLine {
+        let lockWait = localLockWait(running: running, liveness: livenessWord, blockingReason: blockingReason)
         // A queued job's heartbeat and phase can be an earlier claim's: only a running job's count.
         let reported = heartbeatAt.flatMap(RelativeTime.parse)
         let lastUpdate = running ? (reported ?? updatedAt) : updatedAt
@@ -639,7 +660,7 @@ public enum ProjectPage {
             liveness: livenessWord, running: running, startedAt: startedAt, heartbeatAt: heartbeatAt,
             kind: kind, claim: claim, round: round, check: check, stepStartedAt: stepStartedAt,
             outputMovedAt: outputMovedAt, typicalMs: typicalMs, runner: runner,
-            firstStartedAt: firstStartedAt, now: now, updatedAt: updatedAt)
+            firstStartedAt: firstStartedAt, now: now, updatedAt: updatedAt, lockWait: lockWait)
         return LandingLine(what: what,
                            // A legacy claim's runner reports only between steps, so its quiet is
                            // not a stall: the ring keeps turning and the line says why. SILENT is
@@ -647,7 +668,8 @@ public enum ProjectPage {
                            running: running && !unavailable && !silent && livenessWord != "SILENT",
                            state: unavailable ? "Update unavailable"
                                : silent ? landingNoReport
-                                   : running ? (integrationPhaseWords(main)[phase ?? ""] ?? "running") : "queued",
+                                   : running && lockWait != nil ? landingWaiting
+                                       : running ? (integrationPhaseWords(main)[phase ?? ""] ?? "running") : "queued",
                            clock: v6?.clock ?? landingClock(elapsed), word: word,
                            clockLabel: running ? "Elapsed" : "Queued for",
                            updated: report, wait: wait, liveness: v6)

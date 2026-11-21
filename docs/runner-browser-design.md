@@ -61,6 +61,10 @@ runner over the existing link, and a viewer in the client.
   `/home/orbit/.orbit/browser/profile` on the runner's volume, so logins survive restarts and image rolls (not a
   volume rebuild). It starts at the first browser tool call or when the owner presses **Open browser**, and stops
   after 15 minutes with no tool call and no viewer. Nothing runs on a runner that never uses a browser.
+- **Chrome ending by itself.** Chromium quits when its last tab or window closes, which the owner and the agent both
+  do; the viewer's stream would then show the display's empty black surface forever. While a viewer is open, Chrome
+  alone is started again on the same display and VNC server, so the stream stays open and shows the new window. With
+  no viewer, all three programs stop; the next **Open browser** or browser call starts them together.
 - **One session at a time (the browser lease).** The first session whose agent calls a browser tool holds the lease
   until its turn ends or it has made no browser call for 5 minutes. Another session's browser call meanwhile returns a
   tool error naming the holder ("The browser is in use by session …; try again after it finishes"), so the agent can

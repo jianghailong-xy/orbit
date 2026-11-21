@@ -41,6 +41,11 @@ function Loading() {
   );
 }
 
+/** /settings/providers/tiers: the tier SubAgents are routed by, per model, on its own page (owner, 2026-11-21). */
+export function SettingsTiersPage() {
+  return <ModelTiers />;
+}
+
 /** /settings/providers: every key (SettingsKeysPage), or with no key at all, connecting one. */
 export function SettingsProvidersHome() {
   const keys = useKeys();
@@ -242,7 +247,6 @@ export function SettingsPoolsPage() {
           }
         />
       )}
-      <ModelTiers />
       {creatingPool && <NewPoolModal rows={keys.data ?? []} onClose={() => setCreatingPool(false)} />}
     </>
   );
