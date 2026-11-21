@@ -3244,14 +3244,15 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1400 adds three nullable columns, a foreign key and a partial index on owner_request_secret and account_secret;
       // no row is written, and no preserved relation, trigger, function or DONE fence changes.
       '1400_owner_secret_saved_links',
-      // 1401 adds session_release_fact_chk NOT VALID and 1402 validates it; no row is written, and no preserved
-      // relation, trigger, function or DONE fence changes.
+      // 1401 adds session_release_fact_chk NOT VALID; 1402 writes session.finished_at and release_cause on the rows that
+      // break it (1262's UPDATE again, and clearing both on open rows), then validates it. Session is not a preserved
+      // relation, and no trigger, function or DONE fence changes.
       '1401_session_release_fact_chk',
       '1402_session_release_fact_validate',
       // 1403 widens session_release_cause_chk with engine_failed and end_not_honored (NOT VALID) and 1404 validates it;
       // no row is written. 1405 rewrites session.release_cause on FAILED rows whose cause is not a failure cause, in
-      // batches; 1406 adds session_release_failure_chk NOT VALID and 1407 validates it. Session is not a preserved
-      // relation, and no trigger, function or DONE fence changes (1405's procedure is dropped after its CALL).
+      // one UPDATE; 1406 adds session_release_failure_chk NOT VALID and 1407 validates it. Session is not a preserved
+      // relation, and no trigger, function or DONE fence changes.
       '1403_session_release_failure_causes',
       '1404_session_release_failure_causes_validate',
       '1405_session_release_failure_backfill',

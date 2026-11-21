@@ -11,6 +11,8 @@
 --                                         which came first and so also took FAILED rows whose end_reason was
 --                                         written after they failed (a person completing or deleting a failed
 --                                         session records the end reason on the released row)
+-- The same goes for the FAILED rows 1402 made whole after a hand-over window: it gives them 1262's causes, and this
+-- file, which runs after it, rewrites them like any other.
 -- (landing_settled is never written with FAILED; a FAILED LANDING row, if one exists, takes the rules below.)
 --
 -- The new cause is read off the row's own facts, by 1262's FAILED rules in 1262's order with its end_reason rule
