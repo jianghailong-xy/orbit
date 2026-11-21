@@ -3263,6 +3263,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // successor runs on); no row is written, and coordinator_handoff is not a preserved relation — no trigger,
       // function or DONE fence changes.
       '1411_coordinator_handoff_successor',
+      // 1420 (on main) replaces the bodies of the Open-list version functions for session and conversation_turn so a write that changes
+      // no column an Open list draws no longer bumps the list's version; no row is written, and neither table is a
+      // preserved relation — no DONE fence changes.
+      '1420_open_list_undrawn_writes',
       // 1421 to 1425 replace the bodies of the session-dispatch guards and re-create three ended-triggers so they
       // read session.finished_at instead of the terminal status set (plan step 4.4), and add finished_at to five
       // trigger column lists on session; every guard answers what it did for every row session_release_fact_chk
