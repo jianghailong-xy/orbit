@@ -75,6 +75,8 @@ interface Fixture {
   runnerId: string;
   sessionId: string;
   turnId: string;
+  /** An answered steer aimed at the turn: the one kind of row the delivery columns may be set on (0210). */
+  steerId: string;
 }
 
 async function fixture(t: T): Promise<Fixture> {
@@ -110,7 +112,14 @@ async function fixture(t: T): Promise<Fixture> {
     },
     select: { id: true },
   });
-  return { db, prisma: db as unknown as PrismaService, ownerId, runnerId, sessionId, turnId };
+  const { id: steerId } = await db.conversationTurn.create({
+    data: {
+      sessionId, seq: 2, clientTurnId: `olu-${randomUUID()}`, kind: 'steer', sendIntent: 'CURRENT_WORK',
+      targetTurnId: turnId, content: 'also the tests', status: 'ANSWERED', deliveredAt: new Date(), answeredAt: new Date(),
+    },
+    select: { id: true },
+  });
+  return { db, prisma: db as unknown as PrismaService, ownerId, runnerId, sessionId, turnId, steerId };
 }
 
 /** The counters of the two sources a running session writes. */
@@ -128,7 +137,6 @@ test('1. replay: a running turn moves the version only with the statements that 
   const f = await fixture(t);
   const sql = new Client({ connectionString: URL!, connectionTimeoutMillis: 5_000 });
   await sql.connect();
-  t.after(() => sql.end());
   // Every row a statement wrote, and the columns it changed in it. Row-level, beside the
   // statement-level counter triggers it observes; dropped again at the end.
   const audit = `olu_audit_${f.sessionId.replace(/-/g, '').slice(0, 12)}`;
@@ -155,6 +163,7 @@ test('1. replay: a running turn moves the version only with the statements that 
   t.after(async () => {
     await sql.query(`DROP TRIGGER ${audit}_s ON session; DROP TRIGGER ${audit}_t ON conversation_turn;
                      DROP FUNCTION ${audit}(); DROP TABLE ${audit};`);
+    await sql.end();
   });
 
   const api = new RunnerApiController(
@@ -323,21 +332,36 @@ const UNDRAWN_SESSION_WRITES: Record<(typeof OPEN_LIST_UNDRAWN_SESSION_COLUMNS)[
   retry_claimed_at: `retry_claimed_at = now()`,
 };
 
-const UNDRAWN_TURN_WRITES: Record<(typeof OPEN_LIST_UNDRAWN_TURN_COLUMNS)[number], string> = {
-  delivery_status: `delivery_status = 'acknowledged'`,
-  delivery_acknowledged_at: `delivery_acknowledged_at = now()`,
-  lease_deadline_at: `lease_deadline_at = now() + interval '5 minutes'`,
-  translation_state: `translation_state = 'DONE'`,
-  translation_lang: `translation_lang = 'en'`,
-  delivery_failure_code: `delivery_failure_code = 'olu'`,
-  delivery_failure_reason: `delivery_failure_reason = 'olu'`,
-  delivery_terminal_at: `delivery_terminal_at = now()`,
-  lease_generation: `lease_generation = gen_random_uuid()`,
-  translation_failure_reason: `translation_failure_reason = 'olu'`,
-  translation_http_status: `translation_http_status = 500`,
-  wiki_context: `wiki_context = '{"entries":[]}'::jsonb`,
-  coordinator_context_key: `coordinator_context_key = repeat('k', 64)`,
-};
+type TurnColumn = (typeof OPEN_LIST_UNDRAWN_TURN_COLUMNS)[number];
+/**
+ * Writes that change the undrawn turn columns, each listed by the columns it changes. The delivery
+ * columns move together, on a steer, as conversation_turn_delivery_terminal_check (0210) requires.
+ */
+const UNDRAWN_TURN_WRITES: Array<{ columns: TurnColumn[]; row: 'turnId' | 'steerId'; set: string }> = [
+  { columns: ['lease_deadline_at'], row: 'turnId', set: `lease_deadline_at = now() + interval '5 minutes'` },
+  { columns: ['lease_generation'], row: 'turnId', set: `lease_generation = gen_random_uuid()` },
+  { columns: ['translation_state'], row: 'turnId', set: `translation_state = 'DONE'` },
+  { columns: ['translation_lang'], row: 'turnId', set: `translation_lang = 'en'` },
+  { columns: ['translation_failure_reason'], row: 'turnId', set: `translation_failure_reason = 'olu'` },
+  { columns: ['translation_http_status'], row: 'turnId', set: `translation_http_status = 500` },
+  { columns: ['wiki_context'], row: 'turnId', set: `wiki_context = '{"entries":[]}'::jsonb` },
+  { columns: ['coordinator_context_key'], row: 'turnId', set: `coordinator_context_key = repeat('k', 64)` },
+  {
+    columns: ['delivery_status', 'delivery_acknowledged_at'], row: 'steerId',
+    set: `delivery_status = 'ACKNOWLEDGED', delivery_acknowledged_at = now()`,
+  },
+  {
+    columns: ['delivery_status', 'delivery_acknowledged_at', 'delivery_failure_code', 'delivery_failure_reason', 'delivery_terminal_at'],
+    row: 'steerId',
+    set: `delivery_status = 'FAILED', delivery_acknowledged_at = NULL, delivery_failure_code = 'olu',
+          delivery_failure_reason = 'olu', delivery_terminal_at = now()`,
+  },
+];
+
+test('0. every undrawn turn column is written by the specs below', () => {
+  const written = new Set(UNDRAWN_TURN_WRITES.flatMap((w) => w.columns));
+  assert.deepEqual(OPEN_LIST_UNDRAWN_TURN_COLUMNS.filter((c) => !written.has(c)), []);
+});
 
 test('2. hints: a write of undrawn columns alone sends no sessions.list_changed and keeps the version; a drawn one sends one', { skip, timeout: 120_000 }, async (t) => {
   const f = await fixture(t);
@@ -366,8 +390,8 @@ test('2. hints: a write of undrawn columns alone sends no sessions.list_changed 
   for (const [column, set] of Object.entries(UNDRAWN_SESSION_WRITES)) {
     silent.push(await quiet(`session.${column}`, `UPDATE session SET ${set} WHERE id = $1::uuid`, f.sessionId));
   }
-  for (const [column, set] of Object.entries(UNDRAWN_TURN_WRITES)) {
-    silent.push(await quiet(`conversation_turn.${column}`, `UPDATE conversation_turn SET ${set} WHERE id = $1::uuid`, f.turnId));
+  for (const { columns, row, set } of UNDRAWN_TURN_WRITES) {
+    silent.push(await quiet(`conversation_turn.${columns.join('+')}`, `UPDATE conversation_turn SET ${set} WHERE id = $1::uuid`, f[row]));
   }
   silent.push(await quiet('a session write that changes nothing',
     `UPDATE session SET engine_turn_active = engine_turn_active, last_tool_use = last_tool_use WHERE id = $1::uuid`, f.sessionId));
@@ -384,7 +408,7 @@ test('2. hints: a write of undrawn columns alone sends no sessions.list_changed 
   await loud('conversation_turn.answered_at with delivery_status', `UPDATE conversation_turn SET answered_at = now(), delivery_status = 'done' WHERE id = $1::uuid`, f.turnId);
   await loud('conversation_turn.status', `UPDATE conversation_turn SET status = 'ANSWERED' WHERE id = $1::uuid`, f.turnId);
   await loud('a turn inserted', `INSERT INTO conversation_turn (id, session_id, seq, client_turn_id, kind, content, status)
-                                 VALUES (gen_random_uuid(), $1::uuid, 2, 'olu-second', 'message', 'next', 'PENDING')`, f.sessionId);
+                                 VALUES (gen_random_uuid(), $1::uuid, 3, 'olu-second', 'message', 'next', 'PENDING')`, f.sessionId);
   // A session leaving the account moves both owners, whatever else it changed.
   const other = randomUUID();
   await f.db.user.create({ data: { id: other, email: `olu-${other}@open-list-undrawn.invalid`, name: 'olu2', passwordHash: 'x' } });
@@ -403,8 +427,8 @@ test('3. the row: changing every undrawn session column leaves the Open list\'s 
   await f.db.$executeRawUnsafe(
     `UPDATE session SET ${Object.values(UNDRAWN_SESSION_WRITES).join(', ')} WHERE id = $1::uuid`, f.sessionId,
   );
-  await f.db.$executeRawUnsafe(
-    `UPDATE conversation_turn SET ${Object.values(UNDRAWN_TURN_WRITES).join(', ')} WHERE id = $1::uuid`, f.turnId,
-  );
+  for (const { row, set } of UNDRAWN_TURN_WRITES) {
+    await f.db.$executeRawUnsafe(`UPDATE conversation_turn SET ${set} WHERE id = $1::uuid`, f[row]);
+  }
   assert.deepEqual(await sessions.list(f.ownerId, { view: 'open' }), before);
 });
