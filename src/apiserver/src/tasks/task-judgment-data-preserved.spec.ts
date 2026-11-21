@@ -3258,10 +3258,14 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '1405_session_release_failure_backfill',
       '1406_session_release_failure_chk',
       '1407_session_release_failure_validate',
-      // 1410 is main's (not listed there): three nullable columns on coordinator_handoff naming what the successor runs
-      // on (successor_engine, successor_provider, successor_model); no row is written, and no preserved relation,
-      // trigger, function or DONE fence changes.
-      '1410_coordinator_handoff_successor',
+      // 1410 adds session.bg_job_stop_requests, a NOT NULL TEXT[] with a constant default (catalog-only, no rewrite),
+      // for the owner's bg-job stop requests; no row is written. Session is not a preserved relation, and no trigger,
+      // function or DONE fence changes.
+      '1410_session_bg_job_stop_requests',
+      // 1411 (renumbered from a second 1410) adds three nullable columns on coordinator_handoff (what a handoff's
+      // successor runs on); no row is written, and coordinator_handoff is not a preserved relation — no trigger,
+      // function or DONE fence changes.
+      '1411_coordinator_handoff_successor',
       // 1411 to 1415 replace the bodies of the session-dispatch guards and re-create three ended-triggers so they
       // read session.finished_at instead of the terminal status set (plan step 4.4), and add finished_at to five
       // trigger column lists on session; every guard answers what it did for every row session_release_fact_chk
