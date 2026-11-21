@@ -41,9 +41,7 @@ export const SESSION_TERMINAL_STATUS_READERS: Readonly<Record<string, number>> =
   'src/apiserver/src/push/settle-alert.ts': 2,
   'src/apiserver/src/realtime/reaper.service.ts': 4,
   'src/apiserver/src/runner-api/background-job-wake.ts': 3,
-  // 4 of the 30 arrived from main at acb7448a49 in the merge of 2026-11-20 (releaseClaudeAccountSwap's ended-status filter), written before this guard
-  // reached main; admitted as found, plan phase 4 moves them with the rest.
-  'src/apiserver/src/runner-api/runner-api.controller.ts': 30,
+  'src/apiserver/src/runner-api/runner-api.controller.ts': 26,
   'src/apiserver/src/runner-api/runner-link-hints.ts': 1,
   'src/apiserver/src/runner-api/scheduled-wakeup.ts': 3,
   'src/apiserver/src/runner-api/scheduled-wakeup.worker.ts': 2,
