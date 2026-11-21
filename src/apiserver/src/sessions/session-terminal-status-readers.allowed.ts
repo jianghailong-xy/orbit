@@ -49,8 +49,6 @@ export const SESSION_TERMINAL_STATUS_READERS: Readonly<Record<string, number>> =
   'src/apiserver/src/runner-api/scheduled-wakeup.worker.ts': 2,
   // The old runner protocol's turn status words translated into the turn outcome; goes when plan phase 6 lets the runner report the outcome itself.
   'src/apiserver/src/runner-api/turn-outcome.ts': 4,
-  // Arrived from main at acb7448a49 in the merge of 2026-11-20, written before this guard reached main; admitted as found, plan phase 4 moves it with the rest.
-  'src/apiserver/src/runners/claude-account-swap.ts': 1,
   'src/apiserver/src/schedules/schedule-runs.service.ts': 10,
   'src/apiserver/src/sessions/auto-retry.service.ts': 9,
   'src/apiserver/src/sessions/session-move.ts': 1,
