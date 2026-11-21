@@ -8,7 +8,8 @@
 ## Flow
 
 1. **Hand over** (`POST /projects/:id/coordinator/handoff`). Orbit queues a platform turn in the
-   current coordinator. Its key is `coordinator-handoff:v1:<handoffId>:<attempt>` and it is sent as
+   current coordinator. The turn goes through resume, so a coordinator that has ended without being
+   completed (recycled while idle, or `FAILED`) is revived to write it. Its key is `coordinator-handoff:v1:<handoffId>:<attempt>` and it is sent as
    `NEXT_TURN`, so it runs after any turn already running. The turn is the platform's
    (`isOrbitAuthoredTurn`), not a message from the owner, so clients do not draw it as one. It asks
    the coordinator first to record every owner ruling not yet recorded (`project_ruling_record`,
@@ -35,7 +36,31 @@
    Nothing else changes: the old coordinator stays current and no wait moves.
    - Timeouts: 10 minutes after the turn was delivered, or 60 minutes while it is still queued.
    - A stop that drops the queued turn, or a conversation that ends, counts as stopped.
+   - A revived coordinator that fails again before it answers (its model or provider no longer
+     works) is `TURN_FAILED` at the next sweep.
    - A sweep every 30 s catches the endings that never reach turn-complete.
+
+## The successor's model
+
+By default the successor runs on the previous coordinator's engine, provider and model. When that model is
+why the owner is handing over (a provider whose sign-in failed, an engine that will not start), the
+successor would fail the same way. So **Hand over**, **Skip the note** / **Hand over without a note** and
+**Try again** take an optional body, `CoordinatorHandoffRequest`:
+
+```json
+{ "successor": { "engine": "claude", "provider": "claude", "model": "claude-opus-5-5" } }
+```
+
+Each field is what `POST /sessions` takes, and each is optional. A successor named later in the same handoff
+replaces the earlier one; `"successor": null` (the picker's "Same as this one") clears it, back to the
+current coordinator's model; a request that leaves `successor` out keeps it. The pick is checked against the session
+start's own resolution before anything happens, so a pick that could not open is refused (400/409) and the
+current coordinator is not completed. The handoff keeps the pick (migration 1411) and shows it as
+`successor` on `coordinatorHandoff` and on every `CoordinatorHandoffView`, so the failure state can show
+what was picked.
+
+The usual path when the current model is broken: **Hand over** revives the coordinator for its note, the note
+turn fails, and the failure offers **Hand over without a note** with the model picker.
 
 ## Endpoints
 
@@ -69,6 +94,7 @@ the outgoing session, and for the successor once there is one.
 | `failureCode` | `TURN_FAILED` · `TURN_STOPPED` · `TIMED_OUT` · `EMPTY_NOTE` · `REPLACE_FAILED`, or null |
 | `failureReason` | the whole sentence, e.g. "The handoff note wasn't written: the turn failed." |
 | `handedOverToSessionId` | the successor once `COMPLETED` ("Handed over to a new coordinator. Open it") |
+| `successor` | `{ engine, provider, model }` the owner named for the successor, or null (it keeps this coordinator's) |
 
 `coordinatorHandoffReceived: SessionCoordinatorHandoffReceived | null` is set on the **successor**.
 

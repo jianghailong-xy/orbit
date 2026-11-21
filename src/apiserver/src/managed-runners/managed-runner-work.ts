@@ -1,5 +1,6 @@
 import { Prisma, type ManagedRunner } from '@prisma/client';
 
+import { sessionExecutingOutsideTurnSql } from '../common/session-working';
 import type { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -46,6 +47,9 @@ export type ManagedRunnerWork =
 /** The sign-in states with a CLI of the runner's still in play (runner-api.controller drainLoginRequest). */
 const LOGIN_IN_FLIGHT = Prisma.sql`ARRAY['pending', 'awaiting_code', 'awaiting_approval', 'cancelling']::text[]`;
 
+/** A background shell of `s`, which the shared executing facts leave out: sleep counts it on top. */
+const BACKGROUND_SHELL_SQL = `cardinality(s."running_bg_shells") > 0`;
+
 /**
  * One EXISTS per kind of work, about one runner. Shared by the sleep decision (all of it) and the
  * sweep (what can wake a runner), so the two read the same facts the same way.
@@ -55,12 +59,12 @@ function workSql(runner: Prisma.Sql) {
   return {
     ACTIVE_TURN: Prisma.sql`EXISTS (SELECT 1 FROM "session" s WHERE ${onRunner} AND s."status" = 'RUNNING')`,
     QUEUED_TURN: Prisma.sql`EXISTS (SELECT 1 FROM "session" s WHERE ${onRunner} AND s."status" = 'PENDING' AND s."cancel_requested_at" IS NULL)`,
-    // A turn an engine runs on its own, a background shell or job (watches and services included) or
-    // a subagent of a session that is still open: what the runner's events last said was alive.
+    // What a session that is still open executes outside a dispatched turn (the engine's own turn, a
+    // subagent, a background job: common/session-working.ts), plus this reader's own addition, any
+    // background shell — services included, since a process left up still runs on this machine: what
+    // the runner's events last said was alive.
     BACKGROUND_WORK: Prisma.sql`EXISTS (SELECT 1 FROM "session" s WHERE ${onRunner}
-      AND s."status" IN ('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED')
-      AND (s."engine_turn_active" OR cardinality(s."running_bg_jobs") > 0
-        OR cardinality(s."running_bg_shells") > 0 OR cardinality(s."running_subagents") > 0))`,
+      AND ${Prisma.raw(sessionExecutingOutsideTurnSql('s', [BACKGROUND_SHELL_SQL]))})`,
     WORKTREE_OPERATION: Prisma.sql`EXISTS (SELECT 1 FROM "session" s WHERE ${onRunner}
       AND (s."merge_status" = 'pending' OR s."commit_status" = 'pending'))`,
     // Already due: a wakeup or a retry still to come stays on the server and wakes the runner then.

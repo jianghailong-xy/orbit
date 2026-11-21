@@ -197,7 +197,7 @@ async function connect(): Promise<Stack> {
     new ProjectPromotionService(prisma),
   );
   Object.assign(api, { coordinatorFacts: recovery });
-  const reaper = new ReaperService(prisma, realtime, openItems, undefined, undefined, undefined, router);
+  const reaper = new ReaperService(prisma, realtime, openItems, undefined, undefined, undefined, undefined, router);
   return { db, sessions, tasks, projects, acceptance, receipts, api, reaper, jobs };
 }
 

@@ -63,6 +63,14 @@ type HeartbeatRequest struct {
 	// runs, yet the runner takes no work in their place. The control plane counts them as running.
 	// Omitted when there are none; an older runner never sends it, and is counted by turns alone.
 	BackgroundJobSessionIDs []string `json:"backgroundJobSessionIds,omitempty"`
+	// Executing states, for each session this process supervises, what is executing in it now, whole
+	// (session_executing.go): the control plane replaces its inferred sets with it. An older control
+	// plane ignores the member. Omitted when no session run has installed its probe.
+	Executing []SessionExecuting `json:"executing,omitempty"`
+	// ExecutingAt is when Executing was composed, in Unix milliseconds on this machine's clock, the clock every
+	// event's TS is read on: the control plane does not let a beat replace the sets of a session whose event batch
+	// moved them at or after this instant (apiserver runners/runner-executing-sets.ts). Omitted with Executing.
+	ExecutingAt int64 `json:"executingAt,omitempty"`
 	// ExpiredCommitErrors: see CommitErrorExpiry. Omitted when there are none.
 	ExpiredCommitErrors []CommitErrorExpiry `json:"expiredCommitErrors,omitempty"`
 	// Draining marks a process that keeps heartbeating (so the reaper spares its
@@ -601,6 +609,10 @@ type HeartbeatResponse struct {
 	// there are none, and from older control planes.
 	RemoteSubagentRuns []string `json:"remoteSubagentRuns,omitempty"`
 	StopSubagentRunIDs []string `json:"stopSubagentRunIds,omitempty"`
+	// The bg_run jobs the session's owner asked to stop from the app (background_owner_stop.go), listed
+	// on every answer while the job still runs here. Sent only to a runner that declares bg-owner-stop/v1;
+	// absent when there are none, and from older control planes.
+	StopBackgroundJobs []BgJobStopCommand `json:"stopBackgroundJobs,omitempty"`
 	// The snapshots this runner's open forked tasks start from (docs/task-fork-from-session-design.md
 	// §2.6): the keep-alive refs whose snapshot is not listed are this runner's to delete (forkRefGC). A
 	// POINTER because only a present list states anything: absent (an older control plane, a quiet link

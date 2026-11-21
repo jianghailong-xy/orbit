@@ -62,6 +62,8 @@ type linkState struct {
 	sessionQ map[string]*sessionIngest
 	// prefixes are the turn prefix requests relayed to the runner and not answered yet, by request_id (live.go).
 	prefixes map[string]*pendingPrefix
+	// tails are the background job tail requests relayed to the runner and not answered yet, by request_id (bgtail.go).
+	tails map[string]*pendingTail
 
 	lastFailureLog atomic.Int64
 }
@@ -77,6 +79,7 @@ func newLinkState(c *conn) *linkState {
 		sessions:    map[string]bool{},
 		sessionQ:    map[string]*sessionIngest{},
 		prefixes:    map[string]*pendingPrefix{},
+		tails:       map[string]*pendingTail{},
 	}
 }
 
@@ -100,16 +103,21 @@ func (l *linkState) start(credit creditLevel) {
 
 // close lets go of what the connection held: its unacknowledged events no longer count against the gateway's ingest
 // queue once their calls end (events.go), its sessions leave the queue's line, and the turn prefix requests nobody
-// will answer now are answered empty.
+// will answer now are answered empty, and its background job tail requests NO_CONNECTION.
 func (l *linkState) close() {
 	l.mu.Lock()
 	l.closed = true
 	prefixes := l.prefixes
 	l.prefixes = map[string]*pendingPrefix{}
+	tails := l.tails
+	l.tails = map[string]*pendingTail{}
 	l.mu.Unlock()
 	l.c.g.credit.leave(l)
 	for _, p := range prefixes {
 		p.answerEmpty(l.c.g, "closed")
+	}
+	for _, p := range tails {
+		p.answer(l.c.g, nil, linkpb.BackgroundJobTailOutcome_BACKGROUND_JOB_TAIL_OUTCOME_NO_CONNECTION, "closed")
 	}
 }
 

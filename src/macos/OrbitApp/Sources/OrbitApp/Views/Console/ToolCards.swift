@@ -857,7 +857,8 @@ private struct ToolResultImagePlaceholder: View {
     }
 }
 
-private extension ToolTone {
+/// A tool row's tone, as its rail and icon draw it; the Job card (`JobCardView`) draws the shell's.
+extension ToolTone {
     var color: Color {
         switch self {
         case .read:  return .blue

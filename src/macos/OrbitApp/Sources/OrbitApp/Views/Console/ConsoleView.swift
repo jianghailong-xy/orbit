@@ -348,8 +348,11 @@ struct ConsoleView: View {
                 // The folded row by the shared rule; its names stop rotating while the band is folded.
                 BackgroundTrayView(procs: console.state.background, progress: console.state.taskProgress,
                                    row: BackgroundRowRule.row(console.state.background, items: console.state.items,
+                                                              lastAgentTurnStartedAt: console.state.agentTurnStartedAt,
                                                               sessionLive: console.isLive),
-                                   paused: foldsChrome(console) || foldsBand(console))
+                                   paused: foldsChrome(console) || foldsBand(console),
+                                   revealJob: { console.revealJob($0) },
+                                   stopJob: { try await console.stopJob($0) })
                 // The tasks this session's agent created, beside the code the bar below
                 // carries — the session's two kinds of output, together.
                 CreatedTasksCard(console: console)
@@ -380,8 +383,11 @@ struct ConsoleView: View {
             let handoffRow = CoordinatorHandoffRow.resolve(handoff, enginePhase: handoffSession?.enginePhase)
             if let handoffRow {
                 if case .completed = handoffRow {} else {
-                    CoordinatorHandoffStatusView(row: handoffRow) { handoffPress(console, $0) }
-                        .padding(.bottom, .composerBandGap)
+                    CoordinatorHandoffStatusView(row: handoffRow, savedSuccessor: handoff?.successor,
+                                                 choiceSources: console.choiceSources) { action, successor in
+                        handoffPress(console, action, successor: successor)
+                    }
+                    .padding(.bottom, .composerBandGap)
                 }
             }
             if case .completed(let successor)? = handoffRow {
@@ -404,10 +410,11 @@ struct ConsoleView: View {
 
     /// A press on the handoff's row: Skip the note, Cancel handover, or a failure's way out. The
     /// project is the one this conversation coordinates — or, once it no longer does, belongs to.
-    private func handoffPress(_ console: ConsoleModel, _ action: CoordinatorHandoffAction) {
+    private func handoffPress(_ console: ConsoleModel, _ action: CoordinatorHandoffAction,
+                              successor: CoordinatorHandoffSuccessor?) {
         let session = appModel.session(id: console.sessionID)
         guard let projectID = session?.projectId ?? session?.projectMembership?.projectId else { return }
-        Task { await console.coordinatorHandoff(projectID: projectID, action) }
+        Task { await console.coordinatorHandoff(projectID: projectID, action, successor: successor) }
     }
 
     private func consoleBody(navTitleWidth: CGFloat) -> some View {
@@ -1176,6 +1183,9 @@ struct TranscriptView: View {
         // Don't send (`SubagentCardEnd`).
         .environment(\.subagentWakes, console.subagentWakes)
         .environment(\.subagentQueuedWakes, console.subagentQueuedWakes)
+        // A bg_run job's card: its runner reports, its wake turns and a queued one's Don't send, joined by
+        // job id, and where it reads its tail and asks to stop it (`JobCardView`).
+        .environment(\.jobCardHost, console.jobCardHost(place: app.session(id: console.sessionID)?.agent?.name))
         .scrollContentBackground(.hidden)   // show the window background, not the List's own
         #if os(iOS)
         // Turn OFF the scroll view's touch delay so an in-list control (the jump-to-latest disc, the
@@ -2007,7 +2017,10 @@ struct TranscriptView: View {
         guard let session = app.session(id: console.sessionID),
               let subtitle = SessionHeader.subtitle(for: session, watching: watching, now: now,
                                                     machine: console.runnerName) else {
-            return Text(console.state.status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized)
+            // A status word this build does not know reads as the neutral ended wording.
+            let status = console.state.status
+            return Text(status == .unknown ? "Ended"
+                        : status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized)
                 .foregroundColor(.secondary)
         }
         let word = SessionHeader.headerWord(for: session, watching: watching, now: now, machine: console.runnerName)
@@ -2565,6 +2578,10 @@ struct TranscriptItemView: View {
         case .toolCall(let c) where c.name == WorkflowBlock.toolName:
             // An Orbit workflow: its own block, opening to its calls by phase (board subagent-workflow part 4).
             WorkflowBlockView(card: c, fullPayload: fullPayload)
+        case .toolCall(let c) where BgJobCard.drawsCard(c):
+            // A bg_run call is its job's card from start to end (board A1); one refused, or whose answer
+            // names no job, stays a call.
+            JobCardView(card: c)
         case .toolCall(let c):
             // The owner's "Chat about this" reply to one of Orbit's own cards: their message, drawn as
             // theirs under the call rather than left inside its result (`OwnerChatReply`).

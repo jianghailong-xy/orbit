@@ -14,6 +14,15 @@ public enum RunStatus: String, Codable, Sendable {
     case awaitingInput = "AWAITING_INPUT"
     /// A turn was interrupted by the user; the session stays alive.
     case interrupted = "INTERRUPTED"
+    /// Forward compatibility: a status word this build does not know. Decoding maps any such
+    /// word here instead of failing the whole row (and with it the whole list). It is neither
+    /// live nor terminal, and reads as the neutral ``SessionRunState/ended``.
+    case unknown = "UNKNOWN"
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = RunStatus(rawValue: raw) ?? .unknown
+    }
 
     /// Statuses where the session is live / resumable (composer should allow sending).
     public var isLive: Bool {
@@ -90,6 +99,9 @@ public enum SessionRunState: String, Codable, Sendable {
             // Every deliberate end — filed, ended, stopped, deleted, task-driven — plus the
             // retired PARKED-era 'idle'/'orphaned' reasons settle here. None of them differ in
             // what the user can do next.
+            return .ended
+        case .unknown:
+            // A status word this build does not know: never running, and no outcome is claimed.
             return .ended
         }
     }

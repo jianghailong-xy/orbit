@@ -25,7 +25,7 @@ import { SessionAttemptService } from '../projects/session-attempt.service';
 import { encryptSecret } from '../providers/provider-crypto';
 import { PatService } from './pat.service';
 import { call, type Apiserver, type Reply } from './pat-test-apiserver';
-import { evidence, paramsOf, type Tenant, type TenantRequest } from './tenant-isolation-cases';
+import { evidence, paramsOf, TENANT_ISOLATION_BG_JOB_ID, type Tenant, type TenantRequest } from './tenant-isolation-cases';
 
 /**
  * What every table notes while the census runs: one row per row written, by whom it does not say. Every table but the
@@ -244,6 +244,18 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
     await db.runEvent.create({ data: { id: eventId, sessionId, seq: 1, type: 'assistant_text', payload: { text: `wrote ${artifactPath}` } } });
     // A reply of the agent's, which Settings › Translation can translate again (reply-translation.ts).
     await db.runEvent.create({ data: { sessionId, seq: 2, type: 'assistant', payload: { text: 'the census replied' } } });
+    // A bg_run job still running, as runner-go background_job.go reports one: the launch pair and its `running` record,
+    // so POST /background/jobs/:jobId/stop and GET .../tail name a job the session ran (TENANT_ISOLATION_BG_JOB_ID).
+    const bgJob = TENANT_ISOLATION_BG_JOB_ID;
+    await db.runEvent.create({ data: { sessionId, seq: 3, type: 'tool_use', payload: {
+      id: bgJob, name: 'Bash', input: { command: 'sleep 600', run_in_background: true },
+    } } });
+    await db.runEvent.create({ data: { sessionId, seq: 4, type: 'tool_result', payload: {
+      toolUseId: bgJob, content: `Command running in background with ID: ${bgJob}. Output is being written to: /census/${bgJob}.output. `,
+    } } });
+    await db.runEvent.create({ data: { sessionId, seq: 5, type: 'background_task', payload: {
+      shellId: bgJob, toolUseId: bgJob, status: 'running', kind: 'job', command: 'sleep 600', outputPath: `/census/${bgJob}.output`,
+    } } });
     await db.attachment.create({
       data: { ownerId, sessionId, mimeType: 'text/plain', sizeBytes: 6, fileName: 'census.txt', data: Buffer.from('census') },
     });

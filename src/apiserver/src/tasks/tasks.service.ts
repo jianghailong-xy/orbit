@@ -252,6 +252,7 @@ import {
   QUOTA_BLIND_RETRY_BACKOFF_MS,
   autoRunEnd,
 } from './task-retry-policy';
+import { heldStatusFilter } from '../common/session-release';
 
 export {
   AUTO_RUN_RETRY_BACKOFF_MS,
@@ -15013,9 +15014,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           ownerId: delivery.ownerId,
           deletedAt: null,
           startsTaskWork: true,
-          status: {
-            in: [RunStatus.PENDING, RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED],
-          },
+          status: heldStatusFilter(),
         },
         orderBy: { createdAt: 'desc' },
         select: { id: true },

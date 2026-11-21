@@ -1,4 +1,5 @@
 import { parseBackgroundWake } from './backgroundWake';
+import { wakeupsOnly } from './bgJobCard';
 import { parseSubagentFinished } from './subagentFinished';
 import { parseWatchWake } from './watches';
 
@@ -51,5 +52,6 @@ export function queuedSubagentWake(turn: QueuedTurnOrigin): { runIds: string[]; 
   if (turn.sessionMessage) return null;
   const wake = parseSubagentFinished(turn.content);
   if (!wake) return null;
-  return { runIds: wake.runs.map((run) => run.runId), alone: parseBackgroundWake(wake.rest) === null };
+  // A job's news beside it draws nothing in the tail either (`queuedJobWake`); a wakeup coming due still does.
+  return { runIds: wake.runs.map((run) => run.runId), alone: wakeupsOnly(parseBackgroundWake(wake.rest)) === null };
 }

@@ -2125,6 +2125,18 @@ model Session {
   // runner's async /finalize. null = a natural agent finish (read `status`) or a
   // pre-migration row. Values: see SessionEndReason in @orbit/shared.
   endReason            String?   @map("end_reason")
+  // Why the session was released (no runner holds it): written with `finishedAt` and the terminal status in
+  // every write that releases the session, cleared with `finishedAt` by the revive. The end reasons plus
+  // turn_failed, runner_lost, setup_failed, engine_exited, engine_failed, end_not_honored, import_failed,
+  // landing_settled (migrations 1261 and 1403, CHECK session_release_cause_chk; values in
+  // common/session-release.ts). Backfilled by 1262 and 1405. The status is FAILED exactly when the cause is a
+  // failure cause (FAILURE_RELEASE_CAUSES; CHECK session_release_failure_chk, 1406).
+  releaseCause         String?   @map("release_cause")
+  // How the session's latest completed turn ended: ANSWERED | FAILED | INTERRUPTED | CANCELLED, the same
+  // value as that turn's `outcome`, written by runner turn-complete in the write that parks the session
+  // (migration 1201, CHECK session_last_turn_outcome_chk). Backfilled from status and endReason (1202); null
+  // when no turn has settled since, or when the old row could not say.
+  lastTurnOutcome      String?   @map("last_turn_outcome")
   // Denormalized preview: the text of the most recent `assistant` RunEvent, written on
   // event ingestion. Lets the session list show a last-reply line without querying the
   // (high-volume, append-only) run_event table per row. null until the first reply.
@@ -2209,6 +2221,12 @@ model Session {
   // older runner reports nothing) and counts as it did before this column existed. Only meaningful
   // while live. See src/apiserver/src/sessions/background-job-activity.ts.
   runningBgJobActivity Json      @default("{}") @map("running_bg_job_activity")
+  // The bg_run jobs of `runningBgJobs` the session's owner asked to stop from the app (POST
+  // /sessions/:id/background/jobs/:jobId/stop). Every full heartbeat answer to the session's
+  // runner lists the ones still in `runningBgJobs` (stopBackgroundJobs), so the stop is redelivered
+  // until the job's terminal report takes it out of that set; an id no longer there is inert. The
+  // route prunes it to `runningBgJobs` as it adds. Only meaningful while live.
+  bgJobStopRequests    String[]  @default([]) @map("bg_job_stop_requests")
   // Denormalized set of the agent's still-running sub-agents (Task/Agent tool): the tool_use
   // ids of sub-agent launches that haven't yet reported a terminal `<task-notification>`
   // (background_task). Added on launch, removed on completion, cleared on (re)spawn. The Agent
@@ -2224,6 +2242,10 @@ model Session {
   // `status` remains the sole source of truth for runner-slot accounting, so a self-driven
   // turn never consumes a permit it did not acquire.
   engineTurnActive     Boolean   @default(false) @map("engine_turn_active")
+  /// The runner-clock time (an event's `ts`) of the newest event batch that moved engineTurnActive, runningSubagents,
+  /// runningBgJobs or runningBgShells. A heartbeat's `executing` composed before it does not replace those sets: the
+  /// batch is newer news than the beat (runners/runner-executing-sets.ts, migration 1267). Internal: never sent.
+  executingEventAt     DateTime? @map("executing_event_at")
   // When the engine first spoke for the CURRENT run: cleared by every claim, stamped by the
   // first event the engine itself produced (a spawn handshake, or any generation event when a
   // warm process is reused and there is no handshake). RUNNING with this still null is the
@@ -3087,6 +3109,12 @@ model ConversationTurn {
   /// the control plane's note, so `content` stays the owner's words. Null for every other turn.
   wikiContext     Json?     @map("wiki_context")
   answeredAt      DateTime? @map("answered_at")
+  /// How this turn's latest completion ended (migration 1201, CHECK conversation_turn_outcome_chk):
+  /// ANSWERED | FAILED | INTERRUPTED | CANCELLED, written by runner turn-complete in the write that settles
+  /// `status`. Null on a turn no completion has settled, on a kind that is not a turn of work (steer, withdraw,
+  /// control turns), and on every turn written before 1201. `error` is what it failed or was stopped with.
+  outcome         String?
+  error           String?
   createdAt       DateTime  @default(now()) @map("created_at")
 
   // Image blobs sent with this turn (web composer). Linked when the turn is enqueued;
@@ -7856,6 +7884,11 @@ model CoordinatorHandoff {
   note          String?
   /// The waits the swap moved, as `{ id, label, paused }`.
   movedWaits    Json      @default("[]") @map("moved_waits")
+  /// What the successor runs on, as the owner named it (migration 1410); all null keeps the previous
+  /// coordinator's engine, provider and model.
+  successorEngine   String? @map("successor_engine")
+  successorProvider String? @map("successor_provider")
+  successorModel    String? @map("successor_model")
   endedAt       DateTime? @map("ended_at")
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at")

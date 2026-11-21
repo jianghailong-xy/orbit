@@ -16,6 +16,7 @@ import { runnerOs } from '../common/runner-platform';
 import { signedOutEngineRefusal, type EnginePreflightRunner } from '../sessions/engine-signin-preflight';
 import { lastProviderByWorkspace, DEFAULT_AGENT_PROVIDER } from '../workspaces/workspace-provider';
 import { runnerIsOnline } from './runner-presence';
+import { RELEASED_SESSION_STATUSES } from '../common/session-release';
 
 /**
  * Fix with an agent (docs/mocks/install-failed-fix-with-agent, and the board on task 34x9udvOf5AQdLYqYE9N4):
@@ -76,7 +77,7 @@ export function attentionFixEntries(value: unknown): Map<string, AttentionFixEnt
 }
 
 /** The statuses a session has once it is over: its agent is no longer at work on anything. */
-const OVER_STATUSES = ['SUCCEEDED', 'FAILED', 'CANCELLED'] as const;
+const OVER_STATUSES = RELEASED_SESSION_STATUSES;
 
 /** A session that is open: not over, completed or deleted. Ended sessions free the warning for a new press. */
 export const OPEN_FIX_SESSION = {

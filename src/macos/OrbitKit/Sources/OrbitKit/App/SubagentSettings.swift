@@ -16,19 +16,22 @@ public struct ProviderModelTier: Codable, Equatable, Sendable, Identifiable {
     public let editable: Bool
     /// USD per million output tokens, when known.
     public let outputPricePerMTok: Double?
+    /// Set on a built-in engine's older family model: the newest model of its family, which routing uses instead.
+    public let supersededBy: String?
 
     public var id: String { model }
 
     public init(model: String, levels: [String], source: String? = nil, editable: Bool = false,
-                outputPricePerMTok: Double? = nil) {
+                outputPricePerMTok: Double? = nil, supersededBy: String? = nil) {
         self.model = model
         self.levels = levels
         self.source = source
         self.editable = editable
         self.outputPricePerMTok = outputPricePerMTok
+        self.supersededBy = supersededBy
     }
 
-    private enum CodingKeys: String, CodingKey { case model, levels, source, editable, outputPricePerMTok }
+    private enum CodingKeys: String, CodingKey { case model, levels, source, editable, outputPricePerMTok, supersededBy }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -37,6 +40,7 @@ public struct ProviderModelTier: Codable, Equatable, Sendable, Identifiable {
         source = try c.decodeIfPresent(String.self, forKey: .source)
         editable = try c.decodeIfPresent(Bool.self, forKey: .editable) ?? false
         outputPricePerMTok = try c.decodeIfPresent(Double.self, forKey: .outputPricePerMTok)
+        supersededBy = try c.decodeIfPresent(String.self, forKey: .supersededBy)
     }
 }
 
@@ -189,8 +193,17 @@ public enum SubagentSettings {
         return levels.joined(separator: " · ")
     }
 
+    /// A model's Tier cell: `tierText`, but an older family member reads "Older · uses <newest>" in place of Not set.
+    public static func modelTierText(_ model: ProviderModelTier) -> String {
+        if model.levels.isEmpty, let newest = model.supersededBy { return "Older · uses \(newest)" }
+        return tierText(model.levels)
+    }
+
     /// Whether the Tier cell warns: a model with no tier ranks after every tiered one.
     public static func tierIsUnset(_ levels: [String]) -> Bool { levels.isEmpty }
+
+    /// Whether the Tier cell reads Older (grey, not a warning): no tier of its own, a newer family member routed instead.
+    public static func tierIsOlder(_ model: ProviderModelTier) -> Bool { model.levels.isEmpty && model.supersededBy != nil }
 
     /// A model's Price / M out cell.
     public static func priceText(_ model: ProviderModelTier, billing: String) -> String {

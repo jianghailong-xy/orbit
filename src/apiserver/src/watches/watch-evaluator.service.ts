@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client';
 import { NormalizedRunEvent, RunEventType } from '@orbit/shared';
 import { Subscription } from 'rxjs';
 
+import { PENDING_WAKEUP, RESUME_WATCH } from '../common/session-working';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -674,6 +675,9 @@ async function readTargets(tx: Prisma.TransactionClient, watchId: string): Promi
  * and a Task with no row there is in epoch 0, begun at its creation, with nothing reported. The report's
  * message is not read: no leaf may decide from it. A session's jobs in flight come from `running_bg_jobs`
  * and `running_bg_job_activity`, which the runner's job reports keep; nothing a job printed is read.
+ * SESSION_QUIESCENT also reads the work running outside a turn (`engine_turn_active`, `running_subagents`)
+ * and what is armed to wake the session (`retry_at`, its RESUME_SESSION watches, its pending wake-ups), in
+ * the SQL forms of common/session-working.ts.
  */
 async function readFacts(tx: Prisma.TransactionClient, targets: readonly TargetRow[]): Promise<Map<string, OwnedFact>> {
   const ids = (kind: WatchTargetKind) =>
@@ -722,7 +726,11 @@ async function readFacts(tx: Prisma.TransactionClient, targets: readonly TargetR
              s."end_reason" AS "endReason",
              s."completed_at" AS "completedAt", s."archived_at" AS "archivedAt", s."deleted_at" AS "deletedAt",
              EXISTS (SELECT 1 FROM "approval" a WHERE a."session_id" = s."id" AND a."status" = 'PENDING') AS "pendingApproval",
-             s."running_bg_jobs" AS "runningBgJobs", s."running_bg_job_activity" AS "runningBgJobActivity"
+             s."running_bg_jobs" AS "runningBgJobs", s."running_bg_job_activity" AS "runningBgJobActivity",
+             s."engine_turn_active" AS "engineTurnActive", s."running_subagents" AS "runningSubagents",
+             s."retry_at" AS "retryAt",
+             ${Prisma.raw(RESUME_WATCH.sql('s'))} AS "hasResumeWatch",
+             ${Prisma.raw(PENDING_WAKEUP.sql('s'))} AS "hasPendingWakeup"
       FROM "session" s
       WHERE s."id" = ANY(${sessionIds}::uuid[])`;
     for (const { id, runningBgJobs, runningBgJobActivity, ...session } of sessions) {

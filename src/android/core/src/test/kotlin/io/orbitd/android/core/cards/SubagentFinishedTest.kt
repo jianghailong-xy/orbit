@@ -120,7 +120,7 @@ class SubagentFinishedTest {
     }
 
     // Its turn is Orbit's — a card of its own, so never the reader's bubble or the From Orbit line — but it draws nothing and so folds
-    // under no line: the agent's answer reads on (web `orbitTurnOf`). A job's news written beside it folds as its own.
+    // under no line: the agent's answer reads on (web `orbitTurnOf`). A wakeup written beside it folds as its own.
     @Test fun itIsACardOfItsOwnThatFoldsNoTurnButAJobsNewsBesideIt() {
         val event = io.orbitd.android.core.realtime.RunEvent("user", 9, kotlinx.serialization.json.buildJsonObject {
             put("text", JsonPrimitive(DONE)); put("controlPlaneNote", JsonPrimitive(DONE)) }, "turn-wake")
@@ -135,6 +135,13 @@ class SubagentFinishedTest {
             "  The control plane recorded this for you; the user did not say it.\n</background-job-wake>"
         val both = event.copy(payload = kotlinx.serialization.json.buildJsonObject { put("controlPlaneNote", JsonPrimitive("$DONE\n\n$job")) })
         assertEquals(listOf("record:9:subagent", "record:9:wake"), transcriptCards(both).map { it.key })
-        assertEquals("job", OrbitExchangeFold.turnOf(both)?.category)
+        // A job's news draws nothing either (board C1, its Job card says it): only a wakeup coming due beside the end folds.
+        assertNull(OrbitExchangeFold.turnOf(both))
+        val wakeup = "<scheduled-wakeup>\n  The wakeup you asked for with schedule_wakeup is due; the control plane opened this turn for it:\n" +
+            "    2026-09-15T18:00:00.000Z scheduled 600 seconds out, due 2026-09-15T18:10:00.000Z\n    reason: waiting for CI run 4242\n" +
+            "  The control plane recorded this for you; the user did not say it.\n</scheduled-wakeup>"
+        val withWakeup = event.copy(payload = kotlinx.serialization.json.buildJsonObject { put("controlPlaneNote", JsonPrimitive("$DONE\n\n$job\n\n$wakeup")) })
+        assertEquals("job", OrbitExchangeFold.turnOf(withWakeup)?.category)
+        assertEquals("Scheduled wakeup: waiting for CI run 4242", OrbitExchangeFold.turnOf(withWakeup)?.what)
     }
 }
