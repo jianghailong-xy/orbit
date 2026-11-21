@@ -46,7 +46,7 @@ import java.time.Instant
 internal fun RunSettingsSection(state: ProjectPageState, doc: JsonObject, now: Instant, enabled: Boolean, editMergeCheck: () -> Unit,
     integration: (JsonObject?) -> Unit, automatic: (Boolean) -> Unit, stepConcurrency: (Int) -> Unit, pause: (Boolean) -> Unit,
     nonCode: (Boolean) -> Unit = {}, mergeLive: suspend () -> Boolean = { false },
-    revertChange: suspend (ProjectSettingChanges.Change) -> String? = { null }) {
+    revertChange: suspend (ProjectSettingChanges.Change) -> String? = { null }, openTask: ((String) -> Unit)? = null) {
     // The coordinator's changes (board docs/mocks/landing-measured ⑤, D6): a row here, the list a page of its own over this one.
     var changesOpen by remember { mutableStateOf(false) }
     val changes = ProjectSettingChanges.of(doc)?.let(ProjectSettingChanges::listed)
@@ -97,7 +97,8 @@ internal fun RunSettingsSection(state: ProjectPageState, doc: JsonObject, now: I
     }
     if (changesOpen && changes != null) CoordinatorChangesPage(doc.text("title").orEmpty(), changes,
         taskTitle = { id -> state.tasks.firstOrNull { io.orbitd.android.navigation.ObjectId.same(it.text("id"), id) }?.text("title") },
-        now = now, enabled = enabled, close = { changesOpen = false }, revert = revertChange)
+        now = now, enabled = enabled, close = { changesOpen = false }, revert = revertChange,
+        openTask = openTask?.let { open -> { taskId: String -> changesOpen = false; open(taskId) } })
 }
 
 @Composable
@@ -627,6 +628,8 @@ private fun LandingCheckSetting(view: JsonObject, enabled: Boolean, now: Instant
             // Who set it (D3): the four pills, and when; a value nobody is named for, or a server that predates the field, draws none.
             read.setBy?.let { setBy -> WhoLine(setBy, read.setAt?.let { ProjectTime.ago(it, now) }?.let { LandingMeasuredCopy.setAgo(setBy, it) },
                 "project-landing-check-by") }
+            // Who can set it, under the value's own origin, on No check (web's LANDING_CHECK_ORIGIN_NOTES, OrbitKit's originNotes).
+            if (read.mode == ProjectLandingCheck.Mode.NONE) WhoCanSet("project-landing-check-who-can-set")
             if (read.mode != ProjectLandingCheck.Mode.NONE) {
                 if (read.mode == ProjectLandingCheck.Mode.COMMAND) Note(view.number("landingCheckTimeoutSeconds")?.let { "$it seconds" }
                     ?: LandingCheckCopy.inheritedTimeout(view.number("mergeCheckTimeoutSeconds")))

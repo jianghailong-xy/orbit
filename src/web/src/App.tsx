@@ -12,7 +12,7 @@ import { HelpDrawerProvider } from './lib/helpDrawer';
 import { AdminLayout } from './components/settings/AdminLayout';
 import { SettingsLayout } from './components/settings';
 import { SettingsWorkspacePage } from './components/settings/WorkspaceSettingsPage';
-import { SettingsKeysPage, SettingsPoolsPage, SettingsProvidersHome } from './components/settings/SettingsProviderPages';
+import { SettingsKeysPage, SettingsPoolsPage, SettingsProvidersHome, SettingsTiersPage } from './components/settings/SettingsProviderPages';
 import { MachineSettingsPage } from './components/settings/MachineSettingsPage';
 import { ManagedRunnerSetupPage } from './components/settings/ManagedRunnerSetupPage';
 import { useRememberOutsideSettings } from './lib/settingsReturn';
@@ -341,6 +341,7 @@ export function App() {
             <Route path="providers/keys/:id" element={<ProviderConnectPage />} />
             <Route path="providers/pools" element={<SettingsPoolsPage />} />
             <Route path="providers/pools/:id" element={<ProviderPoolPage />} />
+            <Route path="providers/tiers" element={<SettingsTiersPage />} />
             <Route path="providers/:vendor" element={<SettingsKeysPage />} />
             <Route path="workspaces/:id" element={<SettingsWorkspacePage />} />
           </Route>

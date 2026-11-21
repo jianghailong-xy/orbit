@@ -54,12 +54,24 @@ object LandingMeasuredCopy {
     const val whoStart = "Set at start"
     fun setAgo(setBy: String?, ago: String) = when (setBy) { "CARD" -> "confirmed $ago"; "START" -> ago; else -> "set $ago" }
     fun who(setBy: String?) = when (setBy) { "OWNER" -> whoOwner; "CARD" -> whoCard; "START" -> whoStart; else -> whoCoordinator }
+    /** Under No check: who can set the landing check, each pill and what it means, in web's order and words
+     *  (`LANDING_CHECK_ORIGIN_NOTES`, OrbitKit `LandingProvenanceCopy.originNotes`). */
+    const val whoCanSet = "Who can set it"
+    val originNotes = listOf(
+        "OWNER" to "Anything you set; the coordinator then needs a card to change it.",
+        "COORDINATOR" to "No card, while the merge check exists.",
+        "CARD" to "A change you confirmed on a card.",
+        "START" to "The coordinator proposed it and you pressed Start; it may still change without a card. A value you typed on the start card reads as You.",
+    )
 
     // ④ A task exempt from the landing check (D5).
     const val exempt = "Exempt"
     const val removeExemption = "Remove exemption"
     fun markedAgo(ago: String) = "marked $ago"
     const val skipped = "Skipped"
+    // Web's TASK_EXEMPT_COPY and OrbitKit's landing page say these under an exempt task's check list; Android does not draw them yet.
+    const val mergeCheckBeforeMain = "Merge check before main"
+    const val stillRuns = "Still runs"
     fun skippedCheck(label: String) = "$label · $skipped"
     fun exemptBecause(reason: String?) = if (reason.isNullOrBlank()) exempt else "$exempt: $reason"
 
@@ -68,7 +80,7 @@ object LandingMeasuredCopy {
     fun changesCount(count: Int) = when (count) { 0 -> "No changes"; 1 -> "1 change"; else -> "$count changes" }
     const val changesIntro = "What the coordinator changed on its own since the project started. Revert puts the old value back and " +
         "takes the field away from the coordinator: it needs a card from then on."
-    const val changesEmpty = "The coordinator hasn’t changed anything on its own."
+    const val changesEmpty = "The coordinator has not changed anything on its own."
     const val fieldLandingCheck = "Landing check"
     const val fieldExempt = "Check exempt"
     const val usesMergeCheck = "Uses merge check"
@@ -76,7 +88,9 @@ object LandingMeasuredCopy {
     const val exemptValue = "exempt"
     const val revert = "Revert"
     const val cancel = "Cancel"
-    const val yourChange = "Your change · nothing to revert"
+    // Web's CHANGES_COPY.YOUR_CHANGE, the label alone; the row says it with what follows ([yourChange]).
+    const val yourChangeLabel = "Your change"
+    const val yourChange = "$yourChangeLabel · nothing to revert"
     const val cardChange = "Confirmed on a card · nothing to revert"
     const val changedSince = "Changed again since · nothing to revert"
     fun revertedBy(ago: String) = "Reverted by you · $ago · coordinator needs a card for this field"
@@ -85,6 +99,8 @@ object LandingMeasuredCopy {
     const val revertTo = "to"
     const val revertNote = "The coordinator can no longer change this field without a card."
     const val notReverted = "That change was not reverted"
+    /** On an exemption's row: the task it is about (web's list links it, OrbitKit's row opens it). */
+    const val openTask = "Open task"
 }
 
 /** A pill's two inks: the board's light ones, and the same hue on a dark page. */
@@ -115,6 +131,16 @@ internal fun WhoLine(setBy: String?, `when`: String?, tag: String) {
     Row(Modifier.testTag(tag), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         Pill(LandingMeasuredCopy.who(setBy), whoInk(setBy), "$tag:who")
         `when`?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+    }
+}
+
+/** Under No check (web's `project-landing-who`, OrbitKit's `landing-check-who-can-set`): who can set the landing check — each of the
+ * four pills and what it means. */
+@Composable
+internal fun WhoCanSet(tag: String) {
+    Column(Modifier.fillMaxWidth().testTag(tag), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(LandingMeasuredCopy.whoCanSet, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+        LandingMeasuredCopy.originNotes.forEach { (by, note) -> WhoLine(by, note, "$tag:$by") }
     }
 }
 
@@ -191,7 +217,7 @@ internal fun changeField(change: ProjectSettingChanges.Change, taskTitle: (Strin
  * sentence, null once it went through. */
 @Composable
 internal fun CoordinatorChangesPage(projectTitle: String, changes: List<ProjectSettingChanges.Change>, taskTitle: (String) -> String?, now: Instant,
-    enabled: Boolean, close: () -> Unit, revert: suspend (ProjectSettingChanges.Change) -> String?) {
+    enabled: Boolean, close: () -> Unit, revert: suspend (ProjectSettingChanges.Change) -> String?, openTask: ((String) -> Unit)? = null) {
     var asking by remember { mutableStateOf<ProjectSettingChanges.Change?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = false)) {
@@ -220,7 +246,7 @@ internal fun CoordinatorChangesPage(projectTitle: String, changes: List<ProjectS
                         val shape = RoundedCornerShape(topStart = if (first) 13.dp else 0.dp, topEnd = if (first) 13.dp else 0.dp,
                             bottomStart = if (last) 13.dp else 0.dp, bottomEnd = if (last) 13.dp else 0.dp)
                         Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (dark()) 1f else 0.6f), shape)) {
-                            ChangeRow(change, taskTitle, now, enabled) { error = null; asking = change }
+                            ChangeRow(change, taskTitle, now, enabled, openTask) { error = null; asking = change }
                             if (!last) HorizontalDivider(Modifier.padding(start = 13.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
                         }
                     }
@@ -234,7 +260,8 @@ internal fun CoordinatorChangesPage(projectTitle: String, changes: List<ProjectS
 /** One change: its field and time, old struck through → new, the reason, then who and the row's one door or why there is none. A
  * reverted row is greyed and says so; so is one changed again since, which has nothing current to put back. */
 @Composable
-private fun ChangeRow(change: ProjectSettingChanges.Change, taskTitle: (String) -> String?, now: Instant, enabled: Boolean, ask: () -> Unit) {
+private fun ChangeRow(change: ProjectSettingChanges.Change, taskTitle: (String) -> String?, now: Instant, enabled: Boolean,
+    openTask: ((String) -> Unit)?, ask: () -> Unit) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val reverted = change.revertedAt != null
     val stale = !reverted && !change.revertible && change.origin == "COORDINATOR"
@@ -255,6 +282,12 @@ private fun ChangeRow(change: ProjectSettingChanges.Change, taskTitle: (String) 
             else withStyle(SpanStyle(fontWeight = if (change.field == "LANDING_CHECK") FontWeight.SemiBold else FontWeight.Normal)) { append(changeValue(change.new)) }
         }, Modifier.testTag("change:${change.id}:values"), style = MaterialTheme.typography.bodySmall)
         change.reason?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+        // An exemption's row opens the task it is about (web's "Open task" link, OrbitKit's button).
+        if (change.field == "TASK_LANDING_CHECK_EXEMPT" && openTask != null) change.taskId?.let { taskId ->
+            TextButton(onClick = { openTask(taskId) }, Modifier.testTag("change:${change.id}:open-task"), contentPadding = PaddingValues(0.dp)) {
+                Text(LandingMeasuredCopy.openTask, style = MaterialTheme.typography.bodySmall)
+            }
+        }
         Row(Modifier.padding(top = 3.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Pill(LandingMeasuredCopy.who(change.origin), whoInk(change.origin), "change:${change.id}:who")
             val note = when {

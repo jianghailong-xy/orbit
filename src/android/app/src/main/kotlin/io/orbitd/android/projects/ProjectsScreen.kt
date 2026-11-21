@@ -530,7 +530,8 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
                     try { RunSettings.mergeLive(api.currentPromotion(id)) } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { true }
                 },
                 // The owner's Revert on the coordinator's changes list; the page reads the project again whichever way it went.
-                revertChange = { change -> attempt("${LandingMeasuredCopy.notReverted} — ") { api.revertSettingChange(id, change.id) } })
+                revertChange = { change -> attempt("${LandingMeasuredCopy.notReverted} — ") { api.revertSettingChange(id, change.id) } },
+                openTask = openTask)
         }
         doc.text("goal")?.trim()?.takeIf { it.isNotEmpty() }?.let { goal -> item(key = "goal") { SectionHead("Goal"); Folded(goal, 132, link) } }
         state.graph?.takeIf { it.objects("marks").isNotEmpty() }?.let { graph -> item(key = "graph") {

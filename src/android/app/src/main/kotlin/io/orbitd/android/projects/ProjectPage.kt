@@ -1218,7 +1218,7 @@ object StartProjectCopy {
         // A request with no line is answered with none (§12.15 P-M2), and nothing that only a line means rides with it.
         draft.line?.let { put("line", it) }
         if (draft.line == "PROJECT_BRANCH" && branch.isNotEmpty()) put("projectBranchName", branch)
-        draft.upstream?.let { put("upstreamRef", RunSettings.mainBranchRef(it)) }
+        if (draft.line != null) draft.upstream?.let { put("upstreamRef", RunSettings.mainBranchRef(it)) }
         put("automatic", draft.automatic); put("maxConcurrentTasks", draft.maxConcurrentTasks)
         put("mergeCheckCommand", if (check.isEmpty()) JsonNull else JsonPrimitive(check))
         if (draft.line == "PROJECT_BRANCH") {

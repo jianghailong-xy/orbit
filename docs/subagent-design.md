@@ -124,8 +124,8 @@ Optimize For 只在第 5 条（没人给档位）时抬档：Balance 至少 M，
 （价格取自 models.dev，preset 列表本来就从那里刷新，`providerPresets.ts`）；Claude / Codex 内置登录沿用今天
 `DEFAULT_MODEL_TIER_TABLE` 的映射，Kimi 内置登录也在这张表里（S/M 用 K3，L/XL 用 K3.1 Pro，没有就 K3；只给 SubAgent 用）。
 其余内置引擎（Cursor、Antigravity、OpenCode、DSH）的目录按**模型家族**定档（`MODEL_FAMILY_TIERS`：Claude Sonnet S/M、
-Claude Opus L/XL、Gemini Flash S/M、Gemini L/XL、Composer S），每档取该家族版本最新的模型，effort 夹到模型自己报的等级
-（`clampEffort`）；不属于任何已知家族的模型（Cursor 的 `grok-4.7`、`kimi-k3`，Antigravity 的 `gpt-oss-120b` 等）没有档位。
+Claude Opus L/XL、Gemini Flash S/M、Gemini L/XL、Composer S、Claude Haiku S、Kimi K3 S/M、Kimi K3.1 Pro L/XL（无 K3.1 Pro 时 K3 顶替 L/XL；`kimi-k2.*` 不定档）），每档取该家族版本最新的模型，effort 夹到模型自己报的等级
+（`clampEffort`）；不属于任何已知家族的模型（Cursor 的 `grok-4.7`、`kimi-k2.*`，Antigravity 的 `gpt-oss-120b` 等）没有档位。
 
 **owner 给内置引擎的模型定档**（owner，2026-11-20：表总会漏，漏了应该点一下就能补，而不是等发版）：任何内置引擎目录里的
 任何模型，owner 都可以在 Providers 页的 Tier 列设一个档位或清除，存在账号偏好 `builtinModelTiers`（引擎 → 模型 → 档位），
