@@ -3244,20 +3244,17 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1400 adds three nullable columns, a foreign key and a partial index on owner_request_secret and account_secret;
       // no row is written, and no preserved relation, trigger, function or DONE fence changes.
       '1400_owner_secret_saved_links',
-      // 1401 adds session_release_fact_chk NOT VALID; 1402 writes session.finished_at and release_cause on the rows that
-      // break it (1262's UPDATE again, and clearing both on open rows), then validates it. Session is not a preserved
-      // relation, and no trigger, function or DONE fence changes.
+      // 1401 adds session_release_fact_chk NOT VALID (the status is terminal exactly when finished_at is set); 1402
+      // writes session.finished_at on the rows that break it (1262's value on terminal rows, cleared on open rows), then
+      // validates it. Session is not a preserved relation, and no trigger, function or DONE fence changes.
       '1401_session_release_fact_chk',
       '1402_session_release_fact_validate',
       // 1403 widens session_release_cause_chk with engine_failed and end_not_honored (NOT VALID) and 1404 validates it;
-      // no row is written. 1405 rewrites session.release_cause on FAILED rows whose cause is not a failure cause, in
-      // one UPDATE; 1406 adds session_release_failure_chk NOT VALID and 1407 validates it. Session is not a preserved
-      // relation, and no trigger, function or DONE fence changes.
+      // no row is written. Session is not a preserved relation, and no trigger, function or DONE fence changes.
       '1403_session_release_failure_causes',
       '1404_session_release_failure_causes_validate',
-      '1405_session_release_failure_backfill',
-      '1406_session_release_failure_chk',
-      '1407_session_release_failure_validate',
+      // 1405 to 1407 (a failure-cause backfill and its CHECK) were removed on 2026-11-21, never deployed: the session
+      // keeps no failure fact (design §12 decision D9, removal step R1). Their numbers stay unused.
       // 1410 adds session.bg_job_stop_requests, a NOT NULL TEXT[] with a constant default (catalog-only, no rewrite),
       // for the owner's bg-job stop requests; no row is written. Session is not a preserved relation, and no trigger,
       // function or DONE fence changes.
