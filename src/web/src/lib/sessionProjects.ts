@@ -626,6 +626,9 @@ export function sessionProjectListing<T extends SessionProjectSession>(
     workspaceId?: string | null;
     /** Same-view sessions across workspaces, used for the waiting line and tooltip count. */
     contentSessions?: readonly T[];
+    /** Each project's same-view session count across workspaces, as the server counted it; the tooltip
+     *  says at least this many. */
+    sessionCounts?: ReadonlyMap<string, number>;
     line: (session: T) => SessionProjectLine;
   } & FolderSessionReadings<T>,
 ): SessionProjectListing<T> {
@@ -750,7 +753,10 @@ export function sessionProjectListing<T extends SessionProjectSession>(
       title: summary?.title ?? membership.projectTitle,
       status: summary?.status ?? membership.projectStatus,
       members: [...members],
-      sessionCount: new Set([...content.map((session) => session.id), ...(coordinator ? [coordinator.id] : [])]).size,
+      sessionCount: Math.max(
+        new Set([...content.map((session) => session.id), ...(coordinator ? [coordinator.id] : [])]).size,
+        opts.sessionCounts?.get(projectId) ?? 0,
+      ),
       coordinator,
       folderId,
       pinnedAt: coordinator?.pinnedAt ?? null,
