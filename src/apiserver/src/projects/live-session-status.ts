@@ -5,7 +5,7 @@ import { HELD_SESSION_STATUSES } from '../common/session-release';
  *
  * `AWAITING_INPUT` and `INTERRUPTED` are live on purpose — both are resumable, and treating a
  * conversation somebody paused as free is how a task ends up with a second Session on it. The
- * partial unique index `session_task_execution_claim_idx` covers the same set, and 1416's
+ * partial unique index `session_task_execution_claim_idx` covers the same set, and 1426's
  * `session_task_execution_claim_idx_finished_at` the same rows, by `finished_at IS NULL`
  * (session_release_fact_chk).
  */

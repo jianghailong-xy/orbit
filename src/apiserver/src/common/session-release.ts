@@ -12,7 +12,7 @@ import { deriveSessionLifecycleState, SessionLifecycleState } from '@orbit/share
  * `heldFilter`, which the TypeScript readers read (plan step 4.2), and the raw SQL fragments `sessionReleasedSql` /
  * `sessionHeldSql` (plan step 4.3). As status sets, the same members every hand-copied live/terminal set held, for
  * the readers phase 4 has not moved yet, and the Prisma filters whose status list is an index's access path (the only
- * index that reads `finished_at` is the execution claim's, over `task_id`, migration 1416).
+ * index that reads `finished_at` is the execution claim's, over `task_id`, migration 1426).
  * session_release_fact_chk (migrations 1401, 1402) makes the two the same rows: a status is terminal exactly when
  * `finished_at` is set.
  */

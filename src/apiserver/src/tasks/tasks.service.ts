@@ -1105,7 +1105,7 @@ export const TASK_LIST_SELECT = {
  * Was this duplicate-key error one of the TWO unique keys a task run's Session insert can reach?
  *
  * Two are in range and no others: the execution claim (`task_id`; `session_task_execution_claim_idx`
- * and, beside it since 1416, `session_task_execution_claim_idx_finished_at`), and — since the
+ * and, beside it since 1426, `session_task_execution_claim_idx_finished_at`), and — since the
  * id is now derived from the request (`taskRunDesiredSessionId`) rather than drawn at random — the
  * PRIMARY KEY. `share_token` is the table's only other unique key, and a legacy task run leaves it
  * NULL, which PostgreSQL treats as distinct.
@@ -13934,7 +13934,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    *  2. **No row at that id, and a Session holding the claim.** Then this request did not run, and
    *     the row in the way is not its own — it cannot be. Named, never adopted and never reported
    *     as success, off the claim index's own predicate (`task_id`, not in the Trash, not released:
-   *     `session_task_execution_claim_idx_finished_at`, migration 1416) rather than off "the newest"
+   *     `session_task_execution_claim_idx_finished_at`, migration 1426) rather than off "the newest"
    *     or "the live one".
    *  3. **Neither.** The claim was released between the insert and the read, so nothing of this
    *     request landed and there is nothing truthful to return. Refused with the reason — a raw

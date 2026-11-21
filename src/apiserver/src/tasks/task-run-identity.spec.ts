@@ -92,7 +92,7 @@ test('every automatic token is TASK-scoped, so two tasks of one owner never shar
 
 test('TASK_OCCUPYING is still the execution claim index, character for character', () => {
   // `session_task_execution_claim_idx` (migration 0130) is defined over exactly these four
-  // statuses. `createTaskSessionOrReadWinner` reads the claim holder by 1416's predicate
+  // statuses. `createTaskSessionOrReadWinner` reads the claim holder by 1426's predicate
   // (`finished_at IS NULL`) since plan step 4.5, which session_release_fact_chk makes these four;
   // a reader narrower than the index it explains reports "nothing holds the claim" for rows that do,
   // so the set is still pinned to 0130's list while that index exists.

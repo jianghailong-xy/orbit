@@ -1,4 +1,4 @@
--- 1410 — what the successor of a coordinator handoff runs on (docs/coordinator-handoff.md, "The successor's model").
+-- 1411 — what the successor of a coordinator handoff runs on (docs/coordinator-handoff.md, "The successor's model").
 --
 -- A replacement used to open the new coordinator on the previous one's engine, provider and model
 -- (start-anchor.ts previousCoordinatorAnchor). When that model is the reason for handing over — its

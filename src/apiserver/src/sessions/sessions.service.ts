@@ -11061,7 +11061,7 @@ export class SessionsService {
    * Nothing here stops a run that nobody asked to stop, and nothing here moves a running session
    * onto another provider.
    *
-   * The execution claim index (`session_task_execution_claim_idx_finished_at`, migration 1416, beside
+   * The execution claim index (`session_task_execution_claim_idx_finished_at`, migration 1426, beside
    * 0130's `session_task_execution_claim_idx` until release B) makes "one live Session per task" a
    * property of the database, and a revive writes a LIVE status — so a task whose run has already been re-dispatched (Run Now,
    * a sweep, the auto-run the task list reconciles) refuses the revive at that index. The refusal is
@@ -11782,7 +11782,7 @@ export class SessionsService {
       };
     }, loggedRetry(this.logger, 'sessions.resume'))
       // The one duplicate key this UPDATE can reach — another live Session already holds this task's
-      // execution claim (1416, and 0130's index beside it until release B) — answered as the refusal it is instead of as the 500 a bare P2002
+      // execution claim (1426, and 0130's index beside it until release B) — answered as the refusal it is instead of as the 500 a bare P2002
       // becomes. Caught outside the transaction, because naming the holder means reading, and the
       // transaction that raised this cannot answer a read. Any other duplicate is somebody else's
       // fact and goes on being thrown as it is.
