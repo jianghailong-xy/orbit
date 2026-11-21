@@ -125,7 +125,8 @@ function services(f: Fixture) {
       turns.push({ sessionId, ...dto });
       await db.session.updateMany({
         where: { id: sessionId, status: { in: ['SUCCEEDED', 'FAILED', 'CANCELLED'] } },
-        data: { status: 'PENDING' },
+        // As the real revive: held again, so the release column and its cause go with the terminal status.
+        data: { status: 'PENDING', finishedAt: null, releaseCause: null },
       });
       await db.conversationTurn.create({
         data: { sessionId, seq: seq++, clientTurnId: dto.clientTurnId, content: dto.content, kind: 'message', sendIntent: dto.intent ?? null },
@@ -564,7 +565,12 @@ test('the pending-waits preview lists ACTIVE and PAUSED waits, the PAUSED ones m
 test('an ended coordinator (FAILED, or recycled while idle) is revived for its note rather than refused', { skip, timeout: 120_000 }, async () => {
   for (const status of ['FAILED', 'CANCELLED'] as const) {
     const f = await fixture();
-    await f.db.session.update({ where: { id: f.outgoing }, data: { status } });
+    // Released as the writers release (session_release_fact_chk, session_release_failure_chk): finished_at and a
+    // cause, a failure cause for FAILED.
+    await f.db.session.update({
+      where: { id: f.outgoing },
+      data: { status, finishedAt: new Date(), releaseCause: status === 'FAILED' ? 'turn_failed' : 'ended' },
+    });
     const s = services(f);
     const started = await s.handoffs.start(f.ownerId, f.projectId);
     assert.equal(started.state, 'WRITING', status);
@@ -578,7 +584,9 @@ test('the revived coordinator fails again before answering: FAILED at the sweep,
   const s = services(f);
   await s.handoffs.start(f.ownerId, f.projectId);
   // Its model cannot run: the claim fails and the conversation is FAILED, the note turn never delivered.
-  await f.db.session.update({ where: { id: f.outgoing }, data: { status: 'FAILED' } });
+  await f.db.session.update({
+    where: { id: f.outgoing }, data: { status: 'FAILED', finishedAt: new Date(), releaseCause: 'setup_failed' },
+  });
   assert.equal(await s.handoffs.sweep(), 1);
   const { coordinatorHandoff } = await readSessionCoordinatorHandoffs(f.db as unknown as PrismaService, f.outgoing);
   assert.equal(coordinatorHandoff?.state, 'FAILED');
