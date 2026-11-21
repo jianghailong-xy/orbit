@@ -1405,11 +1405,6 @@ function WikiChatSession({
     draft.setHistIdx(-1);
     setFailed(null);
     if (words.startsWith('!')) {
-      // DeepSeek Harness has no shell bridge: the command stays in the composer rather than going out to fail.
-      if (engine === AgentProvider.DSH) {
-        message.warning('DeepSeek Harness sessions don’t run ! shell commands', 'Ask the agent to run it instead.');
-        return;
-      }
       const command = words.slice(1).trim();
       if (command) send.mutate({ content: command, images: [], shell: true, intent: 'NEXT_TURN' });
       else draft.setText('');
