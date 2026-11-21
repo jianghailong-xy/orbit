@@ -3256,7 +3256,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '1404_session_release_failure_causes_validate',
       '1405_session_release_failure_backfill',
       '1406_session_release_failure_chk',
-      '1407_session_release_failure_validate'],
+      '1407_session_release_failure_validate',
+      // 1410 (from main at 6905964d65) adds three nullable columns to coordinator_handoff: the successor's engine,
+      // provider and model. No row is written, coordinator_handoff is not a preserved relation, and no trigger,
+      // function or DONE fence changes.
+      '1410_coordinator_handoff_successor'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
