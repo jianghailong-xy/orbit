@@ -3,7 +3,6 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { CheckOutlined, FileOutlined, FolderFilled, RightOutlined } from '@ant-design/icons';
 import { Button } from '../ui/Button';
-import { Dialog } from '../ui/Dialog';
 import { Input } from '../ui/Input';
 import { driveFolderQuery, formatSize, messageOf } from '../../lib/drive';
 
@@ -15,16 +14,44 @@ interface Crumb {
   name: string;
 }
 
+/** The project's folder name under Files (D22): no `/`, at most 60 characters. */
+export const projectFolderName = (title: string): string => title.replace(/\//g, '-').trim().slice(0, 60);
+
+export interface PickedDriveFile {
+  id: string;
+  name: string;
+  path: string;
+}
+
 /**
- * Add from Files (board 02-web frame 8): browse the drive, pick files, and the message gets their paths. Nothing is
- * uploaded again; a Cloud agent reads the path from its mount and any other runner gets it with the drive tools.
+ * Add from Files (board 02-web frame 8): the popover over the composer. It opens on the session's project folder when
+ * there is one (D22) and on the drive's root otherwise, browses it, and hands back the files picked with their
+ * paths. Nothing is uploaded again; a Cloud agent reads the path from its mount.
  */
-export function DriveFilePicker({ onClose, onPick }: { onClose: () => void; onPick: (paths: string[]) => void }) {
-  const [trail, setTrail] = useState<Crumb[]>([{ id: null, name: 'Files' }]);
-  const [picked, setPicked] = useState<ReadonlyMap<string, string>>(new Map());
+export function DriveFilePicker({
+  projectFolder,
+  onClose,
+  onPick,
+}: {
+  projectFolder?: { id: string; title: string } | null;
+  onClose: () => void;
+  onPick: (files: PickedDriveFile[]) => void;
+}) {
+  const [moved, setMoved] = useState<Crumb[] | null>(null);
+  const [picked, setPicked] = useState<ReadonlyMap<string, PickedDriveFile>>(new Map());
   const [search, setSearch] = useState('');
+  const root = useQuery(driveFolderQuery(null));
+  // The project's folder is looked for by its name, with the short id suffix a clash adds; none found: the root.
+  const wanted = projectFolder ? projectFolderName(projectFolder.title) : null;
+  const projectCrumb: Crumb | null =
+    wanted && root.data
+      ? (root.data.entries.find((e) => e.kind === 'FOLDER' && e.name === wanted) ??
+        root.data.entries.find((e) => e.kind === 'FOLDER' && e.name.startsWith(`${wanted}-`) && projectFolder!.id.startsWith(e.name.slice(wanted.length + 1))) ??
+        null)
+      : null;
+  const trail: Crumb[] = moved ?? [{ id: null, name: 'Files' }, ...(projectCrumb ? [{ id: projectCrumb.id, name: projectCrumb.name }] : [])];
   const here = trail[trail.length - 1]!;
-  const listing = useQuery(driveFolderQuery(here.id));
+  const listing = useQuery({ ...driveFolderQuery(here.id), enabled: root.isSuccess || root.isError });
   const folderPath = [DRIVE_MOUNT, ...trail.slice(1).map((c) => c.name)].join('/');
   const needle = search.trim().toLowerCase();
   const entries = (listing.data?.entries ?? []).filter((e) => !needle || e.name.toLowerCase().includes(needle));
@@ -33,27 +60,16 @@ export function DriveFilePicker({ onClose, onPick }: { onClose: () => void; onPi
     setPicked((was) => {
       const next = new Map(was);
       if (next.has(id)) next.delete(id);
-      else next.set(id, `${folderPath}/${name}`);
+      else next.set(id, { id, name, path: `${folderPath}/${name}` });
       return next;
     });
 
   return (
-    <Dialog
-      open
-      onClose={onClose}
-      width={560}
-      title="Add from Files"
-      footer={
-        <>
-          <span className="files-move-spacer">Puts the file's path in your message; nothing is uploaded again.</span>
-          <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" disabled={picked.size === 0} onClick={() => onPick([...picked.values()])}>
-            {picked.size ? `Add ${picked.size}` : 'Add'}
-          </Button>
-        </>
-      }
-    >
-      <Input size="small" aria-label="Search Files" placeholder="Search Files" value={search} onChange={(e) => setSearch(e.target.value)} />
+    <div className="drive-picker" aria-label="Add from Files" role="dialog">
+      <div className="drive-picker-head">
+        <b>Add from Files</b>
+        <Input size="small" aria-label="Search Files" placeholder="Search this folder" value={search} onChange={(e) => setSearch(e.target.value)} />
+      </div>
       <nav className="drive-picker-crumbs" aria-label="Folder">
         {trail.map((crumb, i) => (
           <button
@@ -61,7 +77,7 @@ export function DriveFilePicker({ onClose, onPick }: { onClose: () => void; onPi
             type="button"
             disabled={i === trail.length - 1}
             onClick={() => {
-              setTrail(trail.slice(0, i + 1));
+              setMoved(trail.slice(0, i + 1));
               setSearch('');
             }}
           >
@@ -81,7 +97,7 @@ export function DriveFilePicker({ onClose, onPick }: { onClose: () => void; onPi
               aria-selected={false}
               className="drive-picker-row"
               onClick={() => {
-                setTrail([...trail, { id: entry.id, name: entry.name }]);
+                setMoved([...trail, { id: entry.id, name: entry.name }]);
                 setSearch('');
               }}
             >
@@ -104,6 +120,13 @@ export function DriveFilePicker({ onClose, onPick }: { onClose: () => void; onPi
           ),
         )}
       </div>
-    </Dialog>
+      <div className="drive-picker-foot">
+        <span>Puts the file's path in your message; nothing is uploaded again.</span>
+        <Button onClick={onClose}>Cancel</Button>
+        <Button variant="primary" disabled={picked.size === 0} onClick={() => onPick([...picked.values()])}>
+          {picked.size ? `Add ${picked.size}` : 'Add'}
+        </Button>
+      </div>
+    </div>
   );
 }

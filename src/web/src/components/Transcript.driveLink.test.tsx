@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type RunEvent, Transcript } from './Transcript';
 import { DriveFilePicker } from './files/DriveFilePicker';
+import { materializeReferences } from '../lib/composerRefs';
 
 /**
  * A reply that links a drive file (`orbit-drive:<id>`, which the runner writes for a path under /home/orbit/Files) draws
@@ -82,28 +83,53 @@ describe('a reply linking a drive file', () => {
 });
 
 describe('the composer drive picker', () => {
-  it('hands back the path of the picked file, inside its folders', async () => {
-    const listing = (folder: object, entries: object[]) => ({ folder, entries, nextCursor: null });
+  const listing = (folder: object, entries: object[]) => ({ folder, entries, nextCursor: null });
+  const serve = () =>
     apiMock.mockImplementation(async (path: string) => {
-      if (path.includes('parentId=f1')) {
-        return listing({ id: 'f1' }, [{ ...FILE, id: 'e1' }]);
-      }
-      return listing({ id: 'root' }, [{ id: 'f1', kind: 'FOLDER', name: 'Orbit UI migration', sizeBytes: 0 }]);
+      if (path.includes('parentId=f1')) return listing({ id: 'f1' }, [{ ...FILE, id: 'e1' }]);
+      return listing({ id: 'root' }, [
+        { id: 'f1', kind: 'FOLDER', name: 'Orbit UI migration', sizeBytes: 0 },
+        { id: 'f2', kind: 'FOLDER', name: 'Other', sizeBytes: 0 },
+      ]);
     });
+  const click = async (el: Element | null | undefined) => {
+    await act(async () => {
+      (el as HTMLElement).click();
+    });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+  };
+  const option = (text: string) => [...document.body.querySelectorAll('[role=option]')].find((e) => e.textContent?.includes(text));
+
+  it('hands back the picked file with its path, browsing from the root', async () => {
+    serve();
     const onPick = vi.fn();
     await mount(<DriveFilePicker onClose={() => {}} onPick={onPick} />);
-    const click = async (el: Element | null | undefined) => {
-      await act(async () => {
-        (el as HTMLElement).click();
-      });
-      await act(async () => {
-        await new Promise((r) => setTimeout(r, 20));
-      });
-    };
-    const body = () => document.body;
-    await click([...body().querySelectorAll('[role=option]')].find((e) => e.textContent?.includes('Orbit UI migration')));
-    await click([...body().querySelectorAll('[role=option]')].find((e) => e.textContent?.includes('sign-in-copy.md')));
-    await click([...body().querySelectorAll('button')].find((b) => b.textContent === 'Add 1'));
-    expect(onPick).toHaveBeenCalledWith(['/home/orbit/Files/Orbit UI migration/sign-in-copy.md']);
+    await click(option('Orbit UI migration'));
+    await click(option('sign-in-copy.md'));
+    await click([...document.body.querySelectorAll('button')].find((b) => b.textContent === 'Add 1'));
+    expect(onPick).toHaveBeenCalledWith([{ id: 'e1', name: 'sign-in-copy.md', path: '/home/orbit/Files/Orbit UI migration/sign-in-copy.md' }]);
+  });
+
+  it("opens on the session's project folder", async () => {
+    serve();
+    const onPick = vi.fn();
+    await mount(<DriveFilePicker projectFolder={{ id: 'p1', title: 'Orbit UI migration' }} onClose={() => {}} onPick={onPick} />);
+    await click(option('sign-in-copy.md'));
+    await click([...document.body.querySelectorAll('button')].find((b) => b.textContent === 'Add 1'));
+    expect(onPick.mock.calls[0]![0][0].path).toBe('/home/orbit/Files/Orbit UI migration/sign-in-copy.md');
+  });
+
+  it('falls back to the drive root when the project has no folder yet', async () => {
+    serve();
+    await mount(<DriveFilePicker projectFolder={{ id: 'p1', title: 'Brand new' }} onClose={() => {}} onPick={() => {}} />);
+    expect(option('Orbit UI migration')).toBeTruthy();
+    expect(option('Other')).toBeTruthy();
+  });
+
+  it('sends a picked chip as the file path', () => {
+    const refs = { 'brief.md': { kind: 'drive' as const, id: 'e1', path: '/home/orbit/Files/P/brief.md' } };
+    expect(materializeReferences('Check #brief.md too', refs)).toBe('Check /home/orbit/Files/P/brief.md too');
   });
 });
