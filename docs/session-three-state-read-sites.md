@@ -38,6 +38,17 @@ now reads `release_cause` against the failure causes (`FAILURE_RELEASE_CAUSES`, 
 by `session_release_failure_chk`, 1406/1407), so 1415 ships only with or after 1406/1407. The unique
 index is step 4.5's.
 
+Plan step 4.5, release A (migration 1416) built `session_task_execution_claim_idx_finished_at` on
+`session(task_id) WHERE task_id IS NOT NULL AND deleted_at IS NULL AND finished_at IS NULL` beside
+0130's index, which stays until release B. No statement has stated the claim in `ON CONFLICT ... WHERE`
+since `2133b988ed`: the claim is stated by the index name the P2002 classifiers match
+(`tasks/task-supersession.ts`, `tasks/tasks.service.ts`; both names now), and by the readers whose access
+path is the index (`sessions/task-work-carrier.ts` `sessionCarriesTaskSql`, the holder reads in
+`sessions/sessions.service.ts` and `tasks/tasks.service.ts`), which state `finished_at IS NULL` since.
+`queue/dispatch-pause.service.ts` reads `sessionHeldIndexedSql`, and `heldSql` is gone. Proven in
+`apiserver/src/sessions/session-claim-index.pg.spec.ts`; the production pre-check is
+`../scripts/session-claim-index-precheck.sql`.
+
 | Object defined in | Lines | R/W | Facts | After | What it does with the status |
 |---|---|---|---|---|---|
 | `apiserver/prisma/migrations/0035_add_parked_run_status/migration.sql` | 7 | R | WIRE | RENAME | Enum type run_status: PENDING, RUNNING, SUCCEEDED, FAILED, CANCELLED, AWAITING_INPUT, INTERRUPTED, PARKED (dead label). Only session.status uses it; default PENDING. Labels cannot be dropped. |
