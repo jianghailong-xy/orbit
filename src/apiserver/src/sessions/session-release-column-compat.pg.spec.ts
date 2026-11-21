@@ -163,7 +163,7 @@ test('release_cause and session_release_cause_chk stay in the database; this bui
     console.log(`# session_release_cause_chk ${JSON.stringify(check)}`);
     assert.equal(check.length, 1);
     assert.equal(check[0].convalidated, true);
-    assert.match(check[0].def, /release_cause IS NULL OR/, 'the constraint text allows null');
+    assert.match(check[0].def, /\(release_cause IS NULL\) OR/, 'the constraint text allows null');
   });
 
   await t.test('(2) this build\'s writers release and revive sessions and leave the column null', async () => {
