@@ -1124,9 +1124,10 @@ object StartProjectCopy {
     }
 
     /** The request's row: who asked and what it suggests — directly into the main branch the start opens with ([startMainBranch]),
-     * which a page holding no integration read takes from the suggestion alone. */
+     * which a page holding no integration read takes from the suggestion alone. A request that names no line says so in the start
+     * card's own sentence ([LandingMeasuredCopy.landsWhenATaskCommits]), never "a project branch". */
     fun requestSummary(settings: JsonObject, main: String = RunSettings.mainBranchName(settings.text("upstreamRef"))) = listOf(rowAsked,
-        RunSettings.lineInSentence(settings.text("line"), main),
+        settings.text("line")?.let { RunSettings.lineInSentence(it, main) } ?: LandingMeasuredCopy.landsWhenATaskCommits,
         "${RunSettings.automatic} ${if (settings.flag("automatic")) "on" else "off"}", "at most ${settings.number("maxConcurrentTasks") ?: 1} at a time").joinToString(" · ")
     /** The start's row in Open items (`StartProject.PageRow`): the coordinator's request, answered on its card, or the owner's own Start…. */
     sealed interface PageRow { data class Asked(val row: JsonObject) : PageRow; data object Own : PageRow }
