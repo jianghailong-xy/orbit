@@ -9944,7 +9944,7 @@ export function WorkspaceView({
                 onMove: onRowTouchMove, onEnd: onRowTouchEnd, onCancel: onRowTouchCancel,
                 onAction: (action) => runSwipeAction(action, coordinator),
               } : undefined}
-              drag={coordinator && !pageProjectId && sessionRowDraggable(s, {
+              drag={coordinator && !pageProjectId && sessionRowDraggable({ kind: 'project', coordinator }, {
                 view: effectiveView, dropTargets: dropTargetsShown, touch: isMobile, renaming: false,
               }) ? {
                 dragging: draggedSession?.id === coordinator.id,
