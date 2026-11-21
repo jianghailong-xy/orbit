@@ -27,15 +27,11 @@ export const SESSION_TERMINAL_STATUS_READERS: Readonly<Record<string, number>> =
   'src/apiserver/src/help/help-ask-marker.ts': 1,
   'src/apiserver/src/help/help-ask-reads.ts': 1,
   'src/apiserver/src/projects/coordinator-evidence-queue.service.ts': 2,
-  // Arrived from main at acb7448a49 in the merge of 2026-11-20, written before this guard reached main; admitted as found, plan phase 4 moves it with the rest.
-  'src/apiserver/src/projects/coordinator-fact-queue.service.ts': 2,
   'src/apiserver/src/projects/coordinator-handoff.service.ts': 3,
   'src/apiserver/src/projects/landing-session.ts': 4,
   'src/apiserver/src/projects/pending-addressees.ts': 1,
   'src/apiserver/src/projects/project-done-request.ts': 1,
   'src/apiserver/src/projects/project-open-item.ts': 4,
-  // Arrived from main at acb7448a49 in the merge of 2026-11-20, written before this guard reached main; admitted as found, plan phase 4 moves it with the rest.
-  'src/apiserver/src/projects/project-tasks-settled.producer.ts': 1,
   'src/apiserver/src/projects/session-source.ts': 1,
   'src/apiserver/src/providers/active-sessions.ts': 3,
   'src/apiserver/src/push/settle-alert.ts': 2,
