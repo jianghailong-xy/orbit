@@ -328,8 +328,8 @@ test('a released value is named only by the release writers, the projector, the 
     if (names && !mayName.has(file)) {
       problems.push(
         `${file}: names a released session status value (SUCCEEDED, FAILED, CANCELLED, ENDED, COMPLETED, DORMANT, ` +
-          'DELETED) but is no release writer, the projector, the old protocol or the client decoder. Read the release ' +
-          'fact and its cause (common/session-release.ts) instead.',
+          'DELETED) but is no release writer, the projector, the old protocol or the client decoder. Ask the release ' +
+          'module by its questions (common/session-release.ts: isReleased, releaseWasFailure, releaseFinishedTheWork) instead.',
       );
     } else if (!names && mayName.has(file)) {
       problems.push(
