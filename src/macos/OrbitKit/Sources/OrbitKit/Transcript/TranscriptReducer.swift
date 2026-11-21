@@ -72,6 +72,11 @@ public struct TranscriptState: Equatable, Sendable, Codable {
     /// started itself included) clears it. The composer decides whether to offer it
     /// (`ComposerLogic.offeredPromptSuggestion`).
     public var promptSuggestion: String?
+    /// The turn the newest agent event (any event but `user`) belongs to, and the earliest time seen
+    /// in that turn: when the agent's latest turn started (`BackgroundRowRule`'s cut-off). A wake's
+    /// turn counts from its recorded note.
+    public var agentTurnId: String?
+    public var agentTurnStartedAt: String?
     /// Settings › Translation: the suggestion's own event and its translation into the owner's
     /// language (from its payload, or folded in from the live `translation` event). Transient: a
     /// rehydrated snapshot offers the English until the window is re-read.
@@ -97,7 +102,7 @@ public struct TranscriptState: Equatable, Sendable, Codable {
     // Tolerant decode so snapshots written before `queued` (or the history-window cursor) existed
     // still rehydrate (the keys just default) instead of discarding the whole cached session; the
     // other fields keep their prior strictness. `encode(to:)` stays synthesized from these keys.
-    enum CodingKeys: String, CodingKey { case items, pendingApprovals, background, queued, accepted, unreadSteers, status, maxSeq, oldestSeq, hasMoreOlder, contextTokens, contextWindow, subagentItems, taskProgress, promptSuggestion, turnEnds }
+    enum CodingKeys: String, CodingKey { case items, pendingApprovals, background, queued, accepted, unreadSteers, status, maxSeq, oldestSeq, hasMoreOlder, contextTokens, contextWindow, agentTurnId, agentTurnStartedAt, subagentItems, taskProgress, promptSuggestion, turnEnds }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         items = try c.decode([TranscriptItem].self, forKey: .items)
@@ -115,6 +120,8 @@ public struct TranscriptState: Equatable, Sendable, Codable {
         subagentItems = (try? c.decodeIfPresent([String: [TranscriptItem]].self, forKey: .subagentItems)) ?? [:]
         taskProgress = (try? c.decodeIfPresent([String: TaskProgress].self, forKey: .taskProgress)) ?? [:]
         promptSuggestion = (try? c.decodeIfPresent(String.self, forKey: .promptSuggestion)) ?? nil
+        agentTurnId = (try? c.decodeIfPresent(String.self, forKey: .agentTurnId)) ?? nil
+        agentTurnStartedAt = (try? c.decodeIfPresent(String.self, forKey: .agentTurnStartedAt)) ?? nil
         turnEnds = (try? c.decodeIfPresent([TurnEndMark].self, forKey: .turnEnds)) ?? []
     }
 }
@@ -316,6 +323,11 @@ public struct TranscriptReducer: Sendable, Codable {
                 replaySetsOlderEdge = false
                 state.hasMoreOlder = ev.seq > 1   // seqs start at 1; a page before it answers the rest
             }
+        }
+        if ev.type != .user, let turn = ev.turnId, let ts = ev.ts {
+            if turn != state.agentTurnId { state.agentTurnId = turn; state.agentTurnStartedAt = ts }
+            else if let at = RelativeTime.parse(ts), let was = state.agentTurnStartedAt.flatMap(RelativeTime.parse),
+                    at < was { state.agentTurnStartedAt = ts }
         }
         let legacy = ev.type == .system && str(ev, "subtype") == "secret_patch_withheld"
             && str(ev, "path").map { path in
@@ -527,6 +539,8 @@ public struct TranscriptReducer: Sendable, Codable {
         clearLiveToolOutputsAtBoundary()
         legacyWithheld = nil
         state.items = []
+        state.agentTurnId = nil
+        state.agentTurnStartedAt = nil
         state.maxSeq = 0
         state.oldestSeq = nil
         state.hasMoreOlder = false

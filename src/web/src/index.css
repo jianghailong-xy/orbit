@@ -5311,15 +5311,15 @@ button.toast--pill:focus-visible {
     border-radius: 6px;
   }
 }
-/* A project entry is the one focusable session row. Keyboard focus takes the row's hover tint, not a
+/* Every session row (a project's too) takes keyboard focus. Focus takes the row's hover tint, not a
    ring: the browser's outer ring is clipped by the list's edge, and an inner one is covered on the
    right by the kebab's fade. */
-.session-project-row:focus-visible {
+.session-row:focus-visible {
   outline: none;
   background: var(--bg-hover);
   --session-menu-surface: var(--bg-hover);
 }
-.session-project-row.active:focus-visible {
+.session-row.active:focus-visible {
   background: var(--brand-tint-hover);
   --session-menu-surface: var(--brand-tint-hover);
 }
@@ -6345,6 +6345,66 @@ button.toast--pill:focus-visible {
 .session-folder-row.menu-open {
   background: var(--bg-hover);
   --row-bg: var(--bg-hover);
+}
+/* A session row dragged over a folder that would take it (lib/sessionDrag): the folder lights up
+   in Move's indigo. A folder's page head takes the same light while the drop would leave the folder. */
+.session-folder-row.drop-target,
+.session-folder-head.drop-target {
+  background: rgba(88, 86, 214, 0.14);
+  box-shadow: inset 0 0 0 1.5px #5856d6;
+  --row-bg: rgba(88, 86, 214, 0.14);
+}
+:root[data-theme='dark'] .session-folder-row.drop-target,
+:root[data-theme='dark'] .session-folder-head.drop-target {
+  background: rgba(94, 92, 230, 0.22);
+  box-shadow: inset 0 0 0 1.5px #5e5ce6;
+  --row-bg: rgba(94, 92, 230, 0.22);
+}
+.session-folder-head.drop-target {
+  border-radius: 8px;
+}
+/* While a row is dragged the list scrolls under the pointer; nothing in it is selected as it goes. */
+.session-col-list.dragging-session {
+  user-select: none;
+  -webkit-user-select: none;
+}
+/* A row is a control, not text: a press dragged from one that cannot be picked up (a project with no
+   coordinator, any row where there is no folder to drop on) would otherwise select the list's text from
+   there to the pointer — headings, counts, titles — and the selection would outlast the gesture. */
+.session-row,
+.session-folder-row {
+  user-select: none;
+  -webkit-user-select: none;
+}
+.session-row input {
+  user-select: text;
+  -webkit-user-select: text;
+}
+/* What a dragged row shows under the pointer: its title alone, on a compact card below-right of the
+   pointer's tip (SessionListRow's setTitleDragImage), so the arrow and the folder it is over stay in
+   sight. Built off-screen for the browser to photograph. */
+.session-drag-card {
+  position: fixed;
+  top: -1000px;
+  left: -1000px;
+  box-sizing: border-box;
+  max-width: 200px;
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-base);
+  color: var(--text-1);
+  font-size: 13px;
+  line-height: 18px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+  pointer-events: none;
+}
+/* The row being dragged stays in place, dimmed, while its image follows the pointer. */
+.session-row.dragging {
+  opacity: 0.5;
 }
 /* Keyboard focus takes the hover tint, as a project row's does, not a ring. */
 .session-folder-row:focus-visible {

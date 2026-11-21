@@ -129,14 +129,25 @@ public enum SessionProjectGrouping {
             if groups[id] == nil { projectIDs.append(id) }
             groups[id, default: []].append(session)
         }
-        // Folder rows count all local sessions under the coordinator's folder, ignoring member moves.
+        // Folder rows hold all local members under the coordinator's folder, ignoring member moves.
         let assigned = sessions.map { session -> Session in
             guard let id = heldBy(session) else { return session }
             return session.settingFolder(coordinatorByProject[id]?.folderId)
         }
-        let folderListing = SessionFolderGrouping.listing(assigned, folders: folders, view: view,
-                                                         byTag: byTag, runnerOffline: runnerOffline,
-                                                         watching: watching)
+        let grouped = SessionFolderGrouping.listing(assigned, folders: folders, view: view,
+                                                    byTag: byTag, runnerOffline: runnerOffline,
+                                                    watching: watching)
+        // A folder's count is the rows its page lists: a project is one row, however many members it holds.
+        var rowsByFolder: [String: Set<String>] = [:]
+        for session in assigned {
+            guard let id = session.folderId else { continue }
+            rowsByFolder[id, default: []].insert(heldBy(session).map { "project:\($0)" } ?? session.id)
+        }
+        let folderListing = SessionFolderListing(
+            folders: grouped.folders.map {
+                SessionFolderRow(folder: $0.folder, sessionCount: rowsByFolder[$0.folder.id]?.count ?? 0, status: $0.status)
+            },
+            sessions: grouped.sessions)
         let knownFolders = Set(folders.map(\.id))
         func inScope(_ id: String?) -> Bool {
             if let folderID { return id == folderID }

@@ -79,6 +79,7 @@ import io.orbitd.android.cards.LocalSteerDeliveries
 import io.orbitd.android.cards.NeedsYouLogic
 import io.orbitd.android.cards.SessionCardsReads
 import io.orbitd.android.cards.rememberSessionCards
+import io.orbitd.android.core.cards.BackgroundRow
 import io.orbitd.android.core.cards.CardFamily
 import io.orbitd.android.core.cards.CardPreviews
 import io.orbitd.android.cards.ReaderSide
@@ -902,11 +903,13 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) { SessionWatches(app, handle, route.id!!, open = open) }
                 // The session's background processes, by the shared row rule (board v2; iOS `BackgroundTrayView`): between what it
                 // waits on and the tasks it created. Its names stop rotating while the band is folded away.
-                val lastUserMessageAt = remember(state.window.events) { BackgroundTrayLogic.lastUserMessageAt(state.window.events) }
+                val backgroundClearedAt = remember(state.window.events) {
+                    BackgroundRow.clearedAt(BackgroundTrayLogic.lastUserMessageAt(state.window.events), BackgroundTrayLogic.lastAgentTurnStartedAt(state.window.events))
+                }
                 Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) {
                     // A running job's row takes Stop through the same routes as its card (R3).
                     CompositionLocalProvider(LocalJobCards provides jobCards) {
-                        BackgroundTray(background.orEmpty(), lastUserMessageAt, BackgroundTrayLogic.sessionLive(detail), folded = foldsChrome,
+                        BackgroundTray(background.orEmpty(), backgroundClearedAt, BackgroundTrayLogic.sessionLive(detail), folded = foldsChrome,
                             jumpToJob = jobJump)
                     }
                 }

@@ -337,8 +337,9 @@ describe('project entry typography', () => {
 
   it('shows keyboard focus as the row tint, not a ring the list edge or the kebab fade would cut', () => {
     const css = fromRepo('src/index.css', 'src/web/src/index.css').replace(/\/\*[\s\S]*?\*\//gu, '');
+    // Every session row's, a project's included: the project row is its coordinator's session row.
     const rule = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/gu)].find(([, selector]) =>
-      /^\.session-project-row:focus-visible\s*$/u.test(selector.trim()));
+      /^\.session-row:focus-visible\s*$/u.test(selector.trim()));
     expect(rule?.[2]).toMatch(/outline\s*:\s*none/u);
     expect(rule?.[2]).toMatch(/background\s*:\s*var\(--bg-hover\)/u);
     expect(rule?.[2]).toMatch(/--session-menu-surface\s*:\s*var\(--bg-hover\)/u);

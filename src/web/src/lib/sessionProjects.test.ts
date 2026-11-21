@@ -126,14 +126,14 @@ describe('sessionProjectListing', () => {
     expect(out.projects[0].lastTurnAt).toBe(ago(2));
   });
 
-  it('puts all members in the coordinator folder for folder counts and activity', () => {
+  it('puts all members in the coordinator folder, counting the project there as one row', () => {
     const folders = [folder('f1', 'Release'), folder('f2', 'Tasks'), folder('empty', 'Empty')];
     const sessions = [coordinator({ folderId: 'f1' }), member('worker', { folderId: 'f2', motion: 'spinner' }), member('waiting', { line: { text: 'Waiting', tone: 'approval' } }), row('ordinary')];
     const out = listing(sessions, {}, [project()], folders);
     expect(out.projects).toEqual([]);
     expect(out.sessions.map((session) => session.id)).toEqual(['ordinary']);
     expect(out.folders.map((entry) => [entry.folder.id, entry.sessionCount, entry.needsYou, entry.running])).toEqual([
-      ['empty', 0, 0, false], ['f1', 3, 1, true], ['f2', 0, 0, false],
+      ['empty', 0, 0, false], ['f1', 1, 1, true], ['f2', 0, 0, false],
     ]);
     const inside = listing(sessions, { folderId: 'f1' }, [project()], folders);
     expect(inside.folders).toEqual([]);
@@ -235,7 +235,7 @@ describe('a project outside its coordinator’s workspace', () => {
     expect(inside.entries).toEqual([{ ...sessions[0], kind: 'session', projectMark: mark }]);
     // Where the coordinator runs, its folder still holds every member, whatever folder each is filed in.
     const home = listing([coordinator({ ...here, folderId: 'f2' }), ...sessions], { workspaceId: 'w1' }, [project()], folders);
-    expect(home.folders.map((entry) => [entry.folder.id, entry.sessionCount])).toEqual([['f1', 0], ['f2', 3]]);
+    expect(home.folders.map((entry) => [entry.folder.id, entry.sessionCount])).toEqual([['f1', 0], ['f2', 1]]);
     expect(home.entries.map((entry) => entry.id)).toEqual(['ordinary']);
   });
 
