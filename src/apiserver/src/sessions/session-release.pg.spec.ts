@@ -55,7 +55,7 @@ import type { RealtimeService } from '../realtime/realtime.service';
 import { ReaperService } from '../realtime/reaper.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import {
-  failedReleaseFilter, failedReleaseSql, isFailedRelease, SESSION_RELEASE_CAUSES,
+  FAILURE_RELEASE_CAUSES, failedReleaseFilter, failedReleaseSql, isFailedRelease, SESSION_RELEASE_CAUSES,
 } from '../common/session-release';
 import { SessionsService } from './sessions.service';
 
@@ -662,10 +662,13 @@ test('every release writes the release column and its cause, and the revive clea
  * ALONE, naming no status, so the status word keeps the value it had: a guard that still decided from the status
  * would answer the old way, and a trigger whose column list named only `status` would not fire at all.
  *
- * session_release_fact_chk is dropped first, in this disposable database, because it refuses exactly that write
- * (terminal-ness and `finished_at` must move together). Today every writer moves both in one statement, so in
- * production the two spellings agree row for row; what this case shows is which of the two each object reads. It
- * runs after (1)-(11), which need the CHECKs.
+ * First, with both CHECKs on, the three ended-triggers are driven through every kind of release that reaches them,
+ * and each fires exactly where its old status clause would have; their failure-cause lists are read back from the
+ * catalog and compared with FAILURE_RELEASE_CAUSES. Then session_release_fact_chk and session_release_failure_chk
+ * are dropped, in this disposable database, because they refuse exactly the release-fact-only write (terminal-ness,
+ * `finished_at` and a failure cause must move together). Today every writer moves them in one statement, so in
+ * production the spellings agree row for row; what the rest shows is which of them each object reads. It runs
+ * after (1)-(11), which need the CHECKs.
  */
 test('(12) the release fact alone fires every guard and ended-trigger (plan step 4.4)', {
   skip, concurrency: 1, timeout: 300_000,
@@ -680,20 +683,7 @@ test('(12) the release fact alone fires every guard and ended-trigger (plan step
     await db.$disconnect().catch(() => undefined);
     await sql.end().catch(() => undefined);
   });
-  await sql.query(`ALTER TABLE "session" DROP CONSTRAINT IF EXISTS "session_release_fact_chk"`);
-  // And the failure CHECK, where a migration has added it (FAILED exactly when the cause is a failure): these rows
-  // pair a held or FAILED status word with the cause `ended` on purpose.
-  await sql.query(`ALTER TABLE "session" DROP CONSTRAINT IF EXISTS "session_release_failure_chk"`);
 
-  const releaseAlone = (id: string) => sql.query(
-    `UPDATE "session" SET "finished_at" = now(), "release_cause" = 'ended' WHERE "id" = $1::uuid`, [id]);
-  const reviveAlone = (id: string) => sql.query(
-    `UPDATE "session" SET "finished_at" = NULL, "release_cause" = NULL WHERE "id" = $1::uuid`, [id]);
-  const statusOf = async (id: string) => (await released(sql, id)).status;
-  const refusedWith = (pattern: RegExp) => (error: { message?: string }) => {
-    console.log(`# refused: ${error.message}`);
-    return pattern.test(error.message ?? '');
-  };
   const task = async (w: World, data: Record<string, unknown> = {}): Promise<string> => {
     const id = randomUUID();
     await db.task.create({
@@ -708,6 +698,160 @@ test('(12) the release fact alone fires every guard and ended-trigger (plan step
     const id = randomUUID();
     await db.project.create({ data: { id, ownerId: w.ownerId, title: `project ${id.slice(0, 8)}` } });
     return id;
+  };
+  const ask = async (w: World, from: string, to: string, extra = '') => {
+    const id = randomUUID();
+    await sql.query(
+      `INSERT INTO "session_request" ("id", "owner_id", "from_session_id", "to_session_id", "turn_id", "client_turn_id",
+              "request_preview", "reply_by"${extra ? ', "state", "closed_at", "reply_held_at"' : ''})
+       VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, $6, 'a question', now() + interval '1 hour'${extra})`,
+      [id, w.ownerId, from, to, randomUUID(), `turn-${id}`]);
+    return id;
+  };
+  const request = async (id: string) => (await sql.query(
+    `SELECT "state", "close_reason", "reply_comment_due_at" FROM "session_request" WHERE "id" = $1::uuid`, [id],
+  )).rows[0] as { state: string; close_reason: string | null; reply_comment_due_at: Date | null };
+  /** An unanswered confirmation review whose reviewer is `reviewer`; returns the review's id. */
+  const review = async (w: World, asker: string, reviewer: string): Promise<string> => {
+    const reviewed = await task(w);
+    const requestId = randomUUID();
+    const reviewId = randomUUID();
+    await sql.query(
+      `INSERT INTO "task_owner_confirmation_request" ("id", "task_id", "owner_id", "session_id", "turn_id")
+       VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid)`,
+      [requestId, reviewed, w.ownerId, asker, randomUUID()]);
+    await sql.query(
+      `INSERT INTO "task_owner_confirmation_review" ("id", "request_id", "task_id", "owner_id", "reviewer_kind",
+              "window_seconds", "due_at", "reviewer_session_id")
+       VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, 'TASK_CREATOR', 3600, now() + interval '1 hour', $5::uuid)`,
+      [reviewId, requestId, reviewed, w.ownerId, reviewer]);
+    return reviewId;
+  };
+  const reviewerEnded = async (reviewId: string) => ((await sql.query(
+    `SELECT "reviewer_ended_at" FROM "task_owner_confirmation_review" WHERE "id" = $1::uuid`, [reviewId],
+  )).rows[0] as { reviewer_ended_at: Date | null }).reviewer_ended_at instanceof Date;
+
+  await t.test('the ended-triggers fire exactly where their old status clauses did, for every kind of release', async () => {
+    const w = await world(db, 'g-ended-table');
+    const asker = await session(db, w);
+    const later = new Date(Date.now() + 3_600_000);
+    interface Row {
+      status: string; end_reason: string | null; retry_at: Date | null; retry_attempts: number;
+      retry_claimed_at: Date | null; deleted_at: Date | null; completed_at: Date | null; archived_at: Date | null;
+    }
+    const row = async (id: string) => (await sql.query(
+      `SELECT status::text AS status, end_reason, retry_at, retry_attempts, retry_claimed_at, deleted_at, completed_at,
+              archived_at FROM "session" WHERE "id" = $1::uuid`, [id])).rows[0] as Row;
+    // The clauses 1415 replaced, as 0350, 0366 and 0507 wrote them, over the statement's OLD and NEW rows. A trigger
+    // also fires only if the statement names a column of its OLD list (each new list is that list plus finished_at).
+    const filed = (n: Row) => n.deleted_at != null || n.completed_at != null || n.archived_at != null;
+    const ended = (n: Row) => (n.end_reason ?? '') !== '';
+    const noRetry = (o: Row, n: Row) => n.retry_at == null && !(o.retry_at != null && n.retry_attempts > o.retry_attempts);
+    const oldRecipient = (o: Row, n: Row) => filed(n) || ['SUCCEEDED', 'CANCELLED'].includes(n.status)
+      || (n.status === 'FAILED' && noRetry(o, n)) || (n.status === 'INTERRUPTED' && ended(n));
+    const oldAsker = (o: Row, n: Row) => oldRecipient(o, n)
+      || (n.status === 'AWAITING_INPUT' && n.retry_at == null
+          && ((o.retry_at != null && n.retry_attempts <= o.retry_attempts) || n.retry_attempts < o.retry_attempts
+              || (o.retry_claimed_at != null && n.retry_claimed_at == null)));
+    const oldReviewer = (_o: Row, n: Row) => filed(n) || ['SUCCEEDED', 'CANCELLED'].includes(n.status)
+      || (['FAILED', 'INTERRUPTED'].includes(n.status) && ended(n));
+    const LISTS = {
+      recipient: ['status', 'end_reason', 'retry_at', 'retry_attempts', 'completed_at', 'archived_at', 'deleted_at'],
+      asker: ['status', 'end_reason', 'retry_at', 'retry_attempts', 'retry_claimed_at', 'completed_at', 'archived_at', 'deleted_at'],
+      reviewer: ['status', 'end_reason', 'completed_at', 'archived_at', 'deleted_at'],
+    };
+    const ending = { cancelRequestedAt: new Date(), endReason: 'ended' };
+    const cases: Array<{ name: string; start: Record<string, unknown>; set: Record<string, string> }> = [
+      { name: 'SUCCEEDED, engine_exited', start: {},
+        set: { status: `'SUCCEEDED'`, finished_at: 'now()', release_cause: `'engine_exited'` } },
+      { name: '(a) a quota park with its retry armed is ended: CANCELLED, retry_at still set', start: {
+        status: RunStatus.AWAITING_INPUT, retryAt: later, ...ending },
+        set: { status: `'CANCELLED'`, finished_at: 'now()', release_cause: `'ended'` } },
+      { name: '(b) the engine failed: FAILED, engine_failed, no end_reason', start: {},
+        set: { status: `'FAILED'`, finished_at: 'now()', release_cause: `'engine_failed'` } },
+      { name: 'an end not honoured: FAILED, end_not_honored, end_reason set', start: { ...ending },
+        set: { status: `'FAILED'`, finished_at: 'now()', release_cause: `'end_not_honored'` } },
+      { name: 'a failed turn with a retry armed: FAILED, turn_failed, retry_at set', start: {},
+        set: { status: `'FAILED'`, finished_at: 'now()', release_cause: `'turn_failed'`, retry_at: `now() + interval '1 hour'` } },
+      { name: 'a failed turn, no retry: FAILED, turn_failed, retry_at clear', start: {},
+        set: { status: `'FAILED'`, finished_at: 'now()', release_cause: `'turn_failed'` } },
+      { name: 'a failed turn during an end: FAILED, turn_failed, end_reason set', start: { ...ending },
+        set: { status: `'FAILED'`, finished_at: 'now()', release_cause: `'turn_failed'` } },
+      { name: 'the sweep takes an armed retry: FAILED stays, retry_at cleared, attempts up', start: {
+        status: RunStatus.FAILED, finishedAt: new Date(), releaseCause: 'turn_failed', retryAt: later, retryAttempts: 0 },
+        set: { retry_at: 'NULL', retry_attempts: '1', retry_claimed_at: 'now()' } },
+      { name: 'the runner was lost: FAILED, runner_lost', start: {},
+        set: { status: `'FAILED'`, finished_at: 'now()', release_cause: `'runner_lost'` } },
+      { name: 'the run never started: FAILED, setup_failed', start: {},
+        set: { status: `'FAILED'`, finished_at: 'now()', release_cause: `'setup_failed'` } },
+      { name: 'the import failed: FAILED, import_failed', start: {},
+        set: { status: `'FAILED'`, finished_at: 'now()', release_cause: `'import_failed'` } },
+    ];
+    const seen = new Set<string>();
+    for (const c of cases) {
+      const id = await session(db, w, c.start);
+      const open = await ask(w, asker, id);
+      const held = await ask(w, id, await session(db, w), `, 'NO_REPLY', now(), now()`);
+      const reviewId = await review(w, asker, id);
+      const before = await row(id);
+      const assignments = Object.entries(c.set).map(([column, value]) => `"${column}" = ${value}`).join(', ');
+      await sql.query(`UPDATE "session" SET ${assignments} WHERE "id" = $1::uuid`, [id]);
+      const after = await row(id);
+      const names = (list: string[]) => list.some((column) => column in c.set);
+      const expected = {
+        recipient: names(LISTS.recipient) && oldRecipient(before, after),
+        asker: names(LISTS.asker) && oldAsker(before, after),
+        reviewer: names(LISTS.reviewer) && oldReviewer(before, after),
+      };
+      const observed = {
+        recipient: (await request(open)).state === 'RECIPIENT_ENDED',
+        asker: (await request(held)).reply_comment_due_at instanceof Date,
+        reviewer: await reviewerEnded(reviewId),
+      };
+      const word = (fired: boolean) => (fired ? 'fires' : 'waits');
+      console.log(`# ${c.name} | recipient_ended ${word(observed.recipient)} | asker_stopped ${word(observed.asker)}`
+        + ` | reviewer_ended ${word(observed.reviewer)} | old clauses: ${word(expected.recipient)}, ${word(expected.asker)},`
+        + ` ${word(expected.reviewer)}`);
+      assert.deepEqual(observed, expected, c.name);
+      for (const [trigger, fired] of Object.entries(observed)) seen.add(`${trigger}:${fired}`);
+    }
+    // The table is not one-sided: each trigger both fires and waits somewhere in it.
+    for (const trigger of ['recipient', 'asker', 'reviewer']) {
+      assert.ok(seen.has(`${trigger}:true`) && seen.has(`${trigger}:false`), `${trigger} both fires and waits`);
+    }
+  });
+
+  await t.test('each ended-trigger names exactly FAILURE_RELEASE_CAUSES, and no terminal status', async () => {
+    const defs = (await sql.query(
+      `SELECT tgname, pg_get_triggerdef(oid) AS def FROM pg_trigger
+        WHERE tgrelid = 'session'::regclass
+          AND tgname IN ('session_request_recipient_ended', 'session_request_asker_stopped',
+                         'task_owner_confirmation_review_reviewer_ended')
+        ORDER BY tgname`,
+    )).rows as Array<{ tgname: string; def: string }>;
+    assert.equal(defs.length, 3);
+    for (const { tgname, def } of defs) {
+      const lists = [...def.matchAll(/release_cause <> ALL \(ARRAY\[([^\]]*)\]\)/g)].map((m) =>
+        [...m[1].matchAll(/'([a-z_]+)'::text/g)].map((item) => item[1]).sort());
+      console.log(`# ${tgname}: ${JSON.stringify(lists)}`);
+      assert.deepEqual(lists, [[...FAILURE_RELEASE_CAUSES].sort()], `${tgname}: one list, equal to FAILURE_RELEASE_CAUSES`);
+      assert.doesNotMatch(def, /'(SUCCEEDED|FAILED|CANCELLED)'::run_status/, `${tgname}: no terminal status`);
+    }
+  });
+
+  await sql.query(`ALTER TABLE "session" DROP CONSTRAINT IF EXISTS "session_release_fact_chk"`);
+  // And the failure CHECK (FAILED exactly when the cause is a failure): the rows below pair a held status word with a
+  // cause on purpose.
+  await sql.query(`ALTER TABLE "session" DROP CONSTRAINT IF EXISTS "session_release_failure_chk"`);
+
+  const releaseAlone = (id: string, cause = 'ended') => sql.query(
+    `UPDATE "session" SET "finished_at" = now(), "release_cause" = $2 WHERE "id" = $1::uuid`, [id, cause]);
+  const reviveAlone = (id: string) => sql.query(
+    `UPDATE "session" SET "finished_at" = NULL, "release_cause" = NULL WHERE "id" = $1::uuid`, [id]);
+  const statusOf = async (id: string) => (await released(sql, id)).status;
+  const refusedWith = (pattern: RegExp) => (error: { message?: string }) => {
+    console.log(`# refused: ${error.message}`);
+    return pattern.test(error.message ?? '');
   };
   /** A released session as every writer leaves one today: terminal status, finished_at, a cause. */
   const releasedData = { status: RunStatus.CANCELLED, finishedAt: new Date(), releaseCause: 'ended' };
@@ -822,58 +966,33 @@ test('(12) the release fact alone fires every guard and ended-trigger (plan step
   await t.test('the three ended-triggers fire on the release fact alone', async () => {
     const w = await world(db, 'g-ended');
     const asker = await session(db, w);
-    const ask = async (from: string, to: string, extra = '') => {
-      const id = randomUUID();
-      await sql.query(
-        `INSERT INTO "session_request" ("id", "owner_id", "from_session_id", "to_session_id", "turn_id", "client_turn_id",
-                "request_preview", "reply_by"${extra ? ', "state", "closed_at", "reply_held_at"' : ''})
-         VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, $6, 'a question', now() + interval '1 hour'${extra})`,
-        [id, w.ownerId, from, to, randomUUID(), `turn-${id}`]);
-      return id;
-    };
-    const request = async (id: string) => (await sql.query(
-      `SELECT "state", "close_reason", "reply_comment_due_at" FROM "session_request" WHERE "id" = $1::uuid`, [id],
-    )).rows[0] as { state: string; close_reason: string | null; reply_comment_due_at: Date | null };
 
     // session_request_recipient_ended (0350).
     const recipient = await session(db, w);
-    const open = await ask(asker, recipient);
+    const open = await ask(w, asker, recipient);
     await releaseAlone(recipient);
     const closed = await request(open);
     console.log(`# recipient_ended ${JSON.stringify(closed)}`);
     assert.equal(closed.state, 'RECIPIENT_ENDED');
     assert.equal(closed.close_reason, 'RUNNING', 'close_reason is still STATUS[:end_reason], unchanged');
 
-    // The kept literal: a FAILED release whose retry is armed is not an end, by either spelling.
-    const retrying = await session(db, w, { status: RunStatus.FAILED, retryAt: new Date(Date.now() + 60_000) });
-    const waiting = await ask(asker, retrying);
-    await releaseAlone(retrying);
-    assert.equal((await request(waiting)).state, 'OPEN', 'FAILED with a retry armed: still waiting for the retry');
+    // A release with a failure cause and a retry armed is not an end. The status word is still RUNNING, so it is
+    // the cause the clause read.
+    const retrying = await session(db, w, { retryAt: new Date(Date.now() + 60_000) });
+    const waiting = await ask(w, asker, retrying);
+    await releaseAlone(retrying, 'turn_failed');
+    assert.equal((await request(waiting)).state, 'OPEN', 'a failure cause with a retry armed: still waiting for the retry');
 
     // session_request_asker_stopped (0366): a reply held for the asker is released as a comment.
     const stopping = await session(db, w);
-    const held = await ask(stopping, await session(db, w), `, 'NO_REPLY', now(), now()`);
+    const held = await ask(w, stopping, await session(db, w), `, 'NO_REPLY', now(), now()`);
     await releaseAlone(stopping);
     assert.ok((await request(held)).reply_comment_due_at instanceof Date, 'asker_stopped fired');
 
     // task_owner_confirmation_review_reviewer_ended (0507).
-    const reviewed = await task(w);
     const reviewer = await session(db, w);
-    const requestId = randomUUID();
-    const reviewId = randomUUID();
-    await sql.query(
-      `INSERT INTO "task_owner_confirmation_request" ("id", "task_id", "owner_id", "session_id", "turn_id")
-       VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid)`,
-      [requestId, reviewed, w.ownerId, asker, randomUUID()]);
-    await sql.query(
-      `INSERT INTO "task_owner_confirmation_review" ("id", "request_id", "task_id", "owner_id", "reviewer_kind",
-              "window_seconds", "due_at", "reviewer_session_id")
-       VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, 'TASK_CREATOR', 3600, now() + interval '1 hour', $5::uuid)`,
-      [reviewId, requestId, reviewed, w.ownerId, reviewer]);
+    const reviewId = await review(w, asker, reviewer);
     await releaseAlone(reviewer);
-    const review = (await sql.query(
-      `SELECT "reviewer_ended_at" FROM "task_owner_confirmation_review" WHERE "id" = $1::uuid`, [reviewId],
-    )).rows[0] as { reviewer_ended_at: Date | null };
-    assert.ok(review.reviewer_ended_at instanceof Date, 'reviewer_ended fired');
+    assert.ok(await reviewerEnded(reviewId), 'reviewer_ended fired');
   });
 });

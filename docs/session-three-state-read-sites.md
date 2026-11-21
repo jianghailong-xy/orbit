@@ -20,11 +20,12 @@ Plan step 4.4 (migrations 1411 to 1415) moved the six guards, the revive exempti
 acquisition guards and the three ended-triggers onto `finished_at`, and added `finished_at` to
 the column lists of the five triggers that decide from it. What still names the status there: the
 acquisition and claim guards' `PENDING` to `RUNNING` (activity, `SAME`); the ended-triggers'
-`INTERRUPTED` and `AWAITING_INPUT` branches (held statuses read as turn and retry facts); one
-`NEW."status" <> 'FAILED'` in each ended-trigger WHEN clause, kept because the release does not
-yet record whether it was a failure (`engine_exited` covers a clean and a failed finalize); and
+`INTERRUPTED` and `AWAITING_INPUT` branches (held statuses read as turn and retry facts); and
 `session_request_recipient_ended`'s `NEW."status"::text`, which writes `close_reason` as
-`STATUS[:end_reason]` unchanged, for display. The unique index is step 4.5's.
+`STATUS[:end_reason]` unchanged, for display. Where an ended-trigger told a FAILED release apart, it
+now reads `release_cause` against the failure causes (`FAILURE_RELEASE_CAUSES`, held equal to FAILED
+by `session_release_failure_chk`, 1406/1407), so 1415 ships only with or after 1406/1407. The unique
+index is step 4.5's.
 
 | Object defined in | Lines | R/W | Facts | After | What it does with the status |
 |---|---|---|---|---|---|
