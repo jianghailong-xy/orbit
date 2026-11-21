@@ -19,9 +19,12 @@ public struct SessionLine: Equatable, Sendable {
     }
     public let text: String
     public let tone: Tone
-    public init(text: String, tone: Tone) {
+    /// A pause glyph leads the line: a project row's 2a and 2b (design §4.2).
+    public let pauseGlyph: Bool
+    public init(text: String, tone: Tone, pauseGlyph: Bool = false) {
         self.text = text
         self.tone = tone
+        self.pauseGlyph = pauseGlyph
     }
 
     /// Build the line for a session. `live` is false in Trash. Always yields a line: a run that
