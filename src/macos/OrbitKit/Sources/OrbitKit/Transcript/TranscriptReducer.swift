@@ -120,6 +120,8 @@ public struct TranscriptState: Equatable, Sendable, Codable {
         subagentItems = (try? c.decodeIfPresent([String: [TranscriptItem]].self, forKey: .subagentItems)) ?? [:]
         taskProgress = (try? c.decodeIfPresent([String: TaskProgress].self, forKey: .taskProgress)) ?? [:]
         promptSuggestion = (try? c.decodeIfPresent(String.self, forKey: .promptSuggestion)) ?? nil
+        agentTurnId = (try? c.decodeIfPresent(String.self, forKey: .agentTurnId)) ?? nil
+        agentTurnStartedAt = (try? c.decodeIfPresent(String.self, forKey: .agentTurnStartedAt)) ?? nil
         turnEnds = (try? c.decodeIfPresent([TurnEndMark].self, forKey: .turnEnds)) ?? []
     }
 }
