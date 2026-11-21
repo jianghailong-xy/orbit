@@ -77,7 +77,7 @@ public struct SessionProjectRow: Identifiable, Equatable, Sendable {
     }
 }
 
-public enum SessionProjectRowAction: Equatable, Sendable { case pause, resume, complete, pin, move }
+public enum SessionProjectRowAction: Hashable, Sendable { case pause, resume, complete, pin, move }
 
 public enum SessionProjectResumeCall: Equatable, Sendable {
     case fuse(episodeId: String)
