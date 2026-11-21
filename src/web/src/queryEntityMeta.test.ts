@@ -96,6 +96,7 @@ const EXEMPT: Record<string, string> = {
   'src/lib/queries.ts#49': "share-link tokens are written from this tab; no control-plane event announces them",
   'src/lib/queries.ts#50': "access tokens are written from this tab; no control-plane event announces them",
   'src/lib/queries.ts#83': "link preview metadata read from the linked pages; no control-plane event announces it",
+  'src/lib/queries.ts#84': "the drive's share of storage, read when Files → Storage opens; no control-plane event announces it",
   'src/lib/useDirProbe.ts#1': "a runner filesystem probe; no control-plane event announces directory state",
   'src/pages/AdminEmailPage.tsx#1': "admin email settings are written from this tab; no control-plane event announces them",
   'src/pages/AdminGithubPage.tsx#1': "admin GitHub App settings are written from this tab; no control-plane event announces them",
