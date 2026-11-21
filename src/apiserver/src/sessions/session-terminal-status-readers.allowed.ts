@@ -54,7 +54,7 @@ export const SESSION_TERMINAL_STATUS_READERS: Readonly<Record<string, number>> =
   'src/apiserver/src/schedules/schedule-runs.service.ts': 10,
   'src/apiserver/src/sessions/auto-retry.service.ts': 9,
   'src/apiserver/src/sessions/session-move.ts': 1,
-  'src/apiserver/src/sessions/sessions.service.ts': 10,
+  'src/apiserver/src/sessions/sessions.service.ts': 9,
   'src/apiserver/src/sessions/task-work-carrier.ts': 2,
   'src/apiserver/src/share-links/public-task.ts': 1,
   'src/apiserver/src/task-lists/task-lists.service.ts': 1,
