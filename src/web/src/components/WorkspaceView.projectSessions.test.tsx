@@ -1764,6 +1764,79 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     await until(() => expect(apiModule.pinSession).toHaveBeenCalledWith(TASK.id));
   });
 
+  // A project's row is its coordinator's session row (SessionListRow): what one row kind does, the other does.
+  it('opens a phone project row’s menu on a held press, as a session row’s, and its release does not open the row', async () => {
+    mobile = true;
+    await mount();
+    const entry = projectRow();
+    Object.defineProperty(entry, 'getBoundingClientRect', { configurable: true, value: () => ({ width: 400, left: 0, top: 100 }) });
+    const down = new Event('touchstart', { bubbles: true, cancelable: true });
+    Object.defineProperty(down, 'touches', { value: [{ clientX: 120, clientY: 130 }] });
+    const before = location;
+    await act(async () => entry.dispatchEvent(down));
+    await until(() => expect(menuItem('Sessions')).toBeTruthy());
+    expect(menuItems().map((item) => item.textContent?.trim())).toEqual(['Open Session', 'Sessions', 'Open Project', 'Pin', 'Move…']);
+    const up = new Event('touchend', { bubbles: true, cancelable: true });
+    Object.defineProperty(up, 'touches', { value: [] });
+    await act(async () => entry.dispatchEvent(up));
+    expect(up.defaultPrevented, 'the release must not send the click that opens the row').toBe(true);
+    expect(location).toBe(before);
+    await click(menuItem('Pin'), 'Pin');
+    await until(() => expect(apiModule.pinSession).toHaveBeenCalledWith(COORDINATOR.id));
+  });
+
+  it('fires nothing on a full rightward swipe of a phone project row', async () => {
+    mobile = true;
+    projects = [project({ startedAt: '2026-10-01T00:00:00Z' } as never)];
+    await mount();
+    await swipe(projectRow(), 300);
+    expect(apiModule.pinSession).not.toHaveBeenCalled();
+    expect(vi.mocked(apiModule.api)).not.toHaveBeenCalledWith(expect.stringMatching(/\/(pause|resume)$/), expect.anything());
+  });
+
+  it('puts Pause first on a running project row and Resume first on a paused one, in the swipe and the menu', async () => {
+    mobile = true;
+    projects = [project({ startedAt: '2026-10-01T00:00:00Z' } as never)];
+    await mount();
+    const labels = () => [...projectRow().querySelectorAll('.session-swipe-actions.leading button')].map((b) => b.getAttribute('aria-label'));
+    expect(labels()).toEqual(['Pause', 'Pin']);
+    await swipe(projectRow(), 90);
+    await click(projectRow().querySelector('.session-swipe-action.pause'), 'the swipe Pause');
+    await until(() => expect(vi.mocked(apiModule.api)).toHaveBeenCalledWith(`/projects/${PROJECT_ID}/pause`, { method: 'POST' }));
+  });
+
+  it('lists Pause first in the desktop menu group of a running project', async () => {
+    projects = [project({ startedAt: '2026-10-01T00:00:00Z' } as never)];
+    await mount();
+    await hoverProjectMenu();
+    await until(() => expect(menuItems().map((item) => item.textContent?.trim())).toEqual(['Open Session', 'Sessions', 'Open Project', 'Pause', 'Pin', 'Move…']));
+  });
+
+  it('shows Resume with the grey paused line on an owner-paused project row', async () => {
+    mobile = true;
+    projects = [project({ startedAt: '2026-10-01T00:00:00Z', pausedAt: '2026-10-04T08:00:00Z', pausedReason: 'OWNER' } as never)];
+    await mount();
+    const entry = projectRow();
+    expect([...entry.querySelectorAll('.session-swipe-actions.leading button')].map((b) => b.getAttribute('aria-label'))).toEqual(['Resume', 'Pin']);
+    expect(entry.querySelector('.session-preview.tone-paused')?.textContent).toMatch(/^Paused · /);
+    expect(entry.querySelector('.session-project-progress.paused')).not.toBeNull();
+  });
+
+  it('gives a plain session row keyboard focus, Enter and a right-click menu, as a project row has', async () => {
+    await mount(undefined, `/sessions/${TASK.id}`);
+    for (const entry of [memberRow(LOOSE.title)!, projectRow()]) {
+      expect(entry.getAttribute('tabindex')).toBe('0');
+      expect(entry.getAttribute('role')).toBe('button');
+    }
+    const loose = memberRow(LOOSE.title)!;
+    await act(async () => loose.focus());
+    await act(async () => loose.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
+    await until(() => expect(location).toBe(`/sessions/${LOOSE.id}`));
+    await act(async () => memberRow(LOOSE.title)!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })));
+    await until(() => expect(menuItem('Rename…')).toBeTruthy());
+    expect(menuItems().map((item) => item.textContent?.trim())).toContain('Move…');
+  });
+
   it('returns to the originating folder with the page back button', async () => {
     mobile = true; // the page in the list's place, as a phone still has it
     folders = [FOLDER];

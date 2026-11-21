@@ -164,15 +164,52 @@ private struct EnclosingScrollViewProbe: NSViewRepresentable {
         probe.drag = drag
     }
 }
+
+/// The card a row drag carries: the row's title alone, in a small pill, so the pointer's tip and the
+/// folder it is over stay visible (owner 2026-11-21). macOS centers a SwiftUI drag preview on the
+/// pointer, so padding the preview's leading and top edges with the card's own size plus twice the
+/// wanted offset puts the card's top-left corner `offset` points below and to the right of the
+/// pointer, the same distance wherever on the row the drag began. The transparent padding is what
+/// the pointer sits in; only the pill is drawn.
+struct SessionDragPreview: View {
+    let title: String
+    /// Where the card's top-left corner sits, from the pointer's tip.
+    static let offset: CGFloat = 16
+    /// The card's width; a longer title truncates rather than widening it.
+    static let width: CGFloat = 200
+    /// The card's expected height (a line of `.orbitListSubtitle` plus its 12pt of padding). It only
+    /// feeds the transparent top padding: the corner lands at `offset` plus half the difference
+    /// between this and the height the card actually takes.
+    private static let expectedHeight: CGFloat = 26
+
+    var body: some View {
+        Text(title)
+            .font(.orbitListSubtitle)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .frame(width: Self.width, alignment: .leading)
+            .background(Color(nsColor: .controlBackgroundColor), in: Capsule())
+            .overlay { Capsule().strokeBorder(Color(nsColor: .separatorColor), lineWidth: 1) }
+            .shadow(color: .black.opacity(0.18), radius: 3, x: 0, y: 1)
+            // Transparent space: the preview is centered on the pointer, so these two paddings move
+            // the card down-right of it by `offset`.
+            .padding(.leading, Self.width + Self.offset * 2)
+            .padding(.top, Self.expectedHeight + Self.offset * 2)
+    }
+}
 #endif
 
 extension View {
     /// A session row that can be picked up and dropped on a folder (the Mac only): `enabled` is
-    /// `SessionFolderDrag.draggable` for it.
+    /// `SessionFolderDrag.draggable` for it. The drag carries its own preview — a small card with the
+    /// row's title — so the pointer and the folder it is over stay visible (`SessionDragPreview`).
     @ViewBuilder
-    func sessionDragSource(_ session: Session, enabled: Bool, drag: SessionDragState) -> some View {
+    func sessionDragSource(_ session: Session?, enabled: Bool, drag: SessionDragState?,
+                           title: String) -> some View {
         #if os(macOS)
-        if enabled {
+        if enabled, let session, let drag {
             self
                 .background(EnclosingScrollViewProbe(drag: drag))
                 .onDrag {
@@ -184,6 +221,8 @@ extension View {
                         return nil
                     }
                     return provider
+                } preview: {
+                    SessionDragPreview(title: title)
                 }
                 .opacity(drag.session?.id == session.id ? 0.5 : 1)
         } else {

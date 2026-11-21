@@ -30,14 +30,24 @@ public enum SessionFolderDrag {
 
     /// Whether a session row may be picked up: only where the list offers somewhere to drop it
     /// (`dropTargets` — folder rows, or a folder's page), and only a row the Move panel would file:
-    /// not in Trash, not a member that goes where its project's coordinator goes (unless the list
-    /// has no row for its project here, `hasProjectMark`), and not a project's coordinator.
+    /// not in Trash, and not a member that goes where its project's coordinator goes (unless the list
+    /// has no row for its project here, `hasProjectMark`). A coordinator is moved as it is by the
+    /// panel, its members following.
     public static func draggable(_ session: Session, view: SessionView, hasProjectMark: Bool,
                                  dropTargets: Bool) -> Bool {
         guard dropTargets, view != .trash else { return false }
         guard let membership = session.projectMembership else { return true }
-        if membership.role == .coordinator { return false }
+        if membership.role == .coordinator { return true }
         return hasProjectMark
+    }
+
+    /// Whether a project's row may be picked up: it stands for its coordinator, which is what the
+    /// drag carries and what the row's Move files (the members follow). A project with no
+    /// coordinator has no Move, so no drag.
+    public static func draggable(projectCoordinator: Session?, view: SessionView, dropTargets: Bool) -> Bool {
+        guard projectCoordinator != nil else { return false }
+        guard dropTargets, view != .trash else { return false }
+        return true
     }
 
     /// How far the list scrolls on one tick of a drag held near its top or bottom edge, in points:

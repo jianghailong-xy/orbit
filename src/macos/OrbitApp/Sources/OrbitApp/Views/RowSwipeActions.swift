@@ -16,6 +16,16 @@ struct RowSwipeAction: Identifiable {
     let perform: () -> Void
 
     var id: String { title }
+
+    /// The action as a context-menu item (which the system's swipe buttons draw too): the same tint
+    /// and enablement, so a list's swipe, its menu and a project row's menu read the same action.
+    var menuItem: some View {
+        Button(role: role, action: perform) {
+            Label(title, systemImage: systemImage)
+        }
+        .tint(role == .destructive ? nil : tint)
+        .disabled(!isEnabled)
+    }
 }
 
 #if os(iOS)

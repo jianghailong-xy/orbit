@@ -50,13 +50,13 @@ export function folderDropVerdict(
 /**
  * Whether a session row may be picked up. Only where the list offers somewhere to drop it — folder
  * rows on a workspace's list, or a folder's page, whose head means No Folder — and only a row Move…
- * would file: not in Trash, not a member that goes where its project's coordinator goes, and not a
- * project's coordinator (its row stands for the whole project). Not on a touch screen, where a held
- * press opens the row's menu and a sideways one swipes it.
+ * would file: not in Trash, and not a member that goes where its project's coordinator goes. A
+ * project's row is its coordinator's session row, so it is asked about its coordinator, and the
+ * members follow; a project with no coordinator is no session row and is never asked. Not on a
+ * touch screen, where a held press opens the row's menu and a sideways one swipes it.
  */
 export function sessionRowDraggable(
   row: {
-    kind?: string;
     projectMembership?: { role: string } | null;
     projectMark?: unknown;
     [key: string]: unknown;
@@ -64,7 +64,6 @@ export function sessionRowDraggable(
   context: { view: SessionListView; dropTargets: boolean; touch: boolean; renaming: boolean },
 ): boolean {
   if (!context.dropTargets || context.touch || context.renaming || context.view === 'trash') return false;
-  if (row.kind === 'project' || row.projectMembership?.role === 'COORDINATOR') return false;
   return sessionMovable(row) || !!row.projectMark;
 }
 

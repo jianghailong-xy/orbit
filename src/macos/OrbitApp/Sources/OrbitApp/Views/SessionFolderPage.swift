@@ -292,7 +292,7 @@ struct SessionFolderPage: View {
     }
 
     /// The page's list: an ordinary session list — the recency sections with their Pinned fold, the
-    /// rows as every other list draws them (see `sessionRow`), and the same pull-to-refresh.
+    /// rows as every other list draws them (see `SessionListRow`), and the same pull-to-refresh.
     private func list(agent: Agent) -> some View {
         @Bindable var app = app
         // One grouping, regrouped only when its inputs change, which the list's closures and its
@@ -438,71 +438,16 @@ struct SessionFolderPage: View {
         }
     }
 
-    /// One row, wrapped for the container it is in — the workspace list's own arrangement, repeated
-    /// here so a folder's page and the list outside behave identically (see `AgentPanes.sessionRow`).
+    /// One row, through the same builder the workspace list draws every entry with, so a folder's
+    /// page and the list outside behave identically.
     @ViewBuilder private func listRow(_ s: Session, projects: [String: SessionProjectRow],
                                       marks: [String: SessionProjectMark]) -> some View {
-        if let project = projects[s.id] {
-            projectRow(project)
-        } else {
-            sessionRow(s, mark: marks[s.id])
-        }
-    }
-
-    /// `mark`: as on the workspace list's rows (`AgentPanes.sessionRow`).
-    @ViewBuilder private func sessionRow(_ s: Session, mark: SessionProjectMark?) -> some View {
-        let row = AgentSessionRow(session: s, deleted: address.view == .trash, projectMark: mark)
-        let onSessions: (() -> Void)? = mark.map { mark in
-            { app.openProjectSessions(SessionProjectAddress(projectID: mark.projectId, agentID: address.agentID,
-                                                            view: address.view)) }
-        }
-        // Somewhere to drop it: the page's head, in the wide shell that draws a back button there.
-        let draggable = SessionFolderDrag.draggable(
-            s, view: address.view, hasProjectMark: mark != nil,
-            dropTargets: !address.isScheduledRuns && !isSearching)
-        switch rowNavigation {
-        case .selection:
-            row.sessionRowActions(s, scope: address.view, onTag: { taggingSession = s },
-                                  onShare: { sharingSession = s }, onMove: { movingSession = s },
-                                  onSessions: onSessions)
-                .sessionDragSource(s, enabled: draggable, drag: drag)
-                .tag(s.id)
-        case .push:
-            Button { app.openSessionRow(s) } label: {
-                row.foregroundStyle(.primary)
-            }
-            .sessionRowActions(s, scope: address.view, onTag: { taggingSession = s },
-                               onShare: { sharingSession = s }, onMove: { movingSession = s },
-                               onSessions: onSessions)
-        }
-    }
-
-    private func projectRow(_ row: SessionProjectRow) -> some View {
-        let projectAddress = SessionProjectAddress(projectID: row.projectId, agentID: address.agentID, view: address.view)
-        let onOpen = {
-            switch row.target {
-            case .session(let id):
-                if let session = (app.sessions + (app.agents?.allSessions ?? [])).first(where: { $0.id == id }) {
-                    app.openProjectMember(session, push: rowNavigation == .push)
-                }
-            case .project: app.openProjectSessions(projectAddress)
-            }
-        }
-        // A phone opens the coordinator's conversation, not the project's sessions page, which is
-        // the button in that conversation's navigation bar (owner 2026-11-11, board 5). The iPad's
-        // column keeps the page. A row whose line says a member is waiting on you opens that member
-        // instead, at its card, on both (owner 2026-11-14).
-        let onTap = {
-            switch SessionProjectSheet.rowTap(row, held: app.sessions + (app.agents?.allSessions ?? []), push: rowNavigation == .push) {
-            case .waitingMember(let member): app.openWaitingMember(member, project: projectAddress, push: rowNavigation == .push)
-            case .coordinator(let coordinator): app.openProjectMember(coordinator, push: true)
-            case .sessions: app.openProjectSessions(projectAddress)
-            }
-        }
-        return SessionProjectRowView(row: row, onOpen: onTap)
-        .sessionProjectRowActions(row, view: address.view, onOpen: onOpen, onSessions: { app.openProjectSessions(projectAddress) }, onProject: {
-            app.openProject(row.projectId)
-        }, onMove: { if let coordinator = row.coordinator { movingSession = coordinator } })
+        SessionListEntryRow(
+            session: s, projects: projects, marks: marks, view: address.view, agentID: address.agentID,
+            navigation: rowNavigation, drag: drag,
+            // Somewhere to drop a row: the page's head, in the wide shell that draws a back button there.
+            dropTargets: !address.isScheduledRuns && !isSearching,
+            onTag: { taggingSession = $0 }, onShare: { sharingSession = $0 }, onMove: { movingSession = $0 })
     }
 
     /// The Pinned section's header: its title, and a chevron that points down while the rows show
