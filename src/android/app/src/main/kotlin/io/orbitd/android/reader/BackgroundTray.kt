@@ -81,6 +81,16 @@ internal object BackgroundTrayLogic {
         e.type == "user" && e.ts != null && transcriptCards(e).let { cards -> StickySummary.isAnchor(e, cards) && !StickySummary.isOrbits(cards) }
     }?.ts
 
+    /**
+     * When the agent's latest turn started (web `lastAgentTurnStartedAt`): the earliest event of the turn the newest non-user event
+     * belongs to, so a wake's turn counts from its recorded note. Null while no agent event carries a turn.
+     */
+    fun lastAgentTurnStartedAt(events: List<RunEvent>): String? {
+        val turnId = events.lastOrNull { it.type != "user" && it.turnId != null && it.ts != null }?.turnId ?: return null
+        return events.filter { it.turnId == turnId && it.ts != null }
+            .minByOrNull { runCatching { java.time.Instant.parse(it.ts!!) }.getOrDefault(java.time.Instant.MAX) }?.ts
+    }
+
     /** The open list's header count (iOS `countText`): "N running · N total". */
     fun countText(procs: List<JsonObject>, sessionLive: Boolean): String {
         val running = procs.count { status(it, sessionLive) == "running" }
@@ -119,9 +129,9 @@ internal object BackgroundTrayLogic {
  * processes · N running · N total", each row (status · name · age) opening to that process's output tail.
  */
 @Composable
-internal fun BackgroundTray(procs: List<JsonObject>, lastUserMessageAt: String?, sessionLive: Boolean, folded: Boolean = false,
+internal fun BackgroundTray(procs: List<JsonObject>, clearedAt: String?, sessionLive: Boolean, folded: Boolean = false,
     jumpToJob: (String) -> (() -> Unit)? = { null }) {
-    val row = remember(procs, lastUserMessageAt, sessionLive) { BackgroundRow.rowOf(procs, lastUserMessageAt, sessionLive) } ?: return
+    val row = remember(procs, clearedAt, sessionLive) { BackgroundRow.rowOf(procs, clearedAt, sessionLive) } ?: return
     var open by rememberSaveable { mutableStateOf(false) }
     // Which rotating name shows: kept here, above the folded row, so a pause holds it and it goes on from there.
     val names = (row.name as? BackgroundRow.Name.Rotate)?.items?.takeIf { it.size > 1 }

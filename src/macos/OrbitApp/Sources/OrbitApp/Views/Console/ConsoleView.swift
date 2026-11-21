@@ -348,6 +348,7 @@ struct ConsoleView: View {
                 // The folded row by the shared rule; its names stop rotating while the band is folded.
                 BackgroundTrayView(procs: console.state.background, progress: console.state.taskProgress,
                                    row: BackgroundRowRule.row(console.state.background, items: console.state.items,
+                                                              lastAgentTurnStartedAt: console.state.agentTurnStartedAt,
                                                               sessionLive: console.isLive),
                                    paused: foldsChrome(console) || foldsBand(console),
                                    revealJob: { console.revealJob($0) },
