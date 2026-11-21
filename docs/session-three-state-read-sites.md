@@ -13,7 +13,9 @@ the access path: runner link hints, drain waiting, managed runner sleep). Left o
 and dispatch-pause's `heldSql`, which step 4.5 removes), `common/session-tree-sql.ts` (slot counts and the
 background-held set), `sessions/task-work-carrier.ts` (activity and the parked status, no terminal value), the
 claimed-and-held set in `runner-api/runner-link-hints.ts`, `watches/watch-evaluator.service.ts` (reads the status for
-the projector), and the reads of `FAILED` or `SUCCEEDED` as against the other terminal values (steps 4.6 and 4.7).
+the projector), and the work readers' reads of `FAILED` or `SUCCEEDED` as against the other terminal values
+(step 4.6: the verified run in `tasks/verification-dependency.ts`, the routing report). The coordinator's "FAILED
+with a retry armed" in `projects/project-open-item.ts` reads the release cause (`failedReleaseSql`).
 
 ## A. Database objects live at HEAD
 

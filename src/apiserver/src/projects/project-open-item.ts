@@ -23,6 +23,7 @@ import {
   taskLandingSql,
 } from './project-criterion-landing';
 import {
+  failedReleaseSql,
   isFailedRelease,
   isReleased,
   sessionHasEnded as releasedSessionHasEnded,
@@ -943,7 +944,9 @@ export function openItemCoordinatorCanTake(alias: string): Prisma.Sql {
  * coordinator conversation is switched on, not filed, trashed or completed, and live or FAILED with an
  * auto-retry pending. The one definition, shared by the open-item clock and the evidence clock
  * (`evidence-undecided.ts`), so the two cannot come to disagree about whether a coordinator can still
- * take its turn. Parameter-free when `projectId` is.
+ * take its turn. Parameter-free when `projectId` is. Live is the release column and FAILED the release
+ * cause (plan step 4.3), the same rows as the status under session_release_fact_chk and
+ * session_release_failure_chk.
  */
 export function projectCoordinatorCanTake(projectId: Prisma.Sql): Prisma.Sql {
   return Prisma.sql`EXISTS (
@@ -956,7 +959,7 @@ export function projectCoordinatorCanTake(projectId: Prisma.Sql): Prisma.Sql {
        AND taker."completed_at" IS NULL
        AND taker."archived_at" IS NULL
        AND (${sessionHeldSql('taker')}
-            OR (taker."status" = 'FAILED' AND taker."retry_at" IS NOT NULL)))`;
+            OR (${failedReleaseSql('taker."release_cause"')} AND taker."retry_at" IS NOT NULL)))`;
 }
 
 /** Owner-facing lists omit coordinator items still waiting in the queue of a conversation that can

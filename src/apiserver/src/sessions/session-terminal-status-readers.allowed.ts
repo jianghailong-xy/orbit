@@ -35,8 +35,10 @@ export const SESSION_TERMINAL_STATUS_READERS: Readonly<Record<string, number>> =
   'src/apiserver/src/common/session-scheduling.ts': 2,
   // The one definition of "held" and "released" (plan step 3.5): the two status sets, their SQL fragments, and the
   // release causes. Its readers read `finished_at` since plan steps 4.2 and 4.3; the sets stay for heldSql (the queue's
-  // dispatch-pause reads, until plan step 4.5) and for the filters whose status list is an index's access path.
-  'src/apiserver/src/common/session-release.ts': 7,
+  // dispatch-pause reads, until plan step 4.5) and for the filters whose status list is an index's access path. The
+  // held list of heldSql and sessionHeldIndexedSql is one constant since 4.3 (HELD_STATUS_LIST_SQL), which the scan
+  // does not count as a hit because no `IN` stands beside it.
+  'src/apiserver/src/common/session-release.ts': 6,
   'src/apiserver/src/common/session-tree-sql.ts': 1,
   'src/apiserver/src/help/help-ask-marker.ts': 1,
   'src/apiserver/src/help/help-ask-reads.ts': 1,
