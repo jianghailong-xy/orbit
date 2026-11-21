@@ -30006,12 +30006,6 @@ button.agent-progress-agent:hover {
 .ag-more {
   display: none;
 }
-.ag-failed {
-  flex: none;
-  color: var(--error);
-  font-weight: 600;
-  white-space: nowrap;
-}
 .ag-facts {
   display: inline-flex;
   align-items: center;

@@ -276,9 +276,10 @@ struct AgentGroupView: View {
 
 /// The composer band's line for the session's Agents (docs/mocks/agents-band-models): what the running one
 /// is doing and where, or with none running where the work went — the machines first, then each model with
-/// how many runs took it — and, in every state, how many failed at its right edge. No cost, and no check
-/// when all succeeded. Always one line: what does not fit gives way in order (the title, the models after
-/// the first, then the words, then the models), the machines and the failures last. It opens their list
+/// how many runs took it. No cost, and no failure count: the owner can do nothing about a failed run (the
+/// agent that started it was told), and its row in the sheet keeps its red mark. Always one line: what does
+/// not fit gives way in order (the title, the models after the first, then the words, then the models), the
+/// machines last. It opens their list
 /// (`AgentsSheet`). Absent until the session has started one.
 struct AgentsBandRow: View {
     @Environment(AppModel.self) private var app
@@ -302,12 +303,6 @@ struct AgentsBandRow: View {
                             .fixedSize()
                         if summary.spread { AgentsBandSpread(summary: summary) }
                         Spacer(minLength: 4)
-                    }
-                    // Failures in every state, the title giving way first: before the spinner while one runs.
-                    if summary.failed > 0 {
-                        Label("\(summary.failed) failed", systemImage: "xmark.circle.fill")
-                            .font(.orbitMeta.weight(.semibold)).foregroundStyle(.red)
-                            .labelStyle(.titleAndIcon).fixedSize().layoutPriority(2)
                     }
                     if summary.running > 0 { ProgressView().controlSize(.mini) }
                     Image(systemName: "chevron.right")
