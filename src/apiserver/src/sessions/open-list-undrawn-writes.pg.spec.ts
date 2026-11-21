@@ -420,7 +420,7 @@ test('2. hints: a write of undrawn columns alone sends no sessions.list_changed 
   await loud('session.last_turn_at', `UPDATE session SET last_turn_at = now() + interval '1 minute' WHERE id = $1::uuid`, f.sessionId);
   await loud('session.last_assistant_text with updated_at', `UPDATE session SET last_assistant_text = 'new reply', updated_at = now() WHERE id = $1::uuid`, f.sessionId);
   await loud('session.engine_turn_active with context_tokens', `UPDATE session SET engine_turn_active = NOT engine_turn_active, context_tokens = 1 WHERE id = $1::uuid`, f.sessionId);
-  await loud('conversation_turn.answered_at with delivery_status', `UPDATE conversation_turn SET answered_at = now(), delivery_status = 'done' WHERE id = $1::uuid`, f.turnId);
+  await loud('conversation_turn.answered_at with lease_deadline_at', `UPDATE conversation_turn SET answered_at = now(), lease_deadline_at = NULL WHERE id = $1::uuid`, f.turnId);
   await loud('conversation_turn.status', `UPDATE conversation_turn SET status = 'ANSWERED' WHERE id = $1::uuid`, f.turnId);
   await loud('a turn inserted', `INSERT INTO conversation_turn (id, session_id, seq, client_turn_id, kind, content, status)
                                  VALUES (gen_random_uuid(), $1::uuid, 4, 'olu-second', 'message', 'next', 'PENDING')`, f.sessionId);
