@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Prisma } from '@prisma/client';
 import { uuidToBase62 } from '@orbit/shared';
 import { addTwins } from '../common/public-id-body';
+import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { ProjectsService } from './projects.service';
 
 /**
@@ -37,13 +37,14 @@ function sidebarOver(projects: Array<Record<string, unknown>>) {
       findFirst: async () => assert.fail('the fuse is never read one project at a time'),
       findMany: async () => assert.fail('the fuse is read by the one raw statement'),
     },
-    $queryRaw: async (query: Prisma.Sql) => {
+    $queryRaw: async (...args: unknown[]) => {
       counts.statements += 1;
-      if (!query.sql.includes('"project_fuse_episode"')) return [];
+      const { text, values } = renderRawQuery(args);
+      if (!text.includes('"project_fuse_episode"')) return [];
       counts.fuseReads += 1;
-      assert.match(query.sql, /= ANY\(/, 'one statement over every project id on the page');
-      assert.match(query.sql, /"resumed_at" IS NULL/, 'only the open pause');
-      assert.deepEqual(query.values[0], projects.map((project) => project.id));
+      assert.match(text, /= ANY\(/, 'one statement over every project id on the page');
+      assert.match(text, /"resumed_at" IS NULL/, 'only the open pause');
+      assert.deepEqual(values[0], projects.map((project) => project.id));
       return projects.some((project) => project.id === FUSE_PAUSED)
         ? [{ projectId: FUSE_PAUSED, id: EPISODE_ID, observed: 6, limit: 6 }]
         : [];
