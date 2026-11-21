@@ -15,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -23,6 +24,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -73,8 +75,13 @@ internal data class JobCards(
 
 internal val LocalJobCards = staticCompositionLocalOf { JobCards() }
 
-/** The terminal tone the board draws a job's rail and icon in (web `.chat-tone-exec`). */
+/** The terminal tone the board draws a job's rail and icon in (web `.chat-tone-exec` `--tone`). */
 internal val ExecTone = Color(0xFF0D9488)
+
+/** The kind chip's accent tint, text on fill (web `.chat-tool-tag` in `.chat-tone-exec`: `--tone` on `--tone-bg`, light and dark). */
+@Composable
+private fun execTag(): Pair<Color, Color> =
+    if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) Color(0xFF2DD4BF) to Color(0x2E0D9488) else ExecTone to Color(0xFFE2F6F3)
 
 /** Whether the app is in front: its lifecycle at least started. */
 @Composable
@@ -194,10 +201,11 @@ internal fun JobCardView(event: RunEvent, receipt: BgJob.Receipt?, highlighted: 
     val grey = MaterialTheme.colorScheme.onSurfaceVariant
     val red = MaterialTheme.colorScheme.error
     val mono = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
+    // The kind in the accent tint, so it never reads as another timer beside the grey run time (web `.chat-tool-tag`).
+    val (tagText, tagFill) = execTag()
     val kindChip = @Composable {
-        Text(kind, Modifier.background(if (phone) grey.copy(alpha = 0.10f) else ExecTone.copy(alpha = 0.12f), RoundedCornerShape(4.dp))
-            .padding(horizontal = 5.dp, vertical = 1.dp).testTag("job-kind"),
-            style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace), color = if (phone) grey else ExecTone, maxLines = 1)
+        Text(kind, Modifier.background(tagFill, RoundedCornerShape(5.dp)).padding(horizontal = 6.dp, vertical = 1.dp).testTag("job-kind"),
+            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold), color = tagText, maxLines = 1)
     }
     val elapsedChip = @Composable {
         elapsed?.let { Text(it, Modifier.background(grey.copy(alpha = 0.10f), RoundedCornerShape(4.dp)).padding(horizontal = 5.dp, vertical = 1.dp)
@@ -260,8 +268,9 @@ internal fun JobCardView(event: RunEvent, receipt: BgJob.Receipt?, highlighted: 
                 killedBy?.let { KilledLine(it) }
                 if (shown.isNotEmpty()) Column(Modifier.fillMaxWidth().background(grey.copy(alpha = 0.06f), RoundedCornerShape(6.dp))
                     .padding(horizontal = 9.dp, vertical = 6.dp).testTag("job-output"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    SelectionContainer { Text(shown.joinToString("\n"), style = mono.copy(fontSize = MaterialTheme.typography.labelSmall.fontSize),
-                        color = if (phase == BgJob.Phase.FAILED) red else MaterialTheme.colorScheme.onSurface) }
+                    // The normal text colour whatever the end: only the folded card's last lines turn red (web `.chat-job-output`).
+                    SelectionContainer { Text(shown.joinToString("\n"), Modifier.testTag("job-output-text"),
+                        style = mono.copy(fontSize = MaterialTheme.typography.labelSmall.fontSize), color = MaterialTheme.colorScheme.onSurface) }
                     if (shown.size < lines.size) Text(BgJob.showAll(lines.size), Modifier.clickable(role = Role.Button) { allLines = true }
                         .testTag("job-show-all"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                 }

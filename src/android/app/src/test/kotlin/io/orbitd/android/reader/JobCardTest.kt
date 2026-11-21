@@ -145,6 +145,12 @@ class JobCardTest {
     private fun on(tag: String) = compose.onNode(hasTestTag(tag), useUnmergedTree = true)
     private fun all(tag: String) = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true)
     private fun within(card: String, tag: String) = compose.onNode(hasTestTag(tag) and hasAnyAncestor(hasTestTag(card)), useUnmergedTree = true)
+    /** The colour a Text node was laid out in. */
+    private fun colorOf(node: SemanticsNodeInteraction): androidx.compose.ui.graphics.Color {
+        val results = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        node.fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult].action!!.invoke(results)
+        return results.first().layoutInput.style.color
+    }
     private fun textOf(node: SemanticsNodeInteraction) = node.fetchSemanticsNode().config.getOrNull(SemanticsProperties.Text)?.joinToString("").orEmpty()
     private fun texts(within: String) = compose.onAllNodes(hasAnyAncestor(hasTestTag(within)), useUnmergedTree = true).fetchSemanticsNodes()
         .mapNotNull { it.config.getOrNull(SemanticsProperties.Text)?.joinToString("") }
@@ -168,6 +174,9 @@ class JobCardTest {
         mount(call(2, "bgj_a1"), JobCards(live = true))
         within("job-sub", "job-kind").assertExists()
         within("job-sub", "job-elapsed").assertExists()
+        // The kind wears the accent tint (web `.chat-tool-tag`, teal on light teal); the run time beside it stays grey.
+        assertEquals(ExecTone, colorOf(on("job-kind")))
+        assertEquals(androidx.compose.ui.graphics.Color(0xFF555861), colorOf(on("job-elapsed")))
         compose.onAllNodes(hasTestTag("job-kind") and hasAnyAncestor(hasTestTag("job-row")), useUnmergedTree = true).assertCountEquals(0)
         assertTrue(textOf(on("job-elapsed")), Regex("^1[23]m \\d\\ds$").matches(textOf(on("job-elapsed"))))
         shot("10-header-phone")
@@ -179,6 +188,7 @@ class JobCardTest {
         all("job-sub").assertCountEquals(0)
         within("job-row", "job-kind").assertExists()
         within("job-row", "job-elapsed").assertExists()
+        assertEquals(ExecTone, colorOf(on("job-kind")))
         shot("11-header-wide")
     }
 
@@ -244,6 +254,9 @@ class JobCardTest {
             JobCards(live = true))
         on("job-exit").assertTextEquals("exit 1")
         on("job-mark:failed").assertExists()
+        compose.onAllNodes(hasAnyAncestor(hasTestTag("job-tail")), useUnmergedTree = true).fetchSemanticsNodes().indices.forEach { i ->
+            assertEquals(androidx.compose.ui.graphics.Color(0xFFB3261E), colorOf(compose.onAllNodes(hasAnyAncestor(hasTestTag("job-tail")), useUnmergedTree = true)[i]))
+        }
         assertEquals(listOf("npm error network ECONNRESET", "ERROR: process \"/bin/sh -c npm ci\" did not complete: exit code 1"), texts("job-tail"))
         shot("03-exit-n")
         on("job-show-full").performClick(); settle()
@@ -312,6 +325,8 @@ class JobCardTest {
         mount(events, JobCards(where = "workstation", shells = mapOf("bgj_a1" to shell("bgj_a1", "status" to "failed", "terminal" to "failed",
             "exitCode" to 1, "endedAt" to endedAt, "latestOutput" to output))))
         on("job-row").performClick(); settle()
+        // A failed job's opened output keeps the normal text colour; only the folded lines turn red (web `.chat-job-output`).
+        assertEquals(androidx.compose.ui.graphics.Color(0xFF1C1C1E), colorOf(on("job-output-text")))
         on("job-command").assertTextEquals("$ gh run watch 19632123456 --exit-status --interval 30")
         val meta = textOf(on("job-meta"))
         assertTrue(meta, Regex("^bgj_a1 · watch · started \\d\\d:\\d\\d · ran 12m 4\\ds · on workstation$").matches(meta))
