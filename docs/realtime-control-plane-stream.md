@@ -291,6 +291,18 @@ GET /api/events?hints=list_changed
 
 ---
 
+### 4.9 `owner_requests.changed`: a request changed (opt-in)
+
+```
+GET /api/events?hints=owner_requests
+```
+
+`hints` is comma-separated (`list_changed,owner_requests` declares both); unknown values are ignored (`CONTROL_HINT_OWNER_REQUESTS`). **A stream that did not declare it never receives `owner_requests.changed`**, for the reason §4.8 gives: shipped clients re-read everything on a type they do not know. Nothing changes for them. The asking session's `session.updated` is still published exactly as before.
+
+- Envelope `{ type: 'owner_requests.changed', sessionId: '', agentId: null, ts, data: { id: 'owner_requests' } }`, user-scoped like the other library events (§4.6.1). It is a nudge to make a conditional `GET /owner-requests?state=open`, never a change to apply.
+- Published after the commit, by every path in `OwnerRequestsService` that publishes `session.updated` for a request: a request filed (and the one a new filing replaced), answered or otherwise settled (`settle`: answered, done, withdrawn, declined), settled by a wiki being made (`settleMadeWikis`), expired by the sweep (`expireDue`), and a card's translation written. A `session.updated` unrelated to requests carries no such event.
+- Delivery is best effort and per owner (one event per owner per sweep, not per request); a client keeps a safety read.
+
 ## 5. 客户端设计(macOS,`src/macos`)
 
 ### 5.1 OrbitKit:`ControlPlaneStream` + 解析
