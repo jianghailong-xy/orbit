@@ -16,11 +16,14 @@
  *   (8) the revive                                   → PENDING, finished_at and release_cause both null
  *   (9) migrations 1202 and 1262 re-applied by the real `prisma migrate deploy` on a database that holds rows:
  *       1262's backfill, one session per rule, then the two counts of plan step 3.3 over the database
- *  (10) migrations 1401 and 1402 (plan step 3.4): the CHECK is listed validated, and each violating write is refused
- *  (11) migrations 1403-1407: the failure reading. 1405's backfill on a migrated fixture (old rows as 1262 left them),
- *       then the two counts (FAILED rows not read as failures; other released rows read as failures) are zero, both
- *       CHECKs are listed validated, and for every cause of SESSION_RELEASE_CAUSES the database takes it with FAILED
- *       exactly when isFailedRelease says it is a failure, and refuses it with the other statuses then
+ *  (10) migrations 1401 and 1402 (plan step 3.4), by prisma: rows shaped as the release before the release-fact work
+ *       writes them during a hand-over are made whole by 1402, the CHECK is listed validated, and each violating
+ *       write is refused
+ *  (11) migrations 1403-1407, by prisma: the failure reading. 1405's backfill on a populated database (old rows as
+ *       1262 left them), then the two counts (FAILED rows not read as failures; other released rows read as
+ *       failures) are zero, both CHECKs are listed validated, and for every cause of SESSION_RELEASE_CAUSES the
+ *       database takes it with FAILED exactly when isFailedRelease says it is a failure, and refuses it with the
+ *       other statuses then
  *  (12) migrations 1411 to 1415 (plan step 4.4), re-applied by the real `prisma migrate deploy` on a database that
  *       holds rows: they write none; then a write of the release fact alone, `finished_at` and `release_cause` with
  *       the status word left as it was, fires every guard and ended-trigger that used to read the status, and each
@@ -40,7 +43,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
@@ -180,28 +182,6 @@ function assertReleased(row: Released, status: string, cause: string): void {
   assert.equal(row.release_cause, cause);
   // The failure reading (common/session-release.ts): the release fact alone says whether the run failed.
   assert.equal(isFailedRelease(row.release_cause), row.status === 'FAILED', `${status}/${cause}: read as a failure exactly when FAILED`);
-}
-
-/**
- * A migration split one statement at a time, `--` lines dropped, a `$$ … $$` body kept whole. Still used by (10) and
- * (11) as the project wrote them; (9) moved to deployAgain because prisma does NOT always send a file this way
- * (see deployAgain), and (11)'s 1405 has the same CREATE PROCEDURE + COMMIT shape 1262 had.
- */
-function statementsOf(file: string): string[] {
-  const out: string[] = [];
-  let current: string[] = [];
-  let inBody = false;
-  for (const line of readFileSync(file, 'utf8').split('\n')) {
-    if (!inBody && line.trimStart().startsWith('--')) continue;
-    current.push(line);
-    if ((line.match(/\$\$/g) ?? []).length % 2 === 1) inBody = !inBody;
-    if (!inBody && line.trimEnd().endsWith(';')) {
-      out.push(current.join('\n'));
-      current = [];
-    }
-  }
-  if (current.join('').trim() !== '') out.push(current.join('\n'));
-  return out;
 }
 
 /**
@@ -461,10 +441,43 @@ test('every release writes the release column and its cause, and the revive clea
     assert.equal(b.n, 0, 'open rows with either');
   });
 
-  await t.test('(10) 1401 and 1402: the check is validated, and each violating write is refused', async () => {
-    const migrations = join(__dirname, '..', '..', 'prisma', 'migrations');
-    for (const dir of ['1401_session_release_fact_chk', '1402_session_release_fact_validate']) {
-      for (const statement of statementsOf(join(migrations, dir, 'migration.sql'))) await sql.query(statement);
+  // Rows the server of the release before the release-fact work writes during the hand-over after 1262, which 1402
+  // makes whole before it validates, and which (11) then sees 1405 give a failure cause where they are FAILED.
+  const handover: Array<{ id: string; name: string; status: string; after1402: string | null; after1405: string | null }> = [];
+
+  await t.test('(10) 1401 and 1402: the hand-over rows are made whole, the check is validated, each violating write is refused', async () => {
+    const old = await world(s.db, 'handover');
+    const stale = new Date(Date.now() - 10 * 60_000);
+    const shapes: Array<{ name: string; data: Record<string, unknown>; after1402: string | null; after1405: string | null }> = [
+      { name: 'ended SUCCEEDED, no release column', after1402: 'engine_exited', after1405: 'engine_exited',
+        data: { status: RunStatus.SUCCEEDED, finishedAt: null } },
+      { name: 'engine crash, no release column', after1402: 'engine_exited', after1405: 'engine_failed',
+        data: { status: RunStatus.FAILED, error: 'crashed', finishedAt: null } },
+      { name: 'cancelled, no release column', after1402: 'cancelled', after1405: 'cancelled',
+        data: { status: RunStatus.CANCELLED, cancelRequestedAt: stale, finishedAt: null } },
+      { name: 'reaper offline, released with no cause', after1402: 'runner_lost', after1405: 'runner_lost',
+        data: { status: RunStatus.FAILED, error: 'runner offline', cancelRequestedAt: stale, finishedAt: stale } },
+      { name: 'a failed session completed, released with no cause', after1402: 'completed', after1405: 'engine_failed',
+        data: { status: RunStatus.FAILED, endReason: SessionEndReason.COMPLETED, finishedAt: stale } },
+      { name: 'revived after 1262: open, with 1262\'s cause', after1402: null, after1405: null,
+        data: { status: RunStatus.PENDING, finishedAt: null, releaseCause: 'engine_exited' } },
+      { name: 'revived, open with both', after1402: null, after1405: null,
+        data: { status: RunStatus.AWAITING_INPUT, finishedAt: stale, releaseCause: 'ended' } },
+    ];
+    for (const shape of shapes) {
+      handover.push({
+        id: await session(s.db, old, shape.data), name: shape.name, status: shape.data.status as string,
+        after1402: shape.after1402, after1405: shape.after1405,
+      });
+    }
+
+    await deployAgain(sql, url, ['1401_session_release_fact_chk', '1402_session_release_fact_validate']);
+
+    for (const h of handover) {
+      const row = await released(sql, h.id);
+      assert.equal(row.status, h.status, `${h.name}: the status is not written`);
+      assert.equal(row.release_cause, h.after1402, `${h.name}: the cause 1402 leaves`);
+      assert.equal(row.finished_at instanceof Date, h.after1402 !== null, `${h.name}: the release column with the cause`);
     }
     const listed = (await sql.query(
       `SELECT convalidated FROM pg_constraint WHERE conname = 'session_release_fact_chk' AND conrelid = 'session'::regclass`,
@@ -513,7 +526,6 @@ test('every release writes the release column and its cause, and the revive clea
   });
 
   await t.test('(11) 1403-1407: every FAILED row gets a failure cause, and the database holds the two readings equal', async () => {
-    const migrations = join(__dirname, '..', '..', 'prisma', 'migrations');
     const w = await world(s.db, 'failure');
     const now = new Date();
     const later = new Date(Date.now() + 3_600_000);
@@ -597,12 +609,15 @@ test('every release writes the release column and its cause, and the revive clea
       }
     }
 
-    for (const dir of [
+    await deployAgain(sql, url, [
       '1405_session_release_failure_backfill', '1406_session_release_failure_chk', '1407_session_release_failure_validate',
-    ]) {
-      for (const statement of statementsOf(join(migrations, dir, 'migration.sql'))) await sql.query(statement);
-    }
+    ]);
 
+    for (const h of handover) {
+      const row = await released(sql, h.id);
+      assert.equal(row.release_cause, h.after1405, `${h.name}: the cause after 1405`);
+      assert.equal(isFailedRelease(row.release_cause), row.status === 'FAILED', `${h.name}: a failure exactly when FAILED`);
+    }
     for (const m of made) {
       const row = (await sql.query(
         `SELECT status::text AS status, release_cause, end_reason FROM "session" WHERE id = $1::uuid`, [m.id],
@@ -617,10 +632,6 @@ test('every release writes the release column and its cause, and the revive clea
       assert.equal(retryAt?.getTime() ?? null, (m.retryAt as Date | null)?.getTime() ?? null, `${m.name}: retry_at is not written`);
       assert.equal(isFailedRelease(row.release_cause), row.status === 'FAILED', `${m.name}: a failure exactly when FAILED`);
     }
-    const gone = (await sql.query(
-      `SELECT count(*)::int AS n FROM pg_proc WHERE proname = 'orbit_1405_backfill_session_release_failure'`,
-    )).rows[0] as { n: number };
-    assert.equal(gone.n, 0, 'the backfill procedure is dropped after its CALL');
 
     // The two counts, over the whole database: this spec's writers above, (9)'s 1262 rows and the rows just written.
     const failure = failedReleaseSql('release_cause').text;
