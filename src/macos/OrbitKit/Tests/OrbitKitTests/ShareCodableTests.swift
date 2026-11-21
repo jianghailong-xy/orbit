@@ -84,6 +84,22 @@ final class ShareCodableTests: XCTestCase {
         XCTAssertEqual(link.include.taskPages, true)
     }
 
+    func testAListWithADriveFileLinkStillListsTheOthers() throws {
+        let list = try decode(ShareLinkList.self, """
+            {"links":[
+             {"id":"L1","kind":"SESSION","token":"t1","include":{},"expiresAt":null,"revokedAt":null,"viewCount":0,
+              "lastViewedAt":null,"createdAt":"c","updatedAt":"u","state":"ACTIVE","stateReason":null,
+              "root":{"id":"s1","title":"S","status":"SUCCEEDED"}},
+             {"id":"L2","kind":"DRIVE_FILE","token":"t2","include":{},"expiresAt":null,"revokedAt":null,"viewCount":0,
+              "lastViewedAt":null,"createdAt":"c","updatedAt":"u","state":"ACTIVE","stateReason":null,
+              "root":{"id":"d1","title":"report.pdf"}},
+             {"id":"L3","kind":"WIKI","token":"t3","include":{},"expiresAt":null,"revokedAt":null,"viewCount":0,
+              "lastViewedAt":null,"createdAt":"c","updatedAt":"u","state":"ACTIVE","stateReason":null,
+              "root":{"id":"w1","title":"W"}}]}
+            """)
+        XCTAssertEqual(list.links.map(\.id), ["L1", "L3"])
+    }
+
     // MARK: PUT — what a press sends
 
     func testASwitchSendsOnlyItsOwnLayerAndLeavesTheExpiryAlone() throws {
