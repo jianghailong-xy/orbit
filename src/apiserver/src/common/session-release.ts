@@ -83,8 +83,14 @@ export const SESSION_RELEASE_CAUSES = [
   'runner_lost',
   // The run never started: the runner refused its source, or the engine's runtime never initialized.
   'setup_failed',
-  // The runner finalized the session with no end requested: its engine exited.
+  // The runner finalized the session with no end requested: its engine exited, and the runner reported no
+  // failure (SUCCEEDED or CANCELLED).
   'engine_exited',
+  // The runner finalized the session with no end requested and reported it FAILED: its engine failed.
+  'engine_failed',
+  // An end was asked for and the runner never honoured it: the reaper released the session FAILED once the
+  // grace ran out. end_reason still records which end was asked for.
+  'end_not_honored',
   // The runner could not import the transcript the session was created from.
   'import_failed',
   // A LANDING container session whose landing settled.
@@ -92,6 +98,38 @@ export const SESSION_RELEASE_CAUSES = [
 ] as const;
 
 export type SessionReleaseCause = (typeof SESSION_RELEASE_CAUSES)[number];
+
+/**
+ * The causes of a release that was a failure. Each cause is a failure or not, never both: the session's status is
+ * FAILED exactly when its release cause is one of these (`session_release_failure_chk`, migrations 1406 and 1407),
+ * so "did the run fail" is read here and not from the terminal status value.
+ */
+export const FAILURE_RELEASE_CAUSES = [
+  'turn_failed',
+  'runner_lost',
+  'setup_failed',
+  'engine_failed',
+  'end_not_honored',
+  'import_failed',
+] as const satisfies readonly SessionReleaseCause[];
+
+/** Whether a release with this cause was a failure. A held session (no cause) is not. */
+export function isFailedRelease(releaseCause: string | null | undefined): boolean {
+  return releaseCause != null && (FAILURE_RELEASE_CAUSES as readonly string[]).includes(releaseCause);
+}
+
+/** Prisma filter on `session.releaseCause`: the release was a failure. */
+export function failedReleaseFilter(): Prisma.StringNullableFilter<'Session'> {
+  return { in: [...FAILURE_RELEASE_CAUSES] };
+}
+
+/**
+ * Raw SQL: the release cause column `column`, as the query spells it (for example `s."release_cause"`; a constant,
+ * never input), is a failure. Null (a held session) is not: `IN` answers null, which a WHERE reads as false.
+ */
+export function failedReleaseSql(column: string): Prisma.Sql {
+  return Prisma.sql`${Prisma.raw(column)} IN ('turn_failed', 'runner_lost', 'setup_failed', 'engine_failed', 'end_not_honored', 'import_failed')`;
+}
 
 /**
  * The cause of a release somebody asked for: the end reason the request recorded, or `cancelled` when
@@ -104,12 +142,18 @@ export function releaseCauseOfEndReason(endReason: string | null | undefined): S
 }
 
 /**
- * The cause the runner's finalize records: the requested end's when an end was requested (whose reason
- * also decided the status the finalize writes), else the engine exited by itself.
+ * The cause the runner's finalize records, from the same inputs that decide the status it writes: the requested
+ * end's when an end was requested (whose reason also decided the status: SUCCEEDED or CANCELLED, never FAILED),
+ * else the engine exited by itself, failed when the runner reported FAILED. `reported` is the status word the
+ * runner sent, the one the finalize writes when no end was requested.
  */
-export function finalizeReleaseCause(current: {
-  cancelRequestedAt: Date | null;
-  endReason: string | null;
-}): SessionReleaseCause {
-  return current.cancelRequestedAt ? releaseCauseOfEndReason(current.endReason) : 'engine_exited';
+export function finalizeReleaseCause(
+  current: {
+    cancelRequestedAt: Date | null;
+    endReason: string | null;
+  },
+  reported: string,
+): SessionReleaseCause {
+  if (current.cancelRequestedAt) return releaseCauseOfEndReason(current.endReason);
+  return reported === 'FAILED' ? 'engine_failed' : 'engine_exited';
 }

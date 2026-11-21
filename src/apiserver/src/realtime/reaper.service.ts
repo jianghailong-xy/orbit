@@ -532,8 +532,10 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
             {
               ...(status ? { status } : {}),
               expectedStatuses: [s.status],
-              // An end somebody asked for, released for the reason it recorded.
-              releaseCause: releaseCauseOfEndReason(s.endReason),
+              // An end somebody asked for, released for the reason it recorded when it settles as asked (a
+              // graceful end, or a cancel that found the session still queued). Not honoured, it is released
+              // FAILED (forceFinalize's default), a failure: end_not_honored, with end_reason kept as asked.
+              releaseCause: status ? releaseCauseOfEndReason(s.endReason) : 'end_not_honored',
             },
           );
           continue;
