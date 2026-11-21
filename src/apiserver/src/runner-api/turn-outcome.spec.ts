@@ -11,6 +11,7 @@ const base: TurnOutcomeInput = {
   swallowed: false,
   unanswered: false,
   failureError: 'the failure',
+  acceptanceFailure: null,
   error: undefined,
   result: 'the reply',
 };
@@ -55,9 +56,30 @@ test('a status that is not a turn end records nothing', () => {
   assert.equal(turnOutcomeOf({ ...base, status: 'RUNNING' }), null);
 });
 
-test('a turn that is not a turn of work has no outcome', () => {
+test('a turn that is not a turn of work has no outcome, unless its session fails on it', () => {
   for (const kind of [undefined, 'steer', 'withdraw', 'control', 'some_future_kind']) {
-    assert.equal(turnOutcomeOf({ ...base, kind, status: 'FAILED' }), null, String(kind));
+    for (const status of ['SUCCEEDED', 'INTERRUPTED', 'CANCELLED']) {
+      assert.equal(turnOutcomeOf({ ...base, kind, status }), null, `${String(kind)} ${status}`);
+    }
     assert.equal(turnOutcomeOf({ ...base, kind, regionStopped: true }), null, String(kind));
+    assert.equal(turnOutcomeOf({ ...base, kind, regionStopped: true, status: 'FAILED' }), null, String(kind));
+    // Design §12.1 W1c: a failed turn of any kind releases its session as failed, and carries the failure.
+    assert.deepEqual(turnOutcomeOf({ ...base, kind, status: 'FAILED' }), { outcome: 'FAILED', error: 'the failure' }, String(kind));
+  }
+});
+
+test('an acceptance turn whose comparison failed or could not be made fails, with the session error', () => {
+  // Design §12.1 W1a: the runner said SUCCEEDED with an exit code the declaration did not ask for.
+  assert.deepEqual(
+    turnOutcomeOf({ ...base, kind: 'shell', acceptanceFailure: 'exit code 1, expected 0' }),
+    { outcome: 'FAILED', error: 'exit code 1, expected 0' },
+  );
+  // W1b: no comparable result, whatever the runner said.
+  for (const status of ['SUCCEEDED', 'FAILED']) {
+    assert.deepEqual(
+      turnOutcomeOf({ ...base, kind: 'shell', status, acceptanceFailure: 'no comparable result' }),
+      { outcome: 'FAILED', error: 'no comparable result' },
+      status,
+    );
   }
 });

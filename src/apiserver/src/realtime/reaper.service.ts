@@ -16,6 +16,7 @@ import { randomUUID } from 'crypto';
 import { initializesRuntimeDynamically } from '../common/runtime-provider';
 import { sessionEngine } from '../providers/session-engine';
 import { runnerOfflineIsFatal } from '../common/session-scheduling';
+import { carryingTurnOf, recordCarryingTurnOutcome } from '../common/carrying-turn';
 import {
   HELD_SESSION_STATUSES,
   releaseCauseOfEndReason,
@@ -536,6 +537,9 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
               // graceful end, or a cancel that found the session still queued). Not honoured, it is released
               // FAILED (forceFinalize's default), a failure: end_not_honored, with end_reason kept as asked.
               releaseCause: status ? releaseCauseOfEndReason(s.endReason) : 'end_not_honored',
+              // Not honoured, the end still is one somebody asked for: the turn it cut off ends CANCELLED, and nothing
+              // records a failure (design §12.1 W7).
+              ...(status ? {} : { carryingTurn: { outcome: 'CANCELLED' as const, orLatest: false } }),
             },
           );
           continue;
@@ -632,6 +636,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
               armRetry: !s.taskId || !s.task?.autoRunWhenReady,
               taskFailure: 'ATTEMPT_LOST_RUNNER_OFFLINE',
               releaseCause: 'runner_lost',
+              carryingTurn: { outcome: 'FAILED', orLatest: false },
             });
           } else if (isSessionExecuting(s)) {
             // Not a dispatched turn, so not failed — but something was executing on the lost machine: an engine turn of
@@ -690,6 +695,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
               onlyIfNotCancelling: true,
               taskFailure: 'ATTEMPT_LOST_RUNTIME_NOT_INITIALIZED',
               releaseCause: 'setup_failed',
+              carryingTurn: { outcome: 'FAILED', orLatest: false },
             },
           );
           continue;
@@ -717,6 +723,8 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
               onlyIfNotCancelling: true,
               taskFailure: 'REAPED_API_ERROR',
               releaseCause: 'turn_failed',
+              // Nothing is in flight: the turn the error answered is the latest, and it fails with the reply as its error.
+              carryingTurn: { outcome: 'FAILED', orLatest: true },
             });
             continue;
           }
@@ -956,6 +964,13 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
       taskFailure?: TaskFailureHow;
       /** Why the session is released (`session.release_cause`), written with the status. */
       releaseCause: SessionReleaseCause;
+      /**
+       * How the turn that carries this release ends (design §12.1, `common/carrying-turn.ts`), recorded in this
+       * transaction with its error (`failureDetail`, else `reason`). FAILED is copied to `last_turn_outcome` in the
+       * release's own write whether or not a turn is found; CANCELLED, an end nobody honoured, ends only a turn
+       * IN_FLIGHT, and is copied only when there is one. Absent, no turn outcome is written.
+       */
+      carryingTurn?: { outcome: 'FAILED' | 'CANCELLED'; orLatest: boolean };
     },
   ): Promise<void> {
     const status = opts.status ?? RunStatus.FAILED;
@@ -986,6 +1001,22 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           return { ok: false, taskReclaimed: false, currentWorkTerminalized: 0, recanted: true };
         }
       }
+      // The turn that carries this release, read under the Session row lock the release's write takes anyway (taken
+      // here, in the mode that write takes it, so the turn read is the one the write releases). CANCELLED is only for
+      // the turn the end cut off.
+      const carrying = opts.carryingTurn;
+      let carryingTurnId: string | null = null;
+      if (carrying) {
+        await tx.$queryRaw`SELECT id FROM "session" WHERE id = ${sessionId}::uuid FOR NO KEY UPDATE`;
+        carryingTurnId = carrying.outcome === 'CANCELLED'
+          ? (await tx.conversationTurn.findFirst({
+              where: { sessionId, kind: { in: ['message', 'shell'] }, status: 'IN_FLIGHT' },
+              orderBy: { seq: 'asc' },
+              select: { id: true },
+            }))?.id ?? null
+          : await carryingTurnOf(tx, sessionId, { orLatest: carrying.orLatest });
+      }
+      const lastTurnOutcome = carrying && (carrying.outcome === 'FAILED' || carryingTurnId) ? carrying.outcome : null;
       const res = await tx.session.updateMany({
         where: {
           id: sessionId,
@@ -1006,6 +1037,8 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           ...(retryAt ? { retryAt } : {}),
           finishedAt: new Date(),
           releaseCause: opts.releaseCause,
+          // The carrying turn's outcome, copied in the release's own write (design §12.1).
+          ...(lastTurnOutcome ? { lastTurnOutcome } : {}),
           cancelRequestedAt: new Date(),
           // Every status this writes is terminal, so the run this reaps stops being live here and
           // what it had running goes with it (CLEARED_RUNNING_WORK). A runner that is merely
@@ -1016,6 +1049,9 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         },
       });
       if (res.count === 0) return { ok: false, taskReclaimed: false, currentWorkTerminalized: 0 };
+      if (carrying && carryingTurnId) {
+        await recordCarryingTurnOutcome(tx, carryingTurnId, carrying.outcome, opts.failureDetail ?? reason);
+      }
       // This finish may be the one a DONE task's identity was waiting for (§10.5 O-L4 3).
       const delivered = taskId
         ? await settleDeliveredIdentityAfterFinish(tx, await tx.session.findUnique({

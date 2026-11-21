@@ -17,6 +17,12 @@ export interface TurnOutcomeInput {
   unanswered: boolean;
   /** The session-error form of the runner's failure, used when the turn failed. */
   failureError: string;
+  /**
+   * The task's acceptance comparison failed on this turn, or could not be made (design §12.1 W1a, W1b): the
+   * sentence the session's error is written with. Null when the turn is not a reserved acceptance turn, or it
+   * passed.
+   */
+  acceptanceFailure: string | null;
   /** The runner's reported error and result. */
   error: string | undefined;
   result: string | undefined;
@@ -28,13 +34,22 @@ export interface TurnOutcomeInput {
  * words into the turn outcome; it goes when plan phase 6 lets the runner report the outcome itself.
  *
  * Only a turn of work has an outcome, a `message` or a `!`-shell turn: a steer and a withdraw settle
- * before this is asked, and a control turn or a kind this build does not know gets none. A region stop
- * ends the turn as an interrupt does, and a swallowed delivery is a failure. A success nothing answered
- * is put back in the queue and has not ended: the completion that answers it says how it did. Null means
- * nothing is recorded.
+ * before this is asked, and a control turn or a kind this build does not know gets none, unless it is the
+ * turn the session fails on. A region stop ends the turn as an interrupt does, and a swallowed delivery is
+ * a failure. A success nothing answered is put back in the queue and has not ended: the completion that
+ * answers it says how it did. Null means nothing is recorded.
+ *
+ * Every completion that releases its session as failed records FAILED on its turn, the turn that carries
+ * the failure (design §12.1): the reserved acceptance turn whose comparison failed or could not be made,
+ * with the session's error (W1a, W1b), and a failed turn of any kind (W1c).
  */
 export function turnOutcomeOf(input: TurnOutcomeInput): { outcome: TurnOutcome; error: string | null } | null {
-  if (input.kind !== 'message' && input.kind !== 'shell') return null;
+  if (input.acceptanceFailure) return { outcome: 'FAILED', error: input.acceptanceFailure };
+  if (input.kind !== 'message' && input.kind !== 'shell') {
+    return input.status === RunStatus.FAILED && !input.regionStopped
+      ? { outcome: 'FAILED', error: input.failureError }
+      : null;
+  }
   const outcome: TurnOutcome | null = input.regionStopped
     ? 'INTERRUPTED'
     : input.swallowed || input.status === RunStatus.FAILED
@@ -47,9 +62,8 @@ export function turnOutcomeOf(input: TurnOutcomeInput): { outcome: TurnOutcome; 
             ? 'ANSWERED'
             : null;
   if (!outcome) return null;
-  // The runner's failure (in the session error's own form, without the acceptance comparison, which is
-  // about the task rather than the turn), the region's stopped sentence, or the error a stop was reported
-  // with. An answered turn has none.
+  // The runner's failure (in the session error's own form), the region's stopped sentence, or the error a
+  // stop was reported with. An answered turn has none.
   const error = outcome === 'FAILED'
     ? input.failureError
     : outcome === 'ANSWERED'
