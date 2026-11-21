@@ -26,6 +26,14 @@ import { parseWatchWake } from '../lib/watches';
 import { parseSessionMessage } from '../lib/sessionMessage';
 import { EMPTY_LIVE_TASK_PROGRESS, type LiveTaskProgress } from '../lib/liveTaskProgress';
 import { TaskProgressBlock } from './TaskProgressBlock';
+import { stopBackgroundJob } from '../api';
+import { Popconfirm } from './ui/Popconfirm';
+
+/** The Job card a bg_run job's row scrolls to (JobCard marks it), where it is on the page. */
+const jobCardOf = (jobId: string): HTMLElement | null =>
+  typeof document === 'undefined'
+    ? null
+    : (Array.from(document.querySelectorAll<HTMLElement>('[data-bg-job]')).find((card) => card.dataset.bgJob === jobId) ?? null);
 
 /**
  * "Background processes" tray, shown above the composer like the worktree status bar. It
@@ -44,11 +52,14 @@ import { TaskProgressBlock } from './TaskProgressBlock';
  * latest live output. We merge: the complete set from the server, the freshest tail from the window.
  */
 export function BackgroundShellsTray({
+  sessionId,
   events,
   live,
   serverShells,
   liveProgress = EMPTY_LIVE_TASK_PROGRESS,
 }: {
+  /** The session the list is of: what a job row's Stop asks to stop it in. */
+  sessionId?: string;
   events: RunEvent[];
   live?: boolean;
   serverShells?: BgShell[];
@@ -114,7 +125,21 @@ export function BackgroundShellsTray({
               shell={s}
               progress={liveProgress.get(s.toolUseId) ?? s.progress}
               expanded={expandedId === s.shellId}
-              onToggle={() => setExpandedId((id) => (id === s.shellId ? null : s.shellId))}
+              onToggle={() => {
+                // A bg_run job's row goes to its Job card, as the Agents list goes to a run's block (R1).
+                const card = s.kind === 'job' ? jobCardOf(s.shellId) : null;
+                if (card) {
+                  setOpen(false);
+                  card.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                  return;
+                }
+                setExpandedId((id) => (id === s.shellId ? null : s.shellId));
+              }}
+              onStop={
+                sessionId && s.kind === 'job' && s.status === 'running' && s.stoppable
+                  ? () => stopBackgroundJob(sessionId, s.shellId)
+                  : undefined
+              }
             />
           ))}
         </div>
@@ -251,11 +276,14 @@ function BgShellRow({
   progress,
   expanded,
   onToggle,
+  onStop,
 }: {
   shell: BgShell;
   progress?: TaskProgress;
   expanded: boolean;
   onToggle: () => void;
+  /** A running bg_run job its runner can stop (R3); unset for anything else. */
+  onStop?: () => Promise<unknown>;
 }) {
   const title = shell.description || shell.command;
   const task = shell.kind === 'agent' || shell.kind === 'workflow';
@@ -271,6 +299,21 @@ function BgShellRow({
         </span>
         <span className="bg-shell-id">{shell.shellId}</span>
         {shell.startedTs && <span className="bg-shell-age">{relAge(shell.startedTs)}</span>}
+        {onStop && (
+          <span className="bg-shell-stop" onClick={(event) => event.stopPropagation()}>
+            <Popconfirm
+              title="Stop this job?"
+              confirmText="Stop"
+              danger
+              onConfirm={onStop}
+              trigger={
+                <button type="button" className="chat-subagent-link chat-job-stop-btn">
+                  Stop
+                </button>
+              }
+            />
+          </span>
+        )}
         <span className="bg-shell-caret">{expanded ? <DownOutlined /> : <RightOutlined />}</span>
       </div>
       {line && <div className="bg-shell-sub">{line}</div>}

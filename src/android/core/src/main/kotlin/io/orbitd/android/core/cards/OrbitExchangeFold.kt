@@ -119,11 +119,11 @@ object OrbitExchangeFold {
             return Head(if (name != null) "$title: $name" else title, title, "watch", target)
         }
         // A SubAgent's end draws nothing (its card is the end), so there is no line to fold the turn under: the reader reads on into what
-        // the agent said next. Only a job's news written beside it folds, as its own (web `orbitTurnOf`).
+        // the agent said next. A job's news draws nothing either (its card says it, BgJob): only a wakeup coming due beside it folds
+        // (web `orbitTurnOf`).
         val note = payload.text("controlPlaneNote").orEmpty()
-        backgroundWake(SubagentFinished.parse(note)?.rest ?: note)?.let { wake ->
-            if (BackgroundWakeCard.jobs(wake).any(BackgroundWakeCard::isFailed)) return null
-            val title = BackgroundWakeCard.title(wake)
+        BgJob.wakeupsOnly(backgroundWake(SubagentFinished.parse(note)?.rest ?: note))?.let { wake ->
+            val title = BackgroundWakeCard.title
             val name = BackgroundWakeCard.lineName(wake)?.takeIf { it.isNotEmpty() }
             return Head(if (name != null) "$title: $name" else title, null, "job", null)
         }

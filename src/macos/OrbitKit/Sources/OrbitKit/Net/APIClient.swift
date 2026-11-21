@@ -392,6 +392,22 @@ public final class APIClient: @unchecked Sendable {
         try await get("sessions/\(sessionID)/background")
     }
 
+    /// The newest lines of one bg_run job's output (GET /sessions/:id/background/jobs/:jobId/tail, at
+    /// most 40), read by the runner hosting it just now: what a running Job card shows (R2). A 404/409
+    /// says it cannot be read (a runner too old, output gone); a 503/504 that the runner is away for now.
+    /// Web parity: `getBackgroundJobTail`.
+    public func backgroundJobTail(sessionID: String, jobID: String) async throws -> BackgroundJobTail {
+        try await get("sessions/\(sessionID)/background/jobs/\(jobID)/tail")
+    }
+
+    /// The owner's stop of one running bg_run job (POST /sessions/:id/background/jobs/:jobId/stop): its
+    /// end arrives as the job's terminal report, killed with the reason `stopped_by_owner` (R3). Web
+    /// parity: `stopBackgroundJob`.
+    @discardableResult
+    public func stopBackgroundJob(sessionID: String, jobID: String) async throws -> BackgroundJobStop {
+        try await postEmpty("sessions/\(sessionID)/background/jobs/\(jobID)/stop")
+    }
+
     /// The session's SubAgent runs, oldest first (GET /sessions/:id/subagents): what each `delegate`
     /// call's block shows beside it — tier, model, Why, time and cost (docs/subagent-design.md §6.4).
     public func sessionSubagents(sessionID: String) async throws -> [SubagentRunView] {

@@ -349,7 +349,9 @@ struct ConsoleView: View {
                 BackgroundTrayView(procs: console.state.background, progress: console.state.taskProgress,
                                    row: BackgroundRowRule.row(console.state.background, items: console.state.items,
                                                               sessionLive: console.isLive),
-                                   paused: foldsChrome(console) || foldsBand(console))
+                                   paused: foldsChrome(console) || foldsBand(console),
+                                   revealJob: { console.revealJob($0) },
+                                   stopJob: { try await console.stopJob($0) })
                 // The tasks this session's agent created, beside the code the bar below
                 // carries — the session's two kinds of output, together.
                 CreatedTasksCard(console: console)
@@ -1180,6 +1182,9 @@ struct TranscriptView: View {
         // Don't send (`SubagentCardEnd`).
         .environment(\.subagentWakes, console.subagentWakes)
         .environment(\.subagentQueuedWakes, console.subagentQueuedWakes)
+        // A bg_run job's card: its runner reports, its wake turns and a queued one's Don't send, joined by
+        // job id, and where it reads its tail and asks to stop it (`JobCardView`).
+        .environment(\.jobCardHost, console.jobCardHost(place: app.session(id: console.sessionID)?.agent?.name))
         .scrollContentBackground(.hidden)   // show the window background, not the List's own
         #if os(iOS)
         // Turn OFF the scroll view's touch delay so an in-list control (the jump-to-latest disc, the
@@ -2572,6 +2577,10 @@ struct TranscriptItemView: View {
         case .toolCall(let c) where c.name == WorkflowBlock.toolName:
             // An Orbit workflow: its own block, opening to its calls by phase (board subagent-workflow part 4).
             WorkflowBlockView(card: c, fullPayload: fullPayload)
+        case .toolCall(let c) where BgJobCard.drawsCard(c):
+            // A bg_run call is its job's card from start to end (board A1); one refused, or whose answer
+            // names no job, stays a call.
+            JobCardView(card: c)
         case .toolCall(let c):
             // The owner's "Chat about this" reply to one of Orbit's own cards: their message, drawn as
             // theirs under the call rather than left inside its result (`OwnerChatReply`).
