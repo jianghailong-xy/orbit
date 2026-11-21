@@ -149,8 +149,15 @@ export class OpenListHints {
     }
   }
 }
+function declares(hints: string | string[] | undefined, name: string): boolean {
+  const values = Array.isArray(hints) ? hints : hints === undefined ? [] : [hints];
+  return values.some((value) => value.split(',').some((hint) => hint.trim() === name));
+}
 /** Whether a `GET /api/events?hints=` value declares `list_changed`. */
 export function declaresListChanged(hints: string | string[] | undefined): boolean {
-  const values = Array.isArray(hints) ? hints : hints === undefined ? [] : [hints];
-  return values.some((value) => value.split(',').some((hint) => hint.trim() === 'list_changed'));
+  return declares(hints, 'list_changed');
+}
+/** Whether a `GET /api/events?hints=` value declares `owner_requests`. */
+export function declaresOwnerRequests(hints: string | string[] | undefined): boolean {
+  return declares(hints, 'owner_requests');
 }
