@@ -229,7 +229,8 @@ private fun FoldedRow(row: BackgroundRow.Row, item: BackgroundRow.Item, open: ()
     }
 }
 
-/** The folded row's mark: the list row's own spinner and icons. */
+/** The folded row's mark: the list row's own spinner and icons. The spinner is drawn as iOS draws it (`SpinnerGlyph`: 13pt, a
+ * 2pt stroke, the accent), the app's running mark, not a quieter grey of its own. */
 @Composable
 private fun Mark(mark: BackgroundRow.Mark) = StatusIcon(mark.name.lowercase())
 
@@ -238,7 +239,7 @@ private fun StatusIcon(status: String) {
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
     Box(Modifier.size(18.dp).testTag("background-status:$status"), contentAlignment = Alignment.Center) {
         when (status) {
-            "running" -> CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 1.5.dp, color = secondary)
+            "running" -> CircularProgressIndicator(Modifier.size(13.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
             "done" -> Icon(painterResource(R.drawable.ic_check_circle), null, Modifier.size(14.dp), tint = LocalOrbitColors.current.success)
             "failed" -> Icon(painterResource(R.drawable.ic_x_circle), null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.error)
             "killed" -> Icon(painterResource(R.drawable.ic_stop), null, Modifier.size(14.dp), tint = secondary)
