@@ -124,31 +124,124 @@ The included gateway serves HTTP. Before exposing Orbit beyond a trusted local h
 - terminate TLS in a reverse proxy or load balancer;
 - redirect HTTP to HTTPS;
 - forward the original host and protocol headers;
-- list the proxy's addresses (a CDN's published ranges) in `TRUSTED_PROXIES`, so Orbit sees each visitor's own address
-  rather than the proxy's ([configuration](configuration.md));
+- list the proxy's addresses (a CDN's published ranges) in [`TRUSTED_PROXIES`](configuration.md#control-plane-and-web),
+  so Orbit sees each visitor's own address rather than the proxy's;
 - allow long-lived SSE responses without proxy buffering or a short idle timeout;
-- pass WebSocket upgrades on to `/runner-link`, which is how runners [reach the link](#how-a-runner-reaches-the-link).
-  Cloudflare, Caddy and Traefik do so as they stand. nginx needs it said:
-
-  ```nginx
-  location = /runner-link {
-      proxy_pass http://127.0.0.1:2086;
-      proxy_http_version 1.1;
-      proxy_set_header Host $host;
-      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-      proxy_set_header X-Forwarded-Proto $scheme;
-      proxy_set_header Upgrade $http_upgrade;
-      proxy_set_header Connection "upgrade";
-      proxy_read_timeout 120s;
-  }
-  ```
-
+- pass WebSocket upgrades on to `/runner-link`, which is how runners
+  [reach the link](#how-a-runner-reaches-the-link). Cloudflare, Caddy and Traefik do so as they stand; nginx needs it
+  configured explicitly, as in the example below;
 - pass on the `Content-Security-Policy` headers of Orbit's pages (`src/web/nginx.conf`), and add no script to the
   pages: the browser refuses any script but Orbit's own files, so a CDN feature that writes one in (on Cloudflare:
   Rocket Loader, Zaraz, automatic Web Analytics, JavaScript Detections) reports an error in the console, and can stop
   the page, until it is turned off;
 - restrict database and control-plane ports so only the gateway can reach them;
-- set `PUBLIC_ORIGIN` to the exact external HTTPS origin and rebuild the web image.
+- set [`PUBLIC_ORIGIN`](configuration.md#control-plane-and-web) to the exact external HTTPS origin and rebuild the
+  web image.
+
+The examples below are illustrative. Replace `orbit.example.com`, the certificate paths, and `127.0.0.1:2086` with
+your deployment's values. They were not validated against a live Orbit instance.
+
+### Caddy
+
+Caddy obtains and renews the certificate automatically, redirects HTTP to HTTPS, and upgrades `/runner-link`
+WebSockets without extra directives. `flush_interval -1` keeps SSE responses unbuffered.
+
+```caddy
+orbit.example.com {
+    reverse_proxy 127.0.0.1:2086 {
+        header_up Host {host}
+        header_up X-Forwarded-Host {host}
+        header_up X-Forwarded-Proto {scheme}
+        flush_interval -1
+        transport http {
+            read_timeout 1h
+        }
+    }
+}
+
+http://orbit.example.com {
+    redir https://{host}{uri} permanent
+}
+```
+
+### nginx
+
+This example terminates TLS, redirects HTTP to HTTPS, streams SSE responses, and upgrades `/runner-link`
+WebSockets. On nginx older than 1.25.1, put `http2` on the `listen` line instead of using `http2 on;`.
+
+```nginx
+server {
+    listen 80;
+    server_name orbit.example.com;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name orbit.example.com;
+
+    ssl_certificate     /etc/letsencrypt/live/orbit.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/orbit.example.com/privkey.pem;
+
+    location = /runner-link {
+        proxy_pass http://127.0.0.1:2086;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 120s;
+    }
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:2086;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header Connection "";
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 3600s;
+        chunked_transfer_encoding off;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:2086;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+    }
+}
+```
+
+Either example needs the proxy's address in [`TRUSTED_PROXIES`](configuration.md#control-plane-and-web) and
+[`PUBLIC_ORIGIN`](configuration.md#control-plane-and-web) set to the exact public HTTPS origin. For a proxy on the
+host that connects to the published `2086` port, the gateway usually sees the Docker bridge gateway
+(for example `172.18.0.1`); confirm the address in the gateway log or `docker network inspect` rather than copying
+the example blindly. A proxy in a container may be seen by its container address or subnet.
+
+```bash
+# Add to .env
+PUBLIC_ORIGIN="https://orbit.example.com"
+TRUSTED_PROXIES="172.18.0.1"
+```
+
+`PUBLIC_ORIGIN` is built into the web image and `TRUSTED_PROXIES` is read by the API at startup, so rebuild and
+recreate both:
+
+```bash
+docker compose up -d --build gateway
+docker compose up -d apiserver
+```
 
 Orbit can execute code with the runner account's privileges. Do not expose an instance to untrusted users or
 attach a runner with broader credentials than its users should be able to exercise.
