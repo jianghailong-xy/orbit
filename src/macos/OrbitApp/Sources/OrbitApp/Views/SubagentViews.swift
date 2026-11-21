@@ -172,7 +172,10 @@ struct InfrastructureModelTiersSection: View {
                 // On the header, not the Section, which would hand it to every row.
                 .task { await agents.loadSubagentTiers() }
         } footer: {
-            Text(SubagentSettings.tiersFooter)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(SubagentSettings.tiersFooter)
+                Text(SubagentSettings.qualityFooter)
+            }
         }
     }
 
@@ -186,6 +189,9 @@ struct InfrastructureModelTiersSection: View {
             Text(SubagentSettings.columnModel).frame(maxWidth: .infinity, alignment: .leading)
             #endif
             Text(SubagentSettings.columnTier).frame(width: 110, alignment: .leading)
+            #if !os(iOS)
+            Text(SubagentSettings.columnQuality).frame(width: 250, alignment: .leading)
+            #endif
             Text(SubagentSettings.columnPrice).frame(width: 96, alignment: .trailing)
         }
         .font(.orbitLabel)
@@ -206,6 +212,10 @@ struct InfrastructureModelTiersSection: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
+            // The Quality lines under the model name (board docs/mocks/model-quality/01-board.png, note E).
+            ModelQualityCell(quality: model.quality)
+                .font(.orbitListSubtitle)
+                .padding(.top, 2)
         }
         #else
         HStack(spacing: 10) {
@@ -216,6 +226,7 @@ struct InfrastructureModelTiersSection: View {
                 .truncationMode(.middle)
                 .frame(maxWidth: .infinity, alignment: .leading)
             tierCell(provider, model).frame(width: 110, alignment: .leading)
+            ModelQualityCell(quality: model.quality).frame(width: 250, alignment: .leading)
             priceCell(provider, model)
         }
         #endif
@@ -276,6 +287,60 @@ struct InfrastructureModelTiersSection: View {
             if let failure = await agents.setModelTier(path: path, model: model, tier: tier) {
                 app.showToast(failure, tone: .error)
             }
+        }
+    }
+}
+
+/// A model's Quality cell (docs/subagent-design.md §7.1, board docs/mocks/model-quality/01-board.png, owner's
+/// A1·B1·C1): a SubAgents line and a Tasks line, each its figure or why there is none, or "No runs yet". Who rated
+/// is the SubAgents line's tooltip on the Mac, and a popover a tap opens on the phone.
+struct ModelQualityCell: View {
+    let quality: ModelQuality
+    @State private var showsRaters = false
+
+    var body: some View {
+        let lines = SubagentSettings.qualityLines(quality)
+        if lines.empty {
+            Text(SubagentSettings.noRunsYet).foregroundStyle(.secondary)
+        } else {
+            VStack(alignment: .leading, spacing: 1) {
+                raters(line(SubagentSettings.qualitySubagents, lines.subagents), lines.raters)
+                line(SubagentSettings.qualityTasks, lines.tasks)
+            }
+        }
+    }
+
+    private func line(_ source: String, _ line: QualityLine) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(source)
+                .font(.orbitLabel)
+                .foregroundStyle(.secondary)
+                .frame(width: 62, alignment: .leading)
+            Text(line.text)
+                .monospacedDigit()
+                .foregroundStyle(line.muted ? .secondary : .primary)
+                .lineLimit(1)
+        }
+    }
+
+    @ViewBuilder private func raters(_ content: some View, _ raters: String?) -> some View {
+        if let raters {
+            #if os(iOS)
+            content
+                .contentShape(Rectangle())
+                .onTapGesture { showsRaters.toggle() }
+                .accessibilityHint(raters)
+                .popover(isPresented: $showsRaters) {
+                    Text(raters)
+                        .font(.orbitListSubtitle)
+                        .padding(10)
+                        .presentationCompactAdaptation(.popover)
+                }
+            #else
+            content.help(raters)
+            #endif
+        } else {
+            content
         }
     }
 }
