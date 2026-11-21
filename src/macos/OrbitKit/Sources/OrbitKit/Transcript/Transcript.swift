@@ -630,6 +630,23 @@ public struct BackgroundProc: Equatable, Sendable, Identifiable, Codable {
     /// a running `job` whose runner can do it. Stated only by GET /sessions/:id/background; nil reads as
     /// not stoppable. Web parity: `BgShell.stoppable`.
     public var stoppable: Bool? = nil
+
+    public init(id: String, command: String?, description: String? = nil, status: String, outputTail: String,
+                startedAt: String? = nil, kind: String? = nil, taskId: String? = nil, endedAt: String? = nil,
+                reason: String? = nil, exitCode: Int? = nil, stoppable: Bool? = nil) {
+        self.id = id
+        self.command = command
+        self.description = description
+        self.status = status
+        self.outputTail = outputTail
+        self.startedAt = startedAt
+        self.kind = kind
+        self.taskId = taskId
+        self.endedAt = endedAt
+        self.reason = reason
+        self.exitCode = exitCode
+        self.stoppable = stoppable
+    }
 }
 
 /// A live tool-permission / question / plan prompt awaiting a human decision.
