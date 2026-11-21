@@ -57,13 +57,14 @@ describe('handoff rows (board 02)', () => {
   it('offers only Hand over without a note when the new coordinator could not be opened', () => {
     const row = html(
       <CoordinatorHandoffFailure
+        engines={[]}
         handoff={handoff({ state: 'FAILED', failureCode: 'REPLACE_FAILED', failureReason: "The handoff note wasn't written: the new coordinator could not be opened." })}
         onRetry={noop}
         onSkip={noop}
         onKeep={noop}
       />,
     );
-    expect([...row.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Hand over without a note']);
+    expect([...row.querySelectorAll('button:not([role="combobox"])')].map((b) => b.textContent)).toEqual(['Hand over without a note']);
   });
 });
 
