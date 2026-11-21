@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 39 |
-| `user` | 519 |
+| `user` | 521 |
 | `admin` | 31 |
 | `runner` | 224 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **817** |
+| **Total** | **819** |
 
 ## Public routes
 
@@ -149,7 +149,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/drive/entries/:id/versions` | path `id` | `DriveController.versions` |
 | `POST` | `/api/drive/folders` | body `CreateDriveFolderDto` | `DriveController.createFolder` |
 | `GET` | `/api/drive/resolve` | query `path` | `DriveController.resolve` |
-| `GET` | `/api/drive/search` | query `q`, `cursor`, `limit` | `DriveController.search` |
+| `GET` | `/api/drive/search` | query `cursor`, `limit`, `q` | `DriveController.search` |
 | `DELETE` | `/api/drive/trash` | — | `DriveController.emptyTrash` |
 | `GET` | `/api/drive/trash` | query `cursor`, `limit` | `DriveController.trash` |
 | `DELETE` | `/api/drive/trash/groups/:id` | path `id` | `DriveController.deleteGroup` |
@@ -161,6 +161,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/drive/uploads/:id` | path `id` | `DriveController.uploadStatus` |
 | `PUT` | `/api/drive/uploads/:id/chunks/:idx` | path `id`, `idx` | `DriveController.putChunk` |
 | `POST` | `/api/drive/uploads/:id/complete` | path `id` | `DriveController.completeUpload` |
+| `GET` | `/api/drive/usage` | — | `DriveController.usage` |
 | `DELETE` | `/api/drive/versions/:id` | path `id` | `DriveController.deleteVersion` |
 | `GET` | `/api/drive/versions/:id/content` | path `id` | `DriveController.downloadVersion` |
 | `POST` | `/api/drive/versions/:id/restore` | body `RestoreDriveVersionDto`; path `id` | `DriveController.restoreVersion` |
