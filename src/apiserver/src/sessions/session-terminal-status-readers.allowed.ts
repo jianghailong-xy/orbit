@@ -29,7 +29,9 @@ export const SESSION_TERMINAL_STATUS_READERS: Readonly<Record<string, number>> =
   'src/apiserver/src/projects/coordinator-evidence-queue.service.ts': 2,
   // Arrived from main at acb7448a49 in the merge of 2026-11-20, written before this guard reached main; admitted as found, plan phase 4 moves it with the rest.
   'src/apiserver/src/projects/coordinator-fact-queue.service.ts': 2,
-  'src/apiserver/src/projects/coordinator-handoff.service.ts': 3,
+  // 5 of the 8 arrived from main at 6905964d65 (coordinator hand-over when a model no longer works), written before this
+  // guard reached main; admitted as found in the merge of 2026-11-21, plan phase 4 moves them with the rest.
+  'src/apiserver/src/projects/coordinator-handoff.service.ts': 8,
   'src/apiserver/src/projects/landing-session.ts': 4,
   'src/apiserver/src/projects/pending-addressees.ts': 1,
   'src/apiserver/src/projects/project-done-request.ts': 1,
