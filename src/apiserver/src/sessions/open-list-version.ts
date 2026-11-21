@@ -185,6 +185,37 @@ export async function readOpenListVersionParts(
   return { version, epochs, steady, deadlinesPassed };
 }
 
+/**
+ * The `session` columns no Open list reads (migration 1420_open_list_undrawn_writes): neither the
+ * row query, its overlay, the probe of a `since=` read nor this version, so no client can draw them
+ * from the list. An UPDATE that changes nothing else moves no counter, and so sends no
+ * `sessions.list_changed`. The migration's `open_list_bump_session` names these same columns
+ * (`open-list-undrawn-writes.pg.spec.ts` writes each one and asserts that, and that the built rows
+ * do not change). A column the list starts to read must leave this list and that function.
+ */
+export const OPEN_LIST_UNDRAWN_SESSION_COLUMNS = [
+  // Every Prisma write of the row.
+  'updated_at',
+  // The context gauge (a mid-turn ping every 20 s, and turn_end), the Agent Tools report, the booked totals.
+  'context_tokens', 'context_window', 'agent_tools', 'engine_usage_totals',
+  'coordinator_context_epoch', 'coordinator_context_ack_key',
+  // A heartbeat's worktree snapshot, for every session of the runner whenever one of them changed.
+  'isolation_status', 'base_sha', 'changed_files', 'worktree_dirty', 'worktree_branch', 'branch_sha',
+  'branch_merged', 'merge_targets', 'branch_commits',
+  // Bookkeeping of the recap pass, the alerts and the inbox claim.
+  'recap_claimed_at', 'recap_event_seq', 'alerted_approval_at', 'agent_notified_at',
+  'inbox_lease_owner', 'inbox_lease_generation', 'inbox_request_id', 'inbox_request_turn_id', 'claim_request_id',
+  'retry_attempts', 'retry_claimed_at',
+] as const;
+
+/** The `conversation_turn` columns no Open list reads, as OPEN_LIST_UNDRAWN_SESSION_COLUMNS (`open_list_bump_via_session`). */
+export const OPEN_LIST_UNDRAWN_TURN_COLUMNS = [
+  'delivery_status', 'delivery_failure_code', 'delivery_failure_reason', 'delivery_terminal_at', 'delivery_acknowledged_at',
+  'lease_deadline_at', 'lease_generation',
+  'translation_state', 'translation_lang', 'translation_failure_reason', 'translation_http_status',
+  'wiki_context', 'coordinator_context_key',
+] as const;
+
 /** The views the version answers for: Open, and its legacy alias. */
 export function isOpenListView(view: string | undefined): boolean {
   return view === undefined || view === 'open' || view === 'active';
