@@ -3756,7 +3756,7 @@ button.toast--pill:focus-visible {
 /* The Tasks card (SessionCreatedTasksStrip.tsx) sits in the tray's shell above; these are
    only what a task list adds to it. Collapsed, the title never wraps and stays whole: beside a lone
    task's name the name truncates, beside the band (`N running · <task>`, `<total> · <task>`) the
-   band does, and the pill after either keeps its size; the failed count is red. Opened, one row per task: a fixed status column, the title (with what it
+   band does, and the pill, at the row's right edge, keeps its size; the failed count is red. Opened, one row per task: a fixed status column, the title (with what it
    replaces, in grey), its age; then the links to the rest. */
 .ct-head {
   min-width: 0;
@@ -3787,8 +3787,7 @@ button.toast--pill:focus-visible {
   white-space: nowrap;
   color: var(--brand);
 }
-.ct-one + .status-pill,
-.ct-count + .status-pill,
+.bg-tray-row > .wt-spacer + .status-pill,
 .ct-row .status-pill {
   height: 20px;
   font-size: 11.5px;

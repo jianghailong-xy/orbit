@@ -308,6 +308,10 @@ const USER_DRIVERS: Readonly<Record<string, Drive>> = {
   'POST /sessions/:id/adopt-branch': (s, w, id) => s.sessions.adoptWorktreeBranch(w.ownerId, id),
   'POST /sessions/:id/retry-message': (s, w, id) => s.autoRetry.resendRetryMessage(w.ownerId, id),
   'POST /sessions/:id/auto-retry': (s, w, id) => s.sessions.armAutoRetry(w.ownerId, id, future()),
+  // The job id is checked after the engine-session guard, so a landing session is refused before any
+  // job of it is looked for.
+  'POST /sessions/:id/background/jobs/:jobId/stop': (s, w, id) =>
+    s.sessions.stopBackgroundJob(w.ownerId, id, 'bgj_0000000000a1'),
   'DELETE /sessions/:id/auto-retry': (s, w, id) => s.sessions.cancelAutoRetry(w.ownerId, id),
   'POST /sessions/:id/complete': (s, w, id) => s.sessions.complete(w.ownerId, id),
   'POST /sessions/:id/archive': (s, w, id) => s.sessions.complete(w.ownerId, id),
