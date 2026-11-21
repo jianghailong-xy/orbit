@@ -123,11 +123,12 @@ public enum SubagentCardEnd {
 
     /// The SubAgent runs a queued turn tells the agent ended, or nil for any other turn. Each run's card
     /// says the turn is waiting and offers `Don't send`; the queue draws the turn only when it also
-    /// carries a background job's news, which is that line's to show (`alone` false). Web:
+    /// carries a wakeup coming due, which is that line's to show (`alone` false). Web:
     /// `queuedSubagentWake` (lib/queuedTurnRestore.ts).
     public static func queuedWake(_ bubble: UserBubble) -> (runIds: [String], alone: Bool)? {
         guard bubble.sessionMessage == nil, let wake = SubagentFinishedText.parse(bubble.text) else { return nil }
-        return (wake.runs.map(\.runId), BackgroundWakeText.parse(wake.rest) == nil)
+        // A job's news beside it draws nothing in the tail either (`BgJobCard.queuedWake`); a wakeup coming due still does.
+        return (wake.runs.map(\.runId), BgJobCard.wakeupsOnly(BackgroundWakeText.parse(wake.rest)) == nil)
     }
 
     /// Whether a turn is a SubAgent's end and nothing else, so it draws nothing: no line, no From Orbit
@@ -137,7 +138,7 @@ public enum SubagentCardEnd {
         if b.sessionMessage != nil || !b.attachments.isEmpty { return false }
         if queued { return queuedWake(b)?.alone == true }
         guard let wake = SubagentFinishedText.parse(b.note) else { return false }
-        return BackgroundWakeText.parse(wake.rest) == nil && !BackgroundWakeCard.drawsBubble(text: b.text)
+        return BgJobCard.wakeupsOnly(BackgroundWakeText.parse(wake.rest)) == nil && !BackgroundWakeCard.drawsBubble(text: b.text)
     }
 
     private static func basename(_ path: String) -> String {

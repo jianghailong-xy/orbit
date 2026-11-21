@@ -2072,6 +2072,41 @@ final class ConsoleModel {
                                       tick: scrollTick)
     }
 
+    /// Scroll the transcript to a bg_run job's card, from the Background list (R1): the call whose receipt
+    /// names the job. Whether there is one to scroll to; a job whose call the loaded window no longer holds
+    /// keeps its row's own accordion.
+    @discardableResult
+    func revealJob(_ jobID: String) -> Bool {
+        guard let cardID = BgJobCard.card(forJob: jobID, in: reducer.state.items) else { return false }
+        revealAgent(cardID)
+        return true
+    }
+
+    /// The owner's stop of one running bg_run job (R3): its end arrives as the job's terminal report.
+    func stopJob(_ jobID: String) async throws {
+        try await api.stopBackgroundJob(sessionID: sessionID, jobID: jobID)
+    }
+
+    /// What a bg_run job's card reads, by job id (`JobCardView`): the Background list's rows, the wake
+    /// turns loaded and those still queued, and the two routes it asks.
+    func jobCardHost(place: String?) -> JobCardHost {
+        var procs: [String: BackgroundProc] = [:]
+        for proc in state.background where proc.kind == "job" { procs[proc.id] = proc }
+        var dontSend: [String: @MainActor () -> Void] = [:]
+        for bubble in state.queued where !bubble.steer {
+            // A steer is on its way into the running turn and cannot be withdrawn: only a queued wake has a Don't send.
+            for jobID in BgJobCard.queuedWake(bubble)?.jobIds ?? [] {
+                dontSend[jobID] = { [weak self] in Task { await self?.cancelQueued(bubble) } }
+            }
+        }
+        let api = self.api
+        let sessionID = self.sessionID
+        return JobCardHost(procs: procs, wakes: BgJobCard.wakes(state.items), dontSend: dontSend,
+                           live: isLive, place: place,
+                           tail: { try await api.backgroundJobTail(sessionID: sessionID, jobID: $0) },
+                           stop: { try await api.stopBackgroundJob(sessionID: sessionID, jobID: $0) })
+    }
+
     /// Each SubAgent end turn loaded, by run id: its card draws the end and keeps the block the agent read
     /// (`SubagentCardEnd.wakes`), so the turn itself draws nothing.
     var subagentWakes: [String: SubagentCardEnd.WakeSeen] { SubagentCardEnd.wakes(state.items) }

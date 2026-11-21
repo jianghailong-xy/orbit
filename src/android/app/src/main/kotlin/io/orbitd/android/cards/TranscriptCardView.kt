@@ -56,12 +56,14 @@ internal fun TranscriptCardView(card: InteractionCard, open: (String) -> Unit, e
         WorkflowFinished.parse(card.source.text("note"))?.let { WorkflowFinishedStripView(it) }
         return
     }
-    // A background job's news or a wakeup coming due is a line in the agent's stream (A08-11), not a card of fields.
+    // A wakeup coming due is a line in the agent's stream (A08-11), not a card of fields. A background job's end, new output or stall
+    // draws nothing (board C1): like a SubAgent, the job is one card from start to end (reader `JobCardView`, joined by job id).
     if (card.family == CardFamily.BACKGROUND && card.key.endsWith(":wake")) {
+        val wakeups = BgJob.wakeupsOnly(card.source) ?: return
         val fields = event?.fields
         val delivery = event?.turnId?.let { LocalSteerDeliveries.current[it] } ?: fields?.text("delivery")
         val undelivered = delivery == "failed"
-        BackgroundWakeLine(card.source, ts, BackgroundWakeCard.steerReceipt(
+        BackgroundWakeLine(wakeups, ts, BackgroundWakeCard.steerReceipt(
             BackgroundWakeCard.steerState(fields?.get("steer") == JsonPrimitive(true), delivery, undelivered)), undelivered)
         return
     }

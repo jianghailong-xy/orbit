@@ -613,6 +613,10 @@ type HeartbeatResponse struct {
 	// there are none, and from older control planes.
 	RemoteSubagentRuns []string `json:"remoteSubagentRuns,omitempty"`
 	StopSubagentRunIDs []string `json:"stopSubagentRunIds,omitempty"`
+	// The bg_run jobs the session's owner asked to stop from the app (background_owner_stop.go), listed
+	// on every answer while the job still runs here. Sent only to a runner that declares bg-owner-stop/v1;
+	// absent when there are none, and from older control planes.
+	StopBackgroundJobs []BgJobStopCommand `json:"stopBackgroundJobs,omitempty"`
 	// The snapshots this runner's open forked tasks start from (docs/task-fork-from-session-design.md
 	// §2.6): the keep-alive refs whose snapshot is not listed are this runner's to delete (forkRefGC). A
 	// POINTER because only a present list states anything: absent (an older control plane, a quiet link

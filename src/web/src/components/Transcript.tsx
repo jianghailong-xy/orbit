@@ -122,6 +122,9 @@ import { resolutionTurnLabel } from '../lib/ownerRequests';
 import { RUNNER_UPDATE_INTERRUPT_REASON, RUNNER_UPDATE_RESUME_NOTE } from '@orbit/shared';
 import { isRunnerUpdateResume, runnerUpdateInterruptedLine } from '../lib/runnerUpdateNow';
 import { parseBackgroundWake } from '../lib/backgroundWake';
+import { BG_RUN_TOOL, bgRunReceipt, isRunnerJobLaunch, jobWakesOf, wakeupsOnly } from '../lib/bgJobCard';
+import { deriveBackgroundShells, mergeBackgroundShells, type BgShell } from '../lib/backgroundShells';
+import { BgJobHostCtx, JobCard, JobShellsCtx, JobWakesCtx } from './JobCard';
 import { parseSubagentFinished } from '../lib/subagentFinished';
 import { parseWorkflowFinished, workflowFinishedTitle } from '../lib/orbitWorkflow';
 import { WorkflowRunsCtx } from '../lib/workflowRuns';
@@ -1312,6 +1315,9 @@ function buildTranscript(
   // `turn_end` closes it. What says how long that turn worked once the end arrives.
   let turnHead: TextNode['turnHead'];
   let legacyWithheld: { node: NoticeNode; count: number; turn: string | null | undefined } | undefined;
+  // The runner's launch pair for a bg_run job (lib/bgJobCard `isRunnerJobLaunch`): the job's card is its
+  // bg_run call, so neither half draws, and its result must not fall to whichever call is still open.
+  const runnerJobLaunches = new Set<string>();
   for (const ev of events) {
     const p = ev.payload ?? {};
     const parent: string | undefined = p.parentToolUseId;
@@ -1551,6 +1557,10 @@ function buildTranscript(
         break;
       }
       case 'tool_use': {
+        if (isRunnerJobLaunch(String(p.name ?? ''), String(p.id ?? ''), p.input)) {
+          runnerJobLaunches.add(String(p.id));
+          break;
+        }
         const node: ToolNode = {
           kind: 'tool',
           seq: ev.seq,
@@ -1568,6 +1578,7 @@ function buildTranscript(
         break;
       }
       case 'tool_result': {
+        if (p.toolUseId && runnerJobLaunches.has(String(p.toolUseId))) break;
         const t =
           (p.toolUseId ? byId.get(String(p.toolUseId)) : undefined) ??
           (lastOpenTool && !lastOpenTool.result ? lastOpenTool : undefined);
@@ -1932,6 +1943,25 @@ export const Transcript = memo(function Transcript({
   const nodes = useMemo(() => transcriptOf(events, turnImages).nodes, [events, turnImages]);
   // Each SubAgent end turn loaded, by run id: its card draws the end, so the turn itself draws nothing.
   const subagentWakes = useMemo(() => subagentWakesOf(nodes), [nodes]);
+  // Each bg_run job's wake turns and its runner reports, by job id: its card draws them (JobCard).
+  const jobWakes = useMemo(
+    () =>
+      jobWakesOf(
+        nodes.flatMap((node) =>
+          node.kind === 'user'
+            ? [{ note: node.note, ts: node.ts, delivered: node.delivery !== 'failed' && node.delivery !== 'unconfirmed' }]
+            : [],
+        ),
+      ),
+    [nodes],
+  );
+  const jobHost = useContext(BgJobHostCtx);
+  const jobShells = useMemo(() => {
+    const out = new Map<string, BgShell>();
+    const shells = mergeBackgroundShells([...(jobHost?.serverShells ?? [])], deriveBackgroundShells(events, { sessionLive: !!live }));
+    for (const shell of shells) if (shell.kind === 'job') out.set(shell.shellId, shell);
+    return out;
+  }, [events, live, jobHost]);
   // Only the Agent and Workflow cards read this (TaskBadgeAndStatus, TaskProgressDetail), so a
   // progress frame re-renders those and nothing else.
   const activity = useContext(TaskActivityCtx);
@@ -2005,6 +2035,8 @@ export const Transcript = memo(function Transcript({
   const body = (
     <MainCheckoutResultsCtx.Provider value={mainCheckoutResults}>
       <SubagentWakesCtx.Provider value={subagentWakes}>
+      <JobWakesCtx.Provider value={jobWakes}>
+      <JobShellsCtx.Provider value={jobShells}>
       <TaskLookupCtx.Provider value={taskLookup}>
         <ShownOriginalProvider>
         <ImagePreviewProvider>
@@ -2017,6 +2049,8 @@ export const Transcript = memo(function Transcript({
         </ImagePreviewProvider>
         </ShownOriginalProvider>
       </TaskLookupCtx.Provider>
+      </JobShellsCtx.Provider>
+      </JobWakesCtx.Provider>
       </SubagentWakesCtx.Provider>
     </MainCheckoutResultsCtx.Provider>
   );
@@ -2216,10 +2250,10 @@ function orbitTurnOf(
     const name = workflow.runs.length === 1 ? workflow.runs[0].name : null;
     return { ts, what: name ? `${title}: ${name}` : title, category: 'job', target: null };
   }
+  // A job's news draws nothing either (its card says it, JobCard): only a wakeup coming due beside it folds.
   const subagent = parseSubagentFinished(node.note);
-  const background = parseBackgroundWake(subagent ? subagent.rest : node.note);
+  const background = wakeupsOnly(parseBackgroundWake(subagent ? subagent.rest : node.note));
   if (background) {
-    if (background.jobs.some((job) => job.status === 'failed' || job.status === 'killed')) return null;
     const title = backgroundWakeTitle(background);
     const name = backgroundWakeName(background);
     return { ts, what: name ? `${title}: ${name}` : title, category: 'job', target: null };
@@ -2337,6 +2371,7 @@ function isGroupableTool(node: Node, chat = false): node is ToolNode {
     node.name !== 'mcp__orbit__task_create' &&
     node.name !== 'mcp__orbit__project_create' &&
     !isBackgroundTaskCall(node.name) &&
+    node.name !== BG_RUN_TOOL &&
     !ownerChatReplyOf(node)
   );
 }
@@ -2657,7 +2692,7 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
       const workflow = parseWorkflowFinished(node.note);
       if (workflow) {
         const others = parseSubagentFinished(workflow.rest);
-        const jobs = parseBackgroundWake(others ? others.rest : workflow.rest);
+        const jobs = wakeupsOnly(parseBackgroundWake(others ? others.rest : workflow.rest));
         return (
           <>
             <WorkflowFinishedStrip wake={workflow} seq={seq} queued={jobs ? undefined : queued} />
@@ -2673,7 +2708,7 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
       const subagent = parseSubagentFinished(node.note);
       if (subagent) {
         const undelivered = node.delivery === 'failed' || node.delivery === 'unconfirmed';
-        const jobs = parseBackgroundWake(subagent.rest);
+        const jobs = wakeupsOnly(parseBackgroundWake(subagent.rest));
         return (
           <>
             {jobs && (
@@ -2690,8 +2725,13 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
           </>
         );
       }
-      const background = parseBackgroundWake(node.note);
-      if (background) {
+      // A background job's end, new output or stall draws NOTHING (board C1): like a SubAgent, the job is one card
+      // from start to end (JobCard, joined by job id), and the agent still reads the block unchanged. A wakeup that
+      // came due beside it keeps its line.
+      const jobNews = parseBackgroundWake(node.note);
+      if (jobNews) {
+        const background = wakeupsOnly(jobNews);
+        if (!background) return node.text.trim() !== '' ? <UserBubble node={{ ...node, note: undefined }} /> : null;
         const undelivered = node.delivery === 'failed' || node.delivery === 'unconfirmed';
         return (
           <>
@@ -4754,6 +4794,13 @@ function ToolView({ node, live, startOpen }: { node: ToolNode; live?: boolean; s
   if ((node.name === 'AskUserQuestion' || node.name === 'ExitPlanMode') && live && !node.result) return null;
   // A spawned child session (mcp__orbit__session_create): once its result is back, render a
   // clickable card that jumps to the child instead of the default folded JSON.
+  // A bg_run call is its job's card from start to end (JobCard); one refused, or whose answer names no job, stays a call.
+  if (node.name === BG_RUN_TOOL && !node.result?.isError) {
+    const receipt = node.result ? bgRunReceipt(resultContent) : null;
+    if (!node.result || receipt) {
+      return <JobCard seq={node.seq} input={input} jobId={receipt?.jobId ?? null} startedAt={receipt?.startedAt ?? null} live={live} />;
+    }
+  }
   if (node.name === 'mcp__orbit__session_create' && node.result && !node.result.isError) {
     // Nothing to render until the untrimmed result lands (see needsWholeResult).
     if (node.result.truncated && !fullResult) return null;

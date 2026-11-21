@@ -273,10 +273,10 @@ public enum OrbitExchangeFold {
         }
         // A SubAgent's end draws nothing (its card is the end), so there is no line to fold the turn under:
         // the reader reads on into what the agent said next. Only a job's news written beside it folds, as
-        // its own (web parity: `orbitTurnOf`).
+        // its own (web parity: `orbitTurnOf`). A job's news draws nothing either (its card says it,
+        // `BgJobCard`): only a wakeup coming due beside it folds.
         let subagent = SubagentFinishedText.parse(bubble.note)
-        if let wake = BackgroundWakeText.parse(subagent?.rest ?? bubble.note) {
-            if wake.jobs.contains(where: BackgroundWakeCard.isFailed) { return nil }
+        if let wake = BgJobCard.wakeupsOnly(BackgroundWakeText.parse(subagent?.rest ?? bubble.note)) {
             let title = BackgroundWakeCard.title(wake)
             let name = BackgroundWakeCard.lineName(wake)
             return OrbitExchange(id: bubble.id, ts: ts, what: name.map { "\(title): \($0)" } ?? title,

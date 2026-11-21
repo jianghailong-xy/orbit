@@ -411,17 +411,14 @@ describe('turns nobody typed, taken off the queue unrun', { timeout: 60_000 }, (
 
     await click(cancelIn(bubbleSaying(`!${ACCEPTANCE}`)));
     await waitForUi(() => expect(cancelMock).toHaveBeenCalledWith(SESSION_PUBLIC, 'turn-acceptance'));
-    await click(cancelIn(mounted().querySelector('.bgwake') ?? undefined));
-    await waitForUi(() => expect(cancelMock).toHaveBeenCalledWith(SESSION_PUBLIC, 'turn-bg-wake'));
     await click(cancelIn(bubbleSaying('请开始执行任务')));
     await waitForUi(() => expect(cancelMock).toHaveBeenCalledWith(SESSION_PUBLIC, 'turn-brief'));
     expect(composer()?.value).toBe('');
 
-    // The wake written into the running turn is the one row here with nothing to withdraw: it says
-    // how far it has got instead, and stays.
-    const steered = [...mounted().querySelectorAll('.bgwake')].find((line) => line.textContent?.includes('Sending…'));
-    expect(steered, 'the steered wake is drawn with its steer state').toBeDefined();
-    expect(steered!.querySelectorAll('a')).toHaveLength(0);
+    // A background job's wakes, queued or written into the running turn, draw no row in the tail (job-card
+    // board E1): a queued one waits on its job's card with Don't send (WorkspaceView.queuedJobWake.test.tsx), and
+    // a steered one is on its way with nothing to withdraw.
+    expect(mounted().querySelectorAll('.bgwake')).toHaveLength(0);
     expect(cancelMock).not.toHaveBeenCalledWith(SESSION_PUBLIC, 'turn-steered-wake');
 
     // Withdrawing a message somebody typed — from the tray — still hands it back, so the empty

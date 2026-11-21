@@ -15,6 +15,12 @@ import {
 import type { RunEvent } from './Transcript';
 import { BackgroundShellsTray, lastUserMessageAt } from './BackgroundShellsTray';
 
+vi.mock('../api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../api')>();
+  return { ...actual, stopBackgroundJob: vi.fn() };
+});
+const { stopBackgroundJob } = await import('../api');
+
 /**
  * The folded Background row draws what the shared rule says (src/shared backgroundRow.ts). Its
  * cases are read out of `background-row.fixture.json`, the file OrbitKit and Android read too, so
@@ -336,5 +342,70 @@ describe('the opened list', () => {
     expect(one('.bg-shell-kind')).toBeNull();
     expect(one('.wt-expand')?.getAttribute('aria-label')).toBe('Hide background processes');
     expect(container.textContent).not.toMatch(/total/);
+  });
+});
+
+// Ruling R1 (2026-11-21): the row stays as it is, and from the board's D1 only two things: a failed job counts in
+// red, and a job's row in the opened list goes to its Job card. R3: a running job's row can stop it.
+describe('a bg_run job in the opened list', () => {
+  const JOBS = [
+    shell({ shellId: 'bgj_run', kind: 'job', command: 'npm test -w @orbit/web', description: 'web suite', startedSeq: 20, status: 'running', endedAt: null, stoppable: true }),
+    shell({ shellId: 'bgj_bad', kind: 'job', command: 'swift test', description: 'OrbitKit swift test', startedSeq: 30, status: 'failed', endedAt: '2026-11-16T02:45:00.000Z' }),
+  ];
+  const rowOf = (id: string) => all('.bg-shell').find((r) => r.querySelector('.bg-shell-id')?.textContent === id)!;
+
+  it('counts a failed job in red', () => {
+    render(JOBS, SINCE, true);
+    expect(one('.bg-tray-count')?.textContent).toBe('1 running · 1 failed');
+    expect(one('.bg-tray-count .ct-failed')?.textContent).toBe('1 failed');
+    expect(css).toMatch(/\.ct-failed\s*\{[^}]*color:\s*var\(--error/);
+  });
+
+  it('scrolls to its Job card when tapped, and folds the list', () => {
+    const cardEl = document.createElement('div');
+    cardEl.dataset.bgJob = 'bgj_bad';
+    const scrolled = vi.fn();
+    cardEl.scrollIntoView = scrolled;
+    document.body.appendChild(cardEl);
+    try {
+      render(JOBS, SINCE, true);
+      toggle();
+      act(() => rowOf('bgj_bad').querySelector<HTMLElement>('.bg-shell-head')!.click());
+      expect(scrolled).toHaveBeenCalledWith({ block: 'center', behavior: 'smooth' });
+      expect(one('.bg-tray-list'), 'the list folds').toBeNull();
+    } finally {
+      cardEl.remove();
+    }
+  });
+
+  it('opens its details as before when its card is not on the page', () => {
+    render(JOBS, SINCE, true);
+    toggle();
+    act(() => rowOf('bgj_bad').querySelector<HTMLElement>('.bg-shell-head')!.click());
+    expect(rowOf('bgj_bad').classList.contains('bg-shell-open')).toBe(true);
+  });
+
+  it('offers Stop on a running job its runner can stop, behind a confirm that calls the stop route', async () => {
+    vi.mocked(stopBackgroundJob).mockReset().mockResolvedValue({ jobId: 'bgj_run', status: 'stopping' });
+    act(() => root.render(<BackgroundShellsTray sessionId="34ySession" events={SINCE} live serverShells={JOBS} />));
+    toggle();
+    expect(rowOf('bgj_bad').querySelector('.bg-shell-stop'), 'not on a job that ended').toBeNull();
+    const stop = rowOf('bgj_run').querySelector<HTMLElement>('.bg-shell-stop button')!;
+    expect(stop.textContent).toBe('Stop');
+    await act(async () => stop.click());
+    expect(stopBackgroundJob).not.toHaveBeenCalled();
+    const popup = document.body.querySelector<HTMLElement>('.orbit-popconfirm')!;
+    expect(popup.querySelector('.orbit-popconfirm-title')?.textContent).toBe('Stop this job?');
+    await act(async () => [...popup.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === 'Stop')!.click());
+    expect(stopBackgroundJob).toHaveBeenCalledWith('34ySession', 'bgj_run');
+    // The press did not open the row.
+    expect(rowOf('bgj_run').classList.contains('bg-shell-open')).toBe(false);
+  });
+
+  it('hides Stop where the list marks the job not stoppable (an older runner)', () => {
+    const older = JOBS.map((j) => ({ ...j, stoppable: false }));
+    act(() => root.render(<BackgroundShellsTray sessionId="34ySession" events={SINCE} live serverShells={older} />));
+    toggle();
+    expect(one('.bg-shell-stop')).toBeNull();
   });
 });
