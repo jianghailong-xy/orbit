@@ -314,6 +314,13 @@ const UNDRAWN_SESSION_WRITES: Record<(typeof OPEN_LIST_UNDRAWN_SESSION_COLUMNS)[
   recap_event_seq: `recap_event_seq = 7`,
   alerted_approval_at: `alerted_approval_at = now()`,
   agent_notified_at: `agent_notified_at = now()`,
+  inbox_lease_owner: `inbox_lease_owner = gen_random_uuid()`,
+  inbox_lease_generation: `inbox_lease_generation = gen_random_uuid()`,
+  inbox_request_id: `inbox_request_id = 'olu-request'`,
+  inbox_request_turn_id: `inbox_request_turn_id = gen_random_uuid()`,
+  claim_request_id: `claim_request_id = 'olu-claim'`,
+  retry_attempts: `retry_attempts = retry_attempts + 1`,
+  retry_claimed_at: `retry_claimed_at = now()`,
 };
 
 const UNDRAWN_TURN_WRITES: Record<(typeof OPEN_LIST_UNDRAWN_TURN_COLUMNS)[number], string> = {
@@ -322,6 +329,14 @@ const UNDRAWN_TURN_WRITES: Record<(typeof OPEN_LIST_UNDRAWN_TURN_COLUMNS)[number
   lease_deadline_at: `lease_deadline_at = now() + interval '5 minutes'`,
   translation_state: `translation_state = 'DONE'`,
   translation_lang: `translation_lang = 'en'`,
+  delivery_failure_code: `delivery_failure_code = 'olu'`,
+  delivery_failure_reason: `delivery_failure_reason = 'olu'`,
+  delivery_terminal_at: `delivery_terminal_at = now()`,
+  lease_generation: `lease_generation = gen_random_uuid()`,
+  translation_failure_reason: `translation_failure_reason = 'olu'`,
+  translation_http_status: `translation_http_status = 500`,
+  wiki_context: `wiki_context = '{"entries":[]}'::jsonb`,
+  coordinator_context_key: `coordinator_context_key = repeat('k', 64)`,
 };
 
 test('2. hints: a write of undrawn columns alone sends no sessions.list_changed and keeps the version; a drawn one sends one', { skip, timeout: 120_000 }, async (t) => {
