@@ -45,6 +45,8 @@ import {
 import { RunEventType, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
+import { DriveContentService } from '../drive/drive-content.service';
+import { DriveService } from '../drive/drive.service';
 import { AttachmentsService } from '../attachments/attachments.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { publicIdHeaders } from '../common/public-id-headers';
@@ -322,6 +324,9 @@ test('a shared task: an explicit projection, the red line, its layers and its ru
     providers: [
       // SharedController's streams, which nothing here opens.
       { provide: ViewerStreamService, useValue: {} },
+      // Drive file links, which nothing here shares or opens (share-links-drive-file.pg.spec.ts holds them).
+      { provide: DriveService, useValue: {} },
+      { provide: DriveContentService, useValue: {} },
       { provide: SessionsService, useValue: sessions },
       { provide: TasksService, useValue: tasks },
       { provide: AttachmentsService, useValue: new AttachmentsService(prisma) },
