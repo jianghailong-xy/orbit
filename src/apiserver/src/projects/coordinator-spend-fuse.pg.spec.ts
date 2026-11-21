@@ -291,7 +291,14 @@ async function failWork(db: PrismaClient, f: Fixture, n: number): Promise<string
 async function openSession(
   db: PrismaClient,
   f: Fixture,
-  options: { taskId?: string; status?: RunStatus; startsTaskWork?: boolean } = {},
+  options: {
+    taskId?: string;
+    status?: RunStatus;
+    startsTaskWork?: boolean;
+    isolationStatus?: string;
+    branch?: string;
+    changedFiles?: string[];
+  } = {},
 ): Promise<string> {
   const id = randomUUID();
   await db.session.create({
@@ -308,6 +315,10 @@ async function openSession(
       status: options.status ?? RunStatus.AWAITING_INPUT,
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: options.startsTaskWork ?? false,
+      ...(options.isolationStatus ? { isolationStatus: options.isolationStatus } : {}),
+      ...(options.branch ? { branch: options.branch } : {}),
+      ...(options.changedFiles ? { changedFiles: options.changedFiles } : {}),
+      ...(options.status === RunStatus.SUCCEEDED ? { finishedAt: new Date() } : {}),
     },
   });
   return id;
