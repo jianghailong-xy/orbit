@@ -243,7 +243,7 @@ export class RunnerSubagentsController {
       const session = await tx.session.findUniqueOrThrow({
         where: { id: sessionId },
         select: {
-          ownerId: true, status: true, endReason: true, completedAt: true, archivedAt: true, deletedAt: true,
+          ownerId: true, status: true, finishedAt: true, endReason: true, completedAt: true, archivedAt: true, deletedAt: true,
           workspace: { select: { subagentsEnabled: true, workflowsEnabled: true } },
         },
       });

@@ -6,6 +6,17 @@ scope and counted only in the design document. The codes are defined in §6.1 of
 document. Line numbers are every line in the file that matched the session-state vocabulary
 plus the sites the readers added by hand; comment lines are included.
 
+Plan step 4.3 (raw SQL in TypeScript files) moved every raw statement that spelled the held or the released
+set onto the release column through `sessionHeldSql` / `sessionReleasedSql` in `apiserver/src/common/session-release.ts`
+(and `sessionHeldIndexedSql`, which states the held statuses beside it where `session_assigned_runner_id_status_idx` is
+the access path: runner link hints, drain waiting, managed runner sleep). Left on purpose: `queue/` (the claim, slot counts
+and dispatch-pause's `heldSql`, which step 4.5 removes), `common/session-tree-sql.ts` (slot counts and the
+background-held set), `sessions/task-work-carrier.ts` (activity and the parked status, no terminal value), the
+claimed-and-held set in `runner-api/runner-link-hints.ts`, `watches/watch-evaluator.service.ts` (reads the status for
+the projector), and the work readers' reads of `FAILED` or `SUCCEEDED` as against the other terminal values
+(step 4.6: the verified run in `tasks/verification-dependency.ts`, the routing report). The coordinator's "FAILED
+with a retry armed" in `projects/project-open-item.ts` reads the release cause (`failedReleaseSql`).
+
 ## A. Database objects live at HEAD
 
 Confirmed against the catalog of a Postgres 16 database with every migration applied (plan
@@ -26,6 +37,17 @@ acquisition and claim guards' `PENDING` to `RUNNING` (activity, `SAME`); the end
 now reads `release_cause` against the failure causes (`FAILURE_RELEASE_CAUSES`, held equal to FAILED
 by `session_release_failure_chk`, 1406/1407), so 1415 ships only with or after 1406/1407. The unique
 index is step 4.5's.
+
+Plan step 4.5, release A (migration 1416) built `session_task_execution_claim_idx_finished_at` on
+`session(task_id) WHERE task_id IS NOT NULL AND deleted_at IS NULL AND finished_at IS NULL` beside
+0130's index, which stays until release B. No statement has stated the claim in `ON CONFLICT ... WHERE`
+since `2133b988ed`: the claim is stated by the index name the P2002 classifiers match
+(`tasks/task-supersession.ts`, `tasks/tasks.service.ts`; both names now), and by the readers whose access
+path is the index (`sessions/task-work-carrier.ts` `sessionCarriesTaskSql`, the holder reads in
+`sessions/sessions.service.ts` and `tasks/tasks.service.ts`), which state `finished_at IS NULL` since.
+`queue/dispatch-pause.service.ts` reads `sessionHeldIndexedSql`, and `heldSql` is gone. Proven in
+`apiserver/src/sessions/session-claim-index.pg.spec.ts`; the production pre-check is
+`../scripts/session-claim-index-precheck.sql`.
 
 | Object defined in | Lines | R/W | Facts | After | What it does with the status |
 |---|---|---|---|---|---|
@@ -61,7 +83,7 @@ index is step 4.5's.
 | `apiserver/src/runners/attention-fix.ts` | 79, 86 | R | REL, LIFE | MOVE | Not in area list. Dedup of machine fix sessions: a non-terminal, unfiled session holds the warning; a terminal one frees a new press. |
 | `apiserver/src/runners/claude-account-swap.ts` | 306 | R | REL | MOVE | Added in plan step 4.2; arrived from main on 2026-11-20 (acb7448a49), after this inventory. A done Set-as-default swap reloads and hints the sessions on either account that are not ended; reads the release column since 4.2. |
 | `apiserver/src/runners/runner-background-holders.ts` | 78-79 | R | ACT, REL | MOVE | Not in area list. Runner running-session count: RUNNING sessions plus open-status sessions its heartbeat names as holding background jobs. |
-| `apiserver/src/runners/runner-executing-sets.ts` | 105, 173 | R | REL | MOVE | Added in plan step 4.2; written in plan step 1.6, after this inventory. Raw SQL: the beat's executing sets replace the inferred ones only on open sessions, the OPEN statuses spliced as text. Left for plan step 4.3 (raw SQL). |
+| `apiserver/src/runners/runner-executing-sets.ts` | 105, 173 | R | REL | MOVE | Added in plan step 4.2; written in plan step 1.6, after this inventory. Raw SQL: the beat's executing sets replace the inferred ones only on open sessions, the OPEN statuses spliced as text. Reads the release column since plan step 4.3. |
 | `apiserver/src/runners/runners.service.ts` | 33, 77, 324, 577, 601, 1541, 1547 | R | REL, ACT, WIRE | MOVE, COMPAT | Lists RUNNING turns on draining runners; abandoned checkouts only for terminal sessions; passes raw session status to clients. |
 | `apiserver/src/sessions/abandoned-approvals.ts` | 72, 406, 419 | R | ACT | SAME | Counts live approval cards through isSessionGenerating; the two listed lines are comments naming AWAITING_INPUT. |
 | `apiserver/src/sessions/auto-retry.service.ts` | 12, 36, 359, 364-365, 441, 444, 446, 453, 456, 459-460, 504-505, 508, 511, 640, 656-657, 814, 818, 839, 1014, 1019, 1200, 1203-1205, 1674, 1687, 1700, 1759, 1774, 1810, 1884, 1926, 1932, 1986, 1991, 2002, 2023, 2027, 2030, 2038, 2045, 2050 | RW | RETRY, TURN, REL, ENDING, LIFE, WORK | MOVE | Retry sweep: selects FAILED or idle rows with retryAt, compare-and-sets on the parked status, resumes them, publishes final FAILED when giving up. Plan step 4.6: the parked FAILED branch of every sweep, claim release and announcement reads the failure cause (failedReleaseFilter, isFailedRelease); compare-and-sets keep the status as read. |
@@ -90,7 +112,7 @@ index is step 4.5's.
 | `apiserver/src/common/session-inbox-fence.ts` | 130 | R | REL | MOVE | Raw SQL retires the session inbox lease generation only when status is SUCCEEDED/FAILED/CANCELLED. |
 | `apiserver/src/common/session-scheduling.ts` | 1, 8, 11-15, 20, 28, 89, 102-104, 109-110, 114-115 | R | ACT, REL, TURN | MOVE | Defines OPEN_SESSION_STATUSES (not released), UNSETTLED (owes an answer), ACTIVE_TURN, and the enqueue/complete transitions; INTERRUPTED treated as idle. |
 | `apiserver/src/common/session-tree-sql.ts` | 35, 39, 72, 89, 103 | R | ACT, REL | RENAME | Raw SQL slot counting: RUNNING per runner/tree/batch, PENDING+RUNNING children, and background-held sessions as PENDING/AWAITING_INPUT/INTERRUPTED. |
-| `apiserver/src/common/session-working.ts` | 136, 146, 151, 167 | R | ACT, REL | MOVE | Added in plan step 4.2; written in plan step 1.1, after this inventory. Executing, will-wake and holds-slot as a predicate, a Prisma filter and a SQL fragment; "open" is the held status set in all three, kept equal. The Prisma form is pinned by sessions/workspace-session-counts.spec.ts, so the module moves with its SQL in plan step 4.3. |
+| `apiserver/src/common/session-working.ts` | 136, 146, 151, 167 | R | ACT, REL | MOVE | Added in plan step 4.2; written in plan step 1.1, after this inventory. Executing, will-wake and holds-slot as a predicate, a Prisma filter and a SQL fragment; "open" is the held status set in all three, kept equal. The Prisma form is pinned by sessions/workspace-session-counts.spec.ts. Plan step 4.3 moved the SQL fragment onto the release column (with the held statuses beside it as the index path); the predicate and the Prisma filters still read the open statuses. |
 | `apiserver/src/feishu/feishu-group.service.ts` | 230 | R | ACT | SAME | Raw SQL counts a group running work as sessions PENDING or RUNNING and not deleted, for the concurrency cap. |
 | `apiserver/src/github/github-workspace.service.ts` | 266 | R | ACT | SAME | Republishes PENDING sessions of a workspace when its clone state moves. |
 | `apiserver/src/help/help-ask-marker.ts` | 2, 52-54 | R | TURN, ACT | MOVE | helpAskOutcome: FAILED reads failed, PENDING/RUNNING/generating reads working, everything else answered. Plan step 4.6: failed reads the failure cause (isFailedRelease). |

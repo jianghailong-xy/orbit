@@ -1,5 +1,8 @@
 import { readSessionCoordinatorHandoffs } from '../projects/coordinator-handoff';
-import type { HelpAskMarker, SubagentRunView, WorkflowRunView } from '@orbit/shared';
+import type { BackgroundJobStopResponse, BackgroundJobTailResponse, HelpAskMarker, SubagentRunView, WorkflowRunView } from '@orbit/shared';
+import { BG_JOB_STOPPED_BY_OWNER, BG_JOB_TAIL_MAX_BYTES, BG_OUTPUT_TAIL_V1, BG_OWNER_STOP_V1 } from '@orbit/shared';
+import { RunnerHints } from '../realtime/runner-hints';
+import { boundTailLines } from './background-job-tail';
 import { modelLabels, subagentRunView } from '../runner-api/subagent-run';
 import { WORKFLOW_RUN_VIEW_SELECT, workflowRunView } from '../runner-api/workflow-run';
 import { checkedWorkSubdir } from './work-subdir';
@@ -13,6 +16,7 @@ import {
 import {
   BadRequestException,
   ConflictException,
+  GatewayTimeoutException,
   ForbiddenException,
   HttpException,
   HttpStatus,
@@ -189,7 +193,6 @@ import {
   type TaskRunEffectFence,
 } from '../tasks/task-run-receipt';
 import { readTaskRouteSummaries } from '../tasks/task-route-decision';
-import { TASK_OCCUPYING } from '../tasks/reclaim-stalled-task';
 import {
   accountDefaultPermissionMode,
   DEFAULT_PERMISSION_MODE,
@@ -316,6 +319,7 @@ import {
   HELD_SESSION_STATUSES,
   RELEASED_SESSION_STATUSES,
   failedReleaseFilter,
+  heldFilter,
   isFailedRelease,
   isHeld,
   isHeldPastClaim,
@@ -1149,6 +1153,12 @@ export class SessionsService {
      * undefined at its decoration. Absent in the specs that build this service by hand.
      */
     @Optional() private readonly moduleRef?: ModuleRef,
+    /**
+     * The runner link's NATS connection (realtime/runner-hints.ts), which asks a session's runner for the newest lines
+     * of a bg_run job (readBackgroundJobTail). Absent in the specs that build this service by hand, where that read
+     * answers RUNNER_LINK_UNAVAILABLE.
+     */
+    @Optional() private readonly runnerHints?: RunnerHints,
   ) {
     this.files = files ?? new FilesService(prisma);
   }
@@ -6509,15 +6519,25 @@ export class SessionsService {
   async getBackgroundShells(userId: string, id: string): Promise<BgShell[]> {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId: userId },
-      select: { id: true, finishedAt: true },
+      select: { id: true, finishedAt: true, assignedRunner: { select: { capabilities: true } } },
     });
     if (!session) throw new NotFoundException('session not found');
-    const rows = await this.selectBackgroundEvents(id);
+    return this.deriveSessionBackground(session);
+  }
+
+  /**
+   * The background list of a session already read, each running `job` marked `stoppable` when the session's runner
+   * carries out the owner's stop (BG_OWNER_STOP_V1), so a client can hide the control where it would be refused.
+   */
+  private async deriveSessionBackground(session: {
+    id: string; finishedAt: Date | null; assignedRunner: { capabilities: string[] } | null;
+  }): Promise<BgShell[]> {
+    const rows = await this.selectBackgroundEvents(session.id);
     // A background shell with no terminal signal is still "running" only while the session is live;
     // once it's settled the shell can't still be running, so it reads as "unknown" (see
     // classifyShellStatus). Mirrors the web tray's liveness (WorkspaceView `TERMINAL`).
     const sessionLive = isHeld(session);
-    return deriveBackgroundShells(
+    const shells = deriveBackgroundShells(
       rows.map((e) => ({
         seq: e.seq,
         type: e.type,
@@ -6526,6 +6546,138 @@ export class SessionsService {
       })),
       { sessionLive },
     );
+    const runnerStops = session.assignedRunner?.capabilities.includes(BG_OWNER_STOP_V1) === true;
+    for (const shell of shells) {
+      if (shell.kind === 'job') shell.stoppable = runnerStops && shell.status === 'running';
+    }
+    return shells;
+  }
+
+  /**
+   * The owner's stop of one running bg_run job (POST /sessions/:id/background/jobs/:jobId/stop). The stop is kept on
+   * the session (bgJobStopRequests) and every full heartbeat answer to its runner lists it while the job runs
+   * (stopBackgroundJobs, runner-api/background-job-stops.ts); the runner kills the job as bg_kill does, under the
+   * reason BG_JOB_STOPPED_BY_OWNER, and the job's terminal report, its row here and its wake carry that reason.
+   *
+   * 404 for another owner's session and for a job id the session never ran; 409 BACKGROUND_JOB_ENDED for a job that
+   * has ended any other way, and 409 RUNNER_CANNOT_STOP_JOB when the session's runner predates the stop (it would
+   * drop the listing unread). A repeat is idempotent: `stopping` while the job runs, `killed` once it ended stopped.
+   */
+  async stopBackgroundJob(ownerId: string, id: string, jobId: string): Promise<BackgroundJobStopResponse> {
+    const session = await this.prisma.session.findFirst({
+      where: { id, ownerId },
+      select: {
+        id: true, status: true, finishedAt: true, sessionKind: true, assignedRunnerId: true,
+        assignedRunner: { select: { capabilities: true } },
+      },
+    });
+    if (!session) throw new NotFoundException('session not found');
+    // Stopping a job is an engine door (§2.9 LS6): the platform's landing container runs no bg_run job.
+    assertEngineSessionRow(session);
+    const job = (await this.deriveSessionBackground(session)).find((shell) => shell.kind === 'job' && shell.shellId === jobId);
+    if (!job) {
+      throw new NotFoundException({ code: 'BACKGROUND_JOB_NOT_FOUND', message: `This session has no background job ${jobId}.` });
+    }
+    if (job.status !== 'running') {
+      if (job.status === 'killed' && job.reason === BG_JOB_STOPPED_BY_OWNER) return { jobId, status: 'killed' };
+      throw new ConflictException({
+        code: 'BACKGROUND_JOB_ENDED',
+        message: `Background job ${jobId} has already ended (${job.status}); there is nothing to stop.`,
+        jobStatus: job.status,
+      });
+    }
+    if (!job.stoppable || !session.assignedRunnerId) {
+      throw new ConflictException({
+        code: 'RUNNER_CANNOT_STOP_JOB',
+        message: `The runner hosting this session is too old to stop a background job from the app: it does not declare ${BG_OWNER_STOP_V1}. Update the runner, or ask the agent to stop the job with bg_kill.`,
+      });
+    }
+    // Added once, and pruned of jobs that are no longer running, so the list stays as short as what is in flight.
+    await this.prisma.$executeRaw`
+      UPDATE "session"
+         SET "bg_job_stop_requests" = ARRAY(
+               SELECT r FROM unnest("bg_job_stop_requests") AS r WHERE r = ANY("running_bg_jobs") AND r <> ${jobId}
+             ) || ARRAY[${jobId}]::text[]
+       WHERE "id" = ${session.id}::uuid
+    `;
+    this.realtime.notifyRunnerWake(session.assignedRunnerId);
+    return { jobId, status: 'stopping' };
+  }
+
+  /**
+   * The newest lines of one bg_run job's output (GET /sessions/:id/background/jobs/:jobId/tail), read just now by the
+   * runner hosting the session from the job's output file and carried back over the runner link: a NATS request on
+   * the runner's subject that the link gateway relays as a BackgroundJobTailRequest (RunnerHints.backgroundJobTail).
+   * At most `lines` (≤ BG_JOB_TAIL_MAX_LINES) lines and BG_JOB_TAIL_MAX_BYTES, without colour codes (boundTailLines).
+   *
+   * 404 for another owner's session and for a job id the session never ran. Then, before the runner is asked:
+   * 409 RUNNER_CANNOT_READ_JOB_OUTPUT when its runner does not declare BG_OUTPUT_TAIL_V1, 503 RUNNER_OFFLINE when it
+   * is not online, 503 RUNNER_LINK_UNAVAILABLE when this server has no link to ask over. From the asking: 503
+   * RUNNER_OFFLINE when no gateway holds a connection of it, 504 RUNNER_DID_NOT_ANSWER when no answer came in time, and
+   * 404 BACKGROUND_JOB_OUTPUT_GONE when the runner no longer hosts the job (its session ended there): the client then
+   * shows the end of the output the job's wake carried.
+   */
+  async readBackgroundJobTail(ownerId: string, id: string, jobId: string, lines: number): Promise<BackgroundJobTailResponse> {
+    const session = await this.prisma.session.findFirst({
+      where: { id, ownerId },
+      select: {
+        id: true, status: true, finishedAt: true, assignedRunnerId: true,
+        assignedRunner: { select: { capabilities: true, status: true, ...RUNNER_BEATS } },
+      },
+    });
+    if (!session) throw new NotFoundException('session not found');
+    const job = (await this.deriveSessionBackground(session)).find((shell) => shell.kind === 'job' && shell.shellId === jobId);
+    if (!job) {
+      throw new NotFoundException({ code: 'BACKGROUND_JOB_NOT_FOUND', message: `This session has no background job ${jobId}.` });
+    }
+    const gone = () => new NotFoundException({
+      code: 'BACKGROUND_JOB_OUTPUT_GONE',
+      message: `The runner no longer holds the output of background job ${jobId}; the end of it is in the job's wake.`,
+    });
+    const offline = () => new ServiceUnavailableException({
+      code: 'RUNNER_OFFLINE',
+      message: `The runner hosting this session is offline, so the output of background job ${jobId} cannot be read now.`,
+    });
+    const runner = session.assignedRunner;
+    if (!session.assignedRunnerId || !runner) throw gone();
+    if (!runner.capabilities.includes(BG_OUTPUT_TAIL_V1)) {
+      throw new ConflictException({
+        code: 'RUNNER_CANNOT_READ_JOB_OUTPUT',
+        message: `The runner hosting this session is too old to show a background job's output in the app: it does not declare ${BG_OUTPUT_TAIL_V1}. Update the runner; the end of the output arrives with the job's wake.`,
+      });
+    }
+    if (!runnerIsOnline(runner)) throw offline();
+    const answer = await this.runnerHints?.backgroundJobTail(session.assignedRunnerId, session.id, jobId, lines, BG_JOB_TAIL_MAX_BYTES);
+    if (answer === undefined || answer === 'unavailable') {
+      throw new ServiceUnavailableException({
+        code: 'RUNNER_LINK_UNAVAILABLE',
+        message: 'This server cannot reach runners over the runner link right now, so a background job\'s output cannot be read.',
+      });
+    }
+    if (answer === null || answer.outcome === 'TIMEOUT') {
+      throw new GatewayTimeoutException({
+        code: 'RUNNER_DID_NOT_ANSWER',
+        message: `The runner hosting this session did not answer in time with the output of background job ${jobId}.`,
+      });
+    }
+    if (answer.outcome === 'NO_CONNECTION') throw offline();
+    if (answer.outcome === 'UNSUPPORTED') {
+      throw new ConflictException({
+        code: 'RUNNER_CANNOT_READ_JOB_OUTPUT',
+        message: `The runner hosting this session is connected without ${BG_OUTPUT_TAIL_V1}, so it cannot show a background job's output in the app. Update the runner.`,
+      });
+    }
+    if (answer.outcome !== 'OK') throw gone();
+    const bounded = boundTailLines(answer.text, lines);
+    return {
+      jobId,
+      status: answer.status,
+      exitCode: answer.exitCode,
+      lines: bounded.lines,
+      truncated: answer.truncated || bounded.cut,
+      outputBytes: answer.outputBytes,
+      readAt: new Date().toISOString(),
+    };
   }
 
   /**
@@ -10917,8 +11069,9 @@ export class SessionsService {
    * Nothing here stops a run that nobody asked to stop, and nothing here moves a running session
    * onto another provider.
    *
-   * `session_task_execution_claim_idx` makes "one live Session per task" a property of the database,
-   * and a revive writes a LIVE status — so a task whose run has already been re-dispatched (Run Now,
+   * The execution claim index (`session_task_execution_claim_idx_finished_at`, migration 1416, beside
+   * 0130's `session_task_execution_claim_idx` until release B) makes "one live Session per task" a
+   * property of the database, and a revive writes a LIVE status — so a task whose run has already been re-dispatched (Run Now,
    * a sweep, the auto-run the task list reconciles) refuses the revive at that index. The refusal is
    * correct; what used to happen with it was not. The raw `P2002` reached the API as a 500 with a
    * PostgreSQL sentence in it, in front of somebody who pressed "Retry now" on a failed run of a
@@ -10929,9 +11082,9 @@ export class SessionsService {
    * Nothing of the revive was written (the flip is the last thing the transaction does), so this
    * read is of the world the refusal is about.
    *
-   * The predicate is the index's own (`TASK_OCCUPYING` is its four statuses, character for
-   * character) rather than "the newest" or "the live one": a reader narrower than the index it
-   * explains answers "nothing holds the claim" for rows that do.
+   * The predicate is the index's own (`task_id`, not in the Trash, `finished_at IS NULL`) rather than
+   * "the newest" or "the live one": a reader narrower than the index it explains answers "nothing
+   * holds the claim" for rows that do.
    */
   private async routeOntoTheHeldClaim(
     ownerId: string,
@@ -10946,7 +11099,7 @@ export class SessionsService {
       // cannot be in the index — and it is what keeps the sentence from naming the caller's own
       // session if that ever stops being true.
       const holder = await this.prisma.session.findFirst({
-        where: { taskId, deletedAt: null, status: { in: TASK_OCCUPYING }, NOT: { id } },
+        where: { taskId, deletedAt: null, ...heldFilter(), NOT: { id } },
         select: {
           id: true,
           status: true,
@@ -11637,7 +11790,7 @@ export class SessionsService {
       };
     }, loggedRetry(this.logger, 'sessions.resume'))
       // The one duplicate key this UPDATE can reach — another live Session already holds this task's
-      // execution claim (0130) — answered as the refusal it is instead of as the 500 a bare P2002
+      // execution claim (1416, and 0130's index beside it until release B) — answered as the refusal it is instead of as the 500 a bare P2002
       // becomes. Caught outside the transaction, because naming the holder means reading, and the
       // transaction that raised this cannot answer a read. Any other duplicate is somebody else's
       // fact and goes on being thrown as it is.

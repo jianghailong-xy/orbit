@@ -192,8 +192,8 @@ import {
 import {
   TASK_SUPERSEDABLE_STATUSES,
   TASK_SUPERSESSION_MAX_HOPS,
-  EXECUTION_CLAIM_INDEX,
   conflictingUniqueKey,
+  namesExecutionClaimIndex,
   successorChain,
   supersededByAbsentReason,
   supersessionRefusal,
@@ -212,7 +212,6 @@ import {
   cascadedTaskClosure,
   touchesAcceptanceFact,
 } from './task-lock-order';
-import { PROJECT_LIVE_SESSION_STATUS_SQL } from '../projects/live-session-status';
 import { readCurrentVerifier, readTaskWorkState } from '../projects/project-task-work-state';
 import { readTaskIntegrationViews } from '../projects/project-task-integration';
 import { stopInFlightJob } from '../projects/project-integration-line';
@@ -256,8 +255,10 @@ import {
   FAILURE_RELEASE_CAUSES,
   WORK_FINISHED_RELEASE_CAUSES,
   failedReleaseFilter,
+  heldFilter,
   heldStatusFilter,
   releasedFilter,
+  sessionHeldSql,
 } from '../common/session-release';
 
 export {
@@ -1111,7 +1112,8 @@ export const TASK_LIST_SELECT = {
 /**
  * Was this duplicate-key error one of the TWO unique keys a task run's Session insert can reach?
  *
- * Two are in range and no others: `session_task_execution_claim_idx` (`task_id`), and — since the
+ * Two are in range and no others: the execution claim (`task_id`; `session_task_execution_claim_idx`
+ * and, beside it since 1416, `session_task_execution_claim_idx_finished_at`), and — since the
  * id is now derived from the request (`taskRunDesiredSessionId`) rather than drawn at random — the
  * PRIMARY KEY. `share_token` is the table's only other unique key, and a legacy task run leaves it
  * NULL, which PostgreSQL treats as distinct.
@@ -1132,7 +1134,7 @@ function isTaskRunClaimConflict(error: unknown): boolean {
   // moment the client moved — `session_task_execution_claim_idx` contains neither `task_id` nor
   // a standalone `id` — and every lost claim went back to reaching the API as a 500. Both
   // releases put the index name in `originalMessage`, so matching on it holds either way.
-  return named.includes(EXECUTION_CLAIM_INDEX) || /session_pkey/.test(named)
+  return namesExecutionClaimIndex(named) || /session_pkey/.test(named)
     || /task_id/.test(named) || /\bid\b/.test(named);
 }
 
@@ -1374,10 +1376,7 @@ const AUTO_RUN_READY_SQL = Prisma.sql`
   AND NOT EXISTS (
     SELECT 1 FROM session s
     WHERE s.task_id = t.id
-      AND s.status IN (${Prisma.join(
-        TASK_OCCUPYING.map((status) => Prisma.sql`${status}::run_status`),
-        ', ',
-      )})
+      AND ${sessionHeldSql('s')}
   )
   -- ...nor is a task whose current dispatch moment has already had its automatic run. Offering it
   -- again is answered from that moment's receipt with the run it already started, and starts
@@ -1432,10 +1431,7 @@ const PROJECT_INDEPENDENT_READY_SQL = Prisma.sql`
   AND NOT EXISTS (
     SELECT 1 FROM session s
     WHERE s.task_id = t.id
-      AND s.status IN (${Prisma.join(
-        TASK_OCCUPYING.map((status) => Prisma.sql`${status}::run_status`),
-        ', ',
-      )})
+      AND ${sessionHeldSql('s')}
   )
   AND NOT EXISTS (
     SELECT 1 FROM task_run_request receipt
@@ -1469,10 +1465,7 @@ const AUTO_RUN_RETRY_CANDIDATE_SQL = Prisma.sql`
   AND NOT EXISTS (
     SELECT 1 FROM session s
     WHERE s.task_id = t.id
-      AND s.status IN (${Prisma.join(
-        TASK_OCCUPYING.map((status) => Prisma.sql`${status}::run_status`),
-        ', ',
-      )})
+      AND ${sessionHeldSql('s')}
   )`;
 
 /** An auto-run task whose current dispatch moment has had its automatic run, as the retry policy reads it. */
@@ -1593,10 +1586,7 @@ const SCHEDULED_DUE_SQL = Prisma.sql`
   AND NOT EXISTS (
     SELECT 1 FROM session s
     WHERE s.task_id = t.id
-      AND s.status IN (${Prisma.join(
-        TASK_OCCUPYING.map((status) => Prisma.sql`${status}::run_status`),
-        ', ',
-      )})
+      AND ${sessionHeldSql('s')}
   )`;
 
 /**
@@ -3867,7 +3857,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
          -- Every task-linked session this release creates starts the task's work, so "any live
          -- run" and "any live work run" are the same set today; the two diverge in the follow-up
          -- migration that also narrows the execution claim.
-         AND s."status"::text IN (${Prisma.raw(PROJECT_LIVE_SESSION_STATUS_SQL)})
+         AND ${sessionHeldSql('s')}
        ORDER BY s."id"
        LIMIT 1
     `);
@@ -11849,10 +11839,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
          AND NOT EXISTS (
            SELECT 1 FROM "session" s
             WHERE s."task_id" = moment."task_id"
-              AND s."status" IN (${Prisma.join(
-                TASK_OCCUPYING.map((status) => Prisma.sql`${status}::run_status`),
-                ', ',
-              )})
+              AND ${sessionHeldSql('s')}
          )`;
     return moved > 0;
   }
@@ -12337,10 +12324,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         AND NOT EXISTS (
           SELECT 1 FROM task t JOIN session s ON s.task_id = t.id
           WHERE t.list_id = tl.id
-            AND s.status IN (${Prisma.join(
-              TASK_OCCUPYING.map((status) => Prisma.sql`${status}::run_status`),
-              ', ',
-            )})
+            AND ${sessionHeldSql('s')}
         )
         -- Nothing has started recently either, so this is quiet rather than merely between runs.
         AND NOT EXISTS (
@@ -13962,9 +13946,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    *     There is no status in this read, so there is no status it can be wrong about.
    *  2. **No row at that id, and a Session holding the claim.** Then this request did not run, and
    *     the row in the way is not its own — it cannot be. Named, never adopted and never reported
-   *     as success, off the claim index's own predicate (`TASK_OCCUPYING` is the four statuses
-   *     `session_task_execution_claim_idx` lists, character for character) rather than off "the
-   *     newest" or "the live one".
+   *     as success, off the claim index's own predicate (`task_id`, not in the Trash, not released:
+   *     `session_task_execution_claim_idx_finished_at`, migration 1416) rather than off "the newest"
+   *     or "the live one".
    *  3. **Neither.** The claim was released between the insert and the read, so nothing of this
    *     request landed and there is nothing truthful to return. Refused with the reason — a raw
    *     duplicate-key error is not an answer, it is a 500 with a PostgreSQL sentence in it.
@@ -14043,7 +14027,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // neither, and a reader narrower than the index it is explaining answers "nothing holds the
         // claim" for rows that do.
         const holder = await this.prisma.session.findFirst({
-          where: { taskId: task.id, deletedAt: null, status: { in: TASK_OCCUPYING } },
+          where: { taskId: task.id, deletedAt: null, ...heldFilter() },
           select: {
             id: true, status: true, workspaceId: true, engine: true, provider: true, providerBuiltin: true,
             ownerId: true, model: true, startsTaskWork: true, cancelRequestedAt: true,
@@ -15298,8 +15282,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // falls through to the resume path below and is handed the prompt as a new turn rather than
     // no-oping (which is why "开始执行" on a parked task used to do nothing).
     //
-    // With no ORDER BY: at most one row can satisfy this, because
-    // `session_task_execution_claim_idx` says so, and ordering a set that cannot have two members
+    // With no ORDER BY: at most one row can satisfy this, because the execution claim index
+    // (`session_task_execution_claim_idx_finished_at`) says so, and ordering a set that cannot have two members
     // only invites a reader to think it can.
     //
     // Everything the refusal names, so this door and the post-conflict one describe the row in the

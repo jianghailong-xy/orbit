@@ -87,7 +87,7 @@
  */
 
 import { RunStatus } from '@orbit/shared';
-import type { SessionReleaseCause } from '../common/session-release';
+import { sessionHeldSql, type SessionReleaseCause } from '../common/session-release';
 import { TASK_OCCUPYING } from './reclaim-stalled-task';
 import { taskNotRetiredSql } from './task-supersession';
 import { verificationLiveness } from './verification-liveness';
@@ -359,7 +359,6 @@ export function verificationCheckSameScopeSql(check: string, subject: string): s
  */
 export function verificationEpochNeedsHumanSql(alias = 't', dependent?: string): string {
   const subject = `COALESCE(${alias}."verifies_task_id", ${alias}."id")`;
-  const occupying = TASK_OCCUPYING.map((status) => `'${status}'`).join(', ');
   return `(NOT ${verificationEpochOpenSql(alias, dependent)}
     AND NOT EXISTS (
       -- "Something in motion will open this." No live check at all is NOT that: every check of the
@@ -384,7 +383,7 @@ export function verificationEpochNeedsHumanSql(alias = 't', dependent?: string):
                       SELECT 1 FROM "session" needs_human_run
                        WHERE needs_human_run."task_id" = needs_human_check."id"
                          AND needs_human_run."deleted_at" IS NULL
-                         AND needs_human_run."status"::text IN (${occupying})
+                         AND ${sessionHeldSql('needs_human_run').sql}
                     )))
          )
     ))`;
@@ -415,7 +414,6 @@ export function latestLiveVerificationCheckIdSql(subject: string): string {
  * the dispatcher correctly waits for the natural run.
  */
 export function verificationCheckPassedSql(check: string, subject: string): string {
-  const occupying = TASK_OCCUPYING.map((status) => `'${status}'`).join(', ');
   return `(
     (
       ${check}."status" = 'DONE'
@@ -425,7 +423,7 @@ export function verificationCheckPassedSql(check: string, subject: string): stri
         SELECT 1 FROM "session" passed_live
          WHERE passed_live."task_id" = ${check}."id"
            AND passed_live."deleted_at" IS NULL
-           AND passed_live."status"::text IN (${occupying})
+           AND ${sessionHeldSql('passed_live').sql}
       )
       AND EXISTS (
         SELECT 1 FROM "session" passed_run

@@ -340,7 +340,7 @@ test('the scan asks only for tasks that are due AND actually runnable', async ()
   assert.match(sql, /epoch_check\."verdict_revision" > 0/);
   assert.match(
     sql,
-    /NOT EXISTS \(\s*SELECT 1 FROM "session" passed_live[\s\S]*passed_live\."status"::text IN \('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'\)/,
+    /NOT EXISTS \(\s*SELECT 1 FROM "session" passed_live[\s\S]*passed_live\."finished_at" IS NULL/,
   );
   assert.match(
     sql,

@@ -168,7 +168,7 @@ test('runnable filter is applied before pagination with the same rules as the Ru
     // action: nothing has written one since the control loop went.
     assert.match(
       sql,
-      /NOT EXISTS \(\s*SELECT 1 FROM "session" passed_live[\s\S]*passed_live\."status"::text IN \('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'\)/,
+      /NOT EXISTS \(\s*SELECT 1 FROM "session" passed_live[\s\S]*passed_live\."finished_at" IS NULL/,
     );
     assert.match(
       sql,

@@ -327,6 +327,10 @@ func (c *conn) dispatch(f *linkpb.Frame) bool {
 		if c.link != nil {
 			c.link.onPrefixAnswer(body.TurnPrefixResponse)
 		}
+	case *linkpb.Frame_BackgroundJobTailResponse:
+		if c.link != nil {
+			c.link.onTailAnswer(body.BackgroundJobTailResponse)
+		}
 	case *linkpb.Frame_StreamOpened, *linkpb.Frame_StreamData, *linkpb.Frame_StreamCredit, *linkpb.Frame_StreamClose,
 		*linkpb.Frame_StreamPasted:
 		c.onStreamFrame(f)

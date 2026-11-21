@@ -12,7 +12,7 @@ import {
   type JudgmentOutcome,
 } from './coordinator-judgment.service';
 import { attemptEndedUnsettledFact } from './coordinator-wake';
-import { releasedSql } from '../common/session-release';
+import { sessionReleasedSql } from '../common/session-release';
 import { RELEASED_SESSION_STATUSES } from '../common/session-release';
 
 /** The project vanished between the committed attempt read and wake authorization. */
@@ -229,7 +229,7 @@ export class AttemptEndedUnsettledProducer {
               AND verifier."terminal_reason" IS NULL
               AND verifier."superseded_by_task_id" IS NULL
          )
-         AND ${releasedSql('s."status"')}
+         AND ${sessionReleasedSql('s')}
        ORDER BY s."task_id", s."updated_at" DESC, s."id" DESC
        LIMIT ${limit}
     `);
