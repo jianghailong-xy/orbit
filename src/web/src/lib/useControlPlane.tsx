@@ -5,6 +5,7 @@ import { getToken } from '../api';
 import { streamReport } from './listBudget';
 import { cloneEventOf, hearClone, sameWorkspace } from './workspaceClone';
 import { heldIds, sessionReaches, type SessionReachDeclaration, type SessionSubject } from './sessionReach';
+import type { ProjectPlacement } from './queries';
 
 // Coalesce a burst of control events (a turn end fires status + approval back-to-back) into a
 // single refetch per list. A second, as the list budget asks (docs/list-freshness-design.md R1): a
@@ -144,6 +145,10 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     // then (a server that predates the hint), every session event reads them as it always did.
     let hinted = false;
     const projectSessionTimers = new Map<string, ReturnType<typeof setTimeout>>();
+    // The workspace lists' project placement (queries.ts projectPlacementQuery): the projects an event
+    // named since its last read, and the window that read waits out.
+    const placementDue = new Set<string>();
+    let placementTimer: ReturnType<typeof setTimeout> | undefined;
     let listsRefetchedAt = 0;
     let stopped = false;
     let dropped = false;
@@ -298,6 +303,8 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       if (root === 'project') return true;
       // One project's member list: one project at a time, scheduleProjectSessions.
       if (root === 'project-sessions') return true;
+      // The workspace lists' project placement: only for its own projects, schedulePlacement.
+      if (root === 'project-placement') return true;
       // The rail's summaries and the Projects page's entries: refetchProjects, or the page's own poll.
       if (root === 'projects') return true;
       // The watch cards: they follow their own targets (watchFollows), not the entities they draw.
@@ -374,7 +381,24 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
         refetchProjects();
       }, PROJECTS_REFRESH_DEBOUNCE_MS);
     };
+    // A workspace list's project placement, read once a coalescing window when an event names one of its
+    // projects (W4): the first such event opens the window, and the ones inside it join that read rather
+    // than putting it off, so a busy project reads it at most once a window and never waits forever.
+    const schedulePlacement = (projectId: string): void => {
+      placementDue.add(projectId);
+      if (placementTimer) return;
+      placementTimer = setTimeout(() => {
+        placementTimer = undefined;
+        const due = new Set(placementDue);
+        placementDue.clear();
+        refresh({
+          predicate: ({ queryKey }) => queryKey[0] === 'project-placement' &&
+            String(queryKey[2] ?? '').split(',').some((id) => due.has(id)),
+        });
+      }, REFRESH_DEBOUNCE_MS);
+    };
     const scheduleProjectSessions = (projectId: string): void => {
+      schedulePlacement(projectId);
       const previous = projectSessionTimers.get(projectId);
       if (previous) clearTimeout(previous);
       projectSessionTimers.set(projectId, setTimeout(() => {
@@ -722,6 +746,14 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
                 scheduleProjectSessions(key[1]);
               }
             }
+            // A coordinator, or a waiting member, the placement holds: its project's row is placed by it.
+            for (const [, placed] of qc.getQueriesData<readonly ProjectPlacement[]>({ queryKey: ['project-placement'] })) {
+              for (const answer of placed ?? []) {
+                if (answer.coordinator?.id === sessionId || answer.waiting.some((row) => row.id === sessionId)) {
+                  schedulePlacement(answer.projectId);
+                }
+              }
+            }
             // Lifecycle-ended frames carry no membership. A member entering Completed may
             // only be known in an earlier workspace Open list or its own session detail.
             if (ev.type === 'session.ended') {
@@ -828,6 +860,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       if (projectsTimer) clearTimeout(projectsTimer);
       if (projectPagesTimer) clearTimeout(projectPagesTimer);
       for (const timer of projectSessionTimers.values()) clearTimeout(timer);
+      if (placementTimer) clearTimeout(placementTimer);
       unsubscribeCache();
       queued.clear();
       refetchWhenLanded.clear();
