@@ -40,11 +40,6 @@ export function isHeldStatus(status: RunStatus | string): boolean {
   return (HELD_SESSION_STATUSES as readonly string[]).includes(status);
 }
 
-/** Prisma filter on `session.status`: released. */
-export function releasedStatusFilter(): Prisma.EnumRunStatusFilter<'Session'> {
-  return { in: [...RELEASED_SESSION_STATUSES] };
-}
-
 /** Prisma filter on `session.status`: held. */
 export function heldStatusFilter(): Prisma.EnumRunStatusFilter<'Session'> {
   return { in: [...HELD_SESSION_STATUSES] };
