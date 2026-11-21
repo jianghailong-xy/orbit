@@ -109,12 +109,15 @@ export enum ControlEventType {
    *  told, at most one per second. Derived from the Open list's own counters and clock thresholds, so
    *  it also covers writes that publish no event at all. */
   SESSIONS_LIST_CHANGED = 'sessions.list_changed',
-  /** One of the owner's requests (`GET /owner-requests`) was filed, answered, expired, withdrawn or
-   *  settled some other way. USER-SCOPED (see above). `data` is `{}`: a nudge to re-read
-   *  `GET /owner-requests`, which is the truth. Sent ONLY to a stream that declared it with
-   *  `GET /api/events?hints=owner_requests` (`CONTROL_HINT_OWNER_REQUESTS`): shipped clients treat a
-   *  type they do not know as "re-read everything", so an undeclared stream never receives it. The
-   *  asking session's `session.updated` is still published as before. */
+  /** One of the owner's requests (`GET /owner-requests`) may read differently than it did: filed, answered,
+   *  expired, withdrawn or otherwise settled, by any writer. USER-SCOPED (see above). `data` is
+   *  `{ version }`, an opaque string: a nudge to re-read `GET /owner-requests`, which is the truth. Sent
+   *  ONLY to a stream that declared it with `GET /api/events?hints=owner_requests`
+   *  (`CONTROL_HINT_OWNER_REQUESTS`): shipped clients treat a type they do not know as "re-read
+   *  everything", so an undeclared stream never receives it. Like `sessions.list_changed` it is derived
+   *  from the stored rows, not published by the writers: a new stream is told the current version about a
+   *  second after it connects, and after that only a version that differs from the one it holds, at most
+   *  once a second. The asking session's `session.updated` is still published as before. */
   OWNER_REQUESTS_CHANGED = 'owner_requests.changed',
   /** Reserved generic notification channel — future pushes ride this without a protocol bump. */
   NOTIFICATION = 'notification',

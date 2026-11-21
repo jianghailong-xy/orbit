@@ -433,9 +433,6 @@ export enum RunEventType {
   // translation.ts). The breaker is per process and the same for every account, so it reaches every user; only a
   // nudge, to read `GET /users/me` again.
   TRANSLATION_STATUS_CHANGED = 'translation_status_changed',
-  // One of the owner's requests was filed, answered, expired, withdrawn or settled. Owner-scoped, a nudge
-  // carrying nothing; a stream receives it only when it declared `hints=owner_requests`.
-  OWNER_REQUESTS_CHANGED = 'owner_requests_changed',
 }
 
 /** Control-plane-internal lifecycle signals (see RunEventType): published through the realtime
@@ -456,8 +453,7 @@ export function isLifecycleType(t: RunEventType): boolean {
     t === RunEventType.WATCH_CHANGED ||
     t === RunEventType.WIKI_CHANGED ||
     t === RunEventType.TERMINALS_CHANGED ||
-    t === RunEventType.TRANSLATION_STATUS_CHANGED ||
-    t === RunEventType.OWNER_REQUESTS_CHANGED
+    t === RunEventType.TRANSLATION_STATUS_CHANGED
   );
 }
 

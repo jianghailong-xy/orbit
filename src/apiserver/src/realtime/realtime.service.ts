@@ -51,6 +51,7 @@ import { WORKTREE_OPERATION_STALE_MS } from '../common/session-inbox-fence';
 import { latestAcceptedCheckpoint } from '../projects/task-checkpoint.service';
 import { ControlPlaneLeader } from './control-plane-leader';
 import { RUNNER_WAKE_CHANNEL } from './runner-wake';
+import { OwnerRequestHints } from './owner-request-hints';
 import { OpenListHints } from './open-list-hints';
 import { RunnerHints, type LinkLiveEvent, type LinkTurnPrefix } from './runner-hints';
 import {
@@ -383,6 +384,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   private readonly eventDataReads = new WeakMap<HubMessage, Promise<Record<string, unknown> | null>>();
   /** `sessions.list_changed` for the streams that declared it (open-list-hints.ts). */
   private readonly listHints: OpenListHints;
+  private readonly ownerRequestHints: OwnerRequestHints;
   /** This replica's own publications, never one the NOTIFY bridge carried in (see localPublications). */
   private readonly published = new Subject<{ runId: string; event: NormalizedRunEvent }>();
   private readonly waiters = new EventEmitter(); // event name = the key waitForNotice waits on
@@ -439,6 +441,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   ) {
     this.waiters.setMaxListeners(0);
     this.listHints = new OpenListHints(prisma);
+    this.ownerRequestHints = new OwnerRequestHints(prisma);
   }
 
   async onModuleInit(): Promise<void> {
@@ -448,6 +451,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   onModuleDestroy(): void {
     this.stopped = true;
     this.listHints.stop();
+    this.ownerRequestHints.stop();
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.listener?.removeAllListeners('error');
     this.listener?.end().catch(() => undefined);
@@ -1347,12 +1351,6 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  /** One of the owner's requests changed (filed, answered, expired, withdrawn, settled). Only a nudge,
-   *  sent to streams that declared `hints=owner_requests`. */
-  publishOwnerRequestsChanged(ownerId: string): void {
-    this.publishForUser(ownerId, RunEventType.OWNER_REQUESTS_CHANGED, 'owner_requests');
-  }
-
   /** A workspace's checkout reads differently on its runner's heartbeat (repoHealth: counts, branch, state). Keyed by
    *  the owner, since a heartbeat has no session; `repoHealth` tells a client only the workspace list moved, so it need
    *  not read its session lists again, and `affectsTaskRows: false` tells the Apple apps the same of their task rows. */
@@ -1453,14 +1451,17 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   streamForUser(userId: string, options: { listChanged?: boolean; ownerRequests?: boolean } = {}): Observable<ControlEvent> {
     const events$ = this.hub.asObservable().pipe(
       filter((m) => controlTypeFor(m.event.type) !== null),
-      // `owner_requests.changed` only for a stream that declared `?hints=owner_requests`.
-      filter((m) => m.event.type !== RunEventType.OWNER_REQUESTS_CHANGED || options.ownerRequests === true),
       mergeMap((m) => this.toControlEvent(userId, m)),
       filter((e): e is ControlEvent => e !== null),
     );
     // `sessions.list_changed` only for a stream that declared it (`?hints=list_changed`): a shipped
     // client re-reads everything on an event type it does not know (open-list-hints.ts).
-    return options.listChanged ? merge(events$, this.listHints.watch(userId)) : events$;
+    // `owner_requests.changed` likewise, for a stream that declared `?hints=owner_requests`.
+    const hinted = [
+      ...(options.listChanged ? [this.listHints.watch(userId)] : []),
+      ...(options.ownerRequests ? [this.ownerRequestHints.watch(userId)] : []),
+    ];
+    return hinted.length > 0 ? merge(events$, ...hinted) : events$;
   }
 
   /** Map a hub run event to a control event for `userId`, or null if it isn't this user's

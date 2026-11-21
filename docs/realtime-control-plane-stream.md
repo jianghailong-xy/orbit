@@ -297,11 +297,12 @@ GET /api/events?hints=list_changed
 GET /api/events?hints=owner_requests
 ```
 
-`hints` is comma-separated (`list_changed,owner_requests` declares both); unknown values are ignored (`CONTROL_HINT_OWNER_REQUESTS`). **A stream that did not declare it never receives `owner_requests.changed`**, for the reason §4.8 gives: shipped clients re-read everything on a type they do not know. Nothing changes for them. The asking session's `session.updated` is still published exactly as before.
+`hints` is comma-separated (`list_changed,owner_requests` declares both); unknown values are ignored (`CONTROL_HINT_OWNER_REQUESTS`). **A stream that did not declare it never receives `owner_requests.changed`**, for the reason §4.8 gives: shipped clients re-read everything on a type they do not know. Nothing changes for them, and the asking session's `session.updated` is still published exactly as before.
 
-- Envelope `{ type: 'owner_requests.changed', sessionId: '', agentId: null, ts, data: { id: 'owner_requests' } }`, user-scoped like the other library events (§4.6.1). It is a nudge to make a conditional `GET /owner-requests?state=open`, never a change to apply.
-- Published after the commit, by every path in `OwnerRequestsService` that publishes `session.updated` for a request: a request filed (and the one a new filing replaced), answered or otherwise settled (`settle`: answered, done, withdrawn, declined), settled by a wiki being made (`settleMadeWikis`), expired by the sweep (`expireDue`), and a card's translation written. A `session.updated` unrelated to requests carries no such event.
-- Delivery is best effort and per owner (one event per owner per sweep, not per request); a client keeps a safety read.
+- Envelope `{ type: 'owner_requests.changed', sessionId: '', agentId: null, ts, data: { version } }`, user-scoped (`sessionId` empty). `version` is opaque. It is a nudge to make a conditional `GET /owner-requests?state=open`, never a change to apply.
+- **Derived, not published by the writers** (`realtime/owner-request-hints.ts`), like §4.8. An owner request is written by an agent's own filing and answer, the expiry sweep, a wiki being made, schedules, conditions (can't-read and still-waiting items) and secret delivery, in five services and about thirty call sites, mostly inside transactions with no commit hook. Every write moves the row's `updated_at`, so once a second one statement reads each watched account's row count and newest `updated_at`; the signal therefore covers filed, answered, expired, withdrawn, declined and any other change of a request, by any writer including a later one, and is sent after the commit.
+- A new stream is told the current version about a second after it connects, whether or not anything moved; a client's connect-time read is answered against it. After that a stream is told only a version that differs from the one it holds, at most once a second (several writes in a second are one event). An event unrelated to requests (a plain `session.updated`) moves nothing and sends nothing.
+- A request that passes its deadline is read as expired before the sweep writes it; the event follows the sweep's write, and a client keeps its safety read for the gap.
 
 ## 5. 客户端设计(macOS,`src/macos`)
 

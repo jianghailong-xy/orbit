@@ -594,10 +594,7 @@ test('owner requests: a pending request lights the session that filed it', {
 
   const prisma = db as unknown as PrismaService;
   const redrawn: string[] = [];
-  const realtime = {
-    publishSessionUpdated: (id: string) => { redrawn.push(id); },
-    publishOwnerRequestsChanged: () => undefined,
-  } as unknown as RealtimeService;
+  const realtime = { publishSessionUpdated: (id: string) => { redrawn.push(id); } } as unknown as RealtimeService;
   const service = new OwnerRequestsService(prisma, new OwnerSecretsService(prisma), undefined, undefined, realtime);
   const a = await account(db, 'needs-you');
   const lit = async () => {
