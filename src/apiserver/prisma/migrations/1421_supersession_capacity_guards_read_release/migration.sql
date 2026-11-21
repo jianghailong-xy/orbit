@@ -1,5 +1,5 @@
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
--- 1411: the 0130 guards read the release fact, not the status (docs/session-three-state-plan.md §7 step 4.4,
+-- 1421: the 0130 guards read the release fact, not the status (docs/session-three-state-plan.md §7 step 4.4,
 -- appendix A of docs/session-three-state-read-sites.md; project 3508bDBDE5xPH43TYuiqP).
 --
 -- WHAT IT CHANGES
@@ -60,8 +60,10 @@
 --
 -- NUMBERING, RE-RUNNABILITY
 -- -------------------------
--- 1411: main and origin/project/* use up to 1402, and origin/orbit/* up to 1407 (the release failure causes,
--- 1403-1407; rescanned 2026-11-21 02:15Z). Not a multiple of 10.
+-- 1421: main uses up to 1411 (1410_session_bg_job_stop_requests, 1411_coordinator_handoff_successor) and no
+-- origin/project/* or origin/orbit/* branch uses a higher number but this project's own (rescanned 2026-11-21
+-- 11:05Z); it starts 10 above main's highest so that main's next migration does not collide at once. Written as
+-- 1411 to 1416 on the project line until main took 1411. Not a multiple of 10.
 -- Can run twice: CREATE OR REPLACE throughout.
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
 

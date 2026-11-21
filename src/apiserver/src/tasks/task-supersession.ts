@@ -288,14 +288,14 @@ export function isLockNotAvailable(error: unknown): boolean {
 
 /**
  * The execution claim, by name: the partial unique index over `session ("task_id")` for the sessions
- * not released and not in the Trash, `finished_at IS NULL` (migration 1416, plan step 4.5). One live
+ * not released and not in the Trash, `finished_at IS NULL` (migration 1426, plan step 4.5). One live
  * Session per task is a property of the database because of this index, and every reader that has to
  * explain a lost claim reads it from here.
  */
 export const EXECUTION_CLAIM_INDEX = 'session_task_execution_claim_idx_finished_at';
 
 /**
- * 0130's claim index, over the four held statuses, which 1416 builds the one above beside (release A).
+ * 0130's claim index, over the four held statuses, which 1426 builds the one above beside (release A).
  * Both are enforced while both exist, and session_release_fact_chk makes them refuse the same rows, so
  * a second live run is refused by either, and which name PostgreSQL reports is its choice. Goes with
  * the index, in release B.

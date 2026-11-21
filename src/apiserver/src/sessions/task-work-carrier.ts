@@ -82,7 +82,7 @@ export function sessionWakeSourceSql(session: string): string {
  * planner read it as an index condition (`session_owner_status_task_idx`), which it cannot see
  * through the OR. `finished_at IS NULL` is implied by the status list (session_release_fact_chk) and
  * is stated anyway for the same kind of reason: it is the execution claim index's predicate
- * (`session_task_execution_claim_idx_finished_at`, migration 1416, beside `deleted_at IS NULL`), and
+ * (`session_task_execution_claim_idx_finished_at`, migration 1426, beside `deleted_at IS NULL`), and
  * the planner matches a partial index only by a predicate it can read here, never through a CHECK.
  * Without it, once 0130's status-set index is gone (release B), a task's carrier is found through
  * `project_event_session_task_provider_idx`, every run the task ever had.

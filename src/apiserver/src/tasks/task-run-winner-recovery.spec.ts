@@ -136,7 +136,7 @@ function fixture(opts: {
       },
       // The mid-flight dedup and the continue-a-paused-run read both come through here and both
       // find nothing: this fixture is the race, where every caller saw a free claim. The holder is
-      // read by the claim index's own predicate (1416: task, not in the Trash, not released).
+      // read by the claim index's own predicate (1426: task, not in the Trash, not released).
       findFirst: async ({ where }: any) =>
         (where && Object.keys(where).sort().join() === 'deletedAt,finishedAt,taskId'
           && where.deletedAt === null && where.finishedAt === null ? (opts.holder ?? null) : null),

@@ -1,5 +1,5 @@
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
--- 1412: the 0134 guards read the release fact, not the status (docs/session-three-state-plan.md §7 step 4.4,
+-- 1422: the 0134 guards read the release fact, not the status (docs/session-three-state-plan.md §7 step 4.4,
 -- appendix A of docs/session-three-state-read-sites.md; project 3508bDBDE5xPH43TYuiqP).
 --
 -- WHAT IT CHANGES
@@ -20,13 +20,13 @@
 --
 -- WHY EVERY STORED ROW GETS THE SAME ANSWER
 -- -----------------------------------------
--- As 1411: session_release_fact_chk (1401/1402) makes "status is terminal" and "finished_at is set" the same
+-- As 1421: session_release_fact_chk (1401/1402) makes "status is terminal" and "finished_at is set" the same
 -- test for every row, and no row holds the unused PARKED label (0071), so "one of the four held statuses" and
 -- "finished_at is null" are the same test too.
 --
 -- WHY THE COLUMN LIST
 -- -------------------
--- As 1411, and as this function's own comment on starts_task_work says: a trigger declared UPDATE OF a column
+-- As 1421, and as this function's own comment on starts_task_work says: a trigger declared UPDATE OF a column
 -- set does not fire at all for a write that touches none of them. Every release and revive today writes status
 -- and finished_at together, so nothing is missed now; the list names the column the function reads so that
 -- stays true. An extra firing reaches the function's no-change early return before it takes any lock.
@@ -43,7 +43,7 @@
 --
 -- NUMBERING, RE-RUNNABILITY
 -- -------------------------
--- 1412: after 1411 (rescanned 2026-11-21). Not a multiple of 10. Can run twice: CREATE OR REPLACE throughout.
+-- 1422: after 1421 (rescanned 2026-11-21). Not a multiple of 10. Can run twice: CREATE OR REPLACE throughout.
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
 
 CREATE OR REPLACE FUNCTION public.session_admission_lock_order()

@@ -21,11 +21,11 @@ import {
 import { readTaskWorkCarriers } from './task-work-carrier';
 
 /**
- * ONE LIVE RUN PER TASK, RELEASE A: 1416's index on the release column beside 0130's on the status set.
+ * ONE LIVE RUN PER TASK, RELEASE A: 1426's index on the release column beside 0130's on the status set.
  *
- * docs/session-three-state-plan.md §7 step 4.5; migration 1416's header says why each piece is there.
+ * docs/session-three-state-plan.md §7 step 4.5; migration 1426's header says why each piece is there.
  *
- *   (1) 1416 by the real `prisma migrate deploy` on a database that holds sessions: the file is sent a statement at a
+ *   (1) 1426 by the real `prisma migrate deploy` on a database that holds sessions: the file is sent a statement at a
  *       time (a concurrent build inside a transaction block is refused, 25001, which is shown first), and afterwards
  *       both indexes exist, are valid, and read as their definitions say
  *   (2) an interrupted build: held behind an open writer, cancelled. The INVALID index it leaves, P3009 on the next
@@ -50,7 +50,7 @@ const skip = !URL;
 
 const NEW_INDEX = 'session_task_execution_claim_idx_finished_at';
 const OLD_INDEX = 'session_task_execution_claim_idx';
-const MIGRATION = '1416_session_task_execution_claim_finished_at_idx';
+const MIGRATION = '1426_session_task_execution_claim_finished_at_idx';
 const NEW_DEF = `CREATE UNIQUE INDEX ${NEW_INDEX} ON public.session USING btree (task_id) `
   + 'WHERE ((task_id IS NOT NULL) AND (deleted_at IS NULL) AND (finished_at IS NULL))';
 const OLD_DEF = `CREATE UNIQUE INDEX ${OLD_INDEX} ON public.session USING btree (task_id) `
@@ -124,7 +124,7 @@ async function assertRecordedApplied(sql: Client): Promise<void> {
     `SELECT count(*)::int AS n FROM _prisma_migrations
       WHERE migration_name = $1 AND finished_at IS NOT NULL AND rolled_back_at IS NULL`, [MIGRATION],
   )).rows as Array<{ n: number }>;
-  assert.equal(rows[0].n, 1, 'prisma recorded 1416 applied');
+  assert.equal(rows[0].n, 1, 'prisma recorded 1426 applied');
 }
 
 interface ClaimIndex { name: string; valid: boolean; ready: boolean; def: string; oid: number }
@@ -182,7 +182,7 @@ async function caught(write: () => Promise<unknown>): Promise<unknown> {
   assert.fail('the write was admitted');
 }
 
-test('the one-live-run-per-task index, release A (migration 1416)', {
+test('the one-live-run-per-task index, release A (migration 1426)', {
   skip, concurrency: 1, timeout: 900_000,
 }, async (t) => {
   const url = URL!;
@@ -197,7 +197,7 @@ test('the one-live-run-per-task index, release A (migration 1416)', {
   });
   const me = await owner(sql, 'claim-index');
 
-  await t.test('(1) 1416 by prisma migrate deploy on a populated database: both indexes, valid', async () => {
+  await t.test('(1) 1426 by prisma migrate deploy on a populated database: both indexes, valid', async () => {
     // Rows before the migration runs again: three released runs per task, and a live one on every other task.
     const ids = await tasks(sql, me, 40);
     for (const [i, taskId] of ids.entries()) {
@@ -207,7 +207,7 @@ test('the one-live-run-per-task index, release A (migration 1416)', {
     const held = (await sql.query(
       `SELECT count(*)::int AS n FROM session WHERE owner_id = $1::uuid AND finished_at IS NULL`, [me],
     )).rows[0] as { n: number };
-    assert.equal(held.n, 20, 'the database holds live runs when 1416 runs');
+    assert.equal(held.n, 20, 'the database holds live runs when 1426 runs');
 
     // Why the file must be sent a statement at a time: the same build inside a transaction block is refused.
     await sql.query('BEGIN');
@@ -219,7 +219,7 @@ test('the one-live-run-per-task index, release A (migration 1416)', {
 
     await deploy1416Again(sql, url);
     const found = await claimIndexes(sql);
-    console.log(`# after 1416: ${JSON.stringify(found)}`);
+    console.log(`# after 1426: ${JSON.stringify(found)}`);
     assert.deepEqual(found.map((i) => [i.name, i.valid, i.ready]), [
       [OLD_INDEX, true, true],
       [NEW_INDEX, true, true],
@@ -270,7 +270,7 @@ test('the one-live-run-per-task index, release A (migration 1416)', {
     const failed = (await sql.query(
       `SELECT finished_at, rolled_back_at FROM _prisma_migrations WHERE migration_name = $1`, [MIGRATION],
     )).rows as Array<{ finished_at: Date | null; rolled_back_at: Date | null }>;
-    assert.deepEqual(failed, [{ finished_at: null, rolled_back_at: null }], 'prisma recorded 1416 as failed');
+    assert.deepEqual(failed, [{ finished_at: null, rolled_back_at: null }], 'prisma recorded 1426 as failed');
 
     // Detected: every later deploy stops until an operator acts.
     const stopped = await prisma(url, ['migrate', 'deploy']);
@@ -305,7 +305,7 @@ test('the one-live-run-per-task index, release A (migration 1416)', {
           await sql.query(`DROP INDEX "${OLD_INDEX}"`);
         },
       },
-      { label: 'both, 1416 built first', present: [OLD_INDEX, NEW_INDEX], before: () => sql.query(OLD_DEF).then(() => undefined) },
+      { label: 'both, 1426 built first', present: [OLD_INDEX, NEW_INDEX], before: () => sql.query(OLD_DEF).then(() => undefined) },
     ];
     try {
       for (const state of states) {
@@ -480,7 +480,7 @@ test('the one-live-run-per-task index, release A (migration 1416)', {
     };
     const readers: Array<{ name: string; claim: boolean; before: Statement; after: Statement }> = [];
     try {
-      // (a) the carrier (sessionCarriesTaskSql through readTaskWorkCarriers), before and after: 1416's
+      // (a) the carrier (sessionCarriesTaskSql through readTaskWorkCarriers), before and after: 1426's
       // `finished_at IS NULL` is the line this change adds.
       const carrierAfter = one(await capture(() => readTaskWorkCarriers(
         logged as unknown as PrismaService, Prisma.sql`carrier."task_id" = ${busy}::uuid`,
