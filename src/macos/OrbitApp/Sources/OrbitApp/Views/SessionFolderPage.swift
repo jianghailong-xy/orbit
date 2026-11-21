@@ -292,7 +292,7 @@ struct SessionFolderPage: View {
     }
 
     /// The page's list: an ordinary session list — the recency sections with their Pinned fold, the
-    /// rows as every other list draws them (see `sessionRow`), and the same pull-to-refresh.
+    /// rows as every other list draws them (see `SessionListRow`), and the same pull-to-refresh.
     private func list(agent: Agent) -> some View {
         @Bindable var app = app
         // One grouping, regrouped only when its inputs change, which the list's closures and its

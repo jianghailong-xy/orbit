@@ -180,7 +180,7 @@ struct NeedsYouCountCapsule: View {
 }
 
 /// How this list's rows navigate — a fact about the container the list is in, not about the rows
-/// (they are the same rows in both shells; see `AgentPanes.sessionRow`).
+/// (they are the same rows in both shells; see `SessionListRow`).
 enum SessionRowNavigation {
     /// Three-column (macOS / iPad regular): `.tag(id)`, and the `List`'s selection — a projection of
     /// the section's stack — fills the detail pane that is always on screen.
@@ -402,7 +402,7 @@ struct AgentPanes: View {
     @State private var rowSwipe = RowSwipeState()
     #endif
     /// The row whose Share was tapped — drives the share panel, owned by the list for the same
-    /// reason as `taggingSession`. Share is iOS's row action (`sessionRowActions`), so on the Mac it is
+    /// reason as `taggingSession`. Share is iOS's row action (`SessionRow`), so on the Mac it is
     /// never set and has no panel.
     @State private var sharingSession: Session?
     /// The row whose Move was tapped — drives the Move panel, list-owned like the two above.
@@ -1016,7 +1016,7 @@ struct AgentPanes: View {
     /// page it opens is pushed by the container's own navigation — a tap lands on `AppModel`'s one
     /// entry point for both shells). A long press offers the two management acts (§3.4) — on the
     /// row itself, since a `Button` does not pass its label's modifiers up to the `List` (see
-    /// `sessionRow`).
+    /// `SessionListRow`).
     private func folderRow(_ row: SessionFolderRow) -> some View {
         Button {
             app.openFolder(SessionFolderAddress(folderID: row.folder.id, agentID: agent.id, view: view))
