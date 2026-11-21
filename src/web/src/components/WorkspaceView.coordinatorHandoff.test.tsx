@@ -54,6 +54,8 @@ const runnerFor = (engine: 'claude' | 'cursor'): Runner => ({
   capabilities: ['provider:cursor'],
   engines: [
     { engine: 'claude', installed: true, auth: 'yes' },
+    { engine: 'codex', installed: true, auth: 'yes' },
+    { engine: 'kimi', installed: true, auth: 'no' },
     { engine: 'cursor', installed: true, auth: 'yes', accounts: [{ id: 'default', home: '/h', auth: 'yes' }] },
   ],
   // Claude Code registers `compact` itself; Cursor CLI reports no such command.
@@ -170,6 +172,19 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
   };
   const titleOf = (row: Element) => row.querySelector('b')?.textContent;
   const button = (text: string) => [...document.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === text);
+  const successorPicker = (scope: Element) => scope.querySelector('.handoff-successor [role="combobox"]');
+  const pickCodex = async (scope: Element) => {
+    await click(successorPicker(scope));
+    const options = () => [...document.querySelectorAll('[role="listbox"] [role="option"]')];
+    await waitFor(() => expect(options()[0]?.textContent).toBe('Same as this one'));
+    expect(options().find((option) => option.textContent?.includes('Not signed in'))?.getAttribute('aria-disabled')).toBe('true');
+    const codex = options().find((option) => option.textContent === 'Codex')!;
+    await act(async () => {
+      codex.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'mouse', button: 0 }));
+    });
+    await click(codex);
+    expect(successorPicker(scope)?.textContent).toBe('Codex');
+  };
 
   beforeEach(() => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -301,10 +316,23 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
     await waitFor(() => expect(dialog.textContent).toContain('2 pending waits move over'));
     // Waits without a kind (an older server) read as watches: the label alone, one line each.
     expect(waitLines(dialog)).toEqual(['Fix login redirect reaching Done', 'Session “Payment retries” finishing its turn (paused)']);
+    expect(successorPicker(dialog)?.textContent).toBe('Same as this one');
     await click(button('Hand over'));
     await waitFor(() =>
-      expect(apiMock.mock.calls.some(([p, init]) => p === `/projects/${PROJECT}/coordinator/handoff` && (init as { method?: string })?.method === 'POST')).toBe(true),
+      expect(apiMock).toHaveBeenCalledWith(`/projects/${PROJECT}/coordinator/handoff`, { method: 'POST', body: {} }),
     );
+  });
+
+  it('hands over on the engine and provider picked in the confirm dialog', async () => {
+    detail = session({ projectId: PROJECT, projectMembership: coordinator });
+    await mount();
+    await click((await contextActions())[1]);
+    await waitFor(() => expect(document.querySelector('.handoff-confirm')).not.toBeNull());
+    await pickCodex(document.querySelector('.handoff-confirm')!);
+    await click(button('Hand over'));
+    await waitFor(() => expect(apiMock).toHaveBeenCalledWith(`/projects/${PROJECT}/coordinator/handoff`, {
+      method: 'POST', body: { successor: { engine: 'codex', provider: 'codex' } },
+    }));
   });
 
   it('names each pending wait\'s kind after its label in the confirm dialog, a watch by its label alone', async () => {
@@ -521,11 +549,29 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
     await waitFor(() => expect(mounted().querySelector('[data-handoff-state="FAILED"]')).not.toBeNull());
     const row = mounted().querySelector('[data-handoff-state="FAILED"]')!;
     expect(row.textContent).toMatch(/^The handoff note wasn't written: the turn failed\./);
-    expect([...row.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Try again', 'Hand over without a note', 'Keep this coordinator']);
+    expect([...row.querySelectorAll('button:not([role="combobox"])')].map((b) => b.textContent)).toEqual(['Try again', 'Hand over without a note', 'Keep this coordinator']);
     await click(button('Keep this coordinator'));
     await waitFor(() =>
       expect(apiMock.mock.calls.some(([p]) => p === `/projects/${PROJECT}/coordinator/handoff/cancel`)).toBe(true),
     );
+  });
+
+  it.each([['Hand over without a note', 'skip'], ['Try again', 'retry']])('preselects the stored successor and sends a new pick with %s', async (action, endpoint) => {
+    detail = session({
+      projectId: PROJECT,
+      projectMembership: coordinator,
+      coordinatorHandoff: { state: 'FAILED', startedAt: new Date().toISOString(), failureCode: 'TURN_FAILED',
+        successor: { engine: 'claude', provider: 'claude', model: 'claude-opus-5-5' } },
+    });
+    await mount();
+    const failure = () => mounted().querySelector('[data-handoff-state="FAILED"]')!;
+    await waitFor(() => expect(failure()).not.toBeNull());
+    expect(successorPicker(failure())?.textContent).toBe('Claude Code · claude-opus-5-5');
+    await pickCodex(failure());
+    await click(button(action));
+    await waitFor(() => expect(apiMock).toHaveBeenCalledWith(`/projects/${PROJECT}/coordinator/handoff/${endpoint}`, {
+      method: 'POST', body: { successor: { engine: 'codex', provider: 'codex' } },
+    }));
   });
 
   it('02-5: does not offer Start a new coordinator while a handoff has failed: the row has its own doors', async () => {

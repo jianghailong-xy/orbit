@@ -2,6 +2,7 @@ import {
   COORDINATOR_HANDOFF_COPY,
   managedSetupState,
   firstSessionProvider,
+  type CoordinatorHandoffSuccessor,
   type MergeRecoveryAction,
   type ProjectSidebarTaskCounts,
   type SessionCoordinatorHandoff,
@@ -7636,11 +7637,16 @@ export function WorkspaceView({
     !!selected && !selectedTrashed && !selectedMissing && !handingOver && !coordinatorHandedOver
     && slashItems.some((it) => it.type === 'command' && it.name === 'compact');
   const [handoffConfirm, setHandoffConfirm] = useState<{ projectId: string; projectTitle: string; running: boolean } | null>(null);
+  const handoffEngines = useMemo(() => engineChoices(choiceSources), [choiceSources]);
   // The outgoing coordinator the owner handed over from here: once its successor exists, go there.
   const [followHandoff, setFollowHandoff] = useState<string | null>(null);
   const handoffAction = useMutation({
-    mutationFn: ({ projectId, action }: { projectId: string; action: CoordinatorHandoffAction; sessionId: string }) =>
-      coordinatorHandoffRequest(projectId, action),
+    mutationFn: ({ projectId, action, successor }: {
+      projectId: string;
+      action: CoordinatorHandoffAction;
+      sessionId: string;
+      successor?: CoordinatorHandoffSuccessor;
+    }) => coordinatorHandoffRequest(projectId, action, successor),
     onSuccess: (view, { sessionId, action }) => {
       qc.invalidateQueries({ queryKey: ['session', sessionId] });
       refreshSessionLists();
@@ -7649,10 +7655,10 @@ export function WorkspaceView({
     },
     onError: (e: Error) => message.error(COORDINATOR_HANDOFF_COPY.refused, e.message),
   });
-  const runHandoffAction = (action: CoordinatorHandoffAction): void => {
+  const runHandoffAction = (action: CoordinatorHandoffAction, successor?: CoordinatorHandoffSuccessor): void => {
     const projectId = handoffRow?.projectMembership?.projectId ?? handoffRow?.projectId;
     if (!projectId || !selectedId || handoffAction.isPending) return;
-    handoffAction.mutate({ projectId, action, sessionId: selectedId });
+    handoffAction.mutate({ projectId, action, sessionId: selectedId, successor });
   };
   useEffect(() => {
     if (!followHandoff || followHandoff !== selectedId) return;
@@ -11160,10 +11166,12 @@ export function WorkspaceView({
               )}
               {selected && !selectedTrashed && coordinatorHandoff?.state === 'FAILED' && (
                 <CoordinatorHandoffFailure
+                  key={`${selectedId}:${coordinatorHandoff.startedAt}`}
                   handoff={coordinatorHandoff}
+                  engines={handoffEngines}
                   busy={handoffAction.isPending}
-                  onRetry={() => runHandoffAction('retry')}
-                  onSkip={() => runHandoffAction('skip')}
+                  onRetry={(successor) => runHandoffAction('retry', successor)}
+                  onSkip={(successor) => runHandoffAction('skip', successor)}
                   onKeep={() => runHandoffAction('cancel')}
                 />
               )}
@@ -11656,11 +11664,12 @@ export function WorkspaceView({
             projectId={handoffConfirm.projectId}
             projectTitle={handoffConfirm.projectTitle}
             running={handoffConfirm.running}
+            engines={handoffEngines}
             onClose={() => setHandoffConfirm(null)}
-            onHandOver={async () => {
+            onHandOver={async (successor) => {
               if (!selectedId) return;
               const sessionId = selectedId;
-              const view = await coordinatorHandoffRequest(handoffConfirm.projectId, 'handoff');
+              const view = await coordinatorHandoffRequest(handoffConfirm.projectId, 'handoff', successor);
               setFollowHandoff(sessionId);
               qc.invalidateQueries({ queryKey: ['session', sessionId] });
               refreshSessionLists();
