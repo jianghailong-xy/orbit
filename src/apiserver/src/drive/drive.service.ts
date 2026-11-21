@@ -306,7 +306,7 @@ export class DriveService {
         ownerId,
         trashedAt: null,
         parentId: { not: null },
-        name: { contains: q, mode: 'insensitive' },
+        name: { contains: q.replace(/[\\%_]/g, '\\$&'), mode: 'insensitive' },
         ...(after ? { OR: [{ name: { gt: after.name } }, { name: after.name, id: { gt: after.id } }] } : {}),
       },
       orderBy: [{ name: 'asc' }, { id: 'asc' }],
