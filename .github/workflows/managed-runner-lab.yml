@@ -85,12 +85,19 @@ jobs:
           npm run build -w @orbit/web
           (cd src/web && npx playwright install --with-deps chromium)
       # The lab's scripts run as root (systemd-run, /dev/kvm) and name /usr/local/bin/node; lab.env
-      # names the lab's directory.
+      # names the lab's directory and sizes the VM.
+      #
+      # The VM gets 10 GiB here instead of lab.env's 6 GiB, which is HPC's cap. At 6 GiB with no swap, a second
+      # session's engine starting beside the first one and Chrome brought the VM under the kubelet's 256Mi hard
+      # eviction threshold, and the kubelet evicted the runner Pod ("The node was low on resource: memory"; lab run
+      # 44851855851). A 4-CPU runner has 16 GB, which leaves the host its own room.
       - name: Point the lab at this runner
         run: |
           sudo ln -sf "$(command -v node)" /usr/local/bin/node
-          sed -i "s#^LAB_DIR=.*#LAB_DIR=$LAB_DIR#" scripts/managed-runner/lab/lab.env
-          grep -n '^LAB_DIR=' scripts/managed-runner/lab/lab.env
+          sed -i -e "s#^LAB_DIR=.*#LAB_DIR=$LAB_DIR#" \
+            -e "s#^LAB_MEMORY_MIB=.*#LAB_MEMORY_MIB=10240#" \
+            -e "s#^LAB_UNIT_MEMORY_MAX=.*#LAB_UNIT_MEMORY_MAX=10752M#" scripts/managed-runner/lab/lab.env
+          grep -nE '^(LAB_DIR|LAB_MEMORY_MIB|LAB_UNIT_MEMORY_MAX)=' scripts/managed-runner/lab/lab.env
       - name: Run the scenario
         run: |
           mkdir -p "$LAB_OUT"
