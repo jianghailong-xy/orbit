@@ -96,6 +96,9 @@ public enum CoordinatorHandoffCopy {
     public static let tryAgain = "Try again"
     public static let handOverWithoutNote = "Hand over without a note"
     public static let keepThisCoordinator = "Keep this coordinator"
+    public static let successorRowTitle = "New coordinator runs on"
+    public static let successorKeep = "Same as this one"
+    public static let successorRowDetail = "Pick another if this one's model or provider has stopped working."
     /// A handoff press the server refused (`refused`): web's toast title, this line's lead.
     public static let refused = "Couldn't hand over"
     /// The line a refused press leaves, `reason` being `APIClient.failureReason` (a sentence's tail).
