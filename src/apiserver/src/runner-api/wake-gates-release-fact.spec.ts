@@ -54,7 +54,9 @@ interface Row {
 }
 
 function outcomesOf(status: string): readonly (string | null)[] {
-  if (status === 'FAILED' || status === 'SUCCEEDED' || status === 'CANCELLED') return OUTCOMES;
+  // A SUCCEEDED or CANCELLED release whose turn failed is a failure by the turn: no writer leaves one with no end asked.
+  if (status === 'FAILED') return OUTCOMES;
+  if (status === 'SUCCEEDED' || status === 'CANCELLED') return OUTCOMES.filter((o) => o !== 'FAILED');
   return [null];
 }
 
