@@ -43,10 +43,10 @@
  * INTERRUPTED and the activity set in schedule-runs.service.ts, and in sessions.service.ts and tasks.service.ts the
  * release writers, the LANDING detail's legacy status, and activity or held-idle sets.
  *
- * Plan step 4.8 left a terminal value in two kinds of code only, and split this list by kind. A file may sit in more
- * than one section; its allowance is the sum. (a) RELEASE_WRITERS: the writers of design §6.3 that record a release,
- * which still write the legacy `status` beside `finished_at` and `release_cause`, and decide in the same statement
- * from the status they write (the reaper's forceFinalize, the runner's finalize and its failed turn, the import, the
+ * Plan step 4.8 split this list by kind. Only (a) and (b) decide from a terminal value, beside two named transitions
+ * that end with later steps, (c) and (d); (e) names none. A file may sit in more than one section; its allowance is
+ * the sum. (a) RELEASE_WRITERS: the writers of design §6.3 that record a release, which still write the legacy
+ * `status` beside the release fact, and decide in the same statement from the status they write (the reaper's forceFinalize, the runner's finalize and its failed turn, the import, the
  * end of a queued session, the landing container and the refused source), with the one vocabulary they share
  * (RELEASED_SESSION_STATUSES, which the finalize also checks the runner's word against, and gracefulEndStatus).
  * (b) PROJECTOR: the derive functions that produce the legacy wire fields `runState`, `sessionState` and

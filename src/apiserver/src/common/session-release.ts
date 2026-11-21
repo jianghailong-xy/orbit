@@ -190,6 +190,40 @@ export function isWorkFinishedRelease(releaseCause: string | null | undefined): 
 }
 
 /**
+ * The release facts of a session row, as the questions below read them (plan step 4.8). A reader selects them with
+ * RELEASE_FACTS_SELECT and asks a question by its name, never a cause: where the facts live is this module's to know.
+ */
+export interface SessionReleaseFacts extends SessionReleaseColumn {
+  releaseCause: string | null;
+}
+
+/** The columns SessionReleaseFacts reads, for a Prisma `select`. */
+export const RELEASE_FACTS_SELECT = { finishedAt: true, releaseCause: true } as const;
+
+/** Whether the session was released having finished its work (isWorkFinishedRelease). */
+export function releaseFinishedTheWork(session: SessionReleaseFacts): boolean {
+  return isReleased(session) && isWorkFinishedRelease(session.releaseCause);
+}
+
+/** Whether the session was released by a failure (isFailedRelease). */
+export function releaseWasFailure(session: SessionReleaseFacts): boolean {
+  return isReleased(session) && isFailedRelease(session.releaseCause);
+}
+
+/** Prisma filter on a session: it was released by a failure. */
+export function releaseWasFailureFilter(): Prisma.SessionWhereInput {
+  return { releaseCause: failedReleaseFilter() };
+}
+
+/**
+ * The release facts a writer stores for a release with this cause at `at`, or for a held session (null): for specs
+ * that build rows, so they spell a release the way the writers do and name no column.
+ */
+export function releaseFactsOf(cause: SessionReleaseCause | null, at: Date = new Date()): SessionReleaseFacts {
+  return cause === null ? { finishedAt: null, releaseCause: null } : { finishedAt: at, releaseCause: cause };
+}
+
+/**
  * The cause of a release somebody asked for: the end reason the request recorded, or `cancelled` when
  * the request recorded none (a cancel with no reason, or a reason this build does not know).
  */

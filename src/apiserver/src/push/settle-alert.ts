@@ -1,11 +1,13 @@
-import { isFailedRelease, isReleased, isWorkFinishedRelease } from '../common/session-release';
+import {
+  isReleased,
+  releaseFinishedTheWork,
+  releaseWasFailure,
+  type SessionReleaseFacts,
+} from '../common/session-release';
 
-/** The session fields the decision below reads — nothing else is load-bearing. */
-export interface SettleInput {
-  /** The release column (common/session-release.ts): set once no runner holds the session. */
-  finishedAt: Date | null;
-  /** Why it was released (`session.release_cause`), null while it is held. */
-  releaseCause: string | null;
+/** The session fields the decision below reads — nothing else is load-bearing. The release facts
+ *  (common/session-release.ts, selected with RELEASE_FACTS_SELECT) say whether and how it was released. */
+export interface SettleInput extends SessionReleaseFacts {
   retryAt: Date | null;
   completedAt: Date | null;
   deletedAt: Date | null;
@@ -57,17 +59,17 @@ export function settleAlert(s: SettleInput): SettleAlert | null {
   if (s.deletedAt) return null;
   // Read off the release and its cause, never off the terminal status value (decision D2, decided
   // 2026-11-21: success and finish are not states of a session). A held session has not settled.
-  // Finished is a release whose cause says the work is done: its task ran to DONE (`task_done`),
-  // or a landing container's landing settled; nobody was necessarily watching. `completedAt` is
+  // Finished is a release that finished the work: its task ran to DONE, or a landing container's
+  // landing settled; nobody was necessarily watching. `completedAt` is
   // deliberately NOT checked here — the task_done path files the session in Completed as part of
   // ending it, so requiring an unfiled row would drop the single most important notification this
   // function exists for. A plain conversation never finishes: it is ended, or failed.
   const kind: SettleAlert['kind'] | null = !isReleased(s)
     ? null
-    : isWorkFinishedRelease(s.releaseCause)
+    : releaseFinishedTheWork(s)
       ? 'finished'
       : // A failure its owner has already filed to Completed is one they have already seen.
-        isFailedRelease(s.releaseCause) && !s.completedAt
+        releaseWasFailure(s) && !s.completedAt
         ? 'failed'
         : // Every other release is a stop: one somebody asked for (the user ended the session,
           // stopped the run, or cancelled its task), or an engine that exited by itself.

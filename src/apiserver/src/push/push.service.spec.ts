@@ -2,11 +2,17 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { uuidToBase62 } from '@orbit/shared';
+import { SessionEndReason, uuidToBase62 } from '@orbit/shared';
 import { test } from 'node:test';
 import { ConfigService } from '@nestjs/config';
 import { RunStatus } from '@prisma/client';
 import { PushService } from './push.service';
+import {
+  FAILURE_RELEASE_CAUSES,
+  releaseCauseOfEndReason,
+  releaseFactsOf,
+  WORK_FINISHED_RELEASE_CAUSES,
+} from '../common/session-release';
 import { findingCollapseId, findingCopy } from '../schedules/schedule-attention';
 
 function enabledConfig(): ConfigService {
@@ -195,9 +201,8 @@ function settledSession(over: Record<string, unknown> = {}) {
     title: 'Fix the login bug',
     ownerId: 'owner-1',
     status: RunStatus.SUCCEEDED,
-    // Released with the cause its writer stores beside SUCCEEDED: the alert reads these (plan step 4.8).
-    finishedAt: new Date(),
-    releaseCause: 'task_done',
+    // Released having finished the work, as its writer stores it beside SUCCEEDED: the alert reads these (plan step 4.8).
+    ...releaseFactsOf(WORK_FINISHED_RELEASE_CAUSES[0]),
     retryAt: null,
     completedAt: null,
     deletedAt: null,
@@ -252,7 +257,7 @@ test('a settled session alerts its owner, collapsing on the session', async () =
 
 test('a failure carries its first error line', async () => {
   const { service, sent } = settleHarness(
-    settledSession({ status: RunStatus.FAILED, releaseCause: 'turn_failed', error: 'API Error: 529 overloaded_error' }),
+    settledSession({ status: RunStatus.FAILED, ...releaseFactsOf(FAILURE_RELEASE_CAUSES[0]), error: 'API Error: 529 overloaded_error' }),
   );
 
   await service.notifySessionSettled('s-1');
@@ -263,7 +268,7 @@ test('a failure carries its first error line', async () => {
 });
 
 test('an ending not worth an interruption sends nothing', async () => {
-  const { service, sent } = settleHarness(settledSession({ status: RunStatus.CANCELLED, releaseCause: 'ended' }));
+  const { service, sent } = settleHarness(settledSession({ status: RunStatus.CANCELLED, ...releaseFactsOf(releaseCauseOfEndReason(SessionEndReason.ENDED)) }));
   await service.notifySessionSettled('s-1');
   assert.equal(sent.length, 0);
 });
