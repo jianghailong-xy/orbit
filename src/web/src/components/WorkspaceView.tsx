@@ -44,6 +44,7 @@ import {
   PauseCircleOutlined,
   PictureOutlined,
   PlusOutlined,
+  ProjectOutlined,
   PushpinFilled,
   PushpinOutlined,
   RightOutlined,
@@ -51,6 +52,7 @@ import {
   TeamOutlined,
   ThunderboltOutlined,
   UndoOutlined,
+  UnorderedListOutlined,
 } from '@ant-design/icons';
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AgentToolsDrawer, agentToolsMenuStatus } from './AgentToolsDrawer';
@@ -262,7 +264,8 @@ import { SessionBrowserChip } from './SessionBrowserChip';
 import { mergeRepairLoopLive } from './MergeRecoveryPanel';
 import { BrandMark, NewSessionProviderHero } from './NewSessionProviderHero';
 import { CreatedWorkspaceLine } from './CreatedWorkspaceLine';
-import { MachineSetupCard, RevealedOnArrival, setupCredentialOf } from './MachineSetupCard';
+import { MachineSetupCard, RevealedOnArrival, setupCredentialOf, type HistoryChoice } from './MachineSetupCard';
+import { startHistoryImport } from '../lib/claudeHistoryImport';
 import { ManagedRunnerNotice } from './ManagedRunnerNotice';
 import { useNewAccount } from './WelcomeCard';
 import type { LoginEngine } from '@orbit/shared';
@@ -7254,12 +7257,13 @@ export function WorkspaceView({
   // name the card was given. The list then says the machine has one, and the console moves on to its new
   // session page (WorkspaceConsole), with the engine and credential picked here as its draft's.
   const createWorkspace = useMutation({
-    mutationFn: ({ folder, name }: { folder: PickedFolder; name: string }) =>
+    mutationFn: ({ folder, name }: { folder: PickedFolder; name: string; history: HistoryChoice | null }) =>
       api<{ id: string }>('/workspaces', {
         method: 'POST',
         body: { name, runnerId: runner.id, ...newWorkspaceOf(folder) },
       }),
-    onSuccess: async (made) => {
+    onSuccess: async (made, { history }) => {
+      if (history) void startHistoryImport(made.id, history.history, history.mode, message, refreshSessionLists);
       if (draftHere) setDraftPick({ ...draftHere, workspaceId: made.id });
       await qc.invalidateQueries({ queryKey: ['workspaces'] });
     },
@@ -9818,16 +9822,17 @@ export function WorkspaceView({
                     } },
                   { key: 'divider-complete', type: 'separator' as const },
                 ] : []),
-                { key: 'session', label: SESSION_PROJECT_COPY.openSession, disabled: s.target.kind !== 'session',
+                { key: 'session', label: SESSION_PROJECT_COPY.openSession, icon: <MessageOutlined />, disabled: s.target.kind !== 'session',
                   onSelect: () => { setMenuOpenId(null); openTarget(); } },
-                { key: 'sessions', label: SESSION_PROJECT_COPY.sessions,
+                { key: 'sessions', label: SESSION_PROJECT_COPY.sessions, icon: <UnorderedListOutlined />,
                   onSelect: () => { setMenuOpenId(null); enterProjectSessions(s.projectId, coordinator?.id); } },
-                { key: 'project', label: SESSION_PROJECT_COPY.openProject,
+                { key: 'project', label: SESSION_PROJECT_COPY.openProject, icon: <ProjectOutlined />,
                   onSelect: () => { setMenuOpenId(null); navigate(`/projects/${encodeId(s.projectId)}`); } },
                 { key: 'divider', type: 'separator' },
                 { key: 'pin', label: coordinator?.pinnedAt ? SESSION_PROJECT_COPY.unpin : SESSION_PROJECT_COPY.pin, disabled: !coordinator,
+                  icon: coordinator?.pinnedAt ? <PushpinFilled /> : <PushpinOutlined />,
                   onSelect: () => { setMenuOpenId(null); if (coordinator) runSwipeAction('pin', coordinator); } },
-                { key: 'move', label: SESSION_PROJECT_COPY.move, disabled: !coordinator,
+                { key: 'move', label: SESSION_PROJECT_COPY.move, icon: <FolderOutlined />, disabled: !coordinator,
                   onSelect: () => { setMenuOpenId(null); if (coordinator) runSwipeAction('move', coordinator); } },
               ]}
             />
@@ -11275,7 +11280,7 @@ export function WorkspaceView({
                 <MachineSetupCard
                   runner={runner}
                   managed={managed}
-                  onCreate={(folder, name) => createWorkspace.mutate({ folder, name })}
+                  onCreate={(folder, name, history) => createWorkspace.mutate({ folder, name, history })}
                   creating={createWorkspace.isPending}
                   createError={createWorkspace.error?.message ?? null}
                   welcome={machineWelcome}

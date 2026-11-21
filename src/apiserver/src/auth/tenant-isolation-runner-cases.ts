@@ -2014,6 +2014,10 @@ export const SHARED_BY_HAND: Readonly<Record<string, string>> = {
     'a document slug of the link\'s own wiki space, not an object a caller can name: the space is the link\'s '
     + '(share-links.service.ts:378), and the slug is looked up among that space\'s own written documents — any '
     + 'other is the one 404 (public-wiki.ts:155)',
+  'GET /shared/:token/content':
+    'names nothing but its link: the bytes are those of the version the link was pinned to, read for the link\'s own '
+    + 'owner and entry (share-links.service.ts:480), and a Range is a window on them — nothing in the request names '
+    + 'another object',
   'GET /shared/:token/card':
     'names nothing but its link: the token is resolved as `GET /shared/:token` resolves it, and the answer is that '
     + 'link\'s own kind and root title (share-links.service.ts:359)',
@@ -2025,6 +2029,12 @@ export const SHARED_BY_HAND: Readonly<Record<string, string>> = {
  * answered alike whoever made the one that does.
  */
 export const PUBLIC_ROUTES: Readonly<Record<string, string>> = {
+  'GET /drive/dl/:token':
+    'a download URL the owner\'s Files page minted (POST /drive/entries/:id/download-link, behind the owner\'s login): the '
+    + 'token is the credential, signed with a key of its own and expiring in five minutes, and it names its owner, file '
+    + 'and version itself; the version is read WHERE id, owner and file are the token\'s, and a forged, expired or stale '
+    + 'one is the one 404 — drive-download-links.ts:78, :84; nothing in the request but the token names an object — '
+    + 'drive.controller.ts:279',
   'GET /health':
     'a constant `{status:"ok"}` that touches no table — health/health.controller.ts:27',
   'ALL /gw/codex':

@@ -42,13 +42,13 @@ controllers and their decorators, so it lists what the server mounts, not what a
 
 | Caller | Routes |
 | --- | --- |
-| `public` | 37 |
-| `user` | 497 |
+| `public` | 39 |
+| `user` | 508 |
 | `admin` | 31 |
 | `runner` | 221 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **790** |
+| **Total** | **803** |
 
 ## Public routes
 
@@ -65,6 +65,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/auth/methods` | — | `AuthController.methods` |
 | `POST` | `/api/auth/refresh` | body `RefreshDto` | `AuthController.refresh` |
 | `GET` | `/api/auth/setup-status` | — | `AuthController.setupStatus` |
+| `GET` | `/api/drive/dl/:token` | path `token` | `DriveDownloadController.open` |
 | `ALL` | `/api/gw/anthropic` | — | `AnthropicGatewayController.forward` |
 | `ALL` | `/api/gw/anthropic/{*path}` | — | `AnthropicGatewayController.forward` |
 | `ALL` | `/api/gw/codex` | — | `PoolGatewayController.forward` |
@@ -82,6 +83,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/shared/:token/artifacts` | path `token`; query `path` | `SharedController.artifact` |
 | `GET` | `/api/shared/:token/attachments/:id` | path `id`, `token` | `SharedController.attachment` |
 | `GET` | `/api/shared/:token/card` | path `token` | `SharedController.card` |
+| `GET` | `/api/shared/:token/content` | path `token` | `SharedController.content` |
 | `GET` | `/api/shared/:token/docs/:slug` | path `slug`, `token` | `SharedController.wikiDoc` |
 | `GET` | `/api/shared/:token/events` | path `token`; query `after`, `before`, `limit`, `maxPayload` | `SharedController.events` |
 | `GET` | `/api/shared/:token/events/:seq` | path `seq`, `token` | `SharedController.event` |
@@ -138,6 +140,9 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `DELETE` | `/api/drive/entries/:id` | path `id` | `DriveController.moveToTrash` |
 | `GET` | `/api/drive/entries/:id` | path `id` | `DriveController.get` |
 | `PATCH` | `/api/drive/entries/:id` | body `UpdateDriveEntryDto`; path `id` | `DriveController.update` |
+| `GET` | `/api/drive/entries/:id/content` | path `id` | `DriveController.download` |
+| `POST` | `/api/drive/entries/:id/download-link` | body `DriveDownloadLinkDto`; path `id` | `DriveController.downloadLink` |
+| `POST` | `/api/drive/entries/:id/share-check` | path `id` | `DriveController.shareCheck` |
 | `GET` | `/api/drive/entries/:id/versions` | path `id` | `DriveController.versions` |
 | `POST` | `/api/drive/folders` | body `CreateDriveFolderDto` | `DriveController.createFolder` |
 | `GET` | `/api/drive/resolve` | query `path` | `DriveController.resolve` |
@@ -145,8 +150,15 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/drive/trash` | query `cursor`, `limit` | `DriveController.trash` |
 | `DELETE` | `/api/drive/trash/groups/:id` | path `id` | `DriveController.deleteGroup` |
 | `GET` | `/api/drive/trash/groups/:id` | path `id`; query `cursor`, `limit`, `parentId` | `DriveController.trashGroup` |
+| `POST` | `/api/drive/trash/groups/:id/items/:entryId/restore` | path `entryId`, `id` | `DriveController.restoreItem` |
 | `POST` | `/api/drive/trash/groups/:id/restore` | path `id` | `DriveController.restoreGroup` |
+| `POST` | `/api/drive/uploads` | body `OpenDriveUploadDto` | `DriveController.openUpload` |
+| `DELETE` | `/api/drive/uploads/:id` | path `id` | `DriveController.abandonUpload` |
+| `GET` | `/api/drive/uploads/:id` | path `id` | `DriveController.uploadStatus` |
+| `PUT` | `/api/drive/uploads/:id/chunks/:idx` | path `id`, `idx` | `DriveController.putChunk` |
+| `POST` | `/api/drive/uploads/:id/complete` | path `id` | `DriveController.completeUpload` |
 | `DELETE` | `/api/drive/versions/:id` | path `id` | `DriveController.deleteVersion` |
+| `GET` | `/api/drive/versions/:id/content` | path `id` | `DriveController.downloadVersion` |
 | `POST` | `/api/drive/versions/:id/restore` | body `RestoreDriveVersionDto`; path `id` | `DriveController.restoreVersion` |
 | `GET` | `/api/events` | query `hints` | `EventsController.events` |
 | `GET` | `/api/guest-sessions` | — | `GuestSessionsController.list` |
@@ -449,6 +461,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/sessions/remove-imported` | body `Object` | `SessionsController.removeImported` |
 | `GET` | `/api/sessions/search` | query `limit`, `q` | `SessionsController.search` |
 | `GET` | `/api/share-links` | query `kind` | `ShareLinksController.list` |
+| `POST` | `/api/share-links` | body `ShareDriveFileDto` | `ShareLinksController.shareDriveFile` |
 | `DELETE` | `/api/share-links/:id` | path `id` | `ShareLinksController.turnOff` |
 | `POST` | `/api/share-links/turn-off` | body `TurnOffShareLinksDto` | `ShareLinksController.turnOffMany` |
 | `GET` | `/api/task-lists` | — | `TaskListsController.list` |

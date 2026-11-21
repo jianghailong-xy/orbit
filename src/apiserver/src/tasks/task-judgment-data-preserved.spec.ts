@@ -3212,7 +3212,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '1327_drive_name_layer',
       // 1339 creates drive_mount_credential (Orbit Files drive, the mount daemon's credential); no existing row is
       // written, and no preserved relation, trigger, function or DONE fence changes.
-      '1339_drive_mount_credential'],
+      '1339_drive_mount_credential',
+      // 1340 adds drive_entry_id and drive_version_id to share_link, replaces its one-root CHECK and adds two foreign keys
+      // and a partial index (one-file share links); no existing row is written, and no preserved relation, trigger,
+      // function or DONE fence changes.
+      '1340_share_link_drive_file'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

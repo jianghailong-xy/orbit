@@ -436,6 +436,9 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       // The owner's terminals: one asked to be approved, a request was decided or collected, or one was revoked
       // (`terminals.changed`). The approve card and Settings → Terminals both declare `terminal`.
       if (type === 'terminals.changed') return ['terminal'];
+      // The owner's drive: a write committed (`drive.changed`, asked for with `hints=drive_changed`). The Files page's
+      // reads declare `drive`; the feed's seq it carries is not needed to re-read what is on screen.
+      if (type === 'drive.changed') return ['drive'];
       // A session's state, its approvals, and a background job of its ending, which moves its row's
       // job mark and its workspace's tally.
       if (type.startsWith('session.') || type.startsWith('approval.') || type === 'background.task') {
@@ -546,8 +549,11 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       dropped = false;
       hinted = false;
       lastMsgAt = Date.now();
-      // `hints=list_changed` asks for the Open list's hint (docs/realtime-control-plane-stream.md §4.8).
-      es = new EventSource(`/api/events?access_token=${encodeURIComponent(getToken() ?? '')}&hints=list_changed`);
+      // `hints=list_changed` asks for the Open list's hint (docs/realtime-control-plane-stream.md §4.8), and
+      // `drive_changed` for the drive's writes, which a stream that does not ask for them never gets.
+      es = new EventSource(
+        `/api/events?access_token=${encodeURIComponent(getToken() ?? '')}&hints=list_changed,drive_changed`,
+      );
       es.onopen = () => {
         lastMsgAt = Date.now();
         setLive(true);

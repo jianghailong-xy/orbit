@@ -55,6 +55,7 @@ import { SharedWikiDocRoute } from './pages/SharedWikiPage';
 import { TaskRoute } from './pages/TaskRoute';
 import { FollowingPage } from './pages/FollowingPage';
 import { WaitingOnYouPage } from './pages/WaitingOnYouPage';
+import { FilesPage } from './pages/FilesPage';
 import { ScheduledPage } from './pages/ScheduledPage';
 import { WikiPage } from './pages/WikiPage';
 import { HelpLayout } from './pages/help/HelpLayout';
@@ -357,6 +358,24 @@ export function App() {
               element={
                 <FlushView>
                   <ScheduledPage />
+                </FlushView>
+              }
+            />
+            {/* Orbit Files, the account's drive (docs/mocks/orbit-files/02-web): `?folder=` opens a folder and `?file=`
+                picks a file in it; its Trash is reached from inside it. */}
+            <Route
+              path="files"
+              element={
+                <FlushView>
+                  <FilesPage />
+                </FlushView>
+              }
+            />
+            <Route
+              path="files/trash"
+              element={
+                <FlushView>
+                  <FilesPage view="trash" />
                 </FlushView>
               }
             />

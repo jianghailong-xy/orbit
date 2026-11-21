@@ -22,6 +22,7 @@ import { CRITERIA_WEAKENING_EFFECT_CLASS } from '../projects/criteria-weakening-
 import { DONE_REQUEST_DEDUPE_KEY, DONE_REQUEST_KIND, DONE_REQUEST_TITLE } from '../projects/project-done-request';
 import { handoffCrossingKey } from '../projects/project-handoff';
 import { SessionAttemptService } from '../projects/session-attempt.service';
+import { DriveChunksService } from '../drive/drive-chunks.service';
 import { DriveService, OWNER_WRITER } from '../drive/drive.service';
 import { encryptSecret } from '../providers/provider-crypto';
 import { PatService } from './pat.service';
@@ -665,6 +666,15 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
     const driveTrashGroupId = await driveTrashed('in-trash');
     const spareDriveTrashGroupId = await driveTrashed('deleted-for-good');
     const spareDriveRestoreGroupId = await driveTrashed('restored');
+    const spareDriveRestoreItemEntryId = (await drive.createFile(ownerId, { parentId: driveFolder.id, name: 'restored-alone.txt' })).id;
+    const spareDriveRestoreItemGroupId = (await drive.moveToTrash(ownerId, spareDriveRestoreItemEntryId)).trashGroupId;
+    const driveUpload = async (declaredSize: number) =>
+      (await new DriveChunksService(db as never, undefined as never).openStaging(ownerId, {
+        source: 'OWNER_UPLOAD', parentId: driveFolder.id, name: 'upload.bin', declaredSize,
+      })).id;
+    const driveUploadId = await driveUpload(10);
+    const spareDriveCompleteUploadId = await driveUpload(0);
+    const spareDriveAbandonUploadId = await driveUpload(10);
     const spareDriveEntryId = (await drive.createFile(ownerId, { parentId: driveFolder.id, name: 'spare.txt' })).id;
 
     const shareTaskId = await task(`${name} shared task`);
@@ -784,6 +794,7 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
       driveFileId: driveFile.id,
       driveVersionId,
       driveTrashGroupId,
+      driveUploadId,
       spare: {
         accessTokenId: idOf(await as('POST', '/access-tokens', { name: `${name} spare`, scopes: ['tasks:read'] }), 'a token'),
         adminProviderId: await adminProvider(`${name}-admin-provider-spare`),
@@ -813,9 +824,13 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
         listId: idOf(await as('POST', '/task-lists', { title: `${name} spare list` }), 'a spare list'),
         taskId: await task(`${name} spare task`),
         driveEntryId: spareDriveEntryId,
+        driveCompleteUploadId: spareDriveCompleteUploadId,
+        driveAbandonUploadId: spareDriveAbandonUploadId,
         driveVersionId: spareDriveVersionId,
         driveTrashGroupId: spareDriveTrashGroupId,
         driveRestoreGroupId: spareDriveRestoreGroupId,
+        driveRestoreItemGroupId: spareDriveRestoreItemGroupId,
+        driveRestoreItemEntryId: spareDriveRestoreItemEntryId,
       },
     };
   }

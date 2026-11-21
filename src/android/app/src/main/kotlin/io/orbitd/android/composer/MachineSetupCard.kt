@@ -14,6 +14,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import io.orbitd.android.cards.conversationCard
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -148,7 +149,7 @@ internal fun MachineSetupCard(
     }
 
     Surface(
-        modifier = Modifier.fillMaxWidth().testTag("machine-setup-card"),
+        modifier = Modifier.conversationCard().testTag("machine-setup-card"),
         shape = RoundedCornerShape(18.dp),
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 1.dp,

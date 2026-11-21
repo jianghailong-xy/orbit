@@ -1,6 +1,9 @@
 import { Module } from '@nestjs/common';
 import { DriveChunksService } from './drive-chunks.service';
-import { DriveController } from './drive.controller';
+import { DriveContentService } from './drive-content.service';
+import { DriveDownloadLinks } from './drive-download-links';
+import { DriveUploadsService } from './drive-uploads.service';
+import { DriveController, DriveDownloadController } from './drive.controller';
 import { DriveService } from './drive.service';
 import { RunnerDriveController } from './runner-drive.controller';
 
@@ -8,8 +11,8 @@ import { RunnerDriveController } from './runner-drive.controller';
 // the runner drive door.
 // PrismaService, FilesService and RealtimeService come from their global modules.
 @Module({
-  controllers: [DriveController, RunnerDriveController],
-  providers: [DriveService, DriveChunksService],
-  exports: [DriveService, DriveChunksService],
+  controllers: [DriveController, DriveDownloadController, RunnerDriveController],
+  providers: [DriveService, DriveChunksService, DriveUploadsService, DriveContentService, DriveDownloadLinks],
+  exports: [DriveService, DriveChunksService, DriveContentService],
 })
 export class DriveModule {}

@@ -2629,6 +2629,14 @@ model ShareLink {
   wikiSpaceId String?    @map("wiki_space_id") @db.Uuid
   wikiSpace   WikiSpace? @relation(fields: [wikiSpaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "share_link_wiki_space_fkey")
 
+  /// One drive file (1340) and the version of it the link was pinned to: the link serves that version's bytes whatever is
+  /// written to the file later, until its owner moves it (docs/orbit-files-drive-technical-design.md §9). Both are reached
+  /// through the (id, owner_id) keys of the drive tables, so a link is only ever rooted at its owner's file.
+  driveEntryId   String?       @map("drive_entry_id") @db.Uuid
+  driveEntry     DriveEntry?   @relation("ShareLinkDriveEntry", fields: [driveEntryId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "share_link_drive_entry_fkey")
+  driveVersionId String?       @map("drive_version_id") @db.Uuid
+  driveVersion   DriveVersion? @relation("ShareLinkDriveVersion", fields: [driveVersionId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "share_link_drive_version_fkey")
+
   /// The ticked layers: `taskPages`, `commentsAndFiles`, `conversations`, `toolOutput`, `footnotes`. A
   /// key that is absent reads as its default (contract §1), so this records choices, not the defaults.
   include       Json      @default("{}")
@@ -3667,6 +3675,7 @@ model DriveEntry {
   commits             DriveCommit[]
   stagings            DriveStaging[] @relation("DriveStagingEntry")
   uploadsHere         DriveStaging[] @relation("DriveStagingParent")
+  shareLinks          ShareLink[] @relation("ShareLinkDriveEntry")
 
   @@unique([id, ownerId], map: "drive_entry_id_owner_id_key")
   @@index([ownerId, trashGroupId], map: "drive_entry_trash_group_idx")
@@ -3695,6 +3704,7 @@ model DriveVersion {
   trashGroup      DriveTrashGroup? @relation(fields: [trashGroupId, ownerId], references: [id, ownerId], onDelete: Restrict, map: "drive_version_trash_group_fkey")
   chunks          DriveVersionChunk[]
   currentOf       DriveEntry[] @relation("DriveEntryCurrentVersion")
+  shareLinks      ShareLink[] @relation("ShareLinkDriveVersion")
 
   @@unique([id, ownerId], map: "drive_version_id_owner_id_key")
   @@index([entryId], map: "drive_version_entry_idx")
