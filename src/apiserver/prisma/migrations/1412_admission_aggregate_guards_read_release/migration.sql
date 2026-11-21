@@ -36,6 +36,10 @@
 -- CREATE OR REPLACE FUNCTION takes no table lock. CREATE OR REPLACE TRIGGER takes SHARE ROW EXCLUSIVE on
 -- session: asked for in one DO statement, 2 s at a time, 1 s apart, up to 45 tries, as 1261 does. No column,
 -- constraint, index or type; no INSERT, UPDATE or DELETE.
+-- How it is sent: the file holds a DO block, so prisma migrate deploy (7.10) sends it whole, as one transaction:
+-- the function replacements and the triggers commit together, and the trigger locks are held until that one
+-- commit. Nothing in it COMMITs. sessions/session-release.pg.spec.ts (12) applies it that way, with deployAgain,
+-- on a database holding rows.
 --
 -- NUMBERING, RE-RUNNABILITY
 -- -------------------------

@@ -14,15 +14,17 @@
  *   (6) the reaper's other three causes              → runner_lost, setup_failed, turn_failed
  *   (7) ending a session still queued                → CANCELLED, ended
  *   (8) the revive                                   → PENDING, finished_at and release_cause both null
- *   (9) migration 1262's backfill, one session per rule, then the two counts of plan step 3.3 over the database
+ *   (9) migrations 1202 and 1262 re-applied by the real `prisma migrate deploy` on a database that holds rows:
+ *       1262's backfill, one session per rule, then the two counts of plan step 3.3 over the database
  *  (10) migrations 1401 and 1402 (plan step 3.4): the CHECK is listed validated, and each violating write is refused
  *  (11) migrations 1403-1407: the failure reading. 1405's backfill on a migrated fixture (old rows as 1262 left them),
  *       then the two counts (FAILED rows not read as failures; other released rows read as failures) are zero, both
  *       CHECKs are listed validated, and for every cause of SESSION_RELEASE_CAUSES the database takes it with FAILED
  *       exactly when isFailedRelease says it is a failure, and refuses it with the other statuses then
- *  (12) migrations 1411 to 1415 (plan step 4.4): a write of the release fact alone, `finished_at` and `release_cause`
- *       with the status word left as it was, fires every guard and ended-trigger that used to read the status, and
- *       each decides from the release fact
+ *  (12) migrations 1411 to 1415 (plan step 4.4), re-applied by the real `prisma migrate deploy` on a database that
+ *       holds rows: they write none; then a write of the release fact alone, `finished_at` and `release_cause` with
+ *       the status word left as it was, fires every guard and ended-trigger that used to read the status, and each
+ *       decides from the release fact
  *
  * Every writer's row in (1)-(8) is also asserted to read as a failure (isFailedRelease) exactly when it is FAILED.
  * The other three writers are asserted where they are already driven: turn-complete's failed turn in
@@ -36,6 +38,7 @@
  * two counts of (9), which are over the whole disposable database by design.
  */
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -180,8 +183,9 @@ function assertReleased(row: Released, status: string, cause: string): void {
 }
 
 /**
- * A migration split as Prisma's migrate deploy sends it: one statement at a time, `--` lines dropped, a `$$ … $$`
- * body kept whole (the backfill procedure COMMITs, which one implicit transaction would refuse).
+ * A migration split one statement at a time, `--` lines dropped, a `$$ … $$` body kept whole. Still used by (10) and
+ * (11) as the project wrote them; (9) moved to deployAgain because prisma does NOT always send a file this way
+ * (see deployAgain), and (11)'s 1405 has the same CREATE PROCEDURE + COMMIT shape 1262 had.
  */
 function statementsOf(file: string): string[] {
   const out: string[] = [];
@@ -198,6 +202,33 @@ function statementsOf(file: string): string[] {
   }
   if (current.join('').trim() !== '') out.push(current.join('\n'));
   return out;
+}
+
+/**
+ * Re-apply migrations with the real `prisma migrate deploy`, on this database as it stands: their rows in
+ * `_prisma_migrations` are forgotten first, so deploy finds them pending and applies them, in order, the way it
+ * applies them on an installation (prisma decides per file whether to send it whole, as one transaction, or
+ * statement by statement). Replaying a file by any other path is what hid that 1262's per-batch COMMIT is refused
+ * on a database holding a terminal row: this spec once split it into statements itself, while prisma sends a file
+ * with a CREATE PROCEDURE whole (production's deploy of af55a2fb38 failed on 1202 with 2D000).
+ */
+async function deployAgain(sql: Client, url: string, migrations: string[]): Promise<void> {
+  await sql.query(`DELETE FROM _prisma_migrations WHERE migration_name = ANY($1::text[])`, [migrations]);
+  const api = join(__dirname, '..', '..');
+  try {
+    execFileSync(process.execPath, [require.resolve('prisma/build/index.js'), 'migrate', 'deploy'], {
+      cwd: api, env: { ...process.env, DATABASE_URL: url }, encoding: 'utf8', stdio: 'pipe',
+    });
+  } catch (error) {
+    const e = error as { stdout?: string; stderr?: string };
+    assert.fail(`prisma migrate deploy of ${migrations.join(', ')} failed:\n${e.stdout ?? ''}${e.stderr ?? ''}`);
+  }
+  const applied = (await sql.query(
+    `SELECT count(*)::int AS n FROM _prisma_migrations
+      WHERE migration_name = ANY($1::text[]) AND finished_at IS NOT NULL AND rolled_back_at IS NULL`,
+    [migrations],
+  )).rows[0] as { n: number };
+  assert.equal(applied.n, migrations.length, 'prisma recorded every one of them applied');
 }
 
 test('every release writes the release column and its cause, and the revive clears both', {
@@ -336,7 +367,7 @@ test('every release writes the release column and its cause, and the revive clea
     assert.equal(row.release_cause, null, 'and no cause');
   });
 
-  await t.test('(9) migration 1262 backfills every terminal row, and the two counts are zero', async () => {
+  await t.test('(9) prisma migrate deploy of 1202 and 1262 on a populated database backfills every terminal row; the counts are zero', async () => {
     const w = await world(s.db, 'backfill');
     const now = new Date();
     // Rows from before 1261 break session_release_fact_chk (1401) by design; the check comes back, by its own two
@@ -398,8 +429,8 @@ test('every release writes the release column and its cause, and the revive clea
     // A cause a writer recorded after 1261 is not the backfill's to change.
     const written = await session(s.db, w, { status: RunStatus.FAILED, finishedAt: now, releaseCause: 'runner_lost' });
 
-    const file = join(__dirname, '..', '..', 'prisma', 'migrations', '1262_session_release_backfill', 'migration.sql');
-    for (const statement of statementsOf(file)) await sql.query(statement);
+    // Both backfills of this project, by prisma, on a database holding every row the cases above wrote.
+    await deployAgain(sql, url, ['1202_turn_outcome_backfill', '1262_session_release_backfill']);
 
     for (const m of made) {
       const row = await released(sql, m.id);
@@ -408,10 +439,11 @@ test('every release writes the release column and its cause, and the revive clea
       else assert.equal(row.finished_at, null, `${m.name}: a held row gets no release column`);
     }
     assert.equal((await released(sql, written)).release_cause, 'runner_lost', 'a recorded cause is kept');
-    const gone = (await sql.query(
-      `SELECT count(*)::int AS n FROM pg_proc WHERE proname = 'orbit_1262_backfill_session_release'`,
+    const held = (await sql.query(
+      `SELECT count(*)::int AS n FROM "session" WHERE id = ANY($1::uuid[]) AND last_turn_outcome = 'ANSWERED'`,
+      [made.filter((m) => m.name === 'held').map((m) => m.id)],
     )).rows[0] as { n: number };
-    assert.equal(gone.n, 0, 'the backfill procedure is dropped after its CALL');
+    assert.equal(held.n, 3, '1202 ran too: a held AWAITING_INPUT row reads ANSWERED');
 
     // Plan step 3.3's two counts, over the whole database: everything this spec's writers released above and
     // everything the backfill just wrote.
@@ -730,6 +762,63 @@ test('(12) the release fact alone fires every guard and ended-trigger (plan step
   const reviewerEnded = async (reviewId: string) => ((await sql.query(
     `SELECT "reviewer_ended_at" FROM "task_owner_confirmation_review" WHERE "id" = $1::uuid`, [reviewId],
   )).rows[0] as { reviewer_ended_at: Date | null }).reviewer_ended_at instanceof Date;
+
+  await t.test('1411-1415 apply by the real prisma migrate deploy on a database holding rows', async () => {
+    // Rows of every shape the guards and triggers read, written before the five files run again: held work on a
+    // task in a project, a confirmation review, an open request, and released rows of each kind.
+    const w = await world(db, 'g-deploy');
+    const projectId = await project(w);
+    const taskId = await task(w, { projectId });
+    const asker = await session(db, w);
+    const held = await session(db, w, { taskId, startsTaskWork: true });
+    const parked = await session(db, w, { status: RunStatus.AWAITING_INPUT, retryAt: new Date(Date.now() + 3_600_000) });
+    const failed = await session(db, w, {
+      status: RunStatus.FAILED, finishedAt: new Date(), releaseCause: 'turn_failed', retryAt: new Date(Date.now() + 3_600_000),
+    });
+    const done = await session(db, w, { status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited' });
+    const ended = await session(db, w, { status: RunStatus.CANCELLED, finishedAt: new Date(), releaseCause: 'ended' });
+    const open = await ask(w, asker, held);
+    const reviewId = await review(w, asker, held);
+    const rows = async () => (await sql.query(
+      `SELECT id, status::text AS status, finished_at, release_cause, retry_at FROM "session"
+        WHERE id = ANY($1::uuid[]) ORDER BY id`, [[held, parked, failed, done, ended]])).rows;
+    const before = await rows();
+
+    const five = [
+      '1411_supersession_capacity_guards_read_release', '1412_admission_aggregate_guards_read_release',
+      '1413_project_move_guard_reads_release', '1414_acquisition_revive_reads_release', '1415_ended_triggers_read_release',
+    ];
+    await deployAgain(sql, url, five);
+
+    assert.deepEqual(await rows(), before, 'no row was written: CREATE OR REPLACE only');
+    assert.equal((await request(open)).state, 'OPEN', 'no trigger fired on the open request');
+    assert.equal(await reviewerEnded(reviewId), false, 'nor on the review');
+    // What is installed is what the files say: the release column in the lists, and no terminal status anywhere.
+    const triggers = (await sql.query(
+      `SELECT tgname, pg_get_triggerdef(oid) AS def FROM pg_trigger WHERE tgrelid = 'session'::regclass AND tgname = ANY($1)
+        ORDER BY tgname`,
+      [['session_superseded_task_revive_guard', 'session_project_capacity_serialize_update',
+        'session_admission_lock_order_update', 'session_request_recipient_ended', 'session_request_asker_stopped',
+        'task_owner_confirmation_review_reviewer_ended']],
+    )).rows as Array<{ tgname: string; def: string }>;
+    assert.equal(triggers.length, 6);
+    for (const { tgname, def } of triggers) {
+      const columns = /UPDATE OF (.*?) ON public\.session/.exec(def)?.[1] ?? '';
+      assert.match(columns, /\bfinished_at\b/, `${tgname}: finished_at is in its column list (${columns})`);
+      assert.doesNotMatch(def, /'(SUCCEEDED|FAILED|CANCELLED)'::run_status/, `${tgname}: no terminal status`);
+    }
+    const bodies = (await sql.query(
+      `SELECT proname, pg_get_functiondef(p.oid) AS def FROM pg_proc p WHERE proname = ANY($1) ORDER BY proname`,
+      [['session_superseded_task_guard', 'task_supersession_live_session_guard', 'session_project_capacity_serialize',
+        'session_admission_lock_order', 'task_aggregate_parent_shape_guard', 'task_claimed_project_move_guard',
+        'guard_session_engine_acquisition', 'guard_dsh_runner_acquisition', 'guard_cursor_runner_acquisition']],
+    )).rows as Array<{ proname: string; def: string }>;
+    assert.equal(bodies.length, 9);
+    for (const { proname, def } of bodies) {
+      assert.match(def, /"finished_at"/, `${proname}: reads finished_at`);
+      assert.doesNotMatch(def, /'(SUCCEEDED|FAILED|CANCELLED)'/, `${proname}: names no terminal status`);
+    }
+  });
 
   await t.test('the ended-triggers fire exactly where their old status clauses did, for every kind of release', async () => {
     const w = await world(db, 'g-ended-table');

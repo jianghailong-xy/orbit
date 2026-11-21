@@ -18,6 +18,10 @@
 -- LOCKS
 -- -----
 -- CREATE OR REPLACE FUNCTION only: no table lock, no row written.
+-- How it is sent: the file holds no DO block and no CREATE PROCEDURE, so prisma migrate deploy (7.10) sends it
+-- statement by statement; each CREATE OR REPLACE FUNCTION stands alone and commits by itself. Nothing in it
+-- COMMITs. sessions/session-release.pg.spec.ts (12) applies it that way, with deployAgain, on a database holding
+-- rows.
 --
 -- NUMBERING, RE-RUNNABILITY
 -- -------------------------
