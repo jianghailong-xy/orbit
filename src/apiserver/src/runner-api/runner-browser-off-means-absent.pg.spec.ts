@@ -29,6 +29,8 @@ import { hashPassword, sha256 } from '../common/crypto.util';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 
+import '../test-support/daemon-routes-over-http';
+
 const URL_ = process.env.COORDINATOR_PG_URL;
 
 const ROUTES: ReadonlyArray<readonly [string, string, unknown]> = [
