@@ -10271,6 +10271,25 @@ export class SessionsService {
   }
 
   /**
+   * Close the red merge failure strip (the ✕ on it): clear a settled 'conflict' or 'error' so the bar
+   * goes back to Merge, or to "✓ In main" when the branch landed another way. Nothing in git changes —
+   * the failed merge already left both tips where they were. One statement predicated on the failure
+   * still being there and no merge recovery open, so a merge queued or settled since, or a recovery
+   * (which has its own panel), is never the one cleared. Closing it again is a no-op.
+   */
+  async dismissMergeFailure(ownerId: string, id: string) {
+    const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
+    if (!session) throw new NotFoundException('session not found');
+    assertEngineSessionRow(session);
+    const { count } = await this.prisma.session.updateMany({
+      where: { id, ownerId, mergeStatus: { in: ['conflict', 'error'] }, mergeRecovery: { equals: Prisma.AnyNull } },
+      data: { mergeStatus: null, mergeError: null, mergeOperationId: null, mergeOperationOwner: null },
+    });
+    if (count > 0) this.realtime.publishSessionUpdated(id);
+    return { ok: true, dismissed: count > 0 };
+  }
+
+  /**
    * Stop a session and settle it to CANCELLED — unlike {@link end}, which reaches the same
    * status under 'ended' and so still reads as dormant/resumable. A PENDING session is
    * finalized in place (while any prior warm runtime is cancelled); other open states receive
