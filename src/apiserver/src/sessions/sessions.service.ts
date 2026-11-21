@@ -1,5 +1,6 @@
 import { readSessionCoordinatorHandoffs } from '../projects/coordinator-handoff';
-import type { HelpAskMarker, SubagentRunView, WorkflowRunView } from '@orbit/shared';
+import type { BackgroundJobStopResponse, HelpAskMarker, SubagentRunView, WorkflowRunView } from '@orbit/shared';
+import { BG_JOB_STOPPED_BY_OWNER, BG_OWNER_STOP_V1 } from '@orbit/shared';
 import { modelLabels, subagentRunView } from '../runner-api/subagent-run';
 import { WORKFLOW_RUN_VIEW_SELECT, workflowRunView } from '../runner-api/workflow-run';
 import { checkedWorkSubdir } from './work-subdir';
@@ -6386,12 +6387,22 @@ export class SessionsService {
   async getBackgroundShells(userId: string, id: string): Promise<BgShell[]> {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId: userId },
-      select: { id: true, status: true },
+      select: { id: true, status: true, assignedRunner: { select: { capabilities: true } } },
     });
     if (!session) throw new NotFoundException('session not found');
-    const rows = await this.selectBackgroundEvents(id);
+    return this.deriveSessionBackground(session);
+  }
+
+  /**
+   * The background list of a session already read, each running `job` marked `stoppable` when the session's runner
+   * carries out the owner's stop (BG_OWNER_STOP_V1), so a client can hide the control where it would be refused.
+   */
+  private async deriveSessionBackground(session: {
+    id: string; status: RunStatus; assignedRunner: { capabilities: string[] } | null;
+  }): Promise<BgShell[]> {
+    const rows = await this.selectBackgroundEvents(session.id);
     const sessionLive = !SessionsService.TERMINAL_STATUSES.includes(session.status);
-    return deriveBackgroundShells(
+    const shells = deriveBackgroundShells(
       rows.map((e) => ({
         seq: e.seq,
         type: e.type,
@@ -6400,6 +6411,62 @@ export class SessionsService {
       })),
       { sessionLive },
     );
+    const runnerStops = session.assignedRunner?.capabilities.includes(BG_OWNER_STOP_V1) === true;
+    for (const shell of shells) {
+      if (shell.kind === 'job') shell.stoppable = runnerStops && shell.status === 'running';
+    }
+    return shells;
+  }
+
+  /**
+   * The owner's stop of one running bg_run job (POST /sessions/:id/background/jobs/:jobId/stop). The stop is kept on
+   * the session (bgJobStopRequests) and every full heartbeat answer to its runner lists it while the job runs
+   * (stopBackgroundJobs, runner-api/background-job-stops.ts); the runner kills the job as bg_kill does, under the
+   * reason BG_JOB_STOPPED_BY_OWNER, and the job's terminal report, its row here and its wake carry that reason.
+   *
+   * 404 for another owner's session and for a job id the session never ran; 409 BACKGROUND_JOB_ENDED for a job that
+   * has ended any other way, and 409 RUNNER_CANNOT_STOP_JOB when the session's runner predates the stop (it would
+   * drop the listing unread). A repeat is idempotent: `stopping` while the job runs, `killed` once it ended stopped.
+   */
+  async stopBackgroundJob(ownerId: string, id: string, jobId: string): Promise<BackgroundJobStopResponse> {
+    const session = await this.prisma.session.findFirst({
+      where: { id, ownerId },
+      select: {
+        id: true, status: true, sessionKind: true, assignedRunnerId: true,
+        assignedRunner: { select: { capabilities: true } },
+      },
+    });
+    if (!session) throw new NotFoundException('session not found');
+    // Stopping a job is an engine door (§2.9 LS6): the platform's landing container runs no bg_run job.
+    assertEngineSessionRow(session);
+    const job = (await this.deriveSessionBackground(session)).find((shell) => shell.kind === 'job' && shell.shellId === jobId);
+    if (!job) {
+      throw new NotFoundException({ code: 'BACKGROUND_JOB_NOT_FOUND', message: `This session has no background job ${jobId}.` });
+    }
+    if (job.status !== 'running') {
+      if (job.status === 'killed' && job.reason === BG_JOB_STOPPED_BY_OWNER) return { jobId, status: 'killed' };
+      throw new ConflictException({
+        code: 'BACKGROUND_JOB_ENDED',
+        message: `Background job ${jobId} has already ended (${job.status}); there is nothing to stop.`,
+        jobStatus: job.status,
+      });
+    }
+    if (!job.stoppable || !session.assignedRunnerId) {
+      throw new ConflictException({
+        code: 'RUNNER_CANNOT_STOP_JOB',
+        message: `The runner hosting this session is too old to stop a background job from the app: it does not declare ${BG_OWNER_STOP_V1}. Update the runner, or ask the agent to stop the job with bg_kill.`,
+      });
+    }
+    // Added once, and pruned of jobs that are no longer running, so the list stays as short as what is in flight.
+    await this.prisma.$executeRaw`
+      UPDATE "session"
+         SET "bg_job_stop_requests" = ARRAY(
+               SELECT r FROM unnest("bg_job_stop_requests") AS r WHERE r = ANY("running_bg_jobs") AND r <> ${jobId}
+             ) || ARRAY[${jobId}]::text[]
+       WHERE "id" = ${session.id}::uuid
+    `;
+    this.realtime.notifyRunnerWake(session.assignedRunnerId);
+    return { jobId, status: 'stopping' };
   }
 
   /**

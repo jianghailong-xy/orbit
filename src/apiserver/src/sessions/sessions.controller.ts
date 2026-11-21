@@ -909,6 +909,25 @@ export class SessionsController {
   }
 
   /**
+   * The owner's stop of one running bg_run job (`bgj_…`) of the session: the runner hosting it kills it as bg_kill
+   * does, under the reason `stopped_by_owner`. 202 `stopping` once asked; a repeat answers the same, or 200 `killed`
+   * once it ended that way. 404 for an unknown job, 409 BACKGROUND_JOB_ENDED for one that ended otherwise, 409
+   * RUNNER_CANNOT_STOP_JOB for a runner that predates the stop (GET /background lists its jobs not `stoppable`).
+   */
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
+  @Post(':id/background/jobs/:jobId/stop')
+  async stopBackgroundJob(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('jobId') jobId: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const answer = await this.sessions.stopBackgroundJob(user.userId, id, jobId);
+    res.status(answer.status === 'stopping' ? 202 : 200);
+    return answer;
+  }
+
+  /**
    * A page of a session's persisted events for tail-first lazy loading. `tail=N` returns the
    * newest N (initial paint, so a long transcript opens straight at the latest message instead
    * of replaying its whole history); `before=<seq>&limit=N` returns the N events just older

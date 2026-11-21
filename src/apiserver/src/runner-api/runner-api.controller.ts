@@ -3,7 +3,7 @@ import { appendRunQuestionContext, questionRecipient, RUN_QUESTION_PREFIX } from
 import { DRAIN_SKIPS_HELD, translationLanguages, turnTranslationOf } from '../sessions/turn-translation';
 import { isRunNotifyTurn, runNotifyContent } from '../sessions/run-notify';
 import { acceptedFinalizeBranch, codelessClaimFields } from '../sessions/codeless-checkout';
-import { BROWSER_CLEAR_V1, CONDITION_PROBE_CAPABILITY, readMergeRecovery, mergeRecoveryReady, RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON, type MergeRecovery } from '@orbit/shared';
+import { BG_OWNER_STOP_V1, BROWSER_CLEAR_V1, type BackgroundJobStopCommand, CONDITION_PROBE_CAPABILITY, readMergeRecovery, mergeRecoveryReady, RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON, type MergeRecovery } from '@orbit/shared';
 import { OWNER_SECRET_CAPABILITY, OwnerSecretsService } from '../owner-requests/owner-secrets.service';
 import { ConditionsService } from '../conditions/conditions.service';
 import { GithubWorkspaceService } from '../github/github-workspace.service';
@@ -273,6 +273,7 @@ import {
 import { fileSubagentWake, fileWorkflowWake, interruptOrphanedSubagentRuns, interruptOrphanedWorkflowRuns } from './subagent-wake';
 import { orbitWorkflowLaunchReceipt, workflowClaimFields } from './workflow-run';
 import { remoteSubagentHeartbeat } from './subagent-remote';
+import { backgroundJobStopsFor } from './background-job-stops';
 import { CLEARED_RUNNING_WORK } from '../sessions/running-work';
 import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
 import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout';
@@ -2484,6 +2485,16 @@ export class RunnerApiController {
     } catch (error) {
       this.logger.warn(`runner ${runner.id}: remote SubAgent runs skipped this heartbeat (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
     }
+    // The bg_run jobs the owner asked to stop from the app, listed while each still runs; only to a runner that
+    // carries them out (BG_OWNER_STOP_V1), which the stop route already refuses to queue for any other.
+    let stopBackgroundJobs: BackgroundJobStopCommand[] = [];
+    if (runnerSupportsCapability(capabilities, BG_OWNER_STOP_V1)) {
+      try {
+        stopBackgroundJobs = await backgroundJobStopsFor(this.prisma, runner.id);
+      } catch (error) {
+        this.logger.warn(`runner ${runner.id}: background job stops skipped this heartbeat (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
+      }
+    }
     // An engine that was signed in and now isn't: tell the owner while it is still news, rather
     // than letting them find out from the next session that refuses to start. Only the yes -> no
     // edge counts — 'unknown' means the probe couldn't answer, which is not a claim of a sign-out,
@@ -2891,6 +2902,7 @@ export class RunnerApiController {
       // Present only while this runner has remote SubAgent runs to claim or to stop.
       ...(!draining && remoteSubagents.remoteSubagentRuns.length > 0 ? { remoteSubagentRuns: remoteSubagents.remoteSubagentRuns } : {}),
       ...(remoteSubagents.stopSubagentRunIds.length > 0 ? { stopSubagentRunIds: remoteSubagents.stopSubagentRunIds } : {}),
+      ...(stopBackgroundJobs.length > 0 ? { stopBackgroundJobs } : {}),
       ...(mainCheckoutRequests ? { mainCheckoutRequests } : {}),
       // Only to the instance being drained to sleep: every other runner's response keeps its shape.
       ...(managedBeat.sleep ? { managedSleep: managedBeat.sleep } : {}),

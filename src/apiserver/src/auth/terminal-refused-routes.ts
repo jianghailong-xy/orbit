@@ -400,6 +400,7 @@ export const TERMINAL_REFUSED_ROUTES: readonly string[] = [
   'POST /sessions/:id/adopt-branch',
   'POST /sessions/:id/archive',
   'POST /sessions/:id/auto-retry',
+  'POST /sessions/:id/background/jobs/:jobId/stop',
   'POST /sessions/:id/checkout/discard',
   'POST /sessions/:id/commit',
   'POST /sessions/:id/complete',

@@ -2209,6 +2209,12 @@ model Session {
   // older runner reports nothing) and counts as it did before this column existed. Only meaningful
   // while live. See src/apiserver/src/sessions/background-job-activity.ts.
   runningBgJobActivity Json      @default("{}") @map("running_bg_job_activity")
+  // The bg_run jobs of `runningBgJobs` the session's owner asked to stop from the app (POST
+  // /sessions/:id/background/jobs/:jobId/stop). Every full heartbeat answer to the session's
+  // runner lists the ones still in `runningBgJobs` (stopBackgroundJobs), so the stop is redelivered
+  // until the job's terminal report takes it out of that set; an id no longer there is inert. The
+  // route prunes it to `runningBgJobs` as it adds. Only meaningful while live.
+  bgJobStopRequests    String[]  @default([]) @map("bg_job_stop_requests")
   // Denormalized set of the agent's still-running sub-agents (Task/Agent tool): the tool_use
   // ids of sub-agent launches that haven't yet reported a terminal `<task-notification>`
   // (background_task). Added on launch, removed on completion, cleared on (re)spawn. The Agent
