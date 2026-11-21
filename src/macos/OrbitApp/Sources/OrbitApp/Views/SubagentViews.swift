@@ -176,6 +176,14 @@ struct InfrastructureModelTiersSection: View {
         }
     }
 
+    #if os(macOS)
+    /// Wide enough for "Older · uses claude-opus-5-5": a Mac pop-up button title cannot wrap, so it would be cut.
+    private static let tierWidth: CGFloat = 230
+    #else
+    /// A phone wraps a longer value inside this width.
+    private static let tierWidth: CGFloat = 110
+    #endif
+
     private var columnHeads: some View {
         HStack(spacing: 10) {
             #if os(iOS)
@@ -185,7 +193,7 @@ struct InfrastructureModelTiersSection: View {
             Text(SubagentSettings.columnProvider).frame(width: 110, alignment: .leading)
             Text(SubagentSettings.columnModel).frame(maxWidth: .infinity, alignment: .leading)
             #endif
-            Text(SubagentSettings.columnTier).frame(width: 110, alignment: .leading)
+            Text(SubagentSettings.columnTier).frame(width: Self.tierWidth, alignment: .leading)
             Text(SubagentSettings.columnPrice).frame(width: 96, alignment: .trailing)
         }
         .font(.orbitLabel)
@@ -198,7 +206,7 @@ struct InfrastructureModelTiersSection: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 10) {
                 Text(provider.label).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
-                tierCell(provider, model).frame(width: 110, alignment: .leading)
+                tierCell(provider, model).frame(width: Self.tierWidth, alignment: .leading)
                 priceCell(provider, model)
             }
             Text(model.model)
@@ -215,7 +223,7 @@ struct InfrastructureModelTiersSection: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            tierCell(provider, model).frame(width: 110, alignment: .leading)
+            tierCell(provider, model).frame(width: Self.tierWidth, alignment: .leading)
             priceCell(provider, model)
         }
         #endif
