@@ -9,7 +9,7 @@ import OrbitKit
 /// `JobCardShotsTests` photographs it on the Mac; the iPhone probe (docs/evidence/bg-job-card-apple)
 /// compiles this same file into the app and photographs it on an iPhone simulator.
 struct JobCardGallery: View {
-    enum Page { case folded, opened }
+    enum Page { case folded, opened, tray }
     let page: Page
 
     var body: some View {
@@ -26,6 +26,13 @@ struct JobCardGallery: View {
             case .opened:
                 Text("OPENED").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                 JobCardView(card: fixtures.opened, startsOpen: true)
+            case .tray:
+                // The Background row (R1): a failed job counted in red; opened, each job's row, Stop on the
+                // running one behind its confirmation (R3).
+                Text("BACKGROUND").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                BackgroundTrayView(procs: fixtures.trayProcs,
+                                   row: BackgroundRowRule.row(fixtures.trayProcs, items: [], sessionLive: true),
+                                   revealJob: { _ in false }, stopJob: { _ in })
             }
         }
         .environment(\.jobCardHost, fixtures.host)
@@ -42,6 +49,8 @@ struct JobCardFixtures {
     let folded: [Item]
     let opened: ToolCard
     let host: JobCardHost
+    /// The Background list: a failed job, a running one its runner can stop, one that finished.
+    let trayProcs: [BackgroundProc]
 
     init(now: Date) {
         let iso = ISO8601DateFormatter()
@@ -126,7 +135,7 @@ struct JobCardFixtures {
         // OPENED: the command, where it ran, the last 40 of 214 lines, and the one time it woke the agent.
         let opened = card("bgj_9f3a2c1d0e", "Wait for CI JavaScript job on 4c8f5a8a1b", ci, kind: "watch", startedAgo: 1800)
         let lines = ["Refreshing run status every 30 seconds."]
-            + (1...208).map { "  waiting · \($0 * 30)s" }
+            + (1...209).map { "  waiting · \($0 * 30)s" }
             + ["✓ Swift in 6m12s", "✓ Android in 9m40s", "X JavaScript in 11m58s — cancelled",
                "run ended before JavaScript finished: completed cancelled"]
         wake("bgj_9f3a2c1d0e", kind: "watch", command: ci, description: "Wait for CI JavaScript job on 4c8f5a8a1b",
@@ -143,6 +152,17 @@ struct JobCardFixtures {
             Item(label: "ENDED, NOT YET READ", card: unread),
         ]
         self.opened = opened
+        trayProcs = [
+            BackgroundProc(id: "bgj_tray_done", command: "npm test --workspace src/web", description: "Full web test suite",
+                           status: "completed", outputTail: "", startedAt: at(900), kind: "job", taskId: "bgj_tray_done",
+                           endedAt: at(600), exitCode: 0),
+            BackgroundProc(id: "bgj_tray_fail", command: "docker build -t apiserver .", description: "Build apiserver image",
+                           status: "failed", outputTail: "", startedAt: at(500), kind: "job", taskId: "bgj_tray_fail",
+                           endedAt: at(430), exitCode: 1),
+            BackgroundProc(id: "bgj_tray_run", command: "./deploy.sh 5dd308afd", description: "Deploy 5dd308afd",
+                           status: "running", outputTail: "", startedAt: at(300), kind: "job", taskId: "bgj_tray_run",
+                           stoppable: true),
+        ]
         let tailsByJob = tails
         host = JobCardHost(procs: procs, wakes: wakes, dontSend: dontSend, live: true, place: "workstation",
                            tail: { id in

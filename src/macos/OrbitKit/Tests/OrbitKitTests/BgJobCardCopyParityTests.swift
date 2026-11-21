@@ -103,6 +103,24 @@ final class BgJobCardCopyParityTests: XCTestCase {
         assertHas(card, "typeof input?.kind === 'string' && input.kind ? input.kind : 'job'", Self.webCard)
     }
 
+    /// Only the folded card's last lines turn red on a failure; the opened output keeps output's own
+    /// colour, and the killed line is the card's second-level size and grey (web `.chat-job-output`,
+    /// `.chat-job-ending`).
+    func testTheOpenedOutputIsNeverRedAndTheKilledLineIsSecondLevel() throws {
+        let css = try source("src/web/src/index.css")
+        let output = try section(css, from: ".chat-job-output .chat-pre {", to: "}")
+        XCTAssertFalse(output.contains("--error"), "web's opened output turned red")
+        let ending = try section(css, from: ".chat-job-ending {", to: "}")
+        assertHas(ending, "font-size: 12px;", "src/web/src/index.css")
+        let view = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/Console/JobCardView.swift")
+        let detail = try section(view, from: "private func detail(", to: "private var wakeBlock")
+        XCTAssertFalse(detail.contains("Color.red"), "the opened output is drawn red again")
+        XCTAssertFalse(detail.contains(".orbitSubtext"), "the killed line is larger than the card's other lines")
+        let killed = try section(view, from: "case .killedBy(let line):", to: "case .ending")
+        XCTAssertTrue(killed.contains(".font(.orbitLabel).foregroundStyle(.secondary)"),
+                      "the folded killed line left the card's second-level size and grey")
+    }
+
     /// R2: the route's pace and the opened card's line count.
     func testThePaceAndTheLineCountsAreTheWebs() throws {
         let card = try source(Self.webCard)

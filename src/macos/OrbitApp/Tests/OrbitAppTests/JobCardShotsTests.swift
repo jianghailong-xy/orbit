@@ -56,6 +56,10 @@ final class JobCardShotsTests: XCTestCase {
         try write("mac-job-card-folded-dark", JobCardGallery(page: .folded), size: CGSize(width: 820, height: 900), dark: true)
     }
 
+    func testBackgroundRow() throws {
+        try write("mac-job-tray-folded", JobCardGallery(page: .tray), size: CGSize(width: 820, height: 200))
+    }
+
     func testOpenedCard() throws {
         try write("mac-job-card-opened", JobCardGallery(page: .opened), size: CGSize(width: 820, height: 1400))
     }
