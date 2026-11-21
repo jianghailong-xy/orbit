@@ -215,7 +215,7 @@ test('Feishu: who can use the bot is saved only through the owner channel, and t
         id, ownerId: owner.id, creatorId: owner.id, workspaceId: owner.workspaceId, assignedRunnerId: owner.runnerId, title: `open ${id.slice(0, 8)}`,
         prompt: 'the work', provider: 'claude', status, dispatchOrigin: SessionDispatchOrigin.USER, startedAt: new Date(),
         ...(status === RunStatus.SUCCEEDED || status === RunStatus.FAILED
-          ? { finishedAt: new Date(), releaseCause: 'engine_exited' }
+          ? { finishedAt: new Date(), releaseCause: status === RunStatus.FAILED ? 'engine_failed' : 'engine_exited' }
           : status === RunStatus.CANCELLED ? { finishedAt: new Date(), releaseCause: 'cancelled' } : {}),
       },
     });

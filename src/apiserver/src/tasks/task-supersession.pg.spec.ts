@@ -497,7 +497,7 @@ suite('task supersession, on real PostgreSQL', async (t) => {
     await db.session.create({
       data: {
         id: sessionId, ownerId, creatorId: ownerId, workspaceId, taskId: old.id,
-        title: 'the attempt', prompt: 'p', status: RunStatus.FAILED, finishedAt: new Date(), releaseCause: 'engine_exited', endReason: 'error',
+        title: 'the attempt', prompt: 'p', status: RunStatus.FAILED, finishedAt: new Date(), releaseCause: 'engine_failed', endReason: 'error',
       },
     });
 

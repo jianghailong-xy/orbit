@@ -289,7 +289,7 @@ test('a shared project: its seven blocks, the red line, and the scope a token re
         status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER, ...extra,
         ...(isReleasedStatus(fixtureStatus) ? {
           finishedAt: extra.finishedAt ?? new Date(),
-          releaseCause: fixtureStatus === RunStatus.CANCELLED ? 'cancelled' : 'engine_exited',
+          releaseCause: fixtureStatus === RunStatus.CANCELLED ? 'cancelled' : fixtureStatus === RunStatus.FAILED ? 'engine_failed' : 'engine_exited',
         } : {}),
       } as never,
     });

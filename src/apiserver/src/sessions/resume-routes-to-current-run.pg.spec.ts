@@ -175,7 +175,7 @@ async function fixture(
       ...common,
       id: replaced,
       title: `${label}-replaced`,
-      status: RunStatus.FAILED, releaseCause: 'engine_exited',
+      status: RunStatus.FAILED, releaseCause: 'engine_failed',
       finishedAt: new Date(),
     },
   });

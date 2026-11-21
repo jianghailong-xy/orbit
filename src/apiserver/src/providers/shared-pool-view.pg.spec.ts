@@ -88,7 +88,7 @@ async function sessionOn(
       prompt: 'hello',
       status,
       ...(['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(status)
-        ? { finishedAt: new Date(), releaseCause: status === 'CANCELLED' ? 'cancelled' : 'engine_exited' }
+        ? { finishedAt: new Date(), releaseCause: status === 'CANCELLED' ? 'cancelled' : status === 'FAILED' ? 'engine_failed' : 'engine_exited' }
         : {}),
       ownerId: owner.id,
       creatorId: owner.id,

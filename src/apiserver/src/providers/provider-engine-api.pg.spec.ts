@@ -150,7 +150,7 @@ test('T3 provider-engine API on PostgreSQL', { timeout: 600_000 }, async (t) => 
   }
   /** A claimed run that did a turn and then failed: there is a conversation to resume. */
   const ranAndFailed = (id: string) => db.session.update({ where: { id }, data: {
-    status: RunStatus.FAILED, releaseCause: 'engine_exited', numTurns: 1, runtimeSessionId: `runtime-${randomUUID()}`, startedAt: new Date(),
+    status: RunStatus.FAILED, releaseCause: 'engine_failed', numTurns: 1, runtimeSessionId: `runtime-${randomUUID()}`, startedAt: new Date(),
     finishedAt: new Date(), inboxLeaseOwner: null, inboxLeaseGeneration: null,
   } });
   const resume = (ownerId: string, id: string, dto: Record<string, unknown> = {}) =>
@@ -531,7 +531,7 @@ test('T3 provider-engine API on PostgreSQL', { timeout: 600_000 }, async (t) => 
     const withKey = await machine(owner, { ORBIT_DSH_API_KEY: 'workspace-own-key' });
     const legacy = async (on: Machine) => (await db.session.create({ data: {
       title: 'legacy dsh', prompt: '', ownerId: owner, creatorId: owner, workspaceId: on.workspaceId, assignedRunnerId: on.id,
-      provider: AgentProvider.DSH, providerBuiltin: true, engine: AgentProvider.DSH, status: RunStatus.FAILED, releaseCause: 'engine_exited', numTurns: 1,
+      provider: AgentProvider.DSH, providerBuiltin: true, engine: AgentProvider.DSH, status: RunStatus.FAILED, releaseCause: 'engine_failed', numTurns: 1,
       runtimeSessionId: `runtime-${randomUUID()}`, startedAt: new Date(), finishedAt: new Date(),
     } })).id;
     const kept = await legacy(withKey);

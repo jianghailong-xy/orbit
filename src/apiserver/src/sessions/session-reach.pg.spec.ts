@@ -271,7 +271,7 @@ test('a session reaches a wider session only as the table says', {
         ...extra,
         ...(isReleasedStatus(fixtureStatus) ? {
           finishedAt: extra.finishedAt ?? new Date(),
-          releaseCause: fixtureStatus === RunStatus.CANCELLED ? 'cancelled' : 'engine_exited',
+          releaseCause: fixtureStatus === RunStatus.CANCELLED ? 'cancelled' : fixtureStatus === RunStatus.FAILED ? 'engine_failed' : 'engine_exited',
         } : {}),
       },
     });

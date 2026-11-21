@@ -808,7 +808,7 @@ test('a session row says when the message it previews is Orbit’s own', {
     await prisma.session.update({
       where: { id: sessionId },
       data: {
-        status: RunStatus.FAILED, releaseCause: 'engine_exited', retryAt: armedAt, retryAttempts: 0,
+        status: RunStatus.FAILED, releaseCause: 'engine_failed', retryAt: armedAt, retryAttempts: 0,
         cancelRequestedAt: new Date(), finishedAt: new Date(),
       },
     });

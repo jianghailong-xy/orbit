@@ -171,7 +171,7 @@ test('session folders: owned, unique per workspace, deleted without deleting a s
         title, prompt: title, status,
         ...(isReleasedStatus(status) ? {
           finishedAt: new Date(),
-          releaseCause: status === RunStatus.CANCELLED ? 'cancelled' : 'engine_exited',
+          releaseCause: status === RunStatus.CANCELLED ? 'cancelled' : status === RunStatus.FAILED ? 'engine_failed' : 'engine_exited',
         } : {}),
         dispatchOrigin: SessionDispatchOrigin.USER,
         folderId: extra.folderId ?? null,

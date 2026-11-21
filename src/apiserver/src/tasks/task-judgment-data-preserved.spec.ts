@@ -3248,6 +3248,15 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // relation, trigger, function or DONE fence changes.
       '1401_session_release_fact_chk',
       '1402_session_release_fact_validate',
+      // 1403 widens session_release_cause_chk with engine_failed and end_not_honored (NOT VALID) and 1404 validates it;
+      // no row is written. 1405 rewrites session.release_cause on FAILED rows whose cause is not a failure cause, in
+      // batches; 1406 adds session_release_failure_chk NOT VALID and 1407 validates it. Session is not a preserved
+      // relation, and no trigger, function or DONE fence changes (1405's procedure is dropped after its CALL).
+      '1403_session_release_failure_causes',
+      '1404_session_release_failure_causes_validate',
+      '1405_session_release_failure_backfill',
+      '1406_session_release_failure_chk',
+      '1407_session_release_failure_validate',
       // 1411 to 1415 replace the bodies of the session-dispatch guards and re-create three ended-triggers so they
       // read session.finished_at instead of the terminal status set (plan step 4.4), and add finished_at to five
       // trigger column lists on session; every guard answers what it did for every row session_release_fact_chk

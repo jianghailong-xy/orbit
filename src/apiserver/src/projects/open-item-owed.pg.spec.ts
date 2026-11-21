@@ -992,7 +992,7 @@ test('(6) the backstop writes the ending the task’s own edge would have writte
           title: 'the attempt that failed',
           prompt: 'do the work',
           provider: 'claude',
-          status: RunStatus.FAILED, releaseCause: 'engine_exited',
+          status: RunStatus.FAILED, releaseCause: 'engine_failed',
           dispatchOrigin: SessionDispatchOrigin.USER,
           startsTaskWork: true,
           startedAt: new Date(Date.now() - 180_000),

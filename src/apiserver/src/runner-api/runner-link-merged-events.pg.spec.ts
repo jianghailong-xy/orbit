@@ -354,7 +354,7 @@ test('the link gateway\'s merged event call: many sessions in one transaction, e
         status,
         ...(isReleasedStatus(status) ? {
           finishedAt: new Date(),
-          releaseCause: status === RunStatus.CANCELLED ? 'cancelled' : 'engine_exited',
+          releaseCause: status === RunStatus.CANCELLED ? 'cancelled' : status === RunStatus.FAILED ? 'engine_failed' : 'engine_exited',
         } : {}),
         dispatchOrigin: 'USER',
         startsTaskWork: false,

@@ -158,7 +158,7 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
         dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false, assignedRunnerId: runnerId, numTurns: 1,
         inboxLeaseOwner: process_, branch: `orbit/${id.slice(0, 8)}`, ...extra,
         ...(status === RunStatus.SUCCEEDED || status === RunStatus.FAILED
-          ? { finishedAt: new Date(), releaseCause: 'engine_exited' }
+          ? { finishedAt: new Date(), releaseCause: status === RunStatus.FAILED ? 'engine_failed' : 'engine_exited' }
           : status === RunStatus.CANCELLED ? { finishedAt: new Date(), releaseCause: 'cancelled' } : {}),
       },
     });

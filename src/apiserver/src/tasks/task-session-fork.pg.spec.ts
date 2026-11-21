@@ -244,7 +244,7 @@ test('SR55: a task forked from its creating session', { skip, concurrency: 1, ti
     // The attempt fails and the task is retried, carrying a known-good commit of its own. SR12: the
     // retry starts from the same snapshot — PF reads the task's create-time columns, not the attempt.
     await admin.query(
-      `UPDATE "session" SET "status" = 'FAILED', "release_cause" = 'engine_exited', "finished_at" = now() WHERE "id" = $1`,
+      `UPDATE "session" SET "status" = 'FAILED', "release_cause" = 'engine_failed', "finished_at" = now() WHERE "id" = $1`,
       [first.id],
     );
     await admin.query(

@@ -151,7 +151,7 @@ test('link previews: five kinds of card, one answer for everything out of reach,
         startsTaskWork: true,
         ...extra,
         ...(status === RunStatus.SUCCEEDED || status === RunStatus.FAILED
-          ? { finishedAt: extra.finishedAt ?? new Date(), releaseCause: 'engine_exited' }
+          ? { finishedAt: extra.finishedAt ?? new Date(), releaseCause: status === RunStatus.FAILED ? 'engine_failed' : 'engine_exited' }
           : status === RunStatus.CANCELLED ? { finishedAt: extra.finishedAt ?? new Date(), releaseCause: 'cancelled' } : {}),
       },
     });
@@ -178,7 +178,7 @@ test('link previews: five kinds of card, one answer for everything out of reach,
       provider: 'claude',
       model: 'claude-opus-5',
       numTurns: 12,
-      status: RunStatus.FAILED, finishedAt: new Date(), releaseCause: 'engine_exited',
+      status: RunStatus.FAILED, finishedAt: new Date(), releaseCause: 'engine_failed',
       error: 'engine exited with code 1',
       retryAt: new Date(now + 30_000),
       startedAt: new Date(now - 2 * HOUR),

@@ -181,7 +181,7 @@ test('a session row names the session that sent the message it previews', {
         ...data,
         ...(isReleasedStatus(fixtureStatus) ? {
           finishedAt: data.finishedAt ?? new Date(),
-          releaseCause: fixtureStatus === RunStatus.CANCELLED ? 'cancelled' : 'engine_exited',
+          releaseCause: fixtureStatus === RunStatus.CANCELLED ? 'cancelled' : fixtureStatus === RunStatus.FAILED ? 'engine_failed' : 'engine_exited',
         } : {}),
       },
     });

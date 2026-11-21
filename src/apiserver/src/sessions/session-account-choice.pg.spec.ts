@@ -214,7 +214,7 @@ test('which of its runner’s accounts a session runs on — picked by hand, or 
         ...extra,
         ...(isReleasedStatus(fixtureStatus) ? {
           finishedAt: extra.finishedAt ?? new Date(),
-          releaseCause: fixtureStatus === RunStatus.CANCELLED ? 'cancelled' : 'engine_exited',
+          releaseCause: fixtureStatus === RunStatus.CANCELLED ? 'cancelled' : fixtureStatus === RunStatus.FAILED ? 'engine_failed' : 'engine_exited',
         } : {}),
       },
     });

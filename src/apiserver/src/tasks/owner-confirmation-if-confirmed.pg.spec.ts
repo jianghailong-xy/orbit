@@ -179,7 +179,7 @@ async function waitingRun(
       status, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
       startedAt: new Date(),
       ...run.session,
-      ...(isReleasedStatus(status) ? { finishedAt: run.session?.finishedAt ?? new Date(), releaseCause: status === 'CANCELLED' ? 'cancelled' : 'engine_exited' } : {}),
+      ...(isReleasedStatus(status) ? { finishedAt: run.session?.finishedAt ?? new Date(), releaseCause: status === 'CANCELLED' ? 'cancelled' : status === 'FAILED' ? 'engine_failed' : 'engine_exited' } : {}),
     },
   });
   let seq = 1;

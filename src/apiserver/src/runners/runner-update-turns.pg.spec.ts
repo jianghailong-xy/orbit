@@ -46,7 +46,7 @@ test('a draining runner lists the viewer’s turns it waits for; no other runner
       provider: 'claude', providerBuiltin: true, status, dispatchOrigin: SessionDispatchOrigin.USER,
       ...(isReleasedStatus(status) ? {
         finishedAt: new Date(),
-        releaseCause: status === RunStatus.CANCELLED ? 'cancelled' : 'engine_exited',
+        releaseCause: status === RunStatus.CANCELLED ? 'cancelled' : status === RunStatus.FAILED ? 'engine_failed' : 'engine_exited',
       } : {}),
       ...(claimedMinutesAgo !== undefined ? { runClaimedAt: new Date(Date.now() - claimedMinutesAgo * MINUTE) } : {}),
     } });

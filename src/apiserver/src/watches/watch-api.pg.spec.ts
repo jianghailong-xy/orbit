@@ -214,7 +214,7 @@ async function session(h: Harness, ownerId: string, shape: SessionShape = {}): P
                            "completed_at","archived_at","deleted_at","updated_at", "finished_at", "release_cause")
      VALUES ($1,'watched session','p',$2,$2,$3,$4,$5,$5,$6,now(),
              CASE WHEN $3::run_status IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN now() END,
-             CASE WHEN $3::run_status = 'CANCELLED' THEN 'cancelled' WHEN $3::run_status IN ('SUCCEEDED', 'FAILED') THEN 'engine_exited' END)`,
+             CASE WHEN $3::run_status = 'CANCELLED' THEN 'cancelled' WHEN $3::run_status = 'FAILED' THEN 'engine_failed' WHEN $3::run_status = 'SUCCEEDED' THEN 'engine_exited' END)`,
     [id, ownerId, shape.status ?? 'RUNNING', shape.endReason ?? null, shape.completedAt ?? null, shape.deletedAt ?? null],
   );
   for (let n = 0; n < (shape.pendingApprovals ?? 0); n += 1) {
@@ -1064,7 +1064,7 @@ test('a session target names the task its session runs, and no other', { skip, t
   assert.deepEqual(named(one.body.targets), created, 'the reads name what the create named');
 
   // The standing is the task's as it is now: the run failed, and the task with it.
-  await h.sql.query(`UPDATE "session" SET "status" = 'FAILED', "release_cause" = 'engine_exited', "finished_at" = now() WHERE "id" = $1`, [runOfWork]);
+  await h.sql.query(`UPDATE "session" SET "status" = 'FAILED', "release_cause" = 'engine_failed', "finished_at" = now() WHERE "id" = $1`, [runOfWork]);
   await h.sql.query(`UPDATE "task" SET "status" = 'FAILED' WHERE "id" = $1`, [work]);
   const ended = await call(h, owner.bearer, 'GET', `/watches/${overSessions.id}`);
   expectStatus(ended, 200, 'the watch reads back after the run ended');
