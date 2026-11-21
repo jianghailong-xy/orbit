@@ -463,10 +463,22 @@ test('every failure writer records FAILED and the error on the turn that carries
       `SELECT id FROM "conversation_turn" WHERE session_id = $1::uuid AND status = 'PENDING' AND kind = 'message'`, [id],
     )).rows as Array<{ id: string }>;
     assert.equal(queued.length, 1, 'the revive queued its message');
+    // In one transaction that declares it reads session engines, as the claim does: without it the engine guard
+    // (guard_session_engine_acquisition) skips a PENDING to RUNNING write on an engine session, silently.
     const leaseOwner = randomUUID();
-    await sql.query(
-      `UPDATE "session" SET status = 'RUNNING', engine_turn_active = true, run_claimed_at = now(), inbox_lease_owner = $2::uuid
-        WHERE id = $1::uuid`, [id, leaseOwner]);
+    await sql.query('BEGIN');
+    try {
+      await sql.query(`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`);
+      const claimed = await sql.query(
+        `UPDATE "session" SET status = 'RUNNING', engine_turn_active = true, run_claimed_at = now(),
+                inbox_lease_owner = $2::uuid
+          WHERE id = $1::uuid AND status = 'PENDING'`, [id, leaseOwner]);
+      assert.equal(claimed.rowCount, 1, 'claimed');
+      await sql.query('COMMIT');
+    } catch (error) {
+      await sql.query('ROLLBACK');
+      throw error;
+    }
     return { id, failedTurn, revivedTurn: queued[0].id, leaseOwner };
   }
 
