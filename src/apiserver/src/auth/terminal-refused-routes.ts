@@ -184,6 +184,7 @@ export const TERMINAL_REFUSED_ROUTES: readonly string[] = [
   'GET /sessions/compact',
   'GET /sessions/counts',
   'GET /sessions/imported',
+  'GET /sessions/project-placement',
   'GET /sessions/search',
   'GET /share-links',
   'GET /task-lists',
