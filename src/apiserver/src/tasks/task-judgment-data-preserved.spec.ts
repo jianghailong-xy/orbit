@@ -3246,7 +3246,7 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1340 adds drive_entry_id and drive_version_id to share_link, replaces its one-root CHECK and adds two foreign keys
       // and a partial index (one-file share links); no existing row is written, and no preserved relation, trigger,
       // function or DONE fence changes.
-      '1340_share_link_drive_file'],
+      '1340_share_link_drive_file',
       // 1350 adds three columns and two CHECKs on task (landing_check_exempt, its reason and the coordinator session
       // that wrote it, §12.14 P-C2); every existing row satisfies both CHECKs with the defaults, no row is written,
       // and no trigger, function or DONE fence changes.
@@ -3261,7 +3261,7 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1403 widens session_release_cause_chk with engine_failed and end_not_honored (NOT VALID) and 1404 validates it;
       // no row is written. Session is not a preserved relation, and no trigger, function or DONE fence changes.
       '1403_session_release_failure_causes',
-      '1404_session_release_failure_causes_validate']],
+      '1404_session_release_failure_causes_validate'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
