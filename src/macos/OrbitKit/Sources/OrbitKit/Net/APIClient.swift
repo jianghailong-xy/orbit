@@ -1416,12 +1416,15 @@ public final class APIClient: @unchecked Sendable {
         try await get("projects/\(projectID)/coordinator/pending-waits")
     }
 
-    /// One of the handoff's presses: `nil` is Hand over, then `skip` (Skip the note / Hand over without
+    /// One of the handoff's presses: `start` is Hand over, then `skip` (Skip the note / Hand over without
     /// a note), `cancel` (Cancel handover / Keep this coordinator) and `retry` (Try again). Each
     /// answers the handoff as it now stands; a 409 is a press that does not fit its state.
     public func coordinatorHandoff(_ projectID: String,
-                                   _ action: CoordinatorHandoffAction = .start) async throws -> CoordinatorHandoffView {
-        try await postEmpty("projects/\(projectID)/coordinator/handoff\(action.pathSuffix)")
+                                   _ action: CoordinatorHandoffAction = .start,
+                                   successor: CoordinatorHandoffSuccessor? = nil) async throws -> CoordinatorHandoffView {
+        let path = "projects/\(projectID)/coordinator/handoff\(action.pathSuffix)"
+        if action == .cancel { return try await postEmpty(path) }
+        return try await post(path, body: CoordinatorHandoffRequest(successor: successor))
     }
 
     /// Lift a task list's pause, so its otherwise-ready tasks can run.

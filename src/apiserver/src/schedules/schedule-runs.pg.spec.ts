@@ -23,7 +23,7 @@ import { after, before, test } from 'node:test';
 
 import { BadRequestException } from '@nestjs/common';
 import { PermissionMode } from '@orbit/shared';
-import { PrismaClient, RunnerStatus, SessionDispatchOrigin, SessionRunSource } from '@prisma/client';
+import { Prisma, PrismaClient, RunnerStatus, SessionDispatchOrigin, SessionRunSource } from '@prisma/client';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -1354,6 +1354,40 @@ test('LAND: a report does not bypass the working-time limit while the turn is st
   assert.equal((await runOf(run.id)).landedSha, null);
   assert.ok(calls.some((c) => c.op === 'interrupt' && c.sessionId === sessionId));
   assert.equal((await db.session.findUniqueOrThrow({ where: { id: sessionId } })).mergeStatus, null);
+});
+
+// Work outside a turn leaves the session at AWAITING_INPUT (common/session-working.ts): the turn is over, the run is not.
+const OUTSIDE_TURN_WORK: Array<{ kind: string; running: Prisma.SessionUpdateInput; ended: Prisma.SessionUpdateInput }> = [
+  { kind: 'a background job', running: { runningBgJobs: ['bgj_still_going'] }, ended: { runningBgJobs: [] } },
+  { kind: 'a subagent', running: { runningSubagents: ['toolu_subagent'] }, ended: { runningSubagents: [] } },
+  { kind: 'an engine turn', running: { engineTurnActive: true }, ended: { engineTurnActive: false } },
+];
+
+for (const work of OUTSIDE_TURN_WORK) {
+  test(`LAND: a run does not land while its session at AWAITING_INPUT still has ${work.kind} executing`, { skip }, async () => {
+    const { w, run, sessionId } = await landFixture(`land-executing-${work.kind.replace(/\W+/g, '-')}`);
+    await runs.report(w.ownerId, sessionId, { outcome: 'CHANGED', key: 'engine@next', summary: 'Bumped the engine.' });
+    await db.session.update({ where: { id: sessionId }, data: { status: 'AWAITING_INPUT', ...work.running } });
+    await runs.landReportedRuns();
+    assert.equal((await runOf(run.id)).landingStatus, 'WAITING', `no landing while ${work.kind} is executing`);
+    assert.equal((await db.session.findUniqueOrThrow({ where: { id: sessionId } })).mergeStatus, null);
+    await db.session.update({ where: { id: sessionId }, data: work.ended });
+    await runs.landReportedRuns();
+    assert.equal((await runOf(run.id)).landingStatus, 'MERGING', `lands once ${work.kind} has ended`);
+    assert.equal((await db.session.findUniqueOrThrow({ where: { id: sessionId } })).mergeStatus, 'pending');
+  });
+}
+
+test('LAND: the working-time limit still bounds a run waiting on a background job after its turn', { skip }, async () => {
+  const { w, run, sessionId } = await landFixture('land-limit-bg-job');
+  await runs.report(w.ownerId, sessionId, { outcome: 'CHANGED', key: 'early', summary: 'Committed the bump.' });
+  await db.session.update({ where: { id: sessionId }, data: { status: 'AWAITING_INPUT', runningBgJobs: ['bgj_never_ends'] } });
+  advance(31 * MINUTE);
+  await runs.landReportedRuns();
+  assert.equal((await runOf(run.id)).state, 'FAILED');
+  assert.equal((await runOf(run.id)).failureReason, 'RUN_LIMIT');
+  assert.equal((await runOf(run.id)).landedSha, null);
+  assert.ok(calls.some((c) => c.op === 'interrupt' && c.sessionId === sessionId));
 });
 
 test('LAND: a pending landing keeps prior failures and Waiting on you until a confirmed success', { skip }, async () => {

@@ -859,6 +859,9 @@ test('ensure writes the LS1 row — LANDING, AWAITING_INPUT, no engine, creator,
       const settledSession = await stack.db.session.findUniqueOrThrow({ where: { id: landing.sessionId } });
       assert.equal(settledSession.status, RunStatus.SUCCEEDED);
       assert.ok(settledSession.completedAt);
+      // Released in the same write (plan step 3.1): the release column and its cause beside the status.
+      assert.equal(settledSession.finishedAt?.getTime(), settledSession.completedAt.getTime());
+      assert.equal(settledSession.releaseCause, 'landing_settled');
       const settledLanding = await stack.db.projectLanding.findUniqueOrThrow({ where: { id: landing.id } });
       assert.equal(settledLanding.settledAs, 'LANDED');
 
@@ -882,6 +885,8 @@ test('ensure writes the LS1 row — LANDING, AWAITING_INPUT, no engine, creator,
       const cancelled = await stack.db.session.findUniqueOrThrow({ where: { id: episode2.sessionId } });
       assert.equal(cancelled.status, RunStatus.CANCELLED);
       assert.ok(cancelled.completedAt);
+      assert.equal(cancelled.finishedAt?.getTime(), cancelled.completedAt.getTime());
+      assert.equal(cancelled.releaseCause, 'landing_settled');
       assert.equal((await stack.db.projectLanding.findUniqueOrThrow({ where: { id: episode2.id } })).settledAs, 'CANCELLED');
 
       // A PROMOTION subject takes the project's coordinator workspace and its own title.

@@ -50,6 +50,7 @@ import { SCHEDULE_COPY, scheduleFill, isUsageLimitErrorText } from '@orbit/share
 import { Prisma, RunStatus, type Schedule, type ScheduleRun } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 
+import { isSessionExecuting } from '../common/session-working';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { RUNNER_BEATS, runnerIsOnline } from '../runners/runner-presence';
@@ -93,6 +94,7 @@ import {
   runSessionScheduleId,
   type ScheduleActor,
 } from './schedules.service';
+import { RELEASED_SESSION_STATUSES } from '../common/session-release';
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -207,7 +209,7 @@ const LIVE_SESSION: Prisma.SessionWhereInput = {
   archivedAt: null,
   cancelRequestedAt: null,
   OR: [
-    { status: { notIn: [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED] } },
+    { status: { notIn: [...RELEASED_SESSION_STATUSES] } },
     { status: RunStatus.FAILED, retryAt: { not: null } },
   ],
 };
@@ -722,9 +724,12 @@ export class ScheduleRunsService {
       await this.settleLanding(run.id, 'FAILED', null, 'The run session ended unsuccessfully; nothing was landed.');
       return;
     }
-    // The tool reports during the turn. A commit and its final worktree report may still be on the way.
-    if (session.status !== RunStatus.AWAITING_INPUT && session.status !== RunStatus.SUCCEEDED) {
-      // Reporting does not exempt the rest of a LAND turn from its run limit.
+    // The tool reports during the turn. A commit and its final worktree report may still be on the way, and
+    // AWAITING_INPUT says only that the turn is over: a background job, a subagent or an engine turn still
+    // executing can commit more. The worker's next pass looks again; the run limit bounds the wait.
+    if ((session.status !== RunStatus.AWAITING_INPUT && session.status !== RunStatus.SUCCEEDED)
+        || isSessionExecuting(session)) {
+      // Reporting does not exempt the rest of a LAND run from its run limit.
       const opening = await this.prisma.conversationTurn.findFirst({
         where: { sessionId: session.id, clientTurnId: openingTurnKey(session.id) }, select: { deliveredAt: true },
       });

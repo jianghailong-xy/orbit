@@ -52,6 +52,41 @@ enum ContextActionSymbol {
     static let newCoordinator = "arrow.right.to.line"
 }
 
+private struct CoordinatorHandoffSuccessorPicker: View {
+    let engines: [EngineChoice]
+    var savedSuccessor: CoordinatorHandoffSuccessor? = nil
+    @Binding var selection: CoordinatorHandoffSuccessor?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(CoordinatorHandoffCopy.successorRowTitle).font(.orbitLabel.weight(.semibold))
+            Picker(CoordinatorHandoffCopy.successorRowTitle, selection: $selection) {
+                Text(CoordinatorHandoffCopy.successorKeep).tag(nil as CoordinatorHandoffSuccessor?)
+                ForEach(engines) { engine in
+                    if engine.unavailable == nil, let provider = engine.provider {
+                        Text("\(engine.label) · \(provider.label)")
+                            .tag(Optional(CoordinatorHandoffSuccessor(engine: engine.slug, provider: provider.slug)))
+                    }
+                }
+                if let savedSuccessor, !engines.contains(where: { engine in
+                    engine.unavailable == nil && engine.provider != nil
+                        && savedSuccessor == CoordinatorHandoffSuccessor(engine: engine.slug,
+                                                                         provider: engine.provider?.slug)
+                }) {
+                    let parts = [savedSuccessor.engine.map(ProviderEngines.cliName), savedSuccessor.provider,
+                                 savedSuccessor.model].compactMap { $0 }
+                    Text(parts.joined(separator: " · ")).tag(Optional(savedSuccessor))
+                }
+            }
+            .pickerStyle(.menu)
+            .labelsHidden()
+            Text(CoordinatorHandoffCopy.successorRowDetail)
+                .font(.orbitLabel).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
 /// The confirm a press on Start a new coordinator opens on the Mac (board 02 ①): what will happen,
 /// the note it writes and the waits that move (each named, a paused one saying so), then Cancel and
 /// Hand over.
@@ -59,8 +94,10 @@ struct CoordinatorHandoffConfirmView: View {
     let projectTitle: String
     let running: Bool
     let waits: [CoordinatorPendingWait]
+    let successorEngines: [EngineChoice]
     let onCancel: () -> Void
-    let onHandOver: () -> Void
+    let onHandOver: (CoordinatorHandoffSuccessor?) -> Void
+    @State private var successor: CoordinatorHandoffSuccessor? = nil
 
     /// The body with the project's name in bold, where the copy puts it.
     private var bodyText: AttributedString {
@@ -99,11 +136,12 @@ struct CoordinatorHandoffConfirmView: View {
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(RoundedRectangle(cornerRadius: 8).fill(Color.secondary.opacity(0.08)))
+            CoordinatorHandoffSuccessorPicker(engines: successorEngines, selection: $successor)
             HStack {
                 Spacer()
                 Button(CoordinatorHandoffCopy.cancel, role: .cancel, action: onCancel)
                     .keyboardShortcut(.cancelAction)
-                Button(CoordinatorHandoffCopy.handOver, action: onHandOver)
+                Button(CoordinatorHandoffCopy.handOver) { onHandOver(successor) }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
             }
@@ -131,7 +169,10 @@ struct CoordinatorHandoffConfirmView: View {
 /// itself; or the failure, with what can still be done.
 struct CoordinatorHandoffStatusView: View {
     let row: CoordinatorHandoffRow
-    let onAction: (CoordinatorHandoffAction) -> Void
+    let savedSuccessor: CoordinatorHandoffSuccessor?
+    let choiceSources: ChoiceSources
+    let onAction: (CoordinatorHandoffAction, CoordinatorHandoffSuccessor?) -> Void
+    @State private var successor: CoordinatorHandoffSuccessor? = nil
 
     var body: some View {
         switch row {
@@ -160,7 +201,14 @@ struct CoordinatorHandoffStatusView: View {
                     Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.red)
                     Text(reason).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
                 }
-                buttons(actions.map { ($0, CoordinatorHandoffRow.label($0)) })
+                CoordinatorHandoffSuccessorPicker(engines: SessionProviderChoices.engines(sources: choiceSources),
+                                                  savedSuccessor: savedSuccessor, selection: $successor)
+                    .padding(.leading, 24)
+                // "Same as this one" here is said on purpose, and clears a pick saved earlier.
+                buttons(actions.map { ($0, CoordinatorHandoffRow.label($0)) }, successor: successor ?? .same)
+            }
+            .onChange(of: savedSuccessor, initial: true) { _, value in
+                successor = value
             }
         case .completed:
             EmptyView()   // drawn in the composer's place (`CoordinatorHandedOverBanner`)
@@ -177,17 +225,21 @@ struct CoordinatorHandoffStatusView: View {
             .accessibilityIdentifier("coordinator-handoff-status")
     }
 
-    private func buttons(_ presses: [(CoordinatorHandoffAction, String)]) -> some View {
+    private func buttons(_ presses: [(CoordinatorHandoffAction, String)],
+                         successor: CoordinatorHandoffSuccessor? = nil) -> some View {
         // Wraps on a phone, where three presses do not fit one line (board 02 ⑤).
         ViewThatFits(in: .horizontal) {
-            HStack(spacing: 8) { ForEach(presses, id: \.0) { press($0.0, $0.1) } }
-            VStack(alignment: .leading, spacing: 8) { ForEach(presses, id: \.0) { press($0.0, $0.1) } }
+            HStack(spacing: 8) { ForEach(presses, id: \.0) { press($0.0, $0.1, successor: successor) } }
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(presses, id: \.0) { press($0.0, $0.1, successor: successor) }
+            }
         }
         .padding(.leading, 24)
     }
 
-    private func press(_ action: CoordinatorHandoffAction, _ label: String) -> some View {
-        Button(label) { onAction(action) }
+    private func press(_ action: CoordinatorHandoffAction, _ label: String,
+                       successor: CoordinatorHandoffSuccessor?) -> some View {
+        Button(label) { onAction(action, action == .cancel ? nil : successor) }
             .buttonStyle(.bordered)
             .controlSize(.small)
     }
