@@ -455,14 +455,28 @@ private struct MarkdownTableView: View {
     }
 
     private func cell(_ text: String, column: Int, header: Bool) -> some View {
-        inlineMarkdown(text)
-            .font(.orbitTableCell)
-            .fontWeight(header ? .semibold : .regular)
-            .frame(maxWidth: .infinity, alignment: frameAlignment(column))
-            .padding(.vertical, 4)
-            .padding(.horizontal, 8)
-            .background(header ? Color.primary.opacity(0.06) : Color.clear)
-            .overlay(Rectangle().stroke(border, lineWidth: 0.5))
+        // A cell may hold an image (a reply listing its screenshots in a table); the inline parser
+        // drops those, so the cell is split into its text and image pieces.
+        let blocks = tableCellBlocks(text)
+        return VStack(alignment: frameAlignment(column).horizontal, spacing: 4) {
+            ForEach(blocks.indices, id: \.self) { i in
+                switch blocks[i] {
+                case .image(let source, let alt):
+                    MarkdownImageView(source: source, alt: alt)
+                case .paragraph(let text):
+                    inlineMarkdown(text)
+                default:
+                    EmptyView()
+                }
+            }
+        }
+        .font(.orbitTableCell)
+        .fontWeight(header ? .semibold : .regular)
+        .frame(maxWidth: .infinity, alignment: frameAlignment(column))
+        .padding(.vertical, 4)
+        .padding(.horizontal, 8)
+        .background(header ? Color.primary.opacity(0.06) : Color.clear)
+        .overlay(Rectangle().stroke(border, lineWidth: 0.5))
     }
 
     private func frameAlignment(_ column: Int) -> Alignment {
