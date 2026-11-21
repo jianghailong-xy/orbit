@@ -678,18 +678,41 @@ describe('dragging a row onto a folder', { timeout: 60_000 }, () => {
     expect(mounted().querySelector('.session-folder-title')?.textContent).toBe('Release');
   });
 
-  it('does not pick up a project’s coordinator, or a member that goes where its coordinator goes', async () => {
+  it('picks up a project’s row by its coordinator and files it with Move…’s request', async () => {
     rows = [
       LOOSE,
       row(925, 'Coordinates a project', { projectMembership: { projectId: pid(960), role: 'COORDINATOR' } }),
       row(926, 'A task of a project', { projectMembership: { projectId: pid(960), role: 'TASK' } }),
     ];
-    // The project's coordinator and its member are one project row here, which stays put.
     await mount(`/sessions/${LOOSE.id}`, () =>
       expect(mounted().querySelector('.session-project-row'), 'the project row').toBeTruthy());
+    const project = mounted().querySelector('.session-project-row')!;
+    expect(project.getAttribute('draggable')).toBe('true');
     expect(listRow('Loose one').getAttribute('draggable')).toBe('true');
-    expect(mounted().querySelector('.session-project-row')!.hasAttribute('draggable')).toBe(false);
-    expect(mounted().querySelectorAll('.session-row[draggable]')).toHaveLength(1);
+    // The project's member is not a row of its own: only the loose session and the project row.
+    expect(mounted().querySelectorAll('.session-row[draggable]')).toHaveLength(2);
+
+    const dt = transfer();
+    await drag('dragstart', project, dt);
+    expect(await drag('dragover', folderRow('Wiki'), dt)).toBe(true);
+    await drag('drop', folderRow('Wiki'), dt);
+    await drag('dragend', project, dt);
+    await settle();
+    expect(apiModule.moveSession).toHaveBeenCalledTimes(1);
+    expect(apiModule.moveSession).toHaveBeenCalledWith(pid(925), { folderId: WIKI.id });
+    await until(() => expect(document.body.textContent).toContain('Moved to “Wiki”'));
+  });
+
+  it('drags a pinned project row and a pinned plain session as it does an unpinned one', async () => {
+    rows = [
+      row(927, 'Pinned loose', { pinnedAt: '2026-11-01T00:00:00Z' }),
+      row(925, 'Coordinates a project', { pinnedAt: '2026-11-01T00:00:00Z', projectMembership: { projectId: pid(960), role: 'COORDINATOR' } }),
+      row(926, 'A task of a project', { projectMembership: { projectId: pid(960), role: 'TASK' } }),
+    ];
+    await mount(`/sessions/${uuid(927)}`, () =>
+      expect(mounted().querySelector('.session-project-row'), 'the project row').toBeTruthy());
+    expect(mounted().querySelector('.session-project-row')!.getAttribute('draggable')).toBe('true');
+    expect(listRow('Pinned loose').getAttribute('draggable')).toBe('true');
   });
 
   it('draws no row draggable where there is nowhere to drop it', async () => {
