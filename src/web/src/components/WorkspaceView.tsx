@@ -10364,7 +10364,7 @@ export function WorkspaceView({
           {!isMobile && <kbd className="session-search-kbd">{SEARCH_HINT}</kbd>}
         </div>}
         <div
-          className="workspace-sessions session-col-list autohide-scrollbar"
+          className={`workspace-sessions session-col-list autohide-scrollbar${draggedSession ? ' dragging-session' : ''}`}
           ref={listRef}
           onScroll={onSessionListScroll}
           {...listDragProps}

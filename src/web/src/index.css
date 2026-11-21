@@ -6363,6 +6363,11 @@ button.toast--pill:focus-visible {
 .session-folder-head.drop-target {
   border-radius: 8px;
 }
+/* While a row is dragged the list scrolls under the pointer; nothing in it is selected as it goes. */
+.session-col-list.dragging-session {
+  user-select: none;
+  -webkit-user-select: none;
+}
 /* The row being dragged stays in place, dimmed, while its image follows the pointer. */
 .session-row.dragging {
   opacity: 0.5;
