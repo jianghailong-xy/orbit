@@ -14,7 +14,8 @@
  *   (6) the reaper's other three causes              → runner_lost, setup_failed, turn_failed
  *   (7) ending a session still queued                → CANCELLED, ended
  *   (8) the revive                                   → PENDING, finished_at and release_cause both null
- *   (9) migration 1262's backfill, one session per rule, then the two counts of plan step 3.3 over the database
+ *   (9) migrations 1202 and 1262 applied as prisma applies them (each file one transaction) on a database that
+ *       holds rows: 1262's backfill, one session per rule, then the two counts of plan step 3.3 over the database
  *
  * The other three writers are asserted where they are already driven: turn-complete's failed turn in
  * runner-api/turn-complete-outcome.pg.spec.ts (2), the landing container in projects/landing-session.pg.spec.ts
@@ -164,24 +165,14 @@ function assertReleased(row: Released, status: string, cause: string): void {
 }
 
 /**
- * A migration split as Prisma's migrate deploy sends it: one statement at a time, `--` lines dropped, a `$$ … $$`
- * body kept whole (the backfill procedure COMMITs, which one implicit transaction would refuse).
+ * A migration applied the way `prisma migrate deploy` applies it: the whole file sent as one query string, which
+ * PostgreSQL runs as ONE transaction (and in which a COMMIT is refused, 2D000). Splitting it into statements and
+ * sending each on its own, as this spec once did, is what hid that the 1262 procedure's per-batch COMMIT fails on
+ * any database holding a terminal row (production's deploy of af55a2fb38).
  */
-function statementsOf(file: string): string[] {
-  const out: string[] = [];
-  let current: string[] = [];
-  let inBody = false;
-  for (const line of readFileSync(file, 'utf8').split('\n')) {
-    if (!inBody && line.trimStart().startsWith('--')) continue;
-    current.push(line);
-    if ((line.match(/\$\$/g) ?? []).length % 2 === 1) inBody = !inBody;
-    if (!inBody && line.trimEnd().endsWith(';')) {
-      out.push(current.join('\n'));
-      current = [];
-    }
-  }
-  if (current.join('').trim() !== '') out.push(current.join('\n'));
-  return out;
+async function applyAsPrismaDoes(sql: Client, migration: string): Promise<void> {
+  const file = join(__dirname, '..', '..', 'prisma', 'migrations', migration, 'migration.sql');
+  await sql.query(readFileSync(file, 'utf8'));
 }
 
 test('every release writes the release column and its cause, and the revive clears both', {
@@ -320,7 +311,7 @@ test('every release writes the release column and its cause, and the revive clea
     assert.equal(row.release_cause, null, 'and no cause');
   });
 
-  await t.test('(9) migration 1262 backfills every terminal row, and the two counts are zero', async () => {
+  await t.test('(9) migrations 1202 and 1262, each one transaction, backfill every terminal row; the two counts are zero', async () => {
     const w = await world(s.db, 'backfill');
     const now = new Date();
     // One row per rule of 1262's table, written as a row from before 1261: no cause, and no release column where
@@ -376,8 +367,9 @@ test('every release writes the release column and its cause, and the revive clea
     // A cause a writer recorded after 1261 is not the backfill's to change.
     const written = await session(s.db, w, { status: RunStatus.FAILED, finishedAt: now, releaseCause: 'runner_lost' });
 
-    const file = join(__dirname, '..', '..', 'prisma', 'migrations', '1262_session_release_backfill', 'migration.sql');
-    for (const statement of statementsOf(file)) await sql.query(statement);
+    // Both backfills of this project, in deploy order, on a database holding every row the cases above wrote.
+    await applyAsPrismaDoes(sql, '1202_turn_outcome_backfill');
+    await applyAsPrismaDoes(sql, '1262_session_release_backfill');
 
     for (const m of made) {
       const row = await released(sql, m.id);
@@ -386,10 +378,11 @@ test('every release writes the release column and its cause, and the revive clea
       else assert.equal(row.finished_at, null, `${m.name}: a held row gets no release column`);
     }
     assert.equal((await released(sql, written)).release_cause, 'runner_lost', 'a recorded cause is kept');
-    const gone = (await sql.query(
-      `SELECT count(*)::int AS n FROM pg_proc WHERE proname = 'orbit_1262_backfill_session_release'`,
+    const held = (await sql.query(
+      `SELECT count(*)::int AS n FROM "session" WHERE id = ANY($1::uuid[]) AND last_turn_outcome = 'ANSWERED'`,
+      [made.filter((m) => m.name === 'held').map((m) => m.id)],
     )).rows[0] as { n: number };
-    assert.equal(gone.n, 0, 'the backfill procedure is dropped after its CALL');
+    assert.equal(held.n, 3, '1202 ran too: a held AWAITING_INPUT row reads ANSWERED');
 
     // Plan step 3.3's two counts, over the whole database: everything this spec's writers released above and
     // everything the backfill just wrote.
