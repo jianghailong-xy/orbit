@@ -66,14 +66,23 @@ type SessionRow = Record<string, unknown>;
  *  `{ taskId: null }` branch, and a fake that let a missing relation through would report the
  *  predicate as working when it excluded every session that has no task at all. */
 function matchesBranch(row: SessionRow, cond: Record<string, unknown>): boolean {
-  return Object.entries(cond).every(([key, expected]) => matchesField(row[key], expected));
+  return Object.entries(cond).every(([key, expected]) => {
+    // A branch may hold its own OR or AND: the release module's failure filter is one such branch.
+    if (key === 'OR') return (expected as Array<Record<string, unknown>>).some((c) => matchesBranch(row, c));
+    if (key === 'AND') return (expected as Array<Record<string, unknown>>).every((c) => matchesBranch(row, c));
+    return matchesField(row[key], expected);
+  });
 }
 
-/** One field of a branch: a scalar, `{ not: value }`, or a to-one relation filter, nested as deep as
- *  the `where` goes (the cancelled-project veto reads `task.project.status`). */
+/** One field of a branch: a scalar, `{ not: value }` and `{ equals: value }` (either or both), or a to-one
+ *  relation filter, nested as deep as the `where` goes (the cancelled-project veto reads `task.project.status`). */
 function matchesField(actual: unknown, expected: unknown): boolean {
   if (expected !== null && typeof expected === 'object' && !(expected instanceof Date)) {
-    if ('not' in expected) return (actual ?? null) !== (expected as { not: unknown }).not;
+    if ('not' in expected || 'equals' in expected) {
+      const filter = expected as { not?: unknown; equals?: unknown };
+      if ('not' in filter && (actual ?? null) === filter.not) return false;
+      return !('equals' in filter) || (actual ?? null) === filter.equals;
+    }
     if ('in' in expected) return (expected as { in: unknown[] }).in.includes(actual ?? null);
     const related = actual as Record<string, unknown> | null | undefined;
     if (!related) return false;
@@ -453,7 +462,15 @@ function row(over: SessionRow = {}): SessionRow {
     assignedRunner: { planUsage: null, status: 'ONLINE', lastHeartbeatAt: NOW },
     status: RunStatus.AWAITING_INPUT,
     ...over,
-    // A FAILED row is released by a failure cause, as every writer releases one; the rest are held.
+    // A FAILED row is released by a failure, as every writer releases one: the release column set (at the sweep's own
+    // instant unless the case says when, so the offline wait has spent nothing) and the failure on its last turn,
+    // beside the cause the writers still record. The rest are held.
+    ...(over.status === RunStatus.FAILED
+      ? {
+          finishedAt: over.finishedAt !== undefined ? over.finishedAt : NOW,
+          lastTurnOutcome: over.lastTurnOutcome !== undefined ? over.lastTurnOutcome : 'FAILED',
+        }
+      : {}),
     releaseCause: over.releaseCause !== undefined
       ? over.releaseCause
       : (over.status === RunStatus.FAILED ? 'turn_failed' : null),
