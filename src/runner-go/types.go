@@ -63,6 +63,14 @@ type HeartbeatRequest struct {
 	// runs, yet the runner takes no work in their place. The control plane counts them as running.
 	// Omitted when there are none; an older runner never sends it, and is counted by turns alone.
 	BackgroundJobSessionIDs []string `json:"backgroundJobSessionIds,omitempty"`
+	// Executing states, for each session this process supervises, what is executing in it now, whole
+	// (session_executing.go): the control plane replaces its inferred sets with it. An older control
+	// plane ignores the member. Omitted when no session run has installed its probe.
+	Executing []SessionExecuting `json:"executing,omitempty"`
+	// ExecutingAt is when Executing was composed, in Unix milliseconds on this machine's clock, the clock every
+	// event's TS is read on: the control plane does not let a beat replace the sets of a session whose event batch
+	// moved them at or after this instant (apiserver runners/runner-executing-sets.ts). Omitted with Executing.
+	ExecutingAt int64 `json:"executingAt,omitempty"`
 	// ExpiredCommitErrors: see CommitErrorExpiry. Omitted when there are none.
 	ExpiredCommitErrors []CommitErrorExpiry `json:"expiredCommitErrors,omitempty"`
 	// Draining marks a process that keeps heartbeating (so the reaper spares its

@@ -765,7 +765,11 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// Whether this row is a landing session (platform work), not a conversation.
     public var isLanding: Bool { sessionKind == "LANDING" }
 
-    public var effectiveRunStatus: RunStatus { runStatus ?? status }
+    /// A `runStatus` word this build does not know defers to the legacy `status`.
+    public var effectiveRunStatus: RunStatus {
+        if let runStatus, runStatus != .unknown { return runStatus }
+        return status
+    }
     public var effectiveRunState: SessionRunState {
         SessionRunState.resolve(runState, legacy: sessionState,
                                 status: effectiveRunStatus, endReason: endReason)
@@ -1815,7 +1819,11 @@ public struct MergeRepairSession: Codable, Equatable, Sendable, Identifiable {
     public let finishedAt: String?
     public let lastAssistantText: String?
 
-    public var effectiveRunStatus: RunStatus? { runStatus ?? status }
+    /// A `runStatus` word this build does not know defers to the legacy `status`.
+    public var effectiveRunStatus: RunStatus? {
+        if let runStatus, runStatus != .unknown { return runStatus }
+        return status ?? runStatus
+    }
     public var effectiveRunState: SessionRunState? {
         SessionRunState.resolveOptional(runState, legacy: sessionState, status: effectiveRunStatus)
     }
@@ -1920,7 +1928,11 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
     /// Whether this detail is a landing session, which is what chooses its renderer.
     public var isLanding: Bool { sessionKind == "LANDING" }
 
-    public var effectiveRunStatus: RunStatus? { runStatus ?? status }
+    /// A `runStatus` word this build does not know defers to the legacy `status`.
+    public var effectiveRunStatus: RunStatus? {
+        if let runStatus, runStatus != .unknown { return runStatus }
+        return status ?? runStatus
+    }
     public var effectiveRunState: SessionRunState? {
         SessionRunState.resolveOptional(runState, legacy: sessionState, status: effectiveRunStatus)
     }
@@ -2203,7 +2215,11 @@ public struct SessionSearchHit: Codable, Equatable, Sendable, Identifiable {
     /// located client-side (see the web `splitHighlight`) — collapsing invalidates any offset.
     public let snippet: String?
 
-    public var effectiveRunStatus: RunStatus { runStatus ?? status }
+    /// A `runStatus` word this build does not know defers to the legacy `status`.
+    public var effectiveRunStatus: RunStatus {
+        if let runStatus, runStatus != .unknown { return runStatus }
+        return status
+    }
     public var effectiveRunState: SessionRunState {
         SessionRunState.resolve(runState, legacy: sessionState,
                                 status: effectiveRunStatus, endReason: endReason)

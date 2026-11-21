@@ -1,9 +1,11 @@
+import { BadRequestException } from '@nestjs/common';
 import {
   COORDINATOR_HANDOFF_PROMPT_HEAD,
   COORDINATOR_HANDOFF_SECTIONS,
   COORDINATOR_HANDOFF_TURN_PREFIX,
   type CoordinatorHandoffFailureCode,
   type CoordinatorHandoffState,
+  type CoordinatorHandoffSuccessor,
   type CoordinatorHandoffView,
   type CoordinatorPendingWait,
   type SessionCoordinatorHandoff,
@@ -77,6 +79,9 @@ export interface CoordinatorHandoffRow {
   failureCode: string | null;
   note: string | null;
   movedWaits: unknown;
+  successorEngine: string | null;
+  successorProvider: string | null;
+  successorModel: string | null;
   endedAt: Date | null;
 }
 
@@ -93,8 +98,45 @@ export const HANDOFF_ROW_SELECT = {
   failureCode: true,
   note: true,
   movedWaits: true,
+  successorEngine: true,
+  successorProvider: true,
+  successorModel: true,
   endedAt: true,
 } as const;
+
+/**
+ * A successor as the request named it, trimmed, with empty fields dropped. Undefined when the request leaves
+ * it out (keep what the handoff has); null when it names none — `null`, or every field empty — which is
+ * "Same as this one" and clears a pick made earlier.
+ */
+export function readHandoffSuccessor(raw: unknown): CoordinatorHandoffSuccessor | null | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null) return null;
+  if (typeof raw !== 'object' || Array.isArray(raw)) throw new BadRequestException('successor must be an object');
+  const out: CoordinatorHandoffSuccessor = {};
+  for (const key of ['engine', 'provider', 'model'] as const) {
+    const value = (raw as Record<string, unknown>)[key];
+    if (value == null) continue;
+    if (typeof value !== 'string') throw new BadRequestException(`successor.${key} must be a string`);
+    if (value.trim()) out[key] = value.trim();
+  }
+  return out.engine || out.provider || out.model ? out : null;
+}
+
+/** The row's columns for a successor; all null when none is named. */
+export function successorColumns(successor: CoordinatorHandoffSuccessor | null) {
+  return {
+    successorEngine: successor?.engine ?? null,
+    successorProvider: successor?.provider ?? null,
+    successorModel: successor?.model ?? null,
+  };
+}
+
+/** The successor the row keeps, or null. */
+export function successorOf(row: Pick<CoordinatorHandoffRow, 'successorEngine' | 'successorProvider' | 'successorModel'>): CoordinatorHandoffSuccessor | null {
+  if (!row.successorEngine && !row.successorProvider && !row.successorModel) return null;
+  return { engine: row.successorEngine, provider: row.successorProvider, model: row.successorModel };
+}
 
 function failureOf(row: CoordinatorHandoffRow): { failureCode: CoordinatorHandoffFailureCode | null; failureReason: string | null } {
   if (row.state !== 'FAILED' || !row.failureCode) return { failureCode: null, failureReason: null };
@@ -119,6 +161,7 @@ export function coordinatorHandoffView(row: CoordinatorHandoffRow): CoordinatorH
     ...failureOf(row),
     handedOverToSessionId: row.toSessionId,
     movedWaits: movedWaitsOf(row),
+    successor: successorOf(row),
   };
 }
 
@@ -130,6 +173,7 @@ export function sessionCoordinatorHandoff(row: CoordinatorHandoffRow | null): Se
     startedAt: row.startedAt.toISOString(),
     ...failureOf(row),
     handedOverToSessionId: row.toSessionId,
+    successor: successorOf(row),
   };
 }
 

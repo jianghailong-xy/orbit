@@ -88,6 +88,10 @@ function redactTarget(stored: unknown): WatchTargetObservation {
     if ('pendingApproval' in observed) {
       view.pendingApproval = typeof observed.pendingApproval === 'boolean' ? observed.pendingApproval : REDACTED;
     }
+    // Only a predicate that asks SESSION_QUIESCENT records these two answers, each a boolean.
+    for (const key of ['executing', 'wakeArmed'] as const) {
+      if (key in observed) view[key] = typeof observed[key] === 'boolean' ? observed[key] : REDACTED;
+    }
     // Only a predicate that reads progress records it. The reporter's message is never part of it.
     if ('progress' in observed) {
       const progress = isRecord(observed.progress) ? observed.progress : null;
