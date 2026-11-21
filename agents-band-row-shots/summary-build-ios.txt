@@ -1,0 +1,13 @@
+Test Case '-[LandingSessionProbeUITests.AgentsBandRowTests testBoardFour]' started.
+/Users/runner/work/orbit/orbit/.ls-probe/UITests/ProbeCase.swift:54: error: -[LandingSessionProbeUITests.AgentsBandRowTests testBoardFour] : failed - ios-band-haiku: hand this to a SubAgent never showed — the app did not render the stub's state
+Test Case '-[LandingSessionProbeUITests.AgentsBandRowTests testBoardFour]' failed (161.856 seconds).
+Test Case '-[LandingSessionProbeUITests.AgentsBandRowTests testLongTitle]' started.
+Test Case '-[LandingSessionProbeUITests.AgentsBandRowTests testLongTitle]' passed (38.487 seconds).
+Test Case '-[LandingSessionProbeUITests.AgentsBandRowTests testShortTitle]' started.
+Test Case '-[LandingSessionProbeUITests.AgentsBandRowTests testShortTitle]' passed (23.744 seconds).
+Test Case '-[LandingSessionProbeUITests.AgentsBandRowTests testShortTitleNoFailure]' started.
+Test Case '-[LandingSessionProbeUITests.AgentsBandRowTests testShortTitleNoFailure]' passed (16.503 seconds).
+	 Executed 4 tests, with 1 failure (0 unexpected) in 240.589 (240.598) seconds
+	 Executed 4 tests, with 1 failure (0 unexpected) in 240.589 (240.600) seconds
+	 Executed 4 tests, with 1 failure (0 unexpected) in 240.589 (240.606) seconds
+** TEST FAILED **
