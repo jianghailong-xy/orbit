@@ -150,6 +150,11 @@ lab_collect() {
       timeout 30 ssh -vvv -i "$LAB_SSH_KEY" -p "$LAB_SSH_PORT" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=10 \
         -o UserKnownHostsFile="$LAB_DIR/ssh/known_hosts" -o StrictHostKeyChecking=accept-new ubuntu@127.0.0.1 true; echo "ssh exit $?"
     } > "$LOGS/vm-ssh.txt" 2>&1
+    # PROBE (not for landing): the VM's own account of the runner stop: kubelet/k3s journal, memory, kernel, events.
+    timeout 120 ssh -i "$LAB_SSH_KEY" -p "$LAB_SSH_PORT" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=10 \
+      -o UserKnownHostsFile="$LAB_DIR/ssh/known_hosts" -o StrictHostKeyChecking=accept-new ubuntu@127.0.0.1 \
+      'echo "=== free"; free -m; echo "=== k3s journal"; sudo journalctl -u k3s --no-pager -o short-iso --since "-3 hours" | grep -iE "kill|evict|pressure|notready|not ready|oom|terminat|preempt|lease|unhealthy|SyncLoop (DELETE|REMOVE)|deleted" | tail -n 400; echo "=== dmesg"; sudo dmesg -T | tail -n 300; echo "=== events"; sudo k3s kubectl get events -A --sort-by=.lastTimestamp 2>&1 | tail -n 200' \
+      > "$LOGS/vm-diag.txt" 2>&1
   fi
   docker rm -f orbit-mr-lab-web-nginx >/dev/null 2>&1
   python3 "$L/login-lab.py" gate stop >/dev/null 2>&1
