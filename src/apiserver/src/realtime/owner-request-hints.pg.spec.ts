@@ -72,7 +72,7 @@ test('the version statement reads only the pending rows through the owner/state 
   await sql.query('ANALYZE owner_request');
 
   const explain = async (statement: Prisma.Sql): Promise<string> => {
-    const rows = await sql.query<{ 'QUERY PLAN': string }>(`EXPLAIN (ANALYZE, BUFFERS) ${statement.sql.replace(/\$1/g, '$1')}`, statement.values);
+    const rows = await sql.query<{ 'QUERY PLAN': string }>(`EXPLAIN (ANALYZE, BUFFERS) ${statement.text}`, statement.values);
     return rows.rows.map((r) => r['QUERY PLAN']).join('\n');
   };
 
