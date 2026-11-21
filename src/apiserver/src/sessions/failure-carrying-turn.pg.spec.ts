@@ -17,8 +17,11 @@
  *   W6  the runner's finalize, FAILED with no end asked: mid-turn, and idle     → the in-flight turn, else the latest, FAILED
  *   W7  the reaper, an end asked for and not honoured                           → the turn in flight CANCELLED, nothing FAILED
  *   W8  the reaper's API-error backstop, through its sweep                      → the latest turn, ANSWERED before, FAILED
+ *   A   the runner's finalize with no end asked and no failure (SUCCEEDED or CANCELLED; the coordinator's option A of
+ *       R3/R4): a failure release revived, then finalized before a turn completed → the queued turn CANCELLED, and
+ *       the session's copy with it, so the release reads as no failure; with nothing to cut off, nothing is written
  *   (tx) each writer's turn outcome commits with its release or not at all: a statement after both in the same
- *        transaction is made to fail, and neither the release nor the outcome is found
+ *        transaction is made to fail, and neither the release nor the outcome is found (option A's too)
  *
  * Queued turns other than the carrying one are drained as before, with no outcome: they never ran.
  *
@@ -45,6 +48,7 @@ import { QueueService } from '../queue/queue.service';
 import type { RealtimeService } from '../realtime/realtime.service';
 import { ReaperService } from '../realtime/reaper.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
+import { releaseWasFailure } from '../common/session-release';
 import { TASK_ACCEPTANCE_CLIENT_TURN_PREFIX } from '../tasks/executable-acceptance-round';
 import { SessionsService } from './sessions.service';
 
@@ -56,6 +60,7 @@ interface Stack {
   sql: Client;
   api: RunnerApiController;
   reaper: ReaperService;
+  sessions: SessionsService;
 }
 
 function stackFor(url: string, sql: Client): Stack {
@@ -67,6 +72,7 @@ function stackFor(url: string, sql: Client): Stack {
   return {
     db,
     sql,
+    sessions,
     reaper: new ReaperService(prisma, realtime),
     api: new RunnerApiController(
       prisma,
@@ -433,6 +439,111 @@ test('every failure writer records FAILED and the error on the turn that carries
       [[running, idle]],
     )).rows[0] as { n: number };
     assert.equal(failed.n, 0, 'no turn of either reads FAILED');
+  });
+
+  /**
+   * A failure release revived, as the owner's message revives it, then claimed again: the revive keeps
+   * last_turn_outcome (FAILED, the copy of the failed turn) and queues its message as a PENDING turn. The claim is
+   * written as the queue writes it (RUNNING, the claim's markers); the runner process holds no inbox lease generation
+   * here, as in every finalize of this file.
+   */
+  async function revivedFailure(w: World, label: string): Promise<{ id: string; failedTurn: string; revivedTurn: string }> {
+    const id = await session(s.db, w, { title: label });
+    const failedTurn = await turn(s.db, id, 1, 'IN_FLIGHT');
+    await s.api.finalize({ id: w.runnerId }, id, { status: SharedRunStatus.FAILED, error: 'engine crashed' } as never);
+    await assertCarried(sql, id, failedTurn, 'engine crashed', { cause: 'engine_failed' });
+    await s.sessions.resume(w.ownerId, id, { clientTurnId: `revive-${randomUUID()}`, content: 'Try again' });
+    const revived = await sessionRow(sql, id);
+    assert.equal(revived.status, 'PENDING', 'revived');
+    assert.equal(revived.finished_at, null, 'held again');
+    assert.equal(revived.last_turn_outcome, 'FAILED', 'the revive keeps the copy of the failed turn');
+    const queued = (await sql.query(
+      `SELECT id FROM "conversation_turn" WHERE session_id = $1::uuid AND status = 'PENDING' AND kind = 'message'`, [id],
+    )).rows as Array<{ id: string }>;
+    assert.equal(queued.length, 1, 'the revive queued its message');
+    await sql.query(
+      `UPDATE "session" SET status = 'RUNNING', engine_turn_active = true, run_claimed_at = now(), inbox_lease_owner = NULL
+        WHERE id = $1::uuid`, [id]);
+    return { id, failedTurn, revivedTurn: queued[0].id };
+  }
+
+  await t.test('A the runner finalize with no end asked and no failure: the turn it cuts off CANCELLED (option A)', async () => {
+    const w = await world(s.db, 'option-a');
+    // The coordinator's shape: a failure release, revived, finalized CANCELLED with no end asked before a turn completed.
+    const revived = await revivedFailure(w, 'revived');
+    await s.api.finalize({ id: w.runnerId }, revived.id, { status: SharedRunStatus.CANCELLED } as never);
+    const cut = await turnRow(sql, revived.revivedTurn);
+    assert.equal(cut.outcome, 'CANCELLED', 'the queued turn the release cut off ends CANCELLED');
+    assert.equal(cut.status, 'ANSWERED', 'and is drained as before');
+    const row = await sessionRow(sql, revived.id);
+    assert.equal(row.last_turn_outcome, 'CANCELLED', 'the session copies it: the FAILED of the run before is gone');
+    assert.equal(row.status, 'CANCELLED', 'the status is written as before');
+    assert.equal(row.release_cause, 'engine_exited', 'and the cause');
+    assert.equal(row.end_reason, null, 'no end was asked');
+    assert.equal(releaseWasFailure({
+      finishedAt: row.finished_at, endReason: row.end_reason, lastTurnOutcome: row.last_turn_outcome, status: row.status,
+    }), false, 'so the release reads as no failure (common/session-release.ts), as the cause read it');
+    assert.equal((await turnRow(sql, revived.failedTurn)).outcome, 'FAILED', 'the failed turn keeps its own');
+
+    // A turn in flight and one queued, the runner's word SUCCEEDED: the one in flight is cut off, the queued one drained.
+    const busy = await session(s.db, w);
+    const inFlight = await turn(s.db, busy, 1, 'IN_FLIGHT');
+    const queued = await turn(s.db, busy, 2, 'PENDING');
+    await s.api.finalize({ id: w.runnerId }, busy, { status: SharedRunStatus.SUCCEEDED } as never);
+    assert.equal((await turnRow(sql, inFlight)).outcome, 'CANCELLED');
+    await assertDrainedUnrun(sql, queued);
+    const busyRow = await sessionRow(sql, busy);
+    assert.equal(busyRow.last_turn_outcome, 'CANCELLED');
+    assert.equal(busyRow.status, 'SUCCEEDED', 'the runner\'s word, written as before');
+
+    // Nothing in flight or queued: nothing is written, and the copy keeps the last turn's outcome.
+    const idle = await session(s.db, w, { status: RunStatus.AWAITING_INPUT, lastTurnOutcome: 'ANSWERED' });
+    const last = await turn(s.db, idle, 1, 'ANSWERED');
+    await s.api.finalize({ id: w.runnerId }, idle, { status: SharedRunStatus.CANCELLED } as never);
+    assert.equal((await sessionRow(sql, idle)).last_turn_outcome, 'ANSWERED', 'no turn to cut off: no outcome written');
+    assert.equal((await turnRow(sql, last)).outcome, 'ANSWERED');
+
+    // An end that was asked for: not this rule's (the end's own status, no outcome written by the finalize).
+    const ended = await session(s.db, w, { cancelRequestedAt: new Date(), endReason: SessionEndReason.ENDED });
+    const endedTurn = await turn(s.db, ended, 1, 'IN_FLIGHT');
+    await s.api.finalize({ id: w.runnerId }, ended, { status: SharedRunStatus.CANCELLED } as never);
+    assert.equal((await turnRow(sql, endedTurn)).outcome, null, 'an end asked for is not cut off by this rule');
+    assert.equal((await sessionRow(sql, ended)).last_turn_outcome, null);
+  });
+
+  await t.test('A (tx) the finalize\'s CANCELLED commits with its release or not at all', async () => {
+    // A trigger that refuses, for the sessions listed, the drain's write of a turn that never ran.
+    await sql.query(`CREATE TABLE IF NOT EXISTS option_a_poison (session_id uuid PRIMARY KEY)`);
+    await sql.query(`
+      CREATE OR REPLACE FUNCTION option_a_poison_refuse() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN
+        IF NEW.status = 'ANSWERED' AND OLD.status <> 'ANSWERED' AND OLD.outcome IS NULL
+           AND EXISTS (SELECT 1 FROM option_a_poison WHERE session_id = NEW.session_id) THEN
+          RAISE EXCEPTION 'option a: the drain is refused';
+        END IF;
+        RETURN NEW;
+      END $$`);
+    await sql.query(`DROP TRIGGER IF EXISTS option_a_poison_turn ON "conversation_turn"`);
+    await sql.query(`CREATE TRIGGER option_a_poison_turn BEFORE UPDATE ON "conversation_turn" FOR EACH ROW EXECUTE FUNCTION option_a_poison_refuse()`);
+    t.after(async () => {
+      await sql.query(`DROP TRIGGER IF EXISTS option_a_poison_turn ON "conversation_turn"`).catch(() => undefined);
+      await sql.query(`DROP FUNCTION IF EXISTS option_a_poison_refuse()`).catch(() => undefined);
+      await sql.query(`DROP TABLE IF EXISTS option_a_poison`).catch(() => undefined);
+    });
+    const w = await world(s.db, 'option-a-tx');
+    const revived = await revivedFailure(w, 'revived-tx');
+    // A second queued turn, which the drain answers after the cut-off one is recorded: refused.
+    await turn(s.db, revived.id, 3, 'PENDING');
+    await sql.query(`INSERT INTO option_a_poison (session_id) VALUES ($1::uuid)`, [revived.id]);
+    await assert.rejects(s.api.finalize({ id: w.runnerId }, revived.id, { status: SharedRunStatus.CANCELLED } as never),
+      /option a: the drain is refused/);
+    const row = await sessionRow(sql, revived.id);
+    assert.equal(row.finished_at, null, 'the release rolled back');
+    assert.equal(row.status, 'RUNNING');
+    assert.equal(row.last_turn_outcome, 'FAILED', 'and the copy with it: still the one the revive kept');
+    const t1 = await turnRow(sql, revived.revivedTurn);
+    assert.equal(t1.outcome, null, 'and the cut-off turn\'s outcome with it');
+    assert.equal(t1.status, 'PENDING');
   });
 
   await t.test('W8 the reaper\'s API-error backstop, through its sweep: the latest turn, ANSWERED before, FAILED', async () => {
