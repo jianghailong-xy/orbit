@@ -34,9 +34,11 @@ acquisition and claim guards' `PENDING` to `RUNNING` (activity, `SAME`); the end
 `INTERRUPTED` and `AWAITING_INPUT` branches (held statuses read as turn and retry facts); and
 `session_request_recipient_ended`'s `NEW."status"::text`, which writes `close_reason` as
 `STATUS[:end_reason]` unchanged, for display. Where an ended-trigger told a FAILED release apart, it
-now reads `release_cause` against the failure causes (`FAILURE_RELEASE_CAUSES`, held equal to FAILED
-by `session_release_failure_chk`, 1406/1407), so 1425 ships only with or after 1406/1407. The unique
-index is step 4.5's.
+now reads `release_cause` against the failure causes (`FAILURE_RELEASE_CAUSES`, which every writer
+records exactly with FAILED), so 1425 ships only after the writers of 1403/1404. Until 2026-11-21 a CHECK
+held that equality (`session_release_failure_chk`, 1406/1407); it was removed before it was deployed
+(design §12.6 R1), and the readers step (R4) restates the three clauses on the turn outcome and the end
+reason. The unique index is step 4.5's.
 
 Plan step 4.5, release A (migration 1426) built `session_task_execution_claim_idx_finished_at` on
 `session(task_id) WHERE task_id IS NOT NULL AND deleted_at IS NULL AND finished_at IS NULL` beside

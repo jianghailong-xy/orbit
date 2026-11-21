@@ -453,7 +453,7 @@ function row(over: SessionRow = {}): SessionRow {
     assignedRunner: { planUsage: null, status: 'ONLINE', lastHeartbeatAt: NOW },
     status: RunStatus.AWAITING_INPUT,
     ...over,
-    // A FAILED row is released by a failure cause (session_release_failure_chk); the rest are held.
+    // A FAILED row is released by a failure cause, as every writer releases one; the rest are held.
     releaseCause: over.releaseCause !== undefined
       ? over.releaseCause
       : (over.status === RunStatus.FAILED ? 'turn_failed' : null),

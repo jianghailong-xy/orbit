@@ -21,9 +21,9 @@
 --              AND (NEW."release_cause" NOT IN (<the failure causes>) OR COALESCE(NEW."end_reason", '') <> ''))
 --          OR (NEW."status" = 'INTERRUPTED' AND COALESCE(NEW."end_reason", '') <> '')
 --   <the failure causes> is written out: 'turn_failed', 'runner_lost', 'setup_failed', 'engine_failed',
---   'end_not_honored', 'import_failed', common/session-release.ts FAILURE_RELEASE_CAUSES and the list
---   session_release_failure_chk (1406) holds FAILED to. sessions/session-release.pg.spec.ts (12) asserts the list in
---   each of the three WHEN clauses equals FAILURE_RELEASE_CAUSES, so a seventh cause cannot be added in one place.
+--   'end_not_honored', 'import_failed', common/session-release.ts FAILURE_RELEASE_CAUSES, the causes every writer
+--   records exactly with FAILED. sessions/session-release.pg.spec.ts (12) asserts the list in each of the three WHEN
+--   clauses equals FAILURE_RELEASE_CAUSES, so a seventh cause cannot be added in one place.
 --   The deleted/completed/archived branches, the INTERRUPTED-with-an-end branch and asker_stopped's AWAITING_INPUT
 --   branch are unchanged: INTERRUPTED and AWAITING_INPUT are held statuses (finished_at null), read here as the
 --   turn and retry facts they are. No terminal status value is named in any of the three clauses.
@@ -33,28 +33,36 @@
 --
 -- WHY EVERY STORED ROW GETS THE SAME ANSWER
 -- -----------------------------------------
--- Two validated CHECKs. session_release_fact_chk (1401/1402): finished_at, and with it release_cause, is set exactly
--- when the status is SUCCEEDED, FAILED or CANCELLED. session_release_failure_chk (1406/1407): the status is FAILED
--- exactly when release_cause is one of the failure causes. So inside "finished_at is set", "release_cause is not a
--- failure cause" is "SUCCEEDED or CANCELLED" (the cause is never null there), and "a failure cause" is "FAILED":
--- every WHEN answers what it did, for every row the two CHECKs admit.
+-- One validated CHECK and the writers. session_release_fact_chk (1401/1402): finished_at is set exactly when the
+-- status is SUCCEEDED, FAILED or CANCELLED. Every writer that sets finished_at also sets release_cause, and sets a
+-- failure cause exactly when it writes FAILED (1403/1404 and their writers, deploy 1 on). So inside "finished_at is
+-- set", "release_cause is not a failure cause" is "SUCCEEDED or CANCELLED", and "a failure cause" is "FAILED": every
+-- WHEN answers what it did, for every row those writers leave.
+-- Not a CHECK since 2026-11-21 (design §12 decision D9, removal step R1): the CHECKs that held the cause to
+-- finished_at and to FAILED were taken off the project branch before they were deployed, because the session keeps
+-- no failure fact and release_cause goes. These three WHEN clauses still read the cause; the readers step (design
+-- §12.6 R4) restates them on the turn outcome and the end reason before any writer stops writing the cause (R5). A
+-- released row with no cause (none is written before R5) would read here as a failure.
 --
 -- WHICH RELEASE IT MAY SHIP IN
 -- ----------------------------
--- Only with or after 1406/1407 (session_release_failure_chk validated), and so only after a release whose writers
--- record the failure causes (1403/1404 and their writers). The new clauses equal the old ones only for rows both
--- CHECKs admit: a replica from before those writers records engine_exited for a FAILED finalize, which these
--- clauses would read as an end. In the owner's plan that is deploy 2; the writers and 1403/1404 are in deploy 1.
+-- Only after a release whose writers record the failure causes (1403/1404 and their writers). The new clauses equal
+-- the old ones only for rows those writers leave: a replica from before them records engine_exited for a FAILED
+-- finalize, which these clauses would read as an end. In the owner's plan that is deploy 2; the writers and
+-- 1403/1404 are in deploy 1. Rows released before deploy 1 that are FAILED with a clean-end cause (1262 gave them
+-- engine_exited or their end reason) are the exception: the backfill that rewrote their causes went with the CHECKs
+-- (R1), so on such a row these clauses can answer otherwise than the old status clauses did. The readers step (R4)
+-- restates the three clauses within the same deploy, so this file's clauses never serve on their own.
 --
 -- WHY THE COLUMN LISTS
 -- --------------------
 -- An AFTER UPDATE OF trigger does not fire for a write naming none of its columns (the restore() case 0130
 -- describes). Every session write that sets or clears finished_at today also names status (the eight release
 -- writers, the revive), so adding the column adds no firing now; it keeps the triggers firing on the release
--- fact once a write may carry it without the status word. release_cause is read but not listed: under the two
--- CHECKs a cause can move across the failure line only with the status (FAILED to or from another value) and appear
--- or vanish only with finished_at, both listed; a cause renamed within one side leaves every clause's answer as it
--- was, so a write naming release_cause alone never changes what these triggers would decide.
+-- fact once a write may carry it without the status word. release_cause is read but not listed: every writer moves a
+-- cause across the failure line only with the status (FAILED to or from another value) and sets or clears it only
+-- with finished_at, both listed; a cause renamed within one side leaves every clause's answer as it was, so a write
+-- naming release_cause alone never changes what these triggers would decide.
 --
 -- LOCKS
 -- -----
