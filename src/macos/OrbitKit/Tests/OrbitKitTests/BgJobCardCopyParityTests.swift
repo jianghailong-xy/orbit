@@ -113,7 +113,7 @@ final class BgJobCardCopyParityTests: XCTestCase {
         let ending = try section(css, from: ".chat-job-ending {", to: "}")
         assertHas(ending, "font-size: 12px;", "src/web/src/index.css")
         let view = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/Console/JobCardView.swift")
-        let detail = try section(view, from: "private struct JobCardDetail: View {", to: "private struct JobWakeBlock: View {")
+        let detail = try section(view, from: "private func detail(", to: "private var wakeBlock")
         XCTAssertFalse(detail.contains("Color.red"), "the opened output is drawn red again")
         XCTAssertFalse(detail.contains(".orbitSubtext"), "the killed line is larger than the card's other lines")
         let killed = try section(view, from: "case .killedBy(let line):", to: "case .ending")
