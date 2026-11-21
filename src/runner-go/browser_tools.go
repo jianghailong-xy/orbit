@@ -11,7 +11,6 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -194,11 +193,7 @@ func browserToolDescriptors(obj func(map[string]interface{}, ...string) map[stri
 				"while it waits you give up the browser, so do not use it; afterwards you hold it again, on the page you " +
 				"were on. answer is SIGNED_IN (reload or carry on where you were) or NOT_NOW (the owner will not sign " +
 				"in now: decide your next step, such as working without the login or ending your turn saying what needs " +
-				"it). A command-line sign-in you run here (gh auth login --web, gcloud auth login, an OAuth flow with a " +
-				"localhost callback) opens its page in this browser too, through $BROWSER or xdg-open, and says so: " +
-				"call this with that page's site so the owner finishes the sign-in there; the redirect to localhost " +
-				"reaches your command on this runner. Only on the Orbit Cloud runner. Never put a password or code " +
-				"in reason.",
+				"it). Only on the Orbit Cloud runner. Never put a password or code in reason.",
 			"inputSchema": obj(map[string]interface{}{
 				"site":   map[string]interface{}{"type": "string", "description": "The site to sign in to, as a host (github.com). A URL is cut to its host."},
 				"reason": map[string]interface{}{"type": "string", "description": "Why you need the login, in one or two sentences the owner reads on the card: which account and what for."},
@@ -619,11 +614,6 @@ func runBrowserOpen(t *Transport, sessionID, target string) (*browserOpenResult,
 // openTabLocally starts this machine's browser on link, and reports whether there was one to start: $BROWSER, else
 // the platform's opener (on Linux only with a display). A var so a test can stand in for it.
 var openTabLocally = func(link string) bool {
-	// On the Orbit Cloud runner an engine's BROWSER is the runner's own Chrome (browser_opener.go), not a person's
-	// browser: the tab is for the owner, so it is only printed.
-	if onOrbitCloudRunner() && filepath.Base(os.Getenv("BROWSER")) == browserOpenerShim {
-		return false
-	}
 	if b := strings.TrimSpace(os.Getenv("BROWSER")); b != "" {
 		return exec.Command(b, link).Start() == nil
 	}

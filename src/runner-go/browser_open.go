@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -98,17 +97,10 @@ func navigateBrowserPage(ctx context.Context, endpoint, target string) error {
 			return nil
 		})
 	}
-	// No tab open: open one on the page.
-	return openBrowserTab(ctx, endpoint, parsed.String())
-}
-
-// openBrowserTab opens target in a new tab of the Chrome whose DevTools listen at endpoint, and brings that tab to the
-// front, so the viewer shows it. Chrome's /json/new (PUT, as current Chrome requires) and /json/activate. The errors
-// never quote target.
-func openBrowserTab(ctx context.Context, endpoint, target string) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPut, endpoint+"/json/new?"+url.QueryEscape(target), nil)
+	// No tab open: Chrome's /json/new opens one on the page (PUT, as current Chrome requires).
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, endpoint+"/json/new?"+url.QueryEscape(parsed.String()), nil)
 	if err != nil {
-		return errors.New("the page is not an address the browser can open")
+		return err
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -117,16 +109,6 @@ func openBrowserTab(ctx context.Context, endpoint, target string) error {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("The browser's DevTools answered %d to a new tab", resp.StatusCode)
-	}
-	var tab struct {
-		ID string `json:"id"`
-	}
-	if json.NewDecoder(resp.Body).Decode(&tab) == nil && tab.ID != "" {
-		if activate, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint+"/json/activate/"+url.PathEscape(tab.ID), nil); err == nil {
-			if r, err := http.DefaultClient.Do(activate); err == nil {
-				r.Body.Close()
-			}
-		}
 	}
 	return nil
 }

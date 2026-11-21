@@ -313,8 +313,7 @@ func antigravityEnv(job *ClaimedSession, execDir string) []string {
 	// Runner-hosted background jobs (mcp__orbit__bg_run): `orbit mcp` inherits these through agy.
 	// agy's own run_command can also leave a command running past its call (WaitMsBeforeAsync); that
 	// one is agy's, and stops with agy.
-	// On the Orbit Cloud runner with the browser on, a tool the agent runs opens its pages there (browser_opener.go).
-	return browserOpenerEnv(append(env, bgJobEnvPairs(job.SessionID)...), job.BrowserEnabled)
+	return append(env, bgJobEnvPairs(job.SessionID)...)
 }
 
 // startAgyProcess starts agy and the goroutines that read it. The process leads its own process
