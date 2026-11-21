@@ -125,8 +125,8 @@ test('the runner dispatch pause holds new work, lets running work finish, and ha
         ...(lease ? { inboxLeaseOwner: lease.owner, inboxLeaseGeneration: lease.generation } : {}),
         ...extra,
         ...(status === RunStatus.SUCCEEDED || status === RunStatus.FAILED
-          ? { finishedAt: (extra.finishedAt as Date | undefined) ?? new Date(), releaseCause: status === RunStatus.FAILED ? 'engine_failed' : 'engine_exited' }
-          : status === RunStatus.CANCELLED ? { finishedAt: (extra.finishedAt as Date | undefined) ?? new Date(), releaseCause: 'cancelled' } : {}),
+          ? { finishedAt: (extra.finishedAt as Date | undefined) ?? new Date()}
+          : status === RunStatus.CANCELLED ? { finishedAt: (extra.finishedAt as Date | undefined) ?? new Date()} : {}),
       },
     });
     if (lease) {
@@ -219,7 +219,7 @@ test('the runner dispatch pause holds new work, lets running work finish, and ha
       data: {
         ownerId: owner.id, creatorId: owner.id, taskId: task.id, workspaceId: projectWorkspaceId,
         assignedRunnerId: runnerId, title: `${name} work`, prompt: `${name} work`, branch,
-        isolationStatus: 'worktree', baseSha: 'b'.repeat(40), status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited', startsTaskWork: true,
+        isolationStatus: 'worktree', baseSha: 'b'.repeat(40), status: RunStatus.SUCCEEDED, startsTaskWork: true,
         finishedAt: new Date(Date.now() - 2 * 86_400_000), worktreeBranch: branch, worktreeDirty: false,
         changedFiles: [{ path: 'src/work.ts' }] as never,
       },

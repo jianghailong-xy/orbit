@@ -79,7 +79,6 @@ test('linkHints.approvals: the decided approvals whose reader is still waiting, 
         dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false, assignedRunnerId: runnerId, numTurns: 1, ...extra,
         ...(isReleasedStatus(status) ? {
           finishedAt: new Date(),
-          releaseCause: status === RunStatus.CANCELLED ? 'cancelled' : status === RunStatus.FAILED ? 'engine_failed' : 'engine_exited',
         } : {}),
       },
     });

@@ -308,10 +308,9 @@ async function insertSession(owner: string, status: string, runnerId: string): P
   const id = randomUUID();
   await sql.query(
     `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","updated_at","status","assigned_runner_id",
-                           "provider","provider_builtin","num_turns","started_at","runtime_session_id", "finished_at", "release_cause")
+                           "provider","provider_builtin","num_turns","started_at","runtime_session_id", "finished_at")
      VALUES ($1,'watch observer','the opening prompt',$2,$2,now(),$3,$4,'claude',TRUE,1,now(),$5,
-             CASE WHEN $3::run_status IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN now() END,
-             CASE WHEN $3::run_status = 'CANCELLED' THEN 'cancelled' WHEN $3::run_status = 'FAILED' THEN 'engine_failed' WHEN $3::run_status = 'SUCCEEDED' THEN 'engine_exited' END)`,
+             CASE WHEN $3::run_status IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN now() END)`,
     [id, owner, status, runnerId, `runtime-${id}`],
   );
   return id;
@@ -721,7 +720,7 @@ test('a wake never revives an observer whose life is over: Completed, ended, end
   const { delivery } = await worker();
   const cases = [
     { name: 'moved to Completed', end: `UPDATE "session" SET "completed_at" = now() WHERE "id" = $1`, code: 'OBSERVER_SESSION_COMPLETED' },
-    { name: 'its run succeeded', end: `UPDATE "session" SET "status" = 'SUCCEEDED', "release_cause" = 'engine_exited', "finished_at" = now() WHERE "id" = $1`, code: 'OBSERVER_SESSION_ENDED' },
+    { name: 'its run succeeded', end: `UPDATE "session" SET "status" = 'SUCCEEDED', "finished_at" = now() WHERE "id" = $1`, code: 'OBSERVER_SESSION_ENDED' },
     { name: 'ended, interrupted with an end reason', end: `UPDATE "session" SET "status" = 'INTERRUPTED', "end_reason" = 'ended' WHERE "id" = $1`, code: 'OBSERVER_SESSION_ENDED' },
     { name: 'being ended', end: `UPDATE "session" SET "cancel_requested_at" = now(), "end_reason" = 'ended' WHERE "id" = $1`, code: 'OBSERVER_SESSION_ENDED' },
     { name: 'in Trash', end: `UPDATE "session" SET "deleted_at" = now() WHERE "id" = $1`, code: 'OBSERVER_SESSION_IN_TRASH' },
@@ -910,8 +909,8 @@ test('task_await on a forked task: the wake carries its branch, forkSha, the sna
   // The forked task's run, on the branch its work is on; the open one's run has not made one yet.
   await sql.query(
     `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","updated_at","status","assigned_runner_id",
-                           "provider","provider_builtin","task_id","branch","finished_at","release_cause")
-     VALUES ($1,'the forked run','go',$2,$2,now(),'SUCCEEDED',$3,'claude',TRUE,$4,'orbit/finish-the-claim-refactor-1a2b3c',now(),'engine_exited')`,
+                           "provider","provider_builtin","task_id","branch","finished_at")
+     VALUES ($1,'the forked run','go',$2,$2,now(),'SUCCEEDED',$3,'claude',TRUE,$4,'orbit/finish-the-claim-refactor-1a2b3c',now())`,
     [randomUUID(), owner, runner, done],
   );
   const watch = await createWatch(owner, {

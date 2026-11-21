@@ -231,7 +231,7 @@ test('a merge recorded outside the card ends the candidate offering the same bra
       data: {
         ownerId, creatorId: ownerId, taskId: task.id, workspaceId: w.workspaceId, assignedRunnerId: w.runnerId,
         title: 'the work', prompt: 'do the work', branch,
-        isolationStatus: 'worktree', status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited', startsTaskWork: true,
+        isolationStatus: 'worktree', status: RunStatus.SUCCEEDED, startsTaskWork: true,
         finishedAt: new Date(Date.now() - 60_000), worktreeBranch: branch,
         worktreeDirty: false, changedFiles: [{ path: 'src/the-work.ts' }] as never,
       },

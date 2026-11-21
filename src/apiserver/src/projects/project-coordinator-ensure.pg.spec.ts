@@ -254,7 +254,7 @@ async function world(
         assignedRunnerId: shape.offlineRunner ? offlineRunnerId : runnerId,
         title: `coordinator: ${label}`, prompt: `coordinator: ${label}`, provider: 'claude',
         status,
-        ...(isReleasedStatus(status) ? { finishedAt: new Date(), releaseCause: status === 'CANCELLED' ? 'cancelled' : status === 'FAILED' ? 'engine_failed' : 'engine_exited' } : {}),
+        ...(isReleasedStatus(status) ? { finishedAt: new Date()} : {}),
         startedAt: shape.startedAt === undefined ? new Date() : shape.startedAt,
         completedAt: shape.completedAt ?? null,
         deletedAt: shape.deletedAt ?? null,
@@ -278,7 +278,7 @@ async function world(
     // the retirement, which 0130 refuses while a live session is working on the task.
     await db.session.update({
       where: { id: coordinatorSessionId },
-      data: { status: RunStatus.FAILED, finishedAt: new Date(), releaseCause: 'engine_failed' },
+      data: { status: RunStatus.FAILED, finishedAt: new Date()},
     });
     await stack.tasks.update(ownerId, taskId, { status: TaskStatus.CANCELLED });
     await stack.tasks.update(ownerId, taskId, { supersededByTaskId: successorId });

@@ -271,7 +271,7 @@ async function sessionOf(
       taskId: opts.taskId ?? null, title: 'landing fixture', prompt: 'landing fixture',
       provider: 'claude', status: opts.finished ? RunStatus.SUCCEEDED : RunStatus.RUNNING,
       startsTaskWork: opts.startsTaskWork ?? false,
-      startedAt: new Date(), ...(opts.finished ? { finishedAt: new Date(), releaseCause: 'engine_exited' } : {}),
+      startedAt: new Date(), ...(opts.finished ? { finishedAt: new Date()} : {}),
     },
   });
   return id;

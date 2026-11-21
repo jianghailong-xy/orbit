@@ -152,7 +152,7 @@ test('P6b follow-up a Cursor CLI session’s claim across a workspace edit, on P
         model: engine === AgentProvider.CURSOR ? 'default[]' : null,
         usesRuntimeDefaultModel: true,
         permissionMode: PermissionMode.ACCEPT_EDITS,
-        status: RunStatus.FAILED, releaseCause: 'engine_failed',
+        status: RunStatus.FAILED, 
         dispatchOrigin: SessionDispatchOrigin.USER,
         startedAt: new Date(),
         finishedAt: new Date(),

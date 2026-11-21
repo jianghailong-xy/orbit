@@ -1,17 +1,16 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { SessionEndReason } from '@orbit/shared';
-import { releaseCauseOfEndReason, SESSION_RELEASE_CAUSES } from '../common/session-release';
-import { CAUSE_READING, releaseFactsOf } from '../common/session-release-shapes.fixture';
+import { releaseFinishedTheWork, releaseWasFailure } from '../common/session-release';
+import { RELEASE_SHAPES, releaseFactsOf, releaseFactsOfShape } from '../common/session-release-shapes.fixture';
 import { settleAlert, SettleInput } from './settle-alert';
 
 const AT = new Date('2026-11-21T00:00:00.000Z');
 
 // The release facts as the writers store them (common/session-release.ts): a release that finished the work, one by
 // a failure, one somebody asked for (a person ended the session), and a session still held.
-const finishedWork = releaseFactsOf('task_done', AT);
-const failedRelease = releaseFactsOf('turn_failed', AT);
-const endedByUser = releaseFactsOf(releaseCauseOfEndReason(SessionEndReason.ENDED), AT);
+const finishedWork = releaseFactsOf('finished work', AT);
+const failedRelease = releaseFactsOf('failed', AT);
+const endedByUser = releaseFactsOf('ended', AT);
 const held = releaseFactsOf(null);
 
 const base: SettleInput = {
@@ -149,44 +148,16 @@ test('a recap never announces a settlement that is not worth one', () => {
 
 // ── plan step 4.8 (decision D2): the alert reads the release, never the terminal status ──────────
 
-test('every stored status and release: the alert before (from the status) and after (from the release)', () => {
-  // Before is the rule this function had until plan step 4.8, which read the terminal status value: SUCCEEDED
-  // finished, FAILED and not filed failed, anything else nothing. Every release the writers store answers as before.
-  // The only rows that differ are a SUCCEEDED release that did not finish the work, and a CANCELLED one that did: in
-  // production the 318 SUCCEEDED rows 1262's backfill wrote in June with an engine that exited by itself (all on DONE
-  // tasks), the 4 filed SUCCEEDED rows released as completed, and a landing container that settled without landing.
-  // No writer stores the first two today (a runner reporting success with no end requested is logged by
-  // reportsSuccessWithNoEnd, and no runner the server accepts sends it), and nothing publishes the final STATUS that
-  // calls this for a landing container, so no alert anybody receives changes. A plain conversation never finishes.
-  type Kind = 'finished' | 'failed' | null;
-  const differs: string[] = [];
+test('every release shape: the alert reads the release the writers store, never the terminal status', () => {
   for (const filed of [false, true]) {
-    for (const status of ['PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED']) {
-      assert.equal(settleAlert({ ...base, ...held, completedAt: filed ? AT : null }), null, status);
-    }
-    for (const cause of SESSION_RELEASE_CAUSES) {
-      // Every writer writes FAILED exactly with a failure cause (the reading before R3, CAUSE_READING).
-      for (const status of CAUSE_READING.failed(cause) ? ['FAILED'] : ['SUCCEEDED', 'CANCELLED']) {
-        const before: Kind = status === 'SUCCEEDED' ? 'finished' : status === 'FAILED' && !filed ? 'failed' : null;
-        const after = settleAlert({ ...base, ...releaseFactsOf(cause, AT), completedAt: filed ? AT : null })?.kind ?? null;
-        const what = `${status} ${cause}${filed ? ' filed' : ''}`;
-        // W7 (design §12.3, removal step R4): an end that was asked for and not honoured is a stop, not a failure, so
-        // it is announced as nothing. It was 'failed' (unfiled) while the release cause was read.
-        const expected: Kind = cause === 'end_not_honored'
-          ? null
-          : CAUSE_READING.finished(cause) ? 'finished' : before === 'finished' ? null : before;
-        assert.equal(after, expected, what);
-        if (after !== before) differs.push(what);
-      }
+    for (const shape of RELEASE_SHAPES) {
+      const facts = releaseFactsOfShape(shape, AT);
+      const after = settleAlert({ ...base, ...facts, completedAt: filed ? AT : null })?.kind ?? null;
+      const expected = !shape.released ? null
+        : releaseFinishedTheWork(facts) ? 'finished'
+        : releaseWasFailure(facts) && !filed ? 'failed'
+        : null;
+      assert.equal(after, expected, `${shape.name}${filed ? ' filed' : ''}`);
     }
   }
-  const finishing = new Set<string>(CAUSE_READING.workFinishedCauses);
-  const expectedDiffers = [
-    ...[false, true].flatMap((filed) => SESSION_RELEASE_CAUSES
-      .filter((cause) => !CAUSE_READING.failed(cause))
-      .map((cause) => `${finishing.has(cause) ? 'CANCELLED' : 'SUCCEEDED'} ${cause}${filed ? ' filed' : ''}`)),
-    // W7: before, from the status, an unfiled FAILED one was a failure.
-    'FAILED end_not_honored',
-  ];
-  assert.deepEqual(differs.sort(), expectedDiffers.sort());
 });

@@ -143,7 +143,6 @@ test('T2 provider-engine foundation on PostgreSQL', { timeout: 600_000 }, async 
       status, usesRuntimeDefaultModel: true,
       ...(isReleasedStatus(status) ? {
         finishedAt: new Date(),
-        releaseCause: status === RunStatus.CANCELLED ? 'cancelled' : status === RunStatus.FAILED ? 'engine_failed' : 'engine_exited',
       } : {}),
       model: opts.model === undefined ? 'pinned-model' : opts.model,
       runtimeSessionId: opts.runtimeSessionId ?? null,
@@ -380,9 +379,9 @@ test('T2 provider-engine foundation on PostgreSQL', { timeout: 600_000 }, async 
     assert.equal(await raw('UPDATE "session" SET inbox_lease_owner = $2 WHERE id = $1', [recorded, owner2], reads), 1);
     assert.equal(await raw('UPDATE "session" SET inbox_lease_generation = $2 WHERE id = $1', [recorded, randomUUID()], reads), 1);
     assert.equal(await raw('UPDATE "session" SET inbox_lease_owner = NULL, inbox_lease_generation = NULL WHERE id = $1', [recorded]), 1, 'release stays open');
-    assert.equal(await raw(`UPDATE "session" SET status = 'CANCELLED', finished_at = now(), release_cause = 'cancelled' WHERE id = $1`, [recorded]), 1);
+    assert.equal(await raw(`UPDATE "session" SET status = 'CANCELLED', finished_at = now() WHERE id = $1`, [recorded]), 1);
     assert.equal(
-      await raw(`UPDATE "session" SET status = 'PENDING', finished_at = NULL, release_cause = NULL, inbox_lease_owner = $2 WHERE id = $1`, [recorded, newTerminalResumeHandoffOwner()]),
+      await raw(`UPDATE "session" SET status = 'PENDING', finished_at = NULL, inbox_lease_owner = $2 WHERE id = $1`, [recorded, newTerminalResumeHandoffOwner()]),
       1, 'a server terminal revive only reserves its handoff marker',
     );
     // Harness on a DeepSeek key, whose runtime an older replica reads as Claude: it never declares
@@ -456,11 +455,11 @@ test('T2 provider-engine foundation on PostgreSQL', { timeout: 600_000 }, async 
     const run = await session(at, ds.slug, { taskId: pinned });
     assert.equal(await engineOf(run), AgentProvider.DSH);
     assert.equal(await claimRaw(run, { 'orbit.runner_supports_dsh': '1' }), 0, 'so that replica cannot run it as Claude');
-    await db.session.update({ where: { id: run }, data: { status: RunStatus.CANCELLED, finishedAt: new Date(), releaseCause: 'cancelled' } });
+    await db.session.update({ where: { id: run }, data: { status: RunStatus.CANCELLED, finishedAt: new Date()} });
     const other = await key(owner);
     const elsewhere = await session(at, other.slug, { taskId: pinned });
     assert.equal(await engineOf(elsewhere), null, 'a run on another credential is not the pin');
-    await db.session.update({ where: { id: elsewhere }, data: { status: RunStatus.CANCELLED, finishedAt: new Date(), releaseCause: 'cancelled' } });
+    await db.session.update({ where: { id: elsewhere }, data: { status: RunStatus.CANCELLED, finishedAt: new Date()} });
     const conversation = await session(at, ds.slug, { taskId: pinned, startsTaskWork: false });
     assert.equal(await engineOf(conversation), null, 'a conversation about the task is not its run');
   });

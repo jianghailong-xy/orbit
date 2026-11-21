@@ -464,16 +464,13 @@ function row(over: SessionRow = {}): SessionRow {
     ...over,
     // A FAILED row is released by a failure, as every writer releases one: the release column set (at the sweep's own
     // instant unless the case says when, so the offline wait has spent nothing) and the failure on its last turn,
-    // beside the cause the writers still record. The rest are held.
+    //. The rest are held.
     ...(over.status === RunStatus.FAILED
       ? {
           finishedAt: over.finishedAt !== undefined ? over.finishedAt : NOW,
           lastTurnOutcome: over.lastTurnOutcome !== undefined ? over.lastTurnOutcome : 'FAILED',
         }
       : {}),
-    releaseCause: over.releaseCause !== undefined
-      ? over.releaseCause
-      : (over.status === RunStatus.FAILED ? 'turn_failed' : null),
   };
 }
 

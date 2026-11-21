@@ -61,7 +61,7 @@ const SUCCESSFUL_SETTLEMENTS: ReadonlySet<LandingSettledAs> = new Set([
 /**
  * The status a LANDING container is written with: AWAITING_INPUT while its subject is open, and once the landing
  * settled SUCCEEDED for a settlement that reached the line and CANCELLED for any other. The two writers below write
- * it beside `release_cause` 'landing_settled', and the detail a LANDING link answers with before its row exists
+ * it with `finished_at`, and the detail a LANDING link answers with before its row exists
  * (SessionsService.landingOnlyDetail) shows the status the row would have from it.
  */
 export function landingContainerStatus(landing: { settledAt: Date | string | null; settledAs: string | null }): RunStatus {
@@ -292,7 +292,7 @@ export async function ensureLandingSession(
         mergeTargets: [],
         // A settled subject starts released, at the moment it settled (design §4.2).
         ...(settled
-          ? { completedAt: landing.settledAt, finishedAt: landing.settledAt, releaseCause: 'landing_settled' }
+          ? { completedAt: landing.settledAt, finishedAt: landing.settledAt }
           : {}),
       }],
       skipDuplicates: true,
@@ -386,7 +386,6 @@ async function settleLanding(
           completedAt: settledAt,
           // Released with the status (design §4.2).
           finishedAt: settledAt,
-          releaseCause: 'landing_settled',
         },
       });
     }

@@ -289,7 +289,7 @@ async function land(stack: Stack, w: World, taskId: string, label: string): Prom
     data: {
       ownerId: w.ownerId, creatorId: w.ownerId, taskId, workspaceId: w.workspaceId, assignedRunnerId: w.runnerId,
       title: label, prompt: label, branch, isolationStatus: 'worktree', baseSha: sha('b'), status: RunStatus.SUCCEEDED,
-      startsTaskWork: true, finishedAt: new Date(Date.now() - 60_000), releaseCause: 'engine_exited', worktreeBranch: branch, worktreeDirty: false,
+      startsTaskWork: true, finishedAt: new Date(Date.now() - 60_000), worktreeBranch: branch, worktreeDirty: false,
       changedFiles: [{ path: 'docs/the-work.md' }] as never,
     },
   });

@@ -335,7 +335,7 @@ async function mergeSession(
       title: `${label}-merge`,
       prompt: `${label}-merge`,
       provider: 'claude',
-      status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited',
+      status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
       dispatchOrigin: SessionDispatchOrigin.USER,
       branch: `orbit/${label}`,
     },
@@ -355,7 +355,7 @@ async function ranOnABranch(stack: Stack, f: Fixture, taskId: string, label: str
       assignedRunnerId: f.runnerId, title: `${label}-work`, prompt: `${label}-work`, provider: 'claude',
       status: RunStatus.SUCCEEDED, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
       isolationStatus: 'worktree', branch: `orbit/${label}-work`, changedFiles: ['src/work.ts'],
-      finishedAt: new Date(), releaseCause: 'engine_exited',
+      finishedAt: new Date(), 
     },
   });
 }

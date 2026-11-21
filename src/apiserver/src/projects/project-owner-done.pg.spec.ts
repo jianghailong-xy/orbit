@@ -352,7 +352,7 @@ test('the owner records a project done in person, and the projection keeps that 
         taskId,
         title: `ran ${branch}`,
         prompt: 'do the work',
-        status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited',
+        status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
         branch,
         isolationStatus: 'worktree',
       },

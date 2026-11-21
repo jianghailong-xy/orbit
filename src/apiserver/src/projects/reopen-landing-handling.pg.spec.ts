@@ -328,7 +328,6 @@ async function completeTask(stack: Stack, w: World, taskId: string, label: strin
       where: { id: sessionId },
       data: {
         status: RunStatus.CANCELLED,
-        releaseCause: 'cancelled',
         completedAt: new Date(),
         finishedAt: new Date(),
         worktreeBranch: branch,
@@ -528,7 +527,7 @@ test('an owner\'s Confirm that writes the reopened DONE while the run is open: t
         const finished = await tx.session.update({
           where: { id: sessionId },
           data: {
-            status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited',
+            status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
             worktreeBranch: branch, worktreeDirty: false,
           },
           select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },

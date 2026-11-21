@@ -200,7 +200,6 @@ test('the tasks a session created: its row, its counts, its order, and the task 
         title: `run of ${taskId}`, prompt: 'do the thing', status,
         ...(isReleasedStatus(status) ? {
           finishedAt: new Date(),
-          releaseCause: status === RunStatus.CANCELLED ? 'cancelled' : status === RunStatus.FAILED ? 'engine_failed' : 'engine_exited',
         } : {}),
         dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
       },
@@ -625,7 +624,6 @@ test('the row writes no temp file, however many tasks the session created', {
         title: `run of ${taskId}`, prompt: 'do the thing', status,
         ...(isReleasedStatus(status) ? {
           finishedAt: new Date(),
-          releaseCause: status === RunStatus.CANCELLED ? 'cancelled' : status === RunStatus.FAILED ? 'engine_failed' : 'engine_exited',
         } : {}),
         dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
       },

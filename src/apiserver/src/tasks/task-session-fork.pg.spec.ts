@@ -244,7 +244,7 @@ test('SR55: a task forked from its creating session', { skip, concurrency: 1, ti
     // The attempt fails and the task is retried, carrying a known-good commit of its own. SR12: the
     // retry starts from the same snapshot — PF reads the task's create-time columns, not the attempt.
     await admin.query(
-      `UPDATE "session" SET "status" = 'FAILED', "release_cause" = 'engine_failed', "finished_at" = now() WHERE "id" = $1`,
+      `UPDATE "session" SET "status" = 'FAILED', "finished_at" = now() WHERE "id" = $1`,
       [first.id],
     );
     await admin.query(
@@ -366,8 +366,8 @@ test('SR55: a task forked from its creating session', { skip, concurrency: 1, ti
 
     // A runner too old for codeless-checkout/v1 is handed the branch up front, so its run is still isolated.
     await admin.query(`UPDATE "runner" SET "capabilities" = '{}' WHERE "id" = $1`, [w.runnerA]);
-    await admin.query(`UPDATE "session" SET "status" = 'SUCCEEDED', "finished_at" = COALESCE("finished_at", now()), "release_cause" = 'engine_exited' WHERE "id" IN ($1, $2)`, [run.id, ordinaryRun.id]);
-    await admin.query(`UPDATE "session" SET "status" = 'SUCCEEDED', "finished_at" = COALESCE("finished_at", now()), "release_cause" = 'engine_exited' WHERE "task_id" = $1`, [forkedCodeless.id]);
+    await admin.query(`UPDATE "session" SET "status" = 'SUCCEEDED', "finished_at" = COALESCE("finished_at", now()) WHERE "id" IN ($1, $2)`, [run.id, ordinaryRun.id]);
+    await admin.query(`UPDATE "session" SET "status" = 'SUCCEEDED', "finished_at" = COALESCE("finished_at", now()) WHERE "task_id" = $1`, [forkedCodeless.id]);
     const older = await startRun(w, (await createForked(w, { title: 'Write more notes', fork: undefined, codeless: true }) as { id: string }).id);
     const oldClaim = await queue.claimSessionForRunner({ id: w.runnerA } as never);
     assert.equal(oldClaim?.sessionId, older.id);

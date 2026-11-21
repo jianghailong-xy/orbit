@@ -238,7 +238,7 @@ async function workSession(stack: Stack, w: World, taskId: string, s: Work): Pro
       branch: s.branch, branchSha: s.branchSha, baseSha: s.baseSha,
       changedFiles: (s.changedFiles ?? []) as Prisma.InputJsonValue,
       numTurns: 1, startedAt: minutesAgo(s.createdMinutesAgo ?? 30), createdAt: minutesAgo(s.createdMinutesAgo ?? 30),
-      ...(finished ? { finishedAt: minutesAgo(s.finishedMinutesAgo!), releaseCause: 'engine_exited' } : {}),
+      ...(finished ? { finishedAt: minutesAgo(s.finishedMinutesAgo!)} : {}),
     },
   });
   return id;
@@ -258,7 +258,7 @@ async function finishDispatchedWork(stack: Stack, taskId: string, s: Omit<Work, 
     data: {
       status: RunStatus.SUCCEEDED, isolationStatus: 'worktree', branch: `orbit/${taskId.slice(0, 8)}`,
       branchSha: s.branchSha, baseSha: s.baseSha, changedFiles: (s.changedFiles ?? []) as Prisma.InputJsonValue,
-      finishedAt: new Date(), releaseCause: 'engine_exited',
+      finishedAt: new Date(), 
     },
   });
   await stack.db.task.update({ where: { id: taskId }, data: { status: TaskStatus.IN_PROGRESS } });
@@ -575,9 +575,9 @@ test('(9) the reaper\'s forced finish runs the same route: an empty branch queue
       const w = await world(stack, 'reaper', 'NONE');
       const forceFinalize = (sessionId: string, taskId: string) => (stack.reaper as unknown as {
         forceFinalize(sessionId: string, runnerId: string | null, taskId: string | null, reason: string,
-          opts: { status: typeof RunStatus.CANCELLED; releaseCause: 'cancelled' }): Promise<void>;
+          opts: { status: typeof RunStatus.CANCELLED }): Promise<void>;
       }).forceFinalize(sessionId, w.runnerId, taskId, 'runner lost', {
-        status: RunStatus.CANCELLED, releaseCause: 'cancelled',
+        status: RunStatus.CANCELLED, 
       });
 
       const empty = await task(stack, w, 'reaped-empty');

@@ -376,7 +376,7 @@ async function recordLanding(stack: Stack, f: Fixture, taskId: string, label: st
       title: `${label}-merge`,
       prompt: `${label}-merge`,
       provider: 'claude',
-      status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited',
+      status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
       dispatchOrigin: SessionDispatchOrigin.USER,
     },
   });
@@ -489,7 +489,7 @@ async function settleByAcceptance(stack: Stack, f: Fixture, taskId: string, labe
   });
   await stack.db.session.update({
     where: { id: sessionId },
-    data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited' },
+    data: { status: RunStatus.SUCCEEDED, finishedAt: new Date()},
   });
 
   assert.equal(
@@ -818,7 +818,7 @@ test('a receipt recorded through the door delivers the landing question, and ans
           title: 'through-the-door-merge',
           prompt: 'through-the-door-merge',
           provider: 'claude',
-          status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited',
+          status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
           dispatchOrigin: SessionDispatchOrigin.USER,
           branch: 'orbit/through-the-door',
         },

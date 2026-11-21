@@ -184,7 +184,7 @@ async function end(
   status: typeof RunStatus.SUCCEEDED | typeof RunStatus.FAILED,
   data: { error?: string | null; model?: string } = {},
 ) {
-  await db.session.update({ where: { id: sessionId }, data: { status, finishedAt: new Date(), releaseCause: status === RunStatus.FAILED ? 'engine_failed' : 'engine_exited', ...data } });
+  await db.session.update({ where: { id: sessionId }, data: { status, finishedAt: new Date(), ...data } });
 }
 
 const decisionOf = (db: PrismaClient, sessionId: string) =>

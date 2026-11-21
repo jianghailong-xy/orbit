@@ -168,7 +168,6 @@ test('T4 provider-engine migration on PostgreSQL', { timeout: 900_000 }, async (
       status, usesRuntimeDefaultModel: true,
       ...(isReleasedStatus(status) ? {
         finishedAt: new Date(),
-        releaseCause: status === RunStatus.CANCELLED ? 'cancelled' : status === RunStatus.FAILED ? 'engine_failed' : 'engine_exited',
       } : {}),
       model: opts.model === undefined ? 'pinned-model' : opts.model,
       runtimeSessionId: opts.runtimeSessionId === undefined ? `runtime-${randomUUID()}` : opts.runtimeSessionId,
@@ -547,7 +546,7 @@ test('T4 provider-engine migration on PostgreSQL', { timeout: 900_000 }, async (
       [['session', straggler, 'UNRESOLVED']],
     );
     assert.equal(listed.summary?.aliasReferences, 1);
-    await db.session.update({ where: { id: straggler }, data: { completedAt: new Date(), status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited' } });
+    await db.session.update({ where: { id: straggler }, data: { completedAt: new Date(), status: RunStatus.SUCCEEDED, finishedAt: new Date()} });
     // The name is held in the one slug namespace, and nothing lists it.
     await assert.rejects(key(owner, { slug: merged.slug }), (e: { code?: string }) => e.code === 'P2002');
     const listedKeys = (await providers.listUsable(owner)).map((p) => p.slug);

@@ -166,7 +166,6 @@ async function moveTo(db: PrismaClient, sessionId: string, status: RunStatus) {
       data: {
         status,
         finishedAt: (TERMINAL as RunStatus[]).includes(status) ? new Date() : null,
-        releaseCause: (TERMINAL as RunStatus[]).includes(status) ? (status === RunStatus.CANCELLED ? 'cancelled' : status === RunStatus.FAILED ? 'engine_failed' : 'engine_exited') : null,
       },
     });
   });
@@ -697,7 +696,7 @@ test('a real primary-key duplicate on the derived id is classified, and never ad
           id: desiredIdFor(target, press), ownerId: stranger.ownerId, creatorId: stranger.ownerId,
           taskId: stranger.taskId, workspaceId: stranger.agentId,
           assignedRunnerId: stranger.runnerId, title: 'not yours', prompt: 'not yours',
-          provider: 'claude', status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited', finishedAt: new Date(),
+          provider: 'claude', status: RunStatus.SUCCEEDED, finishedAt: new Date(),
           dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
         },
       });
@@ -770,7 +769,6 @@ test('the duplicate shapes the unit tests construct are the ones this server pro
         provider: 'claude', status, dispatchOrigin: SessionDispatchOrigin.USER,
         startsTaskWork: true,
         finishedAt: (TERMINAL as RunStatus[]).includes(status) ? new Date() : null,
-        releaseCause: (TERMINAL as RunStatus[]).includes(status) ? (status === RunStatus.CANCELLED ? 'cancelled' : status === RunStatus.FAILED ? 'engine_failed' : 'engine_exited') : null,
       });
       const first = randomUUID();
       await services.db.session.create({ data: row(first, RunStatus.PENDING) });
@@ -778,7 +776,7 @@ test('the duplicate shapes the unit tests construct are the ones this server pro
       const claim = await services.db.session.create({ data: row(randomUUID(), RunStatus.PENDING) })
         .catch((e: unknown) => e) as { code?: string; meta?: Record<string, unknown> };
       await services.db.session.update({
-        where: { id: first }, data: { status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited', finishedAt: new Date() },
+        where: { id: first }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date() },
       });
       const pkey = await services.db.session.create({ data: row(first, RunStatus.PENDING) })
         .catch((e: unknown) => e) as { code?: string; meta?: Record<string, unknown> };

@@ -94,7 +94,7 @@ async function world(t: { after(fn: () => unknown): void }, opts: { capable?: bo
   await prisma.workspace.create({ data: { id: sharedWorkspaceId, ownerId, runnerId, name: 'shared', workDir: ROOT, enableWorktree: false } });
   const session = (over: Record<string, unknown> = {}) =>
     prisma.session.create({
-      data: { ownerId, creatorId: ownerId, workspaceId, title: 'a session', prompt: 'p', status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited', ...over },
+      data: { ownerId, creatorId: ownerId, workspaceId, title: 'a session', prompt: 'p', status: RunStatus.SUCCEEDED, finishedAt: new Date(), ...over },
       select: { id: true },
     });
   const sessionId = (await session({ isolationStatus: 'worktree', branch: 'orbit/session-1' })).id;
@@ -400,7 +400,7 @@ test('a runner\'s ACTION_FAILED is accepted and written as its line; a control-p
 
 test('a live session on a capable runner gets the line as a `notice` turn for the runner to number', { skip }, async (t) => {
   const w = await world(t);
-  await w.prisma.session.update({ where: { id: w.sessionId }, data: { status: RunStatus.AWAITING_INPUT, finishedAt: null, releaseCause: null, assignedRunnerId: w.runnerId } });
+  await w.prisma.session.update({ where: { id: w.sessionId }, data: { status: RunStatus.AWAITING_INPUT, finishedAt: null, assignedRunnerId: w.runnerId } });
   await w.prisma.runEvent.create({ data: { sessionId: w.sessionId, seq: 1, type: 'assistant', payload: { text: 'hi' } } });
   const { requestId } = await commit(w);
   const [handed] = await handOut(w);

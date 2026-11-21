@@ -333,7 +333,7 @@ async function doneCodeTask(stack: Stack, w: World): Promise<{ taskId: string; s
   await db.$transaction(async (tx) => {
     const finished = await tx.session.update({
       where: { id: sessionId },
-      data: { status: RunStatus.SUCCEEDED, finishedAt, releaseCause: 'engine_exited' },
+      data: { status: RunStatus.SUCCEEDED, finishedAt},
       select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
     });
     await settleDeliveredIdentityAfterFinish(tx, finished);

@@ -275,7 +275,7 @@ async function doneCodeTask(stack: Stack, w: World, projectId: string, label: st
     const finished = await tx.session.update({
       where: { id: sessionId },
       data: {
-        status: RunStatus.SUCCEEDED, finishedAt: new Date(Date.now() - 60_000), releaseCause: 'engine_exited',
+        status: RunStatus.SUCCEEDED, finishedAt: new Date(Date.now() - 60_000), 
         branchSha: TASK_BRANCH_TIP, worktreeBranch: branch, worktreeDirty: false,
       },
       select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
@@ -338,7 +338,7 @@ test('(a) a runner\'s merge result that lands a session on main makes the space\
       await stack.db.session.create({
         data: {
           id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, workspaceId: w.workspaceId, assignedRunnerId: w.runnerId,
-          title: 'Shorten the offline window', prompt: 'p', status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited', branch: 'orbit/offline-window',
+          title: 'Shorten the offline window', prompt: 'p', status: RunStatus.SUCCEEDED, finishedAt: new Date(), branch: 'orbit/offline-window',
           isolationStatus: 'worktree',
         },
       });
@@ -377,7 +377,7 @@ test('(a) a wiki chat\'s merge into main is the owner\'s work: its follow job is
       await stack.db.session.create({
         data: {
           id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, workspaceId: w.workspaceId, assignedRunnerId: w.runnerId,
-          title: 'Chat: the lease is two minutes', prompt: 'p', status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited', branch: 'orbit/chat-lease',
+          title: 'Chat: the lease is two minutes', prompt: 'p', status: RunStatus.SUCCEEDED, finishedAt: new Date(), branch: 'orbit/chat-lease',
           isolationStatus: 'worktree', wikiChatSpaceId: w.spaceId,
         },
       });

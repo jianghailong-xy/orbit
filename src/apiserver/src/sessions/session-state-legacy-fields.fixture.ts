@@ -4,7 +4,7 @@
  * string, the six SessionEndReason values and the two legacy ones), and the filing facts (open, filed through
  * `completed_at`, filed through the legacy `archived_at` mirror alone, trashed, filed and trashed).
  *
- * `finished_at` and `release_cause` are set the way session_release_fact_chk holds them (set exactly on the three
+ * `finished_at` is set the way session_release_fact_chk holds them (set exactly on the three
  * released statuses). The projector does not read them; they are here so each row is one a database could hold.
  *
  * No imports, so the golden table (session-state-legacy-fields.golden.json) can be generated from this file at the
@@ -40,14 +40,7 @@ export interface LegacyFieldsCase {
     archivedAt: string | null;
     deletedAt: string | null;
     finishedAt: string | null;
-    releaseCause: string | null;
   };
-}
-
-function causeOf(status: string, endReason: string | null): string | null {
-  if (!RELEASED.has(status)) return null;
-  if (status === 'FAILED') return 'turn_failed';
-  return endReason || 'engine_exited';
 }
 
 export function combinations(): LegacyFieldsCase[] {
@@ -62,7 +55,6 @@ export function combinations(): LegacyFieldsCase[] {
             endReason,
             ...facts,
             finishedAt: RELEASED.has(status) ? AT : null,
-            releaseCause: causeOf(status, endReason),
           },
         });
       }

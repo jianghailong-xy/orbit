@@ -225,7 +225,7 @@ async function workSession(stack: Stack, ids: World, taskId: string, label: stri
       provider: 'claude',
       // SUCCEEDED, so the run is over: a live session would hold the dependent back through a
       // clause that has nothing to do with landing.
-      status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited',
+      status: RunStatus.SUCCEEDED, 
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       isolationStatus: 'worktree',

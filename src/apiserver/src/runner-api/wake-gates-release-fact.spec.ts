@@ -11,8 +11,7 @@ import {
 } from '@orbit/shared';
 import { RunStatus } from '@prisma/client';
 
-import { isHeld, SESSION_RELEASE_CAUSES } from '../common/session-release';
-import { CAUSE_READING } from '../common/session-release-shapes.fixture';
+import { isHeld } from '../common/session-release';
 import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
 import { conversationIsDown, sessionHasEnded as projectSessionHasEnded } from '../projects/project-open-item';
 import { RETRY_CLAIM_WINDOW_MS } from '../sessions/session-request';
@@ -22,13 +21,13 @@ import { tickStanding } from './scheduled-wakeup';
 
 /**
  * Plan step 4.7, decision D4 (keep today's rule): the wake rules and the credential gates read the release fact
- * (`finished_at`) and its cause (`release_cause`) and answer EXACTLY what they answered from the status value.
+ * (`finished_at`) and answer EXACTLY what they answered from the status value.
  *
  * The OLD_* functions below are the gates as they stood before this step, copied from the code, and read the
  * status the way it did. Every combination of (status, end reason, cancel requested, filing, retry armed, and
- * every release cause a writer can pair with the status) is run through both, and the verdicts must be equal.
+ * every outcome of the turn that carries the release) is run through both, and the verdicts must be equal.
  * Rows are the ones the writers and backfills produce: released exactly when the status is terminal
- * (session_release_fact_chk), a failure cause exactly when the status is FAILED (every writer since 1403/1404).
+ * (session_release_fact_chk).
  *
  * Set ORBIT_WAKE_GATES_TABLE to a file path to write the table (before and after, per gate) as markdown.
  */
@@ -38,13 +37,11 @@ const STATUSES = ['PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED', 'SUCCEE
 const END_REASONS = [null, 'ended', 'task_done', 'task_cancelled', 'completed', 'cancelled', 'idle'] as const;
 const FILINGS = ['open', 'completed', 'archived', 'trash'] as const;
 const RETRIES = ['none', 'armed', 'claimed', 'claim lapsed'] as const;
-const FAILED_CAUSES: readonly string[] = CAUSE_READING.failureCauses;
-const OTHER_CAUSES = SESSION_RELEASE_CAUSES.filter((cause) => !FAILED_CAUSES.includes(cause));
+const OUTCOMES: readonly (string | null)[] = ['ANSWERED', 'FAILED', 'CANCELLED', null];
 
 interface Row {
   status: RunStatus;
   finishedAt: Date | null;
-  releaseCause: string | null;
   endReason: string | null;
   lastTurnOutcome: string | null;
   completedAt: Date | null;
@@ -56,23 +53,18 @@ interface Row {
   ownerId: string;
 }
 
-function causesOf(status: string): readonly (string | null)[] {
-  if (status === 'FAILED') return FAILED_CAUSES;
-  if (status === 'SUCCEEDED' || status === 'CANCELLED') return OTHER_CAUSES;
+function outcomesOf(status: string): readonly (string | null)[] {
+  if (status === 'FAILED' || status === 'SUCCEEDED' || status === 'CANCELLED') return OUTCOMES;
   return [null];
 }
 
-function rowOf(status: string, releaseCause: string | null, endReason: string | null, cancelled: boolean, filing: string, retry: string): Row {
+function rowOf(status: string, lastTurnOutcome: string | null, endReason: string | null, cancelled: boolean, filing: string, retry: string): Row {
   return {
     status: status as RunStatus,
-    finishedAt: releaseCause === null ? null : new Date(NOW.getTime() - 60_000),
-    releaseCause,
+    finishedAt: ['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(status) ? new Date(NOW.getTime() - 60_000) : null,
     endReason,
-    // As the writers record it (design §12.1, removal step R2): FAILED on the turn that carries a failure, CANCELLED on
-    // the one an end nobody honoured cut off, nothing for an import; an answered turn before any other release.
-    lastTurnOutcome: releaseCause === 'import_failed' ? null
-      : releaseCause === 'end_not_honored' ? 'CANCELLED'
-        : CAUSE_READING.failed(releaseCause) ? 'FAILED' : 'ANSWERED',
+    // The outcome of the turn that carries the release (design §12.1): the failure is the turn's.
+    lastTurnOutcome,
     completedAt: filing === 'completed' ? NOW : null,
     archivedAt: filing === 'archived' ? NOW : null,
     deletedAt: filing === 'trash' ? NOW : null,
@@ -159,8 +151,8 @@ test('every gate answers from the release column what it answered from the statu
             for (const retry of RETRIES) {
               const verdicts = new Set<string>();
               let before = '';
-              for (const cause of causesOf(status)) {
-                const row = rowOf(status, cause, endReason, cancelled, filing, retry);
+              for (const outcome of outcomesOf(status)) {
+                const row = rowOf(status, outcome, endReason, cancelled, filing, retry);
                 before = gate.before(row);
                 const after = gate.after(row);
                 combinations += 1;
@@ -169,11 +161,11 @@ test('every gate answers from the release column what it answered from the statu
                 // FAILED_RECOVERING.
                 const expected = gate.name.startsWith('tickStanding') && status === 'FAILED' && endReason !== null
                   && filing === 'open' ? 'ENDED' : before;
-                assert.equal(after, expected, `${gate.name}: ${status}/${cause}/end ${endReason}/cancel ${cancelled}/${filing}/retry ${retry}`);
+                assert.equal(after, expected, `${gate.name}: ${status}/${outcome}/end ${endReason}/cancel ${cancelled}/${filing}/retry ${retry}`);
                 verdicts.add(after);
               }
-              // Whatever the release cause, one verdict: the cause only separates a failure from the rest, and that is the status.
-              assert.equal(verdicts.size, 1, `${gate.name}: ${status} ${endReason} ${filing} ${retry} differs by cause`);
+              // Whatever the turn outcome, one verdict: the gates read the status.
+              assert.equal(verdicts.size, 1, `${gate.name}: ${status} ${endReason} ${filing} ${retry} differs by outcome`);
               lines.push(`| ${gate.name} | ${status} | ${endReason ?? '-'} | ${cancelled} | ${filing} | ${retry} | ${before} | ${[...verdicts][0]} |`);
             }
           }
@@ -191,13 +183,13 @@ test('every gate answers from the release column what it answered from the statu
 
 test('named cases: a FAILED session with a retry armed, and a session a person ended', () => {
   // FAILED, retry_at armed: it will be retried, so a scheduled wake-up misses its tick and a machine wake may still revive it.
-  const failed = rowOf('FAILED', 'turn_failed', null, true, 'open', 'armed');
+  const failed = rowOf('FAILED', 'FAILED', null, true, 'open', 'armed');
   assert.equal(oldTickStanding(failed, NOW), 'FAILED_RECOVERING');
   assert.equal(tickStanding(failed, NOW), 'FAILED_RECOVERING');
   assert.equal(oldSessionHasEnded(failed), true);
   assert.equal(sessionHasEnded(failed), true);
   // Ended by a person ('ended', CANCELLED): a stale PENDING wake-up row on it is dropped, never delivered.
-  const ended = rowOf('CANCELLED', 'ended', 'ended', false, 'open', 'none');
+  const ended = rowOf('CANCELLED', 'ANSWERED', 'ended', false, 'open', 'none');
   for (const gate of [oldSessionHasEnded, sessionHasEnded, oldProjectSessionHasEnded, projectSessionHasEnded]) {
     assert.equal(gate(ended), true);
   }
@@ -205,19 +197,14 @@ test('named cases: a FAILED session with a retry armed, and a session a person e
   assert.equal(tickStanding(ended, NOW), 'ENDED');
 });
 
-test('rows 1262 left FAILED with a clean-end cause and no end reason read as failed again, as their status says', () => {
-  // No backfill rewrites these causes: 1405, which was to, was removed on 2026-11-21 before it was deployed (design
-  // §12 decision D9, removal step R1). While the readers read the cause they answered ENDED and not down for these rows
-  // (85 in production); the readers step (R4) reads the end reason, the turn outcome (1202 wrote FAILED on every FAILED
-  // row) and the status bridge, and answers what the status, and production today, answer.
-  for (const cause of ['engine_exited', 'completed', 'cancelled']) {
-    const row = { ...rowOf('FAILED', cause, null, true, 'open', 'none'), lastTurnOutcome: 'FAILED' };
-    assert.equal(oldTickStanding(row, NOW), 'FAILED', cause);
-    assert.equal(tickStanding(row, NOW), 'FAILED', cause);
-    assert.equal(oldConversationIsDown(row), true, cause);
-    assert.equal(conversationIsDown(row), true, cause);
-    // The wake rule and the credential gates do not read the cause: unchanged.
-    assert.equal(sessionHasEnded(row), oldSessionHasEnded(row), cause);
-    assert.equal(newGatewayOpen(row), oldGatewayOpen(row), cause);
-  }
+test('rows 1262 left FAILED with no end reason read as failed, as their status says', () => {
+  // (85 in production.) The readers read the end reason, the turn outcome (1202 wrote FAILED on every FAILED row) and
+  // the status bridge, and answer what the status, and production today, answer.
+  const row = { ...rowOf('FAILED', 'FAILED', null, true, 'open', 'none') };
+  assert.equal(oldTickStanding(row, NOW), 'FAILED');
+  assert.equal(tickStanding(row, NOW), 'FAILED');
+  assert.equal(oldConversationIsDown(row), true);
+  assert.equal(conversationIsDown(row), true);
+  assert.equal(sessionHasEnded(row), oldSessionHasEnded(row));
+  assert.equal(newGatewayOpen(row), oldGatewayOpen(row));
 });

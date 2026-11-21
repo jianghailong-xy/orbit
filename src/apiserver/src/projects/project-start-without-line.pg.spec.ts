@@ -244,7 +244,6 @@ for (const withRepo of [false, true]) test(`a project starts with no line${withR
       isolationStatus: 'worktree', branch: 'orbit/first', branchSha: sha('c'), baseSha: sha('b'),
       changedFiles: TOUCHED, numTurns: 1, startedAt: new Date(Date.now() - 600_000),
       createdAt: new Date(Date.now() - 600_000), finishedAt: new Date(Date.now() - 60_000),
-      releaseCause: 'engine_exited',
     },
   });
   const receipt = await confirmations.decide(

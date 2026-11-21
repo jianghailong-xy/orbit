@@ -4,19 +4,17 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { releaseFinishedTheWork, releaseWasFailure, type SessionReleaseFacts } from './session-release';
-import { CAUSE_READING, RELEASE_SHAPES, releaseFactsOfShape, type ReleaseShape } from './session-release-shapes.fixture';
+import { RELEASE_SHAPES, releaseFactsOfShape, type ReleaseShape } from './session-release-shapes.fixture';
 
 /**
  * Removal steps R3 and R4 (docs/session-three-state-design.md §12.2, decision D9): the two release questions of
  * common/session-release.ts, asked of every release row shape (common/session-release-shapes.fixture.ts), against the
- * reading they replace, the release cause (`CAUSE_READING`: a failure is a failure cause, the work finished exactly when
- * the cause is task_done or landing_settled), and production's reading today (deploy 1 reads the status).
+ * production's reading today (deploy 1 reads the status).
  *
  *   released by a failure  finished_at set, no end reason, and last_turn_outcome FAILED or (the bridge) status FAILED
  *   the work finished      finished_at set, and end_reason task_done or a LANDING container with no end reason
  *
- * The work finished answers as the cause did on every shape. Released by a failure answers as the cause did on every
- * shape but the ones named in the fixture, each by why:
+ * Released by a failure answers as follows for the shapes named in the fixture, each by why:
  *   END_ASKED      W7, and W4 after an end was asked: an end somebody asked for is a stop, not a failure (intended).
  *   LEGACY_FAILED  FAILED rows 1262 gave a clean-end cause with no end reason (production: 71 engine_exited, and at
  *                  most 1 cancelled): read as failed, as their status and 1202's turn outcome say and as deploy 1 reads
@@ -44,11 +42,9 @@ function withoutBridge(facts: SessionReleaseFacts): SessionReleaseFacts {
 
 interface Answers {
   shape: ReleaseShape;
-  todayFailed: boolean;
   statusFailed: boolean;
   failed: boolean;
   failedWithoutBridge: boolean;
-  todayFinished: boolean;
   finished: boolean;
 }
 
@@ -56,11 +52,9 @@ function answersOf(shape: ReleaseShape): Answers {
   const facts = releaseFactsOfShape(shape, new Date('2026-11-21T12:00:00.000Z'));
   return {
     shape,
-    todayFailed: shape.released && CAUSE_READING.failed(shape.releaseCause),
     statusFailed: shape.released && shape.status === 'FAILED',
     failed: releaseWasFailure(facts),
     failedWithoutBridge: releaseWasFailure(withoutBridge(facts)),
-    todayFinished: shape.released && CAUSE_READING.finished(shape.releaseCause),
     finished: releaseFinishedTheWork(facts),
   };
 }
@@ -78,35 +72,31 @@ test('the table names every row shape of design §12.2, and the shapes the rulin
   }
 });
 
-test('released by a failure answers as the release cause did, but for the shapes named by why', () => {
+test('released by a failure: the shapes named by why answer as named, and a held session answers no', () => {
   for (const a of ANSWERS) {
     const { name, failureChange } = a.shape;
     switch (failureChange) {
-      case undefined:
-        assert.equal(a.failed, a.todayFailed, `${name}: as the cause read it`);
-        break;
       case 'END_ASKED':
-        // W7: an end that was asked for and not honoured (or a source refused after one) is no longer a failure.
-        assert.equal(a.todayFailed, true, `${name}: the cause read a failure`);
+        // W7: an end that was asked for and not honoured (or a source refused after one) is a stop, not a failure.
         assert.equal(a.failed, false, `${name}: an end was asked, so a stop`);
         break;
       case 'LEGACY_FAILED':
-        assert.equal(a.todayFailed, false, `${name}: the cause read no failure`);
         assert.equal(a.failed, true, `${name}: failed, as the status and the turn outcome say`);
         assert.equal(a.failed, a.statusFailed, `${name}: production's reading today`);
         break;
       case 'RESIDUAL':
-        assert.equal(a.todayFailed, false, `${name}: the cause read no failure`);
         assert.equal(a.failed, true, `${name}: the kept copy reads as a failure (a gap, named in the evidence)`);
         break;
     }
-    // A held session was released by nothing.
     if (!a.shape.released) assert.equal(a.failed, false, `${name}: held`);
   }
 });
 
-test('the work finished answers as the release cause did on every shape', () => {
-  for (const a of ANSWERS) assert.equal(a.finished, a.todayFinished, `${a.shape.name}: as the cause read it`);
+test('the work finished: task_done, or a LANDING container released with no end reason', () => {
+  for (const a of ANSWERS) {
+    const { shape } = a;
+    assert.equal(a.finished, shape.released && (shape.endReason === 'task_done' || (shape.sessionKind === 'LANDING' && shape.endReason === null)), shape.name);
+  }
 });
 
 test('without the bridge, every shape that carries a turn outcome answers the same; the others are the bridge\'s', () => {
@@ -114,14 +104,13 @@ test('without the bridge, every shape that carries a turn outcome answers the sa
     const { name, carriesTurnOutcome, withoutBridge: change } = a.shape;
     if (change === 'END_ASKED') {
       // W7 with no reason recorded: a failure while the status bridge reads FAILED, a stop once R7 drops it.
-      assert.equal(a.failed, true, `${name}: with the bridge, as the cause read it`);
+      assert.equal(a.failed, true, `${name}: with the bridge`);
       assert.equal(a.failedWithoutBridge, false, `${name}: without it, the turn says CANCELLED`);
     } else if (carriesTurnOutcome) {
       assert.equal(a.failedWithoutBridge, a.failed, `${name}: the turn outcome answers alone`);
     } else {
-      // W5 and the deploy-1 hand-over rows: FAILED with no turn outcome. The bridge reads them as the cause did.
+      // W5 and the deploy-1 hand-over rows: FAILED with no turn outcome, read through the bridge.
       assert.equal(a.failed, true, `${name}: the bridge reads the status`);
-      assert.equal(a.failed, a.todayFailed, `${name}: as the cause read it`);
       assert.equal(a.failedWithoutBridge, false, `${name}: no turn outcome to read without the bridge`);
     }
   }
@@ -144,17 +133,17 @@ test('the bridge is the failure question\'s only read of the status, and the wor
 test('the table, printed', () => {
   const yes = (value: boolean) => (value ? 'yes' : '-');
   const lines = [
-    '| shape | what | status | release_cause | end_reason | last_turn_outcome | kind | failed: cause (before) | failed: status (production) | failed: now | failed: without bridge (R7) | finished: cause (before) | finished: now | why it differs | production |',
-    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+    '| shape | what | status | end_reason | last_turn_outcome | kind | failed: status (production) | failed: now | failed: without bridge (R7) | finished: now | why it differs | production |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
   ];
   for (const a of ANSWERS) {
     const s = a.shape;
     const why = [s.failureChange, s.withoutBridge ? `${s.withoutBridge} without bridge` : null,
       !s.carriesTurnOutcome ? 'bridge carries it' : null].filter(Boolean).join('; ');
-    lines.push(`| ${s.name} | ${s.what} | ${s.status} | ${s.releaseCause ?? '-'} | ${s.endReason ?? '-'} | `
-      + `${s.lastTurnOutcome ?? '-'} | ${s.sessionKind} | ${yes(a.todayFailed)} | ${yes(a.statusFailed)} | ${yes(a.failed)} | `
+    lines.push(`| ${s.name} | ${s.what} | ${s.status} | ${s.endReason ?? '-'} | `
+      + `${s.lastTurnOutcome ?? '-'} | ${s.sessionKind} | ${yes(a.statusFailed)} | ${yes(a.failed)} | `
       + `${s.carriesTurnOutcome || s.withoutBridge ? yes(a.failedWithoutBridge) : `(${yes(a.failedWithoutBridge)})`} | `
-      + `${yes(a.todayFinished)} | ${yes(a.finished)} | ${why || '-'} | ${s.production ?? '-'} |`);
+      + `${yes(a.finished)} | ${why || '-'} | ${s.production ?? '-'} |`);
   }
   for (const line of lines) console.log(`# ${line}`);
   const out = process.env.ORBIT_RELEASE_SHAPES_TABLE;

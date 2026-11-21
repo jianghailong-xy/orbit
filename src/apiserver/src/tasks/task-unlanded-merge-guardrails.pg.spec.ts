@@ -458,7 +458,7 @@ async function settleByAcceptance(stack: Stack, f: Fixture, taskId: string, labe
   });
   await stack.db.session.update({
     where: { id: sessionId },
-    data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited' },
+    data: { status: RunStatus.SUCCEEDED, finishedAt: new Date()},
   });
 
   assert.equal(
@@ -508,7 +508,7 @@ async function recordMerge(
       title: `${label}-merge`,
       prompt: `${label}-merge`,
       provider: 'claude',
-      status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited',
+      status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
       dispatchOrigin: SessionDispatchOrigin.USER,
     },
   });

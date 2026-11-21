@@ -181,8 +181,8 @@ test('Set as default for Claude Code accounts: the swap relay and the records th
         numTurns: 2,
         ...extra,
         ...(status === RunStatus.SUCCEEDED || status === RunStatus.FAILED
-          ? { finishedAt: extra.finishedAt ?? new Date(), releaseCause: status === RunStatus.FAILED ? 'engine_failed' : 'engine_exited' }
-          : status === RunStatus.CANCELLED ? { finishedAt: extra.finishedAt ?? new Date(), releaseCause: 'cancelled' } : {}),
+          ? { finishedAt: extra.finishedAt ?? new Date()}
+          : status === RunStatus.CANCELLED ? { finishedAt: extra.finishedAt ?? new Date()} : {}),
       },
     });
     return id;

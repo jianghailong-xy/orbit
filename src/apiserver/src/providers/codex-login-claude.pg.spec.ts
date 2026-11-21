@@ -229,7 +229,7 @@ suite("Claude Code on the owner's own Codex login pool — on real PostgreSQL", 
     assert.equal(claimed?.sessionId, codex.id);
     assert.equal(claimed!.agent.env?.OPENAI_BASE_URL, CODEX_GATEWAY);
     assert.ok(claimed!.agent.env?.OPENAI_API_KEY?.startsWith('orbit-gwl-'));
-    await db.session.update({ where: { id: codex.id }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited', completedAt: new Date() } });
+    await db.session.update({ where: { id: codex.id }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), completedAt: new Date() } });
   });
 
   let claudeToken = '';
@@ -357,7 +357,7 @@ suite("Claude Code on the owner's own Codex login pool — on real PostgreSQL", 
   });
 
   await t.test('(6) the session ended: its token is refused in Anthropic\'s shape', async () => {
-    await db.session.update({ where: { id: claudeSession }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited', completedAt: new Date() } });
+    await db.session.update({ where: { id: claudeSession }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), completedAt: new Date() } });
     const answer = await post(gateway, '/v1/messages', { authorization: `Bearer ${claudeToken}` }, { model: 'gpt-5.6-sol', messages: [] });
     assert.equal(answer.status, 401);
     assert.equal((JSON.parse(answer.text) as { error: { type: string } }).error.type, 'authentication_error');

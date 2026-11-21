@@ -67,7 +67,6 @@ test('model-routing report aggregates actual runs, first-run task cohorts and on
       workspaceId: subject.ownerId === owner ? agent.id : otherAgent.id, startsTaskWork: true,
       provider: 'claude', model: OPUS, effort: 'low', status, createdAt: at(seconds), ...data,
       finishedAt: terminal ? data.finishedAt ?? at(seconds + (duration ?? 0)) : null,
-      releaseCause: terminal ? (status === 'CANCELLED' ? 'cancelled' : status === 'FAILED' ? 'engine_failed' : 'engine_exited') : null,
     } });
   }
   async function route(subject: Task, sessionId: string | null, seconds: number, data: Partial<Prisma.TaskRouteDecisionUncheckedCreateInput> = {}) {

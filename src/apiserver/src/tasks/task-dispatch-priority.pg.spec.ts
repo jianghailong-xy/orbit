@@ -220,7 +220,7 @@ async function finishTheRun(stack: Stack, ids: World, listId: string): Promise<s
   const [run] = runs;
   await stack.db.session.update({
     where: { id: run.id },
-    data: { status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited', finishedAt: new Date() },
+    data: { status: RunStatus.SUCCEEDED, finishedAt: new Date() },
   });
   await completeHumanTaskForPgTest(stack.db, ids.ownerId, run.taskId, 'finished run');
   return run.taskId;

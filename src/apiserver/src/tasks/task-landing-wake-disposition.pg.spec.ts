@@ -344,7 +344,7 @@ async function recordLanding(stack: Stack, f: Fixture, taskId: string, label: st
       title: `${label}-merge`,
       prompt: `${label}-merge`,
       provider: 'claude',
-      status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited',
+      status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
       dispatchOrigin: SessionDispatchOrigin.USER,
     },
   });
@@ -460,7 +460,7 @@ async function runAcceptance(
   if (status === TaskStatus.DONE) {
     await stack.db.session.update({
       where: { id: sessionId },
-      data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited' },
+      data: { status: RunStatus.SUCCEEDED, finishedAt: new Date()},
     });
   }
   return status;

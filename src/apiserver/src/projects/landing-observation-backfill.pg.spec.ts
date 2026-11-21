@@ -340,7 +340,7 @@ async function historicalTask(
       branch: work.branch, branchSha: work.branchSha, baseSha: work.baseSha, numTurns: 1,
       startedAt: minutesAgo(300), createdAt: minutesAgo(300), runtimeSessionId: randomUUID(),
       changedFiles: [{ path: `src/${title.replace(/\W+/g, '-')}.ts`, additions: 12, deletions: 1 }] as Prisma.InputJsonValue,
-      ...(work.moving ? {} : { finishedAt: minutesAgo(240), releaseCause: 'engine_exited', completedAt: minutesAgo(240) }),
+      ...(work.moving ? {} : { finishedAt: minutesAgo(240), completedAt: minutesAgo(240) }),
     },
   });
   return { taskId: task.id, sessionId, branch: work.branch, title };

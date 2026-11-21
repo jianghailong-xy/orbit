@@ -226,10 +226,9 @@ async function session(
   const id = randomUUID();
   await h.sql.query(
     `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","workspace_id","assigned_runner_id",
-                            "task_id","status","last_turn_at","dispatch_origin","created_at","updated_at", "finished_at", "release_cause")
+                            "task_id","status","last_turn_at","dispatch_origin","created_at","updated_at", "finished_at")
      VALUES ($1,'a session','p',$2,$2,$3,$4,$5,$6::run_status,$7,'USER',$8,now(),
-             CASE WHEN $6::run_status IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN $7::timestamp END,
-             CASE WHEN $6::run_status = 'CANCELLED' THEN 'cancelled' WHEN $6::run_status = 'FAILED' THEN 'engine_failed' WHEN $6::run_status = 'SUCCEEDED' THEN 'engine_exited' END)`,
+             CASE WHEN $6::run_status IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN $7::timestamp END)`,
     [id, ownerId, shape.workspaceId, shape.runnerId ?? null, shape.taskId ?? null, shape.status ?? 'SUCCEEDED',
       utc(shape.lastTurnAt ?? minutesAgo(30)), utc(minutesAgo(24 * 60 * 3))],
   );

@@ -227,7 +227,7 @@ async function doneTask(
     data: {
       ownerId: w.ownerId, creatorId: w.ownerId, taskId: created.id, workspaceId: w.workspaceId,
       assignedRunnerId: w.runnerId, title, prompt: title, branch, isolationStatus: 'worktree',
-      baseSha: sha('b'), status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited', startsTaskWork: true,
+      baseSha: sha('b'), status: RunStatus.SUCCEEDED, startsTaskWork: true,
       finishedAt: new Date(Date.now() - 60_000), worktreeBranch: branch, worktreeDirty: false,
       changedFiles: [{ path: 'src/the-work.ts' }] as never,
     },
@@ -258,7 +258,7 @@ async function bareWork(
     data: {
       id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, taskId, workspaceId: w.workspaceId,
       assignedRunnerId: w.runnerId, title: label, prompt: label, provider: 'claude',
-      status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited', dispatchOrigin: 'USER', startsTaskWork: true, startedAt: new Date(),
+      status: RunStatus.SUCCEEDED, dispatchOrigin: 'USER', startsTaskWork: true, startedAt: new Date(),
       branch, isolationStatus: 'worktree', baseSha: sha('b'),
       finishedAt: new Date(),
     } as never,

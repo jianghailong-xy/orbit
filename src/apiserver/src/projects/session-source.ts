@@ -707,7 +707,6 @@ export async function freezeSessionSourcePin(
           error,
           finishedAt: new Date(),
           // The run never started (design §4.2).
-          releaseCause: 'setup_failed',
           // The failure is the turn's that the dispatch was for, recorded below (design §12.1 W4), and copied here.
           lastTurnOutcome: 'FAILED',
           // The claim's own markers. `run_claimed_at` is what a waiting notice counts from and the

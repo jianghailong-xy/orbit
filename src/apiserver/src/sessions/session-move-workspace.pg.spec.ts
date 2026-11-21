@@ -261,7 +261,7 @@ test('moving a session to another workspace: the panel, the move, its refusals a
       data: {
         id, ownerId, creatorId: ownerId, workspaceId: ws.home, assignedRunnerId: runners.wikova,
         title, prompt: title, provider: 'claude', providerBuiltin: true,
-        status: RunStatus.CANCELLED, releaseCause: 'cancelled', endReason: 'ended', startedAt: new Date(Date.now() - 600_000),
+        status: RunStatus.CANCELLED, endReason: 'ended', startedAt: new Date(Date.now() - 600_000),
         finishedAt: new Date(), numTurns: 3, runtimeSessionId: randomUUID(),
         model: 'claude-opus-5', effort: 'high', permissionMode: 'acceptEdits',
         dispatchOrigin: SessionDispatchOrigin.USER,
@@ -552,7 +552,7 @@ test('moving a session to another workspace: the panel, the move, its refusals a
   });
 
   await t.test('(6) the session itself: every §5.2 rule refuses with its reason; a child moves', async () => {
-    const LIVE = { endReason: null, finishedAt: null, releaseCause: null };
+    const LIVE = { endReason: null, finishedAt: null};
     const taskId = randomUUID();
     await db.task.create({
       data: {
@@ -589,7 +589,7 @@ test('moving a session to another workspace: the panel, the move, its refusals a
       ['a commit in progress', 'A commit is in progress. Try again when it finishes.', { commitStatus: 'pending', commitRequestedAt: new Date() }],
       ['a merge repair open', 'Finish the merge repair first.', { mergeRecovery: { code: 'TARGET_DIVERGED', targetBranch: 'main' } }],
       ['an automatic retry armed', 'An automatic retry is scheduled. Try again after it runs.', {
-        status: RunStatus.FAILED, releaseCause: 'engine_failed', endReason: null, retryAt: new Date(Date.now() + 60_000),
+        status: RunStatus.FAILED, endReason: null, retryAt: new Date(Date.now() + 60_000),
       }],
       ['Kimi', "Moving Kimi sessions isn't supported yet.", { provider: 'kimi', providerBuiltin: true }],
       ['OpenCode', "Moving OpenCode sessions isn't supported yet.", { provider: 'opencode' }],
@@ -617,7 +617,7 @@ test('moving a session to another workspace: the panel, the move, its refusals a
     assert.deepEqual([stuck.reason, stuck.needsEnd], ['sleepy has to be online to end the session first.', true]);
     // Once ended, it moves — the second half of End and Move.
     await sql.query(
-      "UPDATE session SET status = 'CANCELLED', end_reason = 'ended', release_cause = 'cancelled', finished_at = now() WHERE id = $1::uuid",
+      "UPDATE session SET status = 'CANCELLED', end_reason = 'ended', finished_at = now() WHERE id = $1::uuid",
       [idle],
     );
     const settled = (await targetsOf(idle)).json;
@@ -702,7 +702,7 @@ test('moving a session to another workspace: the panel, the move, its refusals a
       await holder.query('BEGIN');
       await holder.query('SELECT id FROM session WHERE id = $1::uuid FOR UPDATE', [waking]);
       await holder.query(
-        "UPDATE session SET status = 'RUNNING', end_reason = NULL, finished_at = NULL, release_cause = NULL WHERE id = $1::uuid",
+        "UPDATE session SET status = 'RUNNING', end_reason = NULL, finished_at = NULL WHERE id = $1::uuid",
         [waking],
       );
       const blocked = move(waking, { workspaceId: pub(ws.sibling) });

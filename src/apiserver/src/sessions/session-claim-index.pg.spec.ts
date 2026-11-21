@@ -166,7 +166,7 @@ async function run(db: PrismaClient, ownerId: string, taskId: string, released =
     data: {
       id, ownerId, creatorId: ownerId, taskId, title: 'a run', prompt: 'do it', startsTaskWork: true,
       ...(released
-        ? { status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'completed' }
+        ? { status: RunStatus.SUCCEEDED, finishedAt: new Date()}
         : { status: RunStatus.RUNNING }),
     },
   });
@@ -320,7 +320,7 @@ test('the one-live-run-per-task index, release A (migration 1426)', {
         // The revive of a released run of the same task: what `resume` writes.
         const revive = await caught(() => db.session.update({
           where: { id: releasedOnBusy },
-          data: { status: RunStatus.PENDING, finishedAt: null, releaseCause: null },
+          data: { status: RunStatus.PENDING, finishedAt: null},
         }));
         for (const [door, error] of [['second run', second], ['revive', revive]] as const) {
           const e = error as {
@@ -383,9 +383,9 @@ test('the one-live-run-per-task index, release A (migration 1426)', {
         await sql.query('SAVEPOINT shape');
         try {
           await sql.query(
-            `INSERT INTO session (id, title, prompt, owner_id, creator_id, updated_at, task_id, status, finished_at, release_cause)
-             VALUES (gen_random_uuid(), 'shape', 'p', $1::uuid, $1::uuid, now(), $2::uuid, $3::run_status, $4, $5)`,
-            [me, taskId.id, label, released ? new Date() : null, released ? 'completed' : null],
+            `INSERT INTO session (id, title, prompt, owner_id, creator_id, updated_at, task_id, status, finished_at)
+             VALUES (gen_random_uuid(), 'shape', 'p', $1::uuid, $1::uuid, now(), $2::uuid, $3::run_status, $4)`,
+            [me, taskId.id, label, released ? new Date() : null],
           );
           return 'admitted';
         } catch (error) {
@@ -423,10 +423,9 @@ test('the one-live-run-per-task index, release A (migration 1426)', {
     const big = await owner(sql, 'claim-index-explain');
     const ids = await tasks(sql, big, 10_000);
     await sql.query(
-      `INSERT INTO session (id, title, prompt, owner_id, creator_id, updated_at, task_id, status, finished_at,
-                            release_cause, starts_task_work)
+      `INSERT INTO session (id, title, prompt, owner_id, creator_id, updated_at, task_id, status, finished_at, starts_task_work)
        SELECT gen_random_uuid(), 'released run', 'p', $1::uuid, $1::uuid, now(), t::uuid, 'SUCCEEDED',
-              now() - interval '1 day', 'completed', true
+              now() - interval '1 day', true
          FROM unnest($2::text[]) t, generate_series(1, 10)`, [big, ids],
     );
     await sql.query(

@@ -215,8 +215,8 @@ test('Feishu: who can use the bot is saved only through the owner channel, and t
         id, ownerId: owner.id, creatorId: owner.id, workspaceId: owner.workspaceId, assignedRunnerId: owner.runnerId, title: `open ${id.slice(0, 8)}`,
         prompt: 'the work', provider: 'claude', status, dispatchOrigin: SessionDispatchOrigin.USER, startedAt: new Date(),
         ...(status === RunStatus.SUCCEEDED || status === RunStatus.FAILED
-          ? { finishedAt: new Date(), releaseCause: status === RunStatus.FAILED ? 'engine_failed' : 'engine_exited' }
-          : status === RunStatus.CANCELLED ? { finishedAt: new Date(), releaseCause: 'cancelled' } : {}),
+          ? { finishedAt: new Date()}
+          : status === RunStatus.CANCELLED ? { finishedAt: new Date()} : {}),
       },
     });
   };
@@ -298,7 +298,7 @@ test('Feishu: who can use the bot is saved only through the owner channel, and t
     await started('ou_frank', RunStatus.RUNNING, `oc_group_${RUN}`);
     await refusedAs('ou_grace', { ok: false, limit: 'TOTAL_RUNNING', max: 2, words: FEISHU_OPEN_REPLIES.totalRunning(2) });
     assert.equal(FEISHU_OPEN_REPLIES.totalRunning(2), 'This bot is already running 2 sessions, the most it allows at a time. Try again when one finishes.');
-    await db.session.updateMany({ where: { ownerId: owner.id }, data: { status: RunStatus.AWAITING_INPUT, finishedAt: null, releaseCause: null } });
+    await db.session.updateMany({ where: { ownerId: owner.id }, data: { status: RunStatus.AWAITING_INPUT, finishedAt: null} });
   });
 
   await t.test('(5d) everyone a day', async () => {

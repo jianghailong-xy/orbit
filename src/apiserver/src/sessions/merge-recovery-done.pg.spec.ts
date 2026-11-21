@@ -232,7 +232,7 @@ async function finishedSession(
     data: {
       id, ownerId: w.ownerId, creatorId: w.ownerId, workspaceId: w.workspaceId, assignedRunnerId: w.runnerId,
       title: label, prompt: 'ship the feature', provider: 'claude', providerBuiltin: true,
-      dispatchOrigin: SessionDispatchOrigin.USER, status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited', startedAt: new Date(Date.now() - 7_200_000),
+      dispatchOrigin: SessionDispatchOrigin.USER, status: RunStatus.SUCCEEDED, startedAt: new Date(Date.now() - 7_200_000),
       finishedAt: new Date(Date.now() - 3_600_000), numTurns: 1, branch: `orbit/${label}-${id.slice(0, 8)}`,
       isolationStatus: 'worktree', ...row,
     },
@@ -350,7 +350,7 @@ async function doneCodeTask(s: Stack, w: ProjectWorld, label: string): Promise<{
   await s.db.$transaction(async (tx) => {
     const finished = await tx.session.update({
       where: { id: sessionId },
-      data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(Date.now() - 60_000), releaseCause: 'engine_exited' },
+      data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(Date.now() - 60_000)},
       select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
     });
     await settleDeliveredIdentityAfterFinish(tx, finished);

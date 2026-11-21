@@ -275,7 +275,7 @@ test('smart selection on: a fresh run is created on the routed model and effort,
 
       // The Agent's old switch, written on or off, is no longer read: the next fresh run is routed and applied.
       await services.db.session.update({
-        where: { id: sessionId }, data: { status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited', finishedAt: new Date() },
+        where: { id: sessionId }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date() },
       });
       await services.workspaces.update(target.ownerId, target.agentId, { modelRouting: false });
       const next = await runNow(services, target, taskId, randomUUID());
@@ -285,7 +285,7 @@ test('smart selection on: a fresh run is created on the routed model and effort,
 
       // Only the account's switch turns it off: the next fresh run is the baseline, and nothing is recorded.
       await services.db.session.update({
-        where: { id: next }, data: { status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited', finishedAt: new Date() },
+        where: { id: next }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date() },
       });
       await services.db.user.update({
         where: { id: target.ownerId }, data: { preferences: { modelRouting: false, optimizeFor: 'cost' } },
@@ -648,7 +648,7 @@ test('Optimize For is frozen with CREATE; changed modes affect only later fresh 
         await setOptimizeFor(services.db, target.ownerId, 'intelligence');
         assert.equal(await runNow(services, target, taskId, press), run);
         assert.equal((await receipt(services.db, target.ownerId, TASK_RUN_ACTION.execute, press)).target.route.features.optimizeFor, mode);
-        await services.db.session.update({ where: { id: run }, data: { status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited', finishedAt: new Date() } });
+        await services.db.session.update({ where: { id: run }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date() } });
       }
     } finally {
       await services.db.$disconnect();

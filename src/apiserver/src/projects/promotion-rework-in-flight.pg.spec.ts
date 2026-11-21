@@ -122,7 +122,7 @@ test('a rework that lands while a promotion is in flight is not read as on main 
     await prisma.session.create({
       data: {
         id: sessionId, ownerId, creatorId: ownerId, taskId: task.id, title, prompt: title, branch,
-        isolationStatus: 'worktree', status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited', startsTaskWork: true,
+        isolationStatus: 'worktree', status: RunStatus.SUCCEEDED, startsTaskWork: true,
         finishedAt: new Date(Date.now() - 3_000_000), worktreeBranch: branch, worktreeDirty: false,
       },
     });

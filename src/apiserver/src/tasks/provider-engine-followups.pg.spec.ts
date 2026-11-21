@@ -130,7 +130,7 @@ test('T3 follow-up on PostgreSQL', { timeout: 600_000 }, async (t) => {
   const sweep = () => (tasks as unknown as { reconcileReadyTasks(): Promise<void> }).reconcileReadyTasks();
   /** The run ends FAILED as the runner's /finalize leaves a usage limit with no retry of its own armed. */
   const killedByQuota = (run: Run) => db.session.update({
-    where: { id: run.id }, data: { status: RunStatus.FAILED, releaseCause: 'engine_failed', error: QUOTA_ERROR, finishedAt: new Date() },
+    where: { id: run.id }, data: { status: RunStatus.FAILED, error: QUOTA_ERROR, finishedAt: new Date() },
   });
   /** Why the sweep is not starting the task again, as the task read reports it. */
   async function skipped(ownerId: string, taskId: string) {

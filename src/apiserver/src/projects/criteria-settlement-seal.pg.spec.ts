@@ -256,7 +256,7 @@ test('a tightening re-seals the standard set, so the confirmation it was settled
       taskId: work.id,
       title: 'ran orbit/seal',
       prompt: 'do the work',
-      status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited',
+      status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
       branch: 'orbit/seal',
       isolationStatus: 'worktree',
     },

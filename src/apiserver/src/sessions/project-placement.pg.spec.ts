@@ -165,14 +165,14 @@ async function project(o: Owner, kind: Coordinator, i: number): Promise<Fixture>
   await o.h.db.approval.create({ data: { sessionId: waitingId, toolName: 'Bash', input: { command: 'ls' } } });
   // Released, so with finished_at and its cause (session_release_fact_chk, 1401/1402).
   await session(o, {
-    taskId: await task(), completedAt: new Date(), status: 'SUCCEEDED', finishedAt: new Date(), releaseCause: 'completed',
+    taskId: await task(), completedAt: new Date(), status: 'SUCCEEDED', finishedAt: new Date(), 
   });
   let coordinatorId: string | null = null;
   if (kind !== 'absent') {
     coordinatorId = await session(o, {
       title: `coordinator ${i}`, workspaceId: o.workspaceB,
       ...(kind === 'completed'
-        ? { completedAt: new Date(), status: 'SUCCEEDED', finishedAt: new Date(), releaseCause: 'completed' }
+        ? { completedAt: new Date(), status: 'SUCCEEDED', finishedAt: new Date()}
         : {}),
       ...(kind === 'trashed' ? { deletedAt: new Date() } : {}),
     });
