@@ -85,9 +85,11 @@ sealed interface SessionProjectEntry {
 
 /** [assigned]: the sessions as their folders count them — a member in its coordinator's folder, wherever it is filed itself.
  * [marks]: the members among [sessions] that are rows of their own here, by session id — their project's row is in the workspace its
- * coordinator runs in, not this one. */
+ * coordinator runs in, not this one. [held]: the project key of each session a project row holds, by session id — a folder counts
+ * such a project as one row, as its page lists it. */
 data class SessionProjectListing(val assigned: List<DirectorySession>, val projects: List<SessionProjectRow>,
-    val sessions: List<DirectorySession>, val entries: List<SessionProjectEntry>, val marks: Map<String, SessionProjectMark>)
+    val sessions: List<DirectorySession>, val entries: List<SessionProjectEntry>, val marks: Map<String, SessionProjectMark>,
+    val held: Map<String, String> = emptyMap())
 
 /** OrbitKit `SessionProjectGrouping`, a port of the web's `sessionProjects.ts` (design §4, §6, §7), after folder grouping. */
 object SessionProjectGrouping {
@@ -137,6 +139,7 @@ object SessionProjectGrouping {
             session.id to SessionProjectMark(membership.projectId, summary?.text("title") ?: membership.projectTitle,
                 summary?.text("status") ?: membership.projectStatus, taskCounts(summary), summary?.obj("buckets")?.number("running") ?: 0)
         }.toMap()
+        val held = groups.flatMap { (project, members) -> members.map { it.id to project } }.toMap()
         if (groups.isEmpty()) return SessionProjectListing(assigned, emptyList(), loose, loose.map { SessionProjectEntry.Session(it) }, marks)
         // Each project's share of the content list, split once.
         val contentByProject = contentSessions?.filter { it.projectMembership != null && !it.isLanding }?.groupBy { key(it.projectMembership!!.projectId) }
@@ -196,7 +199,7 @@ object SessionProjectGrouping {
                 if (view == SessionView.OPEN && (a.first.pinnedAt != null) != (b.first.pinnedAt != null)) (if (a.first.pinnedAt != null) -1 else 1)
                 else b.second.compareTo(a.second)
             }.map { it.first }
-        return SessionProjectListing(assigned, rows, loose, entries, marks)
+        return SessionProjectListing(assigned, rows, loose, entries, marks, held)
     }
 
     /** A project's progress as its `GET /projects/sidebar` row stores it; null for a project the sidebar does not list. */

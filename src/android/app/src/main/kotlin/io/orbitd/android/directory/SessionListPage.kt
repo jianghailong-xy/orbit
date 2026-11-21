@@ -165,10 +165,10 @@ internal fun RowSpinner(modifier: Modifier = Modifier) {
 /** A folder's row (iOS `SessionFolderRowView`): its name, what the sessions it holds would have said — how many wait on you, else a
  * spinner, else the breathing mark, by the drawer's rule — their count (unless some wait on you) and a chevron. A tap opens it and a long press is its menu. */
 @Composable
-internal fun FolderRow(folder: Folder, sessions: List<DirectorySession>, runnerOffline: Boolean, watching: Map<String, WatchSessionSummary>,
+internal fun FolderRow(folder: Folder, sessions: List<DirectorySession>, count: Int, runnerOffline: Boolean, watching: Map<String, WatchSessionSummary>,
     onOpen: () -> Unit, onOptions: () -> Unit) {
     FolderRow(folder.id, folder.name, FolderRowSummary(
-        count = sessions.size,
+        count = count,
         needsYou = sessions.folderNeedsYouCount(),
         running = !runnerOffline && sessions.any { it.isRunning() },
         jobs = !runnerOffline && sessions.any { it.isRunningJob(watching[watchKey(it.id)]) },

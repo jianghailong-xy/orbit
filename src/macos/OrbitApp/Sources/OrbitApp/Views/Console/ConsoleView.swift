@@ -190,12 +190,12 @@ struct ConsoleView: View {
         #if os(iOS)
         if #available(iOS 26.0, *) {
             transcript.safeAreaBar(edge: .bottom, spacing: 0) {
-                composerBand(console).environment(\.floatsOverTranscript, true)
+                AnyView(composerBand(console).environment(\.floatsOverTranscript, true))
             }
         } else {
             VStack(spacing: 0) {
                 transcript
-                composerBand(console)
+                AnyView(composerBand(console))
             }
         }
         #else
@@ -429,7 +429,10 @@ struct ConsoleView: View {
                         ?? landing.projectMembership?.projectId,
                     focusID: sessionID)
             } else if let console = registry.peek(sessionID) {
-                transcriptAndBand(console, navTitleWidth: navTitleWidth)
+                // Erased on purpose: the two dozen modifiers below each wrapped the transcript and the
+                // whole band's view type, and resolving and sizing that nested type at launch ran the
+                // iPhone's 1 MB main-thread stack out (TestFlight 0.1.261 (13668), 2026-11-21).
+                AnyView(transcriptAndBand(console, navTitleWidth: navTitleWidth))
                 // The owner requests this conversation filed, each drawn where it was asked.
                 .onChange(of: appModel.ownerRequests?.forSession(sessionID), initial: true) { _, requests in
                     console.adoptOwnerRequests(requests ?? [])
