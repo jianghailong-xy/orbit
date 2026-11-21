@@ -344,7 +344,7 @@ private struct JobWakeRow: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.top, 2)
             } label: {
-                Text(BgJobCard.rawSummary).font(.orbitMeta).foregroundStyle(.tertiary)
+                Text(BgJobCard.rawSummary).font(.orbitMeta).foregroundStyle(.secondary)
             }
         }
     }
