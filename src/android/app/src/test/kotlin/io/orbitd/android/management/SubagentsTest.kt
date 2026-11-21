@@ -43,6 +43,16 @@ internal object SubagentFixtures {
             {"model":"kimi-k3","levels":[],"source":null,"editable":true,"outputPricePerMTok":null}]},
         {"slug":"my-endpoint","label":"My endpoint","kind":"key","providerId":"${ManagementFixture.KEY_OPENAI}","billing":"key",
           "models":[{"model":"qwen-coder","levels":["M"],"source":"owner","editable":true,"outputPricePerMTok":null}]}]}"""
+
+    /** Cursor's catalogue with older family members: they read "Older · uses <newest>" after the tiered rows, before Not set. */
+    val OLDER = """{"providers":[
+        {"slug":"cursor","label":"Cursor","kind":"builtin","providerId":null,"billing":"subscription",
+          "models":[{"model":"claude-opus-5-5","levels":["L","XL"],"source":"catalogue","editable":true,"outputPricePerMTok":null},
+            {"model":"gemini-4-neon","levels":["L","XL"],"source":"catalogue","editable":true,"outputPricePerMTok":null},
+            {"model":"claude-opus-5","levels":[],"source":null,"editable":true,"outputPricePerMTok":null,"supersededBy":"claude-opus-5-5"},
+            {"model":"claude-opus-4-8","levels":[],"source":null,"editable":true,"outputPricePerMTok":null,"supersededBy":"claude-opus-5-5"},
+            {"model":"gemini-4-argon","levels":[],"source":null,"editable":true,"outputPricePerMTok":null,"supersededBy":"gemini-4-neon"},
+            {"model":"grok-4.7","levels":[],"source":null,"editable":true,"outputPricePerMTok":null}]}]}"""
 }
 
 /** The SubAgents settings and Model tiers (docs/subagent-design.md §7): what is read, what is drawn, and what is written. */
