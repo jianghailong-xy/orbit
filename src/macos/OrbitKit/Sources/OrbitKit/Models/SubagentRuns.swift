@@ -43,6 +43,15 @@ public struct SubagentRunView: Codable, Equatable, Sendable, Identifiable {
     public let resultSummary: String?
     public let createdAt: String
     public let endedAt: String?
+    /// The Orbit workflow this run is a call of: its `WorkflowRunView.id`. Such a run's `toolUseId` is
+    /// `<the workflow call's tool_use id>#<callIndex>`. Nil, as are the three below, on a `delegate`
+    /// call's run and from a server before it sent them.
+    public let workflowRunId: String?
+    /// The call's place in the script, from 0 in the order the script made its `agent()` calls.
+    public let callIndex: Int?
+    /// The `agent()` call's `label` and `phase`, as the script gave them.
+    public let label: String?
+    public let phase: String?
 
     public var id: String { toolUseId }
 
@@ -51,7 +60,8 @@ public struct SubagentRunView: Codable, Equatable, Sendable, Identifiable {
                 reasons: [String] = [], costUsd: Double = 0, resultSummary: String? = nil,
                 createdAt: String, endedAt: String? = nil, why: String? = nil,
                 removed: [Removed]? = nil, workspaceName: String? = nil, description: String? = nil, engine: String? = nil,
-                readonly: Bool? = nil, changedFiles: [String]? = nil) {
+                readonly: Bool? = nil, changedFiles: [String]? = nil, workflowRunId: String? = nil,
+                callIndex: Int? = nil, label: String? = nil, phase: String? = nil) {
         self.toolUseId = toolUseId
         self.type = type
         self.background = background
@@ -72,6 +82,10 @@ public struct SubagentRunView: Codable, Equatable, Sendable, Identifiable {
         self.engine = engine
         self.readonly = readonly
         self.changedFiles = changedFiles
+        self.workflowRunId = workflowRunId
+        self.callIndex = callIndex
+        self.label = label
+        self.phase = phase
     }
 
     /// A candidate the router removed, and why.

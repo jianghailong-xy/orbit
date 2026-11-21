@@ -398,6 +398,8 @@ import {
   taskCodelessHasCommitsBody,
   taskCodelessReasonRequiredBody,
 } from './task-codeless';
+import { type LandingCheckExemptColumns, type LandingCheckExemptWrite, landingCheckExemptWrite } from './task-landing-check-exempt';
+import { recordSettingChange } from '../projects/project-setting-change';
 import {
   assertForkCallerOnRunner,
   assertForkPlacement,
@@ -3440,7 +3442,6 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         where: { id: { in: uniqueIds.slice(offset, offset + TASK_ID_QUERY_CHUNK) }, ownerId },
         select: {
           id: true,
-          codeless: true,
           projectId: true,
           project: {
             select: {
@@ -3455,13 +3456,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           // §1.1 reads the NEWEST work session, so a task whose first attempt ran in a worktree and
           // whose latest one did not is judged by the latest — and by the repository its workspace
           // names (O-L7).
+          // Every one of them, newest first: whether any is still moving, and what each reported
+          // (§12.15 P-M1, `deliveredNothingOfItsOwn`).
           sessions: {
             where: { startsTaskWork: true, deletedAt: null },
             orderBy: { createdAt: 'desc' },
-            take: 1,
-            select: { isolationStatus: true, branch: true, workspace: { select: { repoUrl: true } } },
+            select: {
+              isolationStatus: true, branch: true, finishedAt: true, changedFiles: true,
+              workspace: { select: { repoUrl: true } },
+            },
           },
           mergeReceipts: LANDING_SERVING_WORK_SELECT.mergeReceipts,
+          deliveredSha: true,
+          deliveredBaseSha: true,
         },
       });
       for (const row of rows) {
@@ -3471,13 +3478,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // fixture says nothing about landing" into a crash on the task page.
         const work = row.sessions?.[0];
         landed.set(row.id, prerequisiteLanded({
-          codeless: row.codeless,
           projectId: row.projectId,
           codebase: row.project?.codebases?.[0] ?? null,
           work: work
             ? { isolationStatus: work.isolationStatus, branch: work.branch, repoUrl: work.workspace?.repoUrl }
             : null,
           receipts: row.mergeReceipts ?? [],
+          deliveredSha: row.deliveredSha,
+          deliveredBaseSha: row.deliveredBaseSha,
+          sessions: row.sessions,
+          workStillMoving: (row.sessions ?? []).some((session) => session.finishedAt === null),
         }));
       }
     }
@@ -4215,6 +4225,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const forkColumns = await resolveTaskFork(
       this.prisma, ownerId, creatorSessionId, { ...dto, projectId: scopedProjectId }, null,
     );
+    // §12.15 P-C2, over the project the scope admitted, before any transaction.
+    const landingCheckExempt = await landingCheckExemptWrite(this.prisma, {
+      ownerId, projectId: scopedProjectId, actingSessionId: creatorSessionId,
+      exempt: dto.landingCheckExempt, reason: dto.landingCheckExemptReason, currentlyExempt: false,
+    });
     // Against the project this write was ADMITTED into, for the reason stated above: a coordinator
     // that names no project still files its work under the one it coordinates, and refusing that
     // request on the DTO's empty `projectId` would be a refusal of a task that lands in a project.
@@ -4288,6 +4303,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       await this.pausedListIds(ownerId, [dto.listId]),
       criterionDeclaration,
       forkColumns,
+      landingCheckExempt?.columns ?? null,
     );
     // Initial edges and their task must become visible atomically. Taking the same owner lock
     // used by add/replace prevents a concurrent reverse-edge write from observing the new task
@@ -4408,6 +4424,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             tx, ownerId, dependencyCrossings.edges, now,
           );
           const created = await tx.task.create({ data });
+          // §12.15 P-R1: the coordinator's cardless exemption leaves its record in this transaction.
+          if (landingCheckExempt?.record && created.projectId) {
+            await recordSettingChange(tx, {
+              ownerId, projectId: created.projectId, taskId: created.id, field: 'TASK_LANDING_CHECK_EXEMPT',
+              ...landingCheckExempt.record,
+            });
+          }
           // Its startWhen, in this transaction: the condition, the approved command's hash and the baseline
           // (docs/condition-triggers-design.md §6.2). A refusal (the account's 20) takes the task with it.
           if (dto.startWhen) {
@@ -4710,6 +4733,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     criterionDeclaration: { criterionDefinitionId: string; criterionRevision: number } | null,
     /** Migration 0615: the fork `resolveTaskFork` checked, or null/absent for a task not forked. */
     fork?: TaskForkColumns | null,
+    /** Migration 1350: the landing-check exemption `landingCheckExemptWrite` admitted, or null/absent. */
+    landingCheckExempt?: LandingCheckExemptColumns | null,
   ): Prisma.TaskUncheckedCreateInput {
     const sessionId = origin?.sessionId;
     return {
@@ -4761,6 +4786,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // SR55's five facts, in this INSERT and never again (0615's `task_fork_guard`). Absent on a task
       // that was not forked, so the columns stay out of the statement, as on every task before them.
       ...(fork ?? {}),
+      // §12.15 P-C2, judged by the door before this (writer, reason, line). Absent leaves the defaults.
+      ...(landingCheckExempt ?? {}),
       dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
       // Omitted means unscheduled. The `undefined` is what makes that true without a default:
       // Prisma leaves the column out of the INSERT, so the row is born NULL exactly as every task
@@ -5391,6 +5418,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       const fork = await resolveTaskFork(this.prisma, ownerId, creatorSessionId, item, index);
       if (fork) forkColumns.set(index, fork);
     }
+    // §12.15 P-C2, per item and over the project each was admitted into, like the fork above.
+    const exemptions = new Map<number, LandingCheckExemptWrite>();
+    for (const [index, item] of items.entries()) {
+      if (frozen.has(index)) continue;
+      const exemption = await landingCheckExemptWrite(this.prisma, {
+        ownerId, projectId: item.projectId, actingSessionId: creatorSessionId,
+        exempt: item.landingCheckExempt, reason: item.landingCheckExemptReason, currentlyExempt: false,
+      });
+      if (exemption) exemptions.set(index, exemption);
+    }
     // Item by item, over the project each one was ADMITTED into, and above the dry run for the
     // same reason the bound below is. A frozen item is a replay whose row already exists:
     // re-judging it could only refuse a write that already happened.
@@ -5614,8 +5651,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
               heldListIds,
               criterionDeclarations.get(index) ?? null,
               forkColumns.get(index) ?? null,
+              exemptions.get(index)?.columns ?? null,
             ),
           }));
+        const exemptionRecord = existing ? undefined : exemptions.get(index)?.record;
+        if (exemptionRecord && task.projectId) {
+          await recordSettingChange(tx, {
+            ownerId, projectId: task.projectId, taskId: task.id, field: 'TASK_LANDING_CHECK_EXEMPT',
+            ...exemptionRecord,
+          });
+        }
         if (!existing) {
           insertedIds.push(task.id);
           // Its startWhen, in this transaction, as the single door writes one (task-start-when.ts).
@@ -10142,8 +10187,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // write below). A stored change record never stops describing it, so it is not that prose.
     const clearsStaleOverrideReason = attachesVerifier
       && readTaskCriterionChange(before.completionCriterionOverrideReason) == null;
-    // The codeless door (`task-codeless.ts`): turning an existing task codeless takes it out of its
-    // criterion's landing conjunction, so it is asked why, and refused for a task whose commits are
+    // The codeless door (`task-codeless.ts`): turning an existing task codeless is asked why (it does not decide landing), and refused for a task whose commits are
     // already somewhere — those are work that has to land. Only the change is questioned: re-sending
     // the value the task has, or taking the declaration back, writes no reason and needs none.
     // Before the transaction, like every refusal on this path.
@@ -10156,6 +10200,18 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       const commits = await readTaskCommitEvidence(this.prisma, id);
       if (commits.length > 0) throw new ConflictException(taskCodelessHasCommitsBody(commits));
     }
+    // §12.15 P-C2: the landing-check exemption, over the project the task is in after this write.
+    // Before the transaction, like every refusal on this path.
+    const landingCheckExempt = await landingCheckExemptWrite(this.prisma, {
+      ownerId,
+      projectId: dto.projectId === undefined ? before.projectId : dto.projectId,
+      actingSessionId,
+      exempt: dto.landingCheckExempt,
+      reason: dto.landingCheckExemptReason,
+      currentlyExempt: before.landingCheckExempt,
+      currentReason: before.landingCheckExemptReason,
+      ownerHasWritten: before.landingCheckExemptOwnerSetAt != null,
+    });
     if (dto.assigneeId) await this.assertOwnedWorkspace(ownerId, dto.assigneeId);
     if (dto.listId) await this.assertOwnedList(ownerId, dto.listId);
     if (dto.projectId) await this.assertOwnedProject(ownerId, dto.projectId);
@@ -10343,6 +10399,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // explaining a declaration it no longer makes.
       codeless: declaresCodeless || withdrawsCodeless ? dto.codeless : undefined,
       codelessReason: declaresCodeless ? codelessReason : withdrawsCodeless ? null : undefined,
+      // The exemption and its reason and writer move together (§12.15 P-C2); absent when not named.
+      ...(landingCheckExempt?.columns ?? {}),
       // Three-state like the pins above: omitted keeps the conclusion, null revokes it. Revoking is
       // a real operation rather than an undo — a subject completed by VERIFICATION_PASSED goes back
       // to OPEN on the next reconcile, which is the point of storing the verdict rather than
@@ -10717,6 +10775,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // fence is a check the rotation it exists for can simply commit past. An agent edit inside a
       // project therefore takes the transaction; nothing else changes shape.
       !restructures && !(touchesAcceptanceFacts && before.projectId) && !scopeFence
+        && !landingCheckExempt?.record
         ? assertMaySettleWhatThisMoves(this.prisma).then(() => this.prisma.task.update({ where: { id }, data }))
         // Retried whole, on the transaction branch only. The one-statement branch is an
         // autocommit UPDATE with nothing to re-run: it has no transaction of its own, so a
@@ -11001,6 +11060,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             // Every verifier has the same carrier lifecycle. `data.status` above derives DONE from
             // any verdict before this transaction decides an optional evidence-bound request.
             let task = await tx.task.update({ where: { id }, data });
+            // §12.15 P-R1: the coordinator's cardless exemption change leaves its record in this transaction.
+            if (landingCheckExempt?.record) {
+              const recordedProjectId = task.projectId;
+              if (recordedProjectId) {
+                await recordSettingChange(tx, {
+                  ownerId, projectId: recordedProjectId, taskId: id, field: 'TASK_LANDING_CHECK_EXEMPT',
+                  ...landingCheckExempt.record,
+                });
+              }
+            }
             if (retiresAfter) {
               await writeSupersession();
               task = await tx.task.findUniqueOrThrow({ where: { id } });
@@ -11276,6 +11345,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // an unrelated blocker from some earlier episode goes on releasing its work.
       if (!stopped) await this.dispatchIndependentSiblingsOf(ownerId, doneTaskId);
     }
+  }
+
+  /**
+   * §12.15 P-M1: the finish that froze a DONE task's identity decided the route its DONE had left to
+   * it, and a task that delivered nothing of its own releases its dependents on that finish (J10's
+   * second edge, moved from the DONE to where the fact became known).
+   */
+  async dispatchDependentsOfSettledWork(ownerId: string, doneTaskId: string): Promise<void> {
+    // The whole DONE edge, again: its facts were read while the landing was still undecided — the
+    // settled project held as work still landing (`landingDeferred`) — and are re-derived now that it
+    // is decided. Each step reads committed rows, so the parts the DONE already delivered answer
+    // nothing the second time.
+    await this.dispatchDependentsAfterCompletion(ownerId, doneTaskId);
   }
 
   /**

@@ -34,6 +34,9 @@ export const NOT_STARTED = 'Not started';
 export const START_DONE_WHEN = 'Done when';
 export const START_PLAN = 'Plan';
 export const START_HOW_IT_RUNS = 'How it runs';
+
+/** The one line a start request with no line draws in place of the line and the landing check (ruling D1). */
+export const START_NO_LINE = 'Lands on the project’s branch when a task commits';
 /** The link under the plan, to the tasks it names. */
 export const START_VIEW_TASKS = 'View tasks ›';
 /** Beside it, while the plan is drawn as levels: the project page's task graph, full screen. */
@@ -354,10 +357,14 @@ export const RUN_AUTOMATIC_OFF_MAIN = 'You decide when each task is done, and ea
 /** The five above, said of the project's main branch. */
 export function runAutomaticSays(
   automatic: boolean,
-  line: ProjectStartSettings['line'],
+  /** `null`: the request named no line, so nothing is decided about where work lands and no sentence names a branch. */
+  line: ProjectStartSettings['line'] | null,
   hasMergeCheck: boolean,
   main: string = DEFAULT_MAIN_BRANCH,
 ): string {
+  if (line === null) {
+    return automatic ? 'The coordinator decides when each task is done.' : 'You decide when each task is done.';
+  }
   if (!automatic) {
     return line === 'MAIN'
       ? `You decide when each task is done, and each merge into ${main} asks you.`
@@ -448,7 +455,7 @@ export interface StartComesToYouItem {
  */
 export function startComesToYou(input: {
   automatic: boolean;
-  line: ProjectStartSettings['line'];
+  line: ProjectStartSettings['line'] | null;
   /** The plan's OWNER_CONFIRMED tasks, by the order line's label and their title. */
   ownerConfirmed: ReadonlyArray<{ label: string; title: string }>;
   /** How many of its tasks are settled by a judgment of their evidence. */
@@ -464,7 +471,8 @@ export function startComesToYou(input: {
     : input.ownerConfirmed.map((task) => ({ text: `${task.label} · ${task.title}`, detail: START_YOU_CONFIRM }));
   // An agent that pushes its own work to main asks nobody to merge it (O-L2): no merge comes to the
   // owner on that line.
-  const merges: StartComesToYouItem[] = input.line === 'MAIN'
+  // A request with no line decides nothing about merging, so no merge comes to the owner on it.
+  const merges: StartComesToYouItem[] = input.line === null ? [] : input.line === 'MAIN'
     ? input.deliveryMode === 'AGENT_PUSH' ? [] : [{ text: startEachMergeInto(input.main), detail: null }]
     : input.automatic ? [] : [{ text: startMergingInto(input.main), detail: null }];
   const criteria = { text: START_CRITERIA_CHANGES, detail: null };

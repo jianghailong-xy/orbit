@@ -141,6 +141,8 @@ struct ScheduleRowModel: Identifiable {
     let circle: ScheduleDisplay.CircleView
     let title: String
     let line: String
+    /// The planned end, on its own line so the row's line never cuts it off.
+    var end: String? = nil
     let repeats: Bool
     let time: String
     let draft: Bool
@@ -161,7 +163,20 @@ enum ScheduleTimelineRows {
     static func rows(_ group: ScheduleDisplay.TimelineGroup, scheduled: ScheduledModel, now: Date,
                      wide: Bool, openTask: @escaping (String) -> Void = { _ in }) -> [ScheduleRowModel] {
         let runs = scheduled.timelineRuns
-        return group.items.map { item -> ScheduleRowModel in
+        return ScheduleDisplay.collapseMissedItems(group.items).map { entry -> ScheduleRowModel in
+            guard case .item(let item) = entry else {
+                // A streak of missed slots is one faint row: "4 slots missed, 01:00–04:00".
+                guard case .missed(let s, let missedRuns, let at) = entry, let first = missedRuns.first else { fatalError() }
+                return ScheduleRowModel(
+                    id: "\(group.id)-missed-\(first.id)",
+                    circle: ScheduleDisplay.runCircle(state: first.state, newFinding: false),
+                    title: s.title,
+                    line: ScheduleDisplay.missedText(missedRuns, timezone: scheduled.timezone),
+                    repeats: false, time: scheduleClock(at), draft: false, paused: wide,
+                    scheduleID: wide ? nil : s.id,
+                    kind: .run(s, first),
+                    open: { Self.select(s.id, scheduled) })
+            }
             switch item {
             case .task(let t):
                 return ScheduleRowModel(
@@ -257,6 +272,7 @@ enum ScheduleTimelineRows {
                                                        accessLevel: s.accessLevel, state: s.state,
                                                        heldReason: s.heldReason, pausedAt: pausedAt,
                                                        timezone: scheduled.timezone),
+                    end: ScheduleDisplay.endText(s, now: now, timezone: scheduled.timezone),
                     repeats: ScheduleDisplay.ruleRepeats(s.rule), time: time, draft: false, paused: inPaused,
                     scheduleID: s.id,
                     kind: .schedule(s),
@@ -524,6 +540,10 @@ struct ScheduledPage: View {
                     .font(.orbitLabel)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                    // The planned end on its own line: "until 23:00 today · 3 runs left" is never the part cut off.
+                    if let end = row.end {
+                        Text(end).font(.orbitLabel).foregroundStyle(.secondary).accessibilityIdentifier("schedule-row-end")
+                    }
                 }
             }
             .padding(.vertical, 4)
@@ -717,6 +737,12 @@ extension ScheduleDetailPanel {
                     }
                     .font(.orbitLabel).foregroundStyle(.secondary)
                 }
+                if let end = ScheduleDisplay.endText(s, now: now, timezone: zone) {
+                    block {
+                        Text(SC.End.endLabel + SC.separator + end).font(.orbitLabel).foregroundStyle(.secondary)
+                            .accessibilityIdentifier("schedule-end-line")
+                    }
+                }
                 if conditionID != nil {
                     // A WHEN rule (condition-triggers board ⑥ ② ③): how far the reading is from firing, and how it
                     // is checked, in place of the next run.
@@ -843,8 +869,11 @@ extension ScheduleDetailPanel {
         case record(ScheduleChangeRecord)
         /// A condition's line (board ⑥ ③): Fired, Ready again; a FIRED's run is drawn by its line, not twice.
         case event(ConditionEventView, ConditionDisplay.HistoryLine, index: Int)
+        /// Consecutive MISSED slots, newest first, as one line (design §9.2).
+        case missed([ScheduleRunView])
         var id: String {
             switch self {
+            case .missed(let runs): return "missed-\(runs[0].id)"
             case .run(let r): return "run-\(r.id)"
             case .record(let r): return "rev-\(r.revision)"
             case .event(let e, _, let index): return "event-\(index)-\(e.at)"
@@ -852,6 +881,7 @@ extension ScheduleDetailPanel {
         }
         var at: String {
             switch self {
+            case .missed(let runs): return runs[0].plannedAt
             case .run(let r): return r.startedAt ?? r.plannedAt
             case .record(let r): return r.createdAt
             case .event(let e, _, _): return e.at
@@ -866,8 +896,17 @@ extension ScheduleDetailPanel {
         }
         let firedRuns = Set((condition?.events ?? []).compactMap { $0.runId.map(PublicID.storageKey) })
         let runs = (detail?.recentRuns ?? []).filter { !firedRuns.contains(PublicID.storageKey($0.id)) }
-        let entries = (runs.map(HistoryEntry.run) + events + (detail?.history ?? []).map(HistoryEntry.record))
+        let sorted = (runs.map(HistoryEntry.run) + events + (detail?.history ?? []).map(HistoryEntry.record))
             .sorted { (ScheduleDisplay.parse($0.at) ?? .distantPast) > (ScheduleDisplay.parse($1.at) ?? .distantPast) }
+        // Consecutive missed slots, with nothing else between them, read as one line.
+        let entries = sorted.reduce(into: [HistoryEntry]()) { out, entry in
+            guard case .run(let run) = entry, run.state == "MISSED" else { return out.append(entry) }
+            switch out.last {
+            case .missed(let streak)?: out[out.count - 1] = .missed(streak + [run])
+            case .run(let last)? where last.state == "MISSED": out[out.count - 1] = .missed([last, run])
+            default: out.append(entry)
+            }
+        }
         return section(SC.Inspector.history) {
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
@@ -885,6 +924,12 @@ extension ScheduleDetailPanel {
                             detail: ScheduleDetailResponse?, now: Date, zone: String) -> some View {
         let when = ScheduleDisplay.parse(entry.at).map { ScheduleDisplay.whenText($0, now: now, timezone: zone) } ?? ""
         switch entry {
+        case .missed(let runs):
+            VStack(alignment: .leading, spacing: 2) {
+                Text(when).font(.orbitSubtext)
+                Text(ScheduleDisplay.missedText(runs, timezone: zone)).font(.orbitLabel).foregroundStyle(.secondary)
+            }
+            .accessibilityIdentifier("schedule-history-missed")
         case .event(let event, let line, _):
             let run = line.runId.flatMap { id in
                 detail?.recentRuns.first { PublicID.storageKey($0.id) == PublicID.storageKey(id) }
@@ -1017,7 +1062,7 @@ struct ScheduleDraftPanel: View {
             // The agent drafts the card in its conversation; read until it is there.
             while !Task.isCancelled, scheduled?.draft(forSession: panel.sessionID) == nil {
                 await scheduled?.load()
-                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                await VisibilityGate.app.pause(3)   // not while the app cannot be seen (§4 R3)
             }
         }
         .accessibilityIdentifier("schedule-draft-panel")

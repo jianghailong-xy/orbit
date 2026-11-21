@@ -29,7 +29,7 @@ import {
 import { agentAlert } from './agent-alert';
 import { badgeDiff, BadgeState } from './badge-diff';
 import { ownerItemAlert } from './owner-item-alert';
-import { ownerRequestAlert, ownerRequestPushCategory, type OwnerRequestKind } from '../owner-requests/owner-request';
+import { ownerRequestAlert, ownerRequestPushCategory, type FiledOwnerRequestKind } from '../owner-requests/owner-request';
 import { ownerStarted, settleAlert } from './settle-alert';
 import { crossingRequestAlert } from './crossing-request-alert';
 import { CARD_SESSION_SELECT, crossingCardSessionId } from '../projects/project-handoff.service';
@@ -1103,13 +1103,13 @@ export class PushService {
           return row ? { translation: row.translation } : null;
         },
       );
-      const alert = ownerRequestAlert(request.kind as OwnerRequestKind, translation?.title || request.title);
+      const alert = ownerRequestAlert(request.kind as FiledOwnerRequestKind, translation?.title || request.title);
       const body = JSON.stringify({
         aps: {
           alert,
           sound: 'default',
           // Per kind: the clients' actions open the card on its input, or put it off ("Later").
-          category: ownerRequestPushCategory(request.kind as OwnerRequestKind),
+          category: ownerRequestPushCategory(request.kind as FiledOwnerRequestKind),
           'thread-id': `owner-request-${request.askedBySessionId}`,
         },
         kind: 'owner-request',

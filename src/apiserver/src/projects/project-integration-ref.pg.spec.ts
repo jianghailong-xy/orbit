@@ -340,6 +340,9 @@ async function workSession(
       prompt: label,
       provider: 'claude',
       status: RunStatus.SUCCEEDED,
+      // A SUCCEEDED run is a finished one: its finish is what settles the work (§10.5 O-L4 3), and a
+      // DONE over work that has not finished decides its landing at that finish (§12.15 P-M1).
+      finishedAt: new Date(),
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: taskId !== null,
       isolationStatus: 'worktree',

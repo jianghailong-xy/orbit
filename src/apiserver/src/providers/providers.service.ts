@@ -751,6 +751,50 @@ export class ProvidersService {
     return this.desensitize(await this.prisma.modelProvider.findUniqueOrThrow({ where: { id: current.id } }));
   }
 
+  /**
+   * Set or clear (null) the owner's SubAgent tier for one model of a built-in engine's catalogue
+   * (docs/subagent-design.md §4.2, §7): `UserPreferences.builtinModelTiers[engine][model]`, which overrides the
+   * built-in tier table and the family tiers for that model on that engine. A tier is set only for a model one
+   * of the owner's runners reports for that engine; a clear is always taken.
+   */
+  async setBuiltinModelTier(ownerId: string, engine: string, model: string, tier: 'S' | 'M' | 'L' | 'XL' | null) {
+    if (!isEngine(engine)) throw new NotFoundException('engine not found');
+    if (tier !== null) {
+      const runners = await this.prisma.runner.findMany({
+        where: { ownerId, modelCatalog: { not: Prisma.DbNull } },
+        select: { modelCatalog: true },
+      });
+      const reported = runners.some(({ modelCatalog }) => {
+        const rows = (modelCatalog as Record<string, unknown> | null)?.[engine];
+        return Array.isArray(rows) && rows.some((row) => (row as { value?: unknown } | null)?.value === model);
+      });
+      if (!reported) {
+        throw new BadRequestException({ code: 'MODEL_NOT_LISTED', message: `${ENGINE_CLI_NAMES[engine]} does not list ${model}` });
+      }
+    }
+    // The model's own key, set or removed inside the statement, as setModelTier does: two tiers set at once
+    // cannot overwrite each other. A map that is not an object is replaced.
+    await this.prisma.$executeRaw`
+      UPDATE "user"
+         SET "preferences" = jsonb_set(
+               CASE WHEN jsonb_typeof("preferences") = 'object' THEN "preferences" ELSE '{}'::jsonb END,
+               '{builtinModelTiers}',
+               CASE WHEN ${tier}::text IS NULL
+                 THEN CASE WHEN jsonb_typeof("preferences"->'builtinModelTiers') = 'object'
+                        THEN "preferences"->'builtinModelTiers' #- ARRAY[${engine}::text, ${model}::text]
+                        ELSE '{}'::jsonb END
+               ELSE (CASE WHEN jsonb_typeof("preferences"->'builtinModelTiers') = 'object'
+                       THEN "preferences"->'builtinModelTiers' ELSE '{}'::jsonb END)
+                    || jsonb_build_object(${engine}::text,
+                         (CASE WHEN jsonb_typeof("preferences"->'builtinModelTiers'->${engine}::text) = 'object'
+                            THEN "preferences"->'builtinModelTiers'->${engine}::text ELSE '{}'::jsonb END)
+                         || jsonb_build_object(${model}::text, ${tier}::text))
+               END)
+       WHERE "id" = ${ownerId}::uuid`;
+    this.publishChanged(ownerId, engine);
+    return { engine, model, tier };
+  }
+
   /** The id of one of the caller's own providers, found by the slug `orbit provider list` shows — the
    *  handle the runner's write doors take, since that list carries no id. Scoped like every write: a
    *  shared row, or another user's, reads as not-found. */

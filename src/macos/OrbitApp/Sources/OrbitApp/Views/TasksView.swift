@@ -1420,6 +1420,8 @@ private struct TaskDetailContent: View {
             do { try await Task.sleep(nanoseconds: 4_000_000_000) }
             catch { return }
             guard model.taskDetailIsOpen(taskID) else { return }
+            // A run in flight is read every 4 s — while the app can be seen (§4 R3).
+            if !model.appVisible { continue }
             _ = await tasks.loadDetail(taskID)
             guard let current = tasks.detail, TaskListLogic.isBusy(current) else { return }
         }

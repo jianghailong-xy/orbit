@@ -57,6 +57,8 @@ data class OwnerRequest(
     /** WIKI_CREATE: the repository the wiki is asked for, and the asking session's workspace it would read it from. */
     val repoUrlNorm: String? = null,
     val workspaceId: String? = null,
+    /** SETTINGS_CHANGE: `{changes: [{key, from, to, tier}]}`; read with [SettingsFromConversation.entries]. */
+    val payload: JsonElement? = null,
     val expiresAt: String? = null,
     val askedBySessionId: String = "",
     val projectId: String? = null,
@@ -91,7 +93,9 @@ object OwnerRequests {
     const val CONFIRM = "CONFIRM"
     /** An agent asking the owner to create a wiki for its workspace's repository (docs/wiki-explicit-creation-design.md §3.6). */
     const val WIKI_CREATE = "WIKI_CREATE"
-    val kinds = setOf(DECISION, SECRET, MANUAL_STEP, CONFIRM, WIKI_CREATE)
+    /** An agent proposing changes to the owner's own Settings (docs/settings-from-conversation-design.md §5.1). */
+    const val SETTINGS_CHANGE = "SETTINGS_CHANGE"
+    val kinds = setOf(DECISION, SECRET, MANUAL_STEP, CONFIRM, WIKI_CREATE, SETTINGS_CHANGE)
 
     const val waitingOnYou = "Waiting on you"
     const val holdingUp = "Holding up"
@@ -123,14 +127,14 @@ object OwnerRequests {
     const val later = "Later"
 
     /** The tag beside a card's title. */
-    fun kindTag(kind: String) = when (kind) { MANUAL_STEP -> "STEPS"; WIKI_CREATE -> "WIKI"; else -> kind }
+    fun kindTag(kind: String) = when (kind) { MANUAL_STEP -> "STEPS"; WIKI_CREATE -> "WIKI"; SETTINGS_CHANGE -> "SETTINGS"; else -> kind }
     /** The card's primary button. */
-    fun primary(kind: String) = when (kind) { DECISION -> "Send answer"; SECRET -> "Provide key"; MANUAL_STEP -> "Mark done"; WIKI_CREATE -> "Create wiki"; else -> "Confirm" }
+    fun primary(kind: String) = when (kind) { DECISION -> "Send answer"; SECRET -> "Provide key"; MANUAL_STEP -> "Mark done"; WIKI_CREATE -> "Create wiki"; SETTINGS_CHANGE -> SettingsChangeCopy.save; else -> "Confirm" }
     /** An inbox row's button. */
     fun inboxAction(kind: String) = when (kind) { DECISION -> "Answer"; SECRET -> "Provide"; MANUAL_STEP -> "Open steps"; else -> "Review" }
     /** A push's primary action, which opens the card on its input. */
     fun pushAction(kind: String): String? = when (kind) {
-        SECRET -> "Provide key"; DECISION -> "Answer"; MANUAL_STEP -> "Mark done"; CONFIRM, WIKI_CREATE -> "Review"; else -> null
+        SECRET -> "Provide key"; DECISION -> "Answer"; MANUAL_STEP -> "Mark done"; CONFIRM, WIKI_CREATE, SETTINGS_CHANGE -> "Review"; else -> null
     }
     fun declineLabel(kind: String) = if (kind == MANUAL_STEP) "Can’t do this…" else "Decline…"
 
@@ -230,6 +234,7 @@ object OwnerRequests {
                     }
                 }
                 request.kind == CONFIRM -> "Confirmed"
+                request.kind == SETTINGS_CHANGE -> SettingsChangeCopy.changed(SettingsFromConversation.entries(request.payload).size)
                 request.kind == WIKI_CREATE -> request.answer?.name?.takeIf { it.isNotEmpty() }?.let { "Created the wiki $it" } ?: "Wiki created"
                 else -> "Marked done"
             }
@@ -466,6 +471,10 @@ class OwnerRequestsApi(private val api: OrbitApi, private val handle: SessionHan
 
     /** WIKI_CREATE's Create wiki: the owner's door that makes the wiki with the card's settings and settles the card (design §3.6). */
     suspend fun createWiki(id: String): OwnerRequest = post(id, listOf("create-wiki"), buildJsonObject { })
+
+    /** SETTINGS_CHANGE's Save changes (design §5.2): writes the proposed values and settles the card DONE. A value that moved since is
+     * refused 409 SETTINGS_STALE and nothing is written. */
+    suspend fun applySettings(id: String): OwnerRequest = post(id, listOf("apply-settings"), buildJsonObject { })
 
     /** The key itself, optionally saved under [saveAs]. */
     suspend fun provide(id: String, value: String, saveAs: String? = null): OwnerRequest =
