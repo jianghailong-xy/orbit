@@ -244,8 +244,12 @@ async function finishServingWork(db: PrismaClient, f: Fixture, n: number): Promi
       autoRunWhenReady: false,
     },
   });
+  // The work's session, on its own branch with a commit reported: revision 42 (§12.15 P-M3) reads
+  // landing from the delivered commit, so a DONE task that ran no branch and reported nothing has
+  // nothing to land, and its criterion would read LANDED with no CRITERION_UNLANDED fact.
   await openSession(db, f, {
-    taskId, status: RunStatus.SUCCEEDED, startsTaskWork: true, branch: `orbit/serving-${taskId}`,
+    taskId, status: RunStatus.SUCCEEDED, startsTaskWork: true,
+    isolationStatus: 'worktree', branch: `orbit/serving-${n}-${taskId.slice(0, 8)}`, changedFiles: ['src/work.ts'],
   });
 }
 
@@ -276,7 +280,14 @@ async function failWork(db: PrismaClient, f: Fixture, n: number): Promise<string
 async function openSession(
   db: PrismaClient,
   f: Fixture,
-  options: { taskId?: string; status?: RunStatus; startsTaskWork?: boolean; branch?: string } = {},
+  options: {
+    taskId?: string;
+    status?: RunStatus;
+    startsTaskWork?: boolean;
+    isolationStatus?: string;
+    branch?: string;
+    changedFiles?: string[];
+  } = {},
 ): Promise<string> {
   const id = randomUUID();
   await db.session.create({
@@ -296,10 +307,9 @@ async function openSession(
         : options.status === RunStatus.CANCELLED ? { finishedAt: new Date(), releaseCause: 'cancelled' } : {}),
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: options.startsTaskWork ?? false,
-      ...(options.branch ? {
-        branch: options.branch, isolationStatus: 'worktree',
-        branchSha: 'a'.repeat(40), baseSha: 'b'.repeat(40),
-      } : {}),
+      ...(options.isolationStatus ? { isolationStatus: options.isolationStatus } : {}),
+      ...(options.branch ? { branch: options.branch } : {}),
+      ...(options.changedFiles ? { changedFiles: options.changedFiles } : {}),
     },
   });
   return id;

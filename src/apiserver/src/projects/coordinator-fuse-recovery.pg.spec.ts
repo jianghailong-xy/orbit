@@ -362,6 +362,9 @@ async function finishServingWork(db: PrismaClient, f: Fixture, n: number): Promi
       autoRunWhenReady: false,
     },
   });
+  // The work's session, on its own branch with a commit reported: revision 42 (§12.15 P-M3) reads
+  // landing from the delivered commit, so a DONE task that ran no branch and reported nothing has
+  // nothing to land, and its criterion would read LANDED with no CRITERION_UNLANDED fact.
   await db.session.create({
     data: {
       id: randomUUID(),
@@ -370,18 +373,17 @@ async function finishServingWork(db: PrismaClient, f: Fixture, n: number): Promi
       taskId,
       workspaceId: f.workspaceId,
       assignedRunnerId: f.runnerId,
-      title: 'finished serving work',
-      prompt: 'finish the serving work',
+      title: `serving work ${n}`,
+      prompt: `serving work ${n}`,
       provider: 'claude',
       status: RunStatus.SUCCEEDED,
-      finishedAt: new Date(),
-      releaseCause: 'engine_exited',
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       isolationStatus: 'worktree',
-      branch: `orbit/serving-${taskId}`,
-      branchSha: 'a'.repeat(40),
-      baseSha: 'b'.repeat(40),
+      branch: `orbit/serving-${n}-${taskId.slice(0, 8)}`,
+      changedFiles: ['src/work.ts'],
+      finishedAt: new Date(),
+      releaseCause: 'engine_exited',
     },
   });
   return taskId;
