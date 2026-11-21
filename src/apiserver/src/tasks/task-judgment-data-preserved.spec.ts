@@ -3248,13 +3248,14 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // no row is written. Session is not a preserved relation, and no trigger, function or DONE fence changes.
       '1403_session_release_failure_causes',
       '1404_session_release_failure_causes_validate',
-      // 1410 adds three nullable columns on coordinator_handoff (what a handoff's successor runs on); no row is
-      // written, and coordinator_handoff is not a preserved relation — no trigger, function or DONE fence changes.
-      '1410_coordinator_handoff_successor',
       // 1410 adds session.bg_job_stop_requests, a NOT NULL TEXT[] with a constant default (catalog-only, no rewrite),
       // for the owner's bg-job stop requests; no row is written. Session is not a preserved relation, and no trigger,
       // function or DONE fence changes.
-      '1410_session_bg_job_stop_requests'],
+      '1410_session_bg_job_stop_requests',
+      // 1411 (renumbered from a second 1410) adds three nullable columns on coordinator_handoff (what a handoff's
+      // successor runs on); no row is written, and coordinator_handoff is not a preserved relation — no trigger,
+      // function or DONE fence changes.
+      '1411_coordinator_handoff_successor'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
