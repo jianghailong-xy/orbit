@@ -1,8 +1,11 @@
-import { RunStatus } from '@prisma/client';
+import { isFailedRelease, isReleased, isWorkFinishedRelease } from '../common/session-release';
 
 /** The session fields the decision below reads — nothing else is load-bearing. */
 export interface SettleInput {
-  status: RunStatus | string;
+  /** The release column (common/session-release.ts): set once no runner holds the session. */
+  finishedAt: Date | null;
+  /** Why it was released (`session.release_cause`), null while it is held. */
+  releaseCause: string | null;
   retryAt: Date | null;
   completedAt: Date | null;
   deletedAt: Date | null;
@@ -30,8 +33,7 @@ const MAX_ERROR_CHARS = 120;
 const MAX_BODY_CHARS = 200;
 
 /**
- * Whether a session that just reached a terminal status is worth pushing to its owner's phone,
- * and what to say. Pure so the edge cases below are testable without Prisma or APNs.
+ * Whether a session that was just released is worth pushing to its owner's phone, and what to say. Pure so the edge cases below are testable without Prisma or APNs.
  *
  * The rule is "did this happen on its own, and is it over": a notification exists to pull
  * someone back who has walked away, so anything they did themselves — ending the session,
@@ -53,20 +55,22 @@ export function settleAlert(s: SettleInput): SettleAlert | null {
   if (s.retryAt) return null;
   // Trashed — whatever it did, its owner is done with it.
   if (s.deletedAt) return null;
-  // SUCCEEDED is only ever reached by a run that finished on its own: either the runner
-  // finalized it that way, or a task ran to DONE and `gracefulEndStatus` settled it. Both mean
-  // nobody was necessarily watching. `completedAt` is deliberately NOT checked here — the
-  // task_done path files the session in Completed as part of ending it, so requiring an
-  // unfiled row would drop the single most important notification this function exists for.
-  const kind: SettleAlert['kind'] | null =
-    s.status === RunStatus.SUCCEEDED
+  // Read off the release and its cause, never off the terminal status value (decision D2, decided
+  // 2026-11-21: success and finish are not states of a session). A held session has not settled.
+  // Finished is a release whose cause says the work is done: its task ran to DONE (`task_done`),
+  // or a landing container's landing settled; nobody was necessarily watching. `completedAt` is
+  // deliberately NOT checked here — the task_done path files the session in Completed as part of
+  // ending it, so requiring an unfiled row would drop the single most important notification this
+  // function exists for. A plain conversation never finishes: it is ended, or failed.
+  const kind: SettleAlert['kind'] | null = !isReleased(s)
+    ? null
+    : isWorkFinishedRelease(s.releaseCause)
       ? 'finished'
       : // A failure its owner has already filed to Completed is one they have already seen.
-        s.status === RunStatus.FAILED && !s.completedAt
+        isFailedRelease(s.releaseCause) && !s.completedAt
         ? 'failed'
-        : // Everything else that is terminal is CANCELLED, which is only ever reached
-          // deliberately — the user ended the session, stopped the run, or cancelled its task.
-          // INTERRUPTED isn't terminal at all, and neither are the live statuses.
+        : // Every other release is a stop: one somebody asked for (the user ended the session,
+          // stopped the run, or cancelled its task), or an engine that exited by itself.
           null;
   if (!kind) return null;
   const recap = recapBody(s.recapText);

@@ -195,6 +195,9 @@ function settledSession(over: Record<string, unknown> = {}) {
     title: 'Fix the login bug',
     ownerId: 'owner-1',
     status: RunStatus.SUCCEEDED,
+    // Released with the cause its writer stores beside SUCCEEDED: the alert reads these (plan step 4.8).
+    finishedAt: new Date(),
+    releaseCause: 'task_done',
     retryAt: null,
     completedAt: null,
     deletedAt: null,
@@ -249,7 +252,7 @@ test('a settled session alerts its owner, collapsing on the session', async () =
 
 test('a failure carries its first error line', async () => {
   const { service, sent } = settleHarness(
-    settledSession({ status: RunStatus.FAILED, error: 'API Error: 529 overloaded_error' }),
+    settledSession({ status: RunStatus.FAILED, releaseCause: 'turn_failed', error: 'API Error: 529 overloaded_error' }),
   );
 
   await service.notifySessionSettled('s-1');
@@ -260,7 +263,7 @@ test('a failure carries its first error line', async () => {
 });
 
 test('an ending not worth an interruption sends nothing', async () => {
-  const { service, sent } = settleHarness(settledSession({ status: RunStatus.CANCELLED }));
+  const { service, sent } = settleHarness(settledSession({ status: RunStatus.CANCELLED, releaseCause: 'ended' }));
   await service.notifySessionSettled('s-1');
   assert.equal(sent.length, 0);
 });

@@ -229,6 +229,17 @@ export function reportsSuccessWithNoEnd(current: { cancelRequestedAt: Date | nul
 }
 
 /** What a machine wake or a credential gate reads of a session to decide whether it has ended. */
+/**
+ * Whether the session's run is over: released, or parked interrupted with an end recorded (INTERRUPTED is a held
+ * status, the turn was abandoned; with an end reason, the session itself was ended). The SESSION_RUN_TERMINAL watch
+ * leaf asks exactly this, and sessionHasEnded asks it after the filing facts. Under session_release_fact_chk it
+ * answers, for every stored row, what "the derived run state is SUCCEEDED, FAILED or ENDED" answered.
+ */
+export function runIsOver(session: SessionReleaseColumn & { status: RunStatus | string; endReason: string | null }): boolean {
+  if (isReleased(session)) return true;
+  return session.status === 'INTERRUPTED' && Boolean(session.endReason);
+}
+
 export interface SessionEndedRow extends SessionReleaseColumn {
   status: RunStatus | string;
   endReason: string | null;
@@ -246,7 +257,5 @@ export interface SessionEndedRow extends SessionReleaseColumn {
  */
 export function sessionHasEnded(session: SessionEndedRow): boolean {
   if (deriveSessionLifecycleState(session) !== SessionLifecycleState.OPEN) return true;
-  if (isReleased(session)) return true;
-  // INTERRUPTED is a held status: the turn was abandoned. With an end reason, the session itself was ended.
-  return session.status === 'INTERRUPTED' && Boolean(session.endReason);
+  return runIsOver(session);
 }

@@ -602,7 +602,8 @@ export class PushService {
         select: {
           title: true,
           ownerId: true,
-          status: true,
+          finishedAt: true,
+          releaseCause: true,
           retryAt: true,
           completedAt: true,
           deletedAt: true,

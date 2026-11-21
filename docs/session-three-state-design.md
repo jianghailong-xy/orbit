@@ -1,7 +1,7 @@
 # Session state: three activity states and the facts beside them
 
-Status: **D1, D5 and D8 decided as recommended by the owner on 2026-11-19; D2, D3, D4, D6 and D7
-still open**. Written 2026-11-19 against commit `a1282659a4`.
+Status: **D1, D5 and D8 decided as recommended by the owner on 2026-11-19, D2 on 2026-11-21;
+D3, D4, D6 and D7 still open**. Written 2026-11-19 against commit `a1282659a4`.
 If accepted it replaces §2.1 of [session-lifecycle-design.md](session-lifecycle-design.md).
 The complete list of read sites is in
 [session-three-state-read-sites.md](session-three-state-read-sites.md) (442 rows).
@@ -356,7 +356,8 @@ value an old client reads.
 
 ## 9. Decisions for the owner
 
-Decided on 2026-11-19, each as recommended below: **D1**, **D5** and **D8**. The others are open.
+Decided on 2026-11-19, each as recommended below: **D1**, **D5** and **D8**. **D2** decided by the owner on
+2026-11-21 (below). The others are open.
 
 - **D1. Four situations, not three.** Accept that "released" is the session's own fact, kept
   beside three activity states. Recommended: yes, as a column, so that the status says only
@@ -403,6 +404,17 @@ Decided on 2026-11-19, each as recommended below: **D1**, **D5** and **D8**. The
   `CANCELLED` with `endReason` `ENDED`/`CANCELLED`, not about a success path. Not checked: how
   many stored plain rows read `SUCCEEDED` today. For plan step 4.6: no plain-session
   `SUCCEEDED` case needs to be kept.
+
+  **Decided by the owner on 2026-11-21:** as the plan says, success and finish are not states of a
+  session, so there is nothing special to decide for plain conversations. A plain conversation is
+  ended, or failed when its release was a failure; it is never succeeded or finished. Only a
+  session that did a task's work finishes, and that is read from the release cause (`task_done`,
+  or `landing_settled` for a landing container). Plan step 4.8 moved the three readers that
+  waited on it onto the release fact: the settle push (`push/settle-alert.ts`: "Finished" for a
+  release that finished the work, the failed alert for a failure cause, nothing for any other
+  release), the `SESSION_RUN_TERMINAL` watch leaf (released, or interrupted with an end
+  recorded; its stored meaning unchanged), and the wiki's settled-session feed
+  (`wiki/wiki-maintenance.ts`), which already read activity only and needed no change.
 - **D3. Failed badge.** A session whose last turn failed keeps a visible "Failed" mark in
   lists, drawn from the turn outcome. Recommended: yes.
 - **D4. Machine wake-ups.** Keep today's rule, expressed on the cause: a released session
