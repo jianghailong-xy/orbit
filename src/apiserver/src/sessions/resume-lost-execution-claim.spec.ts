@@ -176,16 +176,16 @@ test('a revive that loses the execution claim is a 409 naming the session that h
       return true;
     },
   );
-  // The predicate the read asks by has to be the index's own: the four statuses 0130 covers, and
-  // no narrowing to the rows somebody guessed were the interesting ones.
+  // The predicate the read asks by has to be the index's own: 1416's, the sessions not released
+  // (plan step 4.5; 0130's four statuses before it), and no narrowing to the rows somebody guessed
+  // were the interesting ones.
   const where = holderReads[0] as {
-    taskId: string; deletedAt: null; status: { in: RunStatus[] };
+    taskId: string; deletedAt: null; finishedAt: null; status?: unknown;
   };
   assert.equal(where.taskId, TASK);
   assert.equal(where.deletedAt, null);
-  assert.deepEqual(where.status.in, [
-    RunStatus.PENDING, RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED,
-  ]);
+  assert.equal(where.finishedAt, null);
+  assert.equal(where.status, undefined);
 });
 
 test('the refusal says which of the shapes the holder is', async () => {

@@ -11,8 +11,8 @@ import { deriveSessionLifecycleState, SessionLifecycleState } from '@orbit/share
  * Both are spelled here twice. On the column: `isReleased` / `isHeld`, the Prisma filters `releasedFilter` /
  * `heldFilter`, which the TypeScript readers read (plan step 4.2), and the raw SQL fragments `sessionReleasedSql` /
  * `sessionHeldSql` (plan step 4.3). As status sets, the same members every hand-copied live/terminal set held, for
- * the readers phase 4 has not moved yet: `heldSql` (queue/dispatch-pause.service.ts only), and the Prisma filters
- * whose status list is an index's access path (no index covers `finished_at`).
+ * the readers phase 4 has not moved yet, and the Prisma filters whose status list is an index's access path (the only
+ * index that reads `finished_at` is the execution claim's, over `task_id`, migration 1416).
  * session_release_fact_chk (migrations 1401, 1402) makes the two the same rows: a status is terminal exactly when
  * `finished_at` is set.
  */
@@ -90,28 +90,19 @@ export function sessionHeldSql(sessionAlias: string): Prisma.Sql {
   return Prisma.sql`${Prisma.raw(sessionAlias)}."finished_at" IS NULL`;
 }
 
-/** The held statuses as an SQL list, for the two fragments below and nothing else. */
+/** The held statuses as an SQL list, for the fragment below and nothing else. */
 const HELD_STATUS_LIST_SQL = Prisma.raw(`('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED')`);
 
 /**
- * Raw SQL: `sessionHeldSql`, for a query whose access path is an index led by another column and then `status`
- * (`session_assigned_runner_id_status_idx`): the release column decides, and the held statuses are stated beside it,
- * which session_release_fact_chk makes the same rows. The status list decides nothing; it is there because the
- * planner can read it as an index condition and cannot read `finished_at` as one (no index covers it). Without it a
- * runner's query reads every session the runner ever had (measured in plan step 4.3: 44,000 index entries for 73 rows).
+ * Raw SQL: `sessionHeldSql`, for a query whose access path is an index on `status`, alone (`session_status_idx`, the
+ * dispatch pause's reads, plan step 4.5) or after another column (`session_assigned_runner_id_status_idx`): the release
+ * column decides, and the held statuses are stated beside it, which session_release_fact_chk makes the same rows. The
+ * status list decides nothing; it is there because the planner can read it as an index condition and cannot read
+ * `finished_at` as one outside the claim index. Without it a runner's query reads every session the runner ever had
+ * (measured in plan step 4.3: 44,000 index entries for 73 rows).
  */
 export function sessionHeldIndexedSql(sessionAlias: string): Prisma.Sql {
   return Prisma.sql`(${sessionHeldSql(sessionAlias)} AND ${Prisma.raw(sessionAlias)}."status" IN ${HELD_STATUS_LIST_SQL})`;
-}
-
-/**
- * Raw SQL, as a status set: the status column `column`, as the query spells it (for example `s."status"`; a
- * constant, never input), is held. Its one caller left is queue/dispatch-pause.service.ts, which plan step 4.3 does
- * not touch (the queue is out of its scope); the one-live-run-per-task index task (plan step 4.5, "dispatch states the
- * new predicate") moves that caller onto `sessionHeldSql` and removes this. Everything else reads `sessionHeldSql`.
- */
-export function heldSql(column: string): Prisma.Sql {
-  return Prisma.sql`${Prisma.raw(column)} IN ${HELD_STATUS_LIST_SQL}`;
 }
 
 /**

@@ -193,7 +193,6 @@ import {
   type TaskRunEffectFence,
 } from '../tasks/task-run-receipt';
 import { readTaskRouteSummaries } from '../tasks/task-route-decision';
-import { TASK_OCCUPYING } from '../tasks/reclaim-stalled-task';
 import {
   accountDefaultPermissionMode,
   DEFAULT_PERMISSION_MODE,
@@ -319,6 +318,7 @@ import {
 import {
   HELD_SESSION_STATUSES,
   RELEASED_SESSION_STATUSES,
+  heldFilter,
   isHeld,
   isHeldPastClaim,
   isReleased,
@@ -11061,8 +11061,9 @@ export class SessionsService {
    * Nothing here stops a run that nobody asked to stop, and nothing here moves a running session
    * onto another provider.
    *
-   * `session_task_execution_claim_idx` makes "one live Session per task" a property of the database,
-   * and a revive writes a LIVE status — so a task whose run has already been re-dispatched (Run Now,
+   * The execution claim index (`session_task_execution_claim_idx_finished_at`, migration 1416, beside
+   * 0130's `session_task_execution_claim_idx` until release B) makes "one live Session per task" a
+   * property of the database, and a revive writes a LIVE status — so a task whose run has already been re-dispatched (Run Now,
    * a sweep, the auto-run the task list reconciles) refuses the revive at that index. The refusal is
    * correct; what used to happen with it was not. The raw `P2002` reached the API as a 500 with a
    * PostgreSQL sentence in it, in front of somebody who pressed "Retry now" on a failed run of a
@@ -11073,9 +11074,9 @@ export class SessionsService {
    * Nothing of the revive was written (the flip is the last thing the transaction does), so this
    * read is of the world the refusal is about.
    *
-   * The predicate is the index's own (`TASK_OCCUPYING` is its four statuses, character for
-   * character) rather than "the newest" or "the live one": a reader narrower than the index it
-   * explains answers "nothing holds the claim" for rows that do.
+   * The predicate is the index's own (`task_id`, not in the Trash, `finished_at IS NULL`) rather than
+   * "the newest" or "the live one": a reader narrower than the index it explains answers "nothing
+   * holds the claim" for rows that do.
    */
   private async routeOntoTheHeldClaim(
     ownerId: string,
@@ -11090,7 +11091,7 @@ export class SessionsService {
       // cannot be in the index — and it is what keeps the sentence from naming the caller's own
       // session if that ever stops being true.
       const holder = await this.prisma.session.findFirst({
-        where: { taskId, deletedAt: null, status: { in: TASK_OCCUPYING }, NOT: { id } },
+        where: { taskId, deletedAt: null, ...heldFilter(), NOT: { id } },
         select: {
           id: true,
           status: true,
@@ -11781,7 +11782,7 @@ export class SessionsService {
       };
     }, loggedRetry(this.logger, 'sessions.resume'))
       // The one duplicate key this UPDATE can reach — another live Session already holds this task's
-      // execution claim (0130) — answered as the refusal it is instead of as the 500 a bare P2002
+      // execution claim (1416, and 0130's index beside it until release B) — answered as the refusal it is instead of as the 500 a bare P2002
       // becomes. Caught outside the transaction, because naming the holder means reading, and the
       // transaction that raised this cannot answer a read. Any other duplicate is somebody else's
       // fact and goes on being thrown as it is.

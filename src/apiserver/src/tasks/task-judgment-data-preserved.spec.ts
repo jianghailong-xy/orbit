@@ -3270,7 +3270,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '1412_admission_aggregate_guards_read_release',
       '1413_project_move_guard_reads_release',
       '1414_acquisition_revive_reads_release',
-      '1415_ended_triggers_read_release'],
+      '1415_ended_triggers_read_release',
+      // 1416 builds the partial unique index session_task_execution_claim_idx_finished_at on session(task_id) CONCURRENTLY
+      // beside 0130's claim index (plan step 4.5, release A), dropping a leftover INVALID one first. Session is not a
+      // preserved relation, and no function, trigger, type, constraint or DONE fence changes. No INSERT, UPDATE or DELETE.
+      '1416_session_task_execution_claim_finished_at_idx'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

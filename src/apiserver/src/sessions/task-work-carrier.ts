@@ -79,12 +79,18 @@ export function sessionWakeSourceSql(session: string): string {
  * `session` is a work session still carrying its task — see the top of this file.
  *
  * The three-status list is implied by the clause after it and is stated anyway: it is what lets the
- * planner read it as an index condition (`session_owner_status_task_idx`) and match the execution
- * claim index's predicate, neither of which it can see through the OR.
+ * planner read it as an index condition (`session_owner_status_task_idx`), which it cannot see
+ * through the OR. `finished_at IS NULL` is implied by the status list (session_release_fact_chk) and
+ * is stated anyway for the same kind of reason: it is the execution claim index's predicate
+ * (`session_task_execution_claim_idx_finished_at`, migration 1416, beside `deleted_at IS NULL`), and
+ * the planner matches a partial index only by a predicate it can read here, never through a CHECK.
+ * Without it, once 0130's status-set index is gone (release B), a task's carrier is found through
+ * `project_event_session_task_provider_idx`, every run the task ever had.
  */
 export function sessionCarriesTaskSql(session: string): string {
   return `(${session}."starts_task_work" = true
     AND ${session}."deleted_at" IS NULL
+    AND ${session}."finished_at" IS NULL
     AND ${session}."status" IN ('PENDING'::"run_status", 'RUNNING'::"run_status", 'AWAITING_INPUT'::"run_status")
     AND (${session}."status" <> 'AWAITING_INPUT'::"run_status" OR ${sessionWakeSourceSql(session)}))`;
 }
@@ -180,8 +186,9 @@ interface CarrierRow extends RunStallFacts {
  * The session carrying each task `scope` reaches, keyed by task id.
  *
  * `scope` is a predicate over `carrier`, the session row: its owner, a task id list, the tasks of a
- * project or a list. At most one row per task can match — `session_task_execution_claim_idx` admits
- * one live session per task — so keying by task loses nothing.
+ * project or a list. At most one row per task can match — the execution claim index
+ * (`session_task_execution_claim_idx_finished_at`) admits one live session per task — so keying by
+ * task loses nothing.
  */
 export async function readTaskWorkCarriers(
   prisma: Pick<PrismaService, '$queryRaw'>,

@@ -27,17 +27,19 @@
  *
  * Plan step 4.3 moved the raw SQL readers of "held" and "released" onto the release column through sessionHeldSql /
  * sessionReleasedSql, deleted releasedSql, and took wiki-maintenance.ts's settled set (every status but PENDING and
- * RUNNING) to its activity spelling, `NOT IN ('PENDING', 'RUNNING')`. Left: heldSql, whose one caller is
- * queue/dispatch-pause.service.ts (the queue is out of 4.3's scope; the index task, plan step 4.5, removes it), and the
- * activity, held-but-idle and claimed-and-held sets above, which name no terminal value.
+ * RUNNING) to its activity spelling, `NOT IN ('PENDING', 'RUNNING')`. Left: the activity, held-but-idle and
+ * claimed-and-held sets above, which name no terminal value.
+ *
+ * Plan step 4.5 (release A) moved queue/dispatch-pause.service.ts onto sessionHeldIndexedSql and deleted heldSql, and
+ * the readers whose access path is the execution claim index onto its new predicate (`finished_at IS NULL`). Neither
+ * was a hit: heldSql's list is one constant, and the claim readers spread TASK_OCCUPYING, so no number falls.
  */
 export const SESSION_TERMINAL_STATUS_READERS: Readonly<Record<string, number>> = {
   'src/apiserver/src/common/session-scheduling.ts': 2,
   // The one definition of "held" and "released" (plan step 3.5): the two status sets, their SQL fragments, and the
-  // release causes. Its readers read `finished_at` since plan steps 4.2 and 4.3; the sets stay for heldSql (the queue's
-  // dispatch-pause reads, until plan step 4.5) and for the filters whose status list is an index's access path. The
-  // held list of heldSql and sessionHeldIndexedSql is one constant since 4.3 (HELD_STATUS_LIST_SQL), which the scan
-  // does not count as a hit because no `IN` stands beside it.
+  // release causes. Its readers read `finished_at` since plan steps 4.2 and 4.3; the sets stay for the filters whose
+  // status list is an index's access path. The held list of sessionHeldIndexedSql is one constant since 4.3
+  // (HELD_STATUS_LIST_SQL), which the scan does not count as a hit because no `IN` stands beside it.
   'src/apiserver/src/common/session-release.ts': 6,
   'src/apiserver/src/common/session-tree-sql.ts': 1,
   'src/apiserver/src/help/help-ask-marker.ts': 1,
