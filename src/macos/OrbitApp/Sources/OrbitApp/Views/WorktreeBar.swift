@@ -1044,6 +1044,10 @@ struct BackgroundTrayView: View {
     let row: BackgroundRowRule.Row?
     /// The band is folded away (`TypingFold`, the folded pill): the names stop rotating.
     var paused = false
+    /// Scrolls the conversation to a bg_run job's card (R1): whether it found one to scroll to.
+    var revealJob: ((String) -> Bool)? = nil
+    /// The owner's stop of a running bg_run job (R3).
+    var stopJob: ((String) async throws -> Void)? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
     @State private var open = false
@@ -1089,11 +1093,21 @@ struct BackgroundTrayView: View {
     private var rows: some View {
         VStack(spacing: 0) {
             ForEach(procs) { proc in
-                BackgroundRow(proc: proc, progress: progress[proc.id], expanded: expandedID == proc.id) {
-                    withAnimation(.easeOut(duration: 0.12)) {
-                        expandedID = expandedID == proc.id ? nil : proc.id
-                    }
-                }
+                BackgroundRow(proc: proc, progress: progress[proc.id], expanded: expandedID == proc.id,
+                              onToggle: {
+                                  // A bg_run job's row goes to its Job card, as the Agents list goes to a
+                                  // run's block (R1); one whose card is not loaded opens here as ever.
+                                  if WorktreeBarLogic.jobRowScrollsToCard(proc), revealJob?(proc.id) == true {
+                                      withAnimation(.easeOut(duration: 0.12)) { open = false }
+                                      return
+                                  }
+                                  withAnimation(.easeOut(duration: 0.12)) {
+                                      expandedID = expandedID == proc.id ? nil : proc.id
+                                  }
+                              },
+                              onStop: stopJob.flatMap { stop in
+                                  WorktreeBarLogic.jobRowOffersStop(proc) ? { try await stop(proc.id) } : nil
+                              })
             }
         }
     }
@@ -1221,6 +1235,10 @@ private struct BackgroundRow: View {
     var progress: TaskProgress? = nil
     let expanded: Bool
     let onToggle: () -> Void
+    /// A running bg_run job its runner can stop (R3); nil for anything else.
+    var onStop: (() async throws -> Void)? = nil
+    @State private var asking = false
+    @State private var stopFailed: String?
 
     /// An async agent or a workflow rather than a shell: named by kind, and opening to its progress.
     private var isTask: Bool { proc.kind == "agent" || proc.kind == "workflow" }
@@ -1241,11 +1259,28 @@ private struct BackgroundRow: View {
                 if let ts = proc.startedAt, let rel = RelativeTime.format(ts) {
                     Text(rel).font(.orbitMeta).foregroundStyle(.secondary)
                 }
+                if onStop != nil {
+                    Button(BgJobCard.stop) { asking = true }
+                        .buttonStyle(.plain).font(.orbitMeta).foregroundStyle(.tint)
+                        .accessibilityIdentifier("bg-job-stop")
+                }
                 Image(systemName: expanded ? "chevron.down" : "chevron.right")
                     .font(.orbitMeta).foregroundStyle(.tertiary)
             }
             .contentShape(Rectangle())
             .onTapGesture(perform: onToggle)
+            .orbitConfirmation(BgJobCard.stopConfirm, isPresented: $asking) {
+                Button(BgJobCard.stop, role: .destructive) {
+                    guard let onStop else { return }
+                    Task {
+                        do { try await onStop(); stopFailed = nil } catch { stopFailed = APIClient.failureReason(error) }
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            }
+            if let stopFailed {
+                Text(stopFailed).font(.orbitMeta).foregroundStyle(.red).padding(.leading, 26)
+            }
             // Where a running workflow is, or what a running agent is on — the row's second line.
             if isTask, proc.status == "running", let progress, let line = TaskProgressCopy.trayLine(progress) {
                 Text(line).font(.orbitMeta).foregroundStyle(.secondary).lineLimit(1)
