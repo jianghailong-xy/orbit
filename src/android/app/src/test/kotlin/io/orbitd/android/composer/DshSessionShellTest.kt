@@ -10,8 +10,8 @@ import org.robolectric.Shadows.shadowOf
 /**
  * A07-5 (iOS e789ce3dc, 7ca6ab87e, 13720e241, cef6c8e0d) in a DeepSeek Harness session, over the controlled server: its approval
  * cards are Allow and Deny alone; a failure is a repair card — the key on the web and the message again, the CLI's install, a newer
- * runner — in the transcript and above the composer while the session is queued; a `!` command stays in the composer with why; and
- * the model chip says the runtime picks while no model is reported. The session's engine is the server's `engine`, and — from a
+ * runner — in the transcript and above the composer while the session is queued; a `!` command goes out as a runner shell turn like
+ * any other engine's; and the model chip says the runtime picks while no model is reported. The session's engine is the server's `engine`, and — from a
  * server that doesn't say it — the runtime of the account's key the session runs on.
  */
 class DshSessionShellTest : ComposerShellTest() {
@@ -135,26 +135,25 @@ class DshSessionShellTest : ComposerShellTest() {
         assertFalse(shows("DeepSeek Harness needs a DeepSeek key"))
     }
 
-    @Test fun aShellCommandOnHarnessStaysInTheComposerWithWhy() {
+    @Test fun aShellCommandOnHarnessGoesOut() {
         onHarness()
         signIn(); openSession()
         compose.onNodeWithTag("composer-input").performTextInput("!ls -la")
         compose.onNodeWithTag("composer-send").performClick()
-        awaitText("DeepSeek Harness sessions don't run ! shell commands — ask the agent to run it instead.")
-        assertTrue("the command stays where it was typed", has(hasTestTag("composer-input") and hasText("!ls -la")))
-        assertFalse(ComposerShell.calls.any { it.startsWith("POST sessions/${ComposerShell.SESSION}/turns") })
-        // The + menu's Shell command says the same, and puts no ! in the box.
+        await { ComposerShell.body("POST sessions/${ComposerShell.SESSION}/turns") != null }
+        val turn = ComposerShell.body("POST sessions/${ComposerShell.SESSION}/turns")!!
+        assertEquals("shell", turn["kind"]?.jsonPrimitive?.content)
+        assertEquals("ls -la", turn["content"]?.jsonPrimitive?.content)
+        // The + menu's Shell command prefixes the box on Harness as on any other engine.
         compose.onNodeWithTag("composer-input").performTextReplacement("")
-        compose.onNodeWithText("Dismiss error").performClick()
         compose.onNodeWithTag("composer-plus").performClick()
         compose.onNode(hasText("Shell command") and hasClickAction()).performClick()
-        awaitText("DeepSeek Harness sessions don't run ! shell commands — ask the agent to run it instead.")
-        assertFalse(has(hasTestTag("composer-input") and hasText("!")))
+        await { has(hasTestTag("composer-input") and hasText("!")) }
     }
 
     /** A new session whose workspace last ran Harness is a Harness draft until a pick says otherwise (contract §3.4): its `!` command
-     * stays in the composer too, no session is created for it, and its chip says the runtime picks. */
-    @Test fun aDraftOnHarnessKeepsItsShellCommandToo() {
+     * opens the session as a shell turn, and its chip says the runtime picks. */
+    @Test fun aDraftOnHarnessSendsItsShellCommandToo() {
         ComposerShell.providers = """[{"slug":"deepseek","label":"DeepSeek","runtime":"claude","presetSlug":"deepseek","engines":["claude","opencode","dsh"],"models":[]}]"""
         ComposerShell.workspace = mapOf("provider" to JsonPrimitive("deepseek"), "lastProvider" to JsonPrimitive("deepseek"),
             "lastEngine" to JsonPrimitive("dsh"), "model" to JsonPrimitive(""))
@@ -162,9 +161,10 @@ class DshSessionShellTest : ComposerShellTest() {
         await { has(hasContentDescription("Model Picked by DeepSeek Harness, effort Default")) }
         compose.onNodeWithTag("composer-input").performTextInput("!ls -la")
         compose.onNodeWithTag("composer-send").performClick()
-        awaitText("DeepSeek Harness sessions don't run ! shell commands — ask the agent to run it instead.")
-        assertTrue("the command stays where it was typed", has(hasTestTag("composer-input") and hasText("!ls -la")))
-        assertFalse(ComposerShell.calls.contains("POST sessions"))
+        await { ComposerShell.body("POST sessions") != null }
+        val created = ComposerShell.body("POST sessions")!!
+        assertEquals(true, created["shell"]?.jsonPrimitive?.booleanOrNull)
+        assertEquals("ls -la", created["prompt"]?.jsonPrimitive?.content)
     }
 
     @Test fun aShellCommandOnAnotherEngineGoesOut() {
