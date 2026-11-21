@@ -2998,6 +2998,58 @@ final class AppModel {
         }
     }
 
+    /// Pause on a started project's row (design §4.3): nothing new starts or merges; runs already going
+    /// finish. No confirmation, because Undo (a Resume) takes it back.
+    func pauseProject(_ row: SessionProjectRow) {
+        guard let api else { return }
+        Task { @MainActor in
+            do { _ = try await api.pauseProject(row.projectId) }
+            catch {
+                showPauseRefusal(error, row: row, resuming: false)
+                return
+            }
+            await projects?.load()
+            showToast(SessionProjectCopy.projectPaused, subtitle: row.title,
+                      detail: SessionProjectCopy.pausedDetail(running: row.runningCount),
+                      icon: "pause.fill", undo: { [weak self] in self?.resumeProject(row) })
+        }
+    }
+
+    /// Resume: the daily limit's episode when that paused it, the owner's pause when that did, both
+    /// when both. Neither raises the limit, and only the limit's says so in a toast.
+    func resumeProject(_ row: SessionProjectRow) {
+        guard let api else { return }
+        let calls = row.resumeCalls
+        Task { @MainActor in
+            do {
+                for call in calls {
+                    switch call {
+                    case .fuse(let episodeID): _ = try await api.resumeProjectFuse(projectID: row.projectId, episodeID: episodeID)
+                    case .owner: _ = try await api.resumeProject(row.projectId)
+                    }
+                }
+            } catch {
+                showPauseRefusal(error, row: row, resuming: true)
+                await projects?.load()
+                return
+            }
+            await projects?.load()
+            if calls.contains(where: { if case .fuse = $0 { return true } else { return false } }) {
+                showToast(SessionProjectCopy.resumed, subtitle: row.title,
+                          detail: SessionProjectCopy.limitNotRaised, icon: "play.fill")
+            }
+        }
+    }
+
+    private func showPauseRefusal(_ error: Error, row: SessionProjectRow, resuming: Bool) {
+        var status: Int?
+        var body: String?
+        if case APIError.http(let code, let text) = error { status = code; body = text }
+        showToast(SessionProjectCopy.pauseRefused(resuming: resuming), subtitle: row.title,
+                  detail: SessionProjectCopy.pauseRefusal(status: status, body: body, resuming: resuming),
+                  tone: .error)
+    }
+
     /// Move a completed/trashed session back to Open (also the Undo target).
     func moveSessionToOpen(_ id: String) {
         guard let api else { return }

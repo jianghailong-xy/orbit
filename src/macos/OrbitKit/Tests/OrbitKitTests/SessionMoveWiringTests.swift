@@ -212,7 +212,7 @@ final class SessionMoveWiringTests: XCTestCase {
         // coordinator, and both row kinds draw the one Move builder.
         let project = code(try appSource("Views/SessionProjectPage.swift"))
         let projectRow = try slice(project, from: "struct SessionProjectListRow: View {", to: "\n}\n")
-        XCTAssertTrue(projectRow.contains("trailing: [SessionRowAction.move { onMove(coordinator) }],"),
+        XCTAssertTrue(projectRow.contains("case .move: return SessionRowAction.move { onMove(coordinator) }"),
                       "the project row has one Move callback, acting on its coordinator")
         XCTAssertEqual(projectRow.components(separatedBy: "onMove(").count - 1, 2,
                        "the swipe and the menu both reach the coordinator through the callback")
