@@ -398,7 +398,7 @@ test('a project’s delivery mode is the owner’s to choose, unlocked by the li
         title: 'the first code task',
         prompt: 'the first code task',
         provider: 'claude',
-        status: RunStatus.SUCCEEDED, finishedAt: new Date(), releaseCause: 'engine_exited',
+        status: RunStatus.SUCCEEDED, releaseCause: 'engine_exited',
         dispatchOrigin: SessionDispatchOrigin.USER,
         startsTaskWork: true,
         isolationStatus: 'worktree',
