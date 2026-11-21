@@ -309,6 +309,12 @@ struct ModelQualityCell: View {
     let quality: ModelQuality
     @State private var showsRaters = false
 
+    #if os(iOS)
+    private static let sourceWidth: CGFloat = 80
+    #else
+    private static let sourceWidth: CGFloat = 70
+    #endif
+
     var body: some View {
         let lines = SubagentSettings.qualityLines(quality)
         if lines.empty {
@@ -323,10 +329,13 @@ struct ModelQualityCell: View {
 
     private func line(_ source: String, _ line: QualityLine) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
+            // One line, never "Sub-/Agents": as wide as the source word at the phone's larger label size.
             Text(source)
                 .font(.orbitLabel)
                 .foregroundStyle(.secondary)
-                .frame(width: 62, alignment: .leading)
+                .lineLimit(1)
+                .fixedSize()
+                .frame(width: Self.sourceWidth, alignment: .leading)
             Text(line.text)
                 .monospacedDigit()
                 .foregroundStyle(line.muted ? .secondary : .primary)
