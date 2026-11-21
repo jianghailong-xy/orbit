@@ -154,6 +154,9 @@ struct SessionFolderPage: View {
     @AppStorage("sessionList.pinnedCollapsed") private var pinnedCollapsed = false
     /// The last grouping drawn and its inputs (see `list(agent:)`).
     @State private var listingMemo = SessionListingMemo<SessionListGrouping>()
+    /// A row being dragged onto the page's head, out of the folder (the Mac's shortcut for Move, see
+    /// `SessionFolderDrop`).
+    @State private var drag = SessionDragState()
 
     private var agent: Agent? { app.agents?.agent(address.agentID) }
     private var folder: SessionFolder? { app.sessionFolders.first { $0.id == address.folderID } }
@@ -236,6 +239,7 @@ struct SessionFolderPage: View {
                         Label("Back", systemImage: "chevron.backward")
                     }
                     .accessibilityLabel("Back to the workspace's sessions")
+                    .modifier(noFolderDropTarget)
                 }
             }
             ToolbarItem(placement: .principal) { title }
@@ -351,6 +355,14 @@ struct SessionFolderPage: View {
         .frame(maxWidth: 240)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isHeader)
+        .modifier(noFolderDropTarget)
+    }
+
+    /// On a folder's page the head — its title and its back button — is where a row dragged out of
+    /// the folder is dropped: No Folder, as the Move panel's first entry. Not on Scheduled runs,
+    /// which nobody files into or out of.
+    private var noFolderDropTarget: NoFolderDropTarget {
+        NoFolderDropTarget(enabled: !address.isScheduledRuns, workspaceID: address.agentID, drag: drag, app: app)
     }
 
     private var titleText: String { address.isScheduledRuns ? ScheduledRunsCopy.title : folder?.name ?? "Folder" }
@@ -444,11 +456,16 @@ struct SessionFolderPage: View {
             { app.openProjectSessions(SessionProjectAddress(projectID: mark.projectId, agentID: address.agentID,
                                                             view: address.view)) }
         }
+        // Somewhere to drop it: the page's head, in the wide shell that draws a back button there.
+        let draggable = SessionFolderDrag.draggable(
+            s, view: address.view, hasProjectMark: mark != nil,
+            dropTargets: !address.isScheduledRuns && !isSearching)
         switch rowNavigation {
         case .selection:
             row.sessionRowActions(s, scope: address.view, onTag: { taggingSession = s },
                                   onShare: { sharingSession = s }, onMove: { movingSession = s },
                                   onSessions: onSessions)
+                .sessionDragSource(s, enabled: draggable, drag: drag)
                 .tag(s.id)
         case .push:
             Button { app.openSessionRow(s) } label: {
@@ -638,5 +655,22 @@ extension View {
     func sessionFolderManagement(renaming: Binding<SessionFolder?>,
                                  deleting: Binding<SessionFolderDeletion?>) -> some View {
         modifier(SessionFolderManagement(renaming: renaming, deleting: deleting))
+    }
+}
+
+/// A folder page's head as the place a row dragged out of the folder is dropped (see
+/// `SessionFolderPage.noFolderDropTarget`).
+private struct NoFolderDropTarget: ViewModifier {
+    let enabled: Bool
+    let workspaceID: String
+    let drag: SessionDragState
+    let app: AppModel
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content.sessionFolderDropTarget(folderID: nil, workspaceID: workspaceID, drag: drag, app: app)
+        } else {
+            content
+        }
     }
 }
