@@ -53,15 +53,15 @@
 -- version meant to. Where the earlier version is recorded as applied, `migrate deploy` does not run it again.
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
 
-SET LOCAL lock_timeout = 0;
+SET lock_timeout = 0;
 
 ALTER TABLE "conversation_turn" VALIDATE CONSTRAINT "conversation_turn_outcome_chk";
 
 ALTER TABLE "session" VALIDATE CONSTRAINT "session_last_turn_outcome_chk";
 
-SET LOCAL lock_timeout TO DEFAULT;
+RESET lock_timeout;
 
-SET LOCAL statement_timeout = 0;
+SET statement_timeout = 0;
 
 UPDATE "session" s
    SET "last_turn_outcome" = CASE
@@ -76,3 +76,5 @@ UPDATE "session" s
      OR (s."status"::text = 'INTERRUPTED' AND s."end_reason" IS NULL)
      OR (s."status"::text = 'SUCCEEDED' AND s."end_reason" = 'task_done')
    );
+
+RESET statement_timeout;

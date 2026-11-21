@@ -60,13 +60,13 @@
 -- deploy` does not run it again.
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
 
-SET LOCAL lock_timeout = 0;
+SET lock_timeout = 0;
 
 ALTER TABLE "session" VALIDATE CONSTRAINT "session_release_cause_chk";
 
-SET LOCAL lock_timeout TO DEFAULT;
+RESET lock_timeout;
 
-SET LOCAL statement_timeout = 0;
+SET statement_timeout = 0;
 
 UPDATE "session" s
    SET "finished_at" = COALESCE(s."finished_at", s."completed_at", s."deleted_at", s."updated_at"),
@@ -86,3 +86,5 @@ UPDATE "session" s
        END)
  WHERE s."status"::text IN ('SUCCEEDED', 'FAILED', 'CANCELLED')
    AND (s."finished_at" IS NULL OR s."release_cause" IS NULL);
+
+RESET statement_timeout;
