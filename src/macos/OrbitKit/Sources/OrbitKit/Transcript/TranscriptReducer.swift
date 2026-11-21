@@ -974,6 +974,18 @@ public struct TranscriptReducer: Sendable, Codable {
             leaving.insert(b, at: 0)
         }
         state.queued += leaving
+        // A message held for its translation that stays in the conversation is skipped below as if
+        // echoed, so its chip follows the listing here: translated while it waits for a runner slot,
+        // it no longer reads "Translating…" until the runner's echo comes (web parity: the snapshot
+        // carries `translation`).
+        let listedTranslation = Dictionary(turns.compactMap { t in t.turnTranslation.map { (t.turnId, $0) } },
+                                           uniquingKeysWith: { _, last in last })
+        for i in state.items.indices {
+            guard case .user(var b) = state.items[i], b.pending, let id = b.turnId,
+                  let translation = listedTranslation[id], b.translation != translation else { continue }
+            b.translation = translation
+            state.items[i] = .user(b)
+        }
         // Every row the tail drew before this listing, the accepted head's first — matched below
         // whichever of the two a turn has moved between.
         let previous = state.accepted + state.queued
