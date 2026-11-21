@@ -688,6 +688,9 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
     nested: ['approvalId'],
   },
   'GET /sessions/:id/background': { request: (of) => ({ params: { id: of.sessionId } }) },
+  'GET /sessions/:id/background/jobs/:jobId/tail': {
+    request: (of) => ({ params: { id: of.sessionId, jobId: TENANT_ISOLATION_BG_JOB_ID } }),
+  },
   'POST /sessions/:id/background/jobs/:jobId/stop': {
     request: (of) => ({ params: { id: of.sessionId, jobId: TENANT_ISOLATION_BG_JOB_ID }, body: {} }),
   },

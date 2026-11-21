@@ -245,7 +245,7 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
     // A reply of the agent's, which Settings › Translation can translate again (reply-translation.ts).
     await db.runEvent.create({ data: { sessionId, seq: 2, type: 'assistant', payload: { text: 'the census replied' } } });
     // A bg_run job still running, as runner-go background_job.go reports one: the launch pair and its `running` record,
-    // so POST /background/jobs/:jobId/stop names a job the session ran (TENANT_ISOLATION_BG_JOB_ID).
+    // so POST /background/jobs/:jobId/stop and GET .../tail name a job the session ran (TENANT_ISOLATION_BG_JOB_ID).
     const bgJob = TENANT_ISOLATION_BG_JOB_ID;
     await db.runEvent.create({ data: { sessionId, seq: 3, type: 'tool_use', payload: {
       id: bgJob, name: 'Bash', input: { command: 'sleep 600', run_in_background: true },

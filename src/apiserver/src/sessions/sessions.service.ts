@@ -1,6 +1,8 @@
 import { readSessionCoordinatorHandoffs } from '../projects/coordinator-handoff';
-import type { BackgroundJobStopResponse, HelpAskMarker, SubagentRunView, WorkflowRunView } from '@orbit/shared';
-import { BG_JOB_STOPPED_BY_OWNER, BG_OWNER_STOP_V1 } from '@orbit/shared';
+import type { BackgroundJobStopResponse, BackgroundJobTailResponse, HelpAskMarker, SubagentRunView, WorkflowRunView } from '@orbit/shared';
+import { BG_JOB_STOPPED_BY_OWNER, BG_JOB_TAIL_MAX_BYTES, BG_OUTPUT_TAIL_V1, BG_OWNER_STOP_V1 } from '@orbit/shared';
+import { RunnerHints } from '../realtime/runner-hints';
+import { boundTailLines } from './background-job-tail';
 import { modelLabels, subagentRunView } from '../runner-api/subagent-run';
 import { WORKFLOW_RUN_VIEW_SELECT, workflowRunView } from '../runner-api/workflow-run';
 import { checkedWorkSubdir } from './work-subdir';
@@ -14,6 +16,7 @@ import {
 import {
   BadRequestException,
   ConflictException,
+  GatewayTimeoutException,
   ForbiddenException,
   HttpException,
   HttpStatus,
@@ -1134,6 +1137,12 @@ export class SessionsService {
      * undefined at its decoration. Absent in the specs that build this service by hand.
      */
     @Optional() private readonly moduleRef?: ModuleRef,
+    /**
+     * The runner link's NATS connection (realtime/runner-hints.ts), which asks a session's runner for the newest lines
+     * of a bg_run job (readBackgroundJobTail). Absent in the specs that build this service by hand, where that read
+     * answers RUNNER_LINK_UNAVAILABLE.
+     */
+    @Optional() private readonly runnerHints?: RunnerHints,
   ) {
     this.files = files ?? new FilesService(prisma);
   }
@@ -6491,6 +6500,82 @@ export class SessionsService {
     `;
     this.realtime.notifyRunnerWake(session.assignedRunnerId);
     return { jobId, status: 'stopping' };
+  }
+
+  /**
+   * The newest lines of one bg_run job's output (GET /sessions/:id/background/jobs/:jobId/tail), read just now by the
+   * runner hosting the session from the job's output file and carried back over the runner link: a NATS request on
+   * the runner's subject that the link gateway relays as a BackgroundJobTailRequest (RunnerHints.backgroundJobTail).
+   * At most `lines` (≤ BG_JOB_TAIL_MAX_LINES) lines and BG_JOB_TAIL_MAX_BYTES, without colour codes (boundTailLines).
+   *
+   * 404 for another owner's session and for a job id the session never ran. Then, before the runner is asked:
+   * 409 RUNNER_CANNOT_READ_JOB_OUTPUT when its runner does not declare BG_OUTPUT_TAIL_V1, 503 RUNNER_OFFLINE when it
+   * is not online, 503 RUNNER_LINK_UNAVAILABLE when this server has no link to ask over. From the asking: 503
+   * RUNNER_OFFLINE when no gateway holds a connection of it, 504 RUNNER_DID_NOT_ANSWER when no answer came in time, and
+   * 404 BACKGROUND_JOB_OUTPUT_GONE when the runner no longer hosts the job (its session ended there): the client then
+   * shows the end of the output the job's wake carried.
+   */
+  async readBackgroundJobTail(ownerId: string, id: string, jobId: string, lines: number): Promise<BackgroundJobTailResponse> {
+    const session = await this.prisma.session.findFirst({
+      where: { id, ownerId },
+      select: {
+        id: true, status: true, assignedRunnerId: true,
+        assignedRunner: { select: { capabilities: true, status: true, ...RUNNER_BEATS } },
+      },
+    });
+    if (!session) throw new NotFoundException('session not found');
+    const job = (await this.deriveSessionBackground(session)).find((shell) => shell.kind === 'job' && shell.shellId === jobId);
+    if (!job) {
+      throw new NotFoundException({ code: 'BACKGROUND_JOB_NOT_FOUND', message: `This session has no background job ${jobId}.` });
+    }
+    const gone = () => new NotFoundException({
+      code: 'BACKGROUND_JOB_OUTPUT_GONE',
+      message: `The runner no longer holds the output of background job ${jobId}; the end of it is in the job's wake.`,
+    });
+    const offline = () => new ServiceUnavailableException({
+      code: 'RUNNER_OFFLINE',
+      message: `The runner hosting this session is offline, so the output of background job ${jobId} cannot be read now.`,
+    });
+    const runner = session.assignedRunner;
+    if (!session.assignedRunnerId || !runner) throw gone();
+    if (!runner.capabilities.includes(BG_OUTPUT_TAIL_V1)) {
+      throw new ConflictException({
+        code: 'RUNNER_CANNOT_READ_JOB_OUTPUT',
+        message: `The runner hosting this session is too old to show a background job's output in the app: it does not declare ${BG_OUTPUT_TAIL_V1}. Update the runner; the end of the output arrives with the job's wake.`,
+      });
+    }
+    if (!runnerIsOnline(runner)) throw offline();
+    const answer = await this.runnerHints?.backgroundJobTail(session.assignedRunnerId, session.id, jobId, lines, BG_JOB_TAIL_MAX_BYTES);
+    if (answer === undefined || answer === 'unavailable') {
+      throw new ServiceUnavailableException({
+        code: 'RUNNER_LINK_UNAVAILABLE',
+        message: 'This server cannot reach runners over the runner link right now, so a background job\'s output cannot be read.',
+      });
+    }
+    if (answer === null || answer.outcome === 'TIMEOUT') {
+      throw new GatewayTimeoutException({
+        code: 'RUNNER_DID_NOT_ANSWER',
+        message: `The runner hosting this session did not answer in time with the output of background job ${jobId}.`,
+      });
+    }
+    if (answer.outcome === 'NO_CONNECTION') throw offline();
+    if (answer.outcome === 'UNSUPPORTED') {
+      throw new ConflictException({
+        code: 'RUNNER_CANNOT_READ_JOB_OUTPUT',
+        message: `The runner hosting this session is connected without ${BG_OUTPUT_TAIL_V1}, so it cannot show a background job's output in the app. Update the runner.`,
+      });
+    }
+    if (answer.outcome !== 'OK') throw gone();
+    const bounded = boundTailLines(answer.text, lines);
+    return {
+      jobId,
+      status: answer.status,
+      exitCode: answer.exitCode,
+      lines: bounded.lines,
+      truncated: answer.truncated || bounded.cut,
+      outputBytes: answer.outputBytes,
+      readAt: new Date().toISOString(),
+    };
   }
 
   /**
