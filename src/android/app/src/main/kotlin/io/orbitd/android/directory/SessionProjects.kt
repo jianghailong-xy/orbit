@@ -37,8 +37,13 @@ data class ProjectPause(
     val pausedAt: String? = null, val pausedReason: String? = null,
     val fusePaused: Boolean = false, val fuseEpisodeId: String? = null, val fuseObserved: Int? = null, val fuseLimit: Int? = null,
 ) {
+    /** Paused either way: by you (or the older Automatic switch), or at the daily limit. */
+    val paused: Boolean get() = pausedAt != null || fusePaused
     companion object {
         val NONE = ProjectPause()
+        /** Whether the sidebar row says the project has started: `startedAt` null is one nobody has; a row without the field (an
+         * older server) is taken as started, since the server refuses a Pause it cannot take. */
+        fun started(summary: JsonObject?): Boolean = summary == null || !summary.containsKey("startedAt") || summary.text("startedAt") != null
         fun of(summary: JsonObject?): ProjectPause {
             if (summary == null) return NONE
             val fuse = summary.obj("fuse")
@@ -56,7 +61,10 @@ data class SessionProjectRow(
     val coordinator: DirectorySession?, val folderId: String?, val pinnedAt: String?, val lastTurnAt: String?, val createdAt: String?,
     val needsYou: Boolean, val running: Boolean, val jobs: Boolean, val indicator: Indicator?, val line: SessionLine, val target: Target,
     val taskCounts: ProjectTaskCounts?, val runningCount: Int, val pause: ProjectPause = ProjectPause.NONE,
+    val started: Boolean = true, val pauseLine: PauseLine? = null,
 ) {
+    /** Which pause the second line says (design §4.2 2a, 2b), or null when it says something else. */
+    enum class PauseLine { DAILY_LIMIT, OWNER }
     enum class Indicator { NEEDS_YOU, RUNNING, JOBS }
     /** Whether the row's menu leads with Complete (design §4.3, owner 2026-11-07; iOS `offersComplete(in:)`): only a DONE or
      * CANCELLED project, and only in Open, where there is something left to move to Completed. */
@@ -188,12 +196,22 @@ object SessionProjectGrouping {
             // The row's `mainBranch` (`GET /projects/sidebar`) names the merge and the sync.
             val landing = SessionProjectCopy.landingLine(summary?.obj("integration"), now, RunSettings.mainBranchName(summary?.text("mainBranch")))
             val held = summary?.obj("attention")?.obj("coordinatorItems")
+            val pause = ProjectPause.of(summary)
+            val pauseLineKind = if (pause.fusePaused) SessionProjectRow.PauseLine.DAILY_LIMIT else if (pause.pausedAt != null) SessionProjectRow.PauseLine.OWNER else null
+            val running = summary?.obj("buckets")?.number("running") ?: 0
+            val pauseSaid = when (pauseLineKind) {
+                SessionProjectRow.PauseLine.DAILY_LIMIT -> SessionLine(ProjectPauseCopy.pausedAtLimit(pause.fuseObserved, pause.fuseLimit), SessionLine.Tone.WARNING)
+                SessionProjectRow.PauseLine.OWNER -> SessionLine(ProjectPauseCopy.pausedByYou(running, ProjectAttention.elapsedLabel(pause.pausedAt, now)), SessionLine.Tone.PREVIEW)
+                null -> null
+            }
             val (selected, target) = when {
                 coordinator != null && coordinatorLine?.tone == SessionLine.Tone.APPROVAL -> coordinatorLine to SessionProjectRow.Target.Session(coordinator.id)
                 waiting.isNotEmpty() -> waiting.first().let { lead ->
                     SessionLine(SessionProjectCopy.waitingSession(lines.getValue(lead.id).text, lead.title.orEmpty()), SessionLine.Tone.APPROVAL) to
                         SessionProjectRow.Target.Session(lead.id)
                 }
+                // 2a and 2b (design §4.2, owner 2026-11-19): a pause outranks everything but what waits on you; the daily limit outranks yours.
+                pauseSaid != null -> pauseSaid to (coordinator?.let { SessionProjectRow.Target.Session(it.id) } ?: SessionProjectRow.Target.Project(membership.projectId))
                 coordinator != null && held != null -> SessionLine(listOfNotNull(SessionProjectCopy.coordinatorLead(held.text("leadKind")),
                     ProjectAttention.elapsedLabel(held.text("oldestWaitingSince"), now)).joinToString(" · "), SessionLine.Tone.RUNNING) to
                     SessionProjectRow.Target.Session(coordinator.id)
@@ -212,7 +230,8 @@ object SessionProjectGrouping {
                 members, content.size, coordinator, rowFolder, coordinator?.pinnedAt, latest.lastTurnAt ?: latest.createdAt, coordinator?.createdAt ?: latest.createdAt,
                 needsYou, runningCount > 0, jobs, when { needsYou -> SessionProjectRow.Indicator.NEEDS_YOU; runningCount > 0 -> SessionProjectRow.Indicator.RUNNING
                     jobs -> SessionProjectRow.Indicator.JOBS; else -> null }, selected, target, counts,
-                if (summary != null) summary.obj("buckets")?.number("running") ?: 0 else runningCount, ProjectPause.of(summary))
+                if (summary != null) summary.obj("buckets")?.number("running") ?: 0 else runningCount, pause, ProjectPause.started(summary),
+                if (selected === pauseSaid) pauseLineKind else null)
         }
         val entries = (loose.map { SessionProjectEntry.Session(it) } + rows.map { SessionProjectEntry.Project(it) })
             .map { it to instant(it.lastTurnAt ?: it.createdAt) }
@@ -395,4 +414,71 @@ internal fun rememberProjectSidebar(app: OrbitApplication, handle: SessionHandle
         catch (_: Exception) { }
     }
     return rows
+}
+
+/** The words of a project row's Pause and Resume (design §4.2 2a/2b, §4.3, §6; owner 2026-11-19). Kept apart from [SessionProjectCopy],
+ * whose every word is held to OrbitKit's Swift, until iOS's own copy lands. */
+object ProjectPauseCopy {
+    const val pause = "Pause"
+    const val resume = "Resume"
+
+    /** 2a: the daily limit's pause, "Paused at the daily limit · 6/6 today"; a server that sent no reading says the sentence alone. */
+    fun pausedAtLimit(observed: Int?, limit: Int?) =
+        if (observed != null && limit != null) "Paused at the daily limit · $observed/$limit today" else "Paused at the daily limit"
+    /** 2b: a pause of yours — while runs still finish, how many; else since when (`2h`, from `pausedAt`). */
+    fun pausedByYou(running: Int, ago: String?) = when {
+        running == 1 -> "Paused · 1 run finishing"
+        running > 1 -> "Paused · $running runs finishing"
+        else -> listOfNotNull("Paused", ago).joinToString(" · ")
+    }
+
+    /** The toast after Pause: what still moves, and what no longer does. */
+    const val pausedTitle = "Project paused"
+    fun pausedDetail(running: Int) = when {
+        running == 1 -> "1 run still going · nothing new starts or merges"
+        running > 1 -> "$running runs still going · nothing new starts or merges"
+        else -> "Nothing new starts or merges"
+    }
+    const val undo = "Undo"
+    const val undoDescription = "Resume the project"
+    /** After a Resume at the daily limit: approved to spend again, the limit not raised. */
+    const val resumedTitle = "Resumed"
+    const val limitNotRaised = "The daily limit was not raised · Change on the project page"
+    fun couldNot(resume: Boolean) = if (resume) "Couldn't resume the project" else "Couldn't pause the project"
+    /** The refusal in words, never a code: the owner's 403, a project nobody has started, else the server's own message. */
+    fun refusal(resume: Boolean, status: Int?, code: String?, message: String?): String? = when {
+        status == 403 -> "Only the project's owner can ${if (resume) "resume" else "pause"} it"
+        code == "PROJECT_NOT_STARTED" -> "The project hasn't started yet"
+        else -> message?.takeIf { it.isNotBlank() }
+    }
+}
+
+/** One press a project row can take (design §4.3). */
+enum class ProjectRowAction(val label: String) {
+    PAUSE(ProjectPauseCopy.pause), RESUME(ProjectPauseCopy.resume), COMPLETE(SessionProjectCopy.complete),
+    PIN(SessionProjectCopy.pin), UNPIN(SessionProjectCopy.unpin), MOVE(SessionProjectCopy.move)
+}
+
+/** The actions of a project row by its state (design §4.3, owner 2026-11-19; iOS `SessionProjectRowActions`). The first right-swipe
+ * slot is the one state change the project can take now; Pin and Move act on the coordinator, so a project with none has neither. */
+object ProjectRowActions {
+    /** A full swipe fires nothing on a project row: dragged to the end it stretches and springs back, and every action is a press. */
+    const val fullSwipeFires = false
+
+    /** The state change: Complete for a finished project in Open, Resume for a paused one, Pause for a started one that runs; none for
+     * a project nobody has started, which opens a card and spends money, so it stays in the conversation. */
+    fun stateAction(row: SessionProjectRow, view: SessionView): ProjectRowAction? = when {
+        row.offersComplete(view) -> ProjectRowAction.COMPLETE
+        row.status != "OPEN" -> null
+        row.pause.paused -> ProjectRowAction.RESUME
+        row.started -> ProjectRowAction.PAUSE
+        else -> null
+    }
+    private fun pin(row: SessionProjectRow) = row.coordinator?.let { if (it.pinnedAt != null) ProjectRowAction.UNPIN else ProjectRowAction.PIN }
+
+    fun swipeRight(row: SessionProjectRow, view: SessionView) = listOfNotNull(stateAction(row, view), pin(row))
+    fun swipeLeft(row: SessionProjectRow) = listOfNotNull(if (row.coordinator != null) ProjectRowAction.MOVE else null)
+    /** The long press's Pin and Move group, led by Pause or Resume; Complete leads the whole menu apart, as before. */
+    fun menuGroup(row: SessionProjectRow, view: SessionView) =
+        listOfNotNull(stateAction(row, view)?.takeIf { it != ProjectRowAction.COMPLETE }, pin(row), if (row.coordinator != null) ProjectRowAction.MOVE else null)
 }
