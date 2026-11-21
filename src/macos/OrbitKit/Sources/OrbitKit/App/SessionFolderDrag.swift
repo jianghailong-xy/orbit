@@ -45,7 +45,7 @@ public enum SessionFolderDrag {
     /// drag carries and what the row's Move files (the members follow). A project with no
     /// coordinator has no Move, so no drag.
     public static func draggable(projectCoordinator: Session?, view: SessionView, dropTargets: Bool) -> Bool {
-        guard let projectCoordinator else { return false }
+        guard projectCoordinator != nil else { return false }
         guard dropTargets, view != .trash else { return false }
         return true
     }
