@@ -3243,7 +3243,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '1390_project_setting_change',
       // 1400 adds three nullable columns, a foreign key and a partial index on owner_request_secret and account_secret;
       // no row is written, and no preserved relation, trigger, function or DONE fence changes.
-      '1400_owner_secret_saved_links'],
+      '1400_owner_secret_saved_links',
+      // 1403 widens session_release_cause_chk with engine_failed and end_not_honored (NOT VALID) and 1404 validates it;
+      // no row is written. Session is not a preserved relation, and no trigger, function or DONE fence changes.
+      '1403_session_release_failure_causes',
+      '1404_session_release_failure_causes_validate'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
