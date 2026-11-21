@@ -160,6 +160,20 @@ export function failedReleaseSql(column: string): Prisma.Sql {
 }
 
 /**
+ * The causes of a release that finished the work (decision D5 of docs/session-three-state-design.md: what became of
+ * the work is read off the release cause, not off the terminal status value): the end of a task that is DONE, and a
+ * LANDING container's landing settling. Every other release that was not a failure is a stop: one somebody asked for
+ * (its end reason says so) or, with none recorded, one nobody asked for. `engine_exited` is such a stop whatever word
+ * the runner reported with it: a runner's SUCCEEDED with no end requested was never evidence that the work finished.
+ */
+export const WORK_FINISHED_RELEASE_CAUSES = ['task_done', 'landing_settled'] as const satisfies readonly SessionReleaseCause[];
+
+/** Whether a release with this cause finished the work. A held session (no cause) has not been released. */
+export function isWorkFinishedRelease(releaseCause: string | null | undefined): boolean {
+  return releaseCause != null && (WORK_FINISHED_RELEASE_CAUSES as readonly string[]).includes(releaseCause);
+}
+
+/**
  * The cause of a release somebody asked for: the end reason the request recorded, or `cancelled` when
  * the request recorded none (a cancel with no reason, or a reason this build does not know).
  */
@@ -184,4 +198,14 @@ export function finalizeReleaseCause(
 ): SessionReleaseCause {
   if (current.cancelRequestedAt) return releaseCauseOfEndReason(current.endReason);
   return reported === 'FAILED' ? 'engine_failed' : 'engine_exited';
+}
+
+/**
+ * Whether this finalize is a runner reporting success with no end requested: released `engine_exited`, which is a
+ * stop and not finished work (isWorkFinishedRelease), whatever the runner said. No current runner reports it (the
+ * runner says SUCCEEDED only for an `end` turn, which the server writes with the end request); the finalize logs it,
+ * so that one in the field is seen.
+ */
+export function reportsSuccessWithNoEnd(current: { cancelRequestedAt: Date | null }, reported: string): boolean {
+  return !current.cancelRequestedAt && reported === 'SUCCEEDED';
 }

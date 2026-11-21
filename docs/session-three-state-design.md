@@ -125,7 +125,7 @@ holds the stored status to it: `FAILED` exactly when the cause is a failure.
 | `task_cancelled`, `ended` | no | an end for a cancelled task; a person or agent ends the session | `CANCELLED` |
 | `completed`, `deleted`, `cancelled` | no | a person completes, deletes or stops it, and it settles as asked (the runner's finalize, or the end found it still queued); `cancelled` too for an end with no reason | `CANCELLED` |
 | `idle`, `orphaned` | no | legacy end reasons: no writer, old rows only | as stored |
-| `engine_exited` | no | the runner finalized with no end requested and reported `SUCCEEDED` or `CANCELLED` | the runner's |
+| `engine_exited` | no | the runner finalized with no end requested and reported `SUCCEEDED` or `CANCELLED` | the runner's word, stored; no reader consults it (see below) |
 | `landing_settled` | no | a landing container is created settled, or settles | `SUCCEEDED` or `CANCELLED` |
 | `turn_failed` | yes | the runner reports a failed turn; the reaper's API-error backstop | `FAILED` |
 | `runner_lost` | yes | the runner holding a running turn went offline (reaper) | `FAILED` |
@@ -133,6 +133,17 @@ holds the stored status to it: `FAILED` exactly when the cause is a failure.
 | `engine_failed` | yes | the runner finalized with no end requested and reported `FAILED` | `FAILED` |
 | `end_not_honored` | yes | an end was asked for and the runner never honoured it: the reaper releases it once the cancel grace runs out (`end_reason` keeps the end that was asked for) | `FAILED` |
 | `import_failed` | yes | the runner could not import the transcript the session was made from | `FAILED` |
+
+**What became of the work** (decision D5, plan step 4.6, 2026-11-21) is read off the cause too: the work finished
+exactly when the cause is `task_done` (or `landing_settled` for a LANDING container; `WORK_FINISHED_RELEASE_CAUSES`,
+`isWorkFinishedRelease`). Every other release that is not a failure is a stop: one somebody asked for when an end reason
+is recorded, and otherwise one nobody asked for. So the four readers that told `SUCCEEDED` from `CANCELLED` among such
+releases (the retry policy's `autoRunEnd`, the retry brake's count of unrequested ends, a schedule run's `landRun`, and
+`mergeAfterOwnTurn`) read an `engine_exited` release as an unrequested stop, whatever word the runner reported with it:
+the runner's `SUCCEEDED` there is no longer consulted. Until 2026-11-21 those readers took `SUCCEEDED` + `engine_exited`
+for finished, landed or merged work. Production then held 318 such rows (created 2026-06-19 to 06-21 by 1262's
+backfill, all on DONE tasks, none reachable by the four readers), and the finalize now logs one if a runner ever reports
+it.
 
 Before 1403, `engine_exited` was also written for a `FAILED` finalize, and the end's own cause for
 the reaper's `FAILED` "cancel not honored"; 1405 rewrote those rows (and the `FAILED` rows 1262 gave
@@ -402,6 +413,11 @@ Decided on 2026-11-19, each as recommended below: **D1**, **D5** and **D8**. The
   or have task code read `releaseCause` and the turn outcome on the session that carried the
   attempt. The second is far smaller and keeps "one released session is one finished attempt".
   Recommended: the second now; `TaskAttempt` as its own project.
+
+  As built in plan step 4.6 (2026-11-21): a failure is a failure cause (`isFailedRelease`), the work finished exactly
+  when the cause is `task_done` (`isWorkFinishedRelease`; `landing_settled` for a landing container), and any other
+  release is a stop, asked for when an end reason is recorded. For `engine_exited` the runner's status word is stored
+  but no longer consulted (§4.2).
 - **D6. Storage collapse.** Defer the decision to after stage 5.
 - **D7. Published wait condition.** `SESSION_RUN_TERMINAL` keeps its name and comes to mean
   "released". Recommended: yes; renaming it breaks stored watches.

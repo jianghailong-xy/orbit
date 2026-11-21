@@ -320,6 +320,7 @@ import {
   isHeld,
   isHeldPastClaim,
   isReleased,
+  isWorkFinishedRelease,
   releaseCauseOfEndReason,
 } from '../common/session-release';
 import { GENERATING_SESSION_FILTER, isSessionGenerating } from '../common/session-generating';
@@ -9612,8 +9613,9 @@ export class SessionsService {
    *
    * - nothing owed → nothing is written;
    * - the turn that ended did not succeed (`turnSucceeded` false: it failed or was stopped), or the
-   *   session ended FAILED or CANCELLED → the request is dropped: the turn that asked did not finish, so
-   *   its work is not merged on its word;
+   *   session was released for anything but its work finishing (a failure, a stop, an engine that exited by
+   *   itself; isWorkFinishedRelease) → the request is dropped: the turn that asked did not finish, so its
+   *   work is not merged on its word;
    * - another turn already running (a queued follow-up started) → nothing is written, and that turn's
    *   end asks again;
    * - a merge already in flight, or the work already in the target → the request is answered by it, and
@@ -9634,7 +9636,7 @@ export class SessionsService {
       const session = await tx.session.findUniqueOrThrow({
         where: { id },
         select: {
-          ownerId: true, status: true, finishedAt: true, cancelRequestedAt: true, mergeStatus: true,
+          ownerId: true, status: true, finishedAt: true, releaseCause: true, cancelRequestedAt: true, mergeStatus: true,
           mergeAfterTurnAt: true, mergeAfterTurnTarget: true,
         },
       });
@@ -9644,7 +9646,9 @@ export class SessionsService {
         await tx.session.update({ where: { id }, data });
         wrote = true;
       };
-      if (!turnSucceeded || session.status === RunStatus.FAILED || session.status === RunStatus.CANCELLED) {
+      // Released for anything but its work finishing (decision D5: the release cause, never the terminal status): a
+      // failure, a stop, or an engine that exited by itself.
+      if (!turnSucceeded || (isReleased(session) && !isWorkFinishedRelease(session.releaseCause))) {
         await clear();
         return 'DROPPED' as const;
       }

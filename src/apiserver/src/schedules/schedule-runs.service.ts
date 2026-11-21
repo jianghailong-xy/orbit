@@ -94,7 +94,7 @@ import {
   runSessionScheduleId,
   type ScheduleActor,
 } from './schedules.service';
-import { failedReleaseFilter, heldFilter, isFailedRelease, isReleased } from '../common/session-release';
+import { failedReleaseFilter, heldFilter, isFailedRelease, isReleased, isWorkFinishedRelease } from '../common/session-release';
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -722,7 +722,10 @@ export class ScheduleRunsService {
 
   private async landRun(run: ScheduleRun): Promise<void> {
     const session = run.sessionId ? await this.prisma.session.findUnique({ where: { id: run.sessionId } }) : null;
-    if (!session || session.deletedAt || session.status === RunStatus.FAILED || session.status === RunStatus.CANCELLED
+    // Released for anything but its work finishing (decision D5: the release cause, never the terminal status) is a run
+    // that ended unsuccessfully, an engine that exited by itself included; INTERRUPTED is a held run stopped mid-turn.
+    const released = session != null && isReleased(session);
+    if (!session || session.deletedAt || (released && !isWorkFinishedRelease(session.releaseCause))
         || session.status === RunStatus.INTERRUPTED || session.cancelRequestedAt) {
       await this.settleLanding(run.id, 'FAILED', null, 'The run session ended unsuccessfully; nothing was landed.');
       return;
@@ -730,8 +733,7 @@ export class ScheduleRunsService {
     // The tool reports during the turn. A commit and its final worktree report may still be on the way, and
     // AWAITING_INPUT says only that the turn is over: a background job, a subagent or an engine turn still
     // executing can commit more. The worker's next pass looks again; the run limit bounds the wait.
-    if ((session.status !== RunStatus.AWAITING_INPUT && session.status !== RunStatus.SUCCEEDED)
-        || isSessionExecuting(session)) {
+    if ((!released && session.status !== RunStatus.AWAITING_INPUT) || isSessionExecuting(session)) {
       // Reporting does not exempt the rest of a LAND run from its run limit.
       const opening = await this.prisma.conversationTurn.findFirst({
         where: { sessionId: session.id, clientTurnId: openingTurnKey(session.id) }, select: { deliveredAt: true },

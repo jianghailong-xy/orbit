@@ -202,6 +202,7 @@ import {
 import { OPEN_SESSION_STATUSES, statusAfterTurnCompleted } from '../common/session-scheduling';
 import {
   finalizeReleaseCause,
+  reportsSuccessWithNoEnd,
   HELD_SESSION_STATUSES,
   RELEASED_SESSION_STATUSES,
   heldFilter,
@@ -10235,6 +10236,11 @@ export class RunnerApiController {
       });
       const retryAt = quotaRetryAt ?? signInRetryAt ?? current.retryAt;
       if (res.count === 0) return { finalized: false, effectiveStatus, keepCheckout, retryAt };
+      // A runner that reports success on a finalize nobody asked for: released engine_exited, which no reader takes for
+      // finished work (common/session-release.ts isWorkFinishedRelease). No current runner sends it; said here if one does.
+      if (reportsSuccessWithNoEnd(current, dto.status)) {
+        this.logger.warn(`session ${sessionId}: the runner reported success with no end requested; released engine_exited`);
+      }
       // This finish may be the one a DONE task's identity was waiting for: its work has stopped moving
       // once every work session has finished (§10.5 O-L4 3).
       const delivered = await settleDeliveredIdentityAfterFinish(tx, current);
