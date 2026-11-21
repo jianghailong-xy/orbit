@@ -1012,40 +1012,6 @@ struct AgentPanes: View {
                                                          recaps: inputs.recaps) })
     }
 
-    private func projectRow(_ row: SessionProjectRow) -> some View {
-        let address = SessionProjectAddress(projectID: row.projectId, agentID: agent.id, view: view)
-        let onOpen = {
-            switch row.target {
-            case .session(let id):
-                if let session = (app.sessions + agents.allSessions).first(where: { $0.id == id }) {
-                    app.openProjectMember(session, push: rowNavigation == .push)
-                }
-            case .project: app.openProjectSessions(address)
-            }
-        }
-        // A phone opens the coordinator's conversation, not the project's sessions page, which is
-        // the button in that conversation's navigation bar (owner 2026-11-11, board 5). The iPad's
-        // column keeps the page. A row whose line says a member is waiting on you opens that member
-        // instead, at its card, on both (owner 2026-11-14).
-        let onTap = {
-            switch SessionProjectSheet.rowTap(row, held: app.sessions + agents.allSessions, push: rowNavigation == .push) {
-            case .waitingMember(let member): app.openWaitingMember(member, project: address, push: rowNavigation == .push)
-            case .coordinator(let coordinator): app.openProjectMember(coordinator, push: true)
-            case .sessions: app.openProjectSessions(address)
-            }
-        }
-        // Dragged by its coordinator, as the row's Move files it (members follow).
-        let draggable = rowNavigation == .selection && SessionFolderDrag.draggable(
-            projectCoordinator: row.coordinator, view: view,
-            dropTargets: !isSearching && SessionFolderGrouping.listShowsFolders(view: view, byTag: tagFilter != nil || groupByTag)
-                && app.sessionFolders.contains { $0.workspaceId == agent.id })
-        return SessionProjectRowView(row: row, onOpen: onTap)
-        .sessionDragSource(row.coordinator, enabled: draggable, drag: drag)
-        .sessionProjectRowActions(row, view: view, onOpen: onOpen, onSessions: { app.openProjectSessions(address) }, onProject: {
-            app.openProject(row.projectId)
-        }, onMove: { if let coordinator = row.coordinator { movingSession = coordinator } })
-    }
-
     /// One folder's row: the glyph, name, count and the state it reports, as the whole row (the
     /// page it opens is pushed by the container's own navigation — a tap lands on `AppModel`'s one
     /// entry point for both shells). A long press offers the two management acts (§3.4) — on the
@@ -1133,50 +1099,21 @@ struct AgentPanes: View {
     /// destination value on the compact stack. There is no third state for "highlighted but not
     /// openable" to live in: the highlight IS the pushed console in both shapes, so a tap always
     /// either selects a row that isn't the page showing or pushes the one that is.
+    ///
+    /// The entry itself — a project's row or a plain session's — is `SessionListEntryRow`, the one
+    /// builder a folder's page also draws its rows through.
     @ViewBuilder private func listRow(_ s: Session, projects: [String: SessionProjectRow],
                                       marks: [String: SessionProjectMark]) -> some View {
-        if let project = projects[s.id] {
-            projectRow(project)
-        } else {
-            sessionRow(s, mark: marks[s.id])
-        }
+        SessionListEntryRow(
+            session: s, projects: projects, marks: marks, view: view, agentID: agent.id,
+            navigation: rowNavigation, drag: drag, dropTargets: folderDropTargets,
+            onTag: { taggingSession = $0 }, onShare: { sharingSession = $0 }, onMove: { movingSession = $0 })
     }
 
-    /// `mark`: the project of a member whose project has no row in this workspace (owner 2026-11-07,
-    /// option A) — drawn on the row, and the long press's Sessions opens that project's sessions.
-    @ViewBuilder private func sessionRow(_ s: Session, mark: SessionProjectMark? = nil) -> some View {
-        let row = AgentSessionRow(session: s, deleted: view == .trash, projectMark: mark)
-        let onSessions: (() -> Void)? = mark.map { mark in
-            { app.openProjectSessions(SessionProjectAddress(projectID: mark.projectId, agentID: agent.id, view: view)) }
-        }
-        // Somewhere to drop it: the workspace's folder rows over the list (none in Trash or by tag).
-        let draggable = SessionFolderDrag.draggable(
-            s, view: view, hasProjectMark: mark != nil,
-            dropTargets: !isSearching && SessionFolderGrouping.listShowsFolders(view: view, byTag: tagFilter != nil || groupByTag)
-                && app.sessionFolders.contains { $0.workspaceId == agent.id })
-        switch rowNavigation {
-        case .selection:
-            row.sessionRowActions(s, scope: view, onTag: { taggingSession = s }, onShare: { sharingSession = s },
-                                  onMove: { movingSession = s }, onSessions: onSessions)
-                .sessionDragSource(s, enabled: draggable, drag: drag)
-                .tag(s.id)
-        case .push:
-            // A `Button`, not a `NavigationLink(value:)`: the link's disclosure indicator has no
-            // usable hiding place on iOS 17/18 (see `AppModel.push`). `.foregroundStyle(.primary)`:
-            // a button's label otherwise inherits the accent tint, and the rows are unchanged by
-            // design (only the wrapper is new). It presses through `openSessionRow`, the model's
-            // one row entry, which also lands on the owner item the row's own line names — the
-            // three-column rows get the same act from the selection setter they write.
-            Button { app.openSessionRow(s) } label: {
-                row.foregroundStyle(.primary)
-            }
-            // The row's actions attach to the *row*, not to what the row is made of: `.swipeActions`
-            // and `.contextMenu` are read off the view the `List` hosts as its row, and a `Button`
-            // does not pass them up from its label — which is where this wrapper used to leave them,
-            // and why a swipe or a long press on a compact session row did nothing.
-            .sessionRowActions(s, scope: view, onTag: { taggingSession = s }, onShare: { sharingSession = s },
-                               onMove: { movingSession = s }, onSessions: onSessions)
-        }
+    /// Somewhere to drop a row: this workspace's folder rows over the list (none in Trash or by tag).
+    private var folderDropTargets: Bool {
+        !isSearching && SessionFolderGrouping.listShowsFolders(view: view, byTag: tagFilter != nil || groupByTag)
+            && app.sessionFolders.contains { $0.workspaceId == agent.id }
     }
 
     /// New Folder…: make the folder in this workspace and keep it, so its row draws at
@@ -1199,7 +1136,12 @@ struct AgentPanes: View {
     /// draws, so the ForEach closure holds no branch of its own.
     @ViewBuilder private func tagGroupSection(_ section: SessionTagSection) -> some View {
         TitledListSection {
-            ForEach(section.sessions) { sessionRow($0) }
+            ForEach(section.sessions) { s in
+                SessionListEntryRow(
+                    session: s, projects: [:], marks: [:], view: view, agentID: agent.id,
+                    navigation: rowNavigation, drag: drag, dropTargets: folderDropTargets,
+                    onTag: { taggingSession = $0 }, onShare: { sharingSession = $0 }, onMove: { movingSession = $0 })
+            }
         } title: {
             tagSectionHeader(section.tag)
         }
