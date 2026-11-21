@@ -86,7 +86,8 @@ struct JobCardView: View {
         let known = look(now: Date())
         let running = known.phase == .running
         TimelineView(.periodic(from: .now, by: running ? 1 : 3600)) { context in
-            content(look(now: context.date))
+            JobCardContent(look: look(now: context.date), wakes: wakes, dontSend: dontSend, phone: phone,
+                           stopFailed: stopFailed, open: $open, allLines: $allLines, asking: $asking)
         }
         .onAppear { onScreen = true }
         .onDisappear { onScreen = false }
@@ -140,20 +141,36 @@ struct JobCardView: View {
             do { try await host.stop(jobId); stopFailed = nil } catch { stopFailed = APIClient.failureReason(error) }
         }
     }
+}
 
-    // MARK: the card
+// MARK: the card
+//
+// The card is drawn by small nominal views rather than one `body` of nested `some View` helpers. As one
+// expression its generic type nested so deep that resolving it at runtime (swift_getTypeByMangledName)
+// overflowed the iPhone's 1 MB main-thread stack when a transcript with a Job card opened (beta.66
+// crash, 2026-11-21). Each struct below ends that nesting.
 
-    private func content(_ look: BgJobCard.Look) -> some View {
+private struct JobCardContent: View {
+    let look: BgJobCard.Look
+    let wakes: [BgJobCard.WakeSeen]
+    let dontSend: (@MainActor () -> Void)?
+    let phone: Bool
+    let stopFailed: String?
+    @Binding var open: Bool
+    @Binding var allLines: Bool
+    @Binding var asking: Bool
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            row(look)
+            JobCardRow(look: look, phone: phone, open: $open)
             if phone {
-                HStack(spacing: 6) { kindChip(look); elapsedText(look) }
+                HStack(spacing: 6) { JobKindChip(look: look); JobElapsedChip(look: look) }
                     .padding(.leading, 42)
             }
             if open {
-                detail(look)
+                JobCardDetail(look: look, wakes: wakes, allLines: $allLines, asking: $asking)
             } else {
-                foldedBody(look).padding(.leading, 42)
+                JobCardFolded(look: look, open: $open).padding(.leading, 42)
             }
             if let stopFailed {
                 Text(stopFailed).font(.orbitMeta).foregroundStyle(.red).padding(.leading, 42)
@@ -183,9 +200,15 @@ struct JobCardView: View {
         }
         .accessibilityIdentifier("job-card")
     }
+}
 
-    /// `>_ Wait for CI JavaScript job on 4c8f5a8a1b  watch  12m 40s  exit 1 ✕` — and never the word "Job" (R4).
-    private func row(_ look: BgJobCard.Look) -> some View {
+/// `>_ Wait for CI JavaScript job on 4c8f5a8a1b  watch  12m 40s  exit 1 ✕` — and never the word "Job" (R4).
+private struct JobCardRow: View {
+    let look: BgJobCard.Look
+    let phone: Bool
+    @Binding var open: Bool
+
+    var body: some View {
         HStack(spacing: 7) {
             Image(systemName: "chevron.right")
                 .font(.orbitMeta.weight(.semibold)).foregroundStyle(.tertiary)
@@ -199,46 +222,60 @@ struct JobCardView: View {
                 .foregroundStyle(.primary)
                 .lineLimit(1).truncationMode(.tail)
             if !phone {
-                kindChip(look)
-                elapsedText(look)
+                JobKindChip(look: look)
+                JobElapsedChip(look: look)
             }
             if let quiet = look.quietChip {
-                chip(quiet, fg: .orange, bg: Color.orange.opacity(0.14))
+                JobChip(text: quiet, fg: .orange, bg: Color.orange.opacity(0.14))
             }
             if let end = look.endChip {
                 look.phase == .killed
-                    ? chip(end, fg: .secondary, bg: Color.gray.opacity(0.14))
-                    : chip(end, fg: .red, bg: Color.red.opacity(0.1))
+                    ? JobChip(text: end, fg: .secondary, bg: Color.gray.opacity(0.14))
+                    : JobChip(text: end, fg: .red, bg: Color.red.opacity(0.1))
             }
             Spacer(minLength: 0)
-            mark(look.phase)
+            JobPhaseMark(phase: look.phase)
         }
         .contentShape(Rectangle())
         .onTapGesture { open.toggle() }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
     }
+}
 
-    private func kindChip(_ look: BgJobCard.Look) -> some View {
-        chip(look.kind, fg: ToolTone.exec.color, bg: ToolTone.exec.color.opacity(0.12))
+private struct JobKindChip: View {
+    let look: BgJobCard.Look
+    var body: some View {
+        JobChip(text: look.kind, fg: ToolTone.exec.color, bg: ToolTone.exec.color.opacity(0.12))
     }
+}
 
-    @ViewBuilder private func elapsedText(_ look: BgJobCard.Look) -> some View {
+private struct JobElapsedChip: View {
+    let look: BgJobCard.Look
+    var body: some View {
         if let elapsed = look.elapsed {
-            chip(elapsed, fg: .secondary, bg: Color.gray.opacity(0.12))
+            JobChip(text: elapsed, fg: .secondary, bg: Color.gray.opacity(0.12))
         }
     }
+}
 
-    private func chip(_ text: String, fg: Color, bg: Color) -> some View {
+private struct JobChip: View {
+    let text: String
+    let fg: Color
+    let bg: Color
+    var body: some View {
         Text(text)
             .font(.orbitMonoFine).foregroundStyle(fg)
             .lineLimit(1).fixedSize()
             .padding(.horizontal, 5).padding(.vertical, 1)
             .background(bg, in: RoundedRectangle(cornerRadius: 4))
     }
+}
 
-    /// A spinner while it runs, then how it ended.
-    @ViewBuilder private func mark(_ phase: BgJobCard.Phase) -> some View {
+/// A spinner while it runs, then how it ended.
+private struct JobPhaseMark: View {
+    let phase: BgJobCard.Phase
+    var body: some View {
         switch phase {
         case .running: ProgressView().controlSize(.small).accessibilityLabel("running")
         case .done: Image(systemName: "checkmark.circle.fill").font(.orbitLabel).foregroundStyle(.green)
@@ -247,8 +284,13 @@ struct JobCardView: View {
         case .unknown: Image(systemName: "minus.circle").font(.orbitLabel).foregroundStyle(.secondary)
         }
     }
+}
 
-    @ViewBuilder private func foldedBody(_ look: BgJobCard.Look) -> some View {
+private struct JobCardFolded: View {
+    let look: BgJobCard.Look
+    @Binding var open: Bool
+
+    var body: some View {
         switch look.folded {
         case .none:
             EmptyView()
@@ -276,12 +318,19 @@ struct JobCardView: View {
             }
         }
     }
+}
 
-    // MARK: opened
+// MARK: opened
 
-    private func detail(_ look: BgJobCard.Look) -> some View {
+private struct JobCardDetail: View {
+    let look: BgJobCard.Look
+    let wakes: [BgJobCard.WakeSeen]
+    @Binding var allLines: Bool
+    @Binding var asking: Bool
+
+    var body: some View {
         let shown = allLines ? look.lines : Array(look.lines.suffix(BgJobCard.openLines))
-        return VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 8) {
             if !look.command.isEmpty { ToolBodyView(kind: .command(look.command)) }
             Text(look.meta)
                 .font(.orbitMeta).foregroundStyle(.tertiary)
@@ -291,35 +340,50 @@ struct JobCardView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             if !shown.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(shown.joined(separator: "\n"))
-                        .font(.orbitMono)
-                        // Output's own colour whatever the end: only the folded card's last lines turn red (web
-                        // `.chat-job-output .chat-pre`).
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    if shown.count < look.lines.count {
-                        Button(BgJobCard.showAll(look.lines.count)) { allLines = true }
-                            .buttonStyle(.plain).font(.orbitMeta).foregroundStyle(.tint)
-                    }
-                }
-                .padding(8)
-                .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+                JobCardOutput(shown: shown, total: look.lines.count, allLines: $allLines)
             }
             if look.stoppable {
                 Button(BgJobCard.stop) { asking = true }
                     .buttonStyle(.plain).font(.orbitLabel).foregroundStyle(.tint)
                     .accessibilityIdentifier("job-stop")
             }
-            if !wakes.isEmpty { wakeBlock }
+            if !wakes.isEmpty { JobWakeBlock(wakes: wakes) }
         }
         .padding(.leading, 31)
     }
+}
 
-    /// `Woke the agent 1 time`, one row per wake with what the agent read behind it.
-    private var wakeBlock: some View {
+/// The opened card's last lines.
+private struct JobCardOutput: View {
+    let shown: [String]
+    let total: Int
+    @Binding var allLines: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(shown.joined(separator: "\n"))
+                .font(.orbitMono)
+                // Output's own colour whatever the end: only the folded card's last lines turn red (web
+                // `.chat-job-output .chat-pre`).
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if shown.count < total {
+                Button(BgJobCard.showAll(total)) { allLines = true }
+                    .buttonStyle(.plain).font(.orbitMeta).foregroundStyle(.tint)
+            }
+        }
+        .padding(8)
+        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+    }
+}
+
+/// `Woke the agent 1 time`, one row per wake with what the agent read behind it.
+private struct JobWakeBlock: View {
+    let wakes: [BgJobCard.WakeSeen]
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(BgJobCard.wokeHead(wakes.count)).font(.orbitSubtext).foregroundStyle(.secondary)
             ForEach(Array(wakes.enumerated()), id: \.offset) { _, wake in
