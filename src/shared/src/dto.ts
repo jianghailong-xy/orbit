@@ -3155,6 +3155,9 @@ export interface ProviderModelTier {
    *  (PATCH /providers/mine/:providerId/model-tier), or any model of a built-in engine's catalogue
    *  (PATCH /providers/builtin/:slug/model-tier, which overrides the catalogue's tier). */
   editable: boolean;
+  /** Set on a built-in engine's untiered model whose family's newest model, this one, is tiered on that engine:
+   *  routing deliberately uses the newest, so the client reads "Older · uses <model>", not "Not set". Display only. */
+  supersededBy?: string;
   /** USD per million output tokens, when known (models.dev); null for a subscription or an unpriced key. */
   outputPricePerMTok: number | null;
 }
