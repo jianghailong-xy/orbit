@@ -74,6 +74,9 @@ struct ShareView: View {
                     }
                 }
         }
+        .onChange(of: model.phase) { _, phase in
+            if phase == .opened { onDone() }
+        }
     }
 
     private var isDone: Bool {
@@ -83,7 +86,7 @@ struct ShareView: View {
 
     @ViewBuilder private var content: some View {
         switch model.phase {
-        case .loading:
+        case .loading, .opened:
             ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
         case .done(let title, let notified):
             DoneView(title: title, notified: notified, onDone: onDone)
