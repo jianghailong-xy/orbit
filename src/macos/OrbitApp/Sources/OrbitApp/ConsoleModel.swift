@@ -3104,11 +3104,8 @@ final class ConsoleModel {
     /// `+` menu → Shell: prefix the draft with `!` so send() routes the rest as a raw shell command
     /// run on the runner, bypassing claude. The user types the command after. Mirrors web's insertShell.
     func insertShell() {
-        if executesDsh { statusMessage = Self.dshShellRefusal; return }
         if !composerText.hasPrefix("!") { composerText = "!" + composerText }
     }
-
-    static let dshShellRefusal = "DeepSeek Harness sessions don't run ! shell commands — ask the agent to run it instead."
 
     /// `authoritative` is the session's live control-plane run status
     /// (`app.session(id:)?.effectiveRunStatus`), read
@@ -3152,12 +3149,6 @@ final class ConsoleModel {
         // A leading `!` runs the remainder as a raw shell command on the runner, bypassing claude
         // (mirrors the web composer). A bare `!` with nothing after it is a no-op.
         let (text, shell) = ComposerLogic.parseShell(overrideText ?? composerText)
-        // DeepSeek Harness has no shell bridge (the runner settles such a turn as a refusal), so the
-        // command stays in the composer rather than going out to fail (web parity).
-        if shell, executesDsh {
-            statusMessage = Self.dshShellRefusal
-            return
-        }
         // Empty text still sends when something is staged to carry the message (see
         // `canSendAttachmentsAlone`) — but never as a shell turn: a bare `!` is a no-op that only
         // clears itself, and attachments mean nothing to a raw command (web ignores them there too).
@@ -3752,10 +3743,6 @@ final class ConsoleModel {
             return
         }
         let (text, shell) = ComposerLogic.parseShell(composerText)
-        if shell, executesDsh {
-            statusMessage = Self.dshShellRefusal
-            return
-        }
         guard !text.isEmpty || (!shell && canSendAttachmentsAlone) else {
             if shell { composerText = "" }
             return
