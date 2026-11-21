@@ -1,11 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { RightOutlined } from '@ant-design/icons';
+import { LeftOutlined, RightOutlined } from '@ant-design/icons';
 import { SettingsCard, SettingsHeader, SettingsRow, SettingsSection } from '../../components/settings';
-import { storageUsageQuery, type StorageUsage } from '../../lib/queries';
+import { driveUsageQuery, storageUsageQuery, type StorageUsage } from '../../lib/queries';
 import { formatFileSize } from '../../lib/worktreeFile';
 import { encodeId } from '../../lib/idCodec';
-import { PERSONAL_SETTINGS as S } from './settingsIndex';
+import { PERSONAL_SETTINGS as S } from '../settings/settingsIndex';
 
 /** A week as its Monday reads, in the zone the server counted it in. */
 export function weekLabel(weekStart: string): string {
@@ -38,12 +38,18 @@ function UsageSection({ title, rows }: { title: string; rows: { key: string; nam
   );
 }
 
-/** Settings → Storage: what this account keeps in Orbit Files, read when the page opens, and only here. */
+/** Files → Storage: what this account keeps in Orbit Files, the drive and everything else, each byte once. Read when the page opens. */
 export function StorageSettingsPage() {
   const { data: usage, isError } = useQuery(storageUsageQuery());
+  const { data: drive } = useQuery(driveUsageQuery());
+  const navigate = useNavigate();
   const full = usage && usage.quotaBytes !== null && usage.totalBytes >= usage.quotaBytes;
   return (
     <div className="settings-page">
+      <button type="button" className="settings-back storage-files-back" onClick={() => navigate('/files')}>
+        <LeftOutlined />
+        <span>Files</span>
+      </button>
       <SettingsHeader title="Storage" />
       <SettingsCard>
         <SettingsRow
@@ -66,15 +72,30 @@ export function StorageSettingsPage() {
           }
         />
       </SettingsCard>
+      {drive && (
+        <SettingsCard>
+          <SettingsRow title="Total" control={<span className="settings-storage-size">{formatFileSize(drive.totalBytes)}</span>} />
+          <SettingsRow
+            title="Drive"
+            description={`Including ${formatFileSize(drive.trashBytes)} in Trash`}
+            control={<span className="settings-storage-size">{formatFileSize(drive.driveBytes)}</span>}
+          />
+          <SettingsRow
+            title="Everything else"
+            description="Conversation pictures, attachments, evidence files and earlier file uploads"
+            control={<span className="settings-storage-size">{formatFileSize(drive.otherBytes)}</span>}
+          />
+        </SettingsCard>
+      )}
       {usage && (
         <>
           <UsageSection
             title="Largest projects"
-            rows={usage.projects.map(({ projectId, title, bytes }) => ({ key: projectId, name: title, size: formatFileSize(bytes), to: `/settings/storage/projects/${encodeId(projectId)}` }))}
+            rows={usage.projects.map(({ projectId, title, bytes }) => ({ key: projectId, name: title, size: formatFileSize(bytes), to: `/files/storage/projects/${encodeId(projectId)}` }))}
           />
           <UsageSection
             title="Largest tasks"
-            rows={usage.tasks.map(({ taskId, title, bytes }) => ({ key: taskId, name: title, size: formatFileSize(bytes), to: `/settings/storage/tasks/${encodeId(taskId)}` }))}
+            rows={usage.tasks.map(({ taskId, title, bytes }) => ({ key: taskId, name: title, size: formatFileSize(bytes), to: `/files/storage/tasks/${encodeId(taskId)}` }))}
           />
           <UsageSection
             title="Added each week"
@@ -82,7 +103,7 @@ export function StorageSettingsPage() {
               key: weekStart,
               name: `Week of ${weekLabel(weekStart)}`,
               size: formatFileSize(bytes),
-              to: `/settings/storage/weeks/${weekStart}`,
+              to: `/files/storage/weeks/${weekStart}`,
             }))}
           />
         </>

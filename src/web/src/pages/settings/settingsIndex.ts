@@ -10,7 +10,6 @@ export const PERSONAL_PAGES = [
   { path: '/settings/notifications', label: 'Notifications' },
   { path: '/settings/appearance', label: 'Appearance' },
   { path: '/settings/profile', label: 'Profile' },
-  { path: '/settings/storage', label: 'Storage' },
   { path: '/settings/shared-links', label: 'Shared links' },
   { path: '/settings/access-tokens', label: 'Access tokens' },
   { path: '/settings/secrets', label: 'Secrets' },

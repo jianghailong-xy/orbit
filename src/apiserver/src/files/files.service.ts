@@ -102,6 +102,14 @@ export interface StorageUsage {
   weeks: { weekStart: string; bytes: number }[];
 }
 
+/** What `driveUsage` answers. `totalBytes` is `driveBytes + otherBytes`; `trashBytes` is the part of the drive's share only Trash holds. */
+export interface DriveUsage {
+  totalBytes: number;
+  driveBytes: number;
+  trashBytes: number;
+  otherBytes: number;
+}
+
 /** How many files one page of a Storage file list holds. */
 export const STORED_FILES_PAGE = 50;
 
@@ -885,6 +893,43 @@ export class FilesService implements OnApplicationBootstrap {
       },
       HttpStatus.PAYLOAD_TOO_LARGE,
     );
+  }
+
+  /**
+   * What the account keeps in all (§2.5): the drive's share, the rest, and their sum, each content once. A content the
+   * drive names (a chunk of a version, current or in Trash, or of a write not committed yet) is the drive's even when an
+   * attachment holds the same bytes, so it is never counted twice. A separate query: `storedTotals` and the attachment
+   * quota are unchanged, so drive bytes can never refuse an attachment upload.
+   */
+  async driveUsage(ownerId: string): Promise<DriveUsage> {
+    const [row] = await this.prisma.$queryRaw<Array<{ drive: bigint; trash: bigint; other: bigint }>>`
+      WITH held AS (
+        SELECT c.sha256, MAX(c.size_bytes) AS size,
+               BOOL_OR(v.trash_group_id IS NULL AND e.trashed_at IS NULL) AS live
+          FROM drive_version_chunk c
+          JOIN drive_version v ON v.id = c.version_id AND v.owner_id = c.owner_id
+          JOIN drive_entry e ON e.id = v.entry_id AND e.owner_id = v.owner_id
+         WHERE c.owner_id = ${ownerId}::uuid
+         GROUP BY c.sha256
+        UNION ALL
+        SELECT sc.sha256, MAX(sc.size_bytes), TRUE
+          FROM drive_staging_chunk sc
+         WHERE sc.owner_id = ${ownerId}::uuid
+           AND NOT EXISTS (SELECT 1 FROM drive_version_chunk c WHERE c.owner_id = sc.owner_id AND c.sha256 = sc.sha256)
+         GROUP BY sc.sha256
+      ), other AS (
+        SELECT MAX(size_bytes) AS size
+          FROM attachment
+         WHERE owner_id = ${ownerId}::uuid AND expired_at IS NULL
+           AND (sha256 IS NULL OR sha256 NOT IN (SELECT sha256 FROM held))
+         GROUP BY COALESCE(sha256, id::text)
+      )
+      SELECT (SELECT COALESCE(SUM(size), 0) FROM held)::bigint AS drive,
+             (SELECT COALESCE(SUM(size), 0) FROM held WHERE NOT live)::bigint AS trash,
+             (SELECT COALESCE(SUM(size), 0) FROM other)::bigint AS other`;
+    const driveBytes = Number(row.drive);
+    const otherBytes = Number(row.other);
+    return { totalBytes: driveBytes + otherBytes, driveBytes, trashBytes: Number(row.trash), otherBytes };
   }
 
   /** What Settings shows of an account's files (§2.10): what it keeps, where most of that is, and how fast it grows. */

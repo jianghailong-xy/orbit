@@ -290,6 +290,20 @@ export const storageUsageQuery = () =>
     queryFn: () => api<StorageUsage>('/attachments/usage'),
   });
 
+/** What `GET /drive/usage` answers: the account's total split into the drive's share (Trash included) and the rest, each byte once. */
+export interface DriveUsage {
+  totalBytes: number;
+  driveBytes: number;
+  trashBytes: number;
+  otherBytes: number;
+}
+
+export const driveUsageQuery = () =>
+  queryOptions({
+    queryKey: ['drive', 'usage'] as const,
+    queryFn: () => api<DriveUsage>('/drive/usage'),
+  });
+
 /** Which of the Storage page's rows a file list is opened from: a project's or a task's id, or a week's Monday. */
 export type StorageScope = { kind: 'projects' | 'tasks' | 'weeks'; id: string };
 

@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import remarkGfm from 'remark-gfm';
 import {
+  DatabaseOutlined,
   DeleteOutlined,
   DownloadOutlined,
   DownOutlined,
@@ -594,6 +595,9 @@ function FilesBrowser() {
           </Button>
           <Button icon={<DeleteOutlined />} onClick={() => navigate('/files/trash')}>
             Trash
+          </Button>
+          <Button icon={<DatabaseOutlined />} onClick={() => navigate('/files/storage')}>
+            Storage
           </Button>
           <input
             ref={picker}
