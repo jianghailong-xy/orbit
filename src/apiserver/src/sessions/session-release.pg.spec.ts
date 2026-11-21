@@ -15,6 +15,9 @@
  *   (8) the revive                                   → PENDING, finished_at and release_cause both null
  *   (9) migration 1262's backfill, one session per rule, then the two counts of plan step 3.3 over the database
  *  (10) migrations 1401 and 1402 (plan step 3.4): the CHECK is listed validated, and each violating write is refused
+ *  (11) migrations 1403 to 1407 (plan step 4.4): a write of the release fact alone, `finished_at` and `release_cause`
+ *       with the status word left as it was, fires every guard and ended-trigger that used to read the status, and
+ *       each decides from the release fact
  *
  * The other three writers are asserted where they are already driven: turn-complete's failed turn in
  * runner-api/turn-complete-outcome.pg.spec.ts (2), the landing container in projects/landing-session.pg.spec.ts
@@ -32,7 +35,9 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin, SessionRunSource } from '@prisma/client';
+import {
+  CreatorType, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin, SessionRunSource, TaskCompletionPolicy,
+} from '@prisma/client';
 import { RunStatus as SharedRunStatus, SessionEndReason } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -440,5 +445,223 @@ test('every release writes the release column and its cause, and the revive clea
     await sql.query(
       `UPDATE "session" SET status = 'PENDING', finished_at = NULL, release_cause = NULL WHERE id = $1::uuid`, [held],
     );
+  });
+});
+
+/**
+ * (11) Plan step 4.4: the database guards read the release fact. Each case writes `finished_at` and `release_cause`
+ * ALONE, naming no status, so the status word keeps the value it had: a guard that still decided from the status
+ * would answer the old way, and a trigger whose column list named only `status` would not fire at all.
+ *
+ * session_release_fact_chk is dropped first, in this disposable database, because it refuses exactly that write
+ * (terminal-ness and `finished_at` must move together). Today every writer moves both in one statement, so in
+ * production the two spellings agree row for row; what this case shows is which of the two each object reads. It
+ * runs after (1)-(10), which need the CHECK.
+ */
+test('(11) the release fact alone fires every guard and ended-trigger (plan step 4.4)', {
+  skip, concurrency: 1, timeout: 300_000,
+}, async (t) => {
+  const url = URL!;
+  assertCoordinatorPgUrlIsIsolated(url);
+  const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
+  await sql.connect();
+  await verifyCoordinatorPgIdentity(sql);
+  const db = prismaClientFor(url);
+  t.after(async () => {
+    await db.$disconnect().catch(() => undefined);
+    await sql.end().catch(() => undefined);
+  });
+  await sql.query(`ALTER TABLE "session" DROP CONSTRAINT IF EXISTS "session_release_fact_chk"`);
+
+  const releaseAlone = (id: string) => sql.query(
+    `UPDATE "session" SET "finished_at" = now(), "release_cause" = 'ended' WHERE "id" = $1::uuid`, [id]);
+  const reviveAlone = (id: string) => sql.query(
+    `UPDATE "session" SET "finished_at" = NULL, "release_cause" = NULL WHERE "id" = $1::uuid`, [id]);
+  const statusOf = async (id: string) => (await released(sql, id)).status;
+  const refusedWith = (pattern: RegExp) => (error: { message?: string }) => {
+    console.log(`# refused: ${error.message}`);
+    return pattern.test(error.message ?? '');
+  };
+  const task = async (w: World, data: Record<string, unknown> = {}): Promise<string> => {
+    const id = randomUUID();
+    await db.task.create({
+      data: {
+        id, ownerId: w.ownerId, title: 'a task', creatorType: CreatorType.USER, creatorId: w.ownerId,
+        completionCriterion: 'EVIDENCE_JUDGMENT', acceptanceCriteria: 'the guard answers from the release fact', ...data,
+      },
+    });
+    return id;
+  };
+  const project = async (w: World): Promise<string> => {
+    const id = randomUUID();
+    await db.project.create({ data: { id, ownerId: w.ownerId, title: `project ${id.slice(0, 8)}` } });
+    return id;
+  };
+  /** A released session as every writer leaves one today: terminal status, finished_at, a cause. */
+  const releasedData = { status: RunStatus.CANCELLED, finishedAt: new Date(), releaseCause: 'ended' };
+
+  await t.test('session_superseded_task_guard: reviving by the release fact alone onto a retired task is refused', async () => {
+    const w = await world(db, 'g-superseded');
+    const taskId = await task(w);
+    const id = await session(db, w, { taskId, startsTaskWork: true, ...releasedData });
+    await sql.query(`UPDATE "task" SET "status" = 'CANCELLED', "terminal_reason" = 'ABANDONED' WHERE "id" = $1::uuid`, [taskId]);
+    await assert.rejects(() => reviveAlone(id), refusedWith(/TASK_SUPERSEDED/));
+    assert.equal(await statusOf(id), 'CANCELLED', 'the status word never left CANCELLED: the guard read finished_at');
+    assert.ok((await released(sql, id)).finished_at instanceof Date, 'nothing was written');
+  });
+
+  await t.test('task_supersession_live_session_guard: a run released by the fact alone no longer holds its task', async () => {
+    const w = await world(db, 'g-retire');
+    const taskId = await task(w);
+    const id = await session(db, w, { taskId, startsTaskWork: true });
+    const retire = () => sql.query(`UPDATE "task" SET "status" = 'CANCELLED', "terminal_reason" = 'ABANDONED' WHERE "id" = $1::uuid`, [taskId]);
+    await assert.rejects(retire, refusedWith(/TASK_RETIRED_WHILE_RUNNING/));
+    await releaseAlone(id);
+    assert.equal(await statusOf(id), 'RUNNING');
+    await retire();
+  });
+
+  await t.test('session_project_capacity_serialize: the release fact alone touches the project row', async () => {
+    const w = await world(db, 'g-capacity');
+    const projectId = await project(w);
+    const taskId = await task(w, { projectId });
+    const id = await session(db, w, { taskId });
+    // Whether project.updated_at still holds the sentinel this case wrote, read in the database's own terms.
+    const untouched = async () => ((await sql.query(
+      `SELECT "updated_at" = '2000-01-01' AS same FROM "project" WHERE "id" = $1::uuid`, [projectId],
+    )).rows[0] as { same: boolean }).same;
+    await sql.query(`UPDATE "project" SET "updated_at" = '2000-01-01' WHERE "id" = $1::uuid`, [projectId]);
+    await sql.query(`UPDATE "session" SET "title" = 'renamed' WHERE "id" = $1::uuid`, [id]);
+    assert.equal(await untouched(), true, 'control: a write naming no listed column does not fire it');
+    await releaseAlone(id);
+    assert.equal(await untouched(), false, 'leaving live by finished_at alone serialized on the project');
+    await sql.query(`UPDATE "project" SET "updated_at" = '2000-01-01' WHERE "id" = $1::uuid`, [projectId]);
+    await reviveAlone(id);
+    assert.equal(await untouched(), false, 'entering live by finished_at alone did too');
+  });
+
+  await t.test('session_admission_lock_order: reviving an aggregate parent\'s work by the release fact alone is refused', async () => {
+    const w = await world(db, 'g-admission');
+    const parent = await task(w, { completionPolicy: TaskCompletionPolicy.ALL_CHILDREN_DONE });
+    await task(w, { parentTaskId: parent });
+    const id = await session(db, w, { taskId: parent, startsTaskWork: true, ...releasedData });
+    await assert.rejects(() => reviveAlone(id), refusedWith(/TASK_AGGREGATE_PARENT:/));
+    assert.equal(await statusOf(id), 'CANCELLED');
+  });
+
+  await t.test('task_aggregate_parent_shape_guard: a run released by the fact alone no longer blocks a subtask', async () => {
+    const w = await world(db, 'g-shape');
+    const parent = await task(w, { completionPolicy: TaskCompletionPolicy.ALL_CHILDREN_DONE });
+    const id = await session(db, w, { taskId: parent, startsTaskWork: true });
+    await assert.rejects(() => task(w, { parentTaskId: parent }), refusedWith(/TASK_AGGREGATE_PARENT_ACTIVATION/));
+    await releaseAlone(id);
+    assert.equal(await statusOf(id), 'RUNNING');
+    await task(w, { parentTaskId: parent });
+  });
+
+  await t.test('task_claimed_project_move_guard: a run released by the fact alone no longer claims its task', async () => {
+    const w = await world(db, 'g-move');
+    const from = await project(w);
+    const to = await project(w);
+    const taskId = await task(w, { projectId: from });
+    const id = await session(db, w, { taskId });
+    const move = () => sql.query(`UPDATE "task" SET "project_id" = $2::uuid WHERE "id" = $1::uuid`, [taskId, to]);
+    await assert.rejects(move, refusedWith(/TASK_CLAIMED_PROJECT_MOVE/));
+    await releaseAlone(id);
+    assert.equal(await statusOf(id), 'RUNNING');
+    await move();
+  });
+
+  await t.test('the three acquisition guards: the revive exemption reads OLD.finished_at', async () => {
+    const w = await world(db, 'g-acquire');
+    const marker = '00000000-0000-5000-8000-000000000001'; // a v5 server handoff marker
+    const revive = (id: string, settings: string[] = []) => (async () => {
+      await sql.query('BEGIN');
+      try {
+        for (const setting of settings) await sql.query(`SELECT set_config($1, '1', true)`, [setting]);
+        const out = await sql.query(
+          `UPDATE "session" SET "status" = 'PENDING', "finished_at" = NULL, "release_cause" = NULL,
+                  "inbox_lease_owner" = $2::uuid WHERE "id" = $1::uuid`, [id, marker]);
+        await sql.query('COMMIT');
+        return out.rowCount;
+      } catch (error) {
+        await sql.query('ROLLBACK');
+        throw error;
+      }
+    })();
+    // guard_session_engine_acquisition refuses; dsh and cursor skip the write (RETURN NULL), so the count says it.
+    for (const engine of ['claude', 'dsh', 'cursor']) {
+      const settings = engine === 'claude' ? [] : ['orbit.claim_reads_session_engine'];
+      const data = { engine, provider: engine };
+      // Released by the fact while the status word is still a held one: exempt.
+      const byFact = await session(db, w, { ...data, status: RunStatus.AWAITING_INPUT, finishedAt: new Date(), releaseCause: 'ended' });
+      assert.equal(await revive(byFact, settings), 1, `${engine}: OLD.finished_at set is a revive`);
+      // A terminal status word with no release fact: not exempt.
+      const byWord = await session(db, w, { ...data, status: RunStatus.CANCELLED });
+      if (engine === 'claude') {
+        await assert.rejects(() => revive(byWord, settings), refusedWith(/does not read session engines/));
+      } else {
+        assert.equal(await revive(byWord, settings), 0, `${engine}: OLD.status alone is no longer a revive`);
+      }
+      assert.equal(await statusOf(byWord), 'CANCELLED');
+    }
+  });
+
+  await t.test('the three ended-triggers fire on the release fact alone', async () => {
+    const w = await world(db, 'g-ended');
+    const asker = await session(db, w);
+    const ask = async (from: string, to: string, extra = '') => {
+      const id = randomUUID();
+      await sql.query(
+        `INSERT INTO "session_request" ("id", "owner_id", "from_session_id", "to_session_id", "turn_id", "client_turn_id",
+                "request_preview", "reply_by"${extra ? ', "state", "closed_at", "reply_held_at"' : ''})
+         VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, $6, 'a question', now() + interval '1 hour'${extra})`,
+        [id, w.ownerId, from, to, randomUUID(), `turn-${id}`]);
+      return id;
+    };
+    const request = async (id: string) => (await sql.query(
+      `SELECT "state", "close_reason", "reply_comment_due_at" FROM "session_request" WHERE "id" = $1::uuid`, [id],
+    )).rows[0] as { state: string; close_reason: string | null; reply_comment_due_at: Date | null };
+
+    // session_request_recipient_ended (0350).
+    const recipient = await session(db, w);
+    const open = await ask(asker, recipient);
+    await releaseAlone(recipient);
+    const closed = await request(open);
+    console.log(`# recipient_ended ${JSON.stringify(closed)}`);
+    assert.equal(closed.state, 'RECIPIENT_ENDED');
+    assert.equal(closed.close_reason, 'RUNNING', 'close_reason is still STATUS[:end_reason], unchanged');
+
+    // The kept literal: a FAILED release whose retry is armed is not an end, by either spelling.
+    const retrying = await session(db, w, { status: RunStatus.FAILED, retryAt: new Date(Date.now() + 60_000) });
+    const waiting = await ask(asker, retrying);
+    await releaseAlone(retrying);
+    assert.equal((await request(waiting)).state, 'OPEN', 'FAILED with a retry armed: still waiting for the retry');
+
+    // session_request_asker_stopped (0366): a reply held for the asker is released as a comment.
+    const stopping = await session(db, w);
+    const held = await ask(stopping, await session(db, w), `, 'NO_REPLY', now(), now()`);
+    await releaseAlone(stopping);
+    assert.ok((await request(held)).reply_comment_due_at instanceof Date, 'asker_stopped fired');
+
+    // task_owner_confirmation_review_reviewer_ended (0507).
+    const reviewed = await task(w);
+    const reviewer = await session(db, w);
+    const requestId = randomUUID();
+    const reviewId = randomUUID();
+    await sql.query(
+      `INSERT INTO "task_owner_confirmation_request" ("id", "task_id", "owner_id", "session_id", "turn_id")
+       VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid)`,
+      [requestId, reviewed, w.ownerId, asker, randomUUID()]);
+    await sql.query(
+      `INSERT INTO "task_owner_confirmation_review" ("id", "request_id", "task_id", "owner_id", "reviewer_kind",
+              "window_seconds", "due_at", "reviewer_session_id")
+       VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, 'TASK_CREATOR', 3600, now() + interval '1 hour', $5::uuid)`,
+      [reviewId, requestId, reviewed, w.ownerId, reviewer]);
+    await releaseAlone(reviewer);
+    const review = (await sql.query(
+      `SELECT "reviewer_ended_at" FROM "task_owner_confirmation_review" WHERE "id" = $1::uuid`, [reviewId],
+    )).rows[0] as { reviewer_ended_at: Date | null };
+    assert.ok(review.reviewer_ended_at instanceof Date, 'reviewer_ended fired');
   });
 });
