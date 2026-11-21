@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { RunStatus } from '@prisma/client';
+import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
+import { SESSION_EXECUTING_EXCEPT_BG_JOB_WHERE } from '../common/session-working';
 import { BG_JOB_ACTIVITY_STALE_AFTER_MS } from './background-job-activity';
 import { SessionsService } from './sessions.service';
 
@@ -10,8 +12,8 @@ test('workspace counts separate queued activity from Session-list spinner work',
   const now = Date.now();
   // Every session with a job in flight, and the one thing that separates them: whether the job is
   // still MOVING. `w-jobs` reported output seconds ago; `w-stalled` has produced nothing since well
-  // before the threshold, which makes it a process rather than work in progress — it stays in
-  // `running_bg_shells` and in the clients' tray, and it is deliberately absent from this tally.
+  // before the threshold: still executing, so it is counted, as `stalledJobs` rather than `jobs` —
+  // the rail's breathing mark stops where nothing is moving without the work disappearing.
   // `w-unknown` is the third shape: a job nobody has reported progress on (an older runner), which
   // is unknown rather than stalled and counts exactly as it did before the rule existed.
   const sessionsWithJobs = [
@@ -60,7 +62,7 @@ test('workspace counts separate queued activity from Session-list spinner work',
         // cannot see, since there need not be a live turn at all — the fourth is the spinner
         // population, and the fifth resolves the conversations an owner DECISION is waiting on
         // (`projects/owner-decision-signal.ts`) to the workspaces they run in.
-        if (args?.where?.runningBgJobs) {
+        if (args?.where?.runningBgJobs && !args?.where?.OR) {
           return sessionsWithJobs;
         }
         if (args?.where?.approvals) {
@@ -155,6 +157,7 @@ test('workspace counts separate queued activity from Session-list spinner work',
     active: 1,
     running: 0,
     jobs: 0,
+    stalledJobs: 0,
     needsYou: 0,
   });
   // Two turns in flight, one of them blocked on you: the count says the blocked one and the spinner
@@ -164,6 +167,7 @@ test('workspace counts separate queued activity from Session-list spinner work',
     active: 2,
     running: 1,
     jobs: 0,
+    stalledJobs: 0,
     needsYou: 1,
   });
   // The third tally, and the only row here that is neither generating nor waiting on anyone: the
@@ -173,17 +177,20 @@ test('workspace counts separate queued activity from Session-list spinner work',
     active: 0,
     running: 0,
     jobs: 1,
+    stalledJobs: 0,
     needsYou: 0,
   });
-  // The same session shape with one thing changed — the job stopped producing long enough ago — and
-  // the tally drops it. The job is still a process, which is a different set on the same row
-  // (`runningBgShells`), and the clients still list it in the tray.
-  //
-  // The workspace is then absent from the answer rather than present with a zero, which is what a
-  // workspace with nothing to count has always been: the rail builds its map from the rows it gets
-  // and reads a missing workspace as 0 (TasksSidePanel), so an entry of zeros would say nothing the
-  // absence does not.
-  assert.equal(byWorkspace.get('w-stalled'), undefined);
+  // The same session shape with one thing changed — the job stopped producing long enough ago. It is
+  // still executing (common/session-working.ts), so the workspace is still counted; the flag beside
+  // it moves it from `jobs` to `stalledJobs`, the same verdict the task carrier's `runStalled` gives.
+  assert.deepEqual(byWorkspace.get('w-stalled'), {
+    workspaceId: 'w-stalled',
+    active: 0,
+    running: 0,
+    jobs: 0,
+    stalledJobs: 1,
+    needsYou: 0,
+  });
   // And the third: nobody has said when this job last produced output, which is not the same claim
   // as "it has produced nothing for ten minutes". Counting it either way is a choice; counting it
   // as work in flight is the one that leaves an older runner behaving exactly as it does today.
@@ -192,6 +199,7 @@ test('workspace counts separate queued activity from Session-list spinner work',
     active: 0,
     running: 0,
     jobs: 1,
+    stalledJobs: 0,
     needsYou: 0,
   });
   assert.equal(byWorkspace.get('w-engine-turn')?.running, 1);
@@ -203,6 +211,7 @@ test('workspace counts separate queued activity from Session-list spinner work',
     active: 0,
     running: 0,
     jobs: 0,
+    stalledJobs: 0,
     needsYou: 1,
   });
   // The third source, and the one the other two cannot see: a card a runner-hosted job is still
@@ -216,6 +225,7 @@ test('workspace counts separate queued activity from Session-list spinner work',
     active: 0,
     running: 0,
     jobs: 0,
+    stalledJobs: 0,
     needsYou: 1,
   });
   assert.equal(byWorkspace.get('w-job-gone'), undefined);
@@ -228,6 +238,7 @@ test('workspace counts separate queued activity from Session-list spinner work',
     active: 0,
     running: 0,
     jobs: 0,
+    stalledJobs: 0,
     needsYou: 1,
   });
   // And it is scoped to the Open list the same way the blocked query is, so a decision waiting on
@@ -264,6 +275,7 @@ test('workspace counts separate queued activity from Session-list spinner work',
   // flight are never read — and still over the same Open scope as the other two.
   const jobsQuery = findManyCalls.find((call) => call?.where?.runningBgJobs);
   assert.deepEqual(jobsQuery.where.runningBgJobs, { isEmpty: false });
+  assert.deepEqual(jobsQuery.where.status, { in: OPEN_SESSION_STATUSES });
   assert.equal(jobsQuery.where.completedAt, null);
   assert.equal(jobsQuery.where.deletedAt, null);
   // It reads the two columns the verdict needs and nothing else — the verdict itself is not stored
@@ -280,10 +292,13 @@ test('workspace counts separate queued activity from Session-list spinner work',
   // The blocked query carries an `OR` too (GENERATING_SESSION_FILTER), which is why it is ruled out
   // by its `approvals`.
   const runningQuery = findManyCalls.find((call) => call?.where?.OR && !call?.where?.approvals);
+  // The shared definition, background jobs aside: a dispatched turn, or on a session that has not
+  // ended the engine's own turn or a subagent (common/session-working.ts).
+  assert.deepEqual(runningQuery.where.OR, SESSION_EXECUTING_EXCEPT_BG_JOB_WHERE.OR);
   assert.deepEqual(runningQuery.where.OR, [
     { status: RunStatus.RUNNING },
     {
-      status: RunStatus.AWAITING_INPUT,
+      status: { in: OPEN_SESSION_STATUSES },
       OR: [{ engineTurnActive: true }, { runningSubagents: { isEmpty: false } }],
     },
   ]);

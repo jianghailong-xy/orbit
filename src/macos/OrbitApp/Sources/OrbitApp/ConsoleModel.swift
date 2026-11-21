@@ -4022,8 +4022,9 @@ final class ConsoleModel {
 
     /// One of the handoff's presses. What it changed reaches this conversation as `session.updated`
     /// (every transition publishes it), so the answer is read only for a refusal.
-    func coordinatorHandoff(projectID: String, _ action: CoordinatorHandoffAction) async {
-        do { _ = try await api.coordinatorHandoff(projectID, action) }
+    func coordinatorHandoff(projectID: String, _ action: CoordinatorHandoffAction,
+                            successor: CoordinatorHandoffSuccessor? = nil) async {
+        do { _ = try await api.coordinatorHandoff(projectID, action, successor: successor) }
         catch { statusMessage = CoordinatorHandoffCopy.refusal(APIClient.failureReason(error)) }
     }
 

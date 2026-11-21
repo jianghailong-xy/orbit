@@ -38,6 +38,12 @@ import { checkOnlyCommandRules, checkOnlyRuleRefusal, runAccessLevel, SCHEDULE_C
 import { settleUnrunWakeTurns } from '../runner-api/wake-turn-withdraw';
 import { linkNotFound } from '../share-links/share-link';
 import { freshRunningBgJobs } from './background-job-activity';
+import {
+  bgJobsStalled,
+  movingBgJobs,
+  SESSION_EXECUTING_EXCEPT_BG_JOB_WHERE,
+  SESSION_RUNNING_BG_JOB_WHERE,
+} from '../common/session-working';
 import { readSessionActivities, sessionActivitySql } from './task-work-carrier';
 import { CLEARED_RUNNING_WORK, KEEP_BACKGROUND_WORK_END_CONTENT } from './running-work';
 import { resolveLegacyArtifactPath, runEventPayloadMentions } from './legacy-artifact-path';
@@ -52,7 +58,9 @@ import {
   STEER_WITHDRAW_POLL_MS,
   STEER_WITHDRAW_WAIT_MS,
 } from './steer-withdraw';
-import { readSessionProjectMembership, sessionInProjectSql, sessionProjectMembershipSql } from './session-project-membership';
+import {
+  projectsMembershipCandidatesSql, readSessionProjectMembership, sessionInProjectSql, sessionProjectMembershipSql,
+} from './session-project-membership';
 import {
   externalSenderColumns,
   externalSenderOf,
@@ -304,6 +312,11 @@ import {
   UNSETTLED_SESSION_STATUSES,
   statusAfterTurnEnqueued,
 } from '../common/session-scheduling';
+import {
+  HELD_SESSION_STATUSES,
+  RELEASED_SESSION_STATUSES,
+  releaseCauseOfEndReason,
+} from '../common/session-release';
 import { GENERATING_SESSION_FILTER, isSessionGenerating } from '../common/session-generating';
 import {
   countLiveApprovals,
@@ -477,6 +490,14 @@ type ListOverlayInput = {
   taskId: string | null;
   runningBgShells: string[];
   runningSubagentCount: number;
+};
+
+/** One project's answer in `SessionsService.projectPlacement`. */
+export type ProjectPlacement = {
+  projectId: string;
+  coordinator: Awaited<ReturnType<SessionsService['listRowsByIds']>>[number] | null;
+  waiting: Awaited<ReturnType<SessionsService['listRowsByIds']>>[number][];
+  sessionCount: number;
 };
 
 /** The part of a list row `listOverlay` reads, keyed in the order the row carries them. */
@@ -3123,6 +3144,18 @@ export class SessionsService {
   }
 
   /**
+   * Refuse, with create()'s own refusal, a start that create() would refuse: for a door that has to know
+   * before it does something it cannot take back (a coordinator handoff completes the outgoing coordinator
+   * before its successor is created).
+   */
+  async assertStartResolves(
+    ownerId: string,
+    target: { engine?: string | null; provider?: string | null; model?: string | null; workspaceId?: string | null },
+  ): Promise<void> {
+    await this.startResolution(ownerId, target);
+  }
+
+  /**
    * The engine and credential a new session started this way runs on: create()'s own resolution, which
    * engineOfStart and taskRunsWith read too, so what a surface shows is what a start gets. `seen` is
    * handed the seed when one is read (neither an engine nor a provider named).
@@ -3951,12 +3984,15 @@ export class SessionsService {
    * (queued + dispatched); `running` is deliberately narrower and matches the Session list's blue
    * spinner: a dispatched turn, a self-driven engine turn, or a parked parent with a sub-agent
    * still working. Keeping both prevents queued-only workspaces from falsely looking as though the
-   * model is already running. `jobs` is neither: sessions with a background job in flight AND still
-   * producing output (`runningBgJobs` narrowed by `runningBgJobActivity`) — a `bg_run` that has gone
-   * quiet is a process, not work in progress, and the rail should not draw it as the latter. The
-   * rail draws this as its own quieter mark: real work the workspace can be doing with nobody
-   * generating in it, and the one thing `running` deliberately does not cover.
-   * `needsYou` is returned separately, and a session it counts is in neither `running` nor `jobs`:
+   * model is already running. `jobs` and `stalledJobs` are neither: sessions with a background job
+   * in flight, which is executing however quiet the job is (common/session-working.ts), split by the
+   * one flag beside it — `stalledJobs` when every job has produced nothing for a while
+   * (`bgJobsStalled`), `jobs` otherwise. The rail draws `jobs` as its own quieter mark: real work the
+   * workspace can be doing with nobody generating in it, and the one thing `running` deliberately
+   * does not cover; a stalled job is still counted, as `stalledJobs`, so a surface can say "no output
+   * for a while" rather than either hiding the work or vouching for a job that may be hung.
+   * `needsYou` is returned separately, and a session it counts is in none of `running`, `jobs` or
+   * `stalledJobs`:
    * the Session list draws that row with the waiting glyph, not the spinner or the breathing
    * terminal, and the expanded sidebar shows its activity dot beside the count — where a turn
    * blocked on you would otherwise light the dot for work that is not moving.
@@ -3984,16 +4020,8 @@ export class SessionsService {
       // Rows rather than a `groupBy`, so a session that needs you can be taken back out by id.
       // These are the sessions in flight right now — a handful even for a busy account.
       this.prisma.session.findMany({
-        where: {
-          ...open,
-          OR: [
-            { status: RunStatus.RUNNING },
-            {
-              status: RunStatus.AWAITING_INPUT,
-              OR: [{ engineTurnActive: true }, { runningSubagents: { isEmpty: false } }],
-            },
-          ],
-        },
+        // Executing, background jobs aside (they are the third tally): common/session-working.ts.
+        where: { ...open, ...SESSION_EXECUTING_EXCEPT_BG_JOB_WHERE },
         select: { id: true, workspaceId: true },
       }),
       // The third tally, and the only one that is neither "the model is generating" nor "somebody
@@ -4002,14 +4030,14 @@ export class SessionsService {
       // quieter mark than the working dot, because it answers the question the rail was silent
       // about: a workspace can be doing real work with nobody generating in it.
       //
-      // A job only counts while it is still MOVING (freshRunningBgJobs): a `bg_run` whose process is
-      // up but has produced nothing for BG_JOB_ACTIVITY_STALE_AFTER_MS is a hang, and a marker that
-      // breathes for a hang is a marker that means nothing. That verdict is a fact about `now`, so
-      // it can't be a WHERE clause and it isn't a stored answer — hence rows, not a groupBy. The
-      // candidate set is the sessions with any job in flight at all, which is a handful even for a
-      // busy account, and the rule applied here is the same one the session payload counts with.
+      // Every job counts as executing; whether its session's jobs have all gone quiet
+      // (bgJobsStalled) only decides which of `jobs` and `stalledJobs` it lands in. That verdict is a
+      // fact about `now`, so it can't be a WHERE clause and it isn't a stored answer — hence rows,
+      // not a groupBy. The candidate set is the sessions with any job in flight at all, which is a
+      // handful even for a busy account, and the rule applied here is the same one the session
+      // payload and the task carrier read.
       this.prisma.session.findMany({
-        where: { ...open, runningBgJobs: { isEmpty: false } },
+        where: { ...open, ...SESSION_RUNNING_BG_JOB_WHERE },
         select: { id: true, workspaceId: true, runningBgJobs: true, runningBgJobActivity: true },
       }),
       // Only the blocked rows come back (a handful at most), so this stays a lookup, not a scan
@@ -4061,12 +4089,12 @@ export class SessionsService {
           });
     const counts = new Map<
       string,
-      { workspaceId: string; active: number; running: number; jobs: number; needsYou: number }
+      { workspaceId: string; active: number; running: number; jobs: number; stalledJobs: number; needsYou: number }
     >();
     const row = (workspaceId: string) => {
       const existing = counts.get(workspaceId);
       if (existing) return existing;
-      const fresh = { workspaceId, active: 0, running: 0, jobs: 0, needsYou: 0 };
+      const fresh = { workspaceId, active: 0, running: 0, jobs: 0, stalledJobs: 0, needsYou: 0 };
       counts.set(workspaceId, fresh);
       return fresh;
     };
@@ -4126,14 +4154,16 @@ export class SessionsService {
       if (!session.workspaceId || needsYou.has(session.id)) continue;
       row(session.workspaceId).running += 1;
     }
-    // One session is one row of this tally however many jobs it has in flight, as it has always
-    // been. What changed with the freshness rule is that a session whose jobs have ALL gone quiet
-    // is not one of them: the rail should stop showing work where nothing is moving. `undefined`
-    // for a job nobody has reported progress on is not quiet — see BgJobActivity.
+    // One session is one row of these tallies however many jobs it has in flight, as it has always
+    // been. A session whose jobs have ALL gone quiet is still executing and is counted, as
+    // `stalledJobs`, so the rail's breathing mark stops where nothing is moving without the work
+    // disappearing. `undefined` for a job nobody has reported progress on is not quiet — see
+    // BgJobActivity.
+    const nowMs = Date.now();
     for (const session of jobs) {
       if (!session.workspaceId || needsYou.has(session.id)) continue;
-      if (freshRunningBgJobs(session.runningBgJobs, session.runningBgJobActivity).length === 0) continue;
-      row(session.workspaceId).jobs += 1;
+      if (bgJobsStalled(session, nowMs)) row(session.workspaceId).stalledJobs += 1;
+      else row(session.workspaceId).jobs += 1;
     }
     return [...counts.values()];
   }
@@ -4675,6 +4705,87 @@ export class SessionsService {
   }
 
   /**
+   * Where each of these projects' rows goes in a workspace list, read for all of them at once
+   * (`GET /sessions/project-placement`): each project's coordinator, Open or Completed, which decides
+   * whether the project is a row in that workspace or its members are rows of their own (owner
+   * 2026-11-07); the project's sessions in `view` that are waiting on the owner, in any workspace,
+   * which the row's line names; and how many sessions in `view` the project has, its coordinator
+   * counted, for the row's tooltip.
+   *
+   * The workspace list used to ask `GET /sessions?projectId=` for each project it showed, and again in
+   * Completed for a coordinator the Open read did not find: some sixty reads for thirty projects on
+   * every page load (2026-11-21). This is a fixed number of statements however many projects it names:
+   * the projects, their members' overlay inputs, the overlay, and the rows of the coordinators and the
+   * waiting members alone. A project's whole member list is still the per-project read's.
+   *
+   * Only `ownerId`'s projects are answered; an id that names none is left out of the answer.
+   */
+  async projectPlacement(
+    ownerId: string,
+    opts: { projectIds: readonly string[]; view: 'open' | 'completed'; confinedTo?: readonly string[] },
+  ): Promise<ProjectPlacement[]> {
+    const requested = [...new Set(opts.projectIds)];
+    if (requested.length === 0) return [];
+    const projects = await this.prisma.$queryRaw<Array<{ id: string; coordinatorSessionId: string | null }>>(Prisma.sql`
+      SELECT p.id, p.coordinator_session_id AS "coordinatorSessionId"
+        FROM project p
+       WHERE p.owner_id = ${ownerId}::uuid AND p.id = ANY(${requested}::uuid[])
+    `);
+    if (projects.length === 0) return [];
+    const ids = projects.map((project) => project.id);
+    // The view's own rules, as the per-project read applies them: its lifecycle, conversations only, no
+    // Ask, no scheduled run, and a confined token's workspaces.
+    const { query } = this.listShape(ownerId, { view: opts.view, confinedTo: opts.confinedTo });
+    const members = await this.prisma.$queryRaw<Array<ListOverlayInput & { projectId: string }>>(Prisma.sql`
+      SELECT s.id, s.status,
+             s.engine_turn_active AS "engineTurnActive",
+             s.task_id AS "taskId",
+             s.running_bg_shells AS "runningBgShells",
+             cardinality(s.running_subagents)::int AS "runningSubagentCount",
+             m.membership ->> 'projectId' AS "projectId"
+        FROM session s
+        CROSS JOIN LATERAL (SELECT ${sessionProjectMembershipSql('s')} AS membership) m
+       WHERE s.owner_id = ${ownerId}::uuid
+         ${query.scope}
+         AND (${query.visibility})
+         AND s.id = ANY(ARRAY(${projectsMembershipCandidatesSql(ids)}))
+         AND (m.membership ->> 'projectId')::uuid = ANY(${ids}::uuid[])
+    `);
+    const overlay = members.length === 0 ? new Map<string, ListOverlay>() : await this.listOverlay(ownerId, members);
+    const waiting = members.filter((member) => (overlay.get(member.id)?.pendingApprovals ?? 0) > 0);
+    const coordinatorIds = projects.flatMap((project) => project.coordinatorSessionId ? [project.coordinatorSessionId] : []);
+    const confined = opts.confinedTo
+      ? Prisma.sql`AND s.workspace_id = ANY(${[...opts.confinedTo]}::uuid[])`
+      : Prisma.empty;
+    const shown = [...new Set([...coordinatorIds, ...waiting.map((member) => member.id)])];
+    // A coordinator in either lifecycle, never one in Trash: what the per-project Open and Completed reads
+    // found between them.
+    const rows = shown.length === 0 ? [] : await this.listRows(ownerId, {
+      scope: Prisma.sql`AND s.help_ask IS NULL ${confined} AND s.id = ANY(${shown}::uuid[])`,
+      visibility: Prisma.sql`s.deleted_at IS NULL AND s.kind = 'CONVERSATION'`,
+      orderBy: Prisma.sql`s.id`,
+      pageLimit: Prisma.empty,
+    }, overlay);
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const byProject = new Map(projects.map((project) => [project.id, project]));
+    return requested.flatMap((projectId) => {
+      const project = byProject.get(projectId);
+      if (!project) return [];
+      const found = project.coordinatorSessionId ? byId.get(project.coordinatorSessionId) : undefined;
+      // The coordinator as its own rows say it: one that coordinates another project first is that one's.
+      const coordinator = found?.projectMembership?.role === 'COORDINATOR'
+        && found.projectMembership.projectId === projectId ? found : null;
+      const own = members.filter((member) => member.projectId === projectId);
+      return [{
+        projectId,
+        coordinator,
+        waiting: waiting.flatMap((member) => member.projectId === projectId && byId.has(member.id) ? [byId.get(member.id)!] : []),
+        sessionCount: new Set([...own.map((member) => member.id), ...(coordinator ? [coordinator.id] : [])]).size,
+      }];
+    });
+  }
+
+  /**
    * The row query and its mapping, shared by `list` and `listRowsByIds`.
    *
    * Every table read here, or by a reader called from here, must also be a source of
@@ -4891,11 +5002,11 @@ export class SessionsService {
         -- sessions/abandoned-approvals.ts), which a cardinality cannot answer. A client that wants
         -- the processes asks the count.
         s.running_bg_shells AS "runningBgShells",
-        -- The subset of the above that is work in flight (a job/watch, never a service), minus the
-        -- ones that have gone quiet: what the clients draw as the pulsing terminal glyph, and what
-        -- the workspace rail reads as background activity. See Session.runningBgJobs and
-        -- freshRunningBgJobs (background-job-activity.ts) — the count is derived in the mapper,
-        -- from these two columns, because the threshold applies to the read.
+        -- The subset of the above that is work in flight (a job/watch, never a service): executing
+        -- however quiet. The mapper derives from these two columns the ones still moving (what the
+        -- clients draw as the pulsing terminal glyph) and the stalled flag beside them —
+        -- movingBgJobs and bgJobsStalled (common/session-working.ts) — because the threshold
+        -- applies to the read.
         s.running_bg_jobs AS "runningBgJobs",
         s.running_bg_job_activity AS "runningBgJobActivity",
         cardinality(s.running_subagents)::int AS "runningSubagentCount",
@@ -5148,7 +5259,10 @@ export class SessionsService {
         hasGuests: r.hasGuests === true,
         tags: r.tags,
         runningBgCount: r.runningBgCount,
-        runningBgJobCount: freshRunningBgJobs(r.runningBgJobs, r.runningBgJobActivity).length,
+        // The moving jobs, which the glyph breathes for; a session whose jobs have all gone quiet is
+        // still executing (`activity` says BACKGROUND_JOB) and says so with the flag beside it.
+        runningBgJobCount: movingBgJobs(r).length,
+        runningBgJobsStalled: bgJobsStalled(r),
         runningSubagentCount: r.runningSubagentCount,
         runningSubagentTitle: r.runningSubagentTitle,
         engineTurnActive: r.engineTurnActive,
@@ -5458,6 +5572,8 @@ export class SessionsService {
       // OpenAI's own id of the ChatGPT account a login-pool session runs on (migration 0324): no response
       // names an account but by its email and masked form (providers/codex-login.ts).
       poolCodexAccountId: _poolCodexAccountId,
+      // The runner-clock stamp that orders a beat's executing sets against event batches (runner-executing-sets.ts).
+      executingEventAt: _executingEventAt,
       // Read, never spread: answered as one `lastUserFrom`, the shape the list row and the summary carry.
       lastUserFromSessionId,
       lastUserFromTitle,
@@ -5555,10 +5671,13 @@ export class SessionsService {
       // client that only needs to draw the glyph should not have to count them itself. The list
       // endpoint answers with the count and never the ids, so this is the one spelling both read.
       //
-      // Counted, not `runningBgJobs.length`: a job that has produced nothing for longer than the
-      // threshold is still a process (it stays in `runningBgShells`, and in the tray) but is no
-      // longer work in flight, which is the question this number answers.
-      runningBgJobCount: freshRunningBgJobs(session.runningBgJobs, runningBgJobActivity).length,
+      // Counted, not `runningBgJobs.length`: the jobs still moving, which is what the glyph breathes
+      // for. A job that has produced nothing for longer than the threshold is still executing — the
+      // session's `activity` and its task's run say so — and `runningBgJobsStalled` is the flag beside
+      // it when every job has gone quiet (common/session-working.ts, the same rule the task's
+      // `runStalled` and the rail's `stalledJobs` read).
+      runningBgJobCount: movingBgJobs({ runningBgJobs: session.runningBgJobs, runningBgJobActivity }).length,
+      runningBgJobsStalled: bgJobsStalled({ runningBgJobs: session.runningBgJobs, runningBgJobActivity }),
       projectId: coordinatorForProject?.id ?? null,
       projectTitle: coordinatorForProject?.title ?? null,
       projectIntegrationRef: integrationRef ? branchName(integrationRef) : null,
@@ -6325,11 +6444,7 @@ export class SessionsService {
   // A background shell with no terminal signal is still "running" only while the session is live;
   // once it's settled the shell can't still be running, so it reads as "unknown" (see
   // classifyShellStatus). Mirrors the web tray's liveness (WorkspaceView `TERMINAL`).
-  private static readonly TERMINAL_STATUSES: RunStatus[] = [
-    RunStatus.SUCCEEDED,
-    RunStatus.FAILED,
-    RunStatus.CANCELLED,
-  ];
+  private static readonly TERMINAL_STATUSES: RunStatus[] = [...RELEASED_SESSION_STATUSES];
 
   /**
    * The authoritative, complete list of background shells the session ever launched — every
@@ -6818,20 +6933,13 @@ export class SessionsService {
   // needs a short prefix of the (potentially multi-KB) denormalized preview text.
   private static readonly PREVIEW_LEN = 200;
 
-  static readonly LIVE: RunStatus[] = [
-    RunStatus.RUNNING,
-    RunStatus.AWAITING_INPUT,
-    RunStatus.INTERRUPTED,
-  ];
+  // Held by a runner past its claim (common/session-release.ts).
+  static readonly LIVE: RunStatus[] = HELD_SESSION_STATUSES.filter((status) => status !== RunStatus.PENDING);
 
   // Not live: resume() revives these (and complete/delete/config treat them as
   // already-ended). CANCELLED covers both a hard stop and a graceful, still-resumable end
   // (idle recycle / user end) — `endReason` is what tells those apart for display.
-  static readonly TERMINAL: RunStatus[] = [
-    RunStatus.SUCCEEDED,
-    RunStatus.FAILED,
-    RunStatus.CANCELLED,
-  ];
+  static readonly TERMINAL: RunStatus[] = [...RELEASED_SESSION_STATUSES];
 
   private static resumeBlocked(
     reason: SessionResumeBlockedReason,
@@ -10232,6 +10340,8 @@ export class SessionsService {
           endReason: reason,
           cancelRequestedAt: now,
           finishedAt: now,
+          // Released for the reason the end recorded (design §4.2).
+          releaseCause: releaseCauseOfEndReason(reason),
           // A queued session can still be holding what its last run left running — a job parked
           // with the session and never reaped — and CANCELLED is the end of the line for it
           // (CLEARED_RUNNING_WORK). The runner is told to stop by the same cancelRequestedAt,
@@ -11452,7 +11562,9 @@ export class SessionsService {
           inboxLeaseOwner: newTerminalResumeHandoffOwner(),
           cancelRequestedAt: null,
           endReason: null,
+          // Held again: the release column and its cause go together.
           finishedAt: null,
+          releaseCause: null,
           error: null,
           result: null,
           lastTurnAt: new Date(),

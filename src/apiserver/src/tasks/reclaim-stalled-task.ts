@@ -1,6 +1,7 @@
 import { CreatorType, Prisma, RunStatus, TaskStatus } from '@prisma/client';
 
 import { TaskFailureHow, recordTaskFailure } from '../projects/project-open-item';
+import { HELD_SESSION_STATUSES } from '../common/session-release';
 
 /** Durable task-timeline signal emitted when a reserved L0 turn cannot yield a comparison. */
 export const EXECUTABLE_ACCEPTANCE_UNAVAILABLE_SIGNAL_CODE =
@@ -12,12 +13,7 @@ export const WORK_NOT_ON_BRANCH_SIGNAL_CODE = 'WORK_NOT_ON_BRANCH';
 // Sessions that could still be working a task: live (RUNNING/AWAITING_INPUT/
 // INTERRUPTED) or queued for a runner slot (PENDING). Mirrors the reaper's LIVE
 // set plus PENDING.
-export const TASK_OCCUPYING: RunStatus[] = [
-  RunStatus.PENDING,
-  RunStatus.RUNNING,
-  RunStatus.AWAITING_INPUT,
-  RunStatus.INTERRUPTED,
-];
+export const TASK_OCCUPYING: RunStatus[] = [...HELD_SESSION_STATUSES];
 
 /**
  * Backstop for a stalled task. When a session ends abnormally (FAILED/CANCELLED),

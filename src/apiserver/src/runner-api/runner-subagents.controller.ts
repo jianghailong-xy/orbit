@@ -91,8 +91,9 @@ import {
 import { sessionHasEnded } from './background-job-wake';
 import { fileSubagentWake, fileWorkflowWake } from './subagent-wake';
 import { WORKFLOW_SCRIPT_MAX_BYTES, WorkflowRunCreateDto, WorkflowRunUpdateDto } from './workflow-run';
+import { RELEASED_SESSION_STATUSES } from '../common/session-release';
 
-const TERMINAL: RunStatus[] = [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED];
+const TERMINAL: RunStatus[] = [...RELEASED_SESSION_STATUSES];
 
 /** How a SubAgent's child runs on one candidate: the claim-shaped config, and what it resolved to. */
 interface ChildExec {

@@ -281,7 +281,10 @@ export async function ensureLandingSession(
         providerBuiltin: true,
         engine: null,
         mergeTargets: [],
-        ...(settled ? { completedAt: landing.settledAt } : {}),
+        // A settled subject starts released, at the moment it settled (design §4.2).
+        ...(settled
+          ? { completedAt: landing.settledAt, finishedAt: landing.settledAt, releaseCause: 'landing_settled' }
+          : {}),
       }],
       skipDuplicates: true,
       select: { id: true },
@@ -372,6 +375,9 @@ async function settleLanding(
         data: {
           status: SUCCESSFUL_SETTLEMENTS.has(settledAs) ? RunStatus.SUCCEEDED : RunStatus.CANCELLED,
           completedAt: settledAt,
+          // Released with the status (design §4.2).
+          finishedAt: settledAt,
+          releaseCause: 'landing_settled',
         },
       });
     }

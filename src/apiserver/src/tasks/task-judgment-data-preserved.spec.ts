@@ -3185,6 +3185,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // each that NULL passes to project_standard_set_confirmation, which is not a preserved relation; no row is
       // written, and no trigger, function or DONE fence changes.
       '1200_standard_set_confirmation_wording',
+      // 1201 adds nullable conversation_turn.outcome and error and session.last_turn_outcome, with CHECKs every
+      // stored row passes (all NULL); 1202 validates them and writes session.last_turn_outcome only. Neither is a
+      // preserved relation, and no trigger, function or DONE fence changes.
+      '1201_turn_outcome',
+      '1202_turn_outcome_backfill',
       // 1213 adds a nullable session.branch_commits (JSONB, no default); no row is written, and no preserved
       // relation, trigger, function or DONE fence changes.
       '1213_session_branch_commits',
@@ -3203,6 +3208,14 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1260 adds two nullable columns on runner, bg_job_cpus and bg_job_memory_mb (no default); no row is written,
       // and no preserved relation, trigger, function or DONE fence changes.
       '1260_runner_bg_job_limits',
+      // 1261 adds nullable session.release_cause with a CHECK every stored row passes (all NULL); 1262 validates it and
+      // writes session.finished_at and release_cause on terminal rows only. Session is not a preserved relation, and no
+      // trigger, function or DONE fence changes.
+      '1261_session_release_cause',
+      '1262_session_release_backfill',
+      // 1267 adds nullable session.executing_event_at, written by the events path only; no row is written, and no
+      // preserved relation, trigger, function or DONE fence changes.
+      '1267_session_executing_event_at',
       // 1270 adds two plain indexes, session_merge_receipt (source_sha) and task (owner_id, updated_at); no row is
       // written, and no preserved relation, trigger, function or DONE fence changes.
       '1270_receipt_source_sha_task_updated_idx',
@@ -3237,7 +3250,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '1393_owner_request_browser_sign_in',
       // 1400 adds three nullable columns, a foreign key and a partial index on owner_request_secret and account_secret;
       // no row is written, and no preserved relation, trigger, function or DONE fence changes.
-      '1400_owner_secret_saved_links'],
+      '1400_owner_secret_saved_links',
+      // 1403 widens session_release_cause_chk with engine_failed and end_not_honored (NOT VALID) and 1404 validates it;
+      // no row is written. Session is not a preserved relation, and no trigger, function or DONE fence changes.
+      '1403_session_release_failure_causes',
+      '1404_session_release_failure_causes_validate'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

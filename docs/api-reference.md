@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 37 |
-| `user` | 490 |
+| `user` | 491 |
 | `admin` | 31 |
 | `runner` | 211 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **773** |
+| **Total** | **774** |
 
 ## Public routes
 
@@ -438,6 +438,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/sessions/import` | body `Object` | `SessionsController.importSession` |
 | `POST` | `/api/sessions/import-batch` | body `Object` | `SessionsController.importBatch` |
 | `GET` | `/api/sessions/imported` | query `workspaceId` | `SessionsController.importedCount` |
+| `GET` | `/api/sessions/project-placement` | query `projectIds`, `view` | `SessionsController.projectPlacement` |
 | `POST` | `/api/sessions/remove-imported` | body `Object` | `SessionsController.removeImported` |
 | `GET` | `/api/sessions/search` | query `limit`, `q` | `SessionsController.search` |
 | `GET` | `/api/share-links` | query `kind` | `ShareLinksController.list` |

@@ -218,7 +218,8 @@ func (r *reclaimStarter) endOneLocked() {
 // answer says the session is no longer open. Called with the entry in entryTakingOver, and returns with
 // the takeover owned by the entry.
 func (r *reclaimStarter) handOver(e *reclaimStartEntry, replacedOwner string, endTakeover func(), status string) bool {
-	if !reclaimStatusOpen(status) {
+	// Only an answered takeover is handed over, so this process holds the lease.
+	if !reclaimStatusOpen(status, true) {
 		endTakeover()
 		r.giveUp(e)
 		return false
@@ -455,7 +456,8 @@ func (r *reclaimStarter) takeNextIdleChunk(n int) []*reclaimStartEntry {
 }
 
 // refreshIdle brings the idle entries still waiting up to a fresh snapshot: each takes its row's lease
-// owner, and one the snapshot no longer lists (or lists closed) is given up.
+// owner, and one the snapshot no longer lists (or lists with a terminal word) is given up. One listed
+// with a word this binary does not know keeps waiting: its takeover's answer decides it (handOver).
 func (r *reclaimStarter) refreshIdle(sessions []ReclaimSession) {
 	rows := make(map[string]ReclaimSession, len(sessions))
 	for _, s := range sessions {
@@ -468,7 +470,7 @@ func (r *reclaimStarter) refreshIdle(sessions []ReclaimSession) {
 			continue
 		}
 		row, listed := rows[e.pending.job.SessionID]
-		if !listed || !reclaimStatusOpen(row.Status) {
+		if !listed || reclaimStatusEnded(row.Status) {
 			e.state = entryTakingOver
 			gone = append(gone, e)
 			continue

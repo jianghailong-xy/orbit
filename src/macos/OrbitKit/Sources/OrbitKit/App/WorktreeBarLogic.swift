@@ -162,7 +162,7 @@ public enum WorktreeBarLogic {
         switch status {
         case .pending, .running: return true
         case .awaitingInput, .interrupted: return sending || (runningSubagents ?? 0) > 0
-        case .succeeded, .failed, .cancelled: return false
+        case .succeeded, .failed, .cancelled, .unknown: return false
         }
     }
 

@@ -33,6 +33,7 @@ import {
   hypothesisDigest,
   planAttemptClose,
 } from './attempt-budget';
+import { RELEASED_SESSION_STATUSES } from '../common/session-release';
 
 /**
  * `[K3]`: the attempt, written down.
@@ -564,7 +565,7 @@ export class SessionAttemptService {
   }
 }
 
-const TERMINAL_RUN_STATUS: readonly string[] = ['SUCCEEDED', 'FAILED', 'CANCELLED'];
+const TERMINAL_RUN_STATUS: readonly string[] = RELEASED_SESSION_STATUSES;
 
 export interface AttemptRow {
   id: string;

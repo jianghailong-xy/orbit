@@ -477,10 +477,11 @@ suite('SOURCE freeze and pin, on real PostgreSQL', async (t) => {
       where: { id: sessionId },
       select: {
         status: true, error: true, finishedAt: true, runClaimedAt: true, inboxLeaseOwner: true,
-        inboxLeaseGeneration: true, numTurns: true, sourceState: true,
+        inboxLeaseGeneration: true, numTurns: true, sourceState: true, releaseCause: true,
       },
     });
     assert.equal(row.status, RunStatus.FAILED, 'a refused run was left running');
+    assert.equal(row.releaseCause, 'setup_failed', 'the release names the run that never started');
     assert.equal(row.error, `BASE_REF_NOT_FOUND: ${stderr}`);
     assert.ok(row.finishedAt instanceof Date && row.finishedAt >= before && row.finishedAt <= after);
     assert.equal(row.numTurns, 0, 'the refused run reported turns');
