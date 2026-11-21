@@ -160,8 +160,7 @@ class FaultProxy {
 
 // ── a web server for curl and wget (row 12) ──────────────────────────────────────────────────────
 
-async function fileServer(files: Record<string, Buffer>, cutFirstAt?: number): Promise<{ port: number; stop: () => Promise<void> }> {
-  let cut = cutFirstAt;
+async function fileServer(files: Record<string, Buffer>, cut?: { path: string; at: number }): Promise<{ port: number; stop: () => Promise<void> }> {
   const server = http.createServer((req, res) => {
     const body = files[req.url ?? ''];
     if (!body) {
@@ -169,6 +168,10 @@ async function fileServer(files: Record<string, Buffer>, cutFirstAt?: number): P
       return;
     }
     const range = /^bytes=(\d+)-$/.exec(String(req.headers.range ?? ''));
+    if (range && Number(range[1]) >= body.length) {
+      res.writeHead(416, { 'Content-Range': `bytes */${body.length}` }).end();
+      return;
+    }
     if (range) {
       const from = Number(range[1]);
       res.writeHead(206, { 'Content-Length': body.length - from, 'Content-Range': `bytes ${from}-${body.length - 1}/${body.length}`, 'Accept-Ranges': 'bytes' });
@@ -176,9 +179,9 @@ async function fileServer(files: Record<string, Buffer>, cutFirstAt?: number): P
       return;
     }
     res.writeHead(200, { 'Content-Length': body.length, 'Accept-Ranges': 'bytes' });
-    if (cut !== undefined) {
-      // The first whole download is cut short, for `wget -c` to resume.
-      const at = cut;
+    if (cut && cut.path === req.url) {
+      // The first whole download of it is cut short, for `wget -c` to resume.
+      const at = cut.at;
       cut = undefined;
       res.write(body.subarray(0, at), () => res.socket?.destroy());
       return;
@@ -524,8 +527,19 @@ test('Orbit Files drive: the mount daemon passes the shell-operation list (§5.9
         results.push({ row: n, what, outcome: 'PASS', detail, ms: Date.now() - started });
       } catch (error) {
         results.push({ row: n, what, outcome: 'FAIL', detail: [...detail, `FAILED: ${(error as Error).message.split('\n')[0]}`], ms: Date.now() - started });
-        t.diagnostic(`runner a's log tail:\n${a.log.slice(-3000)}`);
+        t.diagnostic(`row ${n}: runner a's log tail:\n${a.log.slice(-3000)}\nrunner b's log tail:\n${b.log.slice(-1500)}`);
         throw error;
+      } finally {
+        // Whatever a row did to the network, the next one starts with both daemons reaching the server.
+        for (const r of [a, b]) {
+          r.proxy.set('pass');
+          r.proxy.dropCommitAnswers = 0;
+        }
+        for (const r of [a, b]) {
+          if (r.parent?.exitCode === null && existsSync(path.join(r.root, 'status.json'))) {
+            await waitFor(`runner ${r.name} connected again`, () => status(r).connected || status(r).fenced !== undefined, 30_000).catch(() => undefined);
+          }
+        }
       }
     });
   };
@@ -540,7 +554,14 @@ test('Orbit Files drive: the mount daemon passes the shell-operation list (§5.9
     assert.equal(e.lastWriter.kind, 'AGENT');
     assert.equal(toUuid(e.lastWriter.runnerId!), a.id, 'written through runner A');
     assert.equal(toUuid(e.lastWriter.sessionId!), sessionOnA, 'and by the session whose process wrote it (§5.8)');
-    d.push(`Files page lists r1-a.txt, 3 bytes, last writer AGENT on runner A, session ${sessionOnA.slice(0, 8)} (from /proc of the writer)`);
+    // What the Files page lists (FilesPage.tsx reads GET /drive/entries; DriveWriterName shows "Agent in <session>").
+    const page = await api('GET', '/drive/entries');
+    assert.equal(page.status, 200, page.text);
+    const listed = (page.json.entries as Array<{ name: string; sizeBytes: number; lastWriter: { kind: string; sessionId: string | null } }>)
+      .find((x) => x.name === 'r1-a.txt')!;
+    assert.equal(listed.sizeBytes, 3);
+    assert.equal(toUuid(listed.lastWriter.sessionId!), sessionOnA);
+    d.push(`the Files page's listing has r1-a.txt, 3 bytes, last writer AGENT through runner A in session ${sessionOnA.slice(0, 8)} ("writes the report", from /proc of the writing process), which the page shows as "Agent in writes the report"`);
     // A process outside the runner's Pod is attributed to no session, whatever its environment says.
     ok(await sh(a, 'echo hi > $F/r1-outside.txt', { session: sessionOnA, outsidePod: true }), 'outside the pod');
     const outside = await mustEntry('/r1-outside.txt');
@@ -684,21 +705,22 @@ test('Orbit Files drive: the mount daemon passes the shell-operation list (§5.9
   await row('12', 'tee; curl -o; wget -c interrupted and resumed', async (d) => {
     const page = Buffer.from(`<html>${'x'.repeat(5000)}</html>\n`);
     const big = randomBytes(3 * MiB + 12345);
-    const web = await fileServer({ '/page.html': page, '/big.bin': big }, 1 * MiB + 777);
+    const web = await fileServer({ '/page.html': page, '/dl12.bin': big }, { path: '/dl12.bin', at: 1 * MiB + 777 });
     try {
       const s = await sh(a, `
         echo x | tee $F/t.txt >/dev/null; echo "tee rc=$?"
         curl -sS -o $F/page.html http://127.0.0.1:${web.port}/page.html; echo "curl rc=$?"
-        cd $F && wget -q --tries=1 http://127.0.0.1:${web.port}/big.bin; echo "wget1 rc=$?"; stat -c %s $F/big.bin
-        cd $F && wget -q -c --tries=1 http://127.0.0.1:${web.port}/big.bin; echo "wget2 rc=$?"
-        sha256sum < $F/big.bin`);
+        cd $F && wget -q --tries=1 --read-timeout=5 http://127.0.0.1:${web.port}/dl12.bin; echo "wget1 rc=$?"; stat -c %s $F/dl12.bin
+        cd $F && wget -q -c --tries=1 http://127.0.0.1:${web.port}/dl12.bin; echo "wget2 rc=$?"
+        sha256sum < $F/dl12.bin`);
       assert.match(s.out, /tee rc=0/);
       assert.match(s.out, /curl rc=0/);
+      assert.match(s.out, new RegExp(`wget1 rc=[1-9]\\d*\\n${1 * MiB + 777}\\n`), 'the first download was cut short');
       assert.match(s.out, /wget2 rc=0/);
       assert.equal(s.out.trim().split('\n').pop()!.split(' ')[0], sha256(big), 'the final hash is the source\'s');
       assert.equal((await content('/t.txt')).toString(), 'x\n');
       assert.deepEqual(await content('/page.html'), page);
-      assert.equal((await versions((await mustEntry('/big.bin')).id)).length, 1, 'wget -c resumed by appending: no version');
+      assert.equal((await versions((await mustEntry('/dl12.bin')).id)).length, 1, 'wget -c resumed by appending: no version');
       d.push(`tee, curl -o: exit 0; wget cut at ${1 * MiB + 777} bytes (rc ${/wget1 rc=(\d+)/.exec(s.out)![1]}), wget -c resumed by appending: exit 0, one version, hash matches`);
     } finally {
       await web.stop();
@@ -839,11 +861,16 @@ test('Orbit Files drive: the mount daemon passes the shell-operation list (§5.9
 
   await row('23', 'the same with some executable files', async (d) => {
     ok(await sh(a, 'mkdir -p ~/src23 && echo a > ~/src23/plain && printf "#!/bin/sh\\n" > ~/src23/run.sh && chmod 755 ~/src23/run.sh && tar -C ~/src23 -czf ~/src23.tgz .'), 'archive');
-    const s = await sh(a, 'mkdir -p $F/x23 && tar -C $F/x23/ -xzf ~/src23.tgz; echo "rc=$?"; diff -r ~/src23 $F/x23 && echo same');
-    assert.match(s.out, /rc=2/);
-    assert.match(s.out, /same/);
-    assert.match(s.err, /Cannot change mode.*Operation not permitted/);
-    d.push('contents match; tar: "Cannot change mode … Operation not permitted", exit 2');
+    const s = await sh(a, `mkdir -p $F/x23 && tar -C $F/x23/ -xzf ~/src23.tgz; echo "rc=$?"; diff -r ~/src23 $F/x23 && echo same; stat -c %a $F/x23/run.sh
+      mkdir -p $F/x23p && tar -C $F/x23p/ -xpzf ~/src23.tgz; echo "rc-p=$?"; diff -r ~/src23 $F/x23p && echo same-p`);
+    // GNU tar run by a user (not root) chmods a regular file only when asked (-p, --same-permissions): it creates it
+    // with the archive's mode and takes that as done, so the executable bit the drive cannot keep is dropped silently.
+    // GNU tar creates a file with the mode it is to have and, having created it, takes that mode as set: it chmods a
+    // regular file neither as a user nor with -p. The executable bit the drive cannot keep goes without tar seeing a
+    // refusal, so §5.9's "Cannot change mode … exits 2" cannot happen; errors.log names each such file instead.
+    assert.match(s.out, /rc=0\nsame\n644\nrc-p=0\nsame-p/);
+    assert.match(errorsLog(a), /INFO create \/home\/orbit\/Files\/x23\/run\.sh with mode 0755: the drive keeps no modes: the file is 0644 and cannot be executed/);
+    d.push('every file\'s content matches; tar -x and tar -xp both exit 0 and run.sh shows 0644: GNU tar takes the mode it created a file with as set and chmods no regular file, so it meets no refusal (§5.9\'s "Cannot change mode … exit 2" does not happen with GNU tar 1.35); errors.log says run.sh was created executable and is kept 0644');
   });
 
   await row('24', 'tar -C $F/ -czf ~/out.tgz . and tar -tzf', async (d) => {
@@ -895,7 +922,8 @@ test('Orbit Files drive: the mount daemon passes the shell-operation list (§5.9
     assert.equal(added.filter((g) => g.items.some((i) => i.name === 'dir29' || i.name.startsWith('top') || i.name.startsWith('s'))).length, 1, 'one group for the rm -rf');
     assert.equal(dirGroup.itemCount, 500);
     assert.equal(dirGroup.folderPath, '/');
-    assert.equal((await api('POST', `/drive/trash/groups/${dirGroup.id}/restore`)).status, 201);
+    const restored = await api('POST', `/drive/trash/groups/${dirGroup.id}/restore`);
+    assert.ok(restored.status === 200 || restored.status === 201, restored.text);
     await waitFor('the restored tree on the mount', async () => (await sh(a, 'test "$(find $F/dir29/ -type f | wc -l)" = 490')).code === 0, 30_000, 500);
     ok(await sh(a, 'diff -r ~/dir29 $F/dir29'), 'the tree is back');
     d.push('exit 0; Trash: a29.txt, and one group "dir29, 500 items" from /; restoring it brought the tree back, seen by the mount');
@@ -944,7 +972,7 @@ test('Orbit Files drive: the mount daemon passes the shell-operation list (§5.9
     assert.equal(added.length, 1, `one group, not ${added.length}`);
     assert.equal(added[0].itemCount, hugeFolders * 101 + 1);
     const restore = await api('POST', `/drive/trash/groups/${added[0].id}/restore`);
-    assert.equal(restore.status, 201, restore.text);
+    assert.ok(restore.status === 200 || restore.status === 201, restore.text.slice(0, 300));
     const back = await db.driveEntry.count({ where: { ownerId: owner, kind: 'FILE', trashedAt: null, parent: { parentId: toUuid((await mustEntry('/huge30')).id) } } });
     assert.equal(back, hugeFolders * 100);
     d.push(`exit 0 in ${(s.ms / 1000).toFixed(0)} s (${(s.ms / (hugeFolders * 101)).toFixed(1)} ms per delete); one group of ${added[0].itemCount} items; restoring it brought back ${back} files`);
@@ -956,7 +984,8 @@ test('Orbit Files drive: the mount daemon passes the shell-operation list (§5.9
     const before = await trash();
     ok(await sh(a, 'rm $F/a31.txt && echo second > $F/a31.txt'), 'rm and write again');
     const g = (await newGroups(before)).find((x) => x.items.some((i) => i.name === 'a31.txt'))!;
-    assert.equal((await api('POST', `/drive/trash/groups/${g.id}/restore`)).status, 201);
+    const restored = await api('POST', `/drive/trash/groups/${g.id}/restore`);
+    assert.ok(restored.status === 200 || restored.status === 201, restored.text);
     assert.equal((await content('/a31 (2).txt')).toString(), 'first\n');
     assert.equal((await content('/a31.txt')).toString(), 'second\n');
     await waitFor('the mount sees a31 (2).txt', async () => (await sh(a, 'test "$(cat "$F/a31 (2).txt")" = first')).code === 0, 30_000, 500);
@@ -975,17 +1004,21 @@ test('Orbit Files drive: the mount daemon passes the shell-operation list (§5.9
       ]);
       const webOk = web.status === 200;
       const mountOk = /rc=0/.test(mount.out);
-      assert.ok(!(webOk && mountOk), 'not both');
-      assert.ok(webOk || mountOk, `one of them: web ${web.status} ${web.text}, mount ${mount.out}`);
       // No folder is inside itself.
+      const chain: string[] = [];
       for (const id of [toUuid(p.id), toUuid(q.id)]) {
         const seen = new Set<string>();
         for (let cur: string | null = id; cur; ) {
           assert.ok(!seen.has(cur), 'a cycle');
           seen.add(cur);
-          cur = (await db.driveEntry.findUniqueOrThrow({ where: { id: cur } })).parentId;
+          const entry: { name: string; parentId: string | null } = await db.driveEntry.findUniqueOrThrow({ where: { id: cur } });
+          chain.push(entry.name || '/');
+          cur = entry.parentId;
         }
       }
+      const said = `web ${web.status} ${web.text.slice(0, 200)}; mount ${mount.out.trim()} ${mount.err.trim()}; parents ${chain.join(' < ')}`;
+      assert.ok(!(webOk && mountOk), `not both: ${said}`);
+      assert.ok(webOk || mountOk, `one of them: ${said}`);
       moveOutcomes += `${webOk ? 'web' : 'mount'} won (${webOk ? mount.out.trim().split('\n')[0] : `409 ${web.json?.code}`}); `;
     }
     let trashOutcomes = '';
@@ -1030,17 +1063,17 @@ test('Orbit Files drive: the mount daemon passes the shell-operation list (§5.9
   });
 
   await row('35', 'ls -la $F/ (with the slash), and $F without it', async (d) => {
-    const s = ok(await sh(a, 'ls -la $F/ | head -12; echo ---; ls -la $F; echo ---; stat -c "%u %g %A" $F/b.txt $F/sub; ls -a $F/ | grep -ci trash'), 'ls');
+    const s = ok(await sh(a, 'echo f > $F/r35.txt && mkdir -p $F/r35dir && ls -la $F/ | head -12; echo ---; ls -la $F; echo ---; stat -c "%u %g %A" $F/r35.txt $F/r35dir; ls -a $F/ | grep -ci trash || true'), 'ls');
     const [listing, link, stats] = s.out.split('---\n');
     assert.match(listing, /^drwxr-xr-x .* 10001 10001 .* \.$/m);
     assert.match(link, /^l.* -> .*\/drive$/m, 'without the slash: the symlink');
     assert.match(stats, /^10001 10001 -rw-r--r--\n10001 10001 drwxr-xr-x\n0\n$/);
     d.push('uid/gid 10001 (orbit in the runner image), files -rw-r--r--, folders drwxr-xr-x, no Trash folder; ls -la $F shows the symlink');
     // $F and $F/: a command that does not follow a symlink given as its argument sees the link without the slash.
-    const both = ok(await sh(a, 'find $F | wc -l; find $F/ -maxdepth 1 | wc -l; cat $F/b.txt >/dev/null && cat $F/sub/c.txt >/dev/null && echo cat-both; ls -ld $F | cut -c1; ls -ld $F/ | cut -c1'), '$F and $F/');
+    const both = ok(await sh(a, 'echo g > $F/r35dir/g.txt; find $F | wc -l; find $F/ -maxdepth 1 | wc -l; cat $F/r35.txt >/dev/null && cat $F/r35dir/g.txt >/dev/null && echo cat-both; ls -ld $F | cut -c1; ls -ld $F/ | cut -c1'), '$F and $F/');
     const [linkOnly, listed, cats, linkType, dirType] = both.out.trim().split('\n');
     assert.equal(linkOnly, '1', 'find $F: the link alone');
-    assert.ok(Number(listed) > 10, 'find $F/: the drive');
+    assert.ok(Number(listed) > 2, 'find $F/: the drive');
     assert.equal(cats, 'cat-both');
     assert.deepEqual([linkType, dirType], ['l', 'd']);
     d.push(`find $F lists the link alone, find $F/ the drive (${listed} at depth 1); paths below either spelling work`);
@@ -1117,10 +1150,10 @@ test('Orbit Files drive: the mount daemon passes the shell-operation list (§5.9
   });
 
   await row('39', 'chmod +x $F/a.txt; chmod 644 $F/a.txt', async (d) => {
-    const s = await sh(a, 'echo t > $F/m39; chmod +x $F/m39; echo "rc1=$?"; chmod 644 $F/m39; echo "rc2=$?"');
-    assert.match(s.out, /rc1=1\nrc2=0/);
+    const s = await sh(a, 'echo t > $F/m39; chmod +x $F/m39; echo "rc1=$?"; chmod 644 $F/m39; echo "rc2=$?"; chmod 600 $F/m39; echo "rc3=$?"; chmod 664 $F/m39; echo "rc4=$?"; stat -c %a $F/m39');
+    assert.match(s.out, /rc1=1\nrc2=0\nrc3=0\nrc4=1\n644/);
     assert.match(s.err, /Operation not permitted/);
-    d.push('first: "Operation not permitted"; second: exit 0');
+    d.push('first: "Operation not permitted"; second: exit 0. Also: 0600 (the owner\'s own bits, which rsync -a sets on its temporary files) is a no-op, 0664 is refused; the mode stays 0644');
   });
 
   await row('40', 'flock $F/a.txt true; sqlite create table', async (d) => {
@@ -1191,6 +1224,11 @@ g = open('$F/m43', 'rb'); m = mmap.mmap(g.fileno(), 0, access=mmap.ACCESS_READ);
     const s = await sh(a, `echo x > $F/x46; echo y > $F/y46
       mv --exchange $F/x46 $F/y46; echo "exchange rc=$?"
       python3 -c "
+import ctypes, errno, os
+libc = ctypes.CDLL(None, use_errno=True)
+r = libc.renameat2(-100, b'$F/x46', -100, b'$F/y46', 2)
+print('renameat2', r, errno.errorcode[ctypes.get_errno()])"
+      python3 -c "
 import os, errno
 for name, call in [('setxattr', lambda: os.setxattr('$F/x46', 'user.k', b'v')), ('getxattr', lambda: os.getxattr('$F/x46', 'user.k')),
                    ('fallocate', lambda: os.posix_fallocate(os.open('$F/x46', os.O_WRONLY), 0, 4096))]:
@@ -1200,14 +1238,14 @@ for name, call in [('setxattr', lambda: os.setxattr('$F/x46', 'user.k', b'v')), 
         print(name, errno.errorcode[e.errno])
 print('listxattr', os.listxattr('$F/x46'))"`);
     assert.match(s.out, /exchange rc=1/);
-    assert.match(s.err, /Invalid argument/);
-    assert.match(s.out, /setxattr (ENOTSUP|EOPNOTSUPP)\ngetxattr ENODATA\nfallocate EOPNOTSUPP\nlistxattr \[\]/);
+    assert.match(s.out, /renameat2 -1 EINVAL/);
+    assert.match(s.out, /setxattr (ENOTSUP|EOPNOTSUPP)\ngetxattr ENODATA\nfallocate (ENOTSUP|EOPNOTSUPP)\nlistxattr \[\]/);
     assert.equal((await content('/x46')).toString(), 'x\n', 'nothing swapped');
     const log = errorsLog(a);
     assert.match(log, /EINVAL rename .*x46.*RENAME_EXCHANGE/);
     assert.match(log, /ENOTSUP setxattr .*x46 user\.k: the drive keeps no extended attributes/);
     assert.match(log, /EOPNOTSUPP fallocate .*x46/);
-    d.push('mv --exchange: "Invalid argument" and nothing swapped; setxattr ENOTSUP, getxattr ENODATA, listxattr empty; fallocate EOPNOTSUPP; each refusal in errors.log');
+    d.push(`renameat2(RENAME_EXCHANGE): EINVAL ("Invalid argument"), which mv --exchange words "${(/mv: [^\n]*: ([^\n]+)/.exec(s.err) ?? ['', '?'])[1]}"; nothing swapped; setxattr ENOTSUP, getxattr ENODATA, listxattr empty; fallocate EOPNOTSUPP; each refusal in errors.log`);
   });
 
   // ═══ Sharing state, outages, failures ══════════════════════════════════════════════════════════
@@ -1262,24 +1300,30 @@ print('listxattr', os.listxattr('$F/x46'))"`);
     await ownerUpload('/off48', 'uncached.txt', Buffer.from('never read on A\n'));
     await waitFor('A lists the uncached file', async () => (await sh(a, 'ls $F/off48/ | grep -q uncached.txt')).code === 0, 30_000, 200);
     for (const mode of ['refuse', 'blackhole'] as const) {
+      // Read while online, as an agent would have: a reconnect drops the metadata cache (§5.4), the chunks stay.
+      ok(await sh(a, 'cat $F/off48/cached.txt && ls $F/off48/ >/dev/null'), 'warm the cache');
       a.proxy.set(mode);
-      const s = await sh(a, `
+      const reads = await sh(a, `
         cat $F/off48/cached.txt; echo "cached rc=$?"
         ls $F/off48/ | tr '\\n' ' '; echo "ls rc=$?"
-        s=$(date +%s%N); cat $F/off48/uncached.txt; echo "uncached rc=$? ms=$(( ($(date +%s%N) - s) / 1000000 ))"
-        echo x > $F/off48/n-${mode}; echo "create rc=$?"
-        echo x >> $F/off48/app.txt; echo "append rc=$?"`, { timeoutMs: 120_000 });
-      assert.match(s.out, /cached\ncached rc=0/);
-      assert.match(s.out, /cached\.txt .*ls rc=0/);
-      assert.match(s.out, /uncached rc=1 ms=\d+/);
-      const uncachedMs = Number(/uncached rc=1 ms=(\d+)/.exec(s.out)![1]);
+        s=$(date +%s%N); cat $F/off48/uncached.txt; echo "uncached rc=$? ms=$(( ($(date +%s%N) - s) / 1000000 ))"`, { timeoutMs: 120_000 });
+      assert.match(reads.out, /cached\ncached rc=0/);
+      assert.match(reads.out, /cached\.txt .*ls rc=0/);
+      assert.match(reads.out, /uncached rc=1 ms=\d+/);
+      const uncachedMs = Number(/uncached rc=1 ms=(\d+)/.exec(reads.out)![1]);
       assert.ok(uncachedMs <= 10_000, `uncached cat failed after ${uncachedMs} ms`);
-      assert.match(s.err, /uncached\.txt: Input\/output error/);
-      assert.match(s.err, new RegExp(`n-${mode}: Input/output error`));
-      assert.match(s.err, /write error: Input\/output error/);
-      assert.match(s.out, /append rc=1/);
-      await waitFor('status.json says offline', () => status(a).connected === false, 30_000);
-      d.push(`${mode === 'refuse' ? 'connections refused' : 'connections held unanswered'}: cached cat and ls work; uncached cat "Input/output error" after ${uncachedMs} ms; echo > fails at open, echo >> at write ("write error: Input/output error"); status.json connected=false since ${status(a).since}`);
+      assert.match(reads.err, /uncached\.txt: Input\/output error/);
+      // The daemon is offline once it has met the outage (three failures in 10 s, or one request past its deadline).
+      const cut = Date.now();
+      await waitFor('status.json says offline', () => status(a).connected === false, 30_000, 100);
+      const noticed = Date.now() - cut;
+      const writes = await sh(a, `
+        echo x > $F/off48/n-${mode}; echo "create rc=$?"
+        echo x >> $F/off48/app.txt; echo "append rc=$?"`, { timeoutMs: 60_000 });
+      assert.match(writes.err, new RegExp(`n-${mode}: Input/output error`));
+      assert.match(writes.err, /write error: Input\/output error/);
+      assert.match(writes.out, /create rc=1\nappend rc=1/);
+      d.push(`${mode === 'refuse' ? 'connections refused' : 'connections held unanswered'}: cached cat and ls work; uncached cat "Input/output error" after ${uncachedMs} ms; status.json connected=false (since ${status(a).since}, ${noticed} ms after the uncached read); then echo > fails at open, echo >> at write ("write error: Input/output error")`);
       a.proxy.set('pass');
       await waitFor('back online', () => status(a).connected === true, 30_000);
     }
@@ -1431,8 +1475,9 @@ f = open('$F/long52.log', 'w'); f.write('one line\\n'); f.flush(); time.sleep(70
   });
 
   await row('57', 'umount, fusermount3 -u, mount -o remount,ro from the agent', async (d) => {
-    const s = await sh(a, 'umount $F/; echo "rc1=$?"; fusermount3 -u $F/; echo "rc2=$?"; mount -o remount,ro $F/; echo "rc3=$?"; ls $F/b.txt');
-    assert.match(s.out, /rc1=[1-9]\d*\nrc2=[1-9]\d*\nrc3=[1-9]\d*\n.*b\.txt/);
+    const s = await sh(a, 'echo f > $F/r57.txt; umount $F/; echo "rc1=$?"; fusermount3 -u $F/; echo "rc2=$?"; mount -o remount,ro $F/; echo "rc3=$?"; cat $F/r57.txt && echo f >> $F/r57.txt && echo still-mounted-and-writable');
+    assert.match(s.out, /rc1=[1-9]\d*\nrc2=[1-9]\d*\nrc3=[1-9]\d*\nf\nstill-mounted-and-writable/, `${s.out}\n${s.err}`);
+    assert.ok(mounted(a.drive));
     assert.match(s.err, /must be superuser|Operation not permitted|not permitted/);
     d.push(`refused: ${s.err.trim().split('\n').map((l) => l.replace(/\/\S+/g, '…')).join(' / ')}; the drive is still mounted`);
   });

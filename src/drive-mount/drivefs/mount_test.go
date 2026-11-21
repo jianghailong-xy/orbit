@@ -381,6 +381,17 @@ func TestRefusalsSayWhy(t *testing.T) {
 	if err := os.Chmod(p, 0o644); err != nil {
 		t.Fatalf("chmod to the mode shown: %v", err)
 	}
+	// The owner's own bits are free (rsync -a's 0600 and 0700 on its temporary files); group and others' are not.
+	for _, mode := range []os.FileMode{0o600, 0o700, 0o444} {
+		if err := os.Chmod(p, mode); err != nil {
+			t.Fatalf("chmod %o: %v", mode, err)
+		}
+	}
+	for _, mode := range []os.FileMode{0o666, 0o711, 0o755 | os.ModeSetuid} {
+		if err := os.Chmod(p, mode); !errors.Is(err, syscall.EPERM) {
+			t.Fatalf("chmod %o: %v", mode, err)
+		}
+	}
 	fh, _ := os.Open(p)
 	if err := syscall.Flock(int(fh.Fd()), syscall.LOCK_EX); !errors.Is(err, syscall.ENOLCK) {
 		t.Fatalf("flock: %v", err)

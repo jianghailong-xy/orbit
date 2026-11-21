@@ -231,6 +231,12 @@ func (fs *FS) Create(cancel <-chan struct{}, input *fuse.CreateIn, name string, 
 	fs.rememberChildLocked(e)
 	fs.entryOutLocked(n, &out.EntryOut)
 	fs.mu.Unlock()
+	if input.Mode&0o111 != 0 {
+		// tar x creates a file with the mode it is to have and never checks it (as a user it chmods nothing), so the
+		// executable bit the drive cannot keep would go without a word: errors.log says so (rule 2).
+		fs.rep.Log(fuse.OK, "create", fs.display(drivePath), fmt.Sprintf("with mode %04o", input.Mode&0o7777),
+			"the drive keeps no modes: the file is 0644 and cannot be executed; run it with bash")
+	}
 	if input.Flags&syscall.O_ACCMODE == syscall.O_RDONLY {
 		fh := fs.addHandle(&handle{node: n})
 		out.OpenOut.Fh = fh
@@ -379,11 +385,16 @@ func (fs *FS) SetAttr(cancel <-chan struct{}, input *fuse.SetAttrIn, out *fuse.A
 	drivePath := fs.pathForLog(n.ino, "")
 	valid := input.Valid
 	if valid&fuse.FATTR_MODE != 0 {
-		shown := uint32(0o644)
+		// Nothing is stored. The owner's own bits are free, since no other user is on the runner, and group and
+		// others may read: so the mode shown (0644, folders 0755) and 0600 or 0700 are no-ops. rsync -a sets 0600, or
+		// 0700 for an executable, on each temporary file before writing it, and refusing that would copy nothing. What
+		// a file cannot be in the drive, executable by group or others (chmod +x, 0755), writable by them, setuid, is
+		// refused visibly (§5.6, §12.5): cp -p, rsync -a and tar x of an executable copy its bytes and then fail.
+		allowed := uint32(0o744)
 		if n.dir {
-			shown = 0o755
+			allowed = 0o755
 		}
-		if want := input.Mode & 0o7777; want != shown {
+		if want := input.Mode & 0o7777; want&^allowed != 0 {
 			return fs.refuse(fuse.EPERM, "chmod", drivePath, fmt.Sprintf("to %04o", want),
 				fmt.Sprintf("the drive keeps no modes: files are 0644 and folders 0755; to run a script, use bash %s", fs.display(drivePath)))
 		}
