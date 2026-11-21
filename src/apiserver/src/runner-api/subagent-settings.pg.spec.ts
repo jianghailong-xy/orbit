@@ -28,7 +28,7 @@ import { test } from 'node:test';
 
 import { BadRequestException, ForbiddenException, NotFoundException, ValidationPipe } from '@nestjs/common';
 import { type PrismaClient, type Runner, RunStatus, RunnerStatus } from '@prisma/client';
-import { toUuid } from '@orbit/shared';
+import { type ModelQuality, type ProviderModelTier, type SubagentTiersResponse, toUuid } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { sha256 } from '../common/crypto.util';
@@ -57,6 +57,26 @@ import { SubagentRunCreateDto } from './subagent-run';
 import { planSubagentRoute, subagentBlockedProviders } from './subagent-route';
 
 const URL = process.env.COORDINATOR_PG_URL;
+
+/** No SubAgent run and no done task: the quality every model of these fresh accounts has (docs/subagent-design.md §7.1). */
+const NO_RUNS: ModelQuality = {
+  subagent: { averageRating: null, ratedCount: 0, runCount: 0, raters: [] },
+  tasks: { firstPassRate: null, firstPassTaskCount: 0, completedTaskCount: 0 },
+};
+
+/** The tiers view as the Tier column's cases read it: each model's quality, which these accounts have none of, checked and
+ *  set aside (subagent-rating.pg.spec.ts holds it). */
+function tierRows(view: SubagentTiersResponse): SubagentTiersResponse {
+  return {
+    providers: view.providers.map((provider) => ({
+      ...provider,
+      models: provider.models.map(({ quality, ...model }) => {
+        assert.deepEqual(quality, NO_RUNS, `${model.model} has no runs`);
+        return model as ProviderModelTier;
+      }),
+    })),
+  };
+}
 process.env.PROVIDER_SECRET_KEY ??= 'subagent-settings-spec';
 const skip = !URL;
 
@@ -231,7 +251,7 @@ test('SubAgents settings: defaults, the human doors, the runner refusals, Workfl
       ownerId, workspaceId: agent.id, runnerId, parent: { engine: 'claude', provider: 'claude', model: 'claude-opus-5-5', effort: 'high' },
       dto: { toolUseId: `toolu_${randomUUID()}`, type: 'general', definitionSource: 'builtin', size: 'M' },
     });
-    const row = async () => (await providersDoor.subagentTiers(user)).providers.find((entry) => entry.slug === slug);
+    const row = async () => tierRows(await providersDoor.subagentTiers(user)).providers.find((entry) => entry.slug === slug);
 
     const untiered = await plan();
     t.diagnostic(`before: ${JSON.stringify(untiered)}`);
@@ -281,7 +301,7 @@ test('SubAgents settings: defaults, the human doors, the runner refusals, Workfl
 
   await t.test('the Tier column: preset tiers from the catalogue, not editable', async () => {
     await prisma.user.update({ where: { id: ownerId }, data: { preferences: {} } });
-    const view = await providersDoor.subagentTiers(user);
+    const view = tierRows(await providersDoor.subagentTiers(user));
     const claude = view.providers.find((entry) => entry.slug === 'claude');
     assert.deepEqual(claude?.models, [
       { model: 'claude-sonnet-5-5', levels: ['S', 'M'], source: 'catalogue', editable: true, outputPricePerMTok: null },
@@ -299,7 +319,7 @@ test('SubAgents settings: defaults, the human doors, the runner refusals, Workfl
         apiKeyEnc: 'x', presetSlug: 'deepseek', followsPreset: true, ownerId, position: 2 },
     });
     t.after(async () => { await prisma.modelProvider.deleteMany({ where: { id: deepseek.id } }); });
-    const preset = (await providersDoor.subagentTiers(user)).providers.find((entry) => entry.slug === deepseek.slug);
+    const preset = tierRows(await providersDoor.subagentTiers(user)).providers.find((entry) => entry.slug === deepseek.slug);
     assert.ok(preset && preset.models.length > 0);
     for (const model of preset.models) {
       assert.equal(model.source, 'catalogue', `${model.model} takes its tier from the preset`);
@@ -343,7 +363,7 @@ test('SubAgents settings: defaults, the human doors, the runner refusals, Workfl
       ownerId, workspaceId: agent.id, runnerId, parent: { engine: 'claude', provider: 'claude', model: 'claude-opus-5-5', effort: 'high' },
       dto: { toolUseId: `toolu_${randomUUID()}`, type: 'general', definitionSource: 'builtin', size },
     });
-    const cursor = async () => (await providersDoor.subagentTiers(user)).providers.find((entry) => entry.slug === 'cursor')?.models;
+    const cursor = async () => tierRows(await providersDoor.subagentTiers(user)).providers.find((entry) => entry.slug === 'cursor')?.models;
     const tier = async (model: string, value: 'S' | 'M' | 'L' | 'XL' | null) =>
       providersDoor.setBuiltinModelTier(user, 'cursor', await asSent(UpdateProviderModelTierDto, { model, tier: value }));
 
