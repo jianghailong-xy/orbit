@@ -7856,6 +7856,11 @@ model CoordinatorHandoff {
   note          String?
   /// The waits the swap moved, as `{ id, label, paused }`.
   movedWaits    Json      @default("[]") @map("moved_waits")
+  /// What the successor runs on, as the owner named it (migration 1410); all null keeps the previous
+  /// coordinator's engine, provider and model.
+  successorEngine   String? @map("successor_engine")
+  successorProvider String? @map("successor_provider")
+  successorModel    String? @map("successor_model")
   endedAt       DateTime? @map("ended_at")
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at")

@@ -3123,6 +3123,18 @@ export class SessionsService {
   }
 
   /**
+   * Refuse, with create()'s own refusal, a start that create() would refuse: for a door that has to know
+   * before it does something it cannot take back (a coordinator handoff completes the outgoing coordinator
+   * before its successor is created).
+   */
+  async assertStartResolves(
+    ownerId: string,
+    target: { engine?: string | null; provider?: string | null; model?: string | null; workspaceId?: string | null },
+  ): Promise<void> {
+    await this.startResolution(ownerId, target);
+  }
+
+  /**
    * The engine and credential a new session started this way runs on: create()'s own resolution, which
    * engineOfStart and taskRunsWith read too, so what a surface shows is what a start gets. `seen` is
    * handed the seed when one is read (neither an engine nor a provider named).
