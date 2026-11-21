@@ -38,7 +38,9 @@ class LandingCheckSettingsTest {
         val read = ProjectLandingCheck.of(view)!!
         assertEquals(ProjectLandingCheck.Mode.MERGE_CHECK, read.mode)
         assertEquals("set 2h ago", LandingMeasuredCopy.setAgo(read.setBy, ProjectTime.ago(read.setAt, now)!!))
-        assertEquals("set just now", LandingMeasuredCopy.setAgo("COORDINATOR", ProjectTime.ago(now.minusSeconds(45).toString(), now)!!))
+        // Web's `ago` (lib/watches.ts): "just now" under ten seconds, then the span. Main's port said "just now" at 45 s; web does not.
+        assertEquals("set just now", LandingMeasuredCopy.setAgo("COORDINATOR", ProjectTime.ago(now.minusSeconds(5).toString(), now)!!))
+        assertEquals("set 45s ago", LandingMeasuredCopy.setAgo("COORDINATOR", ProjectTime.ago(now.minusSeconds(45).toString(), now)!!))
         assertEquals(listOf("Merge check", "Command", "No check"),
             listOf(LandingMeasuredCopy.mergeCheck, LandingMeasuredCopy.command, LandingMeasuredCopy.noCheck))
         val owner = ProjectLandingCheck.of(json("""{"landingCheck":{"command":"NONE","setBy":"OWNER"}}"""))!!
@@ -68,7 +70,7 @@ class LandingCheckSettingsTest {
             "{RUN_MERGE_CHECK}</div>").map { settings.indexOf(it) }
         assertTrue("Web places change history between the landing and merge checks", rows.all { it >= 0 } && rows == rows.sorted())
         listOf("if (!changes || changes.length === 0) return null;", "{changesRowLabel(changes.length)} ›",
-            "change.revertible ?", "change.origin !== 'COORDINATOR' && !change.revertsChangeId",
+            "change.revertible ?", ") : change.origin !== 'COORDINATOR' ? (",
             "revertedLine(ago(change.revertedAt, now))", "if (value.none) return <>{CHANGES_COPY.NO_CHECK}</>;",
             "confirmText: CHANGES_COPY.REVERT,", "cancelText: CHANGES_COPY.CANCEL,",
             "}>${LandingMeasuredCopy.openTask}</Link>", "goes back from{' '}", " to <ValueText value={change.oldValue} />.",

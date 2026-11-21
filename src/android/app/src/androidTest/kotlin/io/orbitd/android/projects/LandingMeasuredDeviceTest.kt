@@ -87,6 +87,7 @@ class LandingMeasuredDeviceTest {
                 tap("project-sessions-review-start")
                 await { exists(hasTestTag("project-start-request-no-line")) }
                 compose.onNodeWithTag("project-start-request-no-line", useUnmergedTree = true).assertTextEquals(LandingMeasuredCopy.landsWhenATaskCommits)
+                once("project-start-request-no-line")
                 assertFalse(exists(hasTestTag("project-start-request-line")))
                 assertFalse(exists(hasTestTag("project-start-request-main-branch")))
                 assertFalse(exists(hasText(io.orbitd.android.core.cards.LandingCheckCopy.label)))
@@ -120,10 +121,19 @@ class LandingMeasuredDeviceTest {
                 awaitScrollTo("project-detail", hasTestTag("project-landing-check"))
                 compose.onNodeWithTag("project-landing-check-by:who", useUnmergedTree = true).assertTextEquals("Coordinator")
                 assertTrue(exists(hasTestTag("project-landing-check-none"), unmerged = true))
+                once("project-landing-check"); once("project-coordinator-changes")
+                // Who can set it, under No check (web's LANDING_CHECK_ORIGIN_NOTES): the four pills and what each means.
+                awaitScrollTo("project-detail", hasTestTag("project-landing-check-who-can-set"))
+                for ((by, note) in LandingMeasuredCopy.originNotes) {
+                    compose.onNodeWithTag("project-landing-check-who-can-set:$by:who", useUnmergedTree = true).assertTextEquals(LandingMeasuredCopy.who(by))
+                    assertTrue(exists(hasText(note), unmerged = true))
+                }
+                awaitScrollTo("project-detail", hasTestTag("project-landing-check"))
                 capture("03a-no-check-by-coordinator")
 
                 // ⑤ The coordinator's changes, Revert asked first, and the row it leaves (D6, D7).
                 tap("project-coordinator-changes"); await { exists(hasTestTag("coordinator-changes")) }
+                once("coordinator-changes")
                 await { exists(hasTestTag("change:c3:revert"), unmerged = true) }
                 assertTrue(exists(hasTestTag("change:c1:note") and hasText(LandingMeasuredCopy.yourChange), unmerged = true))
                 capture("05a-changes")
@@ -389,6 +399,8 @@ class LandingMeasuredDeviceTest {
 
     private fun drawerRow(text: String) = hasText(text) and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab)
     private fun exists(matcher: SemanticsMatcher, unmerged: Boolean = false) = compose.onAllNodes(matcher, unmerged).fetchSemanticsNodes().isNotEmpty()
+    /** One implementation draws each of these, once: a merge that kept a second port would draw two (gate task 3518Clf5xuFjeOHF28kFq). */
+    private fun once(tag: String) = assertEquals("$tag drawn once", 1, compose.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().size)
     private fun await(condition: () -> Boolean) = compose.waitUntil(30_000, condition)
     private fun awaitGone(tag: String) = await { !exists(hasTestTag(tag)) }
     private fun openDrawer() { compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick(); settle() }

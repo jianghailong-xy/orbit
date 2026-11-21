@@ -1205,7 +1205,7 @@ object StartProjectCopy {
             fun of(settings: Settings, view: JsonObject? = null) = Draft(settings.line, true, settings.maxConcurrentTasks, settings.mergeCheckCommand.orEmpty(),
                 // A request with no line offers no main branch: nothing about the line is written at the start.
                 if (settings.line != null && ProjectMainBranch.repository(view) != null) startMainBranch(settings.upstreamRef, view) else null,
-                view?.text("deliveryMode")?.let { RunSettings.delivery(settings.line, it) }, settings.landingCheckCommand.orEmpty(),
+                view?.text("deliveryMode")?.takeIf { settings.line != null }?.let { RunSettings.delivery(settings.line, it) }, settings.landingCheckCommand.orEmpty(),
                 settings.landingCheckTimeoutSeconds, settings.mergeCheckTimeoutSeconds)
         }
     }

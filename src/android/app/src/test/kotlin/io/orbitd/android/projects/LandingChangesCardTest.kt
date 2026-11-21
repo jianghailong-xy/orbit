@@ -69,7 +69,7 @@ class LandingChangesCardTest {
         } } }
         compose.onNodeWithTag("project-landing-check-by:who", useUnmergedTree = true).assertTextEquals("Coordinator")
         compose.onNodeWithText("set 2h ago", useUnmergedTree = true).assertExists()
-        compose.onNodeWithTag("project-coordinator-changes-count").assertTextEquals("2 changes  ›")
+        compose.onNodeWithTag("project-coordinator-changes-count", useUnmergedTree = true).assertTextEquals("2 changes  ›")
         compose.onNodeWithTag("project-coordinator-changes").performScrollTo().performClick()
         compose.onNodeWithTag("coordinator-changes").assertExists()
         compose.onNodeWithTag("change:change-1:values", useUnmergedTree = true).assertTextEquals("Uses merge check  →  make fast")
@@ -126,5 +126,27 @@ class LandingChangesCardTest {
             compose.onNodeWithTag("project-landing-check-who-can-set:$by:who", useUnmergedTree = true).assertTextEquals(LandingMeasuredCopy.who(by))
             compose.onNodeWithText(note, useUnmergedTree = true).assertExists()
         }
+    }
+
+    /** As web's list (`change.origin !== 'COORDINATOR'`) and OrbitKit's rows: the owner's own change and one a card approved say there is
+     * nothing to revert; a coordinator's change that moved on since has no door and says nothing. */
+    @Test fun aRowWithNothingToRevertSaysWhyOnlyWhenItIsNotTheCoordinators() {
+        fun row(id: String, origin: String, revertible: Boolean) = """{"id":"$id","projectId":"p1","taskId":null,"field":"LANDING_CHECK",
+            "origin":"$origin","createdAt":"2026-11-21T10:00:00Z","oldValue":{"command":null,"timeoutSeconds":null,"none":false},
+            "newValue":{"command":null,"timeoutSeconds":null,"none":true},"reason":null,"writtenBySessionId":null,"revertsChangeId":null,
+            "revertedAt":null,"revertible":$revertible}"""
+        val doc = json("""{"title":"Payments","settingChanges":[${row("card", "CARD", false)},${row("owner", "OWNER", false)},
+            ${row("stale", "COORDINATOR", false)}]}""")
+        val state = ProjectPageState().apply { integration = json("""{"line":"PROJECT_BRANCH","landingCheckCommand":null}""") }
+        compose.runOnUiThread { compose.activity.setContent { OrbitTheme {
+            Column(Modifier.verticalScroll(rememberScrollState())) { RunSettingsSection(state, doc, now, true, {}, {}, {}, {}, {}) }
+        } } }
+        compose.onNodeWithTag("project-coordinator-changes").performScrollTo().performClick()
+        for (id in listOf("card", "owner")) {
+            compose.onNodeWithTag("change:$id:note", useUnmergedTree = true).assertTextEquals(LandingMeasuredCopy.yourChange)
+            compose.onNodeWithTag("change:$id:revert").assertDoesNotExist()
+        }
+        compose.onNodeWithTag("change:stale:note", useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithTag("change:stale:revert").assertDoesNotExist()
     }
 }

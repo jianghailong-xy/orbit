@@ -91,8 +91,6 @@ object LandingMeasuredCopy {
     // Web's CHANGES_COPY.YOUR_CHANGE, the label alone; the row says it with what follows ([yourChange]).
     const val yourChangeLabel = "Your change"
     const val yourChange = "$yourChangeLabel · nothing to revert"
-    const val cardChange = "Confirmed on a card · nothing to revert"
-    const val changedSince = "Changed again since · nothing to revert"
     fun revertedBy(ago: String) = "Reverted by you · $ago · coordinator needs a card for this field"
     const val revertTitle = "Revert this change?"
     fun revertBody(field: String) = "$field goes back from"
@@ -290,15 +288,16 @@ private fun ChangeRow(change: ProjectSettingChanges.Change, taskTitle: (String) 
         }
         Row(Modifier.padding(top = 3.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Pill(LandingMeasuredCopy.who(change.origin), whoInk(change.origin), "change:${change.id}:who")
+            // As web's list and OrbitKit's rows: Revert where the server allows it; the owner's own and a card's say there is nothing
+            // to revert; a coordinator's change that moved on since says nothing.
             val note = when {
                 reverted -> LandingMeasuredCopy.revertedBy(ProjectTime.ago(change.revertedAt, now) ?: "just now")
-                change.origin == "OWNER" -> LandingMeasuredCopy.yourChange
-                change.origin == "CARD" -> LandingMeasuredCopy.cardChange
                 change.revertible -> null
-                else -> LandingMeasuredCopy.changedSince
+                change.origin != "COORDINATOR" -> LandingMeasuredCopy.yourChange
+                else -> null
             }
             if (note != null) Text(note, Modifier.weight(1f).testTag("change:${change.id}:note"), style = MaterialTheme.typography.bodySmall, color = muted)
-            else FilledTonalButton(onClick = ask, enabled = enabled, modifier = Modifier.heightIn(min = 32.dp).testTag("change:${change.id}:revert"),
+            else if (change.revertible) FilledTonalButton(onClick = ask, enabled = enabled, modifier = Modifier.heightIn(min = 32.dp).testTag("change:${change.id}:revert"),
                 contentPadding = PaddingValues(horizontal = 14.dp, vertical = 2.dp),
                 colors = ButtonDefaults.filledTonalButtonColors(containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.11f),
                     contentColor = MaterialTheme.colorScheme.error)) { Text(LandingMeasuredCopy.revert, fontWeight = FontWeight.SemiBold) }
