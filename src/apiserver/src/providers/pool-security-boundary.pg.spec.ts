@@ -1074,6 +1074,10 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
     await ask(bob, 'PATCH', 'providers/mine/:id/model-tier', { id: tieredId }, tier, 404);
     await ask(alice, 'PATCH', 'providers/mine/:id/model-tier', { id: sharedId }, tier, 404);
     await ask(alice, 'PATCH', 'providers/mine/:id/model-tier', { id: uuidToBase62(alicePool.id) }, tier, 404);
+    // Her tier for a model of a built-in engine's catalogue: a clear is always taken, and the answer
+    // carries no key (the set path is checked in its own spec).
+    await ask(alice, 'PATCH', 'providers/builtin/:engine/model-tier', { engine: 'claude' },
+      { model: 'claude-opus-5', tier: null }, 200);
     assert.deepEqual(
       (await db.modelProvider.findUniqueOrThrow({ where: { id: toUuid(tieredId) }, select: { modelTiers: true } })).modelTiers,
       { 'her-model': 'M' },
@@ -1340,6 +1344,9 @@ exec sleep 300
       await ask(bearer, 'POST', 'providers/mine/:id/key-check', at, undefined, 404);
       await ask(bearer, 'PATCH', 'providers/mine/:id', at, { label: 'Renamed' }, 404);
       await ask(bearer, 'PATCH', 'providers/mine/:id/model-tier', at, { model: 'gpt-5.5-codex', tier: 'M' }, 404);
+      // Her tier for a built-in engine's catalogue: taken for either of them, and keyless.
+      await ask(bearer, 'PATCH', 'providers/builtin/:engine/model-tier', { engine: 'codex' },
+        { model: 'gpt-5.5-codex', tier: null }, 200);
       await ask(bearer, 'DELETE', 'providers/mine/:id', at, undefined, 404);
       await ask(bearer, 'POST', 'providers/pools/:id/members', at, { providerId: at.id }, 404);
       await ask(bearer, 'DELETE', 'providers/pools/:id/members/:providerId', { ...at, providerId: at.id }, undefined, by(404, 200));
