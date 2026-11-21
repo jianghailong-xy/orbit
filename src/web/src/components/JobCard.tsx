@@ -39,6 +39,8 @@ export interface BgJobHost {
   sessionId: string;
   /** GET /sessions/:id/background: the complete list, which alone says whether a job can be stopped. */
   serverShells: readonly BgShell[];
+  /** Where the session runs: its workspace, named on an opened card's metadata line. */
+  where?: string | null;
 }
 export const BgJobHostCtx = createContext<BgJobHost | null>(null);
 
@@ -329,7 +331,8 @@ export function JobCard({
       )}
       {!open && foldedBody}
       {open && (
-        <div className="chat-tool-detail chat-job-detail">
+        <div className="chat-tool-detail">
+          <div className="chat-tool-body chat-job-detail">
           {command && <Pre text={command} prompt />}
           <div className="chat-job-meta">
             {[
@@ -337,6 +340,7 @@ export function JobCard({
               kind,
               start !== null ? `started ${clock(new Date(start).toISOString())}` : null,
               ended && elapsed ? `ran ${elapsed}` : null,
+              host?.where ? `on ${host.where}` : null,
             ]
               .filter(Boolean)
               .join(' · ')}
@@ -365,6 +369,7 @@ export function JobCard({
               </ul>
             </div>
           )}
+          </div>
         </div>
       )}
       {/* Its wake still on the queue: the agent has not read it, and the reader can keep it back (E1). */}

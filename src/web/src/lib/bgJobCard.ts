@@ -150,11 +150,13 @@ export function jobState({
   tail?: BackgroundJobTailResponse | null;
   live: boolean;
 }): JobState {
-  const end = [...wakes].reverse().find((wake) => wake.job.ended)?.job;
+  const endWake = [...wakes].reverse().find((wake) => wake.job.ended);
+  const end = endWake?.job;
   const tailEnded = tail && tail.status !== 'running' ? tail : null;
   const exitCode = shell?.exitCode ?? end?.exitCode ?? tailEnded?.exitCode ?? null;
   const reason = shell?.reason ?? end?.killReason ?? null;
-  const endedAt = shell?.endedAt ?? null;
+  // The runner's report says when it ended; without one loaded, the wake its end opened was written then.
+  const endedAt = shell?.endedAt ?? endWake?.ts ?? null;
   const terminal =
     shell?.terminal ??
     (end ? (end.status === 'killed' ? 'killed' : end.status === 'failed' ? 'failed' : 'done') : undefined) ??

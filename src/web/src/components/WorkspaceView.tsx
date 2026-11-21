@@ -10983,6 +10983,7 @@ export function WorkspaceView({
                 subagentRuns={subagentRuns}
                 subagentQueuedWakes={subagentQueuedWakes}
                 jobQueuedWakes={jobQueuedWakes}
+                jobWhere={shownWorkspaceName ?? null}
               />
               </QueuedFootCtx.Provider>
               </MainCheckoutCtx.Provider>

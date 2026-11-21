@@ -60,6 +60,7 @@ export function SessionConversation({
   subagentRuns: givenRuns,
   subagentQueuedWakes = NO_QUEUED_WAKES,
   jobQueuedWakes = NO_QUEUED_WAKES,
+  jobWhere = null,
 }: {
   sessionId: string;
   stream: SessionStream;
@@ -88,13 +89,18 @@ export function SessionConversation({
   subagentQueuedWakes?: ReadonlyMap<string, () => void>;
   /** Each background job's wake still on the queue, by job id: its `Don't send` (`JobQueuedWakesCtx`). */
   jobQueuedWakes?: ReadonlyMap<string, () => void>;
+  /** Where the session runs, as a bg_run job's opened card names it (`BgJobHost.where`). */
+  jobWhere?: string | null;
 }) {
   const navigate = useNavigate();
   const ownRuns = useSubagentRuns(sessionId, givenRuns ? NO_EVENTS : stream.transcriptEvents);
   const subagentRuns = givenRuns ?? ownRuns;
   const workflowRuns = useWorkflowRuns(sessionId, stream.transcriptEvents);
   // Where a bg_run job's card reads its tail and asks to stop it, and the list that says whether it can be.
-  const jobHost = useMemo(() => ({ sessionId, serverShells: stream.serverBgShells }), [sessionId, stream.serverBgShells]);
+  const jobHost = useMemo(
+    () => ({ sessionId, serverShells: stream.serverBgShells, where: jobWhere }),
+    [sessionId, stream.serverBgShells, jobWhere],
+  );
   return (
     <SessionNavCtx.Provider value={(rawId) => navigate(`/sessions/${encodeId(rawId)}`)}>
       <EventFullCtx.Provider value={stream.fetchEventFull}>

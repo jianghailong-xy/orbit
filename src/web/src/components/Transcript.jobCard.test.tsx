@@ -183,7 +183,7 @@ interface MountOpts {
 function tree(events: RunEvent[], { live = true, host = true, shells = [], queued = new Map() }: MountOpts = {}): ReactNode {
   return (
     <MemoryRouter>
-      <BgJobHostCtx.Provider value={host ? { sessionId: SESSION, serverShells: shells } : null}>
+      <BgJobHostCtx.Provider value={host ? { sessionId: SESSION, serverShells: shells, where: 'workstation' } : null}>
         <JobQueuedWakesCtx.Provider value={queued}>
           <Transcript events={events} live={live} />
         </JobQueuedWakesCtx.Provider>
@@ -361,7 +361,7 @@ describe('the opened card', () => {
     expect(detail.querySelector('.chat-pre-wrap.cmd')?.textContent).toBe(`$ ${COMMAND}`);
     const meta = detail.querySelector('.chat-job-meta')!.textContent!;
     expect(meta.startsWith(`${JOB} · watch · started `)).toBe(true);
-    expect(meta.endsWith(' · ran 12m 40s')).toBe(true);
+    expect(meta.endsWith(' · ran 12m 40s · on workstation')).toBe(true);
     const output = detail.querySelector('.chat-job-output pre')!;
     expect(output.textContent!.split('\n')).toEqual(long.slice(-40));
     const all = detail.querySelector<HTMLButtonElement>('.chat-job-output button')!;

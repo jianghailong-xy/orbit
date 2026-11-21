@@ -24417,6 +24417,9 @@ div.landing-jobs-open {
 .chat-job-detail > .chat-job-ending {
   padding: 4px 0 0;
 }
+.chat-job-detail > .chat-pre-wrap {
+  margin: 0;
+}
 .chat-job-tail {
   margin: 0;
   overflow: hidden;
@@ -24448,6 +24451,9 @@ div.landing-jobs-open {
   background: var(--bg-sunken);
   font-size: 11px;
   line-height: 1.6;
+}
+.chat-job-detail > .chat-job-wakes {
+  margin: 8px 0 0;
 }
 .chat-job-wake-list {
   margin: 2px 0 0;
