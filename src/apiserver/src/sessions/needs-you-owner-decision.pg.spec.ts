@@ -1045,6 +1045,7 @@ test('the badge says Record as done… once a finished-looking project has waite
       changedFiles: ['src/work.ts'],
       startedAt: new Date(),
       finishedAt: new Date(),
+      releaseCause: 'engine_exited',
     },
   });
 
