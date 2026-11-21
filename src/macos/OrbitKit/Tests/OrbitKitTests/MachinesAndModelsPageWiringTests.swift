@@ -245,7 +245,7 @@ final class MachinesAndModelsPageWiringTests: XCTestCase {
                       "SwiftUI.ShareLink(item: command)",
                       "Text(RunnerPageCopy.RUNNER_WAITING_FOR_NEW)",
                       "arrived = RunnerPageFormat.newlyOnline(runners.runners, baseline: baseline)",
-                      "try? await Task.sleep(for: .seconds(5))",
+                      "await VisibilityGate.app.pause(5)",
                       "Text(MachineSetupCopy.REGISTER_NEXT)",
                       "Button(MachineSetupCopy.START_A_SESSION) { start(arrived) }",
                       "model.startSession(onMachine: runner.id)",

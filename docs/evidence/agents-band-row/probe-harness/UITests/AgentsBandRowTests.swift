@@ -20,5 +20,6 @@ final class AgentsBandRowTests: ProbeCase {
 
     func testLongTitle() { run("band", "ios-1-agents-row") }
     func testShortTitleNoFailure() { run("band-ok", "ios-3-agents-row-short-no-failure", until: "Fix lint") }
+    func testBoardFour() { run("band-haiku", "ios-4-agents-row-board-4", until: "Haiku 5.5") }
     func testShortTitle() { run("band-short", "ios-2-agents-row-short-title") }
 }

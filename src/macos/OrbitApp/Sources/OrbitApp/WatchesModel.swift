@@ -7,8 +7,9 @@ import OrbitKit
 ///
 /// The list is refetched: on `watch.changed`, the server naming a watch that moved (`changed`); on a
 /// short coalesced nudge after an event that can move a target; on the app poll's floor — a minute
-/// apart while the control stream is live, 30 s without it; and after each control. What the server
-/// answered is always what's drawn.
+/// after the last read while the control stream is live, 30 s without it (`refreshIfDue`); and after
+/// each control. What the server answered is always what's drawn. While the app cannot be seen an
+/// event reads nothing: its read is owed and made once when the app is shown (`ListReads`, §4 R3).
 @MainActor
 @Observable
 final class WatchesModel {
@@ -25,8 +26,11 @@ final class WatchesModel {
     var onMatched: ((NotificationEvent) -> Void)?
 
     private let api: APIClient
-    private var nudgeTask: Task<Void, Never>?
-    private var changedTask: Task<Void, Never>?
+    /// The nudge's and `watch.changed`'s reads, and the floor's cadence (`ListReads`).
+    @ObservationIgnored private let nudges = ListReads(key: "watches", delay: 2)
+    @ObservationIgnored private let changes = ListReads(key: "watches", delay: 1)
+    /// No read while the control stream is live comes sooner than this after the last (§4 R1).
+    private static let floorInterval: TimeInterval = 30
 
     init(baseURL: URL, tokenStore: TokenStore) {
         api = APIClient(baseURL: baseURL, tokenStore: tokenStore)
@@ -41,6 +45,9 @@ final class WatchesModel {
 
     func load() async {
         guard !unsupported else { return }
+        // Every read counts: a nudge asked before it, and the floor, follow from it.
+        nudges.noteRead()
+        changes.noteRead()
         loadState.begin()
         do {
             adopt(try await api.followedWatches())
@@ -60,28 +67,24 @@ final class WatchesModel {
     }
 
     /// A session or task moved, and a target with it maybe: refetch shortly, once for a burst. Skipped
-    /// while nothing is live, when no target can move; a new watch is left to the poll.
+    /// while nothing is live, when no target can move; a new watch is left to the poll. Hidden, owed.
     func nudge() {
-        guard nudgeTask == nil, watches.contains(where: { WatchStateMachine.isLive($0.state) }) else { return }
-        nudgeTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
-            guard let self else { return }
-            self.nudgeTask = nil
-            await self.load()
-        }
+        guard watches.contains(where: { WatchStateMachine.isLive($0.state) }) else { return }
+        nudges.nudge { [weak self] in await self?.load() }
     }
 
     /// The server named a watch (`watch.changed`): it was made, edited, matched, expired or ended, or a
     /// delivery of it moved — the changes no session or task event comes with. Read the list again,
-    /// once for a burst, whether or not anything was live before (a new watch is not yet).
+    /// once for a burst, whether or not anything was live before (a new watch is not yet). Hidden, owed.
     func changed() {
-        guard changedTask == nil else { return }
-        changedTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 1_000_000_000)
-            guard let self else { return }
-            self.changedTask = nil
-            await self.load()
-        }
+        changes.nudge { [weak self] in await self?.load() }
+    }
+
+    /// The app tick's floor: a minute after the last read with the control stream live, 30 s without.
+    func refreshIfDue(now: Date = Date(), live: Bool) async {
+        let interval = live ? PollSchedule.liveFallback : Self.floorInterval
+        guard nudges.isDue(at: now, interval: interval) else { return }
+        await load()
     }
 
     /// Pause, resume or stop. Nil when it went through; otherwise the sentence to show by the controls.

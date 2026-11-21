@@ -821,22 +821,24 @@ struct ComposerView: View {
         guard !console.isDraft, let session = app.session(id: console.sessionID) else { return ContextActions() }
         let running = session.isGenerating || console.state.status == .running
         let projectID = session.projectId
+        let offersNewCoordinator = CoordinatorContextActions.offersNewCoordinator(session)
         return ContextActions(
             offersCompact: CoordinatorContextActions.offersCompact(slashItems: console.composerSlashItems,
                                                                    engine: console.engine),
             compactEnabled: CoordinatorContextActions.compactEnabled(running: running,
                                                                      handoff: session.coordinatorHandoff),
-            offersNewCoordinator: CoordinatorContextActions.offersNewCoordinator(session),
+            offersNewCoordinator: offersNewCoordinator,
             running: running,
             projectTitle: session.projectTitle ?? "the project",
+            successorEngines: offersNewCoordinator ? SessionProviderChoices.engines(sources: console.choiceSources) : [],
             compact: { Task { await console.compactConversation() } },
             pendingWaits: {
                 guard let projectID else { return [] }
                 return await console.coordinatorPendingWaits(projectID: projectID)
             },
-            handOver: {
+            handOver: { successor in
                 guard let projectID else { return }
-                Task { await console.coordinatorHandoff(projectID: projectID, .start) }
+                Task { await console.coordinatorHandoff(projectID: projectID, .start, successor: successor) }
             })
     }
 
@@ -2865,9 +2867,10 @@ struct ContextActions {
     var offersNewCoordinator = false
     var running = false
     var projectTitle = ""
+    var successorEngines: [EngineChoice] = []
     var compact: () -> Void = {}
     var pendingWaits: () async -> [CoordinatorPendingWait] = { [] }
-    var handOver: () -> Void = {}
+    var handOver: (CoordinatorHandoffSuccessor?) -> Void = { _ in }
 
     var isEmpty: Bool { !offersCompact && !offersNewCoordinator }
 
@@ -3117,15 +3120,16 @@ private struct CoordinatorHandoffConfirmPresentation: ViewModifier {
         content.sheet(isPresented: shown) {
             CoordinatorHandoffConfirmView(projectTitle: actions.projectTitle, running: actions.running,
                                           waits: waits ?? [],
+                                          successorEngines: actions.successorEngines,
                                           onCancel: { waits = nil },
-                                          onHandOver: {
+                                          onHandOver: { successor in
                                               waits = nil
-                                              actions.handOver()
+                                              actions.handOver(successor)
                                           })
         }
         #else
         content.alert(CoordinatorHandoffCopy.confirmTitle, isPresented: shown) {
-            Button(CoordinatorHandoffCopy.handOver) { actions.handOver() }
+            Button(CoordinatorHandoffCopy.handOver) { actions.handOver(nil) }
                 .keyboardShortcut(.defaultAction)
             Button(CoordinatorHandoffCopy.cancel, role: .cancel) {}
         } message: {

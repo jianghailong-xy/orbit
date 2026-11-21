@@ -1422,6 +1422,27 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertEqual(r.state.items[0].asUser?.queued, false)
     }
 
+    /// Translated while the runner is full: the listing says DONE long before the runner's echo can,
+    /// and the bubble kept in the conversation drops its "Translating…" chip on that listing.
+    func testHeldSendTakesTheListingsTranslationBeforeItsEcho() {
+        var r = TranscriptReducer()
+        r.addOptimisticUser(clientTurnId: "c1", text: "先给我效果图")
+        r.setOptimisticTurnId(clientTurnId: "c1", turnId: "t1",
+                              translation: TurnTranslation(state: .translating, from: .zhHans, original: "先给我效果图"),
+                              placement: "queued")
+        let done: JSONValue = .object([
+            "state": .string("DONE"), "from": .string("zh-Hans"), "original": .string("先给我效果图"),
+        ])
+        r.reconcileQueuedTurns([
+            QueuedTurnInfo(turnId: "t1", kind: "message", content: "Show me the mockup first",
+                           placement: "accepted", translation: done),
+        ], knownBefore: r.state.listedTurnIDs)
+        XCTAssertEqual(r.state.items.count, 1)
+        XCTAssertEqual(r.state.items[0].asUser?.translation?.state, .done)
+        XCTAssertEqual(r.state.items[0].asUser?.pending, true, "still waiting on its echo")
+        XCTAssertTrue(r.state.queued.isEmpty && r.state.accepted.isEmpty, "drawn once")
+    }
+
     /// The other way round: a send guessed queued that the server `accepted` is delivered now, so it
     /// is drawn inline and offers no Cancel.
     func testServerAcceptedPlacementMovesQueuedSendInline() {

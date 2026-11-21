@@ -101,11 +101,15 @@ struct AgentBlockLines: View {
     /// What the running Agent is on right now (`ToolCardView.liveActivity`); nil once it is open.
     let live: String?
     let steps: Int
+    /// A background run that has ended: the card draws its ending under these lines
+    /// (`SubagentFoldedEnd`), so the third line is not drawn and the time ends the second.
+    var endsOnCard = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            AgentIdentityLine(block: block)
-            if block.running {
+            AgentIdentityLine(block: block, trailing: endsOnCard ? block.numbers : nil)
+            if endsOnCard {
+            } else if block.running {
                 TimelineView(.periodic(from: .now, by: 1)) { context in
                     let elapsed = block.startedAt.map { context.date.timeIntervalSince($0) }
                     outcomeRow(text: live, italic: true,
@@ -239,8 +243,14 @@ struct AgentGroupView: View {
         let open = openID == card.id
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 7) {
-                ToolStatusGlyph(status: block.running ? .running : block.outcomeIsFailure ? .error : card.status)
-                    .frame(width: 20)
+                Group {
+                    if !block.running, let run = taskActivity?.subagentRun(card.id) {
+                        SubagentEndGlyph(status: run.status)
+                    } else {
+                        ToolStatusGlyph(status: block.running ? .running : card.status)
+                    }
+                }
+                .frame(width: 20)
                 Text(card.input["description"]?.stringValue ?? SubagentBlock.label)
                     .font(.orbitLabel.weight(open ? .semibold : .regular))
                     .lineLimit(1).truncationMode(.tail)
@@ -320,17 +330,22 @@ struct AgentsBandRow: View {
     }
 }
 
-/// The running Agent's title, then where it runs. The whole title and the model's name when both fit;
-/// else the model gives way to its mark and the title takes the rest of the line, cut at its end
-/// (board ④). Never a gap before the failures while the title is cut.
+/// The running Agent's title, then where it runs (board ④): the whole title and the model's name when
+/// both fit; else the title is cut first, down to a readable stub, and the name stays; else the name
+/// gives way to the mark, beside the whole title or after a cut one. A cut title fills the line up to
+/// the chip, so no gap sits before the failures.
 private struct AgentsBandRunning: View {
     let summary: SubagentSessionSummary
 
     var body: some View {
         let title = Text(summary.band).font(.orbitMeta).foregroundStyle(.secondary).lineLimit(1)
+        // Measured at its stub (idealWidth), laid out over all the room the chip leaves.
+        let cut = title.frame(minWidth: 80, idealWidth: 80, maxWidth: .infinity, alignment: .leading)
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 8) { title.fixedSize(); AgentsBandCurrent(summary: summary, named: true) }
-            HStack(spacing: 8) { title; AgentsBandCurrent(summary: summary, named: false) }
+            HStack(spacing: 8) { cut; AgentsBandCurrent(summary: summary, named: true) }
+            HStack(spacing: 8) { title.fixedSize(); AgentsBandCurrent(summary: summary, named: false) }
+            HStack(spacing: 8) { cut; AgentsBandCurrent(summary: summary, named: false) }
         }
     }
 }
@@ -453,8 +468,10 @@ struct AgentsSheet: View {
                                            parentEngine: parentEngine)
         return Button { reveal(run.toolUseId) } label: {
             HStack(alignment: .top, spacing: 10) {
-                ToolStatusGlyph(status: block.running ? .running : block.outcomeIsFailure ? .error : .ok)
-                    .frame(width: 18)
+                Group {
+                    if block.running { ToolStatusGlyph(status: .running) } else { SubagentEndGlyph(status: run.status) }
+                }
+                .frame(width: 18)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(run.description ?? run.type).font(.body).lineLimit(1)
                     AgentIdentityLine(block: block, showsMeta: false, trailing: rowNumbers(block, run))

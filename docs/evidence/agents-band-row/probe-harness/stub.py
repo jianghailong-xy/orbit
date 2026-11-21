@@ -459,12 +459,13 @@ FIX = load_fixtures()
 # The SubAgent card from start to end (board docs/mocks/subagent-card-and-end-line): one background run,
 # its card, and in every ended mode the turn the control plane opened for its end, which draws nothing.
 SA_MODES = {"sa-running": None, "sa-done": "SUBAGENT_DONE", "sa-interrupted": "SUBAGENT_INTERRUPTED",
-            "sa-stopped": "SUBAGENT_STOPPED", "sa-queued": "SUBAGENT_INTERRUPTED", "band": None, "band-short": None, "band-ok": None}
+            "sa-stopped": "SUBAGENT_STOPPED", "sa-queued": "SUBAGENT_INTERRUPTED", "band": None, "band-short": None, "band-ok": None, "band-haiku": None}
 RUN = {"sa-running": ("tu-find", "Find every caller of pollQuota", "34y5Qcall0000000000001", "RUNNING"),
        "sa-done": ("tu-deploy", "Deploy 6bb50a957 to production", "34y5NxcqKYA179mC04VUB", "DONE"),
        "sa-interrupted": ("tu-port", "Update client tests: smart selection default-on", "34y5PintrRUNid0000003", "INTERRUPTED"),
        "sa-stopped": ("tu-sweep", "Sweep stale worktrees", "34y5PstopRUNid0000002", "STOPPED"),
        "band": ("tu-shots", "Take iPhone shots of the Agents line in the parking strip", "34y5BandRUNid0000000001", "RUNNING"),
+       "band-haiku": ("tu-shots", "Review the schedule diff for missed renames", "34y5BandRUNid0000000001", "RUNNING"),
        "band-ok": ("tu-shots", "Fix lint", "34y5BandRUNid0000000001", "RUNNING"),
        "band-short": ("tu-shots", "Fix lint", "34y5BandRUNid0000000001", "RUNNING"),
        "sa-queued": ("tu-port", "Update client tests: smart selection default-on", "34y5PintrRUNid0000003", "INTERRUPTED")}
@@ -500,6 +501,13 @@ def band_runs():
     failed = dict(sa_run(), toolUseId="tu-old", status="FAILED", description="Compare Android and iOS",
                   createdAt=ago(30), endedAt=ago(25))
     return [run, failed]
+
+
+def haiku_run():
+    """Board ④: a long title on Haiku 5.5, nothing failed."""
+    run = sa_run()
+    run.update(model="claude-haiku-5-5", modelLabel="Haiku 5.5")
+    return [run]
 
 
 def sa_events(mode):
@@ -545,9 +553,9 @@ def s4_row():
         row.pop("sourceLanding", None)
         row.pop("taskId", None)
         row["title"] = "Smart selection default-on"
-    if MODE["name"] in ("band", "band-short", "band-ok"):
+    if MODE["name"] in ("band", "band-short", "band-ok", "band-haiku"):
         row.update(model="claude-opus-5-5")
-    if MODE["name"] in ("sa-running", "sa-queued", "band", "band-short", "band-ok"):
+    if MODE["name"] in ("sa-running", "sa-queued", "band", "band-short", "band-ok", "band-haiku"):
         row.update(status="RUNNING", runStatus="RUNNING", runState="RUNNING", sessionState="RUNNING")
     return row
 
@@ -648,7 +656,7 @@ class Handler(BaseHTTPRequestHandler):
                     if more[0] in ("turns", "subagents"):
                         body = []
                     if more[0] == "subagents" and MODE["name"] in SA_MODES and sid == "S4":
-                        body = band_runs()[:1] if MODE["name"] == "band-ok" else band_runs() if MODE["name"] in ("band", "band-short") else [sa_run()]
+                        body = haiku_run() if MODE["name"] == "band-haiku" else band_runs()[:1] if MODE["name"] == "band-ok" else band_runs() if MODE["name"] in ("band", "band-short") else [sa_run()]
                     if more[0] == "turns" and sid == "S4":
                         body = sa_queued()
                     return self.send(200, body)

@@ -407,6 +407,8 @@ struct AgentPanes: View {
     @State private var sharingSession: Session?
     /// The row whose Move was tapped — drives the Move panel, list-owned like the two above.
     @State private var movingSession: Session?
+    /// A row being dragged onto one of the folder rows (the Mac's shortcut for Move, see `SessionFolderDrop`).
+    @State private var drag = SessionDragState()
     /// The folder whose Rename… was tapped — on a folder row's long-press menu (the folder page's
     /// ⋯ raises the same question through the same modifier). List-owned like the sheets above.
     @State private var renamingFolder: SessionFolder?
@@ -1050,6 +1052,7 @@ struct AgentPanes: View {
             SessionFolderRowView(row: row)
         }
         .buttonStyle(.plain)
+        .sessionFolderDropTarget(folderID: row.folder.id, workspaceID: agent.id, drag: drag, app: app)
         .contextMenu {
             Button {
                 renamingFolder = row.folder
@@ -1140,10 +1143,16 @@ struct AgentPanes: View {
         let onSessions: (() -> Void)? = mark.map { mark in
             { app.openProjectSessions(SessionProjectAddress(projectID: mark.projectId, agentID: agent.id, view: view)) }
         }
+        // Somewhere to drop it: the workspace's folder rows over the list (none in Trash or by tag).
+        let draggable = SessionFolderDrag.draggable(
+            s, view: view, hasProjectMark: mark != nil,
+            dropTargets: !isSearching && SessionFolderGrouping.listShowsFolders(view: view, byTag: tagFilter != nil || groupByTag)
+                && app.sessionFolders.contains { $0.workspaceId == agent.id })
         switch rowNavigation {
         case .selection:
             row.sessionRowActions(s, scope: view, onTag: { taggingSession = s }, onShare: { sharingSession = s },
                                   onMove: { movingSession = s }, onSessions: onSessions)
+                .sessionDragSource(s, enabled: draggable, drag: drag)
                 .tag(s.id)
         case .push:
             // A `Button`, not a `NavigationLink(value:)`: the link's disclosure indicator has no
@@ -2120,6 +2129,7 @@ struct AgentFormContent: View {
     @State private var enabled = true
     @State private var subagentsEnabled = true
     @State private var subagentsMaxRunning = SubagentSettings.defaultMaxRunning
+    @State private var workflowsEnabled = true
     @State private var confirmingDelete = false
     #if os(macOS)
     /// Agent Tools for this workspace (docs/mocks/agent-tools board ⑤), and whether its Edit asked for the
@@ -2200,7 +2210,7 @@ struct AgentFormContent: View {
             }
 
             SubagentSettingsSection(agents: agents, enabled: $subagentsEnabled,
-                                    maxRunning: $subagentsMaxRunning)
+                                    workflowsEnabled: $workflowsEnabled, maxRunning: $subagentsMaxRunning)
 
             if let env = agent.env, !env.isEmpty {
                 Section("Environment") {
@@ -2274,6 +2284,7 @@ struct AgentFormContent: View {
         enabled = agent.enabled ?? true
         subagentsEnabled = agent.subagentsEnabled ?? true
         subagentsMaxRunning = SubagentSettings.maxRunning(agent.subagentsMaxRunning)
+        workflowsEnabled = agent.workflowsEnabled ?? true
     }
 
     /// True when the working copy diverges from the agent as prefilled — mirrors `prefill()` field
@@ -2291,6 +2302,7 @@ struct AgentFormContent: View {
         || enabled != (agent.enabled ?? true)
         || subagentsEnabled != (agent.subagentsEnabled ?? true)
         || subagentsMaxRunning != SubagentSettings.maxRunning(agent.subagentsMaxRunning)
+        || workflowsEnabled != (agent.workflowsEnabled ?? true)
     }
 
     /// Save (only if changed and still valid) then close. An emptied name is invalid — the form was
@@ -2314,7 +2326,8 @@ struct AgentFormContent: View {
             // SubAgents: each only when moved.
             subagentsEnabled: subagentsEnabled != (agent.subagentsEnabled ?? true) ? subagentsEnabled : nil,
             subagentsMaxRunning: subagentsMaxRunning != SubagentSettings.maxRunning(agent.subagentsMaxRunning)
-                ? subagentsMaxRunning : nil
+                ? subagentsMaxRunning : nil,
+            workflowsEnabled: workflowsEnabled != (agent.workflowsEnabled ?? true) ? workflowsEnabled : nil
         )
         Task { await agents.save(agent.id, req) }
     }
