@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import remarkGfm from 'remark-gfm';
 import {
+  DatabaseOutlined,
   DeleteOutlined,
   DownloadOutlined,
   DownOutlined,
@@ -31,6 +32,8 @@ import {
   downloadDriveFile,
   driveEntryQuery,
   driveFolderQuery,
+  driveSearchQuery,
+  useSettled,
   driveShareLinksQuery,
   driveVersionsQuery,
   formatSize,
@@ -414,6 +417,7 @@ function FilesBrowser() {
   const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
   const [dialog, setDialog] = useState<Dialog>(null);
+  const [search, setSearch] = useState('');
   const [dropOver, setDropOver] = useState(false);
   const picker = useRef<HTMLInputElement>(null);
   // Where a row menu puts focus when it closes: the name field after Rename, so the menu's own return to its ⋯ does
@@ -476,6 +480,10 @@ function FilesBrowser() {
   };
 
   const entries = listing.data?.entries ?? [];
+  // The search box looks through the whole drive; each result names the folder it is in.
+  const searching = search.trim() !== '';
+  const settled = useSettled(search.trim());
+  const found = useQuery({ ...driveSearchQuery(settled), enabled: settled !== '' });
   const selected = entries.find((entry) => entry.id === selectedId) ?? null;
   const linkOf = (entry: DriveEntry) => links.data?.find((link) => link.root.id === entry.id) ?? null;
   const folderName = folder?.parentId ? folder.name : 'Files';
@@ -586,6 +594,13 @@ function FilesBrowser() {
       <header className="files-head">
         <h1>Files</h1>
         <div className="files-head-actions">
+          <Input
+            size="small"
+            aria-label="Search Files"
+            placeholder="Search all of Files"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
           <Button icon={<FolderAddOutlined />} onClick={() => void newFolder(folder?.id ?? null)}>
             New folder
           </Button>
@@ -594,6 +609,9 @@ function FilesBrowser() {
           </Button>
           <Button icon={<DeleteOutlined />} onClick={() => navigate('/files/trash')}>
             Trash
+          </Button>
+          <Button icon={<DatabaseOutlined />} onClick={() => navigate('/files/storage')}>
+            Storage
           </Button>
           <input
             ref={picker}
@@ -651,7 +669,54 @@ function FilesBrowser() {
               </span>
             ))}
           </div>
-          {listing.isError ? (
+          {searching ? (
+            <div className="files-search" role="region" aria-label="Search results">
+              {found.isError ? (
+                <div className="files-empty" role="alert">
+                  Couldn't search: {messageOf(found.error)}
+                </div>
+              ) : settled !== search.trim() || found.isPending ? (
+                <div className="files-empty">Searching…</div>
+              ) : found.data.entries.length === 0 ? (
+                <div className="files-empty">Nothing matches “{settled}”.</div>
+              ) : (
+                <table className="files-list">
+                  <thead>
+                    <tr>
+                      <th className="files-col-name">Name</th>
+                      <th className="files-col-writer">Folder</th>
+                      <th className="files-col-size">Size</th>
+                      <th className="files-col-when">Modified</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {found.data.entries.map((entry) => (
+                      <tr
+                        key={entry.id}
+                        data-entry={entry.name}
+                        className="files-row"
+                        onClick={() => {
+                          const target = entry.kind === 'FOLDER' ? entry.id : entry.parentId;
+                          setSearch('');
+                          setParams(target ? (entry.kind === 'FOLDER' ? { folder: target } : { folder: target, file: entry.id }) : {});
+                        }}
+                      >
+                        <td className="files-col-name">
+                          <span className="files-name-cell">
+                            <EntryIcon entry={entry} />
+                            <span className="files-name">{entry.name}</span>
+                          </span>
+                        </td>
+                        <td className="files-col-writer">{entry.folderPath === '/' ? 'Files' : `Files${entry.folderPath}`}</td>
+                        <td className="files-col-size">{entry.kind === 'FILE' ? formatSize(entry.sizeBytes) : '—'}</td>
+                        <td className="files-col-when">{formatWhen(entry.lastWriter.at)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          ) : listing.isError ? (
             <div className="files-empty" role="alert">
               Couldn't read this folder: {messageOf(listing.error)}
             </div>

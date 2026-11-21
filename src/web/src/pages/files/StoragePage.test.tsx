@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
-import { meQuery, storageUsageQuery, type StorageUsage } from '../../lib/queries';
+import { driveUsageQuery, meQuery, storageUsageQuery, type StorageUsage } from '../../lib/queries';
 import { StorageSettingsPage } from './StoragePage';
 
 const MB = 1024 * 1024;
@@ -27,10 +27,11 @@ function usage(extra: Partial<StorageUsage> = {}): StorageUsage {
 }
 
 /** The page with this answer in the cache, or none at all, as while it is being read. */
-function render(answer?: StorageUsage) {
+function render(answer?: StorageUsage, drive?: { totalBytes: number; driveBytes: number; trashBytes: number; otherBytes: number }) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   qc.setQueryData(meQuery().queryKey, { id: 'u1', email: 'a@b.c', name: 'A', preferences: {} });
   if (answer) qc.setQueryData(storageUsageQuery().queryKey, answer);
+  if (drive) qc.setQueryData(driveUsageQuery().queryKey, drive);
   return renderToStaticMarkup(
     <QueryClientProvider client={qc}>
       <MemoryRouter>
@@ -43,7 +44,7 @@ function render(answer?: StorageUsage) {
 /** The page's text from its first row on, tags stripped. */
 const card = (html: string) => html.slice(html.indexOf('Stored files')).replace(/<[^>]+>/g, '|').replace(/\|+/g, '|');
 
-describe('Settings → Storage', () => {
+describe('Files → Storage', () => {
   it('is a page of its own, headed Storage, with each ranking a section of rows', () => {
     const html = render(usage());
     expect(html).toMatch(/<h1[^>]*>Storage<\/h1>/);
@@ -82,5 +83,14 @@ describe('Settings → Storage', () => {
     const text = card(render());
     expect(text).toContain('|…|');
     expect(text).not.toContain('Added each week');
+  });
+
+  it('shows the total as the drive and everything else, with Trash inside the drive', () => {
+    const text = render(usage(), { totalBytes: 300 * MB, driveBytes: 200 * MB, trashBytes: 20 * MB, otherBytes: 100 * MB })
+      .replace(/<[^>]+>/g, '|').replace(/\|+/g, '|');
+    expect(text).toContain('Total|300.0 MB|');
+    expect(text).toContain('Drive|Including 20.0 MB in Trash|200.0 MB|');
+    expect(text).toContain('Everything else|');
+    expect(text).toContain('|100.0 MB|');
   });
 });

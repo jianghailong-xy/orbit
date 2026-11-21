@@ -42,6 +42,7 @@ import {
   MoreOutlined,
   SettingOutlined,
   PaperClipOutlined,
+  FolderOpenOutlined,
   PauseCircleOutlined,
   PictureOutlined,
   PlusOutlined,
@@ -372,6 +373,7 @@ import {
 } from './RunNeverStartedCard';
 import { claudeRegionHeld, claudeRegionHeldWords, useClaudeRegionCheckAgain } from '../lib/claudeRegion';
 import { approvalRememberOffered, DSH_RUNNER_CAPABILITY, dshRepair } from '../lib/dshRuntime';
+import { DriveFilePicker } from './files/DriveFilePicker';
 import { AntigravityRepairCard, antigravityRepair, AttachmentImage, QueuedFootCtx, type AuthErrorHelp, type AutoRetryHelp, type CursorQuotaHelp, QueuedUserTurn, type SteerWithdrawHandle, type TurnAttachmentRef, type TurnImage, type UnreadSteer, unreadSteersOf } from './Transcript';
 import { PendingTray, type PendingTrayRow } from './PendingTray';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
@@ -6265,9 +6267,15 @@ export function WorkspaceView({
       if (queuedItem)
         setQueued((current) =>
           current.some((turn) => turn.turnId === queuedItem.turnId)
-            ? current.map((turn) =>
-                turn.turnId === queuedItem.turnId ? { ...turn, ...queuedItem } : turn,
-              )
+            ? current.map((turn) => {
+                if (turn.turnId !== queuedItem.turnId) return turn;
+                // The active snapshot can see the translation settle before the send returns.
+                if (
+                  queuedItem.translation?.state === 'TRANSLATING' &&
+                  turn.translation && turn.translation.state !== 'TRANSLATING'
+                ) return turn;
+                return { ...turn, ...queuedItem };
+              })
             : [...current, queuedItem],
         );
       else {
@@ -11592,6 +11600,7 @@ export function WorkspaceView({
         <SessionComposer
           text={text}
           setText={setText}
+          projectFolder={selectedSession?.projectMembership ? { id: selectedSession.projectMembership.projectId, title: selectedSession.projectMembership.projectTitle } : null}
           composerRefs={composerRefs}
           setComposerRefs={setComposerRefs}
           histIdx={histIdx}
@@ -11781,6 +11790,8 @@ export function WorkspaceView({
 export interface SessionComposerProps {
   text: string;
   setText: Dispatch<SetStateAction<string>>;
+  /** The session's project, whose folder under Files the picker opens on (D22). */
+  projectFolder?: { id: string; title: string } | null;
   composerRefs: ReferenceMap;
   setComposerRefs: Dispatch<SetStateAction<ReferenceMap>>;
   histIdx: number;
@@ -11866,6 +11877,7 @@ export interface SessionComposerProps {
 export function SessionComposer({
   text,
   setText,
+  projectFolder,
   composerRefs,
   setComposerRefs,
   histIdx,
@@ -11978,6 +11990,9 @@ export function SessionComposer({
   const lastComposerTap = useRef<{ at: number; x: number; y: number; held?: number } | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // The `+` menu's "From Files" picker (board docs/mocks/orbit-files, 02-web frame 8).
+  const [drivePickerOpen, setDrivePickerOpen] = useState(false);
+  const driveFilesChip = useRef<HTMLButtonElement>(null);
   // Manual composer height (px). null = autoSize auto-grow (up to maxRows); once the user
   // drags the top handle, that height wins over autoSize until they double-click to reset.
   const [composerHeight, setComposerHeight] = useState<number | null>(null);
@@ -12168,6 +12183,23 @@ export function SessionComposer({
   });
   // The `+` menu "Shell" entry: prefix the draft with `!` so onSend routes it as a raw
   // shell command (run on the runner, bypassing claude). The user types the command after.
+  // Files the drive picker returned go into the draft as chips (`#name`, like a `#` reference) that are sent as their
+  // `/home/orbit/Files/…` paths, so the box shows names and the agent gets paths (board 02-web frame 8).
+  const insertDriveFiles = (files: { id: string; name: string; path: string }[]): void => {
+    let refs = composerRefs;
+    let chips = '';
+    for (const file of files) {
+      const taken = refs[file.name];
+      const parent = file.path.split('/').slice(-2, -1)[0] ?? '';
+      const token = taken && taken.path !== file.path ? `${parent}/${file.name}` : file.name;
+      refs = { ...refs, [token]: { kind: 'drive', id: file.id, path: file.path } };
+      chips += `#${token} `;
+    }
+    setComposerRefs(refs);
+    setText((t) => `${t}${t && !/\s$/.test(t) ? ' ' : ''}${chips}`);
+    setDrivePickerOpen(false);
+    setTimeout(() => taRef.current?.focus(), 0);
+  };
   const insertShell = (): void => {
     setText((t) => (t.startsWith('!') ? t : `!${t}`));
     setTimeout(() => taRef.current?.focus(), 0);
@@ -12667,6 +12699,12 @@ export function SessionComposer({
                 label: 'Image',
                 onSelect: () => imageInputRef.current?.click(),
               },
+              {
+                key: 'drive',
+                icon: <FolderOpenOutlined />,
+                label: 'From Files',
+                onSelect: () => setTimeout(() => setDrivePickerOpen(true), 0),
+              },
               { key: 'divider', type: 'separator' },
               {
                 key: 'shell',
@@ -12710,6 +12748,25 @@ export function SessionComposer({
             />
           }
         />
+        )}
+        {!shellMode && (
+          <Popover
+            side="top"
+            align="start"
+            arrow={false}
+            title={null}
+            open={drivePickerOpen}
+            onOpenChange={setDrivePickerOpen}
+            disabled={composerDisabled}
+            popupClassName="drive-picker-popover"
+            trigger={
+              <button ref={driveFilesChip} type="button" className="composer-pill composer-drive-chip" aria-label="Add from Files">
+                <FolderOpenOutlined /> Files
+              </button>
+            }
+          >
+            <DriveFilePicker projectFolder={projectFolder} onClose={() => setDrivePickerOpen(false)} onPick={insertDriveFiles} />
+          </Popover>
         )}
         {/* The workspace is only a Select when it can actually be picked (new, unlocked
             session); once read-only it shows as a static pill left of Model below. */}

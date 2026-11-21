@@ -10,6 +10,7 @@ import { PublicIdPipe } from '../common/public-id';
 import { DRIVE_CHUNK_MAX, DRIVE_CHUNK_TOO_LARGE, DriveChunksService } from './drive-chunks.service';
 import { DriveContentService, type DriveContent } from './drive-content.service';
 import { DriveUploadsService } from './drive-uploads.service';
+import { FilesService, type DriveUsage } from '../files/files.service';
 import { DriveService } from './drive.service';
 import { DriveDownloadLinks } from './drive-download-links';
 import { CreateDriveFolderDto, DriveDownloadLinkDto, OpenDriveUploadDto, RestoreDriveVersionDto, UpdateDriveEntryDto } from './dto';
@@ -34,7 +35,15 @@ export class DriveController {
     private readonly chunks: DriveChunksService,
     private readonly content: DriveContentService,
     private readonly downloadLinks: DriveDownloadLinks,
+    private readonly files: FilesService,
   ) {}
+
+  // What Files → Storage shows: the drive's share and the rest, each content once (§2.5).
+  @DRIVE_PAT()
+  @Get('usage')
+  usage(@CurrentUser() user: AuthUser): Promise<DriveUsage> {
+    return this.files.driveUsage(user.userId);
+  }
 
   @DRIVE_PAT()
   @Get('entries')
@@ -45,6 +54,13 @@ export class DriveController {
     @Query('limit') limit?: string,
   ) {
     return this.drive.list(user.userId, { parentId, cursor, limit: limitOf(limit) });
+  }
+
+  /** Live entries whose name contains `q`, anywhere in the drive, each with its folder path. */
+  @DRIVE_PAT()
+  @Get('search')
+  search(@CurrentUser() user: AuthUser, @Query('q') q?: string, @Query('cursor') cursor?: string, @Query('limit') limit?: string) {
+    return this.drive.search(user.userId, { q, cursor, limit: limitOf(limit) });
   }
 
   @DRIVE_PAT()

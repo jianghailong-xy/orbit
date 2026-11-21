@@ -122,6 +122,14 @@ function serve(): void {
         nextCursor: null,
       };
     }
+    if (method === 'GET' && p === '/drive/search') {
+      const q = (url.searchParams.get('q') ?? '').toLowerCase();
+      const hits = entries.filter((e) => e.parentId && e.name.toLowerCase().includes(q)).sort((a, b) => a.name.localeCompare(b.name));
+      return {
+        entries: hits.map((e) => ({ ...view(e), path: pathOf(e.id), folderPath: pathOf(e.parentId!) })),
+        nextCursor: null,
+      };
+    }
     let m = /^\/drive\/entries\/([^/]+)$/.exec(p);
     if (m && method === 'GET') return { ...view(entries.find((e) => e.id === m![1])!), path: pathOf(m[1]) };
     if (m && method === 'PATCH') {
@@ -347,6 +355,26 @@ describe('the folder tree and the list', () => {
     // The tree has the drive's folders, from its root.
     const tree = [...document.querySelectorAll('.files-tree .files-tree-name')].map((n) => n.textContent);
     expect(tree).toEqual(['Files', 'Datasets', 'Orbit UI migration', 'screens']);
+  });
+
+  it('searches the whole drive from the box, each result with its folder, and opens a result in its folder', async () => {
+    entries.push({ id: 'notes2', parentId: 'f-data', kind: 'FILE', name: 'field-notes.csv', sizeBytes: 10 });
+    await visit('/files?folder=f-data');
+    const box = document.querySelector<HTMLInputElement>('input[aria-label="Search Files"]')!;
+    await type(box, 'NOTES');
+    // The box asks the server once typing has stopped.
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 400));
+    });
+    await settle();
+    await until(() => expect(row('migration-notes.md')).toBeTruthy());
+    expect(row('field-notes.csv').querySelector('.files-col-writer')!.textContent).toBe('Files/Datasets');
+    expect(row('migration-notes.md').querySelector('.files-col-writer')!.textContent).toBe('Files/Orbit UI migration');
+    expect(row('sign-in-v3.png')).toBeNull();
+    await click(row('migration-notes.md'));
+    expect(location).toBe('/files?folder=f-ui&file=notes');
+    expect(document.querySelector('input[aria-label="Search Files"]')).toBeTruthy();
+    expect((document.querySelector('input[aria-label="Search Files"]') as HTMLInputElement).value).toBe('');
   });
 
   it('opens a folder from the tree', async () => {
