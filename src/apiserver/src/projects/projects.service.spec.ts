@@ -375,8 +375,8 @@ test('the sidebar reads queued and running integration work once for the whole p
   });
   const rows = await service.listSidebar(OWNER_ID);
   assert.equal(bindingReads, 1);
-  assert.equal(rawQueries, 4,
-    'the sidebar keeps its page-wide task/attention readers and adds the one in-flight read');
+  assert.equal(rawQueries, 5,
+    'the sidebar keeps its page-wide task/attention readers, the one in-flight read and the one fuse read');
   assert.deepEqual(rows[0].integration,
     { line: 'PROJECT_BRANCH', ref: 'project/bg', activeJobCount: 1 });
   assert.deepEqual(rows[0].buckets, { running: 0 }, 'integration work is not a task session');

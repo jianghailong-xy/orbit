@@ -909,11 +909,12 @@ test('the rail reaches the index’s running count from the rows that can be run
       await t.test('the rail’s read is page-wide, not one query per project', async () => {
         rawQueries = 0;
         assert.equal((await rail.listSidebar(ownerId)).length, 3);
-        // Three: the running count and the activity instant, the blockers behind the amber count,
-        // and the open items behind them. The project rows themselves are a `findMany`. The
-        // property under test is that this number does not grow with the number of projects, which
-        // is what the rail’s 15-second cadence needs.
-        assert.equal(rawQueries, 3, 'canonical running count, blockers and the items behind them');
+        // Four: the running count and the activity instant, the blockers behind the amber count,
+        // the open items behind them, and the open fuse pauses (`fuse` on each row). The project
+        // rows themselves are a `findMany`. The property under test is that this number does not
+        // grow with the number of projects, which is what the rail’s 15-second cadence needs.
+        assert.equal(rawQueries, 4,
+          'canonical running count, blockers, the items behind them and the open fuse pauses');
       });
 
       await t.test('taskCounts matches the maintained status tally and excludes CANCELLED', async () => {

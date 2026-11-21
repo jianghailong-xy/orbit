@@ -131,6 +131,9 @@ struct SessionProjectRowView: View {
     private var secondLine: some View {
         HStack(spacing: 7) {
             progressChip
+            if row.line.pauseGlyph {
+                Image(systemName: "pause.fill").font(.caption2).foregroundStyle(lineColor)
+            }
             Text(row.line.text)
                 .font(.orbitListSubtitle)
                 .foregroundStyle(lineColor)
@@ -139,7 +142,8 @@ struct SessionProjectRowView: View {
     }
 
     private var progressChip: some View {
-        SessionProjectProgressChip(counts: row.taskCounts, running: row.runningCount, status: row.status)
+        SessionProjectProgressChip(counts: row.taskCounts, running: row.runningCount, status: row.status,
+                                   paused: row.pause != nil)
     }
 
     @ViewBuilder private var liveIndicator: some View {
@@ -192,11 +196,12 @@ private struct SessionProjectProgressChip: View {
     let counts: ProjectSidebarTaskCounts?
     let running: Int
     let status: ProjectStatus
+    var paused = false
 
     var body: some View {
         HStack(spacing: 4) {
             if let counts {
-                SessionProjectProgressBar(counts: counts, running: running)
+                SessionProjectProgressBar(counts: counts, running: running, paused: paused)
                     .frame(width: 26)
                 Text(SessionProjectCopy.progress(done: counts.done, total: counts.total))
             } else {
@@ -217,12 +222,16 @@ private struct SessionProjectProgressChip: View {
 private struct SessionProjectProgressBar: View {
     let counts: ProjectSidebarTaskCounts
     let running: Int
+    /// A paused project's bar draws grey: nothing is moving.
+    var paused = false
 
     var body: some View {
         GeometryReader { proxy in
             ZStack(alignment: .leading) {
                 Color.secondary.opacity(0.3)
-                if counts.total > 0 {
+                if counts.total > 0 && paused {
+                    Color.secondary.frame(width: proxy.size.width * CGFloat(counts.done) / CGFloat(counts.total))
+                } else if counts.total > 0 {
                     HStack(spacing: 0) {
                         Color.green.frame(width: proxy.size.width * CGFloat(counts.done) / CGFloat(counts.total))
                         Color.blue.frame(width: proxy.size.width * CGFloat(running) / CGFloat(counts.total))
@@ -266,9 +275,9 @@ struct SessionProjectListRow: View {
         if let coordinator = row.coordinator {
             SessionListRow(
                 subject: coordinator, navigation: navigation, onOpen: onTap,
-                leading: [SessionRowAction.pin(coordinator, in: app)],
-                trailing: [SessionRowAction.move { onMove(coordinator) }],
-                leadingFullSwipe: true,
+                leading: row.leadingActions(in: view).map { swipeAction($0, coordinator) },
+                trailing: row.trailingActions().map { swipeAction($0, coordinator) },
+                leadingFullSwipe: SessionProjectRow.allowsFullSwipe,
                 draggable: navigation == .selection && SessionFolderDrag.draggable(
                     projectCoordinator: coordinator, view: view, dropTargets: dropTargets),
                 drag: drag, dragTitle: row.title,
@@ -282,6 +291,26 @@ struct SessionProjectListRow: View {
             }
             .buttonStyle(.plain)
             .contextMenu { menu(pin: nil) }
+        }
+    }
+
+    /// One slot of a swipe, drawn from the row's own action list (`SessionProjectRow.leadingActions`).
+    private func swipeAction(_ action: SessionProjectRowAction, _ coordinator: Session) -> RowSwipeAction {
+        switch action {
+        case .pause:
+            return RowSwipeAction(title: SessionProjectCopy.pause, systemImage: "pause.fill", tint: .orange) {
+                app.pauseProject(row)
+            }
+        case .resume:
+            return RowSwipeAction(title: SessionProjectCopy.resume, systemImage: "play.fill", tint: .green) {
+                app.resumeProject(row)
+            }
+        case .complete:
+            return RowSwipeAction(title: SessionProjectCopy.complete, systemImage: "checkmark", tint: .green) {
+                app.completeProjectSessions(row)
+            }
+        case .pin: return SessionRowAction.pin(coordinator, in: app)
+        case .move: return SessionRowAction.move { onMove(coordinator) }
         }
     }
 
@@ -336,11 +365,17 @@ struct SessionProjectListRow: View {
         .disabled(!canOpenSession)
         Button(action: onSessions) { Label(SessionProjectCopy.sessions, systemImage: "list.bullet") }
         Button(action: onProject) { Label(SessionProjectCopy.openProject, systemImage: "square.grid.2x2") }
-        if let pin {
+        if let pin, let coordinator = row.coordinator {
             Divider()
-            pin.menuItem
-            Button(action: { if let coordinator = row.coordinator { onMove(coordinator) } }) {
-                Label(SessionProjectCopy.move, systemImage: "folder")
+            ForEach(row.menuGroup(in: view), id: \.self) { action in
+                switch action {
+                case .pin: pin.menuItem
+                case .move:
+                    Button(action: { onMove(coordinator) }) {
+                        Label(SessionProjectCopy.move, systemImage: "folder")
+                    }
+                default: swipeAction(action, coordinator).menuItem
+                }
             }
         }
     }

@@ -415,10 +415,14 @@ final class SessionProjectPageWiringTests: XCTestCase {
         }
         // Pin and Move act on the coordinator, and both are the one implementations a plain session's
         // row draws. The shell owns the surfaces they appear on.
-        XCTAssertTrue(row.contains("leading: [SessionRowAction.pin(coordinator, in: app)]"))
-        XCTAssertTrue(row.contains("trailing: [SessionRowAction.move { onMove(coordinator) }]"))
-        XCTAssertTrue(row.contains("leadingFullSwipe: true"), "a full leading swipe is allowed")
-        XCTAssertFalse(row.contains("RowSwipeAction(title:"), "no second Pin or Move is built here")
+        XCTAssertTrue(row.contains("leading: row.leadingActions(in: view).map { swipeAction($0, coordinator) }"))
+        XCTAssertTrue(row.contains("trailing: row.trailingActions().map { swipeAction($0, coordinator) }"))
+        XCTAssertTrue(row.contains("case .pin: return SessionRowAction.pin(coordinator, in: app)"))
+        XCTAssertTrue(row.contains("case .move: return SessionRowAction.move { onMove(coordinator) }"))
+        XCTAssertTrue(row.contains("leadingFullSwipe: SessionProjectRow.allowsFullSwipe"),
+                      "a full swipe fires nothing on a project row, in every state")
+        XCTAssertEqual(row.components(separatedBy: "RowSwipeAction(title:").count - 1, 3,
+                       "only Pause, Resume and Complete are built here; Pin and Move are the shared ones")
         let shell = code(try appSource("Views/SessionListRow.swift"))
         XCTAssertTrue(shell.contains(".swipeActions(edge: .leading"))
         XCTAssertTrue(shell.contains(".swipeActions(edge: .trailing"))

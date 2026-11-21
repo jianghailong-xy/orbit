@@ -1785,11 +1785,41 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     await until(() => expect(apiModule.pinSession).toHaveBeenCalledWith(COORDINATOR.id));
   });
 
-  it('pins the coordinator on a full rightward swipe of a phone project row', async () => {
+  it('fires nothing on a full rightward swipe of a phone project row', async () => {
     mobile = true;
+    projects = [project({ startedAt: '2026-10-01T00:00:00Z' } as never)];
     await mount();
     await swipe(projectRow(), 300);
-    await until(() => expect(apiModule.pinSession).toHaveBeenCalledWith(COORDINATOR.id));
+    expect(apiModule.pinSession).not.toHaveBeenCalled();
+    expect(vi.mocked(apiModule.api)).not.toHaveBeenCalledWith(expect.stringMatching(/\/(pause|resume)$/), expect.anything());
+  });
+
+  it('puts Pause first on a running project row and Resume first on a paused one, in the swipe and the menu', async () => {
+    mobile = true;
+    projects = [project({ startedAt: '2026-10-01T00:00:00Z' } as never)];
+    await mount();
+    const labels = () => [...projectRow().querySelectorAll('.session-swipe-actions.leading button')].map((b) => b.getAttribute('aria-label'));
+    expect(labels()).toEqual(['Pause', 'Pin']);
+    await swipe(projectRow(), 90);
+    await click(projectRow().querySelector('.session-swipe-action.pause'), 'the swipe Pause');
+    await until(() => expect(vi.mocked(apiModule.api)).toHaveBeenCalledWith(`/projects/${PROJECT_ID}/pause`, { method: 'POST' }));
+  });
+
+  it('lists Pause first in the desktop menu group of a running project', async () => {
+    projects = [project({ startedAt: '2026-10-01T00:00:00Z' } as never)];
+    await mount();
+    await hoverProjectMenu();
+    await until(() => expect(menuItems().map((item) => item.textContent?.trim())).toEqual(['Open Session', 'Sessions', 'Open Project', 'Pause', 'Pin', 'Move…']));
+  });
+
+  it('shows Resume with the grey paused line on an owner-paused project row', async () => {
+    mobile = true;
+    projects = [project({ startedAt: '2026-10-01T00:00:00Z', pausedAt: '2026-10-04T08:00:00Z', pausedReason: 'OWNER' } as never)];
+    await mount();
+    const entry = projectRow();
+    expect([...entry.querySelectorAll('.session-swipe-actions.leading button')].map((b) => b.getAttribute('aria-label'))).toEqual(['Resume', 'Pin']);
+    expect(entry.querySelector('.session-preview.tone-paused')?.textContent).toMatch(/^Paused · /);
+    expect(entry.querySelector('.session-project-progress.paused')).not.toBeNull();
   });
 
   it('gives a plain session row keyboard focus, Enter and a right-click menu, as a project row has', async () => {
