@@ -1053,6 +1053,8 @@ struct AgentPanes: View {
         }
         .buttonStyle(.plain)
         .sessionFolderDropTarget(folderID: row.folder.id, workspaceID: agent.id, drag: drag, app: app)
+        // PROBE BRANCH ONLY: lets DragFolderShotsTests reach this list's drag state (see DragShotsProbe).
+        .onAppear { DragShotsProbe.register(drag) }
         .contextMenu {
             Button {
                 renamingFolder = row.folder

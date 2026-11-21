@@ -312,6 +312,8 @@ struct SessionFolderPage: View {
             }
         }
         .listStyle(.plain)
+        // PROBE BRANCH ONLY: lets DragFolderShotsTests reach this page's drag state (see DragShotsProbe).
+        .onAppear { DragShotsProbe.register(drag) }
         // The Sessions list's soft top edge, not the hard strip iOS 26 picks here (the owner,
         // 2026-11-12, docs/mocks/ios-header-soft-edge/04-board.html).
         .softTopEdgeEffect()
