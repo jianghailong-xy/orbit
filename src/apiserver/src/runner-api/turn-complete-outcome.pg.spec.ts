@@ -12,15 +12,16 @@
  *   (5) a `!`-shell turn                   → ANSWERED: a turn of work, answered by its exit code
  *   (6) a steer folded into a running turn → nothing: it is not a turn of its own
  *   (7) a retried completion               → the first one's outcome stands
- *   (8) migration 1202's backfill over one session per status, counted per status against design §4.3
+ *   (8) migration 1202's backfill, re-applied by the real `prisma migrate deploy` over one session per status,
+ *       counted per status against design §4.3
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/turn-complete-outcome.pg.spec.ts
  *
  * Not destructive: every id is freshly generated and every assertion is scoped to the rows it made.
  */
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
@@ -139,25 +140,28 @@ function say(api: RunnerApiController, f: Fixture, seq: number, type: RunEventTy
 }
 
 /**
- * Migration 1202 split as Prisma's migrate deploy sends it: one statement at a time, `--` lines dropped, a
- * `$$ … $$` body kept whole. One simple query of the whole file would be one implicit transaction, in which
- * the procedure's COMMIT is refused.
+ * Re-apply migration 1202 with the real `prisma migrate deploy`, on this database as it stands: its row in
+ * `_prisma_migrations` is forgotten first, so deploy finds it pending and applies it the way it does on an
+ * installation (prisma decides per file whether to send it whole, as one transaction, or statement by statement).
+ * This spec once split the file into statements itself, while prisma sends a file with a CREATE PROCEDURE whole, in
+ * which the old procedure's per-batch COMMIT is refused (production's deploy of af55a2fb38 failed with 2D000).
  */
-function statementsOf(file: string): string[] {
-  const out: string[] = [];
-  let current: string[] = [];
-  let inBody = false;
-  for (const line of readFileSync(file, 'utf8').split('\n')) {
-    if (!inBody && line.trimStart().startsWith('--')) continue;
-    current.push(line);
-    if ((line.match(/\$\$/g) ?? []).length % 2 === 1) inBody = !inBody;
-    if (!inBody && line.trimEnd().endsWith(';')) {
-      out.push(current.join('\n'));
-      current = [];
-    }
+async function deployAgain(sql: Client, url: string, migration: string): Promise<void> {
+  await sql.query(`DELETE FROM _prisma_migrations WHERE migration_name = $1`, [migration]);
+  try {
+    execFileSync(process.execPath, [require.resolve('prisma/build/index.js'), 'migrate', 'deploy'], {
+      cwd: join(__dirname, '..', '..'), env: { ...process.env, DATABASE_URL: url }, encoding: 'utf8', stdio: 'pipe',
+    });
+  } catch (error) {
+    const e = error as { stdout?: string; stderr?: string };
+    assert.fail(`prisma migrate deploy of ${migration} failed:\n${e.stdout ?? ''}${e.stderr ?? ''}`);
   }
-  if (current.join('').trim() !== '') out.push(current.join('\n'));
-  return out;
+  const applied = (await sql.query(
+    `SELECT count(*)::int AS n FROM _prisma_migrations
+      WHERE migration_name = $1 AND finished_at IS NOT NULL AND rolled_back_at IS NULL`,
+    [migration],
+  )).rows[0] as { n: number };
+  assert.equal(applied.n, 1, 'prisma recorded it applied');
 }
 
 test('turn-complete records the turn outcome on the turn and on the session', {
@@ -332,8 +336,7 @@ test('turn-complete records the turn outcome on the turn and on the session', {
     const ids = made.map((m) => m.id);
     await sql.query(`UPDATE "session" SET last_turn_outcome = NULL WHERE id = ANY($1::uuid[])`, [ids]);
 
-    const file = join(__dirname, '..', '..', 'prisma', 'migrations', '1202_turn_outcome_backfill', 'migration.sql');
-    for (const statement of statementsOf(file)) await sql.query(statement);
+    await deployAgain(sql, url, '1202_turn_outcome_backfill');
 
     const counts = (await sql.query(
       `SELECT status::text AS status, coalesce(end_reason, '-') AS end_reason,
@@ -352,9 +355,5 @@ test('turn-complete records the turn outcome on the turn and on the session', {
     );
     const kept = (await sql.query(`SELECT last_turn_outcome FROM "session" WHERE id = $1::uuid`, [written.sessionId])).rows[0];
     assert.equal(kept.last_turn_outcome, 'CANCELLED', 'a value already written is kept');
-    const gone = (await sql.query(
-      `SELECT count(*)::int AS n FROM pg_proc WHERE proname = 'orbit_1202_backfill_last_turn_outcome'`,
-    )).rows[0];
-    assert.equal(gone.n, 0, 'the backfill procedure is dropped after its CALL');
   });
 });
