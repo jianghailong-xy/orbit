@@ -165,7 +165,16 @@ import {
   projectDependencyGraphQuery,
 } from '../lib/queries';
 import { SEARCH_HINT, openSessionSearch } from './SessionSearch';
-import { SessionMoveModal, type MoveDialogSession } from './SessionMoveModal';
+import { SessionMoveModal, useSessionFolderFiling, type MoveDialogSession } from './SessionMoveModal';
+import {
+  SESSION_DRAG_TYPE,
+  dragCarriesFiles,
+  dragCarriesSession,
+  dragEdgeScrollStep,
+  folderDropVerdict,
+  sessionRowDraggable,
+  type DraggedSession,
+} from '../lib/sessionDrag';
 import {
   FOLDER_COPY,
   MOVE_COPY,
@@ -7568,8 +7577,7 @@ export function WorkspaceView({
   // events) so the drop hint doesn't flicker as the pointer crosses messages, the textarea, etc.
   const dragDepth = useRef(0);
   const [dragging, setDragging] = useState(false);
-  const dragHasFiles = (e: ReactDragEvent): boolean =>
-    Array.from(e.dataTransfer?.types ?? []).includes('Files');
+  const dragHasFiles = (e: ReactDragEvent): boolean => dragCarriesFiles(e.dataTransfer?.types);
   const onSessionDragEnter = (e: ReactDragEvent): void => {
     if (!canAttach || !dragHasFiles(e)) return;
     e.preventDefault();
@@ -8715,6 +8723,91 @@ export function WorkspaceView({
     setMoveTarget({ id: s.id, title: s.title, folderId: s.folderId ?? null, workspace: s.workspace,
       projectId: s.projectMembership?.projectId });
   };
+  // ── Drag a row onto a folder (lib/sessionDrag): Move…'s first group, as a shortcut ──
+  // Somewhere to drop: the workspace's folder rows, or on a folder's page its head (No Folder).
+  const dropTargetsShown = !listProjectId && !onScheduledRuns && !!scopeWorkspaceId &&
+    (!!openFolder || (folderListing?.folders.length ?? 0) > 0);
+  const { fileInFolder } = useSessionFolderFiling();
+  const [draggedSession, setDraggedSession] = useState<DraggedSession | null>(null);
+  // The target under the pointer that would take the drop: a folder's id, or null for No Folder.
+  const [dropHover, setDropHover] = useState<string | null | undefined>(undefined);
+  const knownFolderIds = useMemo(() => new Set(workspaceFolders.map((f) => f.id)), [workspaceFolders]);
+  const startSessionDrag = (e: ReactDragEvent, s: any): void => {
+    const workspaceId = s.workspaceId ?? s.workspace?.id ?? scopeWorkspaceId;
+    if (!workspaceId) return;
+    // Only the session's own type: no text, so neither the composer nor drop-to-upload takes it.
+    e.dataTransfer.setData(SESSION_DRAG_TYPE, s.id);
+    e.dataTransfer.effectAllowed = 'move';
+    setSwipeOpen(null);
+    setMenuOpenId(null);
+    setDraggedSession({ id: s.id, title: s.title, workspaceId, folderId: s.folderId ?? null,
+      projectId: s.projectMembership?.projectId });
+  };
+  const endSessionDrag = (): void => {
+    setDraggedSession(null);
+    setDropHover(undefined);
+  };
+  // A folder row or a folder page's head, as a place to drop the dragged row: only one where it
+  // would move (not its own folder, not another workspace's), and only that one lights up.
+  const folderDropProps = (folder: SessionFolder | null) => {
+    const folderId = folder?.id ?? null;
+    const takes = (e: ReactDragEvent): boolean =>
+      !!draggedSession && !!scopeWorkspaceId && dragCarriesSession(e.dataTransfer?.types) &&
+      folderDropVerdict(draggedSession, { workspaceId: scopeWorkspaceId, folderId }, knownFolderIds) === 'move';
+    return {
+      onDragEnter: (e: ReactDragEvent) => {
+        if (!takes(e)) return;
+        e.preventDefault();
+        setDropHover(folderId);
+      },
+      onDragOver: (e: ReactDragEvent) => {
+        if (!takes(e)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        if (dropHover !== folderId) setDropHover(folderId);
+      },
+      onDragLeave: (e: ReactDragEvent) => {
+        if (e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget)) return;
+        setDropHover((hover) => (hover === folderId ? undefined : hover));
+      },
+      onDrop: (e: ReactDragEvent) => {
+        const dragged = draggedSession;
+        if (!dragged || !takes(e)) return;
+        e.preventDefault();
+        endSessionDrag();
+        const origin = workspaceFolders.find((f) => f.id === dragged.folderId) ?? null;
+        void fileInFolder(dragged, folder, origin);
+      },
+    };
+  };
+  // Held near the list's top or bottom edge, a drag scrolls it, so the folders at the top are in
+  // reach from a row far down. The pointer is read on every dragover; a frame loop scrolls.
+  const dragPointerY = useRef<number | null>(null);
+  useEffect(() => {
+    if (!draggedSession) return;
+    let frame = 0;
+    const tick = (): void => {
+      const list = listRef.current;
+      const y = dragPointerY.current;
+      if (list && y !== null) {
+        const step = dragEdgeScrollStep(y, list.getBoundingClientRect());
+        if (step) list.scrollTop += step;
+      }
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(frame);
+      dragPointerY.current = null;
+    };
+  }, [draggedSession]);
+  const listDragProps = draggedSession ? {
+    onDragOver: (e: ReactDragEvent) => { dragPointerY.current = e.clientY; },
+    onDragLeave: (e: ReactDragEvent) => {
+      if (e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget)) return;
+      dragPointerY.current = null;
+    },
+  } : {};
   // A folder row: the folder, who in it waits on you, how many sessions it holds. Activity sits on
   // the folder itself as on the sidebar's Workspace rows: a still dot while a session runs, a
   // breathing one while only a background job does. Its ⋯ takes the chevron's place on hover.
@@ -8725,10 +8818,12 @@ export function WorkspaceView({
     return (
       <div
         key={row.folder.id}
-        className={`session-folder-row${folderMenuOpenId === row.folder.id ? ' menu-open' : ''}`}
+        className={`session-folder-row${folderMenuOpenId === row.folder.id ? ' menu-open' : ''}${
+          dropHover === row.folder.id ? ' drop-target' : ''}`}
         role="button"
         tabIndex={0}
         onClick={enter}
+        {...folderDropProps(row.folder)}
         onKeyDown={(e) => {
           if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return;
           e.preventDefault();
@@ -9951,10 +10046,16 @@ export function WorkspaceView({
                 menuItem('delete', close, kebab),
               ];
         const renaming = renamingId === s.id;
+        const draggable = !pageProjectId && sessionRowDraggable(s, {
+          view: memberView, dropTargets: dropTargetsShown, touch: isMobile, renaming,
+        });
         return (
           <div
-            className={`session-row${openable ? '' : ' no-open'}${s.id === selectedId ? ' active' : ''}${menuOpenId === s.id ? ' menu-open' : ''}${renaming ? ' renaming' : ''}`}
+            className={`session-row${openable ? '' : ' no-open'}${s.id === selectedId ? ' active' : ''}${menuOpenId === s.id ? ' menu-open' : ''}${renaming ? ' renaming' : ''}${draggedSession?.id === s.id ? ' dragging' : ''}`}
             key={s.id}
+            draggable={draggable || undefined}
+            onDragStart={draggable ? (e) => startSessionDrag(e, actionSession) : undefined}
+            onDragEnd={draggable ? endSessionDrag : undefined}
             // While it is renamed, a press anywhere else on the row keeps the field's focus
             // (leaving the field saves), and a click there doesn't open the row.
             onMouseDown={(e) => {
@@ -10134,7 +10235,11 @@ export function WorkspaceView({
         {listProjectId ? projectPageHead(leaveProjectSessions, FOLDER_COPY.back(headWorkspaceName), <LeftOutlined />) : openFolder ? (
           // A folder's page: back to the workspace's list, the folder (and the workspace it is in),
           // and the folder's own two entries. It lists the view it was opened from.
-          <div className="session-col-head session-folder-head">
+          // A row dragged onto the head — the back control or the title — leaves the folder (No Folder).
+          <div
+            className={`session-col-head session-folder-head${dropHover === null ? ' drop-target' : ''}`}
+            {...folderDropProps(null)}
+          >
             <button
               type="button"
               className="session-folder-back"
@@ -10262,6 +10367,7 @@ export function WorkspaceView({
           className="workspace-sessions session-col-list autohide-scrollbar"
           ref={listRef}
           onScroll={onSessionListScroll}
+          {...listDragProps}
         >
           {listProjectId && projectPageTop(listProjectId)}
           {listProjectId
