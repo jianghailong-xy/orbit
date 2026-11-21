@@ -225,10 +225,17 @@ test('an unchanged pending queue answers 304 to its ETag, and a changed one answ
   const etag = first.headers.get('etag');
   assert.ok(etag, 'the answer names an ETag');
 
-  // Only the clock moved: every age and `readAt` differ, no question does.
+  // Only the clock moved, within the minute: `readAt` and the seconds of every age differ, no question does.
   queueState.tickSeconds = 30;
   const unchanged = await fetch(url, { headers: { ...AUTH, 'if-none-match': etag } });
   assert.equal(unchanged.status, 304);
+
+  // A row's age crossed a minute: clients draw it, so the answer is a 200 with the new age.
+  queueState.tickSeconds = 60;
+  const aged = await fetch(url, { headers: { ...AUTH, 'if-none-match': etag } });
+  assert.equal(aged.status, 200);
+  assert.notEqual(aged.headers.get('etag'), etag);
+  queueState.tickSeconds = 30;
 
   queueState.claim = 'the suite failed';
   const changed = await fetch(url, { headers: { ...AUTH, 'if-none-match': etag } });

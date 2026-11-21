@@ -37,9 +37,10 @@ export class PendingEvidenceJudgmentsController {
     if (res) {
       // Conditional, decided here for the reason the Open list's is: the global `Cache-Control:
       // no-cache` makes Express's own freshness check refuse, and its body-hash ETag would differ on
-      // every read anyway, because the body carries the read's clock (`readAt`) and each row's age
-      // (`ageSeconds`, `oldestAgeSeconds`). Those three move with time alone, so the ETag leaves
-      // them out: a 304 means no question, row or decision changed.
+      // every read anyway, because the body carries the read's clock (`readAt`) and each row's age in
+      // seconds. Clients draw the age at minute precision (and URLSession hands back the cached body
+      // on a 304), so the ETag holds each age as whole minutes and leaves out `readAt`: a 304 means
+      // no question, row or decision changed and no age crossed a minute.
       const etag = pendingEvidenceEtag(queue);
       res.setHeader('ETag', etag);
       if (ifNoneMatchHits(ifNoneMatch, etag)) {
@@ -51,13 +52,15 @@ export class PendingEvidenceJudgmentsController {
   }
 }
 
-const CLOCK_ONLY_FIELDS = new Set(['readAt', 'ageSeconds', 'oldestAgeSeconds']);
-
-/** A weak ETag of the queue's bytes without the fields that change with the clock alone. */
+/** A weak ETag of the queue's bytes, its ages as whole minutes and without the read's clock. */
 function pendingEvidenceEtag(queue: unknown): string {
   const digest = createHash('sha256')
-    .update(JSON.stringify(queue, (key, value) => (CLOCK_ONLY_FIELDS.has(key) ? undefined : value)))
+    .update(JSON.stringify(queue, (key, value) => {
+      if (key === 'readAt') return undefined;
+      if ((key === 'ageSeconds' || key === 'oldestAgeSeconds') && typeof value === 'number') return Math.floor(value / 60);
+      return value;
+    }))
     .digest('base64url')
     .slice(0, 27);
-  return `W/"pe1-${digest}"`;
+  return `W/"pe2-${digest}"`;
 }
