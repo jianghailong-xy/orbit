@@ -30,6 +30,13 @@ class CoordinatorHandoffTest {
         }
     }
 
+    @Test fun sameAsThisOneSaidOnPurposeSendsANullSuccessorWhichClearsASavedPick() {
+        for (action in listOf("skip", "retry")) {
+            val body = CoordinatorHandoffApi.postRequest("P1", action, HandoffSuccessor.SAME).body!!.decodeToString()
+            assertEquals("""{"successor":null}""", body)
+        }
+    }
+
     @Test fun outgoingHandoffReadsAnOptionalSuccessor() {
         fun successor(fields: String = "") = CoordinatorHandoff.outgoing(
             coordinator(""","coordinatorHandoff":{"state":"FAILED"$fields}"""),

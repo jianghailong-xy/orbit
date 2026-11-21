@@ -105,7 +105,12 @@ internal data class OutgoingHandoff(val state: String, val startedAt: String?, v
     val locksComposer get() = state == "WRITING" || state == "HANDING_OVER"
 }
 
-internal data class HandoffSuccessor(val engine: String?, val provider: String?, val model: String? = null)
+internal data class HandoffSuccessor(val engine: String?, val provider: String?, val model: String? = null) {
+    companion object {
+        /** "Same as this one" said on purpose: sent as `"successor": null`, which clears a pick saved earlier. */
+        val SAME = HandoffSuccessor(null, null, null)
+    }
+}
 
 /** One wait as the handoff names it (`CoordinatorPendingWait`). [kind] is the server's, null from a server without it. */
 internal data class HandoffWait(val id: String, val label: String, val paused: Boolean, val kind: String? = null) {
@@ -241,7 +246,8 @@ internal class CoordinatorHandoffApi(private val auth: AuthSession, private val 
     companion object {
         fun postRequest(projectId: String, action: String?, successor: HandoffSuccessor?): ApiRequest {
             val body = buildJsonObject {
-                successor?.let { pick ->
+                if (successor == HandoffSuccessor.SAME) put("successor", JsonNull)
+                else successor?.let { pick ->
                     put("successor", buildJsonObject {
                         pick.engine?.let { put("engine", it) }
                         pick.provider?.let { put("provider", it) }
@@ -391,7 +397,7 @@ internal fun HandoffStatus(handoff: OutgoingHandoff?, model: ComposerModel, stat
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     CoordinatorHandoff.failureActions(handoff.failureCode).forEach { label ->
                         val action = when (label) { CoordinatorHandoffCopy.TRY_AGAIN -> "retry"; CoordinatorHandoffCopy.KEEP_THIS_COORDINATOR -> "cancel"; else -> "skip" }
-                        OutlinedButton(enabled = !busy, onClick = { act(action, if (action == "cancel") null else successor) },
+                        OutlinedButton(enabled = !busy, onClick = { act(action, if (action == "cancel") null else successor ?: HandoffSuccessor.SAME) },
                             contentPadding = PaddingValues(horizontal = 12.dp)) { Text(label) }
                     }
                 }

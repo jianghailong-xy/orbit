@@ -133,7 +133,7 @@ export interface CoordinatorHandoffSuccessor {
 }
 
 /** The body of `POST …/handoff`, `…/handoff/skip` and `…/handoff/retry`. A successor named here replaces the
- *  one named earlier in the same handoff; none keeps it. Refused 400/409 up front when that start would be
+ *  one named earlier in the same handoff; `successor: null` ("Same as this one") clears it; left out keeps it. Refused 400/409 up front when that start would be
  *  refused, so the current coordinator is never completed for a successor that cannot open. */
 export interface CoordinatorHandoffRequest {
   successor?: CoordinatorHandoffSuccessor | null;

@@ -108,7 +108,7 @@ export class CoordinatorHandoffService implements OnModuleInit, OnModuleDestroy 
       row = await this.prisma.coordinatorHandoff.create({
         data: {
           id, ownerId, projectId, fromSessionId: coordinator.id, state: 'WRITING', attempt: 1, clientTurnId,
-          ...successorColumns(successor),
+          ...successorColumns(successor ?? null),
         },
         select: HANDOFF_ROW_SELECT,
       });
@@ -144,7 +144,7 @@ export class CoordinatorHandoffService implements OnModuleInit, OnModuleDestroy 
     let row: CoordinatorHandoffRow;
     if (live) {
       if (live.state === 'HANDING_OVER') throw new ConflictException('this handover is already under way');
-      const named = successor ? successorColumns(successor) : {};
+      const named = successor === undefined ? {} : successorColumns(successor);
       const moved = await this.prisma.coordinatorHandoff.updateMany({
         where: { id: live.id, state: live.state },
         data: { state: 'HANDING_OVER', note: null, failureCode: null, endedAt: null, ...named },
@@ -156,7 +156,7 @@ export class CoordinatorHandoffService implements OnModuleInit, OnModuleDestroy 
       row = await this.prisma.coordinatorHandoff.create({
         data: {
           id: randomUUID(), ownerId, projectId, fromSessionId, state: 'HANDING_OVER', attempt: 1,
-          ...successorColumns(successor),
+          ...successorColumns(successor ?? null),
         },
         select: HANDOFF_ROW_SELECT,
       });
@@ -195,7 +195,7 @@ export class CoordinatorHandoffService implements OnModuleInit, OnModuleDestroy 
     const attempt = live.attempt + 1;
     const clientTurnId = coordinatorHandoffTurnId(live.id, attempt);
     const startedAt = new Date();
-    const named = successor ? successorColumns(successor) : {};
+    const named = successor === undefined ? {} : successorColumns(successor);
     const moved = await this.prisma.coordinatorHandoff.updateMany({
       where: { id: live.id, state: 'FAILED', attempt: live.attempt },
       data: { state: 'WRITING', attempt, clientTurnId, startedAt, failureCode: null, endedAt: null, ...named },
@@ -385,23 +385,24 @@ export class CoordinatorHandoffService implements OnModuleInit, OnModuleDestroy 
     });
   }
 
-  /** The successor the request names, refused now with create()'s own refusal when it could not open. */
+  /** The successor the request names (undefined: left out; null: cleared), refused now with create()'s own
+   *  refusal when it could not open. */
   private async checkedSuccessor(
     ownerId: string,
     workspaceId: string | null,
     body: CoordinatorHandoffRequest | undefined,
-  ): Promise<CoordinatorHandoffSuccessor | null> {
+  ): Promise<CoordinatorHandoffSuccessor | null | undefined> {
     const successor = readHandoffSuccessor(body?.successor);
     if (successor) await this.sessions.assertStartResolves(ownerId, { ...successor, workspaceId });
     return successor;
   }
 
-  /** A successor named on a handoff already under way replaces the one it had; none keeps it. */
+  /** A successor named on a handoff already under way replaces the one it had (null clears it); left out keeps it. */
   private async rememberSuccessor(
     row: CoordinatorHandoffRow,
-    successor: CoordinatorHandoffSuccessor | null,
+    successor: CoordinatorHandoffSuccessor | null | undefined,
   ): Promise<CoordinatorHandoffRow> {
-    if (!successor) return row;
+    if (successor === undefined) return row;
     const named = successorColumns(successor);
     const updated = await this.prisma.coordinatorHandoff.updateMany({ where: { id: row.id, state: row.state }, data: named });
     if (updated.count === 0) return row;

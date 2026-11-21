@@ -627,3 +627,26 @@ test('the successor runs on what the owner named: kept from Hand over, replaced 
     await assert.rejects(s.handoffs.start(f.ownerId, f.projectId, { successor: { engine: 7 } } as never), BadRequestException);
   }
 });
+
+test('"Same as this one" (successor: null) clears an earlier pick; leaving successor out keeps it', { skip, timeout: 120_000 }, async () => {
+  const f = await fixture();
+  const s = services(f);
+  await s.handoffs.start(f.ownerId, f.projectId, { successor: { engine: 'codex', provider: 'codex' } });
+  await s.handoffs.afterTurn(f.outgoing, (await noteTurn(f, s.turns[0].clientTurnId)).id, 'FAILED');
+  // Try again with no successor in the body keeps the pick.
+  const kept = await s.handoffs.retry(f.ownerId, f.projectId, {});
+  assert.deepEqual(kept.successor, { engine: 'codex', provider: 'codex', model: null });
+  await s.handoffs.afterTurn(f.outgoing, (await noteTurn(f, s.turns[1].clientTurnId)).id, 'FAILED');
+  // Hand over without a note on "Same as this one" clears it: the successor follows the previous coordinator.
+  const skipped = await s.handoffs.skip(f.ownerId, f.projectId, { successor: null });
+  assert.equal(skipped.state, 'COMPLETED');
+  assert.equal(skipped.successor, null);
+  const opened = s.openings.find((o) => o.id === skipped.handedOverToSessionId)!;
+  assert.deepEqual([opened.engine, opened.provider, opened.model], [undefined, undefined, undefined]);
+  // An object with every field empty is the same as null.
+  const g = await fixture();
+  const t = services(g);
+  await t.handoffs.start(g.ownerId, g.projectId, { successor: { engine: 'kimi' } });
+  const cleared = await t.handoffs.start(g.ownerId, g.projectId, { successor: { engine: ' ', provider: null } });
+  assert.equal(cleared.successor, null);
+});

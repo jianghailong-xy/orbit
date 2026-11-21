@@ -7645,7 +7645,7 @@ export function WorkspaceView({
       projectId: string;
       action: CoordinatorHandoffAction;
       sessionId: string;
-      successor?: CoordinatorHandoffSuccessor;
+      successor?: CoordinatorHandoffSuccessor | null;
     }) => coordinatorHandoffRequest(projectId, action, successor),
     onSuccess: (view, { sessionId, action }) => {
       qc.invalidateQueries({ queryKey: ['session', sessionId] });
@@ -7655,7 +7655,7 @@ export function WorkspaceView({
     },
     onError: (e: Error) => message.error(COORDINATOR_HANDOFF_COPY.refused, e.message),
   });
-  const runHandoffAction = (action: CoordinatorHandoffAction, successor?: CoordinatorHandoffSuccessor): void => {
+  const runHandoffAction = (action: CoordinatorHandoffAction, successor?: CoordinatorHandoffSuccessor | null): void => {
     const projectId = handoffRow?.projectMembership?.projectId ?? handoffRow?.projectId;
     if (!projectId || !selectedId || handoffAction.isPending) return;
     handoffAction.mutate({ projectId, action, sessionId: selectedId, successor });

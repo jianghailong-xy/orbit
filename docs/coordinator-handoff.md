@@ -52,7 +52,8 @@ successor would fail the same way. So **Hand over**, **Skip the note** / **Hand 
 ```
 
 Each field is what `POST /sessions` takes, and each is optional. A successor named later in the same handoff
-replaces the earlier one; a request that names none keeps it. The pick is checked against the session
+replaces the earlier one; `"successor": null` (the picker's "Same as this one") clears it, back to the
+current coordinator's model; a request that leaves `successor` out keeps it. The pick is checked against the session
 start's own resolution before anything happens, so a pick that could not open is refused (400/409) and the
 current coordinator is not completed. The handoff keeps the pick (migration 1410) and shows it as
 `successor` on `coordinatorHandoff` and on every `CoordinatorHandoffView`, so the failure state can show

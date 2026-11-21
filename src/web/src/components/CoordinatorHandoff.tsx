@@ -45,10 +45,11 @@ export type CoordinatorHandoffAction = 'handoff' | 'skip' | 'cancel' | 'retry';
 export function coordinatorHandoffRequest(
   projectId: string,
   action: CoordinatorHandoffAction,
-  successor?: CoordinatorHandoffSuccessor,
+  /** Left out keeps what the handoff has; null is "Same as this one" and clears an earlier pick. */
+  successor?: CoordinatorHandoffSuccessor | null,
 ): Promise<CoordinatorHandoffView> {
   const base = `/projects/${encodeURIComponent(projectId)}/coordinator/handoff`;
-  const body: CoordinatorHandoffRequest = successor && action !== 'cancel' ? { successor } : {};
+  const body: CoordinatorHandoffRequest = successor !== undefined && action !== 'cancel' ? { successor } : {};
   return api<CoordinatorHandoffView>(action === 'handoff' ? base : `${base}/${action}`, { method: 'POST', body });
 }
 
@@ -333,21 +334,22 @@ export function CoordinatorHandoffFailure({
   handoff: SessionCoordinatorHandoff;
   engines: readonly EngineChoice[];
   busy?: boolean;
-  onRetry: (successor?: CoordinatorHandoffSuccessor) => void;
-  onSkip: (successor?: CoordinatorHandoffSuccessor) => void;
+  /** null: "Same as this one", which clears the handoff's saved pick. */
+  onRetry: (successor: CoordinatorHandoffSuccessor | null) => void;
+  onSkip: (successor: CoordinatorHandoffSuccessor | null) => void;
   onKeep: () => void;
 }) {
   // The new coordinator could not be opened, and this one is already completed: only the handover
   // without a note can still work.
   const replaceFailed = handoff.failureCode === 'REPLACE_FAILED';
   const [pick, setPick] = useState<CoordinatorHandoffSuccessor | null>();
-  const successor = (pick === undefined ? handoff.successor : pick) ?? undefined;
+  const successor = (pick === undefined ? handoff.successor : pick) ?? null;
   return (
     <div className="handoff-sys err" role="alert" data-handoff-state="FAILED">
       <ErrorIcon />
       <div className="grow">
         {handoff.failureReason ?? coordinatorHandoffFailureSentence(handoff.failureCode ?? 'TURN_FAILED')}
-        <SuccessorPicker engines={engines} successor={successor} stored={handoff.successor} onChange={(next) => setPick(next ?? null)} disabled={busy} />
+        <SuccessorPicker engines={engines} successor={successor ?? undefined} stored={handoff.successor} onChange={(next) => setPick(next ?? null)} disabled={busy} />
         <span className="row">
           {!replaceFailed && <Button size="small" disabled={busy} onClick={() => onRetry(successor)}>{COPY.tryAgain}</Button>}
           <Button size="small" disabled={busy} onClick={() => onSkip(successor)}>{COPY.handOverWithoutNote}</Button>

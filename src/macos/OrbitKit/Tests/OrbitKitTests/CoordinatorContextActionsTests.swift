@@ -176,6 +176,10 @@ final class CoordinatorContextActionsTests: XCTestCase {
         let body = try encoder.encode(CoordinatorHandoffRequest(successor: pick))
         let fields = try JSONDecoder().decode([String: [String: String]].self, from: body)
         XCTAssertEqual(fields, ["successor": ["engine": "claude", "provider": "claude"]])
+
+        // "Same as this one" said on purpose clears a saved pick.
+        let same = try encoder.encode(CoordinatorHandoffRequest(successor: .same))
+        XCTAssertEqual(String(decoding: same, as: UTF8.self), #"{"successor":null}"#)
     }
 
     func testSuccessorDecodesOnSessionAndHandoffResponse() throws {

@@ -204,7 +204,8 @@ struct CoordinatorHandoffStatusView: View {
                 CoordinatorHandoffSuccessorPicker(engines: SessionProviderChoices.engines(sources: choiceSources),
                                                   savedSuccessor: savedSuccessor, selection: $successor)
                     .padding(.leading, 24)
-                buttons(actions.map { ($0, CoordinatorHandoffRow.label($0)) }, successor: successor)
+                // "Same as this one" here is said on purpose, and clears a pick saved earlier.
+                buttons(actions.map { ($0, CoordinatorHandoffRow.label($0)) }, successor: successor ?? .same)
             }
             .onChange(of: savedSuccessor, initial: true) { _, value in
                 successor = value

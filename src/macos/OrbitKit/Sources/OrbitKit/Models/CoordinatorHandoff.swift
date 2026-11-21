@@ -76,10 +76,23 @@ public struct CoordinatorHandoffSuccessor: Codable, Hashable, Sendable {
         self.provider = provider
         self.model = model
     }
+
+    /// "Same as this one" said on purpose: sent as `"successor": null`, which clears a pick saved earlier.
+    public static let same = CoordinatorHandoffSuccessor()
 }
 
+/// A handoff press's body: `{}` when no successor is named (the handoff keeps what it has), `"successor": null`
+/// for `.same`, else the pick.
 struct CoordinatorHandoffRequest: Encodable {
     let successor: CoordinatorHandoffSuccessor?
+
+    private enum CodingKeys: String, CodingKey { case successor }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        if successor == .same { try c.encodeNil(forKey: .successor) }
+        else { try c.encodeIfPresent(successor, forKey: .successor) }
+    }
 }
 
 /// `coordinatorHandoff` on the OUTGOING coordinator's session.

@@ -104,9 +104,14 @@ export const HANDOFF_ROW_SELECT = {
   endedAt: true,
 } as const;
 
-/** A successor as the request named it, trimmed, with empty fields dropped; null when nothing is named. */
-export function readHandoffSuccessor(raw: unknown): CoordinatorHandoffSuccessor | null {
-  if (raw == null) return null;
+/**
+ * A successor as the request named it, trimmed, with empty fields dropped. Undefined when the request leaves
+ * it out (keep what the handoff has); null when it names none — `null`, or every field empty — which is
+ * "Same as this one" and clears a pick made earlier.
+ */
+export function readHandoffSuccessor(raw: unknown): CoordinatorHandoffSuccessor | null | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null) return null;
   if (typeof raw !== 'object' || Array.isArray(raw)) throw new BadRequestException('successor must be an object');
   const out: CoordinatorHandoffSuccessor = {};
   for (const key of ['engine', 'provider', 'model'] as const) {

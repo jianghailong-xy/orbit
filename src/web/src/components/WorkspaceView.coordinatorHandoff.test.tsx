@@ -574,6 +574,32 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
     }));
   });
 
+  it('"Same as this one" after a stored pick sends successor: null, which clears it', async () => {
+    detail = session({
+      projectId: PROJECT,
+      projectMembership: coordinator,
+      coordinatorHandoff: { state: 'FAILED', startedAt: new Date().toISOString(), failureCode: 'TURN_FAILED',
+        successor: { engine: 'codex', provider: 'codex' } },
+    });
+    await mount();
+    const failure = () => mounted().querySelector('[data-handoff-state="FAILED"]')!;
+    await waitFor(() => expect(failure()).not.toBeNull());
+    expect(successorPicker(failure())?.textContent).toBe('Codex');
+    await click(successorPicker(failure()));
+    const options = () => [...document.querySelectorAll('[role="listbox"] [role="option"]')];
+    await waitFor(() => expect(options()[0]?.textContent).toBe('Same as this one'));
+    const same = options()[0];
+    await act(async () => {
+      same.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'mouse', button: 0 }));
+    });
+    await click(same);
+    expect(successorPicker(failure())?.textContent).toBe('Same as this one');
+    await click(button('Hand over without a note'));
+    await waitFor(() => expect(apiMock).toHaveBeenCalledWith(`/projects/${PROJECT}/coordinator/handoff/skip`, {
+      method: 'POST', body: { successor: null },
+    }));
+  });
+
   it('02-5: does not offer Start a new coordinator while a handoff has failed: the row has its own doors', async () => {
     detail = session({
       projectId: PROJECT,
