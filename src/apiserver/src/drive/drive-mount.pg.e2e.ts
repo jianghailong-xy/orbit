@@ -635,7 +635,7 @@ test('Orbit Files drive: the mount daemon passes the shell-operation list (§5.9
       sha256sum ~/big.bin $F/big.bin | cut -d' ' -f1 | uniq | wc -l
       after=$(du -sk ~ | cut -f1); echo "home grew KiB=$((after - before))"
     `, { timeoutMs: 3_600_000 }), 'cp and sha256sum');
-    assert.match(s.out, /cp rc=0/);
+    assert.match(s.out, /cp rc=0/, `${s.out}${s.err}errors.log: ${errorsLog(a).slice(-3000)}`);
     assert.match(s.out, /\n1\n/, 'the two hashes are one');
     const st = status(a);
     assert.ok(st.spoolPeakBytes <= 4 * 1024 * MiB + 64 * MiB, `spool peak ${st.spoolPeakBytes}`);
@@ -655,7 +655,7 @@ test('Orbit Files drive: the mount daemon passes the shell-operation list (§5.9
       rm -f ~/p?.bin
     `, { timeoutMs: 3_600_000 }), 'parallel cp');
     for (let i = 1; i <= 5; i += 1) {
-      assert.match(s.out, new RegExp(`cp${i} rc=0`));
+      assert.match(s.out, new RegExp(`cp${i} rc=0`), `${s.out}${s.err}errors.log: ${errorsLog(b).slice(-3000)}`);
       assert.match(s.out, new RegExp(`hash${i} ok`));
     }
     const st = status(b);
@@ -664,7 +664,7 @@ test('Orbit Files drive: the mount daemon passes the shell-operation list (§5.9
   });
 
   await row('8', 'cp $F/a.txt $F/b.txt; cp -r ~/dir $F/ (1,000 files, 100 folders)', async (d) => {
-    ok(await sh(a, 'cp $F/a.txt $F/b.txt && cmp $F/a.txt $F/b.txt'), 'cp');
+    ok(await sh(a, 'test -f $F/a.txt || echo bye > $F/a.txt; cp $F/a.txt $F/b.txt && cmp $F/a.txt $F/b.txt'), 'cp');
     ok(await sh(a, 'for j in $(seq 1 100); do mkdir -p ~/dir/d$j; for k in $(seq 1 10); do echo "file $j $k" > ~/dir/d$j/f$k; done; done'), 'make dir');
     const s = ok(await sh(a, 'cp -r ~/dir $F/ && diff -r ~/dir $F/dir && echo identical'), 'cp -r');
     assert.match(s.out, /identical/);
