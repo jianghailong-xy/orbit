@@ -4781,6 +4781,8 @@ export class SessionsService {
       projectMembership: SessionProjectMembership | null;
       /** The subject summary of a LANDING row; null on every conversation. */
       landing: SessionLandingSummary | null;
+      /** The release column, read by the capabilities and not sent on the row. */
+      finishedAt: Date | null;
       cancelRequestedAt: Date | null;
       runtimeSessionId: string | null;
       retryAt: Date | null;
@@ -4825,6 +4827,7 @@ export class SessionsService {
         s.cost_usd        AS "costUsd",
         s.error,
         s.end_reason      AS "endReason",
+        s.finished_at     AS "finishedAt",
         s.cancel_requested_at AS "cancelRequestedAt",
         s.runtime_session_id AS "runtimeSessionId",
         -- When the auto-retry will re-send the message that a self-healing failure killed, or
@@ -5117,6 +5120,7 @@ export class SessionsService {
         costUsd: r.costUsd,
         error: r.error,
         endReason: r.endReason,
+        finishedAt: r.finishedAt,
         cancelRequestedAt: r.cancelRequestedAt,
         runtimeSessionId: r.runtimeSessionId,
         retryAt: r.retryAt,
@@ -5206,7 +5210,8 @@ export class SessionsService {
     const given = overlay ?? new Map<string, ListOverlay>();
     const missing = rows.filter((r) => !given.has(r.id));
     const read = missing.length === 0 ? new Map<string, ListOverlay>() : await this.listOverlay(ownerId, missing);
-    return sessions.map((s) => ({ ...s, ...(given.get(s.id) ?? read.get(s.id)!) }));
+    // The release column was read for the capabilities; the row does not carry it.
+    return sessions.map(({ finishedAt: _released, ...s }) => ({ ...s, ...(given.get(s.id) ?? read.get(s.id)!) }));
   }
 
   /**

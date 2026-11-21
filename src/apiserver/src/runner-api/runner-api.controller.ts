@@ -10653,6 +10653,7 @@ export class RunnerApiController {
             completedAt: true,
             archivedAt: true,
             deletedAt: true,
+            finishedAt: true,
             cancelRequestedAt: true,
             startedAt: true,
             numTurns: true,

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { AgentProvider, PermissionMode } from '@orbit/shared';
 import { RunStatus } from '@prisma/client';
+import { isReleasedStatus } from '../common/session-release';
 import { encryptSecret } from '../providers/provider-crypto';
 import { resolveProviderExec } from '../providers/custom-provider';
 import { SessionsService } from './sessions.service';
@@ -92,6 +93,8 @@ function historyFixture(
     assignedRunner: { id: 'runner-1', status: 'ONLINE', lastHeartbeatAt: now, capabilities: ['provider:dsh'], capabilitiesReportedAt: now },
     workspace: null, cancelRequestedAt: null, completedAt: null, archivedAt: null,
     deletedAt: null, mergeStatus: null, commitStatus: null,
+    // A terminal row carries its release column (session_release_fact_chk).
+    ...(isReleasedStatus(String(overrides.status ?? RunStatus.FAILED)) ? { finishedAt: now } : {}),
     ...overrides,
   };
   const updates: Array<Record<string, unknown>> = [];

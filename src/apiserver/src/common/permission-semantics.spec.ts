@@ -247,6 +247,7 @@ test('P5c cursor: the server admits exactly the modes the picker describes as ke
 
 const ROW = {
   status: 'RUNNING',
+  finishedAt: null,
   cancelRequestedAt: null,
   startedAt: new Date(),
   numTurns: 1,
