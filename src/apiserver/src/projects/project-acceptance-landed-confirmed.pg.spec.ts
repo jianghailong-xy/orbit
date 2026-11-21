@@ -288,6 +288,30 @@ async function serve(stack: Stack, f: Fixture, criterionKey: string, title: stri
     acceptanceExpectedExitCode: 0,
     autoRunWhenReady: false,
   } as never);
+  // The task's work session: on its own branch, with a commit reported, and finished. Revision 42
+  // (§12.15 P-M3) reads landing from the delivered commit, so without one the criterion would read
+  // LANDED — "nothing to land" — before the receipt this file is about.
+  await stack.db.session.create({
+    data: {
+      id: randomUUID(),
+      ownerId: f.ownerId,
+      creatorId: f.ownerId,
+      taskId: declared.id,
+      workspaceId: f.workspaceId,
+      assignedRunnerId: f.runnerId,
+      title,
+      prompt: title,
+      provider: 'claude',
+      status: RunStatus.SUCCEEDED,
+      dispatchOrigin: SessionDispatchOrigin.USER,
+      startsTaskWork: true,
+      isolationStatus: 'worktree',
+      branch: `orbit/${declared.id.slice(0, 8)}`,
+      changedFiles: ['src/work.ts'],
+      finishedAt: new Date(),
+      releaseCause: 'engine_exited',
+    },
+  });
   return declared.id;
 }
 

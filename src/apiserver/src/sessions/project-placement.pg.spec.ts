@@ -163,12 +163,17 @@ async function project(o: Owner, kind: Coordinator, i: number): Promise<Fixture>
   const ordinary = await session(o, { taskId: await task() });
   const waitingId = await session(o, { taskId: await task(), status: 'RUNNING' });
   await o.h.db.approval.create({ data: { sessionId: waitingId, toolName: 'Bash', input: { command: 'ls' } } });
-  await session(o, { taskId: await task(), completedAt: new Date(), status: 'SUCCEEDED', finishedAt: new Date(), releaseCause: 'completed' });
+  // Released, so with finished_at and its cause (session_release_fact_chk, 1401/1402).
+  await session(o, {
+    taskId: await task(), completedAt: new Date(), status: 'SUCCEEDED', finishedAt: new Date(), releaseCause: 'completed',
+  });
   let coordinatorId: string | null = null;
   if (kind !== 'absent') {
     coordinatorId = await session(o, {
       title: `coordinator ${i}`, workspaceId: o.workspaceB,
-      ...(kind === 'completed' ? { completedAt: new Date(), status: 'SUCCEEDED', finishedAt: new Date(), releaseCause: 'completed' } : {}),
+      ...(kind === 'completed'
+        ? { completedAt: new Date(), status: 'SUCCEEDED', finishedAt: new Date(), releaseCause: 'completed' }
+        : {}),
       ...(kind === 'trashed' ? { deletedAt: new Date() } : {}),
     });
     await o.h.db.project.update({ where: { id: p.id }, data: { coordinatorSessionId: coordinatorId } });

@@ -16,6 +16,17 @@ status or `end_reason`; the only partial index that does is the claim index. The
 `task_owner_confirmation_review_reviewer_ended` read the status in their WHEN clauses only;
 their functions do not. Line numbers stay at `a1282659a4`.
 
+Plan step 4.4 (migrations 1411 to 1415) moved the six guards, the revive exemption of the three
+acquisition guards and the three ended-triggers onto `finished_at`, and added `finished_at` to
+the column lists of the five triggers that decide from it. What still names the status there: the
+acquisition and claim guards' `PENDING` to `RUNNING` (activity, `SAME`); the ended-triggers'
+`INTERRUPTED` and `AWAITING_INPUT` branches (held statuses read as turn and retry facts); and
+`session_request_recipient_ended`'s `NEW."status"::text`, which writes `close_reason` as
+`STATUS[:end_reason]` unchanged, for display. Where an ended-trigger told a FAILED release apart, it
+now reads `release_cause` against the failure causes (`FAILURE_RELEASE_CAUSES`, held equal to FAILED
+by `session_release_failure_chk`, 1406/1407), so 1415 ships only with or after 1406/1407. The unique
+index is step 4.5's.
+
 | Object defined in | Lines | R/W | Facts | After | What it does with the status |
 |---|---|---|---|---|---|
 | `apiserver/prisma/migrations/0035_add_parked_run_status/migration.sql` | 7 | R | WIRE | RENAME | Enum type run_status: PENDING, RUNNING, SUCCEEDED, FAILED, CANCELLED, AWAITING_INPUT, INTERRUPTED, PARKED (dead label). Only session.status uses it; default PENDING. Labels cannot be dropped. |

@@ -125,7 +125,7 @@ function services(f: Fixture) {
       turns.push({ sessionId, ...dto });
       await db.session.updateMany({
         where: { id: sessionId, status: { in: ['SUCCEEDED', 'FAILED', 'CANCELLED'] } },
-        // Held again, as the real revive writes it: the release column and its cause go together.
+        // As the real revive: held again, so the release column and its cause go with the terminal status.
         data: { status: 'PENDING', finishedAt: null, releaseCause: null },
       });
       await db.conversationTurn.create({
@@ -565,9 +565,11 @@ test('the pending-waits preview lists ACTIVE and PAUSED waits, the PAUSED ones m
 test('an ended coordinator (FAILED, or recycled while idle) is revived for its note rather than refused', { skip, timeout: 120_000 }, async () => {
   for (const status of ['FAILED', 'CANCELLED'] as const) {
     const f = await fixture();
+    // Released as the writers release (session_release_fact_chk, session_release_failure_chk): finished_at and a
+    // cause, a failure cause for FAILED.
     await f.db.session.update({
       where: { id: f.outgoing },
-      data: { status, finishedAt: new Date(), releaseCause: status === 'FAILED' ? 'engine_failed' : 'cancelled' },
+      data: { status, finishedAt: new Date(), releaseCause: status === 'FAILED' ? 'turn_failed' : 'ended' },
     });
     const s = services(f);
     const started = await s.handoffs.start(f.ownerId, f.projectId);
@@ -583,8 +585,7 @@ test('the revived coordinator fails again before answering: FAILED at the sweep,
   await s.handoffs.start(f.ownerId, f.projectId);
   // Its model cannot run: the claim fails and the conversation is FAILED, the note turn never delivered.
   await f.db.session.update({
-    where: { id: f.outgoing },
-    data: { status: 'FAILED', finishedAt: new Date(), releaseCause: 'setup_failed' },
+    where: { id: f.outgoing }, data: { status: 'FAILED', finishedAt: new Date(), releaseCause: 'setup_failed' },
   });
   assert.equal(await s.handoffs.sweep(), 1);
   const { coordinatorHandoff } = await readSessionCoordinatorHandoffs(f.db as unknown as PrismaService, f.outgoing);

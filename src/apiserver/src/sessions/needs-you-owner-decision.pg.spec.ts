@@ -1044,6 +1044,7 @@ test('the badge says Record as done… once a finished-looking project has waite
       branch: `orbit/${served.id.slice(0, 8)}`,
       changedFiles: ['src/work.ts'],
       startedAt: new Date(),
+      // Released, so with its cause beside finished_at (session_release_fact_chk, 1401/1402).
       finishedAt: new Date(),
       releaseCause: 'engine_exited',
     },
