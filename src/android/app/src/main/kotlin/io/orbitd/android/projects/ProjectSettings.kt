@@ -15,6 +15,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -44,7 +47,8 @@ import java.time.Instant
 @Composable
 internal fun RunSettingsSection(state: ProjectPageState, doc: JsonObject, now: Instant, enabled: Boolean, editMergeCheck: () -> Unit,
     integration: (JsonObject?) -> Unit, automatic: (Boolean) -> Unit, stepConcurrency: (Int) -> Unit, pause: (Boolean) -> Unit,
-    nonCode: (Boolean) -> Unit = {}, mergeLive: suspend () -> Boolean = { false }) {
+    nonCode: (Boolean) -> Unit = {}, mergeLive: suspend () -> Boolean = { false }, openLandingChanges: () -> Unit = {},
+    editLandingCheck: () -> Unit = {}) {
     Column(Modifier.testTag("project-settings"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SectionHead(StartProjectCopy.howItRuns, RunSettings.appliesFromNextTask)
         val view = state.integration
@@ -71,7 +75,12 @@ internal fun RunSettingsSection(state: ProjectPageState, doc: JsonObject, now: I
                 AtMostSetting(state, doc, enabled, stepConcurrency)
                 if (!marked) {
                     HorizontalDivider()
-                    LandingCheckSetting(view, enabled, integration)
+                    LandingCheckSetting(view, now, enabled, editLandingCheck)
+                    val changes = ProjectSettingChange.read(doc)
+                    if (changes.isNotEmpty()) {
+                        HorizontalDivider()
+                        LandingChangesEntry(changes.size, openLandingChanges)
+                    }
                     HorizontalDivider()
                     MergeCheckSetting(view, doc, enabled, main, editMergeCheck)
                 }
@@ -195,7 +204,7 @@ private fun DeliversSetting(doc: JsonObject, view: JsonObject, enabled: Boolean,
     val branch = view.text("ref")?.takeIf { view.text("line") == "PROJECT_BRANCH" } ?: "project/${doc.text("id").orEmpty()}"
     Column(Modifier.testTag("project-delivers"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(DoneCopy.RUN_DELIVERS)
-        DeliveryOption(!marked, DoneCopy.RUN_DELIVERS_CODE, DoneCopy.RUN_DELIVERS_CODE_HINT.replace("{main}", main), enabled, offered = true,
+        DeliveryOption(!marked, DoneCopy.RUN_DELIVERS_CODE, DoneCopy.RUN_DELIVERS_CODE_HINT, enabled, offered = true,
             "project-delivers:CODE") { if (marked) asking = false }
         DeliveryOption(marked, DoneCopy.RUN_DELIVERS_NOT_CODE, DoneCopy.RUN_DELIVERS_NOT_CODE_HINT, enabled, offered = true,
             "project-delivers:NOT_CODE") { if (!marked) asking = true }
@@ -592,46 +601,113 @@ internal fun ProjectDoneSheet(api: ProjectApi, id: String, state: ProjectPageSta
     }
 }
 
-/** Landing settings use the same integration PATCH as merge settings. Null inherits independently. */
+/** Landing settings use the same integration PATCH as merge settings. */
 @Composable
-private fun LandingCheckSetting(view: JsonObject, enabled: Boolean, write: (JsonObject?) -> Unit) {
-    var editing by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxWidth().testTag("project-landing-check"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+private fun LandingCheckSetting(view: JsonObject, now: Instant, enabled: Boolean, edit: () -> Unit) {
+    val check = ProjectLandingCheck.read(view)
+    val inheritedCommand = LandingCheckCopy.inheritedCommand(view.text("mergeCheckCommand"))
+    val inheritedTimeout = LandingCheckCopy.inheritedTimeout(view.number("mergeCheckTimeoutSeconds"))
+    val origin = check.originLine(now)
+    val timeoutSeconds = view.number("landingCheckTimeoutSeconds")
+    val direct = view.text("line") == "MAIN"
+    Column(Modifier.fillMaxWidth().testTag("project-landing-check")
+        .then(if (direct) Modifier else Modifier.clickable(enabled = enabled, role = Role.Button, onClick = edit)),
+        verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(LandingCheckCopy.label)
-        if (view.text("line") == "MAIN") Note(LandingCheckCopy.main) else {
-            TextButton(onClick = { editing = true }, enabled = enabled) {
-                Text(view.text("landingCheckCommand") ?: LandingCheckCopy.inheritedCommand(view.text("mergeCheckCommand")))
+        if (direct) {
+            Note(LandingCheckCopy.main)
+        } else {
+            when (check.mode) {
+                LandingCheckMode.COMMAND -> Text(check.command.orEmpty(), fontFamily = FontFamily.Monospace)
+                LandingCheckMode.MERGE_CHECK -> Text(inheritedCommand, fontFamily = FontFamily.Monospace)
+                LandingCheckMode.NO_CHECK -> LandingModeNote(LandingModeCopy.noneHead, LandingModeCopy.noneBody)
             }
-            Note(view.number("landingCheckTimeoutSeconds")?.let { "$it seconds" }
-                ?: LandingCheckCopy.inheritedTimeout(view.number("mergeCheckTimeoutSeconds")))
-            Note(LandingCheckCopy.hint)
+            origin?.let { Note(it) }
+            if (check.mode != LandingCheckMode.NO_CHECK) {
+                Note(timeoutSeconds?.let { "$it seconds" } ?: inheritedTimeout)
+                Note(LandingCheckCopy.hint)
+            }
         }
-    }
-    if (editing) {
-        var command by remember { mutableStateOf(view.text("landingCheckCommand").orEmpty()) }
-        var timeout by remember { mutableStateOf(view.number("landingCheckTimeoutSeconds")?.toString().orEmpty()) }
-        val valid = timeout.isEmpty() || (timeout.toIntOrNull() ?: 0) > 0
-        AlertDialog(onDismissRequest = { editing = false }, title = { Text(LandingCheckCopy.label) },
-            text = { Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                OutlinedTextField(command, { command = it }, label = { Text(LandingCheckCopy.command) },
-                    placeholder = { Text(LandingCheckCopy.commandPlaceholder) }, modifier = Modifier.testTag("landing-check-command"))
-                if (command.isBlank()) Note(LandingCheckCopy.inheritedCommand(view.text("mergeCheckCommand")))
-                OutlinedTextField(timeout, { timeout = it }, label = { Text(LandingCheckCopy.timeout) },
-                    placeholder = { Text(LandingCheckCopy.timeoutPlaceholder) }, modifier = Modifier.testTag("landing-check-timeout"))
-                Note(LandingCheckCopy.timeoutHint)
-                if (timeout.isEmpty()) Note(LandingCheckCopy.inheritedTimeout(view.number("mergeCheckTimeoutSeconds")))
-            } }, confirmButton = { TextButton(onClick = {
-                write(landingCheckWrite(view, command, timeout.toIntOrNull())); editing = false
-            }, enabled = enabled && valid && landingCheckWrite(view, command, timeout.toIntOrNull()) != null) { Text(RunSettings.save) } },
-            dismissButton = { TextButton(onClick = { editing = false }) { Text("Cancel") } })
     }
 }
 
-internal fun landingCheckWrite(view: JsonObject, command: String, timeout: Int?): JsonObject? {
-    val next = command.takeIf { it.isNotBlank() }
-    val body = buildJsonObject {
-        if (next != view.text("landingCheckCommand")) put("landingCheckCommand", next?.let(::JsonPrimitive) ?: JsonNull)
-        if (timeout != view.number("landingCheckTimeoutSeconds")) put("landingCheckTimeoutSeconds", timeout?.let(::JsonPrimitive) ?: JsonNull)
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun LandingCheckEditor(view: JsonObject, now: Instant, enabled: Boolean, close: () -> Unit, save: suspend (JsonObject) -> String?) {
+    val check = ProjectLandingCheck.read(view)
+    val inheritedCommand = LandingCheckCopy.inheritedCommand(view.text("mergeCheckCommand"))
+    val inheritedTimeout = LandingCheckCopy.inheritedTimeout(view.number("mergeCheckTimeoutSeconds"))
+    val origin = check.originLine(now)
+    val timeoutSeconds = view.number("landingCheckTimeoutSeconds")
+    val scope = rememberCoroutineScope()
+    var refused by remember { mutableStateOf<String?>(null) }
+    var saving by remember { mutableStateOf(false) }
+    var mode by remember { mutableStateOf(check.mode) }
+    var command by remember { mutableStateOf(check.command.orEmpty().takeIf { check.mode == LandingCheckMode.COMMAND }.orEmpty()) }
+    var timeout by remember { mutableStateOf(timeoutSeconds?.toString().orEmpty()) }
+    val valid = mode == LandingCheckMode.NO_CHECK || timeout.isEmpty() || (timeout.toIntOrNull() ?: 0) > 0
+    val body = landingCheckWrite(view, mode, command, timeout.toIntOrNull())
+    ModalBottomSheet(onDismissRequest = { if (!saving) close() }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        modifier = Modifier.testTag("landing-check-editor")) {
+        Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(LandingCheckCopy.label, style = MaterialTheme.typography.titleMedium)
+            Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                    LandingCheckMode.entries.forEachIndexed { index, option ->
+                        SegmentedButton(selected = mode == option, onClick = { mode = option }, enabled = !saving,
+                            shape = SegmentedButtonDefaults.itemShape(index, LandingCheckMode.entries.size), icon = {}) {
+                            Text(option.label)
+                        }
+                    }
+                }
+                if (mode == LandingCheckMode.COMMAND) {
+                    OutlinedTextField(command, { command = it }, modifier = Modifier.fillMaxWidth().testTag("landing-check-command"),
+                        textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace), enabled = !saving, label = { Text(LandingCheckCopy.command) },
+                        placeholder = { Text(LandingCheckCopy.commandPlaceholder) })
+                }
+                origin?.let { Note(it) }
+                when (mode) {
+                    LandingCheckMode.MERGE_CHECK -> Note(inheritedCommand)
+                    LandingCheckMode.COMMAND -> Unit
+                    LandingCheckMode.NO_CHECK -> {
+                        LandingModeNote(LandingModeCopy.noneHead, LandingModeCopy.noneBody)
+                        Text(LandingModeCopy.whoCanSet, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                        LandingCheckOriginCopy.notes.forEach { (by, text) -> LandingModeNote(LandingCheckOriginCopy.label(by).orEmpty(), text) }
+                    }
+                }
+                if (mode != LandingCheckMode.NO_CHECK) {
+                    OutlinedTextField(timeout, { timeout = it }, modifier = Modifier.fillMaxWidth().testTag("landing-check-timeout"),
+                        enabled = !saving, label = { Text(LandingCheckCopy.timeout) }, placeholder = { Text(LandingCheckCopy.timeoutPlaceholder) })
+                    Note(LandingCheckCopy.timeoutHint)
+                    if (timeout.isEmpty()) Note(inheritedTimeout)
+                }
+                if (mode == LandingCheckMode.COMMAND) Note("${LandingCheckCopy.hint} ${LandingModeCopy.commandNote}")
+                refused?.let { Note(it, MaterialTheme.colorScheme.error) }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = close, enabled = !saving) { Text(LandingChangesCopy.cancel) }
+                TextButton(onClick = {
+                    if (body != null) {
+                        saving = true
+                        scope.launch {
+                            try {
+                                val failure = save(body)
+                                if (failure == null) close() else refused = failure
+                            } finally { saving = false }
+                        }
+                    }
+                }, enabled = enabled && !saving && valid && body != null) { Text(RunSettings.save) }
+            }
+        }
     }
-    return body.takeIf { it.isNotEmpty() }
+}
+
+@Composable
+private fun LandingModeNote(head: String, body: String) {
+    Text(buildAnnotatedString {
+        withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(head) }
+        append(" $body")
+    }, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
