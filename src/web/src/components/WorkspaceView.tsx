@@ -42,6 +42,7 @@ import {
   MoreOutlined,
   SettingOutlined,
   PaperClipOutlined,
+  FolderOpenOutlined,
   PauseCircleOutlined,
   PictureOutlined,
   PlusOutlined,
@@ -372,6 +373,7 @@ import {
 } from './RunNeverStartedCard';
 import { claudeRegionHeld, claudeRegionHeldWords, useClaudeRegionCheckAgain } from '../lib/claudeRegion';
 import { approvalRememberOffered, DSH_RUNNER_CAPABILITY, dshRepair } from '../lib/dshRuntime';
+import { DriveFilePicker } from './files/DriveFilePicker';
 import { AntigravityRepairCard, antigravityRepair, AttachmentImage, QueuedFootCtx, type AuthErrorHelp, type AutoRetryHelp, type CursorQuotaHelp, QueuedUserTurn, type SteerWithdrawHandle, type TurnAttachmentRef, type TurnImage, type UnreadSteer, unreadSteersOf } from './Transcript';
 import { PendingTray, type PendingTrayRow } from './PendingTray';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
@@ -11978,6 +11980,8 @@ export function SessionComposer({
   const lastComposerTap = useRef<{ at: number; x: number; y: number; held?: number } | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // The `+` menu's "From Files" picker (board docs/mocks/orbit-files, 02-web frame 8).
+  const [drivePickerOpen, setDrivePickerOpen] = useState(false);
   // Manual composer height (px). null = autoSize auto-grow (up to maxRows); once the user
   // drags the top handle, that height wins over autoSize until they double-click to reset.
   const [composerHeight, setComposerHeight] = useState<number | null>(null);
@@ -12168,6 +12172,12 @@ export function SessionComposer({
   });
   // The `+` menu "Shell" entry: prefix the draft with `!` so onSend routes it as a raw
   // shell command (run on the runner, bypassing claude). The user types the command after.
+  // Paths the drive picker returned go into the message as they are, one per line after what is typed.
+  const insertDrivePaths = (paths: string[]): void => {
+    setText((t) => `${t}${t && !/\s$/.test(t) ? '\n' : ''}${paths.join('\n')} `);
+    setDrivePickerOpen(false);
+    setTimeout(() => taRef.current?.focus(), 0);
+  };
   const insertShell = (): void => {
     setText((t) => (t.startsWith('!') ? t : `!${t}`));
     setTimeout(() => taRef.current?.focus(), 0);
@@ -12319,6 +12329,7 @@ export function SessionComposer({
           e.target.value = '';
         }}
       />
+      {drivePickerOpen && <DriveFilePicker onClose={() => setDrivePickerOpen(false)} onPick={insertDrivePaths} />}
       {/* Staged attachments sit inside the card, above the text they go out with, so a
           screenshot reads as part of the message you're about to send — not as one more strip
           of the band above, separated from the text by the watch, tray and branch bars. */}
@@ -12666,6 +12677,12 @@ export function SessionComposer({
                 // upload can't work in says so on pick, rather than greying the item out.
                 label: 'Image',
                 onSelect: () => imageInputRef.current?.click(),
+              },
+              {
+                key: 'drive',
+                icon: <FolderOpenOutlined />,
+                label: 'From Files',
+                onSelect: () => setDrivePickerOpen(true),
               },
               { key: 'divider', type: 'separator' },
               {
