@@ -1215,12 +1215,14 @@ struct BackgroundTrayView: View {
 }
 
 /// The folded row's mark: the list row's own spinner and SF Symbols (`BackgroundRow.statusIcon`).
+/// The spinner is the app's one running mark (`SpinnerGlyph`, as on a running session), not the
+/// system activity indicator, so the bars above the composer do not show two kinds of loading.
 private struct BackgroundRowMarkView: View {
     let mark: BackgroundRowRule.Mark
 
     var body: some View {
         switch mark {
-        case .running: ProgressView().controlSize(.small)
+        case .running: SpinnerGlyph(color: .accentColor)
         case .done:    Image(systemName: "checkmark.circle.fill").font(.orbitLabel).foregroundStyle(.green)
         case .failed:  Image(systemName: "xmark.circle.fill").font(.orbitLabel).foregroundStyle(.red)
         case .killed:  Image(systemName: "stop.circle").font(.orbitLabel).foregroundStyle(.secondary)
@@ -1315,11 +1317,11 @@ private struct BackgroundRow: View {
         .padding(.horizontal, 12).padding(.vertical, 6)
     }
 
-    /// Status glyph mirroring web's `BgStatusIcon`. Uses `ProgressView` for the live spinner like the
-    /// neighbouring tool cards do — safe here since the tray isn't inside the recycling transcript List.
+    /// Status glyph mirroring web's `BgStatusIcon`. The live spinner is the folded row's own
+    /// (`SpinnerGlyph`), so the row keeps its mark when tapped open.
     @ViewBuilder private var statusIcon: some View {
         switch proc.status {
-        case "running":   ProgressView().controlSize(.small)
+        case "running":   SpinnerGlyph(color: .accentColor)
         case "completed": Image(systemName: "checkmark.circle.fill").font(.orbitLabel).foregroundStyle(.green)
         case "failed":    Image(systemName: "xmark.circle.fill").font(.orbitLabel).foregroundStyle(.red)
         case "killed":    Image(systemName: "stop.circle").font(.orbitLabel).foregroundStyle(.secondary)
