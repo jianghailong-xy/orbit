@@ -152,7 +152,7 @@ jobs:
           ./src/macos/scripts/build-dmg.sh
 
       - name: Upload DMG
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: Orbit-dmg
           path: src/macos/build/Orbitd-v*
@@ -184,7 +184,7 @@ jobs:
 
       - name: Upload the Sparkle appcast
         if: github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/v')
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sparkle-appcast
           path: ${{ runner.temp }}/updates/out/appcast.xml
@@ -312,7 +312,7 @@ jobs:
       # App Store Connect keeps a build's symbols but offers no download, and a rebuild is not
       # byte-identical: a TestFlight crash report is only symbolicated against this archive's dSYM.
       - name: Keep the iOS dSYM
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ios-dsym-${{ github.run_id }}-${{ github.run_attempt }}   # a dispatched branch name may hold a slash
           path: ${{ runner.temp }}/Orbit.xcarchive/dSYMs
@@ -420,7 +420,7 @@ jobs:
         run: rm -f "$RUNNER_TEMP/android-internal-signing.jks"
       - name: Keep signed APK and identity
         if: steps.version.outputs.skip == 'false'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: android-release-${{ github.run_id }}
           path: ${{ runner.temp }}/android-internal-apk
@@ -542,7 +542,7 @@ jobs:
         with:
           subject-path: ${{ runner.temp }}/supply-chain/bundle/*
       - name: Keep the verified bundle
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: supply-chain-${{ github.run_id }}
           path: ${{ runner.temp }}/supply-chain/bundle
