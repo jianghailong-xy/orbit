@@ -3,6 +3,17 @@
     <channel>
         <title>Orbit</title>
         <item>
+            <title>0.1.261-beta.69</title>
+            <pubDate>Sat, 21 Nov 2026 16:30:56 +0000</pubDate>
+            <link>https://github.com/jianghailong-xy/orbit</link>
+            <sparkle:channel>beta</sparkle:channel>
+            <sparkle:version>13709</sparkle:version>
+            <sparkle:shortVersionString>0.1.261-beta.69</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <enclosure url="https://github.com/jianghailong-xy/orbit/releases/download/v0.1.261-beta.69/Orbitd-v0.1.261-beta.69-arm64.zip" length="40150800" type="application/octet-stream" sparkle:edSignature="lJMfmJhyCbeybAr8UfLZ1g40/uHD/m54nK5zpWIW1ZrzSII66OwzZtNmQcsNANEYQH6th5XmlQqFR/JpW26JCg=="/>
+        </item>
+        <item>
             <title>0.1.261-beta.68</title>
             <pubDate>Sat, 21 Nov 2026 16:06:20 +0000</pubDate>
             <link>https://github.com/jianghailong-xy/orbit</link>
