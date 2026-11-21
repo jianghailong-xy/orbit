@@ -1,5 +1,5 @@
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
--- 1406: the revive exemption of the three runner acquisition guards reads the release fact, not the status
+-- 1414: the revive exemption of the three runner acquisition guards reads the release fact, not the status
 -- (docs/session-three-state-plan.md §7 step 4.4, appendix A of docs/session-three-state-read-sites.md; project
 -- 3508bDBDE5xPH43TYuiqP).
 --
@@ -36,7 +36,7 @@
 --
 -- NUMBERING, RE-RUNNABILITY
 -- -------------------------
--- 1406: after 1405 (rescanned 2026-11-21). Not a multiple of 10. Can run twice.
+-- 1414: after 1413 (rescanned 2026-11-21). Not a multiple of 10. Can run twice.
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
 
 CREATE OR REPLACE FUNCTION public.guard_session_engine_acquisition()

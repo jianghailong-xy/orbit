@@ -1,5 +1,5 @@
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
--- 1405: the project-move guard reads the release fact, not the status (docs/session-three-state-plan.md §7 step
+-- 1413: the project-move guard reads the release fact, not the status (docs/session-three-state-plan.md §7 step
 -- 4.4, appendix A of docs/session-three-state-read-sites.md; project 3508bDBDE5xPH43TYuiqP).
 --
 -- WHAT IT CHANGES
@@ -12,7 +12,7 @@
 --
 -- WHY EVERY STORED ROW GETS THE SAME ANSWER
 -- -----------------------------------------
--- As 1403: session_release_fact_chk (1401/1402) makes "one of the four held statuses" and "finished_at is null"
+-- As 1411: session_release_fact_chk (1401/1402) makes "one of the four held statuses" and "finished_at is null"
 -- the same test for every session row (no row holds the unused PARKED label, 0071).
 --
 -- LOCKS
@@ -21,7 +21,7 @@
 --
 -- NUMBERING, RE-RUNNABILITY
 -- -------------------------
--- 1405: after 1404 (rescanned 2026-11-21). Not a multiple of 10. Can run twice.
+-- 1413: after 1412 (rescanned 2026-11-21). Not a multiple of 10. Can run twice.
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
 
 CREATE OR REPLACE FUNCTION public.task_claimed_project_move_guard()

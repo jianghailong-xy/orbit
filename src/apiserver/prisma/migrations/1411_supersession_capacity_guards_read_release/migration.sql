@@ -1,5 +1,5 @@
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
--- 1403: the 0130 guards read the release fact, not the status (docs/session-three-state-plan.md §7 step 4.4,
+-- 1411: the 0130 guards read the release fact, not the status (docs/session-three-state-plan.md §7 step 4.4,
 -- appendix A of docs/session-three-state-read-sites.md; project 3508bDBDE5xPH43TYuiqP).
 --
 -- WHAT IT CHANGES
@@ -56,7 +56,8 @@
 --
 -- NUMBERING, RE-RUNNABILITY
 -- -------------------------
--- 1403: main, origin/orbit/* and origin/project/* use up to 1402 (rescanned 2026-11-21). Not a multiple of 10.
+-- 1411: main and origin/project/* use up to 1402, and origin/orbit/* up to 1407 (the release failure causes,
+-- 1403-1407; rescanned 2026-11-21 02:15Z). Not a multiple of 10.
 -- Can run twice: CREATE OR REPLACE throughout.
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
 

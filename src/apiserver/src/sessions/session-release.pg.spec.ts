@@ -15,7 +15,7 @@
  *   (8) the revive                                   → PENDING, finished_at and release_cause both null
  *   (9) migration 1262's backfill, one session per rule, then the two counts of plan step 3.3 over the database
  *  (10) migrations 1401 and 1402 (plan step 3.4): the CHECK is listed validated, and each violating write is refused
- *  (11) migrations 1403 to 1407 (plan step 4.4): a write of the release fact alone, `finished_at` and `release_cause`
+ *  (11) migrations 1411 to 1415 (plan step 4.4): a write of the release fact alone, `finished_at` and `release_cause`
  *       with the status word left as it was, fires every guard and ended-trigger that used to read the status, and
  *       each decides from the release fact
  *
@@ -312,6 +312,9 @@ test('every release writes the release column and its cause, and the revive clea
     // Rows from before 1261 break session_release_fact_chk (1401) by design; the check comes back, by its own two
     // migrations, once the backfill has made the rows whole.
     await sql.query(`ALTER TABLE "session" DROP CONSTRAINT IF EXISTS "session_release_fact_chk"`);
+  // And the failure CHECK, where a migration has added it (FAILED exactly when the cause is a failure): these rows
+  // pair a held or FAILED status word with the cause `ended` on purpose.
+  await sql.query(`ALTER TABLE "session" DROP CONSTRAINT IF EXISTS "session_release_failure_chk"`);
     // One row per rule of 1262's table, written as a row from before 1261: no cause, and no release column where
     // the old writer set none. Three of each, so the counts are counts.
     const cases: Array<{ name: string; data: Record<string, unknown>; cause: string | null }> = [
@@ -472,6 +475,9 @@ test('(11) the release fact alone fires every guard and ended-trigger (plan step
     await sql.end().catch(() => undefined);
   });
   await sql.query(`ALTER TABLE "session" DROP CONSTRAINT IF EXISTS "session_release_fact_chk"`);
+  // And the failure CHECK, where a migration has added it (FAILED exactly when the cause is a failure): these rows
+  // pair a held or FAILED status word with the cause `ended` on purpose.
+  await sql.query(`ALTER TABLE "session" DROP CONSTRAINT IF EXISTS "session_release_failure_chk"`);
 
   const releaseAlone = (id: string) => sql.query(
     `UPDATE "session" SET "finished_at" = now(), "release_cause" = 'ended' WHERE "id" = $1::uuid`, [id]);

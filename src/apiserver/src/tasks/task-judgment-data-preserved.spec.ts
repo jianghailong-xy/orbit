@@ -3248,15 +3248,15 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // relation, trigger, function or DONE fence changes.
       '1401_session_release_fact_chk',
       '1402_session_release_fact_validate',
-      // 1403 to 1407 replace the bodies of the session-dispatch guards and re-create three ended-triggers so they
+      // 1411 to 1415 replace the bodies of the session-dispatch guards and re-create three ended-triggers so they
       // read session.finished_at instead of the terminal status set (plan step 4.4), and add finished_at to five
       // trigger column lists on session; every guard answers what it did for every row session_release_fact_chk
       // admits. No row is written, no preserved relation is read or dropped, and the DONE fence is unchanged.
-      '1403_supersession_capacity_guards_read_release',
-      '1404_admission_aggregate_guards_read_release',
-      '1405_project_move_guard_reads_release',
-      '1406_acquisition_revive_reads_release',
-      '1407_ended_triggers_read_release'],
+      '1411_supersession_capacity_guards_read_release',
+      '1412_admission_aggregate_guards_read_release',
+      '1413_project_move_guard_reads_release',
+      '1414_acquisition_revive_reads_release',
+      '1415_ended_triggers_read_release'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

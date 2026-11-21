@@ -1,5 +1,5 @@
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
--- 1407: the three "ended" triggers read the release fact (docs/session-three-state-plan.md §7 step 4.4, appendix
+-- 1415: the three "ended" triggers read the release fact (docs/session-three-state-plan.md §7 step 4.4, appendix
 -- A of docs/session-three-state-read-sites.md; project 3508bDBDE5xPH43TYuiqP).
 --
 -- WHAT IT CHANGES
@@ -56,7 +56,7 @@
 --
 -- NUMBERING, RE-RUNNABILITY
 -- -------------------------
--- 1407: after 1406 (rescanned 2026-11-21). Not a multiple of 10. Can run twice: CREATE OR REPLACE TRIGGER.
+-- 1415: after 1414 (rescanned 2026-11-21). Not a multiple of 10. Can run twice: CREATE OR REPLACE TRIGGER.
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
 
 DO $$
