@@ -195,7 +195,7 @@ private fun DeliversSetting(doc: JsonObject, view: JsonObject, enabled: Boolean,
     val branch = view.text("ref")?.takeIf { view.text("line") == "PROJECT_BRANCH" } ?: "project/${doc.text("id").orEmpty()}"
     Column(Modifier.testTag("project-delivers"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(DoneCopy.RUN_DELIVERS)
-        DeliveryOption(!marked, DoneCopy.RUN_DELIVERS_CODE, DoneCopy.RUN_DELIVERS_CODE_HINT.replace("{main}", main), enabled, offered = true,
+        DeliveryOption(!marked, DoneCopy.RUN_DELIVERS_CODE, DoneCopy.RUN_DELIVERS_CODE_HINT, enabled, offered = true,
             "project-delivers:CODE") { if (marked) asking = false }
         DeliveryOption(marked, DoneCopy.RUN_DELIVERS_NOT_CODE, DoneCopy.RUN_DELIVERS_NOT_CODE_HINT, enabled, offered = true,
             "project-delivers:NOT_CODE") { if (!marked) asking = true }
