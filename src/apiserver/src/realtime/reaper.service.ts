@@ -459,6 +459,12 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         runClaimedAt: true,
         cancelRequestedAt: true,
         endReason: true,
+        // The failure a held session's last turn reported under the new runner protocol, whose release never came:
+        // the cancel-grace branch keeps it (SESSION_RELEASE_V1).
+        lastTurnOutcome: true,
+        // And, for that hold, what its task is told: the failure's words, and whether a retry was armed for it.
+        error: true,
+        retryAt: true,
         // §13.6 SU6: whether this run is DOING the task's work or looking at it. Only the first
         // follows the task's lifecycle; see `shouldEndTerminalTask`.
         startsTaskWork: true,
@@ -519,6 +525,10 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           // a runner that was never handed it.
           const queued = !graceful && s.status === RunStatus.PENDING;
           const status = graceful ?? (queued ? RunStatus.CANCELLED : undefined);
+          // The hold a failed turn leaves under the new runner protocol (SESSION_RELEASE_V1), whose release never
+          // came: no end asked, and its failure already on the turn and copied to last_turn_outcome.
+          const failedTurnHeld = !status && s.status === RunStatus.RUNNING && s.endReason == null
+            && s.lastTurnOutcome === 'FAILED';
           await this.forceFinalize(
             s.id,
             s.assignedRunnerId,
@@ -536,8 +546,18 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
               // as asked.
               // Not honoured, the end still is one somebody asked for: the turn it cut off ends CANCELLED, and nothing
               // records a failure (design §12.1 W7). Only a RUNNING session had one: idle, none was in flight.
-              ...(!status && s.status === RunStatus.RUNNING
+              // Except the hold a failed turn leaves under the new runner protocol (SESSION_RELEASE_V1): no end asked,
+              // the queue drained, and its failure already on the turn and copied to last_turn_outcome. Its release
+              // never came; released here, it reads as the failure it is, as the old protocol's would have.
+              ...(!status && s.status === RunStatus.RUNNING && !failedTurnHeld
                 ? { carryingTurn: { outcome: 'CANCELLED' as const, orLatest: false } }
+                : {}),
+              // Its task is told what the release would have told it (the old protocol's failed turn): FAILED with
+              // the run-failure comment, or, with a retry armed, nothing yet.
+              ...(failedTurnHeld
+                ? (s.retryAt == null
+                  ? { resetTaskTo: TaskStatus.FAILED, taskFailure: 'RUN_FAILED' as const, failureDetail: s.error ?? undefined }
+                  : { keepTask: true })
                 : {}),
             },
           );
@@ -965,6 +985,9 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
        * session, the one that has such a turn. Absent, no turn outcome is written.
        */
       carryingTurn?: { outcome: 'FAILED' | 'CANCELLED'; orLatest: boolean };
+      /** Leave the task as it is: a retry armed for the run's failure goes on with it (the new runner protocol's held
+       *  failed turn, released by the cancel grace). */
+      keepTask?: boolean;
     },
   ): Promise<void> {
     const status = opts.status ?? RunStatus.FAILED;
@@ -1082,7 +1105,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         `its run was reaped as ${status} (${reason})`,
       );
       // Reclaim a now-stalled IN_PROGRESS task so it stops showing as running.
-      const taskReclaimed = taskId && status !== RunStatus.SUCCEEDED
+      const taskReclaimed = taskId && status !== RunStatus.SUCCEEDED && !opts.keepTask
         ? await reclaimStalledTask(
             tx,
             taskId,

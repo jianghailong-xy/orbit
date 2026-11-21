@@ -3800,6 +3800,18 @@ export interface OrchestrationCredentialResponse {
 }
 
 /**
+ * Runner capability (X-Orbit-Runner-Capabilities, read on each request): the runner reports a turn's outcome and the
+ * session's release as two reports (docs/session-three-state-plan.md step 6.1, design §3). On a turn-complete that
+ * declares it, a FAILED `status` is the turn's outcome and releases nothing: the turn and `last_turn_outcome` record
+ * FAILED with the error, the queue is drained and the task told as for the old protocol, and the session stays held
+ * (RUNNING, the runner's slot) with `cancelRequestedAt` set, the signal to tear its engine down; the runner then
+ * sends POST /runner/sessions/:id/release (RunReleaseRequest), which writes the release. A turn-complete without it is
+ * the old protocol: a FAILED turn releases the session in the same write. If no release follows, the reaper's
+ * cancel-grace sweep releases the held session as a failure.
+ */
+export const SESSION_RELEASE_V1 = 'session-release/v1';
+
+/**
  * Runner → control plane: a single interactive turn finished (the per-turn `result`),
  * distinct from /complete which finalizes the whole session. Carries per-turn billing.
  */
@@ -3807,7 +3819,8 @@ export interface TurnCompleteRequest {
   turnId: string;
   /** Stable UUID for the runner process completing this turn. Omitted only by legacy runners. */
   leaseOwner?: string;
-  /** Turn outcome: SUCCEEDED | INTERRUPTED | FAILED. */
+  /** Turn outcome: SUCCEEDED | INTERRUPTED | FAILED. A FAILED turn releases the session unless the request declares
+   *  SESSION_RELEASE_V1. */
   status: RunStatus;
   result?: string;
   /** What a FAILED turn failed with, when the runtime reported it as the turn's error rather than
@@ -4066,6 +4079,24 @@ export interface RunFinalizeRequest {
 export interface RunFinalizeResponse {
   ok: boolean;
   keepCheckout: boolean;
+}
+
+/**
+ * Runner → control plane under SESSION_RELEASE_V1: POST /runner/sessions/:id/release. The runner's engine is gone and
+ * its checkout finalized; the session is released. It is the finalize report with no status word: the server reads
+ * what the release is from the facts it holds. An end somebody asked for settles as asked (`end_reason`); a release
+ * after a failed turn this hold reported is a failure (FAILED); any other release is a stop nobody asked for
+ * (CANCELLED, and the turn it cuts off ends CANCELLED). Answered with RunFinalizeResponse. Refused without the
+ * capability declared on the request.
+ */
+export interface RunReleaseRequest extends Omit<RunFinalizeRequest, 'status' | 'claudeSessionId'> {
+  /**
+   * The run failed with no turn the runner could report (an engine that died or never started before it read a turn
+   * from the inbox). Only 'FAILED': the turn the release cuts off (in flight, else the oldest queued, else the latest)
+   * records FAILED with `error`, and the release is a failure. Ignored when an end was asked for: an end somebody asked
+   * for is a stop, not a failure.
+   */
+  cutOffTurnOutcome?: 'FAILED';
 }
 
 /** @deprecated Compatibility type alias; use {@link RunFinalizeRequest}. */
