@@ -21,6 +21,7 @@ import {
   WATCH_LIMITS,
   watchDeadLetterCodeOf,
 } from '@orbit/shared';
+import { sessionHasEnded } from '../common/session-release';
 
 import { ownerRequestResolutionTurn, ownerRequestTurnClientId } from '../owner-requests/owner-request';
 import { PrismaService } from '../prisma/prisma.service';
@@ -192,6 +193,7 @@ export function watchEndTurnClientId(watchId: string, end: BareWatchEnd): string
 
 const OBSERVER_SELECT = {
   status: true,
+  finishedAt: true,
   endReason: true,
   completedAt: true,
   archivedAt: true,
@@ -747,7 +749,7 @@ async function readObserver(db: Prisma.TransactionClient | PrismaService, sessio
  * Why this observer is not woken, or null when it may be. A wake never revives: a session in Trash, one
  * moved to Completed, and one whose run is over or ending all stay as they are.
  */
-function observerRefusal(session: ObserverRow | null): DeliveryRefused | null {
+export function observerRefusal(session: ObserverRow | null): DeliveryRefused | null {
   if (!session) return new DeliveryRefused('OBSERVER_SESSION_GONE', 'the observer session no longer exists');
   const lifecycle = deriveSessionLifecycleState(session);
   if (lifecycle === SessionLifecycleState.TRASH) {
@@ -756,8 +758,8 @@ function observerRefusal(session: ObserverRow | null): DeliveryRefused | null {
   if (lifecycle === SessionLifecycleState.COMPLETED) {
     return new DeliveryRefused('OBSERVER_SESSION_COMPLETED', 'the observer session was moved to Completed, and a watch does not reopen it');
   }
-  const run = deriveSessionRunState(session);
-  if (session.cancelRequestedAt || run === SessionRunState.SUCCEEDED || run === SessionRunState.FAILED || run === SessionRunState.ENDED) {
+  if (session.cancelRequestedAt || sessionHasEnded(session)) {
+    const run = deriveSessionRunState(session);
     return new DeliveryRefused('OBSERVER_SESSION_ENDED', `the observer session's run is over (${run}), and a watch does not revive it`);
   }
   return null;
