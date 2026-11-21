@@ -529,6 +529,7 @@ export const TERMINAL_REFUSED_ROUTES: readonly string[] = [
   'GET /drive/entries',
   'GET /drive/entries/:id',
   'GET /drive/resolve',
+  'GET /drive/search',
   'POST /drive/folders',
   'PATCH /drive/entries/:id',
   'DELETE /drive/entries/:id',

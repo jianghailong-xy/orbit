@@ -56,6 +56,13 @@ export class DriveController {
     return this.drive.list(user.userId, { parentId, cursor, limit: limitOf(limit) });
   }
 
+  /** Live entries whose name contains `q`, anywhere in the drive, each with its folder path. */
+  @DRIVE_PAT()
+  @Get('search')
+  search(@CurrentUser() user: AuthUser, @Query('q') q?: string, @Query('cursor') cursor?: string, @Query('limit') limit?: string) {
+    return this.drive.search(user.userId, { q, cursor, limit: limitOf(limit) });
+  }
+
   @DRIVE_PAT()
   @Get('entries/:id')
   get(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {

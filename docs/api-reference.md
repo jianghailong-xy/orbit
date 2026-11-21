@@ -149,6 +149,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/drive/entries/:id/versions` | path `id` | `DriveController.versions` |
 | `POST` | `/api/drive/folders` | body `CreateDriveFolderDto` | `DriveController.createFolder` |
 | `GET` | `/api/drive/resolve` | query `path` | `DriveController.resolve` |
+| `GET` | `/api/drive/search` | query `q`, `cursor`, `limit` | `DriveController.search` |
 | `DELETE` | `/api/drive/trash` | — | `DriveController.emptyTrash` |
 | `GET` | `/api/drive/trash` | query `cursor`, `limit` | `DriveController.trash` |
 | `DELETE` | `/api/drive/trash/groups/:id` | path `id` | `DriveController.deleteGroup` |

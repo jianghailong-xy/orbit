@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { CheckOutlined, FileOutlined, FolderFilled, RightOutlined } from '@ant-design/icons';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
-import { driveFolderQuery, formatSize, messageOf } from '../../lib/drive';
+import { driveFolderQuery, driveSearchQuery, formatSize, messageOf, useSettled } from '../../lib/drive';
 
 /** Where the drive is mounted for an agent (design §4.5): a file's path in a message is this plus its place in Files. */
 export const DRIVE_MOUNT = '/home/orbit/Files';
@@ -53,14 +53,19 @@ export function DriveFilePicker({
   const here = trail[trail.length - 1]!;
   const listing = useQuery({ ...driveFolderQuery(here.id), enabled: root.isSuccess || root.isError });
   const folderPath = [DRIVE_MOUNT, ...trail.slice(1).map((c) => c.name)].join('/');
-  const needle = search.trim().toLowerCase();
-  const entries = (listing.data?.entries ?? []).filter((e) => !needle || e.name.toLowerCase().includes(needle));
+  // A search looks through the whole drive; its results carry the folder each file is in.
+  const needle = useSettled(search.trim());
+  const searching = search.trim() !== '';
+  const found = useQuery({ ...driveSearchQuery(needle), enabled: needle !== '' });
+  const listed = listing.data?.entries ?? [];
+  const entries = searching ? (found.data?.entries ?? []).filter((e) => e.kind === 'FILE') : listed;
+  const source = searching ? found : listing;
 
-  const toggle = (name: string, id: string) =>
+  const toggle = (name: string, id: string, path: string) =>
     setPicked((was) => {
       const next = new Map(was);
       if (next.has(id)) next.delete(id);
-      else next.set(id, { id, name, path: `${folderPath}/${name}` });
+      else next.set(id, { id, name, path });
       return next;
     });
 
@@ -68,7 +73,7 @@ export function DriveFilePicker({
     <div className="drive-picker" aria-label="Add from Files" role="dialog">
       <div className="drive-picker-head">
         <b>Add from Files</b>
-        <Input size="small" aria-label="Search Files" placeholder="Search this folder" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <Input size="small" aria-label="Search Files" placeholder="Search all of Files" value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
       <nav className="drive-picker-crumbs" aria-label="Folder">
         {trail.map((crumb, i) => (
@@ -86,9 +91,11 @@ export function DriveFilePicker({
         ))}
       </nav>
       <div className="drive-picker-list" role="listbox" aria-label="Files" aria-multiselectable="true">
-        {listing.isError && <div role="alert">{messageOf(listing.error)}</div>}
-        {listing.isPending && <div>Loading…</div>}
-        {listing.data && entries.length === 0 && <div>{needle ? 'Nothing matches.' : 'This folder is empty.'}</div>}
+        {source.isError && <div role="alert">{messageOf(source.error)}</div>}
+        {(searching ? needle !== search.trim() || found.isPending : listing.isPending) && <div>Loading…</div>}
+        {source.data && !(searching && needle !== search.trim()) && entries.length === 0 && (
+          <div>{searching ? 'Nothing matches.' : 'This folder is empty.'}</div>
+        )}
         {entries.map((entry) =>
           entry.kind === 'FOLDER' ? (
             <div
@@ -111,10 +118,13 @@ export function DriveFilePicker({
               role="option"
               aria-selected={picked.has(entry.id)}
               className={`drive-picker-row${picked.has(entry.id) ? ' picked' : ''}`}
-              onClick={() => toggle(entry.name, entry.id)}
+              onClick={() => toggle(entry.name, entry.id, searching ? `${DRIVE_MOUNT}${entry.path ?? `/${entry.name}`}` : `${folderPath}/${entry.name}`)}
             >
               {picked.has(entry.id) ? <CheckOutlined aria-hidden="true" /> : <FileOutlined aria-hidden="true" />}
-              <span className="drive-picker-name">{entry.name}</span>
+              <span className="drive-picker-name">
+                {entry.name}
+                {searching && <span className="drive-picker-folder"> · {entry.folderPath === '/' ? 'Files' : `Files${entry.folderPath}`}</span>}
+              </span>
               <span className="drive-picker-size">{formatSize(entry.sizeBytes)}</span>
             </div>
           ),

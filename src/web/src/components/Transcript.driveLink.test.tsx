@@ -128,6 +128,35 @@ describe('the composer drive picker', () => {
     expect(option('Other')).toBeTruthy();
   });
 
+  it('searches the whole drive, shows each result with its folder, and picks it by its path', async () => {
+    const searches: string[] = [];
+    apiMock.mockImplementation(async (path: string) => {
+      if (path.startsWith('/drive/search')) {
+        searches.push(path);
+        return { entries: [{ ...FILE, id: 'e7', name: 'budget.xlsx', path: '/Finance/2026/budget.xlsx', folderPath: '/Finance/2026' }], nextCursor: null };
+      }
+      return listing({ id: 'root' }, [{ id: 'f2', kind: 'FOLDER', name: 'Other', sizeBytes: 0 }]);
+    });
+    const onPick = vi.fn();
+    await mount(<DriveFilePicker onClose={() => {}} onPick={onPick} />);
+    const box = document.body.querySelector<HTMLInputElement>('input[aria-label="Search Files"]')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(box, 'budg');
+      box.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 500));
+    });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50));
+    });
+    expect(searches[0]).toContain('q=budg');
+    expect(option('budget.xlsx')?.textContent).toContain('Files/Finance/2026');
+    await click(option('budget.xlsx'));
+    await click([...document.body.querySelectorAll('button')].find((b) => b.textContent === 'Add 1'));
+    expect(onPick).toHaveBeenCalledWith([{ id: 'e7', name: 'budget.xlsx', path: '/home/orbit/Files/Finance/2026/budget.xlsx' }]);
+  });
+
   it('sends a picked chip as the file path', () => {
     const refs = { 'brief.md': { kind: 'drive' as const, id: 'e1', path: '/home/orbit/Files/P/brief.md' } };
     expect(materializeReferences('Check #brief.md too', refs)).toBe('Check /home/orbit/Files/P/brief.md too');

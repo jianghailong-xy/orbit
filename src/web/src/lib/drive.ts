@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { queryOptions } from '@tanstack/react-query';
 import { api, ApiError, authedFetch, type ShareLink } from '../api';
 
@@ -30,6 +31,8 @@ export interface DriveEntry {
   trashGroupId: string | null;
   /** On a read of one entry: `/a/b/name` under the drive's root. */
   path?: string;
+  /** On a search result: the folder it sits in, `/a/b` (`/` for the top level). */
+  folderPath?: string;
 }
 
 export interface DriveListing {
@@ -112,6 +115,29 @@ export const driveFolderQuery = (parentId: string | null) =>
     meta: { entities: ['drive'] },
     queryFn: () => listFolder(parentId),
   });
+
+export interface DriveSearchResult {
+  entries: DriveEntry[];
+  nextCursor: string | null;
+}
+
+/** Live entries anywhere in the drive whose name contains `q`, each with its path and folder (the first page, by name). */
+export const driveSearchQuery = (q: string) =>
+  queryOptions({
+    queryKey: ['drive', 'search', q] as const,
+    meta: { entities: ['drive'] },
+    queryFn: () => api<DriveSearchResult>(`/drive/search?${new URLSearchParams({ q, limit: '100' })}`),
+  });
+
+/** `value` once it has stood still for `ms`: what a search box asks the server with. */
+export function useSettled(value: string, ms = 250): string {
+  const [settled, setSettled] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setSettled(value), ms);
+    return () => clearTimeout(timer);
+  }, [value, ms]);
+  return settled;
+}
 
 export const driveEntryQuery = (id: string | null) =>
   queryOptions({

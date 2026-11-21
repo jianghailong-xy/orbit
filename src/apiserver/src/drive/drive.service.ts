@@ -288,6 +288,41 @@ export class DriveService {
     };
   }
 
+  /**
+   * Live entries (the root excepted) whose name contains `q`, case-insensitively, anywhere in the account's drive, by
+   * name. Each carries its own path and its folder's path. Trash is never searched.
+   */
+  async search(ownerId: string, options: { q?: string; cursor?: string; limit?: number } = {}) {
+    const q = (options.q ?? '').trim();
+    if (q === '') return { entries: [], nextCursor: null };
+    const after = decodeCursor(
+      options.cursor,
+      (v): v is { name: string; id: string } =>
+        typeof (v as { name?: unknown })?.name === 'string' && typeof (v as { id?: unknown })?.id === 'string',
+    );
+    const take = pageSize(options.limit);
+    const rows = await this.prisma.driveEntry.findMany({
+      where: {
+        ownerId,
+        trashedAt: null,
+        parentId: { not: null },
+        name: { contains: q, mode: 'insensitive' },
+        ...(after ? { OR: [{ name: { gt: after.name } }, { name: after.name, id: { gt: after.id } }] } : {}),
+      },
+      orderBy: [{ name: 'asc' }, { id: 'asc' }],
+      take: take + 1,
+    });
+    const page = rows.slice(0, take);
+    const entries = await Promise.all(
+      page.map(async (e) => {
+        const path = await pathOf(this.prisma, ownerId, e.id);
+        return { ...entryView(e), path, folderPath: path.slice(0, path.lastIndexOf('/')) || '/' };
+      }),
+    );
+    const last = page[page.length - 1];
+    return { entries, nextCursor: rows.length > take ? encodeCursor({ name: last.name, id: last.id }) : null };
+  }
+
   /** One entry of the account's, live or in Trash, with its path. */
   async get(ownerId: string, id: string) {
     const entry = await this.prisma.driveEntry.findFirst({ where: { id, ownerId } });
