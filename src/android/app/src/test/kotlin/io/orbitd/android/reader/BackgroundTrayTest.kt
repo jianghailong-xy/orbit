@@ -98,7 +98,7 @@ class BackgroundTrayTest {
         compose.setContent {
             val c = cases[index]
             OrbitTheme {
-                BackgroundTray(c["list"]!!.jsonArray.map { it.jsonObject }, c["lastUserMessageAt"]?.jsonPrimitive?.contentOrNull,
+                BackgroundTray(c["list"]!!.jsonArray.map { it.jsonObject }, BackgroundRow.clearedAt(c["lastUserMessageAt"]?.jsonPrimitive?.contentOrNull, c["lastAgentTurnStartedAt"]?.jsonPrimitive?.contentOrNull),
                     c["sessionLive"]!!.jsonPrimitive.boolean)
             }
         }
@@ -298,6 +298,15 @@ class BackgroundTrayTest {
         // The list, opened over an ended item, does not spin a stale running one either.
         assertEquals("unknown", BackgroundTrayLogic.status(three[0], sessionLive = false))
         assertEquals("1 total", BackgroundTrayLogic.countText(listOf(three[0]), sessionLive = false))
+    }
+
+    @Test fun theLatestAgentTurnStartsAtItsEarliestEvent() {
+        assertNull(BackgroundTrayLogic.lastAgentTurnStartedAt(listOf(RunEvent("user", 1, obj("""{"text":"Hi"}"""), ts = "2026-11-16T02:40:00.000Z"))))
+        val events = listOf(
+            RunEvent("assistant", 1, obj("{}"), turnId = "t1", ts = "2026-11-16T02:41:00.000Z"),
+            RunEvent("assistant", 2, obj("{}"), turnId = "t2", ts = "2026-11-16T02:42:00.000Z"),
+            RunEvent("tool_use", 3, obj("{}"), turnId = "t2", ts = "2026-11-16T02:43:00.000Z"))
+        assertEquals("2026-11-16T02:42:00.000Z", BackgroundTrayLogic.lastAgentTurnStartedAt(events))
     }
 
     @Test fun theLastUserMessageIsTheNewestTypedTurn() {
