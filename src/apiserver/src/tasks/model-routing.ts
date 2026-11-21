@@ -65,6 +65,20 @@ export const MODEL_FAMILY_TIERS: ReadonlyArray<{
   { family: 'Kimi K3', match: /^kimi-k3(?!\.)/, tiers: { S: 'low', M: 'high' } },
   { family: 'Kimi K3.1 Pro', match: /^kimi-k3\.\d+-pro/, tiers: { L: 'high', XL: 'max' } },
   { family: 'Kimi K3 (no Pro listed)', match: /^kimi-k3(?!\.)/, tiers: { L: 'high', XL: 'max' }, unless: /^kimi-k3\.\d+-pro/ },
+  // Measured 2026-11-21 against the tier anchors (task 351AxJztYRw7WA2Ik86DK, owner-approved). Pinned to the
+  // measured ids where a wider pattern would let the newest-member rule pick an unmeasured model.
+  // Fable passed everything, at ~1.8x Opus's cost: L/XL, after Opus.
+  { family: 'Claude Fable', match: /^claude-fable-\d/, tiers: { L: 'high', XL: 'max' } },
+  // Passed everything on Antigravity, slower than Neon and one run stalled: L/XL, after Gemini.
+  { family: 'Gemini Pro Orchestrator', match: /^gemini-pro-orchestrator-neon$/, tiers: { L: 'high', XL: 'max' } },
+  { family: 'DeepSeek Flash', match: /^deepseek-flash$/, tiers: { S: 'low', M: 'medium' } },
+  // S and M only measured: its L/XL runs died on Cursor transport errors.
+  { family: 'Grok', match: /^grok-\d[\d.]*$/, tiers: { S: 'low', M: 'medium' } },
+  // Pass S/M/L, miss the XL task (Sol 1/2, Terra 0/2, Luna 0/2); in that order of preference.
+  { family: 'GPT Sol', match: /^gpt-5\.6-sol$/, tiers: { S: 'low', M: 'medium' } },
+  { family: 'GPT Terra', match: /^gpt-5\.6-terra$/, tiers: { S: 'low', M: 'medium' } },
+  { family: 'GPT Luna', match: /^gpt-5\.6-luna$/, tiers: { S: 'low', M: 'medium' } },
+  // gpt-oss-120b failed every S task: no entry, so it stays untiered.
 ];
 
 const EFFORT_ORDER = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
