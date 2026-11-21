@@ -15,6 +15,7 @@ import type { BgShell, BgShellStatus } from '../lib/backgroundShells';
 import { deriveBackgroundShells, mergeBackgroundShells } from '../lib/backgroundShells';
 import {
   backgroundRow,
+  backgroundRowClearedAt,
   progressTrayLine,
   type BackgroundRowCountPart,
   type BackgroundRowItem,
@@ -72,8 +73,12 @@ export function BackgroundShellsTray({
     [events, live, serverShells],
   );
   // The folded row is the shared rule's (src/shared backgroundRow.ts, background-row.fixture.json):
-  // what is running on a live session, plus what ended after the person's last message.
-  const since = useMemo(() => lastUserMessageAt(events), [events]);
+  // what is running on a live session, plus what ended after the later of the person's last message
+  // and the start of the agent's latest turn (a wake's turn included).
+  const since = useMemo(
+    () => backgroundRowClearedAt(lastUserMessageAt(events), lastAgentTurnStartedAt(events)),
+    [events],
+  );
   const row = useMemo(() => backgroundRow(shells, since, !!live), [shells, since, live]);
   const [open, setOpen] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -149,9 +154,31 @@ export function BackgroundShellsTray({
 }
 
 /**
+ * When the agent's latest turn started: the earliest event of the turn the newest agent event
+ * (anything but a `user` event) belongs to, so a wake's turn counts from its recorded note. Null
+ * while no agent event carries a turn.
+ */
+export function lastAgentTurnStartedAt(events: RunEvent[]): string | null {
+  let turnId: string | null = null;
+  for (let i = events.length - 1; i >= 0; i--) {
+    const ev = events[i];
+    if (ev.type !== 'user' && ev.turnId && ev.ts) {
+      turnId = ev.turnId;
+      break;
+    }
+  }
+  if (!turnId) return null;
+  let start: string | null = null;
+  for (const ev of events) {
+    if (ev.turnId === turnId && ev.ts && (start === null || Date.parse(ev.ts) < Date.parse(start))) start = ev.ts;
+  }
+  return start;
+}
+
+/**
  * When the person last wrote: the newest `user` event with words they typed. A turn Orbit opened
  * itself (a background job's or a SubAgent's wake: nothing typed, only the recorded note) or a
- * watch's wake is not their message, so it clears nothing (decision D1); nor is a message another
+ * watch's wake is not their message (the turn it opens is the agent's, see lastAgentTurnStartedAt); nor is a message another
  * Orbit session sent (`sessionMessage` card).
  */
 export function lastUserMessageAt(events: RunEvent[]): string | null {
