@@ -238,8 +238,11 @@ struct UserTurnRow: View {
             // parent's answer follows as its own reply. Anything else the note carried keeps its line.
             VStack(alignment: .leading, spacing: 6) {
                 WorkflowFinishedStripView(wake: workflow)
+                // A SubAgent's end the note carries draws nothing here either: its card shows it (see below).
                 if let subagent = SubagentFinishedText.parse(workflow.rest) {
-                    SubagentFinishedLineView(wake: subagent, ts: b.ts)
+                    if let jobs = BackgroundWakeText.parse(subagent.rest) {
+                        BackgroundWakeCardView(wake: jobs, ts: b.ts)
+                    }
                 } else if let jobs = BackgroundWakeText.parse(workflow.rest) {
                     BackgroundWakeCardView(wake: jobs, ts: b.ts)
                 }
