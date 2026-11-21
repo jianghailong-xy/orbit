@@ -58,6 +58,19 @@ const SUCCESSFUL_SETTLEMENTS: ReadonlySet<LandingSettledAs> = new Set([
   'LANDED', 'ALREADY_LANDED', 'NOTHING_TO_LAND', 'MERGED',
 ]);
 
+/**
+ * The status a LANDING container is written with: AWAITING_INPUT while its subject is open, and once the landing
+ * settled SUCCEEDED for a settlement that reached the line and CANCELLED for any other. The two writers below write
+ * it beside `release_cause` 'landing_settled', and the detail a LANDING link answers with before its row exists
+ * (SessionsService.landingOnlyDetail) shows the status the row would have from it.
+ */
+export function landingContainerStatus(landing: { settledAt: Date | string | null; settledAs: string | null }): RunStatus {
+  if (landing.settledAt === null) return RunStatus.AWAITING_INPUT;
+  return landing.settledAs && SUCCESSFUL_SETTLEMENTS.has(landing.settledAs as LandingSettledAs)
+    ? RunStatus.SUCCEEDED
+    : RunStatus.CANCELLED;
+}
+
 /** What a database door needs, without dragging the Nest provider into the signature. */
 export type LandingDb = Pick<Prisma.TransactionClient, '$transaction'>;
 
@@ -251,11 +264,7 @@ export async function ensureLandingSession(
         : null;
 
     const settled = landing.settledAt !== null;
-    const status = settled
-      ? (landing.settledAs && SUCCESSFUL_SETTLEMENTS.has(landing.settledAs as LandingSettledAs)
-          ? RunStatus.SUCCEEDED
-          : RunStatus.CANCELLED)
-      : RunStatus.AWAITING_INPUT;
+    const status = landingContainerStatus(landing);
 
     const [created] = await tx.session.createManyAndReturn({
       data: [{
@@ -373,7 +382,7 @@ async function settleLanding(
       await tx.session.update({
         where: { id: locked.sessionId },
         data: {
-          status: SUCCESSFUL_SETTLEMENTS.has(settledAs) ? RunStatus.SUCCEEDED : RunStatus.CANCELLED,
+          status: landingContainerStatus({ settledAt, settledAs }),
           completedAt: settledAt,
           // Released with the status (design §4.2).
           finishedAt: settledAt,

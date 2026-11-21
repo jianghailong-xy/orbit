@@ -565,8 +565,8 @@ test('the pending-waits preview lists ACTIVE and PAUSED waits, the PAUSED ones m
 test('an ended coordinator (FAILED, or recycled while idle) is revived for its note rather than refused', { skip, timeout: 120_000 }, async () => {
   for (const status of ['FAILED', 'CANCELLED'] as const) {
     const f = await fixture();
-    // Released as the writers release (session_release_fact_chk, session_release_failure_chk): finished_at and a
-    // cause, a failure cause for FAILED.
+    // Released as the writers release (session_release_fact_chk, and every writer since 1403/1404): finished_at and
+    // a cause, a failure cause for FAILED.
     await f.db.session.update({
       where: { id: f.outgoing },
       data: { status, finishedAt: new Date(), releaseCause: status === 'FAILED' ? 'turn_failed' : 'ended' },

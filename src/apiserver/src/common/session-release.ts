@@ -190,6 +190,40 @@ export function isWorkFinishedRelease(releaseCause: string | null | undefined): 
 }
 
 /**
+ * The release facts of a session row, as the questions below read them (plan step 4.8). A reader selects them with
+ * RELEASE_FACTS_SELECT and asks a question by its name, never a cause: where the facts live is this module's to know.
+ */
+export interface SessionReleaseFacts extends SessionReleaseColumn {
+  releaseCause: string | null;
+}
+
+/** The columns SessionReleaseFacts reads, for a Prisma `select`. */
+export const RELEASE_FACTS_SELECT = { finishedAt: true, releaseCause: true } as const;
+
+/** Whether the session was released having finished its work (isWorkFinishedRelease). */
+export function releaseFinishedTheWork(session: SessionReleaseFacts): boolean {
+  return isReleased(session) && isWorkFinishedRelease(session.releaseCause);
+}
+
+/** Whether the session was released by a failure (isFailedRelease). */
+export function releaseWasFailure(session: SessionReleaseFacts): boolean {
+  return isReleased(session) && isFailedRelease(session.releaseCause);
+}
+
+/** Prisma filter on a session: it was released by a failure. */
+export function releaseWasFailureFilter(): Prisma.SessionWhereInput {
+  return { releaseCause: failedReleaseFilter() };
+}
+
+/**
+ * The release facts a writer stores for a release with this cause at `at`, or for a held session (null): for specs
+ * that build rows, so they spell a release the way the writers do and name no column.
+ */
+export function releaseFactsOf(cause: SessionReleaseCause | null, at: Date = new Date()): SessionReleaseFacts {
+  return cause === null ? { finishedAt: null, releaseCause: null } : { finishedAt: at, releaseCause: cause };
+}
+
+/**
  * The cause of a release somebody asked for: the end reason the request recorded, or `cancelled` when
  * the request recorded none (a cancel with no reason, or a reason this build does not know).
  */
@@ -229,6 +263,17 @@ export function reportsSuccessWithNoEnd(current: { cancelRequestedAt: Date | nul
 }
 
 /** What a machine wake or a credential gate reads of a session to decide whether it has ended. */
+/**
+ * Whether the session's run is over: released, or parked interrupted with an end recorded (INTERRUPTED is a held
+ * status, the turn was abandoned; with an end reason, the session itself was ended). The SESSION_RUN_TERMINAL watch
+ * leaf asks exactly this, and sessionHasEnded asks it after the filing facts. Under session_release_fact_chk it
+ * answers, for every stored row, what "the derived run state is SUCCEEDED, FAILED or ENDED" answered.
+ */
+export function runIsOver(session: SessionReleaseColumn & { status: RunStatus | string; endReason: string | null }): boolean {
+  if (isReleased(session)) return true;
+  return session.status === 'INTERRUPTED' && Boolean(session.endReason);
+}
+
 export interface SessionEndedRow extends SessionReleaseColumn {
   status: RunStatus | string;
   endReason: string | null;
@@ -246,7 +291,5 @@ export interface SessionEndedRow extends SessionReleaseColumn {
  */
 export function sessionHasEnded(session: SessionEndedRow): boolean {
   if (deriveSessionLifecycleState(session) !== SessionLifecycleState.OPEN) return true;
-  if (isReleased(session)) return true;
-  // INTERRUPTED is a held status: the turn was abandoned. With an end reason, the session itself was ended.
-  return session.status === 'INTERRUPTED' && Boolean(session.endReason);
+  return runIsOver(session);
 }

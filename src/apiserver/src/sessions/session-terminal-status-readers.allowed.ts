@@ -42,42 +42,110 @@
  * coordinator-handoff.service.ts afterTurn (the runner's turn-complete status, as in turn-outcome.ts), the held
  * INTERRUPTED and the activity set in schedule-runs.service.ts, and in sessions.service.ts and tasks.service.ts the
  * release writers, the LANDING detail's legacy status, and activity or held-idle sets.
+ *
+ * Plan step 4.8 split this list by kind. Only (a) and (b) decide from a terminal value, beside two named transitions
+ * that end with later steps, (c) and (d); (e) names none. A file may sit in more than one section; its allowance is
+ * the sum. (a) RELEASE_WRITERS: the writers of design §6.3 that record a release, which still write the legacy
+ * `status` beside the release fact, and decide in the same statement from the status they write (the reaper's
+ * forceFinalize, the runner's finalize and its failed turn, the import, the end of a queued session, the landing
+ * container and the refused source), with the one vocabulary they share
+ * (RELEASED_SESSION_STATUSES, which the finalize also checks the runner's word against, and gracefulEndStatus).
+ * (b) PROJECTOR: the derive functions that produce the legacy wire fields `runState`, `sessionState` and
+ * `filingState` from the stored facts, which withSessionState (sessions/session-state.ts) puts on every payload beside
+ * `status` and `runStatus`; session-state-legacy-fields.spec.ts pins their output for every stored combination.
+ * (c) OLD_PROTOCOL: the runner's turn-complete status word, translated into the turn outcome and read by the turn
+ * writer; it goes when plan phase 6 (task 3509dk246EQ9g9yZRriiQ, step 6.1) lets the runner report the outcome and the
+ * release as two things. (d) CLIENT_WIRE: the web client's decoder of the legacy vocabulary, which plan step 5.2
+ * (task 3509djyYbFwb4VQd8DnCc) moves onto the new fields. (e) NO_RELEASED_VALUE: hand-written activity sets
+ * (PENDING, RUNNING), held-idle sets (AWAITING_INPUT, INTERRUPTED), the held set and slot counts. They name no released
+ * value, and are counted because the project's criterion JGPQFXIZvP1MO137FGfPP counts every hand-written live or
+ * terminal status set, not because they decide from a terminal value. INTERRUPTED is counted wherever it stands for the
+ * same reason: session_release_fact_chk (migrations 1401, 1402) makes it a held status, never a released one.
+ *
+ * The spec holds the split to the source: a file that names a released value (SUCCEEDED, FAILED or CANCELLED, or for
+ * the derived states ENDED, COMPLETED, DORMANT or DELETED, through an enum or in a session set) is in one of sections
+ * (a) to (d), and every file in those sections names one; a file only in section (e) names none.
  */
-export const SESSION_TERMINAL_STATUS_READERS: Readonly<Record<string, number>> = {
-  'src/apiserver/src/common/session-scheduling.ts': 2,
-  // The one definition of "held" and "released" (plan step 3.5): the two status sets, their SQL fragments, and the
-  // release causes. Its readers read `finished_at` since plan steps 4.2 and 4.3; the sets stay for the filters whose
-  // status list is an index's access path. The held list of sessionHeldIndexedSql is one constant since 4.3
-  // (HELD_STATUS_LIST_SQL), which the scan does not count as a hit because no `IN` stands beside it.
-  'src/apiserver/src/common/session-release.ts': 6,
-  'src/apiserver/src/common/session-tree-sql.ts': 1,
-  'src/apiserver/src/help/help-ask-reads.ts': 1,
-  'src/apiserver/src/projects/coordinator-evidence-queue.service.ts': 2,
-  // 5 hits arrived from main at 6905964d65 (coordinator hand-over when a model no longer works), written before this
-  // guard reached main, and were admitted as found in the merge of 2026-11-21. Plan step 4.2 moved the sweep's ended
-  // set onto the release column, and 4.6 its two FAILED reads onto the failure cause. The 2 left are afterTurn's
-  // reading of the runner's turn-complete status word (old protocol), which goes with plan phase 6.
-  'src/apiserver/src/projects/coordinator-handoff.service.ts': 2,
-  'src/apiserver/src/projects/landing-session.ts': 4,
-  'src/apiserver/src/projects/pending-addressees.ts': 1,
-  'src/apiserver/src/projects/project-done-request.ts': 1,
+
+/** (a) The writers that record a release, and the vocabulary they write. */
+export const RELEASE_WRITERS: Readonly<Record<string, number>> = {
+  // RELEASED_SESSION_STATUSES: the statuses a release writes, which session_release_fact_chk ties to `finished_at`
+  // and the runner's finalize accepts (its TERMINAL); isReleasedStatus builds spec rows from it.
+  'src/apiserver/src/common/session-release.ts': 4,
+  // landingContainerStatus: the status both container writers write, and the LANDING detail shows before its row exists.
+  'src/apiserver/src/projects/landing-session.ts': 2,
+  // The refused source: FAILED with setup_failed.
   'src/apiserver/src/projects/session-source.ts': 1,
-  'src/apiserver/src/providers/active-sessions.ts': 3,
-  'src/apiserver/src/push/settle-alert.ts': 2,
+  // forceFinalize and the status each sweep hands it.
   'src/apiserver/src/realtime/reaper.service.ts': 4,
-  'src/apiserver/src/runner-api/runner-api.controller.ts': 26,
-  'src/apiserver/src/runner-api/runner-link-hints.ts': 1,
-  // The old runner protocol's turn status words translated into the turn outcome; goes when plan phase 6 lets the runner report the outcome itself.
+  // turnComplete's failed turn (the status it writes and publishes), the finalize (its status, the side effects it
+  // decides in the same transaction, producedNothingBeforeFailing) and the failed import.
+  'src/apiserver/src/runner-api/runner-api.controller.ts': 14,
+  // The end of a session still queued: CANCELLED, and the status the end answers with.
+  'src/apiserver/src/sessions/sessions.service.ts': 2,
+  // gracefulEndStatus: the status the finalize and the reaper write for a graceful end.
+  'src/shared/src/enums.ts': 2,
+};
+
+/** (b) The one projector of the legacy wire fields. */
+export const PROJECTOR: Readonly<Record<string, number>> = {
+  // deriveSessionRunState, deriveSessionState (deriveSessionLifecycleState and deriveSessionFilingState name none).
+  'src/shared/src/enums.ts': 23,
+};
+
+/** (c) The old runner protocol's turn status words, until plan phase 6 (task 3509dk246EQ9g9yZRriiQ). */
+export const OLD_PROTOCOL: Readonly<Record<string, number>> = {
+  // afterTurn reads the runner's turn-complete status word, as turn-outcome.ts does.
+  'src/apiserver/src/projects/coordinator-handoff.service.ts': 2,
+  // turnComplete's reading of the runner's word (`dto.status`) for what the turn did.
+  'src/apiserver/src/runner-api/runner-api.controller.ts': 12,
+  // The word translated into the turn outcome.
   'src/apiserver/src/runner-api/turn-outcome.ts': 4,
-  'src/apiserver/src/schedules/schedule-runs.service.ts': 2,
-  'src/apiserver/src/sessions/sessions.service.ts': 5,
-  'src/apiserver/src/sessions/task-work-carrier.ts': 2,
-  'src/apiserver/src/share-links/public-task.ts': 1,
-  'src/apiserver/src/task-lists/task-lists.service.ts': 1,
-  'src/apiserver/src/tasks/evidence-review.service.ts': 1,
-  'src/apiserver/src/tasks/reference-expansion.ts': 1,
-  'src/apiserver/src/tasks/tasks.service.ts': 2,
-  'src/apiserver/src/watches/watch-predicate.ts': 4,
-  'src/shared/src/enums.ts': 25,
+};
+
+/** (d) A client's decoder of the legacy vocabulary, until plan step 5.2 (task 3509djyYbFwb4VQd8DnCc). */
+export const CLIENT_WIRE: Readonly<Record<string, number>> = {
+  // SESSION_RUN_STATES and SESSION_STATES, the two vocabularies, and one held-idle set of derived run states.
   'src/web/src/lib/sessionState.ts': 3,
 };
+
+/** (e) Hand-written sets that name no released value: activity, held-idle and held sets, and slot counts. */
+export const NO_RELEASED_VALUE: Readonly<Record<string, number>> = {
+  // HELD_SESSION_STATUSES, for the filters whose status list is an index's access path.
+  'src/apiserver/src/common/session-release.ts': 2,
+  // UNSETTLED (a turn queued or running), and statusAfterTurnEnqueued's idle statuses (AWAITING_INPUT, INTERRUPTED).
+  'src/apiserver/src/common/session-scheduling.ts': 2,
+  // The background-held set in the slot counts: PENDING, AWAITING_INPUT, INTERRUPTED.
+  'src/apiserver/src/common/session-tree-sql.ts': 1,
+  // `paused`: held and stopped mid-turn (INTERRUPTED).
+  'src/apiserver/src/help/help-ask-reads.ts': 1,
+  // Idle coordinators: AWAITING_INPUT or INTERRUPTED.
+  'src/apiserver/src/projects/coordinator-evidence-queue.service.ts': 2,
+  // A coordinator is busy unless AWAITING_INPUT or INTERRUPTED.
+  'src/apiserver/src/projects/pending-addressees.ts': 1,
+  // Tasks with a session queued or running.
+  'src/apiserver/src/projects/project-done-request.ts': 1,
+  // Sessions per account: queued or running, and held-idle within a window.
+  'src/apiserver/src/providers/active-sessions.ts': 3,
+  // The claimed-and-held set (RUNNING, AWAITING_INPUT, INTERRUPTED) as an index condition.
+  'src/apiserver/src/runner-api/runner-link-hints.ts': 1,
+  // landRun's held INTERRUPTED, and the not-queued-or-running filter of completeNoChangeSessions.
+  'src/apiserver/src/schedules/schedule-runs.service.ts': 2,
+  // The workspace tally of sessions queued or running.
+  'src/apiserver/src/sessions/sessions.service.ts': 1,
+  // Activity and the parked status in the carrier SQL.
+  'src/apiserver/src/sessions/task-work-carrier.ts': 2,
+  // The derived run states still live on the public task page: QUEUED, RUNNING.
+  'src/apiserver/src/share-links/public-task.ts': 1,
+  // The idle sweep's creator sessions: AWAITING_INPUT or INTERRUPTED.
+  'src/apiserver/src/tasks/evidence-review.service.ts': 1,
+  // Tasks with a session queued or running, and the held-idle sessions in raw SQL.
+  'src/apiserver/src/tasks/tasks.service.ts': 2,
+};
+
+export const ALLOW_LIST_SECTIONS = { RELEASE_WRITERS, PROJECTOR, OLD_PROTOCOL, CLIENT_WIRE, NO_RELEASED_VALUE } as const;
+
+/** Each file's allowance: the sum of its sections. */
+export const SESSION_TERMINAL_STATUS_READERS: Readonly<Record<string, number>> = Object.values(ALLOW_LIST_SECTIONS)
+  .flatMap((section) => Object.entries(section))
+  .reduce<Record<string, number>>((sum, [file, n]) => ({ ...sum, [file]: (sum[file] ?? 0) + n }), {});

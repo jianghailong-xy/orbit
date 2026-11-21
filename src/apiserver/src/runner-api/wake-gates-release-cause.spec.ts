@@ -26,8 +26,8 @@ import { tickStanding } from './scheduled-wakeup';
  * The OLD_* functions below are the gates as they stood before this step, copied from the code, and read the
  * status the way it did. Every combination of (status, end reason, cancel requested, filing, retry armed, and
  * every release cause a writer can pair with the status) is run through both, and the verdicts must be equal.
- * Rows are the ones the writers and backfills produce (session_release_fact_chk, session_release_failure_chk):
- * released exactly when the status is terminal, a failure cause exactly when the status is FAILED.
+ * Rows are the ones the writers and backfills produce: released exactly when the status is terminal
+ * (session_release_fact_chk), a failure cause exactly when the status is FAILED (every writer since 1403/1404).
  *
  * Set ORBIT_WAKE_GATES_TABLE to a file path to write the table (before and after, per gate) as markdown.
  */
@@ -193,9 +193,10 @@ test('named cases: a FAILED session with a retry armed, and a session a person e
   assert.equal(tickStanding(ended, NOW), 'ENDED');
 });
 
-test('rows deploy 1 leaves until migration 1405 heals them: FAILED with a clean-end cause reads as ended, not failed', () => {
-  // 1405 rewrites these causes to a failure cause at boot, in the same deploy and before the server serves, so these
-  // answers hold only for the window in which an older database meets this code. Printed so the difference is on record.
+test('rows 1262 left FAILED with a clean-end cause read as ended, not failed', () => {
+  // No backfill rewrites these causes: 1405, which was to, was removed on 2026-11-21 before it was deployed (design
+  // §12 decision D9, removal step R1), and the readers step (R4) moves this reading off the cause. Printed so the
+  // difference is on record.
   for (const cause of ['engine_exited', 'completed', 'cancelled']) {
     const row = rowOf('FAILED', cause, null, true, 'open', 'none');
     assert.equal(oldTickStanding(row, NOW), 'FAILED', cause);

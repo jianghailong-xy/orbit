@@ -403,8 +403,8 @@ test('the one-live-run-per-task index, release A (migration 1426)', {
         const oldAlone = await outcome(OLD_INDEX, label, released);
         const newAlone = await outcome(NEW_INDEX, label, released);
         rows.push(`${label.padEnd(15)} finished_at ${released ? 'set ' : 'NULL'} | old index alone: ${oldAlone} | new index alone: ${newAlone}`);
-        const checkAdmits = !oldAlone.startsWith('refused by session_release');
-        assert.equal(checkAdmits, !newAlone.startsWith('refused by session_release'), `${label}: the CHECK decides alike`);
+        const checkAdmits = !oldAlone.startsWith('refused by session_release_fact_chk');
+        assert.equal(checkAdmits, !newAlone.startsWith('refused by session_release_fact_chk'), `${label}: the CHECK decides alike`);
         if (label === 'PARKED' && !released) {
           assert.deepEqual([oldAlone, newAlone], ['admitted', 'refused by the claim (the index present)'],
             'PARKED, unreleased: the one row the CHECK admits that only the new index counts as live');

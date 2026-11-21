@@ -240,7 +240,7 @@ import { readWikiChatContext, sameWikiChatContext, wikiContextOutsideChat } from
 import { branchName } from '../projects/project-criterion-landing';
 import { settleDeliveredIdentityAfterFinish } from '../projects/project-integration-job';
 import { INTEGRATION_ITEM_KINDS, openItemOwed, openItemVisible } from '../projects/project-open-item';
-import { readSourceLanding } from '../projects/landing-session';
+import { landingContainerStatus, readSourceLanding } from '../projects/landing-session';
 import { readLandingIntegrationLog, type IntegrationLogSelectors } from '../projects/project-integration-log';
 import {
   MATCHED_BY_CONTENT,
@@ -317,7 +317,6 @@ import {
 } from '../common/session-scheduling';
 import {
   HELD_SESSION_STATUSES,
-  RELEASED_SESSION_STATUSES,
   failedReleaseFilter,
   heldFilter,
   isFailedRelease,
@@ -5728,13 +5727,8 @@ export class SessionsService {
    * while the subject is open, SUCCEEDED / CANCELLED once it settled.
    */
   private static landingOnlyDetail(id: string, landing: SessionLandingView<Date>): any {
-    const settledAs = landing.settledAs;
-    const status = landing.settledAt
-      ? (settledAs === 'LANDED' || settledAs === 'ALREADY_LANDED' || settledAs === 'NOTHING_TO_LAND'
-          || settledAs === 'MERGED'
-          ? RunStatus.SUCCEEDED
-          : RunStatus.CANCELLED)
-      : RunStatus.AWAITING_INPUT;
+    // The status the container's writer would write (projects/landing-session.ts): one rule, not a copy of it.
+    const status = landingContainerStatus(landing);
     return {
       id,
       title: null,
@@ -7098,11 +7092,6 @@ export class SessionsService {
 
   // Held by a runner past its claim (common/session-release.ts).
   static readonly LIVE: RunStatus[] = HELD_SESSION_STATUSES.filter((status) => status !== RunStatus.PENDING);
-
-  // Not live: resume() revives these (and complete/delete/config treat them as
-  // already-ended). CANCELLED covers both a hard stop and a graceful, still-resumable end
-  // (idle recycle / user end) — `endReason` is what tells those apart for display.
-  static readonly TERMINAL: RunStatus[] = [...RELEASED_SESSION_STATUSES];
 
   private static resumeBlocked(
     reason: SessionResumeBlockedReason,

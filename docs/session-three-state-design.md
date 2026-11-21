@@ -1,7 +1,7 @@
 # Session state: three activity states and the facts beside them
 
-Status: **D1, D5 and D8 decided as recommended by the owner on 2026-11-19; D9 (no failure fact on the
-session) decided by the owner on 2026-11-21 (§12); D2, D3, D4, D6 and D7 still open**. Written 2026-11-19 against commit `a1282659a4`.
+Status: **D1, D5 and D8 decided as recommended by the owner on 2026-11-19; D2 and D9 (no failure fact on
+the session, §12) decided by the owner on 2026-11-21; D3, D4, D6 and D7 still open**. Written 2026-11-19 against commit `a1282659a4`.
 If accepted it replaces §2.1 of [session-lifecycle-design.md](session-lifecycle-design.md).
 The complete list of read sites is in
 [session-three-state-read-sites.md](session-three-state-read-sites.md) (442 rows).
@@ -120,8 +120,9 @@ Invariant: a released session is always `IDLE`. Sending to it clears `releasedAt
 `common/session-release.ts` `SESSION_RELEASE_CAUSES`, CHECK `session_release_cause_chk`, migrations
 1261 and 1403). Each cause is a failure or not, never both, so "did the run fail" is read off the
 cause (`FAILURE_RELEASE_CAUSES`: `isFailedRelease`, `failedReleaseFilter`, `failedReleaseSql`) and
-not off the terminal status value. The CHECK `session_release_failure_chk` (1406, validated by 1407)
-holds the stored status to it: `FAILED` exactly when the cause is a failure.
+not off the terminal status value. The writers hold the stored status to it: `FAILED` exactly when the cause
+is a failure. (A CHECK for it, `session_release_failure_chk` in migrations 1406 and 1407, was removed from the
+project branch on 2026-11-21 before it was deployed: §12.6 R1.)
 
 | Cause | Failure | Written when | Status written with it |
 |---|---|---|---|
@@ -150,8 +151,9 @@ backfill, all on DONE tasks, none reachable by the four readers), and the finali
 it.
 
 Before 1403, `engine_exited` was also written for a `FAILED` finalize, and the end's own cause for
-the reaper's `FAILED` "cancel not honored"; 1405 rewrote those rows (and the `FAILED` rows 1262 gave
-an end reason) to the failure cause their own facts name.
+the reaper's `FAILED` "cancel not honored". A backfill (migration 1405) was to rewrite those rows (and the
+`FAILED` rows 1262 gave an end reason) to the failure cause their own facts name; it was removed on 2026-11-21
+before it was deployed (§12.6 R1), so those rows keep their causes (§12.2, B1 and B2).
 
 ### 4.3 Today's rows in the new model
 
@@ -285,7 +287,8 @@ the status or one of its modifiers.
 | `apiserver/src/sessions/sessions.service.ts:10942` | back to `PENDING` | cleared | the revive: a person, an agent, the auto-retry sweep, merge repair, a scheduled wake-up |
 
 Each writer decides the cause in the statement that writes the status, and `FAILED` is written with a
-failure cause and nothing else (§4.2; `session_release_failure_chk`).
+failure cause and nothing else (§4.2; the CHECK that was to hold it, `session_release_failure_chk`, was removed on
+2026-11-21 before it was deployed, §12.6 R1).
 
 *Superseded 2026-11-21 by D9 (§12):* the "Release cause" column of this table is what deploy 1 writes. Under D9
 no writer records a cause; a failure writer records the outcome of the turn that carried the failure instead
@@ -365,7 +368,7 @@ value an old client reads.
 ## 9. Decisions for the owner
 
 Decided on 2026-11-19, each as recommended below: **D1**, **D5** and **D8**. Decided by the owner on
-2026-11-21: **D9**, which this document had not proposed. The others are open.
+2026-11-21: **D2** (below) and **D9**, which this document had not proposed. The others are open.
 
 - **D1. Four situations, not three.** Accept that "released" is the session's own fact, kept
   beside three activity states. Recommended: yes, as a column, so that the status says only
@@ -412,6 +415,17 @@ Decided on 2026-11-19, each as recommended below: **D1**, **D5** and **D8**. Dec
   `CANCELLED` with `endReason` `ENDED`/`CANCELLED`, not about a success path. Not checked: how
   many stored plain rows read `SUCCEEDED` today. For plan step 4.6: no plain-session
   `SUCCEEDED` case needs to be kept.
+
+  **Decided by the owner on 2026-11-21:** as the plan says, success and finish are not states of a
+  session, so there is nothing special to decide for plain conversations. A plain conversation is
+  ended, or failed when its release was a failure; it is never succeeded or finished. Only a
+  session that did a task's work finishes, and that is read from the release cause (`task_done`,
+  or `landing_settled` for a landing container). Plan step 4.8 moved the three readers that
+  waited on it onto the release fact: the settle push (`push/settle-alert.ts`: "Finished" for a
+  release that finished the work, the failed alert for a failure cause, nothing for any other
+  release), the `SESSION_RUN_TERMINAL` watch leaf (released, or interrupted with an end
+  recorded; its stored meaning unchanged), and the wiki's settled-session feed
+  (`wiki/wiki-maintenance.ts`), which already read activity only and needed no change.
 - **D3. Failed badge.** A session whose last turn failed keeps a visible "Failed" mark in
   lists, drawn from the turn outcome. Recommended: yes.
 - **D4. Machine wake-ups.** Keep today's rule, expressed on the cause: a released session

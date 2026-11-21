@@ -12,8 +12,7 @@ import {
   type JudgmentOutcome,
 } from './coordinator-judgment.service';
 import { attemptEndedUnsettledFact } from './coordinator-wake';
-import { sessionReleasedSql } from '../common/session-release';
-import { RELEASED_SESSION_STATUSES } from '../common/session-release';
+import { isReleased, sessionReleasedSql } from '../common/session-release';
 
 /** The project vanished between the committed attempt read and wake authorization. */
 export const ATTEMPT_WAKE_PROJECT_GONE = 'PROJECT_GONE';
@@ -63,11 +62,11 @@ export type AttemptEndedDelivery =
       signal?: AttemptHumanSignal;
     };
 
-const TERMINAL_SESSION_STATUSES: readonly RunStatus[] = RELEASED_SESSION_STATUSES;
-
 interface AttemptSessionSnapshot {
   id: string;
   status: RunStatus;
+  /** Released: its release column, `finished_at`, is set (common/session-release.ts). */
+  released: boolean;
   retryAt: Date | null;
   engineTurnActive: boolean;
   startsTaskWork: boolean;
@@ -87,6 +86,7 @@ interface HumanSignalInput {
   projectId: string | null;
   sessionId: string;
   sessionStatus: RunStatus;
+  sessionReleased: boolean;
   l2RefusalCode: string;
 }
 
@@ -130,8 +130,7 @@ export class AttemptEndedUnsettledProducer {
       return { outcome: 'JUDGMENT_PATH_AVAILABLE' };
     }
 
-    const terminal = TERMINAL_SESSION_STATUSES.includes(session.status)
-      && session.retryAt == null;
+    const terminal = session.released && session.retryAt == null;
     if (!terminal) return { outcome: 'NOT_ENDED' };
 
     if (!task.projectId) {
@@ -140,6 +139,7 @@ export class AttemptEndedUnsettledProducer {
         projectId: null,
         sessionId,
         sessionStatus: session.status,
+        sessionReleased: session.released,
         l2RefusalCode: ATTEMPT_WAKE_NO_PROJECT_COORDINATOR,
       });
       return { outcome: 'NOT_PROJECT_TASK', taskId: task.id, signal };
@@ -185,6 +185,7 @@ export class AttemptEndedUnsettledProducer {
       projectId,
       sessionId,
       sessionStatus: session.status,
+      sessionReleased: session.released,
       l2RefusalCode: result.refusalCode,
     });
     return { outcome: result.outcome, projectId, taskId: task.id, signal };
@@ -254,6 +255,7 @@ export class AttemptEndedUnsettledProducer {
       select: {
         id: true,
         status: true,
+        finishedAt: true,
         retryAt: true,
         engineTurnActive: true,
         startsTaskWork: true,
@@ -286,6 +288,7 @@ export class AttemptEndedUnsettledProducer {
     return {
       id: session.id,
       status: session.status,
+      released: isReleased(session),
       retryAt: session.retryAt,
       engineTurnActive: session.engineTurnActive,
       startsTaskWork: session.startsTaskWork,
@@ -456,7 +459,7 @@ export class AttemptEndedUnsettledProducer {
 
   private humanSignalComment(input: HumanSignalInput, taskStatus: TaskStatus): string {
     const sessionPublicId = uuidToBase62(input.sessionId);
-    const sessionLine = TERMINAL_SESSION_STATUSES.includes(input.sessionStatus)
+    const sessionLine = input.sessionReleased
       ? `Run session ${sessionPublicId} has reached the terminal state ${input.sessionStatus}`
       : `Run session ${sessionPublicId} has ended its work turn and now stands at ${input.sessionStatus}`;
     return `${ATTEMPT_UNJUDGED_COMMENT_MARKER}\n`
