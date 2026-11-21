@@ -317,14 +317,15 @@ import {
 } from '../common/session-scheduling';
 import {
   HELD_SESSION_STATUSES,
-  failedReleaseFilter,
   heldFilter,
-  isFailedRelease,
   isHeld,
   isHeldPastClaim,
   isReleased,
-  isWorkFinishedRelease,
   releaseCauseOfEndReason,
+  releaseFinishedTheWork,
+  RELEASE_WORK_SELECT,
+  releaseWasFailure,
+  releaseWasFailureFilter,
 } from '../common/session-release';
 import { GENERATING_SESSION_FILTER, isSessionGenerating } from '../common/session-generating';
 import {
@@ -5790,8 +5791,8 @@ export class SessionsService {
     if (latest && (latest.status === RunStatus.PENDING || latest.status === RunStatus.RUNNING)) {
       return withSessionState(latest);
     }
-    // A repair that was not released by a failure (status FAILED, held to the cause by session_release_failure_chk).
-    if (latest && !isFailedRelease(latest.releaseCause)) {
+    // A repair that was not released by a failure (common/session-release.ts).
+    if (latest && !releaseWasFailure(latest)) {
       const continued = await this.continueMergeRepair(ownerId, latest, mergeRecoveryContinuePrompt(recovery, preparePR));
       if (continued) return withSessionState(continued);
     }
@@ -5960,8 +5961,8 @@ export class SessionsService {
           taskId: target.taskId,
           OR: [
             { status: RunStatus.AWAITING_INPUT, cancelRequestedAt: null },
-            // Released by a failure: the status FAILED, which session_release_failure_chk holds to the cause.
-            { releaseCause: failedReleaseFilter() },
+            // Released by a failure (common/session-release.ts).
+            releaseWasFailureFilter(),
           ],
         },
         // Armed for a LATER instant, so any claim the sweep had in flight is over: the session waits
@@ -9755,7 +9756,7 @@ export class SessionsService {
    * - nothing owed → nothing is written;
    * - the turn that ended did not succeed (`turnSucceeded` false: it failed or was stopped), or the
    *   session was released for anything but its work finishing (a failure, a stop, an engine that exited by
-   *   itself; isWorkFinishedRelease) → the request is dropped: the turn that asked did not finish, so its
+   *   itself; releaseFinishedTheWork) → the request is dropped: the turn that asked did not finish, so its
    *   work is not merged on its word;
    * - another turn already running (a queued follow-up started) → nothing is written, and that turn's
    *   end asks again;
@@ -9777,7 +9778,7 @@ export class SessionsService {
       const session = await tx.session.findUniqueOrThrow({
         where: { id },
         select: {
-          ownerId: true, status: true, finishedAt: true, releaseCause: true, cancelRequestedAt: true, mergeStatus: true,
+          ownerId: true, status: true, ...RELEASE_WORK_SELECT, cancelRequestedAt: true, mergeStatus: true,
           mergeAfterTurnAt: true, mergeAfterTurnTarget: true,
         },
       });
@@ -9787,9 +9788,9 @@ export class SessionsService {
         await tx.session.update({ where: { id }, data });
         wrote = true;
       };
-      // Released for anything but its work finishing (decision D5: the release cause, never the terminal status): a
-      // failure, a stop, or an engine that exited by itself.
-      if (!turnSucceeded || (isReleased(session) && !isWorkFinishedRelease(session.releaseCause))) {
+      // Released for anything but its work finishing (decision D5, design §12.3: the end reason and the kind, never the
+      // terminal status): a failure, a stop, or an engine that exited by itself.
+      if (!turnSucceeded || (isReleased(session) && !releaseFinishedTheWork(session))) {
         await clear();
         return 'DROPPED' as const;
       }
@@ -13183,9 +13184,11 @@ export class SessionsService {
     status: true,
     // A region sentence says the session waits on its machine's region (session-move.ts regionHeld).
     error: true,
-    // The release column: only an ended session moves (session-move.ts); its cause, whether a retry is armed on a failure.
+    // The release column: only an ended session moves (session-move.ts); with the status, the end reason and the last
+    // turn's outcome, whether a retry is armed on a failure (common/session-release.ts).
     finishedAt: true,
-    releaseCause: true,
+    endReason: true,
+    lastTurnOutcome: true,
     deletedAt: true,
     completedAt: true,
     importSourceCwd: true,

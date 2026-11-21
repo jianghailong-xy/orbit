@@ -70,7 +70,12 @@ import {
   withTransactionRetry,
 } from '../common/transaction-retry';
 import { RUNNER_BEATS } from '../runners/runner-presence';
-import { failedReleaseFilter, isFailedRelease } from '../common/session-release';
+import {
+  RELEASE_FAILURE_SELECT,
+  releaseWasFailure,
+  releaseWasFailureFilter,
+  type ReleaseFailureFacts,
+} from '../common/session-release';
 import { ControlPlaneLeader } from '../realtime/control-plane-leader';
 
 const SWEEP_INTERVAL_MS = 30_000;
@@ -282,10 +287,9 @@ const NOT_IN_CANCELLED_PROJECT: Prisma.SessionWhereInput = {
  */
 type AggregateSettleOutcome = 'SETTLED' | 'RELEASED' | 'BUSY';
 
-/** A session parked waiting on its retry, as read: its status for the compare-and-set, its release cause for whether it failed. */
-interface ParkedRow {
+/** A session parked waiting on its retry, as read: its status for the compare-and-set, its release facts for whether it failed. */
+interface ParkedRow extends ReleaseFailureFacts {
   status: RunStatus;
-  releaseCause: string | null;
 }
 
 @Injectable()
@@ -369,8 +373,8 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         sessionKind: 'CONVERSATION',
         OR: [
           { status: RunStatus.AWAITING_INPUT, cancelRequestedAt: null },
-          // Released by a failure: the status FAILED, which session_release_failure_chk holds to the cause.
-          { releaseCause: failedReleaseFilter() },
+          // Released by a failure (common/session-release.ts).
+          releaseWasFailureFilter(),
         ],
         AND: [NOT_DISPATCH_HELD, NOT_IN_CANCELLED_PROJECT],
       },
@@ -383,8 +387,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         providerBuiltin: true,
         retryAt: true,
         retryAttempts: true,
-        status: true,
-        releaseCause: true,
+        ...RELEASE_FAILURE_SELECT,
         taskId: true,
         startsTaskWork: true,
         assignedRunnerId: true,
@@ -466,8 +469,8 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         sessionKind: 'CONVERSATION',
         OR: [
           { status: RunStatus.AWAITING_INPUT, cancelRequestedAt: null },
-          // Released by a failure: the status FAILED, which session_release_failure_chk holds to the cause.
-          { releaseCause: failedReleaseFilter() },
+          // Released by a failure (common/session-release.ts).
+          releaseWasFailureFilter(),
         ],
         // A held task's work is not a candidate at all (see NOT_DISPATCH_HELD). Filtered here
         // rather than skipped in the loop, and that is not only tidiness: a row skipped in the
@@ -493,9 +496,8 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         // generation; this is the narrow version that keeps THIS path from adding the same bug.
         retryAt: true,
         assignedRunnerId: true,
-        status: true,
-        // Whether the row is parked released by a failure (FAILED) or idle: what giving the retry up announces.
-        releaseCause: true,
+        // The status, and whether the row is parked released by a failure or idle: what giving the retry up announces.
+        ...RELEASE_FAILURE_SELECT,
         // §13.6 SU6's two columns, so the sweep can answer "is this task's work still this task's
         // to do" itself instead of finding out from a trigger that refuses the write.
         taskId: true,
@@ -1200,10 +1202,10 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
   ): Promise<boolean> {
     const session = await db.session.findUnique({
       where: { id: sessionId },
-      select: { status: true, releaseCause: true, retryAt: true, retryClaimedAt: true, cancelRequestedAt: true },
+      select: { ...RELEASE_FAILURE_SELECT, retryAt: true, retryClaimedAt: true, cancelRequestedAt: true },
     });
     if (!session) return false;
-    if (isFailedRelease(session.releaseCause)) return true;
+    if (releaseWasFailure(session)) return true;
     if (session.status !== RunStatus.AWAITING_INPUT || session.cancelRequestedAt) return false;
     if (session.retryAt != null) return true;
     if (session.retryClaimedAt && Date.now() - session.retryClaimedAt.getTime() < RETRY_CLAIM_WINDOW_MS) {
@@ -1991,12 +1993,12 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         completedAt: null,
         // Only a conversation can hold a retry claim; the landing container never gets one.
         sessionKind: 'CONVERSATION',
-        // Parked: idle, or released by a failure (FAILED, which session_release_failure_chk holds to the cause).
-        OR: [{ status: RunStatus.AWAITING_INPUT }, { releaseCause: failedReleaseFilter() }],
+        // Parked: idle, or released by a failure (common/session-release.ts).
+        OR: [{ status: RunStatus.AWAITING_INPUT }, releaseWasFailureFilter()],
       },
       orderBy: { retryClaimedAt: 'asc' },
       take: MAX_PER_SWEEP,
-      select: { id: true, status: true, releaseCause: true, retryAttempts: true, retryClaimedAt: true },
+      select: { id: true, ...RELEASE_FAILURE_SELECT, retryAttempts: true, retryClaimedAt: true },
     });
     const released: string[] = [];
     for (const session of lapsed) {
@@ -2046,8 +2048,8 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
     // told that the wait is over as much as the owner's phone does. Publishing the STATUS does
     // both: `final` with no `retryAt` beside it is exactly the settlement signal the failing
     // turn withheld, and RealtimeService.publish turns it into the one push notification.
-    // Released by a failure: the stored status is FAILED (session_release_failure_chk), and that is the word sent.
-    if (isFailedRelease(parked.releaseCause)) {
+    // Released by a failure (common/session-release.ts): its stored status is the word sent.
+    if (releaseWasFailure(parked)) {
       this.realtime.publish(sessionId, {
         seq: Number.MAX_SAFE_INTEGER,
         type: RunEventType.STATUS,

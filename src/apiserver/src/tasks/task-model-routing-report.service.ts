@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { USAGE_LIMIT_ERROR_MARKERS } from '@orbit/shared';
-import { failedReleaseSql } from '../common/session-release';
+import { releaseWasFailureSql } from '../common/session-release';
 import { PrismaService } from '../prisma/prisma.service';
 import { MODEL_AT_CAPACITY_ERROR_MARKER } from './model-routing';
 
@@ -63,9 +63,9 @@ export class TaskModelRoutingReportService {
       WITH routed_runs AS (
         SELECT d.policy_version, d.level, d.applied, s.provider, s.model,
                s.id AS session_id, s.task_id,
-               -- The run failed: released by a failure cause, which is the status FAILED (session_release_failure_chk).
-               -- False, never null, for a run still held.
-               COALESCE(${failedReleaseSql('s.release_cause')}, false) AS run_failed, s.effort,
+               -- The run failed: released by a failure (common/session-release.ts), never null: false for a run still
+               -- held.
+               ${releaseWasFailureSql('s')} AS run_failed, s.effort,
                s.created_at, s.finished_at, t.status AS task_status, t.completion_criterion
           FROM task_route_decision d
           JOIN task t ON t.id = d.task_id AND t.owner_id = ${ownerId}::uuid
@@ -77,7 +77,7 @@ export class TaskModelRoutingReportService {
       ),
       -- Filters choose samples, never cut short the history that determines the first run or cost.
       work_runs AS (
-        SELECT s.id, s.task_id, COALESCE(${failedReleaseSql('s.release_cause')}, false) AS run_failed,
+        SELECT s.id, s.task_id, ${releaseWasFailureSql('s')} AS run_failed,
                s.error, s.cost_usd, s.created_at,
                ${sessionUsageUnreported('s')} AS usage_unknown,
                row_number() OVER history AS ordinal,

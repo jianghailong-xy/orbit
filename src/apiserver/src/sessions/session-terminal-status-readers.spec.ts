@@ -309,7 +309,7 @@ test('no new reader of a terminal session status outside the allow-list', () => 
   assert.deepEqual(problems, [], `\n${problems.join('\n')}\n`);
 });
 
-test('a released value is named only by the release writers, the projector, the old protocol and the client decoder', () => {
+test('a released value is named only by the release writers, the projector, the old protocol, the client decoder and the failure bridge', () => {
   // Plan step 4.8: the sections of the allow-list that may decide from a terminal value are exactly the files that
   // name a released one. A file only in NO_RELEASED_VALUE names none, so a released value slipping into one fails
   // here even when its count does not rise; a file in another section names one, or it belongs in NO_RELEASED_VALUE.
@@ -328,9 +328,9 @@ test('a released value is named only by the release writers, the projector, the 
     if (names && !mayName.has(file)) {
       problems.push(
         `${file}: names a released session status value (SUCCEEDED, FAILED, CANCELLED, ENDED, COMPLETED, DORMANT, ` +
-          'DELETED) but is no release writer, the projector, the old protocol or the client decoder. Ask the release ' +
-          'module by its questions instead (common/session-release.ts: isReleased, releaseWasFailure, ' +
-          'releaseFinishedTheWork).',
+          'DELETED) but is no release writer, the projector, the old protocol, the client decoder or the failure ' +
+          'bridge. Ask the release module by its questions instead (common/session-release.ts: isReleased, ' +
+          'releaseWasFailure, releaseFinishedTheWork).',
       );
     } else if (!names && mayName.has(file)) {
       problems.push(

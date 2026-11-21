@@ -54,10 +54,10 @@
  * `verdict = 'PASS'` alone is not enough, and each of the others closes a window somebody
  * downstream could otherwise start work in:
  *
- *  1. **The check's run has settled naturally.** Released for its task being done (`release_cause =
- *     'task_done'`, which is the release written `SUCCEEDED`; decision D5 of
- *     docs/session-three-state-design.md reads the work's result off the release cause), with
- *     `end_reason = 'task_done'` and a lifecycle of COMPLETED (§4.2). Not a turn count — V5's lesson, from one table over: turns are
+ *  1. **The check's run has settled naturally.** Released (`finished_at` set) with `end_reason =
+ *     'task_done'`, the end of a task that is DONE (decision D5 and §12.3 of
+ *     docs/session-three-state-design.md read the work's result off the release and its end reason,
+ *     never the terminal status), and a lifecycle of COMPLETED (§4.2). Not a turn count — V5's lesson, from one table over: turns are
  *     written when a turn ENDS while the task is marked DONE from inside it, so "0 turns" reads as
  *     "never ran" on exactly the runs that did. And not a bare `SUCCEEDED` either: a session a
  *     person ended with `complete`/`cancel` carries a different `end_reason`, and this project's
@@ -87,7 +87,7 @@
  */
 
 import { RunStatus } from '@orbit/shared';
-import { sessionHeldSql, type SessionReleaseCause } from '../common/session-release';
+import { isReleased, sessionHeldSql, sessionReleasedSql } from '../common/session-release';
 import { TASK_OCCUPYING } from './reclaim-stalled-task';
 import { taskNotRetiredSql } from './task-supersession';
 import { verificationLiveness } from './verification-liveness';
@@ -98,9 +98,6 @@ import { verificationLiveness } from './verification-liveness';
  * this value: a check whose session was `complete`d out from under it did not conclude.
  */
 export const VERIFICATION_RUN_END_REASON = 'task_done';
-
-/** The release a check's run settles naturally with: the end of a task that is DONE (written SUCCEEDED). */
-export const VERIFICATION_RUN_RELEASE_CAUSE: SessionReleaseCause = 'task_done';
 
 /** Why a dependency on a check is not satisfied. Diagnostic AND wire: see `computeDependencyState`. */
 export type VerificationEpochGate =
@@ -136,8 +133,8 @@ export const VERIFICATION_EPOCH_GATES_NEEDING_A_HUMAN: ReadonlySet<VerificationE
 /** One run of a check, by its own terminal facts. */
 export interface VerificationRunFact {
   runStatus: string;
-  /** Why the run was released (common/session-release.ts); null while it is held. */
-  releaseCause: string | null;
+  /** The release column (common/session-release.ts): set once the run was released, null while it is held. */
+  finishedAt: Date | string | null;
   endReason: string | null;
   deletedAt: unknown;
   /** `completed_at ?? archived_at`: non-null is §4.2's COMPLETED lifecycle. */
@@ -183,7 +180,7 @@ export function verificationRunSettled(check: VerificationEpochCheckFact): boole
   const live = check.runs.some((run) => TASK_OCCUPYING.includes(run.runStatus as RunStatus));
   if (live) return false;
   return check.runs.some((run) => run.deletedAt == null
-    && run.releaseCause === VERIFICATION_RUN_RELEASE_CAUSE
+    && isReleased(run)
     && run.endReason === VERIFICATION_RUN_END_REASON
     && run.completionAt != null);
 }
@@ -429,7 +426,7 @@ export function verificationCheckPassedSql(check: string, subject: string): stri
         SELECT 1 FROM "session" passed_run
          WHERE passed_run."task_id" = ${check}."id"
            AND passed_run."deleted_at" IS NULL
-           AND passed_run."release_cause" = '${VERIFICATION_RUN_RELEASE_CAUSE}'
+           AND ${sessionReleasedSql('passed_run').sql}
            AND passed_run."end_reason" = '${VERIFICATION_RUN_END_REASON}'
            AND (passed_run."completed_at" IS NOT NULL OR passed_run."archived_at" IS NOT NULL)
       )

@@ -58,8 +58,9 @@ export function settleAlert(s: SettleInput): SettleAlert | null {
   if (s.retryAt) return null;
   // Trashed — whatever it did, its owner is done with it.
   if (s.deletedAt) return null;
-  // Read off the release and its cause, never off the terminal status value (decision D2, decided
-  // 2026-11-21: success and finish are not states of a session). A held session has not settled.
+  // Read off the release, its end reason and the last turn's outcome, never off the terminal status value
+  // (decision D2, decided 2026-11-21: success and finish are not states of a session; design §12.3). A held
+  // session has not settled.
   // Finished is a release that finished the work: its task ran to DONE, or a landing container's
   // landing settled; nobody was necessarily watching. `completedAt` is
   // deliberately NOT checked here — the task_done path files the session in Completed as part of

@@ -1,5 +1,5 @@
 import { Prisma, TaskEvidenceDecisionValue, TaskVerdict } from '@prisma/client';
-import { isFailedRelease } from '../common/session-release';
+import { RELEASE_FAILURE_SELECT, releaseWasFailure } from '../common/session-release';
 import {
   AgentProvider,
   accountCapWindows,
@@ -400,7 +400,7 @@ async function readRunHistory(
     where: { ownerId, taskId, startsTaskWork: true },
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     select: {
-      id: true, createdAt: true, status: true, releaseCause: true, error: true,
+      id: true, createdAt: true, ...RELEASE_FAILURE_SELECT, error: true,
       engine: true, provider: true, providerBuiltin: true, ownerId: true, model: true, effort: true,
     },
   });
@@ -421,8 +421,8 @@ async function readRunHistory(
   });
   const levels = new Map(decisions.map((row) => [row.sessionId, row.level]));
   return runs.map((run, index): ModelRoutingRun => {
-    // The run failed: released by a failure cause, which is the status FAILED (session_release_failure_chk).
-    const failed = isFailedRelease(run.releaseCause);
+    // The run failed: released by a failure (common/session-release.ts).
+    const failed = releaseWasFailure(run);
     const next = runs[index + 1]?.createdAt;
     const judged = (at: Date) => at >= run.createdAt && (!next || at < next);
     return {

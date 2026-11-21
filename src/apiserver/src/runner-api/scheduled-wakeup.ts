@@ -7,7 +7,7 @@ import {
   SessionRunState,
 } from '@orbit/shared';
 import { IsBoolean, IsISO8601, IsNumber, IsOptional, IsString, MaxLength, MinLength, ValidateIf } from 'class-validator';
-import { isFailedRelease, isReleased, sessionHasEnded } from '../common/session-release';
+import { isReleased, releaseWasFailure, sessionHasEnded } from '../common/session-release';
 import { PrismaService } from '../prisma/prisma.service';
 import { RETRY_CLAIM_WINDOW_MS } from '../sessions/session-request';
 import { stripNul } from './strip-nul';
@@ -300,8 +300,8 @@ export const TICK_SESSION = {
   ownerId: true,
   status: true,
   finishedAt: true,
-  releaseCause: true,
   endReason: true,
+  lastTurnOutcome: true,
   completedAt: true,
   archivedAt: true,
   deletedAt: true,
@@ -320,9 +320,10 @@ export type TickSession = Prisma.SessionGetPayload<{ select: typeof TICK_SESSION
  */
 export function tickStanding(session: TickSession, now: Date): 'ENDED' | 'FAILED_RECOVERING' | 'FAILED' | 'LIVE' {
   if (deriveSessionLifecycleState(session) !== SessionLifecycleState.OPEN) return 'ENDED';
-  // Released: a failed turn (a failure cause) is the one release a scheduled wake-up revives; every other cause ended it.
+  // Released: by a failure (common/session-release.ts) is the one release a scheduled wake-up revives; every other
+  // release ended it, an end that was asked for and not honoured among them (design §12.3).
   if (isReleased(session)) {
-    if (!isFailedRelease(session.releaseCause)) return 'ENDED';
+    if (!releaseWasFailure(session)) return 'ENDED';
     const claimed = session.retryClaimedAt != null && now.getTime() - session.retryClaimedAt.getTime() < RETRY_CLAIM_WINDOW_MS;
     return session.retryAt != null || claimed ? 'FAILED_RECOVERING' : 'FAILED';
   }

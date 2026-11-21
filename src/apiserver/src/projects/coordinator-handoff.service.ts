@@ -18,7 +18,7 @@ import {
   RunEventType,
 } from '@orbit/shared';
 
-import { isFailedRelease, isReleased } from '../common/session-release';
+import { isReleased, RELEASE_FAILURE_SELECT, releaseWasFailure } from '../common/session-release';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
@@ -255,7 +255,7 @@ export class CoordinatorHandoffService implements OnModuleInit, OnModuleDestroy 
       const [session, turn] = await Promise.all([
         this.prisma.session.findUnique({
           where: { id: row.fromSessionId },
-          select: { finishedAt: true, releaseCause: true, completedAt: true, archivedAt: true, deletedAt: true },
+          select: { ...RELEASE_FAILURE_SELECT, completedAt: true, archivedAt: true, deletedAt: true },
         }),
         this.prisma.conversationTurn.findUnique({
           where: { sessionId_clientTurnId: { sessionId: row.fromSessionId, clientTurnId: row.clientTurnId } },
@@ -268,10 +268,11 @@ export class CoordinatorHandoffService implements OnModuleInit, OnModuleDestroy 
       else if (turn.status !== 'ANSWERED' && isReleased(session)) {
         // The note turn revived the conversation and it ended again before answering: most often its
         // own model could not run (a provider whose sign-in failed, an engine that would not start).
-        code = isFailedRelease(session.releaseCause) ? 'TURN_FAILED' : 'TURN_STOPPED';
+        // Released by a failure (common/session-release.ts), or stopped: an end that was asked for is a stop.
+        code = releaseWasFailure(session) ? 'TURN_FAILED' : 'TURN_STOPPED';
       } else if (turn.status === 'ANSWERED') {
         if (turn.answeredAt && now.getTime() - turn.answeredAt.getTime() < ANSWERED_GRACE_MS) continue;
-        if (isFailedRelease(session.releaseCause)) code = 'TURN_FAILED';
+        if (releaseWasFailure(session)) code = 'TURN_FAILED';
         else {
           await this.noteWritten(row, turn.id);
           settled += 1;

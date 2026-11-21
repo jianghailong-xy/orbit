@@ -43,8 +43,13 @@
  * INTERRUPTED and the activity set in schedule-runs.service.ts, and in sessions.service.ts and tasks.service.ts the
  * release writers, the LANDING detail's legacy status, and activity or held-idle sets.
  *
- * Plan step 4.8 split this list by kind. Only (a) and (b) decide from a terminal value, beside two named transitions
- * that end with later steps, (c) and (d); (e) names none. A file may sit in more than one section; its allowance is
+ * Removal steps R3 and R4 (design §12, decision D9) moved the readers of "released by a failure" and "the work
+ * finished" off the release cause onto the release module's two questions (releaseWasFailure / releaseFinishedTheWork,
+ * each a predicate, a Prisma filter and an SQL fragment), which read the turn outcome and the end reason. Their one
+ * terminal value is the status bridge, counted in its own section (f) until removal step R7 deletes it.
+ *
+ * Plan step 4.8 split this list by kind. Only (a) and (b) decide from a terminal value, beside named transitions that
+ * end with later steps, (c), (d) and (f); (e) names none. A file may sit in more than one section; its allowance is
  * the sum. (a) RELEASE_WRITERS: the writers of design §6.3 that record a release, which still write the legacy
  * `status` beside the release fact, and decide in the same statement from the status they write (the reaper's
  * forceFinalize, the runner's finalize and its failed turn, the import, the end of a queued session, the landing
@@ -56,7 +61,10 @@
  * (c) OLD_PROTOCOL: the runner's turn-complete status word, translated into the turn outcome and read by the turn
  * writer; it goes when plan phase 6 (task 3509dk246EQ9g9yZRriiQ, step 6.1) lets the runner report the outcome and the
  * release as two things. (d) CLIENT_WIRE: the web client's decoder of the legacy vocabulary, which plan step 5.2
- * (task 3509djyYbFwb4VQd8DnCc) moves onto the new fields. (e) NO_RELEASED_VALUE: hand-written activity sets
+ * (task 3509djyYbFwb4VQd8DnCc) moves onto the new fields. (f) FAILURE_STATUS_BRIDGE: the one status word the release
+ * module's failure question reads beside the turn outcome, for the rows a deploy-1 server releases during deploy 2's
+ * hand-over without recording one (design §12.6), until removal step R7 (task 351QPAh8wuz6nl3n1ghm2) deletes it.
+ * (e) NO_RELEASED_VALUE: hand-written activity sets
  * (PENDING, RUNNING), held-idle sets (AWAITING_INPUT, INTERRUPTED), the held set and slot counts. They name no released
  * value, and are counted because the project's criterion JGPQFXIZvP1MO137FGfPP counts every hand-written live or
  * terminal status set, not because they decide from a terminal value. INTERRUPTED is counted wherever it stands for the
@@ -64,7 +72,7 @@
  *
  * The spec holds the split to the source: a file that names a released value (SUCCEEDED, FAILED or CANCELLED, or for
  * the derived states ENDED, COMPLETED, DORMANT or DELETED, through an enum or in a session set) is in one of sections
- * (a) to (d), and every file in those sections names one; a file only in section (e) names none.
+ * (a) to (d) or (f), and every file in those sections names one; a file only in section (e) names none.
  */
 
 /** (a) The writers that record a release, and the vocabulary they write. */
@@ -109,6 +117,15 @@ export const CLIENT_WIRE: Readonly<Record<string, number>> = {
   'src/web/src/lib/sessionState.ts': 3,
 };
 
+/**
+ * (f) The status bridge of the release module's failure question, until removal step R7 (task 351QPAh8wuz6nl3n1ghm2,
+ * deploy 3) deletes it: FAILED_STATUS_BRIDGE in common/session-release.ts, its one spelling.
+ */
+export const FAILURE_STATUS_BRIDGE: Readonly<Record<string, number>> = {
+  // `status = FAILED` beside `last_turn_outcome = FAILED`, for a deploy-1 server's releases during the hand-over.
+  'src/apiserver/src/common/session-release.ts': 1,
+};
+
 /** (e) Hand-written sets that name no released value: activity, held-idle and held sets, and slot counts. */
 export const NO_RELEASED_VALUE: Readonly<Record<string, number>> = {
   // HELD_SESSION_STATUSES, for the filters whose status list is an index's access path.
@@ -143,7 +160,14 @@ export const NO_RELEASED_VALUE: Readonly<Record<string, number>> = {
   'src/apiserver/src/tasks/tasks.service.ts': 2,
 };
 
-export const ALLOW_LIST_SECTIONS = { RELEASE_WRITERS, PROJECTOR, OLD_PROTOCOL, CLIENT_WIRE, NO_RELEASED_VALUE } as const;
+export const ALLOW_LIST_SECTIONS = {
+  RELEASE_WRITERS,
+  PROJECTOR,
+  OLD_PROTOCOL,
+  CLIENT_WIRE,
+  FAILURE_STATUS_BRIDGE,
+  NO_RELEASED_VALUE,
+} as const;
 
 /** Each file's allowance: the sum of its sections. */
 export const SESSION_TERMINAL_STATUS_READERS: Readonly<Record<string, number>> = Object.values(ALLOW_LIST_SECTIONS)

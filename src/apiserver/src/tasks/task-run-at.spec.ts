@@ -344,7 +344,7 @@ test('the scan asks only for tasks that are due AND actually runnable', async ()
   );
   assert.match(
     sql,
-    /AND EXISTS \(\s*SELECT 1 FROM "session" passed_run[\s\S]*passed_run\."release_cause" = 'task_done'[\s\S]*passed_run\."end_reason" = 'task_done'/,
+    /AND EXISTS \(\s*SELECT 1 FROM "session" passed_run[\s\S]*passed_run\."finished_at" IS NOT NULL[\s\S]*passed_run\."end_reason" = 'task_done'/,
   );
   assert.match(sql, /FROM session s/, 'nothing already occupying the task');
   // Deterministic and bounded: longest-overdue first, ties broken by id, capped per pass.

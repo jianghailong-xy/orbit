@@ -23,9 +23,8 @@ import {
   taskLandingSql,
 } from './project-criterion-landing';
 import {
-  failedReleaseSql,
-  isFailedRelease,
-  isReleased,
+  releaseWasFailure,
+  releaseWasFailureSql,
   sessionHasEnded as releasedSessionHasEnded,
   sessionHeldSql,
 } from '../common/session-release';
@@ -792,8 +791,8 @@ const BLOCKING_TASKS_NAMED = 5;
 export const SESSION_ENDING_SELECT = {
   status: true,
   finishedAt: true,
-  releaseCause: true,
   endReason: true,
+  lastTurnOutcome: true,
   completedAt: true,
   archivedAt: true,
   deletedAt: true,
@@ -803,8 +802,8 @@ export const SESSION_ENDING_SELECT = {
 export interface SessionEnding {
   status: string;
   finishedAt: Date | null;
-  releaseCause: string | null;
   endReason: string | null;
+  lastTurnOutcome: string | null;
   completedAt: Date | null;
   archivedAt: Date | null;
   deletedAt: Date | null;
@@ -863,8 +862,8 @@ export function coordinatorUnreachable(reach: { askable: boolean; coordinator: {
  * the runner tear the process down, and neither is anybody ending the conversation.
  */
 export function conversationIsDown(session: SessionEnding): boolean {
-  return isReleased(session) && isFailedRelease(session.releaseCause)
-    && !session.endReason
+  // Released by a failure (common/session-release.ts), which already asks that no end was recorded.
+  return releaseWasFailure(session)
     && deriveSessionLifecycleState(session) === SessionLifecycleState.OPEN;
 }
 
@@ -941,12 +940,11 @@ export function openItemCoordinatorCanTake(alias: string): Prisma.Sql {
 
 /**
  * `openItemCoordinatorCanTake`'s rule for any project, named by the SQL expression `projectId`: its
- * coordinator conversation is switched on, not filed, trashed or completed, and live or FAILED with an
- * auto-retry pending. The one definition, shared by the open-item clock and the evidence clock
- * (`evidence-undecided.ts`), so the two cannot come to disagree about whether a coordinator can still
- * take its turn. Parameter-free when `projectId` is. Live is the release column and FAILED the release
- * cause (plan step 4.3), the same rows as the status under session_release_fact_chk and
- * session_release_failure_chk.
+ * coordinator conversation is switched on, not filed, trashed or completed, and live or released by a
+ * failure with an auto-retry pending. The one definition, shared by the open-item clock and the evidence
+ * clock (`evidence-undecided.ts`), so the two cannot come to disagree about whether a coordinator can still
+ * take its turn. Parameter-free when `projectId` is. Live is the release column (plan step 4.3) and the
+ * failure the release module's question (common/session-release.ts, design §12.3).
  */
 export function projectCoordinatorCanTake(projectId: Prisma.Sql): Prisma.Sql {
   return Prisma.sql`EXISTS (
@@ -959,7 +957,7 @@ export function projectCoordinatorCanTake(projectId: Prisma.Sql): Prisma.Sql {
        AND taker."completed_at" IS NULL
        AND taker."archived_at" IS NULL
        AND (${sessionHeldSql('taker')}
-            OR (${failedReleaseSql('taker."release_cause"')} AND taker."retry_at" IS NOT NULL)))`;
+            OR (${releaseWasFailureSql('taker')} AND taker."retry_at" IS NOT NULL)))`;
 }
 
 /** Owner-facing lists omit coordinator items still waiting in the queue of a conversation that can

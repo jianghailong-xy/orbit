@@ -252,13 +252,12 @@ import {
   autoRunEnd,
 } from './task-retry-policy';
 import {
-  FAILURE_RELEASE_CAUSES,
-  WORK_FINISHED_RELEASE_CAUSES,
-  failedReleaseFilter,
   heldFilter,
   heldStatusFilter,
   isReleased,
   releasedFilter,
+  releaseFinishedTheWorkFilter,
+  releaseWasFailureFilter,
   sessionHeldSql,
 } from '../common/session-release';
 
@@ -1481,7 +1480,9 @@ interface EndedAutoRunMoment {
   sessionId: string | null;
   /** The run's own row, read for autoRunEnd; all null once that row is gone. */
   sessionStatus: RunStatus | null;
-  releaseCause: string | null;
+  /** The release column and the kind: whether, with no end reason, the release finished the work (autoRunEnd). */
+  finishedAt: Date | null;
+  sessionKind: string | null;
   endReason: string | null;
   completedAt: Date | null;
   archivedAt: Date | null;
@@ -13092,8 +13093,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         by: ['taskId'],
         where: {
           taskId: { in: ids },
-          // Released by a failure: the status FAILED, which session_release_failure_chk holds to the cause.
-          releaseCause: failedReleaseFilter(),
+          // Released by a failure (common/session-release.ts).
+          AND: [releaseWasFailureFilter()],
           // A run that failed with no error text matches no usage-limit marker, so it is an
           // ordinary failure and counts. Said explicitly: the runner's /finalize omits `error` when
           // its engine died without a message, and a negated match alone is not true of a NULL.
@@ -13129,7 +13130,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           where: {
             taskId: { in: ids },
             ...releasedFilter(),
-            releaseCause: { notIn: [...FAILURE_RELEASE_CAUSES, ...WORK_FINISHED_RELEASE_CAUSES] },
+            NOT: [releaseWasFailureFilter(), releaseFinishedTheWorkFilter()],
             endReason: null,
             completedAt: null,
             archivedAt: null,
@@ -13160,7 +13161,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         by: ['taskId'],
         where: {
           taskId: { in: blindIds },
-          releaseCause: failedReleaseFilter(),
+          AND: [releaseWasFailureFilter()],
           ...usageLimitIs(false),
         },
         _max: { createdAt: true },
@@ -13195,7 +13196,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       SELECT t.id, t.owner_id AS "ownerId", t.assignee_id AS "workspaceId",
              a.runner_id AS "runnerId", current_moment.epoch AS "dispatchEpoch",
              receipt.result->>'sessionId' AS "sessionId", run.status AS "sessionStatus",
-             run.release_cause AS "releaseCause", run.end_reason AS "endReason", run.completed_at AS "completedAt",
+             run.finished_at AS "finishedAt", run.kind AS "sessionKind", run.end_reason AS "endReason",
+             run.completed_at AS "completedAt",
              run.archived_at AS "archivedAt", run.deleted_at AS "deletedAt",
              run.retry_at AS "retryAt", t.engine AS "taskEngine", t.provider AS "taskProvider",
              ${modelRoutingEnabledSql('t.owner_id')} AS "modelRouting"

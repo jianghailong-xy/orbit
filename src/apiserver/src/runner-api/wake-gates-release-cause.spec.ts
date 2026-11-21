@@ -11,7 +11,8 @@ import {
 } from '@orbit/shared';
 import { RunStatus } from '@prisma/client';
 
-import { FAILURE_RELEASE_CAUSES, isHeld, SESSION_RELEASE_CAUSES } from '../common/session-release';
+import { isHeld, SESSION_RELEASE_CAUSES } from '../common/session-release';
+import { CAUSE_READING } from '../common/session-release-shapes.fixture';
 import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
 import { conversationIsDown, sessionHasEnded as projectSessionHasEnded } from '../projects/project-open-item';
 import { RETRY_CLAIM_WINDOW_MS } from '../sessions/session-request';
@@ -37,7 +38,7 @@ const STATUSES = ['PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED', 'SUCCEE
 const END_REASONS = [null, 'ended', 'task_done', 'task_cancelled', 'completed', 'cancelled', 'idle'] as const;
 const FILINGS = ['open', 'completed', 'archived', 'trash'] as const;
 const RETRIES = ['none', 'armed', 'claimed', 'claim lapsed'] as const;
-const FAILED_CAUSES: readonly string[] = FAILURE_RELEASE_CAUSES;
+const FAILED_CAUSES: readonly string[] = CAUSE_READING.failureCauses;
 const OTHER_CAUSES = SESSION_RELEASE_CAUSES.filter((cause) => !FAILED_CAUSES.includes(cause));
 
 interface Row {
@@ -45,6 +46,7 @@ interface Row {
   finishedAt: Date | null;
   releaseCause: string | null;
   endReason: string | null;
+  lastTurnOutcome: string | null;
   completedAt: Date | null;
   archivedAt: Date | null;
   deletedAt: Date | null;
@@ -66,6 +68,11 @@ function rowOf(status: string, releaseCause: string | null, endReason: string | 
     finishedAt: releaseCause === null ? null : new Date(NOW.getTime() - 60_000),
     releaseCause,
     endReason,
+    // As the writers record it (design §12.1, removal step R2): FAILED on the turn that carries a failure, CANCELLED on
+    // the one an end nobody honoured cut off, nothing for an import; an answered turn before any other release.
+    lastTurnOutcome: releaseCause === 'import_failed' ? null
+      : releaseCause === 'end_not_honored' ? 'CANCELLED'
+        : CAUSE_READING.failed(releaseCause) ? 'FAILED' : 'ANSWERED',
     completedAt: filing === 'completed' ? NOW : null,
     archivedAt: filing === 'archived' ? NOW : null,
     deletedAt: filing === 'trash' ? NOW : null,
@@ -157,7 +164,12 @@ test('every gate answers from the release column what it answered from the statu
                 before = gate.before(row);
                 const after = gate.after(row);
                 combinations += 1;
-                assert.equal(after, before, `${gate.name}: ${status}/${cause}/end ${endReason}/cancel ${cancelled}/${filing}/retry ${retry}`);
+                // W7 (design §12.3, removal step R4): a release with an end asked for is a stop, not a failure, so the
+                // scheduled wake-up ends it instead of reviving it. Before, read off the status, it was FAILED or
+                // FAILED_RECOVERING.
+                const expected = gate.name.startsWith('tickStanding') && status === 'FAILED' && endReason !== null
+                  && filing === 'open' ? 'ENDED' : before;
+                assert.equal(after, expected, `${gate.name}: ${status}/${cause}/end ${endReason}/cancel ${cancelled}/${filing}/retry ${retry}`);
                 verdicts.add(after);
               }
               // Whatever the release cause, one verdict: the cause only separates a failure from the rest, and that is the status.
@@ -193,16 +205,17 @@ test('named cases: a FAILED session with a retry armed, and a session a person e
   assert.equal(tickStanding(ended, NOW), 'ENDED');
 });
 
-test('rows 1262 left FAILED with a clean-end cause read as ended, not failed', () => {
+test('rows 1262 left FAILED with a clean-end cause and no end reason read as failed again, as their status says', () => {
   // No backfill rewrites these causes: 1405, which was to, was removed on 2026-11-21 before it was deployed (design
-  // §12 decision D9, removal step R1), and the readers step (R4) moves this reading off the cause. Printed so the
-  // difference is on record.
+  // §12 decision D9, removal step R1). While the readers read the cause they answered ENDED and not down for these rows
+  // (85 in production); the readers step (R4) reads the end reason, the turn outcome (1202 wrote FAILED on every FAILED
+  // row) and the status bridge, and answers what the status, and production today, answer.
   for (const cause of ['engine_exited', 'completed', 'cancelled']) {
-    const row = rowOf('FAILED', cause, null, true, 'open', 'none');
+    const row = { ...rowOf('FAILED', cause, null, true, 'open', 'none'), lastTurnOutcome: 'FAILED' };
     assert.equal(oldTickStanding(row, NOW), 'FAILED', cause);
-    assert.equal(tickStanding(row, NOW), 'ENDED', cause);
+    assert.equal(tickStanding(row, NOW), 'FAILED', cause);
     assert.equal(oldConversationIsDown(row), true, cause);
-    assert.equal(conversationIsDown(row), false, cause);
+    assert.equal(conversationIsDown(row), true, cause);
     // The wake rule and the credential gates do not read the cause: unchanged.
     assert.equal(sessionHasEnded(row), oldSessionHasEnded(row), cause);
     assert.equal(newGatewayOpen(row), oldGatewayOpen(row), cause);

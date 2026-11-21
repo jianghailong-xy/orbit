@@ -172,7 +172,7 @@ test('runnable filter is applied before pagination with the same rules as the Ru
     );
     assert.match(
       sql,
-      /AND EXISTS \(\s*SELECT 1 FROM "session" passed_run[\s\S]*passed_run\."release_cause" = 'task_done'[\s\S]*passed_run\."end_reason" = 'task_done'/,
+      /AND EXISTS \(\s*SELECT 1 FROM "session" passed_run[\s\S]*passed_run\."finished_at" IS NOT NULL[\s\S]*passed_run\."end_reason" = 'task_done'/,
     );
     assert.match(sql, /t\.completion_policy = 'MANUAL'::task_completion_policy/);
     assert.match(sql, /aggregate_child\.parent_task_id = t\.id/);

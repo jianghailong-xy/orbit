@@ -94,7 +94,13 @@ import {
   runSessionScheduleId,
   type ScheduleActor,
 } from './schedules.service';
-import { failedReleaseFilter, heldFilter, isFailedRelease, isReleased, isWorkFinishedRelease } from '../common/session-release';
+import {
+  heldFilter,
+  isReleased,
+  releaseFinishedTheWork,
+  releaseWasFailure,
+  releaseWasFailureFilter,
+} from '../common/session-release';
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -210,7 +216,7 @@ const LIVE_SESSION: Prisma.SessionWhereInput = {
   cancelRequestedAt: null,
   OR: [
     heldFilter(),
-    { releaseCause: failedReleaseFilter(), retryAt: { not: null } },
+    { AND: [releaseWasFailureFilter(), { retryAt: { not: null } }] },
   ],
 };
 
@@ -622,7 +628,8 @@ export class ScheduleRunsService {
       ? await this.prisma.session.findUnique({
           where: { id: sessionId },
           select: {
-            status: true, finishedAt: true, releaseCause: true, completedAt: true, archivedAt: true, deletedAt: true,
+            status: true, finishedAt: true, endReason: true, lastTurnOutcome: true, completedAt: true, archivedAt: true,
+            deletedAt: true,
             cancelRequestedAt: true, error: true, runningBgJobs: true,
           },
         })
@@ -641,14 +648,14 @@ export class ScheduleRunsService {
     const deliveredAt = opening?.deliveredAt ?? null;
     const delivered = deliveredAt !== null;
 
-    // Released by a failure (the status FAILED, which session_release_failure_chk holds to the cause).
-    if (isFailedRelease(session.releaseCause)) {
+    // Released by a failure (common/session-release.ts). An end that was asked for and not honoured is a stop, below.
+    if (releaseWasFailure(session)) {
       if (delivered) return this.fail(runId, 'ENGINE_CRASHED', { sessionId });
       return this.fail(runId, isUsageLimitErrorText(session.error) ? 'QUOTA' : 'ENGINE_CRASHED_BEFORE_START', { sessionId });
     }
     const ended = session.deletedAt !== null || session.completedAt !== null || session.archivedAt !== null
       || session.cancelRequestedAt !== null
-      // Released any other way (SUCCEEDED or CANCELLED): the failures returned above.
+      // Released any other way (a stop, or the work finished): the failures returned above.
       || isReleased(session);
     // Ended before its first turn reached the engine: the run never started (a retire that committed before its
     // re-queue did, among others), so it is retried like one that met no runner.
@@ -722,10 +729,11 @@ export class ScheduleRunsService {
 
   private async landRun(run: ScheduleRun): Promise<void> {
     const session = run.sessionId ? await this.prisma.session.findUnique({ where: { id: run.sessionId } }) : null;
-    // Released for anything but its work finishing (decision D5: the release cause, never the terminal status) is a run
-    // that ended unsuccessfully, an engine that exited by itself included; INTERRUPTED is a held run stopped mid-turn.
+    // Released for anything but its work finishing (decision D5, design §12.3: the end reason, never the terminal
+    // status) is a run that ended unsuccessfully, an engine that exited by itself included; INTERRUPTED is a held run
+    // stopped mid-turn.
     const released = session != null && isReleased(session);
-    if (!session || session.deletedAt || (released && !isWorkFinishedRelease(session.releaseCause))
+    if (!session || session.deletedAt || (released && !releaseFinishedTheWork(session))
         || session.status === RunStatus.INTERRUPTED || session.cancelRequestedAt) {
       await this.settleLanding(run.id, 'FAILED', null, 'The run session ended unsuccessfully; nothing was landed.');
       return;

@@ -85,7 +85,7 @@ prerequisiteIds: string[],
   const sessions = await prisma.session.findMany({
     where: { taskId: { in: checkIds } },
     select: {
-      taskId: true, status: true, releaseCause: true, endReason: true,
+      taskId: true, status: true, finishedAt: true, endReason: true,
       completedAt: true, archivedAt: true, deletedAt: true,
     },
   });
@@ -94,7 +94,7 @@ prerequisiteIds: string[],
     if (!session.taskId) continue;
     const fact: VerificationRunFact = {
       runStatus: session.status,
-      releaseCause: session.releaseCause,
+      finishedAt: session.finishedAt,
       endReason: session.endReason,
       deletedAt: session.deletedAt,
       completionAt: session.completedAt ?? session.archivedAt,

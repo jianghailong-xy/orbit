@@ -1,4 +1,4 @@
-import { isWorkFinishedRelease } from '../common/session-release';
+import { isReleased, releaseFinishedTheWork } from '../common/session-release';
 
 // One retry policy, for the task sweep and everything that schedules off it
 // (`TasksService.autoRunHoldOff`, `quotaGate` and the `rearmEndedAutoRuns` loop that drives them).
@@ -42,36 +42,40 @@ export function retryBackoffUntil(
  *    reason and says the same through its filing timestamps. A run whose row is gone was purged
  *    from Trash, the one path that deletes a Session.
  *  - `UNREQUESTED`: released with none of those, and not for the work being finished: a crash, a
- *    failed turn, the reaper giving up on an offline runner (a failure cause), an engine that exited
- *    without being asked (`engine_exited`, whatever word the runner reported with it), a cancel
- *    with no reason. Retried under the backoff and the failure limit. `cancel_requested_at` is
- *    deliberately not read: the reaper and a failed turn set it too, so it says a teardown was
- *    wanted, not who wanted it.
- *  - `FINISHED`: released because the work finished (isWorkFinishedRelease), without an end reason;
- *    or still held, which the retry policy's candidates never are. Not a retry's to repeat.
+ *    failed turn, the reaper giving up on an offline runner (a failure), an engine that exited
+ *    without being asked (whatever word the runner reported with it), a cancel with no reason.
+ *    Retried under the backoff and the failure limit. `cancel_requested_at` is deliberately not
+ *    read: the reaper and a failed turn set it too, so it says a teardown was wanted, not who
+ *    wanted it.
+ *  - `FINISHED`: released because the work finished (releaseFinishedTheWork: with no end reason, a
+ *    landing settled), or still held, which the retry policy's candidates never are. Not a retry's to
+ *    repeat.
  *
- * What became of the work is read off the release cause (decision D5 of
- * docs/session-three-state-design.md), never off the terminal status value. Until 2026-11-21 a
- * runner-reported SUCCEEDED with no end requested (`engine_exited`) read FINISHED here.
+ * What became of the work is read off the release, its end reason and the session's kind (decision
+ * D5, design §12.3 of docs/session-three-state-design.md), never off the terminal status value. Until
+ * 2026-11-21 a runner-reported SUCCEEDED with no end requested read FINISHED here.
  */
 export type AutoRunEnd = 'REQUESTED' | 'UNREQUESTED' | 'FINISHED';
 
 export function autoRunEnd(run: {
   /** Only whether the run's row is still there: null once it was purged. */
   sessionStatus: string | null;
-  releaseCause: string | null;
+  finishedAt: Date | null;
+  /** The session's kind; null, with every column of the row, once it was purged. */
+  sessionKind: string | null;
   endReason: string | null;
   completedAt: Date | null;
   archivedAt: Date | null;
   deletedAt: Date | null;
 }): AutoRunEnd {
-  if (run.sessionStatus == null) return 'REQUESTED';
+  const sessionKind = run.sessionKind;
+  if (run.sessionStatus == null || sessionKind == null) return 'REQUESTED';
   if (
     run.endReason != null || run.completedAt != null || run.archivedAt != null
     || run.deletedAt != null
   ) {
     return 'REQUESTED';
   }
-  if (run.releaseCause == null || isWorkFinishedRelease(run.releaseCause)) return 'FINISHED';
+  if (!isReleased(run) || releaseFinishedTheWork({ ...run, sessionKind })) return 'FINISHED';
   return 'UNREQUESTED';
 }

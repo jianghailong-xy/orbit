@@ -22,12 +22,15 @@
  *       release_cause but its value CHECK, and each violating write is refused
  *  (11) removed on 2026-11-21 with migrations 1405 to 1407 (design §12 decision D9, removal step R1): the session
  *       keeps no failure fact, so nothing holds release_cause to the status any more
- *  (12) migrations 1421 to 1425 (plan step 4.4), re-applied by the real `prisma migrate deploy` on a database that
- *       holds rows: they write none; then a write of the release fact alone, `finished_at` and `release_cause` with
- *       the status word left as it was, fires every guard and ended-trigger that used to read the status, and each
- *       decides from the release fact
+ *  (12) migrations 1421 to 1425 (plan step 4.4; 1425 restated on the turn outcome and the end reason by removal step
+ *       R4), re-applied by the real `prisma migrate deploy` on a database that holds rows: they write none; the three
+ *       ended-triggers fire on every release shape of design §12.2 where their old status clauses did, but for the two
+ *       named differences, and each WHEN clause is the release module's failure question; then a write of the release
+ *       fact alone, with the status word left as it was, fires every guard and ended-trigger that used to read the
+ *       status, and each decides from the release fact
  *
- * Every writer's row in (1)-(8) is also asserted to read as a failure (isFailedRelease) exactly when it is FAILED.
+ * Every writer's row in (1)-(8) is also asserted to read as released by a failure (releaseWasFailure) exactly when it
+ * is FAILED with no end reason: an end somebody asked for and the runner never honoured is a stop (design §12.3, W7).
  * The other three writers are asserted where they are already driven: turn-complete's failed turn in
  * runner-api/turn-complete-outcome.pg.spec.ts (2), the landing container in projects/landing-session.pg.spec.ts
  * (settles) and sessions/engine-session-guard.pg.spec.ts (inserted settled), the runner's source refusal in
@@ -40,6 +43,7 @@
  */
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -57,7 +61,8 @@ import { QueueService } from '../queue/queue.service';
 import type { RealtimeService } from '../realtime/realtime.service';
 import { ReaperService } from '../realtime/reaper.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
-import { FAILURE_RELEASE_CAUSES, isFailedRelease } from '../common/session-release';
+import { releaseWasFailure, releaseWasFailureSql } from '../common/session-release';
+import { RELEASE_SHAPES } from '../common/session-release-shapes.fixture';
 import { SessionsService } from './sessions.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -161,11 +166,13 @@ interface Released {
   finished_at: Date | null;
   release_cause: string | null;
   end_reason: string | null;
+  last_turn_outcome: string | null;
 }
 
 async function released(sql: Client, id: string): Promise<Released> {
   const row = (await sql.query(
-    `SELECT status::text AS status, finished_at, release_cause, end_reason FROM "session" WHERE id = $1::uuid`,
+    `SELECT status::text AS status, finished_at, release_cause, end_reason, last_turn_outcome FROM "session"
+      WHERE id = $1::uuid`,
     [id],
   )).rows[0] as Released;
   console.log(`# ${id} ${JSON.stringify(row)}`);
@@ -176,8 +183,14 @@ function assertReleased(row: Released, status: string, cause: string): void {
   assert.equal(row.status, status);
   assert.ok(row.finished_at instanceof Date, `${status}/${cause}: the release column is set`);
   assert.equal(row.release_cause, cause);
-  // The failure reading (common/session-release.ts): the release fact alone says whether the run failed.
-  assert.equal(isFailedRelease(row.release_cause), row.status === 'FAILED', `${status}/${cause}: read as a failure exactly when FAILED`);
+  // The failure question (common/session-release.ts, design §12.3): released by a failure exactly when FAILED with no
+  // end reason. W7 (removal step R4): FAILED with an end recorded, one somebody asked for and the runner never
+  // honoured, is a stop; while the cause was read, it was a failure.
+  const failed = releaseWasFailure({
+    finishedAt: row.finished_at, endReason: row.end_reason, lastTurnOutcome: row.last_turn_outcome, status: row.status,
+  });
+  assert.equal(failed, row.status === 'FAILED' && row.end_reason == null,
+    `${status}/${cause}: read as a failure exactly when FAILED with no end reason`);
 }
 
 /**
@@ -532,14 +545,15 @@ test('every release writes the release column and its cause, and the revive clea
 });
 
 /**
- * (12) Plan step 4.4: the database guards read the release fact. Each case writes `finished_at` and `release_cause`
- * ALONE, naming no status, so the status word keeps the value it had: a guard that still decided from the status
- * would answer the old way, and a trigger whose column list named only `status` would not fire at all.
+ * (12) Plan step 4.4: the database guards read the release fact. Each case writes `finished_at` ALONE, naming no
+ * status, so the status word keeps the value it had: a guard that still decided from the status would answer the old
+ * way, and a trigger whose column list named only `status` would not fire at all.
  *
- * First, with session_release_fact_chk on, the three ended-triggers are driven through every kind of release that
- * reaches them, each written as the writers write it (a failure cause exactly with FAILED), and each fires exactly
- * where its old status clause would have; their failure-cause lists are read back from the catalog and compared with
- * FAILURE_RELEASE_CAUSES. Then session_release_fact_chk is dropped, in this disposable database, because it refuses
+ * First, with session_release_fact_chk on, the three ended-triggers 1425 installs (restated on the turn outcome and the
+ * end reason by removal step R4, design §12.3) are driven through every release shape of design §12.2, each written as
+ * its writer writes it, with and without a retry armed, and each fires where its old status clause would have but for
+ * the two differences design §12.3 names; each WHEN clause is read back from the migration and held to the release
+ * module's failure question, releaseWasFailureSql('NEW'). Then session_release_fact_chk is dropped, in this disposable database, because it refuses
  * exactly the release-fact-only write (terminal-ness and `finished_at` must move together). Today every writer moves
  * them in one statement, so in production the spellings agree row for row; what the rest shows is which of them each
  * object reads. It runs after (1)-(10), which need the CHECK.
@@ -644,10 +658,20 @@ test('(12) the release fact alone fires every guard and ended-trigger (plan step
         'task_owner_confirmation_review_reviewer_ended']],
     )).rows as Array<{ tgname: string; def: string }>;
     assert.equal(triggers.length, 6);
+    const ENDED = ['session_request_recipient_ended', 'session_request_asker_stopped', 'task_owner_confirmation_review_reviewer_ended'];
     for (const { tgname, def } of triggers) {
       const columns = /UPDATE OF (.*?) ON public\.session/.exec(def)?.[1] ?? '';
       assert.match(columns, /\bfinished_at\b/, `${tgname}: finished_at is in its column list (${columns})`);
-      assert.doesNotMatch(def, /'(SUCCEEDED|FAILED|CANCELLED)'::run_status/, `${tgname}: no terminal status`);
+      if (ENDED.includes(tgname)) {
+        // R4: the ended-triggers read the turn outcome, list it, and name no release cause. Their one terminal status is
+        // the bridge arm of the failure question (FAILED_STATUS_BRIDGE), which removal step R7 re-creates them without.
+        assert.match(columns, /\blast_turn_outcome\b/, `${tgname}: last_turn_outcome is in its column list (${columns})`);
+        assert.doesNotMatch(def, /release_cause/, `${tgname}: reads no release cause`);
+        assert.deepEqual([...def.matchAll(/'(SUCCEEDED|FAILED|CANCELLED)'::run_status/g)].map((m) => m[1]), ['FAILED'],
+          `${tgname}: one terminal status, the bridge's`);
+      } else {
+        assert.doesNotMatch(def, /'(SUCCEEDED|FAILED|CANCELLED)'::run_status/, `${tgname}: no terminal status`);
+      }
     }
     const bodies = (await sql.query(
       `SELECT proname, pg_get_functiondef(p.oid) AS def FROM pg_proc p WHERE proname = ANY($1) ORDER BY proname`,
@@ -662,62 +686,85 @@ test('(12) the release fact alone fires every guard and ended-trigger (plan step
     }
   });
 
-  await t.test('the ended-triggers fire exactly where their old status clauses did, for every kind of release', async () => {
+  await t.test('the ended-triggers fire on every release shape where their old status clauses did, but for W7 and the residual shape', async () => {
     const w = await world(db, 'g-ended-table');
     const asker = await session(db, w);
     const later = new Date(Date.now() + 3_600_000);
     interface Row {
       status: string; end_reason: string | null; retry_at: Date | null; retry_attempts: number;
       retry_claimed_at: Date | null; deleted_at: Date | null; completed_at: Date | null; archived_at: Date | null;
+      finished_at: Date | null; last_turn_outcome: string | null;
     }
     const row = async (id: string) => (await sql.query(
       `SELECT status::text AS status, end_reason, retry_at, retry_attempts, retry_claimed_at, deleted_at, completed_at,
-              archived_at FROM "session" WHERE "id" = $1::uuid`, [id])).rows[0] as Row;
+              archived_at, finished_at, last_turn_outcome FROM "session" WHERE "id" = $1::uuid`, [id])).rows[0] as Row;
     // The clauses 1425 replaced, as 0350, 0366 and 0507 wrote them, over the statement's OLD and NEW rows. A trigger
-    // also fires only if the statement names a column of its OLD list (each new list is that list plus finished_at).
+    // also fires only if the statement names a column of its list.
     const filed = (n: Row) => n.deleted_at != null || n.completed_at != null || n.archived_at != null;
     const ended = (n: Row) => (n.end_reason ?? '') !== '';
     const noRetry = (o: Row, n: Row) => n.retry_at == null && !(o.retry_at != null && n.retry_attempts > o.retry_attempts);
+    const parkedAsker = (o: Row, n: Row) => n.status === 'AWAITING_INPUT' && n.retry_at == null
+      && ((o.retry_at != null && n.retry_attempts <= o.retry_attempts) || n.retry_attempts < o.retry_attempts
+          || (o.retry_claimed_at != null && n.retry_claimed_at == null));
     const oldRecipient = (o: Row, n: Row) => filed(n) || ['SUCCEEDED', 'CANCELLED'].includes(n.status)
       || (n.status === 'FAILED' && noRetry(o, n)) || (n.status === 'INTERRUPTED' && ended(n));
-    const oldAsker = (o: Row, n: Row) => oldRecipient(o, n)
-      || (n.status === 'AWAITING_INPUT' && n.retry_at == null
-          && ((o.retry_at != null && n.retry_attempts <= o.retry_attempts) || n.retry_attempts < o.retry_attempts
-              || (o.retry_claimed_at != null && n.retry_claimed_at == null)));
+    const oldAsker = (o: Row, n: Row) => oldRecipient(o, n) || parkedAsker(o, n);
     const oldReviewer = (_o: Row, n: Row) => filed(n) || ['SUCCEEDED', 'CANCELLED'].includes(n.status)
       || (['FAILED', 'INTERRUPTED'].includes(n.status) && ended(n));
-    const LISTS = {
+    // The clauses 1425 states now: released, and not by a failure (the release module's question), or no retry armed.
+    const failed = (n: Row) => releaseWasFailure({
+      finishedAt: n.finished_at, endReason: n.end_reason, lastTurnOutcome: n.last_turn_outcome, status: n.status,
+    });
+    const newRecipient = (o: Row, n: Row) => filed(n) || (n.finished_at != null && (!failed(n) || noRetry(o, n)))
+      || (n.status === 'INTERRUPTED' && ended(n));
+    const newAsker = (o: Row, n: Row) => newRecipient(o, n) || parkedAsker(o, n);
+    const newReviewer = (_o: Row, n: Row) => filed(n) || (n.finished_at != null && !failed(n))
+      || (n.status === 'INTERRUPTED' && ended(n));
+    const OLD_LISTS = {
       recipient: ['status', 'end_reason', 'retry_at', 'retry_attempts', 'completed_at', 'archived_at', 'deleted_at'],
       asker: ['status', 'end_reason', 'retry_at', 'retry_attempts', 'retry_claimed_at', 'completed_at', 'archived_at', 'deleted_at'],
       reviewer: ['status', 'end_reason', 'completed_at', 'archived_at', 'deleted_at'],
     };
-    const ending = { cancelRequestedAt: new Date(), endReason: 'ended' };
-    const cases: Array<{ name: string; start: Record<string, unknown>; set: Record<string, string> }> = [
-      { name: 'SUCCEEDED, engine_exited', start: {},
-        set: { status: `'SUCCEEDED'`, finished_at: 'now()', release_cause: `'engine_exited'` } },
-      { name: '(a) a quota park with its retry armed is ended: CANCELLED, retry_at still set', start: {
-        status: RunStatus.AWAITING_INPUT, retryAt: later, ...ending },
+    const NEW_LISTS = {
+      recipient: [...OLD_LISTS.recipient, 'finished_at', 'last_turn_outcome'],
+      asker: [...OLD_LISTS.asker, 'finished_at', 'last_turn_outcome'],
+      reviewer: [...OLD_LISTS.reviewer, 'finished_at', 'last_turn_outcome'],
+    };
+    const quoted = (value: string | null) => (value === null ? 'NULL' : `'${value}'`);
+    interface Case { name: string; start: Record<string, unknown>; set: Record<string, string>; why?: string }
+    const cases: Case[] = [];
+    // Every release shape of design §12.2 (common/session-release-shapes.fixture.ts), released by one statement the
+    // way its writer releases it: from a held session (one an end was asked of when the shape keeps an end reason),
+    // the status, the release column, the cause and the turn outcome together, with and without a retry armed in
+    // the same write (as turn-complete and the reaper arm one). The clauses read no session kind, so every shape is
+    // driven as a conversation.
+    for (const shape of RELEASE_SHAPES.filter((candidate) => candidate.released)) {
+      for (const retry of [false, true]) {
+        cases.push({
+          name: `${shape.name}${retry ? ', retry armed' : ''}`,
+          start: shape.endReason ? { cancelRequestedAt: new Date(), endReason: shape.endReason } : {},
+          set: {
+            status: `'${shape.status}'`, finished_at: 'now()', release_cause: quoted(shape.releaseCause),
+            last_turn_outcome: quoted(shape.lastTurnOutcome), ...(retry ? { retry_at: `now() + interval '1 hour'` } : {}),
+          },
+          why: shape.failureChange,
+        });
+      }
+    }
+    // And the writes that move a released or a parked row without releasing it, as the table before R4 drove them.
+    cases.push(
+      { name: 'a quota park with its retry armed is ended: CANCELLED, retry_at still set',
+        start: { status: RunStatus.AWAITING_INPUT, retryAt: later, cancelRequestedAt: new Date(), endReason: 'ended' },
         set: { status: `'CANCELLED'`, finished_at: 'now()', release_cause: `'ended'` } },
-      { name: '(b) the engine failed: FAILED, engine_failed, no end_reason', start: {},
-        set: { status: `'FAILED'`, finished_at: 'now()', release_cause: `'engine_failed'` } },
-      { name: 'an end not honoured: FAILED, end_not_honored, end_reason set', start: { ...ending },
-        set: { status: `'FAILED'`, finished_at: 'now()', release_cause: `'end_not_honored'` } },
-      { name: 'a failed turn with a retry armed: FAILED, turn_failed, retry_at set', start: {},
-        set: { status: `'FAILED'`, finished_at: 'now()', release_cause: `'turn_failed'`, retry_at: `now() + interval '1 hour'` } },
-      { name: 'a failed turn, no retry: FAILED, turn_failed, retry_at clear', start: {},
-        set: { status: `'FAILED'`, finished_at: 'now()', release_cause: `'turn_failed'` } },
-      { name: 'a failed turn during an end: FAILED, turn_failed, end_reason set', start: { ...ending },
-        set: { status: `'FAILED'`, finished_at: 'now()', release_cause: `'turn_failed'` } },
       { name: 'the sweep takes an armed retry: FAILED stays, retry_at cleared, attempts up', start: {
-        status: RunStatus.FAILED, finishedAt: new Date(), releaseCause: 'turn_failed', retryAt: later, retryAttempts: 0 },
+        status: RunStatus.FAILED, finishedAt: new Date(), releaseCause: 'turn_failed', lastTurnOutcome: 'FAILED',
+        retryAt: later, retryAttempts: 0 },
         set: { retry_at: 'NULL', retry_attempts: '1', retry_claimed_at: 'now()' } },
-      { name: 'the runner was lost: FAILED, runner_lost', start: {},
-        set: { status: `'FAILED'`, finished_at: 'now()', release_cause: `'runner_lost'` } },
-      { name: 'the run never started: FAILED, setup_failed', start: {},
-        set: { status: `'FAILED'`, finished_at: 'now()', release_cause: `'setup_failed'` } },
-      { name: 'the import failed: FAILED, import_failed', start: {},
-        set: { status: `'FAILED'`, finished_at: 'now()', release_cause: `'import_failed'` } },
-    ];
+      { name: 'a parked session gives its claimed retry up: AWAITING_INPUT, the attempt handed back', start: {
+        status: RunStatus.AWAITING_INPUT, retryAttempts: 1, retryClaimedAt: new Date() },
+        set: { retry_attempts: '0', retry_claimed_at: 'NULL' } },
+    );
+    const differences: string[] = [];
     const seen = new Set<string>();
     for (const c of cases) {
       const id = await session(db, w, c.start);
@@ -729,10 +776,15 @@ test('(12) the release fact alone fires every guard and ended-trigger (plan step
       await sql.query(`UPDATE "session" SET ${assignments} WHERE "id" = $1::uuid`, [id]);
       const after = await row(id);
       const names = (list: string[]) => list.some((column) => column in c.set);
+      const old = {
+        recipient: names(OLD_LISTS.recipient) && oldRecipient(before, after),
+        asker: names(OLD_LISTS.asker) && oldAsker(before, after),
+        reviewer: names(OLD_LISTS.reviewer) && oldReviewer(before, after),
+      };
       const expected = {
-        recipient: names(LISTS.recipient) && oldRecipient(before, after),
-        asker: names(LISTS.asker) && oldAsker(before, after),
-        reviewer: names(LISTS.reviewer) && oldReviewer(before, after),
+        recipient: names(NEW_LISTS.recipient) && newRecipient(before, after),
+        asker: names(NEW_LISTS.asker) && newAsker(before, after),
+        reviewer: names(NEW_LISTS.reviewer) && newReviewer(before, after),
       };
       const observed = {
         recipient: (await request(open)).state === 'RECIPIENT_ENDED',
@@ -741,18 +793,47 @@ test('(12) the release fact alone fires every guard and ended-trigger (plan step
       };
       const word = (fired: boolean) => (fired ? 'fires' : 'waits');
       console.log(`# ${c.name} | recipient_ended ${word(observed.recipient)} | asker_stopped ${word(observed.asker)}`
-        + ` | reviewer_ended ${word(observed.reviewer)} | old clauses: ${word(expected.recipient)}, ${word(expected.asker)},`
-        + ` ${word(expected.reviewer)}`);
+        + ` | reviewer_ended ${word(observed.reviewer)} | old clauses: ${word(old.recipient)}, ${word(old.asker)},`
+        + ` ${word(old.reviewer)}${c.why ? ` | ${c.why}` : ''}`);
       assert.deepEqual(observed, expected, c.name);
-      for (const [trigger, fired] of Object.entries(observed)) seen.add(`${trigger}:${fired}`);
+      for (const trigger of ['recipient', 'asker', 'reviewer'] as const) {
+        seen.add(`${trigger}:${observed[trigger]}`);
+        if (observed[trigger] !== old[trigger]) differences.push(`${c.name}: ${trigger} ${word(observed[trigger])}`);
+      }
     }
+    // Where the answer is not the old clauses', it is one of the two differences design §12.3 names. W7's rule: a
+    // release with an end asked for is a stop, so with a retry armed recipient_ended and asker_stopped no longer wait
+    // for that retry. The residual shape: a failed turn's copy kept through a release that is no failure reads as a
+    // failure, so the three wait where the old clauses, reading SUCCEEDED or CANCELLED, fired.
+    const named = [
+      ...RELEASE_SHAPES.filter((shape) => shape.released && shape.failureChange === 'END_ASKED')
+        .flatMap((shape) => [`${shape.name}, retry armed: recipient fires`, `${shape.name}, retry armed: asker fires`]),
+      ...RELEASE_SHAPES.filter((shape) => shape.released && shape.failureChange === 'RESIDUAL')
+        .flatMap((shape) => [`${shape.name}: reviewer waits`, `${shape.name}, retry armed: recipient waits`,
+          `${shape.name}, retry armed: asker waits`, `${shape.name}, retry armed: reviewer waits`]),
+    ];
+    console.log(`# differences from the old clauses: ${JSON.stringify(differences)}`);
+    assert.deepEqual(differences.sort(), named.sort());
     // The table is not one-sided: each trigger both fires and waits somewhere in it.
     for (const trigger of ['recipient', 'asker', 'reviewer']) {
       assert.ok(seen.has(`${trigger}:true`) && seen.has(`${trigger}:false`), `${trigger} both fires and waits`);
     }
   });
 
-  await t.test('each ended-trigger names exactly FAILURE_RELEASE_CAUSES, and no terminal status', async () => {
+  await t.test('each ended-trigger asks the release module\'s failure question, whole, and reads no release cause', async () => {
+    // The file's three WHEN clauses each carry releaseWasFailureSql('NEW'), character for character: released, no end
+    // reason, then the turn outcome and the status bridge (removal step R7 re-creates them without the bridge).
+    const file = readFileSync(join(__dirname, '..', '..', 'prisma', 'migrations', '1425_ended_triggers_read_release',
+      'migration.sql'), 'utf8');
+    const code = file.split('\n').filter((line) => !line.trimStart().startsWith('--')).join('\n');
+    const fragment = releaseWasFailureSql('NEW').sql;
+    const blocks = code.split('CREATE OR REPLACE TRIGGER').slice(1);
+    assert.equal(blocks.length, 3);
+    for (const block of blocks) {
+      const name = /^\s*"([a-z_]+)"/.exec(block)?.[1];
+      assert.equal(block.split(fragment).length - 1, 1, `${name}: its WHEN clause holds the failure question once`);
+      assert.doesNotMatch(block, /release_cause/, `${name}: no release cause`);
+    }
     const defs = (await sql.query(
       `SELECT tgname, pg_get_triggerdef(oid) AS def FROM pg_trigger
         WHERE tgrelid = 'session'::regclass
@@ -762,11 +843,9 @@ test('(12) the release fact alone fires every guard and ended-trigger (plan step
     )).rows as Array<{ tgname: string; def: string }>;
     assert.equal(defs.length, 3);
     for (const { tgname, def } of defs) {
-      const lists = [...def.matchAll(/release_cause <> ALL \(ARRAY\[([^\]]*)\]\)/g)].map((m) =>
-        [...m[1].matchAll(/'([a-z_]+)'::text/g)].map((item) => item[1]).sort());
-      console.log(`# ${tgname}: ${JSON.stringify(lists)}`);
-      assert.deepEqual(lists, [[...FAILURE_RELEASE_CAUSES].sort()], `${tgname}: one list, equal to FAILURE_RELEASE_CAUSES`);
-      assert.doesNotMatch(def, /'(SUCCEEDED|FAILED|CANCELLED)'::run_status/, `${tgname}: no terminal status`);
+      console.log(`# ${tgname}: ${def}`);
+      assert.doesNotMatch(def, /release_cause/, `${tgname}: reads no release cause`);
+      assert.match(def, /last_turn_outcome IS NOT DISTINCT FROM 'FAILED'::text/, `${tgname}: reads the turn outcome`);
     }
   });
 
@@ -904,12 +983,14 @@ test('(12) the release fact alone fires every guard and ended-trigger (plan step
     assert.equal(closed.state, 'RECIPIENT_ENDED');
     assert.equal(closed.close_reason, 'RUNNING', 'close_reason is still STATUS[:end_reason], unchanged');
 
-    // A release with a failure cause and a retry armed is not an end. The status word is still RUNNING, so it is
-    // the cause the clause read.
+    // A release by a failure with a retry armed is not an end. The status word is still RUNNING, so it is the turn
+    // outcome the clause read (removal step R4: the failure is the turn's).
     const retrying = await session(db, w, { retryAt: new Date(Date.now() + 60_000) });
     const waiting = await ask(w, asker, retrying);
-    await releaseAlone(retrying, 'turn_failed');
-    assert.equal((await request(waiting)).state, 'OPEN', 'a failure cause with a retry armed: still waiting for the retry');
+    await sql.query(
+      `UPDATE "session" SET "finished_at" = now(), "release_cause" = 'turn_failed', "last_turn_outcome" = 'FAILED'
+        WHERE "id" = $1::uuid`, [retrying]);
+    assert.equal((await request(waiting)).state, 'OPEN', 'a failed turn with a retry armed: still waiting for the retry');
 
     // session_request_asker_stopped (0366): a reply held for the asker is released as a comment.
     const stopping = await session(db, w);

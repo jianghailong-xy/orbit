@@ -14,7 +14,7 @@ import {
 import { attribute, type RequestForBlock } from './session-message';
 import { readRunQuestionCard, RUN_QUESTION_PREFIX } from './run-question';
 import { SESSION_REPLY_TURN_KEY_PREFIX } from './watch-turn-key';
-import { isFailedRelease, isReleased } from '../common/session-release';
+import { isReleased, releaseWasFailure, type ReleaseFailureFacts } from '../common/session-release';
 
 /**
  * One Orbit session asking another for a reply, and the one outcome every such request comes to
@@ -1035,9 +1035,7 @@ export const RETRY_CLAIM_WINDOW_MS = 10 * 60_000;
  * outcome as well: told twice, and once wrongly.
  */
 export function awaitsAutoRetry(
-  session: {
-    status: string;
-    releaseCause: string | null;
+  session: ReleaseFailureFacts & {
     retryAt: Date | null;
     retryClaimedAt: Date | null;
     cancelRequestedAt: Date | null;
@@ -1048,8 +1046,8 @@ export function awaitsAutoRetry(
   now: Date = new Date(),
 ): boolean {
   if (session.deletedAt || session.completedAt || session.archivedAt) return false;
-  // Parked: released by a failure (FAILED, which session_release_failure_chk holds to the cause), or idle.
-  const parked = isFailedRelease(session.releaseCause)
+  // Parked: released by a failure (common/session-release.ts), or idle.
+  const parked = releaseWasFailure(session)
     || (session.status === 'AWAITING_INPUT' && session.cancelRequestedAt == null);
   if (!parked) return false;
   if (session.retryAt != null) return true;

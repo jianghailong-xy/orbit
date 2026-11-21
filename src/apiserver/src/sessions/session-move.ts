@@ -12,7 +12,7 @@ import { sanitizeRunnerEngines } from '../common/runner-engines';
 import { reportedRunAccount } from '../providers/plan-usage-accounts';
 import { makeBranchName } from './naming';
 import { branchName } from '../projects/project-criterion-landing';
-import { isFailedRelease, isReleased } from '../common/session-release';
+import { isReleased, releaseWasFailure } from '../common/session-release';
 
 /** What a runner declares when it can take in a session moved from another workspace: it checks an
  *  old checkout's repository and branch before reusing it, and carries a Claude conversation over to
@@ -54,8 +54,10 @@ export interface SessionMoveFacts {
   status: RunStatus;
   /** The release column (common/session-release.ts): set on an ended session. */
   finishedAt: Date | null;
-  /** Why it was released (common/session-release.ts); null or absent while held. */
-  releaseCause?: string | null;
+  /** Why an end was asked for, and the last turn's outcome: with the status and the release column, what "released by a
+   *  failure" reads (common/session-release.ts). Null or absent while held. */
+  endReason?: string | null;
+  lastTurnOutcome?: string | null;
   deletedAt: Date | null;
   completedAt: Date | null;
   importSourceCwd: string | null;
@@ -145,7 +147,8 @@ export function sessionMoveVerdict(s: SessionMoveFacts): SessionMoveVerdict {
   const retryArmed =
     s.retryAt != null &&
     s.completedAt == null &&
-    ((s.status === RunStatus.AWAITING_INPUT && s.cancelRequestedAt == null) || isFailedRelease(s.releaseCause));
+    ((s.status === RunStatus.AWAITING_INPUT && s.cancelRequestedAt == null)
+      || releaseWasFailure({ ...s, endReason: s.endReason ?? null, lastTurnOutcome: s.lastTurnOutcome ?? null }));
   if (retryArmed) return refuse(MOVE_REFUSAL.RETRY);
   return { reason: null, needsEnd: !ended && !regionHeld };
 }

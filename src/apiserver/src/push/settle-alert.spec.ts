@@ -1,23 +1,16 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { SessionEndReason } from '@orbit/shared';
-import {
-  FAILURE_RELEASE_CAUSES,
-  isFailedRelease,
-  isWorkFinishedRelease,
-  releaseCauseOfEndReason,
-  releaseFactsOf,
-  SESSION_RELEASE_CAUSES,
-  WORK_FINISHED_RELEASE_CAUSES,
-} from '../common/session-release';
+import { releaseCauseOfEndReason, SESSION_RELEASE_CAUSES } from '../common/session-release';
+import { CAUSE_READING, releaseFactsOf } from '../common/session-release-shapes.fixture';
 import { settleAlert, SettleInput } from './settle-alert';
 
 const AT = new Date('2026-11-21T00:00:00.000Z');
 
 // The release facts as the writers store them (common/session-release.ts): a release that finished the work, one by
 // a failure, one somebody asked for (a person ended the session), and a session still held.
-const finishedWork = releaseFactsOf(WORK_FINISHED_RELEASE_CAUSES[0], AT);
-const failedRelease = releaseFactsOf(FAILURE_RELEASE_CAUSES[0], AT);
+const finishedWork = releaseFactsOf('task_done', AT);
+const failedRelease = releaseFactsOf('turn_failed', AT);
 const endedByUser = releaseFactsOf(releaseCauseOfEndReason(SessionEndReason.ENDED), AT);
 const held = releaseFactsOf(null);
 
@@ -172,20 +165,28 @@ test('every stored status and release: the alert before (from the status) and af
       assert.equal(settleAlert({ ...base, ...held, completedAt: filed ? AT : null }), null, status);
     }
     for (const cause of SESSION_RELEASE_CAUSES) {
-      // session_release_failure_chk: FAILED exactly when the release was a failure.
-      for (const status of isFailedRelease(cause) ? ['FAILED'] : ['SUCCEEDED', 'CANCELLED']) {
+      // Every writer writes FAILED exactly with a failure cause (the reading before R3, CAUSE_READING).
+      for (const status of CAUSE_READING.failed(cause) ? ['FAILED'] : ['SUCCEEDED', 'CANCELLED']) {
         const before: Kind = status === 'SUCCEEDED' ? 'finished' : status === 'FAILED' && !filed ? 'failed' : null;
         const after = settleAlert({ ...base, ...releaseFactsOf(cause, AT), completedAt: filed ? AT : null })?.kind ?? null;
         const what = `${status} ${cause}${filed ? ' filed' : ''}`;
-        const expected: Kind = isWorkFinishedRelease(cause) ? 'finished' : before === 'finished' ? null : before;
+        // W7 (design §12.3, removal step R4): an end that was asked for and not honoured is a stop, not a failure, so
+        // it is announced as nothing. It was 'failed' (unfiled) while the release cause was read.
+        const expected: Kind = cause === 'end_not_honored'
+          ? null
+          : CAUSE_READING.finished(cause) ? 'finished' : before === 'finished' ? null : before;
         assert.equal(after, expected, what);
         if (after !== before) differs.push(what);
       }
     }
   }
-  const finishing = new Set<string>(WORK_FINISHED_RELEASE_CAUSES);
-  const expectedDiffers = [false, true].flatMap((filed) => SESSION_RELEASE_CAUSES
-    .filter((cause) => !isFailedRelease(cause))
-    .map((cause) => `${finishing.has(cause) ? 'CANCELLED' : 'SUCCEEDED'} ${cause}${filed ? ' filed' : ''}`));
+  const finishing = new Set<string>(CAUSE_READING.workFinishedCauses);
+  const expectedDiffers = [
+    ...[false, true].flatMap((filed) => SESSION_RELEASE_CAUSES
+      .filter((cause) => !CAUSE_READING.failed(cause))
+      .map((cause) => `${finishing.has(cause) ? 'CANCELLED' : 'SUCCEEDED'} ${cause}${filed ? ' filed' : ''}`)),
+    // W7: before, from the status, an unfiled FAILED one was a failure.
+    'FAILED end_not_honored',
+  ];
   assert.deepEqual(differs.sort(), expectedDiffers.sort());
 });
