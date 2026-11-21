@@ -63,6 +63,7 @@ import { ifNoneMatchHits, isOpenListView, openListEtag } from './open-list-versi
 import { assertClientTurnIdNotReserved } from './watch-turn-key';
 import { parseMaxPayload, truncatePayload } from './truncate-payload';
 import { coalesceDeltas, isStreamingDelta } from './coalesce-deltas';
+import { parseTailLines } from './background-job-tail';
 import { translationEventOf } from './reply-translation';
 import {
   KEEPALIVE_MS,
@@ -954,6 +955,52 @@ export class SessionsController {
   @Get(':id/background')
   backgroundShells(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.getBackgroundShells(user.userId, id);
+  }
+
+  /**
+   * The newest lines of one bg_run job's output (`?lines=N`, at most and by default 40; at most 8 KB in all), without
+   * terminal colour codes, read just now from the job's file by the runner hosting the session, over the runner link.
+   * A running job answers what it has written so far; one that ended answers from its file while its runner still
+   * holds it, else 404 BACKGROUND_JOB_OUTPUT_GONE, and the client shows the end of the output the job's wake carried.
+   * 404 BACKGROUND_JOB_NOT_FOUND for a job the session never ran; 409 RUNNER_CANNOT_READ_JOB_OUTPUT for a runner
+   * that predates the read; 503 RUNNER_OFFLINE, 503 RUNNER_LINK_UNAVAILABLE and 504 RUNNER_DID_NOT_ANSWER when it
+   * cannot be asked now (SessionsService.readBackgroundJobTail).
+   *
+   * Pacing, which every client keeps: ask only while the job's card is on screen (opened, or folded showing its newest
+   * line) with the app in the foreground, and the job is running — the first time when the card appears, then 5 s
+   * after the previous answer, one request at a time. Stop when the card leaves the screen, the app goes to the
+   * background, or the job ends (an answer's `status` is no longer `running`, or the job's end arrives in the
+   * transcript); read once more then for the final lines. Nothing is asked for a card that is not visible. A 404 or 409
+   * stops asking for that job; a 503 or 504 waits 30 s before the next try.
+   */
+  @PatScope('sessions:read', { workspaceConfinable: { params: { id: 'session' } } })
+  @Get(':id/background/jobs/:jobId/tail')
+  backgroundJobTail(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('jobId') jobId: string,
+    @Query('lines') lines?: string,
+  ) {
+    return this.sessions.readBackgroundJobTail(user.userId, id, jobId, parseTailLines(lines));
+  }
+
+  /**
+   * The owner's stop of one running bg_run job (`bgj_…`) of the session: the runner hosting it kills it as bg_kill
+   * does, under the reason `stopped_by_owner`. 202 `stopping` once asked; a repeat answers the same, or 200 `killed`
+   * once it ended that way. 404 for an unknown job, 409 BACKGROUND_JOB_ENDED for one that ended otherwise, 409
+   * RUNNER_CANNOT_STOP_JOB for a runner that predates the stop (GET /background lists its jobs not `stoppable`).
+   */
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
+  @Post(':id/background/jobs/:jobId/stop')
+  async stopBackgroundJob(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('jobId') jobId: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const answer = await this.sessions.stopBackgroundJob(user.userId, id, jobId);
+    res.status(answer.status === 'stopping' ? 202 : 200);
+    return answer;
   }
 
   /**
