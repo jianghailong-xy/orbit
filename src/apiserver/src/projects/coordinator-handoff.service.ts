@@ -18,6 +18,7 @@ import {
   RunEventType,
 } from '@orbit/shared';
 
+import { isReleased } from '../common/session-release';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
@@ -38,8 +39,6 @@ import { ProjectsService } from './projects.service';
 
 /** How often WRITING handoffs are looked at for a note turn that timed out or was taken away. */
 const SWEEP_MS = 30_000;
-/** A conversation in one of these has ended (SessionsService.TERMINAL). */
-const TERMINAL_STATUSES: readonly RunStatus[] = [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED];
 /** A note turn answered this long ago whose end the turn-complete hook never settled. */
 const ANSWERED_GRACE_MS = 60_000;
 
@@ -256,7 +255,7 @@ export class CoordinatorHandoffService implements OnModuleInit, OnModuleDestroy 
       const [session, turn] = await Promise.all([
         this.prisma.session.findUnique({
           where: { id: row.fromSessionId },
-          select: { status: true, completedAt: true, archivedAt: true, deletedAt: true },
+          select: { status: true, finishedAt: true, completedAt: true, archivedAt: true, deletedAt: true },
         }),
         this.prisma.conversationTurn.findUnique({
           where: { sessionId_clientTurnId: { sessionId: row.fromSessionId, clientTurnId: row.clientTurnId } },
@@ -266,7 +265,7 @@ export class CoordinatorHandoffService implements OnModuleInit, OnModuleDestroy 
       let code: CoordinatorHandoffFailureCode | null = null;
       if (!session || session.completedAt || session.archivedAt || session.deletedAt) code = 'TURN_STOPPED';
       else if (!turn) code = 'TURN_STOPPED';
-      else if (turn.status !== 'ANSWERED' && TERMINAL_STATUSES.includes(session.status)) {
+      else if (turn.status !== 'ANSWERED' && isReleased(session)) {
         // The note turn revived the conversation and it ended again before answering: most often its
         // own model could not run (a provider whose sign-in failed, an engine that would not start).
         code = session.status === RunStatus.FAILED ? 'TURN_FAILED' : 'TURN_STOPPED';

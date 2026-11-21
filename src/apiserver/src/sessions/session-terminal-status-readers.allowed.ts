@@ -35,9 +35,10 @@ export const SESSION_TERMINAL_STATUS_READERS: Readonly<Record<string, number>> =
   'src/apiserver/src/help/help-ask-marker.ts': 1,
   'src/apiserver/src/help/help-ask-reads.ts': 1,
   'src/apiserver/src/projects/coordinator-evidence-queue.service.ts': 2,
-  // 5 of the 8 arrived from main at 6905964d65 (coordinator hand-over when a model no longer works), written before this
-  // guard reached main; admitted as found in the merge of 2026-11-21, plan phase 4 moves them with the rest.
-  'src/apiserver/src/projects/coordinator-handoff.service.ts': 8,
+  // 5 hits arrived from main at 6905964d65 (coordinator hand-over when a model no longer works), written before this
+  // guard reached main, and were admitted as found in the merge of 2026-11-21. Plan step 4.2 moved the sweep's ended
+  // set onto the release column. One of them (a FAILED read) is among the 4 left.
+  'src/apiserver/src/projects/coordinator-handoff.service.ts': 4,
   'src/apiserver/src/projects/landing-session.ts': 4,
   'src/apiserver/src/projects/pending-addressees.ts': 1,
   'src/apiserver/src/projects/project-done-request.ts': 1,
