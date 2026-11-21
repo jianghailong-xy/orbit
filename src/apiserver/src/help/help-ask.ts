@@ -172,6 +172,7 @@ export class HelpAsk {
         id: true,
         title: true,
         status: true,
+        releaseCause: true,
         engineTurnActive: true,
         costUsd: true,
         createdAt: true,

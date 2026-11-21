@@ -315,6 +315,8 @@ import {
 import {
   HELD_SESSION_STATUSES,
   RELEASED_SESSION_STATUSES,
+  failedReleaseFilter,
+  isFailedRelease,
   isHeld,
   isHeldPastClaim,
   isReleased,
@@ -5783,7 +5785,8 @@ export class SessionsService {
     if (latest && (latest.status === RunStatus.PENDING || latest.status === RunStatus.RUNNING)) {
       return withSessionState(latest);
     }
-    if (latest && latest.status !== RunStatus.FAILED) {
+    // A repair that was not released by a failure (status FAILED, held to the cause by session_release_failure_chk).
+    if (latest && !isFailedRelease(latest.releaseCause)) {
       const continued = await this.continueMergeRepair(ownerId, latest, mergeRecoveryContinuePrompt(recovery, preparePR));
       if (continued) return withSessionState(continued);
     }
@@ -5952,7 +5955,8 @@ export class SessionsService {
           taskId: target.taskId,
           OR: [
             { status: RunStatus.AWAITING_INPUT, cancelRequestedAt: null },
-            { status: RunStatus.FAILED },
+            // Released by a failure: the status FAILED, which session_release_failure_chk holds to the cause.
+            { releaseCause: failedReleaseFilter() },
           ],
         },
         // Armed for a LATER instant, so any claim the sweep had in flight is over: the session waits
@@ -13033,8 +13037,9 @@ export class SessionsService {
     status: true,
     // A region sentence says the session waits on its machine's region (session-move.ts regionHeld).
     error: true,
-    // The release column: only an ended session moves (session-move.ts).
+    // The release column: only an ended session moves (session-move.ts); its cause, whether a retry is armed on a failure.
     finishedAt: true,
+    releaseCause: true,
     deletedAt: true,
     completedAt: true,
     importSourceCwd: true,

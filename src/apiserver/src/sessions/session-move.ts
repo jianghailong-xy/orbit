@@ -12,7 +12,7 @@ import { sanitizeRunnerEngines } from '../common/runner-engines';
 import { reportedRunAccount } from '../providers/plan-usage-accounts';
 import { makeBranchName } from './naming';
 import { branchName } from '../projects/project-criterion-landing';
-import { isReleased } from '../common/session-release';
+import { isFailedRelease, isReleased } from '../common/session-release';
 
 /** What a runner declares when it can take in a session moved from another workspace: it checks an
  *  old checkout's repository and branch before reusing it, and carries a Claude conversation over to
@@ -54,6 +54,8 @@ export interface SessionMoveFacts {
   status: RunStatus;
   /** The release column (common/session-release.ts): set on an ended session. */
   finishedAt: Date | null;
+  /** Why it was released (common/session-release.ts); null or absent while held. */
+  releaseCause?: string | null;
   deletedAt: Date | null;
   completedAt: Date | null;
   importSourceCwd: string | null;
@@ -143,7 +145,7 @@ export function sessionMoveVerdict(s: SessionMoveFacts): SessionMoveVerdict {
   const retryArmed =
     s.retryAt != null &&
     s.completedAt == null &&
-    ((s.status === RunStatus.AWAITING_INPUT && s.cancelRequestedAt == null) || s.status === RunStatus.FAILED);
+    ((s.status === RunStatus.AWAITING_INPUT && s.cancelRequestedAt == null) || isFailedRelease(s.releaseCause));
   if (retryArmed) return refuse(MOVE_REFUSAL.RETRY);
   return { reason: null, needsEnd: !ended && !regionHeld };
 }

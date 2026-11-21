@@ -252,7 +252,7 @@ import {
   QUOTA_BLIND_RETRY_BACKOFF_MS,
   autoRunEnd,
 } from './task-retry-policy';
-import { heldStatusFilter } from '../common/session-release';
+import { failedReleaseFilter, heldStatusFilter } from '../common/session-release';
 
 export {
   AUTO_RUN_RETRY_BACKOFF_MS,
@@ -13099,7 +13099,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         by: ['taskId'],
         where: {
           taskId: { in: ids },
-          status: RunStatus.FAILED,
+          // Released by a failure: the status FAILED, which session_release_failure_chk holds to the cause.
+          releaseCause: failedReleaseFilter(),
           // A run that failed with no error text matches no usage-limit marker, so it is an
           // ordinary failure and counts. Said explicitly: the runner's /finalize omits `error` when
           // its engine died without a message, and a negated match alone is not true of a NULL.
@@ -13164,7 +13165,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         by: ['taskId'],
         where: {
           taskId: { in: blindIds },
-          status: RunStatus.FAILED,
+          releaseCause: failedReleaseFilter(),
           ...usageLimitIs(false),
         },
         _max: { createdAt: true },

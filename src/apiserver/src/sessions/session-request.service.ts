@@ -295,7 +295,7 @@ export class SessionRequestService {
       const asker = await tx.session.findFirst({
         where: { id: request.fromSessionId, ownerId: request.ownerId },
         select: {
-          status: true, retryAt: true, retryClaimedAt: true, cancelRequestedAt: true,
+          status: true, releaseCause: true, retryAt: true, retryClaimedAt: true, cancelRequestedAt: true,
           completedAt: true, archivedAt: true, deletedAt: true,
         },
       });
@@ -332,8 +332,8 @@ export class SessionRequestService {
     const asker = await this.prisma.session.findFirst({
       where: { id: request.fromSessionId, ownerId: request.ownerId },
       select: {
-        title: true, taskId: true, status: true, endReason: true, cancelRequestedAt: true, retryAt: true,
-        retryClaimedAt: true, completedAt: true, archivedAt: true, deletedAt: true,
+        title: true, taskId: true, status: true, releaseCause: true, endReason: true, cancelRequestedAt: true,
+        retryAt: true, retryClaimedAt: true, completedAt: true, archivedAt: true, deletedAt: true,
       },
     });
     // The asker's row is gone: nothing left to tell, and the mark is cleared so a request that
@@ -377,7 +377,7 @@ export class SessionRequestService {
       const asker = await tx.session.findFirst({
         where: { id: request.fromSessionId, ownerId: request.ownerId },
         select: {
-          status: true, retryAt: true, retryClaimedAt: true, cancelRequestedAt: true,
+          status: true, releaseCause: true, retryAt: true, retryClaimedAt: true, cancelRequestedAt: true,
           completedAt: true, archivedAt: true, deletedAt: true,
         },
       });
@@ -425,8 +425,8 @@ export class SessionRequestService {
     const asker = await this.prisma.session.findFirst({
       where: { id: request.fromSessionId, ownerId: request.ownerId },
       select: {
-        title: true, taskId: true, status: true, endReason: true, cancelRequestedAt: true, retryAt: true,
-        retryClaimedAt: true, completedAt: true, archivedAt: true, deletedAt: true,
+        title: true, taskId: true, status: true, releaseCause: true, endReason: true, cancelRequestedAt: true,
+        retryAt: true, retryClaimedAt: true, completedAt: true, archivedAt: true, deletedAt: true,
       },
     });
     if (!asker?.taskId) return;
