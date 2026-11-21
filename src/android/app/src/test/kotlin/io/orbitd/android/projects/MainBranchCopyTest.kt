@@ -85,7 +85,7 @@ class MainBranchCopyTest {
             assertTrue("projectStart.ts no longer says $it", start.contains(it))
         }
         val card = web("components/StartProjectCard.tsx")
-        listOf("upstream: standing?.repository ? startMainBranch(settings.upstreamRef, standing) : null,",
+        listOf("upstream: settings.line && standing?.repository ? startMainBranch(settings.upstreamRef, standing) : null,",
             "...(draft.upstream ? { upstreamRef: mainBranchRef(draft.upstream) } : {}),",
             "...(view.upstreamRef ? { upstreamRef: mainBranchRef(view.upstreamRef) } : {}),",
             "{lastMainBranch && draft.upstream === lastMainBranch.branch ? (").forEach {
