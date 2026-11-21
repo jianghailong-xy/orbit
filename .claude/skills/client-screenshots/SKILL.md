@@ -184,8 +184,9 @@ Build errors are in `.shot-probe/build-ios.log` (`grep -n 'error:'`). Paths the 
 
 ### B4. Hand back from the Mac
 
-Upload each PNG with Orbit's `file_upload` and return the links. If `file_upload` is refused (on 2026-11-20 it answered
-`PERMISSION_MODE_UNREADABLE` on the Mac), push the files instead as a one-commit branch built with a temporary index, so
+Upload each PNG with Orbit's `file_upload` and return the links. A remote SubAgent can upload only once the server and the
+Mac's runner both carry the fix from 2026-11-21. Before that it answered `PERMISSION_MODE_UNREADABLE`, and then
+`session does not belong to this runner`. If `file_upload` is refused, push the files instead as a one-commit branch built with a temporary index, so
 the checkout stays untouched: `GIT_INDEX_FILE=$(mktemp -u) git read-tree --empty`, then `git update-index --add --cacheinfo`
 for each `git hash-object -w <file>`, `git write-tree`, `git commit-tree`, and
 `git push origin <sha>:refs/heads/probe/<name>`. The caller fetches it with `git show FETCH_HEAD:<path> > <file>` and
