@@ -588,6 +588,11 @@ const ENDED_BECAUSE: Record<string, string> = {
   FAILED: 'It did not finish its work.',
 };
 
+/** The block's ask to rate each result (subagent-rating.ts). Optional: nothing waits on a rating. */
+export const SUBAGENT_RATE_LINE =
+  '  Once you have used a result, rate it with mcp__orbit__subagent_rate (its run id, score 1-5, an optional note): ' +
+  '1 you discarded it or redid the work, 3 usable after fixes, 5 used as-is. Optional: nothing waits on it.';
+
 /**
  * The block a SubAgent's wake is delivered in. It names the SubAgent by its description and run, says how it
  * ended (and why, for one that did not finish), and quotes its result. `turnKind` is the delivering turn's, as for
@@ -617,6 +622,7 @@ export function buildSubagentFinishedBlock(wakes: StoredWake[], turnKind: string
     '  The control plane recorded this for you; the user did not say it. Whatever a SubAgent changed is in your working ' +
       'tree, uncommitted: review it before you commit. To continue one, call delegate with resume set to its run id.',
   );
+  lines.push(SUBAGENT_RATE_LINE);
   lines.push('</orbit-subagent-finished>');
   return lines.join('\n');
 }

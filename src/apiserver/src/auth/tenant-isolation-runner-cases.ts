@@ -798,6 +798,11 @@ export const RUNNER_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
     'the session must be one of the runner\'s owner that this runner hosts, else 404 as for an id that names nothing '
     + '(runner-api/runner-subagents.controller.ts:137), and the run is matched by (id, that session) only '
     + '(runner-api/runner-subagents.controller.ts:303); subagent-fallback.pg.spec.ts sends another account\'s session and run',
+  'POST /runner/sessions/:id/subagents/:runId/rating':
+    'the session must be one of the runner\'s owner that this runner hosts, else 404 as for an id that names nothing '
+    + '(runner-api/runner-subagents.controller.ts:213), and the run is matched by (id, that session) only, '
+    + 'on the read and on the write (runner-api/subagent-rating.ts:52, runner-api/subagent-rating.ts:60); subagent-rating.pg.spec.ts sends '
+    + 'another session of the same runner and another account\'s runner, and finds the rating unchanged',
   'POST /runner/subagent-runs/:runId/claim':
     'the run is read by id and refused 404 unless it is a remote run of the runner\'s own account, 403 '
     + 'SUBAGENT_RUN_NOT_TARGET unless this runner is its target_runner_id (runner-api/subagent-remote.ts:403); '

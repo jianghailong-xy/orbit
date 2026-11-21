@@ -3072,6 +3072,78 @@ export interface ProviderModelTier {
   editable: boolean;
   /** USD per million output tokens, when known (models.dev); null for a subscription or an unpriced key. */
   outputPricePerMTok: number | null;
+  /** How well this model completed work, for display only: routing never reads it (docs/subagent-design.md §7.1). */
+  quality: ModelQuality;
+}
+
+/** How far back the Model tiers quality reads, in days. */
+export const MODEL_QUALITY_WINDOW_DAYS = 90;
+/** A rating this many days old weighs half as much as one made today. */
+export const MODEL_QUALITY_HALF_LIFE_DAYS = 30;
+/** Fewer ratings than this read as "Not enough ratings": no average is given. */
+export const MODEL_QUALITY_MIN_RATINGS = 5;
+/** Fewer completed tasks than this read as "Not enough tasks": no rate is given. */
+export const MODEL_QUALITY_MIN_TASKS = 10;
+
+/** Who rated a model's SubAgent runs: the parent sessions' own model, and how many of the ratings it gave. */
+export interface ModelQualityRater {
+  engine: string | null;
+  provider: string;
+  model: string | null;
+  /** The model's name as the owner's tables give it, else its id; null when the parent named no model. */
+  label: string | null;
+  count: number;
+}
+
+/**
+ * SubAgent runs on this model in the last MODEL_QUALITY_WINDOW_DAYS days, and how the parents that started them
+ * rated them (subagent_rate, 1 to 5). The average weighs each rating by its age (half-life
+ * MODEL_QUALITY_HALF_LIFE_DAYS); it is null below MODEL_QUALITY_MIN_RATINGS ratings.
+ */
+export interface ModelSubagentQuality {
+  averageRating: number | null;
+  ratedCount: number;
+  /** The runs that ended, rated or not. */
+  runCount: number;
+  /** Most ratings first. */
+  raters: ModelQualityRater[];
+}
+
+/**
+ * Tasks whose first run was on this model in the last MODEL_QUALITY_WINDOW_DAYS days and that are done, and how
+ * many of them passed first time: one run, never failed, sent back or failed by a verifier. A run that failed on a
+ * usage limit or a model at capacity is not counted at all. The rate is null below MODEL_QUALITY_MIN_TASKS.
+ */
+export interface ModelTaskQuality {
+  firstPassRate: number | null;
+  firstPassTaskCount: number;
+  completedTaskCount: number;
+}
+
+export interface ModelQuality {
+  subagent: ModelSubagentQuality;
+  tasks: ModelTaskQuality;
+}
+
+/** POST /runner/sessions/:id/subagents/:runId/rating (subagent_rate): the parent's rating of a run it started. */
+export interface SubagentRatingRequest {
+  /** 1 = discarded it or had to redo it, 3 = usable after fixes, 5 = used as-is. */
+  score: number;
+  /** Up to SUBAGENT_RATING_NOTE_MAX characters. */
+  note?: string;
+}
+
+export const SUBAGENT_RATING_NOTE_MAX = 500;
+
+export interface SubagentRatingResponse {
+  runId: string;
+  score: number;
+  note: string | null;
+  ratedAt: string;
+  /** The rating parent's own engine, provider and model, as the session ran when it rated. */
+  rater: { engine: string | null; provider: string; model: string | null };
+  /** A rating this run already had was replaced. */
+  replaced: boolean;
 }
 
 /** One provider as the SubAgents settings and the Tier column list it, in the owner's provider order. */

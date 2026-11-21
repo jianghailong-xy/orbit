@@ -41,6 +41,8 @@ import {
   type SubagentRoutingInput,
 } from '../tasks/model-routing';
 import { engineState, fullestWindow, quotaTiming, taskRouteReads } from '../tasks/task-route-decision';
+import { addTally, emptyTally, qualityKey, qualityOf, readModelQuality } from './model-quality';
+import { modelLabels } from './subagent-run';
 
 /** The account-level preference listing the providers SubAgents may not run on (docs/subagent-design.md §6.2). */
 export function subagentBlockedProviders(preferences: unknown): string[] {
@@ -361,6 +363,9 @@ export async function subagentTierView(db: Prisma.TransactionClient, ownerId: st
     builtinModelTiers: ownerTiers,
   };
   const configured = await readConfiguredProviders(db, ownerId, { catalog: catalogInput.modelCatalog, planUsage: null, now });
+  // Display only (docs/subagent-design.md §7.1): read beside the tiers, never handed to routeSubagent.
+  const tallies = await readModelQuality(db, ownerId, now);
+  const labels = modelLabels([], catalogInput.modelCatalog);
   const builtins: ConfiguredProvider[] = Object.values(AgentProvider).map((slug) => ({
     label: ENGINE_CLI_NAMES[slug],
     kind: 'key',
@@ -375,6 +380,7 @@ export async function subagentTierView(db: Prisma.TransactionClient, ownerId: st
       .map((entry, index): ProviderTierRow => {
         const builtin = index < builtins.length;
         const models = new Map<string, ProviderModelTier>();
+        const engines = [...new Set(entry.provider.engines.map((engine) => engine.engine))];
         for (const engine of entry.provider.engines) {
           const rows = subagentEngineRows(engine, catalogInput) as Array<SubagentModelRow & Partial<KeyModelRow>>;
           // A built-in engine lists its whole catalogue, the models no row tiers as Not set; a key on that catalogue
@@ -392,6 +398,14 @@ export async function subagentTierView(db: Prisma.TransactionClient, ownerId: st
               source: null,
               editable: false,
               outputPricePerMTok: null,
+              quality: qualityOf(
+                engines.reduce((sum, engine) => {
+                  const tally = tallies.get(qualityKey(entry.provider.slug, engine, row.model));
+                  if (tally) addTally(sum, tally);
+                  return sum;
+                }, emptyTally()),
+                (model) => labels.get(model) ?? model,
+              ),
             };
             if (row.level && !seen.levels.includes(row.level)) seen.levels.push(row.level);
             seen.source = seen.source ?? row.source ?? (owned?.[row.model] ? 'owner' : row.level ? 'catalogue' : null);

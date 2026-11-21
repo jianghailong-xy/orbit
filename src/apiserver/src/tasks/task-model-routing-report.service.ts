@@ -43,6 +43,73 @@ export function sessionUsageUnreported(session: string): Prisma.Sql {
            AND (unreported_mp.owner_id IS NULL OR unreported_mp.owner_id = ${s}.owner_id))))))`;
 }
 
+/**
+ * Whether a run failed on a usage limit or a model at capacity: not the model's quality, so neither the report's
+ * failure count nor the Model tiers view's first pass counts it, as the router does not.
+ */
+export function limitFailure(run: string): Prisma.Sql {
+  const r = Prisma.raw(run);
+  return Prisma.sql`(${r}.status = 'FAILED' AND (${Prisma.join(
+    [...USAGE_LIMIT_ERROR_MARKERS, MODEL_AT_CAPACITY_ERROR_MARKER].map((marker) =>
+      Prisma.sql`lower(coalesce(${r}.error, '')) LIKE ${`%${marker}%`}`), ' OR ')}))`;
+}
+
+/** One provider × engine × model's done tasks, as the Model tiers view reads them (taskFirstPassByModel). */
+export interface TaskFirstPassRow {
+  provider: string;
+  engine: string;
+  model: string;
+  completedTaskCount: number;
+  firstPassTaskCount: number;
+}
+
+/**
+ * The done tasks whose first counted run started at or after `since`, by that run's provider × engine × model, and
+ * how many passed first time: the report's rule — one run, not FAILED, no FAIL verdict and no send-back in its
+ * window — with every run that failed on a usage limit or a model at capacity (limitFailure) left out entirely, so
+ * such a run neither takes the task nor makes it a second run. Reads only; routing never calls it.
+ */
+export async function taskFirstPassByModel(
+  db: Prisma.TransactionClient,
+  ownerId: string,
+  since: Date,
+): Promise<TaskFirstPassRow[]> {
+  return db.$queryRaw<TaskFirstPassRow[]>(Prisma.sql`
+    WITH counted AS (
+      SELECT s.id, s.task_id, s.status, s.created_at, coalesce(s.engine, s.provider) AS engine, s.provider, s.model,
+             row_number() OVER history AS ordinal,
+             lead(s.created_at) OVER history AS next_created_at
+        FROM session s
+        JOIN task t ON t.id = s.task_id AND t.owner_id = ${ownerId}::uuid AND t.status = 'DONE'
+                   AND t.updated_at >= ${since}
+       WHERE s.owner_id = ${ownerId}::uuid AND s.starts_task_work AND NOT ${limitFailure('s')}
+      WINDOW history AS (PARTITION BY s.task_id ORDER BY s.created_at, s.id)
+    ),
+    assessed AS (
+      SELECT c.*, (c.status = 'FAILED' OR EXISTS (
+               SELECT 1 FROM task v
+                WHERE v.owner_id = ${ownerId}::uuid AND v.verifies_task_id = c.task_id
+                  AND v.verdict = 'FAIL' AND v.updated_at >= c.created_at
+                  AND (c.next_created_at IS NULL OR v.updated_at < c.next_created_at)
+             ) OR EXISTS (
+               SELECT 1 FROM task_evidence_decision e
+                WHERE e.owner_id = ${ownerId}::uuid AND e.task_id = c.task_id
+                  AND e.decision = 'SEND_BACK' AND e.decided_at >= c.created_at
+                  AND (c.next_created_at IS NULL OR e.decided_at < c.next_created_at)
+             )) AS failed
+        FROM counted c
+    ),
+    per_task AS (
+      SELECT task_id, count(*) AS run_count, bool_or(failed) AS failed FROM assessed GROUP BY task_id
+    )
+    SELECT f.provider, f.engine, f.model, count(*)::int AS "completedTaskCount",
+           (count(*) FILTER (WHERE p.run_count = 1 AND NOT p.failed))::int AS "firstPassTaskCount"
+      FROM assessed f JOIN per_task p ON p.task_id = f.task_id
+     WHERE f.ordinal = 1 AND f.created_at >= ${since} AND f.model IS NOT NULL
+     GROUP BY f.provider, f.engine, f.model
+  `);
+}
+
 /** A report's `since` filter: absent is no lower bound; anything but an ISO timestamp is a 400. */
 export function reportSince(since: string | undefined): Date | null {
   const sinceDate = since === undefined ? null : new Date(since);
@@ -84,9 +151,7 @@ export class TaskModelRoutingReportService {
       ),
       assessed_runs AS (
         SELECT w.*,
-               NOT (w.status = 'FAILED' AND (${Prisma.join(
-                 [...USAGE_LIMIT_ERROR_MARKERS, MODEL_AT_CAPACITY_ERROR_MARKER].map((marker) =>
-                   Prisma.sql`lower(coalesce(w.error, '')) LIKE ${`%${marker}%`}`), ' OR ')}))
+               NOT ${limitFailure('w')}
                AND (w.status = 'FAILED' OR EXISTS (
                  SELECT 1 FROM task v
                   WHERE v.owner_id = ${ownerId}::uuid AND v.verifies_task_id = w.task_id
