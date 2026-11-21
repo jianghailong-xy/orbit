@@ -332,12 +332,14 @@ private fun TierCell(provider: SubagentProvider, model: SubagentTierModel, style
     val color = if (Subagents.isOlder(model)) Ink.muted else if (model.levels.isEmpty()) Ink.amber else MaterialTheme.colorScheme.onSurface
     val path = Subagents.tierPath(provider, model)
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        if (path == null) Text(text, style = style, color = color, maxLines = 1)
+        // "Older · uses <model>" is longer than the Tier column: it wraps there, every other value stays on one line.
+        val lines = if (Subagents.isOlder(model)) 3 else 1
+        if (path == null) Text(text, style = style, color = color, maxLines = lines)
         else {
             var open by remember { mutableStateOf(false) }
             Box {
                 Text("$text ▾", Modifier.clickable(role = Role.DropdownList) { open = true }.testTag("tier:${provider.slug}:${model.model}"),
-                    style = style, color = color, maxLines = 1)
+                    style = style, color = color, maxLines = lines)
                 DropdownMenu(open, { open = false }) {
                     Subagents.LEVELS.forEach { level ->
                         DropdownMenuItem(text = { Text(level) }, trailingIcon = if (model.levels == listOf(level)) { { Text("✓") } } else null,

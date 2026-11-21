@@ -247,6 +247,8 @@ struct InfrastructureModelTiersSection: View {
         let text = Text(SubagentSettings.modelTierText(model))
             .foregroundStyle(SubagentSettings.tierIsOlder(model) ? Color.secondary
                 : SubagentSettings.tierIsUnset(model.levels) ? Color.orange : Color.primary)
+            // "Older · uses <model>" is longer than the 110-point Tier column: it wraps there.
+            .multilineTextAlignment(.leading)
         if let path = SubagentSettings.tierPath(provider, model) {
             Menu {
                 ForEach(SubagentSettings.tiers, id: \.self) { tier in
@@ -265,7 +267,7 @@ struct InfrastructureModelTiersSection: View {
             }
             .menuStyle(.button)
             .buttonStyle(.borderless)
-            .fixedSize()
+            .fixedSize(horizontal: false, vertical: true)
             .accessibilityIdentifier("tier.\(provider.slug).\(model.model)")
         } else {
             text
