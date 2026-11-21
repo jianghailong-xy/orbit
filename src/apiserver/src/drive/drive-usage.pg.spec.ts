@@ -118,8 +118,8 @@ test('Orbit Files drive: usage — total = drive + other storage, each content o
 
   await t.test('(4) another account sees none of it', async () => {
     assert.deepEqual(await files.driveUsage(stranger), { totalBytes: 0, driveBytes: 0, trashBytes: 0, otherBytes: 0 });
-    await fileWith(stranger, 'theirs.bin', bytesOf('theirs', 11));
-    assert.equal((await files.driveUsage(stranger)).totalBytes, 11);
+    await fileWith(stranger, 'theirs.bin', bytesOf('theirs', 40));
+    assert.equal((await files.driveUsage(stranger)).totalBytes, 40);
     assert.equal((await files.driveUsage(owner)).driveBytes, kept.length + replaced.length + next.length + trashed.length + alsoDrive.length);
   });
 });
