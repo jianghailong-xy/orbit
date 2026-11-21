@@ -1530,9 +1530,6 @@ async function releaseTaskAfterFailedTurn(
   return reclaimed;
 }
 
-/** A run's end as either protocol reports it: the finalize, with its status word, or the release, with none. */
-type RunEndReport = Omit<RunFinalizeRequest, 'status'> & { status?: RunFinalizeRequest['status'] };
-
 /**
  * Did this run fail without ever producing anything? Every reason a session dies between getting
  * its checkout and its first turn — the engine isn't installed, isn't signed in, or the account's
@@ -1552,7 +1549,7 @@ type RunEndReport = Omit<RunFinalizeRequest, 'status'> & { status?: RunFinalizeR
 function producedNothingBeforeFailing(
   numTurns: number,
   status: RunStatus,
-  dto: RunEndReport,
+  dto: RunFinalizeRequest,
 ): boolean {
   return status === RunStatus.FAILED && numTurns === 0 && !dto.changedFiles?.length;
 }
@@ -10096,16 +10093,6 @@ export class RunnerApiController {
     return new Set(rows.map((row) => row.seq));
   }
 
-  @UseGuards(RunnerAuthGuard)
-  @Post('sessions/:id/finalize')
-  async finalize(
-    @CurrentRunner() runner: { id: string },
-    @Param('id', PublicIdPipe) sessionId: string,
-    @Body() body: RunFinalizeRequest,
-  ): Promise<RunFinalizeResponse> {
-    return this.endRun(runner, sessionId, body, null);
-  }
-
   /**
    * The release report of the new runner protocol (SESSION_RELEASE_V1, plan step 6.1, design §3): the runner's run is
    * over and the session is released. The finalize with no status word: what the release is comes from the facts the
@@ -10120,6 +10107,8 @@ export class RunnerApiController {
     @Body() body: RunReleaseRequest,
     @Headers(RUNNER_CAPABILITIES_HEADER) capabilities?: string | string[],
   ): Promise<RunFinalizeResponse> {
+    // Whose session this is, before anything about the request is judged (finalize asks it again).
+    await this.assertEngineSessionById(sessionId, (runner as { ownerId?: string }).ownerId);
     if (!runnerSupportsCapability(capabilities, SESSION_RELEASE_V1)) {
       throw new BadRequestException(`a release report is part of ${SESSION_RELEASE_V1}, which this request does not declare`);
     }
@@ -10127,20 +10116,23 @@ export class RunnerApiController {
     if (cutOff !== undefined && cutOff !== 'FAILED') {
       throw new BadRequestException("cutOffTurnOutcome may only be 'FAILED'");
     }
-    // No status word is read from a release, whatever the body carries.
+    // No status word is read from a release, whatever the body carries: finalize reads `status` only when `release` is
+    // null.
     const { status: _ignored, ...report } = (body ?? {}) as RunReleaseRequest & { status?: unknown };
-    return this.endRun(runner, sessionId, report, { cutOffTurnOutcome: cutOff });
+    return this.finalize(runner, sessionId, report as RunFinalizeRequest, { cutOffTurnOutcome: cutOff });
   }
 
   /**
-   * A run's end, reported by the old protocol's finalize (`release` null: the runner's terminal status word decides) or
-   * the new protocol's release report (the facts decide, readRelease).
+   * A run's end: the old protocol's finalize (`release` null, which is what the route passes: the runner's terminal
+   * status word decides), and the body of the new protocol's release report above (the facts decide, readRelease).
    */
-  private async endRun(
-    runner: { id: string },
-    sessionId: string,
-    body: RunEndReport,
-    release: { cutOffTurnOutcome?: 'FAILED' } | null,
+  @UseGuards(RunnerAuthGuard)
+  @Post('sessions/:id/finalize')
+  async finalize(
+    @CurrentRunner() runner: { id: string },
+    @Param('id', PublicIdPipe) sessionId: string,
+    @Body() body: RunFinalizeRequest,
+    release: { cutOffTurnOutcome?: 'FAILED' } | null = null,
   ): Promise<RunFinalizeResponse> {
     await this.assertEngineSessionById(sessionId, (runner as { ownerId?: string }).ownerId);
     // See turnComplete: the engine's last words (`result`, `error`) and the branch's per-file
@@ -10440,7 +10432,7 @@ export class RunnerApiController {
       // true rather than before it.
       await reapApprovalsOfEndedTurns(tx, sessionId);
       // An Agent check this run was, ended without its verdict (projects/criterion-check-ended.ts).
-      const checksSettled = retryAt != null || failureReported ? [] : await settleChecksOfEndedRun(
+      const checksSettled = failureReported || retryAt != null ? [] : await settleChecksOfEndedRun(
         tx,
         { sessionId, taskId: current.taskId },
         `the runner finalized its run as ${effectiveStatus}${dto.error ? ` (${dto.error})` : ''}`,
@@ -10630,7 +10622,7 @@ export class RunnerApiController {
   private async restRegionGatedRun(
     tx: Prisma.TransactionClient,
     sessionId: string,
-    dto: RunEndReport,
+    dto: RunFinalizeRequest,
     stopped: boolean,
   ) {
     if (stopped) {
