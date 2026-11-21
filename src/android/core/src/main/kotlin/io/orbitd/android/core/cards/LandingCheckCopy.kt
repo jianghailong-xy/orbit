@@ -45,3 +45,66 @@ object IntegrationCheckProposal {
             (value(input, "mergeCheckTimeoutSeconds", after) as? JsonPrimitive)?.intOrNull) else "3600 seconds"
     }
 }
+
+object LandingModeCopy {
+    const val mergeCheck = "Merge check"
+    const val command = "Command"
+    const val none = "No check"
+    const val noneHead = "No check."
+    const val noneBody = "Tasks land with only their own acceptance. The merge check still runs before main."
+    const val commandNote = "Changes the coordinator makes are listed under Coordinator’s changes."
+    const val whoCanSet = "Who can set it"
+}
+
+object LandingCheckOriginCopy {
+    const val owner = "You"
+    const val coordinator = "Coordinator"
+    const val card = "Approved on a card"
+    const val start = "Set at start"
+    fun label(by: String?) = when (by) {
+        "OWNER" -> owner
+        "COORDINATOR" -> coordinator
+        "CARD" -> card
+        "START" -> start
+        else -> null
+    }
+
+    val notes = listOf(
+        "OWNER" to "Anything you set; the coordinator then needs a card to change it.",
+        "COORDINATOR" to "No card, while the merge check exists.",
+        "CARD" to "A change you confirmed on a card.",
+        "START" to "The coordinator proposed it and you pressed Start; it may still change without a card. A value you typed on the start card reads as You.",
+    )
+}
+
+object LandingChangesCopy {
+    const val title = "Coordinator’s changes"
+    const val intro = "What the coordinator changed on its own since the project started. Revert puts the old value back and takes the field away from the coordinator: it needs a card from then on."
+    const val empty = "The coordinator has not changed anything on its own."
+    const val landingCheck = "Landing check"
+    const val checkExempt = "Check exempt"
+    const val usesMergeCheck = "Uses merge check"
+    const val noCheck = "No check"
+    const val exempt = "exempt"
+    const val notExempt = "not exempt"
+    const val revert = "Revert"
+    const val yourChange = "Your change"
+    const val yourChangeNothing = "Your change · nothing to revert"
+    const val confirmTitle = "Revert this change?"
+    const val confirmConsequence = "The coordinator can no longer change this field without a card."
+    const val cancel = "Cancel"
+    const val openTask = "Open task"
+
+    fun rowLabel(count: Int) = "$count ${if (count == 1) "change" else "changes"}"
+    fun revertedLine(whenAgo: String) = "Reverted by you · $whenAgo · coordinator needs a card for this field"
+}
+
+object TaskExemptCopy {
+    const val label = "Landing check"
+    const val badge = "Exempt"
+    const val remove = "Remove exemption"
+    const val skipped = "Skipped"
+    const val mergeCheckStillRuns = "Merge check before main"
+    const val stillRuns = "Still runs"
+    fun reason(reason: String) = "Exempt: $reason"
+}

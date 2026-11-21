@@ -68,6 +68,26 @@ class StartProjectCardCopyTest {
         assertEquals(7_200, StartProjectCopy.defaultEscalationSeconds)
     }
 
+    @Test fun theNoLineRequestUsesTheWebsCopyAndRules() {
+        val words = File(root, "src/web/src/lib/projectStart.ts").readText()
+        assertTrue(words.contains("export const START_NO_LINE = '${StartProjectCopy.noLine}';"))
+        assertTrue(words.contains("return automatic ? '${RunSettings.automaticOnNoLine}' : '${RunSettings.automaticOffNoLine}';"))
+        assertTrue(words.contains("if (line === null) {"))
+        assertTrue(words.contains("input.line === null ? [] : input.line === 'MAIN'"))
+        assertEquals(RunSettings.automaticOnNoLine, RunSettings.automaticSays(true, null, true, "trunk"))
+        assertEquals(RunSettings.automaticOffNoLine, RunSettings.automaticSays(false, null, true, "trunk"))
+        for (automatic in listOf(true, false)) {
+            assertTrue(StartProjectCopy.comesToYou(automatic, null, emptyList(), 0, 7200, "trunk").none { it.text.contains("trunk") })
+        }
+        val card = File(root, "src/web/src/components/StartProjectCard.tsx").readText()
+        listOf("line: settings.line ?? null,", "...(draft.line ? { line: draft.line } : {}),",
+            "...(draft.line === 'PROJECT_BRANCH' ? {", "{draft.line === null ? (",
+            "{START_NO_LINE}", "{draft.line !== null && draft.deliveryMode !== null ? (",
+            "{draft.line !== null ? <div className=\"start-card-row\" data-landing-check=\"true\">").forEach {
+            assertTrue("StartProjectCard.tsx no longer says $it", card.contains(it))
+        }
+    }
+
     @Test fun theSectionHeadsAndTheHeaderLineAreTheSwiftsWhole() {
         assertSentence(start, StartProjectCopy.doneWhenHead(count), listOf(StartProjectCopy.doneWhen to "\\(doneWhen)", n to "\\(count)",
             "criteria" to "\\(count == 1 ? \"criterion\" : \"criteria\")"), "the Done when head")

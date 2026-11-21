@@ -39,7 +39,7 @@ data class OwnerAnswer(val key: String, val option: Int? = null, val text: Strin
  * coordinator's request, and absent when the card offered none (the project keeps the one it stands on). `deliveryMode` is how the
  * work reaches it (§10.5 O-L1), the owner's choice on a press and absent when the card offered none. */
 @Serializable
-data class ProjectStartSettings(val line: String, val automatic: Boolean, val maxConcurrentTasks: Int,
+data class ProjectStartSettings(val line: String? = null, val automatic: Boolean, val maxConcurrentTasks: Int,
     val mergeCheckCommand: String?, val projectBranchName: String? = null, val upstreamRef: String? = null,
     val deliveryMode: String? = null, val landingCheckCommand: String? = null,
     val landingCheckTimeoutSeconds: Int? = null, val mergeCheckTimeoutSeconds: Int? = null)
