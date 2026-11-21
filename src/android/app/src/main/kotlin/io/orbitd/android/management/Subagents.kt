@@ -25,7 +25,7 @@ import java.util.Locale
 
 /** One model of GET providers/subagent-tiers (shared ProviderModelTier). */
 internal data class SubagentTierModel(val model: String, val levels: List<String>, val source: String?, val editable: Boolean,
-                                      val outputPricePerMTok: Double?)
+                                      val outputPricePerMTok: Double?, val supersededBy: String? = null)
 
 /** One provider of GET providers/subagent-tiers (shared ProviderTierRow), in the owner's provider order. */
 internal data class SubagentProvider(val slug: String, val label: String, val kind: String, val providerId: String?, val billing: String,
@@ -73,7 +73,7 @@ internal object Subagents {
         SubagentProvider(slug, row.str("label") ?: slug, row.str("kind").orEmpty(), row.str("providerId"), row.str("billing").orEmpty(),
             row.list("models").mapNotNull { model ->
                 val name = model.str("model")?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
-                SubagentTierModel(name, model.strings("levels"), model.str("source"), model.bool("editable") == true, model.dbl("outputPricePerMTok"))
+                SubagentTierModel(name, model.strings("levels"), model.str("source"), model.bool("editable") == true, model.dbl("outputPricePerMTok"), model.str("supersededBy"))
             })
     }
 
@@ -85,6 +85,13 @@ internal object Subagents {
         levels.containsAll(LEVELS) -> "S–XL by effort"
         else -> levels.joinToString(" · ")
     }
+
+    /** A model's Tier cell: [tierText], but an older family member reads "Older · uses <newest>" in place of Not set. */
+    fun modelTierText(model: SubagentTierModel) =
+        if (model.levels.isEmpty() && model.supersededBy != null) "Older · uses ${model.supersededBy}" else tierText(model.levels)
+
+    /** Whether the Tier cell reads Older (muted, not a warning). */
+    fun isOlder(model: SubagentTierModel) = model.levels.isEmpty() && model.supersededBy != null
 
     /** Where a model's tier is written: a built-in engine's catalogue, or a key of the owner's own; null when it is not the owner's to set. */
     fun tierPath(provider: SubagentProvider, model: SubagentTierModel): String? = when {
@@ -321,8 +328,8 @@ private fun TierRow(wide: Boolean, header: Boolean, provider: @Composable (andro
 @Composable
 private fun TierCell(provider: SubagentProvider, model: SubagentTierModel, style: androidx.compose.ui.text.TextStyle,
                      set: (String, String?) -> Unit) {
-    val text = Subagents.tierText(model.levels)
-    val color = if (model.levels.isEmpty()) Ink.amber else MaterialTheme.colorScheme.onSurface
+    val text = Subagents.modelTierText(model)
+    val color = if (Subagents.isOlder(model)) Ink.muted else if (model.levels.isEmpty()) Ink.amber else MaterialTheme.colorScheme.onSurface
     val path = Subagents.tierPath(provider, model)
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         if (path == null) Text(text, style = style, color = color, maxLines = 1)

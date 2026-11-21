@@ -244,8 +244,9 @@ struct InfrastructureModelTiersSection: View {
     }
 
     @ViewBuilder private func tierControl(_ provider: ProviderTierRow, _ model: ProviderModelTier) -> some View {
-        let text = Text(SubagentSettings.tierText(model.levels))
-            .foregroundStyle(SubagentSettings.tierIsUnset(model.levels) ? Color.orange : Color.primary)
+        let text = Text(SubagentSettings.modelTierText(model))
+            .foregroundStyle(SubagentSettings.tierIsOlder(model) ? Color.secondary
+                : SubagentSettings.tierIsUnset(model.levels) ? Color.orange : Color.primary)
         if let path = SubagentSettings.tierPath(provider, model) {
             Menu {
                 ForEach(SubagentSettings.tiers, id: \.self) { tier in
