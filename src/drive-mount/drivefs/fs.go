@@ -393,6 +393,12 @@ func (fs *FS) upsertLocked(e door.Entry) *node {
 		fs.byID[e.ID] = root
 		return root
 	}
+	if fs.rootID == "" && e.Parent() != "" && strings.Count(e.Path, "/") == 1 {
+		// An entry at the top names the root as its folder: paths can be told without asking for the root.
+		root := fs.byIno[rootIno]
+		fs.rootID, root.id = e.Parent(), e.Parent()
+		fs.byID[e.Parent()] = root
+	}
 	n := fs.byID[e.ID]
 	if n == nil {
 		ino, ok := fs.inoByID[e.ID]

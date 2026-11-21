@@ -450,8 +450,15 @@ func (c *Client) send(ctx context.Context, k kind, method, route string, query u
 		// The caller giving up (the kernel interrupting the request) is not the server's failure; a refused or reset
 		// connection, or one past its deadline, is.
 		callerGaveUp := ctx.Err() == context.Canceled
+		timedOut := ctx.Err() == context.DeadlineExceeded || isTimeout(err)
 		cancel()
-		if !callerGaveUp {
+		switch {
+		case callerGaveUp:
+		case timedOut:
+			// A request past its deadline is the server out of reach, not one more failure among others: held
+			// unanswered, requests fail 9 s apart and three of them never fall within 10 s (§5.7).
+			c.health.unreachable()
+		default:
 			c.health.failure()
 		}
 		return nil, nil, &TransportError{Method: method, Route: route, Err: err}
@@ -789,6 +796,18 @@ func (h *Health) failure() {
 			fn(false, since)
 		}
 	}
+}
+
+// unreachable puts the client offline at once.
+func (h *Health) unreachable() {
+	for i := 0; i < h.threshold; i++ {
+		h.failure()
+	}
+}
+
+func isTimeout(err error) bool {
+	var ne net.Error
+	return errors.As(err, &ne) && ne.Timeout()
 }
 
 func (h *Health) success() {

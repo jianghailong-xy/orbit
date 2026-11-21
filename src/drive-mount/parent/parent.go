@@ -426,18 +426,20 @@ func (w *whois) lookup(pid int) (uint64, string) {
 	}
 	w.mu.Unlock()
 	session := ""
-	if w.podUID == "" || inPod(pid, w.podUID) {
-		for p, depth := pid, 0; p > 1 && depth < 64; depth++ {
-			if s := environValue(p, "ORBIT_SESSION_ID"); s != "" {
-				session = s
-				break
-			}
-			_, parent, ok := procStat(p)
-			if !ok {
-				break
-			}
-			p = parent
+	// Up the process's ancestors, never past the runner Pod: a process outside it says nothing of this runner.
+	for p, depth := pid, 0; p > 1 && depth < 64; depth++ {
+		if w.podUID != "" && !inPod(p, w.podUID) {
+			break
 		}
+		if s := environValue(p, "ORBIT_SESSION_ID"); s != "" {
+			session = s
+			break
+		}
+		_, parent, ok := procStat(p)
+		if !ok {
+			break
+		}
+		p = parent
 	}
 	w.mu.Lock()
 	if len(w.cache) > 8192 {
