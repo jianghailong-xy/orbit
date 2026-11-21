@@ -114,7 +114,7 @@ async function seedSession(sessionId: string, ownerId: string): Promise<void> {
                            "title","prompt","provider","status","num_turns","started_at",
                            "runtime_session_id","retry_attempts","updated_at","finished_at","release_cause")
      VALUES ($1::uuid,$2::uuid,$2::uuid,$3::uuid,$4::uuid,'parked','an opening prompt nobody asked to re-send',
-             'claude','FAILED'::"run_status",1,clock_timestamp(),gen_random_uuid(),0,clock_timestamp(),clock_timestamp(),'engine_exited')`,
+             'claude','FAILED'::"run_status",1,clock_timestamp(),gen_random_uuid(),0,clock_timestamp(),clock_timestamp(),'engine_failed')`,
     [sessionId, ownerId, WORKSPACE_ID, RUNNER_ID],
   );
 }

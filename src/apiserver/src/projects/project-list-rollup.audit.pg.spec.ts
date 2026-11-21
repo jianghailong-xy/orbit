@@ -114,7 +114,7 @@ async function makeSession(
   await db.session.create({
     data: {
       ownerId, creatorId: ownerId, taskId, title: `run of ${taskId}`, prompt: 'do it', status,
-      ...(isReleasedStatus(status) ? { finishedAt: new Date(), releaseCause: status === 'CANCELLED' ? 'cancelled' : 'engine_exited' } : {}),
+      ...(isReleasedStatus(status) ? { finishedAt: new Date(), releaseCause: status === 'CANCELLED' ? 'cancelled' : status === 'FAILED' ? 'engine_failed' : 'engine_exited' } : {}),
       dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
     },
   });

@@ -511,7 +511,7 @@ test('a stopped-run fact refused during FAILED recovers on the reconcile tick wi
   { skip, timeout: 120_000 }, () => withStack(async (stack) => {
     const w = await world(stack, 'stopped-recovery');
     const run = await w.run('submit the missing evidence');
-    await stack.db.session.update({ where: { id: w.coordinator }, data: { status: RunStatus.FAILED, finishedAt: new Date(), releaseCause: 'engine_exited' } });
+    await stack.db.session.update({ where: { id: w.coordinator }, data: { status: RunStatus.FAILED, finishedAt: new Date(), releaseCause: 'engine_failed' } });
     await w.oneTurn(run.sessionId, `platform:${randomUUID()}`, 'The work still needs evidence.');
     assert.equal((await w.wakes())[0]?.status, 'REFUSED');
     assert.equal((await w.told()).length, 0);
@@ -540,7 +540,7 @@ test('the coordinator turn ending delivers the stopped-run fact that waited duri
   { skip, timeout: 120_000 }, () => withStack(async (stack) => {
     const w = await world(stack, 'turn-end-recovery');
     const run = await w.run('work waiting for evidence');
-    await stack.db.session.update({ where: { id: w.coordinator }, data: { status: RunStatus.FAILED, finishedAt: new Date(), releaseCause: 'engine_exited' } });
+    await stack.db.session.update({ where: { id: w.coordinator }, data: { status: RunStatus.FAILED, finishedAt: new Date(), releaseCause: 'engine_failed' } });
     await w.oneTurn(run.sessionId, `platform:${randomUUID()}`);
     assert.equal((await w.wakes())[0]?.status, 'REFUSED');
     await stack.db.session.update({ where: { id: w.coordinator }, data: { status: RunStatus.AWAITING_INPUT, finishedAt: null, releaseCause: null } });

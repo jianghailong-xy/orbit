@@ -276,7 +276,7 @@ async function insertSession(row: {
      VALUES ($1,'watched session','p',$2,$2,now(),$3,$4,
              CASE WHEN $5::boolean THEN now() END, CASE WHEN $6::boolean THEN now() END, $7,
              CASE WHEN $3::run_status IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN now() END,
-             CASE WHEN $3::run_status = 'CANCELLED' THEN 'cancelled' WHEN $3::run_status IN ('SUCCEEDED', 'FAILED') THEN 'engine_exited' END)`,
+             CASE WHEN $3::run_status = 'CANCELLED' THEN 'cancelled' WHEN $3::run_status = 'FAILED' THEN 'engine_failed' WHEN $3::run_status = 'SUCCEEDED' THEN 'engine_exited' END)`,
     [id, row.owner ?? ownerId, row.status, row.endReason ?? null, row.completedAt ?? false, row.deletedAt ?? false, row.runnerId ?? null],
   );
   return id;
@@ -675,7 +675,7 @@ test('a published event only schedules an evaluation: a status it claims is not 
   assert.equal((await readMatches(watchId)).length, 0);
 
   // The row fails too, and the same event now finds it.
-  await sql.query(`UPDATE "session" SET "status" = 'FAILED', "finished_at" = COALESCE("finished_at", now()), "release_cause" = 'engine_exited' WHERE "id" = $1`, [session]);
+  await sql.query(`UPDATE "session" SET "status" = 'FAILED', "finished_at" = COALESCE("finished_at", now()), "release_cause" = 'engine_failed' WHERE "id" = $1`, [session]);
   realtime.publish(session, event(RunEventType.STATUS, { status: 'FAILED' }));
   const [match] = await eventually('the Match', () => readMatches(watchId), (m) => m.length === 1);
   assert.equal(match.snapshot.targets[0].observed?.status, 'FAILED');
@@ -1598,7 +1598,7 @@ async function quiescentSession(row: QuiescentSessionRow = {}): Promise<string> 
      VALUES ($1,'a child session','p',$2,$2,now(),$3,$4,CASE WHEN $5::boolean THEN now() END,$6::text[],$7::text[],$8,
              CASE WHEN $9::int IS NOT NULL THEN now() + make_interval(secs => $9::int) END,
              CASE WHEN $3::run_status IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN now() END,
-             CASE WHEN $3::run_status = 'CANCELLED' THEN 'cancelled' WHEN $3::run_status IN ('SUCCEEDED', 'FAILED') THEN 'engine_exited' END)`,
+             CASE WHEN $3::run_status = 'CANCELLED' THEN 'cancelled' WHEN $3::run_status = 'FAILED' THEN 'engine_failed' WHEN $3::run_status = 'SUCCEEDED' THEN 'engine_exited' END)`,
     [
       id, ownerId, row.status ?? 'AWAITING_INPUT', row.endReason ?? null, row.completed ?? false,
       row.jobs ?? [], row.subagents ?? [], row.engineTurn ?? false, row.retryInSeconds ?? null,

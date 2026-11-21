@@ -128,7 +128,7 @@ async function session(
       provider: 'claude',
       status,
       ...(status === RunStatus.SUCCEEDED || status === RunStatus.FAILED
-        ? { finishedAt: new Date(), releaseCause: 'engine_exited' }
+        ? { finishedAt: new Date(), releaseCause: status === RunStatus.FAILED ? 'engine_failed' : 'engine_exited' }
         : status === RunStatus.CANCELLED ? { finishedAt: new Date(), releaseCause: 'cancelled' } : {}),
       engineTurnActive,
       dispatchOrigin: SessionDispatchOrigin.USER,

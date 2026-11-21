@@ -157,7 +157,7 @@ suite('outside a project the dispatching session settles the evidence, and the o
           runtimeSessionId: randomUUID(),
           ...over,
           ...(over.status === RunStatus.SUCCEEDED || over.status === RunStatus.FAILED
-            ? { finishedAt: over.finishedAt ?? new Date(), releaseCause: 'engine_exited' }
+            ? { finishedAt: over.finishedAt ?? new Date(), releaseCause: over.status === RunStatus.FAILED ? 'engine_failed' : 'engine_exited' }
             : over.status === RunStatus.CANCELLED ? { finishedAt: over.finishedAt ?? new Date(), releaseCause: 'cancelled' } : {}),
         },
       });
@@ -450,7 +450,7 @@ suite('outside a project the dispatching session settles the evidence, and the o
       let turns = await deliveredTo(reviewer);
       assert.equal(turns.length, 1);
       await db.conversationTurn.update({ where: { id: turns[0].id }, data: { status: 'ANSWERED' } });
-      await db.session.update({ where: { id: reviewer }, data: { status: RunStatus.FAILED, finishedAt: new Date(), releaseCause: 'engine_exited' } });
+      await db.session.update({ where: { id: reviewer }, data: { status: RunStatus.FAILED, finishedAt: new Date(), releaseCause: 'engine_failed' } });
       assert.equal(await cardIn(reviewer, work.taskId, new Date(Date.now() + 10 * WINDOW_MS)), null);
       await db.session.update({ where: { id: reviewer }, data: { status: RunStatus.AWAITING_INPUT, finishedAt: null, releaseCause: null } });
       await Promise.all([reviews.deliverOwedTo(reviewer), reviews.deliverOwedTo(reviewer)]);
@@ -477,7 +477,7 @@ suite('outside a project the dispatching session settles the evidence, and the o
       assert.equal(await reviews.deliver(ownerId, ownWork.taskId, (await latestEvidence(ownWork.taskId)).id),
         'REVIEWER_NOT_INDEPENDENT', 'the fixture is refused for independence');
       // Release the run's execution claim before making the other session live on the same task.
-      await db.session.update({ where: { id: ownWork.run }, data: { status: RunStatus.FAILED, finishedAt: new Date(), releaseCause: 'engine_exited' } });
+      await db.session.update({ where: { id: ownWork.run }, data: { status: RunStatus.FAILED, finishedAt: new Date(), releaseCause: 'engine_failed' } });
       await db.session.update({ where: { id: nonIndependent }, data: { status: RunStatus.AWAITING_INPUT, finishedAt: null, releaseCause: null } });
 
       const ended = await conversation('interrupted with a recorded end', { status: RunStatus.FAILED });
@@ -568,7 +568,7 @@ suite('outside a project the dispatching session settles the evidence, and the o
         await submit(work, 'Ready.');
         await db.session.update({ where: { id: work.run }, data: {
           status: outage === 'FAILED' ? RunStatus.FAILED : outage === 'PENDING' ? RunStatus.PENDING : RunStatus.AWAITING_INPUT,
-          ...(outage === 'FAILED' ? { finishedAt: new Date(), releaseCause: 'engine_exited' } : {}),
+          ...(outage === 'FAILED' ? { finishedAt: new Date(), releaseCause: 'engine_failed' } : {}),
           retryAt: outage === 'RETRY' ? new Date(Date.now() + 3_600_000) : null,
           completedAt: outage === 'ENDED' ? new Date() : null,
         } });

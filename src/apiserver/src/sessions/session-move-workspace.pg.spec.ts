@@ -589,7 +589,7 @@ test('moving a session to another workspace: the panel, the move, its refusals a
       ['a commit in progress', 'A commit is in progress. Try again when it finishes.', { commitStatus: 'pending', commitRequestedAt: new Date() }],
       ['a merge repair open', 'Finish the merge repair first.', { mergeRecovery: { code: 'TARGET_DIVERGED', targetBranch: 'main' } }],
       ['an automatic retry armed', 'An automatic retry is scheduled. Try again after it runs.', {
-        status: RunStatus.FAILED, releaseCause: 'engine_exited', endReason: null, retryAt: new Date(Date.now() + 60_000),
+        status: RunStatus.FAILED, releaseCause: 'engine_failed', endReason: null, retryAt: new Date(Date.now() + 60_000),
       }],
       ['Kimi', "Moving Kimi sessions isn't supported yet.", { provider: 'kimi', providerBuiltin: true }],
       ['OpenCode', "Moving OpenCode sessions isn't supported yet.", { provider: 'opencode' }],

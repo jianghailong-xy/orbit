@@ -81,7 +81,7 @@ test('predicate, Prisma filter and SQL fragment agree on every status and fact c
         status: f.status, dispatchOrigin: SessionDispatchOrigin.USER,
         ...(isReleasedStatus(f.status) ? {
           finishedAt: new Date(),
-          releaseCause: f.status === RunStatus.CANCELLED ? 'cancelled' : 'engine_exited',
+          releaseCause: f.status === RunStatus.CANCELLED ? 'cancelled' : f.status === RunStatus.FAILED ? 'engine_failed' : 'engine_exited',
         } : {}),
         engineTurnActive: f.on.has('engine'),
         runningSubagents: f.on.has('subagent') ? ['toolu_sub'] : [],

@@ -2127,8 +2127,10 @@ model Session {
   endReason            String?   @map("end_reason")
   // Why the session was released (no runner holds it): written with `finishedAt` and the terminal status in
   // every write that releases the session, cleared with `finishedAt` by the revive. The end reasons plus
-  // turn_failed, runner_lost, setup_failed, engine_exited, import_failed, landing_settled (migration 1261,
-  // CHECK session_release_cause_chk; values in common/session-release.ts). Backfilled by 1262.
+  // turn_failed, runner_lost, setup_failed, engine_exited, engine_failed, end_not_honored, import_failed,
+  // landing_settled (migrations 1261 and 1403, CHECK session_release_cause_chk; values in
+  // common/session-release.ts). Backfilled by 1262 and 1405. The status is FAILED exactly when the cause is a
+  // failure cause (FAILURE_RELEASE_CAUSES; CHECK session_release_failure_chk, 1406).
   releaseCause         String?   @map("release_cause")
   // How the session's latest completed turn ended: ANSWERED | FAILED | INTERRUPTED | CANCELLED, the same
   // value as that turn's `outcome`, written by runner turn-complete in the write that parks the session

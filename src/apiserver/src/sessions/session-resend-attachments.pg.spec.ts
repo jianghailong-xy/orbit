@@ -111,7 +111,7 @@ async function fixture(db: PrismaClient, label: string, status: RunStatus, store
       status,
       ...(isReleasedStatus(status) ? {
         finishedAt: new Date(),
-        releaseCause: status === RunStatus.CANCELLED ? 'cancelled' : 'engine_exited',
+        releaseCause: status === RunStatus.CANCELLED ? 'cancelled' : status === RunStatus.FAILED ? 'engine_failed' : 'engine_exited',
       } : {}),
     },
   });
@@ -192,7 +192,7 @@ test('Retry of a failed run carries its screenshot, as a copy on the new turn',
       // failed too, so the replay meets a terminal run as the first press did.
       await db.session.update({
         where: { id: f.sessionId },
-        data: { status: RunStatus.FAILED, releaseCause: 'engine_exited', finishedAt: new Date() },
+        data: { status: RunStatus.FAILED, releaseCause: 'engine_failed', finishedAt: new Date() },
       });
       const replayed = await sessions.resume(f.ownerId, f.sessionId, retry) as { turnId: string };
       assert.equal(replayed.turnId, sent.turnId, 'the replay is answered with the turn it queued');

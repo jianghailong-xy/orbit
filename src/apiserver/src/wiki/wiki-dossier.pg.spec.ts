@@ -257,7 +257,7 @@ async function session(h: Harness, ownerId: string, shape: SessionShape): Promis
                             "task_id","status","last_turn_at","dispatch_origin","created_at","updated_at","wiki_chat_space_id", "finished_at", "release_cause")
      VALUES ($1,$2,'p',$3,$3,$4,$5,$6,$7::run_status,$8,'USER',$9,now(),$10,
              CASE WHEN $7::run_status IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN COALESCE($8::timestamp, $9::timestamp) END,
-             CASE WHEN $7::run_status = 'CANCELLED' THEN 'cancelled' WHEN $7::run_status IN ('SUCCEEDED', 'FAILED') THEN 'engine_exited' END)`,
+             CASE WHEN $7::run_status = 'CANCELLED' THEN 'cancelled' WHEN $7::run_status = 'FAILED' THEN 'engine_failed' WHEN $7::run_status = 'SUCCEEDED' THEN 'engine_exited' END)`,
     [
       id,
       shape.title ?? 'a session',

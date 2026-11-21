@@ -73,7 +73,7 @@ function coordinatorColumns(state: CoordinatorState) {
   return {
     status: failed ? RunStatus.FAILED : RunStatus.AWAITING_INPUT,
     finishedAt: failed ? new Date() : null,
-    releaseCause: failed ? 'engine_exited' : null,
+    releaseCause: failed ? 'engine_failed' : null,
     retryAt: state === 'retry' ? new Date(Date.now() + 60 * MINUTE) : null,
     completedAt: state === 'ended' ? new Date() : null,
     cancelRequestedAt: state === 'cancelled' ? new Date() : null,

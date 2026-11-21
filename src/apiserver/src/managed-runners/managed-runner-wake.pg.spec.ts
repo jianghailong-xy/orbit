@@ -274,7 +274,7 @@ test('managed runners wake on demand and sleep through the real application', {
       title: 'earlier work', prompt: 'the opening prompt', provider: 'claude', provider_builtin: true, status, num_turns: 1,
       runtime_session_id: randomUUID(),
       ...(isReleasedStatus(status) ? {
-        finished_at: new Date(), release_cause: status === 'CANCELLED' ? 'cancelled' : 'engine_exited',
+        finished_at: new Date(), release_cause: status === 'CANCELLED' ? 'cancelled' : status === 'FAILED' ? 'engine_failed' : 'engine_exited',
       } : {}),
       ...extra,
     };

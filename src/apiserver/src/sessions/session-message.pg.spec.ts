@@ -184,7 +184,7 @@ test('one session’s message to another is signed, delivered as such, and bound
         ...data,
         ...(isReleasedStatus(fixtureStatus) ? {
           finishedAt: data.finishedAt ?? new Date(),
-          releaseCause: fixtureStatus === RunStatus.CANCELLED ? 'cancelled' : 'engine_exited',
+          releaseCause: fixtureStatus === RunStatus.CANCELLED ? 'cancelled' : fixtureStatus === RunStatus.FAILED ? 'engine_failed' : 'engine_exited',
         } : {}),
       },
     });
@@ -628,7 +628,7 @@ test('one session’s message to another is signed, delivered as such, and bound
         status: parkedAs, retryAt: armedAt, retryAttempts: 0,
         // A provider error settles the run FAILED and asks the process to stop (`sweep`'s own note).
         ...(parkedAs === RunStatus.FAILED
-          ? { cancelRequestedAt: new Date(), finishedAt: new Date(), releaseCause: 'engine_exited' }
+          ? { cancelRequestedAt: new Date(), finishedAt: new Date(), releaseCause: 'turn_failed' }
           : { finishedAt: null, releaseCause: null }),
       },
     });

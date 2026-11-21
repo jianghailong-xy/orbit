@@ -311,7 +311,7 @@ async function insertSession(owner: string, status: string, runnerId: string): P
                            "provider","provider_builtin","num_turns","started_at","runtime_session_id", "finished_at", "release_cause")
      VALUES ($1,'watch observer','the opening prompt',$2,$2,now(),$3,$4,'claude',TRUE,1,now(),$5,
              CASE WHEN $3::run_status IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN now() END,
-             CASE WHEN $3::run_status = 'CANCELLED' THEN 'cancelled' WHEN $3::run_status IN ('SUCCEEDED', 'FAILED') THEN 'engine_exited' END)`,
+             CASE WHEN $3::run_status = 'CANCELLED' THEN 'cancelled' WHEN $3::run_status = 'FAILED' THEN 'engine_failed' WHEN $3::run_status = 'SUCCEEDED' THEN 'engine_exited' END)`,
     [id, owner, status, runnerId, `runtime-${id}`],
   );
   return id;

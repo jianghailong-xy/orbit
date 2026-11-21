@@ -109,7 +109,7 @@ async function fixture(
       provider: 'claude',
       status: session.status ?? RunStatus.RUNNING,
       ...(['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(session.status ?? RunStatus.RUNNING)
-        ? { finishedAt: new Date(), releaseCause: session.status === 'CANCELLED' ? 'cancelled' : 'engine_exited' }
+        ? { finishedAt: new Date(), releaseCause: session.status === 'CANCELLED' ? 'cancelled' : session.status === 'FAILED' ? 'engine_failed' : 'engine_exited' }
         : {}),
       endReason: session.endReason ?? null,
       engineTurnActive: (session.status ?? RunStatus.RUNNING) === RunStatus.RUNNING,

@@ -156,7 +156,7 @@ test('evidence that cites a file', { skip: !URL, concurrency: 1, timeout: 600_00
         id, title, prompt: title, ownerId: who.ownerId, creatorId: who.ownerId, workspaceId: who.workspaceId,
         assignedRunnerId: who.runnerId, status, startedAt: new Date(), runtimeSessionId: `runtime-${id}`,
         ...(status === 'SUCCEEDED' || status === 'FAILED'
-          ? { finishedAt: new Date(), releaseCause: 'engine_exited' }
+          ? { finishedAt: new Date(), releaseCause: status === 'FAILED' ? 'engine_failed' : 'engine_exited' }
           : status === 'CANCELLED' ? { finishedAt: new Date(), releaseCause: 'cancelled' } : {}),
         provider: 'claude', taskId, startsTaskWork: taskId !== undefined,
       },
