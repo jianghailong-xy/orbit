@@ -54,6 +54,8 @@ test('reaper applies the startup watchdog to OpenCode sessions', async () => {
         taskFailure: 'ATTEMPT_LOST_RUNTIME_NOT_INITIALIZED',
         // Released for a runtime that never came up (session.release_cause).
         releaseCause: 'setup_failed',
+        // The turn the runtime never came up for carries the failure (design §12.1 W3).
+        carryingTurn: { outcome: 'FAILED', orLatest: false },
       },
     ],
   ]);
@@ -130,6 +132,8 @@ test('reaper applies the startup watchdog to Antigravity sessions that never rep
         taskFailure: 'ATTEMPT_LOST_RUNTIME_NOT_INITIALIZED',
         // Released for a runtime that never came up (session.release_cause).
         releaseCause: 'setup_failed',
+        // The turn the runtime never came up for carries the failure (design §12.1 W3).
+        carryingTurn: { outcome: 'FAILED', orLatest: false },
       },
     ],
   ]);

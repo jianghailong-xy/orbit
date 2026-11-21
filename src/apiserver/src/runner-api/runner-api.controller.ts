@@ -578,6 +578,7 @@ import { DELETE_APPROVAL_TOOL_NAMES, deleteCardInput } from './runner-delete-app
 import { sanitizeWorkspaceWrite } from './runner-agents.controller';
 import { workspaceWriteCardInput } from './runner-workspace-approval';
 import { turnOutcomeOf } from './turn-outcome';
+import { carryingTurnOf, recordCarryingTurnOutcome } from '../common/carrying-turn';
 import { authorizeManagedRunnerInstance, type ManagedRunnerInstance } from '../managed-runners/managed-runner-instance';
 import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/managed-runner-gate';
 import {
@@ -4829,7 +4830,9 @@ export class RunnerApiController {
     // control plane's own business. And only the winner recorded one — the task row moved
     // (publishTaskChanged) and the project's coordinator is told, because a start that never became
     // a run is the one thing a project's timeline would otherwise never mention.
-    const { refused, ...response } = outcome;
+    const { refused, droppedWakeups, ...response } = outcome;
+    // The one-shot wakeups the refused run's drain dropped: their owners are told once, now it has committed.
+    signalDrainedWakeups(this.push, this.logger, droppedWakeups ?? []);
     // §12.15 P-M1: the refused run's finish decided the route a DONE task's work had left open.
     const settledWork = settledBox.work;
     if (settledWork) {
@@ -7757,19 +7760,6 @@ export class RunnerApiController {
             : unanswered && noEngineTurnRan && current.retryAt == null
               ? nextAutoRetryAt(current.retryAttempts, new Date())
               : null;
-      // How the turn ended, for the turn row and the session's copy of it (docs/session-three-state-design.md
-      // §4.2), and the words it ended with: see turn-outcome.ts. A steer and a withdraw settled above.
-      const turnEnd = turnOutcomeOf({
-        kind: completedTurn?.kind,
-        status: dto.status,
-        regionStopped,
-        swallowed,
-        unanswered,
-        failureError: (swallowed ? swallowedMessageError(failureText) : failureText) || 'run failed',
-        error: dto.error,
-        result: dto.result,
-      });
-      const turnOutcome = turnEnd?.outcome ?? null;
       // Idempotent ack: only the first turn-complete for this turn applies. `deliveredAt` is the
       // other half of that compare-and-set now that a completion can leave the row un-ANSWERED: a
       // turn put back in the queue is no longer out on a delivery, so a retried completion for it
@@ -7799,14 +7789,6 @@ export class RunnerApiController {
           await tx.session.update({ where: { id: sessionId }, data: { ...CLEARED_MERGE_STATE } });
         }
         return { applied: false, steer: false, requeued: false, status: current.status, failSession, retryAt: current.retryAt };
-      }
-      // Beside the status the ack just wrote, in its transaction and only when it won, so a retried completion
-      // records nothing twice. The session's copy rides on the park below, the one Session write (I3).
-      if (turnEnd) {
-        await tx.conversationTurn.updateMany({
-          where: { id: dto.turnId, sessionId },
-          data: { outcome: turnEnd.outcome, error: turnEnd.error },
-        });
       }
       let acceptanceTaskChanged = false;
       let acceptanceTaskCompleted = false;
@@ -7911,6 +7893,29 @@ export class RunnerApiController {
       // database exactly once. Still this transaction, so the FAILED and the project's record of
       // it commit together or not at all (contract §4.3 A).
       if (acceptanceFailure) await recordTaskFailure(tx, acceptanceFailure);
+      // How the turn ended, for the turn row and the session's copy of it (docs/session-three-state-design.md
+      // §4.2), and the words it ended with: see turn-outcome.ts. A steer and a withdraw settled above. Decided
+      // after the acceptance comparison, whose failure is this turn's (design §12.1 W1a, W1b).
+      const turnEnd = turnOutcomeOf({
+        kind: completedTurn?.kind,
+        status: dto.status,
+        regionStopped,
+        swallowed,
+        unanswered,
+        failureError: (swallowed ? swallowedMessageError(failureText) : failureText) || 'run failed',
+        acceptanceFailure: acceptanceFailureReason,
+        error: dto.error,
+        result: dto.result,
+      });
+      const turnOutcome = turnEnd?.outcome ?? null;
+      // Beside the status the ack wrote, in its transaction and only when it won, so a retried completion
+      // records nothing twice. The session's copy rides on the park below, the one Session write (I3).
+      if (turnEnd) {
+        await tx.conversationTurn.updateMany({
+          where: { id: dto.turnId, sessionId },
+          data: { outcome: turnEnd.outcome, error: turnEnd.error },
+        });
+      }
       // And the mirror of it, for the comparison that PASSED: a code task whose acceptance held on
       // the merged tree is what the platform integrates, and the queueing happens in the same
       // transaction as the DONE so the two commit together (contract §2.3 J-T1a). Outside the
@@ -10108,8 +10113,9 @@ export class RunnerApiController {
       // prose inside `error`. Arm the same retry from it, so `retryAt` answers "when does this come
       // back" for every quota failure rather than only the ones that got far enough to talk. Never
       // an overwrite: an ingestion-armed retry already knows more than the terminal message does.
+      const failedRun = effectiveStatus === RunStatus.FAILED;
       const quotaSpent =
-        effectiveStatus === RunStatus.FAILED && current.retryAt == null && isUsageLimitErrorText(dto.error);
+        failedRun && current.retryAt == null && isUsageLimitErrorText(dto.error);
       // A run that ended because its account refused the sign-in, on the runner's own login for its
       // engine. Most often the runner's check before it starts the engine (engineAuthPreflight) finds
       // the account signed out and ends the run with the message it took undelivered. Moved below.
@@ -10183,6 +10189,8 @@ export class RunnerApiController {
           }
         : {};
 
+      // The runner failed the session with no end asked: released by the engine's failure (design §12.1 W6).
+      const engineFailed = !current.cancelRequestedAt && failedRun;
       // Only a LIVE session is finalized (updateMany count); duplicate/late completion
       // is a safe no-op but still returns the result derived from this locked snapshot.
       const res = await tx.session.updateMany({
@@ -10198,6 +10206,9 @@ export class RunnerApiController {
           // Why it was released: the requested end's reason, which also chose the status above, or the
           // engine exiting by itself (engine_failed when the runner reported FAILED, the status written then).
           releaseCause: finalizeReleaseCause(current, dto.status),
+          // The engine failed with no end asked (design §12.1 W6): the failure is the carrying turn's, recorded below,
+          // and copied here in the release's own write.
+          ...(engineFailed ? { lastTurnOutcome: 'FAILED' } : {}),
           // Worktree isolation outcome reported by the runner: the branch it committed
           // the work to, the base it forked from, what it did (worktree/shared-nogit),
           // and the per-file diff summary. Each left untouched when the runner omits it.
@@ -10248,6 +10259,13 @@ export class RunnerApiController {
       });
       const retryAt = quotaRetryAt ?? signInRetryAt ?? current.retryAt;
       if (res.count === 0) return { finalized: false, effectiveStatus, keepCheckout, retryAt };
+      // The turn that carries the engine's failure, under the Session lock taken above and before the drain below
+      // answers it: the one in flight, else the one the claim was for, else, with nothing queued (the events the
+      // runner's link gave up were the last turn's), the latest (common/carrying-turn.ts).
+      if (engineFailed) {
+        const carrying = await carryingTurnOf(tx, sessionId, { orLatest: true });
+        if (carrying) await recordCarryingTurnOutcome(tx, carrying, 'FAILED', dto.error ?? null);
+      }
       // A runner that reports success on a finalize nobody asked for: released engine_exited, which no reader takes for
       // finished work (common/session-release.ts isWorkFinishedRelease). No current runner sends it; said here if one does.
       if (reportsSuccessWithNoEnd(current, dto.status)) {
