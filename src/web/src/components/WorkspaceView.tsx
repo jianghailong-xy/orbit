@@ -43,6 +43,8 @@ import {
   SettingOutlined,
   PaperClipOutlined,
   PauseCircleOutlined,
+  PauseOutlined,
+  PlayCircleOutlined,
   PictureOutlined,
   PlusOutlined,
   ProjectOutlined,
@@ -188,14 +190,18 @@ import { rememberListFolder } from '../lib/workspaceListFolder';
 import {
   SESSION_LANDINGS_COPY,
   SESSION_PROJECT_COPY,
+  PROJECT_ROW_FULL_SWIPE,
+  projectStateAction,
   landingsRowSummary,
   listShowsProjects,
   projectSessionsButtonActive,
   sessionProjectListing,
   sourceLandingLabel,
+  type ProjectRowPause,
   type SessionProjectRow,
   type SessionProjectEntry,
 } from '../lib/sessionProjects';
+import { moveProject } from './ProjectRunSettings';
 import { SidebarNavIcon } from './SidebarNavIcon';
 import {
   type SessionTagRef,
@@ -416,6 +422,7 @@ import {
   ItemAsCard,
   exceptionCardRows,
   isOwnerExceptionCard,
+  resumeFuse,
   openItemChatBanner,
   openItemChatContext,
 } from './ProjectProgressStatus';
@@ -1696,7 +1703,7 @@ export function SessionProjectRowContent({ project }: { project: SessionProjectR
         </div>
         <div className="session-sub">
           <span
-            className={`session-project-progress${project.status === 'DONE' ? ' done' : ''}`}
+            className={`session-project-progress${project.status === 'DONE' ? ' done' : ''}${project.pause ? ' paused' : ''}`}
             title={SESSION_PROJECT_COPY.progressHint(project.sessionCount, project.runningCount)}
           >
             {counts ? (
@@ -1710,6 +1717,7 @@ export function SessionProjectRowContent({ project }: { project: SessionProjectR
             className={`session-preview${project.line.tone === 'preview' ? '' : ` tone-${project.line.tone}`}`}
             title={project.line.text}
           >
+            {project.line.glyph === 'pause' && <PauseOutlined className="session-project-pause-glyph" aria-hidden="true" />}
             {project.line.text}
           </div>
         </div>
@@ -6583,6 +6591,48 @@ export function WorkspaceView({
     },
     onError: (e: Error) => message.error("Couldn't complete the project's sessions", e.message),
   });
+  // Pause / Resume on a project's row (design §4.3, §6): the project page's own calls. A pause offers
+  // Undo, which is Resume; a limit resume approves spending again without raising the limit.
+  const projectPauseMut = useMutation({
+    mutationFn: ({ projectId, door, pause }: { projectId: string; door: 'pause' | 'resume'; pause?: ProjectRowPause | null; running?: number }) =>
+      door === 'pause' ? moveProject(projectId, 'pause')
+        : pause?.kind === 'fuse' ? resumeFuse(projectId, pause.episodeId) : moveProject(projectId, 'resume'),
+    onSuccess: (_d, { projectId, door, pause, running }) => {
+      if (door === 'pause') {
+        showToast({
+          message: SESSION_PROJECT_COPY.pausedTitle,
+          detail: SESSION_PROJECT_COPY.pausedStill(running ?? 0),
+          tone: 'neutral',
+          key: `project-pause-${projectId}`,
+          action: {
+            label: SESSION_PROJECT_COPY.undo,
+            ariaLabel: 'Resume the project',
+            onClick: () => projectPauseMut.mutate({ projectId, door: 'resume', pause: { kind: 'owner' } }),
+          },
+        });
+      } else if (pause?.kind === 'fuse') {
+        showToast({
+          message: SESSION_PROJECT_COPY.resumedTitle,
+          detail: SESSION_PROJECT_COPY.resumedLimitNote,
+          tone: 'success',
+          key: `project-pause-${projectId}`,
+          action: {
+            label: 'Project page',
+            ariaLabel: 'Open the project page to change the daily limit',
+            onClick: () => navigate(`/projects/${encodeId(projectId)}`),
+          },
+        });
+      }
+    },
+    onError: (e: Error, { door }) => {
+      const api = e as { status?: number; code?: string };
+      message.error(
+        SESSION_PROJECT_COPY.refusedTitle(door),
+        SESSION_PROJECT_COPY.refusedReason(door, api.status, api.code, e.message),
+      );
+    },
+    onSettled: () => { void qc.invalidateQueries({ queryKey: ['projects', 'sidebar'] }); },
+  });
   const requestComplete = useCallback(
     (session: any): void => {
       const source = selectedSession?.id === session.id ? selectedSession : session;
@@ -9929,6 +9979,13 @@ export function WorkspaceView({
             else navigateWithPaneSlide('push', () =>
               navigate(sessionItemPath(s.target), { state: stampFromList() }));
           };
+          const stateAction = projectStateAction(s, effectiveView);
+          const completeProject = () => completeProjectMut.mutate({ projectId: s.projectId, memberIds: s.members.map((m: any) => m.id) });
+          const runStateAction = () => {
+            if (stateAction === 'complete') completeProject();
+            else if (stateAction) projectPauseMut.mutate({
+              projectId: s.projectId, door: stateAction, pause: s.pause, running: s.runningCount });
+          };
           const projectMenu = (close: () => void): MenuItem[] => [
             // A finished project's row can leave Open: Complete moves its coordinator and
             // the members still open to Completed (§4.3; board 2026-11-07, part ④).
@@ -9947,6 +10004,11 @@ export function WorkspaceView({
             { key: 'project', label: SESSION_PROJECT_COPY.openProject, icon: <ProjectOutlined />,
               onSelect: () => { close(); navigate(`/projects/${encodeId(s.projectId)}`); } },
             { key: 'divider', type: 'separator' },
+            ...(stateAction === 'pause' || stateAction === 'resume' ? [{
+              key: stateAction, label: SESSION_PROJECT_COPY[stateAction],
+              icon: stateAction === 'pause' ? <PauseCircleOutlined /> : <PlayCircleOutlined />,
+              onSelect: () => { close(); runStateAction(); },
+            }] : []),
             // These two act on the coordinator; with none they are shown and unavailable.
             { key: 'pin', label: coordinator?.pinnedAt ? SESSION_PROJECT_COPY.unpin : SESSION_PROJECT_COPY.pin, disabled: !coordinator,
               icon: coordinator?.pinnedAt ? <PushpinFilled /> : <PushpinOutlined />,
@@ -9984,14 +10046,22 @@ export function WorkspaceView({
                 view: effectiveView, dropTargets: dropTargetsShown, touch: isMobile, renaming: false,
               })}
               swipe={{
-                leading: [{
-                  action: 'pin', label: coordinator.pinnedAt ? 'Unpin' : 'Pin', disabled: false,
-                  icon: coordinator.pinnedAt ? <PushpinFilled /> : <PushpinOutlined />,
-                  run: () => runSwipeAction('pin', coordinator),
-                }],
+                leading: [
+                  ...(stateAction ? [{
+                    action: stateAction, label: SESSION_PROJECT_COPY[stateAction], disabled: false,
+                    icon: stateAction === 'pause' ? <PauseCircleOutlined />
+                      : stateAction === 'resume' ? <PlayCircleOutlined /> : <CheckOutlined />,
+                    run: runStateAction,
+                  }] : []),
+                  {
+                    action: 'pin', label: coordinator.pinnedAt ? 'Unpin' : 'Pin', disabled: false,
+                    icon: coordinator.pinnedAt ? <PushpinFilled /> : <PushpinOutlined />,
+                    run: () => runSwipeAction('pin', coordinator),
+                  },
+                ],
                 trailing: [{ action: 'move', label: 'Move', icon: <FolderOutlined />, disabled: false,
                   run: () => runSwipeAction('move', coordinator) }],
-                fullSwipe: true,
+                fullSwipe: PROJECT_ROW_FULL_SWIPE,
               }}
               menu={projectMenu}
               menuLabel="Project actions"
