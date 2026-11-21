@@ -491,11 +491,14 @@ final class AppModel {
     /// first agent in the list. Read in `loadAgentsThenLand`, written by `selectedAgentID`'s didSet.
     private static let lastAgentKey = "orbit.lastAgent"
 
-    init() {
+    // PROBE BRANCH ONLY (`probe/project-row-shell-macos-shots`): the screenshot harness passes an
+    // `InMemoryTokenStore`, because this Mac answers no Keychain authorization prompt and reading an
+    // item back blocks the test forever. Production call sites use the default.
+    init(tokenStore injectedTokenStore: TokenStore? = nil) {
         #if canImport(Security)
-        tokenStore = KeychainTokenStore()
+        tokenStore = injectedTokenStore ?? KeychainTokenStore()
         #else
-        tokenStore = InMemoryTokenStore()
+        tokenStore = injectedTokenStore ?? InMemoryTokenStore()
         #endif
 
         email = UserDefaults.standard.string(forKey: Self.emailKey) ?? ""

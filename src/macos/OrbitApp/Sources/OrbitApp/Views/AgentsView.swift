@@ -1025,6 +1025,14 @@ struct AgentPanes: View {
         }
         .buttonStyle(.plain)
         .sessionFolderDropTarget(folderID: row.folder.id, workspaceID: agent.id, drag: drag, app: app)
+        // PROBE BRANCH ONLY: lets ProjectRowShellShotsTests reach this list's drag state and the
+        // first folder row's frame (see DragShotsProbe).
+        .onAppear { DragShotsProbe.register(drag) }
+        .background {
+            GeometryReader { proxy in
+                Color.clear.onAppear { DragShotsProbe.folderRowFrame = proxy.frame(in: .global) }
+            }
+        }
         .contextMenu {
             Button {
                 renamingFolder = row.folder
