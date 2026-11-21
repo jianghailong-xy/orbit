@@ -13,15 +13,14 @@
     "",
     "Shown items: running ones (only on a live session) plus ended ones (done, failed, killed) whose",
     "endedAt is later than the cut-off. None shown: `{hidden: true}`, no row and no folded mark.",
-    "`label` is \"Background\". `name.mode`: `one` (one item, still), `rotate` (2+ running, no failure",
-    "shown: the running items newest started first, perNameMs 3000 per name, changeMs 300 per change),",
-    "`pinned` (2+ shown and a failure among them: the most recently failed). With nothing running",
-    "the last to end is named, the most recent failure first. With one running and others ended, the",
-    "running one is named.",
+    "`label` is \"Background\". `name.mode`: `one` (one item, still) or `rotate` (2+ running: the running",
+    "items newest started first, perNameMs 3000 per name, changeMs 300 per change). A failure changes",
+    "neither (E2, revised 2026-11-21): the person can do nothing about it. With nothing running the last",
+    "to end is named, failed or not. With one running and others ended, the running one is named.",
     "An item's name is its description (truncate `tail`), else its command (truncate `middle`).",
     "`mark`: running = spinner, done = check, failed = cross, killed = stop icon.",
-    "`countParts` / `countLine`: only when more than one item is shown; \"N running\", \"N failed\"",
-    "(error colour), zero parts left out, joined by \" · \"; null when no part is left.",
+    "`countParts` / `countLine`: only when more than one item is shown and some run: \"N running\"; a",
+    "failure is never counted (E2); null otherwise.",
     "`accessibilityLabel`: \"Background processes, \" + countLine, or the one named item's name.",
     "",
     "`covers` tags each case with the rules it pins; the shared test requires every tag in `rules`.",
@@ -36,10 +35,10 @@
     "label": "The visible label is \"Background\".",
     "single": "One shown item is drawn as its name and status mark.",
     "nameFallback": "Name = description (tail truncation), else command (middle truncation).",
-    "countLine": "The count line appears only when more than one item is shown, with \"N running\" / \"N failed\".",
-    "rotation": "Names rotate newest started first, 3000 ms / 300 ms, only while 2+ run and no failure is shown.",
-    "pinned": "The most recent failure shown is pinned.",
-    "nothingRunningLastEnded": "Nothing running: the last ended is shown, failure first.",
+    "countLine": "The count line appears only when more than one item is shown and some run, as \"N running\".",
+    "rotation": "Names rotate newest started first, 3000 ms / 300 ms, while 2+ run, a failure shown or not.",
+    "failureNotCounted": "A failure is neither counted nor pinned: it keeps its cross only where it is named.",
+    "nothingRunningLastEnded": "Nothing running: the last ended is shown, failed or not.",
     "a11yCount": "Accessibility label \"Background processes, \" + the count.",
     "a11yName": "Accessibility label \"Background processes, \" + the one name.",
     "notLive": "A non-live session's stale running items are dropped.",
@@ -563,9 +562,9 @@
       }
     },
     {
-      "case": "two running, one failed: the failure is pinned, no rotation, count 2 running · 1 failed",
+      "case": "two running, one failed: the running two rotate, count 2 running, the failure not counted",
       "covers": [
-        "pinned",
+        "failureNotCounted",
         "rotation",
         "countLine",
         "a11yCount"
@@ -600,32 +599,38 @@
         "hidden": false,
         "label": "Background",
         "name": {
-          "mode": "pinned",
-          "item": {
-            "id": "bgj_s",
-            "name": "OrbitKit swift test (swift:6.1) on the full HEAD tree",
-            "truncate": "tail",
-            "mark": "failed"
-          }
+          "mode": "rotate",
+          "items": [
+            {
+              "id": "bgj_tsc",
+              "name": "apiserver tsc + full npm test at 2ce9dc49e",
+              "truncate": "tail",
+              "mark": "running"
+            },
+            {
+              "id": "bgj_web",
+              "name": "web tsc + full Vitest suite",
+              "truncate": "tail",
+              "mark": "running"
+            }
+          ],
+          "perNameMs": 3000,
+          "changeMs": 300
         },
         "countParts": [
           {
             "kind": "running",
             "text": "2 running"
-          },
-          {
-            "kind": "failed",
-            "text": "1 failed"
           }
         ],
-        "countLine": "2 running · 1 failed",
-        "accessibilityLabel": "Background processes, 2 running · 1 failed"
+        "countLine": "2 running",
+        "accessibilityLabel": "Background processes, 2 running"
       }
     },
     {
-      "case": "two failures shown: the most recent failure is pinned",
+      "case": "two failures shown: the running one is named, the failures not counted",
       "covers": [
-        "pinned",
+        "failureNotCounted",
         "countLine"
       ],
       "list": [
@@ -659,32 +664,28 @@
         "hidden": false,
         "label": "Background",
         "name": {
-          "mode": "pinned",
+          "mode": "one",
           "item": {
-            "id": "bgj_f2",
-            "name": "Second failure",
+            "id": "bgj_w",
+            "name": "Wait until the handoff v2 project branch is on main",
             "truncate": "tail",
-            "mark": "failed"
+            "mark": "running"
           }
         },
         "countParts": [
           {
             "kind": "running",
             "text": "1 running"
-          },
-          {
-            "kind": "failed",
-            "text": "2 failed"
           }
         ],
-        "countLine": "1 running · 2 failed",
-        "accessibilityLabel": "Background processes, 1 running · 2 failed"
+        "countLine": "1 running",
+        "accessibilityLabel": "Background processes, 1 running"
       }
     },
     {
       "case": "a failure before the last user message is not shown, so the rest rotate",
       "covers": [
-        "pinned",
+        "failureNotCounted",
         "rotation",
         "endedAfterLastUserMessage"
       ],
@@ -799,10 +800,10 @@
       }
     },
     {
-      "case": "nothing running, a failure among the ended: the failure first, though a success ended later",
+      "case": "nothing running, a failure among the ended: the last to end is named, not the failure",
       "covers": [
         "nothingRunningLastEnded",
-        "pinned",
+        "failureNotCounted",
         "countLine",
         "a11yCount"
       ],
@@ -838,22 +839,17 @@
         "hidden": false,
         "label": "Background",
         "name": {
-          "mode": "pinned",
+          "mode": "one",
           "item": {
-            "id": "bgj_s",
-            "name": "OrbitKit swift test (swift:6.1) on the full HEAD tree",
+            "id": "bgj_tsc",
+            "name": "apiserver tsc + full npm test at 2ce9dc49e",
             "truncate": "tail",
-            "mark": "failed"
+            "mark": "done"
           }
         },
-        "countParts": [
-          {
-            "kind": "failed",
-            "text": "1 failed"
-          }
-        ],
-        "countLine": "1 failed",
-        "accessibilityLabel": "Background processes, 1 failed"
+        "countParts": [],
+        "countLine": null,
+        "accessibilityLabel": "Background processes, apiserver tsc + full npm test at 2ce9dc49e"
       }
     },
     {

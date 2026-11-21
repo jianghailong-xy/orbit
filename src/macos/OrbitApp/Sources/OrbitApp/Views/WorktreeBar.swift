@@ -1141,7 +1141,7 @@ struct BackgroundTrayView: View {
     /// The name the row shows now.
     private func current(_ row: BackgroundRowRule.Row) -> BackgroundRowRule.Item {
         switch row.name {
-        case .one(let item), .pinned(let item): return item
+        case .one(let item): return item
         case .rotate(let items, _, _): return items[turn % items.count]
         }
     }
@@ -1173,7 +1173,7 @@ struct BackgroundTrayView: View {
             if !row.countParts.isEmpty {
                 row.countParts.enumerated().reduce(Text("")) { line, part in
                     line + Text(part.offset == 0 ? "" : " · ")
-                        + Text(part.element.text).foregroundStyle(part.element.kind == "failed" ? Color.red : Color.secondary)
+                        + Text(part.element.text)
                 }
                 .font(.orbitMeta).foregroundStyle(.secondary).lineLimit(1).fixedSize()
             }
