@@ -4669,6 +4669,16 @@ button.toast--pill:focus-visible {
 .wt-merge-cmd:hover .wt-merge-cmd-copy {
   display: inline;
 }
+/* The ✕ that closes a failed merge's strip: its top-right corner, clear of the message. */
+.wt-merge.wt-merge-closable {
+  position: relative;
+  padding-right: 34px;
+}
+.wt-merge-dismiss {
+  position: absolute;
+  top: 7px;
+  right: 8px;
+}
 .wt-merge-err {
   color: var(--error);
   white-space: pre-wrap;
