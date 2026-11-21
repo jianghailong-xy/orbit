@@ -122,6 +122,41 @@ func TestARequestPastItsDeadlineIsOfflineAtOnce(t *testing.T) {
 	}
 }
 
+func TestARequestPastItsDeadlineWhileOthersAreAnsweredIsOneFailure(t *testing.T) {
+	// A loaded server: one request is held past its deadline while the others are answered. It is slow, not gone.
+	held := make(chan struct{})
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("id") == "slow" {
+			close(held)
+			<-release
+			return
+		}
+		_, _ = w.Write([]byte(`{"id":"fast","name":"f","kind":"FILE"}`))
+	}))
+	defer srv.Close()
+	defer close(release) // before Close, which waits for the held request
+	c := New(Config{BaseURL: srv.URL, Token: "t", MetaTimeout: 500 * time.Millisecond})
+	slow := make(chan error, 1)
+	go func() {
+		_, err := c.StatID(context.Background(), "slow")
+		slow <- err
+	}()
+	<-held
+	if _, err := c.StatID(context.Background(), "fast"); err != nil {
+		t.Fatalf("answered while the other waits: %v", err)
+	}
+	if err := <-slow; !Transient(err) {
+		t.Fatalf("past its deadline: %v", err)
+	}
+	if c.Health().Offline() {
+		t.Fatal("one request past its deadline while others were answered: still online")
+	}
+	if _, err := c.StatID(context.Background(), "fast"); err != nil {
+		t.Fatalf("still sent: %v", err)
+	}
+}
+
 func TestASupersededInstanceIsFencedForGood(t *testing.T) {
 	var calls atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

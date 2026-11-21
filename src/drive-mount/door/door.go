@@ -445,6 +445,7 @@ func (c *Client) send(ctx context.Context, k kind, method, route string, query u
 	if k == kindLongPoll {
 		client = c.long
 	}
+	sent := c.health.now()
 	resp, err := client.Do(req)
 	if err != nil {
 		// The caller giving up (the kernel interrupting the request) is not the server's failure; a refused or reset
@@ -455,9 +456,7 @@ func (c *Client) send(ctx context.Context, k kind, method, route string, query u
 		switch {
 		case callerGaveUp:
 		case timedOut:
-			// A request past its deadline is the server out of reach, not one more failure among others: held
-			// unanswered, requests fail 9 s apart and three of them never fall within 10 s (§5.7).
-			c.health.unreachable()
+			c.health.timedOut(sent)
 		default:
 			c.health.failure()
 		}
@@ -742,6 +741,7 @@ type Health struct {
 	failures  []time.Time
 	offline   bool
 	since     time.Time
+	answered  time.Time // when the server last answered a request
 	changed   []func(online bool, since time.Time)
 	now       func() time.Time
 }
@@ -805,6 +805,21 @@ func (h *Health) unreachable() {
 	}
 }
 
+// timedOut is a request sent at sent that passed its deadline. If the server answered nothing while it waited, it is
+// out of reach and the client goes offline at once: held unanswered, requests fail a deadline apart and three of them
+// never fall within 10 s (§5.7). If it answered others meanwhile, it is slow, not gone, and this is one failure among
+// others: one slow request on a loaded server does not fail every write on the mount.
+func (h *Health) timedOut(sent time.Time) {
+	h.mu.Lock()
+	silent := !h.answered.After(sent)
+	h.mu.Unlock()
+	if silent {
+		h.unreachable()
+		return
+	}
+	h.failure()
+}
+
 func isTimeout(err error) bool {
 	var ne net.Error
 	return errors.As(err, &ne) && ne.Timeout()
@@ -812,6 +827,7 @@ func isTimeout(err error) bool {
 
 func (h *Health) success() {
 	h.mu.Lock()
+	h.answered = h.now()
 	h.failures = h.failures[:0]
 	back := h.offline
 	h.offline = false

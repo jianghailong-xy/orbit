@@ -7,7 +7,7 @@ system, at `/run/orbit-files/drive` on an Orbit Cloud runner, which the runner s
 
 | Package | What it is |
 |---|---|
-| `door` | The door client: the mount credential and the managed-runner instance on every request, deadlines (9 s metadata, 60 s a chunk), offline after three failures in 10 s or one request past its deadline, fencing on a superseded or revoked instance. |
+| `door` | The door client: the mount credential and the managed-runner instance on every request, deadlines (9 s metadata, 60 s a chunk), offline after three failures in 10 s, or at once when a request passes its deadline with nothing answered while it waited, fencing on a superseded or revoked instance. |
 | `drivefs` | The file system: inode table, listings and lookups with the change feed's invalidations (`feed.go`), entry-bound write states with commit-on-close, `CONTINUE`/`OVERWRITE`/`APPEND` and the 64 KiB tail merge (`wfile.go`), the evict-and-refetch spool (`spool.go`), the chunk cache (`cache.go`), refusals and `errors.log`/`status.json`/`unsent/` (`report.go`), attribution (`attrib.go`). |
 | `parent` | The privileged parent of one runner's daemon: opens `/dev/fuse`, mounts `fuse.orbit-files` `nosuid,nodev,noexec,default_permissions,allow_other`, starts the daemon as uid 65532 with the descriptor (`/dev/fd/3`), the credential through a pipe and a socket for attribution; replaces a daemon that dies, and aborts and replaces one that freezes (the watchdog: a forced `statx` of the mount's root every 10 s, answered from memory, 5 s deadline). The CSI plugin (`files.orbit.dev`) runs this per runner. |
 | `sandbox` | What the daemon applies to itself once mounted: `no_new_privs`, undumpable, and a seccomp filter refusing mounts, namespaces, tracing, modules, keys and BPF. |

@@ -1327,7 +1327,8 @@ print('listxattr', os.listxattr('$F/x46'))"`);
       const uncachedMs = Number(/uncached rc=1 ms=(\d+)/.exec(reads.out)![1]);
       assert.ok(uncachedMs <= 10_000, `uncached cat failed after ${uncachedMs} ms`);
       assert.match(reads.err, /uncached\.txt: Input\/output error/);
-      // The daemon is offline once it has met the outage (three failures in 10 s, or one request past its deadline).
+      // The daemon is offline once it has met the outage (three failures in 10 s, or a request past its deadline with
+      // nothing answered while it waited).
       const cut = Date.now();
       await waitFor('status.json says offline', () => status(a).connected === false, 30_000, 100);
       const noticed = Date.now() - cut;
