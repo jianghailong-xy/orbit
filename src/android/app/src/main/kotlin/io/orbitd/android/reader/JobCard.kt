@@ -141,7 +141,7 @@ private fun rememberNow(ticking: Boolean): Long {
     return now
 }
 
-/** The R4 breakpoint: below it, the kind chip and the run time move to a second, grey line. */
+/** The R4 breakpoint (web `PHONE_QUERY`, max-width 600px): up to it, the kind chip and the run time move to a second, grey line. */
 internal const val PHONE_WIDTH_DP = 600
 
 /**
@@ -189,7 +189,7 @@ internal fun JobCardView(event: RunEvent, receipt: BgJob.Receipt?, highlighted: 
     val folded = BgJob.lastLines(output, if (running) 1 else 2)
     val lines = BgJob.lines(output)
     val shown = if (allLines) lines else lines.takeLast(BgJob.OPEN_LINES)
-    val phone = LocalConfiguration.current.screenWidthDp < PHONE_WIDTH_DP
+    val phone = LocalConfiguration.current.screenWidthDp <= PHONE_WIDTH_DP
 
     val grey = MaterialTheme.colorScheme.onSurfaceVariant
     val red = MaterialTheme.colorScheme.error
@@ -243,8 +243,11 @@ internal fun JobCardView(event: RunEvent, receipt: BgJob.Receipt?, highlighted: 
                         color = grey, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     phase == BgJob.Phase.KILLED -> killedBy?.let { KilledLine(it, Modifier.padding(start = 40.dp)) }
                     ended && folded.isNotEmpty() -> Column(Modifier.padding(start = 40.dp).testTag("job-ending"), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(folded.joinToString("\n"), Modifier.testTag("job-tail"), style = mono,
-                            color = if (phase == BgJob.Phase.FAILED) red else grey, maxLines = 2, overflow = TextOverflow.Ellipsis, softWrap = false)
+                        // Each of its last two lines on a line of its own, cut at the card's edge (web `.chat-job-tail`, white-space: pre).
+                        Column(Modifier.testTag("job-tail")) {
+                            folded.forEach { line -> Text(line, style = mono, color = if (phase == BgJob.Phase.FAILED) red else grey, maxLines = 1,
+                                overflow = TextOverflow.Ellipsis) }
+                        }
                         Text(BgJob.showFullOutput, Modifier.clickable(role = Role.Button) { open = true }.testTag("job-show-full"),
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                     }
