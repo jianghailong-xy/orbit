@@ -84,7 +84,7 @@ BEGIN
       USING ARRAY[
         'delivery_status', 'delivery_failure_code', 'delivery_failure_reason', 'delivery_terminal_at',
         'delivery_acknowledged_at', 'lease_deadline_at', 'lease_generation',
-        'translation_state', 'translation_lang', 'translation_failure_reason', 'translation_http_status',
+        'display_prompt', 'translation_state', 'translation_lang', 'translation_failure_reason', 'translation_http_status',
         'wiki_context', 'coordinator_context_key'
       ]::text[]
     LOOP

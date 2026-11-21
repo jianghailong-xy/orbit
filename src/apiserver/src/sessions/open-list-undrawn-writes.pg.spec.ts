@@ -77,9 +77,11 @@ interface Fixture {
   turnId: string;
   /** An answered steer aimed at the turn: the one kind of row the delivery columns may be set on (0210). */
   steerId: string;
+  /** A message held by a failed translation (0532), the one kind of row the failure columns may be set on; only when asked. */
+  heldId: string;
 }
 
-async function fixture(t: T): Promise<Fixture> {
+async function fixture(t: T, opts: { held?: boolean } = {}): Promise<Fixture> {
   await verifyDisposableDatabase();
   const db = prismaClientFor(URL!);
   t.after(() => db.$disconnect());
@@ -119,7 +121,14 @@ async function fixture(t: T): Promise<Fixture> {
     },
     select: { id: true },
   });
-  return { db, prisma: db as unknown as PrismaService, ownerId, runnerId, sessionId, turnId, steerId };
+  const heldId = opts.held ? (await db.conversationTurn.create({
+    data: {
+      sessionId, seq: 3, clientTurnId: `olu-${randomUUID()}`, kind: 'message', content: 'later', status: 'HELD',
+      displayPrompt: 'later', translationState: 'FAILED', translationLang: 'en', translationFailureReason: 'TIMEOUT',
+    },
+    select: { id: true },
+  })).id : '';
+  return { db, prisma: db as unknown as PrismaService, ownerId, runnerId, sessionId, turnId, steerId, heldId };
 }
 
 /** The counters of the two sources a running session writes. */
@@ -335,15 +344,21 @@ const UNDRAWN_SESSION_WRITES: Record<(typeof OPEN_LIST_UNDRAWN_SESSION_COLUMNS)[
 type TurnColumn = (typeof OPEN_LIST_UNDRAWN_TURN_COLUMNS)[number];
 /**
  * Writes that change the undrawn turn columns, each listed by the columns it changes. The delivery
- * columns move together, on a steer, as conversation_turn_delivery_terminal_check (0210) requires.
+ * columns move together, on a steer, as conversation_turn_delivery_terminal_check (0210) requires; the
+ * translation columns as conversation_turn_translation_chk and _failure_chk (0532) do.
  */
-const UNDRAWN_TURN_WRITES: Array<{ columns: TurnColumn[]; row: 'turnId' | 'steerId'; set: string }> = [
+const UNDRAWN_TURN_WRITES: Array<{ columns: TurnColumn[]; row: 'turnId' | 'steerId' | 'heldId'; set: string }> = [
   { columns: ['lease_deadline_at'], row: 'turnId', set: `lease_deadline_at = now() + interval '5 minutes'` },
   { columns: ['lease_generation'], row: 'turnId', set: `lease_generation = gen_random_uuid()` },
-  { columns: ['translation_state'], row: 'turnId', set: `translation_state = 'DONE'` },
-  { columns: ['translation_lang'], row: 'turnId', set: `translation_lang = 'en'` },
-  { columns: ['translation_failure_reason'], row: 'turnId', set: `translation_failure_reason = 'olu'` },
-  { columns: ['translation_http_status'], row: 'turnId', set: `translation_http_status = 500` },
+  // The translation columns move together (0532), and its failure only on a HELD turn.
+  {
+    columns: ['display_prompt', 'translation_state', 'translation_lang'], row: 'turnId',
+    set: `display_prompt = 'fix the bug', translation_state = 'DONE', translation_lang = 'en'`,
+  },
+  {
+    columns: ['translation_failure_reason', 'translation_http_status'], row: 'heldId',
+    set: `translation_failure_reason = 'HTTP', translation_http_status = 503`,
+  },
   { columns: ['wiki_context'], row: 'turnId', set: `wiki_context = '{"entries":[]}'::jsonb` },
   { columns: ['coordinator_context_key'], row: 'turnId', set: `coordinator_context_key = repeat('k', 64)` },
   {
@@ -364,7 +379,7 @@ test('0. every undrawn turn column is written by the specs below', () => {
 });
 
 test('2. hints: a write of undrawn columns alone sends no sessions.list_changed and keeps the version; a drawn one sends one', { skip, timeout: 120_000 }, async (t) => {
-  const f = await fixture(t);
+  const f = await fixture(t, { held: true });
   const received = hints(f, t);
   assert.ok(await until(() => received.length === 1, 3_000), 'a new stream was not told the current version');
   let told = received.length;
@@ -408,7 +423,7 @@ test('2. hints: a write of undrawn columns alone sends no sessions.list_changed 
   await loud('conversation_turn.answered_at with delivery_status', `UPDATE conversation_turn SET answered_at = now(), delivery_status = 'done' WHERE id = $1::uuid`, f.turnId);
   await loud('conversation_turn.status', `UPDATE conversation_turn SET status = 'ANSWERED' WHERE id = $1::uuid`, f.turnId);
   await loud('a turn inserted', `INSERT INTO conversation_turn (id, session_id, seq, client_turn_id, kind, content, status)
-                                 VALUES (gen_random_uuid(), $1::uuid, 3, 'olu-second', 'message', 'next', 'PENDING')`, f.sessionId);
+                                 VALUES (gen_random_uuid(), $1::uuid, 4, 'olu-second', 'message', 'next', 'PENDING')`, f.sessionId);
   // A session leaving the account moves both owners, whatever else it changed.
   const other = randomUUID();
   await f.db.user.create({ data: { id: other, email: `olu-${other}@open-list-undrawn.invalid`, name: 'olu2', passwordHash: 'x' } });
@@ -416,7 +431,7 @@ test('2. hints: a write of undrawn columns alone sends no sessions.list_changed 
 });
 
 test('3. the row: changing every undrawn session column leaves the Open list\'s rows as they were', { skip, timeout: 60_000 }, async (t) => {
-  const f = await fixture(t);
+  const f = await fixture(t, { held: true });
   const sessions = new SessionsService(
     f.prisma,
     inert<ConstructorParameters<typeof SessionsService>[1]>(),
