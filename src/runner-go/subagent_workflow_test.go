@@ -261,6 +261,11 @@ func TestWorkflowToolIsListedOnlyWhenTheClaimSaysWorkflowsOn(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(home, "config.json"), config, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	// This process's own home names the config a declared spawn carries (orbitMCPDeclaredEnv appends
+	// ORBIT_HOME=<machineHome>), and the last duplicate in cmd.Env is the one the child sees. Without
+	// this the declared case read the machine's real ~/.orbit, which a CI runner does not have: the
+	// child's `orbit mcp` found no config and exited 1.
+	t.Setenv("ORBIT_HOME", home)
 	// What this binary serves as `orbit mcp` (TestMain), started the way an engine starts it: nothing of this test's
 	// own ORBIT_ environment, only what the spawn hands it.
 	listed := func(t *testing.T, spawnEnv []string) map[string]bool {

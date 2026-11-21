@@ -51,12 +51,34 @@ export const MODEL_FAMILY_TIERS: ReadonlyArray<{
   family: string;
   match: RegExp;
   tiers: Partial<Record<ModelRoutingLevel, string>>;
+  /** The rule stands in only while the catalogue lists no model matching this. */
+  unless?: RegExp;
 }> = [
   { family: 'Claude Sonnet', match: /^claude-sonnet-\d/, tiers: { S: 'low', M: 'medium' } },
   { family: 'Claude Opus', match: /^claude-opus-\d/, tiers: { L: 'high', XL: 'max' } },
   { family: 'Gemini Flash', match: /^gemini-\d[\d.]*-flash$/, tiers: { S: 'low', M: 'medium' } },
   { family: 'Gemini', match: /^gemini-\d[\d.]*-(?!flash$)[a-z]+$/, tiers: { L: 'high', XL: 'max' } },
   { family: 'Composer', match: /^composer-\d/, tiers: { S: 'low' } },
+  // Claude Haiku and Kimi go last so they never displace a Claude or Gemini pick in the same tier.
+  { family: 'Claude Haiku', match: /^claude-haiku-\d/, tiers: { S: 'low' } },
+  // Kimi as Cursor lists it, mirroring the Kimi Code table: K3 at S/M, K3.1 Pro at L/XL, K3 standing in for it.
+  { family: 'Kimi K3', match: /^kimi-k3(?!\.)/, tiers: { S: 'low', M: 'high' } },
+  { family: 'Kimi K3.1 Pro', match: /^kimi-k3\.\d+-pro/, tiers: { L: 'high', XL: 'max' } },
+  { family: 'Kimi K3 (no Pro listed)', match: /^kimi-k3(?!\.)/, tiers: { L: 'high', XL: 'max' }, unless: /^kimi-k3\.\d+-pro/ },
+  // Measured 2026-11-21 against the tier anchors (task 351AxJztYRw7WA2Ik86DK, owner-approved). Pinned to the
+  // measured ids where a wider pattern would let the newest-member rule pick an unmeasured model.
+  // Fable passed everything, at ~1.8x Opus's cost: L/XL, after Opus.
+  { family: 'Claude Fable', match: /^claude-fable-\d/, tiers: { L: 'high', XL: 'max' } },
+  // Passed everything on Antigravity, slower than Neon and one run stalled: L/XL, after Gemini.
+  { family: 'Gemini Pro Orchestrator', match: /^gemini-pro-orchestrator-neon$/, tiers: { L: 'high', XL: 'max' } },
+  { family: 'DeepSeek Flash', match: /^deepseek-flash$/, tiers: { S: 'low', M: 'medium' } },
+  // S and M only measured: its L/XL runs died on Cursor transport errors.
+  { family: 'Grok', match: /^grok-\d[\d.]*$/, tiers: { S: 'low', M: 'medium' } },
+  // Pass S/M/L, miss the XL task (Sol 1/2, Terra 0/2, Luna 0/2); in that order of preference.
+  { family: 'GPT Sol', match: /^gpt-5\.6-sol$/, tiers: { S: 'low', M: 'medium' } },
+  { family: 'GPT Terra', match: /^gpt-5\.6-terra$/, tiers: { S: 'low', M: 'medium' } },
+  { family: 'GPT Luna', match: /^gpt-5\.6-luna$/, tiers: { S: 'low', M: 'medium' } },
+  // gpt-oss-120b failed every S task: no entry, so it stays untiered.
 ];
 
 const EFFORT_ORDER = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
@@ -91,9 +113,10 @@ function familyTierRows(catalog: readonly RunnerModelInfo[]): SubagentModelRow[]
   const rows: SubagentModelRow[] = [];
   const tiered = new Set<string>();
   for (const level of MODEL_ROUTING_LEVELS) {
-    for (const { match, tiers } of MODEL_FAMILY_TIERS) {
+    for (const { match, tiers, unless } of MODEL_FAMILY_TIERS) {
       const wanted = tiers[level];
       if (!wanted) continue;
+      if (unless && catalog.some((row) => unless.test(row.value))) continue;
       const newest = catalog.filter((row) => match.test(row.value)).sort((a, b) => newerFirst(a.value, b.value))[0];
       if (!newest) continue;
       rows.push({ model: newest.value, effort: clampEffort(wanted, newest.reasoningLevels), level });
@@ -101,6 +124,15 @@ function familyTierRows(catalog: readonly RunnerModelInfo[]): SubagentModelRow[]
     }
   }
   return [...rows, ...catalog.filter((row) => !tiered.has(row.value)).map((row) => ({ model: row.value, effort: null, level: null }))];
+}
+
+/** The newest model of `model`'s family in a catalogue (the one familyTierRows tiers), or null for a model of no
+ *  family. It is `model` itself when nothing newer is reported. */
+export function familyNewest(model: string, catalog: readonly RunnerModelInfo[]): string | null {
+  const rule = MODEL_FAMILY_TIERS.find(({ match }) => match.test(model));
+  if (!rule) return null;
+  const newest = catalog.filter((row) => rule.match.test(row.value)).sort((a, b) => newerFirst(a.value, b.value))[0];
+  return newest?.value ?? null;
 }
 
 /** The effort each tier asks of a model the owner tiers: clamped to the model's own levels (clampEffort). */

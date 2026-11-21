@@ -15,6 +15,7 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import io.orbitd.android.TestOrbitApplication
+import io.orbitd.android.core.cards.BackgroundRow
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.core.realtime.RunEvent
 import io.orbitd.android.ui.OrbitTheme
@@ -235,6 +236,57 @@ class BackgroundTrayTest {
         compose.onNodeWithTag("background-proc:bgj_7f3a:output").assertExists()
         compose.onNodeWithText("BUILD SUCCESSFUL in 3m").assertExists()
         compose.onNodeWithText("$ ./gradlew :app:test").assertExists()
+    }
+
+    // MARK: a bg_run job's row and its Job card (board 350t1lTONlrPMjilBdXx7 D1, rulings R1 and R3)
+
+    private fun job(id: String, status: String, stoppable: Boolean? = null) = obj("""{"shellId":"$id","kind":"job","toolUseId":"$id",
+        "command":"./gradlew :app:test","description":"Job $id","startedSeq":40,"startedTs":"${ago(300)}","status":"$status"
+        ${stoppable?.let { ",\"stoppable\":$it" }.orEmpty()}}""")
+
+    private fun setJobTray(list: List<JsonObject>, jobs: JobCards, jump: (String) -> (() -> Unit)?) {
+        compose.setContent {
+            CompositionLocalProvider(LocalLifecycleOwner provides Owner(), LocalJobCards provides jobs) {
+                OrbitTheme { BackgroundTray(list, null, true, jumpToJob = jump) }
+            }
+        }
+        settle()
+    }
+
+    @Test fun aFailedJobCountsInRed() {
+        val failed = JsonObject(job("bgj_f", "failed") + ("endedAt" to JsonPrimitive(ago(60))))
+        val row = BackgroundRow.rowOf(listOf(failed, job("bgj_r", "running")), null, true)!!
+        assertTrue(row.countParts.toString(), row.countParts.any { it.kind == "failed" && it.text == "1 failed" })
+        // The folded row draws a failed part in the error colour (its semantics are cleared to its one label, so this is read from the source).
+        val tray = generateSequence(File(System.getProperty("user.dir")).absoluteFile) { it.parentFile }
+            .map { File(it, "app/src/main/kotlin/io/orbitd/android/reader/BackgroundTray.kt") }.first { it.isFile }.readText()
+        assertTrue(tray.contains("if (part.kind == \"failed\") MaterialTheme.colorScheme.error else secondary"))
+    }
+
+    @Test fun tappingAJobInTheOpenedListGoesToItsCard() {
+        val jumped = mutableListOf<String>()
+        setJobTray(listOf(job("bgj_a", "running"), running("s", 10, "web suite")), JobCards()) { id -> if (id == "bgj_a") ({ jumped += id }) else null }
+        compose.onNodeWithTag("background-tray:row").performClick(); settle()
+        compose.onNodeWithText("Job bgj_a").performClick(); settle()
+        assertEquals(listOf("bgj_a"), jumped)
+        // The list closes onto the card; a shell row (or a job whose card is not drawn) still opens to its output.
+        compose.onNodeWithTag("background-tray:list").assertDoesNotExist()
+        compose.onNodeWithTag("background-tray:row").performClick(); settle()
+        compose.onNodeWithText("web suite").performClick(); settle()
+        compose.onNodeWithTag("background-proc:s:output").assertExists()
+    }
+
+    @Test fun aRunningStoppableJobTakesStopBehindTheCardsConfirmation() {
+        val stopped = mutableListOf<String>()
+        setJobTray(listOf(job("bgj_a", "running", stoppable = true), job("bgj_b", "running", stoppable = false), job("bgj_c", "running"),
+            job("bgj_d", "done", stoppable = true), running("s", 10, "web suite")), JobCards(stop = { stopped += it })) { null }
+        compose.onNodeWithTag("background-tray:row").performClick(); settle()
+        compose.onNodeWithTag("background-proc:bgj_a:stop").assertExists()
+        listOf("bgj_b", "bgj_c", "bgj_d", "s").forEach { compose.onNodeWithTag("background-proc:$it:stop").assertDoesNotExist() }
+        compose.onNodeWithTag("background-proc:bgj_a:stop").performClick(); settle()
+        compose.onNodeWithText("Stop this job?").assertExists()
+        compose.onNodeWithTag("job-stop-confirm").performClick(); settle()
+        assertEquals(listOf("bgj_a"), stopped)
     }
 
     @Test fun aSessionThatIsNotLiveDropsItsStaleRunningItems() {

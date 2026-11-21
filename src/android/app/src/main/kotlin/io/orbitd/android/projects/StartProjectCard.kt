@@ -146,31 +146,36 @@ internal fun StartProjectCard(
                     RunSettings.delivery(draft.line, draft.deliveryMode)), tag)
             }
             HorizontalDivider()
-            LineRow(draft, request, projectId, editable, tag, onDraft)
-            // How the work reaches main, under the line it only means something for: a card whose read does not say offers no
-            // choice, and no row.
-            if (draft.deliveryMode != null) {
+            if (draft.line == null) {
+                Text(StartProjectCopy.noLine, Modifier.fillMaxWidth().padding(12.dp).testTag("$tag-no-line"),
+                    style = MaterialTheme.typography.labelMedium, color = muted)
+            } else {
+                LineRow(draft, request, projectId, editable, tag, onDraft)
+                // How the work reaches main, under the line it only means something for: a card whose read does not say offers no
+                // choice, and no row.
+                if (draft.deliveryMode != null) {
+                    HorizontalDivider()
+                    DeliveryRow(draft, editable, tag, onDraft)
+                }
+                // A project with no repository has no branch to name, and no row.
+                if (draft.upstream != null) {
+                    HorizontalDivider()
+                    MainBranchRow(draft, branches, lastChoice, editable, tag, onDraft)
+                }
                 HorizontalDivider()
-                DeliveryRow(draft, editable, tag, onDraft)
-            }
-            // A project with no repository has no branch to name, and no row.
-            if (draft.upstream != null) {
-                HorizontalDivider()
-                MainBranchRow(draft, branches, lastChoice, editable, tag, onDraft)
-            }
-            HorizontalDivider()
-            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(LandingCheckCopy.label)
-                if (draft.line == "MAIN") Text(LandingCheckCopy.main) else {
-                    OutlinedTextField(draft.landingCheckCommand, { onDraft(draft.copy(landingCheckCommand = it)) },
-                        enabled = editable, placeholder = { Text(LandingCheckCopy.commandPlaceholder) }, label = { Text(LandingCheckCopy.command) })
-                    Text(LandingCheckCopy.hint, style = MaterialTheme.typography.labelMedium)
-                    if (draft.landingCheckCommand.isBlank()) Text(LandingCheckCopy.inheritedCommand(draft.mergeCheckCommand.takeIf { it.isNotBlank() }))
-                    OutlinedTextField(draft.landingCheckTimeoutSeconds?.toString().orEmpty(),
-                        { if (it.isEmpty() || (it.toIntOrNull() ?: 0) > 0) onDraft(draft.copy(landingCheckTimeoutSeconds = it.toIntOrNull())) },
-                        enabled = editable, placeholder = { Text(LandingCheckCopy.timeoutPlaceholder) }, label = { Text(LandingCheckCopy.timeout) })
-                    Text(LandingCheckCopy.timeoutHint, style = MaterialTheme.typography.labelMedium)
-                    if (draft.landingCheckTimeoutSeconds == null) Text(LandingCheckCopy.inheritedTimeout(draft.mergeCheckTimeoutSeconds))
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(LandingCheckCopy.label)
+                    if (draft.line == "MAIN") Text(LandingCheckCopy.main) else {
+                        OutlinedTextField(draft.landingCheckCommand, { onDraft(draft.copy(landingCheckCommand = it)) },
+                            enabled = editable, placeholder = { Text(LandingCheckCopy.commandPlaceholder) }, label = { Text(LandingCheckCopy.command) })
+                        Text(LandingCheckCopy.hint, style = MaterialTheme.typography.labelMedium)
+                        if (draft.landingCheckCommand.isBlank()) Text(LandingCheckCopy.inheritedCommand(draft.mergeCheckCommand.takeIf { it.isNotBlank() }))
+                        OutlinedTextField(draft.landingCheckTimeoutSeconds?.toString().orEmpty(),
+                            { if (it.isEmpty() || (it.toIntOrNull() ?: 0) > 0) onDraft(draft.copy(landingCheckTimeoutSeconds = it.toIntOrNull())) },
+                            enabled = editable, placeholder = { Text(LandingCheckCopy.timeoutPlaceholder) }, label = { Text(LandingCheckCopy.timeout) })
+                        Text(LandingCheckCopy.timeoutHint, style = MaterialTheme.typography.labelMedium)
+                        if (draft.landingCheckTimeoutSeconds == null) Text(LandingCheckCopy.inheritedTimeout(draft.mergeCheckTimeoutSeconds))
+                    }
                 }
             }
             HorizontalDivider()
@@ -306,7 +311,7 @@ fun CoordinatorStartCard(card: InteractionCard, reads: Map<String, JsonElement>,
 /** An edited draft across recreation; none saved while nothing has been edited. */
 private val draftSaver = Saver<StartProjectCopy.Draft?, List<Any?>>(
     save = { draft -> draft?.let { listOf(it.line, it.automatic, it.maxConcurrentTasks, it.mergeCheckCommand, it.upstream, it.deliveryMode) } },
-    restore = { StartProjectCopy.Draft(it[0] as String, it[1] as Boolean, it[2] as Int, it[3] as String, it[4] as String?, it[5] as String?) })
+    restore = { StartProjectCopy.Draft(it[0] as String?, it[1] as Boolean, it[2] as Int, it[3] as String, it[4] as String?, it[5] as String?) })
 
 /** What still comes to the owner once the project starts with these settings. */
 @Composable

@@ -14,6 +14,7 @@ import {
 import { attribute, type RequestForBlock } from './session-message';
 import { readRunQuestionCard, RUN_QUESTION_PREFIX } from './run-question';
 import { SESSION_REPLY_TURN_KEY_PREFIX } from './watch-turn-key';
+import { RELEASED_SESSION_STATUSES } from '../common/session-release';
 
 /**
  * One Orbit session asking another for a reply, and the one outcome every such request comes to
@@ -898,7 +899,7 @@ async function lostDelivery(
 }
 
 /** A run that is over: what a reap or a finalize writes before it drains the run's turns. */
-const RUN_ENDED: string[] = ['SUCCEEDED', 'FAILED', 'CANCELLED'];
+const RUN_ENDED: string[] = [...RELEASED_SESSION_STATUSES];
 
 /**
  * Of these failed turns, the ones the auto-retry will find again: a turn the records it reads are about

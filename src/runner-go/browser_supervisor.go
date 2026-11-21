@@ -37,6 +37,13 @@ const (
 	browserVNCSocketName = "vnc.sock"
 )
 
+// The indexes into browserSupervisor.procs, in the order ensureStartedLocked starts them.
+const (
+	browserProgramXvfb = iota
+	browserProgramVNC
+	browserProgramChrome
+)
+
 // browserClearCapabilityV1 declares that this runner reports its browser on each heartbeat and honours Clear saved
 // logins (HeartbeatResponse.ClearBrowserProfile): @orbit/shared's BROWSER_CLEAR_V1. Only a managed runner declares it.
 const browserClearCapabilityV1 = "browser-clear/v1"
@@ -54,6 +61,8 @@ var errBrowserUnavailable = errors.New("The browser is not available on this run
 type browserProcess interface {
 	// Exited reports whether the program has ended by itself.
 	Exited() bool
+	// Done is closed when the program has ended.
+	Done() <-chan struct{}
 	// Stop ends the program and waits for it.
 	Stop()
 }
@@ -408,15 +417,7 @@ func (b *browserSupervisor) ensureStartedLocked() error {
 		{browserXvfbBinary, []string{browserDisplay, "-screen", "0", browserScreen, "-nolisten", "tcp"}, true},
 		// -noprimary: only what is copied (CLIPBOARD) goes back to the viewer's clipboard, not every selection.
 		{browserX11vncBinary, []string{"-display", browserDisplay, "-unixsock", b.VNCSocket(), "-rfbport", "0", "-shared", "-forever", "-nopw", "-quiet", "-noprimary"}, false},
-		// --no-sandbox: the container is the boundary (§3). --test-type keeps Chrome from drawing its "unsupported
-		// command-line flag" bar over the page for it, which the owner would otherwise see in every viewer.
-		{browserChromeBinary, []string{
-			"--no-sandbox", "--test-type", "--disable-dev-shm-usage",
-			"--user-data-dir=" + b.ProfileDir(),
-			"--remote-debugging-address=" + browserDevToolsHost,
-			"--remote-debugging-port=" + strconv.Itoa(browserDevToolsPort),
-			"--no-first-run", "--no-default-browser-check", "--window-position=0,0", "--window-size=1280,800",
-		}, false},
+		{browserChromeBinary, b.chromeArgs(), false},
 	}
 	var started []browserProcess
 	for _, s := range steps {
@@ -436,8 +437,61 @@ func (b *browserSupervisor) ensureStartedLocked() error {
 		started = append(started, p)
 	}
 	b.procs = started
+	for i, p := range started {
+		go b.watchProgram(p, i)
+	}
 	b.log("browser: started")
 	return nil
+}
+
+// chromeArgs is Chrome's command line on the browser's display: --no-sandbox, because the container is the boundary
+// (§3), with --test-type so it does not draw its "unsupported command-line flag" bar over the page for it, which the
+// owner would otherwise see in every viewer.
+func (b *browserSupervisor) chromeArgs() []string {
+	return []string{
+		"--no-sandbox", "--test-type", "--disable-dev-shm-usage",
+		"--user-data-dir=" + b.ProfileDir(),
+		"--remote-debugging-address=" + browserDevToolsHost,
+		"--remote-debugging-port=" + strconv.Itoa(browserDevToolsPort),
+		"--no-first-run", "--no-default-browser-check", "--window-position=0,0", "--window-size=1280,800",
+	}
+}
+
+// watchProgram waits for one of the browser's programs to end on its own. Chrome ending is what closing its last tab
+// or window does (Chromium quits with its last window): while a viewer is open, Chrome alone starts again on the
+// display and VNC server still running, so the viewer's stream stays open and draws the new window instead of the
+// black display it would otherwise keep. With no viewer the programs have no one to serve, so they stop and the next
+// Open or browser call starts them together. The identity check keeps a program that stopLocked ended, or one
+// restartChromeLocked replaced, from acting on its successor.
+func (b *browserSupervisor) watchProgram(p browserProcess, index int) {
+	<-p.Done()
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.procs == nil || index >= len(b.procs) || b.procs[index] != p {
+		return
+	}
+	if index == browserProgramChrome && b.viewers > 0 && !b.procs[browserProgramXvfb].Exited() && !b.procs[browserProgramVNC].Exited() {
+		b.restartChromeLocked()
+		return
+	}
+	b.stopLocked("one of its programs ended")
+}
+
+// restartChromeLocked starts Chrome again after it ended on its own, without touching the display and VNC server:
+// the viewer's stream names the VNC socket, and that socket outlives the browser it was started with.
+func (b *browserSupervisor) restartChromeLocked() {
+	if err := b.clearChromeLocksLocked(); err != nil {
+		b.stopLocked("its browser ended and could not be started again")
+		return
+	}
+	p, err := b.starter.Start(browserChromeBinary, b.chromeArgs())
+	if err != nil {
+		b.stopLocked("its browser ended and could not be started again")
+		return
+	}
+	b.procs[browserProgramChrome] = p
+	go b.watchProgram(p, browserProgramChrome)
+	b.log("browser: chrome ended, started it again for the open viewer")
 }
 
 // prepareStateLocked makes the profile directory and clears what a previous Chrome or x11vnc left: the VNC socket
@@ -446,12 +500,17 @@ func (b *browserSupervisor) prepareStateLocked() error {
 	if err := os.MkdirAll(b.ProfileDir(), 0o700); err != nil {
 		return err
 	}
-	for _, p := range []string{
-		b.VNCSocket(),
-		filepath.Join(b.ProfileDir(), "SingletonLock"),
-		filepath.Join(b.ProfileDir(), "SingletonSocket"),
-		filepath.Join(b.ProfileDir(), "SingletonCookie"),
-	} {
+	if err := os.Remove(b.VNCSocket()); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return b.clearChromeLocksLocked()
+}
+
+// clearChromeLocksLocked removes Chrome's singleton files: its lock names the host, which a restarted Chrome on a new
+// Pod would refuse the profile over, and a restarted Chrome on the same Pod would find stale.
+func (b *browserSupervisor) clearChromeLocksLocked() error {
+	for _, name := range []string{"SingletonLock", "SingletonSocket", "SingletonCookie"} {
+		p := filepath.Join(b.ProfileDir(), name)
 		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
 			return err
 		}

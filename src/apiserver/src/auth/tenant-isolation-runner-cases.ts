@@ -995,6 +995,12 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
       body: heartbeat({ sessions: [{ sessionId: of.runner.machineSessionId, isolationStatus: 'worktree', changedFiles: [], worktreeDirty: true }] }),
     }),
   },
+  // What a runner states is executing in a session is written only to a session assigned to it and leased to its process
+  // (runners/runner-executing-sets.ts): another account's session under that id matches no row and is left as it is.
+  'POST /runner/heartbeat body executing[].sessionId': {
+    as: RUNNER,
+    request: (of) => ({ params: {}, body: heartbeat({ executing: [{ sessionId: of.runner.machineSessionId, jobs: [], shells: [], subagents: [], engineTurnActive: false }] }) }),
+  },
   'POST /runner/heartbeat body expiredCommitErrors[].sessionId': {
     as: RUNNER,
     request: (of) => ({ params: {}, body: heartbeat({ expiredCommitErrors: [{ sessionId: of.runner.machineSessionId, operationId: LEASE }] }) }),

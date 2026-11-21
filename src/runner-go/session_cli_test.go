@@ -489,6 +489,8 @@ func TestSessionCLICreateWaitPollsWithCallerContext(t *testing.T) {
 			_, _ = w.Write([]byte(`{"id":"watch-1","state":"ACTIVE"}`))
 		case "GET /api/runner/sessions/child-session":
 			_, _ = w.Write([]byte(`{"id":"child-session","status":"SUCCEEDED","result":"done"}`))
+		case "GET /api/runner/watches/watch-1":
+			_, _ = w.Write([]byte(`{"id":"watch-1","state":"MATCHED"}`))
 		case "POST /api/runner/watches/watch-1/release":
 			_, _ = w.Write([]byte(`{"outcome":"CANCELLED"}`))
 		default:
@@ -513,6 +515,7 @@ func TestSessionCLICreateWaitPollsWithCallerContext(t *testing.T) {
 		"POST /api/runner/sessions",
 		"POST /api/runner/watches",
 		"GET /api/runner/sessions/child-session",
+		"GET /api/runner/watches/watch-1",
 		"POST /api/runner/watches/watch-1/release",
 	}
 	if !reflect.DeepEqual(requests, want) {
@@ -553,6 +556,8 @@ func TestSessionCreateWaitAsksAgainForAWatchTheServerFailedToRecord(t *testing.T
 			_, _ = w.Write([]byte(`{"id":"watch-1","state":"ACTIVE"}`))
 		case "GET /api/runner/sessions/child-session":
 			_, _ = w.Write([]byte(`{"id":"child-session","status":"SUCCEEDED","result":"done"}`))
+		case "GET /api/runner/watches/watch-1":
+			_, _ = w.Write([]byte(`{"id":"watch-1","state":"MATCHED"}`))
 		case "POST /api/runner/watches/watch-1/release":
 			_, _ = w.Write([]byte(`{"outcome":"CANCELLED"}`))
 		default:
@@ -584,7 +589,7 @@ func TestSessionCreateWaitAsksAgainForAWatchTheServerFailedToRecord(t *testing.T
 	for i := 0; i < watchRecordAttempts; i++ {
 		want = append(want, "POST /api/runner/watches")
 	}
-	want = append(want, "GET /api/runner/sessions/child-session", "POST /api/runner/watches/watch-1/release")
+	want = append(want, "GET /api/runner/sessions/child-session", "GET /api/runner/watches/watch-1", "POST /api/runner/watches/watch-1/release")
 	if !reflect.DeepEqual(requests, want) {
 		t.Fatalf("requests = %#v, want %#v", requests, want)
 	}

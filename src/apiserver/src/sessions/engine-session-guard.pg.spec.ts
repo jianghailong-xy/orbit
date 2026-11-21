@@ -807,9 +807,14 @@ test('only a claimed subject gets a session row, and the compensation points ins
     });
     const settled = await ensureLandingSession(stack.db, g.landingId, claimed);
     assert.ok(settled?.created);
-    assert.equal((await stack.db.session.findUniqueOrThrow({
-      where: { id: settled!.sessionId }, select: { status: true },
-    })).status, RunStatus.SUCCEEDED);
+    const settledRow = await stack.db.session.findUniqueOrThrow({
+      where: { id: settled!.sessionId }, select: { status: true, finishedAt: true, releaseCause: true },
+    });
+    assert.equal(settledRow.status, RunStatus.SUCCEEDED);
+    // Released from the start, at the moment its landing settled (plan step 3.1).
+    const settledAt = (await stack.db.projectLanding.findUniqueOrThrow({ where: { id: g.landingId } })).settledAt;
+    assert.equal(settledRow.finishedAt?.getTime(), settledAt?.getTime(), 'the release column is the settlement time');
+    assert.equal(settledRow.releaseCause, 'landing_settled');
   } finally {
     await stack.db.$disconnect();
   }

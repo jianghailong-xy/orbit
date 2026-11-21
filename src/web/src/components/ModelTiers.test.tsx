@@ -47,6 +47,7 @@ const TIERS: SubagentTiersResponse = {
       models: [
         { model: 'claude-opus-5-6', levels: ['L', 'XL'], source: 'catalogue', editable: true, outputPricePerMTok: null, quality: RATED },
         { model: 'grok-4.7', levels: ['L'], source: 'owner', editable: true, outputPricePerMTok: null, quality: SPARSE },
+        { model: 'claude-opus-5', levels: [], source: null, editable: true, outputPricePerMTok: null, supersededBy: 'claude-opus-5-6', quality: NONE },
         { model: 'kimi-k3', levels: [], source: null, editable: true, outputPricePerMTok: null, quality: NONE },
       ],
     },
@@ -125,6 +126,15 @@ describe('ModelTiers', () => {
     expect(rowOf('claude-opus-5-6').querySelector('.model-tiers-yours')).toBeNull();
     // The catalogue's tier on a key stays plain text.
     expect(rowOf('deepseek-v4-pro').querySelector('button')).toBeNull();
+  });
+
+  it('reads an older family model as Older · uses the newest, still a tier button with the S-XL menu', async () => {
+    await mount();
+    const button = rowOf('claude-opus-5').querySelector<HTMLButtonElement>('button.model-tiers-set')!;
+    expect(button.textContent).toBe('Older · uses claude-opus-5-6');
+    expect(button.classList.contains('model-tiers-older')).toBe(true);
+    expect(button.classList.contains('model-tiers-unset')).toBe(false);
+    expect(await openMenu('claude-opus-5')).toEqual(['S', 'M', 'L', 'XL']);
   });
 
   it('sets a built-in model\'s tier through the builtin door', async () => {

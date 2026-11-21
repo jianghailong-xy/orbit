@@ -21,6 +21,11 @@ export function tierText(levels: readonly SubagentSize[]): string {
   return levels.join(' · ');
 }
 
+/** A model's Tier cell text: `tierText`, but an older family member reads "Older · uses <newest>" in place of Not set. */
+export function modelTierText(model: ProviderModelTier): string {
+  return model.levels.length === 0 && model.supersededBy ? `Older · uses ${model.supersededBy}` : tierText(model.levels);
+}
+
 /** A model's Price / M out cell. */
 export function priceText(model: ProviderModelTier, billing: ProviderTierRow['billing']): string {
   if (model.outputPricePerMTok != null) return `$${model.outputPricePerMTok.toFixed(2)}`;

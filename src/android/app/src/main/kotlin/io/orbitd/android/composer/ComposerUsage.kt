@@ -178,10 +178,10 @@ internal fun ComposerUsage(model: ComposerModel, state: ComposerState, detail: J
         var error by remember { mutableStateOf<String?>(null) }
         val scope = rememberCoroutineScope()
         LaunchedEffect(projectId) { waits = runCatching { api.pendingWaits(projectId) }.getOrNull() }
-        HandoverConfirm(running, waits, busy, error, onHandOver = {
+        HandoverConfirm(running, waits, busy, error, model, state, detail, onHandOver = { successor ->
             busy = true; error = null
             scope.launch {
-                try { api.post(projectId); confirming = false }
+                try { api.post(projectId, successor = successor); confirming = false }
                 catch (cancel: CancellationException) { throw cancel }
                 catch (e: Exception) { error = CoordinatorHandoff.refusal(e) }
                 finally { busy = false }

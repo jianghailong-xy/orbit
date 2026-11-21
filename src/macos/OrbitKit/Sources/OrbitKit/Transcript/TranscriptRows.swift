@@ -641,7 +641,12 @@ public enum TranscriptRows {
             // Transcript.tsx hides the read-only copy while `live && !result`).
             // A SubAgent's end turn draws nothing: its card is the end (`SubagentCardEnd`). Its turn's
             // head still follows, as it follows every turn that opened one.
-            if case .user(let bubble) = item, SubagentCardEnd.drawsNothing(bubble, queued: false) {
+            // So does a background job's end, new output or stall (board C1): the job is one card from
+            // start to end (`BgJobCard`). The runner's launch pair for that job is the Background list's,
+            // not the transcript's: the bg_run call is the card.
+            if case .user(let bubble) = item, SubagentCardEnd.drawsNothing(bubble, queued: false)
+                || BgJobCard.drawsNothing(bubble, queued: false) {
+            } else if case .toolCall(let card) = item, BgJobCard.isRunnerJobLaunch(card) {
             } else if !Approvals.duplicatesPendingApproval(item, pendingApprovals: state.pendingApprovals) {
                 rows.append(.item(item))
             }
@@ -661,7 +666,8 @@ public enum TranscriptRows {
         // than removing one row and inserting another (web parity: `acceptedUserTurnEvent`, appended
         // after the last event).
         rows.append(contentsOf: state.accepted
-            .filter { !SubagentCardEnd.drawsNothing($0, queued: true) && !SubagentCardEnd.drawsNothing($0, queued: false) }
+            .filter { !SubagentCardEnd.drawsNothing($0, queued: true) && !SubagentCardEnd.drawsNothing($0, queued: false)
+                && !BgJobCard.drawsNothing($0, queued: true) && !BgJobCard.drawsNothing($0, queued: false) }
             .map { TranscriptRow.item(.user($0)) })
         // An anchor no longer in the window (its item was dropped — e.g. an optimistic bubble whose
         // send failed) would otherwise take the card down with it. Trail those instead of losing them.
@@ -689,9 +695,11 @@ public enum TranscriptRows {
         if showWorkingIndicator { rows.append(.working) }
         // …except the reader's own messages still on their way, which the tray above the composer
         // holds instead (`PendingTray.holds`); what Orbit queued keeps its card here — but a SubAgent's
-        // end waits on its own card (`SubagentCardEnd.queuedWake`), so the tail draws nothing for it.
+        // end waits on its own card (`SubagentCardEnd.queuedWake`), so the tail draws nothing for it, and
+        // so does a background job's news, whose card says it waits (`BgJobCard.queuedWake`, board E1).
         rows.append(contentsOf: state.queued
-            .filter { !PendingTray.holds($0) && !SubagentCardEnd.drawsNothing($0, queued: true) }
+            .filter { !PendingTray.holds($0) && !SubagentCardEnd.drawsNothing($0, queued: true)
+                && !BgJobCard.drawsNothing($0, queued: true) }
             .map(TranscriptRow.queued))
         // Zero-height tail row: a stable `scrollTo` target that always sits below the last message
         // (the last item's own id moves as it streams).
@@ -801,7 +809,7 @@ public enum TranscriptRows {
         // SubAgent (`mcp__orbit__delegate`), which draws the child's steps under the same block
         // (docs/subagent-design.md §6.4), and an Orbit workflow, whose block counts its calls.
         case "AskUserQuestion", "ExitPlanMode", "mcp__orbit__session_create", "Task", "Agent", "Workflow",
-             SubagentBlock.toolName, WorkflowBlock.toolName:
+             SubagentBlock.toolName, WorkflowBlock.toolName, BgJobCard.toolName:
             return false
         default:
             return true

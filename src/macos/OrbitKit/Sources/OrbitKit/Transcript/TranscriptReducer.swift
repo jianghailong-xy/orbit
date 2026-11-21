@@ -974,6 +974,18 @@ public struct TranscriptReducer: Sendable, Codable {
             leaving.insert(b, at: 0)
         }
         state.queued += leaving
+        // A message held for its translation that stays in the conversation is skipped below as if
+        // echoed, so its chip follows the listing here: translated while it waits for a runner slot,
+        // it no longer reads "Translating…" until the runner's echo comes (web parity: the snapshot
+        // carries `translation`).
+        let listedTranslation = Dictionary(turns.compactMap { t in t.turnTranslation.map { (t.turnId, $0) } },
+                                           uniquingKeysWith: { _, last in last })
+        for i in state.items.indices {
+            guard case .user(var b) = state.items[i], b.pending, let id = b.turnId,
+                  let translation = listedTranslation[id], b.translation != translation else { continue }
+            b.translation = translation
+            state.items[i] = .user(b)
+        }
         // Every row the tail drew before this listing, the accepted head's first — matched below
         // whichever of the two a turn has moved between.
         let previous = state.accepted + state.queued
@@ -2147,6 +2159,10 @@ public struct TranscriptReducer: Sendable, Codable {
                 if state.background[i].kind == nil { state.background[i].kind = proc.kind }
                 if state.background[i].taskId == nil { state.background[i].taskId = proc.taskId }
                 if state.background[i].endedAt == nil { state.background[i].endedAt = proc.endedAt }
+                if state.background[i].reason == nil { state.background[i].reason = proc.reason }
+                if state.background[i].exitCode == nil { state.background[i].exitCode = proc.exitCode }
+                // Only the server says whether its owner can stop it, so its word is kept on the live row.
+                if let stoppable = proc.stoppable { state.background[i].stoppable = stoppable }
                 if state.background[i].status == "running" { state.background[i].status = proc.status }
                 // The server knows a bg_run by its job record, which a live launch does not carry.
                 if proc.kind == "job" { state.background[i].kind = "job" }
@@ -2186,9 +2202,17 @@ public struct TranscriptReducer: Sendable, Codable {
             return
         }
         let ended = ["completed", "done", "failed", "killed", "stopped"].contains(status)
+        // How a runner-hosted job ended: why a killed one was killed, and its exit code (shared
+        // `deriveBackgroundShells`), which its card says.
+        let reason = ended && (status == "killed" || status == "stopped") ? nonEmpty(str(ev, "reason")) : nil
+        let exitCode = ended ? ev.payload["exitCode"]?.intValue : nil
         if let i = index {
             state.background[i].status = status
             if ended { state.background[i].endedAt = ev.ts ?? state.background[i].endedAt }
+            if let reason { state.background[i].reason = reason }
+            if let exitCode { state.background[i].exitCode = exitCode }
+            // An end is no longer stoppable, whatever the list said while it ran.
+            if ended { state.background[i].stoppable = false }
             if runnerKind != nil { state.background[i].kind = "job" }
             if let command { state.background[i].command = command }
             if state.background[i].taskId == nil { state.background[i].taskId = taskID }
@@ -2201,7 +2225,7 @@ public struct TranscriptReducer: Sendable, Codable {
                                                    description: launch?.description ?? named?.title,
                                                    status: status, outputTail: "", startedAt: ev.ts,
                                                    kind: runnerKind != nil ? "job" : named?.kind, taskId: taskID,
-                                                   endedAt: ended ? ev.ts : nil))
+                                                   endedAt: ended ? ev.ts : nil, reason: reason, exitCode: exitCode))
         }
     }
 

@@ -114,6 +114,55 @@ export function decodeTurnPrefixResponse(data: Uint8Array | string, requestId: s
   };
 }
 
+/** A read of the newest lines of a bg_run job's output: a link `Frame` with only `background_job_tail_request` set, in
+ *  protobuf's canonical JSON (contracts/runner-link/v1, BackgroundJobTailRequest). */
+export function backgroundJobTailRequestMessage(
+  requestId: string,
+  sessionId: string,
+  jobId: string,
+  maxLines: number,
+  maxBytes: number,
+): string {
+  return JSON.stringify({ backgroundJobTailRequest: { requestId, sessionId, jobId, maxLines, maxBytes } });
+}
+
+/** How a BackgroundJobTailRequest ended (proto `BackgroundJobTailOutcome`, without its prefix): the runner's OK or
+ *  NOT_FOUND, or the gateway's NO_CONNECTION, UNSUPPORTED or TIMEOUT. */
+export type LinkBackgroundJobTailOutcome = 'OK' | 'NOT_FOUND' | 'NO_CONNECTION' | 'UNSUPPORTED' | 'TIMEOUT';
+
+/** The end of one bg_run job's output, as its runner read it (proto `BackgroundJobTailResponse`). */
+export interface LinkBackgroundJobTail {
+  outcome: LinkBackgroundJobTailOutcome;
+  status: string;
+  exitCode: number | null;
+  text: string;
+  truncated: boolean;
+  outputBytes: number;
+}
+
+const TAIL_OUTCOMES: ReadonlySet<string> = new Set(['OK', 'NOT_FOUND', 'NO_CONNECTION', 'UNSUPPORTED', 'TIMEOUT']);
+
+/**
+ * Reads the gateway's answer to a background job tail request (a Frame with only `background_job_tail_response` set):
+ * null when it is not one, or answers another request. An outcome left out, or one this server does not know, reads as
+ * NOT_FOUND, as the proto says of UNSPECIFIED.
+ */
+export function decodeBackgroundJobTailResponse(data: Uint8Array | string, requestId: string): LinkBackgroundJobTail | null {
+  const r = parseFrame(data)?.backgroundJobTailResponse;
+  if (!r || typeof r !== 'object' || r.requestId !== requestId) return null;
+  const outcome = String(r.outcome ?? '').replace(/^BACKGROUND_JOB_TAIL_OUTCOME_/, '');
+  const bytes = Number(r.outputBytes ?? 0);
+  const exitCode = Number(r.exitCode ?? 0);
+  return {
+    outcome: TAIL_OUTCOMES.has(outcome) ? (outcome as LinkBackgroundJobTailOutcome) : 'NOT_FOUND',
+    status: typeof r.status === 'string' ? r.status : '',
+    exitCode: r.exited === true && Number.isSafeInteger(exitCode) ? exitCode : null,
+    text: typeof r.text === 'string' ? r.text : '',
+    truncated: r.truncated === true,
+    outputBytes: Number.isSafeInteger(bytes) && bytes >= 0 ? bytes : 0,
+  };
+}
+
 /** One live stream event from the link, with its place in the session's live stream. */
 export interface LinkLiveEvent {
   liveSeq: number;
@@ -200,6 +249,9 @@ const SESSION_RUNNER_MAX = 10_000;
 const DROP_REPORT_MS = 60_000;
 /** How often this instance's non-zero watcher counts are published again; the gateway lets one lapse after 60 s. */
 export const WATCHERS_REFRESH_MS = 20_000;
+/** How long a read of a job's newest lines waits for its runner's answer. The gateway gives up sooner (bgTailTimeout in
+ *  src/link-gateway/bgtail.go) and says so, so this only bounds a gateway that never answers. */
+export const BACKGROUND_JOB_TAIL_TIMEOUT_MS = 4_000;
 /** How long a stream that opens waits for the runner's turn prefix before it goes on without one. */
 export const TURN_PREFIX_TIMEOUT_MS = 1_500;
 
@@ -404,6 +456,31 @@ export class RunnerHints implements OnModuleInit, OnModuleDestroy {
       TURN_PREFIX_TIMEOUT_MS,
     );
     return answer ? decodeTurnPrefixResponse(answer, requestId) : null;
+  }
+
+  /**
+   * The newest lines of one bg_run job's output, asked of the runner hosting its session over the link
+   * (GET /sessions/:id/background/jobs/:jobId/tail): a NATS request on the runner's subject, which the gateway relays
+   * as a BackgroundJobTailRequest and answers with what the runner says, or with why it could not ask. 'unavailable'
+   * when the link's NATS connection is off or down; null when no answer came within BACKGROUND_JOB_TAIL_TIMEOUT_MS
+   * (no gateway holds the runner, or the gateway never answered).
+   */
+  async backgroundJobTail(
+    runnerId: string,
+    sessionId: string,
+    jobId: string,
+    maxLines: number,
+    maxBytes: number,
+  ): Promise<LinkBackgroundJobTail | 'unavailable' | null> {
+    const bus = this.bus;
+    if (!bus?.up) return 'unavailable';
+    const requestId = randomUUID();
+    const answer = await bus.request(
+      runnerHintSubject(runnerId),
+      backgroundJobTailRequestMessage(requestId, sessionId, jobId, maxLines, maxBytes),
+      BACKGROUND_JOB_TAIL_TIMEOUT_MS,
+    );
+    return answer ? decodeBackgroundJobTailResponse(answer, requestId) : null;
   }
 
   /** What was published and dropped since start, for the specs. */

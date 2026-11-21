@@ -541,8 +541,8 @@ func TestWatchCreateSendsTheLowestVersionItsPredicateNeeds(t *testing.T) {
 		{"a quiet job", job, nil, 3},
 		{"a quiet job beside a run ending", `{"kind":"ANY_OF","operands":[` + job + `,{"kind":"ANY","over":"ALL_TARGETS","leaf":"SESSION_RUN_TERMINAL"}]}`, nil, 3},
 		// A leaf this binary does not know goes out under the newest grammar, whose refusal lists every leaf.
-		{"an unknown leaf", `{"kind":"ALL","over":"ALL_TARGETS","leaf":"TASK_REOPENED"}`, nil, 3},
-		{"an unknown kind", `{"kind":"SHELL","command":"true"}`, nil, 3},
+		{"an unknown leaf", `{"kind":"ALL","over":"ALL_TARGETS","leaf":"TASK_REOPENED"}`, nil, 4},
+		{"an unknown kind", `{"kind":"SHELL","command":"true"}`, nil, 4},
 		// A version the agent named is the server's to judge, never rewritten here.
 		{"a version the agent named", job, float64(2), 2},
 	}

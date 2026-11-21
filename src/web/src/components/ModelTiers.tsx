@@ -3,12 +3,12 @@ import type { SubagentSize } from '@orbit/shared';
 import { api } from '../api';
 import { PROVIDERS_BASE } from '../lib/providerAdmin';
 import {
+  modelTierText,
   priceText,
   QUALITY_FOOT,
   qualityLines,
   subagentTiersQuery,
   TIER_LEVELS,
-  tierText,
   type ProviderModelTier,
   type ProviderTierRow,
 } from '../lib/subagentTiers';
@@ -99,10 +99,11 @@ function TierCell({ provider, model }: { provider: ProviderTierRow; model: Provi
     onSuccess: () => qc.invalidateQueries({ queryKey: subagentTiersQuery().queryKey }),
     onError: (error: Error) => toast.error(error.message),
   });
-  const text = tierText(model.levels);
+  const text = modelTierText(model);
   const unset = model.levels.length === 0;
+  const older = unset && !!model.supersededBy;
   if (!model.editable || (!provider.providerId && provider.kind !== 'builtin')) {
-    return <span className={unset ? 'model-tiers-unset' : undefined}>{text}</span>;
+    return <span className={older ? 'model-tiers-older' : unset ? 'model-tiers-unset' : undefined}>{text}</span>;
   }
   const items: MenuItem[] = [
     ...TIER_LEVELS.map((level): MenuItem => ({
@@ -123,7 +124,7 @@ function TierCell({ provider, model }: { provider: ProviderTierRow; model: Provi
       trigger={
         <button
           type="button"
-          className={`model-tiers-set${unset ? ' model-tiers-unset' : ''}`}
+          className={`model-tiers-set${older ? ' model-tiers-older' : unset ? ' model-tiers-unset' : ''}`}
           aria-label={`Tier of ${model.model}: ${text}`}
           disabled={set.isPending}
         >

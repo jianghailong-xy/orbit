@@ -4,6 +4,7 @@ import {
   credentialEngines,
   ENGINE_CLI_NAMES,
   type ProviderModelTier,
+  type RunnerModelInfo,
   type ProviderTierRow,
   type SubagentTiersResponse,
   providerPreset,
@@ -25,6 +26,7 @@ import { isPoolCandidate } from '../providers/pool-admission';
 import { followsRuntimeCatalog, withPreset } from '../providers/preset-overlay';
 import { COMPATIBILITY_GUARD_SLUGS } from '../providers/providers.service';
 import {
+  familyNewest,
   familyTier,
   MODEL_ROUTING_LEVELS,
   type BuiltinModelTiers,
@@ -342,6 +344,19 @@ async function readConfiguredProviders(
   return [...keys, ...poolProviders];
 }
 
+/** Marks each untiered model of a built-in engine whose family's newest model is tiered there: routing uses the
+ *  newest on purpose, so the page reads "Older · uses <newest>", not "Not set". An owner's tier makes a model
+ *  tiered, so it is never marked. Display only; no routing decision reads this. */
+export function markSuperseded(models: readonly ProviderModelTier[], catalog: readonly RunnerModelInfo[]): void {
+  for (const model of models) {
+    if (model.levels.length > 0) continue;
+    const newest = familyNewest(model.model, catalog);
+    if (newest && newest !== model.model && models.some((row) => row.model === newest && row.levels.length > 0)) {
+      model.supersededBy = newest;
+    }
+  }
+}
+
 /**
  * The Providers page's Tier column and the SubAgents settings' provider list (docs/subagent-design.md §7): every
  * provider routeSubagent considers, in its order, each with the tiers the router reads for its models. The
@@ -417,13 +432,20 @@ export async function subagentTierView(db: Prisma.TransactionClient, ownerId: st
         for (const model of models.values()) {
           model.levels.sort((a, b) => MODEL_ROUTING_LEVELS.indexOf(a) - MODEL_ROUTING_LEVELS.indexOf(b));
         }
+        // A built-in engine's older family models sort after its tiered ones and before the plain Not set ones.
+        if (builtin) markSuperseded([...models.values()], catalogInput.modelCatalog?.[entry.provider.slug as AgentProvider] ?? []);
+        const ordered = [...models.values()];
+        if (builtin) {
+          const rank = (model: ProviderModelTier) => (model.levels.length > 0 ? 0 : model.supersededBy ? 1 : 2);
+          ordered.sort((a, b) => rank(a) - rank(b));
+        }
         return {
           slug: entry.provider.slug,
           label: entry.label,
           kind: builtin ? 'builtin' : entry.kind,
           providerId: entry.providerId,
           billing: entry.provider.billing,
-          models: [...models.values()],
+          models: ordered,
         };
       }),
   };

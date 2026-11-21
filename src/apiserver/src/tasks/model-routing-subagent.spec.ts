@@ -319,7 +319,7 @@ test('every registered provider joins: the asked tier, then higher tiers, then u
   const modelCatalog: RunnerModelCatalog = {
     ...CATALOG,
     // No model of a known family (MODEL_FAMILY_TIERS): Cursor stays untiered here.
-    cursor: [{ value: 'default', label: 'Auto' }, { value: 'grok-4.7', label: 'Grok 4.7' }],
+    cursor: [{ value: 'default', label: 'Auto' }, { value: 'muse-spark-1.3', label: 'Muse Spark 1.3' }],
     opencode: [{ value: 'opencode/free-a', label: 'A' }, { value: 'opencode/free-b', label: 'B' }],
   };
   const decision = route(input({
@@ -337,7 +337,7 @@ test('every registered provider joins: the asked tier, then higher tiers, then u
   ], 'untiered: the subscription first (Cost), then the keys by owner order; the runner default, else the provider default; S last');
   // The rest of an untiered engine's list is recorded, reachable by name.
   assert.deepEqual(decision.candidates.map((c) => [c.provider, c.model, c.reason]), [
-    ['cursor', 'grok-4.7', 'The model has no tier; cursor runs default'],
+    ['cursor', 'muse-spark-1.3', 'The model has no tier; cursor runs default'],
     ['opencode', 'opencode/free-a', 'The model has no tier; opencode runs opencode/free-b'],
     ['local-vllm', 'qwen-a', 'The model has no tier; local-vllm runs qwen-b'],
   ]);
@@ -364,6 +364,9 @@ test('an engine with no tier table of its own is tiered by family: the newest of
       { value: 'claude-opus-4-8', label: 'Opus 4.8', reasoningLevels: ladder },
       { value: 'claude-sonnet-5-5', label: 'Sonnet 5.5', reasoningLevels: ['low', 'medium', 'high'] },
       { value: 'composer-2.5', label: 'Composer 2.5' },
+      { value: 'claude-haiku-5-5', label: 'Haiku 5.5', reasoningLevels: ['low', 'medium', 'high'] },
+      { value: 'kimi-k2.6', label: 'Kimi K2.6' },
+      { value: 'kimi-k3', label: 'Kimi K3', reasoningLevels: ['low', 'medium', 'high'] },
     ],
     // agy takes low, medium and high only: XL's max comes down to high.
     antigravity: [
@@ -384,6 +387,23 @@ test('an engine with no tier table of its own is tiered by family: the newest of
   assert.deepEqual(at('S', 'cursor'), ['claude-sonnet-5-5', 'low', 'S'], 'Sonnet before Composer in the same tier');
   assert.deepEqual(at('XL', 'antigravity'), ['gemini-4-neon', 'high', 'XL']);
   assert.deepEqual(at('M', 'antigravity'), ['gemini-3.8-flash', 'medium', 'M']);
+  // Haiku, Kimi and the K3 stand-in come after Sonnet/Opus; K3 stands in at L/XL while no K3.1 Pro is listed.
+  const tiers = (catalog: RunnerModelCatalog['cursor']) => route(input({
+    caller: { size: 'S' }, providers: [login('cursor')], engines, modelCatalog: { ...modelCatalog, cursor: catalog },
+  })).fallbacks.map((f) => [f.model, f.effort, f.level]);
+  const base = modelCatalog.cursor!;
+  const withoutPro = tiers(base);
+  assert.ok(withoutPro.some((r) => r[0] === 'claude-haiku-5-5' && r[1] === 'low' && r[2] === 'S'));
+  assert.ok(withoutPro.some((r) => r[0] === 'kimi-k3' && r[1] === 'low' && r[2] === 'S'));
+  assert.ok(withoutPro.some((r) => r[0] === 'kimi-k3' && r[1] === 'high' && r[2] === 'M'));
+  assert.ok(withoutPro.some((r) => r[0] === 'kimi-k3' && r[1] === 'high' && r[2] === 'L'));
+  assert.ok(withoutPro.some((r) => r[0] === 'kimi-k3' && r[1] === 'high' && r[2] === 'XL'), 'clamped to its top level');
+  assert.ok(!withoutPro.some((r) => r[0] === 'kimi-k2.6' && r[2]), 'kimi-k2.* stays untiered');
+  const withPro = tiers([...base, { value: 'kimi-k3.1-pro', label: 'K3.1 Pro', reasoningLevels: ['low', 'medium', 'high', 'max'] }]);
+  assert.ok(withPro.some((r) => r[0] === 'kimi-k3.1-pro' && r[1] === 'high' && r[2] === 'L'));
+  assert.ok(withPro.some((r) => r[0] === 'kimi-k3.1-pro' && r[1] === 'max' && r[2] === 'XL'));
+  assert.ok(!withPro.some((r) => r[0] === 'kimi-k3' && (r[2] === 'L' || r[2] === 'XL')), 'no stand-in once Pro is listed');
+  assert.ok(withPro.some((r) => r[0] === 'kimi-k3' && r[2] === 'M'));
   // A tiered engine now meets Claude in the same tier rather than after every higher one.
   const both = route(input({ caller: { size: 'L' }, providers: [claude(), login('cursor')], engines: { ...engines, claude: { installed: true } }, modelCatalog: { ...CATALOG, ...modelCatalog } }));
   assert.deepEqual(both.fallbacks.map((f) => [f.provider, f.model, f.level]).slice(0, 1), [['cursor', 'claude-opus-5-6', 'L']]);
@@ -400,7 +420,7 @@ test('an owner tier on a built-in engine: a model of no family routes at it, ove
   const modelCatalog: RunnerModelCatalog = {
     cursor: [
       { value: 'default', label: 'Auto' },
-      { value: 'grok-4.7', label: 'Grok 4.7', reasoningLevels: ['low', 'medium', 'high'] },
+      { value: 'muse-spark-1.3', label: 'Muse Spark 1.3', reasoningLevels: ['low', 'medium', 'high'] },
       { value: 'claude-opus-5-6', label: 'Opus 5.6', reasoningLevels: ['low', 'medium', 'high', 'xhigh', 'max'] },
       { value: 'claude-sonnet-5-5', label: 'Sonnet 5.5', reasoningLevels: ['low', 'medium', 'high'] },
     ],
@@ -415,30 +435,30 @@ test('an owner tier on a built-in engine: a model of no family routes at it, ove
   const plain = (size: 'S' | 'XL', builtinModelTiers?: SubagentRoutingInput['builtinModelTiers']) =>
     route(input({ caller: { size }, providers: [login('cursor')], engines, modelCatalog: bare, builtinModelTiers }));
   assert.deepEqual([plain('XL').model, plain('XL').pickLevel], ['default', null]);
-  assert.ok(plain('XL').candidates.some((c) => c.model === 'grok-4.7' && c.reason === 'The model has no tier; cursor runs default'));
+  assert.ok(plain('XL').candidates.some((c) => c.model === 'muse-spark-1.3' && c.reason === 'The model has no tier; cursor runs default'));
 
-  // The owner tiers grok-4.7 XL: it routes there, at XL's max clamped to the highest level it reports.
-  const grok = { cursor: { 'grok-4.7': 'XL' as const } };
-  const routed = plain('XL', grok);
-  assert.deepEqual([routed.model, routed.effort, routed.pickLevel], ['grok-4.7', 'high', 'XL']);
-  assert.equal(routed.candidates.some((c) => c.model === 'grok-4.7'), false, 'no longer removed');
-  assert.deepEqual([plain('S', grok).model, plain('S', grok).pickLevel], ['grok-4.7', 'XL'], 'its only tier: a higher one at S');
+  // The owner tiers muse-spark-1.3 XL: it routes there, at XL's max clamped to the highest level it reports.
+  const muse = { cursor: { 'muse-spark-1.3': 'XL' as const } };
+  const routed = plain('XL', muse);
+  assert.deepEqual([routed.model, routed.effort, routed.pickLevel], ['muse-spark-1.3', 'high', 'XL']);
+  assert.equal(routed.candidates.some((c) => c.model === 'muse-spark-1.3'), false, 'no longer removed');
+  assert.deepEqual([plain('S', muse).model, plain('S', muse).pickLevel], ['muse-spark-1.3', 'XL'], 'its only tier: a higher one at S');
   // Beside the family tiers it joins its tier after the table's rows.
-  const beside = route(input({ caller: { size: 'XL' }, providers: [login('cursor')], engines, modelCatalog, builtinModelTiers: grok }));
+  const beside = route(input({ caller: { size: 'XL' }, providers: [login('cursor')], engines, modelCatalog, builtinModelTiers: muse }));
   assert.deepEqual([beside.model, beside.effort], ['claude-opus-5-6', 'max']);
-  assert.deepEqual(beside.fallbacks.slice(0, 1).map((f) => [f.model, f.effort, f.level]), [['grok-4.7', 'high', 'XL']]);
+  assert.deepEqual(beside.fallbacks.slice(0, 1).map((f) => [f.model, f.effort, f.level]), [['muse-spark-1.3', 'high', 'XL']]);
 
-  // An owner tier on a family model overrides the family's: Opus at S only, so XL falls to grok, Opus answers S.
-  const opusS = { cursor: { 'claude-opus-5-6': 'S' as const, 'grok-4.7': 'XL' as const } };
-  assert.deepEqual(at('XL', opusS), ['grok-4.7', 'high', 'XL']);
-  assert.deepEqual(at('L', opusS), ['grok-4.7', 'high', 'XL'], 'no L left: the next tier up');
+  // An owner tier on a family model overrides the family's: Opus at S only, so XL falls to muse-spark, Opus answers S.
+  const opusS = { cursor: { 'claude-opus-5-6': 'S' as const, 'muse-spark-1.3': 'XL' as const } };
+  assert.deepEqual(at('XL', opusS), ['muse-spark-1.3', 'high', 'XL']);
+  assert.deepEqual(at('L', opusS), ['muse-spark-1.3', 'high', 'XL'], 'no L left: the next tier up');
   const s = route(input({ caller: { size: 'S' }, providers: [login('cursor')], engines, modelCatalog, builtinModelTiers: opusS }));
   assert.deepEqual([s.model, s.effort], ['claude-sonnet-5-5', 'low'], 'the table rows keep their order ahead of the owner rows');
   assert.ok(s.fallbacks.some((f) => f.model === 'claude-opus-5-6' && f.level === 'S' && f.effort === 'low'));
   assert.equal(s.fallbacks.some((f) => f.model === 'claude-opus-5-6' && f.level !== 'S'), false, 'Opus keeps no family row');
 
-  // Cleared (absent from the map, or another engine's): the family tiers again, grok untiered.
-  const clears: Array<SubagentRoutingInput['builtinModelTiers']> = [undefined, {}, { cursor: {} }, { antigravity: { 'grok-4.7': 'XL' } }];
+  // Cleared (absent from the map, or another engine's): the family tiers again, muse-spark untiered.
+  const clears: Array<SubagentRoutingInput['builtinModelTiers']> = [undefined, {}, { cursor: {} }, { antigravity: { 'muse-spark-1.3': 'XL' } }];
   for (const cleared of clears) {
     assert.deepEqual(at('XL', cleared), ['claude-opus-5-6', 'max', 'XL']);
     assert.deepEqual(at('L', cleared), ['claude-opus-5-6', 'high', 'L']);
@@ -465,7 +485,7 @@ test('owner tiers apply to the tabled engines too, and with none set Claude, Cod
     }));
   const none = picks();
   assert.deepEqual(picks({}), none, 'an empty map is no map');
-  assert.deepEqual(picks({ cursor: { 'grok-4.7': 'XL' } }), none, "another engine's tiers change nothing here");
+  assert.deepEqual(picks({ cursor: { 'muse-spark-1.3': 'XL' } }), none, "another engine's tiers change nothing here");
   assert.deepEqual(none.map((line) => JSON.parse(line).slice(0, 5)), [
     ['S', 'claude', SONNET, 'low', 'S'], ['S', 'codex', GPT, 'low', 'S'], ['S', 'kimi', 'kimi-code/k3', 'low', 'S'],
     ['M', 'claude', SONNET, 'medium', 'M'], ['M', 'codex', GPT, 'medium', 'M'], ['M', 'kimi', 'kimi-code/k3', 'high', 'M'],
@@ -484,13 +504,69 @@ test('owner tiers apply to the tabled engines too, and with none set Claude, Cod
     'Opus at M only, and no levels reported: no effort');
 });
 
+test('measured families (2026-11-21) tier Cursor and Antigravity models after the ones already ranked', () => {
+  const login = (slug: string): SubagentProvider => ({
+    slug, billing: 'subscription', inScope: true, credential: { kind: 'login', engine: slug as 'cursor' }, engines: [{ engine: slug }],
+    account: { quota: null },
+  });
+  const ladder = ['low', 'medium', 'high', 'xhigh', 'max'];
+  const modelCatalog: RunnerModelCatalog = {
+    cursor: [
+      { value: 'claude-opus-5-5', label: 'Opus 5.5', reasoningLevels: ladder },
+      { value: 'claude-fable-5-2', label: 'Fable 5.2', reasoningLevels: ladder },
+      { value: 'claude-sonnet-5-5', label: 'Sonnet 5.5', reasoningLevels: ladder },
+      { value: 'grok-4.7', label: 'Grok 4.7', reasoningLevels: ['low', 'medium', 'high'] },
+      { value: 'gpt-5.6-sol', label: 'GPT-5.6 Sol' },
+      { value: 'gpt-5.6-luna', label: 'GPT-5.6 Luna' },
+    ],
+    antigravity: [
+      { value: 'gemini-4-neon', label: 'Gemini 4 Neon', reasoningLevels: ['low', 'medium', 'high'] },
+      { value: 'gemini-pro-orchestrator-neon', label: 'Orchestrator', reasoningLevels: ['low', 'medium', 'high'] },
+      { value: 'gemini-pro-orchestrator-g1-pro', label: 'Orchestrator G1' },
+      { value: 'gpt-oss-120b', label: 'GPT-OSS 120B' },
+    ],
+  };
+  const engines = { cursor: { installed: true }, antigravity: { installed: true } };
+  const at = (size: 'S' | 'M' | 'L' | 'XL', slug: string) =>
+    route(input({ caller: { size }, providers: [login(slug)], engines, modelCatalog }));
+  // At L the ranked Opus still wins; Fable is its fallback at the same tier.
+  const l = at('L', 'cursor');
+  assert.deepEqual([l.model, l.pickLevel], ['claude-opus-5-5', 'L']);
+  assert.deepEqual(l.fallbacks.filter((f) => f.level === 'L').map((f) => f.model), ['claude-fable-5-2']);
+  // At S Sonnet first, then the measured S families in table order.
+  const s = at('S', 'cursor');
+  assert.equal(s.model, 'claude-sonnet-5-5');
+  assert.deepEqual(s.fallbacks.filter((f) => f.level === 'S').map((f) => [f.model, f.effort]),
+    [['grok-4.7', 'low'], ['gpt-5.6-sol', null], ['gpt-5.6-luna', null]]);
+  // Antigravity: Neon first at L, the measured Orchestrator after it; G1 and gpt-oss stay untiered.
+  const ag = at('L', 'antigravity');
+  assert.equal(ag.model, 'gemini-4-neon');
+  assert.deepEqual(ag.fallbacks.filter((f) => f.level === 'L').map((f) => f.model), ['gemini-pro-orchestrator-neon']);
+  const removed = ag.candidates.filter((c) => c.reason === 'The model has no tier').map((c) => c.model);
+  assert.ok(removed.includes('gpt-oss-120b') && removed.includes('gemini-pro-orchestrator-g1-pro'), removed.join(','));
+});
+
 test('familyTier: a key model of a known family takes the lowest tier of the family; any other none', () => {
   assert.equal(familyTier('claude-opus-5-6'), 'L');
   assert.equal(familyTier('claude-sonnet-4-5'), 'S');
   assert.equal(familyTier('gemini-3.8-flash'), 'S');
   assert.equal(familyTier('gemini-4-argon'), 'L');
+  assert.equal(familyTier('claude-haiku-5-5'), 'S');
+  assert.equal(familyTier('kimi-k3'), 'S');
+  assert.equal(familyTier('kimi-k3.1-pro'), 'L');
+  assert.equal(familyTier('kimi-k2.6'), null);
   assert.equal(familyTier('qwen3.8-27b-uncensored-fp8'), null);
-  assert.equal(familyTier('gemini-pro-orchestrator-neon'), null);
+  // Measured 2026-11-21: tiered since, pinned to the measured ids.
+  assert.equal(familyTier('gemini-pro-orchestrator-neon'), 'L');
+  assert.equal(familyTier('gemini-pro-orchestrator-g1-pro'), null);
+  assert.equal(familyTier('claude-fable-5-2'), 'L');
+  assert.equal(familyTier('deepseek-flash'), 'S');
+  assert.equal(familyTier('deepseek-v4-flash'), null);
+  assert.equal(familyTier('grok-4.7'), 'S');
+  assert.equal(familyTier('gpt-5.6-sol'), 'S');
+  assert.equal(familyTier('gpt-5.6-luna'), 'S');
+  assert.equal(familyTier('gpt-6.2-sol'), null);
+  assert.equal(familyTier('gpt-oss-120b'), null);
 });
 
 test('a subscription whose quota was not read ranks after those whose headroom is known, before metered keys in Cost', () => {

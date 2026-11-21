@@ -3,7 +3,7 @@ import { appendRunQuestionContext, questionRecipient, RUN_QUESTION_PREFIX } from
 import { DRAIN_SKIPS_HELD, translationLanguages, turnTranslationOf } from '../sessions/turn-translation';
 import { isRunNotifyTurn, runNotifyContent } from '../sessions/run-notify';
 import { acceptedFinalizeBranch, codelessClaimFields } from '../sessions/codeless-checkout';
-import { BROWSER_CLEAR_V1, CONDITION_PROBE_CAPABILITY, readMergeRecovery, mergeRecoveryReady, RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON, type MergeRecovery } from '@orbit/shared';
+import { BG_OWNER_STOP_V1, BROWSER_CLEAR_V1, type BackgroundJobStopCommand, CONDITION_PROBE_CAPABILITY, readMergeRecovery, mergeRecoveryReady, RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON, type MergeRecovery } from '@orbit/shared';
 import { OWNER_SECRET_CAPABILITY, OwnerSecretsService } from '../owner-requests/owner-secrets.service';
 import { ConditionsService } from '../conditions/conditions.service';
 import { GithubWorkspaceService } from '../github/github-workspace.service';
@@ -200,6 +200,11 @@ import {
   normalizeEffortForRuntimeModel,
 } from '../common/runtime-provider';
 import { OPEN_SESSION_STATUSES, statusAfterTurnCompleted } from '../common/session-scheduling';
+import {
+  finalizeReleaseCause,
+  HELD_SESSION_STATUSES,
+  RELEASED_SESSION_STATUSES,
+} from '../common/session-release';
 import { assertValidUpload, MAX_UPLOAD_BYTES } from '../attachments/attachments.media';
 import { FileUploadCleanupInterceptor } from '../files/file-upload-cleanup.interceptor';
 import { FILE_UPLOAD_STORAGE, type FileUpload } from '../files/file-upload-storage';
@@ -273,6 +278,7 @@ import {
 import { fileSubagentWake, fileWorkflowWake, interruptOrphanedSubagentRuns, interruptOrphanedWorkflowRuns } from './subagent-wake';
 import { orbitWorkflowLaunchReceipt, workflowClaimFields } from './workflow-run';
 import { remoteSubagentHeartbeat } from './subagent-remote';
+import { backgroundJobStopsFor } from './background-job-stops';
 import { CLEARED_RUNNING_WORK } from '../sessions/running-work';
 import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
 import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout';
@@ -566,6 +572,7 @@ import { refuseManagedRunnerDeletion } from '../managed-runners/managed-runner-d
 import { DELETE_APPROVAL_TOOL_NAMES, deleteCardInput } from './runner-delete-approval';
 import { sanitizeWorkspaceWrite } from './runner-agents.controller';
 import { workspaceWriteCardInput } from './runner-workspace-approval';
+import { turnOutcomeOf } from './turn-outcome';
 import { authorizeManagedRunnerInstance, type ManagedRunnerInstance } from '../managed-runners/managed-runner-instance';
 import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/managed-runner-gate';
 import {
@@ -584,6 +591,7 @@ import {
 } from '../runners/runner-presence';
 import { recordRunnerResources, sanitizeRunnerResources } from '../runners/runner-resources';
 import { ownBackgroundJobSessionIds, sanitizeBackgroundJobSessionIds } from '../runners/runner-background-holders';
+import { executingStatedAt, replaceExecutingSets, sanitizeExecuting } from '../runners/runner-executing-sets';
 import {
   CHECK_ONLY_REFUSED_MESSAGE,
   checkOnlyRefusesApproval,
@@ -682,6 +690,10 @@ const INGEST_SESSION_SELECT = {
   runningBgJobs: true,
   runningBgJobActivity: true,
   runningSubagents: true,
+  // Beside the sets: whether this batch moved the engine's turn, and the batch stamp a moved set leaves
+  // (`executingEventAt`, runners/runner-executing-sets.ts).
+  engineTurnActive: true,
+  executingEventAt: true,
   coordinatorContextEpoch: true,
   // Same one-shot-per-run reason as runtimeSessionId: the stamp ingestEvents takes is only taken
   // while this is still null, and the row is held FOR UPDATE across that decision.
@@ -921,6 +933,7 @@ const INGESTED_SESSION_COLUMNS: Record<string, { column: string; type: 'text' | 
   contextTokens: { column: 'context_tokens', type: 'integer' },
   contextWindow: { column: 'context_window', type: 'integer' },
   engineTurnActive: { column: 'engine_turn_active', type: 'boolean' },
+  executingEventAt: { column: 'executing_event_at', type: 'timestamp' },
   enginePhase: { column: 'engine_phase', type: 'text' },
   enginePhaseSince: { column: 'engine_phase_since', type: 'timestamp' },
   lastUserText: { column: 'last_user_text', type: 'text' },
@@ -939,6 +952,16 @@ const INGESTED_SESSION_COLUMNS: Record<string, { column: string; type: 'text' | 
   runningBgJobActivity: { column: 'running_bg_job_activity', type: 'jsonb' },
   agentTools: { column: 'agent_tools', type: 'jsonb' },
 };
+
+/** The newest runner-clock `ts` of a batch's events, or null when none parses. */
+function newestEventTime(events: ReadonlyArray<{ ts?: unknown }>): Date | null {
+  let newest: number | null = null;
+  for (const e of events) {
+    const at = typeof e.ts === 'string' ? Date.parse(e.ts) : Number.NaN;
+    if (!Number.isNaN(at) && (newest === null || at > newest)) newest = at;
+  }
+  return newest === null ? null : new Date(newest);
+}
 
 /** A value of an ingested Session column as text, or undefined when it is not one writeCallSessions carries. */
 function ingestedSessionValue(type: (typeof INGESTED_SESSION_COLUMNS)[string]['type'], value: unknown): string | null | undefined {
@@ -1085,8 +1108,9 @@ const LEASE_GENERATION_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-
 // entity-ID validation separate from the stricter runner-generated lease UUID
 // validation above so adding a UUID version cannot take the heartbeat offline.
 const SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const LIVE: RunStatus[] = [RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED];
-const TERMINAL: RunStatus[] = [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED];
+// Held by a runner past its claim, and released (common/session-release.ts).
+const LIVE: RunStatus[] = HELD_SESSION_STATUSES.filter((status) => status !== RunStatus.PENDING);
+const TERMINAL: RunStatus[] = [...RELEASED_SESSION_STATUSES];
 // PENDING is also open/resumable. In the active-turn model it can briefly coexist with
 // a still-warm runtime (a new message arrived after the prior turn released its slot), so
 // late event tails and heartbeat snapshots must remain streamable while it waits to claim.
@@ -2106,6 +2130,7 @@ export class RunnerApiController {
       return this.reconcileHeartbeat(admitted, dto, headers.capabilities, headers.providerHeader, headers.osHeader, instance, link);
     }
     if (row.landingNamed) assertEngineSessionRow({ sessionKind: 'LANDING' });
+    await this.recordExecuting(runnerId, leaseOwner, dto);
     let verdict = linkBeatVerdict(runnerId, row, digests, supervised.length);
     if (verdict.answer === 'REPORT') {
       // A beat whose checkout report changed is written here, not by the full reconcile: read what it overwrites, so
@@ -2150,6 +2175,22 @@ export class RunnerApiController {
       row,
       digests,
     });
+  }
+
+  /**
+   * What the beat states is executing in each session the process supervises, replacing those sessions' inferred sets
+   * (runners/runner-executing-sets.ts); nothing for a beat that carries none. Advisory, as the background-job holders
+   * are: a write that fails leaves the sets as they were, and the next beat states them again.
+   */
+  private async recordExecuting(runnerId: string, leaseOwner: string | null, dto: RunnerHeartbeatRequest): Promise<void> {
+    const entries = sanitizeExecuting(dto?.executing);
+    if (!entries) return;
+    try {
+      const moved = await replaceExecutingSets(this.prisma, { runnerId, leaseOwner, entries, statedAt: executingStatedAt(dto?.executingAt) });
+      for (const sessionId of moved) this.realtime.publishSessionUpdated(sessionId);
+    } catch (error) {
+      this.logger.warn(`runner ${runnerId}: executing sets not recorded this heartbeat (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
+    }
   }
 
   /** What a link heartbeat's answer says waits for the runner: the beat statement's HintState, and this process's own. */
@@ -2353,6 +2394,7 @@ export class RunnerApiController {
         backgroundJobSessionIds,
         at: beatAt,
       }).catch(beatLost);
+      await this.recordExecuting(runner.id, heartbeatLeaseOwner, dto);
       // The machine's reading, on the row the beat just wrote. Advisory: a reading lost is the page's dash until the next.
       const resources = sanitizeRunnerResources(dto?.resources);
       if (resources) {
@@ -2483,6 +2525,16 @@ export class RunnerApiController {
       remoteSubagents = await remoteSubagentHeartbeat(this.prisma, runner.id);
     } catch (error) {
       this.logger.warn(`runner ${runner.id}: remote SubAgent runs skipped this heartbeat (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
+    }
+    // The bg_run jobs the owner asked to stop from the app, listed while each still runs; only to a runner that
+    // carries them out (BG_OWNER_STOP_V1), which the stop route already refuses to queue for any other.
+    let stopBackgroundJobs: BackgroundJobStopCommand[] = [];
+    if (runnerSupportsCapability(capabilities, BG_OWNER_STOP_V1)) {
+      try {
+        stopBackgroundJobs = await backgroundJobStopsFor(this.prisma, runner.id);
+      } catch (error) {
+        this.logger.warn(`runner ${runner.id}: background job stops skipped this heartbeat (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
+      }
     }
     // An engine that was signed in and now isn't: tell the owner while it is still news, rather
     // than letting them find out from the next session that refuses to start. Only the yes -> no
@@ -2891,6 +2943,7 @@ export class RunnerApiController {
       // Present only while this runner has remote SubAgent runs to claim or to stop.
       ...(!draining && remoteSubagents.remoteSubagentRuns.length > 0 ? { remoteSubagentRuns: remoteSubagents.remoteSubagentRuns } : {}),
       ...(remoteSubagents.stopSubagentRunIds.length > 0 ? { stopSubagentRunIds: remoteSubagents.stopSubagentRunIds } : {}),
+      ...(stopBackgroundJobs.length > 0 ? { stopBackgroundJobs } : {}),
       ...(mainCheckoutRequests ? { mainCheckoutRequests } : {}),
       // Only to the instance being drained to sleep: every other runner's response keeps its shape.
       ...(managedBeat.sleep ? { managedSleep: managedBeat.sleep } : {}),
@@ -5116,6 +5169,8 @@ export class RunnerApiController {
       }
 
       const orphanedApprovals: Array<{ sessionId: string; id: string }> = [];
+      const interruptedSubagents: string[] = [];
+      const interruptedWorkflows: string[] = [];
       if (writes.length > 0) {
         // The single route's writes, once for the batch. The lease write goes first here so a row a
         // guard refuses (it skips the row rather than raising) retires nothing and reaps nothing —
@@ -5162,11 +5217,34 @@ export class RunnerApiController {
           const replaced = landed.filter((w) => w.predecessor).map((w) => w.id);
           if (replaced.length > 0) {
             orphanedApprovals.push(...await reapApprovalsOfReplacedSupervisors(tx, replaced));
+            // The single route's SubAgent and workflow interrupts, once for the batch: the predecessor that hosted them is
+            // gone, and none of them will report an end. Without this a restart's idle sessions kept their runs RUNNING with
+            // no wake for the parent (design §11.3 item 4), and no sweep ends a local run.
+            interruptedSubagents.push(...await interruptOrphanedSubagentRuns(tx, replaced));
+            interruptedWorkflows.push(...await interruptOrphanedWorkflowRuns(tx, replaced));
           }
         }
       }
-      return { results: ids.map((id) => answers.get(id)!), orphanedApprovals };
+      return { results: ids.map((id) => answers.get(id)!), orphanedApprovals, interruptedSubagents, interruptedWorkflows };
     }, loggedRetry(this.logger, 'runnerApi.takeoverLeasesBatch'));
+
+    // As the single route files them; the wake sweep files any not filed here (ScheduledWakeupWorker).
+    if (this.sessions) {
+      for (const runId of taken.interruptedSubagents) {
+        try {
+          await fileSubagentWake(this.prisma, this.sessions, runId);
+        } catch (error) {
+          this.logger.warn(`the wake for interrupted SubAgent run ${runId} was not filed yet: ${(error as Error).message}`);
+        }
+      }
+      for (const runId of taken.interruptedWorkflows) {
+        try {
+          await fileWorkflowWake(this.prisma, this.sessions, runId);
+        } catch (error) {
+          this.logger.warn(`the wake for interrupted workflow run ${runId} was not filed yet: ${(error as Error).message}`);
+        }
+      }
+    }
 
     for (const { sessionId, id } of taken.orphanedApprovals) {
       this.realtime.publish(sessionId, {
@@ -7668,6 +7746,19 @@ export class RunnerApiController {
             : unanswered && noEngineTurnRan && current.retryAt == null
               ? nextAutoRetryAt(current.retryAttempts, new Date())
               : null;
+      // How the turn ended, for the turn row and the session's copy of it (docs/session-three-state-design.md
+      // §4.2), and the words it ended with: see turn-outcome.ts. A steer and a withdraw settled above.
+      const turnEnd = turnOutcomeOf({
+        kind: completedTurn?.kind,
+        status: dto.status,
+        regionStopped,
+        swallowed,
+        unanswered,
+        failureError: (swallowed ? swallowedMessageError(failureText) : failureText) || 'run failed',
+        error: dto.error,
+        result: dto.result,
+      });
+      const turnOutcome = turnEnd?.outcome ?? null;
       // Idempotent ack: only the first turn-complete for this turn applies. `deliveredAt` is the
       // other half of that compare-and-set now that a completion can leave the row un-ANSWERED: a
       // turn put back in the queue is no longer out on a delivery, so a retried completion for it
@@ -7697,6 +7788,14 @@ export class RunnerApiController {
           await tx.session.update({ where: { id: sessionId }, data: { ...CLEARED_MERGE_STATE } });
         }
         return { applied: false, steer: false, requeued: false, status: current.status, failSession, retryAt: current.retryAt };
+      }
+      // Beside the status the ack just wrote, in its transaction and only when it won, so a retried completion
+      // records nothing twice. The session's copy rides on the park below, the one Session write (I3).
+      if (turnEnd) {
+        await tx.conversationTurn.updateMany({
+          where: { id: dto.turnId, sessionId },
+          data: { outcome: turnEnd.outcome, error: turnEnd.error },
+        });
       }
       let acceptanceTaskChanged = false;
       let acceptanceTaskCompleted = false;
@@ -8044,6 +8143,8 @@ export class RunnerApiController {
                 // released the turn without a reply. Its own sentence follows when it gave one.
                 error: (acceptanceFailureReason ?? (swallowed ? swallowedMessageError(failureText) : failureText)) || 'run failed',
                 finishedAt: new Date(),
+                // Released for the turn that failed (design §4.2), in the statement that writes FAILED.
+                releaseCause: 'turn_failed',
                 cancelRequestedAt: new Date(),
                 // FAILED is where this session stops being live, so whatever it had running
                 // goes with it (CLEARED_RUNNING_WORK). This write is the reason the runner
@@ -8054,6 +8155,9 @@ export class RunnerApiController {
             : {}),
           // The stopped sentence a region stop ends the turn with (§10), which the claim clears once the hold releases.
           ...(regionStopped && !failSession ? { error: dto.error || dto.result || null } : {}),
+          // The outcome just written on the turn, copied for list rows (design §4.2). A turn with none leaves the
+          // last one that had one.
+          ...(turnOutcome ? { lastTurnOutcome: turnOutcome } : {}),
           // Live worktree state for the composer's status bar, refreshed each turn (the
           // runner reports the worktree's uncommitted diff and the exact healed base used to
           // compute it on every turn-complete). Keep both in this one write so a rebase cannot
@@ -8105,8 +8209,9 @@ export class RunnerApiController {
       });
       if (parked.count === 0) {
         // Nothing was written above — an UPDATE that matches no row leaves the tuple, and its
-        // xmin, exactly as it was — so this is still this transaction's first Session write.
-        if (clearsMergedState || acknowledgedCoordinatorContextKey) {
+        // xmin, exactly as it was — so this is still this transaction's first Session write. A turn that
+        // ended while its session was being ended still ended, so its outcome is the session's latest too.
+        if (clearsMergedState || acknowledgedCoordinatorContextKey || turnOutcome) {
           await tx.session.update({
             where: { id: sessionId },
             data: {
@@ -8114,6 +8219,7 @@ export class RunnerApiController {
               ...(acknowledgedCoordinatorContextKey
                 ? { coordinatorContextAckKey: acknowledgedCoordinatorContextKey }
                 : {}),
+              ...(turnOutcome ? { lastTurnOutcome: turnOutcome } : {}),
             },
           });
         }
@@ -9728,6 +9834,16 @@ export class RunnerApiController {
       if (!sameIds(shells, session.runningBgShells)) sessionData.runningBgShells = shells;
       if (!sameIds(jobs, session.runningBgJobs)) sessionData.runningBgJobs = jobs;
       if (!sameIds(subagents, session.runningSubagents)) sessionData.runningSubagents = subagents;
+      // A batch that moved what is executing stamps the row with its newest event's time, on the runner's clock: a beat
+      // composed before that instant, and written after this batch, is older news and does not replace these sets
+      // (runners/runner-executing-sets.ts). Never moved back: a late retry of an older batch keeps the newer stamp.
+      const executingMoved = sessionData.runningBgShells !== undefined || sessionData.runningBgJobs !== undefined
+        || sessionData.runningSubagents !== undefined
+        || (engineTurnActive !== undefined && engineTurnActive !== session.engineTurnActive);
+      const batchAt = executingMoved ? newestEventTime(events) : null;
+      if (batchAt && (!session.executingEventAt || batchAt > session.executingEventAt)) {
+        sessionData.executingEventAt = batchAt;
+      }
       // When each of those jobs last produced output, folded from the same reports and pruned to the
       // same set. This is what makes the marker mean "work in flight AND still moving": a job whose
       // entry here is older than the threshold stops counting as in flight while staying in
@@ -10068,6 +10184,9 @@ export class RunnerApiController {
           // id, so it only serves as a fallback here and is never persisted on its own.
           runtimeSessionId: dto.runtimeSessionId ?? dto.claudeSessionId ?? undefined,
           finishedAt: new Date(),
+          // Why it was released: the requested end's reason, which also chose the status above, or the
+          // engine exiting by itself (engine_failed when the runner reported FAILED, the status written then).
+          releaseCause: finalizeReleaseCause(current, dto.status),
           // Worktree isolation outcome reported by the runner: the branch it committed
           // the work to, the base it forked from, what it did (worktree/shared-nogit),
           // and the per-file diff summary. Each left untouched when the runner omits it.
@@ -10491,6 +10610,9 @@ export class RunnerApiController {
           status: RunStatus.FAILED,
           error: dto.error ?? 'import failed',
           deletedAt: new Date(),
+          // Released with the status, as every terminal write is (design §4.2).
+          finishedAt: new Date(),
+          releaseCause: 'import_failed',
         },
       });
       return { applied: false, failed: true, announced: true };
