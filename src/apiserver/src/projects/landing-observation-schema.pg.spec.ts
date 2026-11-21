@@ -764,25 +764,10 @@ test('0453 §10.4 §10.9 on the schema before it, over rows of every table it al
         // 1070 adds `project_open_item.translation`; it is left out the same way, by name.
         const from1060 = new Set(['start_when_condition_id', 'task_start_when_condition_id_key',
           'task_start_when_condition_id_fkey', 'task_run_at_or_start_when_chk']);
-        // 1310, 1350 and 1390 land after the frontier this test replays: they extend `project_codebase` and
-        // `task` with who set a landing check and the explicit "run none" / exempt values, columns and CHECKs
-        // that are not replayed here and are left out of the empty side by name, as 1060's and 1070's are.
-        const afterFrontier: Record<string, ReadonlySet<string>> = {
-          project_codebase: new Set([
-            'landing_check_none', 'landing_check_set_by', 'landing_check_set_by_session_id', 'landing_check_set_at',
-            'project_codebase_landing_check_none_chk', 'project_codebase_landing_check_set_by_chk',
-          ]),
-          task: new Set([
-            'landing_check_exempt', 'landing_check_exempt_reason', 'landing_check_exempt_by_session_id',
-            'landing_check_exempt_owner_set_at', 'task_landing_check_exempt_reason_chk',
-            'task_landing_check_exempt_by_chk',
-          ]),
-        };
         const empty = await shape(caseClient);
         const before1060 = Object.fromEntries(Object.entries(empty).map(([kind, rows]) =>
           [kind, rows.filter((row) => !(row.table === 'task' && from1060.has(row.name))
-            && !(row.table === 'project_open_item' && row.name === 'translation')
-            && !afterFrontier[row.table as string]?.has(row.name as string))]));
+            && !(row.table === 'project_open_item' && row.name === 'translation'))]));
         assert.deepEqual(await shape(sql), before1060,
           'the tables 0453 alters differ between a database migrated over data and one migrated from empty');
       } finally {
