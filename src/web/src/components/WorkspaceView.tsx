@@ -7433,12 +7433,6 @@ export function WorkspaceView({
     // context on the next message. A bare `!` is a no-op; images are ignored. A terminal
     // session is capability-checked in the mutation; without resumable context it starts fresh.
     if (c.startsWith('!')) {
-      // DeepSeek Harness has no shell bridge (the runner settles such a turn as a refusal), so the
-      // command is kept in the composer rather than sent to fail.
-      if (shownEngine === AgentProvider.DSH) {
-        message.warning('DeepSeek Harness sessions don’t run ! shell commands', 'Ask the agent to run it instead.');
-        return;
-      }
       const cmd = c.slice(1).trim();
       if (cmd) sendFromComposer({ content: cmd, images: [], shell: true, intent: 'NEXT_TURN' });
       else setText('');
