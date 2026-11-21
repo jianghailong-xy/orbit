@@ -2,7 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { toUuid } from '@orbit/shared';
 
 import type { PrismaService } from '../prisma/prisma.service';
-import { heldSql } from '../common/session-release';
+import { sessionHeldSql } from '../common/session-release';
 
 /**
  * Where a runner process's sessions stand as it connects to the runner link (docs/runner-link-design.md §5.3, §5.4,
@@ -106,7 +106,7 @@ export async function readRunnerLinkSessionStates(
                  (SELECT max(e."seq") FROM "run_event" e WHERE e."session_id" = s.id AND e."seq" > 0),
                  0
                )::int AS "durableSeq",
-               (${heldSql('s.status')}
+               (${sessionHeldSql('s')}
                  AND s."kind" = 'CONVERSATION'
                  AND s."inbox_lease_owner" = ${leaseOwner}::uuid) AS "leaseHeld"
         FROM "session" s

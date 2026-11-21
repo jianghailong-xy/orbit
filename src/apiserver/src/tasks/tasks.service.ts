@@ -212,7 +212,6 @@ import {
   cascadedTaskClosure,
   touchesAcceptanceFact,
 } from './task-lock-order';
-import { PROJECT_LIVE_SESSION_STATUS_SQL } from '../projects/live-session-status';
 import { readCurrentVerifier, readTaskWorkState } from '../projects/project-task-work-state';
 import { readTaskIntegrationViews } from '../projects/project-task-integration';
 import { stopInFlightJob } from '../projects/project-integration-line';
@@ -252,7 +251,7 @@ import {
   QUOTA_BLIND_RETRY_BACKOFF_MS,
   autoRunEnd,
 } from './task-retry-policy';
-import { heldStatusFilter } from '../common/session-release';
+import { heldStatusFilter, sessionHeldSql } from '../common/session-release';
 
 export {
   AUTO_RUN_RETRY_BACKOFF_MS,
@@ -1368,10 +1367,7 @@ const AUTO_RUN_READY_SQL = Prisma.sql`
   AND NOT EXISTS (
     SELECT 1 FROM session s
     WHERE s.task_id = t.id
-      AND s.status IN (${Prisma.join(
-        TASK_OCCUPYING.map((status) => Prisma.sql`${status}::run_status`),
-        ', ',
-      )})
+      AND ${sessionHeldSql('s')}
   )
   -- ...nor is a task whose current dispatch moment has already had its automatic run. Offering it
   -- again is answered from that moment's receipt with the run it already started, and starts
@@ -1426,10 +1422,7 @@ const PROJECT_INDEPENDENT_READY_SQL = Prisma.sql`
   AND NOT EXISTS (
     SELECT 1 FROM session s
     WHERE s.task_id = t.id
-      AND s.status IN (${Prisma.join(
-        TASK_OCCUPYING.map((status) => Prisma.sql`${status}::run_status`),
-        ', ',
-      )})
+      AND ${sessionHeldSql('s')}
   )
   AND NOT EXISTS (
     SELECT 1 FROM task_run_request receipt
@@ -1463,10 +1456,7 @@ const AUTO_RUN_RETRY_CANDIDATE_SQL = Prisma.sql`
   AND NOT EXISTS (
     SELECT 1 FROM session s
     WHERE s.task_id = t.id
-      AND s.status IN (${Prisma.join(
-        TASK_OCCUPYING.map((status) => Prisma.sql`${status}::run_status`),
-        ', ',
-      )})
+      AND ${sessionHeldSql('s')}
   )`;
 
 /** An auto-run task whose current dispatch moment has had its automatic run, as the retry policy reads it. */
@@ -1586,10 +1576,7 @@ const SCHEDULED_DUE_SQL = Prisma.sql`
   AND NOT EXISTS (
     SELECT 1 FROM session s
     WHERE s.task_id = t.id
-      AND s.status IN (${Prisma.join(
-        TASK_OCCUPYING.map((status) => Prisma.sql`${status}::run_status`),
-        ', ',
-      )})
+      AND ${sessionHeldSql('s')}
   )`;
 
 /**
@@ -3860,7 +3847,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
          -- Every task-linked session this release creates starts the task's work, so "any live
          -- run" and "any live work run" are the same set today; the two diverge in the follow-up
          -- migration that also narrows the execution claim.
-         AND s."status"::text IN (${Prisma.raw(PROJECT_LIVE_SESSION_STATUS_SQL)})
+         AND ${sessionHeldSql('s')}
        ORDER BY s."id"
        LIMIT 1
     `);
@@ -11842,10 +11829,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
          AND NOT EXISTS (
            SELECT 1 FROM "session" s
             WHERE s."task_id" = moment."task_id"
-              AND s."status" IN (${Prisma.join(
-                TASK_OCCUPYING.map((status) => Prisma.sql`${status}::run_status`),
-                ', ',
-              )})
+              AND ${sessionHeldSql('s')}
          )`;
     return moved > 0;
   }
@@ -12330,10 +12314,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         AND NOT EXISTS (
           SELECT 1 FROM task t JOIN session s ON s.task_id = t.id
           WHERE t.list_id = tl.id
-            AND s.status IN (${Prisma.join(
-              TASK_OCCUPYING.map((status) => Prisma.sql`${status}::run_status`),
-              ', ',
-            )})
+            AND ${sessionHeldSql('s')}
         )
         -- Nothing has started recently either, so this is quiet rather than merely between runs.
         AND NOT EXISTS (

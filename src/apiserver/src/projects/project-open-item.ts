@@ -24,7 +24,7 @@ import {
   taskLanding,
   taskLandingSql,
 } from './project-criterion-landing';
-import { PROJECT_LIVE_SESSION_STATUS_SQL } from './live-session-status';
+import { sessionHeldSql } from '../common/session-release';
 import { evidenceUndecidedOwed } from './evidence-undecided';
 import { LIVE_PROMOTION_STATES } from './project-promotion';
 import {
@@ -953,7 +953,7 @@ export function projectCoordinatorCanTake(projectId: Prisma.Sql): Prisma.Sql {
        AND taker."deleted_at" IS NULL
        AND taker."completed_at" IS NULL
        AND taker."archived_at" IS NULL
-       AND (taker."status" IN (${Prisma.raw(PROJECT_LIVE_SESSION_STATUS_SQL)})
+       AND (${sessionHeldSql('taker')}
             OR (taker."status" = 'FAILED' AND taker."retry_at" IS NOT NULL)))`;
 }
 
@@ -1023,7 +1023,6 @@ export function openItemOwed(alias: string): Prisma.Sql {
   const item = Prisma.raw(`"${alias}"`);
   const integration = Prisma.raw(INTEGRATION_ITEM_KINDS.map((kind) => `'${kind}'`).join(', '));
   const live = Prisma.raw(LIVE_PROMOTION_STATES.map((state) => `'${state}'`).join(', '));
-  const liveSessions = Prisma.raw(PROJECT_LIVE_SESSION_STATUS_SQL);
   const notKnown = Prisma.raw(`(${taskLandingSql('owed_task')}) = 'NOT_KNOWN'`);
   return Prisma.sql`(CASE
       WHEN ${item}."kind" = 'INTEGRATION_CHECK_FAILED' AND ${item}."dedupe_key" LIKE 'ICB:%' THEN true
@@ -1072,7 +1071,7 @@ export function openItemOwed(alias: string): Prisma.Sql {
              SELECT 1 FROM "session" owed_session
               WHERE owed_session."task_id" = owed_task."id"
                 AND owed_session."starts_task_work"
-                AND owed_session."status" IN (${liveSessions})
+                AND ${sessionHeldSql('owed_session')}
                 AND (owed_session."id" IS DISTINCT FROM ${item}."session_id"
                      OR EXISTS (
                        SELECT 1 FROM "conversation_turn" resumed_turn

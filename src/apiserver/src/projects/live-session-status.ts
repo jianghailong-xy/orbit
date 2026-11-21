@@ -12,13 +12,3 @@ export const PROJECT_LIVE_SESSION_STATUSES: readonly string[] = HELD_SESSION_STA
 export function isLiveSessionStatus(status: string): boolean {
   return PROJECT_LIVE_SESSION_STATUSES.includes(status);
 }
-
-/**
- * The same statuses as a SQL literal list, so a raw gate cannot quietly hold a fifth opinion.
- *
- * Interpolated as a literal rather than parameterised because it is a fixed list this file owns,
- * and because a gate is then greppable for the exact string.
- */
-export const PROJECT_LIVE_SESSION_STATUS_SQL: string = PROJECT_LIVE_SESSION_STATUSES
-  .map((status) => `'${status}'`)
-  .join(', ');

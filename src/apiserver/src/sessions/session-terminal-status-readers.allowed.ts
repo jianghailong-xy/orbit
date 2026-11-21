@@ -15,7 +15,7 @@
  * (AWAITING_INPUT and INTERRUPTED, with or without PENDING or RUNNING: session-tree-sql.ts,
  * coordinator-evidence-queue.service.ts, providers/active-sessions.ts, evidence-review.service.ts, tasks.service.ts,
  * task-work-carrier.ts), the claimed-and-held set without PENDING (runner-link-hints.ts),
- * mixed sets (auto-retry.service.ts FAILED with AWAITING_INPUT; wiki-maintenance.ts), and the derived SessionRunState
+ * mixed sets (auto-retry.service.ts FAILED with AWAITING_INPUT), and the derived SessionRunState
  * and SessionState sets (share-links/public-task.ts, watch-predicate.ts, web sessionState.ts).
  *
  * Plan step 4.2 moved the TypeScript readers of "released" and "held" (appendix sections B and C, and those that
@@ -24,13 +24,19 @@
  * that record a release, the old runner protocol's status words, readers of FAILED as against the other terminal
  * values (the release does not yet record whether it was a failure), activity sets, and readers other phase 4 steps
  * own (raw SQL 4.3, work readers 4.6, wake rules 4.7, the projector 4.8).
+ *
+ * Plan step 4.3 moved the raw SQL readers of "held" and "released" onto the release column through sessionHeldSql /
+ * sessionReleasedSql, deleted releasedSql, and took wiki-maintenance.ts's settled set (every status but PENDING and
+ * RUNNING) to its activity spelling, `NOT IN ('PENDING', 'RUNNING')`. Left: heldSql, whose one caller is
+ * queue/dispatch-pause.service.ts (the queue is out of 4.3's scope; the index task, plan step 4.5, removes it), and the
+ * activity, held-but-idle and claimed-and-held sets above, which name no terminal value.
  */
 export const SESSION_TERMINAL_STATUS_READERS: Readonly<Record<string, number>> = {
   'src/apiserver/src/common/session-scheduling.ts': 2,
   // The one definition of "held" and "released" (plan step 3.5): the two status sets, their SQL fragments, and the
-  // release causes. Its TypeScript readers read `finished_at` since plan step 4.2; the sets stay for the raw SQL
-  // fragments (plan step 4.3) and for the filters whose status list is an index's access path.
-  'src/apiserver/src/common/session-release.ts': 8,
+  // release causes. Its readers read `finished_at` since plan steps 4.2 and 4.3; the sets stay for heldSql (the queue's
+  // dispatch-pause reads, until plan step 4.5) and for the filters whose status list is an index's access path.
+  'src/apiserver/src/common/session-release.ts': 7,
   'src/apiserver/src/common/session-tree-sql.ts': 1,
   'src/apiserver/src/help/help-ask-marker.ts': 1,
   'src/apiserver/src/help/help-ask-reads.ts': 1,
@@ -69,7 +75,6 @@ export const SESSION_TERMINAL_STATUS_READERS: Readonly<Record<string, number>> =
   'src/apiserver/src/tasks/verification-dependency.ts': 2,
   'src/apiserver/src/watches/watch-delivery.service.ts': 3,
   'src/apiserver/src/watches/watch-predicate.ts': 4,
-  'src/apiserver/src/wiki/wiki-maintenance.ts': 2,
   'src/shared/src/enums.ts': 25,
   'src/web/src/lib/sessionState.ts': 3,
 };
