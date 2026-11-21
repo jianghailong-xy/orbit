@@ -123,6 +123,12 @@ export function searchSettings(query: string, sources: SettingsSearchSources): S
       label: 'Account pools',
       to: '/settings/providers/pools',
     });
+  if (has('Model tiers', q))
+    providers.push({
+      key: 'tiers',
+      label: 'Model tiers',
+      to: '/settings/providers/tiers',
+    });
 
   const workspaces: SettingsHit[] = [];
   for (const workspace of sources.workspaces) {

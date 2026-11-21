@@ -364,6 +364,9 @@ test('an engine with no tier table of its own is tiered by family: the newest of
       { value: 'claude-opus-4-8', label: 'Opus 4.8', reasoningLevels: ladder },
       { value: 'claude-sonnet-5-5', label: 'Sonnet 5.5', reasoningLevels: ['low', 'medium', 'high'] },
       { value: 'composer-2.5', label: 'Composer 2.5' },
+      { value: 'claude-haiku-5-5', label: 'Haiku 5.5', reasoningLevels: ['low', 'medium', 'high'] },
+      { value: 'kimi-k2.6', label: 'Kimi K2.6' },
+      { value: 'kimi-k3', label: 'Kimi K3', reasoningLevels: ['low', 'medium', 'high'] },
     ],
     // agy takes low, medium and high only: XL's max comes down to high.
     antigravity: [
@@ -384,6 +387,23 @@ test('an engine with no tier table of its own is tiered by family: the newest of
   assert.deepEqual(at('S', 'cursor'), ['claude-sonnet-5-5', 'low', 'S'], 'Sonnet before Composer in the same tier');
   assert.deepEqual(at('XL', 'antigravity'), ['gemini-4-neon', 'high', 'XL']);
   assert.deepEqual(at('M', 'antigravity'), ['gemini-3.8-flash', 'medium', 'M']);
+  // Haiku, Kimi and the K3 stand-in come after Sonnet/Opus; K3 stands in at L/XL while no K3.1 Pro is listed.
+  const tiers = (catalog: RunnerModelCatalog['cursor']) => route(input({
+    caller: { size: 'S' }, providers: [login('cursor')], engines, modelCatalog: { ...modelCatalog, cursor: catalog },
+  })).fallbacks.map((f) => [f.model, f.effort, f.level]);
+  const base = modelCatalog.cursor!;
+  const withoutPro = tiers(base);
+  assert.ok(withoutPro.some((r) => r[0] === 'claude-haiku-5-5' && r[1] === 'low' && r[2] === 'S'));
+  assert.ok(withoutPro.some((r) => r[0] === 'kimi-k3' && r[1] === 'low' && r[2] === 'S'));
+  assert.ok(withoutPro.some((r) => r[0] === 'kimi-k3' && r[1] === 'high' && r[2] === 'M'));
+  assert.ok(withoutPro.some((r) => r[0] === 'kimi-k3' && r[1] === 'high' && r[2] === 'L'));
+  assert.ok(withoutPro.some((r) => r[0] === 'kimi-k3' && r[1] === 'high' && r[2] === 'XL'), 'clamped to its top level');
+  assert.ok(!withoutPro.some((r) => r[0] === 'kimi-k2.6' && r[2]), 'kimi-k2.* stays untiered');
+  const withPro = tiers([...base, { value: 'kimi-k3.1-pro', label: 'K3.1 Pro', reasoningLevels: ['low', 'medium', 'high', 'max'] }]);
+  assert.ok(withPro.some((r) => r[0] === 'kimi-k3.1-pro' && r[1] === 'high' && r[2] === 'L'));
+  assert.ok(withPro.some((r) => r[0] === 'kimi-k3.1-pro' && r[1] === 'max' && r[2] === 'XL'));
+  assert.ok(!withPro.some((r) => r[0] === 'kimi-k3' && (r[2] === 'L' || r[2] === 'XL')), 'no stand-in once Pro is listed');
+  assert.ok(withPro.some((r) => r[0] === 'kimi-k3' && r[2] === 'M'));
   // A tiered engine now meets Claude in the same tier rather than after every higher one.
   const both = route(input({ caller: { size: 'L' }, providers: [claude(), login('cursor')], engines: { ...engines, claude: { installed: true } }, modelCatalog: { ...CATALOG, ...modelCatalog } }));
   assert.deepEqual(both.fallbacks.map((f) => [f.provider, f.model, f.level]).slice(0, 1), [['cursor', 'claude-opus-5-6', 'L']]);
@@ -489,6 +509,10 @@ test('familyTier: a key model of a known family takes the lowest tier of the fam
   assert.equal(familyTier('claude-sonnet-4-5'), 'S');
   assert.equal(familyTier('gemini-3.8-flash'), 'S');
   assert.equal(familyTier('gemini-4-argon'), 'L');
+  assert.equal(familyTier('claude-haiku-5-5'), 'S');
+  assert.equal(familyTier('kimi-k3'), 'S');
+  assert.equal(familyTier('kimi-k3.1-pro'), 'L');
+  assert.equal(familyTier('kimi-k2.6'), null);
   assert.equal(familyTier('qwen3.8-27b-uncensored-fp8'), null);
   assert.equal(familyTier('gemini-pro-orchestrator-neon'), null);
 });

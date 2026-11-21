@@ -74,6 +74,7 @@ vi.mock('./SettingsProviderPages', async (original) => {
     },
     SettingsProvidersHome: () => <p data-page="keys">keys</p>,
     SettingsPoolsPage: () => <p data-page="pools">pools</p>,
+    SettingsTiersPage: () => <p data-page="tiers">tiers</p>,
   };
 });
 vi.mock('../../pages/ProviderPoolPage', () => ({ ProviderPoolPage: () => <p data-page="pool">pool</p> }));
@@ -311,6 +312,7 @@ describe('the Settings window', () => {
       // Two rows however many vendors the keys are (docs/mocks/settings-providers-compact).
       ['API keys', '/settings/providers', '3'],
       ['Account pools', '/settings/providers/pools', '1'],
+      ['Model tiers', '/settings/providers/tiers', null],
     ]);
     expect(rows('Workspaces').map((r) => [r.label, r.href, r.meta])).toEqual([
       ['orbit', '/settings/workspaces/wsOrbit', 'gpu-box'],
@@ -352,6 +354,8 @@ describe('the Settings window', () => {
     await visit('/settings/general');
     expect(rows('Providers').map((r) => [r.label, r.href, r.meta])).toEqual([
       ['Connect a provider', '/settings/providers/new', null],
+      // The built-in engines have model tiers with no key at all.
+      ['Model tiers', '/settings/providers/tiers', null],
     ]);
     await click(nav().querySelector('a[href="/settings/providers/new"]'));
     expect(page()).toBe('pick-vendor');
@@ -365,6 +369,7 @@ describe('the Settings window', () => {
       ['/settings/providers/new/anthropic', null],
       ['/settings/providers/keys/k1', null],
       ['/settings/providers/pools/p1', '/settings/providers/pools'],
+      ['/settings/providers/tiers', '/settings/providers/tiers'],
     ] as const) {
       await visit(path);
       expect([path, nav().querySelector('a.active')?.getAttribute('href') ?? null]).toEqual([path, lit]);
@@ -380,6 +385,8 @@ describe('the Settings window', () => {
       ['/settings/providers/new/anthropic', 'key'],
       ['/settings/providers/keys/k1', 'key'],
       ['/settings/providers/pools/p1', 'pool'],
+      // Model tiers is a page of its own, not the :vendor keys page.
+      ['/settings/providers/tiers', 'tiers'],
     ] as const) {
       await visit(path);
       expect(addressBar()).toBe(path);
