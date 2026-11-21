@@ -324,6 +324,13 @@ owner（2026-11-21）：Model tiers 表每个模型一行多一列 **Quality**�
   另附评分者的模型及各自条数。任务：完成数、首次通过数、通过率，不足 10 个完成任务不给通过率（Not enough tasks）。
   一次 SubAgent 运行算在交出结果的模型下：最后一次 attempt 的，影子行算父会话的引擎和它实际跑的模型，否则是决策选的。
   一行模型把其 provider 各引擎的数加在一起。
+- **界面**（owner 在效果图上选 A1 · B1 · C1，2026-11-21）：Quality 一格两行，各带灰色小字来源——
+  `SubAgents  4.4 · 23 rated of 41`、`Tasks  86% first pass · 52 tasks`；不到门槛的一行灰色写 `Not enough ratings` /
+  `Not enough tasks`，两样都没有的模型只写一行 `No runs yet`；有平均分时，SubAgents 那行的提示写评分者
+  `Rated by Opus 5.5 (15) · Sonnet 5.5 (8)`（web 和 Mac 悬停，iPhone 和 Android 点一下）。表下多一句说明：只显示、不参与路由，
+  以及两个数各自的口径。Web 和 Mac 是 Tier 后面的一列；iPhone 和 Android 把两行放在模型名下面。
+  各端共用同一套文字规则：web `qualityLines`（`lib/subagentTiers.ts`）、Apple `SubagentSettings.qualityLines`、Android
+  `Subagents.qualityLines`。
 
 ## 8. 分期
 
