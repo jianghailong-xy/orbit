@@ -357,6 +357,16 @@ test('W-T1: a task landing\'s CHECK_FAILED of its own making is handed off, and 
       assert.equal((await stack.db.projectOpenItem.findUniqueOrThrow({ where: { id: item.id } })).state, 'OPEN',
         'the refused doors wrote nothing');
       assert.equal(await stack.db.projectIntegrationJob.count({ where: { taskId: t.taskId } }), 1, 'no rerun was queued');
+
+      // W9's second door: "Chat about this" stays — it is not in the door table (§4.7: it writes nothing),
+      // and the project's open-items read still offers it for the item, toward the coordinator, while no
+      // press (no door of the coordinator's or the owner's) is drawn on the card.
+      const read = await stack.openItems.list(w.ownerId, w.projectId);
+      const row = [...read.needsYou, ...read.withCoordinator].find((candidate) => candidate.itemId === item.id);
+      assert.ok(row, 'the item in the work session\'s hands is still read');
+      assert.deepEqual(row.chat, { sessionId: w.coordinatorSessionId, stage: 'WITH_COORDINATOR', refusal: null },
+        'Chat about this is not offered for the item in the work session\'s hands');
+      assert.deepEqual(row.actions, [], 'the card draws a press the item in the work session\'s hands refuses');
     } finally {
       await stack.db.$disconnect();
     }
