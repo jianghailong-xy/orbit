@@ -224,6 +224,13 @@ public struct TranscriptReducer: Sendable, Codable {
     /// yet is waiting for it (web: `turnTranslated`). Transient like `turnAccountedFor`.
     private var turnTranslated = false
 
+    /// Bumped each time a durable row changes in place with no new seq: a live `translation` folded
+    /// into a reply already in the window (`applyTranslation`). `maxSeq` cannot say that a snapshot
+    /// written before it is stale, and this can (`TranscriptSaveLedger`). Transient like
+    /// `turnAccountedFor`: a restored reducer starts at 0, as does the record of the snapshot it was
+    /// restored from.
+    public private(set) var inPlaceRevision = 0
+
     /// Latest broadcast-only foreground-shell snapshot, including the runner's monotonic version.
     /// Keeping this beside (rather than inside) ``TranscriptState`` lets an output that beats its
     /// durable tool_use wait here, and lets a reordered replica notification be rejected. It is
@@ -1300,6 +1307,9 @@ public struct TranscriptReducer: Sendable, Codable {
         b.translation = translation.unchanged(from: b.text) ? nil : translation
         b.awaitsTranslation = nil
         state.items[i] = .assistant(b)
+        // The reply is durable and its seq is already written: without this the snapshot on disk
+        // keeps it untranslated (`inPlaceRevision`).
+        inPlaceRevision &+= 1
     }
 
     /// Settings › Translation: the line under the owner's message changes with its held turn —
