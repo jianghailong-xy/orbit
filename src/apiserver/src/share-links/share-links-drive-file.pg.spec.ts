@@ -11,7 +11,9 @@
  *   (3) the file in Trash answers as an ended link; restored, it opens again; deleted for good, the link goes with it;
  *   (4) GET /share-links without `kind` does not list it, naming DRIVE_FILE does;
  *   (5) another account can neither share the file nor see its link, and the constraints refuse a link with two roots,
- *       a version without a file, and another account's file.
+ *       a version without a file, and another account's file;
+ *   (6) a save renamed onto a shared file (§3.2) keeps the link live on the file, serving the version it pinned, which
+ *       is in Trash now; "Share this version" moves it to the saved content.
  *
  * Not destructive: every row belongs to users this run creates.
  */
@@ -179,5 +181,30 @@ test('one-file share links: pinned to the version shared, warn on a planted key,
     await bad({ ownerId: owner, driveVersionId: version }); // a version without its file
     const task = await db.task.create({ data: { ownerId: owner, title: 'x', creatorType: 'USER', creatorId: owner, completionCriterion: 'EVIDENCE_JUDGMENT' } as never });
     await bad({ ownerId: owner, driveEntryId: id, driveVersionId: version, taskId: task.id }); // two roots
+  });
+
+  await t.test('(6) a save renamed onto a shared file keeps the link on it, serving the version it pinned, until the owner moves it', async () => {
+    const shared = await fileWith(owner, 'saved.txt', 'as shared\n');
+    const pinned = (await db.driveEntry.findUniqueOrThrow({ where: { id: shared } })).currentVersionId!;
+    const link = await owners.shareDriveFile(as(owner), { kind: 'DRIVE_FILE', driveEntryId: shared });
+    // An editor's write-then-os.replace save (§3.2): the target keeps its id, the shared version goes to Trash as a version.
+    const tmp = await fileWith(owner, 'saved.txt.tmp', 'as saved since\n');
+    const renamed = await drive.rename(owner, tmp, { name: 'saved.txt', replace: true, writer: { kind: 'AGENT' } });
+    assert.equal(renamed.id, shared, 'the file keeps its entry id');
+    const row = await db.shareLink.findUniqueOrThrow({ where: { id: link.link.id } });
+    assert.equal(row.revokedAt, null, 'the link is still live');
+    assert.equal(row.driveEntryId, shared, 'on the same file');
+    assert.equal(row.driveVersionId, pinned, 'pinned to the version shared');
+    assert.notEqual((await db.driveVersion.findUniqueOrThrow({ where: { id: pinned } })).trashGroupId, null, 'which is in Trash now');
+    const page = await door.get(link.link.token) as { kind: string; root: { name: string; sizeBytes: number } };
+    assert.equal(page.root.name, 'saved.txt');
+    assert.equal(page.root.sizeBytes, 'as shared\n'.length);
+    assert.equal(await read(await door.content(link.link.token, undefined, response().res as never)), 'as shared\n', 'it serves the version it pinned');
+    const listed = (await links.list(owner, ['DRIVE_FILE'])).links.find((l) => l.id === link.link.id)!;
+    assert.equal((listed.root as { pinnedIsCurrent: boolean }).pinnedIsCurrent, false, 'shown as an earlier version');
+    // Share this version: the same link moves to the content the save wrote.
+    const moved = await owners.shareDriveFile(as(owner), { kind: 'DRIVE_FILE', driveEntryId: shared });
+    assert.equal(moved.link.id, link.link.id);
+    assert.equal(await read(await door.content(link.link.token, undefined, response().res as never)), 'as saved since\n');
   });
 });

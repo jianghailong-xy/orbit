@@ -177,14 +177,22 @@ export class RunnerDriveController {
     @Body() dto: RunnerDriveStagingDto,
     @CurrentManagedRunnerInstance() instance?: ManagedRunnerInstance,
   ) {
+    let entryId: string | null = dto.entryId;
     await this.drive.liveById(runner.ownerId, dto.entryId).catch(async (error) => {
       // A handle bound to an entry in Trash still commits there (§3.1), so its staging opens too.
       const inTrash = await this.prisma.driveEntry.findFirst({ where: { id: dto.entryId, ownerId: runner.ownerId }, select: { id: true } });
-      if (!inTrash) throw error;
+      if (inTrash) return;
+      // So does one bound to a file a replacing rename removed (§3.2): its commit makes a new file in Trash, so the
+      // staging is bound to no entry.
+      const removed = await this.prisma.driveRemovedEntry.findUnique({
+        where: { ownerId_entryId: { ownerId: runner.ownerId, entryId: dto.entryId } }, select: { entryId: true },
+      });
+      if (!removed) throw error;
+      entryId = null;
     });
     return this.chunks.openStaging(runner.ownerId, {
       source: mount ? 'MOUNT' : 'TOOL',
-      entryId: dto.entryId,
+      entryId,
       runnerId: runner.id,
       generation: instance?.generation ?? null,
     });
@@ -268,7 +276,10 @@ export class RunnerDriveController {
     return this.drive.commitStatus(runner.ownerId, commitId);
   }
 
-  /** Rename and/or move. Onto a live file it replaces it, the replaced file going to Trash, unless `noReplace`. */
+  /**
+   * Rename and/or move. Onto a live file it replaces it unless `noReplace` (§3.2): the target keeps its id and takes the
+   * source's content as a new version, its previous one going to Trash; the answer is the target. The source is gone.
+   */
   @Post('rename')
   @HttpCode(HttpStatus.OK)
   async rename(@CurrentRunner() runner: Runner, @Body() dto: RunnerDriveRenameDto) {

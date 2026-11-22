@@ -3296,7 +3296,14 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1426 builds the partial unique index session_task_execution_claim_idx_finished_at on session(task_id) CONCURRENTLY
       // beside 0130's claim index (plan step 4.5, release A), dropping a leftover INVALID one first. Session is not a
       // preserved relation, and no function, trigger, type, constraint or DONE fence changes. No INSERT, UPDATE or DELETE.
-      '1426_session_task_execution_claim_finished_at_idx'],
+      '1426_session_task_execution_claim_finished_at_idx',
+      // 1427 creates the partial trigram index drive_entry_name_trgm on drive_entry(name) for drive search, and the
+      // pg_trgm extension if it is missing; no row is written, and no preserved relation, trigger, function or DONE
+      // fence changes.
+      '1427_drive_entry_name_trgm',
+      // 1428 creates drive_removed_entry (Orbit Files drive: the file a replacing rename removed, §3.2) and its index; no
+      // existing row is written, and no preserved relation, trigger, function or DONE fence changes.
+      '1428_drive_removed_entry'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
