@@ -1,6 +1,7 @@
 import type { SessionTurnPlacement, TurnTranslation } from '@orbit/shared';
 import { queryOptions, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { SessionReach } from './sessionReach';
 import {
   type ActiveSessionTurn,
   type ApprovalInfo,
@@ -155,6 +156,9 @@ const APPROVALS_OPEN_GRACE_MS = 3_000;
 export const sessionBackgroundQuery = (sessionId: string) =>
   queryOptions({
     queryKey: ['session-background', sessionId] as const,
+    // The transcript stream patches it while the session is open, so no session event reads it again;
+    // only a reconnect's catch-up does.
+    meta: { entities: ['session'], sessionReach: 'none' satisfies SessionReach },
     queryFn: () => getBackgroundShells(sessionId),
   });
 

@@ -37,7 +37,9 @@ describe('a workspace’s session list', () => {
 describe('a conversation', () => {
   it('draws its scheduled-task cards and change lines where they happened', () => {
     expect(SOURCE).toContain('const scheduleCards = useSessionScheduleCards(selectedTrashed ? null : selectedId);');
-    expect(SOURCE).toContain('const scheduleInserts = useSessionScheduleInserts(selectedTrashed ? null : selectedId, scheduleCards, transcriptEvents, scheduleRun);');
+    expect(SOURCE).toMatch(
+      /const scheduleInserts = useSessionScheduleInserts\(\n\s+selectedTrashed \? null : selectedId,\n\s+scheduleCards,\n\s+transcriptEvents,\n\s+scheduleRun,/,
+    );
     expect(SOURCE).toMatch(/\[\.\.\.decisionReceipts, \.\.\.questionRecords, \.\.\.ownerRequestCards, \.\.\.scheduleInserts,/);
   });
 

@@ -135,6 +135,7 @@ ScheduleRun
   failureReason?                                       closed set, §7.2
   heldReason?                                          why a HELD run's start checks failed, §6.1
   notBeforeAt?                                         a QUEUED run starts no earlier: a retry's wait, §7.2
+  capacityHeldAt?                                      last seen waiting on a full runner, run or batch, §7.2
 
 ScheduleFinding
   scheduleId, key, firstRunId?, lastSeenRunId?, notifiedAt?, links[]
@@ -250,14 +251,19 @@ The inspector shows what was used: "This month: 14 runs · 41 min", with a cost 
 **Runs per week bounds the runs that start, not only the rule.** Moving the time of day or the weekdays is inside
 the envelope, and a session that moved its rule to "a few minutes from now" after every run would otherwise run back
 to back. So before a run starts (§6.1) the server counts, under the schedule lock the start takes (so two replicas
-cannot both pass), **the schedule's runs that actually started, of every trigger, whose planned slot (`plannedAt`; a
+cannot both pass), **the schedule's runs that actually started and count (below), of every trigger, whose planned slot (`plannedAt`; a
 MANUAL run's is when it was asked for) lies after the same local time 7 days before this run's own slot, in the
 schedule's time zone.** The window is on planned slots, not start times, so how late a start is (the worker's pass,
 a runner back after an outage) never moves a run into or out of it: a rule inside its envelope never trips it, and a
 rule moved to "a few minutes from now" still gives each run its own slot. It is local time, not 7×24 hours, so a
 week across a daylight-saving change is still a week. At `envelope.runsPerWeek` or more, the slot is not started: it is MISSED with
 `failureReason = OVER_BUDGET`, the schedule stays ACTIVE (not HELD, not paused) and its next slot is computed as
-usual. A start retried because it never reached its engine (§7.2) is one start. The owner is told once, by push,
+usual. A start retried because it never reached its engine (§7.2) is one start. **A run counts only if its first turn
+was delivered (`delivered_at`, §7.2) or it is still live (QUEUED, RUNNING or AWAITING_APPROVAL with a start), so an
+in-flight run holds its place and two quick starts cannot overshoot.** A run that ended without ever being
+delivered (MISSED, CANCELLED, or FAILED with `RUNNER_UNAVAILABLE`, `QUOTA` or `ENGINE_CRASHED_BEFORE_START`) counts 0:
+it did nothing, so it must not cost a later slot its place. The `SCHEDULE_OVER_BUDGET` refusal of §8.4 reports this same
+count. The owner is told once, by push,
 for a slot over budget, and not again for the next ones in a row; the run list says "Not started: it had already
 started as many runs in the past 7 days as you allowed." Run now follows §8.4.
 
@@ -583,6 +589,7 @@ run (`LANDING_FAILED`) with its reason, through the same push and **Waiting on y
 | `failureReason` | Retried | Meaning |
 | --- | --- | --- |
 | `RUNNER_UNAVAILABLE`, `QUOTA`, `ENGINE_CRASHED_BEFORE_START` | yes, then MISSED (§5.2) | the run never reached the engine (no `delivered_at` on its first turn) |
+| `RUNNER_FULL` | no: MISSED | the run's session waited for a full runner, run or batch until the catch-up window closed |
 | `LANDING_FAILED`, `REPORTED_FAILED`, `NO_REPORT`, `ENGINE_CRASHED`, `APPROVAL_TIMEOUT`, `RUN_LIMIT` | no | the work started and may have had effects |
 | `CANCELLED_BY_OWNER` | no | the owner stopped this run |
 
@@ -599,10 +606,24 @@ run (`LANDING_FAILED`) with its reason, through the same push and **Waiting on y
 - `consecutiveFailures` counts FAILED runs in a row and resets on NO_CHANGE or CHANGED. At 3 the notification says
   "failed 3 runs in a row". The schedule is **not** paused.
 - Whether a run reached its engine is its first turn's `delivered_at`. A run whose first turn is not delivered 10
-  minutes after it started is `RUNNER_UNAVAILABLE` (its session is ended); a session that FAILED before delivery is
+  minutes after it started is `RUNNER_UNAVAILABLE` (its session is ended), unless a full runner holds it (below); a session that FAILED before delivery is
   `QUOTA` when its error is a usage-limit message, else `ENGINE_CRASHED_BEFORE_START`; after delivery it is
   `ENGINE_CRASHED`. A session that ended before delivery is `RUNNER_UNAVAILABLE`, after it `NO_REPORT`. A retry is the same run row back in QUEUED with `attempt + 1` and `notBeforeAt`, and a new
   session; a newer run already waiting takes its place instead.
+- **A full runner is not a missing one.** A run whose session is queued because its runner, its run tree or its
+  batch is full (the session list's `queuedReason` `runner_at_capacity`, `tree_at_capacity` or `batch_at_capacity`,
+  the same SQL: `sessions/queued-reason-sql.ts`) keeps that one session waiting for a slot, with no 10-minute limit
+  and no new attempt, until its catch-up deadline; when a slot frees it is claimed and the run goes on as usual. Each
+  pass that finds it held writes `capacityHeldAt`, and once nothing holds it the 10-minute limit counts from the later
+  of `startedAt` and `capacityHeldAt`, so a slot that has just freed gets the same 10 minutes to be claimed. Still
+  waiting past the deadline, the run is MISSED with `RUNNER_FULL` and its session is ended. A session held by
+  anything else (a runner draining for an update, a clone or a disk gate, or nothing the server can name) keeps the
+  10-minute `RUNNER_UNAVAILABLE` rule and its retries, and a runner offline at the start still opens no session and
+  looks again every minute (§5.2). Pausing (a MANUAL run aside), holding or deleting the schedule retires the waiting
+  session on the next pass (the run is CANCELLED), and Stop this run ends a session whose first turn was never
+  delivered rather than interrupting it, so it cannot start once a slot frees. This followed production on
+  2026-11-19: a Run now on a full 20-slot runner was retired and reopened five times over two hours, each session
+  never getting a turn, and then MISSED as `RUNNER_UNAVAILABLE` ("found no runner online") with the runner online.
 - The run limit counts the engine's working time from `delivered_at`: time a card kept the run waiting is left out,
   so the 2-hour approval timeout can be reached under a run limit of at most 2 hours.
 - **On an `EVERY` rule the run limit is shorter than the interval.** `runLimitMinutes >= minutes` is refused on

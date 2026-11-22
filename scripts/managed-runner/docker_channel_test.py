@@ -1327,11 +1327,18 @@ class ListingAndHostTest(ChannelFixture):
         self.docker.sizes["unrelated"] = 999
         info = self.call("GET", "/v1/info")[1]
         self.assertEqual((info["instanceId"], info["image"]), (INSTANCE, IMAGE))
+        self.assertIsNone(info["imageRevision"], "an image without the revision label: nothing to compare against")
         self.assertEqual(info["network"], {"name": "orbit-mr-test", "internal": True, "interContainer": False})
         self.assertEqual((info["host"]["cpus"], info["host"]["memoryBytes"]), (8, 16 * 2 ** 30))
         self.assertEqual(info["host"]["managedVolumeBytes"], 12345, "only this instance's data volumes")
         self.assertEqual(info["host"]["disk"]["path"], self.config["stateDir"], "the Docker root is not visible here, so the state dir")
         self.assertGreater(info["host"]["disk"]["totalBytes"], 0)
+
+    def test_info_reports_the_revision_label_of_the_image_it_serves(self):
+        self.docker.images[IMAGE]["Config"]["Labels"] = {"org.opencontainers.image.revision": "c0ffee1234", "other": "x"}
+        self.server.channel = self.channel = self.ch.Channel(self.ch.parse_config(self.config_value(Path(self.scratch.name))), self.docker, TOKEN)
+        self.channel.prepare()
+        self.assertEqual(self.call("GET", "/v1/info")[1]["imageRevision"], "c0ffee1234")
 
     def test_the_disk_is_measured_where_the_probe_path_says(self):
         # Root Compose mounts an empty volume of the channel's own there: Docker keeps it beside the data volumes.
