@@ -242,7 +242,7 @@ class NewDeploymentTest(unittest.TestCase):
         # pushed anywhere.
         self.assertFalse([c for c in calls if c.startswith(("build", "push", "image push", "login"))
                           and c != f"build -f deploy/managed-runner/firewall/Dockerfile -t {FIREWALL_IMAGE} ."
-                          and c != "build --help"
+                          and c not in ("build --help", "buildx version")
                           and not re.fullmatch(r"build --provenance=false --build-arg ORBIT_SOURCE_SHA=\S* -t orbit-link-gateway:local src/link-gateway", c)], calls)
 
     def test_a_fresh_install_builds_the_managed_runner_image_here_and_pushes_nothing(self):
@@ -272,7 +272,31 @@ class NewDeploymentTest(unittest.TestCase):
         self.assertFalse((self.checkout / "data/managed-runners").exists())
         # Nothing of managed runners: the runner link's own image is test/upgrade-runner-link.test.mjs's.
         self.assertEqual([c for c in self.calls() if not c.startswith("compose version")
-                          and "orbit-link-gateway" not in c and c != "build --help"], [])
+                          and "orbit-link-gateway" not in c and c not in ("build --help", "buildx version")], [])
+
+    def test_a_missing_buildx_plugin_is_installed_with_apt_or_warned_about(self):
+        # Ubuntu's docker.io leaves buildx out, and Compose then warns on every build. Fake apt-get and sudo record
+        # what the install asks of them: nothing on this host is installed.
+        bin_dir = self.root / "bin"
+        apt_log = self.root / "apt.log"
+        for name, body in (("apt-get", f'printf "%s\\n" "$*" >>{apt_log}\n[ "$*" != "${{FAKE_APT_FAIL:-}}" ]\n'),
+                           ("sudo", 'exec "$@"\n')):
+            (bin_dir / name).write_text("#!/usr/bin/env bash\n" + body)
+            (bin_dir / name).chmod(0o755)
+        for fail, installed in (("", True), ("install -y -qq docker-buildx", False)):
+            with self.subTest(apt_fails=bool(fail)):
+                (self.checkout / ".env").unlink(missing_ok=True)
+                apt_log.unlink(missing_ok=True)
+                run = self.run_script(INSTALL, "--no-start", FAKE_FAIL="buildx version", FAKE_APT_FAIL=fail)
+                self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+                self.assertEqual(apt_log.read_text().splitlines(), ["update -qq", "install -y -qq docker-buildx"])
+                self.assertIn("Installing docker-buildx", run.stdout)
+                self.assertEqual("could not install docker-buildx" in run.stderr, not installed, run.stderr)
+        # With the plugin there, apt is never asked.
+        (self.checkout / ".env").unlink()
+        apt_log.unlink()
+        self.assertEqual(self.run_script(INSTALL, "--no-start").returncode, 0)
+        self.assertFalse(apt_log.exists())
 
     def test_no_install_or_upgrade_writes_the_browser_switch(self):
         # docs/runner-browser-design.md §2: a default deployment has the managed runner browser off, so its .env

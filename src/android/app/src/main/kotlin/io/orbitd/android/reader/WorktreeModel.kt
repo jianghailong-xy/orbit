@@ -104,6 +104,20 @@ internal class WorktreeModel(private val api: DirectoryApi, private val id: Stri
         loadDetail()
     }
 
+    /** Close a failed merge's section (its ✕): gone at once, and the server clears the stored failure so it stays closed on every
+     * client. Nothing in git changes. A refusal puts it back and says why. */
+    fun dismissMergeFailure() = act {
+        val before = mutable.value.detail
+        before?.let { d -> mutable.update { it.copy(detail = JsonObject(d - "mergeStatus" - "mergeError")) } }
+        try { api.mutate(listOf("sessions", id, "merge-failure", "dismiss")) }
+        catch (cancel: CancellationException) { throw cancel }
+        catch (error: Exception) {
+            before?.let { d -> mutable.update { it.copy(detail = d) } }
+            say(failure("Couldn't dismiss the merge failure", error)); return@act
+        }
+        loadDetail()
+    }
+
     /** One step of a merge held for target recovery: check again (`preview`), push the reviewed candidate, sync local. */
     fun recoverMerge(action: String, previewId: String?, target: String) = act {
         try {

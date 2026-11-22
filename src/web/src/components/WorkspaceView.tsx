@@ -324,6 +324,7 @@ import {
   cancelQueuedTurn,
   steerQueuedTurn,
   adoptSessionBranch,
+  dismissMergeFailure,
   commitSession,
   createMergeRepairSession,
   createInteractiveSession,
@@ -7163,6 +7164,32 @@ export function WorkspaceView({
         tone: 'error',
       }),
   });
+  // Close a failed merge's strip (its ✕). Cleared in the cache at once so the strip goes as it is
+  // pressed; the server clears the stored failure, and a refusal puts the strip back.
+  const dismissMergeMut = useMutation({
+    mutationFn: (session: SessionToastTarget) => dismissMergeFailure(session.id),
+    onMutate: (session) => {
+      const previousDetail = qc.getQueryData<any>(['session', session.id]);
+      qc.setQueryData<any>(['session', session.id], (old: any) =>
+        old ? { ...old, mergeStatus: null, mergeError: null } : old,
+      );
+      return { previousDetail };
+    },
+    onError: (e: Error, session, context) => {
+      if (context?.previousDetail !== undefined) qc.setQueryData(['session', session.id], context.previousDetail);
+      message.sessionNotice({
+        sessionId: session.id,
+        sessionTitle: session.title,
+        event: 'dismiss-merge-failure-error',
+        headline: "Couldn't dismiss the merge failure",
+        detail: e.message,
+        tone: 'error',
+      });
+    },
+    onSettled: (_data, _error, session) => {
+      void qc.invalidateQueries({ queryKey: ['session', session.id], exact: true });
+    },
+  });
   // Change a LIVE session's model / mode / effort / fast mode / provider, mid-turn included.
   // Optimistically patch the cached session so the pill updates instantly; server-side the runner
   // tells the running engine, or re-spawns claude --resume with the new flag when it is a provider
@@ -11640,6 +11667,15 @@ export function WorkspaceView({
             selectedId && detailForSelected?.branch
               ? () =>
                   commitMut.mutate({
+                    id: selectedId,
+                    title: selectedSession?.title ?? 'Untitled session',
+                  })
+              : undefined
+          }
+          onDismissMergeFailure={
+            selectedId
+              ? () =>
+                  dismissMergeMut.mutate({
                     id: selectedId,
                     title: selectedSession?.title ?? 'Untitled session',
                   })
