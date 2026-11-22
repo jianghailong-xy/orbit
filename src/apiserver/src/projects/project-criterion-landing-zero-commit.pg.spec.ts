@@ -250,7 +250,7 @@ test('a criterion is LANDED over work whose finished branch the line found nothi
         ...(finish === 'NOT_FINISHED'
           ? { status: RunStatus.RUNNING }
           : {
-            status: RunStatus.SUCCEEDED,
+            status: RunStatus.SUCCEEDED, 
             finishedAt: new Date(Date.now() - 60_000),
             worktreeBranch: finish.worktreeBranch ?? branch,
             worktreeDirty: finish.worktreeDirty ?? false,
@@ -389,7 +389,7 @@ test('a criterion is LANDED over work whose finished branch the line found nothi
       workspaceId,
       title: 'ran again without a worktree',
       prompt: 'do the work once more',
-      status: RunStatus.SUCCEEDED,
+      status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
       // Stated, so which session is newest is this fixture's fact and not two inserts' timing.
       createdAt: new Date(Date.now() + 1_000),
     },
@@ -423,7 +423,7 @@ test('a criterion is LANDED over work whose finished branch the line found nothi
   await prisma.session.update({
     where: { id: tooSoonSession },
     data: {
-      status: RunStatus.SUCCEEDED,
+      status: RunStatus.SUCCEEDED, 
       finishedAt: new Date(tooSoonAnswer.lookedAt.getTime() + 15_000),
       worktreeBranch: 'orbit/looked-at-too-soon',
       worktreeDirty: false,

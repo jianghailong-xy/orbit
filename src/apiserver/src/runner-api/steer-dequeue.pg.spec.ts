@@ -67,6 +67,8 @@ before(async () => {
   // `external_sender_{source,id,name}` are who outside Orbit sent a turn (migration 0502, a Feishu group
   // member): the claim and the resend read return source and name with the turn, NULL on every case here,
   // as on every turn the owner or a session sent.
+  // `finished_at` is the release column (migrations 1261, 1401): the lock reads it to refuse a released session,
+  // NULL on every case here, as on every session still held.
   await client.query(`
     DROP TABLE IF EXISTS steer_dequeue_test."conversation_turn";
     DROP TABLE IF EXISTS steer_dequeue_test."inbox_lease_generation";
@@ -84,7 +86,8 @@ before(async () => {
       engine text,
       task_id uuid,
       status text NOT NULL,
-      cancel_requested_at timestamptz
+      cancel_requested_at timestamptz,
+      finished_at timestamptz
     );
     CREATE TABLE steer_dequeue_test."inbox_lease_generation" (
       generation uuid PRIMARY KEY,

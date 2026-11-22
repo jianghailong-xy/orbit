@@ -153,10 +153,24 @@ export async function scheduleBudgetStarts(db: Db, schedule: Schedule, plannedAt
   return db.scheduleRun.count({
     where: {
       scheduleId: schedule.id,
-      startedAt: { not: null },
+      ...SCHEDULE_RUN_STARTED,
       plannedAt: { gt: scheduleBudgetWindowStart(plannedAt, schedule.timezone) },
     },
   });
+}
+
+/**
+ * A run that started, as the budget counts starts: a session was opened for it, and a retry of a start that never
+ * reached its engine cleared `startedAt` again, so its attempts are one start.
+ */
+export const SCHEDULE_RUN_STARTED = { startedAt: { not: null } } as const satisfies Prisma.ScheduleRunWhereInput;
+
+/**
+ * The runs a schedule has started in all (§8.5), counted as the budget counts them, over the schedule's whole life:
+ * what a planned end by count (`maxRuns`) is measured against. Read under the schedule lock where it decides a start.
+ */
+export function scheduleRunsStarted(db: Db, scheduleId: string): Promise<number> {
+  return db.scheduleRun.count({ where: { scheduleId, ...SCHEDULE_RUN_STARTED } });
 }
 
 /**

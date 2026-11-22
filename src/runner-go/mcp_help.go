@@ -28,6 +28,7 @@ var mcpHelpObjects = []struct {
 	{objectWiki, "the wiki"},
 	{objectFile, "files"},
 	{objectOwner, "the account owner"},
+	{objectAccount, "the owner's Settings"},
 	{objectBackgroundJob, "background jobs"},
 	{objectPermission, "engine permission prompts"},
 	{objectMergeReceipt, "merge receipts"},

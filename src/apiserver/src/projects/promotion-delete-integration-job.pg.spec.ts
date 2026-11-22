@@ -68,7 +68,7 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from './coordinator-pg-test-safety';
-import { INTEGRATION_JOB_CLAIM, PROMOTION_AUTOMATIC_LAND } from './project-integration-job';
+import { INTEGRATION_JOB_CLAIM, PROMOTION_AUTOMATIC_LAND, settleDeliveredIdentityAfterFinish } from './project-integration-job';
 import { configureProjectIntegration } from './project-integration-line';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { ProjectPromotionService } from './project-promotion.service';
@@ -271,6 +271,7 @@ async function doneCodeTask(stack: Stack, w: World): Promise<{ taskId: string; s
   });
   const sessionId = randomUUID();
   const turnId = randomUUID();
+  const finishedAt = new Date(Date.now() - 60_000);
   await db.session.create({
     data: {
       id: sessionId,
@@ -286,7 +287,6 @@ async function doneCodeTask(stack: Stack, w: World): Promise<{ taskId: string; s
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       startedAt: new Date(),
-      finishedAt: new Date(Date.now() - 60_000),
       branch: `orbit/${w.label}`,
       worktreeBranch: `orbit/${w.label}`,
       worktreeDirty: false,
@@ -330,6 +330,14 @@ async function doneCodeTask(stack: Stack, w: World): Promise<{ taskId: string; s
   });
   const task = await db.task.findUniqueOrThrow({ where: { id: declared.id }, select: { status: true } });
   assert.equal(task.status, TaskStatus.DONE, 'the acceptance command agreed');
+  await db.$transaction(async (tx) => {
+    const finished = await tx.session.update({
+      where: { id: sessionId },
+      data: { status: RunStatus.SUCCEEDED, finishedAt},
+      select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
+    });
+    await settleDeliveredIdentityAfterFinish(tx, finished);
+  });
   return { taskId: declared.id, sessionId };
 }
 

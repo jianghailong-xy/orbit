@@ -895,6 +895,8 @@ export function landingCard(
   now: number,
   observation: { updatedAt?: number; failed?: boolean } = {},
 ): LandingCard | null {
+  // A project whose line has not started draws no Landing card (revision 42 §12.16, ruling D2).
+  if (view.line === null) return null;
   const line = landingLine(view, now, observation);
   if (!line) return null;
   const jobs = landingJobLines(view, now, observation).map((job) => ({

@@ -2,13 +2,17 @@ import type { AnchorHTMLAttributes } from 'react';
 import { defaultUrlTransform, type ExtraProps } from 'react-markdown';
 import { SameOriginLink } from '../components/SameOriginLink';
 import { AppLink } from '../components/AppLink';
+import { SettingsLinkCard } from '../components/SettingsLinkCard';
 import { encodeId } from './idCodec';
+import { settingPlace } from './settingsChange';
 
 /** `#`-references the composer materialises, and the same links agents are told to write when they
  *  name a task, session, project or list to the user (runner-go agent_instructions.go), so a reply
  *  reads as titles rather than bare ids. Both spellings of the id are accepted, since what a client
  *  holds is the base62 public id and older messages may carry the raw uuid. */
 const ORBIT_REFERENCE_RE = /^orbit-(list|task|session|project):([0-9a-zA-Z-]+)$/;
+/** A Settings row an agent links (docs/settings-from-conversation-design.md §6): `orbit-settings:<key or anchor>`. */
+const ORBIT_SETTINGS_RE = /^orbit-settings:([A-Za-z][A-Za-z0-9]*)$/;
 
 /**
  * react-markdown's built-in urlTransform blanks any href whose scheme isn't on its allow-list
@@ -22,7 +26,7 @@ const ORBIT_REFERENCE_RE = /^orbit-(list|task|session|project):([0-9a-zA-Z-]+)$/
  */
 export function referenceUrlTransform(url: string): string {
   const trimmed = url.trim();
-  if (ORBIT_REFERENCE_RE.test(trimmed)) return trimmed;
+  if (ORBIT_REFERENCE_RE.test(trimmed) || ORBIT_SETTINGS_RE.test(trimmed)) return trimmed;
   return defaultUrlTransform(url);
 }
 
@@ -52,8 +56,9 @@ function referenceRoute(href: unknown): { path: string; label: string } | null {
 }
 
 /**
- * The `a` of that Markdown. A `#`-reference routes to the thing it names inside the app; any other
- * link keeps SameOriginLink's page-content semantics.
+ * The `a` of that Markdown. A `#`-reference routes to the thing it names inside the app; an
+ * `orbit-settings:` link is drawn as the Open in Settings card; any other link keeps SameOriginLink's
+ * page-content semantics. A settings link naming no row reads as its words.
  */
 export function ReferenceLink({
   node: _node,
@@ -62,6 +67,11 @@ export function ReferenceLink({
   children,
   ...rest
 }: AnchorHTMLAttributes<HTMLAnchorElement> & ExtraProps) {
+  const settings = typeof href === 'string' ? ORBIT_SETTINGS_RE.exec(href.trim()) : null;
+  if (settings) {
+    const place = settingPlace(settings[1]);
+    return place ? <SettingsLinkCard place={place} /> : <>{children}</>;
+  }
   const to = referenceRoute(href);
   if (to) {
     return (

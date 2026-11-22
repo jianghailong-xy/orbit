@@ -48,6 +48,7 @@ type fakeIngest struct {
 	batches         []fakeIngestBatch
 	live            []fakeLiveEvent
 	prefixAnswers   []*linkpb.TurnPrefixResponse
+	tailAnswers     []*linkpb.BackgroundJobTailResponse
 	refusals        []string
 }
 
@@ -277,6 +278,16 @@ func (g *fakeWorkGateway) onTurnPrefixAnswer(c *fakeWorkConn, resp *linkpb.TurnP
 	}
 	g.ingest.mu.Lock()
 	g.ingest.prefixAnswers = append(g.ingest.prefixAnswers, resp)
+	g.ingest.mu.Unlock()
+}
+
+// onBackgroundJobTailAnswer records the runner's answer to a BackgroundJobTailRequest.
+func (g *fakeWorkGateway) onBackgroundJobTailAnswer(resp *linkpb.BackgroundJobTailResponse) {
+	if g.ingest == nil {
+		return
+	}
+	g.ingest.mu.Lock()
+	g.ingest.tailAnswers = append(g.ingest.tailAnswers, resp)
 	g.ingest.mu.Unlock()
 }
 

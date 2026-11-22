@@ -264,6 +264,7 @@ type gatewayMetrics struct {
 	liveEvents        *counter
 	watchedSessions   *gauge
 	prefixRequests    *counter
+	bgTailRequests    *counter
 	queueFull         *counter
 	streams           *counter
 	openStreams       *gauge
@@ -330,6 +331,7 @@ func newGatewayMetrics(version string, deny *denyList) *gatewayMetrics {
 		liveEvents:        newCounter("link_live_events_total", "Live stream events, by what became of them: published, no_watchers, nats_down, publish_failed, bad_session.", "result"),
 		watchedSessions:   newGauge("link_watched_sessions", "Sessions of connected runners that someone watches live now."),
 		prefixRequests:    newCounter("link_turn_prefix_requests_total", "Turn prefix requests from the apiserver, by how they were answered.", "result"),
+		bgTailRequests:    newCounter("link_bg_tail_requests_total", "Background job tail requests from the apiserver, by how they were answered.", "result"),
 		streams:           newCounter("link_streams_total", "Byte stream opens and ends, by what happened: opened, refused, too_many, no_connection, malformed, nats_down, dropped, timeout, flow_violation, slow_runner, closed_by_runner, closed_by_viewer, connection_closed.", "result"),
 		openStreams:       newGauge("link_open_streams", "Byte streams open or opening now."),
 		queueFull:         newCounter("link_queue_full_total", "Frames that found their write queue full, by queue and what became of them: closed (the connection, slow_consumer) or dropped.", "queue", "result"),
@@ -384,6 +386,9 @@ func newGatewayMetrics(version string, deny *denyList) *gatewayMetrics {
 	for _, r := range []string{"answered", "timeout", "dropped", "no_connection"} {
 		m.prefixRequests.preset(r)
 	}
+	for _, r := range []string{"answered", "timeout", "unsupported", "no_connection"} {
+		m.bgTailRequests.preset(r)
+	}
 	for _, r := range []string{"opened", "refused", "too_many", "flow_violation", "closed_by_runner", "closed_by_viewer", "connection_closed"} {
 		m.streams.preset(r)
 	}
@@ -403,7 +408,7 @@ func newGatewayMetrics(version string, deny *denyList) *gatewayMetrics {
 		m.heartbeatForwards, m.heartbeatDuration, m.heartbeatFacts, m.welcomeLookups,
 		m.eventBatches, m.eventsStored, m.eventAckDuration, m.ingestEvents, m.ingestBytes, m.ingestWaiting, m.creditReduced, m.creditChanges,
 		m.mergeCalls, m.mergeFlushes, m.mergeAlone, m.mergeBatches, m.mergeCallDuration, m.mergeHeld,
-		m.liveEvents, m.watchedSessions, m.prefixRequests, m.queueFull, m.streams, m.openStreams,
+		m.liveEvents, m.watchedSessions, m.prefixRequests, m.bgTailRequests, m.queueFull, m.streams, m.openStreams,
 	}
 	return m
 }

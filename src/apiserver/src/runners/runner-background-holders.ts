@@ -1,4 +1,5 @@
-import { ACTIVE_TURN_STATUSES, OPEN_SESSION_STATUSES } from '../common/session-scheduling';
+import { ACTIVE_TURN_STATUSES } from '../common/session-scheduling';
+import { heldFilter } from '../common/session-release';
 import type { PrismaService } from '../prisma/prisma.service';
 import { runnerIsOnline, type RunnerBeats } from './runner-presence';
 
@@ -76,7 +77,7 @@ export async function runningSessionCounts(
       assignedRunnerId: { in: runners.map((r) => r.id) },
       OR: [
         { status: { in: ACTIVE_TURN_STATUSES } },
-        ...(held.length > 0 ? [{ status: { in: OPEN_SESSION_STATUSES }, OR: held }] : []),
+        ...(held.length > 0 ? [{ ...heldFilter(), OR: held }] : []),
       ],
     },
     _count: { _all: true },

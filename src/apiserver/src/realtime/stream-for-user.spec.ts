@@ -461,6 +461,7 @@ test('a Completed successful summary keeps SUCCEEDED execution state', async () 
     ...rowA,
     status: RunStatus.SUCCEEDED,
     endReason: SessionEndReason.TASK_DONE,
+    finishedAt: new Date('2026-06-27T00:00:00.000Z'),
     completedAt: new Date('2026-06-27T00:00:00.000Z'),
     archivedAt: null,
     deletedAt: null,

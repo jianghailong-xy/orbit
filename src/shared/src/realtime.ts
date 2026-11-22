@@ -109,6 +109,16 @@ export enum ControlEventType {
    *  told, at most one per second. Derived from the Open list's own counters and clock thresholds, so
    *  it also covers writes that publish no event at all. */
   SESSIONS_LIST_CHANGED = 'sessions.list_changed',
+  /** One of the owner's requests (`GET /owner-requests`) may read differently than it did: filed, answered,
+   *  expired, withdrawn or otherwise settled, by any writer. USER-SCOPED (see above). `data` is
+   *  `{ version }`, an opaque string: a nudge to re-read `GET /owner-requests`, which is the truth. Sent
+   *  ONLY to a stream that declared it with `GET /api/events?hints=owner_requests`
+   *  (`CONTROL_HINT_OWNER_REQUESTS`): shipped clients treat a type they do not know as "re-read
+   *  everything", so an undeclared stream never receives it. Like `sessions.list_changed` it is derived
+   *  from the stored rows, not published by the writers: a new stream is told the current version about a
+   *  second after it connects, and after that only a version that differs from the one it holds, at most
+   *  once a second. The asking session's `session.updated` is still published as before. */
+  OWNER_REQUESTS_CHANGED = 'owner_requests.changed',
   /** Reserved generic notification channel — future pushes ride this without a protocol bump. */
   NOTIFICATION = 'notification',
 }
@@ -133,6 +143,9 @@ export interface ControlEvent {
 /** The `hints=` value a `GET /api/events` connection declares to receive `sessions.list_changed`.
  *  Comma-separated with any other hint a later server may learn; unknown values are ignored. */
 export const CONTROL_HINT_LIST_CHANGED = 'list_changed';
+
+/** The `hints=` value a `GET /api/events` connection declares to receive `owner_requests.changed`. */
+export const CONTROL_HINT_OWNER_REQUESTS = 'owner_requests';
 
 /** `data` for `sessions.list_changed`. */
 export interface ControlListChanged {
@@ -367,6 +380,11 @@ export interface ControlBackgroundTask {
   name: string;
   status: string;
   exitCode?: number;
+  /** The launching call's id, which names the process across its reports. Absent when the runner sent
+   *  none, and from an older control plane. */
+  toolUseId?: string;
+  /** A runner-hosted job's kind (`job`, `watch`, `service`, `subagent`); absent for an engine's own shell. */
+  kind?: string;
 }
 
 /** `data` for `task.changed`.

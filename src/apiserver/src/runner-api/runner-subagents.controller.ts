@@ -91,8 +91,7 @@ import {
 import { sessionHasEnded } from './background-job-wake';
 import { fileSubagentWake, fileWorkflowWake } from './subagent-wake';
 import { WORKFLOW_SCRIPT_MAX_BYTES, WorkflowRunCreateDto, WorkflowRunUpdateDto } from './workflow-run';
-
-const TERMINAL: RunStatus[] = [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED];
+import { isReleased } from '../common/session-release';
 
 /** How a SubAgent's child runs on one candidate: the claim-shaped config, and what it resolved to. */
 interface ChildExec {
@@ -117,6 +116,8 @@ function refusalText(error: HttpException): string {
 const SUBAGENT_PARENT_SELECT = {
   ownerId: true,
   status: true,
+  // The release column: a released parent opens no SubAgent run (common/session-release.ts).
+  finishedAt: true,
   workspaceId: true,
   assignedRunnerId: true,
   provider: true,
@@ -139,6 +140,16 @@ function assertSubagentsEnabled(workspace: { subagentsEnabled: boolean } | null)
     throw new ForbiddenException({
       code: 'SUBAGENTS_DISABLED',
       message: 'SubAgents are turned off for this agent. Do the work in this session instead.',
+    });
+  }
+}
+
+/** A workflow needs its own switch on as well (workflowsOn); `delegate` reads only SubAgents. */
+function assertWorkflowsEnabled(workspace: { workflowsEnabled: boolean } | null): void {
+  if (workspace?.workflowsEnabled === false) {
+    throw new ForbiddenException({
+      code: 'WORKFLOWS_DISABLED',
+      message: 'Workflows are turned off for this agent. Hand each piece of work to delegate, or do it in this session.',
     });
   }
 }
@@ -232,12 +243,13 @@ export class RunnerSubagentsController {
       const session = await tx.session.findUniqueOrThrow({
         where: { id: sessionId },
         select: {
-          ownerId: true, status: true, endReason: true, completedAt: true, archivedAt: true, deletedAt: true,
-          workspace: { select: { subagentsEnabled: true } },
+          ownerId: true, status: true, finishedAt: true, endReason: true, completedAt: true, archivedAt: true, deletedAt: true,
+          workspace: { select: { subagentsEnabled: true, workflowsEnabled: true } },
         },
       });
       if (sessionHasEnded(session)) throw new ConflictException('the session has ended');
       assertSubagentsEnabled(session.workspace);
+      assertWorkflowsEnabled(session.workspace);
       const row = await tx.subagentWorkflowRun.create({
         data: {
           ownerId: session.ownerId,
@@ -360,7 +372,7 @@ export class RunnerSubagentsController {
     return withTransactionRetry(this.prisma, async (tx) => {
       await tx.$queryRaw`SELECT 1 FROM "session" WHERE "id" = ${sessionId}::uuid FOR UPDATE`;
       const session = await tx.session.findUniqueOrThrow({ where: { id: sessionId }, select: SUBAGENT_PARENT_SELECT });
-      if (TERMINAL.includes(session.status)) throw new ConflictException('the session has ended');
+      if (isReleased(session)) throw new ConflictException('the session has ended');
       const opened = await tx.subagentRun.findUnique({
         where: { sessionId_toolUseId: { sessionId, toolUseId: dto.toolUseId } },
       });
@@ -607,7 +619,7 @@ export class RunnerSubagentsController {
     const answer = await withTransactionRetry(this.prisma, async (tx) => {
       await tx.$queryRaw`SELECT 1 FROM "session" WHERE "id" = ${sessionId}::uuid FOR UPDATE`;
       const session = await tx.session.findUniqueOrThrow({ where: { id: sessionId }, select: SUBAGENT_PARENT_SELECT });
-      if (TERMINAL.includes(session.status)) throw new ConflictException('the session has ended');
+      if (isReleased(session)) throw new ConflictException('the session has ended');
       const opened = await tx.subagentRun.findUnique({ where: { sessionId_toolUseId: { sessionId, toolUseId: dto.toolUseId } } });
       if (opened) return this.remoteAnswer(opened);
       assertSubagentsEnabled(session.workspace);

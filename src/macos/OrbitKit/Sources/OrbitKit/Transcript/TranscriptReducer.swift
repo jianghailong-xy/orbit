@@ -72,6 +72,11 @@ public struct TranscriptState: Equatable, Sendable, Codable {
     /// started itself included) clears it. The composer decides whether to offer it
     /// (`ComposerLogic.offeredPromptSuggestion`).
     public var promptSuggestion: String?
+    /// The turn the newest agent event (any event but `user`) belongs to, and the earliest time seen
+    /// in that turn: when the agent's latest turn started (`BackgroundRowRule`'s cut-off). A wake's
+    /// turn counts from its recorded note.
+    public var agentTurnId: String?
+    public var agentTurnStartedAt: String?
     /// Settings › Translation: the suggestion's own event and its translation into the owner's
     /// language (from its payload, or folded in from the live `translation` event). Transient: a
     /// rehydrated snapshot offers the English until the window is re-read.
@@ -97,7 +102,7 @@ public struct TranscriptState: Equatable, Sendable, Codable {
     // Tolerant decode so snapshots written before `queued` (or the history-window cursor) existed
     // still rehydrate (the keys just default) instead of discarding the whole cached session; the
     // other fields keep their prior strictness. `encode(to:)` stays synthesized from these keys.
-    enum CodingKeys: String, CodingKey { case items, pendingApprovals, background, queued, accepted, unreadSteers, status, maxSeq, oldestSeq, hasMoreOlder, contextTokens, contextWindow, subagentItems, taskProgress, promptSuggestion, turnEnds }
+    enum CodingKeys: String, CodingKey { case items, pendingApprovals, background, queued, accepted, unreadSteers, status, maxSeq, oldestSeq, hasMoreOlder, contextTokens, contextWindow, agentTurnId, agentTurnStartedAt, subagentItems, taskProgress, promptSuggestion, turnEnds }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         items = try c.decode([TranscriptItem].self, forKey: .items)
@@ -115,6 +120,8 @@ public struct TranscriptState: Equatable, Sendable, Codable {
         subagentItems = (try? c.decodeIfPresent([String: [TranscriptItem]].self, forKey: .subagentItems)) ?? [:]
         taskProgress = (try? c.decodeIfPresent([String: TaskProgress].self, forKey: .taskProgress)) ?? [:]
         promptSuggestion = (try? c.decodeIfPresent(String.self, forKey: .promptSuggestion)) ?? nil
+        agentTurnId = (try? c.decodeIfPresent(String.self, forKey: .agentTurnId)) ?? nil
+        agentTurnStartedAt = (try? c.decodeIfPresent(String.self, forKey: .agentTurnStartedAt)) ?? nil
         turnEnds = (try? c.decodeIfPresent([TurnEndMark].self, forKey: .turnEnds)) ?? []
     }
 }
@@ -316,6 +323,11 @@ public struct TranscriptReducer: Sendable, Codable {
                 replaySetsOlderEdge = false
                 state.hasMoreOlder = ev.seq > 1   // seqs start at 1; a page before it answers the rest
             }
+        }
+        if ev.type != .user, let turn = ev.turnId, let ts = ev.ts {
+            if turn != state.agentTurnId { state.agentTurnId = turn; state.agentTurnStartedAt = ts }
+            else if let at = RelativeTime.parse(ts), let was = state.agentTurnStartedAt.flatMap(RelativeTime.parse),
+                    at < was { state.agentTurnStartedAt = ts }
         }
         let legacy = ev.type == .system && str(ev, "subtype") == "secret_patch_withheld"
             && str(ev, "path").map { path in
@@ -527,6 +539,8 @@ public struct TranscriptReducer: Sendable, Codable {
         clearLiveToolOutputsAtBoundary()
         legacyWithheld = nil
         state.items = []
+        state.agentTurnId = nil
+        state.agentTurnStartedAt = nil
         state.maxSeq = 0
         state.oldestSeq = nil
         state.hasMoreOlder = false
@@ -974,6 +988,18 @@ public struct TranscriptReducer: Sendable, Codable {
             leaving.insert(b, at: 0)
         }
         state.queued += leaving
+        // A message held for its translation that stays in the conversation is skipped below as if
+        // echoed, so its chip follows the listing here: translated while it waits for a runner slot,
+        // it no longer reads "Translating…" until the runner's echo comes (web parity: the snapshot
+        // carries `translation`).
+        let listedTranslation = Dictionary(turns.compactMap { t in t.turnTranslation.map { (t.turnId, $0) } },
+                                           uniquingKeysWith: { _, last in last })
+        for i in state.items.indices {
+            guard case .user(var b) = state.items[i], b.pending, let id = b.turnId,
+                  let translation = listedTranslation[id], b.translation != translation else { continue }
+            b.translation = translation
+            state.items[i] = .user(b)
+        }
         // Every row the tail drew before this listing, the accepted head's first — matched below
         // whichever of the two a turn has moved between.
         let previous = state.accepted + state.queued
@@ -2147,6 +2173,10 @@ public struct TranscriptReducer: Sendable, Codable {
                 if state.background[i].kind == nil { state.background[i].kind = proc.kind }
                 if state.background[i].taskId == nil { state.background[i].taskId = proc.taskId }
                 if state.background[i].endedAt == nil { state.background[i].endedAt = proc.endedAt }
+                if state.background[i].reason == nil { state.background[i].reason = proc.reason }
+                if state.background[i].exitCode == nil { state.background[i].exitCode = proc.exitCode }
+                // Only the server says whether its owner can stop it, so its word is kept on the live row.
+                if let stoppable = proc.stoppable { state.background[i].stoppable = stoppable }
                 if state.background[i].status == "running" { state.background[i].status = proc.status }
                 // The server knows a bg_run by its job record, which a live launch does not carry.
                 if proc.kind == "job" { state.background[i].kind = "job" }
@@ -2186,9 +2216,17 @@ public struct TranscriptReducer: Sendable, Codable {
             return
         }
         let ended = ["completed", "done", "failed", "killed", "stopped"].contains(status)
+        // How a runner-hosted job ended: why a killed one was killed, and its exit code (shared
+        // `deriveBackgroundShells`), which its card says.
+        let reason = ended && (status == "killed" || status == "stopped") ? nonEmpty(str(ev, "reason")) : nil
+        let exitCode = ended ? ev.payload["exitCode"]?.intValue : nil
         if let i = index {
             state.background[i].status = status
             if ended { state.background[i].endedAt = ev.ts ?? state.background[i].endedAt }
+            if let reason { state.background[i].reason = reason }
+            if let exitCode { state.background[i].exitCode = exitCode }
+            // An end is no longer stoppable, whatever the list said while it ran.
+            if ended { state.background[i].stoppable = false }
             if runnerKind != nil { state.background[i].kind = "job" }
             if let command { state.background[i].command = command }
             if state.background[i].taskId == nil { state.background[i].taskId = taskID }
@@ -2201,7 +2239,7 @@ public struct TranscriptReducer: Sendable, Codable {
                                                    description: launch?.description ?? named?.title,
                                                    status: status, outputTail: "", startedAt: ev.ts,
                                                    kind: runnerKind != nil ? "job" : named?.kind, taskId: taskID,
-                                                   endedAt: ended ? ev.ts : nil))
+                                                   endedAt: ended ? ev.ts : nil, reason: reason, exitCode: exitCode))
         }
     }
 

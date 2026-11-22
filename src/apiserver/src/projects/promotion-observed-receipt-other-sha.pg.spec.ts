@@ -79,7 +79,7 @@ async function doneTask(db: PrismaClient, w: World, title: string): Promise<{ ta
   await db.session.create({
     data: {
       id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, taskId: task.id, title, prompt: title,
-      status: RunStatus.SUCCEEDED, startsTaskWork: true, completedAt: new Date(),
+      status: RunStatus.SUCCEEDED, finishedAt: new Date(), startsTaskWork: true, completedAt: new Date(),
     },
   });
   return { taskId: task.id, sessionId };

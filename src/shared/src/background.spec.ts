@@ -283,6 +283,11 @@ describe('runner-hosted bg_run jobs', () => {
     ]);
   });
 
+  it('carries a job’s exit code from its terminal report, and none while it runs', () => {
+    const shells = deriveBackgroundShells(events, { sessionLive: true });
+    expect(shells.map((s) => s.exitCode)).toEqual([1, undefined]);
+  });
+
   it('narrows to them losslessly', () => {
     const ctx = { sessionLive: true };
     expect(deriveBackgroundShells(selectBackgroundDerivationEvents(events), ctx)).toEqual(

@@ -9,6 +9,7 @@ import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
+import { isReleased } from '../common/session-release';
 import {
   COORDINATOR_PAUSE_SELECT,
   DELIVERY_COORDINATOR_PAUSED,
@@ -494,12 +495,12 @@ export class CoordinatorDeliveryService {
     // row goes on naming it after it ends.
     const standing = await this.prisma.session.findFirst({
       where: { id: project.coordinatorSessionId, ownerId: project.ownerId, deletedAt: null },
-      select: { id: true, status: true, cancelRequestedAt: true },
+      select: { id: true, finishedAt: true, cancelRequestedAt: true },
     });
     if (
       !standing
       || standing.cancelRequestedAt !== null
-      || SessionsService.TERMINAL.includes(standing.status)
+      || isReleased(standing)
     ) {
       return { outcome: 'REFUSED', refusalCode: DELIVERY_COORDINATOR_SESSION_UNAVAILABLE };
     }

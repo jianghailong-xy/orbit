@@ -4,6 +4,7 @@ import test from 'node:test';
 
 import { BadRequestException } from '@nestjs/common';
 import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { isReleasedStatus } from '../common/session-release';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -108,7 +109,9 @@ async function fixture(db: PrismaClient, label: string, status: RunStatus, store
       runtimeSessionId: randomUUID(),
       startedAt: new Date(),
       status,
-      ...(status === RunStatus.FAILED ? { finishedAt: new Date() } : {}),
+      ...(isReleasedStatus(status) ? {
+        finishedAt: new Date(),
+      } : {}),
     },
   });
   const first = await db.conversationTurn.create({

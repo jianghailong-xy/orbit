@@ -392,10 +392,32 @@ public final class APIClient: @unchecked Sendable {
         try await get("sessions/\(sessionID)/background")
     }
 
+    /// The newest lines of one bg_run job's output (GET /sessions/:id/background/jobs/:jobId/tail, at
+    /// most 40), read by the runner hosting it just now: what a running Job card shows (R2). A 404/409
+    /// says it cannot be read (a runner too old, output gone); a 503/504 that the runner is away for now.
+    /// Web parity: `getBackgroundJobTail`.
+    public func backgroundJobTail(sessionID: String, jobID: String) async throws -> BackgroundJobTail {
+        try await get("sessions/\(sessionID)/background/jobs/\(jobID)/tail")
+    }
+
+    /// The owner's stop of one running bg_run job (POST /sessions/:id/background/jobs/:jobId/stop): its
+    /// end arrives as the job's terminal report, killed with the reason `stopped_by_owner` (R3). Web
+    /// parity: `stopBackgroundJob`.
+    @discardableResult
+    public func stopBackgroundJob(sessionID: String, jobID: String) async throws -> BackgroundJobStop {
+        try await postEmpty("sessions/\(sessionID)/background/jobs/\(jobID)/stop")
+    }
+
     /// The session's SubAgent runs, oldest first (GET /sessions/:id/subagents): what each `delegate`
     /// call's block shows beside it — tier, model, Why, time and cost (docs/subagent-design.md §6.4).
     public func sessionSubagents(sessionID: String) async throws -> [SubagentRunView] {
         try await get("sessions/\(sessionID)/subagents")
+    }
+
+    /// The session's Orbit workflows, oldest first (GET /sessions/:id/workflows): what each
+    /// `mcp__orbit__workflow` call's block shows — its phases, counts, cost and how it ended.
+    public func sessionWorkflows(sessionID: String) async throws -> [WorkflowRunView] {
+        try await get("sessions/\(sessionID)/workflows")
     }
 
     /// The tasks this session's agent created, as its "Tasks created here" card draws them
@@ -1063,6 +1085,17 @@ public final class APIClient: @unchecked Sendable {
         try await postEmpty("owner-requests/\(id)/create-wiki")
     }
 
+    /// A SETTINGS_CHANGE card's Save changes (design §5.2): writes the proposed values and settles the card DONE. A value
+    /// that moved since is refused 409 SETTINGS_STALE and nothing is written.
+    public func applyOwnerRequestSettings(_ id: String) async throws -> OwnerRequest {
+        try await postEmpty("owner-requests/\(id)/apply-settings")
+    }
+
+    /// Undo of a settings change (design §5.3): the owner's own preferences PATCH with each key's `from`.
+    public func undoSettingsChange(_ values: [String: JSONValue]) async throws -> User {
+        try await patch("users/me/preferences", body: values)
+    }
+
     /// A SECRET request's key, in the body and nowhere else; the answer never carries it back.
     public func submitOwnerSecret(_ id: String, _ body: OwnerRequestSecretBody) async throws -> OwnerRequest {
         try await post("owner-requests/\(id)/secret", body: body)
@@ -1341,6 +1374,13 @@ public final class APIClient: @unchecked Sendable {
         try await patch("projects/\(projectID)/integration", body: body)
     }
 
+    /// The owner's Revert on one of the coordinator's recorded landing-check changes (§12.15 P-R1):
+    /// its old value is put back as the owner's own, so the coordinator needs a card for that field
+    /// from then on. Answers the revert's own record; the page reads the project again.
+    public func revertSettingChange(_ projectID: String, changeID: String) async throws -> ProjectSettingChange {
+        try await postEmpty("projects/\(projectID)/setting-changes/\(changeID)/revert")
+    }
+
     /// Pause project: nothing starts its tasks or merges it into main by itself until it is resumed;
     /// runs already going finish. The owner's own credential and no acting session — the door
     /// refuses one.
@@ -1392,12 +1432,15 @@ public final class APIClient: @unchecked Sendable {
         try await get("projects/\(projectID)/coordinator/pending-waits")
     }
 
-    /// One of the handoff's presses: `nil` is Hand over, then `skip` (Skip the note / Hand over without
+    /// One of the handoff's presses: `start` is Hand over, then `skip` (Skip the note / Hand over without
     /// a note), `cancel` (Cancel handover / Keep this coordinator) and `retry` (Try again). Each
     /// answers the handoff as it now stands; a 409 is a press that does not fit its state.
     public func coordinatorHandoff(_ projectID: String,
-                                   _ action: CoordinatorHandoffAction = .start) async throws -> CoordinatorHandoffView {
-        try await postEmpty("projects/\(projectID)/coordinator/handoff\(action.pathSuffix)")
+                                   _ action: CoordinatorHandoffAction = .start,
+                                   successor: CoordinatorHandoffSuccessor? = nil) async throws -> CoordinatorHandoffView {
+        let path = "projects/\(projectID)/coordinator/handoff\(action.pathSuffix)"
+        if action == .cancel { return try await postEmpty(path) }
+        return try await post(path, body: CoordinatorHandoffRequest(successor: successor))
     }
 
     /// Lift a task list's pause, so its otherwise-ready tasks can run.
@@ -1827,10 +1870,10 @@ public final class APIClient: @unchecked Sendable {
     /// Every provider with its models' SubAgent tiers and prices (GET /providers/subagent-tiers): the
     /// Providers page's Model tiers table and the SubAgents settings' provider list.
     public func subagentTiers() async throws -> SubagentTiersResponse { try await get("providers/subagent-tiers") }
-    /// Set or clear (nil) the owner's tier for one model of their own key.
-    public func setModelTier(providerID: String, model: String, tier: String?) async throws {
-        _ = try await send(makeRequest("providers/mine/\(providerID)/model-tier", method: "PATCH",
-                                       body: ProviderModelTierUpdate(model: model, tier: tier)))
+    /// Set or clear (nil) the owner's tier for one model, at the path SubagentSettings.tierPath names: a key of
+    /// their own, or a built-in engine's catalogue.
+    public func setModelTier(path: String, model: String, tier: String?) async throws {
+        _ = try await send(makeRequest(path, method: "PATCH", body: ProviderModelTierUpdate(model: model, tier: tier)))
     }
 
     /// The whole DeepSeek account's balance behind one of the account's own DeepSeek keys (GET
@@ -2329,6 +2372,12 @@ public final class APIClient: @unchecked Sendable {
     /// session's tracked branch, so Merge/diff act on the real work instead of a stale "In main".
     public func adoptBranch(sessionID: String) async throws {
         _ = try await postRaw("sessions/\(sessionID)/adopt-branch", body: Optional<Empty>.none)
+    }
+
+    /// Close a failed merge's strip: the server clears the stored conflict or error, so every client's
+    /// bar shows Merge (or "In main") again. Nothing in git changes.
+    public func dismissMergeFailure(sessionID: String) async throws {
+        _ = try await postRaw("sessions/\(sessionID)/merge-failure/dismiss", body: Optional<Empty>.none)
     }
 
     // MARK: link previews

@@ -320,12 +320,13 @@ describe('a background SubAgent, from start to end', () => {
     expect(container.textContent).not.toContain('It ended while you were working');
   });
 
-  it('keeps a background job’s news written beside the end as its own line, and only that', () => {
+  it('draws nothing for a background job’s news written beside the end either: the job’s own card says it', () => {
     const { events, view } = oneRun(SUBAGENT_DONE);
     events[4] = wakeEvent(9, `${SUBAGENT_DONE}\n\n${JOB}`);
     mount(events, [view]);
-    expect(container.querySelectorAll('.bgwake')).toHaveLength(1);
-    expect(container.querySelector('.bgwake .bgwake-title')?.textContent).toBe('Background job finished');
+    expect(container.querySelectorAll('.bgwake')).toHaveLength(0);
+    // Only the opening message is a bubble.
+    expect(container.querySelectorAll('.chat-user')).toHaveLength(1);
     expect(container.querySelectorAll('[data-delegate-call]')).toHaveLength(1);
   });
 
@@ -360,12 +361,13 @@ describe('a SubAgent’s end turn still on the queue', () => {
     expect(subagentElements()).toHaveLength(1);
   });
 
-  it('is told apart from the tail’s own rows: a SubAgent-only wake leaves the tail, one with job news stays', () => {
+  it('is told apart from the tail’s own rows: a SubAgent-only wake leaves the tail, and so does one with job news', () => {
     expect(queuedSubagentWake({ content: SUBAGENT_TWO })).toEqual({
       runIds: ['34y5Qcall0000000000001', '34y5Qspec0000000000002'],
       alone: true,
     });
-    expect(queuedSubagentWake({ content: `${SUBAGENT_DONE}\n\n${JOB}` })?.alone).toBe(false);
+    // A job's news beside it waits on the job's card too (JobCard): nothing is left for the tail to draw.
+    expect(queuedSubagentWake({ content: `${SUBAGENT_DONE}\n\n${JOB}` })?.alone).toBe(true);
     expect(queuedSubagentWake({ content: 'deploy it' })).toBeNull();
     expect(queuedSubagentWake({ content: SUBAGENT_DONE, sessionMessage: {} })).toBeNull();
   });

@@ -81,6 +81,7 @@ import { Popconfirm } from '../components/ui/Popconfirm';
 import { Segmented } from '../components/ui/Segmented';
 import { Spinner } from '../components/ui/Spinner';
 import { Tooltip } from '../components/ui/Tooltip';
+import type { SessionReach } from '../lib/sessionReach';
 import '../components/ui/Badge.css';
 
 // A checkbox is focusable but is not text entry, and clicking a row's checkbox leaves the
@@ -553,8 +554,9 @@ export function TaskListView() {
     ],
     // A row's pill is `running` / `queued` from the session carrying the task, and page one's
     // `counts` counts those same session-derived states — neither moves when only the task row is
-    // written, and both move on every run that starts or ends.
-    meta: { entities: ['task', 'session'] },
+    // written, and both move on every run that starts or ends: a task run's events read it, no other session's
+    // (lib/sessionReach).
+    meta: { entities: ['task', 'session'], sessionReach: { taskRuns: scopeProjectId ?? null } satisfies SessionReach },
     queryFn: ({ pageParam }) =>
       api<TaskPage>(
         taskPagePath({

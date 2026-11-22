@@ -49,7 +49,7 @@ extension StartProject {
         let main = main ?? RunSettings.mainBranchName(settings.upstreamRef)
         return [
             rowAsked,
-            RunSettings.lineInSentence(settings.line, main: main),
+            settings.line.map { RunSettings.lineInSentence($0, main: main) } ?? StartProject.landsWhenCommits,
             "\(RunSettings.automatic) \(settings.automatic ? "on" : "off")",
             "at most \(settings.maxConcurrentTasks) at a time",
         ].joined(separator: " · ")

@@ -1440,6 +1440,9 @@ model Workspace {
   // many of one session's SubAgents may run at once. On by default (§9 B).
   subagentsEnabled    Boolean   @default(true) @map("subagents_enabled")
   subagentsMaxRunning Int       @default(8) @map("subagents_max_running")
+  // Workflows (docs/subagent-workflow-design.md §6, §9 D2): whether this Agent's sessions may start a workflow, whose
+  // every call is a SubAgent, so it takes SubAgents on as well (workflowsOn). On by default, as SubAgents is.
+  workflowsEnabled    Boolean   @default(true) @map("workflows_enabled")
   // Default reasoning effort a new session inherits when its create request omits one
   // ('' / null = the model's default). Claude: low|medium|high|xhigh|max; codex adds minimal.
   effort              String?   @map("effort")
@@ -2122,6 +2125,14 @@ model Session {
   // runner's async /finalize. null = a natural agent finish (read `status`) or a
   // pre-migration row. Values: see SessionEndReason in @orbit/shared.
   endReason            String?   @map("end_reason")
+  // No failure fact on the session (design §12, decision D9; removal step R5, 2026-11-21): the nullable column `release_cause` and its CHECK
+  // session_release_cause_chk still exist in the database, and this model does not declare it. Nothing writes it
+  // and nothing reads it; migration R8 drops both one deploy after this field left the model.
+  // How the session's latest completed turn ended: ANSWERED | FAILED | INTERRUPTED | CANCELLED, the same
+  // value as that turn's `outcome`, written by runner turn-complete in the write that parks the session
+  // (migration 1201, CHECK session_last_turn_outcome_chk). Backfilled from status and endReason (1202); null
+  // when no turn has settled since, or when the old row could not say.
+  lastTurnOutcome      String?   @map("last_turn_outcome")
   // Denormalized preview: the text of the most recent `assistant` RunEvent, written on
   // event ingestion. Lets the session list show a last-reply line without querying the
   // (high-volume, append-only) run_event table per row. null until the first reply.
@@ -2206,6 +2217,12 @@ model Session {
   // older runner reports nothing) and counts as it did before this column existed. Only meaningful
   // while live. See src/apiserver/src/sessions/background-job-activity.ts.
   runningBgJobActivity Json      @default("{}") @map("running_bg_job_activity")
+  // The bg_run jobs of `runningBgJobs` the session's owner asked to stop from the app (POST
+  // /sessions/:id/background/jobs/:jobId/stop). Every full heartbeat answer to the session's
+  // runner lists the ones still in `runningBgJobs` (stopBackgroundJobs), so the stop is redelivered
+  // until the job's terminal report takes it out of that set; an id no longer there is inert. The
+  // route prunes it to `runningBgJobs` as it adds. Only meaningful while live.
+  bgJobStopRequests    String[]  @default([]) @map("bg_job_stop_requests")
   // Denormalized set of the agent's still-running sub-agents (Task/Agent tool): the tool_use
   // ids of sub-agent launches that haven't yet reported a terminal `<task-notification>`
   // (background_task). Added on launch, removed on completion, cleared on (re)spawn. The Agent
@@ -2221,6 +2238,10 @@ model Session {
   // `status` remains the sole source of truth for runner-slot accounting, so a self-driven
   // turn never consumes a permit it did not acquire.
   engineTurnActive     Boolean   @default(false) @map("engine_turn_active")
+  /// The runner-clock time (an event's `ts`) of the newest event batch that moved engineTurnActive, runningSubagents,
+  /// runningBgJobs or runningBgShells. A heartbeat's `executing` composed before it does not replace those sets: the
+  /// batch is newer news than the beat (runners/runner-executing-sets.ts, migration 1267). Internal: never sent.
+  executingEventAt     DateTime? @map("executing_event_at")
   // When the engine first spoke for the CURRENT run: cleared by every claim, stamped by the
   // first event the engine itself produced (a spawn handshake, or any generation event when a
   // warm process is reused and there is no handshake). RUNNING with this still null is the
@@ -3084,6 +3105,12 @@ model ConversationTurn {
   /// the control plane's note, so `content` stays the owner's words. Null for every other turn.
   wikiContext     Json?     @map("wiki_context")
   answeredAt      DateTime? @map("answered_at")
+  /// How this turn's latest completion ended (migration 1201, CHECK conversation_turn_outcome_chk):
+  /// ANSWERED | FAILED | INTERRUPTED | CANCELLED, written by runner turn-complete in the write that settles
+  /// `status`. Null on a turn no completion has settled, on a kind that is not a turn of work (steer, withdraw,
+  /// control turns), and on every turn written before 1201. `error` is what it failed or was stopped with.
+  outcome         String?
+  error           String?
   createdAt       DateTime  @default(now()) @map("created_at")
 
   // Image blobs sent with this turn (web composer). Linked when the turn is enqueued;
@@ -3795,6 +3822,7 @@ model Project {
   @@map("project")
   coordinatorHandoffs CoordinatorHandoff[]
   rulings             ProjectRuling[]
+  settingChanges      ProjectSettingChange[]
 }
 
 /// A Project's explicit binding to ONE line of code (`docs/project-source-contract.md` §3.1,
@@ -3860,6 +3888,16 @@ model ProjectCodebase {
   landingCheckCommand        String? @map("landing_check_command")
   /// Landing check budget; null falls back to mergeCheckTimeoutSeconds.
   landingCheckTimeoutSeconds Int?    @map("landing_check_timeout_seconds")
+  /// True: run no project landing check; a landing runs only the task's own acceptance (1310, P-C1).
+  /// Distinct from a null command, which falls back to the merge check.
+  landingCheckNone           Boolean   @default(false) @map("landing_check_none")
+  /// Who last wrote the landing check: OWNER and CARD lock it; START (the owner's Start press on the
+  /// coordinator's proposal) and COORDINATOR (a cardless write, P-C1) do not (1310). Null: nobody.
+  landingCheckSetBy          String?   @map("landing_check_set_by")
+  /// The coordinator session behind a COORDINATOR write; cleared by every other writer.
+  landingCheckSetBySessionId String?   @map("landing_check_set_by_session_id") @db.Uuid
+  /// When the last write happened, whoever wrote it.
+  landingCheckSetAt          DateTime? @map("landing_check_set_at") @db.Timestamptz(3)
   /// The project-level check run before promotion into upstream. Null: none.
   mergeCheckCommand        String?   @map("merge_check_command")
   /// That check's budget in seconds. Null: the one-hour default an acceptance command gets.
@@ -6229,6 +6267,16 @@ model Task {
   /// declaration takes the task out of its criterion's landing conjunction. NULL on a task that is
   /// not codeless, and on one created codeless — creating it so is the first statement, not a change.
   codelessReason     String?  @map("codeless_reason")
+  /// True: when this task lands on its project's branch, the project's landing check is not run; its
+  /// own acceptance still is, and the merge check before upstream is untouched (1350, §12.15 P-C2).
+  landingCheckExempt            Boolean @default(false) @map("landing_check_exempt")
+  /// Why, at most 280 characters; set exactly when `landingCheckExempt` is.
+  landingCheckExemptReason      String? @map("landing_check_exempt_reason")
+  /// The coordinator conversation that wrote the exemption; NULL when the owner did.
+  landingCheckExemptBySessionId String? @map("landing_check_exempt_by_session_id") @db.Uuid
+  /// When the owner last wrote or reverted this task's exemption (migration 1390); the coordinator's
+  /// next cardless write of it is refused while set. NULL when the owner never has.
+  landingCheckExemptOwnerSetAt  DateTime? @map("landing_check_exempt_owner_set_at")
   /// The session this task was forked from (migration 0615, SOURCE row PF, SR55): the session whose
   /// create call filed it, on that call's runner credential. The five fork columns are all NULL or
   /// all set, written by the create doors in the task's own INSERT and never afterwards (0615's
@@ -7832,6 +7880,11 @@ model CoordinatorHandoff {
   note          String?
   /// The waits the swap moved, as `{ id, label, paused }`.
   movedWaits    Json      @default("[]") @map("moved_waits")
+  /// What the successor runs on, as the owner named it (migration 1410); all null keeps the previous
+  /// coordinator's engine, provider and model.
+  successorEngine   String? @map("successor_engine")
+  successorProvider String? @map("successor_provider")
+  successorModel    String? @map("successor_model")
   endedAt       DateTime? @map("ended_at")
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at")
@@ -7864,6 +7917,33 @@ model ProjectRuling {
 
   @@index([projectId, createdAt])
   @@map("project_ruling")
+}
+
+/// One write of a project's landing check or of a task's exemption (migration 1390, §12.15 P-R1). Insert-only.
+/// `field` LANDING_CHECK | TASK_LANDING_CHECK_EXEMPT and `origin` COORDINATOR | OWNER | CARD are CHECKs; `taskId`
+/// is set exactly for the second field; a COORDINATOR row has a reason and a session; `revertsChangeId` names the
+/// change an owner's revert put back (a partial unique index: once), and only an OWNER row carries it.
+model ProjectSettingChange {
+  id                 String                @id @default(uuid(7)) @db.Uuid
+  ownerId            String                @map("owner_id") @db.Uuid
+  projectId          String                @map("project_id") @db.Uuid
+  project            Project               @relation(fields: [projectId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "project_setting_change_project_fkey")
+  /// No foreign key: the record outlives the task it is about.
+  taskId             String?               @map("task_id") @db.Uuid
+  field              String
+  origin             String
+  oldValue           Json                  @map("old_value")
+  newValue           Json                  @map("new_value")
+  reason             String?
+  /// The coordinator conversation that wrote it; null for an owner or card write. No foreign key.
+  writtenBySessionId String?               @map("written_by_session_id") @db.Uuid
+  revertsChangeId    String?               @map("reverts_change_id") @db.Uuid
+  reverts            ProjectSettingChange? @relation("SettingChangeReverts", fields: [revertsChangeId], references: [id], onDelete: Cascade, map: "project_setting_change_reverts_fkey")
+  revertedBy         ProjectSettingChange[] @relation("SettingChangeReverts")
+  createdAt          DateTime              @default(now()) @map("created_at")
+
+  @@index([projectId, createdAt])
+  @@map("project_setting_change")
 }
 
 model KeyGatewayToken {
@@ -8118,6 +8198,9 @@ model OwnerRequest {
   scheduleChangeRequestId String?   @map("schedule_change_request_id") @db.Uuid
   /// CONDITION_UNKNOWN (migration 1030): the condition that cannot be read. History, no FK.
   conditionId             String?   @map("condition_id") @db.Uuid
+  /// SETTINGS_CHANGE (migration 1273): `{ changes: [{ key, from, to, tier }] }`, written by the server. NULL otherwise.
+  /// Its partial unique `owner_request_settings_change_pending_key` holds a session to one PENDING SETTINGS_CHANGE.
+  payload             Json?
   expiresAt           DateTime? @map("expires_at") @db.Timestamptz(3)
   clientRequestId     String?   @map("client_request_id")
   resolvedAt          DateTime? @map("resolved_at") @db.Timestamptz(3)
@@ -8174,6 +8257,13 @@ model OwnerRequestSecret {
   deliveredAt DateTime?    @map("delivered_at") @db.Timestamptz(3)
   removedAt   DateTime?    @map("removed_at") @db.Timestamptz(3)
   removalNote String?      @map("removal_note")
+  /// The saved secret "Use saved" made this grant from (migration 1400); NULL once that saved secret is deleted.
+  /// Indexed by the partial `owner_request_secret_saved_secret_idx` (WHERE saved_secret_id IS NOT NULL), which
+  /// Prisma does not model.
+  savedSecretId String?        @map("saved_secret_id") @db.Uuid
+  savedSecret   AccountSecret? @relation(fields: [savedSecretId], references: [id], onDelete: SetNull)
+  /// The runner's name when the grant was made, so a copy on a runner deleted since is still named.
+  runnerName  String?      @map("runner_name")
   createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
 
@@ -8189,8 +8279,11 @@ model AccountSecret {
   owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   label     String
   valueEnc  String   @map("value_enc")
+  /// When "Use saved" last made a grant from it (migration 1400).
+  lastUsedAt DateTime? @map("last_used_at") @db.Timestamptz(3)
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  grants    OwnerRequestSecret[]
 
   @@unique([ownerId, label], map: "account_secret_owner_label_key")
   @@map("account_secret")
@@ -10153,8 +10246,9 @@ enum ScheduleChangeRequestState {
 
 /// A goal, a rhythm and an envelope (schedules/schedules.service.ts). `workspaceId`, `agentId` and
 /// `createdFromSessionId` are history references, not foreign keys. The envelope (`envelope*`) is written only by a
-/// press on the owner channel, or narrowed by a person's own narrowing (§4). The partial index `schedule_due_idx`
-/// (WHERE state = 'ACTIVE') and the CHECKs live in the migration.
+/// press on the owner channel, or narrowed by a person's own narrowing (§4). The partial indexes `schedule_due_idx`
+/// (WHERE state = 'ACTIVE') and `schedule_planned_end_untold_idx` (ENDED END_REACHED, not yet told; migration 1304) and
+/// the CHECKs live in the migrations.
 model Schedule {
   id                       String              @id @default(uuid(7)) @db.Uuid
   ownerId                  String              @map("owner_id") @db.Uuid
@@ -10171,6 +10265,11 @@ model Schedule {
   timezone                 String
   startAt                  DateTime            @map("start_at") @db.Timestamptz(3)
   endAt                    DateTime?           @map("end_at") @db.Timestamptz(3)
+  /// The planned end by count (§8.5, migration 1304): ENDED (END_REACHED) at the start of the run that reaches it.
+  /// At least 1 (CHECK schedule_max_runs_positive); NULL for none.
+  maxRuns                  Int?                @map("max_runs")
+  /// When the one "Stopped as planned" push was sent, or decided against (a ONCE rule). Bookkeeping, set by the worker.
+  plannedEndToldAt         DateTime?           @map("planned_end_told_at") @db.Timestamptz(3)
   accessLevel              ScheduleAccessLevel @map("access_level")
   runLimitMinutes          Int                 @default(30) @map("run_limit_minutes")
   envelopeWorkspaceId      String              @map("envelope_workspace_id") @db.Uuid
@@ -10223,7 +10322,8 @@ model ScheduleRevision {
 }
 
 /// One firing. Its partial unique indexes (one per SCHEDULED/CATCH_UP slot, one in progress, one queued) live in
-/// the migration. `sessionId` is a history reference.
+/// the migration, and so does `schedule_run_started_idx` (WHERE started_at IS NOT NULL, migration 1304), the started
+/// runs a planned end by count reads. `sessionId` is a history reference.
 model ScheduleRun {
   id               String             @id @default(uuid(7)) @db.Uuid
   scheduleId       String             @map("schedule_id") @db.Uuid

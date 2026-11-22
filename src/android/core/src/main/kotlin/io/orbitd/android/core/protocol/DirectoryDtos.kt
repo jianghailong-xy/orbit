@@ -16,7 +16,8 @@ data class WorkspaceSummary(
 data class SessionSummary(
     val id: String,
     val title: String? = null,
-    val status: String,
+    // A row without a status decodes as an unknown one, like a status word this build does not know.
+    val status: String = "UNKNOWN",
     val runState: String? = null,
     val lifecycleState: String? = null,
     val agentId: String? = null,

@@ -24,6 +24,45 @@ public enum SessionProjectCopy {
     public static let pin = "Pin"
     public static let unpin = "Unpin"
     public static let move = "Move…"
+    public static let pause = "Pause"
+    public static let resume = "Resume"
+
+    /// 2a (design §4.2): the daily limit paused the project.
+    public static func pausedAtLimit(observed: Int?, limit: Int?) -> String {
+        guard let observed, let limit else { return "Paused at the daily limit" }
+        return "Paused at the daily limit · \(observed)/\(limit) today"
+    }
+    /// 2b: the owner paused it; runs already going finish, then it says since when.
+    public static func paused(runsFinishing: Int, ago: String?) -> String {
+        if runsFinishing > 0 { return "Paused · \(runsFinishing) \(runsFinishing == 1 ? "run" : "runs") finishing" }
+        return ago.map { "Paused · \($0)" } ?? "Paused"
+    }
+
+    /// The toast after Pause (§4.3), with Undo.
+    public static let projectPaused = "Project paused"
+    public static func pausedDetail(running: Int) -> String {
+        running > 0
+            ? "\(running) \(running == 1 ? "run" : "runs") still going · nothing new starts or merges"
+            : "Nothing new starts or merges"
+    }
+    public static let undo = "Undo"
+    /// The toast after a daily-limit Resume: the limit stays where it was.
+    public static let resumed = "Resumed"
+    public static let limitNotRaised = "The daily limit was not raised · Change on the project page"
+    public static func pauseRefused(resuming: Bool) -> String {
+        resuming ? "Couldn't resume the project" : "Couldn't pause the project"
+    }
+    /// The refusal's reason in words, never a code: 403 owner-only, `PROJECT_NOT_STARTED`, else the
+    /// server's own message.
+    public static func pauseRefusal(status: Int?, body: String?, resuming: Bool) -> String? {
+        if status == 403 { return "Only the project's owner can \(resuming ? "resume" : "pause") it" }
+        let text = body?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if text.contains("PROJECT_NOT_STARTED") { return "The project hasn't started yet" }
+        if let data = text.data(using: .utf8),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let message = json["message"] as? String, !message.isEmpty { return message }
+        return text.isEmpty ? nil : text
+    }
 
     public static func pageSubtitle(sessions: Int) -> String { "Project · \(sessions) sessions" }
     /// The page's subtitle before its members have been read: no count it cannot vouch for yet.
@@ -46,7 +85,9 @@ public enum SessionProjectCopy {
     /// the one the request suggests.
     public static func startSuggestion(_ settings: ProjectStartSettings, main: String? = nil) -> String {
         let main = main ?? RunSettings.mainBranchName(settings.upstreamRef)
-        return "\(settings.line == .main ? RunSettings.lineMain(main) : "Project branch") · Automatic \(settings.automatic ? "on" : "off") · \(settings.maxConcurrentTasks) at a time"
+        let line = settings.line == nil ? StartProject.landsWhenCommits
+            : settings.line == .main ? RunSettings.lineMain(main) : "Project branch"
+        return "\(line) · Automatic \(settings.automatic ? "on" : "off") · \(settings.maxConcurrentTasks) at a time"
     }
     public static let startReview = "Review and start"
     /// …and when nobody has, beside the owner's own Start….

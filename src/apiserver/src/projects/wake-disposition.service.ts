@@ -51,6 +51,7 @@ import {
   type CriterionWithLandingFacts,
   type LandingBranches,
   criterionLanding,
+  deliveredNothingOfItsOwnSql,
   landingBranchesFor,
   readLandingBranches,
   readLandingJobsByTask,
@@ -593,12 +594,13 @@ export class WakeDispositionService {
             },
             // The attempt that produced the branch. Its snapshot is what the runner computed
             // against this session's own base, so a task that ran twice is described by its
-            // latest delivery and not by a diff of a tree nobody has any more.
+            // latest delivery and not by a diff of a tree nobody has any more — and its own branch's
+            // tip and base, which say whether that snapshot can describe commits of its own at all.
             sessions: {
               where: { startsTaskWork: true, deletedAt: null },
               orderBy: { createdAt: 'desc' },
               take: 1,
-              select: { id: true, changedFiles: true },
+              select: { id: true, changedFiles: true, branchSha: true, baseSha: true },
             },
             progress: { select: { epochStartedAt: true } },
           },
@@ -609,9 +611,10 @@ export class WakeDispositionService {
     const serving = stated
       .filter((row) => criterionSubjectId(fact.projectId, criterionKeyOf(row.id)) === fact.subjectId)
       .flatMap((row) => row.servingTasks.map((task) => ({ row, task })));
-    const [branches, asked] = await Promise.all([
+    const [branches, asked, nothingOfItsOwn] = await Promise.all([
       readLandingBranches(this.prisma, fact.projectId),
       this.questionsAbout(fact.projectId, serving.map(({ task }) => task.id)),
+      this.deliveredNothingOfItsOwn(serving.map(({ task }) => task.id)),
     ]);
 
     return serving.map(({ row, task }) => {
@@ -637,7 +640,7 @@ export class WakeDispositionService {
           // criterion has no snapshot to disagree, and says nothing about the standard moving.
           statedCriterionMoved:
             task.criterionRevision != null && task.criterionRevision !== row.revision,
-          changedPaths: changedPathsOf(task.sessions[0]?.changedFiles),
+          changedPaths: ownChangedPaths(task.sessions[0], nothingOfItsOwn.has(task.id)),
           declaredPaths: declaredPaths(task),
           // The branch test is the landing fold's own, asked without its result: a conflict on
           // some other branch is a conflict about somewhere else, exactly as a merge into one is.
@@ -650,6 +653,20 @@ export class WakeDispositionService {
         },
       };
     });
+  }
+
+  /**
+   * The tasks among these that delivered nothing of their own (§12.15 P-M1, `deliveredNothingOfItsOwn`):
+   * their delivery changed no file anybody could find outside a declaration, so no scope question is
+   * asked about them. One statement for all of them, in the spelling every set reader uses.
+   */
+  private async deliveredNothingOfItsOwn(taskIds: readonly string[]): Promise<Set<string>> {
+    if (taskIds.length === 0) return new Set();
+    const rows = await this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT t."id" FROM "task" t
+       WHERE t."id" = ANY(${[...taskIds]}::uuid[])
+         AND ${Prisma.raw(deliveredNothingOfItsOwnSql('t'))}`);
+    return new Set(rows.map((row) => row.id));
   }
 
   /**
@@ -983,6 +1000,26 @@ export const REQUIRED_ACTION: Readonly<Record<BlockerDisposition['reason'], stri
  * the field, and neither is a delivery that changed nothing outside its scope — it is a delivery
  * about which nothing can be said.
  */
+/**
+ * The files a delivery changed of its own, for the scope question (`blocker-disposition.ts`): none for a
+ * task that delivered nothing of its own (§12.15 P-M1), and none for a session whose own branch never
+ * moved past its base (`branch_sha` = `base_sha`, both reported) — the runner computes `changed_files`
+ * as `git diff <base>..HEAD` wherever HEAD is, so a run that checked out another commit and committed
+ * nothing reports that commit's whole diff, which is nobody's delivery (2026-11-20: nine scope reviews
+ * about 59 files a verification run had only checked out). Otherwise the runner's list, as before.
+ */
+function ownChangedPaths(
+  session: { changedFiles: unknown; branchSha: string | null; baseSha: string | null } | undefined,
+  nothingOfItsOwn: boolean,
+): string[] {
+  if (nothingOfItsOwn || !session) return [];
+  if (typeof session.branchSha === 'string' && typeof session.baseSha === 'string'
+    && session.branchSha === session.baseSha) {
+    return [];
+  }
+  return changedPathsOf(session.changedFiles);
+}
+
 function changedPathsOf(reported: unknown): string[] {
   if (!Array.isArray(reported)) return [];
   return reported
@@ -993,9 +1030,8 @@ function changedPathsOf(reported: unknown): string[] {
 /** What one criterion's serving work has to carry for both halves of the rule to be answerable. */
 const SERVING_WORK = {
   id: true,
-  status: true,
-  // Everything the landing fold reads, from the module that decides what "landed" means: SR5's
-  // escape hatch, the merges recorded against the task, and the answers the line gave about its
+  // Everything the landing fold reads, from the module that decides what "landed" means: the
+  // task's status and work sessions, the merges recorded against the task, and the answers the line gave about its
   // branches. Spread rather than spelled, so this lane cannot come to read a fact the fold no
   // longer reads — a wake raised for a criterion the fold calls LANDED is a person woken for
   // nothing.

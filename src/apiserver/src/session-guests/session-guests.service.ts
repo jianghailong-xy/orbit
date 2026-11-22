@@ -12,6 +12,7 @@ import {
 import { AttachmentsService } from '../attachments/attachments.service';
 import type { FileUpload } from '../files/file-upload-storage';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
+import { isReleased } from '../common/session-release';
 import { enqueueSessionInvite, SESSION_INVITE } from '../email/email-outbox';
 import type { OpenedFile } from '../files/files.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -537,9 +538,9 @@ export class SessionGuestsService {
   private async hasEnded(sessionId: string): Promise<boolean> {
     const s = await this.prisma.session.findUniqueOrThrow({
       where: { id: sessionId },
-      select: { status: true, cancelRequestedAt: true },
+      select: { finishedAt: true, cancelRequestedAt: true },
     });
-    return SessionsService.TERMINAL.includes(s.status as RunStatus) || s.cancelRequestedAt !== null;
+    return isReleased(s) || s.cancelRequestedAt !== null;
   }
 
   /** The guest's own queued turn, or 404: a guest withdraws and steers only what they sent. */

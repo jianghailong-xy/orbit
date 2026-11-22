@@ -25,6 +25,9 @@ public struct User: Codable, Equatable, Sendable, Identifiable {
     /// Settings › Prompt optimizer: the server holds a DeepSeek key and so can optimize a draft.
     /// False: the switch is drawn disabled with the board frame 1b notice. Nil in login's user payload.
     public let promptOptimizerAvailable: Bool?
+    /// Settings last changed from a conversation, by preference key (`GET /users/me`, design §5.3). Nil from an older
+    /// server and in login's user payload.
+    public var changedBy: [String: SettingChangedBy]? = nil
 }
 
 public struct LoginRequest: Codable, Sendable {
@@ -154,6 +157,8 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
     public var subagentsEnabled: Bool? = nil
     /// How many of one session's SubAgents run at once. Nil reads as 4 (`SubagentSettings.maxRunning`).
     public var subagentsMaxRunning: Int? = nil
+    /// Whether this Agent's sessions may start a workflow (docs/subagent-workflow-design.md §6). Nil reads as on.
+    public var workflowsEnabled: Bool? = nil
     public let workDirExists: Bool?
     public let workDirIsGit: Bool?
     /// BIGINT columns are serialized as strings by the control plane; numeric fixtures and older
@@ -174,7 +179,7 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         case maxTurns, maxBudgetUsd, targetRunnerId, targetLabels, runnerId, env, enabled
         case antigravityKeyAvailableByRunner
         case autoInitGit, codexAccount, claudeAccount, antigravityAccount, kimiAccount, cursorAccount
-        case enableWorktree, subagentsEnabled, subagentsMaxRunning
+        case enableWorktree, subagentsEnabled, subagentsMaxRunning, workflowsEnabled
         case workDirExists, workDirIsGit
         case workDirFreeBytes, workDirTotalBytes, repoHealth, repoCleanup, mainCheckoutActions
     }
@@ -214,6 +219,7 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         enableWorktree = try c.decodeIfPresent(Bool.self, forKey: .enableWorktree)
         subagentsEnabled = try c.decodeIfPresent(Bool.self, forKey: .subagentsEnabled)
         subagentsMaxRunning = try c.decodeIfPresent(Int.self, forKey: .subagentsMaxRunning)
+        workflowsEnabled = try c.decodeIfPresent(Bool.self, forKey: .workflowsEnabled)
         workDirExists = try c.decodeIfPresent(Bool.self, forKey: .workDirExists)
         workDirIsGit = try c.decodeIfPresent(Bool.self, forKey: .workDirIsGit)
         workDirFreeBytes = c.flexibleInt64(forKey: .workDirFreeBytes)
@@ -759,7 +765,11 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// Whether this row is a landing session (platform work), not a conversation.
     public var isLanding: Bool { sessionKind == "LANDING" }
 
-    public var effectiveRunStatus: RunStatus { runStatus ?? status }
+    /// A `runStatus` word this build does not know defers to the legacy `status`.
+    public var effectiveRunStatus: RunStatus {
+        if let runStatus, runStatus != .unknown { return runStatus }
+        return status
+    }
     public var effectiveRunState: SessionRunState {
         SessionRunState.resolve(runState, legacy: sessionState,
                                 status: effectiveRunStatus, endReason: endReason)
@@ -1640,6 +1650,12 @@ public struct BgShellDTO: Decodable, Sendable {
     public let endedAt: String?
     /// An agent's or workflow's last progress, carried by the notification that ended it.
     public let progress: JSONValue?
+    /// Why a killed one was killed (`requested`, `stopped_by_owner`, `runner_shutdown`, …).
+    public let reason: String?
+    /// A runner-hosted job's exit code, once it exited.
+    public let exitCode: Int?
+    /// Whether the owner can stop it from the app; absent from older servers, which reads as not.
+    public let stoppable: Bool?
 
     /// Map to the reducer's `BackgroundProc`: key by `toolUseId`, translate the web status vocab to
     /// the native one, and default a missing output to empty (the tray shows "No output captured yet").
@@ -1652,7 +1668,10 @@ public struct BgShellDTO: Decodable, Sendable {
                        startedAt: startedTs,
                        kind: kind,
                        taskId: shellId,
-                       endedAt: endedAt)
+                       endedAt: endedAt,
+                       reason: reason,
+                       exitCode: exitCode,
+                       stoppable: stoppable)
     }
 
     /// The progress this row ended with, for `seedBackground`.
@@ -1809,7 +1828,11 @@ public struct MergeRepairSession: Codable, Equatable, Sendable, Identifiable {
     public let finishedAt: String?
     public let lastAssistantText: String?
 
-    public var effectiveRunStatus: RunStatus? { runStatus ?? status }
+    /// A `runStatus` word this build does not know defers to the legacy `status`.
+    public var effectiveRunStatus: RunStatus? {
+        if let runStatus, runStatus != .unknown { return runStatus }
+        return status ?? runStatus
+    }
     public var effectiveRunState: SessionRunState? {
         SessionRunState.resolveOptional(runState, legacy: sessionState, status: effectiveRunStatus)
     }
@@ -1914,7 +1937,11 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
     /// Whether this detail is a landing session, which is what chooses its renderer.
     public var isLanding: Bool { sessionKind == "LANDING" }
 
-    public var effectiveRunStatus: RunStatus? { runStatus ?? status }
+    /// A `runStatus` word this build does not know defers to the legacy `status`.
+    public var effectiveRunStatus: RunStatus? {
+        if let runStatus, runStatus != .unknown { return runStatus }
+        return status ?? runStatus
+    }
     public var effectiveRunState: SessionRunState? {
         SessionRunState.resolveOptional(runState, legacy: sessionState, status: effectiveRunStatus)
     }
@@ -2197,7 +2224,11 @@ public struct SessionSearchHit: Codable, Equatable, Sendable, Identifiable {
     /// located client-side (see the web `splitHighlight`) — collapsing invalidates any offset.
     public let snippet: String?
 
-    public var effectiveRunStatus: RunStatus { runStatus ?? status }
+    /// A `runStatus` word this build does not know defers to the legacy `status`.
+    public var effectiveRunStatus: RunStatus {
+        if let runStatus, runStatus != .unknown { return runStatus }
+        return status
+    }
     public var effectiveRunState: SessionRunState {
         SessionRunState.resolve(runState, legacy: sessionState,
                                 status: effectiveRunStatus, endReason: endReason)

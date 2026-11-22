@@ -12,7 +12,7 @@ import {
 } from '@orbit/shared';
 import type { AuthCredential } from '../common/current-user.decorator';
 import { isSessionGenerating } from '../common/session-generating';
-import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
+import { isHeld } from '../common/session-release';
 import { PrismaService } from '../prisma/prisma.service';
 import { canonicalRepoUrl } from '../projects/project-criterion-landing';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -47,6 +47,8 @@ const CHAT_SELECT = {
   id: true,
   title: true,
   status: true,
+  // The release column: a chat is open while it is held (common/session-release.ts).
+  finishedAt: true,
   engineTurnActive: true,
   createdAt: true,
   updatedAt: true,
@@ -214,7 +216,7 @@ export class WikiChat {
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       select: CHAT_SELECT,
     });
-    const open = (chat: ChatSession) => OPEN_SESSION_STATUSES.includes(chat.status);
+    const open = (chat: ChatSession) => isHeld(chat);
     // What an open chat waits on the owner for, as the session list counts it — the same rows, read by the same reader.
     const listed = await this.sessions.listRowsByIds(ownerId, chats.filter(open).map((chat) => chat.id));
     const approvals = new Map(listed.map((row) => [row.id, row.pendingApprovals ?? 0]));
@@ -271,7 +273,7 @@ function chatRow(chat: ChatSession, needsYou: number, drafts = 0, working = fals
     sessionId: chat.id,
     title: chat.title,
     status: chat.status,
-    open: OPEN_SESSION_STATUSES.includes(chat.status),
+    open: isHeld(chat),
     completed: chat.completedAt !== null,
     working,
     createdAt: chat.createdAt.toISOString(),

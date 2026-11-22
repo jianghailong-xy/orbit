@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { USAGE_LIMIT_ERROR_MARKERS } from '@orbit/shared';
+import { releaseWasFailureSql } from '../common/session-release';
 import { PrismaService } from '../prisma/prisma.service';
 import { MODEL_AT_CAPACITY_ERROR_MARKER } from './model-routing';
 
@@ -43,19 +44,28 @@ export function sessionUsageUnreported(session: string): Prisma.Sql {
            AND (unreported_mp.owner_id IS NULL OR unreported_mp.owner_id = ${s}.owner_id))))))`;
 }
 
+/** A report's `since` filter: absent is no lower bound; anything but an ISO timestamp is a 400. */
+export function reportSince(since: string | undefined): Date | null {
+  const sinceDate = since === undefined ? null : new Date(since);
+  if (sinceDate && (typeof since !== 'string' || !Number.isFinite(sinceDate.getTime()))) {
+    throw new BadRequestException('since must be an ISO timestamp');
+  }
+  return sinceDate;
+}
+
 @Injectable()
 export class TaskModelRoutingReportService {
   constructor(private readonly prisma: PrismaService) {}
 
   async read(ownerId: string, since?: string, agentId?: string) {
-    const sinceDate = since === undefined ? null : new Date(since);
-    if (sinceDate && (typeof since !== 'string' || !Number.isFinite(sinceDate.getTime()))) {
-      throw new BadRequestException('since must be an ISO timestamp');
-    }
+    const sinceDate = reportSince(since);
     const rows = await this.prisma.$queryRaw<Array<ModelRoutingReportGroup & { applied: boolean }>>(Prisma.sql`
       WITH routed_runs AS (
         SELECT d.policy_version, d.level, d.applied, s.provider, s.model,
-               s.id AS session_id, s.task_id, s.status AS run_status, s.effort,
+               s.id AS session_id, s.task_id,
+               -- The run failed: released by a failure (common/session-release.ts), never null: false for a run still
+               -- held.
+               ${releaseWasFailureSql('s')} AS run_failed, s.effort,
                s.created_at, s.finished_at, t.status AS task_status, t.completion_criterion
           FROM task_route_decision d
           JOIN task t ON t.id = d.task_id AND t.owner_id = ${ownerId}::uuid
@@ -67,7 +77,8 @@ export class TaskModelRoutingReportService {
       ),
       -- Filters choose samples, never cut short the history that determines the first run or cost.
       work_runs AS (
-        SELECT s.id, s.task_id, s.status, s.error, s.cost_usd, s.created_at,
+        SELECT s.id, s.task_id, ${releaseWasFailureSql('s')} AS run_failed,
+               s.error, s.cost_usd, s.created_at,
                ${sessionUsageUnreported('s')} AS usage_unknown,
                row_number() OVER history AS ordinal,
                lead(s.created_at) OVER history AS next_created_at
@@ -78,10 +89,10 @@ export class TaskModelRoutingReportService {
       ),
       assessed_runs AS (
         SELECT w.*,
-               NOT (w.status = 'FAILED' AND (${Prisma.join(
+               NOT (w.run_failed AND (${Prisma.join(
                  [...USAGE_LIMIT_ERROR_MARKERS, MODEL_AT_CAPACITY_ERROR_MARKER].map((marker) =>
                    Prisma.sql`lower(coalesce(w.error, '')) LIKE ${`%${marker}%`}`), ' OR ')}))
-               AND (w.status = 'FAILED' OR EXISTS (
+               AND (w.run_failed OR EXISTS (
                  SELECT 1 FROM task v
                   WHERE v.owner_id = ${ownerId}::uuid AND v.verifies_task_id = w.task_id
                     AND v.verdict = 'FAIL' AND v.updated_at >= w.created_at
@@ -113,7 +124,7 @@ export class TaskModelRoutingReportService {
                count(*)::int AS task_count,
                (count(*) FILTER (WHERE r.task_status = 'DONE'))::int AS completed_task_count,
                (count(*) FILTER (WHERE r.task_status = 'DONE' AND totals.run_count = 1
-                                 AND totals.failures = 0 AND r.run_status <> 'FAILED'))::int AS first_pass_task_count,
+                                 AND totals.failures = 0 AND NOT r.run_failed))::int AS first_pass_task_count,
                avg(totals.failures)::double precision AS average_failure_count,
                (count(*) FILTER (WHERE r.task_status = 'DONE' AND totals.usage_unknown))::int
                  AS usage_unknown_completed_task_count,

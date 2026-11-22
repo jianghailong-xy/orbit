@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 
+import { heldFilter } from '../common/session-release';
+import { UNSETTLED_SESSION_STATUSES } from '../common/session-scheduling';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CoordinatorDeliveryService,
@@ -162,7 +164,8 @@ export class ProjectTasksSettledProducer {
           status: 'OPEN', coordinatorEnabled: true,
           ...(sessionId ? { coordinatorSessionId: sessionId } : {}),
           coordinatorSession: {
-            status: { in: ['AWAITING_INPUT', 'INTERRUPTED'] }, retryAt: null,
+            // Idle and still held: no turn queued or running, not released.
+            ...heldFilter(), status: { notIn: UNSETTLED_SESSION_STATUSES }, retryAt: null,
             workspace: { enabled: true, deletedAt: null },
             endReason: null, completedAt: null, archivedAt: null, deletedAt: null, cancelRequestedAt: null,
           },
@@ -385,9 +388,8 @@ export class ProjectTasksSettledProducer {
             select: {
               id: true,
               title: true,
-              status: true,
-              // Everything the fold reads — SR5's escape hatch, the merges recorded against the
-              // task, and the answers the line gave about its branches — spread from the module
+              // Everything the fold reads — the task's status and work sessions, the merges recorded
+              // against the task, and the answers the line gave about its branches — spread from the module
               // that folds it, so the card agrees with the derivation it reports rather than with
               // the shape that derivation had when this read was written.
               ...LANDING_SERVING_WORK_SELECT,

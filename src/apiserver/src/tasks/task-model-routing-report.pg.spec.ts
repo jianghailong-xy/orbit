@@ -12,6 +12,7 @@ import { PublicIdInterceptor } from '../common/public-id.interceptor';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
+import { SubagentRoutingReportService } from './subagent-routing-report.service';
 import { TaskModelRoutingReportController } from './task-model-routing-report.controller';
 import { TaskModelRoutingReportService, type ModelRoutingReportGroup } from './task-model-routing-report.service';
 
@@ -59,11 +60,13 @@ test('model-routing report aggregates actual runs, first-run task cohorts and on
     } });
   }
   async function run(subject: Task, seconds: number, duration: number | null, data: Partial<Prisma.SessionUncheckedCreateInput> = {}) {
+    const status = data.status ?? 'SUCCEEDED';
+    const terminal = ['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(status);
     return db.session.create({ data: {
       ownerId: subject.ownerId, creatorId: subject.ownerId, title: 'report run', prompt: 'report', taskId: subject.id,
       workspaceId: subject.ownerId === owner ? agent.id : otherAgent.id, startsTaskWork: true,
-      provider: 'claude', model: OPUS, effort: 'low', status: 'SUCCEEDED', createdAt: at(seconds),
-      finishedAt: duration === null ? null : at(seconds + duration), ...data,
+      provider: 'claude', model: OPUS, effort: 'low', status, createdAt: at(seconds), ...data,
+      finishedAt: terminal ? data.finishedAt ?? at(seconds + (duration ?? 0)) : null,
     } });
   }
   async function route(subject: Task, sessionId: string | null, seconds: number, data: Partial<Prisma.TaskRouteDecisionUncheckedCreateInput> = {}) {
@@ -207,7 +210,7 @@ test('model-routing report aggregates actual runs, first-run task cohorts and on
   @Module({
     imports: [JwtModule.register({ secret: 'routing-report-spec' })],
     controllers: [TaskModelRoutingReportController],
-    providers: [TaskModelRoutingReportService, JwtAuthGuard, { provide: PrismaService, useValue: db }],
+    providers: [TaskModelRoutingReportService, SubagentRoutingReportService, JwtAuthGuard, { provide: PrismaService, useValue: db }],
   })
   class ReportModule {}
   app = await NestFactory.create(ReportModule, { logger: false, abortOnError: false });

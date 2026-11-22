@@ -615,6 +615,7 @@ cx mkdir -p "$REFUSE_DIR" &&
 [ "$(unit_prop orbit-runner-alice.service RefuseManualStop)" = yes ] && unit_running orbit-runner-alice.service &&
   [ "$(main_pid orbit-runner-alice.service)" = "$legacy_pid" ] ||
   fail 4 "orbit-runner-alice.service is not running pid $legacy_pid with RefuseManualStop=yes" orbit-runner-alice.service
+# docs: "Register each account's runner" — `systemctl stop orbit-runner-alice.service` is refused.
 cx systemctl stop orbit-runner-alice.service >/dev/null 2>&1 &&
   fail 4 "systemctl stop of orbit-runner-alice.service succeeded despite RefuseManualStop=yes" orbit-runner-alice.service
 one_old_runner() {

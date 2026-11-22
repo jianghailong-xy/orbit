@@ -1064,6 +1064,11 @@ Recorded 2026-10-17 for the second phase's task D3. The account owner decided th
 runners with the Docker backend, while an existing deployment, orbitd.io included, keeps them as its `.env` has
 them: the code's default stays off. The operator's side is [self-hosting](self-hosting.md#managed-runners).
 
+> **Superseded 2026-11-22.** The account owner reversed the install's default: a new deployment now has managed
+> runners (Orbit Cloud) off, and `scripts/install-server.sh --managed-runners` is what prepares and switches them on.
+> Without it the install writes `ORBIT_MANAGED_RUNNERS_ENABLED=false`, as `--no-managed-runners` did. The record below
+> describes the install as D3 left it.
+
 The two paths, as the repository had them:
 
 | Path | Before D3 | Now |

@@ -221,15 +221,27 @@ struct WorktreeBar: View {
             // sitting on its bottom border (web `.wt-merge-inset`, board docs/mocks/merge-conflict-strip).
             if d.mergeRecovery == nil, conflict != nil || failure != nil {
                 Divider()
-                Group {
-                    if let conflict {
-                        WorktreeMergeConflictView(conflict: conflict).id(d.mergeError ?? "")
-                    } else if let failure {
-                        failureView(message: failure)
+                HStack(alignment: .top, spacing: 8) {
+                    Group {
+                        if let conflict {
+                            WorktreeMergeConflictView(conflict: conflict).id(d.mergeError ?? "")
+                        } else if let failure {
+                            failureView(message: failure)
+                        }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    // Closes it everywhere (web `.wt-merge-dismiss`, board docs/mocks/merge-error-dismiss).
+                    Button { Task { await console.worktree.dismissMergeFailure() } } label: {
+                        Image(systemName: "xmark").font(.orbitLabel)
+                            .padding(4).contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain).foregroundStyle(.secondary)
+                    .disabled(console.worktree.busy)
+                    .accessibilityLabel("Dismiss")
+                    .help("Dismiss")
+                    .padding(.top, -4)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 10).padding(.top, 9).padding(.bottom, 10)
+                .padding(.leading, 10).padding(.trailing, 6).padding(.top, 9).padding(.bottom, 10)
             }
             // A merge held for target recovery is the bar's second row: what holds it, one line, and
             // the review behind it in a sheet — never the review itself, which is taller than the band
@@ -1044,6 +1056,10 @@ struct BackgroundTrayView: View {
     let row: BackgroundRowRule.Row?
     /// The band is folded away (`TypingFold`, the folded pill): the names stop rotating.
     var paused = false
+    /// Scrolls the conversation to a bg_run job's card (R1): whether it found one to scroll to.
+    var revealJob: ((String) -> Bool)? = nil
+    /// The owner's stop of a running bg_run job (R3).
+    var stopJob: ((String) async throws -> Void)? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
     @State private var open = false
@@ -1089,11 +1105,21 @@ struct BackgroundTrayView: View {
     private var rows: some View {
         VStack(spacing: 0) {
             ForEach(procs) { proc in
-                BackgroundRow(proc: proc, progress: progress[proc.id], expanded: expandedID == proc.id) {
-                    withAnimation(.easeOut(duration: 0.12)) {
-                        expandedID = expandedID == proc.id ? nil : proc.id
-                    }
-                }
+                BackgroundRow(proc: proc, progress: progress[proc.id], expanded: expandedID == proc.id,
+                              onToggle: {
+                                  // A bg_run job's row goes to its Job card, as the Agents list goes to a
+                                  // run's block (R1); one whose card is not loaded opens here as ever.
+                                  if WorktreeBarLogic.jobRowScrollsToCard(proc), revealJob?(proc.id) == true {
+                                      withAnimation(.easeOut(duration: 0.12)) { open = false }
+                                      return
+                                  }
+                                  withAnimation(.easeOut(duration: 0.12)) {
+                                      expandedID = expandedID == proc.id ? nil : proc.id
+                                  }
+                              },
+                              onStop: stopJob.flatMap { stop in
+                                  WorktreeBarLogic.jobRowOffersStop(proc) ? { try await stop(proc.id) } : nil
+                              })
             }
         }
     }
@@ -1115,7 +1141,7 @@ struct BackgroundTrayView: View {
     /// The name the row shows now.
     private func current(_ row: BackgroundRowRule.Row) -> BackgroundRowRule.Item {
         switch row.name {
-        case .one(let item), .pinned(let item): return item
+        case .one(let item): return item
         case .rotate(let items, _, _): return items[turn % items.count]
         }
     }
@@ -1124,7 +1150,7 @@ struct BackgroundTrayView: View {
     /// folded away; it starts again from where it was.
     private var rotationPaused: Bool { open || paused || scenePhase != .active }
 
-    /// "Background", the name and its mark, the count: only the name moves, by a push from below,
+    /// "Background", the name, the count and its mark: only the name moves, by a push from below,
     /// or — with Reduce Motion — a crossfade in place.
     private func folded(_ row: BackgroundRowRule.Row) -> some View {
         let item = current(row)
@@ -1143,14 +1169,15 @@ struct BackgroundTrayView: View {
             .clipped()
             // The screen reader reads the row's own label, never a name that changes every 3 s.
             .accessibilityHidden(true)
-            BackgroundRowMarkView(mark: item.mark)
+            // The count, then the mark, at the right edge before the chevron, as AgentsBandRow ends.
             if !row.countParts.isEmpty {
                 row.countParts.enumerated().reduce(Text("")) { line, part in
                     line + Text(part.offset == 0 ? "" : " · ")
-                        + Text(part.element.text).foregroundStyle(part.element.kind == "failed" ? Color.red : Color.secondary)
+                        + Text(part.element.text)
                 }
                 .font(.orbitMeta).foregroundStyle(.secondary).lineLimit(1).fixedSize()
             }
+            BackgroundRowMarkView(mark: item.mark)
             Image(systemName: "chevron.right")
                 .font(.orbitMeta.weight(.semibold)).foregroundStyle(.secondary)
         }
@@ -1200,12 +1227,14 @@ struct BackgroundTrayView: View {
 }
 
 /// The folded row's mark: the list row's own spinner and SF Symbols (`BackgroundRow.statusIcon`).
+/// The spinner is the app's one running mark (`SpinnerGlyph`, as on a running session), not the
+/// system activity indicator, so the bars above the composer do not show two kinds of loading.
 private struct BackgroundRowMarkView: View {
     let mark: BackgroundRowRule.Mark
 
     var body: some View {
         switch mark {
-        case .running: ProgressView().controlSize(.small)
+        case .running: SpinnerGlyph(color: .accentColor)
         case .done:    Image(systemName: "checkmark.circle.fill").font(.orbitLabel).foregroundStyle(.green)
         case .failed:  Image(systemName: "xmark.circle.fill").font(.orbitLabel).foregroundStyle(.red)
         case .killed:  Image(systemName: "stop.circle").font(.orbitLabel).foregroundStyle(.secondary)
@@ -1220,6 +1249,10 @@ private struct BackgroundRow: View {
     var progress: TaskProgress? = nil
     let expanded: Bool
     let onToggle: () -> Void
+    /// A running bg_run job its runner can stop (R3); nil for anything else.
+    var onStop: (() async throws -> Void)? = nil
+    @State private var asking = false
+    @State private var stopFailed: String?
 
     /// An async agent or a workflow rather than a shell: named by kind, and opening to its progress.
     private var isTask: Bool { proc.kind == "agent" || proc.kind == "workflow" }
@@ -1240,11 +1273,28 @@ private struct BackgroundRow: View {
                 if let ts = proc.startedAt, let rel = RelativeTime.format(ts) {
                     Text(rel).font(.orbitMeta).foregroundStyle(.secondary)
                 }
+                if onStop != nil {
+                    Button(BgJobCard.stop) { asking = true }
+                        .buttonStyle(.plain).font(.orbitMeta).foregroundStyle(.tint)
+                        .accessibilityIdentifier("bg-job-stop")
+                }
                 Image(systemName: expanded ? "chevron.down" : "chevron.right")
                     .font(.orbitMeta).foregroundStyle(.tertiary)
             }
             .contentShape(Rectangle())
             .onTapGesture(perform: onToggle)
+            .orbitConfirmation(BgJobCard.stopConfirm, isPresented: $asking) {
+                Button(BgJobCard.stop, role: .destructive) {
+                    guard let onStop else { return }
+                    Task {
+                        do { try await onStop(); stopFailed = nil } catch { stopFailed = APIClient.failureReason(error) }
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            }
+            if let stopFailed {
+                Text(stopFailed).font(.orbitMeta).foregroundStyle(.red).padding(.leading, 26)
+            }
             // Where a running workflow is, or what a running agent is on — the row's second line.
             if isTask, proc.status == "running", let progress, let line = TaskProgressCopy.trayLine(progress) {
                 Text(line).font(.orbitMeta).foregroundStyle(.secondary).lineLimit(1)
@@ -1279,11 +1329,11 @@ private struct BackgroundRow: View {
         .padding(.horizontal, 12).padding(.vertical, 6)
     }
 
-    /// Status glyph mirroring web's `BgStatusIcon`. Uses `ProgressView` for the live spinner like the
-    /// neighbouring tool cards do — safe here since the tray isn't inside the recycling transcript List.
+    /// Status glyph mirroring web's `BgStatusIcon`. The live spinner is the folded row's own
+    /// (`SpinnerGlyph`), so the row keeps its mark when tapped open.
     @ViewBuilder private var statusIcon: some View {
         switch proc.status {
-        case "running":   ProgressView().controlSize(.small)
+        case "running":   SpinnerGlyph(color: .accentColor)
         case "completed": Image(systemName: "checkmark.circle.fill").font(.orbitLabel).foregroundStyle(.green)
         case "failed":    Image(systemName: "xmark.circle.fill").font(.orbitLabel).foregroundStyle(.red)
         case "killed":    Image(systemName: "stop.circle").font(.orbitLabel).foregroundStyle(.secondary)

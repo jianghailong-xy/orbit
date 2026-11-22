@@ -18,6 +18,7 @@ import {
 import { api, type ApprovalInfo, type PermissionRule } from '../api';
 import { WAITING_ON_YOU, type OwnerRequest } from '../lib/ownerRequests';
 import { scheduleDetailQuery, scheduleRequestQuery, scheduleRunSessionPath, schedulePath, viewerTimezone } from '../lib/schedules';
+import type { SessionReach } from '../lib/sessionReach';
 import { ago, sameResourceId } from '../lib/watches';
 import { rememberRulesFor } from './ApprovalPanel';
 import { CardActionButton, CardActions } from './CardAction';
@@ -70,7 +71,7 @@ export function ScheduleWaitingCard({ request, now = Date.now() }: { request: Ow
   const detail = useQuery({ ...scheduleDetailQuery(scheduleId), enabled: Boolean(scheduleId) });
   const approvals = useQuery({
     queryKey: ['session-approvals', request.askedBySessionId] as const,
-    meta: { entities: ['session'] },
+    meta: { entities: ['session'], sessionReach: { session: request.askedBySessionId } satisfies SessionReach },
     queryFn: () => api<ApprovalInfo[]>(`/sessions/${encodeURIComponent(request.askedBySessionId)}/approvals?status=PENDING`),
     enabled: request.kind === 'SCHEDULE_APPROVAL',
   });

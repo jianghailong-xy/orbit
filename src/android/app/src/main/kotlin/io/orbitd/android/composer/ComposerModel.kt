@@ -2,7 +2,6 @@ package io.orbitd.android.composer
 
 import io.orbitd.android.core.auth.*
 import io.orbitd.android.core.cards.ClaudeRegion
-import io.orbitd.android.core.cards.DshRuntime
 import io.orbitd.android.core.net.*
 import io.orbitd.android.core.promptoptimizer.PromptOptimizationRequest
 import io.orbitd.android.core.promptoptimizer.PromptOptimizer
@@ -134,13 +133,6 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
     fun forgetOptimizationUndo() = optimizer { it.forgetUndo() }
     /** Why the box won't do what was asked of it, said as an error: there until dismissed. */
     fun refuse(message: String) { mutable.update { it.copy(error = message) } }
-    /** Whether [effective] — a session's detail, or a draft's workspace, under the picks held for it — runs on DeepSeek Harness: its
-     * engine ([ProviderChoices.engine]), which for a key or a pool on a server that records none only the account's keys can say. */
-    private suspend fun executesDsh(effective: JsonObject): Boolean {
-        val keys = if (!ProviderChoices.engineFromKeys(effective)) emptyList()
-            else runCatching { api.read(listOf("providers")).jsonArray.filterIsInstance<JsonObject>() }.getOrDefault(emptyList())
-        return ProviderChoices.engine(effective, keys) == DshRuntime.ENGINE
-    }
     suspend fun attachmentBytes(id: String): ByteArray = auth.readData(handle, DataKind.DRAFT, "$key:attachment:$id")
         ?.takeIf { it.isNotEmpty() } ?: error("Select the file again; its saved copy is unavailable.")
 
@@ -248,8 +240,6 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                 } else sendEndpoint(detail)
                 val raw = draft.text.trim()
                 val shell = raw.startsWith("!")
-                // DeepSeek Harness has no shell bridge (the runner settles such a turn as a refusal): the command stays here (A07-5).
-                if (shell && executesDsh(JsonObject(detail + draft.resumeConfig))) { refuse(DshRuntime.SHELL_REFUSAL); return@launch }
                 val content = if (shell) raw.drop(1).trim() else raw
                 if (content.isEmpty() && (shell || draft.attachments.isEmpty())) return@launch
                 val id = UUID.randomUUID().toString()

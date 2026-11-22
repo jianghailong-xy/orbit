@@ -1,5 +1,8 @@
 package io.orbitd.android.reader
 
+import io.orbitd.android.projects.LandingMeasuredCopy
+import androidx.compose.ui.graphics.luminance
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -470,7 +473,7 @@ private fun LandingBudgetMeter(progress: Float, usual: Float?) {
  *  then its lines gathered into steps (`LandingSteps`), each a tool row. A step opens to its own lines, the server's sentences as they
  *  were, a check's to its output too; a step that failed or runs now starts open. */
 @Composable
-private fun LandingTimelineSectionView(section: LandingSection, view: LandingView, now: Instant, zone: ZoneId,
+internal fun LandingTimelineSectionView(section: LandingSection, view: LandingView, now: Instant, zone: ZoneId,
     onLog: suspend (LandingLogSelectors, String?) -> LandingLogPage?) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val current = section.jobId == view.currentAttempt?.jobId
@@ -497,6 +500,7 @@ private fun LandingTimelineSectionView(section: LandingSection, view: LandingVie
         steps.forEachIndexed { index, step ->
             val last = index == steps.lastIndex
             val status = when {
+                LandingSteps.taskExempt(step) != null -> StepStatus.SKIPPED
                 LandingSteps.failed(step, section.kind) -> StepStatus.FAILED
                 last && live -> StepStatus.RUNNING
                 last && current && attempt?.state == "QUEUED" -> StepStatus.PENDING
@@ -520,7 +524,7 @@ private fun LandingTimelineSectionView(section: LandingSection, view: LandingVie
     }
 }
 
-private enum class StepStatus { OK, FAILED, RUNNING, PENDING }
+private enum class StepStatus { OK, FAILED, RUNNING, PENDING, SKIPPED }
 
 /** One step as the session chat's tool row on Android: the tone bar, the caret, its name in the mono face, its summary line and the
  *  word that says how it stands (`Complete`, `Failed`, `Running`), as the chat's own tool rows say it. No time on a phone's row; the
@@ -540,21 +544,35 @@ private fun LandingStepRow(section: LandingSection, step: LandingStep, status: S
     Column(Modifier.fillMaxWidth().clip(shape).background(if (open) muted.copy(alpha = 0.06f) else Color.Transparent)
         .drawBehind { drawRect(tone, size = androidx.compose.ui.geometry.Size(3.dp.toPx(), size.height)) }
         .testTag(if (open) "landing:step-open:${step.key}" else "landing:step:${step.key}")) {
+        val exempt = LandingSteps.taskExempt(step)
         Row(Modifier.fillMaxWidth().clickable(onClickLabel = step.name) { pressed = !open }
             .padding(start = 11.dp, end = 8.dp, top = 6.dp, bottom = 6.dp).testTag("landing:step-row:${step.key}"),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
             Icon(painterResource(R.drawable.ic_chevron_forward), null, Modifier.size(12.dp).rotate(if (open) 90f else 0f), tint = muted.copy(alpha = 0.6f))
-            Text(step.name, Modifier.testTag("landing:step-name"), style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
-                fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
-            Text(LandingSessionModel.timelineText(step.summary), Modifier.weight(1f).testTag("landing:step-summary"), style = MaterialTheme.typography.bodyMedium, color = muted,
-                maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(when (status) {
-                StepStatus.FAILED -> LandingStepWords.FAILED
-                StepStatus.RUNNING -> LandingStepWords.RUNNING
-                StepStatus.PENDING -> LandingStepWords.QUEUED
-                StepStatus.OK -> LandingStepWords.COMPLETE
-            }, Modifier.testTag("landing:step-status"), style = MaterialTheme.typography.bodySmall,
-                color = if (status == StepStatus.FAILED) MaterialTheme.colorScheme.error else muted, maxLines = 1, softWrap = false)
+            // A task exempt from the landing check (board docs/mocks/landing-measured ④, D5): "Landing check · Skipped" in amber — the
+            // name says how it stands, so no status word beside it — and why, whole, on its own line under it. The step did not fail.
+            if (exempt != null) {
+                Text(LandingMeasuredCopy.skippedCheck(step.name), Modifier.weight(1f).testTag("landing:step-name"),
+                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                    fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, color = skippedInk())
+            } else {
+                Text(step.name, Modifier.testTag("landing:step-name"), style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                    fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
+                Text(LandingSessionModel.timelineText(step.summary), Modifier.weight(1f).testTag("landing:step-summary"), style = MaterialTheme.typography.bodyMedium, color = muted,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(when (status) {
+                    StepStatus.FAILED -> LandingStepWords.FAILED
+                    StepStatus.RUNNING -> LandingStepWords.RUNNING
+                    StepStatus.PENDING -> LandingStepWords.QUEUED
+                    StepStatus.SKIPPED -> LandingMeasuredCopy.skipped
+                    StepStatus.OK -> LandingStepWords.COMPLETE
+                }, Modifier.testTag("landing:step-status"), style = MaterialTheme.typography.bodySmall,
+                    color = if (status == StepStatus.FAILED) MaterialTheme.colorScheme.error else muted, maxLines = 1, softWrap = false)
+            }
+        }
+        exempt?.let {
+            Text(LandingMeasuredCopy.exemptBecause(LandingSteps.exemptReason(it)), Modifier.fillMaxWidth().padding(start = 30.dp, end = 8.dp, bottom = 6.dp)
+                .testTag("landing:step-summary"), style = MaterialTheme.typography.bodySmall, color = muted)
         }
         if (open) Column(Modifier.fillMaxWidth().padding(start = 28.dp, end = 8.dp, bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp),
             content = content)
@@ -596,16 +614,25 @@ private fun LandingEntryLine(section: LandingSection, index: Int, entry: Landing
         }
         when {
             selectors != null && openLog == selectors -> LandingLogBlock(selectors, onLog)
-            selectors != null && !LandingSessionModel.checkPassed(entry) -> LandingInlineOutput(selectors, onLog)
+            // A check its task is exempt from was not run: it has no output to read (D5).
+            selectors != null && !LandingSessionModel.checkPassed(entry) && entry.data?.text("skipped") != "TASK_EXEMPT" -> LandingInlineOutput(selectors, onLog)
         }
     }
 }
 
-/** What a timeline mark says, and the ink it says it in (mockups 05 a/e/i). */
-private fun landingMark(entry: LandingEntry, jobKind: String, entries: List<LandingEntry>, index: Int): Pair<String, Color> = when (entry.kind) {
+/** The amber a skipped landing check is drawn in (board .lm-ck.skip). */
+@Composable
+private fun skippedInk() = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) Color(0xFFFFC66D) else Color(0xFFB35A00)
+
+/** What a timeline mark says, and the ink it says it in (mockups 05 a/e/i). A check its task is exempt from was skipped, not failed. */
+internal fun landingMark(entry: LandingEntry, jobKind: String, entries: List<LandingEntry>, index: Int): Pair<String, Color> = when (entry.kind) {
     "TAKEN_OVER" -> "↗" to Color(0xFF0066BE)
-    "CHECK_FINISHED", "RESULT", "RESULT_FALLBACK" ->
-        if (entry.data?.text("skipped") == "PATHS_EXEMPT") "≡" to Color.Unspecified else if (LandingSessionModel.entryOk(entry, jobKind)) "✓" to Color(0xFF247344) else "✗" to Color(0xFFB3261E)
+    "CHECK_FINISHED", "RESULT", "RESULT_FALLBACK" -> when {
+        entry.data?.text("skipped") == "TASK_EXEMPT" -> "→" to Color(0xFFB35A00)
+        entry.data?.text("skipped") == "PATHS_EXEMPT" -> "≡" to Color.Unspecified
+        LandingSessionModel.entryOk(entry, jobKind) -> "✓" to Color(0xFF247344)
+        else -> "✗" to Color(0xFFB3261E)
+    }
     "STOP_REQUESTED", "CANCELLED", "ABANDONED", "TIMED_OUT", "PUSH_REFUSED" -> "✗" to Color(0xFFB3261E)
     "ENQUEUED", "REQUEUED", "NEXT_GENERATION", "SKIPPED_CHECK", "FIX_TASK" -> "≡" to Color.Unspecified
     "RELEASED" -> "↩" to Color.Unspecified

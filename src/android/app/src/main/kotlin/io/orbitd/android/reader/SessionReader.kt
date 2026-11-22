@@ -45,6 +45,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.perf.OrbitPerf
+import io.orbitd.android.realtime.PagePoll
 import io.orbitd.android.realtime.restoredFields
 import io.orbitd.android.R
 import io.orbitd.android.composer.CoordinatorHandoff
@@ -65,6 +66,7 @@ import io.orbitd.android.composer.SessionComposer
 import io.orbitd.android.composer.ManagedRunnerAsleepLine
 import io.orbitd.android.composer.SessionPendingTray
 import io.orbitd.android.cards.AnsweredQuestions
+import io.orbitd.android.cards.conversationCard
 import io.orbitd.android.cards.CardFocus
 import io.orbitd.android.cards.LocalCardViewport
 import io.orbitd.android.cards.CardReceiptSheet
@@ -77,6 +79,7 @@ import io.orbitd.android.cards.LocalSteerDeliveries
 import io.orbitd.android.cards.NeedsYouLogic
 import io.orbitd.android.cards.SessionCardsReads
 import io.orbitd.android.cards.rememberSessionCards
+import io.orbitd.android.core.cards.BackgroundRow
 import io.orbitd.android.core.cards.CardFamily
 import io.orbitd.android.core.cards.CardPreviews
 import io.orbitd.android.cards.ReaderSide
@@ -358,10 +361,10 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     LaunchedEffect(scheduled, route.id, scheduleRunId, state.session?.snapshotReads) { scheduled.loadSession(route.id!!, scheduleRunId) }
     val scheduleInserts = remember(scheduledState.sessions, scheduledState.runs, route.id) { ScheduleInsert.of(scheduledState, route.id!!) }
     val drawSchedule: @Composable (ScheduleInsert) -> Unit = { insert ->
-        key(insert.key) {
+        key(insert.key) { Box(Modifier.conversationCard()) {
             ScheduleConversationInsert(insert, scheduled, route.id!!) { id ->
                 open(OrbitRoute(Destination.SCHEDULED, ObjectId.canonical(id) ?: id, origin = Origin.LINK))
-            }
+            } }
         }
     }
     // What the needs-you bar counts in this conversation (iOS `ConsoleModel.openBelowRows`), and which way it lies from
@@ -496,9 +499,11 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     LaunchedEffect(console, model) {
         refreshWhileStreaming(model.state.map { it.session?.connection == ConnectionState.CONNECTED }, console::refreshRunner)
     }
-    LaunchedEffect(worktree, state.denied) {
-        if (!state.denied) worktree.poll { (worktree.state.value.detail ?: snapshotDetail)?.let { it.string("runStatus") ?: it.string("status") } in
-            setOf("RUNNING", "AWAITING_INPUT", "INTERRUPTED") }
+    // The bar's detail follows the account stream like every page's poll: a read on a connect, the store's snapshot reads in between
+    // ([WorktreeModel.offer]), a minute's safety read, and its own bounded cadence only while a merge or commit is in flight. It stops with
+    // the Activity.
+    PagePoll(app, handle, emptySet(), worktree, state.denied, inFlightMs = { worktree.inFlightMs() }) {
+        if (!state.denied) worktree.loadDetail()
     }
     // A06-5: the viewport changing size under a pinned reader (keyboard, a taller composer, the reconnect
     // line) asks for the tail again; nothing else re-anchors the bottom of a list that shrank.
@@ -529,13 +534,19 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     // The SubAgent runs by `delegate` call (GET /sessions/:id/subagents), which each SubAgent block draws its tier, model, duration,
     // cost and Why from: read again when a delegate call starts or ends (iOS `refreshSubagentRunsIfNeeded`). A session that never
     // delegated reads nothing, and a failed read is left alone until the transcript moves again.
-    val subagentSignature = remember(state.window.events, background) { SubagentRuns.signature(state.window.events, background.orEmpty()) }
+    // So are the session's Orbit workflows (GET /sessions/:id/workflows), read with the runs whenever a workflow, or one of its calls, moves
+    // (`WorkflowRuns.signature`); a workflow's calls' runs are among the SubAgent runs, under `<workflow call>#<callIndex>`.
+    val delegateSignature = remember(state.window.events, background) { SubagentRuns.signature(state.window.events, background.orEmpty()) }
+    val workflowSignature = remember(state.window.events, background) { WorkflowRuns.signature(state.window.events, background.orEmpty()) }
     var subagentRuns by remember(handle, route.id) { mutableStateOf<Map<String, SubagentRun>>(emptyMap()) }
-    LaunchedEffect(handle, route.id, subagentSignature) {
-        if (subagentSignature.isEmpty()) { subagentRuns = emptyMap(); return@LaunchedEffect }
+    var workflowRuns by remember(handle, route.id) { mutableStateOf<Map<String, WorkflowRun>>(emptyMap()) }
+    LaunchedEffect(handle, route.id, delegateSignature, workflowSignature) {
+        if (delegateSignature.isEmpty() && workflowSignature.isEmpty()) { subagentRuns = emptyMap(); workflowRuns = emptyMap(); return@LaunchedEffect }
+        suspend fun rows(path: String) = (Wire.decode(app.session.request(handle, io.orbitd.android.core.net.ApiRequest(listOf("sessions", route.id!!, path))).body,
+            JsonElement.serializer()) as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
         try {
-            val body = app.session.request(handle, io.orbitd.android.core.net.ApiRequest(listOf("sessions", route.id!!, "subagents"))).body
-            subagentRuns = SubagentRun.byCall((Wire.decode(body, JsonElement.serializer()) as? JsonArray).orEmpty().filterIsInstance<JsonObject>())
+            subagentRuns = SubagentRun.byCall(rows("subagents"))
+            if (workflowSignature.isNotEmpty()) workflowRuns = WorkflowRun.byCall(rows("workflows"))
         } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { }
     }
     LaunchedEffect(cards, console.engine) { cards.engine = console.engine }
@@ -574,10 +585,36 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     val subagentQueued = remember(queuedTurns, queuedCancelEnabled, liveTail) {
         if (!liveTail) emptyMap() else subagentQueuedWakes(queuedTurns, queuedCancelEnabled) { turnId -> composer.control("turns/$turnId", HttpMethod.DELETE) }
     }
+    // Each bg_run job's card reads its job by id: its row of the Background list, its wake turns, a wake still on the queue, and the
+    // tail and stop routes (JobCardView; board 350t1lTONlrPMjilBdXx7, rulings R1-R4).
+    val jobApi = remember(handle, route.id) { BackgroundJobApi(app.session, handle, route.id!!) }
+    val jobWakes = remember(state.window.events, steerDeliveries) { JobCards.wakes(state.window.events, steerDeliveries) }
+    val jobQueued = remember(queuedTurns, queuedCancelEnabled, liveTail) {
+        if (!liveTail) emptyMap() else jobQueuedWakes(queuedTurns, queuedCancelEnabled) { turnId -> composer.control("turns/$turnId", HttpMethod.DELETE) }
+    }
+    val jobSessionLive = BackgroundTrayLogic.sessionLive(sessionDetail)
+    val jobWhere = (sessionDetail?.get("workspace") as? JsonObject)?.string("name") ?: worktreeState.workspace?.string("name")
+    val jobCards = remember(background, jobWakes, jobQueued, jobSessionLive, jobWhere, jobApi) {
+        JobCards(JobCards.shells(background.orEmpty()), jobWakes, jobQueued, jobSessionLive, jobWhere, jobApi::tail, jobApi::stop)
+    }
+    // A job's row in the opened Background list goes to its card, when that card is drawn (R1).
+    val jobCalls = remember(state.window.events) { jobCallsById(state.window.events) }
+    val jobJump: (String) -> (() -> Unit)? = { jobId ->
+        jobCalls[jobId]?.takeIf { seq -> currentRows.any { it.contains(seq) } }?.let { seq -> { model.show(seq) } }
+    }
+    // A workflow's finished strip points back at its block, when that block is drawn.
+    val workflowCalls = remember(state.window.events) {
+        state.window.events.filter { it.type == "tool_use" && it.parent() == null && it.fields.string("name") == WorkflowBlock.TOOL_NAME }
+            .mapNotNull { e -> e.toolId()?.let { it to e.seq } }.toMap()
+    }
+    val workflowJump: (String) -> (() -> Unit)? = { toolUseId ->
+        workflowCalls[toolUseId]?.takeIf { seq -> currentRows.any { it.contains(seq) } }?.let { seq -> { model.show(seq) } }
+    }
     CompositionLocalProvider(LocalMainCheckoutResults provides mainCheckoutResults, LocalReaderResources provides resources, LocalShownOriginals provides shownOriginals, LocalTaskActivity provides taskActivity, LocalSteerDeliveries provides steerDeliveries,
         LocalSessionConsole provides console, LocalMainCheckout provides mainCheckout, LocalWatchTargetNames provides targetNames, LocalAnsweredQuestions provides answeredQuestions,
         LocalRevealItemCard provides revealItemCard, LocalExchangeTree provides exchangeTree, LocalSubagentRuns provides subagentRuns,
-        LocalSubagentWakes provides subagentWakes, LocalSubagentQueuedWakes provides subagentQueued) {
+        LocalSubagentWakes provides subagentWakes, LocalSubagentQueuedWakes provides subagentQueued,
+        LocalWorkflowRuns provides workflowRuns, LocalWorkflowCardJump provides workflowJump, LocalJobCards provides jobCards) {
         SessionCardsReads(cards)
         BoxWithConstraints(Modifier.fillMaxSize()) {
         val view = LocalView.current
@@ -686,18 +723,18 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                         if (displayedWindow.hasOlder) TextButton(enabled = !displayedLoading, onClick = { follow = false; model.older() }) { Text(if (displayedLoading) "Loading messages…" else "Load earlier messages") }
                         else if (ownerPlaced[-1] != null || crossingPlaced[-1] != null || schedulePlaced[-1] != null) Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             schedulePlaced[-1]?.forEach { drawSchedule(it) }
-                            ownerPlaced[-1]?.forEach { key(it.id) { OwnerRequestInConversation(it, ownerStore, ownerRunner, openLink, discussCard) } }
-                            crossingPlaced[-1]?.forEach { key(it.id) { CrossingCardView(it, crossingState) { crossingStore.open(it.id) } } }
+                            ownerPlaced[-1]?.forEach { key(it.id) { Box(Modifier.conversationCard()) { OwnerRequestInConversation(it, ownerStore, ownerRunner, openLink, discussCard) } } }
+                            crossingPlaced[-1]?.forEach { key(it.id) { Box(Modifier.conversationCard()) { CrossingCardView(it, crossingState) { crossingStore.open(it.id) } } } }
                         }
                     }
                     // Board 02 ③: a successor opens with the note its predecessor wrote, and the waits that moved here.
                     val receivedHandoff = CoordinatorHandoff.received(detail)
-                    if (receivedHandoff != null && displayedWindow.seeded && !displayedWindow.hasOlder) item(key = "handoff-note") {
+                    if (receivedHandoff != null && displayedWindow.seeded && !displayedWindow.hasOlder) item(key = "handoff-note") { Box(Modifier.conversationCard()) {
                         HandoffNoteCard(receivedHandoff, io.orbitd.android.core.cards.CoordinatorCleanStart.history(
                             detail?.text("createdAt"), session?.snapshot?.standing.orEmpty(), cards.merged)) { open(OrbitRoute(Destination.SESSION, it)) }
-                    }
+                    } }
                     if (createdWorkspaceLine != null && !displayedWindow.hasOlder) {
-                        item(key = "created-workspace") {
+                        item(key = "created-workspace") { Box(Modifier.conversationCard()) {
                             // A workspace cloned from GitHub: where its clone stands, from the detail (read at `madeReadAt`) and the stream.
                             val heardClones by app.clones.all.collectAsState()
                             val clone = createdWorkspaceLine.cloneState?.let { stored ->
@@ -737,7 +774,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                                     open(OrbitRoute(Destination.SETTINGS, id = "workspace", workspaceId = createdWorkspaceLine.workspaceId))
                                 },
                             )
-                        }
+                        } }
                     }
                     itemsIndexed(displayedRows, key = { _, it -> it.key }, contentType = { _, it -> if (it.steps.isNotEmpty()) "steps" else it.event.type }) { index, row ->
                         val asked = ownerPlaced[index]
@@ -758,8 +795,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                         else Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             drawRow()
                             scheduleThings?.forEach { drawSchedule(it) }
-                            asked?.forEach { key(it.id) { OwnerRequestInConversation(it, ownerStore, ownerRunner, openLink, discussCard) } }
-                            crossings?.forEach { key(it.id) { CrossingCardView(it, crossingState) { crossingStore.open(it.id) } } }
+                            asked?.forEach { key(it.id) { Box(Modifier.conversationCard()) { OwnerRequestInConversation(it, ownerStore, ownerRunner, openLink, discussCard) } } }
+                            crossings?.forEach { key(it.id) { Box(Modifier.conversationCard()) { CrossingCardView(it, crossingState) { crossingStore.open(it.id) } } } }
                         }
                     }
                     // Held by its runner's update with no message of the reader's to put the foot row under: the queued page's
@@ -841,7 +878,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                         held = runnerUpdatingGate?.let { gate -> { RunnerUpdatingFoot(gate, runnerUpdatingMachine, later = runnerUpdatingLater) } })
                 }
                 // A08-5: a run that never started says why, first of the band's cards under the tray — and stays while a phone types.
-                SessionRunStartCard(app, handle, state.session?.snapshot?.detail, state.session?.fresh == true, console,
+                Box(Modifier.conversationCard()) { SessionRunStartCard(app, handle, state.session?.snapshot?.detail, state.session?.fresh == true, console,
                     chat = {
                         // The composer is handed a reply about this run, in place of whatever was in it (iOS `chatAboutRefusedRun`).
                         composer.edit(SessionRunStart.chatPrefix, SessionRunStart.chatPrefix.length, SessionRunStart.chatPrefix.length)
@@ -850,27 +887,33 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     sendAgain = { composer.retryFailed() },
                     openRunner = { runner -> open(OrbitRoute(Destination.RUNNER, runner)) },
                     // The region card's Move to another machine: the session's own Move…, as its menu opens it.
-                    move = listed?.takeIf { it.workspace != null }?.let { session -> { action = DirectoryDialog.Move(session) } })
+                    move = listed?.takeIf { it.workspace != null }?.let { session -> { action = DirectoryDialog.Move(session) } }) }
                 // A07-4: a session queued behind the runner's Antigravity gate says what to fix, above the composer (iOS
                 // `queuedAntigravityRepair`).
                 val queuedDetail = console.detail
                 val queued = (queuedDetail?.string("runStatus") ?: queuedDetail?.string("status")) == "PENDING"
                 // A07-5: and behind its DeepSeek Harness gate, first (iOS `queuedDshRepair`).
                 val queuedDsh = DshRuntime.repair(queuedDetail?.string("error"))?.takeIf { console.executesDsh && queued }
-                if (queuedDsh != null) Box(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) { DshRepairCard(queuedDsh, console) }
+                if (queuedDsh != null) Box(Modifier.padding(horizontal = 16.dp, vertical = 4.dp).conversationCard()) { DshRepairCard(queuedDsh, console) }
                 else AntigravityRepair.of(queuedDetail?.string("error"))?.takeIf {
                     console.executesAntigravity && queued
-                }?.let { Box(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) { AntigravityRepairCard(it, console) } }
+                }?.let { Box(Modifier.padding(horizontal = 16.dp, vertical = 4.dp).conversationCard()) { AntigravityRepairCard(it, console) } }
                 // What this session waits on, the tasks it created and its code output: folded to no height while a
                 // phone's composer holds the keyboard (iOS `TypingFold`), so an open list or a sheet comes back as it was.
                 Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) { SessionWatches(app, handle, route.id!!, open = open) }
                 // The session's background processes, by the shared row rule (board v2; iOS `BackgroundTrayView`): between what it
                 // waits on and the tasks it created. Its names stop rotating while the band is folded away.
-                val lastUserMessageAt = remember(state.window.events) { BackgroundTrayLogic.lastUserMessageAt(state.window.events) }
-                Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) {
-                    BackgroundTray(background.orEmpty(), lastUserMessageAt, BackgroundTrayLogic.sessionLive(detail), folded = foldsChrome)
+                val backgroundClearedAt = remember(state.window.events) {
+                    BackgroundRow.clearedAt(BackgroundTrayLogic.lastUserMessageAt(state.window.events), BackgroundTrayLogic.lastAgentTurnStartedAt(state.window.events))
                 }
-                Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) { SessionTasksCard(app, handle, route.id!!, cards, openLink) }
+                Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) {
+                    // A running job's row takes Stop through the same routes as its card (R3).
+                    CompositionLocalProvider(LocalJobCards provides jobCards) {
+                        BackgroundTray(background.orEmpty(), backgroundClearedAt, BackgroundTrayLogic.sessionLive(detail), folded = foldsChrome,
+                            jumpToJob = jobJump)
+                    }
+                }
+                Box(Modifier.conversationCard().typingFold(foldsChrome)) { SessionTasksCard(app, handle, route.id!!, cards, openLink) }
                 // The composer's send in flight holds Merge as a queued turn does (A06-14, iOS `console.sending`).
                 Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) { Column(Modifier.padding(horizontal = 16.dp)) {
                     // The main checkout's standing state, in Worktree and Shared sessions alike (board 01⑤, 02④).
@@ -893,10 +936,10 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 val handoffProject = detail?.let(CoordinatorHandoff::projectId)
                 val handoffApi = remember(handle) { CoordinatorHandoffApi(app.session, handle) }
                 var handoffBusy by remember(handle, route.id) { mutableStateOf(false) }
-                HandoffStatus(handoff, busy = handoffBusy, act = { action ->
+                if (detail != null) HandoffStatus(handoff, composer, composerState, detail, busy = handoffBusy, act = { action, successor ->
                     if (handoffProject != null) scope.launch {
                         handoffBusy = true
-                        try { handoffApi.post(handoffProject, action) }
+                        try { handoffApi.post(handoffProject, action, successor) }
                         catch (cancel: CancellationException) { throw cancel }
                         catch (e: Exception) { OrbitToasts.show(CoordinatorHandoff.refusal(e), tone = ToastTone.ERROR) }
                         finally { handoffBusy = false; app.realtime.refreshSession() }
