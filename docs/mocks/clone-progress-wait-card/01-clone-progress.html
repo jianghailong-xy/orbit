@@ -1,0 +1,78 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+@font-face{font-family:Inter;src:url(/var/tmp/landing-mock-render/fonts/Inter.ttf)}
+@font-face{font-family:NotoSC;src:url(/var/tmp/landing-mock-render/fonts/NotoSansSC.ttf)}
+:root{--bg-base:#fff;--bg-sunken:#f7f8fa;--bg-subtle:#fafbfc;--fill-muted:#f1f1f4;--border:#dee0e3;--border-subtle:#eceef1;
+--text-1:#1f2329;--text-2:#646a73;--text-3:#8f959e;--text-4:#a8acb3;--brand:#3370ff;--brand-tint:#eaf1ff;--error:#cf3b35;--error-bg:#fdeceb}
+body{margin:0;padding:36px 40px;width:1420px;font-family:Inter,NotoSC,sans-serif;color:var(--text-1);background:#eef0f3}
+h1{font-size:24px;margin:0 0 6px}.lead{color:var(--text-2);font-size:14px;margin:0 0 26px;line-height:1.6}
+.sec{background:#fff;border-radius:14px;padding:22px 26px;margin-bottom:22px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.sec h2{font-size:17px;margin:0 0 4px}.sec .cap{font-size:13px;color:var(--text-2);margin:0 0 16px;line-height:1.6}
+.rec{display:inline-block;font-size:11px;font-weight:600;color:#fff;background:#2ea44f;border-radius:4px;padding:1px 6px;margin-left:8px;vertical-align:2px}
+.row{display:flex;gap:18px}.col{flex:1;min-width:0}.lbl{font-size:12px;font-weight:600;color:var(--text-2);margin-bottom:8px}
+/* conversation pane, drawn */
+.pane{border:1px solid var(--border-subtle);border-radius:10px;background:var(--bg-base);padding:14px 16px 18px}
+.bubble{margin-left:auto;width:max-content;background:var(--brand-tint);border-radius:12px;padding:7px 14px;font-size:14px;margin-bottom:14px}
+/* the card — real classes: chat-queued-title / chat-queued-desc; new: chat-clone-* */
+.card{border:1px solid var(--border);background:var(--bg-subtle);border-radius:10px;padding:16px 18px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center}
+.chat-queued-title{font-size:15px;font-weight:600;color:var(--text-1)}
+.chat-queued-desc{font-size:13px;line-height:1.5;color:var(--text-3)}
+.chat-queued-desc b{color:var(--text-2);font-weight:600}
+.chat-clone-meter{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text-2)}
+.msc-clone-bar{display:inline-block;width:220px;height:4px;border-radius:2px;background:var(--fill-muted);overflow:hidden}
+.msc-clone-bar i{display:block;height:100%;background:var(--brand)}
+.msc-clone-pct{font-variant-numeric:tabular-nums;width:34px;text-align:left}
+.spin{display:inline-block;width:11px;height:11px;border:2px solid var(--brand);border-right-color:transparent;border-radius:50%;vertical-align:-1px}
+.err{color:var(--error)}.err .dot{display:inline-block;width:13px;height:13px;border-radius:50%;background:var(--error);color:#fff;font-size:10px;line-height:13px;font-weight:700;vertical-align:-1px;margin-right:4px}
+.acts{display:flex;gap:6px;font-size:13px;align-items:center}.acts a{color:var(--brand);text-decoration:none}.acts .sep{color:var(--text-4)}
+.msc-created{display:flex;justify-content:center;flex-wrap:wrap;gap:2px 6px;font-size:12.5px;color:var(--text-3);margin-bottom:12px}
+.msc-created b{color:var(--text-2);font-weight:600}.msc-created .msc-clone-bar{width:120px;align-self:center}
+/* session list row, drawn */
+.srow{background:#eaf1ff;border-radius:8px;padding:9px 12px 9px 38px;position:relative;width:360px}
+.srow .t{font-size:14px;font-weight:500}.srow .s{font-size:13px;color:var(--text-3);margin-top:3px;font-variant-numeric:tabular-nums}
+.srow .ic{position:absolute;left:12px;top:14px;width:13px;height:13px;border:1.5px solid var(--text-4);border-radius:50%}
+.srow .tm{position:absolute;right:12px;top:10px;font-size:12px;color:var(--text-3)}
+.q{font-size:13px;line-height:1.7;color:var(--text-1);margin:0;padding-left:18px}.q li{margin-bottom:4px}
+.strike{opacity:.5}
+</style></head><body>
+<h1>Clone progress in the “Waiting for the clone” card</h1>
+<p class="lead">问题：从 New session 开的会话（不是创建工作区的那个会话）只看到“Waiting for the clone / Starts when the clone is done.”，看不到进度，失败了也没有 Retry。<br>
+进度数据已经有（工作区的 cloneState + 流里 git 的百分比，今天只有 CreatedWorkspaceLine 在用）。下面是把它放进这张卡的方案。示意图手绘，类名/颜色取自 index.css 与 MachineSetupCard.css；仓库名、机器名是示例。</p>
+
+<div class="sec"><h2>① 今天</h2><p class="cap">没有进度、没有仓库名、没有机器名；克隆失败时标题变 “Clone failed”，但卡上没有按钮，文案让人去“对话第一行”重试——这个会话没有那一行。</p>
+<div class="row"><div class="col" style="max-width:560px"><div class="pane"><div class="bubble">hello</div>
+<div class="card"><div class="chat-queued-title">Waiting for the clone</div><div class="chat-queued-desc">Starts when the clone is done.</div></div></div></div></div></div>
+
+<div class="sec"><h2>② 方案 A：卡片本身显示克隆进度 <span class="rec">推荐</span></h2>
+<p class="cap">同一张卡，三种状态。标题说在做什么（带仓库名），中间是进度条 + 百分比（复用 .msc-clone-bar 的样式，加宽到 220px），底行说在哪台机器、什么时候开始。失败时原地给出原因和出路，按钮与第一行完全相同（Retry · Workspace settings / Reconnect GitHub / Install on GitHub）。</p>
+<div class="row">
+<div class="col"><div class="lbl">PENDING — git 还没报百分比</div><div class="pane"><div class="bubble">hello</div>
+<div class="card"><div class="chat-queued-title"><span class="spin"></span>&nbsp; Waiting to clone acme/orbit</div>
+<div class="chat-queued-desc">On <b>orbit-ws03</b>. This session starts when the clone is done.</div></div></div></div>
+<div class="col"><div class="lbl">CLONING — 42%</div><div class="pane"><div class="bubble">hello</div>
+<div class="card"><div class="chat-queued-title">Cloning acme/orbit</div>
+<div class="chat-clone-meter"><span class="msc-clone-bar"><i style="width:42%"></i></span><span class="msc-clone-pct">42%</span></div>
+<div class="chat-queued-desc">On <b>orbit-ws03</b>. This session starts when the clone is done.</div></div></div></div>
+<div class="col"><div class="lbl">FAILED — 原因 + 出路</div><div class="pane"><div class="bubble">hello</div>
+<div class="card"><div class="chat-queued-title">Clone failed</div>
+<div class="chat-queued-desc err"><span class="dot">!</span>Couldn’t clone acme/orbit: Repository not found.</div>
+<div class="acts"><a>Retry</a><span class="sep">·</span><a>Workspace settings</a></div></div></div></div>
+</div></div>
+
+<div class="sec"><h2>③ 方案 B：卡片不动，上面加一行和“第一行”一样的状态行</h2>
+<p class="cap">直接复用 CloneStatusLine 组件，代码最少；但同一件事说两遍（状态行说 Cloning，卡片还说 Waiting for the clone），而且进度条只有 120px、字号 12.5，在大空白里不显眼。</p>
+<div class="row"><div class="col" style="max-width:560px"><div class="pane"><div class="bubble">hello</div>
+<div class="msc-created"><span class="spin"></span><span>Cloning</span><b>acme/orbit</b><span>on <b>orbit-ws03</b></span><span class="msc-clone-bar"><i style="width:42%"></i></span><span class="msc-clone-pct">42%</span></div>
+<div class="card"><div class="chat-queued-title">Waiting for the clone</div><div class="chat-queued-desc">Starts when the clone is done.</div></div></div></div></div></div>
+
+<div class="sec"><h2>④ 会话列表行的副标题</h2><p class="cap">左边今天，右边加上百分比（同一个前端 store，不增加请求）。失败时副标题写 “Clone failed”。</p>
+<div class="row"><div class="col"><div class="lbl">今天</div><div class="srow"><span class="ic"></span><span class="tm">4m ago</span><div class="t">Greeting and session setup</div><div class="s">Waiting for the clone</div></div></div>
+<div class="col"><div class="lbl">建议</div><div class="srow"><span class="ic"></span><span class="tm">4m ago</span><div class="t">Greeting and session setup</div><div class="s">Cloning · 42%</div></div></div><div class="col"></div></div></div>
+
+<div class="sec"><h2>要你决定的</h2><ol class="q">
+<li><b>形状</b>：A 卡片本身显示（推荐，一处说一遍）/ B 复用第一行组件放在卡上方。</li>
+<li><b>还没有百分比时</b>：只显示转圈 + “Waiting to clone …”，不画进度条（推荐，进度条只画真实数字）/ 画一条来回滚动的不定进度条。</li>
+<li><b>失败时的按钮</b>：卡片上直接给 Retry 等出路，并把 “Retry the clone from the conversation’s first line” 这句删掉（推荐）/ 只改文案。</li>
+<li><b>列表行副标题</b>显示 “Cloning · 42%”：要（推荐）/ 不要。</li>
+<li><b>平台</b>：先做 web，Apple、Android 各开一个任务跟进（推荐）/ 三端一起。</li>
+</ol></div>
+</body></html>

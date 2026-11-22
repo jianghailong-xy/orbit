@@ -3,7 +3,8 @@
  * `meta.entities`). The control-plane stream reads a view again for a `session.*`, `approval.*` or
  * `background.task` event only when the session the event is about can be in it (useControlPlane).
  *
- * - `{ session: id }`: one session's own reads, the cards of its page. Only that session's events reach it.
+ * - `{ session: id, tasks? }`: one session's own reads, the cards of its page. Only that session's events reach it,
+ *   and, with `tasks`, those of a session running one of them (the runs a created-tasks row draws).
  * - `{ sessions: ids, created? }`: reads that show these sessions (a request's two ends, a list of questions);
  *   with `created`, any session.created reaches it too, a session it may list next.
  * - `{ workspace: id }`: a list of one workspace's sessions (`null`: of every workspace). An event of a session in
@@ -26,7 +27,7 @@
  * nothing is reached by every session event, as it always was.
  */
 export type SessionReach =
-  | { session: string }
+  | { session: string; tasks?: readonly string[] }
   | { sessions: readonly string[]; created?: boolean }
   | { workspace: string | null }
   | { scheduledRuns: string | null; holds?: readonly string[] }
@@ -92,7 +93,9 @@ export function sessionReaches(
   if (reach === undefined) return true;
   if (reach === 'none') return false;
   if (reach === 'lifecycle') return subject.lifecycle;
-  if ('session' in reach) return reach.session === subject.id;
+  if ('session' in reach) {
+    return reach.session === subject.id || (subject.taskId !== '' && (reach.tasks ?? []).includes(subject.taskId));
+  }
   if ('sessions' in reach) return reach.sessions.includes(subject.id) || (reach.created === true && subject.created);
   if ('task' in reach) return reach.task === subject.taskId || (reach.holds ?? []).includes(subject.id);
   if ('tasks' in reach) return subject.taskId !== '' && reach.tasks.includes(subject.taskId);
@@ -104,4 +107,32 @@ export function sessionReaches(
   if (held.includes(subject.id) || (reach.holds ?? []).includes(subject.id)) return true;
   if (subject.createdOnly || !inWorkspace(reach.scheduledRuns)) return false;
   return !listedElsewhere(subject.id);
+}
+
+/**
+ * Which `task.changed` events can move a read that declares the `task` entity (`meta.taskReach` beside
+ * `meta.entities`): a session's "Tasks created here", whose rows are the tasks that session created and the tasks that
+ * took one of them over. A change reaches it when the event names that session among its rows' creators
+ * (`creatorSessionIds`), or names one of the rows it holds; and always when it cannot say — a resync, or a server that
+ * does not name creators. A read that declares no `taskReach` is reached by every task event, as it always was.
+ */
+export interface TaskReach {
+  creatorSession: string;
+  tasks: readonly string[];
+}
+
+/** What `meta.taskReach` holds: a reach, or one computed from the read's data. */
+export type TaskReachDeclaration = TaskReach | ((data: unknown) => TaskReach);
+
+/** What one `task.changed` says, as the stream reads it. `creatorSessionIds` is null when it does not say. */
+export interface TaskChange {
+  taskIds: readonly string[];
+  creatorSessionIds: readonly string[] | null;
+  resync: boolean;
+}
+
+/** Whether `change` can move a read that declares `reach`. */
+export function taskReaches(reach: TaskReach, change: TaskChange): boolean {
+  if (change.resync || change.creatorSessionIds === null) return true;
+  return change.creatorSessionIds.includes(reach.creatorSession) || change.taskIds.some((id) => reach.tasks.includes(id));
 }

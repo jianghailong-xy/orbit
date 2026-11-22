@@ -100,6 +100,16 @@ describe('nginx: the script a page waits for', () => {
   });
 });
 
+describe('nginx: the icons the shell links', () => {
+  it.each(['/favicon.ico', '/favicon.svg', '/favicon-32.png', '/apple-touch-icon.png'])(
+    '%s is kept for a day, so a tab does not revalidate it, with no header of the shell\'s',
+    (name) => {
+      // Not `no-cache` from `location /`, and not a year or `immutable`: the names carry no hash.
+      expect(locationDirectives(`= ${name}`)).toEqual(['add_header Cache-Control "public, max-age=86400"']);
+    },
+  );
+});
+
 describe('nginx: runner downloads', () => {
   const dl = locationDirectives('/dl/');
 

@@ -33,6 +33,25 @@ export function delegateRunsSignature(events: readonly RunEvent[]): string {
   return seqs.join(',');
 }
 
+const pendingReads = new Map<string, Promise<SubagentRunView[]>>();
+
+/**
+ * The one owner of `GET /sessions/:id/subagents`: the delegate view and the workflow view both read through it, so
+ * reads asked for in the same tick (both signatures moving on one transcript update) are one request. The request
+ * goes out after the tick's callers have joined, so a caller never gets an answer older than its own signature.
+ */
+export function readSessionSubagents(sessionId: string): Promise<SubagentRunView[]> {
+  let read = pendingReads.get(sessionId);
+  if (!read) {
+    read = Promise.resolve().then(() => {
+      pendingReads.delete(sessionId);
+      return getSessionSubagents(sessionId);
+    });
+    pendingReads.set(sessionId, read);
+  }
+  return read;
+}
+
 /** The session's SubAgent runs by delegate call, re-read whenever one starts or ends in the transcript. */
 export function useSubagentRuns(sessionId: string, events: readonly RunEvent[]): ReadonlyMap<string, SubagentRunView> {
   const signature = delegateRunsSignature(events);
@@ -43,7 +62,7 @@ export function useSubagentRuns(sessionId: string, events: readonly RunEvent[]):
   useEffect(() => {
     if (!signature) return;
     let closed = false;
-    getSessionSubagents(sessionId)
+    readSessionSubagents(sessionId)
       .then((rows) => {
         if (!closed) setState({ sessionId, runs: new Map(rows.map((row) => [row.toolUseId, row])) });
       })
