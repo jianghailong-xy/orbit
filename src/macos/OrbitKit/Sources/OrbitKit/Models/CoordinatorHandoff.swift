@@ -28,6 +28,9 @@ public enum CoordinatorHandoffFailureCode: String, Codable, Equatable, Sendable,
     /// The replacement threw: the outgoing coordinator is already completed, so Try again and Keep
     /// this coordinator cannot work — only Hand over without a note can.
     case replaceFailed = "REPLACE_FAILED"
+    /// The note turn never reached the engine: this coordinator's own model could not start, and no successor
+    /// was picked (with one, the server hands over without a note by itself).
+    case coordinatorCantRun = "COORDINATOR_CANT_RUN"
 }
 
 /// What kind of pending work a `CoordinatorPendingWait` is (`CoordinatorPendingWaitKind`).
@@ -65,6 +68,36 @@ public struct CoordinatorPendingWait: Codable, Equatable, Sendable, Identifiable
     }
 }
 
+/// The engine, provider slug and optional model requested for the new coordinator.
+public struct CoordinatorHandoffSuccessor: Codable, Hashable, Sendable {
+    public let engine: String?
+    public let provider: String?
+    public let model: String?
+
+    public init(engine: String? = nil, provider: String? = nil, model: String? = nil) {
+        self.engine = engine
+        self.provider = provider
+        self.model = model
+    }
+
+    /// "Same as this one" said on purpose: sent as `"successor": null`, which clears a pick saved earlier.
+    public static let same = CoordinatorHandoffSuccessor()
+}
+
+/// A handoff press's body: `{}` when no successor is named (the handoff keeps what it has), `"successor": null`
+/// for `.same`, else the pick.
+struct CoordinatorHandoffRequest: Encodable {
+    let successor: CoordinatorHandoffSuccessor?
+
+    private enum CodingKeys: String, CodingKey { case successor }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        if successor == .same { try c.encodeNil(forKey: .successor) }
+        else { try c.encodeIfPresent(successor, forKey: .successor) }
+    }
+}
+
 /// `coordinatorHandoff` on the OUTGOING coordinator's session.
 public struct SessionCoordinatorHandoff: Codable, Equatable, Sendable {
     public let state: CoordinatorHandoffState
@@ -73,15 +106,17 @@ public struct SessionCoordinatorHandoff: Codable, Equatable, Sendable {
     public let failureCode: CoordinatorHandoffFailureCode?
     public let failureReason: String?
     public let handedOverToSessionId: String?
+    public let successor: CoordinatorHandoffSuccessor?
 
     public init(state: CoordinatorHandoffState, startedAt: String,
                 failureCode: CoordinatorHandoffFailureCode? = nil, failureReason: String? = nil,
-                handedOverToSessionId: String? = nil) {
+                handedOverToSessionId: String? = nil, successor: CoordinatorHandoffSuccessor? = nil) {
         self.state = state
         self.startedAt = startedAt
         self.failureCode = failureCode
         self.failureReason = failureReason
         self.handedOverToSessionId = handedOverToSessionId
+        self.successor = successor
     }
 
     public init(from decoder: Decoder) throws {
@@ -92,6 +127,7 @@ public struct SessionCoordinatorHandoff: Codable, Equatable, Sendable {
         failureCode = try? c.decodeIfPresent(CoordinatorHandoffFailureCode.self, forKey: .failureCode)
         failureReason = try c.decodeIfPresent(String.self, forKey: .failureReason)
         handedOverToSessionId = try c.decodeIfPresent(String.self, forKey: .handedOverToSessionId)
+        successor = try c.decodeIfPresent(CoordinatorHandoffSuccessor.self, forKey: .successor)
     }
 }
 
@@ -130,4 +166,5 @@ public struct CoordinatorHandoffView: Codable, Equatable, Sendable {
     public let failureReason: String?
     public let handedOverToSessionId: String?
     public let movedWaits: [CoordinatorPendingWait]?
+    public let successor: CoordinatorHandoffSuccessor?
 }

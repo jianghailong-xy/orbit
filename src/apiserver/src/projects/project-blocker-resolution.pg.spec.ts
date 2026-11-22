@@ -299,7 +299,7 @@ async function attempt(
       title: label,
       prompt: label,
       provider: 'claude',
-      status: RunStatus.SUCCEEDED,
+      status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       branch: `orbit/${label}`,

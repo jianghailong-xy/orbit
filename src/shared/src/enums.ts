@@ -433,6 +433,11 @@ export enum RunEventType {
   // translation.ts). The breaker is per process and the same for every account, so it reaches every user; only a
   // nudge, to read `GET /users/me` again.
   TRANSLATION_STATUS_CHANGED = 'translation_status_changed',
+  // What some sessions' schedule cards (`GET /sessions/:id/schedule-cards`) read may have moved: a card was put up or
+  // decided, a change was recorded or undone, or a schedule its cards and records name changed. Owner-scoped like the
+  // libraries above, and only a nudge naming those sessions: streamForUser maps it to
+  // ControlEventType.SCHEDULE_CARDS_CHANGED, for a stream that declared `hints=schedule_cards` only.
+  SCHEDULE_CARDS_CHANGED = 'schedule_cards_changed',
 }
 
 /** Control-plane-internal lifecycle signals (see RunEventType): published through the realtime
@@ -453,7 +458,8 @@ export function isLifecycleType(t: RunEventType): boolean {
     t === RunEventType.WATCH_CHANGED ||
     t === RunEventType.WIKI_CHANGED ||
     t === RunEventType.TERMINALS_CHANGED ||
-    t === RunEventType.TRANSLATION_STATUS_CHANGED
+    t === RunEventType.TRANSLATION_STATUS_CHANGED ||
+    t === RunEventType.SCHEDULE_CARDS_CHANGED
   );
 }
 

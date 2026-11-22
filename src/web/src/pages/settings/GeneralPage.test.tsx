@@ -39,8 +39,6 @@ describe('Settings → General (docs/mocks/settings-redesign, board-2)', () => {
     const rows = [...html.matchAll(/<div class="settings-row-title">([^<]+)<\/div>/g)].map((m) => m[1]);
     expect(rows).toEqual([
       'Default permission mode',
-      'Smart model selection',
-      'Optimize For',
       'Suggested replies',
       'Prompt optimizer',
       'Session recaps',
@@ -70,7 +68,6 @@ describe('Settings → General (docs/mocks/settings-redesign, board-2)', () => {
     const html = render({});
     const rows: Array<[string, { short: string; full: string }]> = [
       ['Default permission mode', GENERAL_HINTS.defaultPermissionMode],
-      ['Smart model selection', GENERAL_HINTS.modelRouting],
       ['Suggested replies', GENERAL_HINTS.promptSuggestions],
       ['Session recaps', GENERAL_HINTS.recaps],
       ['Let sessions orchestrate', GENERAL_HINTS.enableOrchestration],

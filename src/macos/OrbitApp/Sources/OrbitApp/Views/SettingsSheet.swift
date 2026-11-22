@@ -746,7 +746,8 @@ private struct SessionSettingsPage: View {
                 case .row(let row):
                     if SessionSettings.shows(row, smartModelSelection: modelRouting) {
                         Section {
-                            control(row)
+                            control(row).settingRow(Self.key(row))
+                            SettingChangedLineView(key: Self.key(row))
                         } footer: {
                             Text(SessionSettings.footer(row))
                         }
@@ -758,6 +759,7 @@ private struct SessionSettingsPage: View {
                 }
             }
         }
+        .settingsAnchorScroll()
         .navigationTitle(SettingsPage.general.title)
         .onAppear(perform: seed)
         .onChange(of: permMode) { _, value in
@@ -804,6 +806,18 @@ private struct SessionSettingsPage: View {
         .onChange(of: model.user?.preferences?.translationBilingual) { _, value in bilingual = value == true }
     }
 
+    /// The preference key a General row writes.
+    private static func key(_ row: SessionSettings.Row) -> String {
+        switch row {
+        case .defaultPermission: return "defaultPermissionMode"
+        case .orchestration:     return "enableOrchestration"
+        case .modelRouting:      return "modelRouting"
+        case .optimizeFor:       return "optimizeFor"
+        case .promptSuggestions: return "promptSuggestions"
+        case .recaps:            return "recaps"
+        }
+    }
+
     /// A row's own control: the mode is a menu on the row, as the list's Appearance is; Optimize For is
     /// a segmented picker; the other four are the account's switches.
     @ViewBuilder private func control(_ row: SessionSettings.Row) -> some View {
@@ -836,6 +850,8 @@ private struct SessionSettingsPage: View {
         Section {
             Toggle(TranslationCopy.translateConversations, isOn: $translation)
                 .accessibilityIdentifier(TranslationCopy.toggleIdentifier)
+                .settingRow("translationEnabled")
+            SettingChangedLineView(key: "translationEnabled")
             if unavailable {
                 Text(TranslationCopy.unavailable)
                     .font(.orbitLabel)
@@ -846,15 +862,21 @@ private struct SessionSettingsPage: View {
             } label: {
                 LabeledContent(TranslationCopy.yourLanguage, value: SessionTranslation.language(prefs).name)
             }
+            .settingRow("translationLanguage")
+            SettingChangedLineView(key: "translationLanguage")
             NavigationLink {
                 TranslationLanguagePicker(side: .agent)
             } label: {
                 LabeledContent(TranslationCopy.agentsWorkIn, value: SessionTranslation.agentLanguage(prefs).name)
             }
+            .settingRow("translationAgentLanguage")
+            SettingChangedLineView(key: "translationAgentLanguage")
             // Only while translation is on (mark A).
             if translation {
                 Toggle(TranslationCopy.showBothLanguages, isOn: $bilingual)
                     .accessibilityIdentifier(TranslationCopy.bilingualIdentifier)
+                    .settingRow("translationBilingual")
+                SettingChangedLineView(key: "translationBilingual")
             }
         } header: {
             SettingsHeader(TranslationCopy.title)
@@ -872,6 +894,8 @@ private struct SessionSettingsPage: View {
         Section {
             Toggle(PromptOptimizerCopy.title, isOn: $promptOptimizer)
             .accessibilityIdentifier(PromptOptimizerCopy.toggleIdentifier)
+            .settingRow("promptOptimizer")
+            SettingChangedLineView(key: "promptOptimizer")
             if unavailable {
                 Text(PromptOptimizerCopy.unavailable)
                     .font(.orbitLabel)
@@ -976,7 +1000,8 @@ private struct NotificationSettingsPage: View {
             }
 
             Section {
-                Toggle(SettingsCopy.sessionFinished, isOn: $sessionFinished)
+                Toggle(SettingsCopy.sessionFinished, isOn: $sessionFinished).settingRow("notifySessionFinished")
+                SettingChangedLineView(key: "notifySessionFinished")
             } header: {
                 SettingsHeader(SettingsCopy.accountHeader)
             } footer: {
@@ -984,7 +1009,8 @@ private struct NotificationSettingsPage: View {
             }
 
             Section {
-                Toggle(SettingsCopy.agentMessage, isOn: $agentMessage)
+                Toggle(SettingsCopy.agentMessage, isOn: $agentMessage).settingRow("notifyAgentMessage")
+                SettingChangedLineView(key: "notifyAgentMessage")
             } footer: {
                 Text(SettingsCopy.agentMessageHint)
             }
@@ -999,6 +1025,7 @@ private struct NotificationSettingsPage: View {
                 Text(SettingsCopy.alwaysFooter)
             }
         }
+        .settingsAnchorScroll()
         .navigationTitle(SettingsPage.notifications.title)
         .onAppear {
             guard !seeded else { return }

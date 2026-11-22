@@ -107,7 +107,8 @@ const (
 	integrationFailureScanBytes = 4 * integrationFailureLineRunes
 )
 
-// integrationLocks serialises jobs on this machine by repository root and target ref. The database
+// integrationLocks serialises jobs on this machine by repository root and integrationLockRef: the
+// target ref for a job that writes it, a key of its own for one that does not. The database
 // serialises them across machines (J1's partial unique index over RUNNING rows); this is the local
 // half, and it is what keeps two goroutines of THIS process from staging two worktrees onto one
 // checkout's refs at once.
@@ -642,6 +643,15 @@ func integrateOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, sc
 			}
 			return result
 		}
+	}
+
+	// The task is exempt from the project's landing check (§12.15 P-C2): the command carried only its
+	// acceptance, which passed above. Record the check that was not run, and why, where it would have
+	// run, so the result says the landing was not checked rather than leaving it to be inferred.
+	if cmd.Kind == "LAND_TASK" && cmd.LandingCheckExemptReason != "" {
+		result.Checks = append(result.Checks, IntegrationCheckResult{
+			Name: "LANDING_CHECK", Skipped: "TASK_EXEMPT", Reason: cmd.LandingCheckExemptReason,
+		})
 	}
 
 	// ── J-S6a the tree that is about to land ──────────────────────────────────────────────────

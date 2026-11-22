@@ -1,4 +1,4 @@
-import { isWiderThanStarter, resolvePermissionMode } from '../common/permission-mode';
+import { isWiderThanStarter, resolvePermissionMode, runningPermissionMode } from '../common/permission-mode';
 import type { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -50,10 +50,11 @@ export async function sessionCreateAllowedBy(
     if (adding === 0) return null;
     const row = await prisma.session.findFirst({
       where: { id: session.id, ownerId: session.ownerId },
-      select: { permissionMode: true, engine: true, owner: { select: { preferences: true } } },
+      select: { permissionMode: true, actualPermissionMode: true, engine: true, owner: { select: { preferences: true } } },
     });
     if (!row) return null;
-    const starter = { mode: resolvePermissionMode(row.permissionMode, row.owner), engine: row.engine ?? null };
+    // R3: the mode the session is actually running in.
+    const starter = { mode: runningPermissionMode(row, row.owner), engine: row.engine ?? null };
     if (isWiderThanStarter(starter, resolvePermissionMode(null, row.owner), null)) return null;
     const created = await prisma.task.count({ where: { creatorSessionId: session.id } });
     return created + adding <= cardFreeTaskCreates(row.owner?.preferences) ? SESSION_CREATE_ALLOWANCE_MESSAGE : null;

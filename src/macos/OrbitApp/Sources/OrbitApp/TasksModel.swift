@@ -936,8 +936,27 @@ final class TasksModel {
         return await mutate(id) { _ = try await self.api.updateTask(id, UpdateTaskRequest(runAt: field)) }
     }
 
+    /// The owner's Remove exemption (§12.15 P-C2, board 04 b): the task's landing runs the project's
+    /// landing check again.
+    func removeLandingCheckExemption(_ id: String) async {
+        guard await mutate(id, { _ = try await self.api.updateTask(id, TaskLandingCheckExemption.removeRequest) })
+        else { return }
+        // `mutate` rereads the detail only while the Tasks section is the one on screen; a task page
+        // opened from a project, a landing or a link must drop the row it just removed too.
+        _ = await loadDetail(id)
+    }
+
+    /// Who marked a task exempt and when: the project's record of it, as web's `TaskLandingExempt`
+    /// reads it. Nil when the read fails or lists none — the row then says what the task's own
+    /// fields do.
+    func exemptionMarked(projectID: String, taskID: String) async -> ProjectSettingChange? {
+        guard let changes = try? await api.project(projectID).settingChanges else { return nil }
+        return TaskLandingCheckExemption.marked(taskID: taskID, changes: changes)
+    }
+
     /// Save the acceptance block — the fields `TaskAcceptanceDraft.patch` says moved, and only those.
     @discardableResult
+
     func saveAcceptance(_ id: String, _ request: UpdateTaskRequest) async -> Bool {
         await mutate(id) { _ = try await self.api.updateTask(id, request) }
     }

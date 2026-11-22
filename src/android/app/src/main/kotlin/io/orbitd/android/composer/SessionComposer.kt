@@ -242,7 +242,7 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
     // The band under the card is the page's own colour (iOS `ComposerBand`): a tonal elevation tinted it grey-blue apart from the page.
     // Not a Surface: a Surface clips to itself, and the card's light-mode shadow spreads over the page above the band, as on iOS.
     CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
-        Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 10.dp, vertical = 6.dp)
+        Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 6.dp)
             .testTag("session-composer")) {
             Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
                 state.error?.let { Text(it, color = MaterialTheme.colorScheme.error); TextButton(onClick = model::clearError) { Text("Dismiss error") } }
@@ -362,7 +362,7 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
                                 }
                                 DropdownMenuItem(text = { Text("Shell command") }, onClick = {
                                     menu = false
-                                    if (dsh) model.refuse(DshRuntime.SHELL_REFUSAL) else if (!draft.text.startsWith("!")) model.edit("!${draft.text}", 1, 1)
+                                    if (!draft.text.startsWith("!")) model.edit("!${draft.text}", 1, 1)
                                 })
                                 if (target == null) DropdownMenuItem(text = { Text("Queued messages (${waiting.size})") }, onClick = { menu = false; queued = true })
                                 // A pick held for this session travels with the re-send, which would otherwise run on what it already has.

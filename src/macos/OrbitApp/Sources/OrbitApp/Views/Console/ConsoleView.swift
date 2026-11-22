@@ -104,6 +104,9 @@ struct ConsoleView: View {
             isRunning: { id in console.state.background.contains { $0.id == id && $0.status == "running" } },
             subagentItems: { console.state.subagentItems[$0] ?? [] },
             subagentRun: { console.subagentRuns[$0] },
+            workflowRun: { console.workflowRuns[$0] },
+            workflows: { Array(console.workflowRuns.values) },
+            reveal: { console.revealAgent($0) },
             parentEngine: appModel.session(id: console.sessionID)?.engine,
             fullPayload: { await console.fullPayload(seq: $0) })
     }
@@ -187,12 +190,12 @@ struct ConsoleView: View {
         #if os(iOS)
         if #available(iOS 26.0, *) {
             transcript.safeAreaBar(edge: .bottom, spacing: 0) {
-                composerBand(console).environment(\.floatsOverTranscript, true)
+                AnyView(composerBand(console).environment(\.floatsOverTranscript, true))
             }
         } else {
             VStack(spacing: 0) {
                 transcript
-                composerBand(console)
+                AnyView(composerBand(console))
             }
         }
         #else
@@ -252,12 +255,25 @@ struct ConsoleView: View {
         return session
     }
 
+    /// What the waiting card of a session its GitHub workspace's clone holds draws, or nil (web `useCloneWait`).
+    private func cloneWaitCard(_ console: ConsoleModel) -> QueuedClone.Card? {
+        guard let session = appModel.session(id: console.sessionID) else { return nil }
+        return QueuedClone.card(session: session, workspace: console.cloneWorkspace,
+                                heard: appModel.cloneLedger.heard(console.cloneWorkspace?.id),
+                                storedAt: console.cloneWorkspaceReadAt)
+    }
+
     private func bandMembers(_ console: ConsoleModel) -> some View {
         // Unread messages, error, background tray, git bar, composer — web's order
         // (`workspace-composer`). Staged attachments are not a member: they sit inside the
         // composer's card, above the text they go out with. The band owns the gutter and the
         // gaps; members only say whether they are on screen.
         ComposerBand {
+            // Under a transcript that has content, the clone's wait stands as a note beneath it (web's compact card).
+            if let card = cloneWaitCard(console), !console.state.items.isEmpty {
+                CloneWaitCardView(card: card, machine: console.runnerName, compact: true)
+                    .padding(.bottom, .composerBandGap)
+            }
             // The reader's messages nothing has read yet: the conversation's next lines, so the
             // band's first card, right under the conversation and above the parking strip
             // (docs/mocks/pending-tray-above-parking, decided 2026-10-28). Not folded while
@@ -345,8 +361,11 @@ struct ConsoleView: View {
                 // The folded row by the shared rule; its names stop rotating while the band is folded.
                 BackgroundTrayView(procs: console.state.background, progress: console.state.taskProgress,
                                    row: BackgroundRowRule.row(console.state.background, items: console.state.items,
+                                                              lastAgentTurnStartedAt: console.state.agentTurnStartedAt,
                                                               sessionLive: console.isLive),
-                                   paused: foldsChrome(console) || foldsBand(console))
+                                   paused: foldsChrome(console) || foldsBand(console),
+                                   revealJob: { console.revealJob($0) },
+                                   stopJob: { try await console.stopJob($0) })
                 // The tasks this session's agent created, beside the code the bar below
                 // carries — the session's two kinds of output, together.
                 CreatedTasksCard(console: console)
@@ -377,8 +396,11 @@ struct ConsoleView: View {
             let handoffRow = CoordinatorHandoffRow.resolve(handoff, enginePhase: handoffSession?.enginePhase)
             if let handoffRow {
                 if case .completed = handoffRow {} else {
-                    CoordinatorHandoffStatusView(row: handoffRow) { handoffPress(console, $0) }
-                        .padding(.bottom, .composerBandGap)
+                    CoordinatorHandoffStatusView(row: handoffRow, savedSuccessor: handoff?.successor,
+                                                 choiceSources: console.choiceSources) { action, successor in
+                        handoffPress(console, action, successor: successor)
+                    }
+                    .padding(.bottom, .composerBandGap)
                 }
             }
             if case .completed(let successor)? = handoffRow {
@@ -401,10 +423,11 @@ struct ConsoleView: View {
 
     /// A press on the handoff's row: Skip the note, Cancel handover, or a failure's way out. The
     /// project is the one this conversation coordinates — or, once it no longer does, belongs to.
-    private func handoffPress(_ console: ConsoleModel, _ action: CoordinatorHandoffAction) {
+    private func handoffPress(_ console: ConsoleModel, _ action: CoordinatorHandoffAction,
+                              successor: CoordinatorHandoffSuccessor?) {
         let session = appModel.session(id: console.sessionID)
         guard let projectID = session?.projectId ?? session?.projectMembership?.projectId else { return }
-        Task { await console.coordinatorHandoff(projectID: projectID, action) }
+        Task { await console.coordinatorHandoff(projectID: projectID, action, successor: successor) }
     }
 
     private func consoleBody(navTitleWidth: CGFloat) -> some View {
@@ -419,7 +442,10 @@ struct ConsoleView: View {
                         ?? landing.projectMembership?.projectId,
                     focusID: sessionID)
             } else if let console = registry.peek(sessionID) {
-                transcriptAndBand(console, navTitleWidth: navTitleWidth)
+                // Erased on purpose: the two dozen modifiers below each wrapped the transcript and the
+                // whole band's view type, and resolving and sizing that nested type at launch ran the
+                // iPhone's 1 MB main-thread stack out (TestFlight 0.1.261 (13668), 2026-11-21).
+                AnyView(transcriptAndBand(console, navTitleWidth: navTitleWidth))
                 // The owner requests this conversation filed, each drawn where it was asked.
                 .onChange(of: appModel.ownerRequests?.forSession(sessionID), initial: true) { _, requests in
                     console.adoptOwnerRequests(requests ?? [])
@@ -1122,6 +1148,12 @@ struct TranscriptView: View {
     }
 
     @ViewBuilder private var runnerUpdatingPage: some View {
+        if let session = app.session(id: console.sessionID), console.state.items.isEmpty,
+           let card = QueuedClone.card(session: session, workspace: console.cloneWorkspace,
+                                       heard: app.cloneLedger.heard(console.cloneWorkspace?.id),
+                                       storedAt: console.cloneWorkspaceReadAt) {
+            CloneWaitCardView(card: card, machine: console.runnerName)
+        }
         if let session = runnerUpdatingSession, RunnerUpdating.holds(session), !runnerUpdatingTailHeld,
            RunnerUpdating.footBubbleID(console.state.items, accepted: console.state.accepted) == nil {
             RunnerUpdatingQueuedView(session: session, machine: console.runnerName, runnerID: console.runnerID,
@@ -1169,9 +1201,13 @@ struct TranscriptView: View {
         .environment(\.answeredQuestions, console.answeredQuestions)
         // The item a record link or a search hit asked for: a long message from another session opens to it.
         .environment(\.revealedItemID, console.revealedItemID)
-        // Where a SubAgent's finished line finds the card it was started from, and the scroll to it.
-        .environment(\.subagentCardLinks, SubagentCardLinks(find: { console.delegateCard(forRun: $0) },
-                                                            reveal: { console.revealAgent($0) }))
+        // A SubAgent's end turns, joined to their cards by run id: what the agent read, and a queued one's
+        // Don't send (`SubagentCardEnd`).
+        .environment(\.subagentWakes, console.subagentWakes)
+        .environment(\.subagentQueuedWakes, console.subagentQueuedWakes)
+        // A bg_run job's card: its runner reports, its wake turns and a queued one's Don't send, joined by
+        // job id, and where it reads its tail and asks to stop it (`JobCardView`).
+        .environment(\.jobCardHost, console.jobCardHost(place: app.session(id: console.sessionID)?.agent?.name))
         .scrollContentBackground(.hidden)   // show the window background, not the List's own
         #if os(iOS)
         // Turn OFF the scroll view's touch delay so an in-list control (the jump-to-latest disc, the
@@ -1637,7 +1673,8 @@ struct TranscriptView: View {
             }
             .onAppear { Task { await console.loadOlder() } }
         case .item(let item):
-            TranscriptItemView(item: item, fullPayload: console.fullPayload, console: console)
+            TranscriptItemView(item: item, fullPayload: console.fullPayload, console: console,
+                               openSession: { app.route(to: .session($0)) })
                 .modifier(AnchorRow(itemID: item.id, ruler: ruler, recompute: recomputeStuck))
         case .turnHead(let line):
             // No `AnchorRow`: the head belongs to the message above it, which is the anchor.
@@ -1671,16 +1708,16 @@ struct TranscriptView: View {
             // BELOW it — which is why the bar at the top of this console points down at it.
             #if os(iOS)
             if let run = folds[card.id] {
-                settledFoldRow(run, card: card)
+                settledFoldRow(run, card: card).orbitCardWidth()
             } else {
-                DeliveredDecisionCardView(console: console, card: card)
+                DeliveredDecisionCardView(console: console, card: card).orbitCardWidth()
             }
             #else
-            DeliveredDecisionCardView(console: console, card: card)
+            DeliveredDecisionCardView(console: console, card: card).orbitCardWidth()
             #endif
         case .approval(let approval):
             // No `AnchorRow`: an approval isn't a "Your question" the sticky header names.
-            ApprovalCard(console: console, approval: approval)
+            ApprovalCard(console: console, approval: approval).orbitCardWidth()
         case .recap(let card):
             // No `AnchorRow`: the recap sums the conversation up; it asks nothing.
             RecapCardView(card: card, onHide: hideRecap)
@@ -2003,7 +2040,10 @@ struct TranscriptView: View {
         guard let session = app.session(id: console.sessionID),
               let subtitle = SessionHeader.subtitle(for: session, watching: watching, now: now,
                                                     machine: console.runnerName) else {
-            return Text(console.state.status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized)
+            // A status word this build does not know reads as the neutral ended wording.
+            let status = console.state.status
+            return Text(status == .unknown ? "Ended"
+                        : status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized)
                 .foregroundColor(.secondary)
         }
         let word = SessionHeader.headerWord(for: session, watching: watching, now: now, machine: console.runnerName)
@@ -2175,7 +2215,7 @@ struct SessionStatusCardView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
         }
-        .frame(maxWidth: 560, alignment: .leading)
+        .frame(maxWidth: ConversationCardWidth.max, alignment: .leading)
         .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 8))
         .overlay {
             RoundedRectangle(cornerRadius: 8)
@@ -2550,6 +2590,9 @@ struct TranscriptItemView: View {
     /// The owning console, for the rows that can act on the session — the sign-in card signs this
     /// session's runner back in and re-sends the message its failure ate.
     var console: ConsoleModel? = nil
+    /// Open another session's conversation, for the row that names the agent fixing a warning. Nil
+    /// where there is no router (a preview, a guest page), which leaves the link out.
+    var openSession: ((String) -> Void)? = nil
     var body: some View {
         switch item {
         case .user(let b):
@@ -2558,6 +2601,13 @@ struct TranscriptItemView: View {
             UserTurnRow(bubble: b, steer: steerControls(b), putBack: putBack(b), revealItemCard: { console?.revealOpenItemCard($0) ?? false })
         case .assistant(let b): AssistantBubbleView(bubble: b)
         case .thinking(let b):  ThinkingView(block: b)
+        case .toolCall(let c) where c.name == WorkflowBlock.toolName:
+            // An Orbit workflow: its own block, opening to its calls by phase (board subagent-workflow part 4).
+            WorkflowBlockView(card: c, fullPayload: fullPayload)
+        case .toolCall(let c) where BgJobCard.drawsCard(c):
+            // A bg_run call is its job's card from start to end (board A1); one refused, or whose answer
+            // names no job, stays a call.
+            JobCardView(card: c)
         case .toolCall(let c):
             // The owner's "Chat about this" reply to one of Orbit's own cards: their message, drawn as
             // theirs under the call rather than left inside its result (`OwnerChatReply`).
@@ -2581,18 +2631,18 @@ struct TranscriptItemView: View {
             }
         case .error(_, let message):
             if let console, console.executesDsh, let repair = DshRuntime.repair(message) {
-                DshRepairCardView(console: console, repair: repair)
+                DshRepairCardView(console: console, repair: repair).orbitCardWidth()
             } else if let repair = EngineAuth.antigravityRepair(message), let console, console.executesAntigravity {
-                AntigravityRepairCardView(console: console, repair: repair)
+                AntigravityRepairCardView(console: console, repair: repair).orbitCardWidth()
             } else if let summary = ToolFailureSummary.parse(message) {
-                ToolFailureCardView(message: message, summary: summary)
+                ToolFailureCardView(message: message, summary: summary).orbitCardWidth()
             } else {
                 Label(message, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red).textSelection(.enabled)
             }
         case .authError(let id, let message):
             if let console {
-                AuthErrorCardView(console: console, message: message, settled: console.settlement.auth[id])
+                AuthErrorCardView(console: console, message: message, settled: console.settlement.auth[id]).orbitCardWidth()
             } else {
                 // No console to act through (a preview / detached render): the diagnosis alone,
                 // which is what the runtime said in the first place.
@@ -2601,7 +2651,7 @@ struct TranscriptItemView: View {
             }
         case .autoRetry(let notice):
             if let console {
-                AutoRetryCardView(console: console, notice: notice)
+                AutoRetryCardView(console: console, notice: notice).orbitCardWidth()
             } else {
                 // Same as above: with no session to read the armed retry off, or to retry through,
                 // what's left is the runtime's own sentence.
@@ -2617,12 +2667,13 @@ struct TranscriptItemView: View {
                 .foregroundStyle(console?.settlement.settledNotices.contains(id) == true ? Color.secondary : Color.orange)
                 .textSelection(.enabled)
         case .diagnostic(let notice):
-            DiagnosticNoticeRow(notice: notice)
+            DiagnosticNoticeRow(notice: notice, console: notice.isSandboxMissing ? console : nil,
+                                openSession: openSession)
         case .mainCheckout(let item):
             // The main checkout's card (board 01) or one action's line (board 03). Without a console to
             // act through, the event's own sentence, as the notice it used to be.
             if let console, let changed = item.changed {
-                MainCheckoutCardView(console: console, item: item, notice: changed)
+                MainCheckoutCardView(console: console, item: item, notice: changed).orbitCardWidth()
             } else if let console, let result = item.result {
                 MainCheckoutResultRow(console: console, result: result)
             } else {
@@ -2655,21 +2706,90 @@ struct TranscriptItemView: View {
 /// module included, is the row's help text, as it is web's tooltip.
 struct DiagnosticNoticeRow: View {
     let notice: DiagnosticNotice
+    /// The session's console, on the one diagnostic a reader can act on: Codex's missing bubblewrap.
+    var console: ConsoleModel? = nil
+    /// Open the fixing agent's session; nil where there is no router.
+    var openSession: ((String) -> Void)? = nil
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-            if !notice.label.isEmpty {
-                Text(notice.label).font(.orbitMeta).monospacedDigit().foregroundStyle(.tertiary)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                if !notice.label.isEmpty {
+                    Text(notice.label).font(.orbitMeta).monospacedDigit().foregroundStyle(.tertiary)
+                }
+                Text(notice.text).foregroundStyle(.secondary).textSelection(.enabled)
+                if notice.repeats > 1 {
+                    Text("×\(notice.repeats)").font(.orbitMeta).monospacedDigit()
+                        .foregroundStyle(Color.orange.opacity(0.7))
+                }
             }
-            Text(notice.text).foregroundStyle(.secondary).textSelection(.enabled)
-            if notice.repeats > 1 {
-                Text("×\(notice.repeats)").font(.orbitMeta).monospacedDigit()
-                    .foregroundStyle(Color.orange.opacity(0.7))
+            .font(.orbitLabel)
+            .help(notice.message)
+            if notice.isSandboxMissing, let console {
+                SandboxFixActionView(console: console, openSession: openSession)
             }
         }
-        .font(.orbitLabel)
-        .help(notice.message)
+    }
+}
+
+/// Fix with an agent under the transcript's sandbox warning (web parity: Transcript.tsx's
+/// `SandboxFixAction`): the button and where its session runs, the agent at work, or the one that
+/// already finished with the row — a transcript is history, so a handled row offers no second agent.
+struct SandboxFixActionView: View {
+    let console: ConsoleModel
+    var openSession: ((String) -> Void)? = nil
+
+    var body: some View {
+        if let state = RunnerAgentFixLogic.sandboxState(console.runnerAgentFix) {
+            VStack(alignment: .leading, spacing: 6) {
+                switch state {
+                case .ready(let hint):
+                    Button(RunnerPageCopy.AGENT_FIX_BUTTON) { Task { await console.fixSandbox() } }
+                        .buttonStyle(RunnerCapsuleButtonStyle())
+                        .disabled(console.sandboxFixStarting)
+                    hintLine(hint)
+                case .blocked(let reason):
+                    Button(RunnerPageCopy.AGENT_FIX_BUTTON) {}
+                        .buttonStyle(RunnerCapsuleButtonStyle())
+                        .disabled(true)
+                    hintLine(reason)
+                case .fixing(let entry):
+                    HStack(spacing: 6) {
+                        Circle().fill(Color.accentColor).frame(width: 6, height: 6)
+                        Text(RunnerPageCopy.agentFixFixing(workspace: entry.workspaceName))
+                            .foregroundStyle(.secondary)
+                        openLink(entry.sessionId)
+                    }
+                    .font(.orbitLabel)
+                case .handled(let sessionId, let workspaceName):
+                    HStack(spacing: 6) {
+                        Text(RunnerPageCopy.agentFixFixed(workspace: workspaceName))
+                            .foregroundStyle(.secondary)
+                        openLink(sessionId)
+                    }
+                    .font(.orbitLabel)
+                }
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 10).fill(Color.primary.opacity(0.02)))
+            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.secondary.opacity(0.25)))
+        }
+    }
+
+    @ViewBuilder private func hintLine(_ text: String?) -> some View {
+        if let text {
+            Text(text).font(.orbitLabel).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    @ViewBuilder private func openLink(_ sessionId: String) -> some View {
+        if let openSession {
+            Button(RunnerPageCopy.AGENT_FIX_OPEN_SESSION) { openSession(sessionId) }
+                .linkButtonStyle()
+        }
     }
 }
 

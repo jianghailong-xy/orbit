@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ConflictException } from '@nestjs/common';
 import { RunStatus } from '@prisma/client';
+import { isReleasedStatus } from '../common/session-release';
 import { SessionsService } from './sessions.service';
 
 function makeService(
@@ -20,6 +21,8 @@ function makeService(
     commitStatus: null,
     runningSubagents: [],
     runningBgShells: [],
+    // A terminal row carries its release column (session_release_fact_chk).
+    ...(isReleasedStatus(String(overrides.status ?? RunStatus.AWAITING_INPUT)) ? { finishedAt: new Date() } : {}),
     ...overrides,
   };
   const updates: unknown[] = [];
@@ -223,7 +226,7 @@ test('an ended session resumed under a lost compare-and-set is rejected', async 
   const { service } = makeService(
     { status: RunStatus.SUCCEEDED, worktreeDirty: true },
     0,
-    { status: RunStatus.RUNNING, commitStatus: 'pending' },
+    { status: RunStatus.RUNNING, finishedAt: null, commitStatus: 'pending' },
   );
 
   await assert.rejects(

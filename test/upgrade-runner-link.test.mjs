@@ -491,7 +491,7 @@ test('no script writes the switch: RUNNER_LINK_REQUIRED and runner_link_switch a
 
 test('a fresh install writes the link\'s lines once, after the managed runners\' profile, shows no secret, and checks the way a runner takes', (t) => {
   const fixture = makeFixture(t);
-  const run = fixture.run(INSTALL, ['--public-origin', 'http://10.66.82.117:2086', '--managed-runner-image', 'orbit-cloud-runner:fixture']);
+  const run = fixture.run(INSTALL, ['--public-origin', 'http://10.66.82.117:2086', '--managed-runners', '--managed-runner-image', 'orbit-cloud-runner:fixture']);
   assert.equal(run.status, 0, run.output);
   assertNoSecretShown(fixture, run);
   const text = readFileSync(fixture.envFile, 'utf8');
@@ -539,7 +539,7 @@ test('a fresh install whose link does not answer, or whose image makes no secret
 
 test('the firewall added later goes into both of a deployment\'s profile lines', (t) => {
   const fixture = makeFixture(t);
-  assert.equal(fixture.run(INSTALL, ['--no-managed-runner-firewall', '--managed-runner-image', 'orbit-cloud-runner:fixture', '--no-start']).status, 0);
+  assert.equal(fixture.run(INSTALL, ['--managed-runners', '--no-managed-runner-firewall', '--managed-runner-image', 'orbit-cloud-runner:fixture', '--no-start']).status, 0);
   const run = fixture.run(INSTALL, ['--enable-managed-runner-firewall']);
   assert.equal(run.status, 0, run.output);
   assert.deepEqual(readFileSync(fixture.envFile, 'utf8').split('\n').filter((line) => line.startsWith('COMPOSE_PROFILES=')), [

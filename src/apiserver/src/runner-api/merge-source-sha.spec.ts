@@ -37,6 +37,7 @@ test('merge result persists the exact source tip and marks the branch merged', a
     $queryRaw: async () => [
       {
         status: RunStatus.SUCCEEDED,
+        finishedAt: new Date(),
         inboxLeaseOwner: null,
         mergeStatus: 'pending',
         mergeOperationId: OPERATION_ID,

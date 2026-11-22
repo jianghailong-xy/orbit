@@ -11,18 +11,17 @@ import {
   WarningOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { machineName } from '../../lib/machineSetup';
+import { machineName, newWorkspaceOf, type PickedFolder } from '../../lib/machineSetup';
+import { startHistoryImport, useClaudeHistory } from '../../lib/claudeHistoryImport';
 import { managedRowOf, useManagedRunner, useManagedRunnerId } from '../../lib/managedRunner';
+import type { SessionReach } from '../../lib/sessionReach';
 import { type MainCheckoutRepoHealth, type RunnerRepoHealth } from '@orbit/shared';
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   api,
-  askClaudeHistory,
   cleanUpWorkspaceRepo,
   countImportedSessions,
-  getClaudeHistory,
-  importClaudeHistory,
   removeImportedSessions,
   revokeWorkspacePermissionRule,
   type ClaudeHistoryResult,
@@ -49,6 +48,7 @@ import { AccountSelect, offersAccount } from '../AccountSelect';
 import { AUTO_COMPACT_VARIABLE, AutoCompactSelect, withAutoCompact } from '../AutoCompactSelect';
 import { ClaudeHistoryOffer, type ImportMode } from '../ClaudeHistoryOffer';
 import { useMainCheckoutController } from '../MainCheckoutDrawer';
+import { MachineSetupCard, type HistoryChoice } from '../MachineSetupCard';
 import type { Runner } from '../TasksSidePanel';
 import { Button } from '../ui/Button';
 import { useConfirm } from '../ui/ConfirmDialog';
@@ -98,6 +98,8 @@ export interface SettingsWorkspace {
   /** SubAgents (docs/subagent-design.md §7): on by default, 4 of one session's at once. */
   subagentsEnabled?: boolean;
   subagentsMaxRunning?: number;
+  /** Workflows (docs/subagent-workflow-design.md §6): on by default; it takes SubAgents on as well. */
+  workflowsEnabled?: boolean;
   effort?: string | null;
   /** What the runner last saw at `workDir` on its own disk (refreshed each heartbeat). */
   workDirExists?: boolean | null;
@@ -124,6 +126,7 @@ type WorkspacePatch = Partial<
     | 'enableWorktree'
     | 'subagentsEnabled'
     | 'subagentsMaxRunning'
+    | 'workflowsEnabled'
     | 'env'
     | 'appendSystemPrompt'
     | 'enabled'
@@ -140,91 +143,6 @@ const runnerName = (
   runner: { id?: string; name?: string; displayName?: string | null } | null | undefined,
   managedRunnerId: string | null,
 ): string => (runner ? machineName(runner, managedRunnerId) : '');
-
-/** How long the history question waits for the runner. It rides the runner's 30s heartbeat, so this
- *  is two beats plus the scan — past that the offer simply never appears. */
-const HISTORY_WAIT_MS = 75_000;
-const HISTORY_POLL_MS = 2500;
-/** Long enough that typing a path doesn't ask once per keystroke. */
-const HISTORY_DEBOUNCE_MS = 500;
-
-/**
- * What Claude Code history the runner holds under `path`: null until an answer arrives for exactly
- * that path, and for a directory with nothing in it.
- *
- * The runner is the only one who can answer — the control plane never sees ~/.claude/projects — so
- * the question goes out on its heartbeat and the answer arrives on its own POST. Changing the path
- * drops the answer at once, and an answer about a path no longer asked about is never shown.
- */
-function useClaudeHistory(runnerId: string | null, path: string, enabled: boolean): ClaudeHistoryResult | null {
-  const [history, setHistory] = useState<ClaudeHistoryResult | null>(null);
-  useEffect(() => {
-    setHistory(null);
-    const dir = path.trim();
-    if (!enabled || !runnerId || !dir) return;
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      void (async () => {
-        try {
-          await askClaudeHistory(runnerId, dir);
-        } catch {
-          return; // an offline runner, or one too old to know the question: offer nothing
-        }
-        const deadline = Date.now() + HISTORY_WAIT_MS;
-        for (;;) {
-          await new Promise((r) => setTimeout(r, HISTORY_POLL_MS));
-          if (cancelled) return;
-          let state;
-          try {
-            state = await getClaudeHistory(runnerId, dir);
-          } catch {
-            return;
-          }
-          if (cancelled) return;
-          if (state.result) {
-            // A directory with nothing in it is not an offer with a zero in it.
-            if (state.result.conversations > 0 && state.result.transcripts.length > 0) setHistory(state.result);
-            return;
-          }
-          if (state.status === 'failed' || Date.now() > deadline) return;
-        }
-      })();
-    }, HISTORY_DEBOUNCE_MS);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [runnerId, path, enabled]);
-  return history;
-}
-
-/** Import the offered history into a workspace. Not awaited by its callers: each transcript becomes
- *  a session the runner replays on its own, so the page is usable before the last one has landed. */
-function startHistoryImport(
-  workspaceId: string,
-  history: ClaudeHistoryResult,
-  mode: ImportMode,
-  message: ReturnType<typeof useToast>,
-  refreshSessionLists: () => void,
-): Promise<void> {
-  if (mode === 'none') return Promise.resolve();
-  const transcripts = mode === 'latest' ? history.transcripts.slice(0, 1) : history.transcripts;
-  return importClaudeHistory({ workspaceId, transcripts })
-    .then((res) => {
-      message.success(
-        res.imported === 1
-          ? 'Importing 1 conversation — it appears as it lands.'
-          : `Importing ${res.imported} conversations — they appear as they land.`,
-      );
-      refreshSessionLists();
-    })
-    .catch((e: Error) =>
-      message.error(
-        transcripts.length === 1 ? "Couldn't import the conversation" : "Couldn't import the conversations",
-        e.message,
-      ),
-    );
-}
 
 /**
  * /settings/workspaces/:id — one workspace's own Settings page; /settings/workspaces/new, the create
@@ -266,7 +184,7 @@ function WorkspaceSettingsPage({ id }: { id: string }) {
   const rules = useQuery({ ...workspacePermissionRulesQuery(id), enabled: !!workspace });
   const imported = useQuery({
     queryKey: ['imported-sessions', id],
-    meta: { entities: ['session'] },
+    meta: { entities: ['session'], sessionReach: { workspace: id } satisfies SessionReach },
     queryFn: () => countImportedSessions(id),
     enabled: !!workspace,
   });
@@ -693,6 +611,8 @@ function WorkspaceSettingsPage({ id }: { id: string }) {
       <SubagentSettings
         enabled={workspace.subagentsEnabled ?? true}
         onEnabledChange={(subagentsEnabled) => save({ subagentsEnabled })}
+        workflowsEnabled={workspace.workflowsEnabled ?? true}
+        onWorkflowsEnabledChange={(workflowsEnabled) => save({ workflowsEnabled })}
         maxRunning={workspace.subagentsMaxRunning ?? 4}
         onMaxRunningChange={(subagentsMaxRunning) => save({ subagentsMaxRunning })}
       />
@@ -1119,8 +1039,10 @@ function WorkspacePermissionRules({ workspaceId }: { workspaceId: string }) {
 }
 
 /**
- * New workspace (the Workspaces group's +): the machine first — a workspace is a folder on one
- * machine — then today's create form, and then the new workspace's own page.
+ * New workspace (the Workspaces group's +): the machine first — a workspace is a folder on one machine — then the
+ * same card a machine with no workspace shows on its own page (docs/mocks/new-workspace-form, decision 1 A), under
+ * this page's header. A made workspace opens on its conversation, where a GitHub clone's progress is drawn
+ * (decision 3 A).
  */
 function NewWorkspacePage() {
   const navigate = useNavigate();
@@ -1135,39 +1057,18 @@ function NewWorkspacePage() {
   const machineId = routeId(params.get('machine'));
   const runner = runners.find((r) => r.id === machineId) ?? null;
 
-  const [name, setName] = useState('');
-  const [workDir, setWorkDir] = useState('');
-  const [repoUrl, setRepoUrl] = useState('');
-  const [importMode, setImportMode] = useState<ImportMode>('none');
-  const history = useClaudeHistory(runner?.id ?? null, workDir, !!runner);
-  useEffect(() => setImportMode('none'), [history]);
-
   const createMut = useMutation({
-    mutationFn: () =>
-      api<SettingsWorkspace>('/workspaces', {
+    mutationFn: ({ folder, name }: { folder: PickedFolder; name: string; history: HistoryChoice | null }) =>
+      api<{ id: string }>('/workspaces', {
         method: 'POST',
-        body: {
-          name: name.trim(),
-          workDir: workDir.trim(),
-          repoUrl: repoUrl.trim() || undefined,
-          runnerId: runner?.id,
-        },
+        body: { name, runnerId: runner?.id, ...newWorkspaceOf(folder) },
       }),
-    onSuccess: (saved) => {
-      if (history && saved?.id) void startHistoryImport(saved.id, history, importMode, message, refreshSessionLists);
-      void qc.invalidateQueries({ queryKey: ['workspaces'] });
-      if (saved?.id) navigate(`/settings/workspaces/${saved.id}`);
+    onSuccess: async (made, { history }) => {
+      if (history) void startHistoryImport(made.id, history.history, history.mode, message, refreshSessionLists);
+      await qc.invalidateQueries({ queryKey: ['workspaces'] });
+      navigate(`/workspaces/${encodeId(made.id)}`);
     },
-    onError: (e: Error) => message.error("Couldn't create the workspace", e.message),
   });
-  // A new workspace needs its folder as well as its name.
-  const canSubmit = !!name.trim() && !!workDir.trim() && !!runner;
-  const submit = () => {
-    if (canSubmit && !createMut.isPending) createMut.mutate();
-  };
-  const onEnter = (e: KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.nativeEvent.isComposing) submit();
-  };
 
   if (runnersQ.isPending) {
     return (
@@ -1235,74 +1136,16 @@ function NewWorkspacePage() {
           </>
         }
       />
-      <SettingsSection title="Location">
-        <SettingsCard>
-          <SettingsRow
-            title="Name"
-            control={
-              <Input
-                className="workspace-text-setting"
-                aria-label="Name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                onKeyDown={onEnter}
-                placeholder="e.g. tea-cli builder"
-                maxLength={60}
-                autoFocus
-              />
-            }
-          />
-          <SettingsRow
-            title="Working directory"
-            control={
-              <Input
-                className="workspace-text-setting workspace-text-setting--mono"
-                aria-label="Working directory"
-                value={workDir}
-                onChange={(e) => setWorkDir(e.target.value)}
-                onKeyDown={onEnter}
-                placeholder="/path/to/project on the runner"
-              />
-            }
-          />
-          <SettingsRow
-            title="Repository URL"
-            description="Used for project integration. Detected from origin when empty."
-            control={
-              <Input
-                className="workspace-text-setting workspace-text-setting--mono"
-                aria-label="Repository URL"
-                value={repoUrl}
-                onChange={(e) => setRepoUrl(e.target.value)}
-                onKeyDown={onEnter}
-                placeholder="https://github.com/owner/repo (optional)"
-              />
-            }
-          />
-        </SettingsCard>
-      </SettingsSection>
-      {/* Shown only when this directory has something to offer. Consent is given for the directory's
-          history as a whole, the granularity the person has an opinion about. */}
-      {history && (
-        <SettingsSection title="Claude Code history">
-          <SettingsCard>
-            <div className="settings-row settings-row--block">
-              <ClaudeHistoryOffer history={history} value={importMode} onChange={setImportMode} />
-            </div>
-          </SettingsCard>
-        </SettingsSection>
-      )}
-      <div className="workspace-new-actions">
-        <span className="settings-row-description">
-          Have a Claude Code session on this runner? You can import it later from workspace settings.
-        </span>
-        <div style={{ flex: 1 }} />
-        <Button onClick={() => navigate(-1)}>Cancel</Button>
-        <Button variant="primary" onClick={submit} loading={createMut.isPending} disabled={!canSubmit}>
-          Create
-        </Button>
-      </div>
+      {/* Keyed by the machine: another one is a new card, with nothing typed for the last one carried over. */}
+      <MachineSetupCard
+        key={runner.id}
+        runner={runner}
+        managed={managed}
+        headless
+        onCreate={(folder, name, history) => createMut.mutate({ folder, name, history })}
+        creating={createMut.isPending}
+        createError={createMut.error?.message ?? null}
+      />
     </div>
   );
 }
-

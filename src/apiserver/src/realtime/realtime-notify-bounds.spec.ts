@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { RunEventType, RunStatus, SessionEndReason, SessionLifecycleState, type NormalizedRunEvent } from '@orbit/shared';
+import {
+  RunEventType,
+  RunStatus,
+  SCHEDULE_CARDS_CHANGED_MAX_SESSIONS,
+  SessionEndReason,
+  SessionLifecycleState,
+  type NormalizedRunEvent,
+} from '@orbit/shared';
 
 import { TASK_CHANGED_MAX_ROWS } from '../tasks/tasks.service';
 import { approvalRequestEvent, RealtimeService } from './realtime.service';
@@ -57,6 +64,9 @@ test('every event run_event never holds but the approval card rides its notifica
       taskIds: Array.from({ length: TASK_CHANGED_MAX_ROWS }, id), resync: false,
     })]],
     ['agent_changed', [() => realtime.publishWorkspaceChanged(SESSION, id(), true)]],
+    [`schedule_cards_changed of an owner, ${SCHEDULE_CARDS_CHANGED_MAX_SESSIONS} sessions`, [() => realtime.publishScheduleCardsChanged(
+      OWNER, Array.from({ length: SCHEDULE_CARDS_CHANGED_MAX_SESSIONS }, id),
+    )]],
     ['an owner\'s library event', userScoped.map((type) => () => realtime.publishForUser(OWNER, type, id()))],
     ['everyone\'s provider_changed', [() => realtime.publishForAllUsers(RunEventType.PROVIDER_CHANGED, id())]],
     ['everyone\'s translation_status_changed', [() => realtime.publishForAllUsers(RunEventType.TRANSLATION_STATUS_CHANGED, 'translation')]],

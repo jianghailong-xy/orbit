@@ -252,7 +252,7 @@ async function workSession(stack: Stack, w: World, taskId: string, s: WorkSessio
       branch: s.branch, worktreeBranch: s.worktreeBranch ?? null, branchSha: s.branchSha ?? null,
       baseSha: s.baseSha ?? null, numTurns: 1, startedAt: minutesAgo(s.createdMinutesAgo),
       createdAt: minutesAgo(s.createdMinutesAgo),
-      ...(finished ? { finishedAt: minutesAgo(s.finishedMinutesAgo!) } : {}),
+      ...(finished ? { finishedAt: minutesAgo(s.finishedMinutesAgo!)} : {}),
     },
   });
   return id;

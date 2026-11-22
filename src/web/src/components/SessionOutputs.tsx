@@ -89,6 +89,7 @@ export function SessionOutputs({
   resolvingCommit,
   onAdopt,
   adopting,
+  onDismissMergeFailure,
   turnActive,
   repoHealth,
   onCleanUpRepo,
@@ -145,6 +146,9 @@ export function SessionOutputs({
    *  re-points the session to that branch so Merge/diff act on the real work. */
   onAdopt?: () => void;
   adopting?: boolean;
+  /** Provided by the parent (owns the mutation); puts a ✕ on a failed merge's strip. Closing it
+   *  clears the stored failure on the server, so the bar shows Merge (or "✓ In main") again. */
+  onDismissMergeFailure?: () => void;
   /** Heartbeat-reported state of the shared checkout this session's workspace works in. Null when the
    *  runner is older than the report or the workDir isn't a git repo — both read as "unknown", so
    *  nothing is shown. A half-finished merge left in there blocks every merge on the machine, which
@@ -177,7 +181,11 @@ export function SessionOutputs({
   const [noticeHiddenFor, setNoticeHiddenFor] = useState<string | null>(null);
   const firstChanged = detail?.changedFiles?.[0]?.path ?? null;
   useEffect(() => {
-    if (openDiffSignal && firstChanged) setOpenFile(firstChanged);
+    // An open that names no commit is the whole branch: All changes, never the commit last looked at.
+    if (openDiffSignal && firstChanged) {
+      setOpenCommit(null);
+      setOpenFile(firstChanged);
+    }
     // Only a new signal opens it; a file list that changes underneath must not reopen a closed drawer.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openDiffSignal]);
@@ -428,7 +436,22 @@ export function SessionOutputs({
         waitingForTurn={!!turnActive}
         failed={detail.mergeStatus === 'error' || detail.mergeStatus === 'conflict'} />}
       {failed && (!detail.mergeRecovery || detail.commitStatus === 'error') && (
-        <div className={`wt-merge wt-bar-fail${mergeFailShown ? ' wt-merge-inset' : ''}`}>
+        <div className={`wt-merge wt-bar-fail${mergeFailShown ? ' wt-merge-inset' : ''}${mergeFailShown && onDismissMergeFailure ? ' wt-merge-closable' : ''}`}>
+          {mergeFailShown && onDismissMergeFailure && (
+            <Tooltip content="Dismiss">
+              <button
+                type="button"
+                className="wt-notice-close wt-merge-dismiss"
+                aria-label="Dismiss"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDismissMergeFailure();
+                }}
+              >
+                ✕
+              </button>
+            </Tooltip>
+          )}
           {detail.commitStatus === 'error' ? (
             <CommitFailure
               key={detail.commitError ?? ''}
@@ -498,7 +521,11 @@ export function SessionOutputs({
         committed={committed}
         openPath={openFile}
         onSelect={setOpenFile}
-        onClose={() => setOpenFile(null)}
+        onClose={() => {
+          // The drawer opens again on All changes unless a commit is chosen.
+          setOpenFile(null);
+          setOpenCommit(null);
+        }}
         commits={commits}
         openCommit={openCommit}
         onSelectCommit={(sha) => (sha ? openCommitDiff(sha) : openAll())}

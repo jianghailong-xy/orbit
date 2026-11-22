@@ -314,8 +314,8 @@ services:
       ORBIT_BASE_BACKUP_INTERVAL: "${ORBIT_BASE_BACKUP_INTERVAL:-86400}"
       ORBIT_BASE_BACKUP_KEEP: "${ORBIT_BASE_BACKUP_KEEP:-2}"
       # Optional: managed runners (docs/self-hosting.md, "Managed runners"): every account gets a runner of its own,
-      # a container on this host's Docker, at sign-in. Off unless the host's .env says true. A fresh install
-      # (scripts/install-server.sh) writes that line and an upgrade never does, so a deployment that predates managed
+      # a container on this host's Docker, at sign-in. Off unless the host's .env says true. A fresh install with
+      # --managed-runners (scripts/install-server.sh) writes that line and an upgrade never does, so a deployment that predates managed
       # runners keeps them off. The profile read here, the Docker channel's token and its socket are the files in
       # ORBIT_MANAGED_RUNNERS_DIR, mounted below.
       ORBIT_MANAGED_RUNNERS_ENABLED: "${ORBIT_MANAGED_RUNNERS_ENABLED:-false}"
@@ -439,8 +439,8 @@ services:
   # (deploy/managed-runner/docker-channel), the one process given the Docker socket. It makes each account's runner
   # container and data volume from its own template, and touches nothing without its instance's label. The apiserver
   # reaches it only through its unix socket in ORBIT_MANAGED_RUNNERS_DIR, and it needs no network of its own.
-  # It runs only under the managed-runners-docker profile, which a fresh install switches on in .env
-  # (scripts/install-server.sh) and an upgrade never does.
+  # It runs only under the managed-runners-docker profile, which a fresh install with --managed-runners switches on
+  # in .env (scripts/install-server.sh) and an upgrade never does.
   docker-channel:
     profiles: [managed-runners-docker]
     build:
@@ -476,8 +476,8 @@ services:
   # nothing else of this host or of the private networks behind it. It runs in the host's network namespace with
   # NET_ADMIN and NET_RAW, never with the Docker socket; it checks the rules every 10 s, repairs what changed, and leaves
   # them in place when it stops. The Docker channel starts no runner container while it does not report them in force.
-  # It runs only under the managed-runner-firewall profile, which a fresh install switches on in .env beside the Docker
-  # backend's (scripts/install-server.sh; --no-managed-runner-firewall leaves it off), and an upgrade never does.
+  # It runs only under the managed-runner-firewall profile, which a fresh install with --managed-runners switches on in
+  # .env beside the Docker backend's (scripts/install-server.sh; --no-managed-runner-firewall leaves it off), and an upgrade never does.
   managed-runner-firewall:
     profiles: [managed-runner-firewall]
     build:

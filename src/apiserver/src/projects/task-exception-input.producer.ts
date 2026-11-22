@@ -6,6 +6,7 @@ import type { CompletionInputConsumer } from './completion-input';
 import { CoordinatorConvergenceService } from './coordinator-convergence.service';
 import { WakeFact, attemptEndedUnsettledFact } from './coordinator-wake';
 import type { WakeAuthorization, WakeAuthorizer } from './coordinator-wake.service';
+import { sessionReleasedSql } from '../common/session-release';
 
 /** The project disappeared between the committed task read and the wake's authorization. */
 export const EXCEPTION_WAKE_PROJECT_GONE = 'PROJECT_GONE';
@@ -107,7 +108,7 @@ export class TaskExceptionInputProducer {
              AND s."starts_task_work" = true
              AND s."deleted_at" IS NULL
              AND s."retry_at" IS NULL
-             AND s."status" IN ('SUCCEEDED', 'FAILED', 'CANCELLED')
+             AND ${sessionReleasedSql('s')}
            ORDER BY s."updated_at" DESC, s."id" DESC
            LIMIT 1
         ) a ON true

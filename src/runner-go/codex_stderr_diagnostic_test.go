@@ -95,3 +95,33 @@ func TestCodexForwardsACatalogRefreshFailureAsADiagnosticOnBothPaths(t *testing.
 		check(t, payload)
 	})
 }
+
+// Codex logs the missing system bubblewrap at ERROR and then runs with its bundled copy, so the
+// turn still works. Clients draw it as a degraded sandbox, not a failed run, and offer to install
+// what Codex asked for.
+func TestCodexStderrDiagnosticRecognizesTheMissingBubblewrapWarning(t *testing.T) {
+	const line = "2026-08-14T14:31:13.780609Z ERROR codex_app_server: Codex could not find bubblewrap on PATH. " +
+		"Install bubblewrap with your OS package manager. See the sandbox prerequisites: " +
+		"https://developers.openai.com/codex/concepts/sandboxing#prerequisites. " +
+		"Codex will use the bundled bubblewrap in the meantime."
+	want := map[string]interface{}{
+		"component":   "sandbox",
+		"phase":       "startup",
+		"severity":    "WARN",
+		"impact":      "degraded",
+		"recoverable": true,
+		"code":        "bubblewrap_missing",
+	}
+	got, ok := codexStderrDiagnostic(line)
+	if !ok {
+		t.Fatalf("the missing-bubblewrap line was not recognized: %q", line)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("diagnostic = %#v, want %#v", got, want)
+	}
+	// The rest of Codex's sandbox chatter keeps the error path: only this sentence says the
+	// machine is missing the package the clients know how to install.
+	if _, ok := codexStderrDiagnostic("2026-08-14T14:31:13.780609Z WARN codex_app_server: sandbox is degraded"); ok {
+		t.Error("an unrelated sandbox line was taken for the missing-bubblewrap warning")
+	}
+}

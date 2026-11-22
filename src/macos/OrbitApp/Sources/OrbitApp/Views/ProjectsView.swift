@@ -566,6 +566,16 @@ struct ProjectDetailView: View {
                             withAnimation { proxy.scrollTo(ProjectDone.nonCodeAnchor, anchor: .center) }
                         }
                     })
+                case .coordinatorChanges:
+                    CoordinatorChangesPage(
+                        projectTitle: document.title,
+                        changes: store.document?.settingChanges ?? [],
+                        taskTitles: Dictionary(store.tasks.map { ($0.id, $0.title) }, uniquingKeysWith: { first, _ in first }),
+                        revert: { changeID in try await store.revertSettingChange(changeID) },
+                        openTask: { taskID in
+                            pageSheet = nil
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { openTask(taskID) }
+                        })
                 case .landingCheck:
                     if let view = store.integration {
                         MergeCheckEditor(store: store, view: view,
@@ -1159,7 +1169,7 @@ struct ProjectDetailView: View {
     /// read, and its Retry goes through the page's store, which reads the landing again.
     @ViewBuilder
     private func landingRow(_ store: ProjectDetailModel) -> some View {
-        if let integration = store.integration, integration.inFlight != nil {
+        if let integration = store.integration, integration.inFlight != nil, !ProjectPage.noLineYet(integration) {
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 // The Work overview draws every job in flight, a merge job included: the merge
                 // card lives on the project's sessions page, which this page does not have, and
@@ -1448,15 +1458,21 @@ struct ProjectDetailView: View {
                                 Text(LandingCheckCopy.label)
                                 Text(LandingCheckCopy.main).font(.orbitLabel).foregroundStyle(.secondary)
                             } else {
-                                Button { pageSheet = .landingCheck } label: {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(LandingCheckCopy.label)
-                                        Text(view.landingCheckCommand ?? LandingCheckCopy.inheritedCommand(view.mergeCheckCommand)).font(.orbitMono)
-                                        Text(view.landingCheckTimeoutSeconds.map { "\($0) seconds" }
-                                             ?? LandingCheckCopy.inheritedTimeout(view.mergeCheckTimeoutSeconds)).font(.orbitLabel)
-                                        Text(LandingCheckCopy.hint).font(.orbitLabel).foregroundStyle(.secondary)
-                                    }.frame(maxWidth: .infinity, alignment: .leading)
-                                }.buttonStyle(.plain).disabled(store.busy)
+                                // Board 03 b, c (D3, D4, D9): the three values, the command, who
+                                // set it and when.
+                                LandingCheckSettingRow(
+                                    view: view, busy: store.busy,
+                                    onEditCommand: { pageSheet = .landingCheck },
+                                    onChoose: { mode in
+                                        Task { notice = await store.updateIntegration(LandingCheckSetting.write(mode)) }
+                                    })
+                            }
+                        }
+                        // Board 03 b (D6): the coordinator's changes, one row into their page —
+                        // from a server that keeps them.
+                        if view.line == .projectBranch, let changes = document.settingChanges {
+                            CoordinatorChangesEntryRow(count: CoordinatorChanges.count(changes)) {
+                                pageSheet = .coordinatorChanges
                             }
                         }
                         mergeCheckSetting(store, view, document: document)
@@ -2743,6 +2759,8 @@ private enum ProjectPageSheet: String, Identifiable {
     case landingJobs
     /// Change workspace: where the project is coordinated from.
     case coordinatorChange
+    /// Coordinator's changes (board 05): the coordinator's landing-check writes, and Revert.
+    case coordinatorChanges
 
     var id: String { rawValue }
 }

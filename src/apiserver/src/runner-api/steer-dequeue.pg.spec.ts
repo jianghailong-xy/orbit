@@ -67,7 +67,13 @@ before(async () => {
   // `external_sender_{source,id,name}` are who outside Orbit sent a turn (migration 0502, a Feishu group
   // member): the claim and the resend read return source and name with the turn, NULL on every case here,
   // as on every turn the owner or a session sent.
+  // `finished_at` is the release column (migrations 1261, 1401): the lock reads it to refuse a released session,
+  // NULL on every case here, as on every session still held.
+  // `sender_client` is the app a turn came from (migration 0595): the claim returns it, and a reload it hands out
+  // records the mode it carries as the session's actual mode (migration 1437: `actual_permission_mode{,_at}` and one
+  // `session_permission_mode_change` row, sessions/actual-permission-mode.ts), so those are mirrored too.
   await client.query(`
+    DROP TABLE IF EXISTS steer_dequeue_test."session_permission_mode_change";
     DROP TABLE IF EXISTS steer_dequeue_test."conversation_turn";
     DROP TABLE IF EXISTS steer_dequeue_test."inbox_lease_generation";
     DROP TABLE IF EXISTS steer_dequeue_test."session";
@@ -84,7 +90,19 @@ before(async () => {
       engine text,
       task_id uuid,
       status text NOT NULL,
-      cancel_requested_at timestamptz
+      cancel_requested_at timestamptz,
+      finished_at timestamptz,
+      actual_permission_mode text,
+      actual_permission_mode_at timestamp(3)
+    );
+    CREATE TABLE steer_dequeue_test."session_permission_mode_change" (
+      id uuid PRIMARY KEY,
+      session_id uuid NOT NULL,
+      from_mode text,
+      to_mode text NOT NULL,
+      cause text NOT NULL,
+      client text,
+      created_at timestamp(3) NOT NULL
     );
     CREATE TABLE steer_dequeue_test."inbox_lease_generation" (
       generation uuid PRIMARY KEY,
@@ -111,6 +129,7 @@ before(async () => {
       external_sender_source text,
       external_sender_id text,
       external_sender_name text,
+      sender_client text,
       created_at timestamptz NOT NULL DEFAULT now()
     );
   `);

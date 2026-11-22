@@ -72,6 +72,7 @@ import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.composer.CursorRuntime
 import io.orbitd.android.composer.FollowManagedRunner
 import io.orbitd.android.composer.MachineSetupCopy
+import io.orbitd.android.composer.NewWorkspaceCopy
 import io.orbitd.android.composer.ManagedRunner
 import io.orbitd.android.composer.ManagedRunnerIdentity
 import io.orbitd.android.composer.ManagedRunnerNotice
@@ -81,6 +82,7 @@ import io.orbitd.android.navigation.Destination
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.navigation.OrbitRoute
 import io.orbitd.android.navigation.Origin
+import io.orbitd.android.navigation.newWorkspaceRoute
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -608,6 +610,17 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
                     WorkspaceRow(workspace, RunnerPage.runningCount(workspace, model.counts), isolation = {
                         WorktreeIsolationSwitch(api, workspace, reload = { model.load() }, failed = notice::show)
                     }) { openWorkspace(workspace.text("id")) }
+                }
+                // One more workspace on this machine (docs/mocks/new-workspace-form/02-apple-entry, owner A). With none yet, Start a
+                // session above is the way to its first.
+                if (workspaces.isNotEmpty()) {
+                    HorizontalDivider()
+                    Row(Modifier.fillMaxWidth().clickable(role = Role.Button) { open(newWorkspaceRoute(id, hasWorkspace = true, Origin.LIST)) }
+                        .padding(vertical = 10.dp).testTag("machine-new-workspace"),
+                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Icon(painterResource(R.drawable.ic_add_circle), null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+                        Text(NewWorkspaceCopy.NEW_WORKSPACE, color = MaterialTheme.colorScheme.primary)
+                    }
                 }
             }
             FormSection(RunnerCopy.ABOUT, footer = if (runner.bool("runsAsRoot") == true) RunnerCopy.ROOT_NO_BYPASS else null) {

@@ -172,6 +172,10 @@ export class HelpAsk {
         id: true,
         title: true,
         status: true,
+        // With the status, what "released by a failure" reads (common/session-release.ts).
+        finishedAt: true,
+        endReason: true,
+        lastTurnOutcome: true,
         engineTurnActive: true,
         costUsd: true,
         createdAt: true,

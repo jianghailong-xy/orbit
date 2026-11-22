@@ -8,7 +8,7 @@ task D5 measured both on the HPC host.
 
 Root Compose runs it as the `managed-runner-firewall` service, built from [Dockerfile](Dockerfile) (Python's standard
 library, the iptables binaries of both backends and this one file), under the `managed-runner-firewall` profile. A
-fresh install (`scripts/install-server.sh`) switches that profile on in `.env` beside the Docker backend's, and so do
+fresh install with `--managed-runners` (`scripts/install-server.sh`) switches that profile on in `.env` beside the Docker backend's, and so do
 `--enable-managed-runners` and `--enable-managed-runner-firewall`; `--no-managed-runner-firewall` leaves it off, and an
 upgrade never starts, builds or recreates it. The design record is
 [docs/managed-runner-design.md](../../../docs/managed-runner-design.md), "Implementation record: the managed runners'

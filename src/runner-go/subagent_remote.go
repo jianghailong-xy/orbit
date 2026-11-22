@@ -422,11 +422,20 @@ func runClaimedRemoteSubagent(ctx context.Context, t *Transport, task *remoteSub
 	}
 	// The parent session's claim as far as a child needs one: approvals are filed under the parent's id (the server
 	// lets this runner, the run's target, file them), and the server's exec is the child's engine and mode.
+	// The child's Plan gate reads the mode it was claimed in: this machine hosts no socket for the parent session.
+	childExec := claim.Exec
+	childExec.Env = map[string]string{}
+	for k, v := range claim.Exec.Env {
+		childExec.Env[k] = v
+	}
+	if mode := strings.TrimSpace(childExec.PermissionMode); mode != "" {
+		childExec.Env[envSubagentRemoteMode] = mode
+	}
 	parent := &ClaimedSession{
-		SessionID: claim.SessionID, Provider: claim.Exec.Provider, Agent: claim.Exec, WorkDir: cwd,
+		SessionID: claim.SessionID, Provider: childExec.Provider, Agent: childExec, WorkDir: cwd,
 		WatchesDisabled: true, WikiDisabled: true,
 	}
-	engine := subagentEngine(claim.Exec, parent)
+	engine := subagentEngine(childExec, parent)
 	runChild, ok := subagentChildRunners[engine]
 	if !ok {
 		return fail(fmt.Sprintf("SubAgents cannot run on the %s engine on this runner.", engine))
@@ -477,7 +486,7 @@ func runClaimedRemoteSubagent(ctx context.Context, t *Transport, task *remoteSub
 		logln(fmt.Sprintf("remote SubAgent %s — running %s %s %s", claim.RunID, engine, where, workDir))
 		var conversation string
 		res, conversation, err = runChild(withSubagentApprovals(ctx, claim.RunID), subagentChild{
-			t: t, parent: parent, exec: claim.Exec, def: def, runID: claim.RunID, engineSession: rec.EngineSession,
+			t: t, parent: parent, exec: childExec, def: def, runID: claim.RunID, engineSession: rec.EngineSession,
 			resume: claim.ResumeOf != "", cwd: cwd, scratch: scratch, stateDir: rec.StateDir, prompt: prompt,
 			emit: relay.add, spawned: spawned,
 		})

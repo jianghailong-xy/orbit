@@ -355,7 +355,7 @@ async function prerequisite(
     data: {
       id: sessionId, ownerId: f.ownerId, creatorId: f.ownerId, taskId,
       workspaceId: f.workspaceId, assignedRunnerId: f.runnerId, title, prompt: title,
-      provider: 'claude', status: RunStatus.SUCCEEDED,
+      provider: 'claude', status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
       dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
       isolationStatus: 'worktree', branch, completedAt: new Date(),
     },

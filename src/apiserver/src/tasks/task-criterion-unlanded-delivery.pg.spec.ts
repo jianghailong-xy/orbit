@@ -376,7 +376,7 @@ async function recordLanding(stack: Stack, f: Fixture, taskId: string, label: st
       title: `${label}-merge`,
       prompt: `${label}-merge`,
       provider: 'claude',
-      status: RunStatus.SUCCEEDED,
+      status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
       dispatchOrigin: SessionDispatchOrigin.USER,
     },
   });
@@ -422,6 +422,11 @@ async function settleByAcceptance(stack: Stack, f: Fixture, taskId: string, labe
       status: RunStatus.RUNNING,
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
+      // The attempt commits on a worktree branch of its own, past the commit it forked from: work with
+      // something to land. A run that never made a branch delivered nothing to land (§12.15 P-M3).
+      isolationStatus: 'worktree', branch: `orbit/${label}-${sessionId.slice(0, 8)}`,
+      worktreeBranch: `orbit/${label}-${sessionId.slice(0, 8)}`, baseSha: 'a'.repeat(40), branchSha: 'b'.repeat(40),
+      worktreeDirty: false, changedFiles: ['src/work.ts'],
     },
   });
   await stack.db.conversationTurn.create({
@@ -479,6 +484,10 @@ async function settleByAcceptance(stack: Stack, f: Fixture, taskId: string, labe
     subtype: 'shell',
     shellExitCode: shell.status!,
     shellOutput: `${shell.stdout}${shell.stderr}`,
+  });
+  await stack.db.session.update({
+    where: { id: sessionId },
+    data: { status: RunStatus.SUCCEEDED, finishedAt: new Date()},
   });
 
   assert.equal(
@@ -807,7 +816,7 @@ test('a receipt recorded through the door delivers the landing question, and ans
           title: 'through-the-door-merge',
           prompt: 'through-the-door-merge',
           provider: 'claude',
-          status: RunStatus.SUCCEEDED,
+          status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
           dispatchOrigin: SessionDispatchOrigin.USER,
           branch: 'orbit/through-the-door',
         },

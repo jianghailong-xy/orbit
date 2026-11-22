@@ -12,7 +12,6 @@ import { accountPoolList, poolAccessQuery, sharedPoolsQuery } from '../../lib/sh
 import { useToast } from '../../lib/toast';
 import { AccountPools, NewPoolModal, PoolHint } from '../AccountPools';
 import { KeyImpact } from '../KeyImpact';
-import { ModelTiers } from '../ModelTiers';
 import { ProviderTile, vendorName, vendorOf } from '../ProviderGallery';
 import { ProviderKeyRows } from '../ProviderKeyCards';
 import { Button } from '../ui/Button';
@@ -242,7 +241,6 @@ export function SettingsPoolsPage() {
           }
         />
       )}
-      <ModelTiers />
       {creatingPool && <NewPoolModal rows={keys.data ?? []} onClose={() => setCreatingPool(false)} />}
     </>
   );

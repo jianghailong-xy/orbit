@@ -30,7 +30,8 @@ var userModeActions = map[string]string{
 	"login": "", "logout": "", "whoami": "", "api": "",
 	// Reads the catalogue this binary carries and asks no server anything, so it is the person's as much
 	// as anybody's.
-	"guide": "",
+	"guide":         "",
+	"subagent rate": "only the session that started the SubAgent run can rate it (ORBIT_SESSION_ID)",
 
 	"task list":              "",
 	"task labels":            "",

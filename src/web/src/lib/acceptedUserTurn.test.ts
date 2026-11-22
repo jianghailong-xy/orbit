@@ -300,6 +300,19 @@ describe('accepted active-snapshot reconciliation', () => {
     ).toEqual([local]);
   });
 
+  it('refreshes the translation on a local accepted bubble before the runner echoes it', () => {
+    const local = accepted({
+      translation: { state: 'TRANSLATING', from: 'en', original: 'ship it' },
+    });
+    const translation = { state: 'DONE', from: 'en', original: 'ship it' } as const;
+    const server = recovered({ key: local.key, turnId: local.turnId, translation });
+
+    const next = reconcileAcceptedUserTurnSnapshot([server], [local], 'session-a', new Set([local.key]));
+
+    expect(next).toEqual([{ ...local, translation }]);
+    expect(acceptedUserTurnEvent(next[0], 1).payload).toMatchObject({ translation });
+  });
+
   it('the opening this tab drew gives way to the same opening the snapshot lists: one copy', () => {
     const local = accepted({ key: 'initial:session-a', turnId: undefined, text: 'start the session' });
     const listed = recovered({ key: 'turn-open', turnId: 'turn-open', text: 'start the session', opening: true });

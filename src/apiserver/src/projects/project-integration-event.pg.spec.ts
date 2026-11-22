@@ -53,6 +53,7 @@ import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
 import '../test-support/dequeue-under-lease';
+import { settleDeliveredIdentityAfterFinish } from './project-integration-job';
 
 /**
  * The landing timeline (docs/project-integration-line-contract.md §2.9 LS2/LS4, migration 0438), on
@@ -351,9 +352,16 @@ async function doneTask(stack: Stack, w: World, label: string): Promise<Attempt>
     shellOutput: '',
   });
   assert.equal(await taskStatus(stack.db, declared.id), TaskStatus.DONE, 'the acceptance command agreed');
-  await stack.db.session.update({
-    where: { id: sessionId },
-    data: { finishedAt: new Date(), worktreeBranch: branch, worktreeDirty: false },
+  await stack.db.$transaction(async (tx) => {
+    // The finish settles the DONE's delivered identity in the transaction that writes it, as every
+    // finish door does — and decides the route a DONE written while this work moved left to it
+    // (§10.5 O-L4 3, §12.15 P-M1).
+    const finished = await tx.session.update({
+      where: { id: sessionId },
+      data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), worktreeBranch: branch, worktreeDirty: false },
+      select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
+    });
+    await settleDeliveredIdentityAfterFinish(tx, finished);
   });
   return { taskId: declared.id, title, sessionId, branch };
 }
@@ -1209,7 +1217,7 @@ test('an answer asked before the work settled is recorded: requeued, or stopped 
       });
       await stack.db.session.update({
         where: { id: task.sessionId },
-        data: { finishedAt: new Date(Date.now() + 1_000), worktreeBranch: task.branch },
+        data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(Date.now() + 1_000), worktreeBranch: task.branch },
       });
       const requeued = await report(stack, w, first, early());
       assert.equal(requeued.accepted, true);
@@ -1227,7 +1235,7 @@ test('an answer asked before the work settled is recorded: requeued, or stopped 
       )).state, 'CANCELLING');
       await stack.db.session.update({
         where: { id: task.sessionId },
-        data: { finishedAt: new Date(Date.now() + 2_000) },
+        data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(Date.now() + 2_000) },
       });
       const cancelled = await report(stack, w, second, early());
       assert.equal(cancelled.accepted, true);
@@ -1256,7 +1264,7 @@ test('a candidate check that answered before its task work settled goes back to 
       // could still move, so its READY is the same question asked too early.
       await stack.db.session.update({
         where: { id: task.sessionId },
-        data: { finishedAt: new Date(Date.now() + 1_000) },
+        data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(Date.now() + 1_000) },
       });
       const early = await report(stack, w, check, promotionReady('1'.repeat(40)));
       assert.equal(early.accepted, true);

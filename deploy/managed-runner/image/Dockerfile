@@ -115,10 +115,11 @@ RUN mkdir -p /etc/ssl/certs \
       > /etc/apt/sources.list \
  && apt-get -o Acquire::https::CAInfo=/etc/ssl/certs/ca-certificates.crt update \
  && apt-get -o Acquire::https::CAInfo=/etc/ssl/certs/ca-certificates.crt install --no-install-recommends -y \
-      bash ca-certificates curl git openssh-client ripgrep sqlite3 python3 procps tini \
+      bash ca-certificates curl duperemove git openssh-client ripgrep sqlite3 python3 procps tini \
  && apt-get install --no-install-recommends -y \
       chromium=154.0.8037.57-1~deb13u1 chromium-common=154.0.8037.57-1~deb13u1 \
       xvfb=2:21.1.16-1.3+deb13u4 x11vnc=0.9.17-1 \
+      xclip=0.13-4 xdotool=1:3.20160805.1-5.1 \
       fonts-noto-cjk=1:20240730+repack1-1 fonts-noto-color-emoji=2.051-0+deb13u1 \
  && rm -rf /var/lib/apt/lists/* \
  && groupadd --gid 10001 orbit \
@@ -208,6 +209,8 @@ actual = {
     'ripgrep': version('rg', '--version'),
     'sqlite': version('sqlite3', '--version'),
     'tini': version('/usr/bin/tini', '--version'),
+    # The runner shares duplicate files on its volume with it while idle (src/runner-go/managed_dedupe.go).
+    'duperemove': package('duperemove', '/usr/bin/duperemove'),
     'opencode': version('opencode', '--version'),
     'kimi': version('kimi', '--version'),
     'agy': version('agy', '--version'),
@@ -215,6 +218,8 @@ actual = {
     'chromium': version('chromium', '--version'),
     'xvfb': package('xvfb', '/usr/bin/Xvfb'),
     'x11vnc': first_line('x11vnc', '-version'),
+    'xclip': package('xclip', '/usr/bin/xclip'),
+    'xdotool': package('xdotool', '/usr/bin/xdotool'),
     'fontsNotoCjk': package('fonts-noto-cjk'),
     'fontsNotoColorEmoji': package('fonts-noto-color-emoji'),
     'playwrightMcp': version('playwright-mcp', '--version'),
@@ -228,6 +233,7 @@ expected_versions = {'go': 'go1.27.1', 'node': 'v26.10.0', 'codex': 'codex-cli 0
                      'claude': '2.1.328 (Claude Code)', 'opencode': '1.19.6', 'kimi': '2.6.3', 'agy': '1.5.12'}
 expected_versions.update(chromium='Chromium 154.0.8037.57 built on Debian GNU/Linux 13 (trixie)',
                          xvfb='2:21.1.16-1.3+deb13u4', x11vnc='x11vnc: 0.9.17 lastmod: 2025-04-11',
+                         xclip='0.13-4', xdotool='1:3.20160805.1-5.1',
                          fontsNotoCjk='1:20240730+repack1-1', fontsNotoColorEmoji='2.051-0+deb13u1',
                          playwrightMcp='Version 0.0.85')
 if platform.machine() == 'x86_64':

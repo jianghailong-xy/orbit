@@ -64,6 +64,7 @@ import { toUuid, uuidToBase62, type ClaimedSession } from '@orbit/shared';
 import { json, urlencoded } from 'express';
 import { Client } from 'pg';
 
+import { isReleasedStatus } from '../common/session-release';
 import { DisabledAccounts } from '../auth/disabled-accounts';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { sha256 } from '../common/crypto.util';
@@ -234,6 +235,7 @@ async function sessionOn(
       title: 'pool security',
       prompt: 'hello',
       status,
+      ...(isReleasedStatus(status) ? { finishedAt: new Date()} : {}),
       ownerId,
       creatorId: ownerId,
       workspaceId: at.workspaceId,
@@ -907,6 +909,9 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
           workspaceId: at.workspaceId, assignedRunnerId: at.runnerId,
           provider, providerBuiltin: provider === 'codex', model: 'gpt-5.5', permissionMode: 'default',
           usesRuntimeDefaultModel: true, poolCodexAccountId: naming,
+          ...(isReleasedStatus(status) ? {
+            finishedAt: new Date(), 
+          } : {}),
           ...(status === RunStatus.PENDING ? {} : { numTurns: 1, runtimeSessionId: randomUUID(), startedAt: new Date() }),
         },
         select: { id: true },
@@ -1074,6 +1079,10 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
     await ask(bob, 'PATCH', 'providers/mine/:id/model-tier', { id: tieredId }, tier, 404);
     await ask(alice, 'PATCH', 'providers/mine/:id/model-tier', { id: sharedId }, tier, 404);
     await ask(alice, 'PATCH', 'providers/mine/:id/model-tier', { id: uuidToBase62(alicePool.id) }, tier, 404);
+    // Her tier for a model of a built-in engine's catalogue: a clear is always taken, and the answer
+    // carries no key (the set path is checked in its own spec).
+    await ask(alice, 'PATCH', 'providers/builtin/:engine/model-tier', { engine: 'claude' },
+      { model: 'claude-opus-5', tier: null }, 200);
     assert.deepEqual(
       (await db.modelProvider.findUniqueOrThrow({ where: { id: toUuid(tieredId) }, select: { modelTiers: true } })).modelTiers,
       { 'her-model': 'M' },
@@ -1340,6 +1349,9 @@ exec sleep 300
       await ask(bearer, 'POST', 'providers/mine/:id/key-check', at, undefined, 404);
       await ask(bearer, 'PATCH', 'providers/mine/:id', at, { label: 'Renamed' }, 404);
       await ask(bearer, 'PATCH', 'providers/mine/:id/model-tier', at, { model: 'gpt-5.5-codex', tier: 'M' }, 404);
+      // Her tier for a built-in engine's catalogue: taken for either of them, and keyless.
+      await ask(bearer, 'PATCH', 'providers/builtin/:engine/model-tier', { engine: 'codex' },
+        { model: 'gpt-5.5-codex', tier: null }, 200);
       await ask(bearer, 'DELETE', 'providers/mine/:id', at, undefined, 404);
       await ask(bearer, 'POST', 'providers/pools/:id/members', at, { providerId: at.id }, 404);
       await ask(bearer, 'DELETE', 'providers/pools/:id/members/:providerId', { ...at, providerId: at.id }, undefined, by(404, 200));
@@ -1500,7 +1512,7 @@ exec sleep 300
     // Rotated, the next claim carries the new key: decrypted from the row at the claim, kept nowhere.
     const rotated = subscription();
     await providers.update(alice, personal.row.id, { apiKey: rotated });
-    await db.session.update({ where: { id: session }, data: { status: RunStatus.PENDING } });
+    await db.session.update({ where: { id: session }, data: { status: RunStatus.PENDING, finishedAt: null} });
     assert.equal(token((await claim(at.runnerId, session)).agent.env), rotated);
 
     // Every agent this spec made holds exactly the env it was configured with, after every door above.

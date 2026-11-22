@@ -212,6 +212,8 @@ describe('copy language', () => {
     expect(chinese('a := `原 "样"` /* 注释 */ + "转\\"义"', 'go')).toEqual(['原 "样"', '转\\"义']);
   });
 
+  // census() reads every product source file in the repository, so its time scales with repo size
+  // and host load, not with what a change did.
   it('holds Chinese only in the files ALLOWED lists, at exactly their counts', () => {
     const found = census();
     const drift: string[] = [];
@@ -229,5 +231,5 @@ describe('copy language', () => {
         + 'entry, or drop it at zero. Only a parser of old Chinese notes, or code that recognizes what the '
         + 'owner writes, takes a new entry.',
     ).toEqual([]);
-  });
+  }, 180_000);
 });

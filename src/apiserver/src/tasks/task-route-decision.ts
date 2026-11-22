@@ -1,4 +1,5 @@
-import { Prisma, RunStatus, TaskEvidenceDecisionValue, TaskVerdict } from '@prisma/client';
+import { Prisma, TaskEvidenceDecisionValue, TaskVerdict } from '@prisma/client';
+import { RELEASE_FAILURE_SELECT, releaseWasFailure } from '../common/session-release';
 import {
   AgentProvider,
   accountCapWindows,
@@ -9,6 +10,7 @@ import {
   quotaExpiresAt,
   quotaNearLimit,
   spentPlanUsage,
+  withEnginePlanUsage,
   type AccountEngine,
   type PlanUsage,
   type PlanUsageSnapshot,
@@ -16,6 +18,7 @@ import {
   type RunnerModelCatalog,
 } from '@orbit/shared';
 import { runnerAccountPausedUntil } from '../common/account-pause';
+import { sanitizeRunnerEngines } from '../common/runner-engines';
 import { modelRoutingEnabled, optimizeForOf } from '../common/model-routing-switch';
 import { resolvePermissionMode } from '../common/permission-mode';
 import { firstRuntimeCatalogModel, sanitizeRuntimeDefaultModels } from '../common/runtime-model';
@@ -328,7 +331,9 @@ export function engineState(
     nowMs: now.getTime(),
   }) !== null;
   const account = runAccount(engine, agent.env, accounts, runner, now);
-  const snapshot = account === null ? undefined : spentPlanUsage(runner.planUsage as PlanUsage | null, engine, account);
+  // Antigravity's reading travels with its engine health, not in planUsage: folded in as every quota reader does.
+  const usage = withEnginePlanUsage(runner.planUsage as PlanUsage | null, sanitizeRunnerEngines(runner.engines));
+  const snapshot = account === null ? undefined : spentPlanUsage(usage, engine, account);
   const quota = fullestWindow(snapshot, now);
   // No reading at all, or one without a window fullestWindow reads (a runner that fetched nothing for it).
   // Antigravity reads as read once it reports any bucket (one of a model's own is a reading too); Cursor once it
@@ -395,7 +400,7 @@ async function readRunHistory(
     where: { ownerId, taskId, startsTaskWork: true },
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     select: {
-      id: true, createdAt: true, status: true, error: true,
+      id: true, createdAt: true, ...RELEASE_FAILURE_SELECT, error: true,
       engine: true, provider: true, providerBuiltin: true, ownerId: true, model: true, effort: true,
     },
   });
@@ -416,19 +421,21 @@ async function readRunHistory(
   });
   const levels = new Map(decisions.map((row) => [row.sessionId, row.level]));
   return runs.map((run, index): ModelRoutingRun => {
+    // The run failed: released by a failure (common/session-release.ts).
+    const failed = releaseWasFailure(run);
     const next = runs[index + 1]?.createdAt;
     const judged = (at: Date) => at >= run.createdAt && (!next || at < next);
     return {
       ordinal: index + 1,
       status: run.status,
-      quotaFailure: run.status === RunStatus.FAILED && quotaFailure(run.error),
-      capacityFailure: run.status === RunStatus.FAILED && capacityFailure(run.error),
+      quotaFailure: failed && quotaFailure(run.error),
+      capacityFailure: failed && capacityFailure(run.error),
       level: MODEL_ROUTING_LEVELS.find((level) => level === levels.get(run.id)) ?? null,
       model: run.model,
       effort: run.effort,
       runtime: engines.get(run.id) ?? undefined,
       // The run's own end first, then what was said about its work afterwards.
-      outcome: run.status === RunStatus.FAILED
+      outcome: failed
         ? (readExecutableAcceptanceOutcome(run.error) ? 'ACCEPTANCE_FAILED' : 'FAILED')
         : failedVerdicts.some((row) => judged(row.updatedAt)) ? 'VERIFICATION_FAILED'
           : sendBacks.some((row) => judged(row.decidedAt)) ? 'SENT_BACK'

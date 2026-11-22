@@ -329,7 +329,7 @@ test('every write that can take a task out of its status’s lane names it, and 
             where: { taskId: task.id, status: RunStatus.RUNNING }, select: { id: true },
           });
           if (running) {
-            return db.session.update({ where: { id: running.id }, data: { status: RunStatus.SUCCEEDED } });
+            return db.session.update({ where: { id: running.id }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date()} });
           }
           return db.session.create({
             data: {

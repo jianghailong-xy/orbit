@@ -134,128 +134,44 @@ describe('a wake turn in the transcript', () => {
   const row = (): Element => line().querySelector('summary.bgwake-row')!;
   const fold = (): HTMLDetailsElement => line().querySelector<HTMLDetailsElement>('details.bgwake-fold')!;
 
-  it('is one line in the agent’s stream, not a message the user typed', async () => {
-    await mount([wakeEvent(EN_DONE)]);
+  // Board C1 (job-card board, 2026-11-20): a background job's end, new output or stall draws NOTHING where it woke
+  // the agent. The job is one card from start to end (JobCard, Transcript.jobCard.test.tsx), and the agent still
+  // reads the block unchanged. Old sessions parse their history the same way (F1), so the wording that shipped
+  // until 2026-09-15 draws nothing too.
+  it.each([
+    ['a job that finished', EN_DONE],
+    ['a job that failed', EN_FAILED],
+    ['the older wording of a finish', ZH_JOB_DONE],
+    ['the older wording of a failure', ZH_JOB_FAILED],
+    ['an older turn that answered for two jobs', ZH_TWO_JOBS],
+    ['a job that went quiet', EN_STALL],
+    ['a job that went quiet having written nothing', EN_STALL_SILENT],
+    ['two jobs that went quiet', EN_TWO_STALLS],
+    ['a wake whose note also carried a coordinator role', ZH_WAKE_WITH_COORDINATOR_CONTEXT],
+  ])('draws nothing for %s: no line, no bubble, no entry', async (_name, block) => {
+    await mount([wakeEvent(block)]);
 
+    expect(container.querySelector('.bgwake'), 'no wake line').toBeNull();
     expect(container.querySelector('.chat-user'), 'no user bubble').toBeNull();
-    expect(line().getAttribute('data-seq')).toBe('7');
-    expect(line().className).toContain('is-ok');
-    // No anchor for the sticky bar: it keeps naming the question the answer around this belongs to.
-    expect(container.querySelector('[data-orbit-round]'), 'the line is no sticky anchor').toBeNull();
-
-    // The line: what happened, which job, how it came out, and when.
-    expect(row().querySelector('.bgwake-title')?.textContent).toBe('Background job finished');
-    expect(row().querySelector('.bgwake-name')?.textContent).toBe('upgrade to 39551b637');
-    expect(row().querySelector('.bgwake-name')?.classList.contains('is-command')).toBe(false);
-    expect(row().querySelector('.bgwake-status')?.textContent).toBe('exit 0');
-    expect(row().querySelector('.bgwake-time')?.textContent).not.toBe('');
-
-    // Everything else is folded under it, closed: the name in full, the command behind it, the ids,
-    // who queued it, and what the agent read.
-    expect(fold().hasAttribute('open')).toBe(false);
-    const jobs = fold().querySelectorAll('.bgwake-job');
-    expect(jobs).toHaveLength(1);
-    expect(jobs[0].querySelector('.bgwake-job-name')?.textContent).toBe('upgrade to 39551b637');
-    expect(jobs[0].querySelector('.bgwake-job-exit'), 'a lone job says how it came out on the line').toBeNull();
-    expect(jobs[0].querySelector('.bgwake-job-cmd')?.textContent).toBe(
-      '/root/orbit/.claude/skills/upgrade/upgrade.sh --pull',
-    );
-    expect(jobs[0].querySelector('.bgwake-job-meta')?.textContent).toBe(
-      'bgj_13c53745a88a · 16.2 KB of output',
-    );
-    expect(fold().querySelector('.bgwake-meta')?.textContent).toBe('Queued by a background job, not typed by you');
-    const raw = fold().querySelector('details.bgwake-raw')!;
-    expect(raw.hasAttribute('open')).toBe(false);
-    expect(raw.querySelector('summary')?.textContent).toBe('What the agent received');
-    expect(raw.querySelector('pre')?.textContent).toBe(EN_DONE);
-
-    // Outside the fold there is the line and nothing else.
-    const shown = line().cloneNode(true) as HTMLElement;
-    shown.querySelector('.bgwake-body')!.remove();
-    expect(shown.textContent).not.toContain('The control plane recorded this for you');
-    expect(shown.textContent).not.toContain('upgrade.sh');
-    expect(shown.textContent).not.toContain('bgj_');
+    expect(container.textContent).not.toContain('Orbit attached');
+    expect(container.textContent).not.toContain('bgj_');
   });
 
-  it('names a job started without a description by one line of its command', async () => {
-    const bare = EN_DONE.replace('｜upgrade to 39551b637', '');
-    await mount([wakeEvent(bare)]);
+  it('draws nothing when the same wake turn also carries the inventory block', async () => {
+    const inventory = [
+      '<background-jobs>',
+      '  Ended while you were away:',
+      '    bgj_41314cd48e66｜job｜swift test｜completed｜exit code 0｜output /root/.orbit/runs/x/bgj_41314cd48e66.output',
+      '  The control plane recorded this for you; the user did not say it. The output files belong to the runner, so they are still there after an engine change.',
+      '  Read output with mcp__orbit__bg_output by id; mcp__orbit__bg_list gives the whole list.',
+      '</background-jobs>',
+    ].join('\n');
 
-    const name = row().querySelector('.bgwake-name')!;
-    expect(name.textContent).toBe('/root/orbit/.claude/skills/upgrade/upgrade.sh --pull');
-    expect(name.classList.contains('is-command')).toBe(true);
-    // All of it is in the fold, where no description row stands over it.
-    expect(fold().querySelector('.bgwake-job-head')).toBeNull();
-    expect(fold().querySelector('.bgwake-job-cmd')?.textContent).toBe(
-      '/root/orbit/.claude/skills/upgrade/upgrade.sh --pull',
-    );
-  });
+    await mount([wakeEvent(`${ZH_JOB_DONE}\n\n${inventory}`)]);
 
-  it('keeps the failed output preview and its disclosure independent of job details', async () => {
-    await mount([wakeEvent(EN_FAILED)]);
-
-    expect(line().className).toContain('is-failed');
-    expect(row().querySelector('.bgwake-title')?.textContent).toBe('Background job failed');
-    expect(row().querySelector('.bgwake-name')?.textContent).toBe('watch main CI 34997433169');
-    expect(row().querySelector('.bgwake-status')?.textContent).toBe('exit 1');
-    expect(fold().querySelector('.bgwake-job-meta')?.textContent).toBe(
-      'bgj_2955bec0e9fc · 342.5 KB of output',
-    );
-
-    const tail = line().querySelector('.bgwake-tail')!;
-    expect(tail, 'the failure’s tail is drawn').not.toBeNull();
-    expect(fold().contains(tail), 'why it failed is what woke anybody: not behind the fold').toBe(false);
-    expect(row().querySelector('.bgwake-details-label')?.textContent).toBe('Job details');
-    expect(tail.querySelector('.bgwake-output-label')?.textContent).toBe('Output tail');
-    const output = tail.querySelector<HTMLDetailsElement>('details.bgwake-output')!;
-    const toggle = output.querySelector('summary')!;
-    expect(output.open).toBe(false);
-    // Layout is clamped by CSS; the stored excerpt is never shortened or reformatted.
-    const text = FAILED_TAIL.map((line) => line.trim()).join('\n');
-    expect(output.querySelector('.bgwake-output-preview')?.textContent).toBe(text);
-    await act(async () => { toggle.click(); });
-    expect(output.open).toBe(true);
-    expect(output.querySelector('.bgwake-output-full')?.textContent).toBe(text);
-    expect(fold().open, 'opening output must not open job metadata').toBe(false);
-    await act(async () => { toggle.click(); });
-    expect(output.open).toBe(false);
-  });
-
-  it('provides an output disclosure for long single-line JSON and strips terminal color codes', async () => {
-    const json = JSON.stringify(Array.from({ length: 30 }, (_, i) => ({
-      Action: 'fail', Package: 'orbit', Test: `TestCodexReset${i}`,
-    })));
-    await mount([wakeEvent(EN_FAILED.replace(FAILED_TAIL.join('\n'), `        \x1b[31m${json}\x1b[0m`))]);
-
-    const output = line().querySelector<HTMLDetailsElement>('details.bgwake-output')!;
-    expect(output.open).toBe(false);
-    expect(output.querySelector('.bgwake-output-preview')?.textContent).toBe(json);
-    expect(output.querySelector('.bgwake-output-expand')?.textContent).toBe('Show full output');
-    await act(async () => { output.querySelector('summary')!.click(); });
-    expect(output.open).toBe(true);
-    expect(output.querySelector('.bgwake-output-full')?.textContent).toBe(json);
-    expect(fold().open).toBe(false);
-  });
-
-  it('draws the same line for the wording that shipped until 2026-09-15', async () => {
-    await mount([wakeEvent(ZH_JOB_DONE)]);
-
-    expect(container.querySelector('.chat-user'), 'no user bubble').toBeNull();
-    expect(row().querySelector('.bgwake-title')?.textContent).toBe('Background job finished');
-    expect(row().querySelector('.bgwake-name')?.textContent).toBe('watch main CI rerun 34970575848');
-    expect(row().querySelector('.bgwake-status')?.textContent).toBe('exit 0');
-    expect(fold().querySelector('.bgwake-job-meta')?.textContent).toBe('bgj_cc4b4ef84b39 · 54 B of output');
-    expect(fold().querySelector('details.bgwake-raw pre')?.textContent).toBe(ZH_JOB_DONE);
-  });
-
-  it('draws an older failure as a failure', async () => {
-    await mount([wakeEvent(ZH_JOB_FAILED)]);
-
-    expect(line().className).toContain('is-failed');
-    expect(row().querySelector('.bgwake-title')?.textContent).toBe('Background job failed');
-    expect(row().querySelector('.bgwake-name')?.textContent).toBe('Smoke: wakeOnExit on a job that exits 3');
-    expect(row().querySelector('.bgwake-status')?.textContent).toBe('exit 3');
-    expect(fold().querySelector('.bgwake-job-meta')?.textContent).toBe('bgj_209fc7f9f47a · no output');
+    expect(container.querySelector('.chat-user')).toBeNull();
+    expect(container.querySelector('.bgwake')).toBeNull();
+    expect(container.textContent).not.toContain('Orbit attached');
   });
 
   it('draws an older scheduled wakeup as the wakeup it was', async () => {
@@ -275,130 +191,22 @@ describe('a wake turn in the transcript', () => {
     );
   });
 
-  it('draws the one older turn both blocks came on as a single line', async () => {
+  it('keeps the wakeup that came due beside a job’s news as its line, and only that', async () => {
     await mount([wakeEvent(ZH_JOB_AND_SCHEDULED)]);
 
     expect(container.querySelector('.chat-user'), 'no user bubble').toBeNull();
     expect(container.querySelectorAll('.bgwake')).toHaveLength(1);
-    expect(row().querySelector('.bgwake-title')?.textContent).toBe('Background job finished');
-    expect(row().querySelector('.bgwake-name')?.textContent).toBe(
-      'upgrade to 39551b637 (catalog-window fix + session-import)',
-    );
-    expect(fold().querySelector('.bgwake-job-meta')?.textContent).toBe('bgj_13c53745a88a · 16.2 KB of output');
-    // The wakeup that came due while the job ran keeps its own row in the same fold.
-    expect(fold().querySelector('.bgwake-wakeup-reason')?.textContent).toContain('升级作业的备份验证');
-    expect(fold().querySelector('.bgwake-wakeup-meta')?.textContent).toContain('Asked for 12m out');
-    expect(fold().querySelector('details.bgwake-raw pre')?.textContent).toBe(ZH_JOB_AND_SCHEDULED);
-  });
-
-  it('counts the jobs of an older turn that answered for two, and names each in the fold', async () => {
-    await mount([wakeEvent(ZH_TWO_JOBS)]);
-
-    expect(line().className).toContain('is-failed');
-    expect(row().querySelector('.bgwake-title')?.textContent).toBe('2 background jobs finished');
-    expect(row().querySelector('.bgwake-name'), 'several jobs are counted, not named, on the line').toBeNull();
-    expect(row().querySelector('.bgwake-status')?.textContent).toBe('2 of 2 failed');
-    expect([...fold().querySelectorAll('.bgwake-job-exit')].map((el) => el.textContent)).toEqual([
-      'exit 1',
-      'exit 1',
-    ]);
-    expect([...fold().querySelectorAll('.bgwake-job-meta')].map((el) => el.textContent)).toEqual([
-      'bgj_52843eb345d1 · no output',
-      'bgj_974ceb2c3d52 · no output',
-    ]);
-  });
-
-  it('takes only the wake out of a note that carried more, and draws no entry for the coordinator role left over', async () => {
-    await mount([wakeEvent(ZH_WAKE_WITH_COORDINATOR_CONTEXT)]);
-
-    // The line is the wake alone — the coordinator's standing role is not part of what woke anybody.
-    expect(row().querySelector('.bgwake-title')?.textContent).toBe('Background job finished');
-    const raw = fold().querySelector('details.bgwake-raw pre')!;
-    expect(raw.textContent?.startsWith('<background-job-wake>')).toBe(true);
-    expect(raw.textContent).not.toContain('orbit_project_coordinator_context');
-
-    // What is left is the coordinator's routine block, which nobody attached: no entry for it.
-    expect(container.textContent).not.toContain('Orbit attached');
-    // And no bubble: an empty one here reads as a message the person sent without words.
-    expect(container.querySelector('.chat-user')).toBeNull();
-  });
-
-  // The shape that raised this: 16 of this deployment's `<background-jobs>` notes ride a turn whose
-  // content is empty, and every one of them is a wake — 15 a job's, 1 a scheduled wakeup's. Delivery
-  // appends the inventory to the wake's own turn, so both blocks arrive on a turn nobody typed.
-  it('draws no empty bubble when the same wake turn also carries the inventory block', async () => {
-    const inventory = [
-      '<background-jobs>',
-      '  Ended while you were away:',
-      '    bgj_41314cd48e66｜job｜swift test｜completed｜exit code 0｜output /root/.orbit/runs/x/bgj_41314cd48e66.output',
-      '  The control plane recorded this for you; the user did not say it. The output files belong to the runner, so they are still there after an engine change.',
-      '  Read output with mcp__orbit__bg_output by id; mcp__orbit__bg_list gives the whole list.',
-      '</background-jobs>',
-    ].join('\n');
-
-    await mount([wakeEvent(`${ZH_JOB_DONE}\n\n${inventory}`)]);
-
-    expect(container.querySelector('.chat-user')).toBeNull();
-    // The inventory is Orbit's routine and names nothing, so no entry is drawn for it (owner, 2026-11-14).
-    expect(container.textContent).not.toContain('Orbit attached');
-    // The wake itself is still the line's own subject, not one of the entry's rows.
-    expect(row().querySelector('.bgwake-title')?.textContent).toBe('Background job finished');
-  });
-
-  // A quiet job's wake came in a block of its own that no client read, so it drew as an empty bubble
-  // with "⊕ Orbit attached: context" under it, opening onto the words written for the agent
-  // (docs/mocks/background-job-stall-line).
-  it('draws a job gone quiet as the same line: still running, quiet for how long, its last output in the fold', async () => {
-    await mount([wakeEvent(EN_STALL)]);
-
-    expect(container.querySelector('.chat-user'), 'no user bubble').toBeNull();
-    expect(container.textContent).not.toContain('Orbit attached');
-    expect(line().className).toContain('is-ok');
-    // Quiet is no failure: the same grey clock as a job's new output.
+    expect(row().querySelector('.bgwake-title')?.textContent).toBe('Scheduled wakeup');
+    expect(row().querySelector('.bgwake-name')?.textContent).toContain('升级作业的备份验证');
     expect(row().querySelector('.bgwake-mark')?.classList.contains('is-pending')).toBe(true);
-    expect(row().querySelector('.bgwake-title')?.textContent).toBe('Background job went quiet');
-    expect(row().querySelector('.bgwake-name')?.textContent).toBe('Nightly index rebuild (6 workers)');
-    expect(row().querySelector('.bgwake-status')?.textContent).toBe('quiet 15m');
-
-    const job = fold().querySelector('.bgwake-job')!;
-    expect(job.querySelector('.bgwake-job-cmd')?.textContent).toBe('./scripts/rebuild-index.sh --workers 6');
-    const meta = [...job.querySelectorAll('.bgwake-job-meta')].map((el) => el.textContent);
-    expect(meta[0]).toBe('bgj_28a9b17fe75c · 21 B of output');
-    expect(meta[1]).toMatch(/^Still running · 15m in · last wrote .+$/);
-    // Its last output is in the fold, not under the line as a failure's is.
-    expect(job.querySelector('.bgwake-output-full')?.textContent).toBe('entries=32 workers=6');
-    expect(line().querySelector('.bgwake-tail')).toBeNull();
-    expect(fold().querySelector('details.bgwake-raw pre')?.textContent).toBe(EN_STALL);
-
-    const shown = line().cloneNode(true) as HTMLElement;
-    shown.querySelector('.bgwake-body')!.remove();
-    expect(shown.textContent).not.toContain('mcp__orbit__bg_kill');
-    expect(shown.textContent).not.toContain('bgj_');
-  });
-
-  it('says a quiet job that never wrote anything has written nothing yet, with no output to show', async () => {
-    await mount([wakeEvent(EN_STALL_SILENT)]);
-
-    expect(row().querySelector('.bgwake-name')?.textContent).toBe('pg_dump orbit > /backup/orbit.sql');
-    expect(row().querySelector('.bgwake-name')?.classList.contains('is-command')).toBe(true);
-    expect(row().querySelector('.bgwake-status')?.textContent).toBe('quiet 30m');
-    expect([...fold().querySelectorAll('.bgwake-job-meta')].map((el) => el.textContent)).toEqual([
-      'bgj_5c03e1aa90d2 · no output',
-      'Still running · 30m in · has written nothing yet',
-    ]);
-    expect(fold().querySelector('.bgwake-output')).toBeNull();
-  });
-
-  it('counts two quiet jobs on the line and says how long each has been quiet in the fold', async () => {
-    await mount([wakeEvent(EN_TWO_STALLS)]);
-
-    expect(row().querySelector('.bgwake-title')?.textContent).toBe('2 background jobs went quiet');
-    expect(row().querySelector('.bgwake-name')).toBeNull();
-    expect(row().querySelector('.bgwake-status')).toBeNull();
-    expect([...fold().querySelectorAll('.bgwake-job-exit')].map((el) => el.textContent)).toEqual([
-      'quiet 15m',
-      'quiet 10m',
-    ]);
+    expect(fold().querySelector('.bgwake-wakeup-meta')?.textContent).toContain('Asked for 12m out');
+    // No job row: the job's own card says how it ended.
+    expect(fold().querySelectorAll('.bgwake-wakeup')).toHaveLength(1);
+    expect(fold().querySelector('.bgwake-wakeups')?.textContent).not.toContain('catalog-window fix');
+    expect(fold().querySelector('.bgwake-body > .bgwake-jobs, .bgwake-job')).toBeNull();
+    expect(fold().querySelector('.bgwake-meta')?.textContent).toBe('Queued by a scheduled wakeup, not typed by you');
+    // What the agent read is still the whole note's wake, as it read it.
+    expect(fold().querySelector('details.bgwake-raw pre')?.textContent).toBe(ZH_JOB_AND_SCHEDULED);
   });
 
   // Owner rule 2026-11-16: such a turn is the From Orbit line in the agent's stream (OrbitEventLine).
@@ -411,35 +219,21 @@ describe('a wake turn in the transcript', () => {
     expect(container.querySelector('.orbitwake .bgwake-name')?.textContent).toBe('context');
   });
 
-  it('keeps the line, and the words behind a native disclosure, in an exported transcript', () => {
+  it('keeps a wakeup’s line, and the words behind a native disclosure, in an exported transcript', () => {
     const html = renderToStaticMarkup(
       <ExportCtx.Provider value={{ images: new Map() }}>
         <div className="workspace-sessions">
-          <Transcript events={[wakeEvent(EN_DONE)]} live={false} />
+          <Transcript events={[wakeEvent(ZH_SCHEDULED), { ...wakeEvent(EN_DONE), seq: 8 }]} live={false} />
         </div>
       </ExportCtx.Provider>,
     );
     const exported = new DOMParser().parseFromString(html, 'text/html');
 
-    expect(exported.querySelector('.bgwake-title')?.textContent).toBe('Background job finished');
+    expect(exported.querySelectorAll('.bgwake')).toHaveLength(1);
+    expect(exported.querySelector('.bgwake-title')?.textContent).toBe('Scheduled wakeup');
     // A static file has no JS: both folds have to be ones the browser itself can open.
     expect(exported.querySelector('details.bgwake-fold > summary.bgwake-row')).not.toBeNull();
-    expect(exported.querySelector('details.bgwake-fold details.bgwake-raw pre')?.textContent).toBe(EN_DONE);
-  });
-
-  it('keeps failed output expandable without JavaScript in an exported transcript', () => {
-    const html = renderToStaticMarkup(
-      <ExportCtx.Provider value={{ images: new Map() }}>
-        <Transcript events={[wakeEvent(EN_FAILED)]} live={false} />
-      </ExportCtx.Provider>,
-    );
-    const exported = new DOMParser().parseFromString(html, 'text/html');
-    const output = exported.querySelector<HTMLDetailsElement>('details.bgwake-output')!;
-    expect(output.open).toBe(false);
-    expect(output.querySelector('summary')).not.toBeNull();
-    expect(output.querySelector('.bgwake-output-full')?.textContent).toBe(
-      FAILED_TAIL.map((line) => line.trim()).join('\n'),
-    );
+    expect(exported.querySelector('details.bgwake-fold details.bgwake-raw pre')?.textContent).toBe(ZH_SCHEDULED);
   });
 });
 
@@ -491,7 +285,8 @@ describe('a wake still waiting in the queued tail', { timeout: 60_000 }, () => {
     vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {}, removeItem: () => {} });
     vi.stubGlobal('EventSource', FakeEventSource);
     const queue: ActiveSessionTurn[] = [
-      { turnId: 'turn-wake', kind: 'message', placement: 'queued', content: EN_DONE, createdAt: '2026-09-15T18:10:01.000Z' },
+      { turnId: 'turn-wake', kind: 'message', placement: 'queued', content: ZH_SCHEDULED, createdAt: '2026-09-15T18:10:01.000Z' },
+      { turnId: 'turn-job', kind: 'message', placement: 'queued', content: EN_DONE, createdAt: '2026-09-15T18:10:02.000Z' },
       { turnId: 'turn-typed', kind: 'message', placement: 'queued', content: TYPED, createdAt: '2026-09-15T18:10:05.000Z' },
     ];
     apiMock.mockReset();
@@ -553,7 +348,7 @@ describe('a wake still waiting in the queued tail', { timeout: 60_000 }, () => {
     }
   });
 
-  it('is the same line, drawn as still queued, with the queue’s line under it', async () => {
+  it('is the same line for a wakeup, drawn as still queued, with the queue’s line under it; a job’s wake draws no row', async () => {
     const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } } });
     const nextContainer = document.createElement('div');
     const nextRoot = createRoot(nextContainer);
@@ -582,13 +377,15 @@ describe('a wake still waiting in the queued tail', { timeout: 60_000 }, () => {
 
     const line = mounted().querySelector<HTMLElement>('.bgwake')!;
     expect(line.classList.contains('is-queued'), 'drawn as still queued').toBe(true);
-    expect(line.querySelector('.bgwake-title')?.textContent).toBe('Background job finished');
-    expect(line.querySelector('.bgwake-name')?.textContent).toBe('upgrade to 39551b637');
+    expect(line.querySelector('.bgwake-title')?.textContent).toBe('Scheduled wakeup');
+    // A job's wake draws no row in the tail (board E1): it waits on the job's card instead.
+    expect(mounted().querySelectorAll('.bgwake')).toHaveLength(1);
+    expect(mounted().textContent).not.toContain('upgrade to 39551b637');
     expect(line.hasAttribute('data-seq'), 'a queued wake is no event for ⌘F to land on').toBe(false);
     // The block stays folded here too, and none of it is drawn as something the user typed.
     const fold = line.querySelector('details.bgwake-fold')!;
     expect(fold.hasAttribute('open')).toBe(false);
-    expect(fold.querySelector('details.bgwake-raw pre')?.textContent).toBe(EN_DONE);
+    expect(fold.querySelector('details.bgwake-raw pre')?.textContent).toBe(ZH_SCHEDULED);
     expect(
       [...mounted().querySelectorAll('.chat-user')].some((b) => b.textContent?.includes('bgj_')),
       'no part of the wake is drawn as something the user typed',

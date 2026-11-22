@@ -35,6 +35,10 @@ class DirectoryApi(private val api: OrbitApi, private val handle: SessionHandle)
     /** Complete on a DONE or CANCELLED project's row (docs/session-list-projects-design.md §3.6): its coordinator and its members
      * still in Open, in every workspace, move to Completed together. An OPEN project is refused 409 PROJECT_STILL_OPEN. */
     suspend fun completeProject(projectId: String) { mutate(listOf("projects", projectId, "sessions", "complete")) }
+    /** Pause project and its Resume (`POST /projects/:id/pause`, `/resume`), and the daily limit's resume, which raises no limit. */
+    suspend fun pauseProject(projectId: String) { mutate(listOf("projects", projectId, "pause")) }
+    suspend fun resumeProject(projectId: String) { mutate(listOf("projects", projectId, "resume")) }
+    suspend fun resumeFuse(projectId: String, episodeId: String) { mutate(listOf("projects", projectId, "fuse", episodeId, "resume")) }
     suspend fun restore(id: String) { mutate(listOf("sessions", id, "restore")) }
     suspend fun delete(id: String, permanent: Boolean) { mutate(listOf("sessions", id) + if (permanent) listOf("purge") else emptyList(), HttpMethod.DELETE) }
     suspend fun end(id: String) { mutate(listOf("sessions", id, "end")) }

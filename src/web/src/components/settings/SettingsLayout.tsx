@@ -29,8 +29,10 @@ import {
   FolderOutlined,
   HolderOutlined,
   KeyOutlined,
+  LockOutlined,
   LeftOutlined,
   LinkOutlined,
+  OrderedListOutlined,
   PlusOutlined,
   SearchOutlined,
   SettingOutlined,
@@ -56,12 +58,13 @@ import {
 import { settingsReturnPath } from '../../lib/settingsReturn';
 import { useToast } from '../../lib/toast';
 import { useMediaQuery } from '../../lib/useMediaQuery';
-import { INTEGRATION_PAGES, PERSONAL_PAGES } from '../../pages/settings/settingsIndex';
+import { INTEGRATION_PAGES, MODEL_ROUTING_PAGE, PERSONAL_PAGES } from '../../pages/settings/settingsIndex';
 import { ControlPlaneProvider } from '../../lib/useControlPlane';
 import { ImpersonationBanner } from '../ImpersonationBanner';
 import { HelpDrawer } from '../HelpDrawer';
 
 import type { Runner } from '../TasksSidePanel';
+import { SettingChangedLine, SettingChangedLineSlot } from './SettingChangedLine';
 import { around, searchSettings, type SettingsHit, type SettingsHitGroup } from './settingsSearch';
 import './Settings.css';
 
@@ -74,6 +77,7 @@ const PERSONAL_ICONS: Record<(typeof PERSONAL_PAGES)[number]['path'], ReactNode>
   '/settings/storage': <DatabaseOutlined />,
   '/settings/shared-links': <LinkOutlined />,
   '/settings/access-tokens': <KeyOutlined />,
+  '/settings/secrets': <LockOutlined />,
   '/settings/terminals': <CodeOutlined />,
 };
 
@@ -164,7 +168,9 @@ export function SettingsLayout() {
                   <span>Settings</span>
                 </button>
               )}
-              <Outlet />
+              <SettingChangedLineSlot.Provider value={SettingChangedLine}>
+                <Outlet />
+              </SettingChangedLineSlot.Provider>
             </div>
           </main>
         )}
@@ -231,7 +237,7 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
   const nowMs = Date.now();
   // The keys page is every key, or one vendor's (/settings/providers/:vendor); not a key's own pages.
   const { pathname } = useLocation();
-  const keysPage = /^\/settings\/providers(\/(?!(new|keys|pools)(\/|$))[^/]+)?\/?$/.test(pathname);
+  const keysPage = /^\/settings\/providers(\/(?!(new|keys|pools|routing)(\/|$))[^/]+)?\/?$/.test(pathname);
 
   const stateOf = (runner: Runner): MachineState => {
     if (runnerIsOffline(runner, nowMs)) return 'offline';
@@ -320,7 +326,11 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
         >
           {keyCount === 0 && poolCount === 0 ? (
             // With no key and no pool at all, the group is the one way to connect a provider.
-            <NavRow to="/settings/providers/new" icon={<PlusOutlined />} label="Connect a provider" />
+            <>
+              <NavRow to="/settings/providers/new" icon={<PlusOutlined />} label="Connect a provider" />
+              {/* The built-in engines have model tiers with no key at all. */}
+              <NavRow to={MODEL_ROUTING_PAGE.path} icon={<OrderedListOutlined />} label={MODEL_ROUTING_PAGE.label} />
+            </>
           ) : (
             <>
               {/* Two rows however many vendors are connected (choice A, docs/mocks/settings-providers-compact):
@@ -338,6 +348,9 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
                 label="Account pools"
                 trailing={poolCount > 0 ? <span className="settings-nav-meta">{poolCount}</span> : undefined}
               />
+              {/* Every model's tier, keys' and built-in engines', beside how its runs went: Model tiers and the
+                  Routing report on one page. */}
+              <NavRow to={MODEL_ROUTING_PAGE.path} icon={<OrderedListOutlined />} label={MODEL_ROUTING_PAGE.label} />
             </>
           )}
         </NavGroup>
