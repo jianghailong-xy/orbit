@@ -239,7 +239,8 @@ fun SessionCards(cards: SessionCardsModel, open: (String) -> Unit, discuss: ((St
             // A11 hook: the card a project page opened this conversation onto is brought into view once drawn.
             val requester = remember { BringIntoViewRequester() }
             val viewport = LocalCardViewport.current
-            if (focus != null && CardFocus.matches(focus, card.key)) LaunchedEffect(focus, card.key) {
+            // A waiting card is brought in only once its reader gives it a viewport (once the list is placed at the cards).
+            if (focus != null && CardFocus.matches(focus, card.key) && (asked != CardFocus.WAITING || viewport > 0)) LaunchedEffect(focus, card.key) {
                 // The waiting card a project row opened onto shows its top, not its foot: a span from its top nearly the list's height.
                 if (asked == CardFocus.WAITING && viewport > 0) requester.bringIntoView(Rect(0f, 0f, 1f, viewport * 0.9f))
                 else requester.bringIntoView()
