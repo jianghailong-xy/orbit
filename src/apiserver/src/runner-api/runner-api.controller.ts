@@ -7213,8 +7213,10 @@ export class RunnerApiController {
       // fences every write below to the runner process that currently owns the Session.
       await this.lockSessionLeaseOwner(tx, sessionId, runner.id, leaseOwner);
       // A setconfig's acknowledgement: the engine took the mode it carried (actual-permission-mode.ts). Before the
-      // ack below, which a control turn answered on delivery never reaches.
-      if (dto.subtype === TURN_COMPLETE_SETCONFIG && dto.status === RunStatus.SUCCEEDED) {
+      // ack below, which a control turn answered on delivery never reaches. The runner settles every setconfig turn
+      // as succeeded (runner-go settleSetConfigTurn), so its result, read in recordSetConfigAck, is what says whether
+      // anything was applied.
+      if (dto.subtype === TURN_COMPLETE_SETCONFIG) {
         await this.recordSetConfigAck(tx, sessionId, dto.turnId, dto.result);
       }
       const current = await tx.session.findUniqueOrThrow({
