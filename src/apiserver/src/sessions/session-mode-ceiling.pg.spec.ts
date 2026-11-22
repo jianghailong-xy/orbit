@@ -546,8 +546,8 @@ test('a session cannot start a session wider than itself', {
       const taskId = await taskFor(`arranged from ${mode}`);
       const route = `/runner/tasks/${uuidToBase62(taskId)}`;
       const caller = { 'x-orbit-session-id': uuidToBase62(await sessionIn(mode)) };
-      assertRefused(await send('PATCH', route, { runAt: at }, caller), /nothing was written/);
-      assertRefused(await send('PATCH', route, { autoRunWhenReady: true }, caller), /nothing was written/);
+      assertRefused(await send('PATCH', route, { runAt: at }, caller), /would start this task in Auto/);
+      assertRefused(await send('PATCH', route, { autoRunWhenReady: true }, caller), /would start this task in Auto/);
       const row = await prisma.task.findUniqueOrThrow({ where: { id: taskId }, select: { runAt: true, autoRunWhenReady: true } });
       assert.deepEqual(row, { runAt: null, autoRunWhenReady: false });
       // Every other edit from the same session goes on as it did.
