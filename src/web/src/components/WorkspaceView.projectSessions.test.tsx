@@ -1243,7 +1243,10 @@ describe('a project row whose member is waiting on you', { timeout: 60_000 }, ()
   // Where things sit: the conversation's scroller at y=100, the waiting card far below the fold at
   // y=900, so a reveal that brings the card's top to the scroller's top scrolls by 900 - 100 - 12.
   const scrollTops = new WeakMap<Element, number>();
+  // How far content that landed after the open has pushed the waiting card down.
+  let grownAbove = 0;
   beforeEach(() => {
+    grownAbove = 0;
     rows = [LOOSE, COORDINATOR, waitingMember];
     ownerRequests = [request];
     const events = [
@@ -1264,7 +1267,7 @@ describe('a project row whose member is waiting on you', { timeout: 60_000 }, ()
         // An answered question's record sits higher up the transcript than anything still waiting.
         const record = this.classList.contains('answered-question-inline');
         const top = record ? 500 - (scrollTops.get(conversation()!) ?? 0)
-          : waitingCard ? 900 - (scrollTops.get(conversation()!) ?? 0)
+          : waitingCard ? 900 + grownAbove - (scrollTops.get(conversation()!) ?? 0)
           : this.classList.contains('workspace-sessions') ? 100 : 0;
         return { top, bottom: top + 400, left: 0, right: 400, width: 400, height: 400, x: 0, y: top, toJSON: () => ({}) };
       },
@@ -1304,6 +1307,29 @@ describe('a project row whose member is waiting on you', { timeout: 60_000 }, ()
         expect([...column()!.querySelectorAll('.session-row.active .session-title')].map((el) => el.textContent)).toEqual([TASK.title]);
         expect(projectRow().classList.contains('active')).toBe(true);
       }
+    });
+
+    it('keeps the waiting card in place as the conversation lands above it, until the reader scrolls', async () => {
+      await mount();
+      await click(projectRow(), 'the project row');
+      await until(() => expect(conversation()!.scrollTop).toBe(900 - 100 - 12));
+      const stream = (): FakeEventSource => FakeEventSource.streams[FakeEventSource.streams.length - 1];
+      await until(() => expect(stream()?.url).toContain(`/sessions/${TASK.id}/`));
+      const land = async (seq: number): Promise<void> => {
+        await act(async () => {
+          stream().onmessage?.({ data: JSON.stringify({ seq, type: 'assistant', payload: { text: `More ${seq}` }, turnId: 't1', ts: '2026-10-03T08:00:02Z' }) });
+        });
+        await settle();
+      };
+      // Rows land above the card: it is put back at the top, not left where the new rows pushed it.
+      grownAbove = 300;
+      await land(3);
+      expect(conversation()!.scrollTop).toBe(900 + 300 - 100 - 12);
+      // The reader takes the scroller: what lands next moves the card, and nothing brings it back.
+      await act(async () => { conversation()!.dispatchEvent(new Event('wheel')); });
+      grownAbove = 500;
+      await land(4);
+      expect(conversation()!.scrollTop).toBe(900 + 300 - 100 - 12);
     });
 
     // Owner 2026-11-16 (docs/mocks/coordinator-question-jump): the coordinator waiting on you with a
