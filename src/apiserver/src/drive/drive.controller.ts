@@ -280,7 +280,8 @@ function send(content: DriveContent, res: Response): StreamableFile | undefined 
   // A client that leaves early does not hold the store open.
   const stream = content.stream;
   res.once('close', () => stream.destroy());
-  return new StreamableFile(stream);
+  // The file rule (UserFileResponseInterceptor) reads these from the StreamableFile, not from the headers set above.
+  return new StreamableFile(stream, { type: content.headers['Content-Type'], disposition: content.headers['Content-Disposition'] });
 }
 
 /**
