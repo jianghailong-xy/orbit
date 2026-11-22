@@ -135,6 +135,7 @@ ScheduleRun
   failureReason?                                       closed set, §7.2
   heldReason?                                          why a HELD run's start checks failed, §6.1
   notBeforeAt?                                         a QUEUED run starts no earlier: a retry's wait, §7.2
+  capacityHeldAt?                                      last seen waiting on a full runner, run or batch, §7.2
 
 ScheduleFinding
   scheduleId, key, firstRunId?, lastSeenRunId?, notifiedAt?, links[]
@@ -583,6 +584,7 @@ run (`LANDING_FAILED`) with its reason, through the same push and **Waiting on y
 | `failureReason` | Retried | Meaning |
 | --- | --- | --- |
 | `RUNNER_UNAVAILABLE`, `QUOTA`, `ENGINE_CRASHED_BEFORE_START` | yes, then MISSED (§5.2) | the run never reached the engine (no `delivered_at` on its first turn) |
+| `RUNNER_FULL` | no: MISSED | the run's session waited for a full runner, run or batch until the catch-up window closed |
 | `LANDING_FAILED`, `REPORTED_FAILED`, `NO_REPORT`, `ENGINE_CRASHED`, `APPROVAL_TIMEOUT`, `RUN_LIMIT` | no | the work started and may have had effects |
 | `CANCELLED_BY_OWNER` | no | the owner stopped this run |
 
@@ -599,10 +601,24 @@ run (`LANDING_FAILED`) with its reason, through the same push and **Waiting on y
 - `consecutiveFailures` counts FAILED runs in a row and resets on NO_CHANGE or CHANGED. At 3 the notification says
   "failed 3 runs in a row". The schedule is **not** paused.
 - Whether a run reached its engine is its first turn's `delivered_at`. A run whose first turn is not delivered 10
-  minutes after it started is `RUNNER_UNAVAILABLE` (its session is ended); a session that FAILED before delivery is
+  minutes after it started is `RUNNER_UNAVAILABLE` (its session is ended), unless a full runner holds it (below); a session that FAILED before delivery is
   `QUOTA` when its error is a usage-limit message, else `ENGINE_CRASHED_BEFORE_START`; after delivery it is
   `ENGINE_CRASHED`. A session that ended before delivery is `RUNNER_UNAVAILABLE`, after it `NO_REPORT`. A retry is the same run row back in QUEUED with `attempt + 1` and `notBeforeAt`, and a new
   session; a newer run already waiting takes its place instead.
+- **A full runner is not a missing one.** A run whose session is queued because its runner, its run tree or its
+  batch is full (the session list's `queuedReason` `runner_at_capacity`, `tree_at_capacity` or `batch_at_capacity`,
+  the same SQL: `sessions/queued-reason-sql.ts`) keeps that one session waiting for a slot, with no 10-minute limit
+  and no new attempt, until its catch-up deadline; when a slot frees it is claimed and the run goes on as usual. Each
+  pass that finds it held writes `capacityHeldAt`, and once nothing holds it the 10-minute limit counts from the later
+  of `startedAt` and `capacityHeldAt`, so a slot that has just freed gets the same 10 minutes to be claimed. Still
+  waiting past the deadline, the run is MISSED with `RUNNER_FULL` and its session is ended. A session held by
+  anything else (a runner draining for an update, a clone or a disk gate, or nothing the server can name) keeps the
+  10-minute `RUNNER_UNAVAILABLE` rule and its retries, and a runner offline at the start still opens no session and
+  looks again every minute (§5.2). Pausing (a MANUAL run aside), holding or deleting the schedule retires the waiting
+  session on the next pass (the run is CANCELLED), and Stop this run ends a session whose first turn was never
+  delivered rather than interrupting it, so it cannot start once a slot frees. This followed production on
+  2026-11-19: a Run now on a full 20-slot runner was retired and reopened five times over two hours, each session
+  never getting a turn, and then MISSED as `RUNNER_UNAVAILABLE` ("found no runner online") with the runner online.
 - The run limit counts the engine's working time from `delivered_at`: time a card kept the run waiting is left out,
   so the 2-hour approval timeout can be reached under a run limit of at most 2 hours.
 - **On an `EVERY` rule the run limit is shorter than the interval.** `runLimitMinutes >= minutes` is refused on
