@@ -58,7 +58,7 @@ export const NOT_IN_CANCELLED_PROJECT: Prisma.SessionWhereInput = {
  * (`retry_at <= now`) that each reader asks for itself. The sweep reads the Prisma form and the
  * managed runner's DUE_RETRY work reads the SQL form: an arm the sweep can never fire — a completed,
  * trashed, held or cancelled-project session — must not keep a runner awake or un-rollable, so the
- * two are written side by side and compared by sessions/auto-retry-eligibility.pg.spec.ts.
+ * two are written side by side and compared by managed-runners/managed-runner-dormant-retry.pg.spec.ts.
  */
 export function autoRetryEligibleWhere(): Prisma.SessionWhereInput {
   return {

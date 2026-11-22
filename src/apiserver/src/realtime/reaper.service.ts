@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit, Optional } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
-import { RunStatus, TaskStatus } from '@prisma/client';
+import { Prisma, RunStatus, TaskStatus } from '@prisma/client';
 import {
   AgentProvider,
   RunEventType,
@@ -970,15 +970,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     const failed = status === RunStatus.FAILED;
     // Due immediately (see below), and carried on the published STATUS so that event says the
     // same thing the row does: this end is one the server means to undo, not a settlement.
-    // A session its owner completed or trashed is out of the auto-retry sweep, so an arm written
-    // now could never fire; it would only hold its runner awake (sessions/auto-retry-eligibility.ts).
-    const filed = opts.armRetry
-      ? await this.prisma.session.findFirst({
-          where: { id: sessionId, OR: [{ completedAt: { not: null } }, { deletedAt: { not: null } }] },
-          select: { id: true },
-        })
-      : null;
-    const retryAt = opts.armRetry && !filed ? new Date() : null;
+    let retryAt = null as Date | null;
     const resetTaskTo = opts.resetTaskTo ?? TaskStatus.OPEN;
     // Retried whole. The reaper re-reads the session under its row lock and decides from that read,
     // so a re-run either finds the same stalled run or finds that somebody finished it first.
@@ -1003,9 +995,14 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         }
       }
       const carrying = opts.carryingTurn;
-      const res = await tx.session.updateMany({
+      // One write that ends the session, in at most two attempts: with the retry armed only on a session
+      // nobody completed or trashed (that is out of the auto-retry sweep, so an arm written on it could never
+      // fire and would only hold its runner awake: sessions/auto-retry-eligibility.ts), and, when that matches
+      // nothing, without it. The condition is in the statement, so a complete() cannot land between a read and it.
+      const endSession = (arm: Date | null) => tx.session.updateMany({
         where: {
           id: sessionId,
+          ...(arm ? { completedAt: null, archivedAt: null, deletedAt: null } : {}),
           status: { in: opts.expectedStatuses ?? LIVE },
           ...(opts.onlyIfNotCancelling ? { cancelRequestedAt: null } : {}),
           // The claim half of the re-ask above, on the row this writes: a run claimed inside the
@@ -1020,7 +1017,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           // Due immediately: AutoRetryService's own sweep is what waits for the runner to
           // come back, so arming for "now" makes the first sweep after this the first check
           // rather than a fixed delay guessing when the runner returns.
-          ...(retryAt ? { retryAt } : {}),
+          ...(arm ? { retryAt: arm } : {}),
           finishedAt: new Date(),
           // The carrying turn's outcome, copied in the release's own write (design §12.1).
           ...(carrying ? { lastTurnOutcome: carrying.outcome } : {}),
@@ -1033,6 +1030,10 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           ...CLEARED_RUNNING_WORK,
         },
       });
+      const arm = new Date();
+      let res = opts.armRetry ? await endSession(arm) : { count: 0 };
+      retryAt = res.count > 0 ? arm : null;
+      if (res.count === 0) res = await endSession(null);
       if (res.count === 0) return { ok: false, taskReclaimed: false, currentWorkTerminalized: 0 };
       // The turn that carries it, read under the Session row lock the write above took, before the drain below
       // answers it.
