@@ -203,9 +203,11 @@ func decideAntigravityToolCall(policy *agyApprovalPolicy, in *agyHookInput) agyA
 		// agy writes its own artifacts — plans, task lists — without asking, in every mode (measured
 		// on 1.2.16); Accept Edits adds the workspace's files, except agy's own configuration there:
 		// a .agents/hooks.json written into the checkout is loaded from the next turn on, and its
-		// command runs before every tool call (measured on 1.2.16).
+		// command runs before every tool call (measured on 1.2.16). It adds the session's uploads too,
+		// which Claude Code and Codex take as a working directory of their own (--add-dir).
+		inSession := pathWithin(target, policy.Workspace) || pathWithin(target, policy.Uploads)
 		if pathWithin(target, artifacts) ||
-			(policy.Mode == "acceptEdits" && pathWithin(target, policy.Workspace) && !agyConfigPath(target)) {
+			(policy.Mode == "acceptEdits" && inSession && !agyConfigPath(target)) {
 			return agyApprovalVerdict{"allow", ""}
 		}
 	}

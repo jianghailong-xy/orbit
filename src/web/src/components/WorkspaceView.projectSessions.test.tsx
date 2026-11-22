@@ -154,6 +154,7 @@ let merges: Array<Record<string, unknown>> = [];
 let startRequest: Record<string, unknown> | null = null;
 /** The exceptions the open-items door serves as the coordinator's — a blocked candidate's holder. */
 let withCoordinatorItems: Array<Record<string, unknown>> = [];
+let closedQuestions: Array<Record<string, unknown>> = [];
 /** The items the open-items door serves as the owner's — a coordinator's question. */
 let needsYouItems: Array<Record<string, unknown>> = [];
 let openItemsCalls = 0;
@@ -268,6 +269,7 @@ beforeEach(() => {
   merges = [];
   startRequest = null;
   withCoordinatorItems = [];
+  closedQuestions = [];
   needsYouItems = [];
   openItemsCalls = 0;
   integrationView = null;
@@ -314,7 +316,7 @@ beforeEach(() => {
     if (path === `/projects/${PROJECT_ID}/handoffs`) return reply([]);
     if (path === `/projects/${PROJECT_ID}/open-items`) {
       openItemsCalls += 1;
-      return reply({ needsYou: needsYouItems, withCoordinator: withCoordinatorItems, startRequest });
+      return reply({ needsYou: needsYouItems, withCoordinator: withCoordinatorItems, closedQuestions, startRequest });
     }
     if (path === `/projects/${PROJECT_ID}/integration`) return reply(integrationView ?? []);
     if (path === `/projects/${PROJECT_ID}/acceptance/confirmation`) return reply(null);
@@ -1239,9 +1241,13 @@ describe('a project row whose member is waiting on you', { timeout: 60_000 }, ()
   const conversation = (): HTMLElement | null => mounted().querySelector<HTMLElement>('.workspace-scroll-wrap > .workspace-sessions');
   const card = (): HTMLElement | null => conversation()?.querySelector<HTMLElement>('.owner-request-card') ?? null;
   // Where things sit: the conversation's scroller at y=100, the waiting card far below the fold at
-  // y=900, so a reveal that brings the card's top to the scroller's top scrolls by 900 - 100 - 12.
+  // y=900, so a reveal that brings the card's top to the scroller's top scrolls by 900 - 100 - 48 (clear of the
+  // "Jump to the beginning" pill, which a transcript scrolled off its top and tail offers).
   const scrollTops = new WeakMap<Element, number>();
+  // How far content that landed after the open has pushed the waiting card down.
+  let grownAbove = 0;
   beforeEach(() => {
+    grownAbove = 0;
     rows = [LOOSE, COORDINATOR, waitingMember];
     ownerRequests = [request];
     const events = [
@@ -1259,7 +1265,10 @@ describe('a project row whose member is waiting on you', { timeout: 60_000 }, ()
       value(this: HTMLElement) {
         const waitingCard = this.classList.contains('owner-request-card') || this.classList.contains('coordinator-question')
           || (this.classList.contains('review-card') && this.id.startsWith('question-'));
-        const top = waitingCard ? 900 - (scrollTops.get(conversation()!) ?? 0)
+        // An answered question's record sits higher up the transcript than anything still waiting.
+        const record = this.classList.contains('answered-question-inline');
+        const top = record ? 500 - (scrollTops.get(conversation()!) ?? 0)
+          : waitingCard ? 900 + grownAbove - (scrollTops.get(conversation()!) ?? 0)
           : this.classList.contains('workspace-sessions') ? 100 : 0;
         return { top, bottom: top + 400, left: 0, right: 400, width: 400, height: 400, x: 0, y: top, toJSON: () => ({}) };
       },
@@ -1281,9 +1290,9 @@ describe('a project row whose member is waiting on you', { timeout: 60_000 }, ()
       await click(projectRow(), 'the project row');
       await until(() => expect(location).toBe(memberAddress));
       await until(() => expect(card()).not.toBeNull());
-      await until(() => expect(conversation()!.scrollTop).toBe(900 - 100 - 12));
+      await until(() => expect(conversation()!.scrollTop).toBe(900 - 100 - 48));
       // The card's header and title are in view, with the gap above them clear of anything pinned.
-      expect(card()!.getBoundingClientRect().top).toBe(100 + 12);
+      expect(card()!.getBoundingClientRect().top).toBe(100 + 48);
       expect(card()!.querySelector('.owner-request-waiting')?.textContent).toBe('Waiting on you');
       expect(card()!.querySelector('.owner-request-title')?.textContent).toBe(request.title);
       if (phone) {
@@ -1301,6 +1310,29 @@ describe('a project row whose member is waiting on you', { timeout: 60_000 }, ()
       }
     });
 
+    it('keeps the waiting card in place as the conversation lands above it, until the reader scrolls', async () => {
+      await mount();
+      await click(projectRow(), 'the project row');
+      await until(() => expect(conversation()!.scrollTop).toBe(900 - 100 - 48));
+      const stream = (): FakeEventSource => FakeEventSource.streams[FakeEventSource.streams.length - 1];
+      await until(() => expect(stream()?.url).toContain(`/sessions/${TASK.id}/`));
+      const land = async (seq: number): Promise<void> => {
+        await act(async () => {
+          stream().onmessage?.({ data: JSON.stringify({ seq, type: 'assistant', payload: { text: `More ${seq}` }, turnId: 't1', ts: '2026-10-03T08:00:02Z' }) });
+        });
+        await settle();
+      };
+      // Rows land above the card: it is put back at the top, not left where the new rows pushed it.
+      grownAbove = 300;
+      await land(3);
+      expect(conversation()!.scrollTop).toBe(900 + 300 - 100 - 48);
+      // The reader takes the scroller: what lands next moves the card, and nothing brings it back.
+      await act(async () => { conversation()!.dispatchEvent(new Event('wheel')); });
+      grownAbove = 500;
+      await land(4);
+      expect(conversation()!.scrollTop).toBe(900 + 300 - 100 - 48);
+    });
+
     // Owner 2026-11-16 (docs/mocks/coordinator-question-jump): the coordinator waiting on you with a
     // question opens at that question's card, as a waiting member opens at its own.
     it('opens the coordinator when the coordinator itself is waiting, at its question', async () => {
@@ -1314,11 +1346,19 @@ describe('a project row whose member is waiting on you', { timeout: 60_000 }, ()
         waitingSince: '2026-10-03T09:00:00Z',
         question: { question: 'Can you restore Nacos?', options: [{ label: 'I’ll restore it now' }], recommendedOption: 0, blocksTaskIds: [], ifUnanswered: null },
       }];
+      // A question answered earlier in the conversation is drawn above as its record: a record is
+      // not waiting on anyone, so the open question below it is where the row lands.
+      closedQuestions = [{
+        itemId: 'item-answered', question: { question: 'Which region?', options: [{ label: 'us-east' }], recommendedOption: 0 },
+        askedAt: '2026-10-03T08:00:00Z', resolution: 'ANSWERED', resolvedBy: 'USER', resolvedAt: '2026-10-03T08:00:00.500Z',
+        answer: { option: 0, text: null }, delivery: null, withdrawReason: null,
+      }];
       await mount();
       await click(projectRow(), 'the project row');
       await until(() => expect(location).toBe(coordinatorAddress));
       await until(() => expect(conversation()?.querySelector('#question-item-question')).not.toBeNull());
-      await until(() => expect(conversation()!.scrollTop).toBe(900 - 100 - 12));
+      await until(() => expect(conversation()?.querySelector('#question-record-item-answered')).not.toBeNull());
+      await until(() => expect(conversation()!.scrollTop).toBe(900 - 100 - 48));
     });
 
     it('opens the coordinator when nobody is waiting', async () => {

@@ -1173,6 +1173,11 @@ export const commitSession = (sessionId: string) =>
 export const adoptSessionBranch = (sessionId: string) =>
   api<{ ok: true; branch: string }>(`/sessions/${sessionId}/adopt-branch`, { method: 'POST' });
 
+/** Close a failed merge's strip (its ✕): the server clears the stored conflict or error, so the bar
+ *  goes back to Merge, or to "✓ In main". Nothing in git changes. */
+export const dismissMergeFailure = (sessionId: string) =>
+  api<{ ok: true; dismissed: boolean }>(`/sessions/${sessionId}/merge-failure/dismiss`, { method: 'POST' });
+
 // Lifecycle actions for sessions. Complete moves a session into Completed; delete
 // moves it to Trash. Both keep all data; restore brings either back to Open. Purge is
 // the only hard delete: it permanently removes a trashed session and all its data.

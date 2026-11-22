@@ -29,6 +29,7 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import { type PrismaClient, RunStatus, SessionDispatchOrigin } from '@prisma/client';
+import { isReleasedStatus } from '../common/session-release';
 import { Client } from 'pg';
 
 import { sha256 } from '../common/crypto.util';
@@ -76,6 +77,9 @@ test('linkHints.approvals: the decided approvals whose reader is still waiting, 
       data: {
         id, ownerId, creatorId: ownerId, title: 'a session', prompt: 'work', provider: 'claude', status,
         dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false, assignedRunnerId: runnerId, numTurns: 1, ...extra,
+        ...(isReleasedStatus(status) ? {
+          finishedAt: new Date(),
+        } : {}),
       },
     });
     return id;

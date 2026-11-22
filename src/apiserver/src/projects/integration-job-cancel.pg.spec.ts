@@ -234,7 +234,7 @@ async function doneTask(
       branch,
       isolationStatus: 'worktree',
       baseSha: 'b'.repeat(40),
-      status: RunStatus.SUCCEEDED,
+      status: RunStatus.SUCCEEDED, 
       startsTaskWork: true,
       finishedAt: new Date(Date.now() - 60_000),
       worktreeBranch: branch,
@@ -692,7 +692,7 @@ test('a stop is a fact: QUEUED jobs end now, RUNNING ones are asked or ended, an
     await stack.db.$transaction(async (tx) => {
       const finished = await tx.session.update({
         where: { id: stillWorking.id },
-        data: { status: RunStatus.SUCCEEDED, finishedAt: new Date() },
+        data: { status: RunStatus.SUCCEEDED, finishedAt: new Date()},
         select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
       });
       await settleDeliveredIdentityAfterFinish(tx, finished);

@@ -183,8 +183,11 @@ private fun Pill(model: WorktreeModel, state: WorktreeState, d: JsonObject, bran
         // A failed merge is its own section under the row, inset from the bar's edges (web's `.wt-merge-inset`).
         if (recovery == null && (conflict != null || failure != null)) {
             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-            Column(Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp, top = 9.dp, bottom = 10.dp)) {
-                if (conflict != null) key(d.string("mergeError")) { MergeConflictView(conflict) } else if (failure != null) FailureLine(failure)
+            Row(Modifier.fillMaxWidth().padding(start = 10.dp, end = 4.dp, top = 9.dp, bottom = 10.dp), verticalAlignment = Alignment.Top) {
+                Column(Modifier.weight(1f)) {
+                    if (conflict != null) key(d.string("mergeError")) { MergeConflictView(conflict) } else if (failure != null) FailureLine(failure)
+                }
+                DismissButton(enabled = !state.busy) { model.dismissMergeFailure() }
             }
         }
         // A merge held for target recovery: what holds it, one line, and the review behind it.
@@ -404,6 +407,15 @@ private fun FailureLine(message: String) {
     DropdownMenu(menu, { menu = false }) {
         DropdownMenuItem(text = { Text("Copy failure reason") }, onClick = { clipboard.setText(AnnotatedString(message)); menu = false })
     } }
+}
+
+/** The ✕ that closes a failed merge's section (web's `.wt-merge-dismiss`), in its top corner, clear of the message. */
+@Composable
+private fun DismissButton(enabled: Boolean, dismiss: () -> Unit) {
+    Box(Modifier.offset(y = (-6).dp).size(32.dp).clip(CircleShape).clickable(enabled = enabled, onClickLabel = "Dismiss", onClick = dismiss)
+        .semantics { contentDescription = "Dismiss"; role = Role.Button }.testTag("merge-failure-dismiss"), contentAlignment = Alignment.Center) {
+        Text("✕", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+    }
 }
 
 /** A merge conflict (web's conflict panel): what happened, then the by-hand recipe as two steps, each command a tap to copy. */

@@ -157,7 +157,7 @@ async function harness(t: { after(fn: () => Promise<void> | void): void }) {
         prompt: 'do the work',
         branch: `orbit/release-${task.id}`,
         isolationStatus: 'worktree',
-        status: RunStatus.SUCCEEDED,
+        status: RunStatus.SUCCEEDED, 
         baseSha: '1'.repeat(40),
         changedFiles: WORK_REPORTED as never,
         createdAt: new Date(Date.now() - 5 * 60_000),

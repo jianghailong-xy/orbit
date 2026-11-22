@@ -65,6 +65,10 @@ func sessionPermissionMode() (mode string, known bool, err error) {
 		if strings.TrimSpace(os.Getenv(envBgJobID)) != "" || strings.TrimSpace(os.Getenv(envRunnerChild)) == "" {
 			return "", false, nil
 		}
+		// A remote SubAgent's machine hosts no socket for its parent session: the mode it was claimed in stands.
+		if mode := strings.TrimSpace(os.Getenv(envSubagentRemoteMode)); mode != "" && os.Getenv(envSubagentRunID) != "" {
+			return mode, true, nil
+		}
 		return "", true, errNoSessionSocket
 	}
 	raw, err := bgSocketCall(socket, token, planGateModeOp, nil)

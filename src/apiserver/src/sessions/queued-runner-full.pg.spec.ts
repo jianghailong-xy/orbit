@@ -22,6 +22,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { JwtService } from '@nestjs/jwt';
 import { Prisma, RunStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { isReleasedStatus } from '../common/session-release';
 import { toUuid } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -87,6 +88,9 @@ test('queuedReason runner_at_capacity: a runner full of turns and background-job
       data: {
         id, ownerId, creatorId: ownerId, workspaceId: r.workspaceId, assignedRunnerId: r.id, title,
         prompt: title, provider: 'claude', providerBuiltin: true, status,
+        ...(isReleasedStatus(status) ? {
+          finishedAt: new Date(),
+        } : {}),
         dispatchOrigin: SessionDispatchOrigin.USER,
         ...(lastTurnAt ? { lastTurnAt } : {}),
         ...(status === RunStatus.RUNNING

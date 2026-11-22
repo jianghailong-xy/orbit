@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ConflictException } from '@nestjs/common';
 import { RunStatus } from '@prisma/client';
+import { isReleasedStatus } from '../common/session-release';
 import { SESSION_MERGE_BESIDE_TURN_V1, SESSION_MERGE_RECOVERY_V1, type MergeRecovery } from '@orbit/shared';
 import { SessionsService } from './sessions.service';
 
@@ -22,6 +23,8 @@ function harness(overrides: Record<string, unknown> = {}, capabilities = [SESSIO
     mergeStatus: null,
     commitStatus: null,
     commitOperationOwner: null,
+    // A terminal row carries its release column (session_release_fact_chk).
+    ...(isReleasedStatus(String(overrides.status ?? RunStatus.AWAITING_INPUT)) ? { finishedAt: new Date() } : {}),
     ...overrides,
   };
   const lockCalls: unknown[][] = [];

@@ -344,7 +344,7 @@ async function recordLanding(stack: Stack, f: Fixture, taskId: string, label: st
       title: `${label}-merge`,
       prompt: `${label}-merge`,
       provider: 'claude',
-      status: RunStatus.SUCCEEDED,
+      status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
       dispatchOrigin: SessionDispatchOrigin.USER,
     },
   });
@@ -393,12 +393,11 @@ async function runAcceptance(
       status: RunStatus.RUNNING,
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
-      // The work ran in the task's own worktree and reported files: revision 42 (§12.15 P-M3) reads
-      // landing from the delivered commit, and a DONE task with no branch and nothing reported has
-      // nothing to land — it would leave its criterion's landing conjunction, not enter it.
-      isolationStatus: 'worktree',
-      branch: `orbit/${sessionId}`,
-      changedFiles: ['src/work.ts'],
+      // The attempt commits on a worktree branch of its own, past the commit it forked from: work with
+      // something to land. A run that never made a branch delivered nothing to land (§12.15 P-M3).
+      isolationStatus: 'worktree', branch: `orbit/${label}-${sessionId.slice(0, 8)}`,
+      worktreeBranch: `orbit/${label}-${sessionId.slice(0, 8)}`, baseSha: 'a'.repeat(40), branchSha: 'b'.repeat(40),
+      worktreeDirty: false, changedFiles: ['src/work.ts'],
     },
   });
   await stack.db.conversationTurn.create({
@@ -456,7 +455,14 @@ async function runAcceptance(
     shellExitCode: shell.status!,
     shellOutput: `${shell.stdout}${shell.stderr}`,
   });
-  return (await stack.db.task.findUniqueOrThrow({ where: { id: taskId } })).status;
+  const { status } = await stack.db.task.findUniqueOrThrow({ where: { id: taskId } });
+  if (status === TaskStatus.DONE) {
+    await stack.db.session.update({
+      where: { id: sessionId },
+      data: { status: RunStatus.SUCCEEDED, finishedAt: new Date()},
+    });
+  }
+  return status;
 }
 
 /** Drive one serving task to DONE and assert that is what the comparison derived. */

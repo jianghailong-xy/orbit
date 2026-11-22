@@ -222,6 +222,20 @@ case "$PUBLIC_ORIGIN" in
 esac
 command -v openssl >/dev/null || die "openssl is needed to generate the deployment's secrets"
 docker compose version >/dev/null 2>&1 || die "Docker with the Compose plugin (docker compose) is needed"
+# Compose builds through Bake, which needs the buildx plugin. Ubuntu's and Debian's docker.io packages leave it
+# out (docker-buildx is a package of its own there), and Compose then warns on every build and falls back to its
+# own builder. Where apt can install it, install it; elsewhere say how, and build without it.
+if ! docker buildx version >/dev/null 2>&1; then
+  if command -v apt-get >/dev/null 2>&1 && { [ "$(id -u)" -eq 0 ] || command -v sudo >/dev/null 2>&1; }; then
+    echo "==> Installing docker-buildx, the Docker build plugin Compose builds with"
+    as_root_apt() { if [ "$(id -u)" -eq 0 ]; then env DEBIAN_FRONTEND=noninteractive "$@"; else sudo env DEBIAN_FRONTEND=noninteractive "$@"; fi; }
+    as_root_apt apt-get update -qq && as_root_apt apt-get install -y -qq docker-buildx >/dev/null \
+      || echo "!! warning: could not install docker-buildx (above); the images build without it, and Compose warns that buildx is missing." >&2
+  else
+    echo "!! warning: Docker's buildx plugin is missing: install it (docker-buildx, or docker-buildx-plugin from Docker's own" >&2
+    echo "!! packages) so that Compose builds with it. The images build without it, and Compose warns that buildx is missing." >&2
+  fi
+fi
 if [ "$MANAGED" -eq 1 ] && [ "$FIREWALL" -eq 0 ]; then
   echo "!! warning: $FIREWALL_OFF_WARNING" >&2
 fi

@@ -23,6 +23,7 @@ import { uuidToBase62 } from '@orbit/shared';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { Client } from 'pg';
 
+import { isReleasedStatus } from '../common/session-release';
 import { call, startApiserver, type Apiserver, type Reply } from '../auth/pat-test-apiserver';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from './coordinator-pg-test-safety';
@@ -94,10 +95,12 @@ async function task(o: Owner, projectId: string): Promise<string> {
 }
 
 async function session(o: Owner, fields: Partial<Prisma.SessionUncheckedCreateInput>): Promise<string> {
+  const status = fields.status ?? 'AWAITING_INPUT';
   const row = await o.h.db.session.create({
     data: {
       ownerId: o.id, creatorId: o.id, title: 'a session', prompt: 'p',
-      status: 'AWAITING_INPUT', dispatchOrigin: 'USER', ...fields,
+      status, dispatchOrigin: 'USER', ...fields,
+      ...(isReleasedStatus(status) ? { finishedAt: fields.finishedAt ?? new Date()} : {}),
     },
   });
   return row.id;

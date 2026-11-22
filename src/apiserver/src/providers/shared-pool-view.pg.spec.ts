@@ -87,6 +87,9 @@ async function sessionOn(
       title: 'shared pool view',
       prompt: 'hello',
       status,
+      ...(['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(status)
+        ? { finishedAt: new Date()}
+        : {}),
       ownerId: owner.id,
       creatorId: owner.id,
       workspaceId: owner.workspaceId,
@@ -199,9 +202,9 @@ suite("a shared pool page's next key, running keys and session counts — on rea
     for (const who of [ann, mia, max]) assert.deepEqual(await running(who), ['mia-org'], `${who.name}'s view`);
 
     // A session that finished is on the key no longer; a turn the engine started for itself is.
-    await db.session.update({ where: { id: onMia }, data: { status: RunStatus.SUCCEEDED } });
+    await db.session.update({ where: { id: onMia }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date()} });
     assert.deepEqual(await running(ann), []);
-    await db.session.update({ where: { id: onMia }, data: { status: RunStatus.AWAITING_INPUT, engineTurnActive: true } });
+    await db.session.update({ where: { id: onMia }, data: { status: RunStatus.AWAITING_INPUT, finishedAt: null, engineTurnActive: true } });
     assert.deepEqual(await running(ann), ['mia-org']);
     await db.session.update({ where: { id: onMia }, data: { engineTurnActive: false } });
     assert.deepEqual(await running(ann), []);

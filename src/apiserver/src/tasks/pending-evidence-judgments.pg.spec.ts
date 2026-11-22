@@ -556,7 +556,7 @@ suite('the pending-decision queue is derived from the facts, not delivered to an
     // session, it would go with it.
     await db.session.update({
       where: { id: f.coordinatorSessionId },
-      data: { status: RunStatus.SUCCEEDED, completedAt: new Date() },
+      data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), completedAt: new Date() },
     });
     await db.session.delete({ where: { id: f.coordinatorSessionId } });
 

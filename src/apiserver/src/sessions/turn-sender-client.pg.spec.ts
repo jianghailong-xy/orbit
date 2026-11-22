@@ -132,6 +132,9 @@ test('each turn says which client sent it, on the events page and the SSE, and n
         numTurns: 1, startedAt: new Date(), runtimeSessionId: `runtime-${id}`,
         dispatchOrigin: SessionDispatchOrigin.USER, runSource: SessionRunSource.MANUAL,
         ...data,
+        ...(['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(data.status ?? RunStatus.AWAITING_INPUT)
+          ? { finishedAt: data.finishedAt ?? new Date()}
+          : {}),
       },
     });
     return id;

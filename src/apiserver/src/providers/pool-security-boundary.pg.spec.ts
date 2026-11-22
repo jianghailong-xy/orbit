@@ -64,6 +64,7 @@ import { toUuid, uuidToBase62, type ClaimedSession } from '@orbit/shared';
 import { json, urlencoded } from 'express';
 import { Client } from 'pg';
 
+import { isReleasedStatus } from '../common/session-release';
 import { DisabledAccounts } from '../auth/disabled-accounts';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { sha256 } from '../common/crypto.util';
@@ -234,6 +235,7 @@ async function sessionOn(
       title: 'pool security',
       prompt: 'hello',
       status,
+      ...(isReleasedStatus(status) ? { finishedAt: new Date()} : {}),
       ownerId,
       creatorId: ownerId,
       workspaceId: at.workspaceId,
@@ -907,6 +909,9 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
           workspaceId: at.workspaceId, assignedRunnerId: at.runnerId,
           provider, providerBuiltin: provider === 'codex', model: 'gpt-5.5', permissionMode: 'default',
           usesRuntimeDefaultModel: true, poolCodexAccountId: naming,
+          ...(isReleasedStatus(status) ? {
+            finishedAt: new Date(), 
+          } : {}),
           ...(status === RunStatus.PENDING ? {} : { numTurns: 1, runtimeSessionId: randomUUID(), startedAt: new Date() }),
         },
         select: { id: true },
@@ -1507,7 +1512,7 @@ exec sleep 300
     // Rotated, the next claim carries the new key: decrypted from the row at the claim, kept nowhere.
     const rotated = subscription();
     await providers.update(alice, personal.row.id, { apiKey: rotated });
-    await db.session.update({ where: { id: session }, data: { status: RunStatus.PENDING } });
+    await db.session.update({ where: { id: session }, data: { status: RunStatus.PENDING, finishedAt: null} });
     assert.equal(token((await claim(at.runnerId, session)).agent.env), rotated);
 
     // Every agent this spec made holds exactly the env it was configured with, after every door above.

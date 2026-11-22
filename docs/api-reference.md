@@ -405,6 +405,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/sessions/:id/interrupt` | body `Object`; path `id` | `SessionsController.interrupt` |
 | `GET` | `/api/sessions/:id/landing/log` | path `id`; query `check`, `claim`, `cursor`, `jobId`, `round` | `SessionsController.landingLog` |
 | `POST` | `/api/sessions/:id/merge` | body `Object`; path `id` | `SessionsController.mergeToMain` |
+| `POST` | `/api/sessions/:id/merge-failure/dismiss` | path `id` | `SessionsController.dismissMergeFailure` |
 | `GET` | `/api/sessions/:id/merge-receipts` | path `id`; query `limit` | `SessionsController.listMergeReceipts` |
 | `POST` | `/api/sessions/:id/merge-receipts` | body `RecordMergeReceiptDto`; path `id` | `SessionsController.recordMergeReceipt` |
 | `POST` | `/api/sessions/:id/merge-repair` | body `Object`; path `id` | `SessionsController.mergeRepair` |

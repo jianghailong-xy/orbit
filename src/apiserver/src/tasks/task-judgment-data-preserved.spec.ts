@@ -3251,10 +3251,17 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1400 adds three nullable columns, a foreign key and a partial index on owner_request_secret and account_secret;
       // no row is written, and no preserved relation, trigger, function or DONE fence changes.
       '1400_owner_secret_saved_links',
+      // 1401 adds session_release_fact_chk NOT VALID (the status is terminal exactly when finished_at is set); 1402
+      // writes session.finished_at on the rows that break it (1262's value on terminal rows, cleared on open rows), then
+      // validates it. Session is not a preserved relation, and no trigger, function or DONE fence changes.
+      '1401_session_release_fact_chk',
+      '1402_session_release_fact_validate',
       // 1403 widens session_release_cause_chk with engine_failed and end_not_honored (NOT VALID) and 1404 validates it;
       // no row is written. Session is not a preserved relation, and no trigger, function or DONE fence changes.
       '1403_session_release_failure_causes',
       '1404_session_release_failure_causes_validate',
+      // 1405 to 1407 (a failure-cause backfill and its CHECK) were removed on 2026-11-21, never deployed: the session
+      // keeps no failure fact (design §12 decision D9, removal step R1). Their numbers stay unused.
       // 1410 adds session.bg_job_stop_requests, a NOT NULL TEXT[] with a constant default (catalog-only, no rewrite),
       // for the owner's bg-job stop requests; no row is written. Session is not a preserved relation, and no trigger,
       // function or DONE fence changes.
@@ -3263,11 +3270,26 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // successor runs on); no row is written, and coordinator_handoff is not a preserved relation — no trigger,
       // function or DONE fence changes.
       '1411_coordinator_handoff_successor',
-      // 1420 replaces open_list_bump_session and open_list_bump_via_session (CREATE OR REPLACE, names, arguments and
-      // triggers unchanged) so that an UPDATE of `session` or `conversation_turn` changing only columns no Open list
-      // draws bumps no owner; no DDL, and no row is written. Neither function is one of the six preserved
-      // triggers/functions, and no `task`, `project` or `project_acceptance_*` object nor the DONE fence is named.
+      // 1420 (on main) replaces the bodies of the Open-list version functions for session and conversation_turn so a write that changes
+      // no column an Open list draws no longer bumps the list's version; no row is written, and neither table is a
+      // preserved relation — no DONE fence changes.
       '1420_open_list_undrawn_writes',
+      // 1421 to 1425 replace the bodies of the session-dispatch guards and re-create three ended-triggers so they
+      // read session.finished_at instead of the terminal status set (plan step 4.4), and add finished_at to five
+      // trigger column lists on session; every guard answers what it did for every row session_release_fact_chk
+      // admits. 1425 was restated in place before it was deployed (removal step R4): its three WHEN clauses ask the
+      // release module's failure question (finished_at, end_reason, last_turn_outcome, the status bridge) and list
+      // last_turn_outcome. No row is written, no preserved relation is read or dropped, and the DONE fence is unchanged.
+      // Written as 1411 to 1416 on the project line, the six were renumbered after main took 1411.
+      '1421_supersession_capacity_guards_read_release',
+      '1422_admission_aggregate_guards_read_release',
+      '1423_project_move_guard_reads_release',
+      '1424_acquisition_revive_reads_release',
+      '1425_ended_triggers_read_release',
+      // 1426 builds the partial unique index session_task_execution_claim_idx_finished_at on session(task_id) CONCURRENTLY
+      // beside 0130's claim index (plan step 4.5, release A), dropping a leftover INVALID one first. Session is not a
+      // preserved relation, and no function, trigger, type, constraint or DONE fence changes. No INSERT, UPDATE or DELETE.
+      '1426_session_task_execution_claim_finished_at_idx',
       // 1430 adds managed_runner.update_interrupt_turns, BOOLEAN NOT NULL with a constant default (catalog-only, no
       // rewrite), for an owner's Update Now of a busy runner; `managed_runner` is none of the preserved relations, no
       // row is written, and no trigger, function or DONE fence changes.

@@ -193,7 +193,6 @@ import {
   type TaskRunEffectFence,
 } from '../tasks/task-run-receipt';
 import { readTaskRouteSummaries } from '../tasks/task-route-decision';
-import { TASK_OCCUPYING } from '../tasks/reclaim-stalled-task';
 import {
   accountDefaultPermissionMode,
   DEFAULT_PERMISSION_MODE,
@@ -241,7 +240,7 @@ import { readWikiChatContext, sameWikiChatContext, wikiContextOutsideChat } from
 import { branchName } from '../projects/project-criterion-landing';
 import { settleDeliveredIdentityAfterFinish } from '../projects/project-integration-job';
 import { INTEGRATION_ITEM_KINDS, openItemOwed, openItemVisible } from '../projects/project-open-item';
-import { readSourceLanding } from '../projects/landing-session';
+import { landingContainerStatus, readSourceLanding } from '../projects/landing-session';
 import { readLandingIntegrationLog, type IntegrationLogSelectors } from '../projects/project-integration-log';
 import {
   MATCHED_BY_CONTENT,
@@ -318,8 +317,14 @@ import {
 } from '../common/session-scheduling';
 import {
   HELD_SESSION_STATUSES,
-  RELEASED_SESSION_STATUSES,
-  releaseCauseOfEndReason,
+  heldFilter,
+  isHeld,
+  isHeldPastClaim,
+  isReleased,
+  releaseFinishedTheWork,
+  RELEASE_WORK_SELECT,
+  releaseWasFailure,
+  releaseWasFailureFilter,
 } from '../common/session-release';
 import { GENERATING_SESSION_FILTER, isSessionGenerating } from '../common/session-generating';
 import {
@@ -4894,6 +4899,8 @@ export class SessionsService {
       projectMembership: SessionProjectMembership | null;
       /** The subject summary of a LANDING row; null on every conversation. */
       landing: SessionLandingSummary | null;
+      /** The release column, read by the capabilities and not sent on the row. */
+      finishedAt: Date | null;
       cancelRequestedAt: Date | null;
       runtimeSessionId: string | null;
       retryAt: Date | null;
@@ -4938,6 +4945,7 @@ export class SessionsService {
         s.cost_usd        AS "costUsd",
         s.error,
         s.end_reason      AS "endReason",
+        s.finished_at     AS "finishedAt",
         s.cancel_requested_at AS "cancelRequestedAt",
         s.runtime_session_id AS "runtimeSessionId",
         -- When the auto-retry will re-send the message that a self-healing failure killed, or
@@ -5230,6 +5238,7 @@ export class SessionsService {
         costUsd: r.costUsd,
         error: r.error,
         endReason: r.endReason,
+        finishedAt: r.finishedAt,
         cancelRequestedAt: r.cancelRequestedAt,
         runtimeSessionId: r.runtimeSessionId,
         retryAt: r.retryAt,
@@ -5319,7 +5328,8 @@ export class SessionsService {
     const given = overlay ?? new Map<string, ListOverlay>();
     const missing = rows.filter((r) => !given.has(r.id));
     const read = missing.length === 0 ? new Map<string, ListOverlay>() : await this.listOverlay(ownerId, missing);
-    return sessions.map((s) => ({ ...s, ...(given.get(s.id) ?? read.get(s.id)!) }));
+    // The release column was read for the capabilities; the row does not carry it.
+    return sessions.map(({ finishedAt: _released, ...s }) => ({ ...s, ...(given.get(s.id) ?? read.get(s.id)!) }));
   }
 
   /**
@@ -5717,13 +5727,8 @@ export class SessionsService {
    * while the subject is open, SUCCEEDED / CANCELLED once it settled.
    */
   private static landingOnlyDetail(id: string, landing: SessionLandingView<Date>): any {
-    const settledAs = landing.settledAs;
-    const status = landing.settledAt
-      ? (settledAs === 'LANDED' || settledAs === 'ALREADY_LANDED' || settledAs === 'NOTHING_TO_LAND'
-          || settledAs === 'MERGED'
-          ? RunStatus.SUCCEEDED
-          : RunStatus.CANCELLED)
-      : RunStatus.AWAITING_INPUT;
+    // The status the container's writer would write (projects/landing-session.ts): one rule, not a copy of it.
+    const status = landingContainerStatus(landing);
     return {
       id,
       title: null,
@@ -5785,7 +5790,8 @@ export class SessionsService {
     if (latest && (latest.status === RunStatus.PENDING || latest.status === RunStatus.RUNNING)) {
       return withSessionState(latest);
     }
-    if (latest && latest.status !== RunStatus.FAILED) {
+    // A repair that was not released by a failure (common/session-release.ts).
+    if (latest && !releaseWasFailure(latest)) {
       const continued = await this.continueMergeRepair(ownerId, latest, mergeRecoveryContinuePrompt(recovery, preparePR));
       if (continued) return withSessionState(continued);
     }
@@ -5821,12 +5827,12 @@ export class SessionsService {
   private async continueMergeRepair(ownerId: string, repair: Session, content: string): Promise<Session | null> {
     const message = { clientTurnId: randomUUID(), content, kind: 'message' as const };
     try {
-      if (SessionsService.TERMINAL.includes(repair.status)) {
+      if (isReleased(repair)) {
         await this.resume(ownerId, repair.id, message);
       } else {
         await this.createTurn(ownerId, repair.id, { ...message, intent: 'NEXT_TURN' }, {
           coalesce: async (tx, session) =>
-            session.status === RunStatus.AWAITING_INPUT || session.status === RunStatus.INTERRUPTED
+            isHeld(session) && !UNSETTLED_SESSION_STATUSES.includes(session.status)
               ? null
               : tx.conversationTurn.findFirst({ where: { sessionId: session.id }, orderBy: { seq: 'desc' } }),
         });
@@ -5954,7 +5960,8 @@ export class SessionsService {
           taskId: target.taskId,
           OR: [
             { status: RunStatus.AWAITING_INPUT, cancelRequestedAt: null },
-            { status: RunStatus.FAILED },
+            // Released by a failure (common/session-release.ts).
+            releaseWasFailureFilter(),
           ],
         },
         // Armed for a LATER instant, so any claim the sweep had in flight is over: the session waits
@@ -6451,11 +6458,6 @@ export class SessionsService {
     };
   }
 
-  // A background shell with no terminal signal is still "running" only while the session is live;
-  // once it's settled the shell can't still be running, so it reads as "unknown" (see
-  // classifyShellStatus). Mirrors the web tray's liveness (WorkspaceView `TERMINAL`).
-  private static readonly TERMINAL_STATUSES: RunStatus[] = [...RELEASED_SESSION_STATUSES];
-
   /**
    * The authoritative, complete list of background shells the session ever launched — every
    * Bash(run_in_background), and the workspace's own background sub-agents and workflows (an async
@@ -6511,7 +6513,7 @@ export class SessionsService {
   async getBackgroundShells(userId: string, id: string): Promise<BgShell[]> {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId: userId },
-      select: { id: true, status: true, assignedRunner: { select: { capabilities: true } } },
+      select: { id: true, finishedAt: true, assignedRunner: { select: { capabilities: true } } },
     });
     if (!session) throw new NotFoundException('session not found');
     return this.deriveSessionBackground(session);
@@ -6522,10 +6524,13 @@ export class SessionsService {
    * carries out the owner's stop (BG_OWNER_STOP_V1), so a client can hide the control where it would be refused.
    */
   private async deriveSessionBackground(session: {
-    id: string; status: RunStatus; assignedRunner: { capabilities: string[] } | null;
+    id: string; finishedAt: Date | null; assignedRunner: { capabilities: string[] } | null;
   }): Promise<BgShell[]> {
     const rows = await this.selectBackgroundEvents(session.id);
-    const sessionLive = !SessionsService.TERMINAL_STATUSES.includes(session.status);
+    // A background shell with no terminal signal is still "running" only while the session is live;
+    // once it's settled the shell can't still be running, so it reads as "unknown" (see
+    // classifyShellStatus). Mirrors the web tray's liveness (WorkspaceView `TERMINAL`).
+    const sessionLive = isHeld(session);
     const shells = deriveBackgroundShells(
       rows.map((e) => ({
         seq: e.seq,
@@ -6556,7 +6561,7 @@ export class SessionsService {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
       select: {
-        id: true, status: true, sessionKind: true, assignedRunnerId: true,
+        id: true, status: true, finishedAt: true, sessionKind: true, assignedRunnerId: true,
         assignedRunner: { select: { capabilities: true } },
       },
     });
@@ -6610,7 +6615,7 @@ export class SessionsService {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
       select: {
-        id: true, status: true, assignedRunnerId: true,
+        id: true, status: true, finishedAt: true, assignedRunnerId: true,
         assignedRunner: { select: { capabilities: true, status: true, ...RUNNER_BEATS } },
       },
     });
@@ -7042,12 +7047,12 @@ export class SessionsService {
   async requestDiffRefresh(ownerId: string, id: string): Promise<void> {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
-      select: { id: true, status: true, sessionKind: true },
+      select: { id: true, status: true, finishedAt: true, sessionKind: true },
     });
     if (!session) throw new NotFoundException('session not found');
     // It queues a diff turn for the runner: an engine door like any other (§2.9 LS6).
     assertEngineSessionRow(session);
-    if (!SessionsService.LIVE.includes(session.status)) return;
+    if (!isHeldPastClaim(session)) return;
     const pending = await this.prisma.conversationTurn.findFirst({
       where: { sessionId: id, kind: 'diff', status: 'PENDING' },
       select: { id: true },
@@ -7088,11 +7093,6 @@ export class SessionsService {
   // Held by a runner past its claim (common/session-release.ts).
   static readonly LIVE: RunStatus[] = HELD_SESSION_STATUSES.filter((status) => status !== RunStatus.PENDING);
 
-  // Not live: resume() revives these (and complete/delete/config treat them as
-  // already-ended). CANCELLED covers both a hard stop and a graceful, still-resumable end
-  // (idle recycle / user end) — `endReason` is what tells those apart for display.
-  static readonly TERMINAL: RunStatus[] = [...RELEASED_SESSION_STATUSES];
-
   private static resumeBlocked(
     reason: SessionResumeBlockedReason,
     sessionId: string,
@@ -7122,15 +7122,15 @@ export class SessionsService {
   }
 
   /** Whether an engine runs for the session now: the test getLive refuses with "the session has ended". */
-  private static engineLive(session: { status: RunStatus; cancelRequestedAt: Date | null }): boolean {
-    return SessionsService.LIVE.includes(session.status) && !session.cancelRequestedAt;
+  private static engineLive(session: { status: RunStatus; finishedAt: Date | null; cancelRequestedAt: Date | null }): boolean {
+    return isHeldPastClaim(session) && !session.cancelRequestedAt;
   }
 
   /** Load an owner's session and assert it's still live (not ended/cancelled). */
   private async getLive(ownerId: string, id: string) {
     const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
     if (!session) throw new NotFoundException('session not found');
-    if (!SessionsService.LIVE.includes(session.status) || session.cancelRequestedAt) {
+    if (!isHeldPastClaim(session) || session.cancelRequestedAt) {
       throw new ConflictException('the session has ended');
     }
     return session;
@@ -7152,7 +7152,7 @@ export class SessionsService {
     if (session.deletedAt) {
       throw SessionNotSendable.trashed(session.id);
     }
-    if (SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) {
+    if (isReleased(session) || session.cancelRequestedAt) {
       throw SessionNotSendable.ended(session.id);
     }
     return session;
@@ -7864,7 +7864,7 @@ export class SessionsService {
       if (session.deletedAt) {
         throw SessionNotSendable.trashed(session.id);
       }
-      if (SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) {
+      if (isReleased(session) || session.cancelRequestedAt) {
         throw SessionNotSendable.ended(session.id);
       }
       // Settings › Translation: written HELD, routed and woken only once translated (releaseHeldTurn).
@@ -8327,7 +8327,7 @@ export class SessionsService {
         where: { id: turnId, sessionId, status: HELD_TURN_STATUS, translationState: { in: [...from] } },
       });
       if (!turn) return null;
-      if (session.deletedAt || SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) {
+      if (session.deletedAt || isReleased(session) || session.cancelRequestedAt) {
         return { ended: true as const };
       }
       const steerTarget = turn.sendIntent == null && turn.clientTurnId !== SessionsService.initialTurnClientId(sessionId)
@@ -8554,7 +8554,7 @@ export class SessionsService {
       }
       // A committed follow-up is returned above even if the Session later ended or was filed in
       // Trash. Only a new operation is judged against the lifecycle it is trying to mutate.
-      if (!SessionsService.LIVE.includes(session.status) || session.cancelRequestedAt) {
+      if (!isHeldPastClaim(session) || session.cancelRequestedAt) {
         // A plain 409, not SessionNotSendable: the callers that re-home a message on that class
         // never reach the interrupt, and this keeps it that way.
         throw sessionRefusal('SESSION_ENDED', 'the session has ended', {
@@ -9081,7 +9081,7 @@ export class SessionsService {
         FOR UPDATE`;
       if (locked.length === 0) throw new NotFoundException('session not found');
       const session = await tx.session.findUniqueOrThrow({ where: { id } });
-      if (SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) {
+      if (isReleased(session) || session.cancelRequestedAt) {
         throw new ConflictException('the session has ended');
       }
       // A Watch wake is withdrawn like any queued message, and then no runner will take it: its delivery
@@ -9281,7 +9281,7 @@ export class SessionsService {
       if (session.deletedAt) {
         throw SessionNotSendable.trashed(session.id);
       }
-      if (SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) {
+      if (isReleased(session) || session.cancelRequestedAt) {
         throw SessionNotSendable.ended(session.id);
       }
       const turn = await tx.conversationTurn.findFirst({
@@ -9741,8 +9741,8 @@ export class SessionsService {
 
   /** {@link mergeToMain}'s "wait for the current turn to finish": the session is open and not parked
    *  idle, or it is being ended. */
-  private static mergeWaitsForTurn(session: { status: RunStatus; cancelRequestedAt: Date | null }): boolean {
-    return !SessionsService.TERMINAL.includes(session.status) &&
+  private static mergeWaitsForTurn(session: { status: RunStatus; finishedAt: Date | null; cancelRequestedAt: Date | null }): boolean {
+    return !isReleased(session) &&
       (session.status !== RunStatus.AWAITING_INPUT || !!session.cancelRequestedAt);
   }
 
@@ -9754,8 +9754,9 @@ export class SessionsService {
    *
    * - nothing owed → nothing is written;
    * - the turn that ended did not succeed (`turnSucceeded` false: it failed or was stopped), or the
-   *   session ended FAILED or CANCELLED → the request is dropped: the turn that asked did not finish, so
-   *   its work is not merged on its word;
+   *   session was released for anything but its work finishing (a failure, a stop, an engine that exited by
+   *   itself; releaseFinishedTheWork) → the request is dropped: the turn that asked did not finish, so its
+   *   work is not merged on its word;
    * - another turn already running (a queued follow-up started) → nothing is written, and that turn's
    *   end asks again;
    * - a merge already in flight, or the work already in the target → the request is answered by it, and
@@ -9776,7 +9777,7 @@ export class SessionsService {
       const session = await tx.session.findUniqueOrThrow({
         where: { id },
         select: {
-          ownerId: true, status: true, cancelRequestedAt: true, mergeStatus: true,
+          ownerId: true, status: true, ...RELEASE_WORK_SELECT, cancelRequestedAt: true, mergeStatus: true,
           mergeAfterTurnAt: true, mergeAfterTurnTarget: true,
         },
       });
@@ -9786,7 +9787,9 @@ export class SessionsService {
         await tx.session.update({ where: { id }, data });
         wrote = true;
       };
-      if (!turnSucceeded || session.status === RunStatus.FAILED || session.status === RunStatus.CANCELLED) {
+      // Released for anything but its work finishing (decision D5, design §12.3: the end reason and the kind, never the
+      // terminal status): a failure, a stop, or an engine that exited by itself.
+      if (!turnSucceeded || (isReleased(session) && !releaseFinishedTheWork(session))) {
         await clear();
         return 'DROPPED' as const;
       }
@@ -9854,7 +9857,7 @@ export class SessionsService {
       const session = await tx.session.findUniqueOrThrow({
         where: { id },
         select: {
-          ownerId: true, status: true, cancelRequestedAt: true, assignedRunnerId: true, mergeStatus: true,
+          ownerId: true, status: true, finishedAt: true, cancelRequestedAt: true, assignedRunnerId: true, mergeStatus: true,
           commitStatus: true, mergeRecovery: true, mergeRepairTurnEndedAt: true,
         },
       });
@@ -10086,7 +10089,7 @@ export class SessionsService {
         discard ? 'session has no worktree checkout to discard' : 'session has no worktree to commit',
       );
     }
-    const ended = !SessionsService.LIVE.includes(session.status);
+    const ended = !isHeldPastClaim(session);
     if (discard && !ended) {
       throw new ConflictException(
         'the session is still running — end it before discarding its checkout',
@@ -10164,7 +10167,7 @@ export class SessionsService {
       const current = await this.prisma.session.findFirst({ where: { id, ownerId } });
       const stillCommittable =
         current != null &&
-        (SessionsService.LIVE.includes(current.status)
+        (isHeldPastClaim(current)
           ? current.status === RunStatus.AWAITING_INPUT &&
             !current.cancelRequestedAt &&
             current.runningSubagents.length === 0
@@ -10268,6 +10271,25 @@ export class SessionsService {
   }
 
   /**
+   * Close the red merge failure strip (the ✕ on it): clear a settled 'conflict' or 'error' so the bar
+   * goes back to Merge, or to "✓ In main" when the branch landed another way. Nothing in git changes —
+   * the failed merge already left both tips where they were. One statement predicated on the failure
+   * still being there and no merge recovery open, so a merge queued or settled since, or a recovery
+   * (which has its own panel), is never the one cleared. Closing it again is a no-op.
+   */
+  async dismissMergeFailure(ownerId: string, id: string) {
+    const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
+    if (!session) throw new NotFoundException('session not found');
+    assertEngineSessionRow(session);
+    const { count } = await this.prisma.session.updateMany({
+      where: { id, ownerId, mergeStatus: { in: ['conflict', 'error'] }, mergeRecovery: { equals: Prisma.AnyNull } },
+      data: { mergeStatus: null, mergeError: null, mergeOperationId: null, mergeOperationOwner: null },
+    });
+    if (count > 0) this.realtime.publishSessionUpdated(id);
+    return { ok: true, dismissed: count > 0 };
+  }
+
+  /**
    * Stop a session and settle it to CANCELLED — unlike {@link end}, which reaches the same
    * status under 'ended' and so still reads as dormant/resumable. A PENDING session is
    * finalized in place (while any prior warm runtime is cancelled); other open states receive
@@ -10286,7 +10308,7 @@ export class SessionsService {
   ): Promise<boolean> {
     const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
     if (!session) throw new NotFoundException('session not found');
-    if (SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) return false;
+    if (isReleased(session) || session.cancelRequestedAt) return false;
     return this.endOpen(ownerId, id, reason);
   }
 
@@ -10416,6 +10438,9 @@ export class SessionsService {
       /** @deprecated Rolling-version compatibility mirror. */
       archivedAt?: Date;
       deletedAt?: Date;
+      /** A completed or trashed session is out of the auto-retry sweep for good: its arm could never fire. */
+      retryAt?: null;
+      retryClaimedAt?: null;
     } = {};
     let finalCompletedAt = session.completedAt ?? session.archivedAt;
     let finalDeletedAt = session.deletedAt;
@@ -10423,10 +10448,14 @@ export class SessionsService {
       lifecycleData.completedAt = now;
       // Keep old replicas and clients coherent during the compatibility window.
       lifecycleData.archivedAt = now;
+      lifecycleData.retryAt = null;
+      lifecycleData.retryClaimedAt = null;
       finalCompletedAt = now;
     }
     if (lifecycle === 'deletedAt' && session.deletedAt == null) {
       lifecycleData.deletedAt = now;
+      lifecycleData.retryAt = null;
+      lifecycleData.retryClaimedAt = null;
       finalDeletedAt = now;
     }
     const lifecycleState = deriveSessionLifecycleState({
@@ -10437,7 +10466,7 @@ export class SessionsService {
       completedAt: finalCompletedAt,
       deletedAt: finalDeletedAt,
     });
-    if (SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) {
+    if (isReleased(session) || session.cancelRequestedAt) {
       if (Object.keys(lifecycleData).length > 0 || requireNoProjectBinding) {
         await tx.session.update({
           where: { id: sessionId },
@@ -10492,8 +10521,6 @@ export class SessionsService {
           endReason: reason,
           cancelRequestedAt: now,
           finishedAt: now,
-          // Released for the reason the end recorded (design §4.2).
-          releaseCause: releaseCauseOfEndReason(reason),
           // A queued session can still be holding what its last run left running — a job parked
           // with the session and never reaped — and CANCELLED is the end of the line for it
           // (CLEARED_RUNNING_WORK). The runner is told to stop by the same cancelRequestedAt,
@@ -11055,8 +11082,9 @@ export class SessionsService {
    * Nothing here stops a run that nobody asked to stop, and nothing here moves a running session
    * onto another provider.
    *
-   * `session_task_execution_claim_idx` makes "one live Session per task" a property of the database,
-   * and a revive writes a LIVE status — so a task whose run has already been re-dispatched (Run Now,
+   * The execution claim index (`session_task_execution_claim_idx_finished_at`, migration 1426, beside
+   * 0130's `session_task_execution_claim_idx` until release B) makes "one live Session per task" a
+   * property of the database, and a revive writes a LIVE status — so a task whose run has already been re-dispatched (Run Now,
    * a sweep, the auto-run the task list reconciles) refuses the revive at that index. The refusal is
    * correct; what used to happen with it was not. The raw `P2002` reached the API as a 500 with a
    * PostgreSQL sentence in it, in front of somebody who pressed "Retry now" on a failed run of a
@@ -11067,9 +11095,9 @@ export class SessionsService {
    * Nothing of the revive was written (the flip is the last thing the transaction does), so this
    * read is of the world the refusal is about.
    *
-   * The predicate is the index's own (`TASK_OCCUPYING` is its four statuses, character for
-   * character) rather than "the newest" or "the live one": a reader narrower than the index it
-   * explains answers "nothing holds the claim" for rows that do.
+   * The predicate is the index's own (`task_id`, not in the Trash, `finished_at IS NULL`) rather than
+   * "the newest" or "the live one": a reader narrower than the index it explains answers "nothing
+   * holds the claim" for rows that do.
    */
   private async routeOntoTheHeldClaim(
     ownerId: string,
@@ -11084,7 +11112,7 @@ export class SessionsService {
       // cannot be in the index — and it is what keeps the sentence from naming the caller's own
       // session if that ever stops being true.
       const holder = await this.prisma.session.findFirst({
-        where: { taskId, deletedAt: null, status: { in: TASK_OCCUPYING }, NOT: { id } },
+        where: { taskId, deletedAt: null, ...heldFilter(), NOT: { id } },
         select: {
           id: true,
           status: true,
@@ -11298,7 +11326,7 @@ export class SessionsService {
     //     what the run is for, and it is judged;
     //   a terminal revival — judged categorically, whoever asks: nothing on the row separates a
     //     person reviving it from the auto-retry sweep doing so.
-    const continuesSalvage = SessionsService.LIVE.includes(session.status)
+    const continuesSalvage = isHeldPastClaim(session)
       && !session.startsTaskWork
       && !opts?.startsTaskWork;
     if (session.taskId && !continuesSalvage) {
@@ -11346,7 +11374,7 @@ export class SessionsService {
     // that for ended sessions (mergeStatus: null); mirror it here, since createTurn doesn't.
     // Only a *settled* outcome is stale. createTurn performs that cleanup under
     // its Session row lock so it cannot erase an operation queued after this fast read.
-    if (SessionsService.LIVE.includes(session.status) && !session.cancelRequestedAt) {
+    if (isHeldPastClaim(session) && !session.cancelRequestedAt) {
       const live = await this.createTurn(ownerId, id, dto, {
         clearSettledWorktreeState: true,
         // Carried through: a live paused run being handed the task's prompt is the task's work,
@@ -11575,7 +11603,7 @@ export class SessionsService {
           );
         }
       }
-      if (!SessionsService.TERMINAL.includes(current.status)) {
+      if (!isReleased(current)) {
         if (existing) return { turn: existing, wasCompleted: false, wasRevived: false };
         throw SessionsService.resumeBlocked('NOT_TERMINAL', id);
       }
@@ -11714,9 +11742,8 @@ export class SessionsService {
           inboxLeaseOwner: newTerminalResumeHandoffOwner(),
           cancelRequestedAt: null,
           endReason: null,
-          // Held again: the release column and its cause go together.
+          // Held again (design §4.2).
           finishedAt: null,
-          releaseCause: null,
           error: null,
           result: null,
           lastTurnAt: new Date(),
@@ -11775,7 +11802,7 @@ export class SessionsService {
       };
     }, loggedRetry(this.logger, 'sessions.resume'))
       // The one duplicate key this UPDATE can reach — another live Session already holds this task's
-      // execution claim (0130) — answered as the refusal it is instead of as the 500 a bare P2002
+      // execution claim (1426, and 0130's index beside it until release B) — answered as the refusal it is instead of as the 500 a bare P2002
       // becomes. Caught outside the transaction, because naming the holder means reading, and the
       // transaction that raised this cannot answer a read. Any other duplicate is somebody else's
       // fact and goes on being thrown as it is.
@@ -11872,7 +11899,7 @@ export class SessionsService {
     // it keep going — refusing a message here would leave a salvage somebody can reply to once and
     // never again. The same carve-out `resume` makes, spelled the same way.
     const continuesSalvage =
-      SessionsService.LIVE.includes(session.status) && !session.startsTaskWork;
+      isHeldPastClaim(session) && !session.startsTaskWork;
     if (session.taskId && !continuesSalvage) {
       const refusal = await this.taskWorkRefusalFor(
         this.prisma, session.taskId, false, session.startsTaskWork,
@@ -12227,7 +12254,7 @@ export class SessionsService {
           owner: { select: { preferences: true } },
         },
       });
-      if (SessionsService.TERMINAL.includes(session.status)) {
+      if (isReleased(session)) {
         throw new ConflictException('the session has ended');
       }
       const next = await this.resolveProviderSwitch(tx, session, {
@@ -12485,6 +12512,7 @@ export class SessionsService {
         where: { id },
         select: {
           status: true,
+          finishedAt: true,
           engine: true,
           provider: true,
           providerBuiltin: true,
@@ -12578,7 +12606,7 @@ export class SessionsService {
           "this session's runner cannot move a conversation to another account yet — it updates itself when no turn is running",
         );
       }
-      const live = !SessionsService.TERMINAL.includes(session.status) && session.status !== RunStatus.PENDING;
+      const live = isHeldPastClaim(session);
       await tx.session.update({
         where: { id },
         data: {
@@ -12629,6 +12657,7 @@ export class SessionsService {
           where: { id },
           select: {
             status: true,
+            finishedAt: true,
             engine: true,
             provider: true,
             providerBuiltin: true,
@@ -12684,7 +12713,7 @@ export class SessionsService {
           },
         });
         // An ended or unclaimed session just stores it, for the claim that runs it next.
-        if (SessionsService.TERMINAL.includes(session.status) || session.status === RunStatus.PENDING) return 'leaving' as const;
+        if (!isHeldPastClaim(session)) return 'leaving' as const;
         await this.insertTurnLocked(tx, id, {
           kind: 'reload',
           content: JSON.stringify({ provider: engine }),
@@ -13177,6 +13206,11 @@ export class SessionsService {
     status: true,
     // A region sentence says the session waits on its machine's region (session-move.ts regionHeld).
     error: true,
+    // The release column: only an ended session moves (session-move.ts); with the status, the end reason and the last
+    // turn's outcome, whether a retry is armed on a failure (common/session-release.ts).
+    finishedAt: true,
+    endReason: true,
+    lastTurnOutcome: true,
     deletedAt: true,
     completedAt: true,
     importSourceCwd: true,
@@ -13242,7 +13276,7 @@ export class SessionsService {
     if (!session) return null;
     // Only an open session can still be asking or have work queued; on an ended one these are
     // leftovers that nothing will act on.
-    const open = !SessionsService.TERMINAL.includes(session.status);
+    const open = isHeld(session);
     const liveApprovals = open ? await countLiveApprovals(db, session) : 0;
     const queuedTurns = open
       ? await db.conversationTurn.count({
