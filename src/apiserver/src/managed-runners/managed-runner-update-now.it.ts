@@ -194,6 +194,11 @@ test('Update Now of a busy Orbit Cloud runner, on real Docker', { skip: !CONFIG 
       return null;
     }
   }
+  /** A container's log, both streams: the entrypoint writes what it did to stderr, which `docker logs` passes on as its own. */
+  async function containerLogs(name: string): Promise<string> {
+    const { stdout, stderr } = await run('docker', ['logs', name], { maxBuffer: 32 * MiB }).catch((error: Error) => ({ stdout: error.message, stderr: '' }));
+    return `${stdout}${stderr}`;
+  }
   async function shell(name: string, script: string): Promise<string> {
     const { stdout } = await run('docker', ['exec', '-u', '10001:10001', name, 'sh', '-c', script], { maxBuffer: 8 * MiB });
     return stdout.trim();
@@ -651,7 +656,7 @@ test('Update Now of a busy Orbit Cloud runner, on real Docker', { skip: !CONFIG 
       const root = (await shell(name, 'echo "$HOME"; ls -A /home/orbit | sort | tr "\\n" " "')).split('\n');
       const signedIn = await shell(name, `for f in ${Object.keys(SIGN_INS).join(' ')}; do [ -e /home/orbit/$f ] && echo $f; done; true`);
       const listing = await shell(name, 'cd /home/orbit && find . -maxdepth 4 -not -path "./home/*" | sort | head -200');
-      const logs = await docker('logs', name).catch((error: Error) => error.message);
+      const logs = await containerLogs(name);
       note('(1m) on the middle image', { generation: middle.generation, podUid: middle.podUid, image: container?.Image, root, signedIn, rootHome: listing.split('\n'), entrypoint: logs.split('\n').filter((line) => line.includes('orbit-container')) });
       assert.equal(root[0], '/home/orbit');
       assert.ok(/(^| )home( |$)/.test(root[1]), `the earlier home is still in its \`home\` folder: ${root[1]}`);
@@ -687,13 +692,15 @@ test('Update Now of a busy Orbit Cloud runner, on real Docker', { skip: !CONFIG 
   });
 
   await t.test('(3) Update Now without interruptTurns: refused 409 MANAGED_RUNNER_BUSY, naming the running turn', async () => {
+    const asked = (await mappingOf()).updateRequestedAt;
     const refused = await api('POST', '/api/managed-runner/update-now', alice.token, {});
     assert.equal(refused.status, 409, refused.text);
     assert.equal(refused.json.code, 'MANAGED_RUNNER_BUSY');
     assert.deepEqual(refused.json.turns.map((turn: { sessionId: string }) => toUuid(turn.sessionId)), [sessionId]);
     const m = await mappingOf();
-    assert.deepEqual({ asked: m.updateRequestedAt, state: m.managementState }, { asked: null, state: 'READY' });
-    assert.equal(await db.activity.count({ where: { actorId: alice.userId, type: MANAGED_RUNNER_UPDATE_NOW_ACTIVITY } }), 0);
+    // Nothing asked: still none, or the middle image's Update Now, already done.
+    assert.deepEqual({ asked: m.updateRequestedAt, state: m.managementState }, { asked: cfg.middleImage ? asked : null, state: 'READY' });
+    assert.equal(await db.activity.count({ where: { actorId: alice.userId, type: MANAGED_RUNNER_UPDATE_NOW_ACTIVITY } }), cfg.middleImage ? 1 : 0, 'nothing recorded beyond the middle image\'s Update Now');
     note('(3) refused while busy', { status: refused.status, code: refused.json.code, turns: refused.json.turns, backgroundJobs: refused.json.backgroundJobs });
   });
 
@@ -705,7 +712,7 @@ test('Update Now of a busy Orbit Cloud runner, on real Docker', { skip: !CONFIG 
     const accepted = await api('POST', '/api/managed-runner/update-now', alice.token, { interruptTurns: true });
     assert.equal(accepted.status, 202, accepted.text);
     assert.equal(accepted.json.update?.phase, 'updating');
-    const [activity] = await db.activity.findMany({ where: { actorId: alice.userId, type: MANAGED_RUNNER_UPDATE_NOW_ACTIVITY } });
+    const activity = await db.activity.findFirst({ where: { actorId: alice.userId, type: MANAGED_RUNNER_UPDATE_NOW_ACTIVITY, createdAt: { gte: askedAt } } });
     assert.ok(activity, 'the request is recorded');
     assert.deepEqual((activity.payload as { sessionIds: string[] }).sessionIds, [sessionId], 'naming the session whose turn it interrupts');
     note('(4) Update Now taken', { status: accepted.status, update: accepted.json.update, activity: activity.payload });
@@ -763,7 +770,7 @@ test('Update Now of a busy Orbit Cloud runner, on real Docker', { skip: !CONFIG 
       const signIns = Object.fromEntries(await Promise.all(Object.keys(SIGN_INS).map(async (file) => [file, await shell(name, `cat /home/orbit/${file}`)] as const)));
       const config = JSON.parse(await shell(name, 'cat /home/orbit/.orbit/config.json')) as { runnerId: string; workDir: string; runnerToken?: string };
       const moved = await transcriptIn(name, `/home/orbit/.claude/projects/${claudeSlug(workspace.workDir!)}`, transcript!.bytes);
-      const logs = await docker('logs', name).catch((error: Error) => error.message);
+      const logs = await containerLogs(name);
       note('(4b) the earlier home moved', { root, workDir: workspace.workDir, readme, config: { runnerId: config.runnerId, workDir: config.workDir }, transcriptBefore: transcript, transcriptAfter: moved, warnings: logs.split('\n').filter((line) => line.includes('orbit-container')) });
       assert.equal(root[0], '/home/orbit');
       assert.ok(!/(^| )(home|\.orbit-earlier-home)( |$)/.test(root[1]), `no earlier home left at the root: ${root[1]}`);
