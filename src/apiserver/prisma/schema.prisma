@@ -379,7 +379,7 @@ model User {
   driveTrashGroups   DriveTrashGroup[]
   driveCommits       DriveCommit[]
   driveChanges       DriveChange[]
-  /// Files a replacing rename removed, for a handle still writing one (migration 1428).
+  /// Files a replacing rename removed, for a handle still writing one (migration 1438).
   driveRemovedEntries DriveRemovedEntry[]
   /// The mount credentials of its managed runner's generations (migration 1339).
   driveMountCredentials DriveMountCredential[]
@@ -3757,7 +3757,7 @@ model DriveCommit {
   @@map("drive_commit")
 }
 
-/// A file a rename onto an existing file removed outright (1428, §3.2): its name and folder, so a mount handle still bound
+/// A file a rename onto an existing file removed outright (1438, §3.2): its name and folder, so a mount handle still bound
 /// to its id commits as a new file in Trash named after it (`successor_id`, made by the first such commit). No foreign
 /// key to the entry, the folder or the successor: each is read by id and checked. Pruned after seven days.
 model DriveRemovedEntry {

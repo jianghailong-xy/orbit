@@ -3301,9 +3301,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // pg_trgm extension if it is missing; no row is written, and no preserved relation, trigger, function or DONE
       // fence changes.
       '1427_drive_entry_name_trgm',
-      // 1428 creates drive_removed_entry (Orbit Files drive: the file a replacing rename removed, §3.2) and its index; no
-      // existing row is written, and no preserved relation, trigger, function or DONE fence changes.
-      '1428_drive_removed_entry'],
+      // 1438 creates drive_removed_entry (Orbit Files drive: the file a replacing rename removed, §3.2) and its index; no
+      // existing row is written, and no preserved relation, trigger, function or DONE fence changes. Numbered past every
+      // migration on main and the project and task branches (1437 the highest) when it was written.
+      '1438_drive_removed_entry'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

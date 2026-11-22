@@ -1,4 +1,4 @@
--- 1428 — Orbit Files drive: a file a replacing rename removed (docs/orbit-files-drive-technical-design.md §3.2).
+-- 1438 — Orbit Files drive: a file a replacing rename removed (docs/orbit-files-drive-technical-design.md §3.2).
 --
 --   drive_removed_entry  the name and folder of a source entry a rename onto an existing file removed outright
 --
