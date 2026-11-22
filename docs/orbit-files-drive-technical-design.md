@@ -621,6 +621,13 @@ The product asks for a clear error, not a hang.
 
 - Every door request has a deadline (10 s for metadata, 60 s for a chunk). After three failures in 10 s the daemon is
   **offline**: it probes every 5 s and fails what needs the server at once instead of waiting each time.
+- **A slow answer is not no answer.** A refused or reset connection, or a 5xx, is one failure. A request past its
+  deadline is offline at once only if the server answered nothing while it waited: a request still waiting halfway to
+  its deadline, with nothing answered since it was sent, probes the door meanwhile, so a server that is up but busy
+  (a loaded host, a long Postgres transaction) answers the probe and the timeout is one failure, while one that holds
+  connections unanswered answers neither and is offline within the deadline. A read (`stat`, a listing) past its
+  deadline on a server that answered is sent once more, given three times the deadline, instead of failing the call,
+  so one slow answer neither fails the operation nor every operation after it in an agent's long `rm -rf`.
 - **Offline is read-only from cache.** Reads of cached chunks, and lookups and listings in the metadata cache (up to
   10 minutes old), work. Everything else fails `EIO` at once: reads of uncached chunks, uncached lookups and listings,
   `open(O_CREAT)` (it must create the entry), `mkdir`, `rename`, `unlink`, and **`write()` itself** on any handle, so
