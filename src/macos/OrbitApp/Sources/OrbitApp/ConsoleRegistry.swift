@@ -231,10 +231,11 @@ final class ConsoleRegistry {
         }
     }
 
-    /// A GitHub workspace's clone moved to another state: the cached consoles whose conversation made that workspace
+    /// A GitHub workspace's clone moved to another state: the cached consoles whose conversation made or runs in that workspace
     /// read their detail again, which carries the state the server stored and, for a failure, why.
     func cloneStateMoved(workspaceID: String) {
-        for model in models.values where WorkspaceClone.sameWorkspace(model.madeWorkspaceID, workspaceID) {
+        for model in models.values where WorkspaceClone.sameWorkspace(model.madeWorkspaceID, workspaceID)
+            || WorkspaceClone.sameWorkspace(model.cloneWorkspace?.id, workspaceID) {
             Task { await model.refreshMadeWorkspace() }
         }
     }
