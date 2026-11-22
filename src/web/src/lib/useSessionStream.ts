@@ -185,6 +185,11 @@ export interface SessionStreamOptions {
   /** Called just before older events are put above the loaded ones, so the host can hold its scroll
    *  position. */
   beforePrepend?: () => void;
+  /** Whether the reader is following the latest message. A window that has to be replaced (`resync`,
+   *  a stalled cursor) is replaced only then; under a reader who scrolled up it is kept, its bottom
+   *  becomes a gap, and they page down to the latest or jump to it. Absent, the reader is taken to be
+   *  at the tail. */
+  readerAtTail?: () => boolean;
 }
 
 /**
@@ -210,6 +215,7 @@ export function useSessionStream({
   revealRecord,
   forgetRecord,
   beforePrepend,
+  readerAtTail,
 }: SessionStreamOptions) {
   const qc = useQueryClient();
   const message = useToast();
@@ -222,8 +228,8 @@ export function useSessionStream({
   const recordAtRef = useRef(recordAt);
   recordAtRef.current = recordAt;
   // The host's callbacks, read when they are needed: the stream is registered once per session.
-  const host = useRef({ revealRecord, forgetRecord, beforePrepend });
-  host.current = { revealRecord, forgetRecord, beforePrepend };
+  const host = useRef({ revealRecord, forgetRecord, beforePrepend, readerAtTail });
+  host.current = { revealRecord, forgetRecord, beforePrepend, readerAtTail };
   const [events, setEvents] = useState<RunEvent[]>([]);
   // `events` is replaced in an effect after navigation. Keep its owner explicit so a render in
   // between cannot treat the previous session's transcript as the newly selected session's.
@@ -791,6 +797,25 @@ export function useSessionStream({
       // branch — a permanently broken stream would reconnect, stall, re-seed, forever.
       connect();
     };
+    /**
+     * reseed(), unless the reader has scrolled up: swapping the window then moved what they were
+     * reading out from under them, to wherever the new page put the same scrollTop. Their window is
+     * kept instead and treated as one opened at a record — its bottom a gap at `lastSeq`, the stream
+     * closed — so scrolling down pages forward to the latest (loadNewer) and the jump-to-latest
+     * button trades it for a tail page (backToLatestRef).
+     */
+    const replaceWindow = (): void => {
+      if (lastSeq === 0 || (host.current.readerAtTail?.() ?? true)) {
+        void reseed();
+        return;
+      }
+      es?.close();
+      es = null;
+      clearTimeout(retry);
+      stalled = 0;
+      newerCursorRef.current = lastSeq;
+      setDetached(true);
+    };
     const connect = (): void => {
       // A tab in the background holds no transcript stream: nobody is reading it, and every frame
       // it took would be growth in a tab nobody is watching — the shape of a tab that gets heavier
@@ -812,10 +837,11 @@ export function useSessionStream({
         if (ev.type === 'ping') return;
         // The server refused to replay our gap — it's longer than it will stream (SSE_GAP_CAP).
         // Handled here, before the seq bookkeeping and the dedup below, because it rides seq 0
-        // like the approval nudges. Re-seed from a tail page instead; this connection is spent.
+        // like the approval nudges. Re-seed from a tail page instead — or, under a reader who scrolled
+        // up, keep their window and leave its bottom open (replaceWindow); this connection is spent.
         if (ev.type === 'resync') {
           es?.close();
-          void reseed();
+          replaceWindow();
           return;
         }
         // A still-PENDING turn is not in the transcript stream until the runner leases it.
@@ -1038,7 +1064,7 @@ export function useSessionStream({
       // outsized event makes — and the only way out is to stop asking for it. See reseed().
       stalled = lastSeq > seqAtConnect ? 0 : stalled + 1;
       if (stalled >= RESEED_AFTER_STALLED_RECONNECTS) {
-        void reseed();
+        replaceWindow();
         return;
       }
       fails += 1;

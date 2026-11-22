@@ -4633,6 +4633,7 @@ export function WorkspaceView({
         };
       }
     },
+    readerAtTail: () => atBottomRef.current,
   });
   const {
     events,

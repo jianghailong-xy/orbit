@@ -38,8 +38,11 @@ const lastStream = (): string => FakeEventSource.all[FakeEventSource.all.length 
 let root: Root;
 let latest: ReturnType<typeof useSessionStream>;
 const commits: number[] = [];
+let atTail = true;
 function Probe({ id }: { id: string }): null {
-  latest = useSessionStream({ sessionId: id, live: true, runStatus: 'RUNNING', runTerminal: false });
+  latest = useSessionStream({
+    sessionId: id, live: true, runStatus: 'RUNNING', runTerminal: false, readerAtTail: () => atTail,
+  });
   commits.push(latest.events.length);
   return null;
 }
@@ -58,6 +61,7 @@ describe('reopening a cached session', () => {
     (globalThis as { EventSource?: unknown }).EventSource = FakeEventSource;
     FakeEventSource.all = [];
     commits.length = 0;
+    atTail = true;
     vi.mocked(apiModule.getSessionEventPage).mockImplementation(async () => ({ events: range(1, 200), hasMore: true }) as never);
     root = createRoot(document.createElement('div'));
   });
@@ -115,6 +119,37 @@ describe('reopening a cached session', () => {
     });
     expect(latest.events.find((e) => e.seq === 150)?.payload.translation).toEqual({ lang: 'en', text: 'hello' });
     expect(vi.mocked(store.saveTranscript).mock.calls.at(-1)?.[2]).toEqual([150]);
+  });
+
+  describe('when the server will not replay the gap', () => {
+    const resync = async (): Promise<void> => {
+      vi.mocked(apiModule.getSessionEventPage).mockImplementation(async () => ({ events: range(2801, 3000), hasMore: true }) as never);
+      await act(async () => { FakeEventSource.all[FakeEventSource.all.length - 1].emit({ seq: 0, type: 'resync', payload: {} }); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(50); });
+    };
+
+    it('takes the newest page for a reader following the latest message', async () => {
+      await open('S1');
+      await resync();
+      expect(latest.events[0].seq).toBe(2801);
+      expect(latest.detached).toBe(false);
+      expect(lastStream()).toContain('sinceSeq=3000');
+    });
+
+    it('keeps the window of a reader who scrolled up, open at its bottom', async () => {
+      await open('S1');
+      const streams = FakeEventSource.all.length;
+      atTail = false;
+      await resync();
+      expect(latest.events.map((e) => e.seq)).toEqual(range(1, 200).map((e) => e.seq));
+      expect(latest.detached).toBe(true);
+      expect(FakeEventSource.all).toHaveLength(streams); // no stream until they reach the latest
+      vi.mocked(apiModule.getSessionEventPageAfter).mockResolvedValue({ events: range(201, 300), before: 200, after: null } as never);
+      await act(async () => { await latest.loadNewer(); });
+      expect(apiModule.getSessionEventPageAfter).toHaveBeenCalledWith('S1', 200, expect.anything());
+      expect(latest.detached).toBe(false);
+      expect(lastStream()).toContain('sinceSeq=300');
+    });
   });
 
   it('keeps a window that fits as it was', () => {
