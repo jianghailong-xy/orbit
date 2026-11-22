@@ -201,6 +201,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'runnerId',
   'assignedRunnerId',
   'targetRunnerId',
+  // A BROWSER_SIGN_IN owner request's Orbit Cloud runner (migration 1393): the card's Open browser
+  // opens /runners/:id/browser with it, so it is an address the client hands back.
+  'browserRunnerId',
   'taskId',
   // A concrete repair task's exception item (migration 0379), an address the task/open-item
   // readers hand back to the task or project routes.

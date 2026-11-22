@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link as RouterLink, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { api } from '../api';
 import { encodeId, routeId } from '../lib/idCodec';
+import { pastDeadline, type OwnerRequest } from '../lib/ownerRequests';
+import { ownerRequestsQuery } from '../lib/queries';
+import { sameResourceId } from '../lib/watches';
 import { RUNNER_BROWSER_COPY as COPY, isMacLike, runnerBrowserQuery } from '../lib/runnerBrowser';
 import { VncCanvas, type Link, type PasteState } from '../components/RunnerBrowserScreen';
 import { Button } from '../components/ui/Button';
@@ -19,6 +23,10 @@ import '../components/RunnerBrowserDrawer.css';
  *     footer says which session uses the browser, how to paste, the size and scale, and Live.
  *   - View only (the drawer's Open in new tab): the bar says who uses the browser, with a link to that session, and
  *     Take control. Nothing is sent: no pointer, no keys, no paste.
+ *   - A sign-in request (browser_request_sign_in) open for this runner puts a banner above the bar (board
+ *     03-agent-tools frame ①, notes ④ ⑤): the site and the session that asked, and I'm signed in, which answers the
+ *     card as signed in so the agent's waiting turn carries on. Done only stops control and answers nothing; Not now
+ *     is the card's.
  *   - Closing the tab closes the stream. With the server's browser switch off, or for a runner that is not the
  *     caller's managed one, GET /runners/:id/browser is 404 and this page is not found, like any other.
  */
@@ -81,6 +89,7 @@ export function RunnerBrowserPage() {
 
   return (
     <div className={`rb-tab${control ? ' is-controlling' : ''}`}>
+      <SignInRequests runnerId={runnerId} />
       <header className="rb-tab-bar">
         {control ? (
           <span className="rb-tab-title">
@@ -147,6 +156,59 @@ export function RunnerBrowserPage() {
         <span className="rb-size">{COPY.size(scale)}</span>
         <span className={`rb-link is-${link}`}>{linkLabel}</span>
       </footer>
+    </div>
+  );
+}
+
+/** The open sign-in requests for this runner's browser, one banner each, oldest first. */
+function SignInRequests({ runnerId }: { runnerId: string }) {
+  const { data } = useQuery(ownerRequestsQuery('open'));
+  // Answered here: gone at once, before the list is read again.
+  const [answered, setAnswered] = useState<ReadonlySet<string>>(() => new Set());
+  const now = Date.now();
+  const asking = (data?.requests ?? [])
+    .filter(
+      (r) =>
+        r.kind === 'BROWSER_SIGN_IN' &&
+        r.state === 'PENDING' &&
+        !answered.has(r.id) &&
+        !pastDeadline(r, now) &&
+        !!r.browserRunnerId &&
+        sameResourceId(r.browserRunnerId, runnerId),
+    )
+    .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
+  if (asking.length === 0) return null;
+  return (
+    <>
+      {asking.map((request) => (
+        <SignInBanner key={request.id} request={request} onAnswered={() => setAnswered((s) => new Set(s).add(request.id))} />
+      ))}
+    </>
+  );
+}
+
+function SignInBanner({ request, onAnswered }: { request: OwnerRequest; onAnswered: () => void }) {
+  const qc = useQueryClient();
+  // I'm signed in is the card's own answer, DONE: the agent's waiting call reads it as SIGNED_IN.
+  const signedIn = useMutation({
+    mutationFn: () => api<OwnerRequest>(`/owner-requests/${encodeURIComponent(request.id)}/done`, { method: 'POST', body: {} }),
+    onSuccess: onAnswered,
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: ['owner-requests'] });
+    },
+  });
+  const title = request.askedBySessionTitle?.trim() || null;
+  return (
+    <div className="rb-sign-in" role="region" aria-label={COPY.signInAsked(request.browserSite ?? '', null)}>
+      <span className="rb-sign-in-text">{COPY.signInAsked(request.browserSite ?? '', title)}</span>
+      {signedIn.isError && (
+        <span className="rb-paste-error" role="alert">
+          {COPY.signedInFailed}
+        </span>
+      )}
+      <Button variant="primary" disabled={signedIn.isPending} onClick={() => signedIn.mutate()}>
+        {COPY.signedIn}
+      </Button>
     </div>
   );
 }
