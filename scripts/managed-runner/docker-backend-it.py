@@ -5,6 +5,17 @@
         --evidence /mnt/data/tmp/<task>/it/evidence [--build-image [--image-source <checkout>]] \
         [--image orbit-cloud-runner:d2]
 
+The owner's Update Now of a busy runner (managed-runner-update-now.it.ts) runs the same way, on two images built
+beforehand — the one its runner starts on and the one an upgrade moves it to — and the stop grace a production
+channel has, so that the runner's own stop runs to its end before Docker would kill it:
+
+    python3 scripts/managed-runner/docker-backend-it.py --work ... --evidence ... \
+        --spec managed-runner-update-now.it.js --image <old image> --next-image <new image> --stop-grace-seconds 240 \
+        --link-gateway <binary built from src/link-gateway>
+
+A runner takes the daemon's calls over the runner link alone (docs/runner-link-design.md), so that test runs the link
+gateway it is handed beside its apiserver.
+
 What it sets up, every piece labelled `orbit.test=<run label>` and removed afterwards:
   - the managed runner image, from deploy/managed-runner/image of this checkout or of --image-source
     (built locally with --build-image, never pushed);
@@ -62,6 +73,10 @@ def main():
     parser.add_argument("--build-image", action="store_true", help="build the managed runner image first")
     parser.add_argument("--image-source", type=Path, default=REPO, help="the checkout whose deploy/managed-runner/image is built")
     parser.add_argument("--keep", action="store_true", help="leave everything in place for inspection")
+    parser.add_argument("--spec", default="docker-backend.it.js", help="the compiled test under build/managed-runners to run")
+    parser.add_argument("--next-image", help="the image an upgrade in the test moves the runners to (the test restarts the channel on it)")
+    parser.add_argument("--stop-grace-seconds", type=int, default=60, help="the channel's stopGraceSeconds (production: 240)")
+    parser.add_argument("--link-gateway", type=Path, help="the runner link gateway binary (go build ./src/link-gateway) the test runs")
     args = parser.parse_args()
 
     run_id = time.strftime("%m%d%H%M", time.gmtime()) + secrets.token_hex(2)
@@ -92,6 +107,13 @@ def main():
         revision = docker("image", "inspect", "-f", '{{index .Config.Labels "org.opencontainers.image.revision"}}', args.image).stdout.strip()
         log(f"managed runner image {args.image} = {image}, source revision {revision}")
         (evidence / "image.txt").write_text(f"{args.image} {image} org.opencontainers.image.revision={revision}\n")
+        next_image = None
+        if args.next_image:
+            next_image = docker("image", "inspect", "-f", "{{.Id}}", args.next_image).stdout.strip()
+            next_revision = docker("image", "inspect", "-f", '{{index .Config.Labels "org.opencontainers.image.revision"}}', args.next_image).stdout.strip()
+            log(f"next managed runner image {args.next_image} = {next_image}, source revision {next_revision}")
+            with open(evidence / "image.txt", "a") as out:
+                out.write(f"next: {args.next_image} {next_image} org.opencontainers.image.revision={next_revision}\n")
 
         # The test tree, compiled from this checkout (as scripts/run-pg-spec.sh does it).
         run(["bash", REPO / "scripts/worktree-overlay.sh"])
@@ -145,7 +167,7 @@ def main():
             "network": network,
             "limits": {"maxCpuMillis": 2000, "maxMemoryBytes": 2 * 2 ** 30, "maxPids": 2048, "maxTmpBytes": 2 ** 30,
                        "maxVolumeBytes": 10 * 2 ** 30, "maxConcurrent": 4},
-            "stopGraceSeconds": 60,
+            "stopGraceSeconds": args.stop_grace_seconds,
             "diskCheckSeconds": 30,
             "extraLabels": {label[0]: label[1]},
         }, indent=2))
@@ -157,9 +179,12 @@ def main():
             "channel": {"script": str(CHANNEL), "config": str(channel_config), "socket": str(socket), "tokenFile": str(token_file)},
             "instanceId": instance, "image": image, "network": network, "gateway": gateway,
             "testLabel": {"key": label[0], "value": label[1]},
+            **({"nextImage": next_image} if next_image else {}),
+            **({"linkGateway": str(args.link_gateway.resolve())} if args.link_gateway else {}),
         }, indent=2))
 
-        log("running build/managed-runners/docker-backend.it.js")
+        spec = f"build/managed-runners/{args.spec}"
+        log(f"running {spec}")
         env = {
             **os.environ,
             "ORBIT_D2_IT": str(it_config),
@@ -171,7 +196,7 @@ def main():
         env.pop("DOCKER_HOST", None)
         with open(evidence / "it.tap", "w") as tap:
             child = subprocess.Popen(["node", "--test", "--test-reporter=tap", "--test-concurrency=1",
-                                      "build/managed-runners/docker-backend.it.js"],
+                                      spec],
                                      cwd=API, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
             for line in child.stdout:
                 sys.stdout.write(line)
