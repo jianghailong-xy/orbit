@@ -139,7 +139,7 @@ class RunnerPageTest {
         assertEquals("Kept up to date by Orbit", RunnerPage.hostLine(runner("orbit-cloud"), managed = true))
         assertEquals("Kept up to date by Orbit", RunnerPage.versionValue(runner("orbit-cloud"), "0.1.197", managed = true))
         assertEquals("v0.1.190", RunnerPage.hostLine(runner("orbit-cloud", version = "0.1.190"), managed = true))
-        assertEquals("0.1.190 · Orbit updates this machine for you.", RunnerPage.versionValue(runner("orbit-cloud", version = "0.1.190"), "0.1.197", managed = true))
+        assertEquals("0.1.190 · Orbit moves it to each new build.", RunnerPage.versionValue(runner("orbit-cloud", version = "0.1.190"), "0.1.197", managed = true))
         assertFalse(RunnerPage.hostLine(runner("orbit-cloud"), managed = true).contains("managed-"))
 
         // The head's line leads with the country its IP is in, once a check has decided one; the words are OrbitKit's.
