@@ -1,11 +1,14 @@
 package io.orbitd.android.reader
 
 import androidx.compose.ui.test.*
+import io.orbitd.android.cards.CardFocus
 import io.orbitd.android.composer.ComposerShell
 import io.orbitd.android.composer.ComposerShellApplication
 import io.orbitd.android.composer.ComposerShellTest
 import kotlinx.serialization.json.*
+import org.junit.After
 import org.junit.Assert.*
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -28,6 +31,11 @@ class RecordJumpHoldShellTest : ComposerShellTest() {
         add(event("user", 1, "First question"))
         (2L..30L).forEach { add(event("assistant", it, "Answer $it\n\nIt goes on for a while, so that a few of these fill the phone's page.")) }
     }
+    /** The clock the hold's 5 s quiet reads: the test's, still. On the real clock a slow machine spends those seconds between the jump
+     * and the note's landing, and the row is let go before the note it is held against arrives. */
+    private val wall = 1_000_000L
+    @Before fun handClock() { CardFocus.now = { wall } }
+    @After fun realClock() { CardFocus.now = { System.currentTimeMillis() } }
     private fun top(tag: String) = compose.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().singleOrNull()?.boundsInWindow?.top
     private fun listTop() = compose.onNodeWithTag("transcript-list").fetchSemanticsNode().boundsInWindow.top
 
@@ -71,6 +79,8 @@ class RecordJumpHoldShellTest : ComposerShellTest() {
         ComposerShell.session = mapOf("coordinatorHandoffReceived" to Json.parseToJsonElement(
             """{"handoffFromSessionId":"34HandoffPrevious00001","note":"Handing over after Friday's release.","handedOverAt":"2026-11-14T15:42:00Z","movedWaits":[]}"""))
         app().realtime.refreshSession()
+        // The read lands off the main thread, in real time: waited for, then laid out on the shell's own clock.
+        await { has(hasTestTag("handoff-note-card"), unmerged = true) }
         repeat(5) { compose.mainClock.advanceTimeBy(300); compose.waitForIdle() }
         val gap = top("event:16")!! - listTop()
         assertTrue("the record's row is still the first row in view: $gap below the list's top", gap in 0f..80f)

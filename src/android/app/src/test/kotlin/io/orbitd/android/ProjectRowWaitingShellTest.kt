@@ -7,7 +7,9 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import io.orbitd.android.cards.CardFocus
 import io.orbitd.android.core.auth.AuthState
+import io.orbitd.android.navigation.ObjectId
 import java.io.File
 import java.time.Instant
 import kotlinx.coroutines.Dispatchers
@@ -17,6 +19,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import kotlinx.serialization.json.*
 import org.junit.Assert.*
+import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -56,7 +59,13 @@ class ProjectRowWaitingShellTest {
     private val headLine = "echo HEAD-OF-THE-WAITING-CARD"
     private val footLine = "echo FOOT-OF-THE-WAITING-CARD"
 
+    /** The clock a row's request to open at the waiting card lapses by (10 s): the test's, still. On the real clock a slow machine
+     * spends those seconds between the press and the card being drawn, and the member then opens wherever its tail is. */
+    private val wall = 1_000_000L
+    @After fun realClock() { CardFocus.now = { System.currentTimeMillis() } }
+
     @Before fun start() {
+        CardFocus.now = { wall }
         ProjectShell.reset()
         ProjectShell.waitingEvents = buildJsonArray {
             (1..24).forEach { n ->
@@ -125,7 +134,10 @@ class ProjectRowWaitingShellTest {
         signIn(); openList()
         compose.onNodeWithTag(row).performClick()
         await { shows(headLine) || shows(footLine) }
+        // The read lands off the main thread, in real time: the card is measured once the open has brought it in and laid it out.
+        await { read() && CardFocus.pending(ProjectShell.WAITING) == null && CardFocus.held(ProjectShell.WAITING)?.key == "approval:a-quota" }
         settle()
+        await { !bounds(compose.onNodeWithText("Run a command?", useUnmergedTree = true)).isEmpty }
         shot(name)
         val list = bounds(compose.onNodeWithTag("transcript-list"))
         val head = commandHead().single()
@@ -154,6 +166,7 @@ class ProjectRowWaitingShellTest {
         await { exists(hasText("Open Session") and hasAnyAncestor(isDialog())) }
         compose.onNode(hasText("Open Session") and hasAnyAncestor(isDialog())).performClick()
         await { shows(footLine) || shows(headLine) }
+        await { read() }
         settle()
         shot("project-row-waiting-member-from-menu")
         val again = bounds(compose.onNodeWithTag("transcript-list"))
@@ -175,6 +188,10 @@ class ProjectRowWaitingShellTest {
         val range = compose.onNodeWithTag("transcript-list").fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange]
         return range.value() >= range.maxValue() - 1f
     }
+    /** The member's own read has landed: its transcript and its cards, fresh. */
+    private fun read() = app().realtime.state.value.session?.let {
+        ObjectId.same(it.id, ProjectShell.WAITING) && it.snapshot != null && it.fresh && it.transcript.seeded
+    } == true
     private fun settle() { repeat(5) { compose.mainClock.advanceTimeBy(500); compose.waitForIdle() } }
     private fun bounds(node: SemanticsNodeInteraction): Rect = node.fetchSemanticsNode().boundsInRoot
     private fun shows(text: String) = compose.onAllNodesWithText(text, substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()

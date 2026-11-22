@@ -10,6 +10,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import io.orbitd.android.core.auth.AuthState
+import io.orbitd.android.navigation.ObjectId
 import java.time.Instant
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
@@ -61,7 +62,8 @@ class WaitingCardHoldShellTest {
     }
     private fun serve(vararg approvals: JsonObject) { ProjectShell.waitingApprovals = JsonArray(approvals.toList()).toString() }
 
-    /** The wall clock the 10 s lapse reads: the test's, moved by hand, since the shell's virtual time runs far ahead of real loads. */
+    /** The wall clock the 10 s lapse and the 5 s quiet read: the test's, moved by hand, since the shell's virtual time runs far ahead of
+     * real loads. */
     private var wall = 1_000_000L
     @After fun realClock() { CardFocus.now = { System.currentTimeMillis() } }
 
@@ -85,6 +87,7 @@ class WaitingCardHoldShellTest {
         val before = bounds(stepRow())
         serve(approval("a-late", 1, "LATE-DECISION", tall))
         arrive()
+        assertTrue("the late card landed", shows("LATE-DECISION"))
         assertEquals("the late card did not carry the list away from the reader", before, bounds(stepRow()))
     }
 
@@ -98,6 +101,7 @@ class WaitingCardHoldShellTest {
         val before = bounds(stepRow())
         serve(approval("a-late", 1, "LATE-DECISION", tall))
         arrive()
+        assertTrue("the late card landed", shows("LATE-DECISION"))
         assertEquals("the late card did not carry the list away from the reader", before, bounds(stepRow()))
     }
 
@@ -122,7 +126,10 @@ class WaitingCardHoldShellTest {
         serve(quota)
         openMember()
         await { shows(headLine) }
+        // The read lands off the main thread, in real time: the card is measured once the open has brought it in, held it and laid it out.
+        await { CardFocus.pending(ProjectShell.WAITING) == null && CardFocus.held(ProjectShell.WAITING)?.key == "approval:a-quota" }
         settle()
+        await { title()?.isEmpty == false }
         val placed = title()!!
         assertTrue("opened on the card: $placed", inList(placed))
         return placed.top
@@ -187,21 +194,26 @@ class WaitingCardHoldShellTest {
     /** A short drag back: the reader steps up into the last rows, and the cards item is still on screen below them. */
     private fun readAlittle() { compose.onNodeWithTag("transcript-list").performTouchInput { swipe(Offset(centerX, 150f), Offset(centerX, 190f), 200) }; settle() }
     private fun readHistory() { compose.onNodeWithTag("transcript-list").performTouchInput { swipeDown() }; settle() }
-    /** Asks for the session again and waits, in real time, for the read to land, so the shell's virtual clock does not run past the hold meanwhile. */
+    /** Asks for the session again and waits until that read has landed in the store (its lists are decoded off the main thread, so in
+     * real time: waited for, never slept through), then lets the reader lay it out and put the card back on the shell's own clock.
+     * The hold reads [wall], which only the test moves, so however long the read takes nothing lapses meanwhile. */
     private fun arrive() {
-        val reads = { ProjectShell.calls.count { it == "GET sessions/${ProjectShell.WAITING}/approvals?status=PENDING" } }
-        val before = reads()
+        val landed = snapshotReads()
         app().realtime.refreshSession()
-        val until = System.currentTimeMillis() + 30_000
-        while (reads() == before && System.currentTimeMillis() < until) Thread.sleep(20)
-        Thread.sleep(300)
+        await { snapshotReads() > landed && read() }
         repeat(5) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() }
     }
+    private fun snapshotReads() = app().realtime.state.value.session?.snapshotReads ?: 0L
+    /** The member's own read has landed: its transcript and its cards, fresh. */
+    private fun read() = app().realtime.state.value.session?.let {
+        ObjectId.same(it.id, ProjectShell.WAITING) && it.snapshot != null && it.fresh && it.transcript.seeded
+    } == true
     private fun advance(ms: Long) { compose.mainClock.advanceTimeBy(ms); compose.waitForIdle() }
     private fun openMember() {
         signIn(); await { exists(hasTestTag(row)) }
         compose.onNodeWithTag(row).performClick()
         await { exists(hasContentDescription("Project sessions")) }
+        await { read() }
         settle()
     }
     private fun settle() { repeat(5) { compose.mainClock.advanceTimeBy(500); compose.waitForIdle() } }
