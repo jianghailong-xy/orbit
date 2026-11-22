@@ -68,16 +68,15 @@ class SessionMessageBubbleTest {
         compose.onAllNodesWithText("Open sender session", useUnmergedTree = true).assertCountEquals(0)
     }
 
-    @Test fun theFootIsOneLineOfTimeTaskRequestAndAttachment() {
+    @Test fun theFootIsOneLineOfTimeTaskAndRequestWithoutTheNote() {
         show(message("Did you restart the runner by hand?", note = "<orbit-session-message from-session=\"s-2\">\nfrom another session\n</orbit-session-message>",
             request = "req-1"))
         compose.onNodeWithText("just now · ", useUnmergedTree = true).assertExists()
         compose.onNodeWithText("Its task ↗ · ", useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
         assertEquals(listOf("orbit-task:task-7"), opened)
-        compose.onNodeWithText("Asked for a reply · ", useUnmergedTree = true).assertExists()
-        compose.onNodeWithText("⊕ Orbit attached: session message", useUnmergedTree = true).assertExists()
-            .performSemanticsAction(SemanticsActions.OnClick)
-        compose.onNodeWithText("from another session", substring = true, useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("Asked for a reply", useUnmergedTree = true).assertExists()
+        compose.onAllNodesWithText("Orbit attached", substring = true, useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodesWithText("from another session", substring = true, useUnmergedTree = true).assertCountEquals(0)
     }
 
     @Test fun aMessageWithNoTaskOrRequestEndsItsFootAtTheTime() {

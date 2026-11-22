@@ -152,6 +152,11 @@ class SessionLineTest {
         assertEquals(SessionLine("Agent: $title…", Tone.RUNNING), line(session("RUNNING", runningSubagentCount = 1, runningSubagentTitle = title)))
         assertEquals(SessionLine("Running 2 agents · $title…", Tone.RUNNING), line(session("AWAITING_INPUT", runningSubagentCount = 2, runningSubagentTitle = title)))
         assertEquals(SessionLine("Running Agent…", Tone.RUNNING), line(session("AWAITING_INPUT", runningSubagentCount = 1, runningSubagentTitle = " ")))
+        // A foreground delegate is still the tool in flight: the row names its work, not the tool.
+        assertEquals(SessionLine("Agent: $title…", Tone.RUNNING),
+            line(session("RUNNING", lastToolUse = "mcp__orbit__delegate", runningSubagentCount = 1, runningSubagentTitle = title)))
+        assertEquals(SessionLine("Running Bash…", Tone.RUNNING),
+            line(session("RUNNING", lastToolUse = "Bash", runningSubagentCount = 1, runningSubagentTitle = title)))
     }
 
     /** The list payload's fields decode, null for a server that sends none. */

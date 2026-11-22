@@ -31,7 +31,7 @@ class OpenCodeKeysTest : ComposerShellTest() {
         compose.onNodeWithTag("new-session-engine").performClick()
         await { has(hasTestTag("engine:opencode") and hasClickAction()) }
         compose.onNodeWithTag("engine:opencode").performClick()
-        await { ComposerShell.calls.none { it.startsWith("PATCH") } && has(hasText("OpenCode ⌄")) }
+        await { ComposerShell.calls.none { it.startsWith("PATCH") } && has((hasTestTag("new-session-engine") and hasText("OpenCode"))) }
         openModelMenu()
         assertEquals("OpenCode's own sign-in, then the keys it runs; a key OpenCode can't spend is not there",
             listOf("On Fixture runner", "✓ OpenCode's own sign-in\nopencode auth", "API keys", "DeepSeek"), providerRows())

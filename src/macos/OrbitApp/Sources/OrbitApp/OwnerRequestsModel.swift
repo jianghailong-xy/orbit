@@ -20,6 +20,9 @@ final class OwnerRequestsModel {
     /// cards head the Scheduled page (docs/scheduled-tasks-design.md §6.4). There is no Waiting on you sheet
     /// (docs/mocks/waiting-on-you-removal; the owner, 2026-11-16).
     private(set) var scheduleItems: [ScheduleWaitingItem] = []
+    /// A condition's two kinds, pending: the can't-read card and the 30-day question (docs/condition-triggers-design.md
+    /// §5.3, §6.2). They head the Scheduled page with the schedule's.
+    private(set) var conditionItems: [ConditionWaitingItem] = []
     /// Terminals asking to be approved (docs/terminal-session-design.md). Each waits ten minutes at most.
     /// Read here for the machine page's Needs you section (docs/mocks/waiting-on-you-removal/02).
     private(set) var terminalRequests: [TerminalRequest] = []
@@ -62,6 +65,7 @@ final class OwnerRequestsModel {
             let openList = try await api.ownerRequests(state: "open")
             assignIfChanged(\.open, openList.requests)
             assignIfChanged(\.scheduleItems, openList.scheduleItems.filter { $0.state == "PENDING" })
+            assignIfChanged(\.conditionItems, openList.conditionItems.filter { $0.state == "PENDING" })
             assignIfChanged(\.all, try await api.ownerRequests(state: "all").requests)
             await loadTerminalRequests()
         } catch {
@@ -120,6 +124,17 @@ final class OwnerRequestsModel {
 
     // MARK: the doors
 
+    /// The 30-day question answered: Keep waiting (0) or Stop (1). The server's refusal in its own words, or nil.
+    func answerCondition(_ item: ConditionWaitingItem, option: Int) async -> String? {
+        do {
+            try await api.answerConditionItem(item.id, option: option)
+            assignIfChanged(\.conditionItems, conditionItems.filter { $0.id != item.id })
+            return nil
+        } catch {
+            return ScheduledModel.refusal(error)
+        }
+    }
+
     func complete(_ request: OwnerRequest, _ body: OwnerRequestDoneBody) async throws {
         adopt(try await api.completeOwnerRequest(request.id, body))
     }
@@ -129,8 +144,14 @@ final class OwnerRequestsModel {
         adopt(try await api.createWikiFromOwnerRequest(request.id))
     }
 
-    func decline(_ request: OwnerRequest, reason: String) async throws {
-        adopt(try await api.declineOwnerRequest(request.id, reason: reason))
+    /// A SETTINGS_CHANGE card's Save changes (design §5.2): the server writes the values and answers with the card,
+    /// DONE. A refusal 409 SETTINGS_STALE is thrown for the card to say so.
+    func applySettings(_ request: OwnerRequest) async throws {
+        adopt(try await api.applyOwnerRequestSettings(request.id))
+    }
+
+    func decline(_ request: OwnerRequest, reason: String, sendAsWritten: Bool = false) async throws {
+        adopt(try await api.declineOwnerRequest(request.id, reason: reason, sendAsWritten: sendAsWritten))
     }
 
     /// The key goes in the body of one request and nowhere else; the answer never carries it back.

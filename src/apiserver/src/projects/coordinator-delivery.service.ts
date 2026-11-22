@@ -9,6 +9,7 @@ import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
+import { isReleased } from '../common/session-release';
 import {
   COORDINATOR_PAUSE_SELECT,
   DELIVERY_COORDINATOR_PAUSED,
@@ -184,8 +185,8 @@ export interface QueueOptions {
    * Do not write to a conversation that is paused (`conversationIsPaused`): refuse with
    * DELIVERY_COORDINATOR_PAUSED instead, so the fact waits for it. Off, a paused conversation is
    * treated as it always was — a FAILED one refuses as ended, and one parked on a retry is written
-   * to. Only evidence asks for it (`CompletionEvidenceProducer`): what it refuses is delivered when
-   * the conversation is back, which is not true of every fact on this door.
+   * to. Evidence and the three edge-triggered coordinator facts ask for it: their recovery queues
+   * retry when the conversation is back without disarming its retry in the meantime.
    */
   holdWhilePaused?: boolean;
   /** The revision waited for this conversation before this delivery: recorded on the wake. */
@@ -494,12 +495,12 @@ export class CoordinatorDeliveryService {
     // row goes on naming it after it ends.
     const standing = await this.prisma.session.findFirst({
       where: { id: project.coordinatorSessionId, ownerId: project.ownerId, deletedAt: null },
-      select: { id: true, status: true, cancelRequestedAt: true },
+      select: { id: true, finishedAt: true, cancelRequestedAt: true },
     });
     if (
       !standing
       || standing.cancelRequestedAt !== null
-      || SessionsService.TERMINAL.includes(standing.status)
+      || isReleased(standing)
     ) {
       return { outcome: 'REFUSED', refusalCode: DELIVERY_COORDINATOR_SESSION_UNAVAILABLE };
     }

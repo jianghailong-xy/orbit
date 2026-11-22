@@ -103,9 +103,9 @@ fi
 # moves to the new image with its next container, made when it wakes after it next sleeps. Nothing here
 # deletes the previous image, and Docker keeps what a container runs (docs/self-hosting.md, "What an
 # upgrade does").
-MR_TAG=orbit-managed-runner:local
+MR_TAG=orbit-cloud-runner:local
 # Where root Compose mounts the managed runners' directory: in the channel, and read-only in the apiserver.
-MR_MOUNT=/var/lib/orbit-managed-runners
+MR_MOUNT=/var/lib/orbit-cloud-runners
 MR_SWITCH=0
 
 # The managed runners' directory on this host: the source Compose binds at $MR_MOUNT in service $1 (the channel by
@@ -480,6 +480,19 @@ web_gateway_refresh() {
   fi
 }
 
+# NATS keeps the nats.conf it started on the same way, a single file under a running container, and refuses whatever its
+# grants there do not allow, so a changed one is compared after `up` and recreates nats: the apiserver and the link
+# gateway lose their connection to it for a moment and reconnect on their own.
+nats_refresh() {
+  local running
+  running="$($DC ps -q nats 2>/dev/null || true)"
+  [ -n "$running" ] || return 0
+  if ! docker exec "$running" cat /etc/orbit-nats/nats.conf | cmp -s - src/link-gateway/nats.conf; then
+    echo "==> Recreating nats to run this checkout's src/link-gateway/nats.conf"
+    $DC up -d --wait --wait-timeout 180 --no-deps --force-recreate nats
+  fi
+}
+
 # After the images are built, before the apiserver is recreated. NATS and the gateway need nothing of the apiserver to
 # start: its revocation list and switch are read again until they answer. --no-deps, so that nothing else moves.
 link_start() {
@@ -490,6 +503,11 @@ link_start() {
   echo "==> Starting the runner link (nats, link-gateway)"
   if ! $DC up -d --wait --wait-timeout 180 --no-deps nats link-gateway; then
     link_failed "nats or link-gateway did not come up within 3 minutes"
+    web_gateway_refresh
+    return 0
+  fi
+  if ! nats_refresh; then
+    link_failed "nats, recreated for this checkout's src/link-gateway/nats.conf, did not come up within 3 minutes"
     web_gateway_refresh
     return 0
   fi

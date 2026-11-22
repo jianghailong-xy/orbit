@@ -216,7 +216,7 @@ class LinkIncrementsDeviceTest : IncrementDeviceTest() {
         verify("and no recap label", !exists(hasText("Recap ·", substring = true)))
         capture("01-recap-line")
         compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
-        compose.onNode(hasText("Settings") and hasClickAction()).performClick()
+        compose.onNodeWithTag("drawer:settings").performClick()
         // The switch is on Sessions' page (docs/mocks/ios-settings-order).
         val sessions = hasText("Sessions") and hasClickAction()
         await("the Sessions row") { exists(sessions) }

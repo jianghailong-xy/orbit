@@ -92,6 +92,8 @@ func claudeCommandArgs(job *ClaimedSession, scratchDir string, firstSpawn bool) 
 			"args":    []string{"mcp"},
 			"timeout": mcpToolTimeoutMs,
 		}
+		// The runner's browser, while it is active (browser_mcp.go).
+		addClaudeBrowserMCPServer(servers, orbitExe)
 	}
 	if len(servers) > 0 {
 		mcpPath := filepath.Join(scratchDir, "mcp.json")
@@ -199,6 +201,8 @@ func writeClaudeSettings(scratchDir, orbitExe string, fastMode bool) (string, er
 				{"matcher": "Bash", "hooks": guard},
 				{"matcher": "BashOutput|KillShell|TaskOutput|TaskStop", "hooks": guard},
 				{"matcher": "ScheduleWakeup|CronCreate", "hooks": guard},
+				// Claude's own alert, which reaches the engine's sign-in rather than the person (bgGuardPushNotificationReason).
+				{"matcher": "PushNotification", "hooks": guard},
 				// The other two doors a poll of Orbit's own work comes through (bgGuardOrbitPollReason).
 				{"matcher": "Monitor|" + claudeToolName("bg_run"), "hooks": guard},
 				// A SubAgent's questions and plans (subagentAsksNobodyReason); no verdict in any other session.
@@ -257,6 +261,7 @@ func spawnClaude(ctx context.Context, job *ClaimedSession, execDir string, args 
 		"ORBIT_ALLOW_ORCHESTRATION="+orchestrationEnv(job.AllowOrchestration),
 		envWatches+"="+watchesEnv(job.WatchesDisabled),
 		envWiki+"="+wikiEnv(job.WikiDisabled),
+		envWorkflows+"="+workflowsEnv(job.WorkflowsDisabled),
 		envScheduleRun+"="+scheduleRunEnv(job.ScheduleRun),
 		envScheduledCheckOnly+"="+scheduledCheckOnlyEnv(job.Agent.ScheduledCheckOnly),
 		"ORBIT_SPAWN_DEPTH="+strconv.Itoa(job.SpawnDepth),

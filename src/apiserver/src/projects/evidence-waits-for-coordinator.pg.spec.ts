@@ -473,7 +473,10 @@ async function evidenceMessages(db: PrismaClient, sessionId: string, taskId: str
     select: { clientTurnId: true, content: true, status: true, deliveredAt: true },
     orderBy: { seq: 'asc' },
   });
-  return turns.filter((turn) => (turn.content ?? '').includes('task_evidence_decide')
+  // Not the opening: a successor's lists every task by id in its state digest, beside standing
+  // instructions that name task_evidence_decide, and is no message about this revision.
+  return turns.filter((turn) => !turn.clientTurnId.startsWith('initial-')
+    && (turn.content ?? '').includes('task_evidence_decide')
     && (turn.content ?? '').includes(uuidToBase62(taskId)));
 }
 
@@ -1030,7 +1033,7 @@ test('a coordinator that took part in the work is not waited for: the revision i
       assert.equal(recorded!.status, 'CONSUMED');
       assert.equal(recorded!.sessionId, null);
       // And then it goes down: still not a coordinator anything waits for.
-      await stack.db.session.update({ where: { id: w.runSessionId }, data: { status: RunStatus.FAILED } });
+      await stack.db.session.update({ where: { id: w.runSessionId }, data: { status: RunStatus.FAILED, finishedAt: new Date()} });
       await stack.waiting.deliverOwed(w.projectId);
       assert.equal((await evidenceWakes(stack.db, w.taskId)).length, 1);
       const own = await readPendingEvidenceJudgments(stack.prisma, w.ownerId, { id: w.runSessionId, taskId: w.taskId });

@@ -148,7 +148,7 @@ describe('Machines in the account menu', () => {
     const labels = [...document.querySelectorAll<HTMLElement>('[role="menu"].tp-account-menu > [role="menuitem"]')]
       .filter((row) => !row.classList.contains('tp-account-profile'))
       .map((row) => row.textContent);
-    expect(labels).toEqual(['AppearanceSystem', 'Machines2 of 3 online', 'Settings', 'Help center', 'Log out']);
+    expect(labels).toEqual(['AppearanceSystem', 'Machines2 of 3 online', 'Model routingBalance', 'Settings', 'Help center', 'Log out']);
     expect(accountRow('Machines')!.getAttribute('aria-haspopup')).toBe('menu');
   });
 
@@ -183,7 +183,7 @@ describe('Machines in the account menu', () => {
   ])('shows the managed runner %s by its own state, never Ready', async (name, dot, text) => {
     managed = name;
     const id = managedState(name).runnerId!;
-    runners = [{ id, name: 'orbit-managed', online: name === 'available' }];
+    runners = [{ id, name: 'orbit-cloud', online: name === 'available' }];
     serve();
     await visit('/projects');
     await openAccountMenu();
@@ -192,6 +192,88 @@ describe('Machines in the account menu', () => {
       await vi.waitFor(() => expect(accountRow('Orbit Cloud')?.textContent).toBe(text), { timeout: 5_000, interval: 20 });
     });
     expect(accountRow('Orbit Cloud')!.querySelector('.tp-account-machine-dot')!.getAttribute('data-online')).toBe(dot);
+  });
+
+  it('pins Orbit Cloud first, marked, with a line before your own machines in their order', async () => {
+    runners = [
+      { id: 'r1', name: 'mbp', displayName: 'MacBook Pro', online: true },
+      { id: 'r2', name: 'orbit-cloud', online: true, managed: true },
+      { id: 'r3', name: 'old-linux', online: false },
+    ];
+    serve();
+    await visit('/projects');
+    await openAccountMenu();
+    await press(accountRow('Machines'));
+    await act(async () => {
+      await vi.waitFor(() => expect(accountRow('Orbit Cloud')).toBeDefined(), { timeout: 5_000, interval: 20 });
+    });
+
+    const level = accountRow('Orbit Cloud')!.closest('[role="menu"]')!;
+    const rows = [...level.children].map((row) =>
+      row.getAttribute('role') === 'separator' ? '—' : (row.textContent ?? ''),
+    );
+    expect(rows).toEqual(['Orbit Cloud', '—', 'MacBook Pro', 'old-linuxOffline', '—', 'Add a machine']);
+    expect(accountRow('Orbit Cloud')!.querySelector('.tp-account-machine-cloud .anticon-cloud')).not.toBeNull();
+    expect(accountRow('MacBook Pro')!.querySelector('.tp-account-machine-cloud')).toBeNull();
+  });
+
+  it('marks every other machine by the OS it reported, a monitor when it has not said', async () => {
+    runners = [
+      { id: 'r2', name: 'orbit-cloud', online: true, managed: true, capabilities: ['os:linux'] },
+      { id: 'r1', name: 'mini', online: true, capabilities: ['session-worktree-ops-v1', 'os:darwin'] },
+      { id: 'r3', name: 'hpc', online: true, capabilities: ['os:linux'] },
+      { id: 'r4', name: 'win-box', online: true, capabilities: ['os:windows'] },
+      { id: 'r5', name: 'old-runner', online: true },
+    ];
+    serve();
+    await visit('/projects');
+    await openAccountMenu();
+    await press(accountRow('Machines'));
+    await act(async () => {
+      await vi.waitFor(() => expect(accountRow('Orbit Cloud')).toBeDefined(), { timeout: 5_000, interval: 20 });
+    });
+
+    const osOf = (label: string) => accountRow(label)!.querySelector('.tp-account-machine-os > .anticon')?.getAttribute('data-os');
+    expect(osOf('mini')).toBe('darwin');
+    expect(osOf('hpc')).toBe('linux');
+    expect(osOf('win-box')).toBe('windows');
+    expect(osOf('old-runner')).toBe('unknown');
+    // Add a machine's + leads, in the same column, so its words start where the names do; no icon at the row's end.
+    expect(accountRow('Add a machine')!.querySelector('.tp-account-machine-os > .anticon-plus')).not.toBeNull();
+    expect(accountRow('Add a machine')!.querySelector('.orbit-menu-icon')).toBeNull();
+    // Orbit Cloud keeps its cloud, whatever OS it runs.
+    expect(accountRow('Orbit Cloud')!.querySelector('.tp-account-machine-os')).toBeNull();
+    expect(accountRow('Orbit Cloud')!.querySelector('.anticon-cloud')).not.toBeNull();
+  });
+
+  it('draws Appearance\'s choices with their marks before them, as the machines are drawn', async () => {
+    serve();
+    await visit('/projects');
+    await openAccountMenu();
+    await press(accountRow('Appearance'));
+    await act(async () => {
+      await vi.waitFor(() => expect(accountRow('Light')).toBeDefined(), { timeout: 5_000, interval: 20 });
+    });
+    const markOf = (label: string) =>
+      [...accountRow(label)!.querySelector('.tp-account-machine-os > .anticon')!.classList].find((c) => c.startsWith('anticon-'));
+    expect(markOf('System')).toBe('anticon-desktop');
+    expect(markOf('Light')).toBe('anticon-sun');
+    expect(markOf('Dark')).toBe('anticon-moon');
+    // The current choice keeps its check at the row's end.
+    expect(accountRow('System')!.querySelector('.orbit-menu-icon .anticon-check')).not.toBeNull();
+  });
+
+  it('draws no line under Orbit Cloud when it is the only machine', async () => {
+    runners = [{ id: 'r2', name: 'orbit-cloud', online: true, managed: true }];
+    serve();
+    await visit('/projects');
+    await openAccountMenu();
+    await press(accountRow('Machines'));
+    await act(async () => {
+      await vi.waitFor(() => expect(accountRow('Orbit Cloud')).toBeDefined(), { timeout: 5_000, interval: 20 });
+    });
+    const level = accountRow('Orbit Cloud')!.closest('[role="menu"]')!;
+    expect(level.querySelectorAll('[role="separator"]').length).toBe(1);
   });
 
   it('reads All online when none is down', async () => {

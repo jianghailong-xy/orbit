@@ -189,7 +189,7 @@ describe('the account menu', () => {
     serve('ADMIN');
     await visit('/projects');
     await openAccountMenu();
-    expect(menuRows()).toEqual(['MachinesNone', 'Settings', 'Help center', 'Admin', 'Log out']);
+    expect(menuRows()).toEqual(['MachinesNone', 'Model routingBalance', 'Settings', 'Help center', 'Admin', 'Log out']);
 
     const row = [...document.querySelectorAll<HTMLElement>('[role="menu"].tp-account-menu [role="menuitem"]')].find(
       (item) => item.textContent === 'Help center',
@@ -202,7 +202,7 @@ describe('the account menu', () => {
     serve('MEMBER');
     await visit('/projects');
     await openAccountMenu();
-    expect(menuRows()).toEqual(['MachinesNone', 'Settings', 'Help center', 'Log out']);
+    expect(menuRows()).toEqual(['MachinesNone', 'Model routingBalance', 'Settings', 'Help center', 'Log out']);
   });
 });
 

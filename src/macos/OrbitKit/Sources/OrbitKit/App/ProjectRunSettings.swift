@@ -49,7 +49,7 @@ extension StartProject {
         let main = main ?? RunSettings.mainBranchName(settings.upstreamRef)
         return [
             rowAsked,
-            RunSettings.lineInSentence(settings.line, main: main),
+            settings.line.map { RunSettings.lineInSentence($0, main: main) } ?? StartProject.landsWhenCommits,
             "\(RunSettings.automatic) \(settings.automatic ? "on" : "off")",
             "at most \(settings.maxConcurrentTasks) at a time",
         ].joined(separator: " · ")
@@ -96,7 +96,10 @@ extension StartProject {
         let upstream = view?.upstreamRef.flatMap { $0.isEmpty ? nil : RunSettings.mainBranchRef($0) }
         return ProjectStartSettings(line: line, projectBranchName: branch, upstreamRef: upstream,
                                     automatic: true, maxConcurrentTasks: maxConcurrentTasks ?? 1,
-                                    mergeCheckCommand: view?.mergeCheckCommand)
+                                    mergeCheckCommand: view?.mergeCheckCommand,
+                                    landingCheckCommand: view?.landingCheckCommand,
+                                    landingCheckTimeoutSeconds: view?.landingCheckTimeoutSeconds,
+                                    mergeCheckTimeoutSeconds: view?.mergeCheckTimeoutSeconds)
     }
 
     /// Whether any live task of the plan waits on another. A run the server folded is a chain.
@@ -415,6 +418,15 @@ extension RunSettings {
     }
 
     /// The merge check a Save writes: trimmed, blank is none — and nothing when it is what is stored.
+    public static func landingCheckWrite(_ view: ProjectIntegrationView, command: String,
+                                         timeout: Int?) -> UpdateProjectIntegrationRequest? {
+        let next: String? = command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : command
+        guard next != view.landingCheckCommand || timeout != view.landingCheckTimeoutSeconds else { return nil }
+        return UpdateProjectIntegrationRequest(
+            landingCheckCommand: next != view.landingCheckCommand ? .some(next) : nil,
+            landingCheckTimeoutSeconds: timeout != view.landingCheckTimeoutSeconds ? .some(timeout) : nil)
+    }
+
     public static func mergeCheckWrite(_ view: ProjectIntegrationView,
                                        to command: String) -> UpdateProjectIntegrationRequest? {
         let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)

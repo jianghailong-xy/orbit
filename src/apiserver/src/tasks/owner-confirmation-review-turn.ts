@@ -429,7 +429,9 @@ export function ownerAnswersMessage(input: {
     const shown = answer.source === 'NOT_SHOWN'
       ? ' (the owner\'s app did not show this question; your recommended option was recorded)'
       : '';
-    return `- ${question?.text ?? answer.key} → ${answerInWords(answer, question)}${shown}`;
+    // The owner's words as the reviewer reads them: their translation into the agent language when one was made.
+    const words = answer.translation?.text ? { ...answer, text: answer.translation.text } : answer;
+    return `- ${question?.text ?? answer.key} → ${answerInWords(words, question)}${shown}`;
   });
   return [
     `<orbit-confirmation-answers task="${uuidToBase62(input.taskId)}">`,

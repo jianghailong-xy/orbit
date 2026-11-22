@@ -23,11 +23,21 @@ private struct RunnerUpdatingFootKey: EnvironmentKey {
     static let defaultValue: RunnerUpdatingFoot? = nil
 }
 
+private struct HeldCancelKey: EnvironmentKey {
+    static let defaultValue: ((UserBubble) -> Void)? = nil
+}
+
 private struct RunnerUpdatingQueuedKey: EnvironmentKey {
     static let defaultValue: RunnerUpdatingFoot? = nil
 }
 
 extension EnvironmentValues {
+    /// Set by `TranscriptView`: the held tag's Cancel under a message no runner has taken yet
+    /// (`HeldCancel.offers`). Nil where there is no console to act through.
+    var heldCancel: ((UserBubble) -> Void)? {
+        get { self[HeldCancelKey.self] }
+        set { self[HeldCancelKey.self] = newValue }
+    }
     /// Set by `TranscriptView` while the session is held by its runner's update.
     var runnerUpdatingFoot: RunnerUpdatingFoot? {
         get { self[RunnerUpdatingFootKey.self] }
@@ -121,22 +131,36 @@ struct RunnerUpdatingQueuedView: View {
 /// updating`, the reason underlined because a press opens why. A session a full runner, run or batch
 /// holds is drawn the same way with `QueuedCapacity`'s words (`Queued · runner full`, web
 /// `CapacityHeldTag`, docs/mocks/queued-card-runner-full), and its popover offers nothing to press.
+/// A new session Keep Free holds reads `Queued · low disk space` (`QueuedDiskLow`), likewise.
 struct RunnerUpdatingTagView: View {
     let foot: RunnerUpdatingFoot
+    /// ` · Cancel` after the tag, under a message no runner has taken yet (`HeldCancel`): in the
+    /// tint, the tag staying muted. Nil draws the tag alone.
+    var onCancel: (() -> Void)? = nil
     @State private var open = false
 
     private var full: Bool { QueuedCapacity.holds(foot.session) }
+    private var disk: Bool { QueuedDiskLow.holds(foot.session) }
 
     var body: some View {
         HStack(spacing: 4) {
             Text(RunnerUpdating.queuedWord)
             Text("·")
             Button { open = true } label: {
-                Text(full ? QueuedCapacity.tag(foot.session) : RunnerUpdating.tag(foot.session))
+                Text(disk ? QueuedDiskLow.tag : full ? QueuedCapacity.tag(foot.session) : RunnerUpdating.tag(foot.session))
                     .underline(pattern: .dot)
             }
             .buttonStyle(.plain)
             .popover(isPresented: $open) { pop }
+            if let onCancel {
+                Text("·")
+                Button { onCancel() } label: {
+                    Text(HeldCancel.label)
+                }
+                .buttonStyle(.plain).foregroundStyle(.tint)
+                .contentShape(Rectangle())
+                .accessibilityIdentifier("held-cancel")
+            }
         }
         .font(.orbitMeta)
         .foregroundStyle(.secondary)
@@ -146,15 +170,17 @@ struct RunnerUpdatingTagView: View {
     private var pop: some View {
         TimelineView(.periodic(from: .now, by: 30)) { context in
             VStack(alignment: .leading, spacing: 6) {
-                Text(full ? QueuedCapacity.title(foot.session) : RunnerUpdating.title(foot.session)).font(.headline)
-                Text(full ? QueuedCapacity.messageText(foot.session, machine: foot.machine)
+                Text(disk ? QueuedDiskLow.title : full ? QueuedCapacity.title(foot.session) : RunnerUpdating.title(foot.session))
+                    .font(.headline)
+                Text(disk ? QueuedDiskLow.wait : full ? QueuedCapacity.messageText(foot.session, machine: foot.machine)
                      : RunnerUpdating.messageText(foot.session, machine: foot.machine))
                     .font(.callout)
-                if let waited = full ? QueuedCapacity.waited(foot.session, now: context.date)
+                // Keep Free's wait counts from when the session went PENDING, as a full runner's does.
+                if let waited = full || disk ? QueuedCapacity.waited(foot.session, now: context.date)
                     : RunnerUpdating.waited(foot.session, now: context.date) {
                     Text("\(waited).").font(.callout).foregroundStyle(.secondary)
                 }
-                if let runnerID = foot.runnerID, !full, !RunnerUpdating.stopping(foot.session) {
+                if let runnerID = foot.runnerID, !full, !disk, !RunnerUpdating.stopping(foot.session) {
                     RunnerUpdateLaterControl(runnerID: runnerID,
                                              version: foot.session.queuedRunnerUpdate?.targetVersion,
                                              machine: foot.machine)
@@ -167,5 +193,45 @@ struct RunnerUpdatingTagView: View {
             .padding(14)
         }
         .presentationCompactAdaptation(.popover)
+    }
+}
+
+/// The waiting card of a session held by its GitHub workspace's clone (web `CloneWaitNotice`, board
+/// docs/mocks/clone-progress-wait-card ②): what is cloning, git's percentage once the stream has relayed one, and
+/// where. `compact` is the one under a transcript; the full-height one stands alone on an empty conversation. Neither
+/// has a waiting animation of its own, so the spinner shows while there is no percentage.
+struct CloneWaitCardView: View {
+    let card: QueuedClone.Card
+    let machine: String?
+    var compact = false
+
+    var body: some View {
+        VStack(spacing: compact ? 4 : 10) {
+            HStack(spacing: 6) {
+                if card.progress == nil { ProgressView().controlSize(.small) }
+                Text(card.title).font(compact ? .subheadline.weight(.semibold) : .headline)
+            }
+            if let progress = card.progress {
+                HStack(spacing: 8) {
+                    Capsule().fill(.quaternary).frame(width: 160, height: 4)
+                        .overlay(alignment: .leading) {
+                            Capsule().fill(Color.accentColor).frame(width: 160 * CGFloat(progress) / 100, height: 4)
+                        }
+                        .accessibilityElement()
+                        .accessibilityLabel(card.title)
+                        .accessibilityValue("\(progress)%")
+                    Text(verbatim: "\(progress)%").font(.footnote).monospacedDigit().foregroundStyle(.secondary)
+                }
+            }
+            Text(QueuedClone.sentence(machine: machine))
+                .font(compact ? .footnote : .callout)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding(.horizontal, compact ? 16 : 32)
+        .padding(.vertical, compact ? 10 : 0)
+        .frame(maxWidth: compact ? .infinity : 420)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier(compact ? "clone-wait-compact" : "clone-wait")
     }
 }

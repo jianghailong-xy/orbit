@@ -4,6 +4,7 @@ import { renderRawQuery, noSessionRequests } from '../test-support/prisma-transa
 import { test } from 'node:test';
 import { ConflictException, ForbiddenException, Logger } from '@nestjs/common';
 import { Prisma, RunStatus } from '@prisma/client';
+import { isReleasedStatus } from '../common/session-release';
 import { API_ERROR_RETRY_BACKOFF_MS, MAX_API_ERROR_RETRIES, RunEventType } from '@orbit/shared';
 import { RunnerApiController } from './runner-api.controller';
 import { coordinatorDeliveryTurnId } from '../projects/coordinator-delivery.service';
@@ -147,6 +148,8 @@ function makeController(
       findUniqueOrThrow: async () => ({
         ownerId: 'owner-1',
         status,
+        // A terminal row carries its release column (session_release_fact_chk).
+        ...(isReleasedStatus(status) ? { finishedAt: new Date() } : {}),
         runtimeSessionId,
         cancelRequestedAt: null,
         runningBgShells: stored.runningBgShells ?? [],
@@ -479,6 +482,44 @@ test('an async Agent and a Workflow count as running sub-agents until their noti
     ['toolu_agent', 'toolu_wf'],
     'both launch receipts leave their call running',
   );
+});
+
+test('an Orbit workflow remains running after its JSON receipt and clears on background completion', async () => {
+  const toolUseId = 'toolu_orbit_workflow';
+  const { calls, controller } = makeController();
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      { seq: 64, type: RunEventType.TOOL_USE, ts: '2026-11-19T06:00:00.000Z',
+        payload: { id: toolUseId, name: 'mcp__orbit__workflow', input: {} } },
+      { seq: 65, type: RunEventType.TOOL_RESULT, ts: '2026-11-19T06:00:01.000Z',
+        payload: { toolUseId, content: [{ type: 'text', text: JSON.stringify({
+          workflowRunId: 'workflow-1', status: 'running',
+        }, null, 2) }] } },
+    ],
+  });
+  assert.deepEqual(calls.update[0].data.runningSubagents, [toolUseId]);
+
+  const ended = makeController(RunStatus.AWAITING_INPUT, 'runtime-1', { runningSubagents: [toolUseId] });
+  await ended.controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      { seq: 66, type: RunEventType.BACKGROUND_TASK, ts: '2026-11-19T06:01:00.000Z',
+        payload: { toolUseId, kind: 'workflow', status: 'completed' } },
+    ],
+  });
+  assert.deepEqual(ended.calls.update[0].data.runningSubagents, []);
+});
+
+test('an Orbit workflow re-announced after a resume counts as a running sub-agent, not a background job', async () => {
+  const toolUseId = 'toolu_orbit_workflow';
+  const { calls, controller } = makeController();
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      { seq: 70, type: RunEventType.BACKGROUND_TASK, ts: '2026-11-19T06:02:00.000Z',
+        payload: { toolUseId, status: 'running', kind: 'subagent', workflowRunId: 'workflow-1' } },
+    ],
+  });
+  assert.deepEqual(calls.update[0].data.runningSubagents, [toolUseId]);
+  assert.equal(calls.update[0].data.runningBgJobs, undefined);
 });
 
 test('a Workflow leaves the running sub-agents when its notification arrives', async () => {

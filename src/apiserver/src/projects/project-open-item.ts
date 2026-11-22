@@ -9,10 +9,9 @@ import {
   OpenItemStage,
   OwnerAnswerCard,
   OwnerItemKind,
+  OwnerWordsTranslation,
   SessionLifecycleState,
-  SessionRunState,
   deriveSessionLifecycleState,
-  deriveSessionRunState,
   uuidToBase62,
 } from '@orbit/shared';
 
@@ -23,7 +22,13 @@ import {
   taskLanding,
   taskLandingSql,
 } from './project-criterion-landing';
-import { PROJECT_LIVE_SESSION_STATUS_SQL } from './live-session-status';
+import {
+  releaseWasFailure,
+  releaseWasFailureSql,
+  sessionHasEnded as releasedSessionHasEnded,
+  sessionHeldSql,
+} from '../common/session-release';
+import { evidenceUndecidedOwed } from './evidence-undecided';
 import { LIVE_PROMOTION_STATES } from './project-promotion';
 import {
   doorsForOpenItem,
@@ -67,7 +72,9 @@ export interface ProjectOpenItemDelivery {
  *  (§4.6 X-E5), so that the owner can abandon an attempt whose runner stopped reporting.
  *  `LANDING_UNOBSERVED` (0453) is a finished task's work not yet seen on its line, put to the
  *  coordinator first; `LANDED_WITHOUT_CONFIRMATION` (0453) is the owner's item about work that
- *  reached main without their confirmation (§10.7). */
+ *  reached main without their confirmation (§10.7). `EVIDENCE_UNDECIDED` (1110) is the owner's: the
+ *  escalation clock opens it when a task's latest evidence revision has had no decision for longer
+ *  than its project's window, after the coordinator was asked first (`evidence-undecided.ts`). */
 export const OPEN_ITEM_KINDS = [
   'INTEGRATION_CONFLICT',
   'INTEGRATION_CHECK_FAILED',
@@ -82,6 +89,7 @@ export const OPEN_ITEM_KINDS = [
   'LANDING_LEASE_EXPIRED',
   'LANDING_UNOBSERVED',
   'LANDED_WITHOUT_CONFIRMATION',
+  'EVIDENCE_UNDECIDED',
 ] as const;
 export type OpenItemKind = (typeof OPEN_ITEM_KINDS)[number];
 
@@ -172,6 +180,10 @@ export const OPEN_ITEM_RESOLUTIONS = [
   /** The task a `LANDING_UNOBSERVED` item was about was declared codeless, with a reason (§10.7,
    *  0453). */
   'CODELESS',
+  /** The evidence revision an `EVIDENCE_UNDECIDED` item was about was decided — CONFIRM or SEND_BACK (1110). */
+  'DECIDED',
+  /** A newer evidence revision replaced the one an `EVIDENCE_UNDECIDED` item was about (1110). */
+  'REVISED',
 ] as const;
 export type OpenItemResolution = (typeof OPEN_ITEM_RESOLUTIONS)[number];
 
@@ -339,6 +351,7 @@ export function ownerItemNeed(kind: OpenItemKind | string): string {
     case 'LANDING_LEASE_EXPIRED': return 'Runner stopped reporting';
     case 'LANDING_UNOBSERVED': return 'Not on the line yet';
     case 'LANDED_WITHOUT_CONFIRMATION': return 'Landed without your confirmation';
+    case 'EVIDENCE_UNDECIDED': return 'Evidence waiting for a decision';
     default: return 'Exception';
   }
 }
@@ -351,6 +364,8 @@ function primaryActionPreference(row: OpenItemDecisionRow): OpenItemAction[] {
   const owner = row.assignee === 'OWNER';
   // §10.8: what this item asks the owner for is the Accept.
   if (row.kind === 'LANDED_WITHOUT_CONFIRMATION') return ['ACCEPT'];
+  // Undecided evidence asks the owner to read it: the Review opens the revision.
+  if (row.kind === 'EVIDENCE_UNDECIDED') return ['REVIEW'];
   if (owner) return ['ASK_COORDINATOR_AGAIN', 'OPEN_TASK_SESSION', 'RETRY', 'REVIEW', 'ANSWER', 'RESUME'];
   if (row.kind === 'TASK_FAILED') return ['RETRY', 'OPEN_TASK_SESSION', 'OPEN_COORDINATOR', 'CANCEL_TASK'];
   if (row.kind === 'COORDINATOR_QUESTION') return ['ANSWER'];
@@ -468,6 +483,10 @@ export function openItemRequiredAction(row: OpenItemDecisionRow): string {
   if (row.kind === 'LANDING_UNOBSERVED') {
     return `This task’s work is not on ${landingLineOf(row.payload) ?? main} yet — record the commit that carries it, `
       + 'or send the task back to push it.';
+  }
+  if (row.kind === 'EVIDENCE_UNDECIDED') {
+    // No ask-again: the coordinator already had this evidence, and the cell draws no such door.
+    return 'The coordinator has not decided this evidence — review it, then confirm it or send it back.';
   }
   if (row.kind === 'LANDED_WITHOUT_CONFIRMATION') {
     const target = filled((row.payload as { targetBranch?: unknown } | null | undefined)?.targetBranch);
@@ -646,7 +665,10 @@ export interface CoordinatorQuestion {
 /** How the owner answered: an option, free text, or both. */
 export interface OwnerAnswer {
   option?: number;
+  /** The owner's words, as they typed them: what every card shows. */
   text?: string;
+  /** `text` in the agent language, when Settings › Translation translated it: what the coordinator is told. */
+  translation?: OwnerWordsTranslation;
   answeredByUserId: string;
 }
 
@@ -739,28 +761,38 @@ export function answerInWords(question: CoordinatorQuestion, answer: OwnerAnswer
  * version of the same answer.
  *
  * `redelivered` is set when the conversation told is not the one that asked (§5.2 R11): "you asked"
- * would be false there, and the new coordinator needs to know whether the answer still holds work up.
- * Whether it still blocks is read at delivery, once per conversation; the asker's words never carry it.
+ * would be false there, and the new coordinator needs to know which work the answer still holds up,
+ * named, so it can act on it without a read first. Which tasks still block is read at delivery, once
+ * per conversation; the asker's words never carry it.
  */
 export function ownerAnswerMessage(
   question: CoordinatorQuestion,
   answer: OwnerAnswer,
   answeredAt: Date,
-  redelivered?: { stillBlocks: boolean },
+  redelivered?: { stillBlocks: ReadonlyArray<{ title: string; status: string }> },
 ): string {
   const asked = redelivered ? 'a previous coordinator of this project asked' : 'you asked';
+  // The owner's words as the agent reads them: their translation into the agent language when one was made.
+  const words = answer.translation?.text ? { ...answer, text: answer.translation.text } : answer;
   const told = `From Orbit · owner answer: ${asked} "${question.question}". `
-    + `The owner answered: ${answerInWords(question, answer)} (${answeredAt.toISOString()}).`;
+    + `The owner answered: ${answerInWords(question, words)} (${answeredAt.toISOString()}).`;
   if (!redelivered) return told;
-  return told + (redelivered.stillBlocks
-    ? ' That question still blocks unfinished tasks.'
-    : ' That question no longer blocks any unfinished task.');
+  const blocking = redelivered.stillBlocks;
+  if (blocking.length === 0) return told + ' That question no longer blocks any unfinished task.';
+  const named = blocking.slice(0, BLOCKING_TASKS_NAMED).map((task) => `"${task.title}" (${task.status})`);
+  const more = blocking.length > BLOCKING_TASKS_NAMED ? ` and ${blocking.length - BLOCKING_TASKS_NAMED} more` : '';
+  return told + ` That question still blocks unfinished tasks: ${named.join(', ')}${more}.`;
 }
+
+/** How many still-blocked tasks a redelivered answer names before counting the rest. */
+const BLOCKING_TASKS_NAMED = 5;
 
 /** The columns "has this conversation ended" is decided from. */
 export const SESSION_ENDING_SELECT = {
   status: true,
+  finishedAt: true,
   endReason: true,
+  lastTurnOutcome: true,
   completedAt: true,
   archivedAt: true,
   deletedAt: true,
@@ -769,7 +801,9 @@ export const SESSION_ENDING_SELECT = {
 
 export interface SessionEnding {
   status: string;
+  finishedAt: Date | null;
   endReason: string | null;
+  lastTurnOutcome: string | null;
   completedAt: Date | null;
   archivedAt: Date | null;
   deletedAt: Date | null;
@@ -783,35 +817,14 @@ export interface SessionEnding {
  * onto, because from the outside those are conversations somebody closed.
  */
 export function sessionHasEnded(session: SessionEnding): boolean {
-  if (session.cancelRequestedAt) return true;
-  if (deriveSessionLifecycleState(session) !== SessionLifecycleState.OPEN) return true;
-  const run = deriveSessionRunState(session);
-  return run === SessionRunState.ENDED
-    || run === SessionRunState.SUCCEEDED
-    || run === SessionRunState.FAILED;
+  return Boolean(session.cancelRequestedAt) || releasedSessionHasEnded(session);
 }
 
-/**
- * Whether a project's coordinator conversation can be reached about an item right now, read once
- * for both of the card's doors so they cannot come to two answers about one conversation:
- *
- *  - `coordinator.receiving` — "Chat about this" is live: a message can be delivered there, alive or
- *    ended in a way a message revives (`receiveBlockedReasonFor`, i.e. `canSend` minus a retired run);
- *  - `askable` — ASK_COORDINATOR_AGAIN is drawn, and `returnToCoordinator` refuses on exactly this:
- *    a message can reach it AND the conversation is not over (`conversationIsOver`). A run that is
- *    only down — FAILED by the reaper while its runner was away, nobody closed it — is askable as
- *    soon as its runner is back, because the press revives it as the chat would (2026-11-15: the
- *    chat was live while Ask-again was hidden). One the owner closed (Completed) still takes a chat
- *    message, which is the owner choosing to reopen THAT conversation, but is not where the platform
- *    puts an item back on its own say.
- *
- * So `askable` implies `receiving`, and "nothing works" is `!receiving` (`coordinatorUnreachable`).
- * The project page and the owner's push both read it here.
- */
+/** Read whether the chat can send now and whether Ask again can queue on this conversation. */
 export async function readCoordinatorReach(
   sessions: { receiveBlockedReasonFor(ownerId: string, sessionId: string): Promise<string | null> },
   ownerId: string,
-  project: { coordinatorSessionId: string | null; coordinatorSession: SessionEnding | null },
+  project: { coordinatorSessionId: string | null; coordinatorSession: (SessionEnding & { retryAt?: Date | null }) | null },
 ): Promise<{ askable: boolean; coordinator: { sessionId: string; receiving: boolean } | null }> {
   const blocked = project.coordinatorSessionId
     ? await sessions.receiveBlockedReasonFor(ownerId, project.coordinatorSessionId)
@@ -819,20 +832,15 @@ export async function readCoordinatorReach(
   const coordinator = project.coordinatorSessionId && blocked !== 'SESSION_GONE'
     ? { sessionId: project.coordinatorSessionId, receiving: blocked == null }
     : null;
-  const askable = coordinator?.receiving === true
-    && project.coordinatorSession != null
-    && !conversationIsOver(project.coordinatorSession);
+  const session = project.coordinatorSession;
+  const askable = coordinator != null && session != null && !conversationIsOver(session)
+    && (coordinator.receiving || conversationIsDown(session) || session.retryAt != null);
   return { askable, coordinator };
 }
 
-/**
- * Whether the owner's item has no coordinator to turn to right now: no conversation a message can
- * reach, so neither "Chat about this" nor ASK_COORDINATOR_AGAIN works (`askable` implies
- * `receiving`, `readCoordinatorReach`). An escalated item's heading says this instead of "no one
- * acted on this", because the doors under it say it already — and never while the chat is live.
- */
-export function coordinatorUnreachable(reach: { coordinator: { receiving: boolean } | null }): boolean {
-  return !reach.coordinator?.receiving;
+/** Whether neither of the owner's coordinator actions is available. */
+export function coordinatorUnreachable(reach: { askable: boolean; coordinator: { receiving: boolean } | null }): boolean {
+  return !reach.askable && !reach.coordinator?.receiving;
 }
 
 /**
@@ -854,8 +862,8 @@ export function coordinatorUnreachable(reach: { coordinator: { receiving: boolea
  * the runner tear the process down, and neither is anybody ending the conversation.
  */
 export function conversationIsDown(session: SessionEnding): boolean {
-  return deriveSessionRunState(session) === SessionRunState.FAILED
-    && !session.endReason
+  // Released by a failure (common/session-release.ts), which already asks that no end was recorded.
+  return releaseWasFailure(session)
     && deriveSessionLifecycleState(session) === SessionLifecycleState.OPEN;
 }
 
@@ -914,10 +922,50 @@ export function openItemDeliveredAt(alias: string): Prisma.Sql {
   )`;
 }
 
-/** Owner-facing lists omit coordinator items still waiting in the conversation's queue. */
+/**
+ * Whether the project's coordinator conversation can still take this item's ITEM turn: it is
+ * switched on, not filed, trashed or completed, and either live or FAILED with an auto-retry
+ * pending. Only then does an undelivered item wait for its receipt with no deadline.
+ *
+ * A coordinator that is down with no retry coming (`conversationIsDown`, nobody scheduled one) never
+ * takes the turn. Without this, its item had no deadline and no owner card for ever, and an
+ * INTEGRATION_CONFLICT held every later landing of its lane by M2 with nobody told (production,
+ * 2026-11-13 to 11-18: a landing QUEUED 98 h). Such an item goes to the owner by the clock, one
+ * window after it opened.
+ */
+export function openItemCoordinatorCanTake(alias: string): Prisma.Sql {
+  const item = Prisma.raw(`"${alias}"`);
+  return projectCoordinatorCanTake(Prisma.sql`${item}."project_id"`);
+}
+
+/**
+ * `openItemCoordinatorCanTake`'s rule for any project, named by the SQL expression `projectId`: its
+ * coordinator conversation is switched on, not filed, trashed or completed, and live or released by a
+ * failure with an auto-retry pending. The one definition, shared by the open-item clock and the evidence
+ * clock (`evidence-undecided.ts`), so the two cannot come to disagree about whether a coordinator can still
+ * take its turn. Parameter-free when `projectId` is. Live is the release column (plan step 4.3) and the
+ * failure the release module's question (common/session-release.ts, design §12.3).
+ */
+export function projectCoordinatorCanTake(projectId: Prisma.Sql): Prisma.Sql {
+  return Prisma.sql`EXISTS (
+    SELECT 1
+      FROM "project" taker_project
+      JOIN "session" taker ON taker."id" = taker_project."coordinator_session_id"
+     WHERE taker_project."id" = ${projectId}
+       AND taker_project."coordinator_enabled" = true
+       AND taker."deleted_at" IS NULL
+       AND taker."completed_at" IS NULL
+       AND taker."archived_at" IS NULL
+       AND (${sessionHeldSql('taker')}
+            OR (${releaseWasFailureSql('taker')} AND taker."retry_at" IS NOT NULL)))`;
+}
+
+/** Owner-facing lists omit coordinator items still waiting in the queue of a conversation that can
+ *  take them (`openItemCoordinatorCanTake`). */
 export function openItemVisible(alias: string): Prisma.Sql {
   const item = Prisma.raw(`"${alias}"`);
-  return Prisma.sql`(${item}."assignee" <> 'COORDINATOR' OR ${openItemDeliveredAt(alias)} IS NOT NULL)`;
+  return Prisma.sql`(${item}."assignee" <> 'COORDINATOR' OR ${openItemDeliveredAt(alias)} IS NOT NULL
+    OR NOT ${openItemCoordinatorCanTake(alias)})`;
 }
 
 /**
@@ -963,6 +1011,8 @@ export function openItemVisible(alias: string): Prisma.Sql {
  *    codeless and still NOT_KNOWN (§1.4, `taskLandingSql`): the complement of the endings
  *    `resolveByFact` and the landing edge write — `SUCCESSOR_FILED`, `TASK_CLOSED`, `RETRIED`,
  *    `CODELESS`, `LANDED`;
+ *  - an `EVIDENCE_UNDECIDED` (1110), while the revision it names is still its task's latest, has no
+ *    decision, and its task is still OPEN or IN_PROGRESS in the same project (`evidenceUndecidedOwed`);
  *  - a `LANDED_WITHOUT_CONFIRMATION` (§10.7), always — until the owner presses Accept — unless its
  *    task was cancelled or replaced, the two facts `resolveByFact` answers it with;
  *  - anything else — a question, a pause, a request — while it is open: what answers those is a
@@ -976,9 +1026,9 @@ export function openItemOwed(alias: string): Prisma.Sql {
   const item = Prisma.raw(`"${alias}"`);
   const integration = Prisma.raw(INTEGRATION_ITEM_KINDS.map((kind) => `'${kind}'`).join(', '));
   const live = Prisma.raw(LIVE_PROMOTION_STATES.map((state) => `'${state}'`).join(', '));
-  const liveSessions = Prisma.raw(PROJECT_LIVE_SESSION_STATUS_SQL);
   const notKnown = Prisma.raw(`(${taskLandingSql('owed_task')}) = 'NOT_KNOWN'`);
   return Prisma.sql`(CASE
+      WHEN ${item}."kind" = 'INTEGRATION_CHECK_FAILED' AND ${item}."dedupe_key" LIKE 'ICB:%' THEN true
       WHEN ${item}."kind" = 'LANDING_UNOBSERVED' THEN EXISTS (
         SELECT 1 FROM "task" owed_task
          WHERE owed_task."id" = ${item}."task_id"
@@ -991,6 +1041,7 @@ export function openItemOwed(alias: string): Prisma.Sql {
          WHERE owed_task."id" = ${item}."task_id"
            AND owed_task."status" <> 'CANCELLED'
            AND owed_task."superseded_by_task_id" IS NULL))
+      WHEN ${item}."kind" = 'EVIDENCE_UNDECIDED' THEN ${evidenceUndecidedOwed(alias)}
       WHEN ${item}."kind" = 'LANDING_LEASE_EXPIRED' THEN EXISTS (
         SELECT 1 FROM "project_integration_job" owed_job
          WHERE owed_job."id" = ${item}."integration_job_id"
@@ -1023,7 +1074,7 @@ export function openItemOwed(alias: string): Prisma.Sql {
              SELECT 1 FROM "session" owed_session
               WHERE owed_session."task_id" = owed_task."id"
                 AND owed_session."starts_task_work"
-                AND owed_session."status" IN (${liveSessions})
+                AND ${sessionHeldSql('owed_session')}
                 AND (owed_session."id" IS DISTINCT FROM ${item}."session_id"
                      OR EXISTS (
                        SELECT 1 FROM "conversation_turn" resumed_turn
@@ -1193,7 +1244,7 @@ export interface OwnerHeldItem {
  * Open the item for an integration that did not land, in the transaction that wrote the job's
  * terminal state (§2.6, §4.2).
  *
- * The platform does not retry a conflict or a red check by itself (J5), so this item IS the retry
+ * Except for K5 baseline holds, the platform does not retry a conflict or red check (J5): this item IS the retry
  * mechanism: it names somebody, and what they decide is what happens next. Never escalated past the
  * coordinator by this function — a conflict has no chain limit, because there is no chain: one
  * failed job is one generation, and a second generation only exists because somebody asked.
@@ -1257,6 +1308,18 @@ export async function recordIntegrationFailure(
     skipDuplicates: true,
     select: { id: true },
   });
+  if (!created && failure.dedupeKey.startsWith('ICB:') && failure.taskId) {
+    const [held] = await tx.$queryRaw<Array<{ id: string; assignee: OpenItemAssignee }>>(Prisma.sql`
+      UPDATE "project_open_item"
+         SET "payload" = jsonb_set("payload", '{heldTaskIds}',
+           COALESCE("payload"->'heldTaskIds', '[]'::jsonb) ||
+           CASE WHEN COALESCE("payload"->'heldTaskIds', '[]'::jsonb) @> ${JSON.stringify([failure.taskId])}::jsonb
+                THEN '[]'::jsonb ELSE ${JSON.stringify([failure.taskId])}::jsonb END)
+       WHERE "project_id" = ${failure.projectId}::uuid AND "dedupe_key" = ${failure.dedupeKey}
+         AND "state" = 'OPEN'
+       RETURNING "id", "assignee"`);
+    return held ? { itemId: held.id, projectId: failure.projectId, taskId: failure.taskId, assignee: held.assignee } : null;
+  }
   if (!created) return null;
   return {
     itemId: created.id,
@@ -1283,7 +1346,7 @@ export async function resolveIntegrationItemsOnLanding(
   taskId: string,
 ): Promise<void> {
   await tx.projectOpenItem.updateMany({
-    where: { taskId, kind: { in: [...INTEGRATION_ITEM_KINDS] }, state: 'OPEN' },
+    where: { taskId, kind: { in: [...INTEGRATION_ITEM_KINDS] }, state: 'OPEN', NOT: { dedupeKey: { startsWith: 'ICB:' } } },
     data: {
       state: 'RESOLVED' satisfies OpenItemState,
       resolution: 'LANDED' satisfies OpenItemResolution,
@@ -1295,7 +1358,8 @@ export async function resolveIntegrationItemsOnLanding(
 
 /**
  * §4.4 X-D4 (5), revision 13: a task filed to fix an exception has landed, so that exception goes
- * back in front of the coordinator, which closes it or reruns what it is about.
+ * back in front of the coordinator, which closes it or reruns what it is about. K5 baseline items
+ * are resolved LANDED instead when the fix lands on the failed job's serial key.
  *
  * Called in the transaction that wrote the fix's landing receipt. The item is about ANOTHER task's
  * work, and whether that work reached the line with the fix is a question about commits this server
@@ -1308,9 +1372,20 @@ export async function resolveIntegrationItemsOnLanding(
 export async function rearmItemFixedBy(
   tx: Prisma.TransactionClient,
   taskId: string,
+  serialKey?: string,
 ): Promise<string | null> {
   const fix = await tx.task.findUnique({ where: { id: taskId }, select: { fixesOpenItemId: true } });
   if (!fix?.fixesOpenItemId) return null;
+  if (serialKey) {
+    const closed = await tx.$executeRaw(Prisma.sql`
+      UPDATE "project_open_item" i SET "state" = 'RESOLVED', "resolution" = 'LANDED',
+             "resolved_by" = 'PLATFORM', "resolved_at" = now()
+        FROM "project_integration_job" f
+       WHERE i."id" = ${fix.fixesOpenItemId}::uuid AND i."state" = 'OPEN'
+         AND i."kind" = 'INTEGRATION_CHECK_FAILED' AND f."id" = i."integration_job_id"
+         AND f."baseline_red" = true AND f."serial_key" = ${serialKey}`);
+    if (closed > 0) return null;
+  }
   const rearmed = await tx.projectOpenItem.updateMany({
     where: { id: fix.fixesOpenItemId, state: 'OPEN', assignee: 'COORDINATOR', promotionId: null },
     data: { assignedAt: new Date() },

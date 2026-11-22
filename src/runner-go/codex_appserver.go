@@ -477,9 +477,9 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 			ChangedDiff:      livePatches,
 			BaseSha:          liveBaseSha,
 			WorktreeDirty:    worktreeIsDirty(job.WT),
-			BranchSha:        effectiveBranchSha(job.WT),
-			BranchMerged:     branchMergedInto(job.WT),
-			WorktreeBranch:   currentBranch(job.WT),
+			BranchSha:        effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT),
+			BranchMerged:   branchMergedInto(job.WT),
+			WorktreeBranch: currentBranch(job.WT),
 		}, workerCtx); err != nil {
 			logln("turn-complete failed for", job.SessionID+":", err)
 		}
@@ -806,7 +806,7 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 					TurnID: resp.TurnID, Status: stSucceeded,
 					Result: "started in background", Subtype: "shell",
 					RuntimeSessionID: currentRuntimeSessionID(job),
-					BranchSha:        effectiveBranchSha(job.WT),
+					BranchSha:        effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT),
 				}); err != nil {
 					logln("shell turn-complete failed for", job.SessionID+":", err)
 				}
@@ -851,11 +851,11 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 			liveFiles, livePatches := liveDiff(job.WT)
 			liveBaseSha := job.WT.baseSha()
 			if err := t.diffResult(job.SessionID, DiffResultRequest{
-				ChangedFiles:   liveFiles,
-				ChangedDiff:    livePatches,
-				BaseSha:        liveBaseSha,
-				WorktreeDirty:  worktreeIsDirty(job.WT),
-				BranchSha:      effectiveBranchSha(job.WT),
+				ChangedFiles:  liveFiles,
+				ChangedDiff:   livePatches,
+				BaseSha:       liveBaseSha,
+				WorktreeDirty: worktreeIsDirty(job.WT),
+				BranchSha:     effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT),
 				BranchMerged:   branchMergedInto(job.WT),
 				WorktreeBranch: currentBranch(job.WT),
 			}); err != nil {
@@ -987,6 +987,19 @@ func codexStderrIsStateInitFailure(line string) bool {
 // repeats through a session, and the turns themselves still complete.
 func codexStderrDiagnostic(line string) (map[string]interface{}, bool) {
 	lower := strings.ToLower(line)
+	// Codex's sandbox setup logs this at ERROR and then runs with its bundled copy, so the turn
+	// still works: a degraded sandbox, not a failed run. Matched on Codex's own sentence, not the
+	// URL or the word "bubblewrap", so another sandbox line keeps its existing treatment.
+	if strings.Contains(lower, "could not find bubblewrap on path") {
+		return map[string]interface{}{
+			"component":   "sandbox",
+			"phase":       "startup",
+			"severity":    "WARN",
+			"impact":      "degraded",
+			"recoverable": true,
+			"code":        "bubblewrap_missing",
+		}, true
+	}
 	tokenInvalidated := strings.Contains(lower, "token_invalidated") || strings.Contains(lower, "token has been invalidated")
 	if strings.Contains(lower, "codex_models_manager") &&
 		strings.Contains(lower, "failed to refresh available models") {
@@ -1351,6 +1364,7 @@ func codexAppServerCommandArgs(job *ClaimedSession, stateDir, exe string) []stri
 	args := []string{"app-server", "--stdio", "-c", fmt.Sprintf("sqlite_home=%q", stateDir)}
 	args = appendCodexSessionToolConfig(args)
 	args = appendCodexOrbitMCPConfig(args, exe)
+	args = appendCodexBrowserMCPConfig(args, exe)
 	return append(args, codexProviderArgs(job.Agent.Env)...)
 }
 

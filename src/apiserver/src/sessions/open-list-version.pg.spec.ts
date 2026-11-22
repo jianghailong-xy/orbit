@@ -91,6 +91,7 @@ async function fixture(t: { after: (fn: () => Promise<void>) => void }): Promise
       data: {
         id, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId, title: `olv ${id}`,
         prompt: 'olv', provider: 'claude', providerBuiltin: true, status, startedAt: new Date(),
+        ...(status === RunStatus.SUCCEEDED ? { finishedAt: new Date()} : {}),
         dispatchOrigin: SessionDispatchOrigin.USER,
       },
     });
@@ -115,10 +116,11 @@ async function poll(
   let listed = 0;
   const service = new Proxy(f.sessions, {
     get(target, key, receiver) {
-      if (key === 'list') {
-        return (...args: Parameters<SessionsService['list']>) => {
+      // Every build of list rows, the plain read's and a since= read's, is one call of listRows.
+      if (key === 'listRows') {
+        return (...args: unknown[]) => {
           listed += 1;
-          return target.list(...args);
+          return (target as unknown as { listRows: (...a: unknown[]) => Promise<unknown> }).listRows.apply(receiver, args);
         };
       }
       return Reflect.get(target, key, receiver);
@@ -613,7 +615,7 @@ test('a landing insert and its settlement leave the flat Open list alone', { ski
   await db.projectLanding.update({
     where: { sessionId }, data: { settledAt: new Date(), settledAs: 'LANDED' },
   });
-  await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.SUCCEEDED, completedAt: new Date() } });
+  await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), completedAt: new Date() } });
   const plainAfterSettlement = await poll(f, plain.etag);
   assert.equal(plainAfterSettlement.status, 304, 'a settlement moved the plain list');
   assert.equal(plainAfterSettlement.etag, plain.etag);
@@ -666,9 +668,9 @@ test('a write landing after the build is not hidden behind the version kept with
   const f = await fixture(t);
   const racing = new Proxy(f.sessions, {
     get(target, key, receiver) {
-      if (key === 'list') {
-        return async (...args: Parameters<SessionsService['list']>) => {
-          const rows = await target.list(...args);
+      if (key === 'listRows') {
+        return async (...args: unknown[]) => {
+          const rows = await (target as unknown as { listRows: (...a: unknown[]) => Promise<unknown> }).listRows.apply(receiver, args);
           await f.db.session.update({ where: { id: f.sessionId }, data: { title: 'written after the build' } });
           return rows;
         };

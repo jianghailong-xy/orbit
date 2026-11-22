@@ -340,6 +340,9 @@ async function workSession(
       prompt: label,
       provider: 'claude',
       status: RunStatus.SUCCEEDED,
+      // A SUCCEEDED run is a finished one: its finish is what settles the work (§10.5 O-L4 3), and a
+      // DONE over work that has not finished decides its landing at that finish (§12.15 P-M1).
+      finishedAt: new Date(), 
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: taskId !== null,
       isolationStatus: 'worktree',
@@ -834,10 +837,26 @@ test('a project’s integration line is recorded, defaulted, locked, read for la
       stack.receipts,
       {} as SessionAttemptService,
     );
+    // 166ce5937 makes the agent's queued merge explicit: PENDING with polling guidance, so
+    // callers cannot mistake acceptance for a completed merge. The owner's menu keeps ok: true.
     const answer = await runnerDoor.mergeSession(runner, undefined, undefined, undefined, merged,
       { targetBranch: `project/${f.publicId}` });
-    const { ok, outcome, mergeStatus } = answer as { ok?: boolean; outcome: string; mergeStatus: string | null };
-    assert.deepEqual([ok, outcome, mergeStatus], [true, 'PENDING', 'pending']);
+    const queued = await stack.db.session.findUniqueOrThrow({ where: { id: merged } });
+    assert.ok(queued.mergeOperationId);
+    assert.deepEqual(answer, {
+      ok: true,
+      outcome: 'PENDING',
+      sessionId: merged,
+      operationId: queued.mergeOperationId,
+      mergeStatus: 'pending',
+      receipt: null,
+      receiptAbsentReason: 'MERGE_STILL_RUNNING',
+      next: {
+        actionCode: 'POLL_STATE',
+        afterSeconds: 30,
+        resources: [{ type: 'SESSION', id: merged }],
+      },
+    });
     assert.deepEqual(await stack.db.session.findUniqueOrThrow({
       where: { id: merged },
       select: { mergeStatus: true, mergeTarget: true },

@@ -10,10 +10,12 @@ import Foundation
 public struct MachineToSetUp: Equatable, Sendable, Identifiable {
     public let id: String
     public let name: String
+    public let isManaged: Bool
 
-    public init(id: String, name: String) {
+    public init(id: String, name: String, isManaged: Bool = false) {
         self.id = id
         self.name = name
+        self.isManaged = isManaged
     }
 }
 
@@ -277,6 +279,52 @@ public enum MachineSetup {
             : .new(name: name, path: newFolderPath(root: root, name: name))
     }
 
+    /// A folder field's text that names a whole path (`/srv/app`, `~/code/app`) rather than one folder in the machine's
+    /// home (docs/mocks/new-workspace-form, decision 2 A; web `isFolderPath`): the machine is asked about that path itself.
+    public static func isFolderPath(_ typed: String) -> Bool {
+        typed.hasPrefix("/") || typed.hasPrefix("~")
+    }
+
+    /// A path's last segment, what the workspace's name follows for a full path (web `folderName`).
+    public static func folderName(_ path: String) -> String {
+        var trimmed = path
+        while trimmed.hasSuffix("/") || trimmed.hasSuffix("\\") { trimmed.removeLast() }
+        let last = trimmed.split(omittingEmptySubsequences: false, whereSeparator: { $0 == "/" || $0 == "\\" }).last
+        return last.map(String.init).flatMap { $0.isEmpty ? nil : $0 } ?? path
+    }
+
+    /// What Create workspace picks on a full path's answer: the directory as it stands. Nothing is made for a path
+    /// outside the machine's home, so one that isn't there is refused as any folder is (web `folderPathPick`).
+    public static func folderPathPick(_ probe: DirProbe, machine: String) -> PickedFolder? {
+        let verdict = folderVerdict(probe, machine: machine)
+        return verdict.usable ? .existing(path: probe.path, note: verdict.short) : nil
+    }
+
+    /// The path the card's folder field asks the machine about: a full path as typed, a name where it would go, and
+    /// nothing for anything else. Nil too where nothing can be asked (a managed runner not up, a machine offline or
+    /// too old to check folders).
+    public static func folderQuestion(folder: String, root: String, canAsk: Bool) -> String? {
+        guard canAsk else { return nil }
+        if isFolderPath(folder) { return folder }
+        return isValidNewFolder(folder) ? newFolderPath(root: root, name: folder) : nil
+    }
+
+    /// What the typed folder would make the workspace in, on the machine's answer about it (`found`). A managed runner
+    /// that isn't up takes a name unchecked, but a full path only once it has been checked.
+    public static func typedPick(folder: String, found: DirProbe?, root: String, machine: String,
+                                 managedState: ManagedSetupState?) -> PickedFolder? {
+        let fullPath = isFolderPath(folder)
+        if managedState != nil { return fullPath ? nil : uncheckedFolder(name: folder, root: root) }
+        guard let found else { return nil }
+        if fullPath { return folderPathPick(found, machine: machine) }
+        return isValidNewFolder(folder) ? newFolderPick(found, name: folder, root: root, machine: machine) : nil
+    }
+
+    /// The folder the workspace's Name follows: the typed name, or a full path's last segment.
+    public static func followedName(folder: String) -> String {
+        isFolderPath(folder) ? folderName(folder) : folder
+    }
+
     /// The login CLIs installed here, in the app's order.
     public static func installedLogins(_ engines: [RunnerEngineHealth]?) -> [LoginEngine] {
         LoginEngine.allCases.filter { engine in
@@ -327,18 +375,31 @@ public enum MachineSetup {
     }
 
     /// The line under the card's folder field (web `MachineSetupCard`). `folder` is the field's text trimmed,
-    /// `found` the machine's answer about `<root>/<folder>` (nil while there is none for it), and `unanswered`
-    /// that the machine gave no answer to that question.
+    /// `found` the machine's answer about the path `folderQuestion` asked (nil while there is none for it), and
+    /// `unanswered` that the machine gave no answer to that question. `pathHintRoot` is set where the card's hint says
+    /// a full path is taken too (New workspace on a machine that has one): the directory a name goes in.
     public static func folderLine(folder: String, createError: String?, found: DirProbe?, unanswered: Bool,
-                                  machine: String, managedState: ManagedSetupState? = nil) -> SetupFolderLine {
+                                  machine: String, managedState: ManagedSetupState? = nil,
+                                  pathHintRoot: String? = nil) -> SetupFolderLine {
         // Why the last Create workspace was refused stands in for the rest until the next try.
         if let createError { return .createFailed(MachineSetupCopy.setupCreateFailed(why: createError)) }
-        if folder.isEmpty { return .meta(MachineSetupCopy.SETUP_FOLDER_HINT) }
-        if !isValidNewFolder(folder) { return .verdict(MachineSetupCopy.SETUP_NEW_FOLDER_INVALID, .bad) }
+        if folder.isEmpty {
+            guard var root = pathHintRoot else { return .meta(MachineSetupCopy.SETUP_FOLDER_HINT) }
+            while root.hasSuffix("/") || root.hasSuffix("\\") { root.removeLast() }
+            return .meta(MachineSetupCopy.setupFolderOrPathHint(root: root))
+        }
+        let fullPath = isFolderPath(folder)
+        if !fullPath, !isValidNewFolder(folder) { return .verdict(MachineSetupCopy.SETUP_NEW_FOLDER_INVALID, .bad) }
+        if managedState != nil, fullPath { return .meta(MachineSetupCopy.setupPathUnchecked(machine: machine)) }
         if let state = managedState {
             return .meta(state == .preparing ? ManagedRunnerCopy.Setup.FolderUnchecked.preparing : ManagedRunnerCopy.Setup.FolderUnchecked.asleep)
         }
         if let found {
+            // A full path must already be there: it says what it found, or that nothing is.
+            if fullPath {
+                let verdict = folderVerdict(found, machine: machine)
+                return .verdict(verdict.text, verdict.tone)
+            }
             let verdict = newFolderVerdict(found, machine: machine)
             // Nothing there yet reads as a note; anything there says what it is, and so does a check that failed.
             if !found.exists, verdict.usable { return .meta(MachineSetupCopy.SETUP_NEW_FOLDER_WITH_WORKSPACE) }

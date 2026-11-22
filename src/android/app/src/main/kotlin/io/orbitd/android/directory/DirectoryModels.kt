@@ -93,9 +93,11 @@ data class DirectorySession(
     val queuedHeldByJobs: Int? = null,
     /** Beside queuedReason `runner_updating` only, kept as the JSON it came as and read by [QueuedRunnerUpdate.of]. */
     val queuedRunnerUpdate: JsonElement? = null,
+    val runSource: String? = null,
 ) {
     /** Whether this row is a landing session (platform work), not a conversation. */
     val isLanding get() = sessionKind == "LANDING"
+    val isScheduledRun get() = runSource == "SCHEDULE"
     val workspace get() = workspaceId ?: agentId ?: agent?.id
     val name get() = title?.takeIf(String::isNotBlank) ?: "Untitled session"
 }
@@ -166,6 +168,28 @@ private fun <T> workspaceOrder(runnerId: (T) -> String?, position: (T) -> Int?, 
 enum class SessionView(val query: String, val label: String) { OPEN("open", "Open"), COMPLETED("completed", "Completed"), TRASH("trash", "Trash") }
 enum class Grouping { RECENCY, TAG }
 data class SessionGroup(val id: String, val title: String, val sessions: List<DirectorySession>)
+
+internal fun listShowsFolders(isFolder: Boolean, view: SessionView, tag: String?, grouping: Grouping) =
+    !isFolder && view != SessionView.TRASH && tag == null && grouping != Grouping.TAG
+
+internal fun List<DirectorySession>.withoutScheduledRuns() = filterNot { it.isScheduledRun }
+
+internal data class FolderRowSummary(val count: Int, val needsYou: Int, val running: Boolean, val jobs: Boolean = false)
+
+internal fun List<DirectorySession>.folderNeedsYouCount() = count { it.pendingApprovals > 0 && it.waitingKind != "START_REQUEST" }
+
+internal object ScheduledRunsFolder {
+    const val ID = "scheduled"
+    const val POLL_INTERVAL_MS = 30_000L
+
+    fun sessions(rows: List<DirectorySession>, workspace: String) =
+        rows.filter { it.isScheduledRun && ObjectId.same(it.workspace, workspace) }
+
+    fun row(sessions: List<DirectorySession>, showFolders: Boolean): FolderRowSummary? =
+        if (showFolders && sessions.isNotEmpty())
+            FolderRowSummary(sessions.size, sessions.folderNeedsYouCount(), sessions.any { it.status == "RUNNING" })
+        else null
+}
 
 fun directoryGroups(sessions: List<DirectorySession>, view: SessionView, grouping: Grouping,
     now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()): List<SessionGroup> {

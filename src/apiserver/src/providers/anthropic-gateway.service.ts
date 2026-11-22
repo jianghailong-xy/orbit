@@ -6,7 +6,7 @@ import { StringDecoder } from 'node:string_decoder';
 import { AgentProvider, keyDialect, providerPreset } from '@orbit/shared';
 import { ACCOUNT_DISABLED, ACCOUNT_DISABLED_MESSAGE, DisabledAccounts } from '../auth/disabled-accounts';
 import { sha256 } from '../common/crypto.util';
-import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
+import { isHeld } from '../common/session-release';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   anthropicError,
@@ -34,6 +34,7 @@ import {
 import { responseCostMicros } from './openai-prices';
 import { decryptSecret } from './provider-crypto';
 import { ResponsesStreamTap, type ResponsesOutcome } from './responses-stream-tap';
+import { servesKeptSubagent } from './kept-subagent-gateway';
 
 /**
  * What a token authenticates (docs/claude-engine-openai-gateway-design.md §5.2): one session, of one person, on
@@ -133,7 +134,7 @@ export class AnthropicGatewayService {
         },
         session: {
           select: {
-            status: true, ownerId: true, provider: true, engine: true, model: true, completedAt: true, deletedAt: true,
+            status: true, finishedAt: true, ownerId: true, provider: true, engine: true, model: true, completedAt: true, deletedAt: true,
             cancelRequestedAt: true, endReason: true,
             owner: { select: { disabledAt: true } },
           },
@@ -142,13 +143,14 @@ export class AnthropicGatewayService {
     });
     if (!row || row.revokedAt || row.expiresAt.getTime() <= Date.now()) return null;
     const { session, provider } = row;
-    const current =
-      OPEN_SESSION_STATUSES.includes(session.status) &&
+    const open =
+      isHeld(session) &&
       !session.completedAt &&
-      !session.deletedAt &&
       // An end asked for (SessionsService.end): the runner has yet to stop it, but it serves no more turns.
       !session.cancelRequestedAt &&
-      !session.endReason &&
+      !session.endReason;
+    const current =
+      !session.deletedAt &&
       session.ownerId === row.userId &&
       session.provider === provider.slug &&
       session.engine === AgentProvider.CLAUDE &&
@@ -157,6 +159,8 @@ export class AnthropicGatewayService {
       // A personal key is its owner's alone; a shared one (no owner) an admin's, as dispatch scopes it.
       (provider.ownerId === null || provider.ownerId === row.userId);
     if (!current) return null;
+    // A session no longer open serves on only while its handover left a SubAgent running on its tokens.
+    if (!open && !(await servesKeptSubagent(this.prisma, row.sessionId))) return null;
     // Asked last, as the pool gateway asks it: the token itself is good, and works again once enabled.
     if (session.owner.disabledAt || this.disabled.has(row.userId)) return ACCOUNT_DISABLED;
     return {

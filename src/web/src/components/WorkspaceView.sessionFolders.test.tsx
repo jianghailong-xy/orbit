@@ -383,8 +383,11 @@ describe('folders in the session list', { timeout: 60_000 }, () => {
     expect(folderNames()).toEqual(['Release', 'Wiki']);
     expect(sessionTitles()).toEqual(['Loose one']);
     const release = folderRow('Release');
-    expect(release.querySelector('.session-folder-count')?.textContent).toBe('2');
+    // One number: who waits on you takes the total's place, and the total moves into its label.
+    expect(release.querySelector('.session-folder-count')).toBeNull();
     expect(release.querySelector('.session-folder-needs')?.textContent).toBe('1');
+    expect(release.querySelector('.session-folder-needs')?.getAttribute('aria-label'))
+      .toBe('1 session needs your reply · 2 sessions');
     expect(release.querySelector('.session-folder-activity:not(.jobs)'), 'a running session lights the folder').not.toBeNull();
     const wiki = folderRow('Wiki');
     expect(wiki.querySelector('.session-folder-count')?.textContent).toBe('1');
@@ -398,7 +401,10 @@ describe('folders in the session list', { timeout: 60_000 }, () => {
     folders = [ELSEWHERE];
     await mount(`/sessions/${LOOSE.id}`, () => expect(sessionTitles()).toHaveLength(4));
     expect(folderRows()).toHaveLength(0);
-    expect(listCalls.every((p) => p.includes('limit=40'))).toBe(true);
+    // The Scheduled runs folder's own read is whole: a workspace's runs, not its list.
+    const pagedReads = listCalls.filter((p) => !p.includes('scheduled=1'));
+    expect(pagedReads.length).toBeGreaterThan(0);
+    expect(pagedReads.every((p) => p.includes('limit=40'))).toBe(true);
   });
 
   it('opens a folder’s page in place, and its back button returns to the list', async () => {
@@ -586,6 +592,193 @@ describe('Move', { timeout: 60_000 }, () => {
       vi.mocked(apiModule.moveSession).mock.invocationCallOrder[0],
     );
     await until(() => expect(document.body.textContent).toContain('Moved to wikova-develop'));
+  });
+});
+
+// jsdom has no DragEvent or DataTransfer: a plain event of the drag's type carries a stand-in, which
+// React's drag handlers read as they would the browser's.
+const transfer = (types: string[] = []) => {
+  const data = new Map<string, string>(types.map((t) => [t, ''] as const));
+  return {
+    get types() { return [...data.keys()]; },
+    setData(type: string, value: string) { data.set(type, value); },
+    getData(type: string) { return data.get(type) ?? ''; },
+    effectAllowed: 'all',
+    dropEffect: 'none',
+    files: [] as File[],
+  };
+};
+type Transfer = ReturnType<typeof transfer>;
+async function drag(type: string, target: Element, dataTransfer: Transfer, clientY = 0): Promise<boolean> {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  Object.defineProperty(event, 'dataTransfer', { value: dataTransfer });
+  Object.defineProperty(event, 'clientY', { value: clientY });
+  Object.defineProperty(event, 'relatedTarget', { value: null });
+  await act(async () => {
+    target.dispatchEvent(event);
+  });
+  // Taken: the target called preventDefault, which is how a page accepts a drag.
+  return event.defaultPrevented;
+}
+/** Drag `row` over `target` and, when `drop`, let it go there. What the target answered on dragover. */
+async function dragOnto(row: Element, target: Element, drop = true): Promise<boolean> {
+  const dt = transfer();
+  await drag('dragstart', row, dt);
+  expect(dt.types).toEqual(['application/x-orbit-session']);
+  await drag('dragenter', target, dt);
+  const taken = await drag('dragover', target, dt);
+  if (drop && taken) await drag('drop', target, dt);
+  await drag('dragend', row, dt);
+  await settle();
+  return taken;
+}
+const folderHead = (): HTMLElement => mounted().querySelector<HTMLElement>('.session-folder-head')!;
+
+describe('dragging a row onto a folder', { timeout: 60_000 }, () => {
+  it('files the row in the folder it is dropped on, with Move…’s request and toast', async () => {
+    await mountOnLoose();
+    const loose = listRow('Loose one');
+    expect(loose.getAttribute('draggable')).toBe('true');
+
+    const dt = transfer();
+    await drag('dragstart', loose, dt);
+    await drag('dragenter', folderRow('Wiki'), dt);
+    expect(await drag('dragover', folderRow('Wiki'), dt), 'the folder takes the drag').toBe(true);
+    // Only the folder under the pointer lights up.
+    expect(folderRow('Wiki').classList.contains('drop-target')).toBe(true);
+    expect(folderRow('Release').classList.contains('drop-target')).toBe(false);
+    await drag('drop', folderRow('Wiki'), dt);
+    await drag('dragend', loose, dt);
+    await settle();
+
+    expect(apiModule.moveSession).toHaveBeenCalledTimes(1);
+    expect(apiModule.moveSession).toHaveBeenCalledWith(LOOSE.id, { folderId: WIKI.id });
+    await until(() => expect(document.body.textContent).toContain('Moved to “Wiki”'));
+    await until(() => expect(folderRow('Wiki').querySelector('.session-folder-count')?.textContent).toBe('2'));
+    expect(folderRows().some((r) => r.classList.contains('drop-target'))).toBe(false);
+  });
+
+  it('takes a row out of the open folder when it is dropped on the page’s head', async () => {
+    await mountOnLoose();
+    await click(folderRow('Release'), 'the Release folder row');
+    await until(() => expect(sessionTitles()).toEqual(['Release notes', 'Tag the build']));
+
+    const dt = transfer();
+    await drag('dragstart', listRow('Release notes'), dt);
+    // The back control is part of the head, and takes the drop as the title does.
+    expect(await drag('dragover', mounted().querySelector('.session-folder-back')!, dt)).toBe(true);
+    expect(folderHead().classList.contains('drop-target')).toBe(true);
+    await drag('drop', mounted().querySelector('.session-folder-back')!, dt);
+    await settle();
+
+    expect(apiModule.moveSession).toHaveBeenCalledWith(NOTES.id, { folderId: null });
+    await until(() => expect(document.body.textContent).toContain('Moved out of “Release”'));
+    await until(() => expect(sessionTitles()).toEqual(['Tag the build']));
+    // The drop is not a press of Back: the page stays.
+    expect(mounted().querySelector('.session-folder-title')?.textContent).toBe('Release');
+  });
+
+  it('picks up a project’s row by its coordinator and files it with Move…’s request', async () => {
+    rows = [
+      LOOSE,
+      row(925, 'Coordinates a project', { projectMembership: { projectId: pid(960), role: 'COORDINATOR' } }),
+      row(926, 'A task of a project', { projectMembership: { projectId: pid(960), role: 'TASK' } }),
+    ];
+    await mount(`/sessions/${LOOSE.id}`, () =>
+      expect(mounted().querySelector('.session-project-row'), 'the project row').toBeTruthy());
+    const project = mounted().querySelector('.session-project-row')!;
+    expect(project.getAttribute('draggable')).toBe('true');
+    expect(listRow('Loose one').getAttribute('draggable')).toBe('true');
+    // The project's member is not a row of its own: only the loose session and the project row.
+    expect(mounted().querySelectorAll('.session-row[draggable]')).toHaveLength(2);
+
+    const dt = transfer();
+    await drag('dragstart', project, dt);
+    expect(await drag('dragover', folderRow('Wiki'), dt)).toBe(true);
+    await drag('drop', folderRow('Wiki'), dt);
+    await drag('dragend', project, dt);
+    await settle();
+    expect(apiModule.moveSession).toHaveBeenCalledTimes(1);
+    expect(apiModule.moveSession).toHaveBeenCalledWith(pid(925), { folderId: WIKI.id });
+    await until(() => expect(document.body.textContent).toContain('Moved to “Wiki”'));
+  });
+
+  it('drags a pinned project row and a pinned plain session as it does an unpinned one', async () => {
+    rows = [
+      row(927, 'Pinned loose', { pinnedAt: '2026-11-01T00:00:00Z' }),
+      row(925, 'Coordinates a project', { pinnedAt: '2026-11-01T00:00:00Z', projectMembership: { projectId: pid(960), role: 'COORDINATOR' } }),
+      row(926, 'A task of a project', { projectMembership: { projectId: pid(960), role: 'TASK' } }),
+    ];
+    await mount(`/sessions/${uuid(927)}`, () =>
+      expect(mounted().querySelector('.session-project-row'), 'the project row').toBeTruthy());
+    expect(mounted().querySelector('.session-project-row')!.getAttribute('draggable')).toBe('true');
+    expect(listRow('Pinned loose').getAttribute('draggable')).toBe('true');
+  });
+
+  it('takes a project row out of the open folder when it is dropped on the page’s head', async () => {
+    rows = [
+      LOOSE,
+      row(925, 'Coordinates a project', { folderId: RELEASE.id, projectMembership: { projectId: pid(960), role: 'COORDINATOR' } }),
+      row(926, 'A task of a project', { folderId: RELEASE.id, projectMembership: { projectId: pid(960), role: 'TASK' } }),
+    ];
+    await mount(`/sessions/${LOOSE.id}`, () => expect(folderRow('Release')).toBeTruthy());
+    await click(folderRow('Release'), 'the Release folder row');
+    await until(() => expect(mounted().querySelector('.session-project-row'), 'the project row').toBeTruthy());
+    const project = mounted().querySelector('.session-project-row')!;
+    expect(project.getAttribute('draggable')).toBe('true');
+
+    const dt = transfer();
+    await drag('dragstart', project, dt);
+    expect(await drag('dragover', mounted().querySelector('.session-folder-back')!, dt)).toBe(true);
+    await drag('drop', mounted().querySelector('.session-folder-back')!, dt);
+    await settle();
+    expect(apiModule.moveSession).toHaveBeenCalledWith(pid(925), { folderId: null });
+    await until(() => expect(document.body.textContent).toContain('Moved out of “Release”'));
+  });
+
+  it('draws no row draggable where there is nowhere to drop it', async () => {
+    folders = [ELSEWHERE];
+    await mount(`/sessions/${LOOSE.id}`, () => expect(sessionTitles()).toHaveLength(4));
+    expect(mounted().querySelector('.session-row[draggable]')).toBeNull();
+  });
+
+  it('scrolls the list while the drag is held near its bottom edge', async () => {
+    await mountOnLoose();
+    const list = mounted().querySelector<HTMLElement>('.session-col-list')!;
+    let scrollTop = 0;
+    Object.defineProperty(list, 'scrollTop', { configurable: true, get: () => scrollTop, set: (v: number) => { scrollTop = v; } });
+    Object.defineProperty(list, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({ top: 0, bottom: 400, left: 0, right: 300, width: 300, height: 400, x: 0, y: 0, toJSON: () => ({}) }),
+    });
+    const dt = transfer();
+    const loose = listRow('Loose one');
+    await drag('dragstart', loose, dt);
+    await drag('dragover', loose, dt, 395);
+    await until(() => expect(scrollTop).toBeGreaterThan(0));
+    const scrolled = scrollTop;
+    // Away from the edges it holds still, and once the drag ends it stops.
+    await drag('dragover', loose, dt, 200);
+    await act(async () => { await new Promise((r) => setTimeout(r, 100)); });
+    expect(scrollTop - scrolled).toBeLessThanOrEqual(16);
+    await drag('dragend', loose, dt);
+  });
+
+  it('leaves the session pane’s drop-to-upload to files', async () => {
+    await mountOnLoose();
+    const pane = mounted().querySelector('.workspace-view')!;
+    // A dragged row is not files: the pane neither takes it nor says "Drop files to upload".
+    const dt = transfer();
+    await drag('dragstart', listRow('Loose one'), dt);
+    expect(await drag('dragenter', pane, dt)).toBe(false);
+    expect(await drag('dragover', pane, dt)).toBe(false);
+    expect(mounted().querySelector('.workspace-dropzone')).toBeNull();
+    await drag('dragend', listRow('Loose one'), dt);
+    // Files still are.
+    const files = transfer(['Files']);
+    expect(await drag('dragenter', pane, files)).toBe(true);
+    await until(() => expect(mounted().querySelector('.workspace-dropzone')?.textContent).toContain('Drop files to upload'));
+    expect(apiModule.moveSession).not.toHaveBeenCalled();
   });
 });
 

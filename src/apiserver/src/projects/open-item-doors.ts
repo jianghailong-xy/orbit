@@ -23,6 +23,7 @@ export const OPEN_ITEM_DOOR_TODO_TYPES = [
   'LANDING_LEASE_EXPIRED',
   'LANDING_UNOBSERVED',
   'LANDED_WITHOUT_CONFIRMATION',
+  'EVIDENCE_UNDECIDED',
 ] as const;
 export type OpenItemDoorTodoType = (typeof OPEN_ITEM_DOOR_TODO_TYPES)[number];
 
@@ -124,7 +125,7 @@ export interface OpenItemDirectDoorCell {
 
 const RESOLVING_OUTCOMES = new Set(['LANDED', 'RETRIED', 'TASK_DONE', 'TASK_CLOSED',
   'SUCCESSOR_FILED', 'PROMOTION_MOVED_ON', 'APPROVED', 'DECLINED', 'ANSWERED', 'RESUMED',
-  'JOB_MOVED_ON', 'ACCEPTED', 'CODELESS']);
+  'JOB_MOVED_ON', 'ACCEPTED', 'CODELESS', 'DECIDED', 'REVISED']);
 
 function door(
   holder: OpenItemDoorAssignee,
@@ -355,6 +356,18 @@ function review(holder: OpenItemDoorAssignee, resolving: boolean): OpenItemDoor 
     });
 }
 
+/**
+ * The owner's Review of evidence its coordinator has not decided (`EVIDENCE_UNDECIDED`, 1110): the
+ * task's evidence, where the revision is read, and the decision door that records CONFIRM or
+ * SEND_BACK — the one fact that ends the item (`DECIDED`), beside a newer revision (`REVISED`).
+ */
+function reviewEvidence(holder: OpenItemDoorAssignee): OpenItemDoor {
+  return door(holder, 'evidence-review', 'task evidence decision', 'ROUTE', 'DECIDE', ['DECIDED', 'REVISED'], {
+    action: 'REVIEW',
+    route: '/tasks/:taskId/evidence/decision',
+  });
+}
+
 function askAgain(holder: OpenItemDoorAssignee): OpenItemDoor {
   return door(holder, 'ask-coordinator-again', 'return-to-coordinator', 'ROUTE', 'LOOKUP', [], {
     action: 'ASK_COORDINATOR_AGAIN',
@@ -439,7 +452,7 @@ function recordLanding(holder: OpenItemDoorAssignee): OpenItemDoor {
   });
 }
 
-/** Declare the task codeless, with a reason (§1.1): it takes no part in its criterion's landing, and
+/** Declare the task codeless, with a reason (§1.1): it resolves no source and does not decide landing, and
  *  a `LANDING_UNOBSERVED` about it ends CODELESS. A task with commits of its own is refused
  *  `TASK_CODELESS_HAS_COMMITS`, as everywhere else. */
 function declareCodeless(holder: OpenItemDoorAssignee): OpenItemDoor {
@@ -505,6 +518,8 @@ export function sourceJobForOpenItem(input: OpenItemDoorInput): OpenItemDoorSour
   // §10.7's two: each is about one task's work and where it stands, not about a job that failed —
   // the observation that may have opened one is named in its payload, and is not a failure.
   if (input.kind === 'LANDING_UNOBSERVED' || input.kind === 'LANDED_WITHOUT_CONFIRMATION') return 'DIRECT';
+  // 1110: about one evidence revision, not about a job.
+  if (input.kind === 'EVIDENCE_UNDECIDED') return 'DIRECT';
   const phase = input.phase ?? (input.payload && typeof input.payload === 'object'
     ? (input.payload as { phase?: unknown }).phase : null);
   const jobKind = input.jobKind ?? (input.payload && typeof input.payload === 'object'
@@ -623,6 +638,14 @@ export function doorsForCell(cell: Pick<OpenItemDoorCell,
     // task's session is there to read. Never delivered to a coordinator, so no hand-over and no
     // ask-again; no hand-close either — Accept is what it asks for.
     doors.push(accept(assignee), openTaskSession(assignee));
+    return doors;
+  }
+  if (todoType === 'EVIDENCE_UNDECIDED') {
+    // 1110: evidence its coordinator has not decided, the owner's from birth. Review leads and is the
+    // cell's resolving door (the decision it leads to); the task's session is there to read. Never
+    // delivered to a coordinator, so no hand-over and no ask-again; no hand-close either — it ends
+    // with the decision or a newer revision.
+    doors.push(reviewEvidence(assignee), openTaskSession(assignee));
     return doors;
   }
   if (todoType === 'TASK_FAILED') {
@@ -756,6 +779,10 @@ function buildTable(): OpenItemDoorCell[] {
   cells.push({ todoType: 'LANDED_WITHOUT_CONFIRMATION', sourceJob: 'DIRECT', failureClass: 'ERROR',
     assignee: 'OWNER',
     doors: doorsForCell({ todoType: 'LANDED_WITHOUT_CONFIRMATION', sourceJob: 'DIRECT', failureClass: 'ERROR', assignee: 'OWNER' }) });
+  // 1110: undecided evidence is the owner's from birth.
+  cells.push({ todoType: 'EVIDENCE_UNDECIDED', sourceJob: 'DIRECT', failureClass: 'ERROR',
+    assignee: 'OWNER',
+    doors: doorsForCell({ todoType: 'EVIDENCE_UNDECIDED', sourceJob: 'DIRECT', failureClass: 'ERROR', assignee: 'OWNER' }) });
   // §10.6 O-J4: an observation fails one way — an ERROR — and its item is the coordinator's like every
   // integration item, the owner's when there is none or it is handed over.
   for (const assignee of OPEN_ITEM_DOOR_ASSIGNEES) {
@@ -861,6 +888,12 @@ export function openItemActionsFromDoors(input: OpenItemDoorInput): OpenItemActi
     // to open: its payload lists the tasks.
     return (['ACCEPT', 'OPEN_TASK_SESSION'] as const).filter((action) =>
       (action !== 'OPEN_TASK_SESSION' || !!input.taskId)
+      && directDoors.some((candidate) =>
+        candidate.implemented && candidate.holder === assignee && candidate.action === action));
+  }
+  if (normalizeTodo(input.kind) === 'EVIDENCE_UNDECIDED') {
+    // 1110: Review opens the task's evidence; it needs the task the item names.
+    return (['REVIEW', 'OPEN_TASK_SESSION'] as const).filter((action) => !!input.taskId
       && directDoors.some((candidate) =>
         candidate.implemented && candidate.holder === assignee && candidate.action === action));
   }

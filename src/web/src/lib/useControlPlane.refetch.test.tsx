@@ -60,7 +60,8 @@ async function mount(): Promise<QueryClient> {
 }
 
 /** Puts a list on screen: cached already, so it reads only when the stream asks it to, or, with
- *  `cached: false`, as a page load does, with its first read out. */
+ *  `cached: false`, as a page load does, with its first read out. Both keys are session lists, and
+ *  carry the declaration their real counterparts make — the stream selects on `meta.entities`. */
 function onScreen(client: QueryClient, key: QueryKey, { cached = true } = {}): List {
   const pending: Array<() => void> = [];
   const list: List = {
@@ -73,6 +74,7 @@ function onScreen(client: QueryClient, key: QueryKey, { cached = true } = {}): L
   if (cached) client.setQueryData(key, []);
   const observer = new QueryObserver(client, {
     queryKey: key,
+    meta: { entities: ['session', 'workspace', 'tag', 'folder', 'project'] },
     queryFn: () => {
       list.asked += 1;
       return new Promise<never[]>((resolve) => pending.push(() => resolve([])));

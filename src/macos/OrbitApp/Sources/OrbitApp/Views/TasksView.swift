@@ -497,7 +497,7 @@ struct TasksListView: View {
     }
     #endif
 
-    /// One row, wrapped for the container it is in — the same shape as `AgentPanes.sessionRow`. The
+    /// One row, wrapped for the container it is in — the same shape as `SessionListRow`. The
     /// row view itself is the same either way, actions included; what changes is who moves the
     /// screen: the three-column `List`'s selection, or the row's own destination value on the
     /// compact stack. There is no third state for "highlighted but not openable" to live in, because
@@ -1139,6 +1139,9 @@ private struct TaskDetailContent: View {
     @State private var editingAcceptance = false
     @State private var following = false
     @State private var importingInput = false
+    /// The project's record of this task's exemption from the landing check: who marked it and when
+    /// (board 04 b); nil until read.
+    @State private var exemptionMarked: ProjectSettingChange?
     @State private var inputToRemove: TaskInput?
     @State private var prerequisiteToRemove: TaskDependencyListRow?
     /// The reader's Graph/List choice; nil follows the component (`TaskDetailLogic.prefersGraph`).
@@ -1420,6 +1423,8 @@ private struct TaskDetailContent: View {
             do { try await Task.sleep(nanoseconds: 4_000_000_000) }
             catch { return }
             guard model.taskDetailIsOpen(taskID) else { return }
+            // A run in flight is read every 4 s — while the app can be seen (§4 R3).
+            if !model.appVisible { continue }
             _ = await tasks.loadDetail(taskID)
             guard let current = tasks.detail, TaskListLogic.isBusy(current) else { return }
         }
@@ -1439,7 +1444,8 @@ private struct TaskDetailContent: View {
                 hasLiveRun: TaskDetailLogic.liveRun(task) != nil,
                 hasEvidence: tasks.evidence.last != nil,
                 hasLanding: TaskLandingLogic.status(task.integration,
-                                                    taskStatus: task.status.rawValue) != nil,
+                                                    taskStatus: task.status.rawValue) != nil
+                    || task.landingCheckExempt == true,
                 hasDependencies: TaskDetailLogic.hasDependencies(task),
                 hasInputs: !(task.attachments ?? []).isEmpty,
                 hasAttribution: tasks.attribution.map {
@@ -1476,8 +1482,10 @@ private struct TaskDetailContent: View {
         case .evidence:
             if let latest = tasks.evidence.last { evidenceSection(task, latest) }
         case .landing:
-            if let landing = TaskLandingLogic.status(task.integration, taskStatus: task.status.rawValue) {
-                landingSection(landing)
+            let landing = TaskLandingLogic.status(task.integration, taskStatus: task.status.rawValue)
+            let exemption = TaskLandingCheckExemption.of(task, marked: exemptionMarked)
+            if landing != nil || exemption != nil {
+                landingSection(landing, exemption: exemption, task: task)
             }
         case .acceptance:
             acceptanceSection(task)
@@ -1594,8 +1602,10 @@ private struct TaskDetailContent: View {
     /// The task's Landing section, in the web's `LandTaskStatus` words: the badge, the generation,
     /// the step it is on or stopped at, the reason, and the six facts — then the one way into the
     /// segment's landing session.
-    private func landingSection(_ status: TaskLandingStatus) -> some View {
+    private func landingSection(_ landing: TaskLandingStatus?, exemption: TaskLandingCheckExemption?,
+                                task: TaskItem) -> some View {
         Section(TaskLandingCopy.landingSection) {
+            if let status = landing {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
                     if let badge = status.badge {
@@ -1649,6 +1659,18 @@ private struct TaskDetailContent: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            // Board 04 b (D5): exempt from the project's landing check, why, who and when, and the
+            // owner's Remove exemption.
+            if let exemption {
+                TaskExemptionRow(exemption: exemption, busy: tasks.mutatingTaskIDs.contains(task.id)) {
+                    Task { await tasks.removeLandingCheckExemption(task.id) }
+                }
+            }
+        }
+        .task(id: "\(task.id):\(task.landingCheckExempt == true):\(task.landingCheckExemptReason ?? ""):\(task.landingCheckExemptBySessionId ?? ""):\(task.landingCheckExemptOwnerSetAt ?? "")") {
+            guard task.landingCheckExempt == true, let projectID = task.projectId else { exemptionMarked = nil; return }
+            exemptionMarked = await tasks.exemptionMarked(projectID: projectID, taskID: task.id)
         }
     }
 
@@ -1703,6 +1725,22 @@ private struct TaskDetailContent: View {
     @ViewBuilder
     private func actions(_ task: TaskItem) -> some View {
         let row = actionRow(task)
+        // A task that starts when its condition holds says so where a task says why it has not started
+        // (docs/condition-triggers-design.md §6.2): "Waiting for: 3 or more OSDs are in", and the newest reading.
+        if let waiting = ConditionDisplay.taskWaiting(task.startWhen, now: Date()) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Image(systemName: "gauge.with.dots.needle.33percent").foregroundStyle(Color.accentColor)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(waiting.line).font(.orbitSubtext)
+                    if let reading = waiting.reading {
+                        Text(reading).font(.orbitLabel).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("task-waiting-line")
+            .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 4, trailing: 0))
+        }
         if !row.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 if row.stacked {
@@ -2021,7 +2059,7 @@ private struct TaskDetailContent: View {
             (TaskDetailCopy.engineLabel, ProviderEngines.cliName(runPin(task).runEngine)),
             (TaskDetailCopy.providerLabel, providerSummary(task)),
             (TaskDetailCopy.modelLabel, task.model.map { runModelName($0, task) }
-                ?? (smartSelection && assigneeAgent(task)?.modelRouting == true
+                ?? (smartSelection
                     ? TaskDetailCopy.smartSelectionPlaceholder : "Provider default")),
         ]
         return pairs.enumerated().reduce(Text("")) { line, entry in
@@ -2352,8 +2390,8 @@ private struct TaskDetailContent: View {
             engine: pin.runEngine, provider: pin.runProvider(firstDeepSeekKey: firstDeepSeekKey?.slug),
             catalog: model.agents?.modelCatalog(for: assigneeAgent(task)?.runnerId),
             configured: pinConfigured)
-        // Unpinned on an assignee with smart selection on, each run's model is picked for it.
-        let unpinned = smartSelection && assigneeAgent(task)?.modelRouting == true
+        // Unpinned with the account's smart selection on, each run's model is picked for it.
+        let unpinned = smartSelection
             ? TaskDetailCopy.smartSelectionPlaceholder : "Provider default"
         return Picker(TaskDetailCopy.modelLabel, selection: Binding(
             get: { task.model },

@@ -242,17 +242,15 @@ describe('the change line (board 2/2 ② ③ ⑤)', () => {
 });
 
 function RunSession({ sessionId }: { sessionId: string }) {
-  const of = cards.useScheduleRunOfSession(sessionId);
-  const inserts = cards.useSessionScheduleInserts(null, [], of);
+  const read = cards.useSessionScheduleCards(sessionId);
+  const of = cards.useScheduleRunOfSession(sessionId, read);
+  const inserts = cards.useSessionScheduleInserts(null, undefined, [], of);
   if (!of) return null;
   return (
     <>
-      <cards.ScheduleRunCrumb of={of} />
       <cards.ScheduleRunStrip of={of} />
       <cards.ScheduleRunReport of={of} />
       <span data-inserts="">{inserts.length}</span>
-      {/* The header's agent, as WorkspaceView names it, beside a session that ran on Claude. */}
-      <span data-run-agent="">{cards.scheduleRunAgentName(of, 'Claude')}</span>
     </>
   );
 }
@@ -274,27 +272,23 @@ function serveRun(sessionId: string, run: typeof CODEX_NOV13_RUN) {
 }
 
 describe('a run’s session (board 2/2 ⑤ ⑥)', () => {
-  it('has the crumb, the strip and the report card', async () => {
+  it('has the strip and the report card', async () => {
     serveRun('sess-codex-run-nov13', CODEX_NOV13_RUN);
     await render(<RunSession sessionId="sess-codex-run-nov13" />);
-    expect(host.querySelector('[data-schedule-crumb]')!.textContent).toBe('Scheduled › Codex stable check › run of Nov 13');
     expect(host.querySelector('[data-schedule-strip]')!.textContent).toBe(
-      'Scheduled run · planned 10:00, started 10:01 · access Open a PR · this session is not in your session list',
+      'Scheduled run · planned 10:00, started 10:01 · access Open a PR',
     );
     const report = host.querySelector('[data-schedule-report]')!;
     expect(report.querySelector('.sched-report-head')!.textContent).toBe('Reported: Changed · 0.49.0 · you were notified');
     expect(report.textContent).toContain('Codex 0.49.0 is out (pinned 0.48.0).');
     expect(report.querySelector('a')!.getAttribute('href')).toBe('https://github.com/openai/codex/releases/tag/0.49.0');
-    const crumbs = [...host.querySelectorAll('[data-schedule-crumb] a')].map((a) => a.getAttribute('href'));
-    expect(crumbs).toEqual(['/scheduled', '/scheduled?id=sch-codex']);
   });
 
   it('knows a run older than the schedule’s last 50 from the session alone, with no ?schedule= and no scan', async () => {
     serveRun('sess-codex-run-jun02', JUNE_RUN);
     await render(<RunSession sessionId="sess-codex-run-jun02" />);
-    expect(host.querySelector('[data-schedule-crumb]')!.textContent).toBe('Scheduled › Codex stable check › run of Jun 2');
     expect(host.querySelector('[data-schedule-strip]')!.textContent).toBe(
-      'Scheduled run · planned 10:00, started 10:01 · access Open a PR · this session is not in your session list',
+      'Scheduled run · planned 10:00, started 10:01 · access Open a PR',
     );
     expect(host.querySelector('.sched-report-head')!.textContent).toBe('Reported: No change · 0.31.0');
     expect(calls.map((c) => c.path)).toEqual(['/sessions/sess-codex-run-jun02/schedule-cards', '/schedules/sch-codex']);
@@ -303,21 +297,7 @@ describe('a run’s session (board 2/2 ⑤ ⑥)', () => {
   it('knows a run of a schedule that has ended', async () => {
     serveRun('sess-freeze-run', FREEZE_RUN);
     await render(<RunSession sessionId="sess-freeze-run" />);
-    expect(host.querySelector('[data-schedule-crumb]')!.textContent).toBe('Scheduled › Release 2.0 freeze watch › run of Nov 14');
     expect(host.querySelector('.sched-report-head')!.textContent).toBe('Reported: Changed · released@2.0.0 · you were notified');
-  });
-
-  it('names the agent in its header from the schedule’s view, not the session’s engine', async () => {
-    serveRun('sess-codex-run-nov13', CODEX_NOV13_RUN);
-    await render(<RunSession sessionId="sess-codex-run-nov13" />);
-    // Codex stable check's view carries engine 'codex'; the session's own engine (Claude here) is not read.
-    expect(host.querySelector('[data-run-agent]')!.textContent).toBe('Codex');
-  });
-
-  it('names the session’s own engine when the schedule names none', async () => {
-    serveRun('sess-freeze-run', FREEZE_RUN);
-    await render(<RunSession sessionId="sess-freeze-run" />);
-    expect(host.querySelector('[data-run-agent]')!.textContent).toBe('Claude');
   });
 
   it('a reported failure’s report says what the run reported', async () => {
@@ -332,7 +312,7 @@ describe('a run’s session (board 2/2 ⑤ ⑥)', () => {
   it('draws nothing for a session that serves no run', async () => {
     serve((path) => (path === '/sessions/sess-plain/schedule-cards' ? { run: null, cards: [], records: [] } : undefined));
     await render(<RunSession sessionId="sess-plain" />);
-    expect(host.querySelector('[data-schedule-crumb]')).toBeNull();
+    expect(host.querySelector('[data-schedule-strip]')).toBeNull();
     expect(calls.map((c) => c.path)).toEqual(['/sessions/sess-plain/schedule-cards']);
   });
 });
@@ -340,7 +320,8 @@ describe('a run’s session (board 2/2 ⑤ ⑥)', () => {
 describe('a conversation’s scheduled-task inserts', () => {
   function Inserts({ sessionId }: { sessionId: string }) {
     const events = [{ seq: 1, ts: '2025-11-14T04:00:00.000Z' }, { seq: 2, ts: '2025-11-14T04:22:00.000Z' }];
-    const inserts = cards.useSessionScheduleInserts(sessionId, events, null);
+    const read = cards.useSessionScheduleCards(sessionId);
+    const inserts = cards.useSessionScheduleInserts(sessionId, read, events, null);
     return <>{inserts.map((insert) => <div key={insert.key} data-anchor={String(insert.anchor)}>{insert.element}</div>)}</>;
   }
 

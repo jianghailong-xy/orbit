@@ -13,7 +13,7 @@ import {
 import { api } from '../api';
 import { streamPoll } from '../lib/listBudget';
 import { DEFAULT_MAIN_BRANCH, mainBranchName } from '../lib/projectStart';
-import { projectIntegrationQuery, projectReadyToRunQuery } from '../lib/queries';
+import { projectReadyToRunQuery } from '../lib/queries';
 import { LandingJobsSheet } from './LandingJobsSheet';
 import { ProjectLandingCard } from './ProjectLandingCard';
 import { ProjectTaskLink } from './ProjectTaskLink';
@@ -21,6 +21,7 @@ import { Alert } from './ui/Alert';
 import { Button } from './ui/Button';
 import { Spinner } from './ui/Spinner';
 import './ui/Typography.css';
+import { useProjectIntegration } from '../lib/pollOwner';
 
 /**
  * Where a project's work stands, and — when none of it is moving — why (the header card of the
@@ -108,6 +109,7 @@ export interface ProjectPanorama {
 export const projectPanoramaQuery = (projectId: string) =>
   queryOptions({
     queryKey: ['project', projectId, 'panorama'] as const,
+    meta: { entities: ['task', 'session'] },
     queryFn: () => api<ProjectPanorama>(`/projects/${encodeURIComponent(projectId)}/panorama`),
     refetchInterval: streamPoll(30_000),
   });
@@ -368,6 +370,18 @@ export const LANDING_WORDS = {
   MAY_HAVE_BEEN_PUSHED: 'may have been pushed',
   RETRIED_BY_OWNER: 'retried by you',
   RETRIED_BY_COORDINATOR: 'retried by the coordinator',
+  /** The owner's skip of a landing still in flight (§2.4 J-S5): the check does not run for it. */
+  SKIP_CHECK: 'Land without the check',
+  SKIP_CHECK_CONFIRM: "The landing check won't run for this landing. It stops now and lands again without the check, recorded as skipped by you.",
+  SKIP_CHECK_GO: 'Land without it',
+  SKIP_CHECK_CANCEL: 'Keep checking',
+  SKIP_CHECK_FAILED: 'Could not skip the check',
+  /** Where a skip stands, in the place of "Nothing to do": the stopped generation still answering… */
+  SKIP_CHECK_STOPPING: 'Stopping — it lands again without the landing check.',
+  /** …and the generation that runs without it. */
+  SKIP_CHECK_SKIPPED: 'Landing without the landing check — you skipped it.',
+  /** What the owner's press records as the reason on the landing (the door requires one). */
+  SKIP_CHECK_REASON: 'The owner chose to land this without waiting for the landing check.',
 };
 
 /**
@@ -391,7 +405,20 @@ export const LANDING_LIVENESS_WORDS = {
   TAKEN_OVER: 'Taken over',
   FIRST_STARTED: 'first started',
   USUALLY: 'usually',
+  /** The state word of a claimed job waiting for its runner's local lock: it has not started its
+   *  work, so it has no output to be quiet about and is not fetching. */
+  WAITING: 'waiting',
 };
+
+/**
+ * The server's sentence about a claimed job waiting for its runner's local lock, naming the job
+ * that holds it — or null for any other job. A SILENT runner is a different fact (the runner, not
+ * the lock) and keeps its own words.
+ */
+function localLockWait(job: Pick<LandingJobFacts, 'state' | 'liveness' | 'blockingReason'>): string | null {
+  if (job.state !== 'RUNNING' || job.liveness === 'SILENT' || job.liveness === 'LEASE_EXPIRED') return null;
+  return job.blockingReason?.code === 'WAITING_LOCAL_LOCK' ? job.blockingReason.summary : null;
+}
 
 /**
  * "round 2 of 3" for a task's landing, "round 1" for a merge check or a merge into main (§7.2 V6):
@@ -543,6 +570,7 @@ interface LandingJobFacts {
   outputMovedAt?: string | null;
   typicalMs?: number | null;
   liveness?: string | null;
+  blockingReason?: { code: string; summary: string } | null;
 }
 
 /**
@@ -584,7 +612,12 @@ function landingLiveness(
   // says the liveness there — "checking · output 1s ago" (v4 04 and 07). The claim, round and the
   // usual duration follow it and are read in full on the wider rows.
   const clauses: string[] = [];
-  if (word === 'LIVE') {
+  // A job waiting for its runner's local lock has not started: what holds it leads the line, and
+  // the step's clock is the wait's. Its output was never going to move.
+  const lockWait = localLockWait(job);
+  if (lockWait !== null) {
+    clauses.push(lockWait);
+  } else if (word === 'LIVE') {
     if (Number.isFinite(outputMoved)) {
       clauses.push(`${lowerFirst(LANDING_LIVENESS_WORDS.OUTPUT)} ${Math.max(0, Math.round((now - outputMoved) / 1000))}s ago`);
     }
@@ -650,7 +683,8 @@ function liveLine(
     timedOut: false,
     state: unavailable ? 'Update unavailable'
       : silent ? LANDING_NO_REPORT
-        : running ? (job.phase ? jobPhases(main)[job.phase] ?? 'running' : 'running') : 'queued',
+        : running && localLockWait(job) !== null ? LANDING_LIVENESS_WORDS.WAITING
+          : running ? (job.phase ? jobPhases(main)[job.phase] ?? 'running' : 'running') : 'queued',
     // An instant this clock cannot read is no elapsed time rather than `NaN` on the page: the row
     // stays up and counts from zero, which is the one thing it can still say truthfully.
     clock: liveness?.clock ?? landingClock(Number.isFinite(startedAt) ? elapsedAt - startedAt : 0),
@@ -693,6 +727,10 @@ export interface LandingJobLine {
   detail: string | null;
   /** Whether the owner's Retry takes this job now — the server's answer, not `line.timedOut`. */
   retryable: boolean;
+  /** Whether "Land without the check" takes this job now — the server's `skippable`. */
+  skippable: boolean;
+  /** Where a skip of this job's check stands — the server's `skipCheck`. */
+  skipCheck: 'STOPPING' | 'SKIPPED' | null;
   /** The landing session this job belongs to (§2.9), or null where the server named none — an
    *  older build, or a job whose subject opened no session. "Open landing ›" is drawn from it. */
   landingSessionId: string | null;
@@ -746,6 +784,8 @@ export function landingJobLines(
           ? `Generation ${job.generation} · ${job.retriedBy === 'OWNER' ? LANDING_WORDS.RETRIED_BY_OWNER : LANDING_WORDS.RETRIED_BY_COORDINATOR} at ${landingClockTime(job.queuedAt)}`
           : null,
       retryable: job.retryable,
+      skippable: job.skippable === true,
+      skipCheck: job.skipCheck ?? null,
     };
   });
 }
@@ -772,6 +812,10 @@ export interface LandingCardJob {
   timedOut: boolean;
   /** The server's `retryable`, never inferred from `timedOut`. */
   retryable: boolean;
+  /** The server's `skippable`. */
+  skippable: boolean;
+  /** The server's `skipCheck`. */
+  skipCheck: 'STOPPING' | 'SKIPPED' | null;
   /** What a timed-out runner did before it stopped; the job list's own sentence. */
   detail: string | null;
 }
@@ -816,6 +860,12 @@ export interface LandingCard {
   detail: string | null;
   /** The job Retry takes, when the server says a retry takes one. */
   retryJobId: string | null;
+  /** The task whose landing "Land without the check" skips, when the card holds that one landing
+   *  and the server says the skip takes it; null otherwise. */
+  skipTaskId: string | null;
+  /** Where a skip of the one landing's check stands, said in the place of "Nothing to do"; null
+   *  when nobody skipped it. */
+  skipNote: string | null;
   /** The card holds one job — by the same counts its head is named by — and it is a round of
    *  merging into main (a merge check, or the merge itself). It lands no task, so the card says no
    *  "Nothing to do" (board v4 04 draws no body under that head). Read off `inFlight`, so a server
@@ -846,6 +896,8 @@ export function landingCard(
   now: number,
   observation: { updatedAt?: number; failed?: boolean } = {},
 ): LandingCard | null {
+  // A project whose line has not started draws no Landing card (revision 42 §12.16, ruling D2).
+  if (view.line === null) return null;
   const line = landingLine(view, now, observation);
   if (!line) return null;
   const jobs = landingJobLines(view, now, observation).map((job) => ({
@@ -861,6 +913,8 @@ export function landingCard(
     running: job.line.running,
     timedOut: job.line.timedOut,
     retryable: job.retryable,
+    skippable: job.skippable,
+    skipCheck: job.skipCheck,
     detail: job.detail,
   }));
   // The row's own rule for the name slot, one row down: several jobs are a count in the head and a
@@ -885,6 +939,10 @@ export function landingCard(
     ...(line.liveness ? { liveness: line.liveness } : {}),
     detail: line.timedOut ? lead?.detail ?? null : null,
     retryJobId: lead?.retryable ? lead.jobId : null,
+    skipTaskId: !several && lead?.skippable && lead.taskId ? lead.taskId : null,
+    skipNote: several ? null
+      : lead?.skipCheck === 'STOPPING' ? LANDING_WORDS.SKIP_CHECK_STOPPING
+        : lead?.skipCheck === 'SKIPPED' ? LANDING_WORDS.SKIP_CHECK_SKIPPED : null,
     mergeJob: !several && MERGE_JOB_KINDS.has(view.inFlight?.kind ?? ''),
   };
 }
@@ -1288,7 +1346,7 @@ export function ProjectPanoramaHeader({
   // — one query key, so the card mounting this is not a second request. It is read here rather than
   // handed in because the row is drawn inside this card, and a card that only knew there was a line
   // (the `integrationLine` prop) could not say what the line is doing.
-  const integration = useQuery({ ...projectIntegrationQuery(projectId), enabled: Boolean(projectId) });
+  const integration = useProjectIntegration(projectId);
   const ready = useQuery({ ...projectReadyToRunQuery(projectId), enabled: Boolean(projectId) });
   const inFlight = integration.data?.inFlight ?? null;
   // The clock counts in SECONDS while something is landing, rather than stepping with the 30s poll

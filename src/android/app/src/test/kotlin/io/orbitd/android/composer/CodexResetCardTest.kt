@@ -26,7 +26,8 @@ class CodexResetCardTest : ComposerShellTest() {
         ComposerShell.session = mapOf("provider" to JsonPrimitive("codex"), "model" to JsonPrimitive("gpt-6"))
     }
     private fun openUsage() {
-        val usage = hasText("Context: 0 tokens · Usage") and hasClickAction()
+        // The toolbar's ring opens the usage sheet (board android-composer-parity).
+        val usage = hasTestTag("composer-context") and hasClickAction()
         await { has(usage) }
         compose.onNode(usage).performClick()
         awaitText("Primary: 23%")

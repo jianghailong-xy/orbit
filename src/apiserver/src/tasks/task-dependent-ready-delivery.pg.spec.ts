@@ -16,6 +16,8 @@ import { uuidToBase62 } from '@orbit/shared';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CompletionInputRouter } from '../projects/completion-input-router.service';
+import { TaskRunStoppedProducer } from '../projects/task-run-stopped.producer';
+import { CoordinatorFactQueueService } from '../projects/coordinator-fact-queue.service';
 import { CoordinatorConvergenceService } from '../projects/coordinator-convergence.service';
 import {
   DELIVERY_COORDINATOR_SESSION_UNAVAILABLE,
@@ -172,7 +174,16 @@ async function connect(): Promise<Stack> {
     new TaskDispatchRefusalProducer(prisma, convergence, delivery),
     new DependentReadyProducer(prisma, convergence, delivery),
   );
+  const recoveryDelivery = new CoordinatorDeliveryService(prisma, new CoordinatorWakeService(prisma), sessions);
+  const recovery = new CoordinatorFactQueueService(
+    prisma, recoveryDelivery,
+    new TaskRunStoppedProducer(prisma, convergence, recoveryDelivery),
+    new DependentReadyProducer(prisma, convergence, recoveryDelivery),
+    new ProjectTasksSettledProducer(prisma,
+      new CoordinatorJudgmentService(prisma, new CoordinatorWakeService(prisma), sessions), convergence, recoveryDelivery),
+  );
   const tasks = new TasksService(prisma, sessions, realtime, undefined, router);
+  Object.assign(tasks, { coordinatorFacts: recovery });
   const receipts = new MergeReceiptService(prisma, router, tasks);
   return { db, prisma, tasks, receipts };
 }
@@ -225,6 +236,7 @@ async function coordinatorSession(
       prompt: `协调：${label}`,
       provider: 'claude',
       status,
+      ...(status === RunStatus.SUCCEEDED ? { finishedAt: new Date()} : {}),
       // What `ProjectsService.coordinator` writes: a person's conversation, not a judgment session.
       dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true,
@@ -372,7 +384,7 @@ async function donePrerequisite(
       prompt: label,
       provider: 'claude',
       // Over: a live session would hold the prerequisite in a way that has nothing to do with this.
-      status: RunStatus.SUCCEEDED,
+      status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       // §1.1 `isCodeTask`'s whole evidence: it ran in a worktree, on a branch.
@@ -903,4 +915,84 @@ test('a released dependent under a switched-off coordinator is refused once, tol
     } finally {
       await stack.db.$disconnect();
     }
+  });
+
+test('a dependent-ready fact refused during FAILED recovers on the reconcile tick without another event',
+  { skip, timeout: 120_000 }, async (t) => {
+    const stack = await connect();
+    t.after(() => stack.db.$disconnect());
+    const w = await world(stack, 'ready-recovery', { coordinator: 'PARKED' });
+    // A codeless prerequisite is released by DONE alone.
+    const prerequisite = await task(stack, w, 'finished prerequisite');
+    const dependent = await dependentOf(stack, w, 'manual dependent', [prerequisite]);
+    await stack.db.session.update({ where: { id: w.coordinatorSessionId! }, data: { status: RunStatus.FAILED, finishedAt: new Date()} });
+    await stack.db.task.update({ where: { id: prerequisite }, data: { status: TaskStatus.DONE } });
+    await completionEdge(stack, w, prerequisite);
+    const wakes = () => stack.db.projectCoordinatorWake.findMany({
+      where: { projectId: w.projectId, event: 'DEPENDENT_READY', subjectId: dependent },
+    });
+    assert.equal((await wakes())[0]?.status, 'REFUSED');
+    await stack.tasks.reconcileTick();
+    assert.equal((await wakes()).length, 1, 'paused recovery writes no repeated refusal');
+    await stack.db.session.update({ where: { id: w.coordinatorSessionId! }, data: { status: RunStatus.AWAITING_INPUT, finishedAt: null} });
+    await Promise.all([stack.tasks.reconcileTick(), stack.tasks.reconcileTick()]);
+    const delivered = (await wakes()).filter((wake) => wake.status === 'DELIVERED');
+    assert.equal(delivered.length, 1);
+    const turns = () => stack.db.conversationTurn.findMany({
+      where: { sessionId: w.coordinatorSessionId!, content: { contains: 'manual dependent' } },
+    });
+    assert.equal((await turns()).length, 1);
+    await stack.db.conversationTurn.updateMany({
+      where: { id: (await turns())[0]!.id }, data: { status: 'ANSWERED', deliveredAt: null },
+    });
+    await stack.db.session.update({ where: { id: w.coordinatorSessionId! }, data: { status: RunStatus.AWAITING_INPUT, finishedAt: null} });
+    await Promise.all([stack.tasks.reconcileTick(), stack.tasks.reconcileTick()]);
+    const resent = await turns();
+    assert.equal(resent.length, 2);
+    assert.notEqual(resent[0]!.clientTurnId, resent[1]!.clientTurnId);
+    await stack.tasks.reconcileTick();
+    assert.equal((await turns()).length, 2);
+  });
+
+test('recovery leaves obsolete facts and unavailable coordinators alone without writing refusal rows',
+  { skip, timeout: 120_000 }, async (t) => {
+    const stack = await connect();
+    t.after(() => stack.db.$disconnect());
+    const w = await world(stack, 'ready-recovery-ineligible');
+    const prerequisite = await task(stack, w, 'finished prerequisite');
+    const dependent = await dependentOf(stack, w, 'dependent that becomes obsolete', [prerequisite]);
+    await stack.db.session.update({ where: { id: w.coordinatorSessionId! }, data: { status: RunStatus.FAILED, finishedAt: new Date()} });
+    await stack.db.task.update({ where: { id: prerequisite }, data: { status: TaskStatus.DONE } });
+    await completionEdge(stack, w, prerequisite);
+    const rows = () => stack.db.projectCoordinatorWake.count({ where: { projectId: w.projectId, event: 'DEPENDENT_READY' } });
+    assert.equal(await rows(), 1);
+    const noRetry = async () => {
+      await stack.tasks.reconcileTick();
+      await stack.tasks.reconcileTick();
+      assert.equal(await rows(), 1);
+    };
+    await stack.db.session.update({ where: { id: w.coordinatorSessionId! }, data: {
+      status: RunStatus.AWAITING_INPUT, finishedAt: null, retryAt: new Date(Date.now() + 3600_000),
+    } });
+    await noRetry();
+    assert.ok((await stack.db.session.findUniqueOrThrow({ where: { id: w.coordinatorSessionId! } })).retryAt);
+    await stack.db.session.update({ where: { id: w.coordinatorSessionId! }, data: {
+      status: RunStatus.PENDING, retryAt: null, error: 'Account paused until 2099-01-01T00:00:00.000Z',
+    } });
+    await noRetry();
+    await stack.db.session.update({ where: { id: w.coordinatorSessionId! }, data: {
+      status: RunStatus.AWAITING_INPUT, error: null, completedAt: new Date(),
+    } });
+    await noRetry();
+    await stack.db.session.update({ where: { id: w.coordinatorSessionId! }, data: { completedAt: null, deletedAt: new Date() } });
+    await noRetry();
+    await stack.db.session.update({ where: { id: w.coordinatorSessionId! }, data: { deletedAt: null } });
+    await stack.db.project.update({ where: { id: w.projectId }, data: { coordinatorEnabled: false } });
+    await noRetry();
+    await stack.db.task.update({ where: { id: dependent }, data: { status: TaskStatus.CANCELLED } });
+    await stack.db.project.update({ where: { id: w.projectId }, data: { coordinatorEnabled: true } });
+    await noRetry();
+    assert.equal(await stack.db.conversationTurn.count({
+      where: { sessionId: w.coordinatorSessionId!, content: { contains: 'dependent that becomes obsolete' } },
+    }), 0);
   });

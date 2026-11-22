@@ -118,7 +118,7 @@ export class FakeKubeCluster {
   private version = 1;
   private readonly watchers: Array<{ kind: Kind; selector?: string; onEvent: (event: KubeWatchEvent<KubeObject>) => void }> = [];
 
-  constructor(readonly namespace = 'orbit-managed-test') {}
+  constructor(readonly namespace = 'orbit-cloud-test') {}
 
   /**
    * A client of this cluster, as one manager replica holds it. `delayMs` interleaves concurrent

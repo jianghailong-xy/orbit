@@ -116,7 +116,9 @@ class PushNotifications(private val context: Context) {
         message.payload.isReminder || message.payload.kind == "confirmation-problems" || message.payload.isOwnerRequest ||
             message.payload.isTerminalLogin || message.payload.isOwnerDecision ||
             // A scheduled task's failure or hold files a Waiting on you item; the push names it.
-            (message.payload.kind == PushPayload.SCHEDULE && message.payload.ownerRequestId != null) -> needsYou
+            (message.payload.kind == PushPayload.SCHEDULE && message.payload.ownerRequestId != null) ||
+            // A condition that cannot be read files its can't-read card in Waiting on you (§5.3).
+            message.payload.kind == PushPayload.CONDITION -> needsYou
         message.payload.sessionId != null -> SESSIONS
         else -> UPDATES
     }

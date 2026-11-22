@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 import { getSessionGuests, getSessionGuestSuggestions, inviteSessionGuest, removeSessionGuest } from '../api';
 import { lastInvitedLabel, matchGuestSuggestions, type GuestSuggestionMatch, type MatchRange } from '../lib/guestSuggestions';
+import type { SessionReach } from '../lib/sessionReach';
 import { countOf } from '../lib/shareLinks';
 import { useToast } from '../lib/toast';
 import { Autocomplete } from './ui/Autocomplete';
@@ -92,9 +93,14 @@ export function SessionGuestsSection({
   const qc = useQueryClient();
   const message = useToast();
   const key = guestsQueryKey(sessionId);
-  const guestsQ = useQuery({ queryKey: key, queryFn: () => getSessionGuests(sessionId) });
+  const guestsQ = useQuery({
+    queryKey: key,
+    meta: { entities: ['session'], sessionReach: { session: sessionId } satisfies SessionReach },
+    queryFn: () => getSessionGuests(sessionId),
+  });
   const suggestionsQ = useQuery({
     queryKey: suggestionsQueryKey(sessionId),
+    meta: { entities: ['session'], sessionReach: { session: sessionId } satisfies SessionReach },
     queryFn: () => getSessionGuestSuggestions(sessionId),
   });
   const [email, setEmail] = useState('');

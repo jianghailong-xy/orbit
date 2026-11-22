@@ -184,6 +184,20 @@ describe('the SubAgent block', () => {
     expect(bg.textContent).not.toContain('"status":"running"');
   });
 
+  it("draws a background run's end, not its call's receipt: a run that did not finish is red, a stopped one grey, never checked", () => {
+    for (const status of ['INTERRUPTED', 'FAILED'] as const) {
+      render([FG, { ...BG_RUNNING, status, endedAt: '2026-11-11T10:03:13.000Z' }], false);
+      const bg = card(5);
+      expect(bg.querySelector('.chat-tool-status.ok')).toBeNull();
+      expect(bg.querySelector('.chat-tool-status.err')?.getAttribute('aria-label')).toBe(status.toLowerCase());
+    }
+    render([FG, { ...BG_RUNNING, status: 'STOPPED', endedAt: '2026-11-11T10:03:13.000Z' }], false);
+    expect(card(5).querySelector('.chat-tool-status.ok, .chat-tool-status.err')).toBeNull();
+    expect(card(5).querySelector('.chat-tool-status.stopped')?.getAttribute('aria-label')).toBe('stopped');
+    render([FG, { ...BG_RUNNING, status: 'DONE', endedAt: '2026-11-11T10:03:13.000Z' }], false);
+    expect(card(5).querySelector('.chat-tool-status.ok')).not.toBeNull();
+  });
+
   it('opens on a grey Why line first, then the child steps and the result as Markdown', () => {
     render([FG, BG_RUNNING]);
     const fg = card(1);
@@ -311,5 +325,11 @@ describe('subagentRuns helpers', () => {
     expect(subagentMeta(undefined)).toBeNull();
     expect(delegateResultText('{"runId":"r","status":"running"}', undefined)).toBeNull();
     expect(delegateResultText('plain text', undefined)).toBe('plain text');
+  });
+
+  it("reads the run's text when the call's JSON was clipped to a preview, never the opening brace", () => {
+    const clipped = '{\n  "changedFiles": [],\n  "result": "Route 1 worked: the transcript is';
+    expect(delegateResultText(clipped, run({ resultSummary: 'Route 1 worked.' }))).toBe('Route 1 worked.');
+    expect(delegateResultText(clipped, undefined)).toBeNull();
   });
 });

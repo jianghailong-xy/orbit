@@ -13,12 +13,13 @@
 #                            the base images by digest, from that commit's deploy/two-stage/base-images.env (postgres,
 #                            pgbackup and db-proxy are pinned by deploy/postgres-pinned.yml and deploy/db-proxy.yml)
 #   ORBIT_MANAGED_RUNNER_IMAGE
-#                            the hosted runners' image by digest, <registry>/orbit-managed-runner@sha256:<64 hex>, or
+#                            the hosted runners' image by digest, <registry>/orbit-cloud-runner@sha256:<64 hex>, or
 #                            empty for a release without one. Where this host runs managed runners on Kubernetes, their
 #                            profile's runner.image is set to it before the apiserver is replaced, and the apiserver's
 #                            manager moves each runner onto it once that runner is idle (rollPreviousImage)
 #   ORBIT_DEPLOY_PULL_BASE   1 lets a running postgres whose configuration changed be recreated (upgrade.sh --pull-base)
-#   ORBIT_DEPLOY_PRUNE       1 prunes dangling images once the release runs (upgrade.sh --prune)
+#   ORBIT_DEPLOY_PRUNE       1 also prunes dangling images once the release runs (upgrade.sh --prune); earlier releases'
+#                            images beyond the last 3 are removed on every deploy
 #   ORBIT_DEPLOY_PLAN        1 prints the plan and stops there, having changed nothing (upgrade.sh --plan)
 #   ORBIT_DEPLOY_STOP_THEN_START
 #                            1 stops the running apiserver and web before their replacements start, as every release did
@@ -353,6 +354,7 @@ done
 # Compose sees no change in it, so a new one reaches the service only by recreating it.
 declare -A MOUNTED=(
   [db-proxy]="/usr/local/etc/haproxy/haproxy.cfg deploy/db-proxy/haproxy.cfg"
+  [nats]="/etc/orbit-nats/nats.conf src/link-gateway/nats.conf"
   [gateway]="/etc/nginx/conf.d/default.conf gateway/nginx.conf"
   [pgbackup]="/usr/local/bin/pg-backup.sh scripts/pg-backup.sh"
 )
@@ -578,8 +580,9 @@ for service in "${DEPLOYED[@]}"; do
       fi
       ;;
     *)
-      # db-proxy and gateway, recreated for the file the plan found they do not run: db-proxy's haproxy.cfg ends every
-      # database connection once, and the apiserver's reconnect on their own (docs/postgres-standby.md).
+      # db-proxy, nats and gateway, recreated for the file the plan found they do not run: db-proxy's haproxy.cfg ends every
+      # database connection once, and the apiserver's reconnect on their own (docs/postgres-standby.md); nats.conf ends
+      # the apiserver's and the link gateway's connections to NATS once, and both reconnect on their own.
       if [ -n "${FORCE[$service]:-}" ]; then
         echo "==> $service: recreated to run this release's ${MOUNTED[$service]#* }"
         up --force-recreate "$service"
@@ -598,5 +601,22 @@ if [ "$PRUNE" = 1 ]; then
   docker image prune -f
 fi
 echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) $COMMIT link-gateway=$LINK_TAG" >>.upgrade/history
+
+# Earlier releases' images. Every release pulls its own apiserver and web image (about 2.5 GB together) and nothing
+# else removes them, so they filled production's disk (2026-11-18: 77 releases, 137 GB, 6.6 GB left). The images of
+# the last KEEP_RELEASES releases in .upgrade/history stay for a quick rollback; an older one is in the registry and a
+# rollback to it pulls it again. Docker refuses an image a container uses, and that refusal is kept.
+KEEP_RELEASES=3
+remove_earlier_release_images() {
+  local keep_tags removed=0 ref
+  keep_tags=" $(tail -n "$KEEP_RELEASES" .upgrade/history | awk '{ print $2; sub(/^link-gateway=/, "", $3); print $3 }' | tr '\n' ' ') "
+  while IFS= read -r ref; do
+    case "$ref" in "$REGISTRY"/orbit-apiserver:* | "$REGISTRY"/orbit-web:* | "$REGISTRY"/orbit-link-gateway:*) ;; *) continue ;; esac
+    case "$keep_tags" in *" ${ref##*:} "*) continue ;; esac
+    if docker rmi "$ref" >/dev/null 2>&1; then removed=$((removed + 1)); fi
+  done < <(docker image ls --format '{{.Repository}}:{{.Tag}}')
+  echo "==> Earlier release images: $removed removed; the last $KEEP_RELEASES releases' kept"
+}
+remove_earlier_release_images
 for notice in ${NOTICES[@]+"${NOTICES[@]}"}; do printf '%s\n' "$notice" >&2; done
 echo "✓ Deployed $COMMIT on $(hostname). Its releases so far, newest last, are in $DIR/.upgrade/history."

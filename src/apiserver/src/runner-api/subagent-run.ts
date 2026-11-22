@@ -19,6 +19,8 @@ import {
   ArrayMaxSize,
   IsBoolean,
   IsIn,
+  IsInt,
+  Max,
   IsNumber,
   IsObject,
   IsOptional,
@@ -28,7 +30,7 @@ import {
   MinLength,
 } from 'class-validator';
 import { IsPublicId } from '../common/public-id';
-import { MODEL_AT_CAPACITY_ERROR_MARKER, type SubagentRoutingDecision } from '../tasks/model-routing';
+import { MODEL_AT_CAPACITY_ERROR_MARKER, subagentFitLine, type SubagentRoutingDecision } from '../tasks/model-routing';
 import { stripNul } from './strip-nul';
 
 /**
@@ -117,6 +119,24 @@ export class SubagentRunCreateDto implements SubagentRunCreateRequest {
   @IsOptional()
   @IsPublicId()
   resumeOf?: string;
+
+  @IsOptional()
+  @IsPublicId()
+  workflowRunId?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(2_147_483_647)
+  callIndex?: number;
+
+  @IsOptional()
+  @IsString()
+  label?: string;
+
+  @IsOptional()
+  @IsString()
+  phase?: string;
 }
 
 export class SubagentRunUpdateDto implements SubagentRunUpdateRequest {
@@ -260,6 +280,11 @@ export function appliedDecision(
   const ranked = fallbackCandidates(route);
   const at = ranked.findIndex((c) => c.engine === runsOn.engine && c.provider === runsOn.provider && c.model === runsOn.model);
   const fallbacks = at >= 0 ? ranked.slice(at + 1) : route.fallbacks;
+  // A candidate further down that runs because the ones before it could not start: say when it is not of the asked tier.
+  const ran = at > 0 ? ranked[at] : null;
+  const fit = ran && route.level && ran.level !== undefined
+    ? subagentFitLine(route.level, { level: ran.level, model: ran.model, provider: ran.provider, engine: ran.engine })
+    : null;
   return {
     ...route,
     engine: runsOn.engine,
@@ -270,6 +295,7 @@ export function appliedDecision(
     reasons: [
       ...route.reasons,
       ...passedOver.map((p) => `Passed over ${p.target.model} on ${p.target.provider}: ${p.reason}`),
+      ...(fit ? [fit] : []),
     ],
     candidates: [
       ...route.candidates,
@@ -297,7 +323,8 @@ export function subagentWhyLine(decision: Partial<SubagentDecision>): string | n
   if (decision.model) {
     const engine = decision.engine && decision.engine !== decision.provider ? ` (${decision.engine})` : '';
     const where = `${decision.model}${decision.effort ? ` · ${decision.effort}` : ''} on ${decision.provider}${engine}`;
-    const routed = decision.tierSource !== 'named-model' && decision.tierSource !== 'definition-model';
+    const routed = decision.tierSource !== 'named-model' && decision.tierSource !== 'definition-model'
+      && decision.tierSource !== 'not-routed';
     const mode = routed && decision.optimizeFor ? OPTIMIZE_LABEL[decision.optimizeFor] : undefined;
     const lead = mode ? `${mode}: ${where}` : where;
     parts.push(decision.note ? `${lead}, ${decision.note}` : lead);
@@ -349,6 +376,11 @@ export function subagentRunView(
     attempts?: unknown;
     changedFiles?: string[];
     description?: string | null;
+    /** A workflow call's (docs/subagent-workflow-design.md §5.2); absent or null on a delegate call's run. */
+    workflowRunId?: string | null;
+    callIndex?: number | null;
+    label?: string | null;
+    phase?: string | null;
   },
   labels?: ReadonlyMap<string, string>,
 ): SubagentRunView {
@@ -378,6 +410,11 @@ export function subagentRunView(
     engine,
     readonly: decision.readonly === true,
     changedFiles: row.changedFiles ?? [],
+    workflowRunId: row.workflowRunId ?? null,
+    callIndex: row.callIndex ?? null,
+    // The runner sends a call's label and phase as it has them, "" for none.
+    label: row.label || null,
+    phase: row.phase || null,
     createdAt: row.createdAt.toISOString(),
     endedAt: row.endedAt ? row.endedAt.toISOString() : null,
   };

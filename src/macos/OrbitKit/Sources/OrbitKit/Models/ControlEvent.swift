@@ -52,6 +52,10 @@ public enum ControlEventType: String, Codable, Sendable {
     /// stream that declared `?hints=list_changed` (`URLSessionControlStream`): a hint to make one
     /// conditional delta read, never a change in itself.
     case sessionsListChanged = "sessions.list_changed"
+    /// The server started, kept or stopped skipping a failing translator (circuit breaker, board
+    /// docs/ux/translation-failure-policy.html frame 6). USER-scoped: a nudge to re-read `GET /users/me`
+    /// for `translationUnavailableUntil`. Not sent when the skip simply runs out: the client times that.
+    case translationStatusChanged = "translation.status_changed"
     case notification = "notification"
     case unknown
 

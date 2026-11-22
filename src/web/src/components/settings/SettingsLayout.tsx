@@ -26,14 +26,14 @@ import {
   BellOutlined,
   BlockOutlined,
   CloudOutlined,
-  CodeOutlined,
   DatabaseOutlined,
   FolderOutlined,
-  HddOutlined,
   HolderOutlined,
   KeyOutlined,
+  LockOutlined,
   LeftOutlined,
   LinkOutlined,
+  OrderedListOutlined,
   PlusOutlined,
   SearchOutlined,
   SettingOutlined,
@@ -42,7 +42,9 @@ import {
 } from '@ant-design/icons';
 import { MANAGED_RUNNER_COPY, type ManagedRunnerRow } from '@orbit/shared';
 import { api } from '../../api';
+import { routeId } from '../../lib/idCodec';
 import { machineName } from '../../lib/machineSetup';
+import { MachineOsIcon } from '../../lib/machineOs';
 import { managedRowOf, useManagedRunner, useManagedRunnerId } from '../../lib/managedRunner';
 import { Spinner } from '../ui/Spinner';
 import { publishedRunnerVersionQuery, runnersQuery, workspacesQuery } from '../../lib/queries';
@@ -57,12 +59,13 @@ import {
 import { settingsReturnPath } from '../../lib/settingsReturn';
 import { useToast } from '../../lib/toast';
 import { useMediaQuery } from '../../lib/useMediaQuery';
-import { INTEGRATION_PAGES, PERSONAL_PAGES } from '../../pages/settings/settingsIndex';
+import { INTEGRATION_PAGES, MODEL_ROUTING_PAGE, PERSONAL_PAGES } from '../../pages/settings/settingsIndex';
 import { ControlPlaneProvider } from '../../lib/useControlPlane';
 import { ImpersonationBanner } from '../ImpersonationBanner';
 import { HelpDrawer } from '../HelpDrawer';
 
 import type { Runner } from '../TasksSidePanel';
+import { SettingChangedLine, SettingChangedLineSlot } from './SettingChangedLine';
 import { around, searchSettings, type SettingsHit, type SettingsHitGroup } from './settingsSearch';
 import './Settings.css';
 
@@ -75,6 +78,7 @@ const PERSONAL_ICONS: Record<(typeof PERSONAL_PAGES)[number]['path'], ReactNode>
   '/settings/storage': <DatabaseOutlined />,
   '/settings/shared-links': <LinkOutlined />,
   '/settings/access-tokens': <KeyOutlined />,
+  '/settings/secrets': <LockOutlined />,
 };
 
 /** Integrations' rows' icons, one per connected service. */
@@ -164,7 +168,9 @@ export function SettingsLayout() {
                   <span>Settings</span>
                 </button>
               )}
-              <Outlet />
+              <SettingChangedLineSlot.Provider value={SettingChangedLine}>
+                <Outlet />
+              </SettingChangedLineSlot.Provider>
             </div>
           </main>
         )}
@@ -216,7 +222,11 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
   const runners = (useQuery(runnersQuery()).data ?? []) as Runner[];
   const workspaces = (useQuery(workspacesQuery()).data ?? []) as SettingsWorkspace[];
   const latestVersion = latestRunnerVersion(useQuery(publishedRunnerVersionQuery()).data, runners);
-  const providers = useQuery({ queryKey: PROVIDERS_LIST_KEY, queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE) });
+  const providers = useQuery({
+    queryKey: PROVIDERS_LIST_KEY,
+    meta: { entities: ['provider'] },
+    queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE),
+  });
   const pools = useQuery(providerPoolsQuery());
   // The account's managed runner (docs/managed-runner-existing-account-entry-design.md): an entry while the
   // server offers one, then its own machine row in the shared state words. Nothing is read with the feature off.
@@ -227,7 +237,7 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
   const nowMs = Date.now();
   // The keys page is every key, or one vendor's (/settings/providers/:vendor); not a key's own pages.
   const { pathname } = useLocation();
-  const keysPage = /^\/settings\/providers(\/(?!(new|keys|pools)(\/|$))[^/]+)?\/?$/.test(pathname);
+  const keysPage = /^\/settings\/providers(\/(?!(new|keys|pools|routing)(\/|$))[^/]+)?\/?$/.test(pathname);
 
   // A terminal on a machine asking to be approved lights that machine's dot (docs/mocks/waiting-on-you-removal/02 ①).
   const terminalRequests = useLiveTerminalRequests();
@@ -303,7 +313,12 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
             // With no machine at all, the group is the one way to register one, as Providers does.
             <NavRow to="/settings/machines/new" icon={<PlusOutlined />} label="Register a machine" />
           ) : (
-            <MachineRows runners={runners} stateOf={stateOf} managedRowOf={managedRowFor} />
+            <MachineRows
+              runners={runners}
+              managedId={managedRunnerId}
+              stateOf={stateOf}
+              managedRowOf={managedRowFor}
+            />
           )}
         </NavGroup>
 
@@ -314,7 +329,11 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
         >
           {keyCount === 0 && poolCount === 0 ? (
             // With no key and no pool at all, the group is the one way to connect a provider.
-            <NavRow to="/settings/providers/new" icon={<PlusOutlined />} label="Connect a provider" />
+            <>
+              <NavRow to="/settings/providers/new" icon={<PlusOutlined />} label="Connect a provider" />
+              {/* The built-in engines have model tiers with no key at all. */}
+              <NavRow to={MODEL_ROUTING_PAGE.path} icon={<OrderedListOutlined />} label={MODEL_ROUTING_PAGE.label} />
+            </>
           ) : (
             <>
               {/* Two rows however many vendors are connected (choice A, docs/mocks/settings-providers-compact):
@@ -332,6 +351,9 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
                 label="Account pools"
                 trailing={poolCount > 0 ? <span className="settings-nav-meta">{poolCount}</span> : undefined}
               />
+              {/* Every model's tier, keys' and built-in engines', beside how its runs went: Model tiers and the
+                  Routing report on one page. */}
+              <NavRow to={MODEL_ROUTING_PAGE.path} icon={<OrderedListOutlined />} label={MODEL_ROUTING_PAGE.label} />
             </>
           )}
         </NavGroup>
@@ -444,16 +466,22 @@ function Marked({ text, query }: { text: string; query: string }) {
  * row itself with a mouse, or by the grip that shows on hover or focus, which a keyboard picks up with
  * Space or Enter and moves with the arrows. The new order shows at once and goes back if the server
  * refuses it. A press that never moves stays a click, and opens the machine's page.
+ * Orbit Cloud is pinned above them and never moves (docs/mocks/orbit-cloud-pinned, A).
  */
 function MachineRows({
-  runners,
+  runners: all,
+  managedId,
   stateOf,
   managedRowOf,
 }: {
   runners: Runner[];
+  /** Which runner is Orbit Cloud, if any. */
+  managedId: string | null;
   stateOf: (runner: Runner) => MachineState;
   managedRowOf: (runner: Runner) => ManagedRunnerRow | null;
 }) {
+  const cloud = (managedId && all.find((runner) => routeId(runner.id) === routeId(managedId))) || null;
+  const runners = cloud ? all.filter((runner) => runner !== cloud) : all;
   const qc = useQueryClient();
   const message = useToast();
   const reorderMut = useMutation({
@@ -493,22 +521,56 @@ function MachineRows({
     const from = runners.findIndex((runner) => runner.id === active.id);
     const to = runners.findIndex((runner) => runner.id === over.id);
     if (from < 0 || to < 0) return;
-    reorderMut.mutate(arrayMove(runners, from, to).map((runner) => runner.id));
+    // Orbit Cloud stays first in the saved order too, for a client that does not pin it.
+    reorderMut.mutate([...(cloud ? [cloud] : []), ...arrayMove(runners, from, to)].map((runner) => runner.id));
   };
   return (
-    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-      <SortableContext items={runners.map((runner) => runner.id)} strategy={verticalListSortingStrategy}>
-        {runners.map((runner) => (
-          <MachineRow
-            key={runner.id}
-            runner={runner}
-            state={stateOf(runner)}
-            managedRow={managedRowOf(runner)}
-            dragDisabled={reorderMut.isPending}
+    <>
+      {cloud && (
+        <div className="settings-nav-cloud">
+          <NavRow
+            to={`/settings/machines/${cloud.id}`}
+            icon={<CloudOutlined />}
+            label={machineName(cloud, cloud.id)}
+            trailing={<MachineRowState state={stateOf(cloud)} managedRow={managedRowOf(cloud)} />}
           />
-        ))}
-      </SortableContext>
-    </DndContext>
+          {runners.length > 0 && <div className="settings-nav-divider" role="separator" />}
+        </div>
+      )}
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+        <SortableContext items={runners.map((runner) => runner.id)} strategy={verticalListSortingStrategy}>
+          {runners.map((runner) => (
+            <MachineRow
+              key={runner.id}
+              runner={runner}
+              state={stateOf(runner)}
+              managedRow={managedRowOf(runner)}
+              dragDisabled={reorderMut.isPending}
+            />
+          ))}
+        </SortableContext>
+      </DndContext>
+    </>
+  );
+}
+
+/** A machine row's state: the managed runner's shared short label, else a dot. */
+function MachineRowState({
+  state,
+  managedRow,
+}: {
+  state: MachineState;
+  managedRow: ManagedRunnerRow | null;
+}) {
+  return managedRow ? (
+    <ManagedRowState row={managedRow} />
+  ) : (
+    <span
+      className={`settings-dot settings-dot--${state}`}
+      role="img"
+      aria-label={MACHINE_STATE_LABEL[state]}
+      title={MACHINE_STATE_LABEL[state]}
+    />
   );
 }
 
@@ -559,20 +621,9 @@ function MachineRow({
     >
       <NavRow
         to={`/settings/machines/${runner.id}`}
-        icon={<HddOutlined />}
+        icon={<MachineOsIcon runner={runner} />}
         label={name}
-        trailing={
-          managedRow ? (
-            <ManagedRowState row={managedRow} />
-          ) : (
-            <span
-              className={`settings-dot settings-dot--${state}`}
-              role="img"
-              aria-label={MACHINE_STATE_LABEL[state]}
-              title={MACHINE_STATE_LABEL[state]}
-            />
-          )
-        }
+        trailing={<MachineRowState state={state} managedRow={managedRow} />}
       />
       <button
         ref={setActivatorNodeRef}

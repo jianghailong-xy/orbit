@@ -19,6 +19,12 @@
  *  13. a draining beat asks for the drain's one push even when quiet, so work queuing behind a drain is told once.
  *  14. the sessions a background job holds slots for (backgroundJobSessionIds) are written by the beat's one statement
  *      and counted by the runners list as running, a session named both ways once; an older runner's beat clears them.
+ *  15. a beat that states what is executing (executing, plan step 1.6) replaces the inferred sets of the sessions it
+ *      names: a job whose end report never arrived is gone; a beat without sets changes nothing; a session of another
+ *      runner, of another process or closed is not written.
+ *  16. a beat says when it was composed (executingAt, plan step 1.7): one composed before an event batch that moved a
+ *      session's sets, and written after it, leaves them as the batch left them — a job just launched is not taken out,
+ *      an ended one is not put back; a later beat still replaces, and so does one that does not say.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/link-heartbeat.pg.spec.ts
  *
@@ -31,7 +37,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 import { CreatorType, PrismaClient, RunStatus, SessionDispatchOrigin, TaskStatus } from '@prisma/client';
 import type { HttpException } from '@nestjs/common';
-import type { PlanUsageRateLimitReset, RunnerHeartbeatRequest, RunnerHeartbeatResponse } from '@orbit/shared';
+import { type PlanUsageRateLimitReset, type RunnerHeartbeatRequest, type RunnerHeartbeatResponse, RunEventType } from '@orbit/shared';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Client, Pool } from 'pg';
 
@@ -151,6 +157,9 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
         id, ownerId, creatorId: ownerId, title: 'a session', prompt: 'work', provider: 'claude', status, workspaceId,
         dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false, assignedRunnerId: runnerId, numTurns: 1,
         inboxLeaseOwner: process_, branch: `orbit/${id.slice(0, 8)}`, ...extra,
+        ...(status === RunStatus.SUCCEEDED || status === RunStatus.FAILED
+          ? { finishedAt: new Date()}
+          : status === RunStatus.CANCELLED ? { finishedAt: new Date()} : {}),
       },
     });
     return id;
@@ -247,7 +256,8 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
     assert.deepEqual(
       { ...quiet.answer, linkHints: undefined },
       {
-        cancelSessionIds: [], leaseLostSessionIds: [], maxConcurrent: 1, minFreeDiskMb: null,
+        // A runner created without a Keep Free has the column's default: 10 GB since 0990_runner_keep_free_default.
+        cancelSessionIds: [], leaseLostSessionIds: [], maxConcurrent: 1, minFreeDiskMb: 10240,
         mergeRequests: [], commitRequests: [], artifactRequests: [], linkHints: undefined,
       },
     );
@@ -524,7 +534,7 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
       });
       const work = await prisma.session.create({
         data: {
-          ownerId, creatorId: ownerId, title: 'the work', prompt: 'p', taskId, startsTaskWork: true, status: RunStatus.SUCCEEDED,
+          ownerId, creatorId: ownerId, title: 'the work', prompt: 'p', taskId, startsTaskWork: true, status: RunStatus.SUCCEEDED, 
           workspaceId, assignedRunnerId: runnerId, finishedAt: new Date(),
         },
       });
@@ -769,8 +779,8 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
     assert.equal((await sql.query(`SELECT 1 FROM runner_presence WHERE runner_id = $1`, [managed])).rowCount, 0);
     const instance = {
       'x-orbit-runner-capabilities': `${CAPABILITIES},managed-runner-instance-v1`,
-      'x-orbit-managed-runner-generation': '1',
-      'x-orbit-managed-runner-pod-uid': podUid,
+      'x-orbit-cloud-runner-generation': '1',
+      'x-orbit-cloud-runner-pod-uid': podUid,
     };
     for (let i = 0; i < 3; i += 1) assert.ok(isFull(await managedBeat(instance)), 'every beat of a managed runner reconciles in full');
   });
@@ -833,7 +843,7 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
     assert.equal(queued.statements.length, 1, queued.statements.join('\n---\n'));
     assert.equal(drainPushes.length, 0, 'the web\'s update indicator says it; nothing is pushed (docs/mocks/runner-update-indicator)');
 
-    await prisma.session.update({ where: { id: waiting }, data: { status: RunStatus.CANCELLED } });
+    await prisma.session.update({ where: { id: waiting }, data: { status: RunStatus.CANCELLED, finishedAt: new Date()} });
     for (let i = 0; i < 4 && isFull((await beat()).answer); i += 1);
     await settle();
   });
@@ -892,6 +902,119 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
     await beat();
     assert.deepEqual(await holders(), []);
     assert.equal(await running(), inTurn, 'a runner that omits the member counts as before');
+    await settle();
+  });
+
+  // ── 15 ─────────────────────────────────────────────────────────────────────────────────────────────────
+  await t.test('15. a beat that states what is executing replaces the inferred sets of its own sessions, and no other', async () => {
+    await settle();
+    type Sets = { jobs: string[]; shells: string[]; subagents: string[]; activity: Record<string, number>; turn: boolean; tuple: string };
+    const sets = async (id: string): Promise<Sets> => (await sql.query(
+      `SELECT "running_bg_jobs" AS jobs, "running_bg_shells" AS shells, "running_subagents" AS subagents,
+              "running_bg_job_activity" AS activity, "engine_turn_active" AS turn, ctid::text || ':' || xmin::text AS tuple
+         FROM "session" WHERE "id" = $1`, [id])).rows[0];
+    const seed = (id: string) => sql.query(
+      `UPDATE "session" SET "running_bg_jobs" = '{bgj_lost,bgj_live}', "running_bg_shells" = '{toolu_shell,bgj_lost,bgj_live}',
+              "running_bg_job_activity" = '{"bgj_lost": 1000, "bgj_live": 2000}', "running_subagents" = '{toolu_agent}',
+              "engine_turn_active" = true
+        WHERE "id" = $1`, [id]);
+    const seeded = { jobs: ['bgj_lost', 'bgj_live'], shells: ['toolu_shell', 'bgj_lost', 'bgj_live'], subagents: ['toolu_agent'],
+      activity: { bgj_lost: 1000, bgj_live: 2000 }, turn: true };
+    const without = ({ tuple: _tuple, ...rest }: Sets) => rest;
+    const lost = await session(RunStatus.AWAITING_INPUT);
+    await seed(lost);
+
+    // An older runner's beat carries no sets: today's inference stands, and the beat costs what it cost.
+    const older = await beat();
+    assert.equal(older.statements.length, 1, older.statements.join('\n---\n'));
+    assert.deepEqual(without(await sets(lost)), seeded, 'a beat without sets changes nothing');
+
+    // bgj_lost ended and its end report never arrived; the runner states what it still runs.
+    const stating = await beat({
+      executing: [{ sessionId: lost.toUpperCase(), engineTurnActive: false, jobs: ['bgj_live'], shells: ['bgj_live', 'toolu_shell'], subagents: [] }],
+    });
+    assert.equal(isFull(stating.answer), false, 'nothing a beat delivers depends on the sets');
+    const after = await sets(lost);
+    assert.deepEqual(without(after), {
+      jobs: ['bgj_live'], shells: ['toolu_shell', 'bgj_live'], subagents: [], activity: { bgj_live: 2000 }, turn: false,
+    }, 'the lost job is gone from every set; the job that stays keeps its freshness and its place');
+
+    // The same statement again moves no row.
+    await beat({ executing: [{ sessionId: lost, engineTurnActive: false, jobs: ['bgj_live'], shells: ['toolu_shell', 'bgj_live'], subagents: [] }] });
+    assert.equal((await sets(lost)).tuple, after.tuple, 'a beat that states the stored sets writes nothing');
+
+    // A set an entry leaves out is not stated; a new id goes in after the ones that stay.
+    await seed(lost);
+    await beat({ executing: [{ sessionId: lost, jobs: ['bgj_live', 'bgj_new'] }] });
+    assert.deepEqual(without(await sets(lost)), { ...seeded, jobs: ['bgj_live', 'bgj_new'], activity: { bgj_live: 2000 } });
+
+    // A session assigned to another runner of the same account, one leased to another process, and a closed one are
+    // not written, whatever the beat says of them.
+    const otherRunner = randomUUID();
+    await prisma.runner.create({ data: { id: otherRunner, ownerId, name: 'laptop', tokenHash: sha256(randomUUID()), status: 'ONLINE' } });
+    const elsewhere = await session(RunStatus.AWAITING_INPUT, { assignedRunnerId: otherRunner });
+    const otherProcess = await session(RunStatus.AWAITING_INPUT, { inboxLeaseOwner: randomUUID() });
+    const closed = await session(RunStatus.SUCCEEDED);
+    for (const id of [elsewhere, otherProcess, closed]) await seed(id);
+    await beat({ executing: [elsewhere, otherProcess, closed].map((sessionId) => ({ sessionId, engineTurnActive: false, jobs: [], shells: [], subagents: [] })) });
+    for (const id of [elsewhere, otherProcess, closed]) {
+      assert.deepEqual(without(await sets(id)), seeded, `a beat cannot write session ${id}: another runner's, another process's, or closed`);
+    }
+
+    // Over HTTPS the same body does the same.
+    await seed(lost);
+    await door.heartbeat(
+      (await prisma.runner.findUniqueOrThrow({ where: { id: runnerId } })) as never,
+      { ...body, executing: [{ sessionId: lost, engineTurnActive: false, jobs: [], shells: [], subagents: [] }] },
+      CAPABILITIES, 'claude,codex', 'linux',
+    );
+    assert.deepEqual(without(await sets(lost)), { jobs: [], shells: [], subagents: [], activity: {}, turn: false });
+    for (const id of [lost, elsewhere, otherProcess]) await prisma.session.update({ where: { id }, data: { status: RunStatus.CANCELLED, finishedAt: new Date()} });
+    for (let i = 0; i < 4 && isFull((await beat()).answer); i += 1);
+    await settle();
+  });
+
+  // ── 16 ─────────────────────────────────────────────────────────────────────────────────────────────────
+  await t.test('16. a beat composed before an event batch that moved the sets, and written after it, does not undo it', async () => {
+    await settle();
+    const sets = async (id: string) => (await sql.query(
+      `SELECT "running_bg_jobs" AS jobs, "running_bg_shells" AS shells FROM "session" WHERE "id" = $1`, [id])).rows[0] as { jobs: string[]; shells: string[] };
+    const s = await session(RunStatus.AWAITING_INPUT);
+    let seq = 0;
+    const job = (status: string) => ({ toolUseId: 'bgj_new', shellId: 'bgj_new', status, kind: 'job', command: 'npm test', outputPath: '/runs/bgj_new.output', idleMs: 0 });
+    const report = (payload: Record<string, unknown>, ts: number) => door.events({ id: runnerId, ownerId } as never, s, {
+      leaseOwner: process_, events: [{ type: RunEventType.BACKGROUND_TASK, payload, seq: ++seq, ts: new Date(ts).toISOString() }],
+    } as never);
+    const nothing = { sessionId: s, engineTurnActive: false, jobs: [] as string[], shells: [] as string[], subagents: [] as string[] };
+
+    // The beat was composed (runner clock) a moment before bgj_new started; the launch's batch is written first.
+    const composed = Date.now() - 5_000;
+    await report(job('running'), composed + 1_000);
+    assert.deepEqual(await sets(s), { jobs: ['bgj_new'], shells: ['bgj_new'] }, 'the launch is recorded');
+    await beat({ executing: [nothing], executingAt: composed });
+    assert.deepEqual(await sets(s), { jobs: ['bgj_new'], shells: ['bgj_new'] },
+      'the beat composed before the launch does not take the running job out: the session does not read idle');
+
+    // The same at the same millisecond: the runner stamps the event no earlier than the beat that missed it.
+    await beat({ executing: [nothing], executingAt: composed + 1_000 });
+    assert.deepEqual(await sets(s), { jobs: ['bgj_new'], shells: ['bgj_new'] }, 'a beat of the launch\'s own instant is not newer');
+
+    // A beat composed after the batch is newer news, and replaces: here the job's end report was lost.
+    await beat({ executing: [nothing], executingAt: composed + 2_000 });
+    assert.deepEqual(await sets(s), { jobs: [], shells: [] }, 'a later beat still clears a job whose end never arrived');
+
+    // The other order: a beat composed before an end, and written after it, does not put the ended job back.
+    await report(job('running'), composed + 3_000);
+    await report({ ...job('completed'), exitCode: 0 }, composed + 4_000);
+    assert.deepEqual(await sets(s), { jobs: [], shells: [] });
+    await beat({ executing: [{ ...nothing, jobs: ['bgj_new'], shells: ['bgj_new'] }], executingAt: composed + 3_500 });
+    assert.deepEqual(await sets(s), { jobs: [], shells: [] }, 'the ended job is not restated by an older beat');
+
+    // A beat that does not say when it was composed (a runner of step 1.6 alone) replaces as it did.
+    await report(job('running'), composed + 5_000);
+    await beat({ executing: [nothing] });
+    assert.deepEqual(await sets(s), { jobs: [], shells: [] }, 'without executingAt the beat replaces');
+    await prisma.session.update({ where: { id: s }, data: { status: RunStatus.CANCELLED, finishedAt: new Date()} });
     await settle();
   });
 

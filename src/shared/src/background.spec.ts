@@ -236,3 +236,100 @@ describe('background sub-agents and workflows', () => {
     ).toEqual(['tu_agent', 'tu_inline', 'tu_wf']);
   });
 });
+
+// A runner-hosted bg_run job, in the events runner-go background_job.go emits for it: the launch pair
+// the tray already reads, then the job record (a `running` background_task at launch, one terminal
+// background_task at its end) that carries the job's kind.
+describe('runner-hosted bg_run jobs', () => {
+  const launch = (seq: number, id: string, command: string, description?: string): BgDeriveEvent[] => [
+    {
+      seq,
+      type: RunEventType.TOOL_USE,
+      ts: `2026-11-17T02:40:${String(seq).padStart(2, '0')}.000Z`,
+      payload: { id, name: 'Bash', input: { command, run_in_background: true, ...(description ? { description } : {}) } },
+    },
+    {
+      seq: seq + 1,
+      type: RunEventType.TOOL_RESULT,
+      payload: {
+        toolUseId: id,
+        content: `Command running in background with ID: ${id}. Output is being written to: /runs/${id}.output. Read it with mcp__orbit__bg_output.`,
+      },
+    },
+    {
+      seq: seq + 2,
+      type: RunEventType.BACKGROUND_TASK,
+      payload: { shellId: id, toolUseId: id, status: 'running', kind: command === 'vite dev' ? 'service' : 'job', command, idleMs: 0 },
+    },
+  ];
+  const end = (seq: number, id: string, status: string): BgDeriveEvent => ({
+    seq,
+    type: RunEventType.BACKGROUND_TASK,
+    ts: `2026-11-17T02:50:${String(seq).padStart(2, '0')}.000Z`,
+    payload: { shellId: id, toolUseId: id, status, kind: 'job', command: 'x', exitCode: status === 'failed' ? 1 : 0 },
+  });
+  const events: BgDeriveEvent[] = [
+    ...launch(1, 'bgj_000000000001', 'npm test', 'Full suite'),
+    ...launch(4, 'bgj_000000000002', 'vite dev', 'Dev server'),
+    ...launch(7, 'bgj_000000000003', 'gh run watch'),
+    end(10, 'bgj_000000000001', 'failed'),
+  ];
+
+  it('lists a job as kind job with its end, and leaves a service out', () => {
+    const shells = deriveBackgroundShells(events, { sessionLive: true });
+    expect(shells.map((s) => [s.kind, s.shellId, s.description, s.command, s.status, s.endedAt])).toEqual([
+      ['job', 'bgj_000000000001', 'Full suite', 'npm test', 'failed', '2026-11-17T02:50:10.000Z'],
+      ['job', 'bgj_000000000003', undefined, 'gh run watch', 'running', undefined],
+    ]);
+  });
+
+  it('carries a job’s exit code from its terminal report, and none while it runs', () => {
+    const shells = deriveBackgroundShells(events, { sessionLive: true });
+    expect(shells.map((s) => s.exitCode)).toEqual([1, undefined]);
+  });
+
+  it('narrows to them losslessly', () => {
+    const ctx = { sessionLive: true };
+    expect(deriveBackgroundShells(selectBackgroundDerivationEvents(events), ctx)).toEqual(
+      deriveBackgroundShells(events, ctx),
+    );
+  });
+});
+
+describe('Orbit workflow (mcp__orbit__workflow)', () => {
+  const RECEIPT = JSON.stringify({ status: 'running', workflowRunId: '350PhFyB3FxEUt9iEImF5' }, null, 2);
+  const events: BgDeriveEvent[] = [
+    { seq: 1, type: RunEventType.TOOL_USE, payload: { id: 'tu_owf', name: 'mcp__orbit__workflow', input: { description: 'Phase 1 smoke test', script: 'export const meta = {}' } } },
+    { seq: 2, type: RunEventType.TOOL_RESULT, payload: { toolUseId: 'tu_owf', content: [{ type: 'text', text: RECEIPT }] } },
+    // One of its agent() calls, drawn as a delegate call nested under it: not a workflow of its own.
+    { seq: 3, type: RunEventType.TOOL_USE, payload: { id: 'tu_owf#0', name: 'mcp__orbit__delegate', parentToolUseId: 'tu_owf', input: { description: 'find:workflow-tool' } } },
+  ];
+
+  it('runs from its receipt, as a workflow named by its description, until its terminal background_task', () => {
+    const [shell, ...rest] = deriveBackgroundShells(events);
+    expect(rest).toEqual([]);
+    expect(shell).toMatchObject({
+      shellId: '350PhFyB3FxEUt9iEImF5', kind: 'workflow', toolUseId: 'tu_owf', description: 'Phase 1 smoke test', status: 'running',
+    });
+    const ended = deriveBackgroundShells([
+      ...events,
+      { seq: 4, type: RunEventType.BACKGROUND_TASK, payload: { toolUseId: 'tu_owf', status: 'completed', workflowRunId: '350PhFyB3FxEUt9iEImF5' } },
+    ]);
+    expect(ended[0].status).toBe('done');
+  });
+
+  it('stays a workflow when the runner re-announces it after a resume', () => {
+    const [shell] = deriveBackgroundShells([
+      ...events,
+      { seq: 4, type: RunEventType.BACKGROUND_TASK, payload: { toolUseId: 'tu_owf', status: 'running', kind: 'subagent', workflowRunId: '350PhFyB3FxEUt9iEImF5' } },
+    ]);
+    expect([shell.kind, shell.status]).toEqual(['workflow', 'running']);
+  });
+
+  it('is nothing until its receipt lands, and nothing for a call the tool refused', () => {
+    expect(deriveBackgroundShells(events.slice(0, 1))).toEqual([]);
+    expect(deriveBackgroundShells([events[0], {
+      seq: 2, type: RunEventType.TOOL_RESULT, payload: { toolUseId: 'tu_owf', content: 'workflow: the script must begin with `export const meta`', isError: true },
+    }])).toEqual([]);
+  });
+});

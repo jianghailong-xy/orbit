@@ -26,6 +26,8 @@ final class AgentsModel {
     /// The online machines no workspace is on yet, each a Set up row after the workspaces (board rule
     /// 9). Empty until the workspace list has answered: every machine would read as bare until it lands.
     private(set) var machinesToSetUp: [MachineToSetUp] = []
+    /// Every machine of the account, for the Workspaces group's + (docs/mocks/new-workspace-form/02-apple-entry).
+    private(set) var newWorkspaceMachines: [NewWorkspaceMachine] = []
     /// The first runner online: where an account with no workspace lands, and where New session goes.
     private(set) var firstOnlineMachine: String?
     /// A workspace list from the server is in hand, not one a launch snapshot left.
@@ -85,6 +87,8 @@ final class AgentsModel {
     /// The last (agent, view) `loadSessions` ran for, so a row action can silently refresh the same
     /// list without the view having to thread the agent id / tab back in.
     private var lastSessionQuery: (agentID: String, view: SessionView)?
+    private var scheduledSnapshot: (address: SessionFolderAddress, sessions: [Session])?
+    private var scheduledRequest = 0
     /// Sessions being moved to Trash from this device (`AppModel.deleteSession`), kept out of this
     /// pane's own Completed / Trash reads until the move has settled: a read already on the wire when
     /// Delete was pressed — this pane's poll, or the re-read a delete just before it started — would
@@ -98,6 +102,8 @@ final class AgentsModel {
     /// The app's Open-list refresh (`AppModel.loadSessions`), answering the list it adopted — nil
     /// when that fetch failed. An Open list loads through it, so the app fetches that list once.
     @ObservationIgnored var refreshOpen: (@MainActor () async -> [Session]?)?
+    /// Told when the server has answered the workspace list: the share picker's snapshot names them.
+    @ObservationIgnored var onWorkspacesLoaded: (@MainActor () -> Void)?
 
     private let api: APIClient
 
@@ -256,11 +262,11 @@ final class AgentsModel {
         }
     }
 
-    /// Set or clear (nil) the owner's tier for one model of their own key, then read the table again.
-    /// Answers why it failed, or nil.
-    func setModelTier(providerID: String, model: String, tier: String?) async -> String? {
+    /// Set or clear (nil) the owner's tier for one model (of their own key, or of a built-in engine's catalogue),
+    /// then read the table again. Answers why it failed, or nil.
+    func setModelTier(path: String, model: String, tier: String?) async -> String? {
         do {
-            try await api.setModelTier(providerID: providerID, model: model, tier: tier)
+            try await api.setModelTier(path: path, model: model, tier: tier)
         } catch {
             return SubagentSettings.tierSaveFailed + ": " + APIClient.failureReason(error)
         }
@@ -321,6 +327,7 @@ final class AgentsModel {
         do {
             assignIfChanged(\.items, try await api.agents())
             workspacesAnswered = true
+            onWorkspacesLoaded?()
             await refreshRunnerSnapshot()
             // Also when a refresh already on the wire took that call: the workspaces just changed.
             updateMachinesToSetUp()
@@ -415,6 +422,8 @@ final class AgentsModel {
         guard workspacesAnswered else { return }
         let machines = AgentListLogic.machinesToSetUp(runners: runnerRows, agents: items, managedStatus: managedStatus)
         if machines != machinesToSetUp { machinesToSetUp = machines }
+        let offered = AgentListLogic.newWorkspaceMachines(runners: runnerRows, agents: items, managedStatus: managedStatus)
+        if offered != newWorkspaceMachines { newWorkspaceMachines = offered }
         let first = runnerRows.first { AgentListLogic.isOnline($0) || ManagedRunnerLogic.managedSetupState(runnerID: $0.id, status: managedStatus) != nil }?.id
         if first != firstOnlineMachine { firstOnlineMachine = first }
     }
@@ -483,6 +492,7 @@ final class AgentsModel {
     /// list may otherwise retain a tappable ghost row until its next successful polling response.
     func discardSession(_ id: String) {
         agentSessions = SessionFilter.removing(id, from: agentSessions)
+        scheduledSnapshot?.sessions.removeAll { $0.id == id }
     }
 
     /// Take a row being moved to Trash out of this pane's lists on the tap, and keep it out of the
@@ -491,10 +501,31 @@ final class AgentsModel {
         trashing.insert(id)
         agentSessions = SessionFilter.removing(id, from: agentSessions)
         allSessions = SessionFilter.removing(id, from: allSessions)
+        scheduledSnapshot?.sessions.removeAll { $0.id == id }
     }
 
     func revealTrashedSession(_ id: String) {
         trashing.remove(id)
+    }
+
+    func scheduledRuns(in address: SessionFolderAddress) -> [Session]? {
+        guard let snapshot = scheduledSnapshot, snapshot.address == address else { return nil }
+        return snapshot.sessions
+    }
+
+    func scheduledRunSession(id: String) -> Session? {
+        scheduledSnapshot?.sessions.first { $0.id == id }
+    }
+
+    func loadScheduledRuns(_ address: SessionFolderAddress) async {
+        scheduledRequest += 1
+        let request = scheduledRequest
+        guard let rows = try? await api.listScheduledRuns(workspaceID: address.agentID, view: address.view),
+              !Task.isCancelled, request == scheduledRequest else { return }
+        let sessions = SessionFilter.removing(trashing, from: rows)
+        if scheduledRuns(in: address) != sessions {
+            scheduledSnapshot = (address, sessions)
+        }
     }
 
     /// Load one agent's sessions for a view. The list endpoint filters by view only, so narrow to

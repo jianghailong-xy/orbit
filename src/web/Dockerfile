@@ -49,7 +49,8 @@ RUN if [ -n "$ORBIT_MACOS_SIGNING" ]; then \
         aarch64) arch=aarch64 sum=4af92c87ddf52f5f2d1258a3b4e56c7dcb8f1b2468df744976c5f139e031961f ;; \
         *) echo "no rcodesign release for $(uname -m)" >&2; exit 1 ;; \
       esac && \
-      curl -fsSL -o /tmp/rcodesign.tar.gz \
+      curl -fsSL --connect-timeout 30 --speed-limit 4096 --speed-time 60 --retry 5 --retry-delay 10 --retry-all-errors \
+        -o /tmp/rcodesign.tar.gz \
         "https://github.com/indygreg/apple-platform-rs/releases/download/apple-codesign/0.29.0/apple-codesign-0.29.0-$arch-unknown-linux-musl.tar.gz" && \
       echo "$sum  /tmp/rcodesign.tar.gz" | sha256sum -c - && \
       tar -xzf /tmp/rcodesign.tar.gz -C /usr/local/bin --strip-components=1 \

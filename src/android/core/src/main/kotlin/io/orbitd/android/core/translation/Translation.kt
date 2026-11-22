@@ -54,6 +54,13 @@ object Translation {
     const val DEFAULT_AGENT_LANGUAGE = "en"
     /** The 422 code of a question answer whose words could not be translated: nothing was recorded (TRANSLATION_FAILED_CODE). */
     const val FAILED_CODE = "TRANSLATION_FAILED"
+    /** The account event announcing that `translationUnavailableUntil` changed (ControlEventType.TRANSLATION_STATUS_CHANGED): read
+     *  `users/me` again. Its passing by itself is never announced. */
+    const val STATUS_CHANGED_EVENT = "translation.status_changed"
+
+    /** Whether a door refused the owner's words because they could not be translated: nothing was recorded, and the card offers
+     * Retry and Send as written. */
+    fun refused(error: Throwable?): Boolean = (error as? io.orbitd.android.core.net.ApiError)?.code == FAILED_CODE
 
     fun isLanguage(value: String?): Boolean = LANGUAGES.any { it.first == value }
     fun name(lang: String): String = LANGUAGES.firstOrNull { it.first == lang }?.second ?: lang
@@ -240,10 +247,30 @@ object Translation {
     /** `GET /users/me`'s `translationAvailable`: the server holds a DeepSeek key. Absent (an older server) reads as unable. */
     fun available(user: JsonObject?): Boolean = (user?.get("translationAvailable") as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull == true
 
+    /** `GET /users/me`'s `translationUnavailableUntil` (MeTranslation, board frame 6): until when the server skips a failing translator,
+     * so a message sent now is held with reason UNAVAILABLE. Null when absent, null, unparsable or already past [now]; non-null, the
+     * composer tag reads "unavailable, messages will wait". The server does not say when it passes: draw the ordinary tag again then. */
+    fun unavailableUntil(user: JsonObject?, now: java.time.Instant = java.time.Instant.now()): java.time.Instant? {
+        val raw = (user?.get("translationUnavailableUntil") as? JsonPrimitive)?.takeIf { it.isString }?.content ?: return null
+        val until = runCatching { java.time.Instant.parse(raw) }.getOrNull() ?: return null
+        return until.takeIf { it.isAfter(now) }
+    }
+
     enum class TurnState { TRANSLATING, FAILED, DONE, SENT_AS_WRITTEN }
 
-    /** A turn's `translation` (TurnTranslation): where the owner's message is, the language it was written in, and what they typed. */
-    data class Turn(val state: TurnState, val from: String, val original: String) {
+    /** Why translating the owner's words failed (TranslationFailureReason, TRANSLATION_FAILURE_REASONS in shared's order): on a FAILED
+     * turn's `failureReason` and on the 422 TRANSLATION_FAILED answer. A value this client does not know reads as no reason. */
+    enum class FailureReason { TIMEOUT, NETWORK, HTTP, EMPTY, TRUNCATED, MANGLED, NO_KEY, UNAVAILABLE }
+
+    /** A turn's `translation` (TurnTranslation): where the owner's message is, the language it was written in, and what they typed;
+     * on a FAILED one, why ([failureReason]) and, beside HTTP, the translator's status ([httpStatus]). */
+    data class Turn(
+        val state: TurnState,
+        val from: String,
+        val original: String,
+        val failureReason: FailureReason? = null,
+        val httpStatus: Int? = null,
+    ) {
         /** Not delivered to the engine yet: still translating, or failed (1A). */
         val held: Boolean get() = state == TurnState.TRANSLATING || state == TurnState.FAILED
     }
@@ -256,7 +283,24 @@ object Translation {
         val original = (t["original"] as? JsonPrimitive)?.takeIf { it.isString }?.content ?: return null
         val from = t.string("from")?.takeIf(::isLanguage) ?: return null
         val state = TurnState.entries.firstOrNull { it.name == t.string("state") } ?: return null
-        return Turn(state, from, original)
+        return Turn(state, from, original, failureReason(t), httpStatus(t))
+    }
+
+    private fun failureReason(t: JsonObject): FailureReason? = FailureReason.entries.firstOrNull { it.name == t.string("failureReason") }
+    private fun httpStatus(t: JsonObject): Int? = (t["httpStatus"] as? JsonPrimitive)?.takeIf { !it.isString }?.longOrNull?.toInt()
+
+    /** Why a door refused the owner's words untranslated, read off that 422's body (TranslationFailedBody): the reason and, beside HTTP,
+     * the translator's status. Null for any other error, or a refusal from a server that does not say why. */
+    fun refusalReason(error: Throwable?): Pair<FailureReason, Int?>? {
+        if (!refused(error)) return null
+        return refusalReason((error as io.orbitd.android.core.net.ApiError).body as? JsonObject)
+    }
+
+    /** The same, read off a 422 TRANSLATION_FAILED body a door answered with (a card's `response`). Null for any other body. */
+    fun refusalReason(body: JsonObject?): Pair<FailureReason, Int?>? {
+        if (body?.string("code") != FAILED_CODE) return null
+        val reason = failureReason(body) ?: return null
+        return reason to httpStatus(body)
     }
 
     fun reply(value: JsonElement?): Reply? {
@@ -266,6 +310,13 @@ object Translation {
         if ((t["failed"] as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull == true) return Reply(lang, null, true)
         return null
     }
+
+    /**
+     * A reply's translation as it is drawn: none when the translator handed back the reply itself, spaces aside — the agent already
+     * wrote in the owner's language, so the reply is drawn as it is, with no foot (web `translationUnchanged`).
+     */
+    fun shownReply(value: JsonElement?, original: String): Reply? =
+        reply(value)?.takeUnless { it.text != null && it.text.trim() == original.trim() }
 
     /**
      * A live `translation` event (seq 0, TranslationEventPayload) folded into the event it translates, under that event's payload as
@@ -293,8 +344,9 @@ object Translation {
         reply(fields["translation"])?.text?.trim()?.takeIf { it.isNotEmpty() } ?: fields.string("text")?.trim()?.takeIf { it.isNotEmpty() }
 
     /**
-     * An approval as its card shows it (3A): `input.questions`, `input.description` and `input.plan` in the owner's language where
-     * the server translated them (ApprovalTranslation), index for index; everything else as it is. Answers are keyed by what is shown,
+     * An approval as its card shows it (3A): `input.questions`, `input.description` and `input.plan` — and on Orbit's own cards
+     * ([ORBIT_CARDS]) their title, criteria, batch tasks, goal, reason and note — in the owner's language where the server translated
+     * them (ApprovalTranslation), index for index; everything else as it is. Answers are keyed by what is shown,
      * and the server maps a translated question and label back to the original before the engine reads them. A card the server could
      * not translate, or has not yet, is drawn as it came.
      */
@@ -325,7 +377,44 @@ object Translation {
             })
             JsonObject(next)
         })
+        if ((raw["toolName"] as? JsonPrimitive)?.contentOrNull in ORBIT_CARDS) orbitFields(input, t, shown)
         return JsonObject(raw + ("input" to JsonObject(shown)))
+    }
+
+    /** The Orbit cards whose agent-written fields beyond `description` the server translates (TRANSLATED_ORBIT_CARDS). */
+    val ORBIT_CARDS = setOf("orbit_task_create", "orbit_task_batch", "orbit_project_create", "orbit_blocker_resolve", "orbit_dag_change")
+
+    /** An Orbit card's fields as the card draws them (ApprovalTranslation, board 04-owner-cards.html part 2): each one the original
+     * has, in the owner's language where the server translated it. A batch's `tasks` go index for index with `input.tasks` and with
+     * `input.preview.tasks`, whose titles the review lists. `instructions` is not drawn on Android, so it is left as it came. */
+    private fun orbitFields(input: JsonObject, t: JsonObject, shown: MutableMap<String, JsonElement>) {
+        fun swap(into: MutableMap<String, JsonElement>, from: JsonObject, key: String, original: JsonObject) {
+            if (original[key] != null) from.string(key)?.takeIf { it.isNotEmpty() }?.let { into[key] = JsonPrimitive(it) }
+        }
+        fun swapped(original: JsonObject, from: JsonObject?, keys: List<String>): JsonObject {
+            if (from == null) return original
+            val next = original.toMutableMap()
+            keys.forEach { swap(next, from, it, original) }
+            return JsonObject(next)
+        }
+        listOf("title", "acceptanceCriteria", "goal", "reason", "note").forEach { swap(shown, t, it, input) }
+        val tasks = (t["tasks"] as? JsonArray)?.map { it as? JsonObject }
+        if (tasks != null) {
+            (input["tasks"] as? JsonArray)?.let { originals -> shown["tasks"] = JsonArray(originals.mapIndexed { i, task ->
+                (task as? JsonObject)?.let { swapped(it, tasks.getOrNull(i), listOf("title", "description", "acceptanceCriteria")) } ?: task
+            }) }
+            (input["preview"] as? JsonObject)?.let { preview ->
+                val previewTasks = preview["tasks"] as? JsonArray ?: return@let
+                shown["preview"] = JsonObject(preview + ("tasks" to JsonArray(previewTasks.mapIndexed { i, task ->
+                    (task as? JsonObject)?.let { swapped(it, tasks.getOrNull(i), listOf("title")) } ?: task
+                })))
+            }
+        }
+        val items = (t["acceptanceCriteriaItems"] as? JsonArray)?.map { it as? JsonObject }
+        val originals = input["acceptanceCriteriaItems"] as? JsonArray
+        if (items != null && originals != null) shown["acceptanceCriteriaItems"] = JsonArray(originals.mapIndexed { i, item ->
+            (item as? JsonObject)?.let { swapped(it, items.getOrNull(i), listOf("text", "verificationMethod")) } ?: item
+        })
     }
 
     private fun JsonObject.string(key: String): String? = (get(key) as? JsonPrimitive)?.contentOrNull

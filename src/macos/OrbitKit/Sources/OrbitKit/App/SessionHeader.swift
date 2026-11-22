@@ -38,7 +38,8 @@ public enum SessionHeader {
         case .queued:
             return ClaudeRegion.heldWords(s, machine: machine)
                 ?? (RunnerUpdating.holds(s) ? RunnerUpdating.title(s)
-                    : QueuedCapacity.holds(s) ? QueuedCapacity.title(s) : "Queued")
+                    : QueuedCapacity.holds(s) ? QueuedCapacity.title(s)
+                    : QueuedDiskLow.holds(s) ? QueuedDiskLow.title : "Queued")
         case .running:
             return "Running"
         case .awaitingInput:

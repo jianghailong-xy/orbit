@@ -79,7 +79,10 @@ data class NewWorkspaceRequest(
 }
 
 /** A machine as a Set up row names it (rule 9). */
-data class MachineToSetUp(val id: String, val name: String)
+data class MachineToSetUp(val id: String, val name: String, val managed: Boolean = false)
+
+/** A machine the drawer's New workspace + offers, with how many workspaces it has (iOS `NewWorkspaceMachine`). */
+data class NewWorkspaceMachine(val id: String, val name: String, val online: Boolean, val workspaces: Int)
 
 /**
  * How a checked path reads, and whether it may be used. Rule 4: what isn't there can't be picked; a folder that is not a git
@@ -298,6 +301,122 @@ object MachineSetup {
     }
 
     /**
+     * A folder field's text that names a whole path (`/srv/app`, `~/code/app`) rather than one folder in the machine's home
+     * (docs/mocks/new-workspace-form, decision 2 A; web `isFolderPath`): the machine is asked about that path itself.
+     */
+    fun isFolderPath(typed: String): Boolean = typed.startsWith("/") || typed.startsWith("~")
+
+    /** A path's last segment, what the workspace's name follows for a full path (web `folderName`). */
+    fun folderName(path: String): String {
+        val trimmed = path.trimEnd('/', '\\')
+        return trimmed.split('/', '\\').last().ifEmpty { path }
+    }
+
+    /**
+     * What Create workspace picks on a full path's answer: the directory as it stands. Nothing is made for a path outside the machine's
+     * home, so one that isn't there is refused as any folder is (web `folderPathPick`).
+     */
+    fun folderPathPick(probe: DirProbe, machine: String): PickedFolder? {
+        val verdict = folderVerdict(probe, machine)
+        return if (verdict.usable) PickedFolder.Existing(probe.path, verdict.short) else null
+    }
+
+    /**
+     * The path the card's folder field asks the machine about: a full path as typed, a name where it would go, and nothing for anything
+     * else. Null too where nothing can be asked (a managed runner not up, a machine offline or too old to check folders).
+     */
+    fun folderQuestion(folder: String, root: String, canAsk: Boolean): String? {
+        if (!canAsk) return null
+        if (isFolderPath(folder)) return folder
+        return if (isValidNewFolder(folder)) newFolderPath(root, folder) else null
+    }
+
+    /**
+     * What the typed folder would make the workspace in, on the machine's answer about it ([found]). A managed runner that isn't up
+     * ([managedSetup] non-null) takes a name unchecked, but a full path only once it has been checked.
+     */
+    fun typedPick(folder: String, found: DirProbe?, root: String, machine: String, managedSetup: String?): PickedFolder? {
+        val fullPath = isFolderPath(folder)
+        if (managedSetup != null) return if (!fullPath && isValidNewFolder(folder)) PickedFolder.New(folder, newFolderPath(root, folder)) else null
+        if (found == null) return null
+        if (fullPath) return folderPathPick(found, machine)
+        return if (isValidNewFolder(folder)) newFolderPick(found, folder, root, machine) else null
+    }
+
+    /** The folder the workspace's Name follows: the typed name, or a full path's last segment. */
+    fun followedName(folder: String): String = if (isFolderPath(folder)) folderName(folder) else folder
+
+    /** The line under the card's folder field (iOS `MachineSetup.folderLine`). */
+    sealed interface FolderLine {
+        data class Meta(val text: String) : FolderLine
+        data class Verdict(val text: String, val tone: FolderVerdict.Tone) : FolderLine
+        data object NoAnswer : FolderLine
+        data object Checking : FolderLine
+    }
+
+    /**
+     * What the folder field's line says. [folder] is the field's text trimmed, [found] the machine's answer about the path
+     * [folderQuestion] asked (null while there is none for it), and [unanswered] that the machine gave no answer to that question.
+     * [pathHintRoot] is set where the card's hint says a full path is taken too (New workspace on a machine that has one): the directory a
+     * name goes in.
+     */
+    fun folderLine(
+        folder: String,
+        createError: String?,
+        found: DirProbe?,
+        unanswered: Boolean,
+        machine: String,
+        managedSetup: String? = null,
+        pathHintRoot: String? = null,
+    ): FolderLine {
+        // Why the last Create workspace was refused stands in for the rest until the next try.
+        if (createError != null) return FolderLine.Verdict(MachineSetupCopy.setupCreateFailed(createError), FolderVerdict.Tone.BAD)
+        if (folder.isEmpty()) {
+            return FolderLine.Meta(pathHintRoot?.let { MachineSetupCopy.setupFolderOrPathHint(it.trimEnd('/', '\\')) } ?: MachineSetupCopy.SETUP_FOLDER_HINT)
+        }
+        val fullPath = isFolderPath(folder)
+        if (!fullPath && !isValidNewFolder(folder)) return FolderLine.Verdict(MachineSetupCopy.SETUP_NEW_FOLDER_INVALID, FolderVerdict.Tone.BAD)
+        if (managedSetup != null) {
+            return FolderLine.Meta(if (fullPath) MachineSetupCopy.setupPathUnchecked(machine) else ManagedRunner.Setup.FOLDER_UNCHECKED.getValue(managedSetup))
+        }
+        if (found != null) {
+            // A full path must already be there: it says what it found, or that nothing is.
+            if (fullPath) return folderVerdict(found, machine).let { FolderLine.Verdict(it.text, it.tone) }
+            val verdict = newFolderVerdict(found, machine)
+            // Nothing there yet reads as a note; anything there, or a check that failed, says what it is.
+            return if (found.exists || !verdict.usable) FolderLine.Verdict(verdict.text, verdict.tone)
+            else FolderLine.Meta(MachineSetupCopy.SETUP_NEW_FOLDER_WITH_WORKSPACE)
+        }
+        return if (unanswered) FolderLine.NoAnswer else FolderLine.Checking
+    }
+
+    /**
+     * The machines the drawer's New workspace + offers (docs/mocks/new-workspace-form/02-apple-entry, owner A 2026-11-20; iOS
+     * `AgentListLogic.newWorkspaceMachines`): every machine of the account, whatever it already holds, in the runner list's order with
+     * the managed runner first.
+     */
+    fun newWorkspaceMachines(
+        runners: List<JsonObject>?,
+        workspaces: List<JsonObject>,
+        nowMs: Long = System.currentTimeMillis(),
+        managedStatus: ManagedRunner.Status? = null,
+    ): List<NewWorkspaceMachine> {
+        if (runners == null) return emptyList()
+        val managedId = managedStatus?.runnerId ?: ManagedRunnerIdentity.runnerId
+        return RunnerPage.managedRunnerFirst(runners, managedId).mapNotNull { runner ->
+            val id = runner.text("id") ?: return@mapNotNull null
+            NewWorkspaceMachine(
+                id = id,
+                name = RunnerPage.displayName(runner, managedId),
+                online = !RunnerPage.isOffline(runner, nowMs),
+                workspaces = workspaces.count {
+                    (it["deletedAt"] == null || it["deletedAt"] is JsonNull) && ObjectId.same(it.text("runnerId"), id)
+                },
+            )
+        }
+    }
+
+    /**
      * The workspace's name on the card: the folder's until it is edited ([edited] non-null), and from then on what was typed, empty
      * included: an emptied name is never filled in again.
      */
@@ -385,8 +504,8 @@ object MachineSetup {
     }
 
     /**
-     * Rule 9: the machines that get a Set up row in the drawer, in the runner list's order. Online, with no workspace of this account
-     * on them: an offline one is already what Machines & models says needs you.
+     * Rule 9: the machines that get a Set up row in the drawer, managed first and the rest in the runner list's order. Online, with no
+     * workspace of this account on them: an offline one is already what Machines & models says needs you.
      */
     fun machinesToSetUp(
         runners: List<JsonObject>?,
@@ -395,14 +514,15 @@ object MachineSetup {
         managedStatus: ManagedRunner.Status? = null,
     ): List<MachineToSetUp> {
         if (runners == null) return emptyList()
-        return runners.mapNotNull { runner ->
+        val managedId = managedStatus?.runnerId ?: ManagedRunnerIdentity.runnerId
+        return RunnerPage.managedRunnerFirst(runners, managedId).mapNotNull { runner ->
             val id = runner.text("id") ?: return@mapNotNull null
             if (RunnerPage.isOffline(runner, nowMs) && ManagedRunner.managedSetupState(id, managedStatus) == null) return@mapNotNull null
             if (workspaces.any {
                     (it["deletedAt"] == null || it["deletedAt"] is JsonNull) && ObjectId.same(it.text("runnerId"), id)
                 }
             ) return@mapNotNull null
-            MachineToSetUp(id = id, name = RunnerPage.displayName(runner))
+            MachineToSetUp(id = id, name = RunnerPage.displayName(runner, managedId), managed = RunnerPage.isManaged(runner, managedId))
         }
     }
 

@@ -340,11 +340,11 @@ test('the scan asks only for tasks that are due AND actually runnable', async ()
   assert.match(sql, /epoch_check\."verdict_revision" > 0/);
   assert.match(
     sql,
-    /NOT EXISTS \(\s*SELECT 1 FROM "session" passed_live[\s\S]*passed_live\."status"::text IN \('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'\)/,
+    /NOT EXISTS \(\s*SELECT 1 FROM "session" passed_live[\s\S]*passed_live\."finished_at" IS NULL/,
   );
   assert.match(
     sql,
-    /AND EXISTS \(\s*SELECT 1 FROM "session" passed_run[\s\S]*passed_run\."status"::text = 'SUCCEEDED'[\s\S]*passed_run\."end_reason" = 'task_done'/,
+    /AND EXISTS \(\s*SELECT 1 FROM "session" passed_run[\s\S]*passed_run\."finished_at" IS NOT NULL[\s\S]*passed_run\."end_reason" = 'task_done'/,
   );
   assert.match(sql, /FROM session s/, 'nothing already occupying the task');
   // Deterministic and bounded: longest-overdue first, ties broken by id, capped per pass.
@@ -960,6 +960,7 @@ test('the reconcile sweep does not start a task overtaken in the same window', a
   const f = raceFixture(3n, 4n, new Date(Date.now() + 7 * 24 * 60 * 60_000));
   (f.service as any).quotaGate = async () => ({ blocked: new Map(), blind: new Set() });
   (f.service as any).autoRunHoldOff = async () => new Set();
+  (f.service as any).signedOutGate = async () => new Map();
 
   await (f.service as any).reconcileReadyTasks();
 

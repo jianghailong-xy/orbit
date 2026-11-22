@@ -63,6 +63,10 @@ object TranslationCopy {
     // The conversation (board frames 4–6).
     const val TRANSLATED = "Translated"
     const val SHOW_ORIGINAL = "Show original"
+    // Both languages on, one message's original hidden and back (docs/mocks/translation-hide-original). Not SHOW_ORIGINAL, which
+    // swaps the translation for the original.
+    const val HIDE_ORIGINAL = "Hide original"
+    const val SHOW_BOTH = "Show both"
     const val SHOW_TRANSLATION = "Show translation"
     const val ORIGINAL = "Original"
     const val TRANSLATING = "Translating…"
@@ -82,6 +86,51 @@ object TranslationCopy {
     /** The collapsed original's press (frame 3): "Show English · 9 lines", naming the agent language (web `showEnglishLabel`). */
     fun showEnglishLabel(lines: Int, agentLanguage: String = Translation.DEFAULT_AGENT_LANGUAGE): String =
         "$SHOW ${Translation.name(agentLanguage)} · $lines $LINES"
+}
+
+/**
+ * Why the owner's words were not sent (policy board docs/ux/translation-failure-policy.html, frame 7's B column): the sentence before
+ * "· Retry · Send as written" on a held message (4B) and, naming "your answer", on a card answer refused 422 TRANSLATION_FAILED (5).
+ * No reason, or one the board has no line for (NO_KEY, HTTP without a 4xx/5xx status), is null: the drawing says today's generic [TranslationCopy.SEND_FAILED]. Same words as the web's.
+ */
+object TranslationFailureCopy {
+    const val TIMEOUT = "The translator didn't answer in time"
+    const val UNREACHABLE = "The translator was unreachable"
+    const val REFUSED = "The translator refused the message"
+    const val TOO_LONG = "Too long to translate"
+    const val DAMAGED = "The translation came back damaged"
+    const val UNAVAILABLE = "Translation is unavailable right now"
+    const val MESSAGE_NOT_SENT = ", so it wasn't sent"
+    const val ANSWER_NOT_SENT = ", so your answer wasn't sent"
+    /** After the composer tag while the server skips a failing translator (frame 6): "Chinese → English · unavailable, messages will wait". */
+    const val COMPOSER_UNAVAILABLE = "unavailable, messages will wait"
+
+    /** The reason's clause, or null for none: HTTP 429 and 5xx were retried and read as unreachable, any other 4xx as refused, and HTTP
+     *  without a status (or with one outside those) is null, like NO_KEY: frame 7 names no other, so the drawing does not guess why. */
+    fun clause(reason: Translation.FailureReason?, httpStatus: Int?): String? = when (reason) {
+        Translation.FailureReason.TIMEOUT -> TIMEOUT
+        Translation.FailureReason.NETWORK -> UNREACHABLE
+        Translation.FailureReason.HTTP -> when {
+            httpStatus == null -> null
+            httpStatus == 429 || httpStatus >= 500 -> UNREACHABLE
+            httpStatus in 400..499 -> REFUSED
+            else -> null
+        }
+        Translation.FailureReason.TRUNCATED -> TOO_LONG
+        Translation.FailureReason.MANGLED, Translation.FailureReason.EMPTY -> DAMAGED
+        Translation.FailureReason.UNAVAILABLE -> UNAVAILABLE
+        Translation.FailureReason.NO_KEY, null -> null
+    }
+
+    /** A held message's line: "The translator didn't answer in time, so it wasn't sent"; null without a reason (draw SEND_FAILED). */
+    fun message(reason: Translation.FailureReason?, httpStatus: Int?): String? = clause(reason, httpStatus)?.let { it + MESSAGE_NOT_SENT }
+
+    /** A card answer's line: "The translator was unreachable, so your answer wasn't sent"; null without a reason (draw SEND_FAILED). */
+    fun answer(reason: Translation.FailureReason?, httpStatus: Int?): String? = clause(reason, httpStatus)?.let { it + ANSWER_NOT_SENT }
+
+    /** The composer tag: "Chinese → English", and while [unavailable] "Chinese → English · unavailable, messages will wait". */
+    fun composerTag(language: String, agentLanguage: String, unavailable: Boolean): String =
+        Translation.tag(language, agentLanguage).let { if (unavailable) "$it · $COMPOSER_UNAVAILABLE" else it }
 }
 
 /** The English under a translated message with both languages on: null draws no block (held, failed, pending, sent as written, or off). */
@@ -195,6 +244,8 @@ class ShownOriginals(private val keys: SnapshotStateMap<String, Boolean> = mutab
     companion object {
         fun user(seq: Long, turnId: String?) = "user:${turnId ?: seq}"
         fun reply(seq: Long) = "reply:$seq"
+        /** Both languages on: this message's original hidden ("Hide original"). */
+        fun hidden(key: String) = "hidden:$key"
     }
 }
 
@@ -225,6 +276,45 @@ private fun FootAction(label: String, color: Color, onPress: (() -> Unit)?) {
         color = color, style = MaterialTheme.typography.labelSmall, textDecoration = TextDecoration.Underline)
 }
 
+/**
+ * One of Orbit's own cards drawn in the owner's language (board 04-owner-cards.html, part 2): one foot for the whole card, as a reply's,
+ * "Translated · Show original" ↔ "Original · Show translation".
+ */
+@Composable
+fun CardTranslationFoot(flipped: Boolean, onFlip: () -> Unit, modifier: Modifier = Modifier) {
+    val muted = footColor()
+    Row(modifier.testTag("translation-foot"), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(if (flipped) TranslationCopy.ORIGINAL else TranslationCopy.TRANSLATED, color = muted, style = MaterialTheme.typography.labelSmall)
+        Sep(muted); FootAction(if (flipped) TranslationCopy.SHOW_TRANSLATION else TranslationCopy.SHOW_ORIGINAL, muted, onFlip)
+    }
+}
+
+/**
+ * An owner card's answer the server could not translate (422 TRANSLATION_FAILED, board 04-owner-cards.html mark B): nothing was
+ * recorded, and the card says why ([TranslationFailureCopy.answer], policy board frame 5: "The translator was unreachable, so your
+ * answer wasn't sent"), or without a reason "Couldn't translate, so it wasn't sent", then "· Retry · Send as written".
+ * Send as written sends the words again untranslated (`sendAsWritten: true`).
+ */
+@Composable
+fun AnswerNotTranslated(retry: () -> Unit, sendAsWritten: () -> Unit, enabled: Boolean, modifier: Modifier = Modifier,
+    reason: Translation.FailureReason? = null, httpStatus: Int? = null) {
+    val error = MaterialTheme.colorScheme.error
+    Row(modifier.testTag("card-translation-failed"), verticalAlignment = Alignment.CenterVertically) {
+        Text(TranslationFailureCopy.answer(reason, httpStatus) ?: TranslationCopy.SEND_FAILED, Modifier.weight(1f, fill = false), color = error, style = MaterialTheme.typography.bodySmall)
+        Sep(error)
+        androidx.compose.material3.TextButton(onClick = retry, enabled = enabled) { Text(TranslationCopy.RETRY) }
+        Sep(error)
+        androidx.compose.material3.TextButton(onClick = sendAsWritten, enabled = enabled) { Text(TranslationCopy.SEND_AS_WRITTEN) }
+    }
+}
+
+/** Both languages on: " · Hide original", or " · Show both" once this message's original is hidden (docs/mocks/translation-hide-original). */
+@Composable
+private fun HideOriginal(hidden: Boolean, onPress: (() -> Unit)?, color: Color) {
+    if (onPress == null) return
+    Sep(color); FootAction(if (hidden) TranslationCopy.SHOW_BOTH else TranslationCopy.HIDE_ORIGINAL, color, onPress)
+}
+
 @Composable
 fun TranslationChip(text: String) {
     Text(text, Modifier.testTag("translation-chip").clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surfaceVariant)
@@ -233,16 +323,19 @@ fun TranslationChip(text: String) {
 
 /**
  * The owner's message (board frames 4–6, web `UserTranslationFoot`): "Show original" ↔ "Show translation" once delivered, the press
- * alone (docs/mocks/translation-foot-one-line, B); the "Translating…" chip while held; and, held because the translation failed (1A), "Couldn't
- * translate, so it wasn't sent · Retry · Send as written". A message sent as written has no foot.
+ * alone (docs/mocks/translation-foot-one-line, B); the "Translating…" chip while held; and, held because the translation failed (1A), why
+ * ([TranslationFailureCopy.message], e.g. "The translator didn't answer in time, so it wasn't sent") · Retry · Send as written. A message sent as written has no foot.
  */
 @Composable
 fun UserTranslationFoot(turn: Translation.Turn, flipped: Boolean, onFlip: () -> Unit, retry: (() -> Unit)?, sendAsWritten: (() -> Unit)?,
-    modifier: Modifier = Modifier, bilingual: Boolean = false) {
+    modifier: Modifier = Modifier, bilingual: Boolean = false, originalHidden: Boolean = false, onHideOriginal: (() -> Unit)? = null) {
     val muted = footColor()
-    // Both languages on: the English is in the message, so there is nothing to flip to (mark C).
+    // Both languages on: the English is in the message, so there is nothing to flip to (mark C); "Hide original" hides it.
     if (bilingual && turn.state == Translation.TurnState.DONE) {
-        Row(modifier.testTag("translation-foot")) { Text(TranslationCopy.sentToAgentLabel(LocalTranslation.current.agentLanguage), color = muted, style = MaterialTheme.typography.labelSmall) }
+        Row(modifier.testTag("translation-foot"), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(TranslationCopy.sentToAgentLabel(LocalTranslation.current.agentLanguage), color = muted, style = MaterialTheme.typography.labelSmall)
+            HideOriginal(originalHidden, onHideOriginal, muted)
+        }
         return
     }
     when (turn.state) {
@@ -250,7 +343,9 @@ fun UserTranslationFoot(turn: Translation.Turn, flipped: Boolean, onFlip: () -> 
         Translation.TurnState.FAILED -> {
             val error = MaterialTheme.colorScheme.error
             Row(modifier.testTag("translation-foot"), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(TranslationCopy.SEND_FAILED, color = error, style = MaterialTheme.typography.labelSmall)
+                // The reason's sentence wraps on a narrow phone; Retry and Send as written keep their width beside it.
+                Text(TranslationFailureCopy.message(turn.failureReason, turn.httpStatus) ?: TranslationCopy.SEND_FAILED, Modifier.weight(1f, fill = false),
+                    color = error, style = MaterialTheme.typography.labelSmall)
                 Sep(error); FootAction(TranslationCopy.RETRY, error, retry)
                 Sep(error); FootAction(TranslationCopy.SEND_AS_WRITTEN, error, sendAsWritten)
             }
@@ -268,11 +363,13 @@ fun UserTranslationFoot(turn: Translation.Turn, flipped: Boolean, onFlip: () -> 
  */
 @Composable
 fun ReplyTranslationFoot(reply: Translation.Reply?, pending: Boolean, flipped: Boolean, onFlip: () -> Unit, retry: (() -> Unit)?,
-    modifier: Modifier = Modifier, bilingual: Boolean = false) {
+    modifier: Modifier = Modifier, bilingual: Boolean = false, originalHidden: Boolean = false, onHideOriginal: (() -> Unit)? = null) {
     val muted = footColor()
     when {
-        bilingual && reply?.text != null -> Row(modifier.testTag("translation-foot")) {
+        bilingual && reply?.text != null -> Row(modifier.testTag("translation-foot"), horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically) {
             Text(TranslationCopy.TRANSLATED, color = muted, style = MaterialTheme.typography.labelSmall)
+            HideOriginal(originalHidden, onHideOriginal, muted)
         }
         reply?.failed == true -> {
             val error = MaterialTheme.colorScheme.error

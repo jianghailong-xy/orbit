@@ -1,5 +1,6 @@
 import type {
   ApprovalTranslation,
+  BranchCommit,
   GuestSessionSummary,
   MainCheckoutActionAnswer,
   MainCheckoutActionPost,
@@ -13,9 +14,13 @@ import type {
   SessionGuestSuggestion,
   TranslationActionResponse,
   TurnTranslation,
+  SubagentRoutingReport,
   SubagentRunView,
+  WorkflowRunView,
 } from '@orbit/shared';
 import type {
+  BackgroundJobStopResponse,
+  BackgroundJobTailResponse,
   BgShell,
   ConfirmationAnswersCard,
   ConfirmationReturnCard,
@@ -484,9 +489,31 @@ export const readDirProbe = (runnerId: string, path: string, signal?: AbortSigna
 export const getBackgroundShells = (id: string): Promise<BgShell[]> =>
   api<BgShell[]>(`/sessions/${id}/background`);
 
+/** The newest lines of one bg_run job's output (GET /sessions/:id/background/jobs/:jobId/tail, at most 40). */
+export const getBackgroundJobTail = (id: string, jobId: string): Promise<BackgroundJobTailResponse> =>
+  api<BackgroundJobTailResponse>(`/sessions/${id}/background/jobs/${encodeURIComponent(jobId)}/tail`);
+
+/** The owner's stop of one running bg_run job: its end arrives as the job's terminal report. */
+export const stopBackgroundJob = (id: string, jobId: string): Promise<BackgroundJobStopResponse> =>
+  api<BackgroundJobStopResponse>(`/sessions/${id}/background/jobs/${encodeURIComponent(jobId)}/stop`, { method: 'POST' });
+
 /** The session's SubAgent runs, oldest first: what each `delegate` block shows beside its call. */
 export const getSessionSubagents = (id: string): Promise<SubagentRunView[]> =>
   api<SubagentRunView[]>(`/sessions/${id}/subagents`);
+
+/** The session's Orbit workflows, oldest first: what each `mcp__orbit__workflow` block shows beside its call. */
+export const getSessionWorkflows = (id: string): Promise<WorkflowRunView[]> =>
+  api<WorkflowRunView[]>(`/sessions/${id}/workflows`);
+
+/** The routing report's SubAgents and Workflows views (docs/subagent-design.md §7): runs since `since`, of one Agent's
+ *  sessions or of all of them. */
+export const getSubagentRoutingReport = (opts: { since?: string; agentId?: string }): Promise<SubagentRoutingReport> => {
+  const qs = new URLSearchParams();
+  if (opts.since) qs.set('since', opts.since);
+  if (opts.agentId) qs.set('agentId', opts.agentId);
+  const query = qs.toString();
+  return api<SubagentRoutingReport>(`/tasks/model-routing/report/subagents${query ? `?${query}` : ''}`);
+};
 
 // ── Interactive sessions (Route B) ──
 
@@ -986,6 +1013,11 @@ export interface ApprovalInfo {
 export const listApprovals = (sessionId: string, status = 'PENDING') =>
   api<ApprovalInfo[]>(`/sessions/${sessionId}/approvals?status=${status}`);
 
+/** Every AskUserQuestion card of the session, decided or not: an answered question's record shows
+ *  the questions as its card did, in the owner's language (`translation`). */
+export const listQuestionApprovals = (sessionId: string) =>
+  api<ApprovalInfo[]>(`/sessions/${sessionId}/approvals?toolName=AskUserQuestion`);
+
 /** A claude permission rule so future "same kind" calls are auto-allowed
  *  (mirrors PermissionRule in @orbit/shared). */
 export interface PermissionRule {
@@ -1140,6 +1172,11 @@ export const commitSession = (sessionId: string) =>
  *  Pure server-side re-point; the change reflects on the next detail fetch. */
 export const adoptSessionBranch = (sessionId: string) =>
   api<{ ok: true; branch: string }>(`/sessions/${sessionId}/adopt-branch`, { method: 'POST' });
+
+/** Close a failed merge's strip (its ✕): the server clears the stored conflict or error, so the bar
+ *  goes back to Merge, or to "✓ In main". Nothing in git changes. */
+export const dismissMergeFailure = (sessionId: string) =>
+  api<{ ok: true; dismissed: boolean }>(`/sessions/${sessionId}/merge-failure/dismiss`, { method: 'POST' });
 
 // Lifecycle actions for sessions. Complete moves a session into Completed; delete
 // moves it to Trash. Both keep all data; restore brings either back to Open. Purge is
@@ -2149,6 +2186,9 @@ export interface SessionDetail {
   branch?: string | null;
   baseSha?: string | null;
   changedFiles?: SessionChangedFile[] | null;
+  /** The branch's commits, base to tip, newest first, as the runner last read them. Null/absent from a
+   *  runner too old to report them: the bar then counts files, as it did before. */
+  branchCommits?: BranchCommit[] | null;
   isolationStatus?: string | null;
   // "Merge to main" outcome (see mergeSessionToMain): 'pending' while the runner works,
   // then 'merged' (mergedAt set) | 'conflict' | 'error' (mergeError carries why). Null

@@ -62,15 +62,15 @@ test('backpressure never advises a resend: not retryable, no automatic-retry act
   assert.equal(depth.retryAfterSeconds, undefined);
 });
 
-test('a person\'s boundary is named as one: Trash, orchestration, sign-in and a failed machine are AWAIT_USER_FIX, actor USER', () => {
-  for (const code of ['SESSION_TRASHED', 'ORCHESTRATION_DISABLED', 'ENGINE_SIGNED_OUT', 'MANAGED_RUNNER_FAILED'] as const) {
+test('a person\'s boundary is named as one: Trash, orchestration, sign-in, a failed machine and a full disk are AWAIT_USER_FIX, actor USER', () => {
+  for (const code of ['SESSION_TRASHED', 'ORCHESTRATION_DISABLED', 'ENGINE_SIGNED_OUT', 'MANAGED_RUNNER_FAILED', 'RUNNER_DISK_BELOW_FLOOR'] as const) {
     assert.equal(SESSION_RECOVERY_RULES[code].actor, 'USER', code);
     assert.equal(SESSION_RECOVERY_RULES[code].actionCode, 'AWAIT_USER_FIX', code);
     assert.notEqual(SESSION_RECOVERY_RULES[code].retryPolicy, 'SAFE', code);
   }
   // And the only USER-actor codes are those: nothing else is handed to a person.
   assert.deepEqual(CODES.filter((c) => SESSION_RECOVERY_RULES[c].actor === 'USER').sort(),
-    ['ENGINE_SIGNED_OUT', 'MANAGED_RUNNER_FAILED', 'ORCHESTRATION_DISABLED', 'SESSION_TRASHED']);
+    ['ENGINE_SIGNED_OUT', 'MANAGED_RUNNER_FAILED', 'ORCHESTRATION_DISABLED', 'RUNNER_DISK_BELOW_FLOOR', 'SESSION_TRASHED']);
 });
 
 test('only the next-turn race is retryable, and only after its wait', () => {

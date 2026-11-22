@@ -20,16 +20,36 @@ import OrbitKit
 /// A folder's row at the top of a workspace's session list (§3.3): the folder glyph, its name, and
 /// the one state it reports for the sessions inside it plus how many there are.
 struct SessionFolderRowView: View {
-    let row: SessionFolderRow
+    private let name: String
+    private let icon: String
+    private let sessionCount: Int
+    private let status: WorkspaceNavigationStatus
+    private let runningDot: Bool
+
+    init(row: SessionFolderRow) {
+        name = row.folder.name
+        icon = "folder"
+        sessionCount = row.sessionCount
+        status = row.status
+        runningDot = false
+    }
+
+    init(scheduledRuns: ScheduledRunsFolder.Summary) {
+        name = ScheduledRunsCopy.title
+        icon = "clock"
+        sessionCount = scheduledRuns.sessionCount
+        status = scheduledRuns.needsYou > 0 ? .needsYou(scheduledRuns.needsYou) : .idle
+        runningDot = scheduledRuns.running
+    }
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: "folder")
+            Image(systemName: icon)
                 .font(.orbitGlyph)
                 .foregroundStyle(Color.accentColor)
                 .frame(width: 24)
                 .accessibilityHidden(true)
-            Text(row.folder.name)
+            Text(name)
                 .lineLimit(1)
                 .foregroundStyle(.primary)
                 .layoutPriority(2)
@@ -37,7 +57,7 @@ struct SessionFolderRowView: View {
             // The same three marks, in the same order and the same words, as the drawer's Workspace
             // row (`WorkspaceNavigationRow`): the folder stands in for the sessions it hides, so it
             // has to say what they would have said.
-            switch row.status {
+            switch status {
             case .needsYou(let count):
                 NeedsYouCountCapsule(count: count)
             case .running:
@@ -49,10 +69,18 @@ struct SessionFolderRowView: View {
             case .idle:
                 EmptyView()
             }
-            Text("\(row.sessionCount)")
-                .font(.orbitMeta)
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
+            if runningDot {
+                Circle().fill(Color.accentColor).frame(width: 6, height: 6)
+                    .accessibilityHidden(true)
+            }
+            // One number on the row (owner 2026-11-19, as on the web): who waits on you takes the
+            // total's place, and the total moves into what VoiceOver reads.
+            if !waitsOnYou {
+                Text("\(sessionCount)")
+                    .font(.orbitMeta)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
             Image(systemName: "chevron.right")
                 .font(.orbitMeta.weight(.semibold))
                 .foregroundStyle(.tertiary)
@@ -61,17 +89,22 @@ struct SessionFolderRowView: View {
         .padding(.vertical, 6)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
-        .accessibilityValue(folderStatusWords)
+        .accessibilityValue(runningDot ? "\(folderStatusWords), session running" : folderStatusWords)
+    }
+
+    private var waitsOnYou: Bool {
+        if case .needsYou = status { return true }
+        return false
     }
 
     /// What VoiceOver reads for the state the trailing slot draws — the same words the session rows
     /// use for the same facts.
     private var folderStatusWords: String {
-        switch row.status {
-        case .needsYou(let count): return "\(count) waiting for you"
+        switch status {
+        case .needsYou(let count): return "\(count) waiting for you, \(sessionCount) sessions"
         case .running:             return "Session running"
         case .jobs:                return "Background job running"
-        case .idle:                return "\(row.sessionCount) sessions"
+        case .idle:                return "\(sessionCount) sessions"
         }
     }
 }
@@ -121,6 +154,9 @@ struct SessionFolderPage: View {
     @AppStorage("sessionList.pinnedCollapsed") private var pinnedCollapsed = false
     /// The last grouping drawn and its inputs (see `list(agent:)`).
     @State private var listingMemo = SessionListingMemo<SessionListGrouping>()
+    /// A row being dragged onto the page's head, out of the folder (the Mac's shortcut for Move, see
+    /// `SessionFolderDrop`).
+    @State private var drag = SessionDragState()
 
     private var agent: Agent? { app.agents?.agent(address.agentID) }
     private var folder: SessionFolder? { app.sessionFolders.first { $0.id == address.folderID } }
@@ -177,7 +213,8 @@ struct SessionFolderPage: View {
         SessionTimeGrouping.sections(sessions, pinnedFirst: inputs.view == .open)
     }
     private var query: String {
-        searchQuery?.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !address.isScheduledRuns else { return "" }
+        return searchQuery?.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
     private var isSearching: Bool { !query.isEmpty }
 
@@ -202,17 +239,20 @@ struct SessionFolderPage: View {
                         Label("Back", systemImage: "chevron.backward")
                     }
                     .accessibilityLabel("Back to the workspace's sessions")
+                    .modifier(noFolderDropTarget)
                 }
             }
             ToolbarItem(placement: .principal) { title }
-            ToolbarItem(placement: actionPlacement) { folderMenu }
-            ToolbarItem(placement: actionPlacement) {
-                Button {
-                    app.startComposingSession(inFolder: address.folderID, of: address.agentID)
-                } label: {
-                    Label("New session", systemImage: "square.and.pencil")
+            if !address.isScheduledRuns {
+                ToolbarItem(placement: actionPlacement) { folderMenu }
+                ToolbarItem(placement: actionPlacement) {
+                    Button {
+                        app.startComposingSession(inFolder: address.folderID, of: address.agentID)
+                    } label: {
+                        Label("New session", systemImage: "square.and.pencil")
+                    }
+                    .accessibilityLabel("Start a new session in \(titleText)")
                 }
-                .accessibilityLabel("Start a new session in \(titleText)")
             }
         }
         // The two management asks, in the same words the row's long-press menu asks them in.
@@ -236,7 +276,11 @@ struct SessionFolderPage: View {
         // Completed keeps its poll; Open is served by the app's shared snapshot, so one read is
         // enough there. The poll follows the control stream, as the workspace's own Completed list
         // does (`ViewPoll`, docs/list-freshness-design.md §4 R6).
-        .task(id: "\(address.agentID)|\(address.view.rawValue)") {
+        .task(id: address) {
+            if address.isScheduledRuns {
+                await app.pollScheduledRuns(address)
+                return
+            }
             await app.agents?.loadSessions(agentID: address.agentID, view: address.view)
             await app.projects?.load()
             guard address.view != .open else { return }
@@ -248,16 +292,16 @@ struct SessionFolderPage: View {
     }
 
     /// The page's list: an ordinary session list — the recency sections with their Pinned fold, the
-    /// rows as every other list draws them (see `sessionRow`), and the same pull-to-refresh.
+    /// rows as every other list draws them (see `SessionListRow`), and the same pull-to-refresh.
     private func list(agent: Agent) -> some View {
         @Bindable var app = app
         // One grouping, regrouped only when its inputs change, which the list's closures and its
         // empty state share (see the workspace list's `body`).
-        let grouping = listingMemo.value(for: listInputs, compute: Self.grouping)
-        let sessions = grouping.folderListing.sessions
-        let timeSections = grouping.timeSections
-        let projectRows = grouping.projectRows
-        let projectMarks = grouping.projectListing.marks
+        let grouping = address.isScheduledRuns ? nil : listingMemo.value(for: listInputs, compute: Self.grouping)
+        let sessions = grouping?.folderListing.sessions ?? app.agents?.scheduledRuns(in: address) ?? []
+        let timeSections = grouping?.timeSections ?? SessionTimeGrouping.sections(sessions, pinnedFirst: address.view == .open)
+        let projectRows = grouping?.projectRows ?? [:]
+        let projectMarks = grouping?.projectListing.marks ?? [:]
         return List(selection: rowNavigation == .selection ? $app.selectedAgentSessionID : nil) {
             if isSearching {
                 searchResults
@@ -275,7 +319,11 @@ struct SessionFolderPage: View {
         .rowSwipeList(rowSwipe)
         #endif
         .refreshable {
-            await app.agents?.loadSessions(agentID: address.agentID, view: address.view)
+            if address.isScheduledRuns {
+                await app.agents?.loadScheduledRuns(address)
+            } else {
+                await app.agents?.loadSessions(agentID: address.agentID, view: address.view)
+            }
         }
         .overlay {
             if isSearching {
@@ -283,6 +331,8 @@ struct SessionFolderPage: View {
                     ContentUnavailableView("No matches", systemImage: "magnifyingglass",
                                            description: Text("Nothing matches \u{201C}\(hitsQuery)\u{201D}."))
                 }
+            } else if sessions.isEmpty && address.isScheduledRuns {
+                ContentUnavailableView(ScheduledRunsCopy.empty, systemImage: "clock")
             } else if sessions.isEmpty && !(app.agents?.sessionsLoading ?? false) {
                 ContentUnavailableView("Nothing in this folder", systemImage: "folder")
             }
@@ -305,9 +355,17 @@ struct SessionFolderPage: View {
         .frame(maxWidth: 240)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isHeader)
+        .modifier(noFolderDropTarget)
     }
 
-    private var titleText: String { folder?.name ?? "Folder" }
+    /// On a folder's page the head — its title and its back button — is where a row dragged out of
+    /// the folder is dropped: No Folder, as the Move panel's first entry. Not on Scheduled runs,
+    /// which nobody files into or out of.
+    private var noFolderDropTarget: NoFolderDropTarget {
+        NoFolderDropTarget(enabled: !address.isScheduledRuns, workspaceID: address.agentID, drag: drag, app: app)
+    }
+
+    private var titleText: String { address.isScheduledRuns ? ScheduledRunsCopy.title : folder?.name ?? "Folder" }
 
     /// The way back to the workspace's list and the page's actions, where each platform's bar puts
     /// them (as the project's sessions page places its own).
@@ -380,66 +438,16 @@ struct SessionFolderPage: View {
         }
     }
 
-    /// One row, wrapped for the container it is in — the workspace list's own arrangement, repeated
-    /// here so a folder's page and the list outside behave identically (see `AgentPanes.sessionRow`).
+    /// One row, through the same builder the workspace list draws every entry with, so a folder's
+    /// page and the list outside behave identically.
     @ViewBuilder private func listRow(_ s: Session, projects: [String: SessionProjectRow],
                                       marks: [String: SessionProjectMark]) -> some View {
-        if let project = projects[s.id] {
-            projectRow(project)
-        } else {
-            sessionRow(s, mark: marks[s.id])
-        }
-    }
-
-    /// `mark`: as on the workspace list's rows (`AgentPanes.sessionRow`).
-    @ViewBuilder private func sessionRow(_ s: Session, mark: SessionProjectMark?) -> some View {
-        let row = AgentSessionRow(session: s, deleted: address.view == .trash, projectMark: mark)
-        let onSessions: (() -> Void)? = mark.map { mark in
-            { app.openProjectSessions(SessionProjectAddress(projectID: mark.projectId, agentID: address.agentID,
-                                                            view: address.view)) }
-        }
-        switch rowNavigation {
-        case .selection:
-            row.sessionRowActions(s, scope: address.view, onTag: { taggingSession = s },
-                                  onShare: { sharingSession = s }, onMove: { movingSession = s },
-                                  onSessions: onSessions)
-                .tag(s.id)
-        case .push:
-            Button { app.openSessionRow(s) } label: {
-                row.foregroundStyle(.primary)
-            }
-            .sessionRowActions(s, scope: address.view, onTag: { taggingSession = s },
-                               onShare: { sharingSession = s }, onMove: { movingSession = s },
-                               onSessions: onSessions)
-        }
-    }
-
-    private func projectRow(_ row: SessionProjectRow) -> some View {
-        let projectAddress = SessionProjectAddress(projectID: row.projectId, agentID: address.agentID, view: address.view)
-        let onOpen = {
-            switch row.target {
-            case .session(let id):
-                if let session = (app.sessions + (app.agents?.allSessions ?? [])).first(where: { $0.id == id }) {
-                    app.openProjectMember(session, push: rowNavigation == .push)
-                }
-            case .project: app.openProjectSessions(projectAddress)
-            }
-        }
-        // A phone opens the coordinator's conversation, not the project's sessions page, which is
-        // the button in that conversation's navigation bar (owner 2026-11-11, board 5). The iPad's
-        // column keeps the page. A row whose line says a member is waiting on you opens that member
-        // instead, at its card, on both (owner 2026-11-14).
-        let onTap = {
-            switch SessionProjectSheet.rowTap(row, held: app.sessions + (app.agents?.allSessions ?? []), push: rowNavigation == .push) {
-            case .waitingMember(let member): app.openWaitingMember(member, project: projectAddress, push: rowNavigation == .push)
-            case .coordinator(let coordinator): app.openProjectMember(coordinator, push: true)
-            case .sessions: app.openProjectSessions(projectAddress)
-            }
-        }
-        return SessionProjectRowView(row: row, onOpen: onTap)
-        .sessionProjectRowActions(row, view: address.view, onOpen: onOpen, onSessions: { app.openProjectSessions(projectAddress) }, onProject: {
-            app.openProject(row.projectId)
-        }, onMove: { if let coordinator = row.coordinator { movingSession = coordinator } })
+        SessionListEntryRow(
+            session: s, projects: projects, marks: marks, view: address.view, agentID: address.agentID,
+            navigation: rowNavigation, drag: drag,
+            // Somewhere to drop a row: the page's head, in the wide shell that draws a back button there.
+            dropTargets: !address.isScheduledRuns && !isSearching,
+            onTag: { taggingSession = $0 }, onShare: { sharingSession = $0 }, onMove: { movingSession = $0 })
     }
 
     /// The Pinned section's header: its title, and a chevron that points down while the rows show
@@ -592,5 +600,22 @@ extension View {
     func sessionFolderManagement(renaming: Binding<SessionFolder?>,
                                  deleting: Binding<SessionFolderDeletion?>) -> some View {
         modifier(SessionFolderManagement(renaming: renaming, deleting: deleting))
+    }
+}
+
+/// A folder page's head as the place a row dragged out of the folder is dropped (see
+/// `SessionFolderPage.noFolderDropTarget`).
+private struct NoFolderDropTarget: ViewModifier {
+    let enabled: Bool
+    let workspaceID: String
+    let drag: SessionDragState
+    let app: AppModel
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content.sessionFolderDropTarget(folderID: nil, workspaceID: workspaceID, drag: drag, app: app)
+        } else {
+            content
+        }
     }
 }

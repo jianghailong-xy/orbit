@@ -30,7 +30,9 @@ struct OwnerRequestContent: View {
     var onChat: ((OwnerRequest) -> Void)? = nil
 
     var body: some View {
-        if request.state != .pending {
+        if request.kind == .settingsChange, [.pending, .done, .declined].contains(request.state) {
+            SettingsChangeCardView(model: model, request: request)
+        } else if request.state != .pending {
             OwnerRequestResolvedLine(model: model, request: request)
         } else if let until = model.snoozedUntil(request.id) {
             OwnerRequestSnoozedLine(model: model, request: request, until: until)
@@ -44,7 +46,17 @@ struct OwnerRequestContent: View {
 struct OwnerRequestCard: View {
     @Environment(AppModel.self) private var appModel
     let model: OwnerRequestsModel
-    let request: OwnerRequest
+    /// The request as it was filed; `request` below is what the card draws.
+    let source: OwnerRequest
+    /// Settings › Translation: the whole card flips back to the asking session's words.
+    @State private var showOriginal = false
+    private var owner: TranslationLanguage? { OwnerCardTranslations.ownerLanguage(appModel.user) }
+    /// The request as drawn: title, why, ifUnanswered, options, steps and verifyHint in the owner's
+    /// language where they were translated. Same id, kind and option order, so every press is the same.
+    private var request: OwnerRequest { source.shown(owner: owner, showOriginal: showOriginal) }
+    /// The answer the server refused with 422 TRANSLATION_FAILED, to send again — as typed when
+    /// `true` (Send as written). Nil while nothing was refused.
+    @State private var resend: ((Bool) -> Void)?
     var onChat: ((OwnerRequest) -> Void)? = nil
 
     private enum Field: Hashable { case secret, answer, reason }
@@ -66,7 +78,7 @@ struct OwnerRequestCard: View {
 
     init(model: OwnerRequestsModel, request: OwnerRequest, onChat: ((OwnerRequest) -> Void)? = nil) {
         self.model = model
-        self.request = request
+        self.source = request
         self.onChat = onChat
         _draft = State(initialValue: OwnerRequests.SecretDraft(spec: request.secretSpec))
         _chosen = State(initialValue: request.recommendedOption)
@@ -88,6 +100,9 @@ struct OwnerRequestCard: View {
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                TranslationFootView(parts: source.translationFoot(owner: owner, showOriginal: showOriginal)) { _ in
+                    showOriginal.toggle()
+                }
                 facts
                 kindContent
                 if let hint = request.verifyHint {
@@ -98,6 +113,11 @@ struct OwnerRequestCard: View {
                         Image(systemName: "exclamationmark.triangle.fill")
                     }
                     .font(.orbitLabel).foregroundStyle(.red)
+                }
+                if let resend {
+                    TranslationFootView(parts: OwnerCardTranslations.refusedFoot) { action in
+                        resend(action == .sendAsWritten)
+                    }
                 }
                 if declining { declineForm } else { actions }
                 if let unanswered = request.ifUnanswered {
@@ -183,6 +203,8 @@ struct OwnerRequestCard: View {
             EmptyView()
         case .wikiCreate:
             OwnerRequestWikiCreateFacts(request: request)
+        case .settingsChange:
+            EmptyView()
         }
     }
 
@@ -416,7 +438,10 @@ struct OwnerRequestCard: View {
             HStack(spacing: 12) {
                 Button(OwnerRequests.declineButton) {
                     let why = reason.trimmingCharacters(in: .whitespacesAndNewlines)
-                    run { try await model.decline(request, reason: why) }
+                    func decline(asWritten: Bool) {
+                        run(resend: decline) { try await model.decline(request, reason: why, sendAsWritten: asWritten) }
+                    }
+                    decline(asWritten: false)
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(busy || closed || reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -435,14 +460,27 @@ struct OwnerRequestCard: View {
             return
         }
         let body = OwnerRequests.doneBody(request, option: chosen, text: text)
-        run { try await model.complete(request, body) }
+        func complete(asWritten: Bool) {
+            let sent = OwnerRequestDoneBody(option: body.option, text: body.text, sendAsWritten: asWritten)
+            run(resend: complete) { try await model.complete(request, sent) }
+        }
+        complete(asWritten: false)
     }
 
-    private func run(_ work: @escaping @MainActor () async throws -> Void) {
+    /// `resend` is the press again, for an answer whose words could not be translated (Retry with
+    /// `false`, Send as written with `true`).
+    private func run(resend: ((Bool) -> Void)? = nil, _ work: @escaping @MainActor () async throws -> Void) {
         busy = true
         failure = nil
+        self.resend = nil
         Task { @MainActor in
-            do { try await work() } catch { failure = error.localizedDescription }
+            do { try await work() } catch {
+                if let resend, OwnerCardTranslations.refused(error) {
+                    self.resend = { asWritten in resend(asWritten) }
+                } else {
+                    failure = error.localizedDescription
+                }
+            }
             busy = false
         }
     }

@@ -74,7 +74,7 @@ internal object RunnerCopy {
     /** A managed runner that has not reported yet (preparing, waiting for capacity, failed to start): its Resources and Engines say
      * only this (web runnerCopy MANAGED_RUNNER_NOT_REPORTED). */
     const val MANAGED_NOT_REPORTED = "Available once the runner is ready."
-    /** The account's managed runner wherever its name is shown, unless its owner renamed it: its stored name (`orbit-managed`) is
+    /** The account's managed runner wherever its name is shown, unless its owner renamed it: its stored name (`orbit-managed` on a server before migration 1250) is
      * the server's, not a word for anyone to read (web runnerCopy MANAGED_RUNNER_LABEL). */
     const val MANAGED_RUNNER_LABEL = "Orbit Cloud"
     /** A managed runner's version when it reports none that is a release (its image is `managed-<sha>`). */
@@ -82,7 +82,12 @@ internal object RunnerCopy {
     /** About's Version note on a managed runner: Orbit rolls its image, so it neither updates itself nor needs to. */
     const val MANAGED_RUNNER_UPDATED_BY_ORBIT = "Orbit updates this machine for you."
     const val SEP = " · "
+    const val NO_PROVIDER_KEY = "no provider key found"
     fun offlineLastSeen(whenText: String) = "Offline · last seen $whenText"
+    /** The country a machine's IP is in, first in the line under a machine page's title (OrbitKit `runnerLocation`). */
+    fun location(place: String) = "📍 $place"
+    /** The same, when the check went through a proxy: the country is the proxy's, not the machine's. */
+    fun locationViaProxy(place: String) = "📍 $place (via proxy)"
     fun versionTag(version: String) = "v$version"
     fun runningOf(active: Int, max: Int) = "$active of $max running"
     const val ADD = "Add Runner"
@@ -97,8 +102,8 @@ internal object RunnerCopy {
     const val EDIT = "Edit"
     const val DISK = "Disk"
     const val KEEP_FREE = "Keep Free"
-    const val CAPACITY_FOOTER = "Max Concurrent applies to the next session it picks up — no restart. Below Keep Free, task " +
-        "runs stop being sent here and finished worktrees are cleaned up sooner."
+    const val CAPACITY_FOOTER = "Max Concurrent applies to the next session it picks up — no restart. Below Keep Free, new sessions and " +
+        "task runs wait until space frees up, and finished worktrees are cleaned up sooner."
     fun gb(amount: String) = "$amount GB"
     fun diskUsed(used: String, total: String) = "$used of $total GB used"
     // Resources (web runnerCopy.ts "MARK: Resources", docs/mocks/runner-resource-monitor)
@@ -154,11 +159,16 @@ internal object RunnerCopy {
     const val FIX_WITH_AGENT = "Fix with an agent"
     /** The line in the button's place while the session a press started is open; "Open session" follows it as a link. */
     fun agentFixing(workspace: String) = "An agent is fixing this in $workspace · "
+    /** A transcript's history row, after the agent it was handed to finished; "Open session" follows it as a link. */
+    fun agentFixFixed(workspace: String) = "Fixed by an agent in $workspace · "
     const val OPEN_SESSION = "Open session"
     /** Under the Install failed panel's button, while a press can start a session. */
     fun agentFixStarts(workspace: String, engine: String) = "Starts a session in $workspace on this machine, with $engine."
     /** Appended to a signed-out reason on the Install failed panel, whose engine rows sit above it. */
     fun agentFixSignIn(engine: String) = " Sign in to $engine above to use this."
+    /** Appended to a signed-out reason in a transcript, which has no engine list of its own. */
+    fun agentFixSignInOnMachinePage(engine: String) = " Sign in to $engine on the machine page to use this."
+    const val FIX_FAILED = "Couldn't start the agent"
     const val WORKTREES = "Worktrees"
     fun workspaceRunning(count: Int) = "$count running"
     const val ABOUT_NAME = "Name"
@@ -262,8 +272,8 @@ internal object AccountCopy {
     fun next(account: String) = "Next: $account"
 }
 
-/** Removing a runner's Default from Orbit and bringing it back, in the web's words: src/web/src/lib/runnerAccountCopy.ts, which
- * RunnerAccountCopyParityTest reads as text — the web's, not Swift's, so the order the native clients land in changes nothing. Its two
+/** Removing a runner's Default from Orbit and bringing it back, and making an added Claude Code account the Default, in the web's words:
+ * src/web/src/lib/runnerAccountCopy.ts, which RunnerAccountCopyParityTest reads as text — the web's, not Swift's, so the order the native clients land in changes nothing. Its two
  * lines for the workspace form's account field have no counterpart here: no Android page sets a workspace's account. */
 internal object RunnerAccountCopy {
     /** The question in front of Default's Remove…, and an added account's while Default is removed. */
@@ -302,6 +312,38 @@ internal object RunnerAccountCopy {
     const val IN_USE_WAITING = "Waiting for input"
     /** A listed session with no title yet. */
     const val IN_USE_UNTITLED = "Untitled session"
+
+    /** An added Claude Code account's way to become the Default: the item in its ⋯ menu, and what it does. */
+    const val SET_DEFAULT = "Set as default"
+    const val SET_DEFAULT_HINT = "Moves this login into ~/.claude, so the terminal uses it too"
+    /** Why that item can't be chosen: the runner is offline, too old to swap logins, or swapping already. */
+    const val SET_DEFAULT_OFFLINE = "The runner is offline"
+    const val SET_DEFAULT_UPDATE = "Update the runner to set a default Claude Code account on it"
+    const val SET_DEFAULT_BUSY = "A default is already being set on this runner"
+    /** The question in front of Set as default. */
+    fun setDefaultTitle(name: String) = "Make $name the default?"
+    /** What Set as default comes to: [name] is the added account and [dir] its folder, [defaultName] and [defaultDir] the Default's, each
+     * the way a terminal spells it. */
+    fun setDefaultDetail(name: String, defaultDir: String, defaultName: String, dir: String, runner: String) = "$name’s login moves to " +
+        "$defaultDir, and $defaultName’s to $dir. Claude Code in a terminal on $runner uses $name from then on — restart any that are open. " +
+        "Sessions stay on their accounts, and a turn in progress finishes first. Workspaces keep their account."
+    /** The confirmation's own button. */
+    const val SET_DEFAULT_CONFIRM = "Make default"
+    /** Under the account while it is being made the Default, with no turn left to wait for. */
+    fun settingDefault(name: String) = "Making $name the default"
+    /** The same, while one session on either account finishes its turn. */
+    fun settingDefaultOne(name: String) = "Making $name the default — waiting for 1 session to finish its turn"
+    /** The same, while several do. */
+    fun settingDefaultMany(name: String, count: Int) = "Making $name the default — waiting for $count sessions to finish their turns"
+    /** Beside it, while Claude Code runs in a terminal on either folder: the swap waits for it to exit. */
+    const val SETTING_DEFAULT_TERMINAL = "It also waits for Claude Code running in a terminal there to exit."
+    /** A swap that failed, or that the control plane refused: over the reason. */
+    fun setDefaultFailed(name: String) = "Couldn’t make $name the default"
+    /** Under that reason: a failed swap puts both logins back. */
+    const val SET_DEFAULT_UNCHANGED = "Both logins are as they were."
+    /** What a former Default is called — the account a Set as default moved out of ~/.claude into an added folder — while the owner has
+     * not named it and no email is known for it. */
+    const val FORMER_DEFAULT = "Former default"
 }
 
 /**
@@ -510,10 +552,23 @@ internal data class AttentionItem(val kind: String, val tone: String, val short:
  * the machine's most recently used workspace, on that workspace's engine — or why it can't ([blockedCode] offline, noWorkspace,
  * engineSignedOut, with the server's own [blockedMessage]), and the warnings an agent is fixing now. */
 internal data class AgentFix(val workspaceId: String?, val workspaceName: String?, val engine: String?, val engineName: String?,
-    val blockedCode: String?, val blockedMessage: String?, val fixing: List<AgentFixing>)
+    val blockedCode: String?, val blockedMessage: String?, val fixing: List<AgentFixing>, val handled: List<AgentFixHandled> = emptyList())
 
 /** An open session a press started, on one warning: [engine] for engineNotUpdating and installFailed, null for cannotSelfUpdate. */
 internal data class AgentFixing(val kind: String, val engine: String?, val sessionId: String, val workspaceId: String, val workspaceName: String)
+
+/** The latest agent a warning was handed to once its session is over: a transcript's history row shows what was done with it. */
+internal data class AgentFixHandled(val kind: String, val engine: String?, val sessionId: String, val workspaceId: String,
+    val workspaceName: String, val status: String)
+
+/** What the transcript's missing-bubblewrap warning draws (web `sandboxFixView`): the button and where its session runs, the reason none
+ * can start, the agent at work, or the one that already finished with that row — a transcript is history, so it offers no second agent. */
+internal sealed interface SandboxFixView {
+    data class Ready(val line: String?) : SandboxFixView
+    data class Blocked(val line: String) : SandboxFixView
+    data class Fixing(val fixing: AgentFixing) : SandboxFixView
+    data class Handled(val sessionId: String, val workspaceName: String) : SandboxFixView
+}
 
 /** What one warning draws for Fix with an agent: the session at work on it ([fixing], in the button's place), or the button — disabled
  * while [enabled] is false — with the grey [line] under it, if any. */
@@ -715,7 +770,27 @@ internal object RunnerPage {
             fix.list("fixing").mapNotNull { entry ->
                 AgentFixing(entry.str("kind") ?: return@mapNotNull null, entry.str("engine"), entry.str("sessionId") ?: return@mapNotNull null,
                     entry.str("workspaceId").orEmpty(), entry.str("workspaceName").orEmpty())
+            },
+            fix.list("handled").mapNotNull { entry ->
+                AgentFixHandled(entry.str("kind") ?: return@mapNotNull null, entry.str("engine"), entry.str("sessionId") ?: return@mapNotNull null,
+                    entry.str("workspaceId").orEmpty(), entry.str("workspaceName").orEmpty(), entry.str("status").orEmpty())
             })
+    }
+
+    /** The transcript's missing-bubblewrap warning (docs/mocks/codex-sandbox-fix-with-agent): nil from an older server, which sends no
+     * `agentFix`. The handled line comes before the button, so a history row already handed to an agent offers no second one. */
+    fun sandboxFixView(runner: JsonObject?): SandboxFixView? {
+        val fix = runner?.let(::agentFixOf) ?: return null
+        agentFixing(fix, "sandboxMissing", "codex")?.let { return SandboxFixView.Fixing(it) }
+        fix.handled.firstOrNull { it.kind == "sandboxMissing" && it.engine == "codex" }?.let {
+            return SandboxFixView.Handled(it.sessionId, it.workspaceName)
+        }
+        fix.blockedCode?.let { code ->
+            val signIn = if (code == "engineSignedOut") RunnerCopy.agentFixSignInOnMachinePage(fix.engineName ?: engineName(fix.engine.orEmpty())) else ""
+            return SandboxFixView.Blocked(fix.blockedMessage.orEmpty() + signIn)
+        }
+        val starts = fix.workspaceName?.let { RunnerCopy.agentFixStarts(it, fix.engineName ?: engineName(fix.engine.orEmpty())) }
+        return SandboxFixView.Ready(starts)
     }
 
     /** The open session at work on this warning: the same kind and, but for the machine's own (cannotSelfUpdate, engineUpdateFailed),
@@ -969,7 +1044,7 @@ internal object RunnerPage {
         val free = formatDiskGb(disk.freeBytes); val total = formatDiskGb(disk.totalBytes)
         val summary = "Disk ${disk.usedPercent}% full"
         return AttentionItem("diskLow", "warn", summary, summary,
-            reserve?.let { "$free GB free of $total GB, under the ${formatDiskGb(it * MIB)} GB it keeps free — task runs stop being sent here until space frees up." }
+            reserve?.let { "$free GB free of $total GB, under the ${formatDiskGb(it * MIB)} GB it keeps free — new sessions and task runs wait until space frees up." }
                 ?: "$free GB free of $total GB. No reserve is set, so task runs keep landing here until the disk fills.",
             AttentionAction("setReserve"))
     }
@@ -1087,6 +1162,14 @@ internal object RunnerPage {
     fun isManaged(id: String?, managedRunnerId: String? = ManagedRunnerIdentity.runnerId, managed: Boolean? = null): Boolean =
         managed == true || (!id.isNullOrEmpty() && !managedRunnerId.isNullOrEmpty() && ObjectId.same(id, managedRunnerId))
 
+    /** The OS a runner reported, from its `os:<goos>` capability (`darwin`, `linux`, `windows`, …), as the web's machineOs reads it;
+     *  null when it has not said. A machine row draws its mark by it (docs/mocks/machine-menu-icons, A). */
+    fun os(runner: JsonObject): String? = runner.strings("capabilities").firstOrNull { it.startsWith("os:") }?.removePrefix("os:")
+
+    /** Pin the account's managed runner, keeping the order the server sent for the other machines. */
+    fun managedRunnerFirst(runners: List<JsonObject>, managedRunnerId: String? = ManagedRunnerIdentity.runnerId): List<JsonObject> =
+        runners.sortedByDescending { isManaged(it, managedRunnerId) }
+
     /** Whether a version is a release number, not a managed image's `managed-<sha>` or a `dev` build. */
     fun isReleaseVersion(version: String?): Boolean = version != null && Regex("^[vV]?[0-9]").containsMatchIn(version.trim())
 
@@ -1113,6 +1196,18 @@ internal object RunnerPage {
         val host = runner.str("hostname")?.trim()?.takeIf { it.isNotEmpty() && it != shown }
         return listOfNotNull(host, versionLine(runner.str("version"), managed)).joinToString(RunnerCopy.SEP)
     }
+
+    /** Where a machine's IP is, from the Claude region check's last answer (`runner.region`): `📍 Japan`, `📍 Japan (via proxy)`.
+     *  Null for a runner no check has decided, or one too old to check. The web's `runnerLocationLine`. */
+    fun location(runner: JsonObject): String? {
+        val region = runner.obj("region") ?: return null
+        val place = region.str("name")?.trim()?.takeIf { it.isNotEmpty() } ?: region.str("country")?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        return if (region.bool("viaProxy") == true) RunnerCopy.locationViaProxy(place) else RunnerCopy.location(place)
+    }
+
+    /** The head's line under the title: the country its IP is in, then [hostLine]. */
+    fun headLine(runner: JsonObject, managed: Boolean = false): String =
+        listOfNotNull(location(runner), hostLine(runner, managed).takeIf { it.isNotEmpty() }).joinToString(RunnerCopy.SEP)
 
     /** green online, amber while it drains, grey offline. */
     /** The status dot, by the web's rule: "online" or "offline" — a machine that drains is online. */
@@ -1206,6 +1301,10 @@ internal object RunnerPage {
      * first sign-in — and with several accounts, which can be on different sites: each says its own on the engine page. */
     fun engineSite(health: JsonObject): String? =
         if (health.str("engine") != "kimi" || health.list("accounts").size >= 2) null else KimiSite.of(health.str("kimiRegion"))?.domain
+    /** OpenCode's note after its version when its CLI listed no provider key (`1.19.5 · no provider key found`): its
+     * unknown sign-in is about a key, never the version. Null otherwise. */
+    fun engineKeyNote(health: JsonObject): String? =
+        if (health.str("engine") == "opencode" && health.bool("openCodeNoKey") == true && health.str("auth") != "yes") RunnerCopy.NO_PROVIDER_KEY else null
     /** The engines whose quota a runner reads: the ones Orbit signs in. */
     fun reportsQuota(engine: String) = isLoginEngine(engine)
 
@@ -1344,9 +1443,17 @@ internal object RunnerPage {
     fun accountNoQuotaLimit(runner: JsonObject, engine: String, account: String): Boolean =
         engine == "kimi" && kimiNoQuotaLimit(accountSnapshotReported(EngineAccounts.usage(engine, runner), account))
 
-    /** CodexAccounts.label: what the user called it, else Default, or `Account <id>`. */
-    fun accountLabel(id: String, accounts: List<JsonObject>): String =
-        accounts.firstOrNull { it.str("id") == id }?.str("name")?.takeIf { it.isNotEmpty() } ?: if (id == "default") "Default" else "Account $id"
+    /** CodexAccounts.label: what the user called it, else Default; a former Default (the account a Set as default moved out of
+     * ~/.claude) by its email, else "Former default"; or `Account <id>`. */
+    fun accountLabel(id: String, accounts: List<JsonObject>): String {
+        val account = accounts.firstOrNull { it.str("id") == id }
+        account?.str("name")?.takeIf { it.isNotEmpty() }?.let { return it }
+        if (id == "default") return "Default"
+        if ((account?.get("formerDefault") as? JsonPrimitive)?.booleanOrNull == true) {
+            return account?.str("email")?.takeIf { it.isNotEmpty() } ?: RunnerAccountCopy.FORMER_DEFAULT
+        }
+        return "Account $id"
+    }
 
     /** One sign-in on the engine page. [auth] is none for an Antigravity Default on the machine's Gemini key ([envKey]),
      * which has nothing to sign in or pause; its line says what it runs on. [site]: Kimi only, the site its login is on —
@@ -1441,6 +1548,50 @@ internal object RunnerPage {
             else -> RunnerAccountCopy.movingMany(engineName(engine), count)
         }
     }
+
+    /** What a runner declares when it can make an added Claude Code account the Default: the swap itself, and moving a session into its
+     * account's new folder (RunnersService.setDefaultAccount asks for both). */
+    private val CLAUDE_ACCOUNT_SWAP_CAPABILITIES = listOf("claude-account-swap/v1", "claude-account-move/v1")
+
+    /** Whether [line]'s menu offers Set as default: an added Claude Code account's only. */
+    fun offersSetDefault(engine: String, line: AccountLine) = engine == "claude" && !line.isDefault
+
+    /** The Set as default this runner has in flight or last finished, when it is [account]'s; null otherwise. */
+    fun swapOf(runner: JsonObject, account: String): JsonObject? = runner.obj("claudeAccountSwap")?.takeIf { it.str("account") == account }
+
+    /** Why Set as default can't be chosen now, said where its hint is; null when it can. [pressing]: this page's own request is on its way. */
+    fun setDefaultBlocked(runner: JsonObject, offline: Boolean, pressing: Boolean): String? = when {
+        offline -> RunnerAccountCopy.SET_DEFAULT_OFFLINE
+        !runner.strings("capabilities").containsAll(CLAUDE_ACCOUNT_SWAP_CAPABILITIES) -> RunnerAccountCopy.SET_DEFAULT_UPDATE
+        pressing || runner.obj("claudeAccountSwap")?.str("status") == "pending" -> RunnerAccountCopy.SET_DEFAULT_BUSY
+        else -> null
+    }
+
+    /** The question before [line]'s Set as default, title and body: the swap of the two folders, the terminal, the sessions and the
+     * workspaces. The Default's folder is the one the runner reports, else ~/.claude. */
+    fun setDefaultQuestion(runner: JsonObject, health: JsonObject, line: AccountLine): Pair<String, String> {
+        val accounts = health.list("accounts")
+        val default = accounts.firstOrNull { it.str("id") == "default" }
+        val defaultDir = (default?.str("home") ?: default?.str("codexHome"))?.let(::tildePath) ?: "~/.claude"
+        return RunnerAccountCopy.setDefaultTitle(line.name) to RunnerAccountCopy.setDefaultDetail(line.name, defaultDir,
+            accountLabel("default", accounts), line.home.orEmpty(), displayName(runner))
+    }
+
+    /** Under an account while it is being made the Default: how many sessions' turns the swap waits on, and any terminal Claude Code on
+     * either folder. Null unless its swap is pending. */
+    fun settingDefaultLine(runner: JsonObject, line: AccountLine): String? {
+        val swap = swapOf(runner, line.id)?.takeIf { it.str("status") == "pending" } ?: return null
+        val waiting = swap.list("waitingOn").size
+        val said = when (waiting) {
+            0 -> RunnerAccountCopy.settingDefault(line.name)
+            1 -> RunnerAccountCopy.settingDefaultOne(line.name)
+            else -> RunnerAccountCopy.settingDefaultMany(line.name, waiting)
+        }
+        return if (swap.list("foreignProcesses").isNotEmpty()) "$said ${RunnerAccountCopy.SETTING_DEFAULT_TERMINAL}" else said
+    }
+
+    /** A swap of this account's that failed, which puts both logins back: its `message` is the machine's reason. Null otherwise. */
+    fun failedSwap(runner: JsonObject, line: AccountLine): JsonObject? = swapOf(runner, line.id)?.takeIf { it.str("status") == "failed" }
 
     /** What stands over those sessions in place of the machine's sentence, the engine named as its CLI is. */
     fun inUseHeading(engine: String, count: Int) =

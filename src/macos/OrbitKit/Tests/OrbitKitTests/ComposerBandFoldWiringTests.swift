@@ -150,7 +150,7 @@ final class ComposerBandFoldWiringTests: XCTestCase {
         let bar = try bar
         for use in ["WorktreeBarLogic.mode(", "WorktreeBarLogic.primary(", "WorktreeBarLogic.turnActive(",
                     "SessionTaskCard(created: console.createdTasks.snapshot",
-                    "FoldedBand.processes(console.state.background)", "FoldedBand.branch("] {
+                    "FoldedBand.processes(console.state.background,", "FoldedBand.branch("] {
             XCTAssertTrue(bar.contains(use), "the bar reads \(use)")
         }
         // `FoldedBand.branch` writes the merge slot's chips word for word; the slot has to still say them.

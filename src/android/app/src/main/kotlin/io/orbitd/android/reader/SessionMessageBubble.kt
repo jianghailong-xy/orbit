@@ -9,7 +9,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -61,18 +60,17 @@ internal object SessionMessageCopy {
 /**
  * Another Orbit session's message, drawn the way a chat draws somebody else's (docs/mocks/session-message-bubble, owner 2026-11-12; web
  * `SessionMessageCard`): who sent it on one grey line, their words in a bubble on the left that hugs them (720 dp at most), and everything
- * else on one grey foot line — when, its task, what the message asks and where that stands, and what Orbit attached.
+ * else on one grey foot line — when, its task, what the message asks and where that stands.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun SessionMessageBubble(source: JsonObject, event: RunEvent?, open: (String) -> Unit, words: String = event?.personWords().orEmpty(),
-    note: String? = event?.fields?.text("controlPlaneNote")?.takeIf { it.isNotBlank() }, revealed: Boolean = false) {
+    revealed: Boolean = false) {
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
     val quiet = secondary.copy(alpha = 0.75f)
     val requestId = source.text("requestId")
     val request = sessionRequest(requestId)
-    var noteOpen by rememberSaveable(note) { mutableStateOf(false) }
-    Column(Modifier.widthIn(max = 720.dp).testTag("session-message"), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+    Column(Modifier.widthIn(max = io.orbitd.android.core.cards.ConversationCardWidth.DP.dp).testTag("session-message"), verticalArrangement = Arrangement.spacedBy(3.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(painterResource(R.drawable.ic_sessions), null, Modifier.padding(end = 4.dp).size(14.dp), tint = quiet)
             Text("${SessionMessageCopy.FROM} ", style = MaterialTheme.typography.labelMedium, color = secondary)
@@ -111,12 +109,10 @@ internal fun SessionMessageBubble(source: JsonObject, event: RunEvent?, open: (S
                     add { sep -> FootText(label + sep, tone) }
                 }
             }
-            note?.takeIf { describeNote(it).isNotEmpty() }?.let { add { sep -> AttachedNoteLabel(it, noteOpen, sep, quiet) { noteOpen = !noteOpen } } }
         }
         if (items.isNotEmpty()) FlowRow(Modifier.testTag("session-message:foot")) {
             items.forEachIndexed { index, item -> item(if (index < items.lastIndex) " · " else "") }
         }
-        if (noteOpen) note?.let { AttachedNotePanel(it) }
     }
 }
 

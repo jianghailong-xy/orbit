@@ -21,13 +21,14 @@ import (
 // plane and a scripted `claude`: the claim, the temporary detached worktree outside the workspace's workDir, the
 // relayed events, the discarded-changes line, the worktree's removal, a stop, and a restart's INTERRUPTED report.
 
-// remoteChildScript is the child engine: it records where it ran and its prompt, writes one file through a Write
+// remoteChildScript is the child engine: it records where it ran, its prompt and its SubAgent environment, writes one file through a Write
 // call and one through the shell, waits for $REMOTE_MARKS/finish when REMOTE_WAIT is set, and ends.
 const remoteChildScript = `#!/bin/sh
 read -r frame
 printf '%s' "$frame" > "$REMOTE_MARKS/frame"
 pwd > "$REMOTE_MARKS/cwd"
 printf '%s\n' "$@" > "$REMOTE_MARKS/argv"
+printf '%s %s' "$ORBIT_SUBAGENT_RUN_ID" "$ORBIT_SUBAGENT_REMOTE_MODE" > "$REMOTE_MARKS/env"
 printf '%s\n' '{"type":"system","subtype":"init","session_id":"child"}'
 printf '%s\n' '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_w","name":"Write","input":{"file_path":"src/new.swift","content":"x"}}]}}'
 mkdir -p src && printf 'x' > src/new.swift
@@ -206,6 +207,10 @@ func TestRemoteSubagentRunsInATemporaryWorktreeAndRemovesIt(t *testing.T) {
 	if !strings.Contains(string(argv), "You are a SubAgent") || !strings.Contains(string(argv), "acceptEdits") {
 		t.Fatalf("the child was not started in child mode with the preamble and its mode:\n%s", argv)
 	}
+	// Its Plan gate reads the mode it was claimed in: this machine hosts no socket for the parent session.
+	if env, _ := os.ReadFile(filepath.Join(r.marks, "env")); string(env) != "run-1 acceptEdits" {
+		t.Fatalf("the child's SubAgent environment is %q, want its run and the mode it was claimed in", env)
+	}
 
 	if err := os.WriteFile(filepath.Join(r.marks, "finish"), nil, 0o644); err != nil {
 		t.Fatal(err)
@@ -276,6 +281,53 @@ func TestRemoteSubagentRefusesAWorkDirThatIsNotGit(t *testing.T) {
 	}
 	if r.marked("started") {
 		t.Fatal("the child ran")
+	}
+}
+
+// A claim in place (a read-only run on a workDir that is not a git repository): the child runs in the workDir itself,
+// read-only even though its claim's type is "general", no worktree is made, and the workDir is left where it is.
+func TestRemoteSubagentInPlaceRunsReadOnlyInTheWorkDir(t *testing.T) {
+	r := newRemoteRig(t)
+	plain := t.TempDir()
+	writeTestFile(t, filepath.Join(plain, "my.cnf"), "[client]\n")
+	r.stub.claim["workDir"] = plain
+	r.stub.claim["inPlace"] = true
+	remoteSubagents.onHeartbeat(r.t, []string{"run-1"}, nil, false)
+	end := r.stub.awaitEnd(t)
+	result, _ := end["resultSummary"].(string)
+	if end["status"] != subagentStatusDone || result != "swift build passed" {
+		t.Fatalf("the end was %v", end)
+	}
+	cwdRaw, _ := os.ReadFile(filepath.Join(r.marks, "cwd"))
+	got, _ := filepath.EvalSymlinks(strings.TrimSpace(string(cwdRaw)))
+	if want, _ := filepath.EvalSymlinks(plain); got != want {
+		t.Fatalf("the child ran in %s, want the workDir %s", got, want)
+	}
+	argv, _ := os.ReadFile(filepath.Join(r.marks, "argv"))
+	for _, tool := range subagentReadonlyDisallowed {
+		if !strings.Contains(string(argv), tool) {
+			t.Fatalf("the child was not denied %s:\n%s", tool, argv)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(plain, "my.cnf")); err != nil {
+		t.Fatalf("the workDir lost its files: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(plain, ".git")); !os.IsNotExist(err) {
+		t.Fatalf("a git repository was made in the workDir: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(remoteSubagentDir("run-1"), "tree")); !os.IsNotExist(err) {
+		t.Fatalf("a worktree was made: %v", err)
+	}
+	waitUntil(t, func() bool { rec, _ := readRemoteSubagentRecord("run-1"); return rec.Ended },
+		"the run's record was not kept as ended")
+	if rec, _ := readRemoteSubagentRecord("run-1"); !rec.InPlace || rec.Tree != "" {
+		t.Fatalf("the record does not say it ran in place: %+v", rec)
+	}
+	// A restart's recovery and the GC never touch a workDir a run in place worked in.
+	recoverRemoteSubagents(r.t)
+	gcRemoteSubagentConversations(time.Now().Add(remoteSubagentKeep + time.Hour))
+	if _, err := os.Stat(filepath.Join(plain, "my.cnf")); err != nil {
+		t.Fatalf("the workDir was removed by the cleanup: %v", err)
 	}
 }
 

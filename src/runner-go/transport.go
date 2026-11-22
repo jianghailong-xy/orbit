@@ -32,7 +32,7 @@ const (
 	sessionWorktreeOpsV1             = "session-worktree-ops-v1"
 	sessionMergeRecoveryV1           = "session-merge-recovery-v1"
 	// A merge runs whether or not a turn holds the session's checkout, and holds no turn back
-	// (heartbeatMerge); a commit is refused while a background job is still changing it.
+	// (heartbeatMerge); a commit runs beside a live background job.
 	sessionMergeBesideTurnV1 = "session-merge-beside-turn-v1"
 	// The commit relay may also carry `discard`, and this runner reports which finished
 	// sessions' checkouts still hold uncommitted work (abandoned_checkout.go).
@@ -103,6 +103,7 @@ func init() {
 		claudeAccountLoginCapabilityV1,
 		claudeAccountRemoveCapabilityV1,
 		claudeAccountMoveCapabilityV1,
+		claudeAccountSwapCapabilityV1,
 		claudeScheduledCheckOnlyAsksCapabilityV1,
 		antigravityAccountLoginCapabilityV1,
 		antigravityAccountRemoveCapabilityV1,
@@ -119,6 +120,7 @@ func init() {
 		dirProbeCapabilityV1,
 		createWorkDirCapabilityV1,
 		cloneWorkDirCapabilityV1,
+		conditionProbeCapabilityV1,
 		createWorkDirCapabilityV2,
 		claudeRegionCapabilityV1,
 		mainCheckoutGitCapabilityV1,
@@ -130,10 +132,17 @@ func init() {
 		machineResourcesCapabilityV1,
 		helpAskCapabilityV1,
 		subagentRemoteResumeCapabilityV1,
+		subagentRemoteInPlaceCapabilityV1,
+		bgOwnerStopCapabilityV1,
+		bgOutputTailCapabilityV1,
 	}, cursorAccountCapabilities()...), declaredSteerCapabilities()...), ",")
 	// Where 0600 means something (secret_file_unix.go); a Windows runner is never handed a secret.
 	if secretFilesSupported {
 		runnerCapabilitiesV1 += "," + ownerSecretCapabilityV1
+	}
+	// Only a runner the managed image's entrypoint started has the browser (browser_supervisor.go).
+	if declaresBrowserClear(os.LookupEnv) {
+		runnerCapabilitiesV1 += "," + browserClearCapabilityV1
 	}
 }
 
@@ -650,6 +659,11 @@ func (t *Transport) inbox(ctx context.Context, sessionID, leaseGeneration string
 	if r.TurnID == "" {
 		return nil, nil
 	}
+	// The end of a coordinator handing over leaves the session's background work running; noted before any loop
+	// acts on the turn, whichever engine's loop that is (session_keep_work.go).
+	if r.Kind == "end" && keepBackgroundWorkRequested(r.Content) {
+		markSessionKeepsWork(sessionID)
+	}
 	r.Content = withExternalSenderBlock(r.Kind, r.Content, r.ExternalSender)
 	return &r, nil
 }
@@ -1080,6 +1094,12 @@ func (t *Transport) dirProbeResult(b RunnerDirProbeResult) error {
 // whether this machine ended up signed in.
 func (t *Transport) loginResult(b LoginResultRequest) error {
 	return t.do(nil, "POST", "/runner/login-result", b, nil, 15*time.Second)
+}
+
+// claudeAccountSwapResult reports where a heartbeat-delivered Claude account swap stands
+// (claude-account-swap/v1).
+func (t *Transport) claudeAccountSwapResult(b ClaudeAccountSwapResult) error {
+	return t.do(nil, "POST", "/runner/claude-account-swap-result", b, nil, 15*time.Second)
 }
 
 // codexAccountRemoveResult reports what a heartbeat-delivered account removal came to, on the route
@@ -1554,6 +1574,16 @@ func (t *Transport) scheduleWakeup(sessionID string, body map[string]interface{}
 	var receipt scheduledWakeupReceipt
 	err := t.do(nil, "POST", "/runner/sessions/"+sessionID+"/scheduled-wakeup", body, &receipt, taskOpTimeout)
 	return receipt, err
+}
+
+func (t *Transport) rateSubagentRun(sessionID, runID string, body map[string]interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(runID); err != nil {
+		return nil, fmt.Errorf("runId: %w", err)
+	}
+	var out json.RawMessage
+	path := "/runner/sessions/" + url.PathEscape(sessionID) + "/subagents/" + url.PathEscape(runID) + "/rating"
+	err := t.do(nil, "POST", path, body, &out, taskOpTimeout)
+	return out, err
 }
 
 // listTaskPage returns one page of tasks plus the cursor that continues it — an empty cursor
@@ -2832,6 +2862,17 @@ func (t *Transport) endSession(callerSessionID, orchestrationToken, id string) (
 	}
 	var out json.RawMessage
 	err := t.doOrchestration("POST", "/runner/sessions/"+url.PathEscape(id)+"/end", nil, &out, callerSessionID, orchestrationToken)
+	return out, err
+}
+
+// moveSession files a session in a folder of its workspace (or in none), or moves an ended one to
+// another workspace: the Move panel's rules, refusals as a 409 with the reason.
+func (t *Transport) moveSession(callerSessionID, orchestrationToken, id string, body interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doOrchestration("POST", "/runner/sessions/"+url.PathEscape(id)+"/move", body, &out, callerSessionID, orchestrationToken)
 	return out, err
 }
 

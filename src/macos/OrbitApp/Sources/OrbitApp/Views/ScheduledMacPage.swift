@@ -5,8 +5,8 @@ import OrbitKit
 // The Scheduled section on the Mac (docs/mocks/scheduled-tasks/web/01-board.png, 02-board.png ⑤): the Mac follows the
 // WEB board, not the phone's. The session column holds the timeline — "Scheduled 7", the workspace filter and Show
 // past runs, the groups with the web's long row line, and the line at the end — and the detail column is the
-// right-hand panel: a row's detail, a draft's create card, or a run's own session with Scheduled still lit in the
-// sidebar. Every rule and word is OrbitKit's (ScheduleDisplay, ScheduleCopy); the rows, detail panel, draft panel
+// right-hand panel: a row's detail or a draft's create card. Every rule and word is OrbitKit's
+// (ScheduleDisplay, ScheduleCopy); the rows, detail panel, draft panel
 // and cards are I1's views, shared with the phone (ScheduledPage.swift, ScheduleCards.swift).
 
 private typealias SC = ScheduleCopy
@@ -17,6 +17,9 @@ struct ScheduledMacPage: View {
     @State private var typed = ""
     @State private var asking = false
     @AppStorage("scheduled.quickAddWorkspace") private var chosenWorkspace = ""
+    /// The schedule a row's right-click asked to delete, and the run it asked to stop, while the question is up.
+    @State private var deleting: ScheduleView?
+    @State private var stopping: ScheduleRunView?
 
     var body: some View {
         Group {
@@ -31,12 +34,15 @@ struct ScheduledMacPage: View {
         let now = Date()
         let groups = scheduled.timeline(now: now)
         let empty = scheduled.loaded && scheduled.shownSchedules.isEmpty && scheduled.drafts.isEmpty
-            && scheduled.workspaceFilter == nil
+            && scheduled.shownWaitingTasks.isEmpty && scheduled.workspaceFilter == nil
         return ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
                 header(scheduled)
-                // A scheduled task's items, whole, under the head: each answers at its own door. There is no Waiting on
-                // you sheet (docs/mocks/waiting-on-you-removal; the owner, 2026-11-16).
+                // A condition's items and a scheduled task's, whole, under the head: each answers at its own door. There is
+                // no Waiting on you sheet (docs/mocks/waiting-on-you-removal; the owner, 2026-11-16).
+                ForEach(model.ownerRequests?.conditionItems ?? []) { item in
+                    ConditionWaitingCardView(item: item).padding(.vertical, 6)
+                }
                 ForEach(model.ownerRequests?.scheduleItems ?? []) { item in
                     ScheduleWaitingCardView(item: item).padding(.vertical, 6)
                 }
@@ -60,8 +66,9 @@ struct ScheduledMacPage: View {
                     tools(scheduled)
                     ForEach(groups) { group in
                         groupHeader(group)
-                        ForEach(ScheduleTimelineRows.rows(group, scheduled: scheduled, now: now, wide: true)) { row in
-                            rowView(row, selected: row.scheduleID.map {
+                        ForEach(ScheduleTimelineRows.rows(group, scheduled: scheduled, now: now, wide: true,
+                                                          openTask: { id in model.route(to: .task(id)) })) { row in
+                            rowView(row, scheduled, selected: row.scheduleID.map {
                                 PublicID.storageKey($0) == scheduled.inspectedID.map(PublicID.storageKey)
                             } ?? false)
                         }
@@ -83,6 +90,27 @@ struct ScheduledMacPage: View {
                 for s in scheduled.schedules { await scheduled.loadDetail(s.id) }
             }
         }
+        // A row's Delete and Stop ask first, as the detail panel's ⋯ → Delete does.
+        .orbitConfirmation({ ScheduleDisplay.deleteTitle($0.title) },
+                           isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
+                           presenting: deleting) { schedule in
+            Button(SC.DeleteConfirm.confirm, role: .destructive) {
+                Task { @MainActor in await scheduled.delete(schedule.id) }
+            }
+            Button(SC.DeleteConfirm.cancel, role: .cancel) {}
+        } message: { _ in
+            Text(SC.DeleteConfirm.body)
+        }
+        .orbitConfirmation({ _ in SC.StopConfirm.title },
+                           isPresented: Binding(get: { stopping != nil }, set: { if !$0 { stopping = nil } }),
+                           presenting: stopping) { run in
+            Button(SC.StopConfirm.confirm, role: .destructive) {
+                Task { @MainActor in await scheduled.stop(runID: run.id, scheduleID: run.scheduleId) }
+            }
+            Button(SC.StopConfirm.cancel, role: .cancel) {}
+        } message: { _ in
+            Text(SC.StopConfirm.body)
+        }
         .accessibilityIdentifier("scheduled-mac-page")
     }
 
@@ -93,7 +121,7 @@ struct ScheduledMacPage: View {
                 .font(.largeTitle.weight(.bold))
                 .foregroundStyle(Color.accentColor)
             Spacer()
-            Text("\(scheduled.shownSchedules.count)")
+            Text("\(scheduled.shownSchedules.count + scheduled.shownWaitingTasks.count)")
                 .font(.largeTitle.weight(.regular))
                 .foregroundStyle(.secondary)
                 .accessibilityIdentifier("scheduled-count")
@@ -131,12 +159,12 @@ struct ScheduledMacPage: View {
         .padding(.top, 6)
     }
 
-    /// "Today  Fri, Nov 14"; Needs you in red, Paused grey (web board ① 2–3).
+    /// "Today  Fri, Nov 14"; Paused grey (web board ① 2–3).
     private func groupHeader(_ group: ScheduleDisplay.TimelineGroup) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(group.title)
                 .font(.title3.weight(.bold))
-                .foregroundStyle(group.key == .needsYou ? Color.red : group.key == .paused ? Color.secondary : Color.primary)
+                .foregroundStyle(group.key == .paused ? Color.secondary : Color.primary)
             if let subtitle = group.subtitle {
                 Text(subtitle).font(.orbitSubtext).foregroundStyle(.secondary)
             }
@@ -147,11 +175,12 @@ struct ScheduledMacPage: View {
 
     /// One row: the state circle, the title with its tag and time at the end, and the long line under it. The row a
     /// panel is open for is tinted, as the web's selected row.
-    private func rowView(_ row: ScheduleRowModel, selected: Bool) -> some View {
-        Button {
-            model.closeScheduleRun()
-            row.open()
-        } label: {
+    private func rowView(_ row: ScheduleRowModel, _ scheduled: ScheduledModel, selected: Bool) -> some View {
+        // The phone's long-press menu on a right-click (ScheduleRowActions); the Mac has no row swipes.
+        let actions = ScheduleRowActions(row.kind, model: model, scheduled: scheduled,
+                                         askDelete: { deleting = $0 }, askStop: { stopping = $0 },
+                                         openTask: { id in model.route(to: .task(id)) })
+        return Button(action: row.open) {
             HStack(alignment: .top, spacing: 10) {
                 ScheduleCircleGlyph(view: row.circle, size: 18).padding(.top, 1)
                 VStack(alignment: .leading, spacing: 2) {
@@ -166,7 +195,16 @@ struct ScheduledMacPage: View {
                             Text(tag.text).font(.orbitMeta.weight(.semibold)).foregroundStyle(tag.tone.color)
                                 .fixedSize()
                         }
-                        if !row.time.isEmpty {
+                        if let reading = row.reading {
+                            // A condition's row (condition-triggers board ④ ②): "6.9% · 1 min ago" where a timed row
+                            // has its time, how far from firing and whether the probe is still alive.
+                            (Text(reading.value).font(.orbitLabel.weight(.semibold)).foregroundColor(.primary)
+                             + Text(reading.age.map { "\(SC.separator)\($0)" } ?? "").font(.orbitLabel)
+                                .foregroundColor(.secondary))
+                                .monospacedDigit()
+                                .fixedSize()
+                                .accessibilityIdentifier("schedule-row-reading")
+                        } else if !row.time.isEmpty {
                             Text(row.time).font(.orbitLabel).foregroundStyle(.secondary).monospacedDigit()
                                 .fixedSize()
                         }
@@ -178,6 +216,10 @@ struct ScheduledMacPage: View {
                     .font(.orbitLabel)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                    // The planned end on its own line, so the 400 pt column never cuts it off.
+                    if let end = row.end {
+                        Text(end).font(.orbitLabel).foregroundStyle(.secondary).accessibilityIdentifier("schedule-row-end")
+                    }
                 }
             }
             .padding(.vertical, 7).padding(.horizontal, 8)
@@ -193,6 +235,7 @@ struct ScheduledMacPage: View {
         .padding(.horizontal, -8)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("schedule-row")
+        .contextMenu { actions.menuContent }
     }
 
     /// The line at the end (web board ③): one sentence and the workspace it goes to, ↵ asks. Not a form: an agent sets
@@ -218,7 +261,6 @@ struct ScheduledMacPage: View {
                             typed = ""
                             chosenWorkspace = workspace.id
                             scheduled.inspectedID = nil
-                            model.closeScheduleRun()
                         }
                         asking = false
                     }
@@ -250,17 +292,12 @@ struct ScheduledMacPage: View {
     }
 }
 
-/// The detail column beside the timeline: a run's session when one is open over the page, else the panel a row
-/// opened — a schedule's detail (web board 01 ②) or a draft's create card (④) — else nothing chosen.
+/// The detail column beside the timeline shows a schedule's detail or a draft's create card.
 struct ScheduledMacDetail: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        if let sessionID = model.focusedConsoleSessionID, let registry = model.consoleRegistry {
-            // A run's session (web board 02 ⑤): its strip, crumb and head line are the transcript's first card
-            // (`ScheduleRunStripView`), and the report its last. Not a row of any workspace's list (§7.4).
-            ConsoleView(sessionID: sessionID, agentID: model.agentID(for: sessionID), registry: registry)
-        } else if let scheduled = model.scheduled, let id = scheduled.inspectedID {
+        if let scheduled = model.scheduled, let id = scheduled.inspectedID {
             ScheduleDetailPanel(scheduleID: id)
                 .id(id)
         } else if let scheduled = model.scheduled, let panel = scheduled.draftPanel {

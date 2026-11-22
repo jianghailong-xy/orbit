@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider, type QueryKey } from '@tanstack/react
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ControlPlaneProvider } from './useControlPlane';
 import { watchQuery, watchesQuery } from './queries';
+import { streamReport } from './listBudget';
 
 /**
  * The watches read rides the control-plane stream as a refetch nudge, never as data.
@@ -63,11 +64,22 @@ const frame = (type: string, data: Record<string, unknown>, sessionId = '') => (
 let container: HTMLDivElement | null = null;
 let root: Root | null = null;
 
+/** Seeds a cached read with the declaration its real counterpart makes: the stream selects on
+ *  `meta.entities`, and a bare `setQueryData` creates an entry that declares nothing. */
+function seed(client: QueryClient, key: QueryKey, data: unknown): void {
+  const entities = key[0] === 'watches' ? ['watch', 'session', 'task']
+    : key[0] === 'session-tags' ? ['tag']
+    : key[0] === 'tasks' ? ['task']
+    : ['session', 'workspace', 'tag', 'folder', 'project'];
+  client.getQueryCache().build(client, { queryKey: key, meta: { entities } });
+  client.setQueryData(key, data);
+}
+
 async function mount(keys: QueryKey[]): Promise<QueryClient> {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   // Seeded rather than fetched: a read with no observer is only marked by an invalidation, never
   // refetched, so the flag is the provider's doing and nothing else's.
-  for (const key of keys) client.setQueryData(key, key === WATCHES ? FOLLOWING : []);
+  for (const key of keys) seed(client, key, key === WATCHES ? FOLLOWING : []);
   container = document.createElement('div');
   document.body.appendChild(container);
   const next = createRoot(container);
@@ -202,7 +214,13 @@ describe('the watches read rides the control-plane stream', () => {
     // restarting or a socket going quiet drops it without a word, and the read may not go a minute
     // stale for that. Asserted here because this is the file that would otherwise make the poll look
     // redundant.
-    expect(watchesQuery().refetchInterval).toBe(60_000);
+    streamReport.opened();
+    try {
+      const interval = watchesQuery().refetchInterval as (query: { queryHash: string }) => number;
+      expect(interval({ queryHash: 'watches' })).toBe(60_000);
+    } finally {
+      streamReport.stopped();
+    }
   });
 
   it('library events leave the watches alone', async () => {

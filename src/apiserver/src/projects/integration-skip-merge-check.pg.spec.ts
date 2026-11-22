@@ -42,8 +42,9 @@ import { CriterionReadyProducer } from './criterion-ready.producer';
 import { CriterionUnlandedProducer } from './criterion-unlanded.producer';
 import { INTEGRATION_JOB_CLAIM } from './project-integration-job';
 import { ProjectOpenItemEscalationService } from './open-item-escalation.service';
-import { configureProjectIntegration } from './project-integration-line';
-import { ProjectOpenItemService } from './project-open-item.service';
+import { configureProjectIntegration, readInFlightJobs } from './project-integration-line';
+import { readLandingTimeline } from './landing-timeline';
+import { InFlightLandingSkipped, ProjectOpenItemService } from './project-open-item.service';
 import { ProjectIntegrationRetryController } from './project-integration-retry.controller';
 import { INTEGRATION_SKIP_CHECK_TOOL_NAME } from './project-integration-skip-check';
 import { ProjectPromotionService } from './project-promotion.service';
@@ -51,6 +52,7 @@ import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
 import '../test-support/dequeue-under-lease';
+import { settleDeliveredIdentityAfterFinish } from './project-integration-job';
 
 /**
  * `integration_skip_merge_check` (docs/project-integration-line-contract.md §2.4 J-S5): a project's
@@ -347,9 +349,16 @@ async function doneTask(stack: Stack, w: World, label: string): Promise<Attempt>
     shellOutput: '',
   });
   assert.equal(await taskStatus(stack.db, declared.id), TaskStatus.DONE, 'the acceptance command agreed');
-  await stack.db.session.update({
-    where: { id: sessionId },
-    data: { finishedAt: new Date(), worktreeBranch: branch, worktreeDirty: false },
+  await stack.db.$transaction(async (tx) => {
+    // The finish settles the DONE's delivered identity in the transaction that writes it, as every
+    // finish door does — and decides the route a DONE written while this work moved left to it
+    // (§10.5 O-L4 3, §12.15 P-M1).
+    const finished = await tx.session.update({
+      where: { id: sessionId },
+      data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), worktreeBranch: branch, worktreeDirty: false },
+      select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
+    });
+    await settleDeliveredIdentityAfterFinish(tx, finished);
   });
   return { taskId: declared.id, title, sessionId, turnId, branch };
 }
@@ -862,6 +871,154 @@ test('the account owner needs no card: their own press is the approval, and the 
       const conflictRefusal = await denied(() => ownerSkip(stack, conflicted, clashed.task.taskId, REASON));
       assert.equal(conflictRefusal.status, 409);
       assert.equal(conflictRefusal.code, 'INTEGRATION_RETRY_NOT_APPLICABLE');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+// ── the owner's "Land without the check" on a landing still in flight ─────────────────────────────
+
+const OWNER_REASON = 'the check takes ninety minutes and this landing does not wait for it';
+
+/** The owner's press on a landing in flight, answered as the in-flight door answers it. */
+async function ownerSkipInFlight(stack: Stack, w: World, taskId: string): Promise<InFlightLandingSkipped> {
+  return await ownerSkip(stack, w, taskId, OWNER_REASON) as InFlightLandingSkipped;
+}
+
+/** Where the view says a skip of this job stands. */
+async function skipCheckOf(db: PrismaClient, projectId: string, jobId: string): Promise<string | null | undefined> {
+  const [job] = await readInFlightJobs(db as unknown as PrismaService, projectId, jobId);
+  return job?.skipCheck;
+}
+
+/** Whether the landing card would offer the button for this job: the view's own answer. */
+async function skippable(db: PrismaClient, projectId: string, jobId: string): Promise<boolean | undefined> {
+  const [job] = await readInFlightJobs(db as unknown as PrismaService, projectId, jobId);
+  return job?.skippable;
+}
+
+test('the owner skips the check of a landing still queued: it ends CANCELLED and the next one runs no check',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'skip-inflight-queued');
+      const task = await doneTask(stack, w, 'skip-inflight-queued');
+      const [queued] = await landings(stack.db, task.taskId);
+      assert.equal(queued?.state, 'QUEUED');
+      assert.equal(await skippable(stack.db, w.projectId, queued!.id), true, 'the card offers it');
+
+      const skipped = await ownerSkipInFlight(stack, w, task.taskId);
+      assert.equal(skipped.state, 'QUEUED');
+      assert.equal(skipped.stoppedJobId, queued!.id);
+
+      const rows = await landings(stack.db, task.taskId);
+      assert.deepEqual(rows.map((row) => [row.generation, row.state]), [[1, 'CANCELLED'], [2, 'QUEUED']]);
+      const second = rows[1]!;
+      assert.equal(skipped.jobId, second.id);
+      assert.equal(second.skipMergeCheck, true);
+      assert.equal(second.skipReason, OWNER_REASON);
+      assert.equal(second.skipApprovedByUserId, w.ownerId, 'the owner\'s press is the approval');
+      assert.equal(second.retryOfJobId, null, 'a stopped landing failed of nothing, so nothing is rerun');
+      assert.equal(await skippable(stack.db, w.projectId, second.id), false,
+        'a generation that already runs without the check has nothing left to skip');
+      assert.equal(await skipCheckOf(stack.db, w.projectId, second.id), 'SKIPPED');
+      assert.deepEqual(await itemsOf(stack.db, task.taskId), [], 'a stop opens no item');
+
+      const claimed = await claim(stack, w, 'lease-skip-inflight-queued');
+      assert.equal(claimed.length, 1);
+      assert.deepEqual(claimed[0]!.checks.map((check) => check.name), ['TASK_ACCEPTANCE'],
+        'the landing check is not handed out; the task\'s own acceptance still is');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('a running landing is asked to stop, and the one without the check is queued when its runner answers',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'skip-inflight-running');
+      const task = await doneTask(stack, w, 'skip-inflight-running');
+      const [running] = await claim(stack, w, 'lease-skip-inflight-running');
+      assert.ok(running, 'the landing was claimed');
+      assert.equal(await skippable(stack.db, w.projectId, running.jobId), true);
+      assert.equal(await skipCheckOf(stack.db, w.projectId, running.jobId), null);
+
+      const skipped = await ownerSkipInFlight(stack, w, task.taskId);
+      assert.equal(skipped.state, 'STOPPING');
+      assert.equal(skipped.jobId, null, 'nothing is queued while the runner may still be working');
+      assert.deepEqual((await landings(stack.db, task.taskId)).map((row) => row.state), ['RUNNING']);
+      assert.equal(await skippable(stack.db, w.projectId, running.jobId), false,
+        'a landing already asked to stop is not offered again');
+      assert.equal(await skipCheckOf(stack.db, w.projectId, running.jobId), 'STOPPING',
+        'the card can say the skip is under way while the runner answers');
+      const again = await denied(() => ownerSkip(stack, w, task.taskId, OWNER_REASON));
+      assert.equal(again.status, 409);
+      assert.equal(again.code, 'INTEGRATION_SKIP_CHECK_ALREADY_ASKED');
+
+      const answered = await report(stack, w, running, { state: 'CANCELLED', phase: 'CHECK' });
+      assert.equal(answered.accepted, true);
+      const rows = await landings(stack.db, task.taskId);
+      assert.deepEqual(rows.map((row) => [row.generation, row.state]), [[1, 'CANCELLED'], [2, 'QUEUED']],
+        'the stopped generation ended, and the one without the check took its place');
+      assert.equal(rows[1]!.skipMergeCheck, true);
+      assert.equal(rows[1]!.skipApprovedByUserId, w.ownerId);
+      assert.equal(rows[1]!.skipReason, OWNER_REASON);
+      assert.deepEqual(await itemsOf(stack.db, task.taskId), [], 'the stopped generation opened no item');
+
+      // The landing page's own read of it: the generation without the check says so, and says the
+      // owner asked for it with the skip's reason — not that the task was marked done.
+      const landing = await stack.db.projectLanding.findFirstOrThrow({
+        where: { taskId: task.taskId, subject: 'TASK' },
+        select: { id: true, projectId: true, ownerId: true, subject: true, taskId: true, promotionId: true },
+      });
+      const timeline = await readLandingTimeline(stack.db as unknown as PrismaService, landing);
+      const second = timeline.sections.find((section) => section.generation === 2)!;
+      assert.deepEqual(
+        { cause: second.trigger?.cause, by: second.trigger?.by, reason: second.trigger?.reason },
+        { cause: 'RETRY', by: 'OWNER', reason: OWNER_REASON });
+      assert.equal(second.entries.find((entry) => entry.kind === 'SKIPPED_CHECK')?.text,
+        `Landing check skipped · ${OWNER_REASON}`);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('a stopped landing whose runner landed it anyway queues nothing more',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'skip-inflight-landed');
+      const task = await doneTask(stack, w, 'skip-inflight-landed');
+      const [running] = await claim(stack, w, 'lease-skip-inflight-landed');
+      assert.equal((await ownerSkipInFlight(stack, w, task.taskId)).state, 'STOPPING');
+      // A legacy runner reads the stop only when it starts: its answer may be that it landed.
+      assert.equal((await report(stack, w, running!, LANDED)).accepted, true);
+      assert.deepEqual((await landings(stack.db, task.taskId)).map((row) => row.state), ['LANDED'],
+        'the work is on the line: there is nothing left to land without the check');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('a landing past the push is not skipped: it may already have landed',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'skip-inflight-pushed');
+      const task = await doneTask(stack, w, 'skip-inflight-pushed');
+      const [running] = await claim(stack, w, 'lease-skip-inflight-pushed');
+      await stack.db.projectIntegrationJob.update({ where: { id: running!.jobId }, data: { phase: 'PUSH' } });
+      assert.equal(await skippable(stack.db, w.projectId, running!.jobId), false);
+      const refused = await denied(() => ownerSkip(stack, w, task.taskId, OWNER_REASON));
+      assert.equal(refused.status, 409);
+      assert.equal(refused.code, 'INTEGRATION_SKIP_CHECK_PUSHED');
+      const [row] = await landings(stack.db, task.taskId);
+      assert.equal(row?.state, 'RUNNING', 'nothing was stopped');
+      const job = await stack.db.projectIntegrationJob.findUniqueOrThrow({
+        where: { id: running!.jobId }, select: { cancelRequestedAt: true },
+      });
+      assert.equal(job.cancelRequestedAt, null);
     } finally {
       await stack.db.$disconnect();
     }

@@ -114,6 +114,7 @@ Predicate :=
 | leaf | 目标 | 定义 | 权威 |
 | --- | --- | --- | --- |
 | `SESSION_TURN_SETTLED` | SESSION | `session.status ∉ (PENDING, RUNNING)` | `UNSETTLED_SESSION_STATUSES` |
+| `SESSION_QUIESCENT`（v4，§16） | SESSION | turn 已 settle，且没有在执行、也没有已布置的唤醒 | `session-working.ts` |
 | `SESSION_RUN_TERMINAL` | SESSION | `deriveSessionRunState ∈ (SUCCEEDED, FAILED, ENDED)` | `enums.ts` |
 | `SESSION_LIFECYCLE_TERMINAL` | SESSION | `deriveSessionLifecycleState ∈ (COMPLETED, TRASH)` | `enums.ts` |
 | `SESSION_NEEDS_ATTENTION` | SESSION | 该会话存在 `PENDING` 的 Approval 行 | `push.service.ts` `needsYouSessions` |
@@ -234,6 +235,13 @@ release 掉了（§13.3）。客户端仍然显示它，写成「唤醒已撤回
 只接受 `true`，其他值 400。挑选在 SQL 里按上面的规则做，死信码取 `last_error` 的开头码（与 `watchDeadLetterCodeOf`
 同一读法），所以 `WAKE_WITHDRAWN` 这类不需要处理的死信不会占掉名额。客户端把这一路与最新 100 条、
 `?state=ACTIVE`、`?state=PAUSED` 合并，每个 Watch 只留一份。
+
+这四次读取合成一次：`GET /api/watches?following=true` 一次返回上面的并集——最新 100 条（任意状态），
+再加上其中没有的 ACTIVE、PAUSED 和要人处理的 Watch（各最多 100 条），每个 Watch 只出现一次，
+先是最新 100 条，其后依次是 ACTIVE、PAUSED、要人处理的。`following` 只接受 `true`，其他值，
+或与 `?state=`、`?needsAttention=` 同用，一律 400。它和其他读法一样带 ETag，条件请求未变时回 304。
+Web 的 Following 页、Watch 卡片和会话/任务上的关系都读这一条（每次刷新一个请求）；原来的三种读法
+（无参数、`?state=`、`?needsAttention=true`）保持原样，Mac 和 Android 仍用它们。
 
 ---
 
@@ -681,7 +689,7 @@ v2 在 v1 之上加四样东西，全部仍然只从数据库行判定（v3 在 
 
 ### 13.3 session_create(wait) 迁移
 
-1. 建完子会话后、**等待开始前**建 watch：`ALL SESSION_TURN_SETTLED` 盯子会话，`RESUME_SESSION`，
+1. 建完子会话后、**等待开始前**建 watch：`ALL SESSION_QUIESCENT`（predicateVersion 4，§16；此前是 `ALL SESSION_TURN_SETTLED`）盯子会话，`RESUME_SESSION`，
    `idempotencyKey = session-create-wait:<sessionId>`。调用在等待中被杀或断线，watch 仍在服务端，子会话 settle 时唤醒调用方。
 2. 在原有的有界预算内轮询子会话（顶层约 10 分钟，每深一层减半）。
 3. 预算内 settle：输出迁移前**逐字节相同**的会话 JSON，再 `POST /api/runner/watches/:id/release`，让答案只到达一次：
@@ -800,3 +808,32 @@ leaf 发 3，没有 v3 的旧服务端回 `PREDICATE_VERSION_UNSUPPORTED`，原�
 **谓词里没有 shell，服务器也没有执行命令的地方。** 外部系统（CI、部署、远端队列）的停滞这样盯：用 bg_run 跑一个只在状态变化时才
 打印一行的轮询脚本，配 `wakeOnStall`；脚本不打印就是状态没变，沉默超过阈值就是停滞。要在 runner 死了时也听到，再从另一个会话用
 这个 leaf 盯那个 job。工具描述写明了这一条。
+
+## 16. 子会话真正做完：`SESSION_QUIESCENT`（predicateVersion 4，contractVersion 2）
+
+`SESSION_TURN_SETTLED` 只看 `status`。子会话结束 turn 去等自己的后台 job 或 subagent 时 `status` 是 `AWAITING_INPUT`，
+这个 leaf 立刻成立，`session_await` 与 `session_create(wait)` 就把没做完的结果交给了父会话
+（docs/session-three-state-design.md §11.3 第 1 条）。`SESSION_TURN_SETTLED` 已存进 watch 行并发布给 agent，含义不变；
+v4 加一个新 leaf，并让两个等待默认用它。
+
+**定义。** `SESSION_TURN_SETTLED` 成立，且：
+
+- 没有在执行（`isSessionExecuting`）：没有 dispatched turn；会话 status 仍 open 时，没有引擎自己起的 turn
+  （`engine_turn_active`）、subagent（`running_subagents`）、runner 托管的后台 job（`running_bg_jobs`）；
+- 没有已布置的唤醒：Open（未进 Completed/Trash）的会话上没有 `retry_at`；未结束的会话上没有它作为观察者的 ACTIVE
+  `RESUME_SESSION` watch，也没有 PENDING 的 scheduled wake-up。已结束（`sessionHasEnded`）会话上的 watch 和 wake-up
+  是残留，机器唤醒不会送达已结束的会话，所以不算；FAILED 且 `retry_at` 已设的会话会被自动重试，不算做完。
+- LANDING 容器与 `SESSION_TURN_SETTLED` 相同：只在其 landing 结束（`completed_at` 已写）后成立。
+
+**谁用它。** `session_await` 的默认 `until` 变为 `ALL_QUIESCENT_OR_ANY_NEEDS_ATTENTION`，另加 `ALL_QUIESCENT`、`ANY_QUIESCENT`；
+原有的 `ALL_SETTLED*`、`ANY_SETTLED` 预设保留，含义不变。`session_create(wait)` 的 watch 是 `ALL SESSION_QUIESCENT`；
+内联轮询看到 status settle 后还要读这个 watch，等它 MATCHED（或以其他方式结束）才内联作答，两条路径由同一个 leaf 判定。
+没有 watch 的路径（headless、Watch 关闭、watch 被拒或服务端没有 watch 门）仍只看 status。
+工具发送预设时用它需要的最低版本，旧预设照旧发 1。
+
+**判定时机。** 与其他 status leaf 一样由评估器的 schedule 与 hint 决定。job、subagent、引擎 turn 结束不发自己的 hint，
+由对账（最多 `reconcileIntervalMs`）发现。
+
+**spawn-tree 额度不变。** `UNSETTLED_SESSION_STATUSES`（`common/session-scheduling.ts`）仍只是 `PENDING, RUNNING`：
+它计的是占 runner slot 的未完成 turn，而不是「做完没有」，本步不改它。
+

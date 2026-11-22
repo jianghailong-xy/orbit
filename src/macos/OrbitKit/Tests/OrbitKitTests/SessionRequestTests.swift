@@ -152,12 +152,8 @@ final class SessionRequestTests: XCTestCase {
         XCTAssertNil(try bubble(reducer).sessionReplies)
     }
 
-    func testTheReplyBlocksLeaveTheNoteToWhatElseWasAppended() {
+    func testAReplyBlockIsNamedAsASessionReply() {
         let block = "<orbit-session-reply request-id=\"a\" outcome=\"REPLIED\">\n回复：ok\n</orbit-session-reply>"
-        XCTAssertEqual(SessionReply.withoutReplyBlocks(block), "")
-        XCTAssertEqual(SessionReply.withoutReplyBlocks("\(block)\n\n<background-jobs>\n…\n</background-jobs>"),
-                       "<background-jobs>\n…\n</background-jobs>")
-        XCTAssertEqual(SessionReply.withoutReplyBlocks(nil), "")
         XCTAssertEqual(describeNote(block), "session reply")
     }
 

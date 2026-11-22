@@ -21,7 +21,6 @@
   color: var(--text-1); display: flex; gap: 8px; align-items: baseline;
 }
 .sched-group > h2 small { color: var(--text-3); font-weight: 400; font-size: 13px; }
-.sched-group[data-group='NEEDS_YOU'] > h2 { color: var(--error); }
 .sched-group[data-group='PAUSED'] > h2 { color: var(--text-3); }
 
 .sched-row {
@@ -53,6 +52,7 @@
 .sched-circle[data-circle='running'] { border-color: var(--brand); border-right-color: transparent; animation: sched-spin 1.2s linear infinite; }
 .sched-circle[data-circle='draft'] { border-style: dashed; border-color: var(--brand); }
 .sched-circle[data-circle='paused'] { border-color: var(--border); }
+.sched-circle[data-circle='open'] { color: var(--text-3); }
 @keyframes sched-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .sched-circle[data-circle='running'] { animation: none; } }
 
@@ -83,6 +83,30 @@
 .sched-examples button::before { content: '\201C'; color: var(--text-4); }
 .sched-examples button::after { content: '\201D'; color: var(--text-4); }
 .sched-error { color: var(--error); font-size: 13px; margin-top: 6px; }
+
+/* ---- Conditions (docs/mocks/condition-triggers ④ ⑥): a gauge in place of the circle, the reading in place of a time ---- */
+.sched-group[data-group='CONDITION'] > h2 { color: var(--text-1); }
+.sched-gauge { width: 20px; height: 20px; flex: none; margin-top: 1px; display: grid; place-items: center; color: var(--brand); }
+.sched-gauge .sched-icon { width: 18px; height: 18px; }
+.sched-gauge[data-gauge='cant-read'] { color: var(--warning-solid); }
+.sched-row-reading { color: var(--text-3); }
+.sched-row-reading b { color: var(--text-1); font-weight: 600; }
+.cond-reading { display: flex; gap: 8px; align-items: baseline; }
+.cond-reading .sched-big { font-size: 22px; }
+.cond-bar { position: relative; margin: 10px 0 4px; padding-bottom: 16px; }
+.cond-bar-track { position: relative; display: block; height: 8px; border-radius: 999px; background: var(--fill-muted); }
+.cond-bar-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; background: var(--brand); }
+.cond-bar-mark { position: absolute; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; background: var(--text-4); }
+.cond-bar-mark.is-fire { background: var(--error); }
+.cond-bar-labels { position: absolute; left: 0; right: 0; top: 12px; height: 14px; font-size: 11px; color: var(--text-3); }
+.cond-bar-labels > span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+.cond-bar-labels > .is-fire { color: var(--error); }
+.cond-bar-labels > .is-rearm { transform: translateX(-100%); padding-right: 4px; }
+.sched-who[data-who='CONDITION'] { background: var(--fill-muted); color: var(--text-2); }
+.sched-strip.is-condition .sched-icon { color: var(--brand); }
+.sched-card-facts dd .sched-command { margin: 4px 0 2px; }
+.tdp-start-when { display: flex; gap: 6px; align-items: center; font-size: 13px; color: var(--text-2); margin-top: 6px; }
+.tdp-start-when .sched-icon { color: var(--brand); }
 
 /* ---- The inspector ---- */
 .sched-inspector {
@@ -122,7 +146,7 @@
 .sched-link:disabled { color: var(--text-4); cursor: default; text-decoration: none; }
 
 /* ---- Cards (create, envelope) ---- */
-.sched-card { border: 1px solid var(--border); border-radius: 10px; max-width: 560px; margin: 10px 0 0; overflow: hidden; background: var(--bg-raised); }
+.sched-card { border: 1px solid var(--border); border-radius: 10px; max-width: var(--chat-card-max, 560px); margin: 10px 0 0; overflow: hidden; background: var(--bg-raised); }
 .sched-inspector .sched-card { border-color: var(--brand-border); max-width: none; }
 .sched-card.is-widen { border-color: var(--warning-border); }
 .sched-card-head { display: flex; gap: 8px; align-items: center; padding: 11px 14px 4px; font-weight: 600; color: var(--text-1); }
@@ -147,7 +171,7 @@
 /* ---- The change line ---- */
 .sched-record {
   display: flex; gap: 8px; align-items: center; margin: 10px 0 0; padding: 8px 12px; border-radius: 8px; background: var(--bg-subtle);
-  border: 1px solid var(--border-subtle); font-size: 13.5px; color: var(--text-2); max-width: 640px;
+  border: 1px solid var(--border-subtle); font-size: 13.5px; color: var(--text-2); max-width: var(--chat-card-max, 640px);
 }
 .sched-record .sched-icon { color: var(--brand); }
 .sched-record b { color: var(--text-1); font-weight: 600; }
@@ -155,7 +179,6 @@
 .sched-record.is-undone { opacity: 0.7; }
 
 /* ---- A run's session ---- */
-.sched-crumb { color: var(--text-3); font-size: 13px; margin-bottom: 4px; }
 .sched-crumb a { color: var(--brand); text-decoration: none; }
 .sched-strip {
   display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--text-2); background: var(--bg-subtle);
@@ -164,13 +187,12 @@
 .sched-strip .sched-icon { color: var(--brand); }
 .sched-report {
   border: 1px solid var(--border-subtle); border-left: 3px solid var(--success-solid); border-radius: 8px; padding: 10px 14px;
-  font-size: 14px; line-height: 22px; margin: 12px 0 0; max-width: 640px; color: var(--text-1);
+  font-size: 14px; line-height: 22px; margin: 12px 0 0; max-width: var(--chat-card-max, 640px); color: var(--text-1);
 }
 .sched-report.is-failed { border-left-color: var(--error); }
 .sched-report-head { font-weight: 600; display: flex; gap: 6px; align-items: center; }
 .sched-report-head .sched-icon { color: var(--success-solid); }
 .sched-report.is-failed .sched-report-head .sched-icon { color: var(--error); }
-.workspace-split.is-schedule-run > .session-col { display: none; }
 
 /* ---- Waiting on you ---- */
 .sched-command {

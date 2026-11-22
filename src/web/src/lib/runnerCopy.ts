@@ -28,6 +28,16 @@ export function runnerOfflineLastSeen(when: string): string {
   return `Offline · last seen ${when}`;
 }
 
+/** The country a machine's IP is in, first in the line under a machine page's title: `📍 Japan`. */
+export function runnerLocation(place: string): string {
+  return `📍 ${place}`;
+}
+
+/** The same, when the check went through a proxy: the country is the proxy's, not the machine's. */
+export function runnerLocationViaProxy(place: string): string {
+  return `📍 ${place} (via proxy)`;
+}
+
 export function runnerVersionTag(version: string): string {
   return `v${version}`;
 }
@@ -121,8 +131,8 @@ export const RUNNER_KEEP_FREE_10_GB = '10 GB';
 export const RUNNER_KEEP_FREE_20_GB = '20 GB';
 export const RUNNER_KEEP_FREE_50_GB = '50 GB';
 export const RUNNER_CAPACITY_FOOTER =
-  'Max Concurrent applies to the next session it picks up — no restart. Below Keep Free, task ' +
-  'runs stop being sent here and finished worktrees are cleaned up sooner.';
+  'Max Concurrent applies to the next session it picks up — no restart. Below Keep Free, new sessions and ' +
+  'task runs wait until space frees up, and finished worktrees are cleaned up sooner.';
 
 /** An amount of disk, already formatted by runnerAttention's formatDiskGb (`9.4`, `197`). */
 export function runnerGb(amount: string): string {
@@ -148,6 +158,8 @@ export const RUNNER_ENGINE_NO_QUOTA_LIMIT = 'No quota limit';
 export const RUNNER_ENGINE_COULDNT_CHECK = 'Couldn’t check';
 /** The quota column when the sign-in check gave no answer — no reading at all, rather than a zero. */
 export const RUNNER_ENGINE_NO_READING = 'No reading';
+/** OpenCode's Unknown line when its CLI listed no provider key at all. */
+export const RUNNER_ENGINE_NO_PROVIDER_KEY = 'no provider key found';
 export const RUNNER_SIGN_IN = 'Sign In';
 export const RUNNER_UPDATE_ENGINES_NOW = 'Update Engines Now';
 export const RUNNER_REFRESH_MODEL_LISTS = 'Refresh Model Lists';
@@ -247,7 +259,7 @@ export function runnerVersionUpdatingTo(version: string): string {
   return `updating to ${version}`;
 }
 /** A managed runner — the machine Orbit runs for the account — wherever its name is shown, unless the owner
- *  renamed it. Its stored name (`orbit-managed`) is the server's, not a word for anyone to read. */
+ *  renamed it. Its stored name (`orbit-managed` on a server before migration 1250) is the server's, not a word for anyone to read. */
 export const MANAGED_RUNNER_LABEL = 'Orbit Cloud';
 /** A managed runner's version, when it reports none that is a release (its image is `managed-<sha>`). */
 export const MANAGED_RUNNER_KEPT_UP_TO_DATE = 'Kept up to date by Orbit';
@@ -473,7 +485,7 @@ export function attentionDiskNoReserve(free: string, total: string): string {
 }
 
 export function attentionDiskBelowReserve(free: string, total: string, reserve: string): string {
-  return `${free} GB free of ${total} GB, under the ${reserve} GB it keeps free — task runs stop being sent here until space frees up.`;
+  return `${free} GB free of ${total} GB, under the ${reserve} GB it keeps free — new sessions and task runs wait until space frees up.`;
 }
 
 // MARK: Needs Attention — the runner can't replace its own binary
@@ -554,6 +566,10 @@ export function agentFixFixing(workspace: string): string {
   return `An agent is fixing this in ${workspace} · `;
 }
 export const AGENT_FIX_OPEN_SESSION = 'Open session';
+/** A transcript's history row, after the agent it was handed to finished; the link opens it. */
+export function agentFixFixed(workspace: string): string {
+  return `Fixed by an agent in ${workspace} · `;
+}
 /** Under the button on an Install failed panel: where the session would run. */
 export function agentFixStartsIn(workspace: string, engine: string): string {
   return `Starts a session in ${workspace} on this machine, with ${engine}.`;
@@ -565,6 +581,10 @@ export function agentFixSignInAbove(engine: string): string {
 /** The same, after a signed-out reason on the Update engines report, which sits above the engine rows. */
 export function agentFixSignInBelow(engine: string): string {
   return ` Sign in to ${engine} below to use this.`;
+}
+/** The same, after a signed-out reason in a transcript, which has no engine list of its own. */
+export function agentFixSignInOnMachinePage(engine: string): string {
+  return ` Sign in to ${engine} on the machine page to use this.`;
 }
 export const AGENT_FIX_FAILED = 'Couldn’t start the agent';
 

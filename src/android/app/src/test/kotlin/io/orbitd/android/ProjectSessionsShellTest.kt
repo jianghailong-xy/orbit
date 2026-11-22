@@ -77,6 +77,11 @@ class ProjectSessionsShellTest {
         await { exists(hasTestTag("project-sessions-button-count"), unmerged = true) }
         val counted = buttonCount()
         assertEquals(4, counted)
+        // A member runs (the sheet's "1 running"): the glyph gives its place to the spinner, and the button says so (owner
+        // 2026-11-17, docs/mocks/project-sessions-button-running, option C).
+        await { exists(hasTestTag("project-sessions-button-active"), unmerged = true) }
+        assertEquals("Active", compose.onNodeWithTag("project-sessions-button").fetchSemanticsNode().config
+            .getOrNull(SemanticsProperties.StateDescription))
         assertTrue(ProjectShell.calls.any { it == "GET sessions?view=completed&projectId=${ProjectShell.LAUNCH}&includeLanding=1" })
         compose.onNodeWithContentDescription("Project sessions").performClick()
         await { exists(hasTestTag("project-sessions-sheet")) && exists(hasText("Shipped docs")) }
@@ -245,7 +250,7 @@ class ProjectSessionsShellTest {
     @Test fun theRowsMenuOpensTheSessionItSpeaksForItsSessionsAndItsProject() {
         signIn(); openAlpha()
         rowMenu()
-        assertEquals(listOf("Open Session", "Sessions", "Open Project", "Pin", "Move…", "Close"), dialogButtons())
+        assertEquals(listOf("Open Session", "Sessions", "Open Project", "Pause", "Pin", "Move…", "Close"), dialogButtons())
         compose.onNode(hasText("Open Session") and hasAnyAncestor(isDialog())).performClick()
         // The member in Beta the line names opens over the list.
         await { ProjectShell.calls.any { it == "GET sessions/${ProjectShell.WAITING}" } }

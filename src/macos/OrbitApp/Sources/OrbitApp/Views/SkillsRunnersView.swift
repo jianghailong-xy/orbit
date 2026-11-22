@@ -135,12 +135,25 @@ struct RunnersListView: View {
                     }
                 }
                 if part != .providers {
+                    let managedID = model.managedRunner?.display == nil ? nil : model.managedRunner?.status?.runnerId
+                    let order = RunnerPageFormat.managedFirst(runners.runners, managedRunnerID: managedID)
+                    let pinned = order.first.flatMap { RunnerPageFormat.isManaged($0, managedRunnerID: managedID) ? $0 : nil }
+                    let movable = pinned == nil ? order : Array(order.dropFirst())
                     Section {
-                        ForEach(runners.runners) { r in
-                            row(r)
+                        if let pinned {
+                            row(pinned, isManaged: true, separates: !movable.isEmpty)
+                                .listRowSeparator(.hidden, edges: .bottom)
                         }
-                        .onMove { moveRunners(runners, from: $0, to: $1) }
-                        .onDelete { pendingRemoval = runnerToRemove(runners, at: $0) }
+                        ForEach(movable) { r in
+                            row(r)
+                                .listRowSeparator(pinned != nil && r.id == movable.first?.id ? .hidden : .automatic,
+                                                  edges: .top)
+                        }
+                        .onMove { moveRunners(runners, movable: movable, from: $0, to: $1) }
+                        .onDelete { offsets in
+                            guard let index = offsets.first, movable.indices.contains(index) else { return }
+                            pendingRemoval = movable[index]
+                        }
                     } header: {
                         RunnerSectionHeader(MachinesAndModels.machines,
                                             trailing: MachinesAndModels.machinesCount(runners.runners))
@@ -201,11 +214,14 @@ struct RunnersListView: View {
     /// One row, wrapped for the container it is in — the three-column `List`'s selection, or the
     /// compact row's own destination on Runners' stack. The row view is the same either way, and the
     /// managed runner's row carries its shared state label instead of the heartbeat's (D4).
-    @ViewBuilder private func row(_ r: Runner) -> some View {
-        let row = RunnerRow(runner: r, workspaces: model.runners?.agents(forRunner: r.id) ?? [],
-                            latestVersion: model.runners?.latestVersion,
-                            managed: ManagedRunnerLogic.row(runnerID: r.id, status: model.managedRunner?.status),
-                            disclosure: rowNavigation == .push)
+    @ViewBuilder private func row(_ r: Runner, isManaged: Bool = false, separates: Bool = false) -> some View {
+        let row = VStack(spacing: 6) {
+            RunnerRow(runner: r, workspaces: model.runners?.agents(forRunner: r.id) ?? [],
+                      latestVersion: model.runners?.latestVersion,
+                      managed: ManagedRunnerLogic.row(runnerID: r.id, status: model.managedRunner?.status),
+                      isManaged: isManaged, disclosure: rowNavigation == .push)
+            if separates { Divider() }
+        }
         switch rowNavigation {
         case .selection:
             row.tag(r.id)
@@ -417,17 +433,11 @@ private struct RunnerListEditing: ViewModifier {
 }
 
 /// A drag in Edit: the rows move at once, and the server's order settles it.
-@MainActor private func moveRunners(_ runners: RunnersModel, from source: IndexSet, to destination: Int) {
-    var order = runners.runners
+@MainActor private func moveRunners(_ runners: RunnersModel, movable: [Runner], from source: IndexSet, to destination: Int) {
+    var order = movable
     order.move(fromOffsets: source, toOffset: destination)
     let ids = order.map(\.id)
     Task { await runners.reorder(ids) }
-}
-
-/// The row a delete in Edit (or a swipe) names — asked about before anything is removed.
-@MainActor private func runnerToRemove(_ runners: RunnersModel, at offsets: IndexSet) -> Runner? {
-    guard let index = offsets.first, runners.runners.indices.contains(index) else { return nil }
-    return runners.runners[index]
 }
 
 /// One machine in the list (03-ios.png): its status dot and name, the bar of its slots in use at the end
@@ -444,6 +454,7 @@ struct RunnerRow: View {
     /// place of the heartbeat's Online/Offline, and the asleep line whole. Nil for every other runner,
     /// and with the feature off.
     var managed: ManagedRunnerRow? = nil
+    var isManaged = false
     /// Whether the row draws the disclosure a pushing row needs; a selection row has none.
     var disclosure = false
     var now = Date()
@@ -461,9 +472,18 @@ struct RunnerRow: View {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 mark
                     .alignmentGuide(.firstTextBaseline) { d in d[VerticalAlignment.center] + 5 }
+                if isManaged {
+                    Image(systemName: "cloud")
+                        .foregroundStyle(Color.accentColor)
+                        .accessibilityHidden(true)
+                } else {
+                    // Every other machine by the OS it reported (docs/mocks/machine-menu-icons, A).
+                    MachineOSMark(runner: runner)
+                }
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(RunnerPageFormat.displayName(runner))
+                            .fontWeight(isManaged ? .semibold : nil)
                             .lineLimit(1)
                         Spacer(minLength: 8)
                         if let managed {
@@ -738,7 +758,10 @@ struct RunnerDetailContent: View {
     /// its mark. The managed runner's state is the shared short label (Asleep, never Offline), in its
     /// tone's colour.
     @ViewBuilder private func head(now: Date) -> some View {
-        let host = RunnerPageFormat.hostLine(runner, managed: managedRow != nil)
+        // The country its IP is in, ahead of the host and version.
+        let host = [RunnerPageFormat.location(runner), RunnerPageFormat.hostLine(runner, managed: managedRow != nil)]
+            .compactMap { $0?.isEmpty == false ? $0 : nil }
+            .joined(separator: RunnerPageCopy.RUNNER_LINE_SEPARATOR)
         Section {
             HStack(spacing: 14) {
                 RunnerMachineTile(presence: RunnerPageFormat.presence(runner, now: now))
@@ -1090,6 +1113,17 @@ struct RunnerDetailContent: View {
                         .contentShape(Rectangle())
                 }
                 .runnerRowButtonStyle()
+            }
+            // One more workspace on this machine (docs/mocks/new-workspace-form/02-apple-entry, owner A). With none yet,
+            // Start a session above is the way to its first.
+            if !workspaces.isEmpty {
+                Button { newWorkspace() } label: {
+                    Label(NewWorkspaceCopy.NEW_WORKSPACE, systemImage: "plus.circle")
+                        .foregroundStyle(Color.accentColor)
+                        .contentShape(Rectangle())
+                }
+                .runnerRowButtonStyle()
+                .accessibilityIdentifier("machine-new-workspace")
             }
         } header: {
             RunnerSectionHeader(RunnerPageCopy.RUNNER_WORKSPACES,
@@ -1491,6 +1525,11 @@ struct RunnerDetailContent: View {
     private func openWorkspace(_ id: String) {
         model.settingsPresented = false
         model.openAgent(id)
+    }
+
+    /// New workspace on this machine: its new session page with the setup card, after the Settings sheet comes down.
+    private func newWorkspace() {
+        model.openNewWorkspace(runner.id)
     }
 
     /// Start a session: this machine's new session page, after the Settings sheet comes down.

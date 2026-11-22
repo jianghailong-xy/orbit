@@ -104,7 +104,7 @@ runner 在 `X-Orbit-Supported-Providers` 和心跳里声明 `dsh`，只表示它
 
 DSH_HOME 内的 `orbit-turns.json` 是 runner 的回合台账：保存 runtimeSessionId，以及每个 Orbit turn 在写出 prompt 前的 `prompted` 记录、未终态工具 id 和首次结算。Orbit 尚未收到 runtime id 时，从台账恢复同一会话。已 `prompted` 却未结算的回合再次投递时（runner 崩溃、租约转移），不重发 prompt，补齐其工具的失败终态并结算为 INTERRUPTED；已结算但完成回执丢失的回合按原结算再报一次。同一进程内的重复投递直接丢弃。
 
-单会话只有一个进行中 prompt；运行中的新消息留在 Orbit 队列（服务端在 IN_FLIGHT 期间不投递下一条），租约过期造成的提前投递在 runner 本地排队，按序开始。不声明原生 mid-turn steer；shell 回合以 `unknown_kind` 失败结算，不结束会话。
+单会话只有一个进行中 prompt；运行中的新消息留在 Orbit 队列（服务端在 IN_FLIGHT 期间不投递下一条），租约过期造成的提前投递在 runner 本地排队，按序开始。不声明原生 mid-turn steer。shell 回合（人手输入的 `!` 命令与 EXECUTABLE 验收命令）由 runner 在工作区执行，不经过 dsh 和模型，与其它引擎相同；其输出作为下一条消息的上下文。
 
 结算优先级由 `dshSettlementOutcome` 固定，从高到低：本地停止（interrupt、end、关机、会话取消、租约丢失）一律为 cancelled，晚到的 end_turn 也不改变；其次 prompt 响应（end_turn、max_tokens 输出上限、refusal、cancelled）；再次 JSON-RPC 错误；最后是无响应的进程退出或传输断开。每个回合只结算一次。审批请求在本阶段一律回复 cancelled，停止或断开后不会有迟到许可；已结算回合的迟到 `tool_call_update` 与消息块被丢弃，不进入下一回合。
 

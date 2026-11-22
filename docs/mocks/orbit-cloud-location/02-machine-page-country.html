@@ -1,0 +1,54 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#eef0f3;font-family:-apple-system,Inter,'Noto Sans SC',sans-serif;color:#1d2330}
+.board{width:1500px;padding:40px 48px 48px;background:#f7f8fa}
+h1{font-size:28px;margin:0 0 6px}
+.sub{color:#5b6475;font-size:16px;margin:0 0 26px}
+.frame{background:#fff;border:1.5px solid #d6dae2;border-radius:14px;padding:16px 20px 18px;margin-bottom:20px}
+.frame h2{font-size:17px;margin:0 0 10px}
+.frame img{width:100%;display:block;border:1px solid #eceef2;border-radius:8px}
+.n{display:inline-block;width:26px;height:26px;border-radius:50%;color:#fff;text-align:center;line-height:26px;font-size:14px;margin-right:8px}
+.g{background:#8a93a3}.p{background:#1f9d6b}
+.grid{display:grid;grid-template-columns:1.25fr 1fr;gap:20px}
+table{border-collapse:collapse;width:100%;font-size:14px}
+td,th{border-top:1px solid #eceef2;padding:8px 6px;text-align:left;vertical-align:top}
+th{color:#6b7385;font-weight:600;border-top:0}
+code{font-family:'JetBrains Mono',monospace;font-size:12.5px;background:#f2f4f7;border-radius:4px;padding:1px 4px}
+.q li{margin-bottom:8px}
+ul{margin:6px 0 0;padding-left:18px;font-size:14px;line-height:1.55}
+.open{border-color:#e8c46a;background:#fffaf0}
+</style></head><body>
+<div class="board">
+<h1>Settings › Machines › Orbit Cloud — show the IP's country</h1>
+<p class="sub">The real web page (fixture data). The country is the one Orbit's region check already reads from the machine's IP (<code>runner.region</code>); nothing new is stored.</p>
+
+<div class="frame"><h2><span class="n g">①</span>Today: the header line has no location</h2><img src="today-head.png"></div>
+<div class="frame"><h2><span class="n p">②</span>Proposal: the country goes first in the header line</h2><img src="proposal-head.png"></div>
+
+<div class="grid">
+  <div class="frame">
+    <h2>Rules</h2>
+    <table>
+      <tr><th>Machine state</th><th>Header line shows</th></tr>
+      <tr><td>Checked, Claude allowed</td><td><b>IP in Japan</b> · host · version · check-in</td></tr>
+      <tr><td>Checked, Claude blocked</td><td><b>IP in Iran</b> · … (the existing red note below stays as is)</td></tr>
+      <tr><td>Check went through a proxy</td><td><b>IP in Japan (via proxy)</b>: it's the proxy's country, not the machine's</td></tr>
+      <tr><td>Not checked yet / runner too old to check</td><td>Nothing: the line looks like today</td></tr>
+      <tr><td>Offline</td><td>The last country it reported (the check time is on hover)</td></tr>
+    </table>
+    <ul><li>Hover the country: “Checked 3 min ago”.</li>
+      <li>Files: <code>MachineSettingsPage.tsx</code> (metaline), <code>runnerCopy.ts</code> (copy), a test next to <code>MachineSettingsPage.layout.test.tsx</code>.</li></ul>
+  </div>
+  <div class="frame open">
+    <h2>To decide</h2>
+    <ol class="q" style="font-size:14.5px;line-height:1.5;padding-left:20px;margin:0">
+      <li><b>Orbit Cloud only, or every machine?</b> The data exists for every machine, so it's the same one line either way. My pick: every machine.</li>
+      <li><b>Wording:</b> “IP in Japan” (my pick), or just “Japan”, or “📍 Japan”?</li>
+      <li><b>Apps:</b> web only for now, or iOS / macOS / Android in the same change?</li>
+    </ol>
+  </div>
+</div>
+</div>
+</body></html>

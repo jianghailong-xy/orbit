@@ -74,7 +74,7 @@ final class CrossingBatchWiringTests: XCTestCase {
         XCTAssertTrue(review.contains("guard !crossingAnsweredAtOpen else { return }"),
                       "a record opened again after the press stays open")
         let console = try app("Views/Console/ConsoleView.swift")
-        XCTAssertTrue(console.contains(".ownerConfirmation, .coordinatorQuestion, .crossingBatch:"),
+        XCTAssertTrue(console.contains(".ownerConfirmation, .coordinatorQuestion, .crossingBatch, .projectDone:"),
                       "the needs-you bar opens the review")
     }
 }

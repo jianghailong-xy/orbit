@@ -1192,6 +1192,7 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 	bridge := newCursorPermissionBridge(policy, mapper.permissionAsk, mapper.refuse, mapper.withdraw, func(ask cursorPermissionAsk) bool {
 		return cursorPreApproved(preApproved, ask)
 	}, bridgeCursorCard(p.t, p.job.SessionID), p.emitFor, launch.Cwd)
+	bridge.uploads = uploadsDir(p.job.SessionID)
 	bridge.prepareSandbox(p.ctx, p.job, runnerCursorSandboxInstaller, detectCursorSandbox, installCursorBubblewrap)
 	app, err := startCursorACP(p.ctx, *launch, mapper, bridge, p.emit)
 	if err != nil {
@@ -1595,7 +1596,7 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 				if err := p.t.diffResult(p.job.SessionID, DiffResultRequest{
 					ChangedFiles: files, ChangedDiff: patches, BaseSha: p.job.WT.baseSha(),
 					WorktreeDirty: worktreeIsDirty(p.job.WT), BranchMerged: branchMergedInto(p.job.WT),
-					BranchSha: effectiveBranchSha(p.job.WT), WorktreeBranch: currentBranch(p.job.WT),
+					BranchSha: effectiveBranchSha(p.job.WT), BranchCommits: branchCommits(p.job.WT), WorktreeBranch: currentBranch(p.job.WT),
 				}); err != nil {
 					logln("diff-result failed for", p.job.SessionID+":", err)
 				}

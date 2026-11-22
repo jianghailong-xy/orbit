@@ -1,0 +1,58 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+@font-face{font-family:Inter;src:url("file:///mnt/tmp/toolcard-mock/Inter.ttf");font-weight:100 900}
+body{margin:0;background:#eef0f3;font-family:-apple-system,Inter,"Noto Sans SC","WenQuanYi Micro Hei",sans-serif}
+.board{width:1180px;padding:32px;box-sizing:border-box}
+h1{font-size:22px;margin:0 0 4px}.sub{color:#646a73;font-size:13px;margin-bottom:22px}
+.cols{display:flex;gap:24px}.col{flex:1}
+.cap{font-size:14px;font-weight:600;margin:0 0 10px}.cap b{display:inline-block;background:#1f2329;color:#fff;border-radius:999px;width:20px;height:20px;text-align:center;line-height:20px;font-size:12px;margin-right:6px}
+.panel{background:#fff;border-radius:12px;padding:6px 18px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.panel.dark{background:#1b1d21}
+.r{display:flex;align-items:center;gap:10px;height:48px;border-bottom:1px solid #eef0f2;--t1:#1f2329;--t4:#a8acb3;--w:#c2710c;--wb:#fff4e6;--ic:#5b5bd6}
+.dark .r{border-color:#2a2d33;--t1:#c9ced5;--t4:#71767f;--w:#e0a23b;--wb:rgba(250,140,22,.15);--ic:#8b8bf0}
+.r:last-child{border-bottom:0}
+.ic{width:18px;color:var(--ic);font-size:16px;text-align:center}
+.nm{flex:1;font-size:14px;color:var(--t1)}
+.nd{padding:0 7px;border-radius:999px;background:var(--wb);color:var(--w);font-size:12px;font-weight:600;line-height:18px}
+.ct{min-width:10px;text-align:right;font-size:12.5px;color:var(--t4);font-variant-numeric:tabular-nums}
+.ch{width:16px;text-align:center;color:var(--t4);font-size:13px}
+.hl{outline:2px dashed #e5484d;outline-offset:3px;border-radius:999px}
+.note{font-size:12.5px;color:#4e5560;line-height:1.7;margin-top:10px}
+table{border-collapse:collapse;width:100%;font-size:13px;background:#fff;border-radius:12px;overflow:hidden;margin-top:24px}
+td,th{padding:9px 14px;border-bottom:1px solid #eef0f2;text-align:left;vertical-align:top}th{background:#f6f7f9;font-weight:600}
+code{font-family:"JetBrains Mono",monospace;font-size:12px;background:#f2f3f5;padding:1px 4px;border-radius:4px}
+.open{background:#fff8e6;border:1px solid #f5d48a;border-radius:12px;padding:12px 16px;font-size:13px;line-height:1.8;margin-top:20px}
+</style></head><body><div class="board">
+<h1>文件夹行：只留一个数字</h1>
+<div class="sub">Web 控制台 · Workspace 的 Session 列表 · 「待你回复」的数字顶替总数的位置</div>
+<div class="cols">
+ <div class="col"><p class="cap"><b>①</b>现在</p><div class="panel">
+  <div class="r"><span class="ic">◷</span><span class="nm">Scheduled runs</span><span class="nd hl">1</span><span class="ct hl">5</span><span class="ch">›</span></div>
+  <div class="r"><span class="ic">▭</span><span class="nm">Release</span><span class="nd">2</span><span class="ct">7</span><span class="ch">›</span></div>
+  <div class="r"><span class="ic">▭</span><span class="nm">uncertain</span><span class="ct">1</span><span class="ch">›</span></div>
+ </div><div class="note">橙色 1 和灰色 5 并排，两个数字抢眼，读的人要分辨哪个是什么。</div></div>
+ <div class="col"><p class="cap"><b>②</b>提议 · 浅色</p><div class="panel">
+  <div class="r"><span class="ic">◷</span><span class="nm">Scheduled runs</span><span class="nd hl">1</span><span class="ch">›</span></div>
+  <div class="r"><span class="ic">▭</span><span class="nm">Release</span><span class="nd">2</span><span class="ch">›</span></div>
+  <div class="r"><span class="ic">▭</span><span class="nm">uncertain</span><span class="ct">1</span><span class="ch">›</span></div>
+ </div><div class="note">有人等你（≥1）：只显示橙色徽标，占总数的位置，总数隐藏。<br>没人等你：照旧显示灰色总数。</div></div>
+ <div class="col"><p class="cap"><b>②</b>提议 · 深色</p><div class="panel dark">
+  <div class="r"><span class="ic">◷</span><span class="nm">Scheduled runs</span><span class="nd">1</span><span class="ch">›</span></div>
+  <div class="r"><span class="ic">▭</span><span class="nm">Release</span><span class="nd">2</span><span class="ch">›</span></div>
+  <div class="r"><span class="ic">▭</span><span class="nm">uncertain</span><span class="ct">1</span><span class="ch">›</span></div>
+ </div><div class="note">徽标靠右对齐到原来总数的那条线，和 › 的间距不变。</div></div>
+</div>
+<table>
+<tr><th style="width:200px">情况</th><th>显示</th><th>悬停 / 读屏（aria-label）</th></tr>
+<tr><td>needsYou = 0</td><td>灰色总数 <code>5</code></td><td>不变</td></tr>
+<tr><td>needsYou ≥ 1</td><td>橙色徽标 <code>1</code>，总数不显示</td><td><code>1 run needs your reply · 5 runs</code>（总数并入提示，不丢信息）</td></tr>
+<tr><td>文件夹 / Scheduled runs</td><td colspan="2">两种行同一条规则（共用 <code>.session-folder-needs</code> / <code>.session-folder-count</code>）</td></tr>
+</table>
+<table>
+<tr><th style="width:200px">要改的文件</th><th>改什么</th></tr>
+<tr><td><code>src/web/src/components/WorkspaceView.tsx</code></td><td><code>folderRowView</code>、<code>scheduledRunsRowView</code>：needsYou&gt;0 时不渲染 <code>.session-folder-count</code>，提示里带上总数</td></tr>
+<tr><td><code>WorkspaceView.sessionFolders.test.tsx</code></td><td>:386 那条断言改成“有徽标时没有总数”</td></tr>
+</table>
+<div class="open"><b>待你定</b><br>
+D1　普通文件夹（Release、uncertain…）也按这条规则？<b>建议：是</b>，同一种行不该两种读法。<br>
+D2　iOS / macOS / Android 的文件夹行跟着改？<b>建议：这次只改 Web</b>，你确认样子后再各自跟。</div>
+</div></body></html>

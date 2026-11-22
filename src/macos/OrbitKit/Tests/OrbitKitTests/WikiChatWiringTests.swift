@@ -254,7 +254,7 @@ final class WikiChatWiringTests: XCTestCase {
                              "model: providerCapabilitiesResolved ? modelID : nil, permissionMode: permissionMode.rawValue,",
                              "effort: effort.rawValue, fastMode: fastMode))", "guard made else { return }",
                              "composerText = \"\"", "pendingAttachments = []"], "a new chat's first message")
-        XCTAssertTrue(console.contains("replyContext == nil && !pendingAttachments.isEmpty && wikiChat?.create == nil"),
+        XCTAssertTrue(console.contains("&& !pendingAttachments.isEmpty && wikiChat?.create == nil"),
                       "a new chat's files never go without words")
         let chat = try slice(code(try source("WikiChatModel.swift")),
                              from: "func create(spaceID: String, workspaceID: String, _ first: WikiChatLogic.FirstMessage) async -> Bool {",

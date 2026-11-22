@@ -51,7 +51,7 @@ export class OwnerRequestsController {
     @Body() dto: DeclineOwnerRequestDto,
     @Headers('x-orbit-client') client?: string,
   ) {
-    return this.requests.decline(user.userId, id, dto.reason, ownerRequestClient(client));
+    return this.requests.decline(user.userId, id, dto.reason, ownerRequestClient(client), dto.sendAsWritten);
   }
 
   /**
@@ -69,6 +69,24 @@ export class OwnerRequestsController {
     @Headers('x-orbit-client') client?: string,
   ) {
     return this.requests.createWiki(user.userId, id, actingSession(request.headers), ownerRequestClient(client), user.credential);
+  }
+
+  /**
+   * The owner's Save changes on a SETTINGS_CHANGE card (docs/settings-from-conversation-design.md §5.2): writes the
+   * card's settings, marks each as changed from the asking conversation, and settles the card DONE. Answers with the
+   * card. 409 SETTINGS_STALE, writing nothing, when a setting changed since it was proposed; refused
+   * SETTINGS_OWNER_CHANNEL_ONLY to a request carrying an acting session.
+   */
+  @Post(':id/apply-settings')
+  @PatForbidden('OWNER_INTERACTIVE')
+  @HttpCode(HttpStatus.OK)
+  applySettings(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Req() request: { headers: Record<string, string | string[] | undefined> },
+    @Headers('x-orbit-client') client?: string,
+  ) {
+    return this.requests.applySettings(user.userId, id, actingSession(request.headers), ownerRequestClient(client));
   }
 
   /**

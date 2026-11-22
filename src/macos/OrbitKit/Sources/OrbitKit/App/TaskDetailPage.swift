@@ -212,13 +212,6 @@ public enum TaskDetailCopy {
     /// How the Why of a run that a failure moved up a tier ends (`USAGE_LIMIT_NOTE`).
     public static let usageLimitNote = "a failure from a usage limit would not have moved the tier"
 
-    // The Agent's settings (`settings/WorkspaceSettingsPage.tsx`).
-    public static let smartSelectionSwitch = "Smart model selection for tasks"
-    public static let smartSelectionSwitchDetail =
-        "Task runs use the model and effort of the tier suggested for the task, and go one tier up after a "
-        + "failed run. Tasks with no suggestion start on this Agent's model. A model pinned on a task always "
-        + "wins. Sessions you open yourself are not affected."
-
     // The task run's composer (`WorkspaceView.tsx`): the model menu of a run still on the pick.
     public static func pickedBySmartSelection(tier: String) -> String { "Picked by smart selection · tier \(tier)" }
     /// What the chip's accessibility label ends on while it carries the ✦.
@@ -421,8 +414,9 @@ public enum TaskDetailLogic {
     /// The reasons a Run cannot be taken come first, as on the web: the page asks this only of a Run
     /// it can take.
     public static func runNowHint(_ task: TaskItem) -> String? {
+        // A startWhen starts it, as a runAt does (docs/condition-triggers-design.md §6.2).
         guard task.status == .open, task.projectId == nil, task.dependsOn?.isEmpty == true,
-              (task.runAt ?? "").isEmpty else { return nil }
+              (task.runAt ?? "").isEmpty, task.startWhen?.waitingLine == nil else { return nil }
         return TaskDetailCopy.nothingStartsThisTask
     }
 

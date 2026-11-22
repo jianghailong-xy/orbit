@@ -101,6 +101,8 @@ internal object ProjectShell {
     @Volatile var landings: String? = null
     /** The owner's open items on Launch, as `open-items.needsYou` lists them (A-2's X-E5 card and the Landings group's holders). */
     @Volatile var needsYouItems: String? = null
+    /** The project's answered questions (`closedQuestions` of the open-items read), as a JSON array. */
+    @Volatile var closedQuestions: String = "[]"
     /** The code session's derived `sourceLanding` (A-2's label at its bottom); null for a conversation that produced none. */
     @Volatile var sourceLanding: String? = null
     /** What `GET sessions/<LANDING>/landing/log` answers, one page. */
@@ -169,6 +171,8 @@ internal object ProjectShell {
     /** WAITING's transcript (`sessions/WAITING/events/page`) and its pending approvals, as JSON arrays; null answers with none. */
     @Volatile var waitingEvents: String? = null
     @Volatile var waitingApprovals: String? = null
+    /** Whether WAITING's detail names its project, so its conversation reads the project's open items (the answered-question records). */
+    @Volatile var waitingReadsProject = false
     /** Whether Plain notes, in no project, waits on the owner too, so a conversation opened elsewhere shows the needs-you capsule. */
     @Volatile var plainWaiting = false
     /** A crossing decision's answer by its door id and body, when a test answers each row itself; null answers as [decide] does. */
@@ -183,7 +187,7 @@ internal object ProjectShell {
         done = false; doneBy = "DERIVED"; doneCounts = true; completedMembers = emptySet()
         promotion = null; merged = "[]"; mergeCheck = false; mergeJobKind = "CHECK_PROMOTION"; holder = null; criteria = null; pressStatus = 200; mergeWaiting = false; bodies.clear()
         landTasks = null; plan = null; documentStatus = 200; holdDocument = null; landing = null; landingById = emptyMap(); landingTitle = null; inFlightJobs = null
-        landings = null; needsYouItems = null; sourceLanding = null
+        landings = null; needsYouItems = null; closedQuestions = "[]"; sourceLanding = null
         landingLog = """{"jobId":"j-1","entries":[],"nextCursor":null}"""; taskTitle = "Wire the page"
         landingStatus = 200; landingLogStatus = 200
         coordinatorStatus = "{\"state\":\"NEVER_OPENED\"}"; doorStatus = 200; doorMessage = "The job is no longer running."
@@ -193,7 +197,7 @@ internal object ProjectShell {
         trashed = emptySet(); holdDelete = null; holdMembers = null; attention = null
         quietAttention = null; coordinatorWorking = false
         configRevision = null; automatic = true; maxConcurrentTasks = 2; crossings = null; tasks = null; coordEvents = null; onDecision = null; onMoveBatch = null
-        lineIdle = false; memberWaiting = true; coordinatorWaiting = false; waitingEvents = null; waitingApprovals = null; plainWaiting = false
+        lineIdle = false; memberWaiting = true; coordinatorWaiting = false; waitingEvents = null; waitingApprovals = null; waitingReadsProject = false; plainWaiting = false
         while (accountEvents.tryReceive().isSuccess) Unit
     }
 
@@ -228,7 +232,7 @@ internal object ProjectShell {
             lastTurnAt = ago(30), approvals = if (coordinatorWaiting) 1 else 0)
         WORKER -> row(WORKER, "Wire tests", ALPHA, "RUNNING", ""","lastToolUse":"Bash",${member("TASK")}${
             sourceLanding?.let { ""","sourceLanding":$it""" }.orEmpty()}""", lastTurnAt = ago(2))
-        WAITING -> if (memberWaiting) row(WAITING, "Quota retry", BETA, "AWAITING_INPUT", ""","waitingKind":"OWNER_CONFIRMATION",${member("TASK")}""", lastTurnAt = ago(10), approvals = 1)
+        WAITING -> if (memberWaiting) row(WAITING, "Quota retry", BETA, "AWAITING_INPUT", ""","waitingKind":"OWNER_CONFIRMATION",${if (waitingReadsProject) "\"projectId\":\"$LAUNCH\"," else ""}${member("TASK")}""", lastTurnAt = ago(10), approvals = 1)
             else row(WAITING, "Quota retry", BETA, "AWAITING_INPUT", ""","lastAssistantText":"Retried the quota read",${member("TASK")}""", lastTurnAt = ago(10))
         PLAIN -> if (plainWaiting) row(PLAIN, "Plain notes", ALPHA, "AWAITING_INPUT", ""","waitingKind":"OWNER_CONFIRMATION"""", approvals = 1)
             else row(PLAIN, "Plain notes", ALPHA, "AWAITING_INPUT", ""","lastAssistantText":"Notes kept"""")
@@ -258,8 +262,8 @@ internal object ProjectShell {
         "inFlight":${if (mergeCheck) """{"kind":"$mergeJobKind","state":"RUNNING","phase":"CHECK","startedAt":"${ago(7)}","heartbeatAt":"${ago(0)}"}"""
             else """{"kind":"LAND_TASK","state":"RUNNING","phase":"CHECK","taskTitle":"Wire the page","startedAt":"${ago(3)}","heartbeatAt":"${ago(0)}"}"""}${
             landTasks?.let { ""","landTasks":$it""" }.orEmpty()}${inFlightJobs?.let { ""","inFlightJobs":$it""" }.orEmpty()}}"""
-    private val openItems get() = if (!startRequest) """{"needsYou":${needsYouItems ?: "[]"},"withCoordinator":[${holder.orEmpty()}]}""" else
-        """{"needsYou":${needsYouItems ?: "[]"},"withCoordinator":[],
+    private val openItems get() = if (!startRequest) """{"needsYou":${needsYouItems ?: "[]"},"withCoordinator":[${holder.orEmpty()}],"closedQuestions":$closedQuestions}""" else
+        """{"needsYou":${needsYouItems ?: "[]"},"withCoordinator":[],"closedQuestions":$closedQuestions,
         "startRequest":{"itemId":"start-1","waitingSince":"${ago(130)}","startRequest":{"criteriaDigest":"digest-1","why":"Everything is filed.",
         "settings":{"line":"PROJECT_BRANCH","automatic":true,"maxConcurrentTasks":3,"mergeCheckCommand":null,"projectBranchName":"project/launch"}}}}"""
     /** The projection a current server carries for a done project: six criteria, five on main and one with no code to land — or,
@@ -341,6 +345,7 @@ internal object ProjectShell {
             path == "users/me" -> ok("""{"id":"u1","email":"owner@a05d.test","name":"Owner"}""")
             path == "workspaces" -> ok(workspaces)
             path == "runners" -> ok("""[{"id":"r1","name":"Fixture runner","online":true}]""")
+            path == "sessions" && ("scheduled" to "1") in api.query -> ok("[]")
             path == "sessions" && scoped == QUIET -> if (quietStatus == 200) ok("[]") else ApiResponse(quietStatus, """{"message":"The project's sessions are unavailable"}""".encodeToByteArray())
             path == "sessions" && scoped == LAUNCH -> {
                 // The page's own widening (§2.9 LS6): its Landings group's rows ride on this read and no other.

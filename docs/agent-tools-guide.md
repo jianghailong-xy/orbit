@@ -1,6 +1,6 @@
 # How agents use Orbit
 
-> Generated from `src/runner-go/agent_tools_guide.go` — do not edit by hand. Guide 1.0.0, written from Agent Contract 1.10.0, operation catalogue 1.8.0 and primer 1.4.0.
+> Generated from `src/runner-go/agent_tools_guide.go` — do not edit by hand. Guide 1.0.0, written from Agent Contract 1.11.0, operation catalogue 1.9.0 and primer 1.4.4.
 
 This is the person's side of the [Orbit Agent Contract](orbit-agent-contract.md): what an agent in an Orbit session does with Orbit, and why. The agent learns the same rules from its primer, its tools' descriptions and the `guide` tool. The web console and the macOS app show this guide in **Agent tools**: a session's More actions → Agent tools, and Workspace settings → Agent environment → Agent tools, beside what that session or workspace is actually given. The same rows make the playbooks skill Orbit gives Claude Code and Codex, and a test holds this file, the apps' copy and the skill to them.
 
@@ -83,6 +83,7 @@ task_create records work and runs nothing in the call; starting it is a decision
 - task_start runs work that is already recorded, on its assignee, once its prerequisites are DONE.
 - task_create with startNow: true records the work and starts it on one card.
 - runAt starts it once, at a set time; it is not a deadline (that is dueDate).
+- startWhen starts it once, when something outside Orbit becomes true ("when a third OSD is in"); a schedule with a WHEN rule runs each time it does. The agent writes a read-only check command, runs it once, and the card shows you that command verbatim before anything is created; your runner then runs it unattended, with no secret in it. When you answer a question with "wait until X", the agent proposes that card instead of keeping a note to itself, and condition_get reads either one back.
 - autoRunWhenReady defaults to true: an assigned task in a started project starts by itself once every prerequisite is DONE. To hold work until you say so, the agent passes autoRunWhenReady: false.
 - Your own "Create and start" on the card starts it even if the agent asked for no start, and the agent does not undo that.
 
@@ -239,7 +240,7 @@ Try asking: *"File this for later: the staging API key needs rotating."* · *"So
 | Step | MCP | CLI | Approval | Why |
 | --- | --- | --- | --- | --- |
 | 1? | `task_list` | `orbit task list` | none | When the work may already be recorded, or you are not sure which project it belongs to, read before you write (R4). |
-| 2 | `task_create` | `orbit task create` | card | Write it. The call puts a confirmation card in front of the user and waits for their answer; nothing is written if they decline. |
+| 2 | `task_create` | `orbit task create` | card | Write it. The call puts a confirmation card in front of the user and waits for their answer; nothing is written if they decline. A session's first 8 tasks (or the number the account owner set) are answered at once, with no one asked. |
 | 3? | `task_get` | `orbit task get` | none | Read it back when the claim matters. |
 
 **Done when:** The task_create receipt reads ok: true and outcome: written, with the task's id and status. Name it to the user as [title](orbit-task:<id>).
@@ -400,7 +401,7 @@ In the order each engine puts them in front of its model, with the role it reads
 | 1 | Claude Code's system prompt *(unless the workspace replaces it)* | System | The engine | The engine's own. |
 | 2 | This workspace's base instructions *(when the workspace sets base instructions)* | System | The workspace | In place of Claude Code's own system prompt (--system-prompt). |
 | 3 | This workspace's runtime instructions *(when the workspace has instructions)* | System · appended | The workspace | Appended to the system prompt (--append-system-prompt), before Orbit's. |
-| 4 | Orbit's runtime instructions | System · appended | Orbit | The primer 1.4.0, then the CLI's absolute path, files, evidence, progress, waits and the wiki. Appended to the system prompt, so a compaction does not touch them. |
+| 4 | Orbit's runtime instructions | System · appended | Orbit | The primer 1.4.4, then the CLI's absolute path, files, evidence, progress, waits and the wiki. Appended to the system prompt, so a compaction does not touch them. |
 | 5 | CLAUDE.md files | Project context | The repository | Put by Claude Code at the top of your first message, as a reminder that they override its defaults. Orbit neither reads nor changes them. |
 | 6 | Your messages | User | You | With the task or project context Orbit attaches to them. |
 | 7 | Orbit MCP server instructions | System message | Orbit | The primer again, in the system message Claude Code adds after your first message, beside the environment and the list of skills. |
@@ -415,11 +416,11 @@ In the order each engine puts them in front of its model, with the role it reads
 | 3 | Orbit playbooks · orbit-playbooks | On demand | Orbit | Listed among Codex's skills by name and description; its recipes are read only when the agent opens it, and nothing depends on it. |
 | 4 | AGENTS.md files | Project context | The repository | Read by Codex from the checkout. Orbit neither reads nor changes them. |
 | 5 | This workspace's runtime instructions *(when the workspace has instructions; Codex 0.135 and later)* | Developer | The workspace | Application context, just before Orbit's. |
-| 6 | Orbit's runtime instructions *(Codex 0.135 and later)* | Developer | Orbit | The primer 1.4.0, then the CLI's absolute path, files, evidence, progress, waits and the wiki. Application context, sent with every turn, so a compaction cannot drop them. |
+| 6 | Orbit's runtime instructions *(Codex 0.135 and later)* | Developer | Orbit | The primer 1.4.4, then the CLI's absolute path, files, evidence, progress, waits and the wiki. Application context, sent with every turn, so a compaction cannot drop them. |
 | 7 | This workspace's runtime instructions *(when the workspace has instructions; Codex 0.125 to 0.134)* | Developer | The workspace | In the same developer message as Orbit's, before them. |
-| 8 | Orbit's runtime instructions *(Codex 0.125 to 0.134)* | Developer | Orbit | The primer 1.4.0, then the CLI's absolute path, files, evidence, progress, waits and the wiki. One developer message, sent again after a compaction. |
+| 8 | Orbit's runtime instructions *(Codex 0.125 to 0.134)* | Developer | Orbit | The primer 1.4.4, then the CLI's absolute path, files, evidence, progress, waits and the wiki. One developer message, sent again after a compaction. |
 | 9 | This workspace's runtime instructions *(when the workspace has instructions; Codex before 0.125)* | User · turn input | The workspace | In the same block as Orbit's, before them. |
-| 10 | Orbit's runtime instructions *(Codex before 0.125)* | User · turn input | Orbit | The primer 1.4.0, then the CLI's absolute path, files, evidence, progress, waits and the wiki. At the top of every turn's input. |
+| 10 | Orbit's runtime instructions *(Codex before 0.125)* | User · turn input | Orbit | The primer 1.4.4, then the CLI's absolute path, files, evidence, progress, waits and the wiki. At the top of every turn's input. |
 | 11 | Your messages | User | You | Codex's own base instructions put your message ahead of a skill or a repository file. |
 | 12 | Orbit MCP server instructions | With the tools | Orbit | Shown with Orbit's tools, cut to their first 250 characters; the runtime instructions above carry the whole primer either way. |
 
@@ -449,16 +450,17 @@ Agent tools on a session counts each family as that session's engine lists it. T
 | Tasks (21) | `task_attribution`, `task_batch_pin`, `task_comment`, `task_confirmation_return`, `task_confirmation_review`, `task_create`, `task_create_batch`, `task_delete`, `task_dependency_add`, `task_dependency_graph`, `task_dependency_remove`, `task_evidence_decide`, `task_evidence_list`, `task_evidence_submit`, `task_get`, `task_labels`, `task_list`, `task_progress_report`, `task_reopen`, `task_start`, `task_update` |
 | Projects (20) | `criterion_check_report`, `criterion_check_start`, `criterion_confirm`, `criterion_confirmation_withdraw`, `integration_abandon`, `integration_observe`, `integration_request_promotion`, `integration_retry`, `integration_skip_merge_check`, `open_item_resolve`, `project_blocker_resolve`, `project_create`, `project_crossings`, `project_delete`, `project_get`, `project_integration_get`, `project_request_done`, `project_request_start`, `project_ruling_record`, `project_update` |
 | Task lists (6) | `tasklist_create`, `tasklist_delete`, `tasklist_get`, `tasklist_list`, `tasklist_propose_dag`, `tasklist_update` |
-| Schedules (11) | `schedule_create`, `schedule_delete`, `schedule_end`, `schedule_get`, `schedule_list`, `schedule_pause`, `schedule_resume`, `schedule_run_now`, `schedule_run_report`, `schedule_run_stop`, `schedule_update` |
+| Schedules (12) | `condition_get`, `schedule_create`, `schedule_delete`, `schedule_end`, `schedule_get`, `schedule_list`, `schedule_pause`, `schedule_resume`, `schedule_run_now`, `schedule_run_report`, `schedule_run_stop`, `schedule_update` |
 | Waits (6) | `task_await`, `watch_cancel`, `watch_create`, `watch_get`, `watch_list`, `watch_update` |
 | Files (4) | `file_fetch`, `file_list`, `file_pin`, `file_upload` |
+| SubAgents (1) | `subagent_rate` |
 | Background jobs (5) | `bg_kill`, `bg_list`, `bg_output`, `bg_run`, `schedule_wakeup` |
-| Questions for you (6) | `ask_owner`, `notify`, `open_item_hand_over`, `request_owner_action`, `task_request_confirmation`, `withdraw_owner_request` |
+| Questions for you (8) | `ask_owner`, `notify`, `open_item_hand_over`, `request_owner_action`, `settings_get`, `settings_propose`, `task_request_confirmation`, `withdraw_owner_request` |
 | Wiki (5) | `wiki_draft`, `wiki_get`, `wiki_note`, `wiki_propose`, `wiki_search` |
 | Providers (4) | `provider_create`, `provider_delete`, `provider_list`, `provider_update` |
 | Merge receipts (3) | `merge_receipt`, `merge_receipts`, `project_merge_evidence` |
 | Guide (1) | `guide` |
-| Sessions, agents and runners (22) | `agent_create`, `agent_delete`, `agent_list`, `agent_update`, `project_ensure_coordinator`, `project_send`, `runner_delete`, `runner_engine_install`, `runner_engine_install_status`, `runner_list`, `session_await`, `session_complete`, `session_create`, `session_delete`, `session_end`, `session_get`, `session_interrupt`, `session_list`, `session_merge`, `session_reply`, `session_search`, `session_send` |
+| Sessions, agents and runners (23) | `agent_create`, `agent_delete`, `agent_list`, `agent_update`, `project_ensure_coordinator`, `project_send`, `runner_delete`, `runner_engine_install`, `runner_engine_install_status`, `runner_list`, `session_await`, `session_complete`, `session_create`, `session_delete`, `session_end`, `session_get`, `session_interrupt`, `session_list`, `session_merge`, `session_move`, `session_reply`, `session_search`, `session_send` |
 
 ## The playbooks skill
 

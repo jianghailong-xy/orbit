@@ -34,7 +34,7 @@ import kotlinx.serialization.json.JsonObject
 internal object Steps {
     private val CARD_TOOLS = setOf("AskUserQuestion", "ExitPlanMode", "mcp__orbit__session_create", "mcp__orbit__task_create_batch",
         "mcp__orbit__task_create", "mcp__orbit__project_create", "Agent", "Task", "Workflow",
-        SubagentBlock.TOOL_NAME)
+        SubagentBlock.TOOL_NAME, WorkflowBlock.TOOL_NAME, io.orbitd.android.core.cards.BgJob.TOOL)
     private val FILE_KINDS = setOf("read", "edit", "write")
 
     /** A row one steps line can stand in for (web `isGroupableTool`): reasoning, or a plain call — not a call that is its own card,

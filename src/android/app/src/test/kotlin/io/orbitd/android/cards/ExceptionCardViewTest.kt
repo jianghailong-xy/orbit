@@ -15,6 +15,10 @@ import io.orbitd.android.MainActivity
 import io.orbitd.android.TestOrbitApplication
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.core.protocol.Wire
+import io.orbitd.android.management.AccountTranslation
+import io.orbitd.android.management.LocalTranslation
+import io.orbitd.android.translation.TranslationCopy
+import androidx.compose.runtime.CompositionLocalProvider
 import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Rule
@@ -38,7 +42,7 @@ class ExceptionCardViewTest {
     private fun row(kind: String, actions: List<String>, promotionId: String? = null, taskId: String? = "t1", sessionId: String? = "s9",
         requiredAction: String? = null, handledBy: List<String> = emptyList(), facts: JsonElement = JsonNull, fuseEpisodeId: String? = null,
         reason: String = "ESCALATED", primaryAction: String? = null, landingSessionId: String? = null, integrationJobId: String? = null,
-        lease: JsonElement = JsonNull, title: String = "Checks failed on the combined tree") = buildJsonObject {
+        lease: JsonElement = JsonNull, title: String = "Checks failed on the combined tree", handledByState: String = "OPEN") = buildJsonObject {
         put("itemId", "01a0bb0b-b3fb-744c-b9a6-2fd68b4420b4"); put("kind", kind); put("title", title)
         put("detailLine", "the merge check exited 1"); put("assignee", "OWNER"); put("assigneeReason", reason)
         put("waitingSince", "2026-09-19T19:01:41.497Z"); put("escalatedAt", if (reason == "ESCALATED") "2026-09-19T21:02:23.903Z" else null)
@@ -48,7 +52,7 @@ class ExceptionCardViewTest {
         putJsonArray("actions") { actions.forEach { add(it) } }
         requiredAction?.let { put("requiredAction", it) }
         primaryAction?.let { put("primaryAction", it) }
-        if (handledBy.isNotEmpty()) putJsonArray("handledBy") { handledBy.forEach { addJsonObject { put("taskId", "f"); put("title", it); put("state", "OPEN") } } }
+        if (handledBy.isNotEmpty()) putJsonArray("handledBy") { handledBy.forEach { addJsonObject { put("taskId", "01a0bb0b-b3fb-744c-b9a6-2fd68b4420f0"); put("title", it); put("state", handledByState) } } }
         put("question", JsonNull); put("facts", facts); put("lease", lease)
     }
     private fun card(row: JsonObject) = CardCatalog.project("s1", "p1", mapOf("project" to buildJsonObject { put("id", "p1") },
@@ -71,8 +75,11 @@ class ExceptionCardViewTest {
         // A chain's 3rd failure keeps this layout; an escalation draws the "Who fixes it?" card (below).
         val candidate = card(row("INTEGRATION_CHECK_FAILED", listOf("ASK_COORDINATOR_AGAIN", "RETRY", "REVIEW"), promotionId = "pr1", taskId = null,
             sessionId = null, reason = "CHAIN_LIMIT", requiredAction = "Nothing on the project branch reaches main until this check passes.", handledBy = listOf("Fix the branch"),
-            facts = check))
+            handledByState = "DONE", facts = check))
         show(candidate, mergeCard = "pr1")
+        // Its repair has ended, so the card is the plain one: no Fixing tag, no one linked line.
+        compose.onNodeWithTag("$key:fixing-tag", useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithTag("$key:fixing", useUnmergedTree = true).assertDoesNotExist()
         compose.onNodeWithTag("$key:title", useUnmergedTree = true).assertTextEquals("Escalated to you")
         compose.onNodeWithTag("$key:required", useUnmergedTree = true).assertTextEquals("Nothing on the project branch reaches main until this check passes.")
         compose.onNodeWithTag("$key:handled-by", useUnmergedTree = true).assertTextEquals("The coordinator is fixing this in Fix the branch.")
@@ -100,6 +107,35 @@ class ExceptionCardViewTest {
         assertEquals(listOf(CardVerb.RERUN_CHECK), pressed.map { it.first })
         compose.onNodeWithTag("$key:REVIEW").performClick()
         assertEquals(listOf("pr1"), reviewed)
+    }
+
+    /** Board card-ui-polish ① (iOS `fixingBlock`/`quietRow`, web `ItemCard`): while a repair task is live the card wears the blue
+     * Fixing tag, says "Being fixed in <task ↗>" once — the title opening the task — with "In progress · nothing for you to do unless it
+     * fails." under it, in place of the server's sentence and the handled-by line, and every door is a quiet link with no line, in one
+     * row with the owner's ending, under the facts. The Into row names the branch, not its ref. */
+    @Test fun aLiveRepairIsOneLinkedLineAndQuietDoors() {
+        val into = Wire.json.parseToJsonElement("""{"task":null,"targetRef":"refs/heads/main","targetSha":"928ed7e0000","files":[],"nothingLanded":true,
+            "check":null,"branchUnchanged":false,"errorCode":null,"failure":null}""")
+        show(card(row("INTEGRATION_CHECK_FAILED", listOf("ASK_COORDINATOR_AGAIN", "RETRY", "OPEN_TASK_SESSION"), reason = "CHAIN_LIMIT",
+            requiredAction = "Nothing on the project branch reaches main until this check passes.", handledBy = listOf("Fix the branch"), facts = into)))
+        compose.onNodeWithTag("$key:fixing-tag", useUnmergedTree = true).assertTextEquals(ExceptionCards.fixingTag)
+        compose.onNodeWithTag("$key:being-fixed", useUnmergedTree = true).assertTextEquals("Being fixed in Fix the branch ↗")
+        compose.onNodeWithTag("$key:nothing-for-you", useUnmergedTree = true).assertTextEquals(ExceptionCards.fixingNothingForYou)
+        compose.onNodeWithTag("$key:required", useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithTag("$key:handled-by", useUnmergedTree = true).assertDoesNotExist()
+        compose.onAllNodes(hasTestTag("$key:RETRY_INTEGRATION:consequence") or hasTestTag("$key:RETURN_COORDINATOR:consequence")
+            or hasTestTag("$key:MARK_HANDLED:consequence"), useUnmergedTree = true).assertCountEquals(0)
+        listOf("RETURN_COORDINATOR", "RETRY_INTEGRATION", "OPEN_TASK_SESSION", "MARK_HANDLED").forEach {
+            compose.onNode(hasTestTag("$key:$it") and hasAnyAncestor(hasTestTag("$key:quiet")), useUnmergedTree = true).assertExists()
+        }
+        assertTrue("the quiet row waits under the facts", top("$key:fact:Into") < top("$key:quiet"))
+        compose.onNode(hasText("main at 928ed7e · nothing landed") and hasAnyAncestor(hasTestTag("$key:fact:Into")), useUnmergedTree = true).assertExists()
+        compose.onNodeWithTag("$key:being-fixed", useUnmergedTree = true)
+            .performFirstLinkClick({ (it.item as? androidx.compose.ui.text.LinkAnnotation.Clickable)?.tag == "orbit-task:01a0bb0b-b3fb-744c-b9a6-2fd68b4420f0" })
+        compose.waitForIdle()
+        assertEquals(listOf("orbit-task:01a0bb0b-b3fb-744c-b9a6-2fd68b4420f0"), opened)
+        compose.onNodeWithTag("$key:RETRY_INTEGRATION").performClick()
+        assertEquals(listOf(CardVerb.RETRY_INTEGRATION), pressed.map { it.first })
     }
 
     @Test fun reviewIsDrawnOnlyWhereTheMergeCardIs() {
@@ -196,6 +232,47 @@ class ExceptionCardViewTest {
         compose.onNodeWithTag("$key:who:status", useUnmergedTree = true).assertTextEquals("It handed this to you on purpose.")
         compose.onNodeWithTag("$key:RETURN_COORDINATOR").performScrollTo().performClick()
         assertEquals(CardVerb.RETURN_COORDINATOR, pressed.single().first)
+    }
+
+    /** The coordinator's hand-over note, under its caption in the coordinator row: translated with its own flip while a usable translation
+     * exists, as written otherwise, and nothing at all when the item carries no note. */
+    @Test fun aHandOverDrawsTheCoordinatorsNoteUnderItsCaptionTranslated() {
+        fun handed(note: String?, translation: JsonElement = JsonNull) = card(JsonObject(
+            row("INTEGRATION_CONFLICT", listOf("ASK_COORDINATOR_AGAIN", "OPEN_TASK_SESSION"), reason = "HANDED_OVER")
+                + mapOf("handoverNote" to JsonPrimitive(note), "translation" to translation)))
+        fun showIn(card: InteractionCard, language: String?) {
+            val account = AccountTranslation(enabled = language != null, available = true, language = language ?: "ja")
+            compose.runOnUiThread { compose.activity.setContent { MaterialTheme { CompositionLocalProvider(LocalTranslation provides account) {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    ExceptionCard(card, fresh = true, result = CardActionState(), mergeCard = null, open = { opened += it }, discuss = null,
+                        review = { reviewed += it }, main = "main") { verb, input -> pressed += verb to input }
+                }
+            } } } }
+            compose.waitForIdle()
+        }
+        val note = "Your retry policy"
+        val translated = buildJsonObject { put("lang", "ja"); put("handoverNote", "再試行ポリシー") }
+        showIn(handed(note, translated), "ja")
+        compose.onNodeWithTag("$key:who:handover:caption", useUnmergedTree = true).assertTextEquals(ExceptionCards.handoverNoteCaption)
+        compose.onNodeWithTag("$key:who:handover:note", useUnmergedTree = true).assertTextEquals("再試行ポリシー")
+        compose.onNodeWithTag("$key:who:status", useUnmergedTree = true).assertTextEquals("It handed this to you on purpose.")
+        assertTrue("the note is under the status sentence", top("$key:who:status") < top("$key:who:handover:caption"))
+        assertTrue(top("$key:who:handover:caption") < top("$key:who:handover:note"))
+        compose.onNodeWithText(TranslationCopy.SHOW_ORIGINAL, useUnmergedTree = true).performScrollTo().performClick()
+        compose.onNodeWithTag("$key:who:handover:note", useUnmergedTree = true).assertTextEquals(note)
+        compose.onNodeWithText(TranslationCopy.SHOW_TRANSLATION, useUnmergedTree = true).assertExists()
+
+        showIn(handed(note), "ja")
+        compose.onNodeWithTag("$key:who:handover:caption", useUnmergedTree = true).assertTextEquals(ExceptionCards.handoverNoteCaption)
+        compose.onNodeWithTag("$key:who:handover:note", useUnmergedTree = true).assertTextEquals(note)
+        compose.onNodeWithText(TranslationCopy.SHOW_ORIGINAL, useUnmergedTree = true).assertDoesNotExist()
+        showIn(handed(note, translated), null)
+        compose.onNodeWithTag("$key:who:handover:note", useUnmergedTree = true).assertTextEquals(note)
+        compose.onNodeWithText(TranslationCopy.SHOW_ORIGINAL, useUnmergedTree = true).assertDoesNotExist()
+
+        showIn(handed(null, translated), "ja")
+        compose.onNodeWithTag("$key:who:handover", useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithText(ExceptionCards.handoverNoteCaption, useUnmergedTree = true).assertDoesNotExist()
     }
 
     @Test fun aFailedTaskRunsAgainWithItsOwnPressAndCancelAsksFirst() {

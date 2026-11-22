@@ -38,6 +38,8 @@ struct OrbitiOSApp: App {
                 // with a window-level UIKit recognizer instead.
                 .dismissesKeyboardOnBackgroundTap()
                 .onOpenURL { url in
+                    // `orbit-session://<id>?share=<entry>`: the Share extension's Add opening Orbit.
+                    if let entryID = ShareHandoffLink.entryID(in: url) { model.requestShareClaim(entryID: entryID); return }
                     // `orbit://owner-request/<id>`: the conversation that asked, on that request's card.
                     if let request = OwnerRequestLink.parse(url) { model.openOwnerRequest(request); return }
                     if let route = DeepLink.parse(url) { model.route(to: route) }
@@ -69,6 +71,10 @@ struct OrbitiOSApp: App {
                         model.consoleRegistry?.persistAll()
                         model.persistLaunchSnapshot()
                     case .active:
+                        // Share to Orbit: opened within ten minutes of a share, Orbit goes to it
+                        // (docs/share-to-orbit-design.md §3.1) — after a banner pass too, since a
+                        // share sheet over another app is exactly such a trip.
+                        model.noticeSharedItems(launching: false)
                         // Only after a genuine background trip: a socket suspended there may be dead
                         // but not yet erroring, so kick the open consoles + the user-level
                         // control-plane stream to reconnect instead of waiting out URLSession's long
@@ -84,7 +90,11 @@ struct OrbitiOSApp: App {
                         break
                     }
                 }
-                .task { model.bootstrap() }
+                .task {
+                    model.bootstrap()
+                    // A share left in the App Group inbox: sweep a day-old one, open a fresh one.
+                    model.noticeSharedItems(launching: true)
+                }
         }
     }
 }

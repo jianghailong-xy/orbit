@@ -39,23 +39,23 @@ public enum ProjectOpenItemKind: String, Codable, Sendable {
 /// What a coordinator asked its owner to decide (§5.2 R7).
 public struct CoordinatorQuestion: Codable, Equatable, Sendable {
     public struct Option: Codable, Equatable, Sendable {
-        public let label: String
+        public var label: String
         /// Why this one, in the asker's words. Absent when it asked with labels alone.
-        public let description: String?
+        public var description: String?
         public init(label: String, description: String? = nil) {
             self.label = label
             self.description = description
         }
     }
 
-    public let question: String
+    public var question: String
     /// Empty when the coordinator asked for prose rather than a choice.
-    public let options: [Option]
+    public var options: [Option]
     /// Index into ``options``; nil when it recommended nothing.
     public let recommendedOption: Int?
     public let blocksTaskIds: [String]
     /// What happens if nobody answers, in the asker's own words.
-    public let ifUnanswered: String?
+    public var ifUnanswered: String?
 
     public init(question: String, options: [Option] = [], recommendedOption: Int? = nil,
                 blocksTaskIds: [String] = [], ifUnanswered: String? = nil) {
@@ -181,6 +181,13 @@ public struct OpenItemHandling: Codable, Equatable, Sendable {
 }
 
 /// One exception item as `GET /projects/:id/open-items` serves it (§4.8).
+public struct OpenItemBaseline: Codable, Equatable, Sendable {
+    public let upstreamSha: String
+    public let targetSha: String
+    public let mergeTreeSha: String
+    public let check: LandingCheckResult
+}
+
 public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
     /// Where this item is on its way to the coordinator (§4.4), which is the address `Open
     /// coordinator` reaches. Read for the same reason as every other field here: a press is drawn
@@ -327,18 +334,26 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
     public let facts: OpenItemFacts?
     /// The rerun or observation handling it while that is in flight (§4.7 H1, §10.8), or nil — for
     /// none, and from a server that predates it.
+    public let baseline: OpenItemBaseline?
+    public let heldTaskIds: [String]
     public let handling: OpenItemHandling?
     /// Whether the project's coordinator can be neither asked again nor messaged right now, as the
     /// server read it with the list. An escalated card's heading says so instead of "no one acted on
     /// this" (`ExceptionCards.heading`). False from a server that predates it.
     public let coordinatorUnreachable: Bool
     /// The coordinator's own words when it handed the item to the owner on purpose — what the
-    /// owner exception card's coordinator row quotes (`ExceptionCards.coordinatorRowSentence`).
+    /// owner exception card's coordinator row draws under `ExceptionCards.handoverNoteCaption`
+    /// (`shownHandoverNote`).
     /// Nil for every other item, and from a server that predates it.
     public let handoverNote: String?
     /// "Chat about this": where the item's handling stands, and whether a message about it can reach
     /// the project's coordinator conversation. Nil from a server that predates it.
     public let chat: Chat?
+    /// The card's agent-written words in the owner's language (Settings › Translation): a
+    /// `COORDINATOR_QUESTION`'s question, options and ifUnanswered, a `START_REQUEST`'s why, a
+    /// `DONE_REQUEST`'s judgment and gaps. Nil until translated, and from an older server
+    /// (`OwnerCardTranslations` decides when it is drawn).
+    public let translation: OwnerCardTranslation?
 
     /// The browser's `OpenItemChat`: the conversation the chat is held in, the stage, and — when
     /// the chat cannot be had — why (`NO_COORDINATOR`, `COORDINATOR_UNAVAILABLE`, …).
@@ -377,7 +392,8 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
                 startRequest: ProjectStartRequest? = nil, doneRequest: DoneRequest? = nil,
                 facts: OpenItemFacts? = nil, handling: OpenItemHandling? = nil,
                 coordinatorUnreachable: Bool = false, handoverNote: String? = nil,
-                chat: Chat? = nil) {
+                chat: Chat? = nil, translation: OwnerCardTranslation? = nil,
+                baseline: OpenItemBaseline? = nil, heldTaskIds: [String] = []) {
         self.itemId = itemId
         self.kind = kind
         self.title = title
@@ -404,9 +420,12 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
         self.doneRequest = doneRequest
         self.facts = facts
         self.handling = handling
+        self.baseline = baseline
+        self.heldTaskIds = heldTaskIds
         self.coordinatorUnreachable = coordinatorUnreachable
         self.handoverNote = handoverNote
         self.chat = chat
+        self.translation = translation
     }
 
     public init(from decoder: Decoder) throws {
@@ -443,10 +462,13 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
                                                forKey: .startRequest)) ?? nil
         doneRequest = (try? c.decodeIfPresent(DoneRequest.self, forKey: .doneRequest)) ?? nil
         facts = try c.decodeIfPresent(OpenItemFacts.self, forKey: .facts)
+        baseline = try c.decodeIfPresent(OpenItemBaseline.self, forKey: .baseline)
+        heldTaskIds = try c.decodeIfPresent([String].self, forKey: .heldTaskIds) ?? []
         handling = (try? c.decodeIfPresent(OpenItemHandling.self, forKey: .handling)) ?? nil
         coordinatorUnreachable = (try? c.decodeIfPresent(Bool.self, forKey: .coordinatorUnreachable)) ?? false
         handoverNote = (try? c.decodeIfPresent(String.self, forKey: .handoverNote)) ?? nil
         chat = (try? c.decodeIfPresent(Chat.self, forKey: .chat)) ?? nil
+        translation = (try? c.decodeIfPresent(OwnerCardTranslation.self, forKey: .translation)) ?? nil
     }
 }
 
@@ -572,7 +594,7 @@ public struct ProjectClosedQuestion: Codable, Equatable, Sendable, Identifiable 
     }
 
     public let itemId: String
-    public let question: CoordinatorQuestion
+    public var question: CoordinatorQuestion
     public let askedAt: String
     /// `ANSWERED` or `WITHDRAWN`.
     public let resolution: String
@@ -586,12 +608,15 @@ public struct ProjectClosedQuestion: Codable, Equatable, Sendable, Identifiable 
     public let delivery: Delivery?
     /// The reason it was withdrawn with; nil for an answered question.
     public let withdrawReason: String?
+    /// The question in the owner's language (Settings › Translation); nil until translated.
+    public let translation: OwnerCardTranslation?
 
     public var id: String { itemId }
 
     public init(itemId: String, question: CoordinatorQuestion, askedAt: String,
                 resolution: String = "ANSWERED", resolvedBy: String = "USER", resolvedAt: String,
-                answer: Answer? = nil, delivery: Delivery? = nil, withdrawReason: String? = nil) {
+                answer: Answer? = nil, delivery: Delivery? = nil, withdrawReason: String? = nil,
+                translation: OwnerCardTranslation? = nil) {
         self.itemId = itemId
         self.question = question
         self.askedAt = askedAt
@@ -601,6 +626,7 @@ public struct ProjectClosedQuestion: Codable, Equatable, Sendable, Identifiable 
         self.answer = answer
         self.delivery = delivery
         self.withdrawReason = withdrawReason
+        self.translation = translation
     }
 
     /// Withdrawn rather than answered.
@@ -720,9 +746,13 @@ public struct OwnerAnswerReceipt: Codable, Equatable, Sendable {
 public struct OwnerAnswerRequest: Codable, Sendable {
     public let option: Int?
     public let text: String?
-    public init(option: Int? = nil, text: String? = nil) {
+    /// `true` delivers the owner's words untranslated (Send as written, after a 422
+    /// TRANSLATION_FAILED); nil is left out of the body.
+    public let sendAsWritten: Bool?
+    public init(option: Int? = nil, text: String? = nil, sendAsWritten: Bool = false) {
         self.option = option
         self.text = text
+        self.sendAsWritten = sendAsWritten ? true : nil
     }
 }
 

@@ -24,6 +24,7 @@ import {
 } from '../common/runner-repo-health';
 import { MODEL_ROUTING_ENGINES } from '../tasks/model-routing';
 import { CreateWorkspaceDto, UpdateWorkspaceDto } from './dto';
+import { worktreeNeedsGit } from './worktree-needs-git';
 import { isNewFolderName, newFolderWorkDirOn, readGithub, type NewWorkspaceTarget } from '../sessions/new-workspace';
 
 /** The engines a list names, each once and in the order the router weighs them. Absent stays absent:
@@ -162,7 +163,8 @@ export class WorkspacesService {
         modelRoutingOptimizeFor: dto.modelRoutingOptimizeFor ?? 'cost',
         modelRoutingProviders: modelRoutingEngines(dto.modelRoutingProviders) ?? [],
         subagentsEnabled: dto.subagentsEnabled ?? true,
-        subagentsMaxRunning: dto.subagentsMaxRunning ?? 4,
+        subagentsMaxRunning: dto.subagentsMaxRunning ?? 8,
+        workflowsEnabled: dto.workflowsEnabled ?? true,
         // A clone (§5.3): its repository and PENDING, which the runner's next reconcile asks it to clone, and which
         // holds the workspace's sessions until it is READY.
         ...(cloned?.clone ? { ...cloned.clone, cloneState: 'PENDING' as const } : {}),
@@ -371,6 +373,8 @@ export class WorkspacesService {
 
   async update(ownerId: string, id: string, dto: UpdateWorkspaceDto) {
     const current = await this.get(ownerId, id);
+    const needsGit = worktreeNeedsGit(current, dto);
+    if (needsGit) throw needsGit;
     await this.assertOwnedRunner(ownerId, dto.targetRunnerId);
     await this.assertOwnedRunner(ownerId, dto.runnerId);
     const data: Prisma.WorkspaceUpdateInput = {
@@ -402,6 +406,7 @@ export class WorkspacesService {
       modelRoutingProviders: modelRoutingEngines(dto.modelRoutingProviders),
       subagentsEnabled: dto.subagentsEnabled,
       subagentsMaxRunning: dto.subagentsMaxRunning,
+      workflowsEnabled: dto.workflowsEnabled,
     };
     if (dto.disallowedTools) data.disallowedTools = dto.disallowedTools as Prisma.InputJsonValue;
     if (dto.providerFallbacks) {

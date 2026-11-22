@@ -339,8 +339,10 @@ git -C "$ROOT" cat-file -e "$OLD_REV^{commit}" 2>/dev/null ||
   harness_fail "commit $OLD_REV is not in this clone (git fetch --unshallow, or fetch it)"
 mkdir -p "$WORK/old" && git -C "$ROOT" archive "$OLD_REV" src/runner-go | tar -x -C "$WORK/old" ||
   harness_fail "cannot check out src/runner-go at $OLD_REV"
+# -buildvcs=false: the extracted tree is no checkout of its own, and the git Go asks about it can
+# fail (it did under a runner's background job); the version and commit come from -ldflags anyway.
 (cd "$WORK/old/src/runner-go" && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-  go build -ldflags "-s -w -X main.version=$V0 -X main.sourceSHA=$OLD_REV -X main.defaultServer=$SERVER" -o "$WORK/orbit-$V0" .) ||
+  go build -buildvcs=false -ldflags "-s -w -X main.version=$V0 -X main.sourceSHA=$OLD_REV -X main.defaultServer=$SERVER" -o "$WORK/orbit-$V0" .) ||
   harness_fail "building orbit $V0 from $OLD_REV failed"
 SHA_V0=$(sha256sum "$WORK/orbit-$V0" | cut -d' ' -f1)
 (cd "$HERE/stubserver" && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o "$WORK/stubserver" .) ||
@@ -615,6 +617,7 @@ cx mkdir -p "$REFUSE_DIR" &&
 [ "$(unit_prop orbit-runner-alice.service RefuseManualStop)" = yes ] && unit_running orbit-runner-alice.service &&
   [ "$(main_pid orbit-runner-alice.service)" = "$legacy_pid" ] ||
   fail 4 "orbit-runner-alice.service is not running pid $legacy_pid with RefuseManualStop=yes" orbit-runner-alice.service
+# docs: "Register each account's runner" — `systemctl stop orbit-runner-alice.service` is refused.
 cx systemctl stop orbit-runner-alice.service >/dev/null 2>&1 &&
   fail 4 "systemctl stop of orbit-runner-alice.service succeeded despite RefuseManualStop=yes" orbit-runner-alice.service
 one_old_runner() {

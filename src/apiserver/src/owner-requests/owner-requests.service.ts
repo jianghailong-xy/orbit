@@ -19,13 +19,35 @@ import { WatchDeliveryService } from '../watches/watch-delivery.service';
 import type { AuthCredential } from '../common/current-user.decorator';
 import { WikiRefusalError, WikiService, normalizeRepoUrl } from '../wiki/wiki.service';
 import { isScheduleItemKind } from '../schedules/schedule-attention';
+import { OWNER_REQUEST_FIELDS, queueOwnerCardTranslation, translatedInto } from '../sessions/card-translation';
+import { translationLanguages, type TranslationLanguages } from '../sessions/turn-translation';
+import { ownerWordsForAgent } from '../sessions/reply-translation';
+import { isConditionItemKind } from '../conditions/condition-attention';
+import { answerStillWaiting } from '../conditions/condition-still-waiting';
+import { CONDITION_STILL_WAITING_KIND } from '@orbit/shared';
 import { endUndeliveredGrants, enqueueResolutions } from './owner-request-endings';
 import { OwnerSecretsService, type OwnerSecretGrantView } from './owner-secrets.service';
+import { settingOwnerOnlyBody, settingsChangeTitle } from '@orbit/shared';
+import { normalizeDefaultModels } from '../providers/engine-provider';
+import { applySettingsChanges } from './settings-apply';
+import {
+  SettingsProposalInvalid,
+  sameSettingsChanges,
+  settingsChangeDeclinedMessage,
+  settingsChangeEntries,
+  validateSettingsChanges,
+  wideningKeys,
+  type SettingsChangePayload,
+} from './settings-change';
 import {
   OWNER_REQUEST_EXPIRED,
   OWNER_REQUEST_NOT_ASKER,
   OWNER_REQUEST_NOT_PENDING,
   OwnerRequestNotFileable,
+  SETTINGS_ALREADY_SET,
+  SETTINGS_CHANGE,
+  SETTINGS_CHANGE_DECLINED,
+  SETTINGS_OWNER_CHANNEL_ONLY,
   WIKI_CREATE_DAILY_RUN_LIMIT,
   WIKI_CREATE_DECLINED,
   WIKI_CREATE_LOOKBACK_DAYS,
@@ -76,6 +98,11 @@ const VIEW = {
   scheduleRunId: true,
   approvalId: true,
   scheduleChangeRequestId: true,
+  // CONDITION_* items (migration 1030, conditions/condition-attention.ts): the condition a can't-read card or the
+  // 30-day question is about, which a client reads to name its schedule or task.
+  conditionId: true,
+  // SETTINGS_CHANGE (migration 1273): `{ changes: [{ key, from, to, tier }] }`, which the card draws.
+  payload: true,
   expiresAt: true,
   clientRequestId: true,
   askedBySessionId: true,
@@ -86,6 +113,8 @@ const VIEW = {
   resolvedClient: true,
   resolutionNote: true,
   answer: true,
+  // Settings › Translation (migration 1070): the agent-written fields in the owner's language, or null.
+  translation: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.OwnerRequestSelect;
@@ -244,6 +273,10 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
       // Told after the row is committed, and never awaited: the request is the fact, the banner a reader of it.
       void this.push?.notifyOwnerRequest(created.id);
       this.realtime?.publishOwnerSignalChanged(ownerId, [askingSessionId]);
+      // And translated for the owner in the background, when their translation is on (decision 1A).
+      void translationLanguages(this.prisma, ownerId)
+        .then((langs) => { if (langs) this.queueTranslation(ownerId, created, langs); })
+        .catch((error: Error) => this.logger.warn(`translating request ${created.id} failed to queue: ${error.message}`));
       return { ...created, created: true };
     }
     // A WIKI_CREATE meeting the card already waiting for its repository answers that card, and the owner is not told again.
@@ -272,6 +305,116 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
       : null;
     if (!already) throw new ConflictException('the request under this clientRequestId could not be read back; try again');
     return { ...(await this.get(ownerId, already.id)), created: false };
+  }
+
+  /**
+   * A session proposes a change to the owner's own Settings (docs/settings-from-conversation-design.md §5.1), filed as
+   * a SETTINGS_CHANGE card the owner approves or declines. Nothing here writes a preference.
+   *
+   *   1. every key is in the tier table and every value passes the PATCH's rules (400), `defaultModels` normalised;
+   *   2. each key's value in force is recorded beside its new value, and a change to what is already in force is
+   *      dropped: with nothing left, 409 SETTINGS_ALREADY_SET;
+   *   3. any change that widens agent reach refuses the whole proposal, 403 SETTING_OWNER_ONLY (§6);
+   *   4. a change this session's card was declined for is refused, 409 SETTINGS_CHANGE_DECLINED;
+   *   5. this session's previous PENDING card is WITHDRAWN in the transaction that files the new one, so the owner never
+   *      answers a stale card (`owner_request_settings_change_pending_key` holds a session to one). The session is not
+   *      woken for it: it is told here, in `withdrawnRequestIds`;
+   *   6. the card is filed with the server's title, "Change N setting(s)?", and `{ changes }` as its payload.
+   */
+  async proposeSettings(
+    ownerId: string,
+    askingSessionId: string,
+    proposal: { changes: Record<string, unknown>; why: string },
+  ): Promise<OwnerRequestView & { created: true; withdrawnRequestIds: string[] }> {
+    const why = proposal.why?.trim();
+    if (!why) throw new BadRequestException('why is required: say what the person asked for');
+    let proposed: Awaited<ReturnType<typeof validateSettingsChanges>>;
+    try {
+      proposed = await validateSettingsChanges(proposal.changes ?? {});
+    } catch (error) {
+      if (error instanceof SettingsProposalInvalid) throw new BadRequestException(error.message);
+      throw error;
+    }
+    const session = await this.prisma.session.findFirst({
+      where: { id: askingSessionId, ownerId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!session) throw new NotFoundException('the asking session is not one of this account’s');
+    if (proposed.defaultModels !== undefined) {
+      proposed.defaultModels = await normalizeDefaultModels(this.prisma, ownerId, proposed.defaultModels as Record<string, string>);
+    }
+    const user = await this.prisma.user.findUnique({ where: { id: ownerId }, select: { preferences: true } });
+    const changes = settingsChangeEntries((user?.preferences ?? {}) as Record<string, unknown>, proposed);
+    if (changes.length === 0) {
+      throw new ConflictException({
+        code: SETTINGS_ALREADY_SET,
+        message: 'Every setting proposed already has that value; nothing was filed.',
+      });
+    }
+    const widening = wideningKeys(changes);
+    if (widening.length > 0) throw new ForbiddenException(settingOwnerOnlyBody(widening));
+    const declined = await this.prisma.ownerRequest.findMany({
+      where: { ownerId, askedBySessionId: askingSessionId, kind: SETTINGS_CHANGE, state: 'DECLINED' },
+      orderBy: { resolvedAt: 'desc' },
+      select: { id: true, payload: true, resolvedAt: true, resolutionNote: true },
+    });
+    const refused = declined.find((request) => sameSettingsChanges(request.payload, changes));
+    if (refused) {
+      throw new ConflictException({
+        code: SETTINGS_CHANGE_DECLINED,
+        message: settingsChangeDeclinedMessage(refused.resolvedAt!, refused.resolutionNote),
+        requestId: refused.id,
+        declinedAt: refused.resolvedAt!.toISOString(),
+        reason: refused.resolutionNote,
+      });
+    }
+
+    const payload: SettingsChangePayload = { changes };
+    // Two filings of one session at once: the second's insert waits on the pending key and fails once the first
+    // commits. Filed again, it withdraws the first, as filing after it would have.
+    const fileOnce = () => withTransactionRetry(this.prisma, async (tx) => {
+      const now = new Date();
+      const withdrawn = await tx.ownerRequest.updateManyAndReturn({
+        where: { ownerId, askedBySessionId: askingSessionId, kind: SETTINGS_CHANGE, state: 'PENDING' },
+        data: {
+          state: 'WITHDRAWN',
+          resolvedAt: now,
+          resolvedBySessionId: askingSessionId,
+          resolutionNote: 'Replaced by a newer settings proposal from the same session.',
+        },
+        select: { id: true },
+      });
+      const created = await tx.ownerRequest.create({
+        data: {
+          ownerId,
+          askedBySessionId: askingSessionId,
+          kind: SETTINGS_CHANGE,
+          state: 'PENDING',
+          title: settingsChangeTitle(changes.length),
+          why,
+          payload: payload as unknown as Prisma.InputJsonValue,
+        },
+        select: VIEW,
+      });
+      return { created, withdrawn: withdrawn.map((row) => row.id) };
+    }, loggedRetry(this.logger, 'ownerRequests.proposeSettings'));
+    let filed: Awaited<ReturnType<typeof fileOnce>>;
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        filed = await fileOnce();
+        break;
+      } catch (error) {
+        const pendingTaken = error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
+        if (!pendingTaken || attempt >= 3) throw error;
+      }
+    }
+    const { created, withdrawn } = filed;
+    void this.push?.notifyOwnerRequest(created.id);
+    this.realtime?.publishSessionUpdated(created.askedBySessionId);
+    void translationLanguages(this.prisma, ownerId)
+      .then((langs) => { if (langs) this.queueTranslation(ownerId, created, langs); })
+      .catch((error: Error) => this.logger.warn(`translating request ${created.id} failed to queue: ${error.message}`));
+    return { ...created, created: true, withdrawnRequestIds: withdrawn };
   }
 
   /**
@@ -321,7 +464,56 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
       take: LIST_LIMIT,
       select: VIEW,
     });
+    await this.translateUntranslated(ownerId, requests).catch((error: Error) =>
+      this.logger.warn(`queueing request translations failed: ${error.message}`));
     return { requests: await this.withGrants(ownerId, requests) };
+  }
+
+  /**
+   * Queue the translation of one request's card into the owner's language (sessions/card-translation.ts): stored
+   * in `translation` while the request is still PENDING, and the asking session's row announced (`session.updated`,
+   * as filing it is) so clients read it again. A SCHEDULE_* item is Orbit's own words, not an agent's, and is not
+   * translated. Returns at once: true when it queued one.
+   */
+  queueTranslation(
+    ownerId: string,
+    request: { id: string; kind: string; askedBySessionId: string },
+    langs: TranslationLanguages,
+  ): boolean {
+    if (isScheduleItemKind(request.kind)) return false;
+    return queueOwnerCardTranslation({
+      key: `owner-request:${request.id}`,
+      read: async () => {
+        const row = await this.prisma.ownerRequest.findFirst({
+          where: { id: request.id, ownerId, state: 'PENDING' },
+          select: { title: true, why: true, ifUnanswered: true, options: true, steps: true, verifyHint: true, translation: true },
+        });
+        return row ? { source: row, fields: OWNER_REQUEST_FIELDS, translation: row.translation } : null;
+      },
+      write: async (translation) => (await this.prisma.ownerRequest.updateMany({
+        where: { id: request.id, ownerId, state: 'PENDING' },
+        data: { translation: translation as unknown as Prisma.InputJsonValue },
+      })).count > 0,
+      published: () => this.realtime?.publishSessionUpdated(request.askedBySessionId),
+    }, langs);
+  }
+
+  /**
+   * Decision 1A: a PENDING request with no translation in the owner's current language — translation was turned on
+   * after it was filed, or the language changed — gets one queued as the list is read; one already tried in this
+   * language, failed or not, is left, and one queued or running is not queued again.
+   */
+  private async translateUntranslated(
+    ownerId: string,
+    requests: ReadonlyArray<{ id: string; kind: string; state: string; askedBySessionId: string; translation: unknown }>,
+  ): Promise<void> {
+    const pending = requests.filter((r) => r.state === 'PENDING' && !isScheduleItemKind(r.kind));
+    if (pending.length === 0) return;
+    const langs = await translationLanguages(this.prisma, ownerId);
+    if (!langs) return;
+    for (const request of pending) {
+      if (!translatedInto(request.translation, langs)) this.queueTranslation(ownerId, request, langs);
+    }
   }
 
   async get(ownerId: string, id: string): Promise<OwnerRequestView> {
@@ -375,7 +567,7 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
   async complete(
     ownerId: string,
     id: string,
-    given: { option?: number; text?: string },
+    given: { option?: number; text?: string; sendAsWritten?: boolean },
     client: OwnerRequestClient | null = null,
   ): Promise<OwnerRequestView> {
     const request = await this.get(ownerId, id);
@@ -385,12 +577,22 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
     if (request.kind === 'WIKI_CREATE') {
       throw new BadRequestException('a WIKI_CREATE request is done when its repository has a wiki: create it with POST /owner-requests/:id/create-wiki');
     }
+    if (request.kind === SETTINGS_CHANGE) {
+      throw new BadRequestException('a SETTINGS_CHANGE request is done when the owner saves its changes, which writes them; it is not marked done by hand');
+    }
     this.refuseAnsweredElsewhere(request.kind);
     const text = given.text?.trim();
     const option = given.option ?? undefined;
+    // The 30-day question of a task's condition (conditions/condition-still-waiting.ts): Keep waiting or Stop.
+    const stillWaiting = request.kind === CONDITION_STILL_WAITING_KIND;
+    if (stillWaiting && option === undefined) {
+      throw new BadRequestException(`a ${CONDITION_STILL_WAITING_KIND} item is answered with option 0 (Keep waiting) or 1 (Stop)`);
+    }
     if (option !== undefined) {
       const options = (request.options ?? []) as unknown as OwnerRequestOption[];
-      if (request.kind !== 'DECISION') throw new BadRequestException('only a DECISION request takes an option');
+      if (request.kind !== 'DECISION' && !stillWaiting) {
+        throw new BadRequestException('only a DECISION request takes an option');
+      }
       if (!Number.isInteger(option) || option < 0 || option >= options.length) {
         throw new BadRequestException('option must name one of the options this request offered');
       }
@@ -398,14 +600,24 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
     if (request.kind === 'DECISION' && option === undefined && !text) {
       throw new BadRequestException('a decision needs an option or some text');
     }
+    // Settings › Translation: the owner's words reach the asking session in the agent language, or the answer is
+    // refused whole (422 TRANSLATION_FAILED) before anything is written. The option goes by index either way.
+    const translation = text
+      ? await ownerWordsForAgent(text, await translationLanguages(this.prisma, ownerId), given.sendAsWritten)
+      : null;
     const answer = option !== undefined || text
-      ? { ...(option !== undefined ? { option } : {}), ...(text ? { text } : {}) }
+      ? { ...(option !== undefined ? { option } : {}), ...(text ? { text } : {}), ...(translation ? { translation } : {}) }
       : null;
     return this.settle(ownerId, id, 'DONE', {
       resolvedByUserId: ownerId,
       resolvedClient: client,
       answer: json(answer),
-    });
+    }, stillWaiting
+      ? async (tx, now) => {
+        const item = await tx.ownerRequest.findUnique({ where: { id }, select: { conditionId: true } });
+        await answerStillWaiting(tx, item?.conditionId ?? null, option, now);
+      }
+      : undefined);
   }
 
   /**
@@ -470,6 +682,42 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * The owner's Save changes on a SETTINGS_CHANGE card (docs/settings-from-conversation-design.md §5.2), in the
+   * transaction that settles the card DONE: the account's preferences re-read under the user row's lock; any key whose
+   * value in force is no longer the card's `from` answers 409 SETTINGS_STALE and the whole transaction rolls back, so
+   * nothing is written and the card stays PENDING; otherwise each `to` is merged as the owner's PATCH merges it, and each
+   * key written is marked `changedBy[key] = { sessionId, requestId, at, from }` (§5.3). The ending reaches the asking
+   * session as every owner request's does (`settle`). The owner's own login only: a request carrying an acting session
+   * is refused SETTINGS_OWNER_CHANNEL_ONLY before anything is read, and a personal access token never reaches this door
+   * (@PatForbidden('OWNER_INTERACTIVE')).
+   */
+  async applySettings(
+    ownerId: string,
+    id: string,
+    actingSessionId: string | null,
+    client: OwnerRequestClient | null = null,
+  ): Promise<OwnerRequestView> {
+    if (actingSessionId !== null) {
+      throw new ForbiddenException({
+        code: SETTINGS_OWNER_CHANNEL_ONLY,
+        message: 'a settings change is saved by the account owner, signed in, with no acting session: the owner presses Save changes on the card.',
+      });
+    }
+    const request = await this.get(ownerId, id);
+    if (request.kind !== SETTINGS_CHANGE) throw new BadRequestException('only a SETTINGS_CHANGE request applies settings');
+    if (request.state !== 'PENDING') {
+      throw new ConflictException({
+        code: OWNER_REQUEST_NOT_PENDING,
+        state: request.state,
+        message: `this request is already ${request.state}; an ended request is final and nothing was written`,
+      });
+    }
+    const { changes } = request.payload as unknown as SettingsChangePayload;
+    return this.settle(ownerId, id, 'DONE', { resolvedByUserId: ownerId, resolvedClient: client }, (tx, now) =>
+      applySettingsChanges(tx, { ownerId, requestId: id, askedBySessionId: request.askedBySessionId, changes }, now));
+  }
+
+  /**
    * Every PENDING WIKI_CREATE whose repository now has a wiki in use, however it was made, settled DONE with that wiki
    * (design §3.6: "the card reads DONE once the repository has an in-use space"), each with its delivery to the asking
    * session — the owner's list and reads and the expiry sweep call it, so a card whose wiki came from the Create wiki
@@ -497,18 +745,32 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** The owner refuses the request. The reason is what the asking session reads. */
-  async decline(ownerId: string, id: string, reason: string, client: OwnerRequestClient | null = null): Promise<OwnerRequestView> {
+  async decline(
+    ownerId: string,
+    id: string,
+    reason: string,
+    client: OwnerRequestClient | null = null,
+    sendAsWritten?: boolean,
+  ): Promise<OwnerRequestView> {
     const note = reason?.trim();
     if (!note) throw new BadRequestException('reason is required: say why, so the session asking can act on it');
     const request = await this.get(ownerId, id);
     this.refuseAnsweredElsewhere(request.kind);
-    return this.settle(ownerId, id, 'DECLINED', { resolvedByUserId: ownerId, resolvedClient: client, resolutionNote: note });
+    // Settings › Translation: the reason reaches the asking session in the agent language, kept in `answer` beside
+    // the owner's own words in resolution_note, or the decline is refused whole (422 TRANSLATION_FAILED).
+    const translation = await ownerWordsForAgent(note, await translationLanguages(this.prisma, ownerId), sendAsWritten);
+    return this.settle(ownerId, id, 'DECLINED', {
+      resolvedByUserId: ownerId,
+      resolvedClient: client,
+      resolutionNote: note,
+      ...(translation ? { answer: json({ translation }) } : {}),
+    });
   }
 
   /** The asking session no longer needs it. Only the session that filed a request may withdraw it. */
   async withdraw(ownerId: string, sessionId: string, id: string, reason: string | undefined): Promise<OwnerRequestView> {
     const request = await this.get(ownerId, id);
-    if (request.askedBySessionId !== sessionId || isScheduleItemKind(request.kind)) {
+    if (request.askedBySessionId !== sessionId || isScheduleItemKind(request.kind) || isConditionItemKind(request.kind)) {
       throw new ForbiddenException({
         code: OWNER_REQUEST_NOT_ASKER,
         message: 'only the session that filed this request may withdraw it',
@@ -560,6 +822,8 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
     id: string,
     to: Exclude<OwnerRequestState, 'PENDING' | 'EXPIRED'>,
     data: Prisma.OwnerRequestUpdateManyMutationInput,
+    /** What the answer does, in the transaction that settles the item: only when this call settled it. */
+    effect?: (tx: Prisma.TransactionClient, now: Date) => Promise<void>,
   ): Promise<OwnerRequestView> {
     const now = new Date();
     const settled = await withTransactionRetry(this.prisma, async (tx) => {
@@ -568,9 +832,11 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
         data: { ...data, state: to, resolvedAt: now },
       });
       if (written.count === 1) {
-        // A scheduled task's item was written by the schedule, not asked by its session: nobody is waiting to hear.
+        if (effect) await effect(tx, now);
+        // A scheduled task's item was written by the schedule, and a condition's by the condition, not asked by a
+        // session: nobody is waiting to hear.
         const kind = await tx.ownerRequest.findUnique({ where: { id }, select: { kind: true } });
-        if (!kind || !isScheduleItemKind(kind.kind)) await enqueueResolutions(tx, [id]);
+        if (!kind || !(isScheduleItemKind(kind.kind) || isConditionItemKind(kind.kind))) await enqueueResolutions(tx, [id]);
         await endUndeliveredGrants(tx, [id], to === 'WITHDRAWN' ? 'WITHDRAWN' : 'REVOKED');
       }
       return written;

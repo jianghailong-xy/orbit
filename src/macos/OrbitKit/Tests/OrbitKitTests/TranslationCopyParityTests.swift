@@ -7,14 +7,14 @@ import XCTest
 /// words to iOS and macOS, and nothing in either build notices a word changed at one end only — so
 /// each one is looked up in the web source it came from: the conversation's words in
 /// `TRANSLATION_COPY` (src/web/src/lib/translation.ts), the Settings section's on the General page
-/// (pages/settings/GeneralPage.tsx, its rows' titles and descriptions in settingsIndex.ts), and the
+/// (pages/settings/GeneralPage.tsx, its rows' titles and descriptions in src/shared/src/settingsIndex.ts), and the
 /// languages in @orbit/shared translation.ts. A missing counterpart is a FAILURE, never an
 /// `XCTSkip`.
 final class TranslationCopyParityTests: XCTestCase {
 
     private static let lib = "src/web/src/lib/translation.ts"
     private static let settings = "src/web/src/pages/settings/GeneralPage.tsx"
-    private static let settingsIndex = "src/web/src/pages/settings/settingsIndex.ts"
+    private static let settingsIndex = "src/shared/src/settingsIndex.ts"
     private static let shared = "src/shared/src/translation.ts"
 
     private enum ParityError: Error, CustomStringConvertible {
@@ -57,6 +57,8 @@ final class TranslationCopyParityTests: XCTestCase {
         let pairs: [(String, String)] = [
             ("translated", TranslationCopy.translated),
             ("showOriginal", TranslationCopy.showOriginal),
+            ("hideOriginal", TranslationCopy.hideOriginal),
+            ("showBoth", TranslationCopy.showBoth),
             ("showTranslation", TranslationCopy.showTranslation),
             ("original", TranslationCopy.original),
             ("translating", TranslationCopy.translating),
@@ -142,6 +144,57 @@ final class TranslationCopyParityTests: XCTestCase {
         assertContains(shared, "BILINGUAL_COLLAPSE_LINES = \(BilingualEnglish.collapseLines);", in: Self.shared)
         assertContains(shared, "BILINGUAL_LINE_CHARS = \(BilingualEnglish.lineChars);", in: Self.shared)
     }
+
+    /// The owner cards (board 04-owner-cards.html) draw two lines: the whole-card flip and an answer
+    /// the server refused untranslated. iOS/macOS builds each as parts its foot view joins with "·";
+    /// the web writes them in TranslationParts.tsx with a `<Sep />` between. Same words, same order.
+    func testTheOwnerCardLinesAreTheWebs() throws {
+        func line(_ parts: [SessionTranslation.FootPart]) -> String {
+            parts.map { part -> String in
+                switch part {
+                case .text(let w), .chip(let w), .action(let w, _): return w
+                }
+            }.joined(separator: " · ")
+        }
+        XCTAssertEqual(line(OwnerCardTranslations.foot(translates: true, showOriginal: false)), "Translated · Show original")
+        XCTAssertEqual(line(OwnerCardTranslations.foot(translates: true, showOriginal: true)), "Original · Show translation")
+        XCTAssertEqual(line(OwnerCardTranslations.refusedFoot), "Couldn't translate, so it wasn't sent · Retry · Send as written")
+        XCTAssertTrue(OwnerCardTranslations.foot(translates: false, showOriginal: false).isEmpty)
+
+        let web = try source(Self.parts)
+        assertContains(web, #"const Sep = () => <span className="chat-translate-sep">·</span>;"#, in: Self.parts)
+        assertContains(web, "<span>{flipped ? COPY.original : COPY.translated}</span> <Sep /> "
+            + #"<button type="button" className="chat-translate-action" onClick={onFlip}> "#
+            + "{flipped ? COPY.showTranslation : COPY.showOriginal} </button>", in: Self.parts)
+        // The first sentence names why (failure policy B, frame 5); with no reason it is the generic line above,
+        // which translationFailureLines.spec.ts and TranslationFailureLinesParityTests hold to the same fixture.
+        assertContains(web, "<span>{translationFailureSentence('answer', failureReason, httpStatus)}</span> <Sep /> "
+            + "<FootAction label={COPY.retry} onPress={onRetry} /> "
+            + "<Sep /> <FootAction label={COPY.sendAsWritten} onPress={onSendAsWritten} />", in: Self.parts)
+        // Every web owner card draws the flip from useOwnerCardTranslation/useOwnerCardFlip, and the
+        // ones whose answer can be refused draw it with RefusedAnswerFoot/RefusedSendBack.
+        for (card, refuses) in Self.webOwnerCards {
+            let text = try source(card)
+            XCTAssertTrue(text.contains("useOwnerCardTranslation(") || text.contains("useOwnerCardFlip("),
+                          "\(card) draws its flip from useOwnerCardTranslation or useOwnerCardFlip")
+            if refuses {
+                XCTAssertTrue(text.contains("<RefusedAnswerFoot") || text.contains("<RefusedSendBack"),
+                              "\(card) draws a refused answer with RefusedAnswerFoot or RefusedSendBack")
+            }
+        }
+    }
+
+    private static let parts = "src/web/src/components/TranslationParts.tsx"
+    private static let webOwnerCards: [(String, Bool)] = [
+        ("src/web/src/components/CoordinatorQuestionCard.tsx", true),
+        ("src/web/src/components/OwnerRequestCard.tsx", true),
+        ("src/web/src/components/ProjectSettlementCard.tsx", true),
+        ("src/web/src/components/OwnerConfirmationCard.tsx", true),
+        ("src/web/src/components/EvidenceDecisionCard.tsx", false),
+        ("src/web/src/components/CriteriaDecisionCard.tsx", false),
+        ("src/web/src/components/CrossingDecisionCard.tsx", false),
+        ("src/web/src/components/StartProjectCard.tsx", false),
+    ]
 
     /// The composer tag is built, not written: the web drops each name's parenthesis and joins the
     /// two with " → " as `TranslationLanguage.tag(to:)` does.

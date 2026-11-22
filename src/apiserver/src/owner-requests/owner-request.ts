@@ -11,6 +11,15 @@
 export const OWNER_REQUEST_KINDS = ['DECISION', 'SECRET', 'MANUAL_STEP', 'CONFIRM', 'WIKI_CREATE'] as const;
 export type OwnerRequestKind = (typeof OWNER_REQUEST_KINDS)[number];
 
+/**
+ * An agent proposing a change to the owner's own Settings (docs/settings-from-conversation-design.md §5.1, migration
+ * 1273). Filed only by `POST /runner/settings-proposals`, which writes its title and payload, so it is not one of the
+ * OWNER_REQUEST_KINDS `POST /runner/owner-requests` takes.
+ */
+export const SETTINGS_CHANGE = 'SETTINGS_CHANGE';
+/** Every kind a session files and the owner is alerted to. */
+export type FiledOwnerRequestKind = OwnerRequestKind | typeof SETTINGS_CHANGE;
+
 export const OWNER_REQUEST_STATES = ['PENDING', 'DONE', 'DECLINED', 'EXPIRED', 'WITHDRAWN'] as const;
 export type OwnerRequestState = (typeof OWNER_REQUEST_STATES)[number];
 
@@ -44,6 +53,15 @@ export const OWNER_REQUEST_NOT_ASKER = 'OWNER_REQUEST_NOT_ASKER';
 export const WIKI_CREATE_DECLINED = 'WIKI_CREATE_DECLINED';
 /** A WIKI_CREATE filed from a workspace with no repository: there is nothing to make a wiki for. */
 export const WIKI_CREATE_NO_REPOSITORY = 'WIKI_CREATE_NO_REPOSITORY';
+
+/** A settings proposal whose every change is already in force (design §5.1 step 2): nothing to ask the owner. */
+export const SETTINGS_ALREADY_SET = 'SETTINGS_ALREADY_SET';
+/** A settings proposal re-filing a change this session's card was declined for (design §5.1 step 4). */
+export const SETTINGS_CHANGE_DECLINED = 'SETTINGS_CHANGE_DECLINED';
+/** Saving a SETTINGS_CHANGE card on a request that carries an acting session (design §5.2): only the owner saves it. */
+export const SETTINGS_OWNER_CHANNEL_ONLY = 'SETTINGS_OWNER_CHANNEL_ONLY';
+/** Saving a SETTINGS_CHANGE card after one of its settings changed since it was proposed (design §5.2). */
+export const SETTINGS_STALE = 'SETTINGS_STALE';
 
 /** The maintenance a wiki made from a WIKI_CREATE card starts with (design §3.6): the Create wiki form's defaults. */
 export const WIKI_CREATE_DAILY_RUN_LIMIT = 8;
@@ -269,19 +287,20 @@ export function normalizeOwnerRequest(filing: OwnerRequestFiling, now: Date): Ow
 }
 
 /** The banner's first line, per kind. Short enough to read at a glance on a lock screen. */
-const ALERT_TITLES: Readonly<Record<OwnerRequestKind, string>> = {
+const ALERT_TITLES: Readonly<Record<FiledOwnerRequestKind, string>> = {
   DECISION: 'Decision needed',
   SECRET: 'Secret needed',
   MANUAL_STEP: 'Action needed',
   CONFIRM: 'Please confirm',
   WIKI_CREATE: 'Create a wiki?',
+  SETTINGS_CHANGE: 'Confirm settings',
 };
 
 /** Longest body a lock screen shows without cutting it. */
 export const OWNER_REQUEST_ALERT_BODY_MAX = 110;
 
 /** The lock-screen alert for a newly filed request: the kind as the title, the request's own title as the body. */
-export function ownerRequestAlert(kind: OwnerRequestKind, title: string): { title: string; body: string } {
+export function ownerRequestAlert(kind: FiledOwnerRequestKind, title: string): { title: string; body: string } {
   const line = title.replace(/\s+/g, ' ').trim();
   const body = line.length <= OWNER_REQUEST_ALERT_BODY_MAX
     ? line
@@ -295,7 +314,7 @@ export function ownerRequestAlert(kind: OwnerRequestKind, title: string): { titl
  * a SECRET has no reply path outside its card (secrets design §7.2), and the other kinds are read before they are
  * answered.
  */
-export function ownerRequestPushCategory(kind: OwnerRequestKind): string {
+export function ownerRequestPushCategory(kind: FiledOwnerRequestKind): string {
   return `ORBIT_OWNER_REQUEST_${kind}`;
 }
 
@@ -353,14 +372,17 @@ const ENDING_MEANING: Readonly<Record<Exclude<OwnerRequestState, 'PENDING'>, str
  * typed: no value reaches a turn, and neither does a free-text answer the value could have been pasted into.
  */
 export function ownerRequestResolutionPayload(request: EndedOwnerRequest): Record<string, unknown> {
-  const answer = (request.answer ?? {}) as { option?: number; text?: string };
+  const answer = (request.answer ?? {}) as { option?: number; text?: string; translation?: { text?: string } };
+  // The owner's words as the session reads them: their translation into the agent language when Settings ›
+  // Translation made one (the done text's, or a decline's reason's), else as they typed them.
+  const translated = typeof answer.translation?.text === 'string' ? answer.translation.text : undefined;
   const payload: Record<string, unknown> = {
     requestId: request.id,
     kind: request.kind,
     outcome: request.state,
     title: request.title,
     resolvedAt: request.resolvedAt?.toISOString() ?? null,
-    reason: request.resolutionNote,
+    reason: request.state === 'DECLINED' && translated !== undefined ? translated : request.resolutionNote,
   };
   if (request.kind === 'SECRET') {
     const spec = (request.secretSpec ?? {}) as Partial<OwnerRequestSecretSpec>;
@@ -398,7 +420,7 @@ export function ownerRequestResolutionPayload(request: EndedOwnerRequest): Recor
     const options = (request.options ?? []) as OwnerRequestOption[];
     payload.chosenOption = { index: answer.option, label: options[answer.option]?.label ?? null };
   }
-  if (answer.text !== undefined) payload.answerText = answer.text;
+  if (answer.text !== undefined) payload.answerText = translated ?? answer.text;
   return payload;
 }
 

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type JSX, type ReactNode } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
+import type { OwnerCardTranslation } from '@orbit/shared';
 import {
   CheckCircleFilled,
   CloseCircleFilled,
@@ -11,6 +12,7 @@ import {
 } from '@ant-design/icons';
 import remarkGfm from 'remark-gfm';
 import { api } from '../api';
+import { answerRefusedUntranslated } from '../lib/translation';
 import { copyText } from '../lib/clipboard';
 import { rehypeCodeWords } from '../lib/codeWords';
 import { decisionReceiptAnchor } from '../lib/decisionReceipt';
@@ -50,6 +52,7 @@ import { NOTE_PROMPT, OWN_ANSWER_PROMPT, YOUR_ANSWER, QuestionOptions, optionInd
 import { decisionReceiptTime } from './EvidenceDecisionCard';
 import Markdown from './Markdown';
 import type { TranscriptInsert } from './Transcript';
+import { RefusedAnswerFoot, useOwnerCardTranslation } from './TranslationParts';
 import { Alert } from './ui/Alert';
 import { Checkbox } from './ui/Checkbox';
 import { Input } from './ui/Input';
@@ -58,6 +61,8 @@ import { PasswordInput } from './ui/PasswordInput';
 import { Textarea } from './ui/Textarea';
 import { WikiCreateDialog, sameId, useWikiWorkspaceChoices } from './WikiSetUpDialog';
 import { ScheduleWaitingCard, isScheduleWaitingKind } from './ScheduleWaitingCard';
+import { ConditionWaitingCard, isConditionWaitingKind } from './ConditionWaitingCard';
+import { SettingsChangeCard, SettingsChangeFolded } from './SettingsChangeCard';
 import './OwnerRequest.css';
 import { useMachineName } from '../lib/managedRunner';
 
@@ -69,10 +74,31 @@ import { useMachineName } from '../lib/managedRunner';
  */
 
 type Ending =
-  | { to: 'done'; body: { option?: number; text?: string } }
-  | { to: 'decline'; body: { reason: string } }
+  | { to: 'done'; body: { option?: number; text?: string; sendAsWritten?: true } }
+  | { to: 'decline'; body: { reason: string; sendAsWritten?: true } }
   // WIKI_CREATE's Create wiki: the owner's door that makes the wiki and settles the card (design §3.6).
   | { to: 'create-wiki'; body: Record<string, never> };
+
+/**
+ * A request's agent-written words as the card draws them: translated while it is shown translated
+ * (board 04-owner-cards.html); a step's command and link, and the option picked, stay the original's.
+ */
+function shownRequest(request: OwnerRequest, t: OwnerCardTranslation | undefined): OwnerRequest {
+  if (!t) return request;
+  return {
+    ...request,
+    title: t.title || request.title,
+    why: t.why || request.why,
+    ifUnanswered: request.ifUnanswered ? t.ifUnanswered || request.ifUnanswered : request.ifUnanswered,
+    verifyHint: request.verifyHint ? t.verifyHint || request.verifyHint : request.verifyHint,
+    options: request.options ? request.options.map((o, i) => {
+      const to = t.options?.[i];
+      if (!to) return o;
+      return { ...o, label: to.label || o.label, ...(o.description !== undefined ? { description: to.description || o.description } : {}) };
+    }) : request.options,
+    steps: request.steps ? request.steps.map((step, i) => ({ ...step, text: t.steps?.[i]?.text || step.text })) : request.steps,
+  };
+}
 
 const PRIMARY: Readonly<Record<AgentRequestKind, string>> = {
   DECISION: 'Send answer',
@@ -80,6 +106,7 @@ const PRIMARY: Readonly<Record<AgentRequestKind, string>> = {
   MANUAL_STEP: 'Mark done',
   CONFIRM: 'Confirm',
   WIKI_CREATE: 'Create wiki',
+  SETTINGS_CHANGE: 'Save changes',
 };
 
 /** The runner a secret goes to, by the name the owner knows it by. */
@@ -95,6 +122,7 @@ function HoldingUp({ taskIds }: { taskIds: readonly string[] }): JSX.Element {
   const tasks = useQueries({
     queries: taskIds.map((id) => ({
       queryKey: ['owner-request-task', id] as const,
+      meta: { entities: ['task'] },
       queryFn: () => api<{ title?: string }>(`/tasks/${encodeURIComponent(id)}`),
       staleTime: 300_000,
       retry: false,
@@ -375,6 +403,15 @@ export function OwnerRequestCard(props: {
 }): JSX.Element {
   // A scheduled task's items (failed, held, a run's approval, a run's wider envelope) are answered through the door of
   // what they point at, so they draw their own body in the same frame.
+  // A proposed change to the owner's Settings is drawn as a confirmation card (docs/settings-from-conversation-design.md
+  // §8.1); answered, as its own one-line fold. Expired or withdrawn, it reads as any request does.
+  if (props.request.kind === 'SETTINGS_CHANGE') {
+    if (props.request.state === 'PENDING') return <SettingsChangeCard request={props.request} />;
+    if (props.request.state === 'DONE' || props.request.state === 'DECLINED') return <SettingsChangeFolded request={props.request} />;
+  }
+  if (props.request.state === 'PENDING' && isConditionWaitingKind(props.request.kind)) {
+    return <ConditionWaitingCard request={props.request} now={props.now} />;
+  }
   return isScheduleWaitingKind(props.request.kind) && props.request.state === 'PENDING'
     ? <ScheduleWaitingCard request={props.request} now={props.now} />
     : <AgentRequestCard {...props} />;
@@ -387,7 +424,8 @@ function AgentRequestCard({ request: given, now = Date.now(), onChat }: {
 }): JSX.Element {
   const qc = useQueryClient();
   const door = useSecretDoor(given);
-  const request = door.current;
+  const translated = useOwnerCardTranslation(door.current.translation);
+  const request = shownRequest(door.current, translated.shown);
   const [draft, setDraft] = useState<SecretDraft>(() => emptyDraft(request.secretSpec));
   const [chosen, setChosen] = useState<Choice>(request.recommendedOption ?? null);
   const [text, setText] = useState('');
@@ -517,11 +555,22 @@ function AgentRequestCard({ request: given, now = Date.now(), onChat }: {
           </div>
         ) : null}
         {request.verifyHint ? <p className="owner-request-hint">{`How to check: ${request.verifyHint}`}</p> : null}
+        {translated.foot}
 
         {failed ? (
           <Alert type="error" title={`The key did not reach ${runner}`} description={grant.removalNote ?? 'Enter it again.'} />
         ) : null}
-        {end.isError || door.failure ? (
+        {end.isError && answerRefusedUntranslated(end.error) && end.variables && end.variables.to !== 'create-wiki' ? (
+          <RefusedAnswerFoot
+            error={end.error}
+            resend={(sendAsWritten) => {
+              const ending = end.variables!;
+              return end.mutateAsync(
+                sendAsWritten ? ({ ...ending, body: { ...ending.body, sendAsWritten: true } } as Ending) : ending,
+              );
+            }}
+          />
+        ) : end.isError || door.failure ? (
           <Alert type="error" title="That was not recorded" description={door.failure ?? (end.error as Error).message} />
         ) : null}
 
@@ -681,7 +730,14 @@ const ENDING_ICON: Readonly<Record<string, ReactNode>> = {
 };
 
 /** A request that has ended, as one row: how, who, when, and from which device. */
-export function OwnerRequestResolved({ request: given, now = Date.now() }: { request: OwnerRequest; now?: number }): JSX.Element {
+export function OwnerRequestResolved({ request, now = Date.now() }: { request: OwnerRequest; now?: number }): JSX.Element {
+  if (request.kind === 'SETTINGS_CHANGE' && (request.state === 'DONE' || request.state === 'DECLINED')) {
+    return <SettingsChangeFolded request={request} />;
+  }
+  return <AgentRequestResolved request={request} now={now} />;
+}
+
+function AgentRequestResolved({ request: given, now }: { request: OwnerRequest; now: number }): JSX.Element {
   const door = useSecretDoor(given);
   const request = door.current;
   // A delivered key's whole story on a DONE request; on any other ending, only a removal the owner must be told of —

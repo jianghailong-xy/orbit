@@ -33,6 +33,25 @@ export function delegateRunsSignature(events: readonly RunEvent[]): string {
   return seqs.join(',');
 }
 
+const pendingReads = new Map<string, Promise<SubagentRunView[]>>();
+
+/**
+ * The one owner of `GET /sessions/:id/subagents`: the delegate view and the workflow view both read through it, so
+ * reads asked for in the same tick (both signatures moving on one transcript update) are one request. The request
+ * goes out after the tick's callers have joined, so a caller never gets an answer older than its own signature.
+ */
+export function readSessionSubagents(sessionId: string): Promise<SubagentRunView[]> {
+  let read = pendingReads.get(sessionId);
+  if (!read) {
+    read = Promise.resolve().then(() => {
+      pendingReads.delete(sessionId);
+      return getSessionSubagents(sessionId);
+    });
+    pendingReads.set(sessionId, read);
+  }
+  return read;
+}
+
 /** The session's SubAgent runs by delegate call, re-read whenever one starts or ends in the transcript. */
 export function useSubagentRuns(sessionId: string, events: readonly RunEvent[]): ReadonlyMap<string, SubagentRunView> {
   const signature = delegateRunsSignature(events);
@@ -43,7 +62,7 @@ export function useSubagentRuns(sessionId: string, events: readonly RunEvent[]):
   useEffect(() => {
     if (!signature) return;
     let closed = false;
-    getSessionSubagents(sessionId)
+    readSessionSubagents(sessionId)
       .then((rows) => {
         if (!closed) setState({ sessionId, runs: new Map(rows.map((row) => [row.toolUseId, row])) });
       })
@@ -109,6 +128,9 @@ export function delegateResultText(content: unknown, run: SubagentRunView | unde
     const value = JSON.parse(text.trim());
     if (value && typeof value === 'object') parsed = value;
   } catch {
+    // The call's JSON clipped to a preview (the server trims a long result): the run's own text, never the
+    // receipt's opening brace.
+    if (text.trim().startsWith('{')) return run && run.status !== 'RUNNING' && run.resultSummary ? run.resultSummary : null;
     return text;
   }
   if (parsed && typeof parsed.result === 'string' && parsed.result) return parsed.result;
@@ -186,4 +208,143 @@ export function delegateRunId(content: unknown): string | null {
   } catch {
     return null;
   }
+}
+
+/** Whether a run that has ended did not finish: failed or interrupted. A stopped run was stopped on purpose, so it is
+ *  grey and no failure (docs/mocks/subagent-card-and-end-line D1). */
+export const subagentRunFailed = (run: SubagentRunView): boolean =>
+  run.status === 'FAILED' || run.status === 'INTERRUPTED';
+
+/** How long a run took, once it has ended (`50s`, `4m 12s`); null while it runs. */
+export function subagentDuration(run: SubagentRunView): string | null {
+  if (run.status === 'RUNNING' || !run.endedAt) return null;
+  return wikiDuration((Date.parse(run.endedAt) - Date.parse(run.createdAt)) / 1000);
+}
+
+/** An engine as an Agent's chip names it: short, since the model follows it (OrbitKit's `SubagentBlock.shortName`). */
+export function agentShortName(engine: string): string {
+  switch (engine) {
+    case 'claude': return 'Claude';
+    case 'codex': return 'Codex';
+    case 'kimi': return 'Kimi';
+    case 'antigravity': return 'Antigravity';
+    case 'opencode': return 'OpenCode';
+    case 'dsh': return 'DeepSeek';
+    case 'cursor': return 'Cursor';
+    default: return engine.charAt(0).toUpperCase() + engine.slice(1);
+  }
+}
+
+/** The session an Agent was started from: its own engine and model. */
+export interface AgentParent {
+  engine: string | null;
+  model: string | null;
+}
+
+/** One model the session's Agents ran on, with how many runs took it; `engine` gives the chip its mark. */
+export interface AgentModelCount {
+  label: string;
+  engine: string | null;
+  count: number;
+}
+
+/** One place the session's Agents ran: a workspace by name, or null for the session's own machine. */
+export interface AgentMachineCount {
+  name: string | null;
+  count: number;
+}
+
+/**
+ * The session's Agents, as the composer band's line and its list draw them — the web's copy of OrbitKit's
+ * `SubagentSessionSummary` (docs/mocks/agents-band-models, revision 3). No cost anywhere.
+ */
+export interface SubagentSessionSummary {
+  count: number;
+  running: number;
+  /** The running ones first, then the rest, each newest first. */
+  rows: SubagentRunView[];
+  /** The words after "Agents" (see `subagentSessionSummary`). */
+  band: string;
+  /** The models the runs took, most runs first. */
+  models: AgentModelCount[];
+  /** Every place the runs ran, most runs first; the session's own machine is `name: null`. */
+  machines: AgentMachineCount[];
+  /** Whether any run went to another workspace. */
+  elsewhere: boolean;
+  /** Whether any run went to another workspace or another model than the session's: the band shows where
+   *  the work went only then, so a session whose Agents all ran on its own model and machine stays quiet. */
+  spread: boolean;
+  /** The newest running run, which the band names while one runs; null while none does. */
+  current: SubagentRunView | null;
+}
+
+/** The model a run took, as its chip names it: the catalogue's label, the id, else its engine's name. */
+export function agentModelLabel(run: SubagentRunView): string | null {
+  return run.modelLabel ?? run.model ?? (run.engine ? agentShortName(run.engine) : null);
+}
+
+/**
+ * Whether a run ran on the session's own machine and model: a shadow row (no engine of its own) runs on the
+ * parent's, and a run on the parent's engine with the parent's model is no different from the parent.
+ */
+export function agentRunIsOwn(run: SubagentRunView, parent: AgentParent | undefined): boolean {
+  if (run.workspaceName) return false;
+  if (!run.engine) return true;
+  return !!parent && run.engine === parent.engine && (run.model ?? null) === (parent.model ?? null);
+}
+
+/**
+ * Null when the session started no Agent. While one runs the band says what it is doing, by its `delegate`
+ * description; several running lead with how many (`2 running · Deploy …`), naming the newest; a running run
+ * with no description keeps the counts (`2 · 1 running`). With none running it is the count alone: the
+ * models and machines say what was done, and each run's title is on its row in the list.
+ */
+export function subagentSessionSummary(
+  runs: Iterable<SubagentRunView>,
+  parent?: AgentParent,
+): SubagentSessionSummary | null {
+  const all = [...runs];
+  if (all.length === 0) return null;
+  const newestFirst = (a: SubagentRunView, b: SubagentRunView) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0);
+  const going = all.filter((run) => run.status === 'RUNNING').sort(newestFirst);
+  const rows = [...going, ...all.filter((run) => run.status !== 'RUNNING').sort(newestFirst)];
+  const count = all.length;
+  const running = going.length;
+  const described = (run: SubagentRunView | undefined) => run?.description?.trim() ?? '';
+  let band: string;
+  if (running === 0) {
+    band = `${count}`;
+  } else {
+    const newest = described(going[0]);
+    band = !newest ? `${count} · ${running} running` : running > 1 ? `${running} running · ${newest}` : newest;
+  }
+  const models = new Map<string, AgentModelCount>();
+  const machines = new Map<string | null, AgentMachineCount>();
+  // Oldest first, so a tie keeps the order the runs were started in.
+  for (const run of [...rows].reverse()) {
+    const label = agentModelLabel(run);
+    if (label) {
+      const engine = run.engine ?? parent?.engine ?? null;
+      const key = `${engine ?? ''}\u0000${label}`;
+      const seen = models.get(key);
+      if (seen) seen.count++;
+      else models.set(key, { label, engine, count: 1 });
+    }
+    const name = run.workspaceName ?? null;
+    const place = machines.get(name);
+    if (place) place.count++;
+    else machines.set(name, { name, count: 1 });
+  }
+  const byCount = <T extends { count: number }>(list: T[]) => list.sort((a, b) => b.count - a.count);
+  return {
+    count,
+    running,
+    rows,
+    band,
+    models: byCount([...models.values()]),
+    machines: byCount([...machines.values()]),
+    elsewhere: all.some((run) => !!run.workspaceName),
+    spread: all.some((run) => !agentRunIsOwn(run, parent)),
+    current: going[0] ?? null,
+  };
 }

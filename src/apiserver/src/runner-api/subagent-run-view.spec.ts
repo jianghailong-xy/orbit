@@ -33,8 +33,22 @@ test('a shadow decision names the model the SubAgent runs on, labelled by the ru
     why: null, removed: [],
     costUsd: 0.21, resultSummary: 'Three callers.', workspaceName: null,
     description: null, engine: null, readonly: false, changedFiles: [],
+    workflowRunId: null, callIndex: null, label: null, phase: null,
     createdAt: '2026-11-11T10:00:00.000Z', endedAt: '2026-11-11T10:03:12.000Z',
   });
+});
+
+test("a workflow call's run names its workflow, index, label and phase; an empty label or phase is none", () => {
+  const decision = { level: 'S', model: 'claude-sonnet-5-5', applied: true, reasons: [] };
+  const call = subagentRunView({
+    ...base, toolUseId: 'toolu_workflow#1', decision, workflowRunId: 'wf-1', callIndex: 1, label: 'review:bugs', phase: 'Review',
+  });
+  assert.deepEqual(
+    [call.workflowRunId, call.callIndex, call.label, call.phase],
+    ['wf-1', 1, 'review:bugs', 'Review'],
+  );
+  const bare = subagentRunView({ ...base, decision, workflowRunId: 'wf-1', callIndex: 0, label: '', phase: '' });
+  assert.deepEqual([bare.callIndex, bare.label, bare.phase], [0, null, null]);
 });
 
 test('a remote run names its workspace: the row\'s now, else the one its decision recorded', () => {

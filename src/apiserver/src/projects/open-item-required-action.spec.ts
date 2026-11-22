@@ -249,10 +249,10 @@ test('a coordinator\'s own sentence is untouched by whether the owner could ask 
   }
 });
 
-test('readCoordinatorReach: Ask-again and the chat read one answer, and unreachable means neither works', async () => {
-  const live: SessionEnding = { status: 'AWAITING_INPUT', endReason: null, completedAt: null, archivedAt: null, deletedAt: null, cancelRequestedAt: null };
-  const reaped: SessionEnding = { ...live, status: 'FAILED', cancelRequestedAt: new Date() };
-  const closed: SessionEnding = { ...live, status: 'CANCELLED', endReason: 'COMPLETED', completedAt: new Date() };
+test('readCoordinatorReach: Ask again can wait for recovery, and unreachable means neither action works', async () => {
+  const live: SessionEnding = { status: 'AWAITING_INPUT', finishedAt: null, lastTurnOutcome: 'ANSWERED', endReason: null, completedAt: null, archivedAt: null, deletedAt: null, cancelRequestedAt: null };
+  const reaped: SessionEnding = { ...live, status: 'FAILED', finishedAt: new Date(), lastTurnOutcome: 'FAILED', cancelRequestedAt: new Date() };
+  const closed: SessionEnding = { ...live, status: 'CANCELLED', finishedAt: new Date(), endReason: 'COMPLETED', completedAt: new Date() };
   const answering = (reason: string | null) => ({ receiveBlockedReasonFor: async () => reason });
   const project = (session: SessionEnding | null) => ({ coordinatorSessionId: session ? 'coordinator' : null, coordinatorSession: session });
   const read = async (reason: string | null, session: SessionEnding | null) => {
@@ -261,22 +261,21 @@ test('readCoordinatorReach: Ask-again and the chat read one answer, and unreacha
   };
 
   assert.deepEqual(await read(null, live), { askable: true, receiving: true, unreachable: false });
-  // 2026-11-15: the reaper's FAILED run, its runner back — a message revives it, so both doors work.
+  // With the runner back, chat can send and Ask again can queue.
   assert.deepEqual(await read(null, reaped), { askable: true, receiving: true, unreachable: false });
-  // The same run while its runner is away: neither door works.
-  assert.deepEqual(await read('RUNNER_OFFLINE', reaped), { askable: false, receiving: false, unreachable: true });
+  // Ask again can queue while the runner is away and chat cannot send.
+  assert.deepEqual(await read('RUNNER_OFFLINE', reaped), { askable: true, receiving: false, unreachable: false });
   // A live run a message cannot reach (its run retired) is unreachable too.
   assert.deepEqual(await read('RUN_RETIRED', live), { askable: false, receiving: false, unreachable: true });
   assert.deepEqual(await read(null, null), { askable: false, receiving: false, unreachable: true });
   // Closed by the owner, its runner up: the chat may reopen it, Ask-again does not — and the
   // heading does not say it cannot take messages while the chat is live.
   assert.deepEqual(await read(null, closed), { askable: false, receiving: true, unreachable: false });
-  // Never a drawn press over a conversation the chat cannot reach.
+  // The heading marks the coordinator unreachable when both actions are unavailable.
   for (const reason of [null, 'RUNNER_OFFLINE', 'TRASHED', 'RUN_RETIRED', 'SESSION_GONE']) {
     for (const session of [live, reaped, closed, null]) {
       const reach = await read(reason, session);
-      assert.ok(!reach.askable || reach.receiving, `askable implies receiving (${reason}, ${session?.status})`);
-      assert.equal(reach.unreachable, !reach.receiving, `unreachable iff the chat is refused (${reason}, ${session?.status})`);
+      assert.equal(reach.unreachable, !reach.askable && !reach.receiving, `unreachable iff both actions are unavailable (${reason}, ${session?.status})`);
     }
   }
 });

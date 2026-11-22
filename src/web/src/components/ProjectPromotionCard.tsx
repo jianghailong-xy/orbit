@@ -32,11 +32,10 @@ import {
 } from '../lib/coordinatorChat';
 import { encodeId } from '../lib/idCodec';
 import {
-  projectIntegrationQuery,
   projectOpenItemsQuery,
   projectPromotionQuery,
 } from '../lib/queries';
-import { integrationInFlight, pollWhileInFlight, promotionInFlight, streamPoll } from '../lib/listBudget';
+import { pollWhileInFlight, promotionInFlight, streamPoll } from '../lib/listBudget';
 import { ago, formatSpan } from '../lib/watches';
 import {
   BLOCKED_BY,
@@ -46,6 +45,7 @@ import {
   promotionReceiptLine,
 } from '../lib/projectMerge';
 import { DEFAULT_MAIN_BRANCH, RUN_DELIVERY_ANCHOR, mainBranchName, revealRunDelivery } from '../lib/projectStart';
+import { useProjectIntegration } from '../lib/pollOwner';
 
 /**
  * The card that asks the account owner to merge a project branch into main (mock 4,
@@ -1003,6 +1003,7 @@ export function ProjectPromotion({
   });
   const project = useQuery({
     queryKey: ['project', projectId],
+    meta: { entities: ['project', 'task'] },
     queryFn: () => api<PromotionProjectView>(`/projects/${encodeURIComponent(projectId!)}`),
     enabled: Boolean(projectId),
   });
@@ -1010,11 +1011,7 @@ export function ProjectPromotion({
   // names the landing in front of it, and the three states that are not blocked have nothing to
   // look past.
   const blocked = promotion.data?.state === 'BLOCKED';
-  const integration = useQuery({
-    ...projectIntegrationQuery(projectId ?? ''),
-    enabled: Boolean(projectId) && blocked,
-    refetchInterval: blocked ? pollWhileInFlight(20_000, (query) => integrationInFlight(query.state.data)) : false,
-  });
+  const integration = useProjectIntegration(projectId ?? '', blocked);
   const current = promotion.data;
   if (!projectId || !current) return null;
   // A candidate with a moment is drawn by the transcript, and one whose stamp nothing can read

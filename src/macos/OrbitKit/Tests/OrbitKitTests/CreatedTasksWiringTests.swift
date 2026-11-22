@@ -76,7 +76,7 @@ final class CreatedTasksWiringTests: XCTestCase {
     /// run starting or settling on a task the card draws all make the focused card read again.
     func testTaskEventsAndReconnectsMakeTheFocusedCardReadAgain() throws {
         let app = code(try source("AppModel.swift"))
-        XCTAssertTrue(try slice(app, from: "private func reconcileOnConnect() async {", to: "\n    }\n")
+        XCTAssertTrue(try slice(app, from: "private func alignOnScreenAfterConnect() async {", to: "\n    }\n")
             .contains("nudgeCreatedTasks()"))
         XCTAssertTrue(try slice(app, from: "case .tasks:\n", to: "case .taskLists:")
             .contains("nudgeCreatedTasks()"))
@@ -95,12 +95,12 @@ final class CreatedTasksWiringTests: XCTestCase {
     func testTheWordsAreOrbitKits() throws {
         let card = code(try source("Views/CreatedTasksCard.swift"))
         for word in ["Tasks created here", "View all in Tasks", "Open project ›", "Replaces ", " running", " done",
-                     "elsewhere"] {
+                     " failed", "elsewhere"] {
             XCTAssertFalse(card.contains("\"\(word)") || card.contains("\(word)\""),
                            "the card spells \(word.debugDescription) itself")
         }
         for use in ["SessionTaskCard(created: console.createdTasks.snapshot", "SessionCreatedTasksCopy.title",
-                    "SessionCreatedTasksCopy.elsewhere", "card.countParts",
+                    "SessionCreatedTasksCopy.elsewhere", "card.band", "band.failedPart",
                     "SessionCreatedTasksCopy.replaces(", "SessionCreatedTasksCopy.separator"] {
             XCTAssertTrue(card.contains(use), "the card no longer reads \(use)")
         }

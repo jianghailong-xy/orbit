@@ -1,10 +1,16 @@
-import { Prisma, RunStatus, TaskEvidenceDecisionValue, TaskVerdict } from '@prisma/client';
+import { Prisma, TaskEvidenceDecisionValue, TaskVerdict } from '@prisma/client';
+import { RELEASE_FAILURE_SELECT, releaseWasFailure } from '../common/session-release';
 import {
   AgentProvider,
+  accountCapWindows,
+  cursorUsageRead,
   isEngine,
   USAGE_LIMIT_ERROR_MARKERS,
   runnerCatalogRow,
+  quotaExpiresAt,
+  quotaNearLimit,
   spentPlanUsage,
+  withEnginePlanUsage,
   type AccountEngine,
   type PlanUsage,
   type PlanUsageSnapshot,
@@ -12,11 +18,13 @@ import {
   type RunnerModelCatalog,
 } from '@orbit/shared';
 import { runnerAccountPausedUntil } from '../common/account-pause';
-import { modelRoutingEnabled } from '../common/model-routing-switch';
+import { sanitizeRunnerEngines } from '../common/runner-engines';
+import { modelRoutingEnabled, optimizeForOf } from '../common/model-routing-switch';
 import { resolvePermissionMode } from '../common/permission-mode';
 import { firstRuntimeCatalogModel, sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import { normalizeEffortForProvider } from '../common/runtime-provider';
 import type { PrismaService } from '../prisma/prisma.service';
+import { subagentRouteInput } from '../runner-api/subagent-route';
 import {
   defaultDeepSeekKey,
   resolvedCredentialEngines,
@@ -24,6 +32,7 @@ import {
   type ResolvedCredential,
 } from '../providers/engine-provider';
 import { sessionEngine, sessionEnginesOf } from '../providers/session-engine';
+import { ACCOUNT_CHOICE } from '../providers/account';
 import { automaticAccount, runAccount } from '../providers/plan-usage-accounts';
 import { followsRuntimeCatalog } from '../providers/preset-overlay';
 import { signedOutEngineRefusal } from '../sessions/engine-signin-preflight';
@@ -33,7 +42,6 @@ import { RUNNER_BEATS } from '../runners/runner-presence';
 import { readExecutableAcceptanceOutcome } from './executable-acceptance-round';
 import {
   MODEL_AT_CAPACITY_ERROR_MARKER,
-  MODEL_ROUTING_ENGINES,
   MODEL_ROUTING_LEVELS,
   priorLevel,
   routeTaskRun,
@@ -68,8 +76,8 @@ export function taskRouteReads(prisma: PrismaService, ownerId: string, now: Date
     workspace: (id: string) => once(`workspace:${id}`, () => prisma.workspace.findFirst({
       where: { id, ownerId },
       select: {
-        runnerId: true, effort: true, modelRouting: true, modelRoutingProviders: true, modelRoutingOptimizeFor: true,
-        env: true, codexAccount: true, claudeAccount: true,
+        runnerId: true, effort: true,
+        env: true, codexAccount: true, claudeAccount: true, kimiAccount: true, antigravityAccount: true, cursorAccount: true,
       },
     })),
     /** What an unpinned run of this task starts on: its project's coordinator, else its workspace's
@@ -243,6 +251,27 @@ function windowName(window: PlanUsageWindow | undefined, slot: string): string {
 }
 
 /**
+ * When an account's quota goes to waste and whether it is nearly spent, as account selection weighs them
+ * (quotaExpiresAt, quotaNearLimit in planUsage.ts): what the SubAgent router spends first (§4.2).
+ */
+export function quotaTiming(
+  snapshot: PlanUsageSnapshot | null | undefined,
+  now: Date,
+): { expiresAt: number | null; nearLimit: boolean; opusUtilization: number | null } {
+  // A model family's own window (Opus or Sonnet weekly) caps that family, not the account: it moves the family's
+  // rows (opusUtilization), never the account's place.
+  const account = snapshot ? { ...snapshot, sevenDayOpus: undefined, sevenDaySonnet: undefined } : snapshot;
+  const at = quotaExpiresAt(account, now);
+  const opus = snapshot?.sevenDayOpus;
+  const live = opus && !(Date.parse(opus.resetsAt ?? '') <= now.getTime());
+  return {
+    expiresAt: Number.isFinite(at) ? at : null,
+    nearLimit: quotaNearLimit(account, now),
+    opusUtilization: live ? opus.utilization : null,
+  };
+}
+
+/**
  * The fullest live window of one account's snapshot, the one that caps the whole engine — a model family's
  * own window (Opus weekly) is not one. Null when none is live: one past its reset has given its quota back.
  */
@@ -251,8 +280,13 @@ export function fullestWindow(snapshot: PlanUsageSnapshot | null | undefined, no
     ? [
       [snapshot.fiveHour, '5-hour'],
       [snapshot.sevenDay, 'weekly'],
+      // Kimi Code's monthly pair.
+      [snapshot.month, 'monthly'],
+      [snapshot.monthCode, 'monthly'],
       [snapshot.primary, windowName(snapshot.primary, 'primary')],
       [snapshot.secondary, windowName(snapshot.secondary, 'secondary')],
+      // Antigravity's shared buckets and a Cursor account's usage limit (accountCapWindows).
+      ...accountCapWindows(snapshot),
     ]
     : [];
   let quota: ModelRoutingEngineState['quota'] = null;
@@ -283,7 +317,10 @@ export function engineState(
   const accounts = {
     codexAccount: agent.codexAccount,
     claudeAccount: agent.claudeAccount,
-    ...(automatic ? { [engine === AgentProvider.CLAUDE ? 'claudeAccount' : 'codexAccount']: automatic } : {}),
+    kimiAccount: agent.kimiAccount,
+    antigravityAccount: agent.antigravityAccount,
+    cursorAccount: agent.cursorAccount,
+    ...(automatic ? { [ACCOUNT_CHOICE[engine]]: automatic } : {}),
   };
   const signedOut = signedOutEngineRefusal({
     runtime: engine,
@@ -294,12 +331,22 @@ export function engineState(
     nowMs: now.getTime(),
   }) !== null;
   const account = runAccount(engine, agent.env, accounts, runner, now);
-  const snapshot = account === null ? undefined : spentPlanUsage(runner.planUsage as PlanUsage | null, engine, account);
+  // Antigravity's reading travels with its engine health, not in planUsage: folded in as every quota reader does.
+  const usage = withEnginePlanUsage(runner.planUsage as PlanUsage | null, sanitizeRunnerEngines(runner.engines));
+  const snapshot = account === null ? undefined : spentPlanUsage(usage, engine, account);
   const quota = fullestWindow(snapshot, now);
+  // No reading at all, or one without a window fullestWindow reads (a runner that fetched nothing for it).
+  // Antigravity reads as read once it reports any bucket (one of a model's own is a reading too); Cursor once it
+  // reports its included usage.
+  const quotaUnread = !snapshot
+    || (![snapshot.fiveHour, snapshot.sevenDay, snapshot.month, snapshot.monthCode, snapshot.primary, snapshot.secondary].some(Boolean)
+      && !(snapshot.buckets?.length) && !cursorUsageRead(snapshot));
   const regionBlocked = engine === AgentProvider.CLAUDE && blockedRunnerRegion(runner, now) !== null;
   // Only the SubAgent router reads it (routeSubagent); chooseEngine does not.
   const paused = runnerAccountPausedUntil(runner.accountPauses, engine, account, now) !== null;
-  return { signedOut, quota, ...(regionBlocked ? { regionBlocked } : {}), ...(paused ? { paused } : {}) };
+  return {
+    signedOut, quota, ...quotaTiming(snapshot, now), ...(quotaUnread ? { quotaUnread } : {}), ...(regionBlocked ? { regionBlocked } : {}), ...(paused ? { paused } : {}),
+  };
 }
 
 /** The engine a task's newest work run was created on: what a verification looks past (§6). */
@@ -312,28 +359,12 @@ async function lastRunEngine(reads: TaskRouteReads, taskId: string): Promise<str
   return run ? sessionEngine(reads.prisma, run) : null;
 }
 
-/**
- * The router's cross-engine input (§6): the engines the owner allowed this Agent's task runs, what
- * the target runner says of each one a run could start on, and for a verification the engine the
- * task it verifies last ran on. Nothing past the allowed list when the task pins its engine or the
- * owner allowed none: the run cannot leave its own engine then.
- */
+/** For a verification task, the engine the task it verifies last ran on (§6): the pick moves off it when it can. */
 async function routeEngines(
   reads: TaskRouteReads,
   task: TaskRouteSubject,
-  agent: RouteAgent | null,
-  env: Awaited<ReturnType<typeof routeEnvironment>>,
 ): Promise<NonNullable<ModelRoutingInput['engines']>> {
-  const allowed = (agent?.modelRoutingProviders ?? []).filter((engine) => MODEL_ROUTING_ENGINES.includes(engine));
-  if (task.engine || task.provider || allowed.length === 0 || !agent) return { allowed };
-  const states: Record<string, ModelRoutingEngineState> = {};
-  for (const engine of new Set([env.engine, ...allowed])) {
-    if (env.runner && (engine === AgentProvider.CLAUDE || engine === AgentProvider.CODEX)) {
-      states[engine] = engineState(engine, agent, env.runner, reads.now);
-    }
-  }
-  const verifiedRunEngine = task.verifiesTaskId ? await lastRunEngine(reads, task.verifiesTaskId) : null;
-  return { allowed, states, verifiedRunEngine };
+  return { verifiedRunEngine: task.verifiesTaskId ? await lastRunEngine(reads, task.verifiesTaskId) : null };
 }
 
 /** `autoRunHoldOff`'s reading: an error naming a spent quota says nothing about the task (§3.3). */
@@ -369,7 +400,7 @@ async function readRunHistory(
     where: { ownerId, taskId, startsTaskWork: true },
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     select: {
-      id: true, createdAt: true, status: true, error: true,
+      id: true, createdAt: true, ...RELEASE_FAILURE_SELECT, error: true,
       engine: true, provider: true, providerBuiltin: true, ownerId: true, model: true, effort: true,
     },
   });
@@ -390,19 +421,21 @@ async function readRunHistory(
   });
   const levels = new Map(decisions.map((row) => [row.sessionId, row.level]));
   return runs.map((run, index): ModelRoutingRun => {
+    // The run failed: released by a failure (common/session-release.ts).
+    const failed = releaseWasFailure(run);
     const next = runs[index + 1]?.createdAt;
     const judged = (at: Date) => at >= run.createdAt && (!next || at < next);
     return {
       ordinal: index + 1,
       status: run.status,
-      quotaFailure: run.status === RunStatus.FAILED && quotaFailure(run.error),
-      capacityFailure: run.status === RunStatus.FAILED && capacityFailure(run.error),
+      quotaFailure: failed && quotaFailure(run.error),
+      capacityFailure: failed && capacityFailure(run.error),
       level: MODEL_ROUTING_LEVELS.find((level) => level === levels.get(run.id)) ?? null,
       model: run.model,
       effort: run.effort,
       runtime: engines.get(run.id) ?? undefined,
       // The run's own end first, then what was said about its work afterwards.
-      outcome: run.status === RunStatus.FAILED
+      outcome: failed
         ? (readExecutableAcceptanceOutcome(run.error) ? 'ACCEPTANCE_FAILED' : 'FAILED')
         : failedVerdicts.some((row) => judged(row.updatedAt)) ? 'VERIFICATION_FAILED'
           : sendBacks.some((row) => judged(row.decidedAt)) ? 'SENT_BACK'
@@ -429,14 +462,12 @@ export interface TaskRouteSubject {
  * Route one fresh run: read the router's inputs, call it, and return the decision with the
  * baseline and features it is recorded with (§7.3).
  *
- * `applied` when the Agent has smart selection on (`workspace.modelRouting`) and a tier was decided:
- * the run is then created on the routed provider, model and effort (§7.4). Otherwise it is the
- * shadow — the run is dispatched exactly as it was before routing existed, and the decision records
- * what routing would have picked.
+ * `applied` whenever a tier was decided: the run is then created on the routed provider, model and
+ * effort (§7.4). There is no per-Agent switch any more (owner, 2026-11-20; `workspace.modelRouting`
+ * is no longer read): the account's switch alone decides.
  *
  * Null when the account has smart model selection off (common/model-routing-switch.ts): routing
- * does not exist then, so there is no decision to record, shadow or not, and the run is dispatched
- * as before routing whatever the Agent's own switch says.
+ * does not exist then, so there is no decision to record, and the run is dispatched as before routing.
  */
 export async function planTaskRunRoute(
   reads: TaskRouteReads,
@@ -456,7 +487,16 @@ export async function planTaskRunRoute(
     : ((env.owner?.preferences ?? {}) as { defaultEffort?: string }).defaultEffort || undefined;
   const effort = normalizeEffortForProvider(env.engine as AgentProvider, named) || null;
   const modelHint = MODEL_ROUTING_LEVELS.find((level) => level === task.modelHint) ?? null;
-  const engines = await routeEngines(reads, task, agent, env);
+  const engines = await routeEngines(reads, task);
+  // The pool the SubAgent router picks from, read for this Agent's runner the way a SubAgent there reads it.
+  const pool = await subagentRouteInput(prisma as unknown as Prisma.TransactionClient, {
+    ownerId,
+    workspaceId: workspace.id,
+    runnerId: workspace.runnerId,
+    dto: { toolUseId: '', type: 'task', definitionSource: 'builtin' },
+    parent: { engine: env.engine, provider: env.provider, model: task.model ?? '', effort },
+    now: reads.now,
+  });
   const structuralFeatures = {
     completionCriterion: task.completionCriterion ?? null,
     hasAcceptanceCommand: task.acceptanceCommand != null,
@@ -465,8 +505,8 @@ export async function planTaskRunRoute(
     dependents,
     promptChars: prompt.length,
   };
-  const optimizeFor = agent?.modelRoutingOptimizeFor === 'balance' ? 'balance'
-    : agent?.modelRoutingOptimizeFor === 'intelligence' ? 'intelligence' : 'cost';
+  // The account's, for every Agent (owner, 2026-11-19).
+  const optimizeFor = optimizeForOf(await reads.owner());
   const decision = routeTaskRun({
     optimizeFor,
     features: structuralFeatures,
@@ -488,6 +528,7 @@ export async function planTaskRunRoute(
       planUsage: env.planUsage,
     },
     engines,
+    pool,
   });
   // The run the router compared against: the newest one that did not stop at a usage limit or
   // at a model at capacity.
@@ -501,9 +542,9 @@ export async function planTaskRunRoute(
     : null;
   return {
     policyVersion: decision.policyVersion,
-    // Only a decided tier is applied: one that kept the baseline (a model pin, no tier table, no
-    // suggestion, no catalogue) changes nothing whether the switch is on or not.
-    applied: agent?.modelRouting === true && decision.level !== null,
+    // Only a decided tier is applied: one that kept the baseline (a model pin, no suggestion, no
+    // provider that can take it) changes nothing.
+    applied: decision.level !== null,
     level: decision.level,
     engine: decision.engine,
     provider: decision.provider,
@@ -539,10 +580,6 @@ export async function planTaskRunRoute(
         : null,
       escalatedFrom,
       opusWeeklyUtilization: env.planUsage?.claude?.sevenDayOpus?.utilization ?? null,
-      modelRouting: agent?.modelRouting === true,
-      // Cross-engine (§6): what the owner allowed, and what the runner said of each candidate.
-      modelRoutingProviders: engines.allowed ?? [],
-      engineStates: engines.states ?? null,
       verifiedRunEngine: engines.verifiedRunEngine ?? null,
     },
     reasons: decision.reasons,
@@ -643,9 +680,10 @@ export interface ModelHintOption {
 }
 
 /**
- * Each tier as the router would resolve it for this task's engine on its Agent's runner, from the
- * same tier table and the same catalogue rules — so the picker never shows a model routing would
- * not pick. A runner's quota is left out: it moves a single decision, not what a tier means.
+ * Each tier as the router would resolve it for this task on its Agent's runner, from the same pool
+ * and the same catalogue rules — so the picker never shows a model routing would not pick. What
+ * the runner says of each sign-in and every account's quota are left out: they move a single
+ * decision, not what a tier means.
  */
 export async function readModelHintOptions(
   reads: TaskRouteReads,
@@ -653,6 +691,21 @@ export async function readModelHintOptions(
 ): Promise<ModelHintOption[]> {
   const agent = task.assigneeId ? await reads.workspace(task.assigneeId) : null;
   const env = agent ? await routeEnvironment(reads, task, task.assigneeId!, agent.runnerId) : null;
+  const read = agent && env ? await subagentRouteInput(reads.prisma as unknown as Prisma.TransactionClient, {
+    ownerId: reads.ownerId,
+    workspaceId: task.assigneeId!,
+    runnerId: agent.runnerId,
+    dto: { toolUseId: '', type: 'task', definitionSource: 'builtin' },
+    parent: { engine: env.engine, provider: env.provider, model: '', effort: null },
+    now: reads.now,
+  }) : null;
+  const pool = read && {
+    ...read,
+    engines: null,
+    providers: read.providers.map(({ account: _account, ...provider }) => (provider.pool
+      ? { ...provider, pool: { members: provider.pool.members.map((m) => ({ label: m.label })) } }
+      : provider)),
+  };
   return MODEL_ROUTING_LEVELS.map((level) => {
     const decision = env && routeTaskRun({
       task: { engine: task.engine ?? null, provider: task.provider ?? null, modelHint: level },
@@ -665,13 +718,14 @@ export async function readModelHintOptions(
         runtimeDefaultModels: env.runtimeDefaultModels,
         defaultPermissionMode: env.permissionMode,
       },
+      pool,
     });
     const model = decision?.level ? decision.model : null;
     return {
       level,
-      provider: env?.provider ?? task.provider ?? null,
+      provider: (model ? decision!.provider : null) ?? env?.provider ?? task.provider ?? null,
       model,
-      label: model ? runnerCatalogRow(env!.runtime, model, env!.modelCatalog)?.label ?? model : null,
+      label: model ? runnerCatalogRow(decision!.engine, model, env!.modelCatalog)?.label ?? model : null,
       effort: model ? decision!.effort : null,
     };
   });

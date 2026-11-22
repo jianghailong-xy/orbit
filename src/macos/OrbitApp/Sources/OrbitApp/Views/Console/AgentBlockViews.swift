@@ -101,11 +101,15 @@ struct AgentBlockLines: View {
     /// What the running Agent is on right now (`ToolCardView.liveActivity`); nil once it is open.
     let live: String?
     let steps: Int
+    /// A background run that has ended: the card draws its ending under these lines
+    /// (`SubagentFoldedEnd`), so the third line is not drawn and the time ends the second.
+    var endsOnCard = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            AgentIdentityLine(block: block)
-            if block.running {
+            AgentIdentityLine(block: block, trailing: endsOnCard ? block.numbers : nil)
+            if endsOnCard {
+            } else if block.running {
                 TimelineView(.periodic(from: .now, by: 1)) { context in
                     let elapsed = block.startedAt.map { context.date.timeIntervalSince($0) }
                     outcomeRow(text: live, italic: true,
@@ -239,8 +243,14 @@ struct AgentGroupView: View {
         let open = openID == card.id
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 7) {
-                ToolStatusGlyph(status: block.running ? .running : block.outcomeIsFailure ? .error : card.status)
-                    .frame(width: 20)
+                Group {
+                    if !block.running, let run = taskActivity?.subagentRun(card.id) {
+                        SubagentEndGlyph(status: run.status)
+                    } else {
+                        ToolStatusGlyph(status: block.running ? .running : card.status)
+                    }
+                }
+                .frame(width: 20)
                 Text(card.input["description"]?.stringValue ?? SubagentBlock.label)
                     .font(.orbitLabel.weight(open ? .semibold : .regular))
                     .lineLimit(1).truncationMode(.tail)
@@ -264,23 +274,38 @@ struct AgentGroupView: View {
     }
 }
 
-/// The composer band's line for the session's Agents: what the running one is doing, or how many
-/// (`SubagentSessionSummary.band`). No cost.
-/// It opens their list (`AgentsSheet`). Absent until the session has started one.
+/// The composer band's line for the session's Agents (docs/mocks/agents-band-models): what the running one
+/// is doing and where, or with none running where the work went — the machines first, then each model with
+/// how many runs took it. No cost, and no failure count: the owner can do nothing about a failed run (the
+/// agent that started it was told), and its row in the sheet keeps its red mark. Always one line: what does
+/// not fit gives way in order (the title, the models after the first, then the words, then the models), the
+/// machines last. It opens their list
+/// (`AgentsSheet`). Absent until the session has started one.
 struct AgentsBandRow: View {
     @Environment(AppModel.self) private var app
     let console: ConsoleModel
     @State private var showing = false
 
     var body: some View {
-        if let summary = SubagentSessionSummary.make(Array(console.subagentRuns.values)) {
+        let session = app.session(id: console.sessionID)
+        if let summary = SubagentSessionSummary.make(Array(console.subagentRuns.values),
+                                                     parentEngine: session?.engine, parentModel: session?.model) {
             Button { showing = true } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "sparkle").font(.orbitMeta).foregroundStyle(.purple)
-                    Text("Agents").font(.orbitLabel.weight(.semibold))
-                    Text(summary.band).font(.orbitMeta).foregroundStyle(.secondary).lineLimit(1)
-                    Spacer(minLength: 4)
-                    if summary.running > 0 { ProgressView().controlSize(.mini) }
+                    // One line, as the Background row's label: never broken into "Ag / ent / s".
+                    Text("Agents").font(.orbitLabel.weight(.semibold)).lineLimit(1).fixedSize()
+                    if summary.running > 0 {
+                        AgentsBandRunning(summary: summary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
+                        Text(summary.band).font(.orbitMeta).monospacedDigit().foregroundStyle(.secondary)
+                            .fixedSize()
+                        if summary.spread { AgentsBandSpread(summary: summary) }
+                        Spacer(minLength: 4)
+                    }
+                    // The app's one running mark, as the Background row draws it (`BackgroundRowMarkView`).
+                    if summary.running > 0 { SpinnerGlyph(color: .accentColor) }
                     Image(systemName: "chevron.right")
                         .font(.orbitMeta.weight(.semibold)).foregroundStyle(.secondary)
                 }
@@ -290,9 +315,9 @@ struct AgentsBandRow: View {
             .buttonStyle(.plain)
             .composerBandCard()
             .padding(.bottom, .composerBandGap)
-            .accessibilityLabel("Agents: \(summary.band)")
+            .accessibilityLabel(summary.spoken)
             .sheet(isPresented: $showing) {
-                AgentsSheet(summary: summary, parentEngine: app.session(id: console.sessionID)?.engine) { id in
+                AgentsSheet(summary: summary, parentEngine: session?.engine) { id in
                     showing = false
                     console.revealAgent(id)
                 }
@@ -301,7 +326,112 @@ struct AgentsBandRow: View {
     }
 }
 
-/// Every Agent the session started: two figures and the runs — the running ones first. No cost is shown,
+/// The running Agent's title, then where it runs (board ④): the whole title and the model's name when
+/// both fit; else the title is cut first, down to a readable stub, and the name stays; else the name
+/// gives way to the mark, beside the whole title or after a cut one. A cut title fills the line up to
+/// the chip, so no gap sits before the failures.
+private struct AgentsBandRunning: View {
+    let summary: SubagentSessionSummary
+
+    var body: some View {
+        let title = Text(summary.band).font(.orbitMeta).foregroundStyle(.secondary).lineLimit(1)
+        // Measured at its stub (idealWidth), laid out over all the room the chip leaves.
+        let cut = title.frame(minWidth: 80, idealWidth: 80, maxWidth: .infinity, alignment: .leading)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) { title.fixedSize(); AgentsBandCurrent(summary: summary, named: true) }
+            HStack(spacing: 8) { cut; AgentsBandCurrent(summary: summary, named: true) }
+            HStack(spacing: 8) { title.fixedSize(); AgentsBandCurrent(summary: summary, named: false) }
+            HStack(spacing: 8) { cut; AgentsBandCurrent(summary: summary, named: false) }
+        }
+    }
+}
+
+/// Where the running Agent runs: its machine when it went to another one, else its model when that is
+/// not the session's own — the chip with its name, or its mark alone (`named` false).
+private struct AgentsBandCurrent: View {
+    let summary: SubagentSessionSummary
+    let named: Bool
+
+    var body: some View {
+        if let run = summary.current {
+            if let place = run.workspaceName, !place.isEmpty {
+                AgentFact(symbol: "desktopcomputer", text: place).lineLimit(1).fixedSize()
+            } else if !summary.currentIsOwnModel, let label = SubagentSessionSummary.modelLabel(run) {
+                AgentBandChip(engine: run.engine, label: named ? label : nil).fixedSize()
+            }
+        }
+    }
+}
+
+/// Where the work went, with none running: the machines first, then the models most runs first, each
+/// with its count. What does not fit gives way: the models after the first fold into "+n", then the
+/// words go and the marks keep their counts; the machines stay.
+private struct AgentsBandSpread: View {
+    let summary: SubagentSessionSummary
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            line(words: true, allModels: true)
+            line(words: true, allModels: false)
+            line(words: false, allModels: true)
+            line(words: false, allModels: false)
+            line(words: false, allModels: false, models: false)
+        }
+    }
+
+    private func line(words: Bool, allModels: Bool, models: Bool = true) -> some View {
+        let shown = allModels ? summary.models : Array(summary.models.prefix(1))
+        let folded = summary.models.count - shown.count
+        return HStack(spacing: 5) {
+            if summary.elsewhere {
+                AgentFact(symbol: "desktopcomputer",
+                          text: words ? "\(summary.machines.count) machines" : "\(summary.machines.count)")
+            }
+            if models {
+                ForEach(Array(shown.enumerated()), id: \.offset) { _, m in
+                    AgentBandChip(engine: m.engine, label: words ? m.label : nil, count: m.count)
+                }
+                if folded > 0 {
+                    Text("+\(folded)").font(.orbitLabel).foregroundStyle(.secondary)
+                        .padding(.horizontal, 5).padding(.vertical, 2)
+                        .background(Color.gray.opacity(0.14), in: RoundedRectangle(cornerRadius: 6))
+                }
+            }
+        }
+        .lineLimit(1)
+        .fixedSize()
+    }
+}
+
+/// `[C] Opus 5.5 ×9` on the band: the coding agent's mark, the model unless there is no room for it, and
+/// how many runs took it. `AgentEngineChip`'s look.
+struct AgentBandChip: View {
+    let engine: String?
+    let label: String?
+    var count: Int? = nil
+
+    var body: some View {
+        let tint = engineTint(engine)
+        HStack(spacing: 4) {
+            if let engine {
+                Text(String(SubagentBlock.shortName(engine).prefix(1)))
+                    .font(.orbitSectionLabel.weight(.heavy))
+                    .foregroundStyle(Color(white: 1))
+                    .frame(width: 14, height: 14)
+                    .background(tint, in: RoundedRectangle(cornerRadius: 4))
+            }
+            if let label { Text(label).lineLimit(1) }
+            if let count { Text("×\(count)").foregroundStyle(.secondary).monospacedDigit() }
+        }
+        .font(.orbitLabel)
+        .padding(.leading, engine == nil ? 6 : 3).padding(.trailing, label == nil && count == nil ? 3 : 6)
+        .padding(.vertical, 2)
+        .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+        .fixedSize()
+    }
+}
+
+/// Every Agent the session started, the running ones first. No cost is shown,
 /// not even a run's own. A row closes the sheet and scrolls the conversation to its block.
 struct AgentsSheet: View {
     let summary: SubagentSessionSummary
@@ -311,18 +441,10 @@ struct AgentsSheet: View {
 
     var body: some View {
         NavigationStack {
+            // One list, the running ones first (`summary.rows`' order), with no Running / Done headings:
+            // each row's status mark already tells them apart.
             List {
-                Section {
-                    HStack(spacing: 10) {
-                        figure("\(summary.count)", summary.running > 0 ? "runs · \(summary.running) running" : "runs · all done")
-                        figure(summary.spread.components(separatedBy: " · ").first ?? summary.spread,
-                               summary.spread.components(separatedBy: " · ").dropFirst().first ?? " ")
-                    }
-                }
-                let running = summary.rows.filter(\.isRunning)
-                let ended = summary.rows.filter { !$0.isRunning }
-                if !running.isEmpty { Section("Running") { ForEach(running) { row($0) } } }
-                if !ended.isEmpty { Section("Done") { ForEach(ended) { row($0) } } }
+                ForEach(summary.rows) { row($0) }
             }
             .navigationTitle("Agents")
             #if os(iOS)
@@ -337,21 +459,15 @@ struct AgentsSheet: View {
         #endif
     }
 
-    private func figure(_ value: String, _ caption: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(value).font(.title3.weight(.semibold)).monospacedDigit()
-            Text(caption).font(.orbitMeta).foregroundStyle(.secondary).lineLimit(2)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
     private func row(_ run: SubagentRunView) -> some View {
         let block = SubagentBlock.describe(input: .object([:]), run: run, status: .ok,
                                            parentEngine: parentEngine)
         return Button { reveal(run.toolUseId) } label: {
             HStack(alignment: .top, spacing: 10) {
-                ToolStatusGlyph(status: block.running ? .running : block.outcomeIsFailure ? .error : .ok)
-                    .frame(width: 18)
+                Group {
+                    if block.running { SpinnerGlyph(color: .accentColor) } else { SubagentEndGlyph(status: run.status) }
+                }
+                .frame(width: 18)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(run.description ?? run.type).font(.body).lineLimit(1)
                     AgentIdentityLine(block: block, showsMeta: false, trailing: rowNumbers(block, run))

@@ -23,7 +23,8 @@ import (
 // makes a temporary detached worktree of that workspace's workDir at its own HEAD (outside the workDir, under this
 // machine's ~/.orbit), runs the child engine there exactly as a same-machine SubAgent runs (child mode, preamble,
 // definition, permission rules: the subagentChildRunners), relays its events to the server, and removes the worktree
-// at the end. The result is text only: when the child changed anything, the runner says what it discarded
+// at the end. A claim marked inPlace (a read-only run on a work dir that is not a git repository) runs the child in the
+// workDir itself, read-only, and makes and removes no worktree. The result is text only: when the child changed anything, the runner says what it discarded
 // (discardedChangesLine). The run's conversation is kept after it ends (remoteSubagentKeep), so a claim that names it
 // in resumeOf continues it, in a new worktree at the same path, which is where the engine looks for it. A run the heartbeat says to stop (stopSubagentRunIds) is stopped with the same grace a
 // same-machine SubAgent gets; a run this process was hosting when it stopped is reported INTERRUPTED, by the stop
@@ -37,6 +38,11 @@ import (
 // claim's resumeOf: @orbit/shared's SUBAGENT_REMOTE_RESUME_V1. The server refuses a resume for a runner without it.
 const subagentRemoteResumeCapabilityV1 = "subagent-remote-resume/v1"
 
+// subagentRemoteInPlaceCapabilityV1 declares that this runner runs a read-only remote SubAgent in a work dir that is
+// not a git repository, in that directory itself, on a claim's inPlace: @orbit/shared's SUBAGENT_REMOTE_IN_PLACE_V1.
+// The server places no such run on a runner without it.
+const subagentRemoteInPlaceCapabilityV1 = "subagent-remote-in-place/v1"
+
 // subagentStopParent is why the target stops a remote run: its parent session stopped it or ended.
 const subagentStopParent = "parent_stopped"
 
@@ -45,7 +51,10 @@ const subagentStopParent = "parent_stopped"
 type remoteSubagentRecord struct {
 	RunID   string `json:"runId"`
 	WorkDir string `json:"workDir"`
+	// Tree is the temporary worktree the run works in; "" for a run in place, which works in WorkDir and must never
+	// have it removed.
 	Tree    string `json:"tree"`
+	InPlace bool   `json:"inPlace,omitempty"`
 	// The conversation a resume continues: its engine, the engine's id for it, and the directory holding the engine's
 	// state for it. A resume runs in Tree again, which may be another run's directory's, and so may StateDir be.
 	Engine        string `json:"engine,omitempty"`
@@ -130,6 +139,8 @@ type remoteSubagentClaim struct {
 	Background       bool            `json:"background"`
 	Prompt           string          `json:"prompt"`
 	Exec             AgentExecConfig `json:"exec"`
+	// InPlace runs the child read-only in WorkDir itself, which is not a git repository: no worktree is made.
+	InPlace bool `json:"inPlace"`
 }
 
 // remoteSubagentTask is one remote run this process hosts.
@@ -352,22 +363,36 @@ func runClaimedRemoteSubagent(ctx context.Context, t *Transport, task *remoteSub
 	scratch := filepath.Join(dir, "scratch")
 	_ = os.MkdirAll(scratch, 0o700)
 	// A new conversation runs in this run's own tree. A resume runs in the tree of the run that opened the
-	// conversation, at the same path, which is where the engine finds it, and on that run's engine state.
-	rec := remoteSubagentRecord{RunID: claim.RunID, WorkDir: workDir, Tree: filepath.Join(dir, "tree"), StateDir: scratch}
+	// conversation, at the same path, which is where the engine finds it, and on that run's engine state. A run in
+	// place has no tree: it works in workDir, which is never removed.
+	rec := remoteSubagentRecord{RunID: claim.RunID, WorkDir: workDir, Tree: filepath.Join(dir, "tree"), StateDir: scratch, InPlace: claim.InPlace}
+	if claim.InPlace {
+		rec.Tree = ""
+	}
 	if claim.ResumeOf != "" {
 		prev, ok := readRemoteSubagentRecord(claim.ResumeOf)
 		if !ok || !prev.Ended || prev.EngineSession == "" {
 			return fail("this runner no longer has the conversation of the SubAgent it was to continue (an ended one's is" +
 				" kept for 7 days after its last run). Start a new SubAgent with the full brief instead.")
 		}
+		if prev.InPlace != claim.InPlace {
+			return fail("its work directory has become or stopped being a git repository since that SubAgent ran, so its" +
+				" conversation is not where the engine would look for it. Start a new SubAgent with the full brief instead.")
+		}
 		rec.Tree, rec.StateDir, rec.Engine, rec.EngineSession = prev.Tree, prev.StateDir, prev.Engine, prev.EngineSession
 	}
 	tree := rec.Tree
-	if !remoteSubagents.takeTree(tree) {
+	cwd := tree
+	// Two runs may not continue one conversation at once: its worktree, or for a run in place its engine state.
+	busy := tree
+	if claim.InPlace {
+		cwd, busy = workDir, rec.StateDir
+	}
+	if !remoteSubagents.takeTree(busy) {
 		return fail("another run is already continuing that SubAgent's conversation; resume it once that run has ended.")
 	}
-	defer remoteSubagents.releaseTree(tree)
-	if claim.ResumeOf != "" {
+	defer remoteSubagents.releaseTree(busy)
+	if claim.ResumeOf != "" && !claim.InPlace {
 		// A worktree an earlier run of the conversation left behind, of the work dir it had then.
 		if prev, ok := readRemoteSubagentRecord(claim.ResumeOf); ok {
 			removeRemoteSubagentTree(firstNonEmpty(prev.WorkDir, workDir), tree)
@@ -375,23 +400,42 @@ func runClaimedRemoteSubagent(ctx context.Context, t *Transport, task *remoteSub
 	}
 	// Recorded before the worktree exists, so a crash while it is made still leaves the next start a record to clean.
 	_ = writeJSONFile(filepath.Join(dir, "run.json"), rec)
-	if err := addRemoteSubagentTree(claim.RunID, workDir, tree); err != nil {
-		return fail(err.Error())
+	if claim.InPlace {
+		if info, err := os.Stat(workDir); err != nil || !info.IsDir() {
+			return fail(fmt.Sprintf("the work directory %s of the workspace it was handed to does not exist on this machine.", workDir))
+		}
+	} else {
+		if err := addRemoteSubagentTree(claim.RunID, workDir, tree); err != nil {
+			return fail(err.Error())
+		}
+		defer removeRemoteSubagentTree(workDir, tree)
 	}
-	defer removeRemoteSubagentTree(workDir, tree)
 
-	// The definition as the target workspace's own HEAD has it, read from the worktree the child runs in.
-	def, err := findSubagentDefinition(sessionSubagentDefinitions(tree), claim.Type)
+	// The definition as the target workspace has it, read from the directory the child runs in.
+	def, err := findSubagentDefinition(sessionSubagentDefinitions(cwd), claim.Type)
 	if err != nil {
 		return fail(err.Error())
 	}
+	if claim.InPlace {
+		// Nothing discards what a run in place writes: it is read-only whatever the definition found here says.
+		def.Readonly = true
+	}
 	// The parent session's claim as far as a child needs one: approvals are filed under the parent's id (the server
 	// lets this runner, the run's target, file them), and the server's exec is the child's engine and mode.
+	// The child's Plan gate reads the mode it was claimed in: this machine hosts no socket for the parent session.
+	childExec := claim.Exec
+	childExec.Env = map[string]string{}
+	for k, v := range claim.Exec.Env {
+		childExec.Env[k] = v
+	}
+	if mode := strings.TrimSpace(childExec.PermissionMode); mode != "" {
+		childExec.Env[envSubagentRemoteMode] = mode
+	}
 	parent := &ClaimedSession{
-		SessionID: claim.SessionID, Provider: claim.Exec.Provider, Agent: claim.Exec, WorkDir: tree,
+		SessionID: claim.SessionID, Provider: childExec.Provider, Agent: childExec, WorkDir: cwd,
 		WatchesDisabled: true, WikiDisabled: true,
 	}
-	engine := subagentEngine(claim.Exec, parent)
+	engine := subagentEngine(childExec, parent)
 	runChild, ok := subagentChildRunners[engine]
 	if !ok {
 		return fail(fmt.Sprintf("SubAgents cannot run on the %s engine on this runner.", engine))
@@ -405,9 +449,11 @@ func runClaimedRemoteSubagent(ctx context.Context, t *Transport, task *remoteSub
 		if err := subagentResumeRefusal(&subagentRecord{RunID: claim.ResumeOf, Engine: rec.Engine, EngineSession: rec.EngineSession}); err != nil {
 			return fail(err.Error())
 		}
-		head, _ := git(tree, "rev-parse", "--short", "HEAD")
-		prompt = fmt.Sprintf("(From Orbit: you continue in a new worktree of this workspace at %s. The worktree you"+
-			" worked in before was discarded when you ended, so anything you changed there is gone.)\n\n%s", head, prompt)
+		if !claim.InPlace {
+			head, _ := git(tree, "rev-parse", "--short", "HEAD")
+			prompt = fmt.Sprintf("(From Orbit: you continue in a new worktree of this workspace at %s. The worktree you"+
+				" worked in before was discarded when you ended, so anything you changed there is gone.)\n\n%s", head, prompt)
+		}
 	} else {
 		rec.Engine = engine
 		if engine == providerClaude {
@@ -433,11 +479,15 @@ func runClaimedRemoteSubagent(ctx context.Context, t *Transport, task *remoteSub
 	remoteSubagents.mu.Unlock()
 	var res ExecResult
 	if !stopped && ctx.Err() == nil {
-		logln(fmt.Sprintf("remote SubAgent %s — running %s in a worktree of %s", claim.RunID, engine, workDir))
+		where := "in a worktree of"
+		if claim.InPlace {
+			where = "read-only in"
+		}
+		logln(fmt.Sprintf("remote SubAgent %s — running %s %s %s", claim.RunID, engine, where, workDir))
 		var conversation string
 		res, conversation, err = runChild(withSubagentApprovals(ctx, claim.RunID), subagentChild{
-			t: t, parent: parent, exec: claim.Exec, def: def, runID: claim.RunID, engineSession: rec.EngineSession,
-			resume: claim.ResumeOf != "", cwd: tree, scratch: scratch, stateDir: rec.StateDir, prompt: prompt,
+			t: t, parent: parent, exec: childExec, def: def, runID: claim.RunID, engineSession: rec.EngineSession,
+			resume: claim.ResumeOf != "", cwd: cwd, scratch: scratch, stateDir: rec.StateDir, prompt: prompt,
 			emit: relay.add, spawned: spawned,
 		})
 		if conversation != "" && conversation != rec.EngineSession {
@@ -446,7 +496,10 @@ func runClaimedRemoteSubagent(ctx context.Context, t *Transport, task *remoteSub
 			_ = writeJSONFile(filepath.Join(dir, "run.json"), rec)
 		}
 	}
-	changed := remoteSubagentTreeChanges(tree)
+	var changed []string
+	if !claim.InPlace {
+		changed = remoteSubagentTreeChanges(tree)
+	}
 	relay.close(15 * time.Second)
 
 	remoteSubagents.mu.Lock()
@@ -746,7 +799,8 @@ func (s *bgJobService) followRemoteSubagent(ctx context.Context, run *subagentRu
 	run.status, run.result = status, result
 	answeredElsewhere := run.background || run.detached
 	s.subagents.mu.Unlock()
-	if answeredElsewhere || status == subagentStatusStopped || status == subagentStatusInterrupted {
+	// A workflow's call is answered to its script (subagent_workflow.go), not as a background_task.
+	if run.workflowID == "" && (answeredElsewhere || status == subagentStatusStopped || status == subagentStatusInterrupted) {
 		bgStatus := map[string]string{subagentStatusDone: bgStatusCompleted, subagentStatusFailed: bgStatusFailed}[status]
 		if bgStatus == "" {
 			bgStatus = bgStatusKilled

@@ -46,7 +46,8 @@ object CardRequests {
         return when (verb) {
             CardVerb.CONFIRM_EVIDENCE, CardVerb.SEND_BACK -> if (card.family == CardFamily.EVIDENCE) {
                 val body = EvidenceDecision(requireNotNull(card.context.text("decidingSessionId")), required("evidenceRevision"),
-                    if (verb == CardVerb.SEND_BACK) "SEND_BACK" else "CONFIRM", if (verb == CardVerb.SEND_BACK) note() else null)
+                    if (verb == CardVerb.SEND_BACK) "SEND_BACK" else "CONFIRM", if (verb == CardVerb.SEND_BACK) note() else null,
+                    sendAsWritten = if (input.sendAsWritten && verb == CardVerb.SEND_BACK) true else null)
                 request(listOf("tasks", card.objectId, "evidence", "decision"), encoded(Wire.json.encodeToString(body)))
             } else owner(card, verb, input)
             CardVerb.CONFIRM_OWNER -> owner(card, verb, input)
@@ -56,16 +57,23 @@ object CardRequests {
             CardVerb.START -> {
                 val original = requireNotNull(row.obj("startRequest"))
                 val settings = input.settings ?: Wire.json.decodeFromJsonElement(ProjectStartSettings.serializer(), requireNotNull(original.obj("settings")))
-                require(settings.line in setOf("MAIN", "PROJECT_BRANCH") && settings.maxConcurrentTasks in 1..100)
+                require((settings.line == null || settings.line in setOf("MAIN", "PROJECT_BRANCH")) && settings.maxConcurrentTasks in 1..100)
                 val body = buildJsonObject {
                     put("criteriaDigest", requireNotNull(original.text("criteriaDigest")))
                     put("requestId", card.objectId)
-                    put("line", settings.line); put("automatic", settings.automatic); put("maxConcurrentTasks", settings.maxConcurrentTasks)
+                    // A request with no line (§12.15 P-M2) is answered with none: the line is decided when the first task commits.
+                    settings.line?.let { put("line", it) }
+                    put("automatic", settings.automatic); put("maxConcurrentTasks", settings.maxConcurrentTasks)
                     put("mergeCheckCommand", settings.mergeCheckCommand?.trim()?.takeIf { it.isNotBlank() }?.let(::JsonPrimitive) ?: JsonNull)
                     if (settings.line == "PROJECT_BRANCH") settings.projectBranchName?.trim()?.takeIf { it.isNotBlank() }?.let { put("projectBranchName", it) }
+                    if (settings.line == "PROJECT_BRANCH") {
+                        put("landingCheckCommand", settings.landingCheckCommand?.takeIf { it.isNotBlank() }?.let(::JsonPrimitive) ?: JsonNull)
+                        put("landingCheckTimeoutSeconds", settings.landingCheckTimeoutSeconds?.let(::JsonPrimitive) ?: JsonNull)
+                    }
+                    put("mergeCheckTimeoutSeconds", settings.mergeCheckTimeoutSeconds?.let(::JsonPrimitive) ?: JsonNull)
                     // The main branch rides only as the card showed it: a press that brings no settings of its own names none, and
                     // the project keeps the one it stands on rather than taking the coordinator's suggestion as the owner's choice.
-                    input.settings?.upstreamRef?.trim()?.takeIf { it.isNotBlank() }?.let { put("upstreamRef", it) }
+                    if (settings.line != null) input.settings?.upstreamRef?.trim()?.takeIf { it.isNotBlank() }?.let { put("upstreamRef", it) }
                     // How the work reaches main, the same way, and with a main line only: the door refuses AGENT_PUSH anywhere else
                     // (409 DELIVERY_MODE_NEEDS_MAIN_LINE), and a card that offered no choice records none.
                     if (settings.line == "MAIN") input.settings?.deliveryMode?.let { put("deliveryMode", it) }
@@ -79,6 +87,8 @@ object CardRequests {
                 request(projectPath("open-items", card.objectId, "answer"), buildJsonObject {
                     input.option?.let { put("option", it) }
                     input.text.trim().takeIf { it.isNotEmpty() }?.let { put("text", it) }
+                    // Settings › Translation (2A): the words again, untranslated, after a 422 TRANSLATION_FAILED.
+                    if (input.sendAsWritten) put("sendAsWritten", true)
                 })
             }
             CardVerb.RETURN_COORDINATOR -> request(projectPath("open-items", card.objectId, "return-to-coordinator"))
@@ -161,6 +171,8 @@ object CardRequests {
                 put("reviewRecordId", record)
                 if (answers.isNotEmpty()) put("answers", JsonArray(answers))
             } else put("note", input.text.trim().also { require(it.isNotEmpty() && it.length <= 4000) { "Enter a reason (up to 4000 characters)." } })
+            // Settings › Translation (2A): the owner's words again, untranslated, after a 422 TRANSLATION_FAILED.
+            if (input.sendAsWritten) put("sendAsWritten", true)
         }
         return ApiRequest(listOf("tasks", card.objectId, "owner-confirmation"), HttpMethod.POST, body = body.toString().encodeToByteArray())
     }

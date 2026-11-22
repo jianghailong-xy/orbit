@@ -34,7 +34,7 @@ public enum RunnerPageFormat {
 
     /// The name every screen shows a machine by: the owner's alias, else Orbit Cloud for the account's
     /// managed runner (its row's `managed`, else `ManagedRunnerIdentity`, the managed status's runnerId —
-    /// never its stored name `orbit-managed`), else the machine's own name.
+    /// never its stored name, `orbit-managed` on a server before migration 1250), else the machine's own name.
     public static func displayName(_ runner: Runner) -> String {
         displayName(runner, managedRunnerID: ManagedRunnerIdentity.runnerID)
     }
@@ -65,6 +65,23 @@ public enum RunnerPageFormat {
     public static func isManaged(_ runnerID: String?, managedRunnerID: String?) -> Bool {
         guard let runnerID, let managedRunnerID, !runnerID.isEmpty, !managedRunnerID.isEmpty else { return false }
         return PublicID.storageKey(runnerID) == PublicID.storageKey(managedRunnerID)
+    }
+
+    /// The OS a runner reported, from its `os:<goos>` capability (`darwin`, `linux`, `windows`, …), as the web's
+    /// `machineOs` reads it; nil when it has not said. A machine list draws its mark by it (docs/mocks/machine-menu-icons, A).
+    public static func os(_ runner: Runner) -> String? {
+        guard let capability = runner.capabilities?.first(where: { $0.hasPrefix("os:") }) else { return nil }
+        return String(capability.dropFirst(3))
+    }
+
+    /// Orbit Cloud leads the list. The other machines keep the order the server gave them.
+    public static func managedFirst(_ runners: [Runner], managedRunnerID: String?) -> [Runner] {
+        guard let index = runners.firstIndex(where: { isManaged($0, managedRunnerID: managedRunnerID) }),
+              index != runners.startIndex else { return runners }
+        var order = runners
+        let managed = order.remove(at: index)
+        order.insert(managed, at: 0)
+        return order
     }
 
     /// A list row's `4/12` and the bar beside it. The web card's rule: none for an offline machine,
@@ -123,6 +140,19 @@ public enum RunnerPageFormat {
             .flatMap { $0.isEmpty || $0 == shown ? nil : $0 }
         let version = RunnerAttention.runnerVersionLine(runner.version, managed: orbitCloud)
         return [host, version].compactMap { $0 }.joined(separator: RunnerPageCopy.RUNNER_LINE_SEPARATOR)
+    }
+
+    /// Where a machine's IP is, from the Claude region check's last answer (`runner.region`):
+    /// `📍 Japan`, `📍 Japan (via proxy)`. Nil for a runner no check has decided, or one too old to
+    /// check. The web's `runnerLocationLine`.
+    public static func location(_ runner: Runner) -> String? {
+        guard let region = runner.region else { return nil }
+        let name = region.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let place = name.isEmpty ? (region.country?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "") : name
+        guard !place.isEmpty else { return nil }
+        return region.viaProxy == true
+            ? RunnerPageCopy.runnerLocationViaProxy(place: place)
+            : RunnerPageCopy.runnerLocation(place: place)
     }
 
     // MARK: Needs Attention
@@ -382,6 +412,13 @@ public enum RunnerPageFormat {
     public static func engineSite(_ health: RunnerEngineHealth) -> String? {
         guard (health.accounts ?? []).count < 2 else { return nil }
         return KimiSite.current(of: health)?.domain
+    }
+
+    /// OpenCode's note after its version when its CLI listed no provider key (web's
+    /// `1.19.5 · no provider key found`): its Unknown is about a key, never the version. Nil otherwise.
+    public static func engineKeyNote(_ health: RunnerEngineHealth) -> String? {
+        health.engine == "opencode" && health.openCodeNoKey == true && health.auth != "yes"
+            ? RunnerPageCopy.RUNNER_ENGINE_NO_PROVIDER_KEY : nil
     }
 
     /// Whether the Engines row offers Sign In: an engine Orbit signs in, installed, with a login
@@ -793,6 +830,73 @@ public enum RunnerPageFormat {
     /// machine, so it works with the runner offline; an added account's sign-in is deleted by the
     /// runner, which has to be online for it.
     public static func canRemove(_ line: AccountLine, offline: Bool) -> Bool { line.isDefault || !offline }
+
+    /// What a runner declares when it can make an added Claude Code account the Default: the swap
+    /// itself, and moving a session into its account's new folder (RunnersService.setDefaultAccount
+    /// asks for both).
+    public static let claudeAccountSwapCapabilities = ["claude-account-swap/v1", "claude-account-move/v1"]
+
+    /// Whether `line`'s menu offers Set as default: an added Claude Code account's only.
+    public static func offersSetDefault(_ line: AccountLine, engine: String) -> Bool {
+        engine == "claude" && !line.isDefault
+    }
+
+    /// The Set as default this runner has in flight or last finished, when it is `account`'s; nil otherwise.
+    public static func swapOf(_ runner: Runner, account: String) -> RunnerClaudeAccountSwapState? {
+        guard let swap = runner.claudeAccountSwap, swap.account == account else { return nil }
+        return swap
+    }
+
+    /// Why Set as default can't be chosen now, said where its hint is; null when it can. `pressing`:
+    /// this page's own request is on its way.
+    public static func setDefaultBlocked(_ runner: Runner, offline: Bool, pressing: Bool) -> String? {
+        if offline { return RunnerAccountCopy.RUNNER_ACCOUNT_SET_DEFAULT_OFFLINE }
+        let caps = Set(runner.capabilities ?? [])
+        if !claudeAccountSwapCapabilities.allSatisfy(caps.contains) {
+            return RunnerAccountCopy.RUNNER_ACCOUNT_SET_DEFAULT_UPDATE
+        }
+        if pressing || runner.claudeAccountSwap?.status == "pending" {
+            return RunnerAccountCopy.RUNNER_ACCOUNT_SET_DEFAULT_BUSY
+        }
+        return nil
+    }
+
+    /// The question before `line`'s Set as default: the swap of the two folders, the terminal, the
+    /// sessions and the workspaces. The Default's folder is the one the runner reports, else ~/.claude.
+    public static func setDefaultQuestion(_ line: AccountLine, health: RunnerEngineHealth,
+                                          runner: Runner) -> RemovalQuestion {
+        let accounts = health.accounts ?? []
+        let defaultAccount = accounts.first { $0.id == CodexAccounts.defaultID }
+        let defaultDir = (defaultAccount?.home ?? defaultAccount?.codexHome).map(tildePath) ?? "~/.claude"
+        let defaultName = CodexAccounts.label(CodexAccounts.defaultID, accounts: accounts)
+        let dir = line.home ?? ""
+        return RemovalQuestion(title: RunnerAccountCopy.runnerAccountSetDefaultTitle(name: line.name),
+                               message: RunnerAccountCopy.runnerAccountSetDefaultDetail(
+                                   name: line.name, defaultDir: defaultDir, defaultName: defaultName,
+                                   dir: dir, runner: displayName(runner)))
+    }
+
+    /// Under an account while it is being made the Default: how many sessions' turns the swap waits on,
+    /// and any terminal Claude Code on either folder. Nil unless its swap is pending.
+    public static func settingDefaultLine(_ runner: Runner, line: AccountLine) -> String? {
+        guard let swap = swapOf(runner, account: line.id), swap.status == "pending" else { return nil }
+        let waiting = swap.waitingOn.count
+        let said: String
+        switch waiting {
+        case 0: said = RunnerAccountCopy.runnerAccountSettingDefault(name: line.name)
+        case 1: said = RunnerAccountCopy.runnerAccountSettingDefaultOne(name: line.name)
+        default: said = RunnerAccountCopy.runnerAccountSettingDefaultMany(name: line.name, count: waiting)
+        }
+        if swap.foreignProcesses.isEmpty { return said }
+        return said + " " + RunnerAccountCopy.RUNNER_ACCOUNT_SETTING_DEFAULT_TERMINAL
+    }
+
+    /// A swap of this account's that failed, which puts both logins back: its `message` is the machine's
+    /// reason. Nil otherwise.
+    public static func failedSwap(_ runner: Runner, line: AccountLine) -> RunnerClaudeAccountSwapState? {
+        guard let swap = swapOf(runner, account: line.id), swap.status == "failed" else { return nil }
+        return swap
+    }
 
     /// The question in front of an account's Remove, and what removing it comes to.
     public struct RemovalQuestion: Equatable, Sendable {

@@ -5,7 +5,7 @@ import { Agent as HttpsAgent, request as httpsRequest } from 'node:https';
 import { AgentProvider } from '@orbit/shared';
 import { ACCOUNT_DISABLED, DisabledAccounts } from '../auth/disabled-accounts';
 import { sha256 } from '../common/crypto.util';
-import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
+import { isHeld } from '../common/session-release';
 import { PrismaService } from '../prisma/prisma.service';
 import { poolPauseBlocksRequest } from './pool-pause';
 import { claudeCodexLoginEnabled } from './codex-login-claude';
@@ -49,6 +49,7 @@ import { PoolLoginLedger } from './pool-login-ledger';
 import { PoolNotices } from './pool-notice';
 import { decryptSecret, encryptSecret } from './provider-crypto';
 import { readResponsesEvent, type ResponsesOutcome } from './responses-stream-tap';
+import { servesKeptSubagent } from './kept-subagent-gateway';
 
 /** How long a refresh may take before the request that needed it is answered 502. */
 const REFRESH_TIMEOUT_MS = 15_000;
@@ -413,7 +414,7 @@ export class PoolLoginGatewayService {
         pool: { select: { slug: true, label: true, engine: true, ownerId: true, shared: true } },
         session: {
           select: {
-            status: true, ownerId: true, provider: true, poolCodexAccountId: true, poolKeyId: true,
+            status: true, finishedAt: true, ownerId: true, provider: true, poolCodexAccountId: true, poolKeyId: true,
             completedAt: true, deletedAt: true, owner: { select: { disabledAt: true } },
             engine: true, model: true, cancelRequestedAt: true, endReason: true,
           },
@@ -425,10 +426,9 @@ export class PoolLoginGatewayService {
     // A SubAgent's token (mintSubagentPoolLoginToken) names its own credential, and its child runs codex on this
     // pool whatever the parent session runs: only the codex gateway serves it, on a pool its owner did not share.
     const subagent = Boolean(row.accountId || row.keyId);
+    const open = isHeld(session) && !session.completedAt;
     const current =
       pool.engine === AgentProvider.CODEX &&
-      OPEN_SESSION_STATUSES.includes(session.status) &&
-      !session.completedAt &&
       !session.deletedAt &&
       // Nobody's session but the pool's owner's: the token's person is the owner (its foreign key), and
       // the session has to be theirs too.
@@ -447,6 +447,8 @@ export class PoolLoginGatewayService {
           !session.endReason
         : session.engine !== AgentProvider.CLAUDE));
     if (!current) return null;
+    // A session no longer open serves on only while its handover left a SubAgent running on its tokens.
+    if (!open && !(await servesKeptSubagent(this.prisma, row.sessionId))) return null;
     // Asked last, as the runner credential asks it: the token itself is good, and works again once the
     // account is enabled.
     if (session.owner.disabledAt) return ACCOUNT_DISABLED;

@@ -357,6 +357,8 @@ beforeEach(() => {
           confirmedAt: '2026-09-11T03:10:40.000Z',
           confirmedById: 'user-1',
           startedWith: null,
+          // What the press changed, kept on the record as the server keeps it (1200).
+          changes: confirmationStanding.changesSinceConfirmed,
         },
         changesSinceConfirmed: { added: [], stricter: [], revised: [], removed: [], unchanged: [1, 2] },
         changesSinceConfirmedAbsentReason: null,
@@ -452,7 +454,7 @@ beforeEach(() => {
     }
     if (path.startsWith('/tasks/page')) return reply({ items: [], nextCursor: null });
     if (path.startsWith('/tasks')) return reply({ items: [], total: 0, counts: {} });
-    if (path === '/providers' || path === '/providers/pools' || path === '/providers/shared-pools' || path === '/session-tags' || path === '/session-folders' || path === '/task-lists' || path === '/runners' || path === '/watches' || path === '/watches?state=ACTIVE' || path === '/watches?state=PAUSED' || path === '/watches?needsAttention=true') return reply([]);
+    if (path === '/providers' || path === '/providers/pools' || path === '/providers/shared-pools' || path === '/session-tags' || path === '/session-folders' || path === '/task-lists' || path === '/runners' || path === '/watches' || path === '/watches?state=ACTIVE' || path === '/watches?state=PAUSED' || path === '/watches?needsAttention=true' || path === '/watches?following=true') return reply([]);
     // The session list's Needs you row reads the terminals asking to be approved: none here.
     if (path === '/terminals/requests') return reply({ requests: [] });
     if (path.startsWith('/owner-requests')) return reply({ requests: [] });
@@ -685,7 +687,7 @@ describe('the start card in WorkspaceView', { timeout: 60_000 }, () => {
     });
     const receipt = mounted().querySelector<HTMLElement>('.settlement-receipt')!;
     expect(receipt.querySelector('.settlement-receipt-line')?.textContent)
-      .toBe('You started the project on 2 criteria at seal 4fc57753a6ec');
+      .toBe('You started the project on 2 criteria');
     expect(receipt.querySelector('.settlement-receipt-settings')?.textContent)
       .toContain('Automatic on');
     expect(receipt.querySelector('.run-settings-changed')?.textContent).toContain('5 tasks at a time');
@@ -740,7 +742,7 @@ describe('the change card in WorkspaceView', { timeout: 60_000 }, () => {
     await waitForUi(() => {
       expect(count('#settlement-preview')).toBe(0);
       expect(mounted().querySelector('.settlement-receipt .settlement-receipt-line')?.textContent)
-        .toBe('You confirmed 2 criteria at seal 4fc57753a6ec — 1 new');
+        .toBe('You confirmed 2 criteria · 1 new, 1 unchanged');
     });
     // A confirmation that started nothing carries no settings.
     expect(count('.settlement-receipt-settings')).toBe(0);
@@ -924,7 +926,7 @@ describe('Chat about this on the start card', { timeout: 60_000 }, () => {
     expect(actions()[0]!.disabled, 'Start the project went dead with the handoff').toBe(false);
     // No text box grew inside the card — the sentence is typed in the one composer at the bottom —
     // and nothing was written anywhere.
-    expect(card().querySelectorAll('textarea')).toHaveLength(0);
+    expect(card().querySelectorAll('textarea:not([aria-label="Landing check"])')).toHaveLength(0);
     expect(requested.slice(requestedBefore), 'arming the composer asked the server for something')
       .toEqual([]);
   });

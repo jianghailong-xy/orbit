@@ -13,13 +13,14 @@ import Foundation
 //       Result:
 //         <the result, four spaces in>          — or —   (no result)
 //       … the next run …
-//       <two sentences for the agent>
+//       <the sentences for the agent>
 //     </orbit-subagent-finished>
 //
-// The web reads the same note with `parseSubagentFinished` (src/web/src/lib/subagentFinished.ts) and
-// draws it as `SubagentFinishedCard.tsx`. This is that rule for iOS and macOS;
-// `SubagentFinishedCopyParityTests` holds the two to each other. A wording this does not recognise
-// parses as nothing at all rather than half a line: the note then stays the entry it has always been.
+// The web reads the same note with `parseSubagentFinished` (src/web/src/lib/subagentFinished.ts). The
+// turn itself draws nothing: the run's own card draws its end (`SubagentCardEnd`), and keeps this block
+// under `What the agent read`. This is that reading for iOS and macOS; `SubagentFinishedCopyParityTests`
+// holds the two to each other. A wording this does not recognise parses as nothing at all rather than
+// half a reading: the note then stays the From Orbit line it would otherwise be.
 
 /// One run's end, as the block spells it out.
 public struct SubagentFinishedRun: Equatable, Sendable {
@@ -46,7 +47,7 @@ public struct SubagentFinished: Equatable, Sendable {
     public let runs: [SubagentFinishedRun]
     /// The block itself, exactly as the agent received it.
     public let text: String
-    /// Whatever else the same note carried: not the line's to draw, it stays a folded entry.
+    /// Whatever else the same note carried: a background job's news beside it keeps that line.
     public let rest: String
 }
 
@@ -63,7 +64,7 @@ public enum SubagentFinishedText {
     private static let head = try? NSRegularExpression(pattern: headPattern)
     private static let sentence = try? NSRegularExpression(pattern: sentencePattern)
 
-    /// Whether a note carries a SubAgent's end the transcript draws as a line — `parse(note) != nil`,
+    /// Whether a note carries a SubAgent's end this client reads — `parse(note) != nil`,
     /// answered once per distinct note, for the sticky bar's every step (as `BackgroundWakeText.carriesWake`).
     public static func carriesWake(_ note: String?) -> Bool {
         guard let note, note.contains("<orbit-subagent-finished>") else { return false }
@@ -194,66 +195,4 @@ public enum SubagentFinishedText {
         while let last = out.last, last.isWhitespace { out.removeLast() }
         return out
     }
-}
-
-/// What the line says, in the browser's words (`SubagentFinishedCard.tsx`): one event line in the
-/// agent's stream — purple ✦, what happened, which run, how it ended, when — the result's first three
-/// lines under it, and a fold with the run, its card, who queued the turn and what the agent read.
-public enum SubagentFinishedCard {
-    /// Whether a run came to its end on its own.
-    public static func isOk(_ run: SubagentFinishedRun) -> Bool { run.status == "DONE" }
-
-    /// A lone run that did not finish: the whole line turns red.
-    public static func isFailed(_ wake: SubagentFinished) -> Bool {
-        wake.runs.count == 1 && !isOk(wake.runs[0])
-    }
-
-    /// What happened, at a glance: one run's end, or how many ended.
-    public static func title(_ wake: SubagentFinished) -> String {
-        if wake.runs.count > 1 { return "\(wake.runs.count) SubAgents finished" }
-        return isOk(wake.runs[0]) ? "SubAgent finished" : "SubAgent did not finish"
-    }
-
-    /// The word chip the line closes on: the one run's end, or how many of several did not finish.
-    public static func status(_ wake: SubagentFinished) -> String {
-        if wake.runs.count == 1 { return runStatus(wake.runs[0]) }
-        let failed = wake.runs.filter { !isOk($0) }.count
-        return failed > 0 ? "\(failed) of \(wake.runs.count) failed" : "done"
-    }
-
-    /// One run's end, as its chip says it.
-    public static func runStatus(_ run: SubagentFinishedRun) -> String { run.status.lowercased() }
-
-    /// What a lone run's line names after its title; several are counted by the title instead.
-    public static func lineName(_ wake: SubagentFinished) -> String? {
-        wake.runs.count == 1 ? wake.runs[0].description : nil
-    }
-
-    /// One of several runs, in one line: the first line it handed back, else why it ended, else
-    /// `No result`.
-    public static func runLine(_ run: SubagentFinishedRun) -> String {
-        let first = run.result.components(separatedBy: "\n")
-            .first { !$0.trimmingCharacters(in: .whitespaces).isEmpty } ?? ""
-        if !first.isEmpty { return first }
-        return run.reason ?? noResult
-    }
-
-    /// What the turn folds to in the exchange fold (`OrbitExchangeFold`): the title, and the run's name
-    /// where there is one run.
-    public static func foldWhat(_ wake: SubagentFinished) -> String {
-        lineName(wake).map { "\(title(wake)): \($0)" } ?? title(wake)
-    }
-
-    public static let noResult = "No result"
-    public static let showFullResult = "Show full result"
-    public static let showLess = "Show less"
-    public static let details = "Details"
-    public static let run = "Run"
-    public static let cardLink = "↑ Its SubAgent card"
-    public static let changes = "Changes left in the working tree, uncommitted"
-    public static let queuedBy = "Queued by a SubAgent, not typed by you"
-    /// The fold the block itself stays behind: the only place its sentences for the agent are shown.
-    public static let rawSummary = "What the agent read"
-    /// How many lines of a result show before `Show full result`.
-    public static let previewLines = 3
 }

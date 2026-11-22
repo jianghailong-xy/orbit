@@ -5,12 +5,13 @@ import {
   PermissionMode,
   RunEventType,
   type RemoteSubagentEvent,
+  SUBAGENT_REMOTE_IN_PLACE_V1,
   type SubagentCandidateTarget,
   type SubagentDecision,
   type SubagentRunCreateRequest,
   type SubagentWorkspaceChoice,
 } from '@orbit/shared';
-import { Prisma, RunStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import {
   ALWAYS_ALLOWED_TOOLS,
   isWiderThanParent,
@@ -20,6 +21,7 @@ import { dispatchAllowedTools } from '../common/permission-rules';
 import { normalizeBuiltinPermissionMode, normalizeEffortForRuntimeModel } from '../common/runtime-provider';
 import { isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
 import { dispatchKeyRow } from '../providers/engine-provider';
+import { runAccessLevel, scheduleRunDisallowedTools, scheduleRunPermissionMode } from '../schedules/schedule-access';
 import type { PrismaService } from '../prisma/prisma.service';
 import { runnerIsOnline, runnerOfflineSql } from '../runners/runner-presence';
 import { routeSubagent, subagentCandidateRefusal, subagentRunnableModels } from '../tasks/model-routing';
@@ -29,6 +31,8 @@ import { agentProviderSeed } from '../workspaces/workspace-provider';
 import { stripNul } from './strip-nul';
 import { appliedDecision, fallbackCandidates, noProviderMessage } from './subagent-run';
 import { subagentRouteInput, type SubagentPlanUsageReader } from './subagent-route';
+import { sessionReleasedSql } from '../common/session-release';
+import { assertEngineSession } from '../sessions/engine-session';
 
 /**
  * Cross-workspace SubAgents (docs/subagent-design.md §10): a delegate call that runs on another workspace of the
@@ -52,6 +56,7 @@ interface WorkspaceCandidate {
   name: string;
   runnerId: string | null;
   workDir: string | null;
+  inPlace: boolean;
   /** What it lacks, English; empty when it can run the SubAgent. */
   lacks: string[];
   /** Quota headroom of its default engine's account, in percent left; null when unknown. */
@@ -60,7 +65,12 @@ interface WorkspaceCandidate {
 
 export type SubagentWorkspacePick =
   | { kind: 'local'; reason: string | null }
-  | { kind: 'remote'; workspace: { id: string; name: string; runnerId: string; workDir: string | null }; reason: string };
+  | {
+    kind: 'remote';
+    /** inPlace: its work dir is not a git repository, so the read-only run goes in the work dir itself (§10.2). */
+    workspace: { id: string; name: string; runnerId: string; workDir: string | null; inPlace: boolean };
+    reason: string;
+  };
 
 const CANDIDATE_SELECT = {
   id: true,
@@ -90,16 +100,41 @@ export function neededCapabilities(needs: readonly string[] | undefined): string
   return [...new Set((needs ?? []).map((need) => need.trim()).filter(Boolean))];
 }
 
+/**
+ * The refusal for a SubAgent that may change files, handed to a workspace whose work dir is not a git repository
+ * (§10.2). It names the ways that leave that directory as it is, and warns off the one that does not: `git init` and a
+ * first commit would change it, and commit whatever it holds, its secrets included.
+ */
+export function notGitRefusal(name: string): HttpException {
+  return refusal(
+    HttpStatus.CONFLICT,
+    'SUBAGENT_WORKSPACE_NOT_GIT',
+    `${name}'s work directory is not a git repository. A SubAgent that may change files runs in a worktree of its own, ` +
+      `so it cannot run there; a read-only one (type "explore", or a definition with readonly: true) runs in the work ` +
+      `directory itself. Delegate the work as read-only, or open a session on ${name}. Do not make that directory a git ` +
+      'repository to get round this: git init and a first commit change it, and commit whatever it holds, secrets included.',
+  );
+}
+
+/** Why a target runner cannot run a read-only SubAgent in a work dir that is not a git repository; null when it can. */
+function inPlaceLack(row: Pick<CandidateRow, 'runner'>): string | null {
+  return row.runner?.capabilities?.includes(SUBAGENT_REMOTE_IN_PLACE_V1)
+    ? null
+    : 'its work directory is not a git repository, and its runner is too old to run a read-only SubAgent in it';
+}
+
 /** What one workspace lacks for this SubAgent, English, in the order a person would fix them. */
-function lacksOf(row: CandidateRow, needs: readonly string[], now: number): string[] {
+function lacksOf(row: CandidateRow, needs: readonly string[], readonly: boolean, now: number): string[] {
   const lacks: string[] = [];
-  if (row.workDirIsGit === false) lacks.push('its work directory is not a git repository');
+  if (row.workDirIsGit === false && !readonly) lacks.push('its work directory is not a git repository, and the SubAgent may change files');
   if (!row.subagentsEnabled) lacks.push('SubAgents are turned off for it');
   if (!row.runner || !runnerIsOnline(row.runner, now)) lacks.push('its runner is offline');
   else {
     const reported = new Set(row.runner.capabilities ?? []);
     const missing = needs.filter((need) => !reported.has(need));
     if (missing.length) lacks.push(`its runner does not report ${missing.join(', ')}`);
+    const inPlace = row.workDirIsGit === false && readonly ? inPlaceLack(row) : null;
+    if (inPlace) lacks.push(inPlace);
   }
   return lacks;
 }
@@ -123,8 +158,17 @@ async function headroomOf(db: Prisma.TransactionClient, ownerId: string, workspa
  */
 export async function chooseSubagentWorkspace(
   db: Prisma.TransactionClient,
-  args: { ownerId: string; parentWorkspaceId: string | null; workspace?: string; needs?: readonly string[]; now?: Date },
+  args: {
+    ownerId: string;
+    parentWorkspaceId: string | null;
+    workspace?: string;
+    needs?: readonly string[];
+    /** A read-only SubAgent may run in a work dir that is not a git repository, in that directory itself (§10.2). */
+    readonly?: boolean;
+    now?: Date;
+  },
 ): Promise<SubagentWorkspacePick> {
+  const readonly = args.readonly === true;
   const named = args.workspace?.trim() ?? '';
   const needs = neededCapabilities(args.needs);
   if (!named && needs.length === 0) return { kind: 'local', reason: null };
@@ -143,13 +187,7 @@ export async function chooseSubagentWorkspace(
     if (row.id === args.parentWorkspaceId) {
       return { kind: 'local', reason: null };
     }
-    if (row.workDirIsGit === false) {
-      throw refusal(
-        HttpStatus.CONFLICT,
-        'SUBAGENT_WORKSPACE_NOT_GIT',
-        `${row.name}'s work directory is not a git repository, so a SubAgent cannot run there in a worktree of its own.`,
-      );
-    }
+    if (row.workDirIsGit === false && !readonly) throw notGitRefusal(row.name);
     if (!row.subagentsEnabled) {
       throw refusal(
         HttpStatus.FORBIDDEN,
@@ -163,14 +201,15 @@ export async function chooseSubagentWorkspace(
     if (!row.runner || !row.runnerId || !runnerIsOnline(row.runner, now.getTime())) {
       throw refusal(HttpStatus.CONFLICT, 'SUBAGENT_WORKSPACE_OFFLINE', `${row.name}'s runner is offline.`);
     }
-    const lacks = lacksOf(row, needs, now.getTime());
+    const lacks = lacksOf(row, needs, readonly, now.getTime());
     if (lacks.length) {
       throw refusal(HttpStatus.CONFLICT, 'SUBAGENT_WORKSPACE_LACKS_NEEDS', `${row.name} cannot run this SubAgent: ${lacks.join('; ')}.`);
     }
     return {
       kind: 'remote',
-      workspace: { id: row.id, name: row.name, runnerId: row.runnerId, workDir: row.workDir },
-      reason: `Named by the delegate call: ${row.name}` + (needs.length ? `, whose runner reports ${needText}` : ''),
+      workspace: { id: row.id, name: row.name, runnerId: row.runnerId, workDir: row.workDir, inPlace: row.workDirIsGit === false },
+      reason: `Named by the delegate call: ${row.name}` + (needs.length ? `, whose runner reports ${needText}` : '') +
+        (row.workDirIsGit === false ? ', read-only in its work directory, which is not a git repository' : ''),
     };
   }
 
@@ -187,7 +226,7 @@ export async function chooseSubagentWorkspace(
   });
   const candidates: WorkspaceCandidate[] = [];
   for (const row of rows) {
-    const lacks = lacksOf(row, needs, now.getTime());
+    const lacks = lacksOf(row, needs, readonly, now.getTime());
     const repo = repoOf(row.repoUrl);
     if (!parentRepo || !repo) lacks.unshift(repo ? "this session's workspace has no repository URL" : 'it has no repository URL');
     else if (repo !== parentRepo) lacks.unshift(`it works on another repository (${repo})`);
@@ -196,6 +235,7 @@ export async function chooseSubagentWorkspace(
       name: row.name,
       runnerId: row.runnerId,
       workDir: row.workDir,
+      inPlace: row.workDirIsGit === false,
       lacks,
       headroom: lacks.length ? null : await headroomOf(db, args.ownerId, row.id, now),
     });
@@ -228,7 +268,11 @@ export async function chooseSubagentWorkspace(
       : `Needs ${needText}: ${pick.name} comes first in the Agents list of the ${able.length} workspaces of this ` +
         'repository whose runners report it, none of whose quota is known';
   if (pick.id === args.parentWorkspaceId) return { kind: 'local', reason };
-  return { kind: 'remote', workspace: { id: pick.id, name: pick.name, runnerId: pick.runnerId!, workDir: pick.workDir }, reason };
+  return {
+    kind: 'remote',
+    workspace: { id: pick.id, name: pick.name, runnerId: pick.runnerId!, workDir: pick.workDir, inPlace: pick.inPlace },
+    reason,
+  };
 }
 
 /** What a remote run keeps of the delegate call that the target runner needs (`subagent_run.remote`). */
@@ -239,6 +283,8 @@ export interface SubagentRemoteFacts {
   needs?: string[];
   /** The earlier remote run whose conversation this one continues (§10.2). */
   resumeOf?: string;
+  /** Read-only, in the target's work dir itself, which is not a git repository (§10.2). */
+  inPlace?: boolean;
 }
 
 export function remoteFactsOf(value: unknown): SubagentRemoteFacts {
@@ -249,6 +295,7 @@ export function remoteFactsOf(value: unknown): SubagentRemoteFacts {
     ...(typeof facts.permissionMode === 'string' ? { permissionMode: facts.permissionMode } : {}),
     ...(Array.isArray(facts.needs) ? { needs: facts.needs.filter((n): n is string => typeof n === 'string') } : {}),
     ...(typeof facts.resumeOf === 'string' ? { resumeOf: facts.resumeOf } : {}),
+    ...(facts.inPlace === true ? { inPlace: true } : {}),
   };
 }
 
@@ -293,7 +340,10 @@ export async function remoteSubagentExec(
   if (!workspace?.runner) return { refusal: 'the target workspace has no runner' };
   const parent = await tx.session.findUnique({
     where: { id: args.parentSessionId },
-    select: { engine: true, provider: true, permissionMode: true, owner: { select: { preferences: true } } },
+    select: {
+      engine: true, provider: true, permissionMode: true, owner: { select: { preferences: true } },
+      scheduleRun: { select: { accessLevel: true, schedule: { select: { accessLevel: true } } } },
+    },
   });
   if (!parent) return { refusal: 'the parent session is gone' };
   const target = args.target;
@@ -353,14 +403,18 @@ export async function remoteSubagentExec(
   const effort = normalizeEffortForRuntimeModel(
     provider, (target ? target.effort : null) ?? workspace.effort ?? undefined, runnerModel, catalog, resolved.reasoningLevels,
   );
+  // A scheduled run's SubAgent is held to the run's level, as the run is: Auto on Claude Code, the level's denials on
+  // every engine (schedule-access.ts). It never waits on a card nobody is there to answer.
+  const level = runAccessLevel(parent.scheduleRun);
   return {
     exec: {
       provider,
       model: runnerModel,
       allowedTools: dispatchAllowedTools(provider, ALWAYS_ALLOWED_TOOLS, workspace.permissionRules ?? []),
-      disallowedTools: (workspace.disallowedTools as string[] | null) ?? [],
+      disallowedTools: scheduleRunDisallowedTools((workspace.disallowedTools as string[] | null) ?? [], level, provider),
       permissionMode: normalizeBuiltinPermissionMode(
-        provider, runnerModel, childMode, keyRow?.enabled === true, workspace.runner.runsAsRoot, catalog,
+        provider, runnerModel, scheduleRunPermissionMode(childMode, level, provider), keyRow?.enabled === true,
+        workspace.runner.runsAsRoot, catalog,
       ),
       effort,
       env: resolved.env,
@@ -590,10 +644,30 @@ export async function runOfTarget(
   return run;
 }
 
+/**
+ * The parent session a remote SubAgent keeps a file under (§10.2): its `file_upload` acts for the parent's session, which
+ * the run's target runner does not host. Only while the run is RUNNING, of this session and account, and handed to this
+ * runner; null otherwise, and the caller's own door then decides as for any session.
+ */
+export async function sessionOfRemoteSubagent(
+  db: Prisma.TransactionClient,
+  runner: { id: string; ownerId?: string },
+  sessionId: string,
+  subagentRunId: string | undefined,
+) {
+  if (!subagentRunId || !runner.ownerId) return null;
+  const run = await db.subagentRun.findFirst({
+    where: { id: subagentRunId, sessionId, ownerId: runner.ownerId, targetRunnerId: runner.id, status: 'RUNNING' },
+    select: { id: true },
+  });
+  if (!run) return null;
+  const session = await db.session.findFirst({ where: { id: sessionId, ownerId: runner.ownerId, deletedAt: null } });
+  if (session) assertEngineSession(session);
+  return session;
+}
+
 /** A run whose parent stopped it or ended: the target is to stop it. */
-const PARENT_GONE = Prisma.sql`(r."stop_requested_at" IS NOT NULL OR s."status"::text IN (${Prisma.join([
-  RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED,
-])}) OR s."cancel_requested_at" IS NOT NULL)`;
+const PARENT_GONE = Prisma.sql`(r."stop_requested_at" IS NOT NULL OR ${sessionReleasedSql('s')} OR s."cancel_requested_at" IS NOT NULL)`;
 
 /**
  * What a runner's heartbeat says of the remote SubAgent runs it is the target of (§10.2, §10.3): the ones to claim,
@@ -625,8 +699,8 @@ export const TARGET_OFFLINE_SUBAGENT_RESULT =
 export const STOPPED_BEFORE_CLAIM_RESULT = 'The SubAgent was stopped before the runner it was handed to took it up.';
 
 /**
- * End every RUNNING remote run whose target runner is offline (or gone) as INTERRUPTED, owing the parent a wake
- * (§10.3), which the wake sweep files. Returns the runs, with their parents, so the caller can reap their cards.
+ * End every RUNNING remote run whose target runner is offline (or gone) as INTERRUPTED (§10.3). The sweep wakes
+ * the parent for standalone runs. Returns the runs, with their parents, so the caller can reap their cards.
  */
 export async function interruptRunsOfOfflineTargets(db: Prisma.TransactionClient): Promise<Array<{ id: string; sessionId: string }>> {
   return db.$queryRaw<Array<{ id: string; sessionId: string }>>`
@@ -634,7 +708,7 @@ export async function interruptRunsOfOfflineTargets(db: Prisma.TransactionClient
     SET "status" = 'INTERRUPTED',
         "result_summary" = ${TARGET_OFFLINE_SUBAGENT_RESULT},
         "ended_at" = now(),
-        "wake_owed" = true
+        "wake_owed" = (r."workflow_run_id" IS NULL)
     WHERE r."status" = 'RUNNING' AND r."target_runner_id" IS NOT NULL
       AND NOT EXISTS (
         SELECT 1 FROM "runner" ru WHERE ru."id" = r."target_runner_id" AND NOT ${runnerOfflineSql('ru')}

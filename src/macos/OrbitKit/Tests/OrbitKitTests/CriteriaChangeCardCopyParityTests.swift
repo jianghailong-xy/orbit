@@ -20,6 +20,8 @@ final class CriteriaChangeCardCopyParityTests: XCTestCase {
 
     private static let words = "src/web/src/lib/projectStart.ts"
     private static let card = "src/web/src/components/CriteriaChangeCard.tsx"
+    /// The rows themselves, shared by the change card and the receipt of its confirmation.
+    private static let rows = "src/web/src/components/CriteriaChangeList.tsx"
 
     private static let title = "Aurora"
     private static let seal = "qqqqzzzzqqqq"
@@ -144,18 +146,19 @@ final class CriteriaChangeCardCopyParityTests: XCTestCase {
 
     /// The marks each row carries, in the order the rows are listed: new, stricter, changed.
     func testTheMarksAndTheOrderOfTheRowsAreTheWebs() throws {
+        let rows = try raw(Self.rows)
         let card = try raw(Self.card)
-        let new = try XCTUnwrap(card.range(of: "mark: '\(CriteriaChanges.Row.Mark.new.rawValue)'"),
+        let new = try XCTUnwrap(rows.range(of: "mark: '\(CriteriaChanges.Row.Mark.new.rawValue)'"),
                                 "the web no longer marks a new criterion `+`")
-        let stricter = try XCTUnwrap(card.range(of: "mark: '\(CriteriaChanges.Row.Mark.stricter.rawValue)'"),
+        let stricter = try XCTUnwrap(rows.range(of: "mark: '\(CriteriaChanges.Row.Mark.stricter.rawValue)'"),
                                      "the web no longer marks a stricter check `↑`")
-        let revised = try XCTUnwrap(card.range(of: "mark: '\(CriteriaChanges.Row.Mark.revised.rawValue)'"),
+        let revised = try XCTUnwrap(rows.range(of: "mark: '\(CriteriaChanges.Row.Mark.revised.rawValue)'"),
                                     "the web no longer marks a changed criterion `~`")
         XCTAssertLessThan(new.lowerBound, stricter.lowerBound)
         XCTAssertLessThan(stricter.lowerBound, revised.lowerBound)
         // The stricter row's words are its check now, with the one it replaced under it.
-        XCTAssertTrue(card.contains("text: change.verificationMethod,"))
-        XCTAssertTrue(card.contains("was: criteriaChangeWas(change.confirmedVerificationMethod),"))
+        XCTAssertTrue(rows.contains("text: change.verificationMethod,"))
+        XCTAssertTrue(rows.contains("was: criteriaChangeWas(change.confirmedVerificationMethod),"))
         // And the second action is the word the other composer handoffs share.
         XCTAssertTrue(card.contains("{OWNER_SEND_BACK_ACTION}"))
         // A refused press is said in the confirmation card's words at both ends.

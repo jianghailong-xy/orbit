@@ -11,6 +11,7 @@ function sessionRow() {
   return {
     id: '11111111-1111-4111-8111-111111111111',
     status: RunStatus.CANCELLED,
+    finishedAt: NOW,
     title: 'Dormant session',
     createdAt: NOW,
     lastTurnAt: NOW,

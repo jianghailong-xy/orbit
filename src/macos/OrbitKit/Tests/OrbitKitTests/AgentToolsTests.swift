@@ -67,7 +67,7 @@ final class AgentToolsTests: XCTestCase {
         XCTAssertEqual(decoded.examples.count, 4)
         XCTAssertFalse(decoded.troubleshooting.isEmpty)
         XCTAssertEqual(decoded.families.map(\.id), [
-            "tasks", "projects", "task-lists", "schedules", "waits", "files", "background", "owner", "wiki", "providers",
+            "tasks", "projects", "task-lists", "schedules", "waits", "files", "subagents", "background", "owner", "wiki", "providers",
             "merge-receipts", "guide", "orchestration",
         ])
         XCTAssertEqual(Set(decoded.instructions.keys), ["claude", "codex"])
@@ -160,7 +160,7 @@ final class AgentToolsTests: XCTestCase {
         XCTAssertTrue(rows[0].text.hasPrefix("Tasks 21 · Projects 20 · Task lists 6"), rows[0].text)
         XCTAssertEqual(rows[0].word, "Available")
         XCTAssertEqual(rows[0].tone, .ok)
-        XCTAssertEqual(rows[1].text, "Sessions, agents and runners · 22")
+        XCTAssertEqual(rows[1].text, "Sessions, agents and runners · 23")
         XCTAssertEqual(rows[1].word, "Available")
 
         let down = AgentTools.toolsRows(try failed())

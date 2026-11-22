@@ -150,7 +150,20 @@ final class RunnersModel {
     /// restarts; each interrupted turn continues once it is back. Nil once taken; else why not.
     @discardableResult
     func updateNow(_ id: String) async -> String? {
-        await press { _ = try await self.api.updateRunnerNow(id) }
+        if let reason = await press({ _ = try await self.api.updateRunnerNow(id) }) { return reason }
+        // The runner answers on its next heartbeat, after the read `press` made: read again until it
+        // reports the restart, so the card moves without a pull.
+        Task { await self.awaitUpdateNowAnswer(id) }
+        return nil
+    }
+
+    private func awaitUpdateNowAnswer(_ id: String) async {
+        let started = Date()
+        while !RunnerUpdateNow.answered(runner(id)),
+              Date().timeIntervalSince(started) < RunnerUpdateNow.answerWait {
+            await VisibilityGate.app.pause(RunnerUpdateNow.answerPollInterval)   // not while hidden (§4 R3)
+            await load()
+        }
     }
 
     /// The runners whose Check again is on its way (`checkRegion`): their presses hold until the check
@@ -174,7 +187,7 @@ final class RunnersModel {
         let askedAt = asked.requestedAt ?? ISO8601DateFormatter().string(from: Date())
         let started = Date()
         while !Task.isCancelled, Date().timeIntervalSince(started) < ClaudeRegion.checkWait {
-            try? await Task.sleep(for: .seconds(ClaudeRegion.checkPollInterval))
+            await VisibilityGate.app.pause(ClaudeRegion.checkPollInterval)   // not while hidden (§4 R3)
             await load()
             if ClaudeRegion.checkAnswered(checkedAt: runner(id)?.region?.checkedAt, askedAt: askedAt) { break }
         }
@@ -216,6 +229,21 @@ final class RunnersModel {
         }
     }
 
+    /// Make an added Claude Code account the Default: POST …/set-default. A control-plane refusal
+    /// (offline, busy, too old) comes back in its own words; a machine failure rides in
+    /// `claudeAccountSwap` after the list is read again.
+    @discardableResult
+    func setDefaultAccount(_ id: String, engine: LoginEngine, account: String) async -> String? {
+        do {
+            _ = try await api.setDefaultRunnerAccount(id, engine: engine, account: account)
+            await load()
+            return nil
+        } catch {
+            await load()
+            return APIClient.failureReason(error)
+        }
+    }
+
     /// Use again: the Default removed from Orbit back in its use. Orbit's own record, as the removal is,
     /// so it works with the runner offline too.
     @discardableResult
@@ -241,13 +269,20 @@ final class RunnersModel {
         return failure
     }
 
-    /// The list in a new order: the rows move at once, and the server's answer — every runner, in the
-    /// order it keeps — settles it.
-    func reorder(_ ids: [String]) async {
+    /// The other machines in a new order, Orbit Cloud kept first in the order saved (as the web sends it, for a
+    /// client that does not pin it): the rows move at once, and the server's answer settles it.
+    func reorder(_ orderedIDs: [String]) async {
         let before = runners
-        runners = ids.compactMap { id in before.first { $0.id == id } }
+        let ordered = orderedIDs.compactMap { id in before.first { $0.id == id } }
+            .filter { !RunnerPageFormat.isManaged($0) }
+        guard !ordered.isEmpty else { return }
+        let moved = Set(ordered.map(\.id))
+        let pinned = before.filter { RunnerPageFormat.isManaged($0) }
+        runners = pinned + ordered + before.filter { !moved.contains($0.id) && !RunnerPageFormat.isManaged($0) }
+        let ids = runners.map(\.id)
         do {
             runners = try await api.reorderRunners(ids)
+            onRead?(runners)
         } catch {
             runners = before
             errorText = APIClient.failureReason(error)

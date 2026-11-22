@@ -63,6 +63,14 @@ type HeartbeatRequest struct {
 	// runs, yet the runner takes no work in their place. The control plane counts them as running.
 	// Omitted when there are none; an older runner never sends it, and is counted by turns alone.
 	BackgroundJobSessionIDs []string `json:"backgroundJobSessionIds,omitempty"`
+	// Executing states, for each session this process supervises, what is executing in it now, whole
+	// (session_executing.go): the control plane replaces its inferred sets with it. An older control
+	// plane ignores the member. Omitted when no session run has installed its probe.
+	Executing []SessionExecuting `json:"executing,omitempty"`
+	// ExecutingAt is when Executing was composed, in Unix milliseconds on this machine's clock, the clock every
+	// event's TS is read on: the control plane does not let a beat replace the sets of a session whose event batch
+	// moved them at or after this instant (apiserver runners/runner-executing-sets.ts). Omitted with Executing.
+	ExecutingAt int64 `json:"executingAt,omitempty"`
 	// ExpiredCommitErrors: see CommitErrorExpiry. Omitted when there are none.
 	ExpiredCommitErrors []CommitErrorExpiry `json:"expiredCommitErrors,omitempty"`
 	// Draining marks a process that keeps heartbeating (so the reaper spares its
@@ -119,9 +127,53 @@ type HeartbeatRequest struct {
 	// sends it; the control plane stores it only from the instance its manager authorized, and puts
 	// nothing to sleep without a fresh one.
 	ManagedWorkload *ManagedWorkload `json:"managedWorkload,omitempty"`
+	// Browser is the managed runner browser now (browser_supervisor.go, Report): sent on every beat by a runner that
+	// has one, which only a managed runner does.
+	Browser *BrowserReport `json:"browser,omitempty"`
 	// CloneReports is where each clone the control plane asked for stands (clone_workdir.go). Omitted when there
 	// is none.
 	CloneReports []CloneReport `json:"cloneReports,omitempty"`
+	// ConditionSamples are the condition probes' readings since the last answered beat (condition_probe.go), oldest
+	// first per condition. Only a runner that declares condition-probe/v1 sends them; omitted when there are none.
+	ConditionSamples []ConditionSample `json:"conditionSamples,omitempty"`
+}
+
+// ConditionProbe is one condition whose probe this runner runs (docs/condition-triggers-design.md §4.2), as the
+// heartbeat answer lists it.
+type ConditionProbe struct {
+	// ID is the condition's id.
+	ID string `json:"id"`
+	// Command is the shell command, verbatim as the owner approved it.
+	Command string `json:"command"`
+	// CommandHash is the approved command's hash: the SHA-256 of its exact text, lowercase hex. A command that does
+	// not match it is not run.
+	CommandHash     string `json:"commandHash"`
+	TimeoutSeconds  int    `json:"timeoutSeconds"`
+	IntervalSeconds int    `json:"intervalSeconds"`
+	// WorkDir is the workspace's directory, where the command runs.
+	WorkDir string `json:"workDir"`
+	// Env is the workspace's environment, layered over the runner's as a session's is.
+	Env map[string]string `json:"env,omitempty"`
+}
+
+// ConditionSample outcomes.
+const (
+	conditionOutcomeValue   = "VALUE"
+	conditionOutcomeExit    = "EXIT"
+	conditionOutcomeTimeout = "TIMEOUT"
+	conditionOutcomeError   = "ERROR"
+)
+
+// ConditionSample is one reading of a probe (docs/condition-triggers-design.md §3). Value is the number on the last
+// non-empty line of stdout (VALUE); ExitCode is set whenever the command exited (VALUE, EXIT). StderrTail is the end
+// of stderr, at most 500 bytes; on ERROR it says, in words, why the probe could not run.
+type ConditionSample struct {
+	ConditionID string    `json:"conditionId"`
+	At          time.Time `json:"at"`
+	Outcome     string    `json:"outcome"`
+	Value       *float64  `json:"value,omitempty"`
+	ExitCode    *int      `json:"exitCode,omitempty"`
+	StderrTail  string    `json:"stderrTail,omitempty"`
 }
 
 // SelfUpdateReport mirrors @orbit/shared RunnerSelfUpdate: whether this runner can replace itself
@@ -210,6 +262,9 @@ type EngineHealthReport struct {
 	// Kimi only: the site its own login is on, "mainland-cn" (kimi.com) or "global" (kimi.ai).
 	// Omitted when it has none (kimi_region.go).
 	KimiRegion string `json:"kimiRegion,omitempty"`
+	// OpenCode only: `opencode auth list` listed no provider key, neither stored nor in its
+	// environment. Auth stays "unknown" — OpenCode's free models need none. Omitted otherwise.
+	OpenCodeNoKey bool `json:"openCodeNoKey,omitempty"`
 	// What the updater last did to this engine. Nil until it has run once — which the UI shows
 	// as "not reported yet", never as a problem.
 	Update *EngineUpdateReport `json:"update,omitempty"`
@@ -401,6 +456,10 @@ type ModelParameterValue struct {
 
 type HeartbeatResponse struct {
 	CancelSessionIDs []string `json:"cancelSessionIds"`
+	// KeepWorkSessionIDs are those of CancelSessionIDs whose end is a coordinator handing over: the session ends,
+	// but its running SubAgent runs and bg_run jobs are left to end by themselves (session_keep_work.go). Absent
+	// from an older control plane, which reads as none.
+	KeepWorkSessionIDs []string `json:"keepWorkSessionIds,omitempty"`
 	// The owner-request secrets this runner may hold (secret_store.go), sent only to a runner that declares
 	// owner-secret/v1. A POINTER because only a present list states anything: absent (an older control plane, or an
 	// answer that reconciled nothing) removes nothing, and [] means hold nothing.
@@ -438,6 +497,9 @@ type HeartbeatResponse struct {
 	// every engine whose accounts this runner can remove, including Codex. The codex-named field
 	// above stays for a control plane older than accounts-per-engine.
 	AccountRemoveRequest *AccountRemoveCommand `json:"accountRemoveRequest,omitempty"`
+	// ClaudeAccountSwapRequest makes an added Claude account the Default (claude-account-swap/v1,
+	// docs/claude-default-swap-contract.md §5): redelivered on every heartbeat while the swap is pending.
+	ClaudeAccountSwapRequest *ClaudeAccountSwapCommand `json:"claudeAccountSwapRequest,omitempty"`
 	// An engine CLI the user asked to install from the web. Nil on older control planes, and
 	// whenever no install is in flight for this runner.
 	InstallRequest *InstallCommand `json:"installRequest,omitempty"`
@@ -448,6 +510,10 @@ type HeartbeatResponse struct {
 	// this runner's that is PENDING or CLONING. A POINTER because only a present list states anything: absent (an
 	// older control plane, or an answer that reconciled nothing) stops nothing.
 	CloneRequests *[]CloneRequest `json:"cloneRequests,omitempty"`
+	// The conditions whose probes this runner runs (condition_probe.go), to a runner that declares condition-probe/v1.
+	// A POINTER because only a present list states anything: absent stops nothing, and a probe left out of a present
+	// list (empty included) stops.
+	ConditionProbes *[]ConditionProbe `json:"conditionProbes,omitempty"`
 	// A "clean up this checkout" the user asked for after seeing it reported wedged. Nil on older
 	// control planes and whenever no repair is in flight. Redelivered until we report an outcome.
 	RepoCleanupRequest *RepoCleanupCommand `json:"repoCleanupRequest,omitempty"`
@@ -465,6 +531,10 @@ type HeartbeatResponse struct {
 	// RefreshModelCatalog: the outcome is what later heartbeats report. False/absent on older
 	// control planes.
 	CheckSelfUpdate bool `json:"checkSelfUpdate,omitempty"`
+	// The owner's Clear saved logins: stop the browser and delete its profile (browserSupervisor.ClearProfile). Handed
+	// over once and cleared, like CheckSelfUpdate; sent only to a runner that declares browser-clear/v1. The answer is
+	// the browser report's profileClearedAt on the beats that follow.
+	ClearBrowserProfile bool `json:"clearBrowserProfile,omitempty"`
 	// The control plane takes a claim scoped to named sessions (GET /runner/sessions/claim?drainScope=):
 	// a pool draining for an update claims only for sessions whose engine is running a turn here
 	// (drainClaimScope). False/absent on older control planes, which would ignore the scope, so the
@@ -539,6 +609,10 @@ type HeartbeatResponse struct {
 	// there are none, and from older control planes.
 	RemoteSubagentRuns []string `json:"remoteSubagentRuns,omitempty"`
 	StopSubagentRunIDs []string `json:"stopSubagentRunIds,omitempty"`
+	// The bg_run jobs the session's owner asked to stop from the app (background_owner_stop.go), listed
+	// on every answer while the job still runs here. Sent only to a runner that declares bg-owner-stop/v1;
+	// absent when there are none, and from older control planes.
+	StopBackgroundJobs []BgJobStopCommand `json:"stopBackgroundJobs,omitempty"`
 	// The snapshots this runner's open forked tasks start from (docs/task-fork-from-session-design.md
 	// §2.6): the keep-alive refs whose snapshot is not listed are this runner's to delete (forkRefGC). A
 	// POINTER because only a present list states anything: absent (an older control plane, a quiet link
@@ -669,9 +743,14 @@ type IntegrationJobCommand struct {
 	// (§3.3 M-T11). It is authorized onto UpstreamShaChecked and nowhere else: if the upstream has
 	// moved, the job merges nothing, checks nothing and reports READY, and the owner is asked
 	// (M-T12). Only sent to a process that declared promotionAutomaticLandCapabilityV1.
-	Automatic       bool                   `json:"automatic,omitempty"`
-	Checks          []IntegrationCheckSpec `json:"checks"`
-	CancelRequested bool                   `json:"cancelRequested"`
+	Automatic bool                   `json:"automatic,omitempty"`
+	Checks    []IntegrationCheckSpec `json:"checks"`
+	// LandingCheckExemptReason is set on a LAND_TASK whose task the coordinator or the owner exempted
+	// from the project's landing check (contract §12.15 P-C2). The control plane has already left the
+	// landing check out of Checks, so a runner that ignores this field still runs exactly the task's
+	// acceptance; this one also records the skip and its reason in the result.
+	LandingCheckExemptReason string `json:"landingCheckExemptReason,omitempty"`
+	CancelRequested          bool   `json:"cancelRequested"`
 	// Earlier landings on this job's serial key whose push outcome the control plane could not know
 	// (ERROR / PUSH_OUTCOME_UNKNOWN) and that have no receipt yet (J12). After its fetch the runner
 	// asks git whether each one's tested commit is already an ancestor of the target, and reports
@@ -759,16 +838,19 @@ type IntegrationCheckSpec struct {
 // IntegrationCheckResult is what one check came to. ExitCode is nil when the command never
 // produced one — it could not start, or its budget killed it.
 type IntegrationCheckResult struct {
-	Scope            string   `json:"scope,omitempty"`
-	Skipped          string   `json:"skipped,omitempty"`
-	Files            []string `json:"files,omitempty"`
-	Name             string   `json:"name"`
-	Command          string   `json:"command"`
-	ExpectedExitCode int      `json:"expectedExitCode"`
-	ExitCode         *int     `json:"exitCode"`
-	TimedOut         bool     `json:"timedOut"`
-	DurationMs       int64    `json:"durationMs"`
-	OutputTail       string   `json:"outputTail"`
+	TreeSha string   `json:"treeSha,omitempty"`
+	Scope   string   `json:"scope,omitempty"`
+	Skipped string   `json:"skipped,omitempty"`
+	Files   []string `json:"files,omitempty"`
+	// Reason is why a TASK_EXEMPT landing check was not run (§12.15 P-C2).
+	Reason           string `json:"reason,omitempty"`
+	Name             string `json:"name"`
+	Command          string `json:"command"`
+	ExpectedExitCode int    `json:"expectedExitCode"`
+	ExitCode         *int   `json:"exitCode"`
+	TimedOut         bool   `json:"timedOut"`
+	DurationMs       int64  `json:"durationMs"`
+	OutputTail       string `json:"outputTail"`
 }
 
 // IntegrationJobProgressRequest renews the lease and says which step the job reached.
@@ -1048,6 +1130,52 @@ type AccountRemoveResultRequest struct {
 	SessionIDs []string `json:"sessionIds,omitempty"`
 }
 
+// ClaudeAccountSwapCommand mirrors the contract's ClaudeAccountSwapCommand: the added Claude account to
+// make the Default. Carrying it out twice is the same as carrying it out once.
+type ClaudeAccountSwapCommand struct {
+	// The added account's slot id under claude-accounts.
+	Account string `json:"account"`
+	// Identifies this swap; echoed in every result.
+	Attempt string `json:"attempt"`
+	// The accountUuid each folder held when the server asked: tells a redelivery of a swap this runner
+	// already finished from a new request.
+	Expect *ClaudeAccountSwapExpect `json:"expect,omitempty"`
+}
+
+type ClaudeAccountSwapExpect struct {
+	DefaultAccountUUID string `json:"defaultAccountUuid"`
+	AccountAccountUUID string `json:"accountAccountUuid"`
+}
+
+// ClaudeAccountSwapResult is the runner's word on a swap (POST /runner/claude-account-swap-result), the
+// same body every time, latest wins.
+type ClaudeAccountSwapResult struct {
+	Account string `json:"account"`
+	Attempt string `json:"attempt"`
+	Status  string `json:"status"` // "pending" | "done" | "failed"
+	// failed: the one line the page shows.
+	Message string `json:"message,omitempty"`
+	// pending: the Orbit sessions with a turn in progress on either folder.
+	WaitingOn []string `json:"waitingOn,omitempty"`
+	// pending: Claude processes on either folder that are not Orbit's (a terminal `claude`).
+	ForeignProcesses []ClaudeSwapProcess `json:"foreignProcesses,omitempty"`
+	// done: the accountUuid now in each folder.
+	Now *ClaudeAccountSwapNow `json:"now,omitempty"`
+}
+
+type ClaudeSwapProcess struct {
+	PID     int    `json:"pid"`
+	Command string `json:"command"`
+}
+
+type ClaudeAccountSwapNow struct {
+	DefaultAccountUUID string `json:"defaultAccountUuid"`
+	AccountAccountUUID string `json:"accountAccountUuid"`
+	// AccountEmail is the emailAddress of the account now in the added folder — the former Default —
+	// which the page names it by until the owner renames it. Empty when its .claude.json names none.
+	AccountEmail string `json:"accountEmail,omitempty"`
+}
+
 // LoginResultRequest is the runner's progress report for a sign-in, POSTed back so the web card
 // can show the URL to approve and then the outcome. `URL` is set with "awaiting_code" and
 // "awaiting_approval"; `UserCode` only with the latter (the device flow's one-time code, which
@@ -1302,6 +1430,9 @@ type DiffResultRequest struct {
 	BaseSha string `json:"baseSha,omitempty"`
 	// BranchSha is the tip of the effective branch (see SessionLiveState.BranchSha).
 	BranchSha string `json:"branchSha,omitempty"`
+	// BranchCommits are the branch's commits from its base to BranchSha, newest first (branch_commits.go); null
+	// when the runner could not read them, which leaves the stored list as it was.
+	BranchCommits []BranchCommit `json:"branchCommits"`
 	// BranchMerged: the branch already landed in the default merge target (see SessionLiveState).
 	// Recomputed with the diff, so opening the drawer refreshes it for an idle session.
 	BranchMerged bool `json:"branchMerged"`
@@ -1415,6 +1546,10 @@ type ClaimedSession struct {
 	// every engine but Claude, whose child keeps the parent's mode without edit tools; Codex alone reads this too, since its plan mode refuses every command and a shell
 	// is the only way Codex reads a repository (codexPermissionMode).
 	readonlySubagent bool
+	// readonlyParentMode is the parent session's permission mode as it stands now, on a read-only SubAgent's
+	// child claim on an engine other than Claude (subagentChildJob); nil on every other claim. Kimi reads it to
+	// answer its plan mode's shell requests the way the parent runs (kimiReadonlyShellFollowsParent).
+	readonlyParentMode func() string
 	// WorkDir is the coding engine's cwd for this session, from the session's agent.
 	WorkDir string `json:"workDir,omitempty"`
 	// HelpAsk marks the help center's Ask (help_ask.go): started read-only in a scratch folder of help articles,
@@ -1457,6 +1592,10 @@ type ClaimedSession struct {
 	// ORBIT_WIKI=off, which leaves the wiki tools out of the MCP server and the wiki commands out of
 	// `orbit capabilities` (wiki_tools.go). Absent means on.
 	WikiDisabled bool `json:"wikiDisabled,omitempty"`
+	// WorkflowsDisabled is set when the session's Agent may not start a workflow: its Workflows switch is off, or its
+	// SubAgents are. Injected as ORBIT_WORKFLOWS=off, which leaves the workflow tool out of `orbit mcp`
+	// (subagent_workflow.go); delegate is not affected. Absent means on.
+	WorkflowsDisabled bool `json:"workflowsDisabled,omitempty"`
 	// ScheduleRun is set for the session of a scheduled task's run (Session.scheduleRunId); injected as
 	// ORBIT_SCHEDULE_RUN=1, which lists schedule_run_report in its `orbit mcp` (schedule_tools.go).
 	ScheduleRun bool `json:"scheduleRun,omitempty"`
@@ -1714,6 +1853,8 @@ type ReclaimSession struct {
 	// may have moved since the session was first claimed.
 	WatchesDisabled bool `json:"watchesDisabled,omitempty"`
 	WikiDisabled    bool `json:"wikiDisabled,omitempty"`
+	// WorkflowsDisabled, cf. ClaimedSession: the Agent's switch may have moved since the session was first claimed.
+	WorkflowsDisabled bool `json:"workflowsDisabled,omitempty"`
 	// ScheduleRun, cf. ClaimedSession.ScheduleRun.
 	ScheduleRun bool `json:"scheduleRun,omitempty"`
 	// OrchestrationToken is freshly persisted for the reclaimed runtime, cf. ClaimedSession.
@@ -1775,6 +1916,9 @@ type TurnCompleteRequest struct {
 	BaseSha string `json:"baseSha,omitempty"`
 	// BranchSha is the tip of the effective branch (see SessionLiveState.BranchSha).
 	BranchSha string `json:"branchSha,omitempty"`
+	// BranchCommits are the branch's commits from its base to BranchSha, newest first (branch_commits.go); null
+	// when the runner could not read them, which leaves the stored list as it was.
+	BranchCommits []BranchCommit `json:"branchCommits"`
 	// Per-file unified diffs (capped) for the same uncommitted worktree state, so the web
 	// can open a file's diff on demand without a round-trip back to this runner.
 	ChangedDiff []FilePatch `json:"changedDiff,omitempty"`
@@ -1878,6 +2022,9 @@ type RunFinalizeRequest struct {
 	// (contract §10.5 O-L4). Empty on a park checkpoint (a CANCELLED end), which the next resume
 	// undoes, and whenever git cannot resolve the tip.
 	BranchSha string `json:"branchSha,omitempty"`
+	// BranchCommits are the branch's commits from its base to BranchSha, newest first (branch_commits.go); null
+	// when the runner could not read them, which leaves the stored list as it was.
+	BranchCommits []BranchCommit `json:"branchCommits"`
 	// CaptureError is why the session's work did NOT reach its branch: finalizeWorktree could not
 	// stage or could not commit. Empty on every finalize that captured the work.
 	//

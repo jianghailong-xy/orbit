@@ -31,17 +31,17 @@ const USER = ENGINE_SESSION_USER_ROUTES;
 const RUNNER = ENGINE_SESSION_RUNNER_ROUTES;
 const DOORS = ENGINE_SESSION_DOORS;
 
-test('the user door is exactly the 42 session-naming routes the registries hold', () => {
+test('the user door is exactly the 44 session-naming routes the registries hold', () => {
   // The count is a statement, not a convenience: when a route is added the number and the list both
-  // change in one diff, which is what makes "41 → 42" reviewable (main's routes and the project's
+  // change in one diff, which is what makes "43 → 44" reviewable (main's routes and the project's
   // GET /sessions/:id/task-moves, merged).
-  assert.equal(USER.length, 42, `derived user routes: ${USER.join(', ')}`);
+  assert.equal(USER.length, 44, `derived user routes: ${USER.join(', ')}`);
   const mapped = Object.keys(DOORS).filter((key) => !key.includes(' /runner/sessions/'));
   assert.deepEqual([...mapped].sort(), USER, 'a user route has no line in ENGINE_SESSION_DOORS, or a line names no route');
 });
 
-test('the runner door is exactly the 34 session-naming routes the registries hold', () => {
-  assert.equal(RUNNER.length, 34, `derived runner routes: ${RUNNER.join(', ')}`);
+test('the runner door is exactly the 37 session-naming routes the registries hold', () => {
+  assert.equal(RUNNER.length, 37, `derived runner routes: ${RUNNER.join(', ')}`);
   const mapped = Object.keys(DOORS).filter((key) => key.includes(' /runner/sessions/'));
   assert.deepEqual([...mapped].sort(), RUNNER, 'a runner route has no line in ENGINE_SESSION_DOORS, or a line names no route');
 });

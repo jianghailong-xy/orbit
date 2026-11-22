@@ -161,12 +161,16 @@ public enum AgentListLogic {
         }.filter { seen.insert($0.id).inserted }
     }
 
-    /// Machines with no workspace, in the runner list's order: online machines and managed runners
+    /// Machines with no workspace, Orbit Cloud first: online machines and managed runners
     /// whose setup card accepts a folder while preparing or asleep.
     public static func machinesToSetUp(runners: [Runner], agents: [Agent], managedStatus: ManagedRunnerStatus? = nil) -> [MachineToSetUp] {
         let taken = Set(agents.compactMap(\.runnerId))
-        return runners.filter { !taken.contains($0.id) && (isOnline($0) || ManagedRunnerLogic.managedSetupState(runnerID: $0.id, status: managedStatus) != nil) }
-            .map { MachineToSetUp(id: $0.id, name: RunnerPageFormat.displayName($0)) }
+        let managedID = ManagedRunnerLogic.display(managedStatus) == nil ? nil : managedStatus?.runnerId
+        let available = runners.filter { !taken.contains($0.id) && (isOnline($0) || ManagedRunnerLogic.managedSetupState(runnerID: $0.id, status: managedStatus) != nil) }
+        return RunnerPageFormat.managedFirst(available, managedRunnerID: managedID).map {
+            MachineToSetUp(id: $0.id, name: RunnerPageFormat.displayName($0, managedRunnerID: managedID),
+                           isManaged: RunnerPageFormat.isManaged($0, managedRunnerID: managedID))
+        }
     }
 
     /// `GET /runners`' answer for this machine, read the way the rest of the rail reads it.
@@ -182,5 +186,33 @@ public enum AgentListLogic {
         if let currentAgentID { return .workspace(currentAgentID) }
         guard list == .empty else { return nil }
         return firstOnlineMachine.map(NewSessionTarget.machine) ?? .machines
+    }
+}
+
+/// A machine the Workspaces group's + offers a new workspace on (docs/mocks/new-workspace-form/02-apple-entry, owner A
+/// 2026-11-20): every machine of the account, whatever it already holds, with how many workspaces it has.
+public struct NewWorkspaceMachine: Equatable, Sendable, Identifiable {
+    public let id: String
+    public let name: String
+    public let online: Bool
+    public let workspaces: Int
+
+    public init(id: String, name: String, online: Bool, workspaces: Int) {
+        self.id = id
+        self.name = name
+        self.online = online
+        self.workspaces = workspaces
+    }
+}
+
+extension AgentListLogic {
+    /// The + menu's machines, in the rail's runner order with the account's managed runner first.
+    public static func newWorkspaceMachines(runners: [Runner], agents: [Agent],
+                                            managedStatus: ManagedRunnerStatus? = nil) -> [NewWorkspaceMachine] {
+        let managedID = ManagedRunnerLogic.display(managedStatus) == nil ? nil : managedStatus?.runnerId
+        return RunnerPageFormat.managedFirst(runners, managedRunnerID: managedID).map { runner in
+            NewWorkspaceMachine(id: runner.id, name: RunnerPageFormat.displayName(runner, managedRunnerID: managedID),
+                                online: isOnline(runner), workspaces: agents.filter { $0.runnerId == runner.id }.count)
+        }
     }
 }

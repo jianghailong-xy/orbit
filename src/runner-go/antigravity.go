@@ -300,6 +300,7 @@ func antigravityEnv(job *ClaimedSession, execDir string) []string {
 		"ORBIT_ALLOW_ORCHESTRATION": orchestrationEnv(job.AllowOrchestration),
 		envWatches:                  watchesEnv(job.WatchesDisabled),
 		envWiki:                     wikiEnv(job.WikiDisabled),
+		envWorkflows:                workflowsEnv(job.WorkflowsDisabled),
 		envScheduleRun:              scheduleRunEnv(job.ScheduleRun),
 		envMCPPermissionPrompt:      "0",
 		envSpawnDepth:               strconv.Itoa(job.SpawnDepth),
@@ -1003,9 +1004,9 @@ func (d *agyDriver) finishTurn(result map[string]interface{}, failure string) {
 		ChangedDiff:      livePatches,
 		BaseSha:          d.job.WT.baseSha(),
 		WorktreeDirty:    worktreeIsDirty(d.job.WT),
-		BranchSha:        effectiveBranchSha(d.job.WT),
-		BranchMerged:     branchMergedInto(d.job.WT),
-		WorktreeBranch:   currentBranch(d.job.WT),
+		BranchSha:        effectiveBranchSha(d.job.WT), BranchCommits: branchCommits(d.job.WT),
+		BranchMerged:   branchMergedInto(d.job.WT),
+		WorktreeBranch: currentBranch(d.job.WT),
 	}); err != nil {
 		logln("turn-complete failed for", d.job.SessionID+":", err)
 	}
@@ -1206,7 +1207,7 @@ func runAntigravitySessionProcess(ctx context.Context, shutdownCtx context.Conte
 				runShellTurnBackground(bg, execDir, scratchDir, command, resp.TurnID, emit, job.Agent.Env)
 				if err := completeTurn(TurnCompleteRequest{
 					TurnID: resp.TurnID, Status: stSucceeded, Result: "started in background", Subtype: "shell",
-					RuntimeSessionID: currentRuntimeSessionID(job), BranchSha: effectiveBranchSha(job.WT),
+					RuntimeSessionID: currentRuntimeSessionID(job), BranchSha: effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT),
 				}); err != nil {
 					logln("shell turn-complete failed for", job.SessionID+":", err)
 				}
@@ -1361,7 +1362,7 @@ func reportUnknownInboxKind(resp *RunInboxResponse, job *ClaimedSession, complet
 		Result:           fmt.Sprintf("this runner does not understand turns of kind %q; upgrade the runner", resp.Kind),
 		Subtype:          subtypeUnknownKind,
 		RuntimeSessionID: currentRuntimeSessionID(job),
-		BranchSha:        effectiveBranchSha(job.WT),
+		BranchSha:        effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT),
 	}); err != nil {
 		logln("unknown-kind turn-complete failed for", job.SessionID+":", err)
 	}

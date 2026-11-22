@@ -17,6 +17,7 @@ import type {
   ReportedEngine,
   RunnerAccountRemoveSession,
   RunnerAccountRemoveState,
+  RunnerClaudeAccountSwapState,
   RunnerEngineAccount,
   RunnerInstallState,
   RunnerLoginState,
@@ -30,10 +31,10 @@ import type {
   RunnerSelfUpdatePostponeRequest,
   RunnerSelfUpdatePostponeResponse,
 } from '@orbit/shared';
-import { RunStatus } from '@prisma/client';
+import { Prisma, RunStatus } from '@prisma/client';
 import { generateToken, sha256 } from '../common/crypto.util';
 import { agentFixesOf } from './attention-fix';
-import { namedRunnerEngines, sanitizeEngineUpdateDismissals, sanitizeRunnerEngines, usedPlanUsage, usedRunnerEngines } from '../common/runner-engines';
+import { namedRunnerEngines, sanitizeEngineUpdateDismissals, sanitizeFormerDefaults, sanitizeRunnerEngines, usedPlanUsage, usedRunnerEngines } from '../common/runner-engines';
 import {
   antigravityGoogleLoginRefusal,
   antigravitySignInUnderWay,
@@ -71,10 +72,16 @@ import { DIR_PROBE_MAX_PATH, dirProbeAnswerOf } from './dir-probe';
 import { isInternalAddress } from '../shared/public-surface.guard';
 import { blockedRunnerRegion, claudeRegionSignInRefusal, regionMachineName, runnerRegionView } from './runner-region';
 import { activeSessionsOn, engineHealthWithActiveSessions } from '../providers/active-sessions';
-
-/** The statuses an abandoned checkout can belong to: a session that has stopped running for good.
- *  A parked one can be dirty between turns and is not abandoned, so it is not listed. */
-const FINISHED_SESSION_STATUSES = [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED];
+import { CLAUDE_ACCOUNT_MOVE_V1 } from '../providers/account-move-capability';
+import {
+  CLAUDE_ACCOUNT_SWAP_BUSY,
+  CLAUDE_ACCOUNT_SWAP_TOO_OLD,
+  CLAUDE_ACCOUNT_SWAP_V1,
+  claudeAccountSwapStateOf,
+  claudeAccountSwapWaitingOf,
+} from './claude-account-swap';
+import { openCodeKeyRows, runsOnOpenCode } from '../providers/custom-provider';
+import { releasedFilter } from '../common/session-release';
 
 // Cap device-enrollment userCode lookups per user, so an authenticated insider
 // cannot brute-force another user's pending enrollment code online.
@@ -206,6 +213,12 @@ export class RunnersService {
         codexAccountRemoveStatus: true,
         codexAccountRemoveMessage: true,
         codexAccountRemoveSessions: true,
+        // Set as default for Claude Code (claude-account-swap.ts): which account, and where it stands.
+        claudeAccountSwapAccount: true,
+        claudeAccountSwapStatus: true,
+        claudeAccountSwapMessage: true,
+        claudeAccountSwapWaiting: true,
+        claudeAccountSwapForeign: true,
         // Where this machine's Claude connection to Anthropic comes out (docs/claude-region-check-contract.md §6), read
         // with the capabilities above: only a runner that declares claude-region/v1 has a region to show.
         region: true,
@@ -227,6 +240,11 @@ export class RunnersService {
     // Each account says how many sessions are at work on it, so that a client's "starts on" is the server's.
     const atWork = await activeSessionsOn(this.prisma, runners, new Date(now));
     const used = runners.map((runner) => engineHealthWithActiveSessions(usedRunnerEngines(runner), atWork.get(runner.id)));
+    // The runner's local auth probe cannot see keys Orbit injects at session dispatch.
+    const openCodeNoKeyEntries = used.flatMap((engines) => engines?.filter((entry) => entry.openCodeNoKey) ?? []);
+    if (openCodeNoKeyEntries.length && (await openCodeKeyRows(this.prisma, where.ownerId)).some(runsOnOpenCode)) {
+      for (const entry of openCodeNoKeyEntries) delete entry.openCodeNoKey;
+    }
     const updateTurns = await this.updateTurnsOf(where.ownerId, runners);
     const drainWaiting = await drainWaitingOf(this.prisma, where.ownerId, runners);
     // Fix with an agent: where a press would start its session on each runner, or why it can't, and the
@@ -234,6 +252,8 @@ export class RunnersService {
     const agentFixes = await agentFixesOf(this.prisma, where.ownerId, runners, now);
     // The sessions a refused account removal named, by title, for the row that asked.
     const removalSessions = await accountRemoveSessionsOf(this.prisma, where.ownerId, runners);
+    // The sessions a pending Set as default waits on, by title.
+    const swapWaiting = await claudeAccountSwapWaitingOf(this.prisma, where.ownerId, runners);
     return runners.map(({
       availableCommands,
       availableSkills,
@@ -254,6 +274,11 @@ export class RunnersService {
       codexAccountRemoveStatus,
       codexAccountRemoveMessage,
       codexAccountRemoveSessions: removalSessionIds,
+      claudeAccountSwapAccount,
+      claudeAccountSwapStatus,
+      claudeAccountSwapMessage,
+      claudeAccountSwapWaiting: _swapWaiting,
+      claudeAccountSwapForeign,
       selfUpdate,
       presence,
       region,
@@ -291,6 +316,10 @@ export class RunnersService {
         codexAccountRemoveSessions: removalSessionIds,
         sessions: removalSessions.get(r.id),
       }),
+      claudeAccountSwap: claudeAccountSwapStateOf(
+        { claudeAccountSwapAccount, claudeAccountSwapStatus, claudeAccountSwapMessage, claudeAccountSwapForeign },
+        swapWaiting.get(r.id),
+      ),
       online: runnerIsOnline({ status: r.status, lastHeartbeatAt: r.lastHeartbeatAt, presence }, now),
       activeSessions: activeByRunner.get(r.id) ?? 0,
       // Only on a runner draining for its self-update: the viewer's turns the drain waits for.
@@ -574,7 +603,9 @@ export class RunnersService {
     const runner = await this.prisma.runner.findFirst({ where: { id, ownerId }, select: { id: true } });
     if (!runner) throw new NotFoundException('runner not found');
     const rows = await this.prisma.abandonedCheckout.findMany({
-      where: { runnerId: id, ownerId, session: { status: { in: FINISHED_SESSION_STATUSES } } },
+      // An abandoned checkout belongs to a session that has stopped running for good: released. A parked one can be
+      // dirty between turns and is not abandoned, so it is not listed.
+      where: { runnerId: id, ownerId, session: releasedFilter() },
       orderBy: { observedAt: 'asc' },
       select: {
         sessionId: true,
@@ -858,6 +889,57 @@ export class RunnersService {
   }
 
   /**
+   * Make an added Claude Code account the Default on this runner (docs/claude-default-swap-contract.md §5): the runner
+   * swaps that account's login with the one in ~/.claude, so Orbit and a terminal `claude` there both use it. Recorded
+   * on the runner's row as `pending`, woken to heartbeat at once, and handed over there until the runner reports `done`
+   * or `failed`; RunnerApiController.applyClaudeAccountSwapResult applies the outcome. Sessions are never a reason to
+   * refuse: the swap waits for turns in progress to end, and each session follows its account.
+   *
+   * Refused: an engine other than Claude Code; `default` itself, and an account this runner does not report; a runner
+   * that cannot swap logins (no claude-account-swap/v1, or no claude-account-move/v1 to carry conversations), in words
+   * the owner can act on; and a second ask while one is still pending, which the runner may be in the middle of.
+   */
+  async setDefaultAccount(
+    ownerId: string,
+    id: string,
+    engine: LoginEngine,
+    account: string,
+  ): Promise<RunnerClaudeAccountSwapState> {
+    if (engine !== 'claude') throw new BadRequestException('Only a Claude Code account can be made the Default');
+    if (account === 'default') throw new BadRequestException('This account is already the Default');
+    if (!ACCOUNT_ID_PATTERN.test(account ?? '')) throw new BadRequestException('Unknown account');
+    const runner = await this.prisma.runner.findFirst({
+      where: { id, ownerId },
+      select: { engines: true, capabilities: true, capabilitiesReportedAt: true, claudeAccountSwapStatus: true },
+    });
+    if (!runner) throw new NotFoundException('runner not found');
+    const capabilities = runner.capabilitiesReportedAt ? (runner.capabilities ?? []) : [];
+    if (!capabilities.includes(CLAUDE_ACCOUNT_SWAP_V1) || !capabilities.includes(CLAUDE_ACCOUNT_MOVE_V1)) {
+      throw new BadRequestException(CLAUDE_ACCOUNT_SWAP_TOO_OLD);
+    }
+    const reported = sanitizeRunnerEngines(runner.engines)
+      ?.find((entry) => entry.engine === 'claude')
+      ?.accounts?.some((entry) => entry.id === account);
+    if (!reported) throw new NotFoundException('That account is not one this runner reports');
+    // Fenced on nothing pending, in the statement itself, so two asks at once start one swap.
+    const { count } = await this.prisma.runner.updateMany({
+      where: { id, ownerId, OR: [{ claudeAccountSwapStatus: null }, { claudeAccountSwapStatus: { not: 'pending' } }] },
+      data: {
+        claudeAccountSwapAccount: account,
+        claudeAccountSwapStatus: 'pending',
+        claudeAccountSwapMessage: null,
+        claudeAccountSwapWaiting: [],
+        claudeAccountSwapForeign: Prisma.DbNull,
+        claudeAccountSwapAt: new Date(),
+      },
+    });
+    if (count === 0) throw new ConflictException(CLAUDE_ACCOUNT_SWAP_BUSY);
+    // Delivered on the runner's next heartbeat; have that be now, as for a removal.
+    this.realtime?.notifyRunnerWake(id);
+    return claudeAccountSwapStateOf({ claudeAccountSwapAccount: account, claudeAccountSwapStatus: 'pending' });
+  }
+
+  /**
    * Remove this runner's Default of `engine` from Orbit. The machine keeps it and its sign-in, and the
    * CLI in a terminal there keeps working on it; Orbit stops listing and using it. Orbit's own record,
    * kept in `runner.default_removed`, so the runner takes no part: no relay row, no wake, no
@@ -958,13 +1040,16 @@ export class RunnersService {
     }
     const trimmed = (name ?? '').trim();
     if (!trimmed) throw new BadRequestException('An account needs a name');
-    const runner = await this.prisma.runner.findFirst({ where: { id, ownerId }, select: { engines: true } });
+    const runner = await this.prisma.runner.findFirst({ where: { id, ownerId }, select: { engines: true, accountNames: true } });
     if (!runner) throw new NotFoundException('runner not found');
     const reported = sanitizeRunnerEngines(runner.engines)
       ?.find((entry) => entry.engine === engine)
       ?.accounts?.find((entry) => entry.id === account);
     if (!reported) throw new NotFoundException('That account is not one this runner reports');
-    const own = reported.name || (account === 'default' ? 'Default' : '');
+    // A former Default carries no name of its slot's: the runner's name for that slot belongs to the
+    // account now in ~/.claude, so any name the owner gives it is kept as theirs.
+    const formerDefault = engine === 'claude' && sanitizeFormerDefaults(runner.accountNames).has(account);
+    const own = formerDefault ? '' : (reported.name || (account === 'default' ? 'Default' : ''));
     const alias = trimmed === own ? null : trimmed;
     const written = await this.prisma.$executeRaw`
       UPDATE "runner"

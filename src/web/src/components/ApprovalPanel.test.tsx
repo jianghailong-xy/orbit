@@ -593,13 +593,13 @@ describe('merge check change approval', () => {
   it('shows the check as it stands beside the check being asked for', () => {
     const html = render(change());
 
-    expect(html).toContain('Confirm: change the merge check of Checkout rewrite?');
+    expect(html).toContain('Change project integration settings?');
     // Both commands, because their difference is the whole decision. The CURRENT one is the fact
     // the agent's proposal is checked against, so a card with only the new command would be asking
     // the owner to take the agent's word for what is being replaced.
     expect(html).toContain('npm run lint');
     expect(html).toContain('npm test');
-    expect(html).toContain('Change the check');
+    expect(html).toContain('Confirm');
     expect(html).toContain('Chat about this');
     expect(html).not.toContain('orbit_project_update_integration');
   });
@@ -608,17 +608,32 @@ describe('merge check change approval', () => {
     // An empty line under "after" reads as a card that failed to load rather than as "no check".
     const html = render(change({ input: { mergeCheckCommand: null } }));
 
-    expect(html).toContain('no check — nothing runs on the combined tree');
+    expect(html).toContain('Uses merge check');
     expect(html).toContain('no check configured');
   });
 
-  it('names the budget only when the proposal named one', () => {
+  it('shows the effective budget before and after the proposal', () => {
     // Absent means "leave the budget as it is", which is not the same as "no budget" — a card that
     // printed a zero would be describing a write nobody proposed.
     expect(render(change())).not.toContain('killed after');
     expect(render(change({
       input: { mergeCheckCommand: 'npm test', mergeCheckTimeoutSeconds: 900 },
-    }))).toContain('killed after 900s');
+    }))).toContain('900 seconds');
+  });
+
+  it('shows two check columns, preserves omitted values and treats explicit null as inheritance', () => {
+    const html = render(change({ input: {
+      currentLandingCheckCommand: '  make fast  ', currentLandingCheckTimeoutSeconds: 300,
+      currentMergeCheckCommand: 'make all', currentMergeCheckTimeoutSeconds: 900,
+      landingCheckTimeoutSeconds: null,
+    } }));
+    expect(html).toContain('landing-check-confirmation');
+    expect(html.indexOf('<h4>Landing check')).toBeLessThan(html.indexOf('<h4>Merge check'));
+    expect(html.match(/  make fast  /g)).toHaveLength(2);
+    expect(html.match(/make all/g)).toHaveLength(2);
+    expect(html).toContain('300 seconds');
+    expect(html).toContain('Uses merge check timeout: 900 seconds');
+    expect(html).toContain('Applies to the next claimed landing job.');
   });
 
   it('offers no standing yes', () => {
@@ -890,7 +905,7 @@ describe('DAG change approval', () => {
     expect(html).toContain('No task changes state');
   });
 
-  it('still renders an ordinary tool approval as the raw input', () => {
+  it('renders an ordinary tool approval as the call itself', () => {
     const html = renderToStaticMarkup(
       <ApprovalPanel
         approval={{ id: 'b1', toolName: 'Bash', input: { command: 'ls -la' } } as ApprovalInfo}
@@ -898,7 +913,8 @@ describe('DAG change approval', () => {
       />,
     );
 
-    expect(html).toContain('Approve tool call: Bash');
+    expect(html).toContain('Run a command?');
+    expect(html).toContain('approval-tool-chip');
     expect(html).toContain('ls -la');
   });
 });
@@ -1089,7 +1105,7 @@ describe('one waiting completion decision on the session page', () => {
       if (path === `/projects/${PROJECT_ID}`) return reply({ id: PROJECT_ID, acceptanceCriteriaItems: [] });
       if (path.startsWith('/tasks/page')) return reply({ items: [], nextCursor: null });
       if (path.startsWith('/tasks')) return reply({ items: [], total: 0, counts: {} });
-      if (path === '/providers' || path === '/providers/pools' || path === '/providers/shared-pools' || path === '/session-tags' || path === '/session-folders' || path === '/task-lists' || path === '/runners' || path === '/watches' || path === '/watches?state=ACTIVE' || path === '/watches?state=PAUSED' || path === '/watches?needsAttention=true' || path === '/wiki/spaces') return reply([]);
+      if (path === '/providers' || path === '/providers/pools' || path === '/providers/shared-pools' || path === '/session-tags' || path === '/session-folders' || path === '/task-lists' || path === '/runners' || path === '/watches' || path === '/watches?state=ACTIVE' || path === '/watches?state=PAUSED' || path === '/watches?needsAttention=true' || path === '/watches?following=true' || path === '/wiki/spaces') return reply([]);
       // The session list's Needs you row reads the terminals asking to be approved: none here.
       if (path === '/terminals/requests') return reply({ requests: [] });
       if (path.startsWith('/owner-requests')) return reply({ requests: [] });

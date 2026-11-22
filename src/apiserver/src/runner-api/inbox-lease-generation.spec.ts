@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { RunStatus } from '@prisma/client';
+import { isReleasedStatus } from '../common/session-release';
 import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { RunnerApiController } from './runner-api.controller';
 
@@ -30,6 +31,8 @@ function harness(
               inboxLeaseGeneration: activeGeneration,
               inboxLeaseOwner: GENERATION,
               status,
+              // A terminal row carries its release column (session_release_fact_chk).
+              ...(isReleasedStatus(status) ? { finishedAt: new Date() } : {}),
             }]
           : [];
       }

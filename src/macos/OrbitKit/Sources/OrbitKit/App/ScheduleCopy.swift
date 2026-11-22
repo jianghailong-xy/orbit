@@ -28,7 +28,6 @@ public enum ScheduleCopy {
         public static let showPastRuns = "Show past runs"
     }
     public static let groups: [String: String] = [
-        "NEEDS_YOU": "Needs you",
         "TODAY": "Today",
         "TOMORROW": "Tomorrow",
         "LATER": "Later",
@@ -85,6 +84,31 @@ public enum ScheduleCopy {
         public static let daysSeparator = ", "
     }
     public static let separator = " · "
+    public enum Every {
+        public static let minutes = "Every {count} min"
+        public static let hour = "Every hour"
+        public static let hours = "Every {count} hours"
+        public static let window = "{interval}, {time}–{until}"
+        public static let from = "{interval} from {time}"
+        public static let days = "{rule}, {days}"
+        public static let workweek = "Mon–Fri"
+        public static let weekend = "weekends"
+    }
+    /// The planned end (§8.5) and the line a run of missed slots collapses into.
+    public enum End {
+        public static let until = "until {when}"
+        public static let today = "{time} today"
+        public static let tomorrow = "{time} tomorrow"
+        public static let runLeft = "1 run left"
+        public static let runsLeft = "{count} runs left"
+        public static let missed = "{count} slots missed, {from}–{to}"
+        public static let missedDated = "{count} slots missed, {fromDate}, {from}–{toDate}, {to}"
+        public static let endLabel = "Ends"
+        public static let extend = "Extend the end"
+        public static let remove = "Remove the end"
+        public static let extendAsk = "{title}: extend the end"
+        public static let removeAsk = "{title}: remove the end"
+    }
     public enum Landing {
         public static let landed = "Landed on main: {sha}."
         public static let failed = "Could not land on main: {reason}"
@@ -132,6 +156,7 @@ public enum ScheduleCopy {
     ]
     public static let failureReasons: [String: String] = [
         "RUNNER_UNAVAILABLE": "found no runner online",
+        "RUNNER_FULL": "waited for a full runner until its window closed",
         "QUOTA": "hit the engine's usage limit",
         "ENGINE_CRASHED_BEFORE_START": "stopped before its engine started",
         "LANDING_FAILED": "could not land on main",
@@ -217,11 +242,19 @@ public enum ScheduleCopy {
         public static let alwaysAllow = "Always allow"
         public static let allowOnce = "Allow once"
         public static let deny = "Deny"
+        public static let stop = "Stop"
+        public static let openLastRun = "Open last run"
     }
     public enum DeleteConfirm {
         public static let title = "Delete “{title}”?"
         public static let body = "It stops running: a run waiting to start is cancelled, and one under way finishes. Its runs and their sessions are kept, but the Scheduled page no longer shows it or its history, and you cannot undo this here."
         public static let confirm = "Delete"
+        public static let cancel = "Cancel"
+    }
+    public enum StopConfirm {
+        public static let title = "Stop this run?"
+        public static let body = "It ends where it is and counts as stopped by you. Its session is kept, and the schedule runs again at its next time."
+        public static let confirm = "Stop"
         public static let cancel = "Cancel"
     }
     public static let keep: [String: String] = [
@@ -256,6 +289,7 @@ public enum ScheduleCopy {
             "rule": "Time",
             "timezone": "Time zone",
             "endAt": "Ends",
+            "maxRuns": "Runs",
             "accessLevel": "Access",
             "runLimitMinutes": "Run limit",
             "workspaceId": "Workspace",
@@ -294,6 +328,7 @@ public enum ScheduleCopy {
             "RUNS_PER_WEEK": "Let {title} run more often?",
             "RUN_LIMIT": "Let {title} run longer?",
             "WORKSPACE": "Let {title} run in {workspace}?",
+            "PROBE_COMMAND": "Let {title} check with a new command?",
         ]
     }
     public enum SessionPreview {
@@ -317,6 +352,7 @@ public enum ScheduleCopy {
     public enum Push {
         public static let failedBody = "The last run {reason}. It keeps running until you pause it."
         public static let goalReachedTitle = "{title} ended itself"
+        public static let stoppedAsPlanned = "Stopped as planned after {runs}"
     }
     public enum Empty {
         public static let lead = "Nothing scheduled. Say what should happen and when; an agent sets it up and asks you once."
@@ -329,7 +365,7 @@ public enum ScheduleCopy {
     public enum RunSession {
         public static let crumb = "Scheduled"
         public static let runOf = "run of {date}"
-        public static let strip = "Scheduled run · planned {planned}, started {started} · access {access} · this session is not in your session list"
+        public static let strip = "Scheduled run · planned {planned}, started {started} · access {access}"
         public static let reported = "Reported: {state}"
         public static let agent = "{engine} agent"
         public static let duration = "{minutes} min"
@@ -341,7 +377,6 @@ public enum ScheduleCopy {
         "page.title": ScheduleCopy.Page.title,
         "page.allWorkspaces": ScheduleCopy.Page.allWorkspaces,
         "page.showPastRuns": ScheduleCopy.Page.showPastRuns,
-        "groups.NEEDS_YOU": ScheduleCopy.groups["NEEDS_YOU"]!,
         "groups.TODAY": ScheduleCopy.groups["TODAY"]!,
         "groups.TOMORROW": ScheduleCopy.groups["TOMORROW"]!,
         "groups.LATER": ScheduleCopy.groups["LATER"]!,
@@ -444,6 +479,7 @@ public enum ScheduleCopy {
         "runStates.HELD": ScheduleCopy.runStates["HELD"]!,
         "runStates.CANCELLED": ScheduleCopy.runStates["CANCELLED"]!,
         "failureReasons.RUNNER_UNAVAILABLE": ScheduleCopy.failureReasons["RUNNER_UNAVAILABLE"]!,
+        "failureReasons.RUNNER_FULL": ScheduleCopy.failureReasons["RUNNER_FULL"]!,
         "failureReasons.QUOTA": ScheduleCopy.failureReasons["QUOTA"]!,
         "failureReasons.ENGINE_CRASHED_BEFORE_START": ScheduleCopy.failureReasons["ENGINE_CRASHED_BEFORE_START"]!,
         "failureReasons.REPORTED_FAILED": ScheduleCopy.failureReasons["REPORTED_FAILED"]!,
@@ -521,16 +557,42 @@ public enum ScheduleCopy {
         "actions.alwaysAllow": ScheduleCopy.Actions.alwaysAllow,
         "actions.allowOnce": ScheduleCopy.Actions.allowOnce,
         "actions.deny": ScheduleCopy.Actions.deny,
+        "actions.stop": ScheduleCopy.Actions.stop,
+        "actions.openLastRun": ScheduleCopy.Actions.openLastRun,
         "deleteConfirm.title": ScheduleCopy.DeleteConfirm.title,
         "deleteConfirm.body": ScheduleCopy.DeleteConfirm.body,
         "deleteConfirm.confirm": ScheduleCopy.DeleteConfirm.confirm,
         "deleteConfirm.cancel": ScheduleCopy.DeleteConfirm.cancel,
+        "stopConfirm.title": ScheduleCopy.StopConfirm.title,
+        "stopConfirm.body": ScheduleCopy.StopConfirm.body,
+        "stopConfirm.confirm": ScheduleCopy.StopConfirm.confirm,
+        "stopConfirm.cancel": ScheduleCopy.StopConfirm.cancel,
         "keep.ACCESS_LEVEL": ScheduleCopy.keep["ACCESS_LEVEL"]!,
         "keep.RUNS_PER_WEEK": ScheduleCopy.keep["RUNS_PER_WEEK"]!,
         "keep.RUN_LIMIT": ScheduleCopy.keep["RUN_LIMIT"]!,
         "keep.WORKSPACE": ScheduleCopy.keep["WORKSPACE"]!,
         "keep.other": ScheduleCopy.keep["other"]!,
         "history.change": ScheduleCopy.History.change,
+        "every.minutes": ScheduleCopy.Every.minutes,
+        "every.hour": ScheduleCopy.Every.hour,
+        "every.hours": ScheduleCopy.Every.hours,
+        "every.window": ScheduleCopy.Every.window,
+        "every.from": ScheduleCopy.Every.from,
+        "every.days": ScheduleCopy.Every.days,
+        "every.workweek": ScheduleCopy.Every.workweek,
+        "every.weekend": ScheduleCopy.Every.weekend,
+        "end.until": ScheduleCopy.End.until,
+        "end.today": ScheduleCopy.End.today,
+        "end.tomorrow": ScheduleCopy.End.tomorrow,
+        "end.runLeft": ScheduleCopy.End.runLeft,
+        "end.runsLeft": ScheduleCopy.End.runsLeft,
+        "end.missed": ScheduleCopy.End.missed,
+        "end.missedDated": ScheduleCopy.End.missedDated,
+        "end.endLabel": ScheduleCopy.End.endLabel,
+        "end.extend": ScheduleCopy.End.extend,
+        "end.remove": ScheduleCopy.End.remove,
+        "end.extendAsk": ScheduleCopy.End.extendAsk,
+        "end.removeAsk": ScheduleCopy.End.removeAsk,
         "history.changeTo": ScheduleCopy.History.changeTo,
         "history.changeText": ScheduleCopy.History.changeText,
         "history.ruleChange": ScheduleCopy.History.ruleChange,
@@ -550,6 +612,7 @@ public enum ScheduleCopy {
         "history.fields.rule": ScheduleCopy.History.fields["rule"]!,
         "history.fields.timezone": ScheduleCopy.History.fields["timezone"]!,
         "history.fields.endAt": ScheduleCopy.History.fields["endAt"]!,
+        "history.fields.maxRuns": ScheduleCopy.History.fields["maxRuns"]!,
         "history.fields.accessLevel": ScheduleCopy.History.fields["accessLevel"]!,
         "history.fields.runLimitMinutes": ScheduleCopy.History.fields["runLimitMinutes"]!,
         "history.fields.workspaceId": ScheduleCopy.History.fields["workspaceId"]!,
@@ -580,6 +643,7 @@ public enum ScheduleCopy {
         "envelopeCard.titles.RUNS_PER_WEEK": ScheduleCopy.EnvelopeCard.titles["RUNS_PER_WEEK"]!,
         "envelopeCard.titles.RUN_LIMIT": ScheduleCopy.EnvelopeCard.titles["RUN_LIMIT"]!,
         "envelopeCard.titles.WORKSPACE": ScheduleCopy.EnvelopeCard.titles["WORKSPACE"]!,
+        "envelopeCard.titles.PROBE_COMMAND": ScheduleCopy.EnvelopeCard.titles["PROBE_COMMAND"]!,
         "sessionPreview.create": ScheduleCopy.SessionPreview.create,
         "sessionPreview.envelope": ScheduleCopy.SessionPreview.envelope,
         "waiting.title": ScheduleCopy.Waiting.title,
@@ -596,6 +660,7 @@ public enum ScheduleCopy {
         "waiting.widen.body": ScheduleCopy.Waiting.widenBody,
         "push.failedBody": ScheduleCopy.Push.failedBody,
         "push.goalReachedTitle": ScheduleCopy.Push.goalReachedTitle,
+        "push.stoppedAsPlanned": ScheduleCopy.Push.stoppedAsPlanned,
         "empty.lead": ScheduleCopy.Empty.lead,
         "empty.examples.0": ScheduleCopy.Empty.examples[0],
         "empty.examples.1": ScheduleCopy.Empty.examples[1],

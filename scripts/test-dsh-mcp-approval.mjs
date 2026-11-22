@@ -17,8 +17,10 @@ export const unitScenarios = [
   ...['allow-once-joins-the-bare-tool-call-id', 'reject', 'late-allow-after-stop-is-never-sent', 'closed-bridge-cancels-without-asking',
     'unknown-tool-call-is-rejected', 'dont-ask-rejects-unasked', 'unknown-options-never-default-to-allow',
     'auto-allows-a-routine-escalation-without-a-card', 'auto-leaves-a-high-impact-escalation-to-a-person',
+    'auto-allows-an-edit-in-the-uploads-directory-without-a-card',
     'default-never-allows-an-escalation-itself'].map((name) => `TestDshPermissionBridge/${name}`),
   'TestDshAutoRoutineEscalation',
+  'TestDshAutoUploadsEdit',
   'TestDshToolGate',
   'TestDshPermissionCard',
   'TestDshMCPServers',
@@ -52,6 +54,7 @@ export const realScenarios = [
   'TestDshRealAutoRoutineEscalation',
   'TestDshRealAutoCacheRoot',
   'TestDshRealDefaultCacheRootDenied',
+  'TestDshRealAutoUploads',
   'TestDshRealToolGateAsksInAuto',
   'TestDshRealToolGateRefusesInDontAsk',
 ];

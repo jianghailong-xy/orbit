@@ -114,7 +114,7 @@ test('a new account queues its first session while its managed runner waits for 
   await verifyCoordinatorPgIdentity(sql);
   const db: PrismaClient = prismaClientFor(url);
   const prisma = db as unknown as PrismaService;
-  const scratch = mkdtempSync(path.join(tmpdir(), 'orbit-managed-first-session-'));
+  const scratch = mkdtempSync(path.join(tmpdir(), 'orbit-cloud-first-session-'));
   const savedEnv = process.env;
   let app: INestApplication | undefined;
   t.after(async () => {

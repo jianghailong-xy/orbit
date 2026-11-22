@@ -240,7 +240,7 @@ class StartProjectTest {
         val draft = StartProjectCopy.Draft.of(request().settings).copy(automatic = false, maxConcurrentTasks = 5, mergeCheckCommand = "  npm test  ")
         val branch = StartProjectCopy.body(request(), draft, "item-1")
         assertEquals(j("""{"criteriaDigest":"$seal","line":"PROJECT_BRANCH","projectBranchName":"refs/heads/project/$project","automatic":false,
-            "maxConcurrentTasks":5,"mergeCheckCommand":"npm test","requestId":"item-1"}"""), branch)
+            "maxConcurrentTasks":5,"mergeCheckCommand":"npm test","landingCheckCommand":null,"landingCheckTimeoutSeconds":null,"mergeCheckTimeoutSeconds":null,"requestId":"item-1"}"""), branch)
         val main = StartProjectCopy.body(request(), StartProjectCopy.Draft("MAIN", true, 3, "   "), null)
         assertEquals("MAIN", main.text("line"))
         assertFalse("directly into main names no branch", main.containsKey("projectBranchName"))
@@ -258,11 +258,40 @@ class StartProjectTest {
         val card = CardCatalog.project("s1", project, reads).single { it.family == CardFamily.START }
         val request = StartProjectCopy.request(row)!!
         for (draft in listOf(StartProjectCopy.Draft.of(request.settings), StartProjectCopy.Draft("MAIN", false, 7, " make check "),
-            StartProjectCopy.Draft("PROJECT_BRANCH", true, 2, ""))) {
+            StartProjectCopy.Draft("PROJECT_BRANCH", true, 2, ""),
+            StartProjectCopy.Draft("PROJECT_BRANCH", true, 2, "make all", landingCheckCommand = "  make fast  ", landingCheckTimeoutSeconds = 600, mergeCheckTimeoutSeconds = 900))) {
             val sent = CardRequests.build(card, CardVerb.START, CardInput(settings = ProjectStartSettings(draft.line, draft.automatic, draft.maxConcurrentTasks,
-                draft.mergeCheckCommand, request.settings.projectBranchName)))
+                draft.mergeCheckCommand, request.settings.projectBranchName,
+                landingCheckCommand = draft.landingCheckCommand.takeIf { it.isNotBlank() },
+                landingCheckTimeoutSeconds = draft.landingCheckTimeoutSeconds, mergeCheckTimeoutSeconds = draft.mergeCheckTimeoutSeconds)))
             assertEquals(listOf("projects", project, "start"), sent.path)
             assertEquals(StartProjectCopy.body(request, draft, "item-1"), Json.parseToJsonElement(sent.body!!.decodeToString()).jsonObject)
+        }
+    }
+
+    @Test fun aRequestWithoutALineOmitsTheLineAndItsSettingsFromBothStartDoors() {
+        val raw = requestRow("item-1").replace("\"line\":\"PROJECT_BRANCH\",", "")
+        val row = j(raw)
+        val request = StartProjectCopy.request(row)!!
+        assertNull(StartProjectCopy.request(j(raw.replace("\"settings\":{", "\"settings\":{\"line\":null,")))!!.settings.line)
+        val view = j("""{"repository":"acme/app","upstreamRef":"refs/heads/trunk","deliveryMode":"AGENT_PUSH"}""")
+        val draft = StartProjectCopy.Draft.of(request.settings.copy(upstreamRef = "refs/heads/other", landingCheckCommand = "make fast",
+            landingCheckTimeoutSeconds = 600), view)
+        assertNull(draft.line)
+        assertNull(draft.upstream)
+        assertNull(draft.deliveryMode)
+        assertTrue(draft.complete)
+        val expected = j("""{"criteriaDigest":"$seal","requestId":"item-1","automatic":true,"maxConcurrentTasks":3,
+            "mergeCheckCommand":null,"mergeCheckTimeoutSeconds":null}""")
+        assertEquals(expected, StartProjectCopy.body(request, draft, "item-1"))
+        assertEquals(expected, StartProjectCopy.body(request, draft.copy(upstream = "trunk"), "item-1"))
+        val card = InteractionCard("start:item-1", CardFamily.START, StartProjectCopy.title, row, "s1", project, "item-1", seal,
+            actions = listOf(CardVerb.START))
+        val edited = ProjectStartSettings(null, true, 3, null, request.settings.projectBranchName,
+            upstreamRef = "refs/heads/trunk", deliveryMode = "PLATFORM", landingCheckCommand = "make fast", landingCheckTimeoutSeconds = 600)
+        for (input in listOf(CardInput(), CardInput(settings = edited))) {
+            val sent = CardRequests.build(card, CardVerb.START, input)
+            assertEquals(expected, j(sent.body!!.decodeToString()))
         }
     }
 

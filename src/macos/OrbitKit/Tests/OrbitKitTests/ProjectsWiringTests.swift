@@ -247,7 +247,7 @@ final class ProjectsWiringTests: XCTestCase {
         let main = code(try appSource("Views/MainView.swift"))
         let sidebar = try slice(main, from: "struct SectionSidebar: View {", to: "struct AccountFooter: View {")
         try assertInOrder(sidebar, ["ForEach(sections) { row in",
-                                    "Section(AppSection.agents.title, isExpanded: $workspacesExpanded)",
+                                    "Section(isExpanded: $workspacesExpanded)", "Text(AppSection.agents.title)",
                                     "ForEach(projects) { row in"],
                           "the drawer's order")
         XCTAssertTrue(sidebar.contains("model.projects?.drawerProjects(coordinators: model.projectCoordinators)"),
@@ -577,7 +577,9 @@ final class ProjectsWiringTests: XCTestCase {
         XCTAssertTrue(row.contains("onOpenJobs: integration.inFlightJobs == nil ? nil : { pageSheet = .landingJobs },"))
         XCTAssertTrue(row.contains("onOpenProject: nil,"),
                       "on the project's own page a card with no list to open is a read")
-        XCTAssertTrue(row.contains("retry: { jobID in try await store.retryIntegrationJob(jobID) })"))
+        XCTAssertTrue(row.contains("retry: { jobID in try await store.retryIntegrationJob(jobID) },"))
+        XCTAssertTrue(row.contains("skipCheck: { taskID in try await store.skipLandingCheck(taskID) })"),
+                      "the card's skip goes through the page's own store, which reads the page again")
         XCTAssertFalse(row.contains(".sheet("), "the card redraws every second; the sheet is the page's")
         let kinds = try slice(view, from: "private enum ProjectPageSheet: String, Identifiable {", to: "\n}\n")
         XCTAssertTrue(kinds.contains("case landingJobs"))

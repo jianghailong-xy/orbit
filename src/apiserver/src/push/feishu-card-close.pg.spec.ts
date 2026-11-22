@@ -175,6 +175,8 @@ test('a card whose matter was settled elsewhere is drawn as its outcome, without
     const card = cardOf(updated[0]!);
     assertNoButtons(card);
     assert.match(card, /Allowed in Orbit · \d\d:\d\d UTC/);
+    assert.doesNotMatch(card, /needs? your reply/i, 'a settled card asks for nothing');
+    assert.equal(JSON.parse(card).header.subtitle.content, 'Bash', 'its subtitle is the tool alone');
     assert.match(card, /a web answer/, 'still the card it was: its session');
     const after = await rowOf({ sessionId: s });
     assert.equal(after.id, row.id);

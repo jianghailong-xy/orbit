@@ -86,6 +86,14 @@ class PendingTrayShellTest : ComposerShellTest() {
         assertTrue(has(hasText("lfs 属于另一个仓库") and tray))
         assertFalse(has(hasText("lfs belongs to another repository") and tray))
         assertFalse(has(hasText("and update the changelog") and tray))
+
+        // Withdraw hands back the same words, not the English: the steer first (the first row), then the queued message.
+        compose.onAllNodesWithTag("pending-tray-withdraw")[0].performClick()
+        await { ComposerShell.calls.contains("DELETE sessions/${ComposerShell.SESSION}/turns/$steerId") }
+        await { input() == "lfs 属于另一个仓库" }
+        compose.onNodeWithTag("pending-tray-withdraw").performClick()
+        await { ComposerShell.calls.contains("DELETE sessions/${ComposerShell.SESSION}/turns/$queuedId") }
+        await { input() == "lfs 属于另一个仓库\n\n顺便更新变更日志" }
     }
 
     @Test fun steerSendsAQueuedMessageIntoTheRunningTurn() {
@@ -136,7 +144,7 @@ class PendingTrayShellTest : ComposerShellTest() {
     @Test fun sendHeldWhileATurnRunsQueuesTheMessageForTheNextTurn() {
         running(); signIn(); openSession()
         compose.onNodeWithTag("composer-input").performTextInput("and tag the release")
-        await { has(hasTestTag("composer-send") and isEnabled() and hasText("Send")) }
+        await { has(hasTestTag("composer-send") and isEnabled() and hasContentDescription("Send")) }
         compose.onNodeWithTag("composer-send").performTouchInput { longClick() }
         await { has(hasTestTag("composer-queue-next-turn")) }
         assertTrue(shows("Queue for next turn"))
@@ -149,7 +157,7 @@ class PendingTrayShellTest : ComposerShellTest() {
         // A tap sends as it always has, and the server places it.
         await { input() == "" }
         compose.onNodeWithTag("composer-input").performTextInput("and write the notes")
-        await { has(hasTestTag("composer-send") and isEnabled() and hasText("Send")) }
+        await { has(hasTestTag("composer-send") and isEnabled() and hasContentDescription("Send")) }
         compose.onNodeWithTag("composer-send").performClick()
         await { ComposerShell.bodies.count { it.first == turns } == 2 }
         assertNull(ComposerShell.body(turns)!!["intent"])
@@ -162,7 +170,7 @@ class PendingTrayShellTest : ComposerShellTest() {
         await { has(hasText("and update the changelog") and tray) }
         assertFalse(has(hasTestTag("pending-tray-steer")))
         compose.onNodeWithTag("composer-input").performTextInput("and tag the release")
-        await { has(hasTestTag("composer-send") and isEnabled() and hasText("Send")) }
+        await { has(hasTestTag("composer-send") and isEnabled() and hasContentDescription("Send")) }
         compose.onNodeWithTag("composer-send").performTouchInput { longClick() }
         compose.waitForIdle()
         assertFalse(has(hasTestTag("composer-queue-next-turn")))
@@ -187,7 +195,7 @@ class PendingTrayShellTest : ComposerShellTest() {
         await { ComposerShell.calls.any { it.startsWith("GET attachments/") } }
         shot("tray")
         compose.onNodeWithTag("composer-input").performTextInput("and tag the release")
-        await { has(hasTestTag("composer-send") and isEnabled() and hasText("Send")) }
+        await { has(hasTestTag("composer-send") and isEnabled() and hasContentDescription("Send")) }
         compose.onNodeWithTag("composer-send").performTouchInput { longClick() }
         await { has(hasTestTag("composer-queue-next-turn")) }
         shot("queue-for-next-turn")

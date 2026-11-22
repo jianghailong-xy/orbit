@@ -16,8 +16,10 @@ import {
   SafetyOutlined,
 } from '@ant-design/icons';
 import { MentionDeliveryNotes } from './MentionDeliveryNotes';
+import { GaugeIcon } from './ScheduleCards';
 import { WaitingOnYouTaskBadge } from './OwnerRequestCard';
 import { TaskInputs } from './TaskInputs';
+import { TaskLandingExempt } from './TaskLandingExempt';
 import { LandTaskStatus, landingBadge, landingIsLive } from './LandTaskStatus';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { AgentProvider, ALL_ENGINES, ENGINE_CLI_NAMES, isEngine, type RunnerModelCatalog } from '@orbit/shared';
@@ -102,6 +104,7 @@ import {
 } from './OwnerConfirmationCard';
 import { UNDER_REVIEW } from './OwnerConfirmationReview';
 import { useMachineName } from '../lib/managedRunner';
+import { taskDocumentReach, taskGraphReach, type SessionReachDeclaration } from '../lib/sessionReach';
 
 // Graph rendering pulls in React Flow + dagre. Keep that weight out of the initial task-list
 // bundle; it is fetched only when someone opens a task with dependencies and selects Graph.
@@ -784,6 +787,15 @@ export function TaskDetailPanel({
   // list row lacks; show `summary` meanwhile so the header doesn't flash.
   const q = useQuery({
     queryKey: ['task', taskId],
+    // The document carries the task's sessions, which is what the header's Run/Queued state, the
+    // busy-session poll below and the panel's session rows are read from. A run starting or ending
+    // need not write the task row at all — the control plane's `task.changed` fires only when it is
+    // created or updated — so `task` alone would leave the panel showing a run that is over.
+    //
+    // One cache entry with ProjectTaskPanel's and TaskRoute's reads of the same key; all three
+    // declare the same entities so whichever observer sets the entry's options last says the same
+    // thing.
+    meta: { entities: ['task', 'session'], sessionReach: taskDocumentReach(taskId ?? '') satisfies SessionReachDeclaration },
     queryFn: () => api<any>(`/tasks/${taskId}`),
     // While the task has a busy (queued/running) session, poll so the 开始执行 button
     // leaves its running state once the run ends; stay idle otherwise.
@@ -815,6 +827,7 @@ export function TaskDetailPanel({
   // task refreshes this too.
   const evidenceQ = useQuery({
     queryKey: ['task', taskId, 'evidence'],
+    meta: { entities: ['task'] },
     queryFn: () => api<TaskEvidenceRevision[]>(`/tasks/${taskId}/evidence`),
     enabled: !!q.data,
   });
@@ -833,6 +846,9 @@ export function TaskDetailPanel({
   // wide single-depth fan-in fits whole.
   const dependencyGraphQ = useQuery({
     queryKey: ['task', taskId, 'dependency-graph'],
+    // The graph's nodes carry live run state (`running` / `queued`) from their sessions; a run
+    // starting or ending writes no task row. So a run of one of its tasks reads it (lib/sessionReach).
+    meta: { entities: ['task', 'session'], sessionReach: taskGraphReach satisfies SessionReachDeclaration },
     queryFn: () =>
       api<TaskDependencyGraphResponse>(
         `/tasks/${taskId}/dependency-graph?direction=both&pairUnary=true&maxNodes=500`,
@@ -874,6 +890,8 @@ export function TaskDetailPanel({
   );
   const dependencyGraphNodesQ = useQuery({
     queryKey: ['task', taskId, 'dependency-graph-nodes', dependencyGraphKnownTaskIds],
+    // Same nodes, same live run state, read again for the expanded branches.
+    meta: { entities: ['task', 'session'], sessionReach: taskGraphReach satisfies SessionReachDeclaration },
     queryFn: () =>
       api<TaskDependencyGraphNodesResponse>(`/tasks/${taskId}/dependency-graph/nodes`, {
         method: 'POST',
@@ -924,12 +942,17 @@ export function TaskDetailPanel({
   useEffect(() => setDependencyViewOverride(null), [taskId]);
 
   // Owner's workspaces, for @-mention autocomplete and to label/trigger mentions.
-  const workspacesQ = useQuery({ queryKey: ['workspaces'], queryFn: () => api<WorkspaceRow[]>('/workspaces') });
+  const workspacesQ = useQuery({
+    queryKey: ['workspaces'],
+    meta: { entities: ['workspace', 'checkout'] },
+    queryFn: () => api<WorkspaceRow[]>('/workspaces'),
+  });
   const workspaceList = useMemo(() => workspacesQ.data ?? [], [workspacesQ.data]);
 
   // Owner's task lists, to move this task into a list (or detach it to 未分组).
   const taskListsQ = useQuery({
     queryKey: ['task-lists'],
+    meta: { entities: ['task'] },
     queryFn: () => api<{ id: string; title: string }[]>('/task-lists'),
   });
 
@@ -1033,7 +1056,7 @@ export function TaskDetailPanel({
   // The account's switch for smart model selection. Off (the default), none of it is drawn here:
   // no Suggested, no ✦ placeholder, and runs read as they did before routing.
   const me = useQuery(meQuery());
-  const smartSelection = me.data?.preferences?.modelRouting === true;
+  const smartSelection = me.data?.preferences?.modelRouting !== false;
   // Each tier with the model and effort it runs as for this task, as the server resolved them on the
   // assignee's runner, and the work it is for.
   const modelHintOptions: ModelHintOption[] | null = q.data?.modelHintOptions ?? null;
@@ -1177,6 +1200,7 @@ export function TaskDetailPanel({
   const [dependencyQuery, setDependencyQuery] = useState('');
   const dependencyTasksQ = useQuery({
     queryKey: ['tasks', 'dependency-search', dependencyQuery],
+    meta: { entities: ['task'] },
     // Only the options list is read, and this refires on every keystroke — skip the counts.
     queryFn: () => api<TaskPage>(taskPagePath({ limit: 50, q: dependencyQuery, counts: 'none' })),
   });
@@ -1514,7 +1538,7 @@ export function TaskDetailPanel({
       label: 'Model',
       value: q.data?.model
         ? modelLabel(q.data.model)
-        : smartSelection && assigneeWorkspace?.modelRouting ? SMART_SELECTION_PLACEHOLDER : 'Provider default',
+        : smartSelection ? SMART_SELECTION_PLACEHOLDER : 'Provider default',
     },
   ];
   const inputCount = (q.data?.attachments ?? []).length;
@@ -1778,6 +1802,14 @@ export function TaskDetailPanel({
           {/* A task forked from a session says where its checkout came from, in the server's own
               words (docs/task-fork-from-session-design.md §2.3). Absent on an older server. */}
           {q.data?.forkSource && <div className="tdp-fork-source">{q.data.forkSource}</div>}
+          {/* A task that starts when its condition holds says what it waits for (condition-triggers design §6.2):
+              "Waiting for: 3 or more OSDs are in", in the server's own words, while the condition has not fired. */}
+          {q.data?.startWhen?.waitingLine && (
+            <div className="tdp-start-when" data-start-when="">
+              <GaugeIcon />
+              <span>{q.data.startWhen.waitingLine}</span>
+            </div>
+          )}
           {/* How this row is judged, which nothing else on the page said: a row whose completion
               is owned by a check has no work of its own, and every other row names the method
               that settles it. */}
@@ -2066,10 +2098,11 @@ export function TaskDetailPanel({
               </div>
             </section>
           )}
-          {landing ? (
+          {landing || q.data?.landingCheckExempt === true ? (
             <section className="tdp-section" aria-label="Task landing">
               <div className="tdp-section-title">Landing</div>
-              <LandTaskStatus integration={q.data.integration} taskStatus={q.data.status} main={mainBranch} />
+              {landing ? <LandTaskStatus integration={q.data.integration} taskStatus={q.data.status} main={mainBranch} /> : null}
+              <TaskLandingExempt task={q.data} />
               {landingSessionId ? (
                 <div className="tdp-landing-open">
                   <LandingLink className="tdp-landing-link" sessionId={landingSessionId} />
@@ -2421,7 +2454,7 @@ export function TaskDetailPanel({
                     value={q.data?.model ?? null}
                     // Unpinned on an assignee with smart selection on, each run's model is picked for it.
                     placeholder={
-                      smartSelection && assigneeWorkspace?.modelRouting ? SMART_SELECTION_PLACEHOLDER : 'Provider default'
+                      smartSelection ? SMART_SELECTION_PLACEHOLDER : 'Provider default'
                     }
                     clearable
                     loading={runnersQ.isLoading || updateRunTarget.isPending}

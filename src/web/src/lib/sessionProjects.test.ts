@@ -4,6 +4,7 @@ import type { SessionFolder } from '../api';
 import { COORDINATOR_LEAD_COPY, type SidebarProject } from './projectAttention';
 import { sessionTimeSections } from './sessionGrouping';
 import {
+  projectSessionsButtonActive,
   LANDINGS_GROUP_GAP_MS,
   landingTaskName,
   landingsCountLine,
@@ -11,6 +12,8 @@ import {
   landingsWindow,
   landingsWindowGroups,
   listShowsProjects,
+  PROJECT_ROW_FULL_SWIPE,
+  projectStateAction,
   SESSION_PROJECT_COPY,
   SESSION_PROJECT_COORDINATOR_COPY,
   sessionProjectListing,
@@ -125,14 +128,14 @@ describe('sessionProjectListing', () => {
     expect(out.projects[0].lastTurnAt).toBe(ago(2));
   });
 
-  it('puts all members in the coordinator folder for folder counts and activity', () => {
+  it('puts all members in the coordinator folder, counting the project there as one row', () => {
     const folders = [folder('f1', 'Release'), folder('f2', 'Tasks'), folder('empty', 'Empty')];
     const sessions = [coordinator({ folderId: 'f1' }), member('worker', { folderId: 'f2', motion: 'spinner' }), member('waiting', { line: { text: 'Waiting', tone: 'approval' } }), row('ordinary')];
     const out = listing(sessions, {}, [project()], folders);
     expect(out.projects).toEqual([]);
     expect(out.sessions.map((session) => session.id)).toEqual(['ordinary']);
     expect(out.folders.map((entry) => [entry.folder.id, entry.sessionCount, entry.needsYou, entry.running])).toEqual([
-      ['empty', 0, 0, false], ['f1', 3, 1, true], ['f2', 0, 0, false],
+      ['empty', 0, 0, false], ['f1', 1, 1, true], ['f2', 0, 0, false],
     ]);
     const inside = listing(sessions, { folderId: 'f1' }, [project()], folders);
     expect(inside.folders).toEqual([]);
@@ -234,7 +237,7 @@ describe('a project outside its coordinator’s workspace', () => {
     expect(inside.entries).toEqual([{ ...sessions[0], kind: 'session', projectMark: mark }]);
     // Where the coordinator runs, its folder still holds every member, whatever folder each is filed in.
     const home = listing([coordinator({ ...here, folderId: 'f2' }), ...sessions], { workspaceId: 'w1' }, [project()], folders);
-    expect(home.folders.map((entry) => [entry.folder.id, entry.sessionCount])).toEqual([['f1', 0], ['f2', 3]]);
+    expect(home.folders.map((entry) => [entry.folder.id, entry.sessionCount])).toEqual([['f1', 0], ['f2', 1]]);
     expect(home.entries.map((entry) => entry.id)).toEqual(['ordinary']);
   });
 
@@ -677,5 +680,86 @@ describe('the source session’s landing label', () => {
   it('is nothing at all for a conversation that fed no landing', () => {
     expect(sourceLandingLabel(null)).toBeNull();
     expect(sourceLandingLabel(undefined)).toBeNull();
+  });
+});
+
+/** The title bar's Project sessions button spins while anything its page shows is active (owner
+ *  2026-11-17, docs/mocks/project-sessions-button-running, option C). */
+describe('projectSessionsButtonActive', () => {
+  const still = () => null;
+  it('spins for a session at work or with a background job in flight', () => {
+    expect(projectSessionsButtonActive([{ id: 'a' }], () => 'spinner', null, null)).toBe(true);
+    expect(projectSessionsButtonActive([{ id: 'a' }], () => 'pulse', null, null)).toBe(true);
+    expect(projectSessionsButtonActive([{ id: 'a' }], still, null, null)).toBe(false);
+  });
+  it('spins for a landing job running or queued', () => {
+    expect(projectSessionsButtonActive([], still, { inFlight: { kind: 'LAND_TASK' } }, null)).toBe(true);
+    expect(projectSessionsButtonActive([], still, { inFlight: null, integratingCount: 0, queuedCount: 1 }, null)).toBe(true);
+    expect(projectSessionsButtonActive([], still, { inFlight: null, inFlightJobs: [{}] }, null)).toBe(true);
+    expect(projectSessionsButtonActive([], still, { inFlight: null, integratingCount: 0, queuedCount: 0, inFlightJobs: [] }, null)).toBe(false);
+  });
+  it('spins for a merge into main being checked or landing, not one waiting on a decision', () => {
+    for (const state of ['CHECKING', 'CONFIRMED', 'RECHECKING']) {
+      expect(projectSessionsButtonActive([], still, null, { state })).toBe(true);
+    }
+    for (const state of ['READY', 'BLOCKED', 'MERGED']) {
+      expect(projectSessionsButtonActive([], still, null, { state })).toBe(false);
+    }
+  });
+});
+
+describe('project row Pause / Resume (design §4.2 2a/2b, §4.3)', () => {
+  const rowOf = (over: Partial<SidebarProject>, rows: Row[] = [coordinator()]) =>
+    listing(rows, {}, [project(over)]).projects[0];
+  const started = ago(600);
+  const fuse = (paused: boolean) => ({ paused, episodeId: paused ? 'ep1' : null, observed: paused ? 6 : null, limit: paused ? 6 : null });
+
+  it('names the one state action per project state, and Pin stays the second slot', () => {
+    expect(projectStateAction(rowOf({ startedAt: null }), 'open')).toBeNull();
+    expect(projectStateAction(rowOf({ startedAt: started }), 'open')).toBe('pause');
+    expect(projectStateAction(rowOf({ startedAt: started, pausedAt: ago(120), pausedReason: 'OWNER' }), 'open')).toBe('resume');
+    expect(projectStateAction(rowOf({ startedAt: started, fuse: fuse(true) }), 'open')).toBe('resume');
+    expect(projectStateAction(rowOf({ startedAt: started, status: 'DONE' }), 'open')).toBe('complete');
+    expect(projectStateAction(rowOf({ startedAt: started, status: 'CANCELLED' }), 'open')).toBe('complete');
+    expect(projectStateAction(rowOf({ startedAt: started, status: 'DONE' }), 'completed')).toBeNull();
+  });
+
+  it('resumes the daily limit first when both pauses hold', () => {
+    expect(rowOf({ startedAt: started, pausedAt: ago(5), fuse: fuse(true) }).pause).toEqual({ kind: 'fuse', episodeId: 'ep1' });
+    expect(rowOf({ startedAt: started, pausedAt: ago(5) }).pause).toEqual({ kind: 'owner' });
+    expect(rowOf({ startedAt: started }).pause).toBeNull();
+  });
+
+  it('never fires anything on a full swipe of a project row', () => {
+    expect(PROJECT_ROW_FULL_SWIPE).toBe(false);
+  });
+
+  it('says 2a amber for the limit and 2b grey for the owner, 2a winning', () => {
+    const limit = rowOf({ startedAt: started, pausedAt: ago(5), fuse: fuse(true) });
+    expect(limit.line).toEqual({ text: 'Paused at the daily limit · 6/6 today', tone: 'warning', glyph: 'pause' });
+    expect(rowOf({ startedAt: started, pausedAt: ago(120) }).line).toEqual({ text: 'Paused · 2 runs finishing', tone: 'paused', glyph: 'pause' });
+    expect(rowOf({ startedAt: started, pausedAt: ago(120), buckets: { running: 1 } }).line.text).toBe('Paused · 1 run finishing');
+    expect(rowOf({ startedAt: started, pausedAt: ago(120), buckets: { running: 0 } }).line.text).toBe('Paused · 2h');
+  });
+
+  it('keeps the line order: a waiting question beats 2a, 2a/2b beat the coordinator exceptions and running', () => {
+    const paused = { startedAt: started, pausedAt: ago(120) };
+    const waiting = coordinator({ line: { text: 'Approve merge to main', tone: 'approval' } });
+    expect(rowOf(paused, [waiting]).line.text).toBe('Approve merge to main');
+    const worker = member('worker', { line: { text: 'Waiting for your confirmation', tone: 'approval' } });
+    expect(rowOf(paused, [coordinator(), worker]).line.text).toBe('Waiting for your confirmation · worker');
+    const held = { attention: { ownerItems: [], startRequest: null, coordinatorItems: { leadKind: 'INTEGRATION_CONFLICT' as const, oldestWaitingSince: ago(18), count: 1 } } } as Partial<SidebarProject>;
+    expect(rowOf({ ...paused, ...held }).line.text).toBe('Paused · 2 runs finishing');
+    const running = coordinator({ motion: 'spinner', line: { text: 'Running coordinator', tone: 'running' } });
+    expect(rowOf(paused, [running]).line.text).toBe('Paused · 2 runs finishing');
+  });
+
+  it('reads refusals in words, never as a code', () => {
+    expect(SESSION_PROJECT_COPY.refusedReason('pause', 403, undefined, 'x')).toBe("Only the project's owner can pause it");
+    expect(SESSION_PROJECT_COPY.refusedReason('resume', 403, undefined, 'x')).toBe("Only the project's owner can resume it");
+    expect(SESSION_PROJECT_COPY.refusedReason('pause', 409, 'PROJECT_NOT_STARTED', 'x')).toBe("The project hasn't started yet");
+    expect(SESSION_PROJECT_COPY.refusedReason('pause', 500, undefined, 'Server said')).toBe('Server said');
+    expect(SESSION_PROJECT_COPY.pausedStill(0)).toBe('Nothing new starts or merges');
+    expect(SESSION_PROJECT_COPY.pausedStill(1)).toBe('1 run still going · nothing new starts or merges');
   });
 });

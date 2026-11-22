@@ -1,0 +1,5 @@
+run: no window after launch; File > New Window
+run: Ceph capacity guard shown
+run: Run of  shown
+run: Fired 03:12 · 90.4% for 10 min · Check only shown
+run: the planned-time strip is gone

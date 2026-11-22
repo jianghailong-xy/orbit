@@ -94,6 +94,18 @@ class SessionReaderModelTest {
         assertTrue(restored.state.value.window.events.any { it.seq == 850L })
         assertEquals(before, rig.calls.size)
     }
+    /** A reader resting on the cards, with no transcript row in view, still tells the model they are not following: a resync must not reseed under them. */
+    @Test fun aReaderRestingOnTheCardsStopsFollowingAndSavesIt() = runTest {
+        val rig = Rig(this); val reader = rig.start()
+        assertTrue(reader.following)
+        reader.reading(false)
+        assertFalse(reader.following)
+        advanceTimeBy(400); runCurrent()
+        val bookmark = rig.saved.entries.single { it.key.contains("reader-") }.let { Wire.decode(it.value, ReadingBookmark.serializer()) }
+        assertFalse("the saved position no longer follows the tail", bookmark.following)
+        reader.reading(true)
+        assertTrue(reader.following)
+    }
     @Test fun oneOlderRequestAndLateResponseCannotReplaceJumpToLatest() = runTest {
         val rig = Rig(this); val reader = rig.start()
         rig.held = CompletableDeferred()

@@ -156,6 +156,9 @@ suite('outside a project the dispatching session settles the evidence, and the o
           startedAt: new Date(),
           runtimeSessionId: randomUUID(),
           ...over,
+          ...(over.status === RunStatus.SUCCEEDED || over.status === RunStatus.FAILED
+            ? { finishedAt: over.finishedAt ?? new Date()}
+            : over.status === RunStatus.CANCELLED ? { finishedAt: over.finishedAt ?? new Date()} : {}),
         },
       });
       return id;
@@ -438,7 +441,7 @@ suite('outside a project the dispatching session settles the evidence, and the o
       assert.equal(await waitingOn(reviewer), 0);
       assert.equal(await waitingOn(work.run), 0);
       await db.session.update({ where: { id: reviewer }, data: {
-        status: RunStatus.AWAITING_INPUT, retryAt: new Date(Date.now() + WINDOW_MS),
+        status: RunStatus.AWAITING_INPUT, finishedAt: null, retryAt: new Date(Date.now() + WINDOW_MS),
       } });
       await reviews.deliverOwedTo(reviewer);
       assert.deepEqual(await deliveredTo(reviewer), [], 'scheduled retries remain untouched');
@@ -447,9 +450,9 @@ suite('outside a project the dispatching session settles the evidence, and the o
       let turns = await deliveredTo(reviewer);
       assert.equal(turns.length, 1);
       await db.conversationTurn.update({ where: { id: turns[0].id }, data: { status: 'ANSWERED' } });
-      await db.session.update({ where: { id: reviewer }, data: { status: RunStatus.FAILED } });
+      await db.session.update({ where: { id: reviewer }, data: { status: RunStatus.FAILED, finishedAt: new Date()} });
       assert.equal(await cardIn(reviewer, work.taskId, new Date(Date.now() + 10 * WINDOW_MS)), null);
-      await db.session.update({ where: { id: reviewer }, data: { status: RunStatus.AWAITING_INPUT } });
+      await db.session.update({ where: { id: reviewer }, data: { status: RunStatus.AWAITING_INPUT, finishedAt: null} });
       await Promise.all([reviews.deliverOwedTo(reviewer), reviews.deliverOwedTo(reviewer)]);
       turns = await deliveredTo(reviewer);
       assert.equal(turns.length, 2, 'exactly one replacement for the drained unread turn');
@@ -474,14 +477,14 @@ suite('outside a project the dispatching session settles the evidence, and the o
       assert.equal(await reviews.deliver(ownerId, ownWork.taskId, (await latestEvidence(ownWork.taskId)).id),
         'REVIEWER_NOT_INDEPENDENT', 'the fixture is refused for independence');
       // Release the run's execution claim before making the other session live on the same task.
-      await db.session.update({ where: { id: ownWork.run }, data: { status: RunStatus.FAILED } });
-      await db.session.update({ where: { id: nonIndependent }, data: { status: RunStatus.AWAITING_INPUT } });
+      await db.session.update({ where: { id: ownWork.run }, data: { status: RunStatus.FAILED, finishedAt: new Date()} });
+      await db.session.update({ where: { id: nonIndependent }, data: { status: RunStatus.AWAITING_INPUT, finishedAt: null} });
 
       const ended = await conversation('interrupted with a recorded end', { status: RunStatus.FAILED });
       const endedWork = await dispatched('cannot deliver after end', ended);
       await submit(endedWork, 'ready before the reviewer ended');
       await db.session.update({ where: { id: ended }, data: {
-        status: RunStatus.INTERRUPTED, completedAt: new Date(),
+        status: RunStatus.INTERRUPTED, finishedAt: null, completedAt: new Date(),
       } });
       assert.equal(await reviews.deliver(ownerId, endedWork.taskId, (await latestEvidence(endedWork.taskId)).id),
         'REVIEWER_ENDED', 'the interrupted fixture has an actual end');
@@ -506,7 +509,7 @@ suite('outside a project the dispatching session settles the evidence, and the o
         const ended = await dispatched('reconcile the ledger', reviewer);
         await submit(ended, 'reconciled');
         assert.equal(await cardIn(reviewer, ended.taskId), null, 'held while it is open');
-        await db.session.update({ where: { id: reviewer }, data: { status: RunStatus.SUCCEEDED, completedAt: new Date() } });
+        await db.session.update({ where: { id: reviewer }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), completedAt: new Date() } });
         const card = await cardIn(reviewer, ended.taskId);
         assert.ok(card, 'its end hands the card to the owner at once, without the window');
         assert.equal(await waitingOn(reviewer), 0, 'completed conversations have no open-session badge');
@@ -514,7 +517,7 @@ suite('outside a project the dispatching session settles the evidence, and the o
         // Ended before the revision arrives: nothing is delivered, and the owner is asked at once.
         const gone = await conversation('files work and is completed', {});
         const unheld = await dispatched('close the books', gone);
-        await db.session.update({ where: { id: gone }, data: { status: RunStatus.SUCCEEDED, completedAt: new Date() } });
+        await db.session.update({ where: { id: gone }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), completedAt: new Date() } });
         const turnsBefore = await db.conversationTurn.count({ where: { sessionId: gone } });
         await submit(unheld, 'closed');
         assert.equal(await db.conversationTurn.count({ where: { sessionId: gone } }), turnsBefore,
@@ -557,6 +560,51 @@ suite('outside a project the dispatching session settles the evidence, and the o
         assert.equal(await status(moved.taskId), TaskStatus.DONE);
         assert.equal(await waitingOn(moved.run), 0);
       });
+
+    await t.test('SEND_BACK survives recipient outages, recovery races and unread drains', async () => {
+      for (const outage of ['FAILED', 'RETRY', 'PENDING', 'ENDED'] as const) {
+        const reviewer = await conversation(`send-back reviewer ${outage}`);
+        const work = await dispatched(`send-back run ${outage}`, reviewer);
+        await submit(work, 'Ready.');
+        await db.session.update({ where: { id: work.run }, data: {
+          status: outage === 'FAILED' ? RunStatus.FAILED : outage === 'PENDING' ? RunStatus.PENDING : RunStatus.AWAITING_INPUT,
+          ...(outage === 'FAILED' ? { finishedAt: new Date()} : {}),
+          retryAt: outage === 'RETRY' ? new Date(Date.now() + 3_600_000) : null,
+          completedAt: outage === 'ENDED' ? new Date() : null,
+        } });
+        const decision = await evidence.decide(ownerId, work.taskId, agent, {
+          decidingSessionId: reviewer, evidenceRevision: '1', decision: 'SEND_BACK', note: 'Show the missing counts.',
+        });
+        assert.equal(await status(work.taskId), 'OPEN');
+        assert.equal(await cardIn(reviewer, work.taskId, new Date(Date.now() + 2 * WINDOW_MS)), null);
+        const key = `evidence-send-back:v1:${decision.id}`;
+        const notices = () => db.conversationTurn.findMany({
+          where: { sessionId: work.run, clientTurnId: { startsWith: key } }, orderBy: { seq: 'asc' },
+        });
+        await reviews.deliverSendBacksOwedTo(work.run);
+        if (outage === 'ENDED') {
+          assert.equal((await notices()).length, 0);
+          continue;
+        }
+        const retry = (await db.session.findUniqueOrThrow({ where: { id: work.run } })).retryAt;
+        if (outage === 'RETRY') assert.ok(retry, 'delivery preserves the retry');
+        if (outage === 'FAILED' || outage === 'RETRY') assert.equal((await notices()).length, 0);
+        await db.session.update({ where: { id: work.run }, data: { status: RunStatus.AWAITING_INPUT, finishedAt: null, retryAt: null } });
+        await Promise.all([reviews.deliverSendBacksOwedTo(work.run), reviews.deliverSendBacksOwedTo()]);
+        const [first] = await notices();
+        assert.equal((await notices()).length, 1);
+        assert.match(first.content ?? '', /Show the missing counts/);
+        await db.conversationTurn.update({ where: { id: first.id }, data: { status: 'ANSWERED', answeredAt: new Date(), deliveredAt: null } });
+        await Promise.all([reviews.deliverSendBacksOwedTo(), reviews.deliverSendBacksOwedTo(work.run)]);
+        const turns = await notices();
+        assert.equal(turns.length, 2);
+        assert.equal(turns[1].clientTurnId, `${key}:retry:${first.id}`);
+        assert.equal(turns[1].content, first.content);
+        await db.conversationTurn.update({ where: { id: turns[1].id }, data: { status: 'ANSWERED', answeredAt: new Date(), deliveredAt: new Date() } });
+        await reviews.deliverSendBacksOwedTo(work.run);
+        assert.equal((await notices()).length, 2);
+      }
+    });
 
     // (8) -------------------------------------------------------------------------------------------
     await t.test('(8) a send-back leaves the task open, its note is handed to the run, and the next revision is held again',

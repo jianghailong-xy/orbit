@@ -16,6 +16,21 @@ struct ScheduleCircleGlyph: View {
     var size: CGFloat = 22
 
     var body: some View {
+        if view.gauge {
+            // A condition's row (condition-triggers board ④ ③): a gauge in place of the circle, amber when it
+            // cannot be read, faint when paused.
+            Image(systemName: "gauge.with.dots.needle.33percent")
+                .font(.title3.weight(.medium))
+                .foregroundStyle(view.circle == .held ? Color.orange
+                                 : view.circle == .paused ? Color.secondary.opacity(0.5) : Color.accentColor)
+                .frame(width: size, height: size)
+                .accessibilityHidden(true)
+        } else {
+            circleBody
+        }
+    }
+
+    private var circleBody: some View {
         ZStack {
             switch view.circle {
             case .open:
@@ -39,7 +54,12 @@ struct ScheduleCircleGlyph: View {
             case .muted:
                 Circle().strokeBorder(Color.secondary.opacity(0.25), lineWidth: 1.5)
             }
-            if let mark = view.mark {
+            if view.mark == .clock {
+                // A queued run: clock hands inside the ring, which is the clock's face.
+                ScheduleClockHands()
+                    .stroke(markColor, style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round))
+                    .padding(size * 0.2)
+            } else if let mark = view.mark {
                 Image(systemName: mark == .check ? "checkmark" : "exclamationmark")
                     .font(.orbitMeta.weight(.heavy))
                     .foregroundStyle(markColor)
@@ -56,6 +76,17 @@ struct ScheduleCircleGlyph: View {
         case .muted: return Color.secondary.opacity(0.5)
         default: return .secondary
         }
+    }
+}
+
+/// A clock's two hands, pointing at about four o'clock, for a queued run's circle.
+private struct ScheduleClockHands: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.midX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.midX, y: rect.midY))
+        path.addLine(to: CGPoint(x: rect.midX + rect.width * 0.32, y: rect.midY + rect.height * 0.2))
+        return path
     }
 }
 
@@ -110,23 +141,52 @@ struct ScheduleRowModel: Identifiable {
     let circle: ScheduleDisplay.CircleView
     let title: String
     let line: String
+    /// The planned end, on its own line so the row's line never cuts it off.
+    var end: String? = nil
     let repeats: Bool
     let time: String
     let draft: Bool
     let paused: Bool
     /// The schedule this row opens, for the Mac's selected row; nil for a draft.
     var scheduleID: String? = nil
+    /// A condition's row: the newest reading and its age, where a timed row shows its time (board ④ ②).
+    var reading: ConditionDisplay.RowReading? = nil
+    /// What the row stands for: its swipes and long-press menu act on it.
+    let kind: ScheduleRowKind
     let open: () -> Void
 }
 
 /// The timeline's rows, the web's `rowOf`: one builder for the phone and the Mac. `wide` is the Mac's (and the
-/// web's) long row line, `scheduleRowLine`, and a failing row's time with its day; the phone keeps its short line.
+/// web's) long row line, `scheduleRowLine`; the phone keeps its short line.
 enum ScheduleTimelineRows {
     @MainActor
     static func rows(_ group: ScheduleDisplay.TimelineGroup, scheduled: ScheduledModel, now: Date,
-                     wide: Bool) -> [ScheduleRowModel] {
-        group.items.map { item -> ScheduleRowModel in
+                     wide: Bool, openTask: @escaping (String) -> Void = { _ in }) -> [ScheduleRowModel] {
+        let runs = scheduled.timelineRuns
+        return ScheduleDisplay.collapseMissedItems(group.items).map { entry -> ScheduleRowModel in
+            guard case .item(let item) = entry else {
+                // A streak of missed slots is one faint row: "4 slots missed, 01:00–04:00".
+                guard case .missed(let s, let missedRuns, let at) = entry, let first = missedRuns.first else { fatalError() }
+                return ScheduleRowModel(
+                    id: "\(group.id)-missed-\(first.id)",
+                    circle: ScheduleDisplay.runCircle(state: first.state, newFinding: false),
+                    title: s.title,
+                    line: ScheduleDisplay.missedText(missedRuns, timezone: scheduled.timezone),
+                    repeats: false, time: scheduleClock(at), draft: false, paused: wide,
+                    scheduleID: wide ? nil : s.id,
+                    kind: .run(s, first),
+                    open: { Self.select(s.id, scheduled) })
+            }
             switch item {
+            case .task(let t):
+                return ScheduleRowModel(
+                    id: "\(group.id)-\(item.id)",
+                    circle: ConditionDisplay.circle(cantRead: t.condition.cantRead),
+                    title: t.title, line: ConditionDisplay.taskRowLine(t), repeats: false, time: "",
+                    draft: false, paused: false,
+                    reading: t.condition.cantRead ? nil : ConditionDisplay.rowReading(t.condition, now: now),
+                    kind: .task(t.id),
+                    open: { openTask(t.id) })
             case .draft(let card, let at):
                 let rule = card.when?.rule ?? .daily(time: "")
                 let accessLevel = card.may?.accessLevel ?? "CHECK_ONLY"
@@ -141,6 +201,7 @@ enum ScheduleTimelineRows {
                                                        accessLevel: accessLevel, state: "ACTIVE", heldReason: nil,
                                                        draft: true),
                     repeats: ScheduleDisplay.ruleRepeats(rule), time: scheduleClock(at), draft: true, paused: false,
+                    kind: .draft(card),
                     open: {
                         scheduled.inspectedID = nil
                         scheduled.draftPanel = ScheduledModel.DraftPanel(sessionID: card.askedBySessionId ?? card.id,
@@ -174,24 +235,34 @@ enum ScheduleTimelineRows {
                     repeats: underWay && ScheduleDisplay.ruleRepeats(s.rule), time: scheduleClock(run.plannedAt),
                     // A past run is drawn faint, as the web's `is-past` row.
                     draft: false, paused: wide && !underWay, scheduleID: wide ? nil : s.id,
+                    kind: .run(s, run),
                     open: { Self.select(s.id, scheduled) })
             case .schedule(let s, let at):
-                let inNeeds = group.key == .needsYou
                 let inPaused = group.key == .paused
-                let failing = inNeeds && s.state == "ACTIVE" && s.lastRun != nil
-                let time: String
-                if failing, let last = s.lastRun?.plannedAt {
-                    // The web says when it last failed with its day ("Today 02:00"); the phone has room for the clock.
-                    time = wide
-                        ? ScheduleDisplay.parse(last).map { ScheduleDisplay.whenText($0, now: now, timezone: scheduled.timezone) } ?? ""
-                        : scheduleClock(last)
-                }
-                else if let at, !inNeeds && !inPaused { time = scheduleClock(at) }
-                else { time = "" }
+                // A failing schedule is tagged on its own row on the day of its next run (owner 2026-11-19), with
+                // that run's time; the circle drops the tag while a run of it is under way.
+                let circle = ScheduleDisplay.scheduleCircle(s, runs: runs)
+                let time = inPaused ? "" : scheduleClock(at)
                 let pausedAt = s.pausedAt.flatMap(ScheduleDisplay.parse) ?? Self.pausedAt(scheduled.detail(s.id))
+                if case .when = s.rule {
+                    // A WHEN rule (condition-triggers board ④): "↻ When raw used above 90% · HPC", a gauge, and the
+                    // newest reading with its age where a timed row has its time; "Can't read" at the head of its group.
+                    var parts = [ScheduleDisplay.ruleText(s.rule, form: .long)]
+                    if let name = s.workspaceName, !name.isEmpty { parts.append(name) }
+                    if s.accessLevel != "CHECK_ONLY" { parts.append(ScheduleDisplay.accessCopy(s.accessLevel).label) }
+                    let cantRead = s.condition?.cantRead == true
+                    return ScheduleRowModel(
+                        id: "\(group.id)-\(item.id)",
+                        circle: circle,
+                        title: s.title, line: parts.joined(separator: SC.separator), repeats: true,
+                        time: "", draft: false, paused: inPaused, scheduleID: s.id,
+                        reading: cantRead || inPaused ? nil : s.condition.flatMap { ConditionDisplay.rowReading($0, now: now) },
+                        kind: .schedule(s),
+                        open: { Self.select(s.id, scheduled) })
+                }
                 return ScheduleRowModel(
                     id: "\(group.id)-\(item.id)",
-                    circle: inNeeds || inPaused ? ScheduleDisplay.scheduleCircle(s) : .init(.open),
+                    circle: circle,
                     title: s.title,
                     line: wide
                         ? ScheduleDisplay.rowLine(rule: s.rule, workspaceName: s.workspaceName, accessLevel: s.accessLevel,
@@ -201,8 +272,10 @@ enum ScheduleTimelineRows {
                                                        accessLevel: s.accessLevel, state: s.state,
                                                        heldReason: s.heldReason, pausedAt: pausedAt,
                                                        timezone: scheduled.timezone),
+                    end: ScheduleDisplay.endText(s, now: now, timezone: scheduled.timezone),
                     repeats: ScheduleDisplay.ruleRepeats(s.rule), time: time, draft: false, paused: inPaused,
                     scheduleID: s.id,
+                    kind: .schedule(s),
                     open: { Self.select(s.id, scheduled) })
             }
         }
@@ -226,6 +299,12 @@ struct ScheduledPage: View {
     @State private var typed = ""
     @State private var asking = false
     @State private var chosenWorkspace: String?
+    /// The schedule a row's swipe or menu asked to delete, and the run it asked to stop, while the question is up.
+    @State private var deleting: ScheduleView?
+    @State private var stopping: ScheduleRunView?
+    /// The round swipe buttons need the compact list (as the session list's do); a regular-width one keeps the system's.
+    @Environment(\.horizontalSizeClass) private var hSize
+    @State private var rowSwipe = RowSwipeState()
     @FocusState private var typing: Bool
 
     var body: some View {
@@ -260,10 +339,12 @@ struct ScheduledPage: View {
                     .buttonStyle(.plain)
                 case .waiting(let item):
                     ScheduleWaitingCardView(item: item).listRowSeparator(.hidden)
+                case .condition(let item):
+                    ConditionWaitingCardView(item: item).listRowSeparator(.hidden)
                 case .group(let group):
                     groupHeader(group).listRowSeparator(.hidden)
                 case .item(let item):
-                    rowView(item)
+                    rowView(item, scheduled)
                 case .quickAdd:
                     quickAdd(scheduled).listRowSeparator(.hidden)
                 case .error(let text):
@@ -274,6 +355,28 @@ struct ScheduledPage: View {
         .listStyle(.plain)
         .softTopEdgeEffect()
         .environment(\.defaultMinListRowHeight, 0)
+        .rowSwipeList(rowSwipe)
+        // A row's Delete and Stop ask first, as the detail panel's ⋯ → Delete does.
+        .orbitConfirmation({ ScheduleDisplay.deleteTitle($0.title) },
+                           isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
+                           presenting: deleting) { schedule in
+            Button(SC.DeleteConfirm.confirm, role: .destructive) {
+                Task { @MainActor in await scheduled.delete(schedule.id) }
+            }
+            Button(SC.DeleteConfirm.cancel, role: .cancel) {}
+        } message: { _ in
+            Text(SC.DeleteConfirm.body)
+        }
+        .orbitConfirmation({ _ in SC.StopConfirm.title },
+                           isPresented: Binding(get: { stopping != nil }, set: { if !$0 { stopping = nil } }),
+                           presenting: stopping) { run in
+            Button(SC.StopConfirm.confirm, role: .destructive) {
+                Task { @MainActor in await scheduled.stop(runID: run.id, scheduleID: run.scheduleId) }
+            }
+            Button(SC.StopConfirm.cancel, role: .cancel) {}
+        } message: { _ in
+            Text(SC.StopConfirm.body)
+        }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
@@ -313,6 +416,7 @@ struct ScheduledPage: View {
         case lead
         case example(String)
         case waiting(ScheduleWaitingItem)
+        case condition(ConditionWaitingItem)
         case group(ScheduleDisplay.TimelineGroup)
         case item(ScheduleRowModel)
         case quickAdd
@@ -324,6 +428,7 @@ struct ScheduledPage: View {
             case .lead: return "lead"
             case .example(let text): return "example-\(text)"
             case .waiting(let item): return "waiting-\(item.id)"
+            case .condition(let item): return "condition-\(item.id)"
             case .group(let group): return "group-\(group.id)"
             case .item(let row): return row.id
             case .quickAdd: return "quick-add"
@@ -335,12 +440,14 @@ struct ScheduledPage: View {
     private func pageRows(_ scheduled: ScheduledModel, groups: [ScheduleDisplay.TimelineGroup],
                           now: Date) -> [PageRow] {
         var out: [PageRow] = [.header]
-        // A scheduled task's items (failed, held, a run's approval, a run asking for more), whole, under the head: each
-        // answers at its own door. There is no Waiting on you sheet (docs/mocks/waiting-on-you-removal; the owner,
-        // 2026-11-16); the run's session draws its own.
+        // A condition's items (the can't-read card and the 30-day question, condition-triggers board ⑥ ①) and a
+        // scheduled task's (failed, held, a run's approval, a run asking for more), whole, under the head: each answers
+        // at its own door. There is no Waiting on you sheet (docs/mocks/waiting-on-you-removal; the owner, 2026-11-16);
+        // the run's session draws its own.
+        out += (model.ownerRequests?.conditionItems ?? []).map(PageRow.condition)
         out += (model.ownerRequests?.scheduleItems ?? []).map(PageRow.waiting)
         let empty = scheduled.loaded && scheduled.shownSchedules.isEmpty && scheduled.drafts.isEmpty
-            && scheduled.workspaceFilter == nil
+            && scheduled.shownWaitingTasks.isEmpty && scheduled.workspaceFilter == nil
         if empty {
             out += [.lead, .quickAdd] + SC.Empty.examples.map(PageRow.example)
         } else {
@@ -362,7 +469,7 @@ struct ScheduledPage: View {
                     .font(.largeTitle.weight(.bold))
                     .foregroundStyle(Color.accentColor)
                 Spacer()
-                Text("\(scheduled.shownSchedules.count)")
+                Text("\(scheduled.shownSchedules.count + scheduled.shownWaitingTasks.count)")
                     .font(.largeTitle.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .accessibilityIdentifier("scheduled-count")
@@ -387,12 +494,12 @@ struct ScheduledPage: View {
         .padding(.top, 4)
     }
 
-    /// "Today  Fri, Nov 14"; Needs you in red (board 01 ② 1).
+    /// "Today  Fri, Nov 14"; Paused grey.
     private func groupHeader(_ group: ScheduleDisplay.TimelineGroup) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(group.title)
                 .font(.title3.weight(.bold))
-                .foregroundStyle(group.key == .needsYou ? Color.red : group.key == .paused ? Color.secondary : Color.primary)
+                .foregroundStyle(group.key == .paused ? Color.secondary : Color.primary)
             if let subtitle = group.subtitle {
                 Text(subtitle).font(.orbitSubtext).foregroundStyle(Color.secondary)
             }
@@ -404,11 +511,12 @@ struct ScheduledPage: View {
 
     private func rows(_ group: ScheduleDisplay.TimelineGroup, scheduled: ScheduledModel,
                       now: Date) -> [ScheduleRowModel] {
-        ScheduleTimelineRows.rows(group, scheduled: scheduled, now: now, wide: false)
+        ScheduleTimelineRows.rows(group, scheduled: scheduled, now: now, wide: false,
+                                  openTask: { id in model.route(to: .task(id)) })
     }
 
-    private func rowView(_ row: ScheduleRowModel) -> some View {
-        Button(action: row.open) {
+    private func rowView(_ row: ScheduleRowModel, _ scheduled: ScheduledModel) -> some View {
+        swipeable(Button(action: row.open) {
             HStack(alignment: .top, spacing: 12) {
                 ScheduleCircleGlyph(view: row.circle).padding(.top, 1)
                 VStack(alignment: .leading, spacing: 3) {
@@ -424,7 +532,14 @@ struct ScheduledPage: View {
                             if let tag = row.circle.tag, row.circle.circle != .done, row.circle.circle != .muted {
                                 Text(tag.text).font(.orbitMeta.weight(.semibold)).foregroundStyle(tag.tone.color)
                             }
-                            if !row.time.isEmpty {
+                            if let reading = row.reading {
+                                // "6.9% · 1 min ago": how far from firing, and whether the probe is still alive.
+                                (Text(reading.value).font(.orbitLabel.weight(.semibold)).foregroundColor(.primary)
+                                 + Text(reading.age.map { "\(SC.separator)\($0)" } ?? "").font(.orbitLabel)
+                                    .foregroundColor(.secondary))
+                                    .monospacedDigit()
+                                    .accessibilityIdentifier("schedule-row-reading")
+                            } else if !row.time.isEmpty {
                                 Text(row.time).font(.orbitLabel).foregroundStyle(.secondary).monospacedDigit()
                             }
                         }
@@ -439,6 +554,10 @@ struct ScheduledPage: View {
                     .font(.orbitLabel)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                    // The planned end on its own line: "until 23:00 today · 3 runs left" is never the part cut off.
+                    if let end = row.end {
+                        Text(end).font(.orbitLabel).foregroundStyle(.secondary).accessibilityIdentifier("schedule-row-end")
+                    }
                 }
             }
             .padding(.vertical, 4)
@@ -446,7 +565,40 @@ struct ScheduledPage: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("schedule-row")
+        .accessibilityIdentifier("schedule-row"), row, scheduled)
+    }
+
+    /// The row's swipes and long-press menu, by its kind (`ScheduleRowActions`), on the row the List hosts: a
+    /// `Button` does not pass them up from its label. iOS 26's compact list draws the session list's round buttons;
+    /// elsewhere the system's.
+    @ViewBuilder
+    private func swipeable<V: View>(_ content: V, _ row: ScheduleRowModel, _ scheduled: ScheduledModel) -> some View {
+        let actions = ScheduleRowActions(row.kind, model: model, scheduled: scheduled,
+                                         askDelete: { deleting = $0 }, askStop: { stopping = $0 },
+                                         openTask: { id in model.route(to: .task(id)) })
+        if #available(iOS 26.0, *), hSize == .compact, !(actions.leading.isEmpty && actions.trailing.isEmpty) {
+            content
+                .contextMenu { actions.menuContent }
+                .circleSwipeActions(id: row.id, leading: actions.leading, trailing: actions.trailing,
+                                    leadingFullSwipe: actions.leadingFullSwipe)
+        } else {
+            content
+                .swipeActions(edge: .leading, allowsFullSwipe: actions.leadingFullSwipe) {
+                    ForEach(actions.leading) { swipeButton($0) }
+                }
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    ForEach(actions.trailing) { swipeButton($0) }
+                }
+                .contextMenu { actions.menuContent }
+        }
+    }
+
+    /// A system swipe button: tinted, never `.destructive`, which would take the row away before Delete's or
+    /// Stop's question is answered.
+    private func swipeButton(_ action: RowSwipeAction) -> some View {
+        Button(action: action.perform) { Label(action.title, systemImage: action.systemImage) }
+            .tint(action.tint)
+            .disabled(!action.isEnabled)
     }
 
     /// The line at the end (board 01 ② 3, ⑧): one sentence and the workspace it goes to. Not a form: an agent sets
@@ -572,7 +724,10 @@ extension ScheduleDetailPanel {
         let now = Date()
         let lastRun = detail?.lastRun ?? s.lastRun
         let lastFacts = lastRun.map { ScheduleDisplay.runFindingFacts($0, findings: detail?.findings ?? []) }
-        let meta = [ScheduleDisplay.ruleText(s.rule, form: .short), s.timezone, s.workspaceName,
+        let conditionID = s.rule.conditionId ?? s.condition?.id
+        let condition = scheduled.condition(conditionID)
+        // A WHEN rule has no time, so its zone says nothing.
+        let meta = [ScheduleDisplay.ruleText(s.rule, form: .short), conditionID == nil ? s.timezone : nil, s.workspaceName,
                     ScheduleDisplay.accessCopy(s.accessLevel).label]
             .compactMap { $0 }.joined(separator: SC.separator)
         let next: String = s.nextDueAt.flatMap(ScheduleDisplay.parse)
@@ -596,12 +751,31 @@ extension ScheduleDetailPanel {
                     }
                     .font(.orbitLabel).foregroundStyle(.secondary)
                 }
-                block {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(SC.Inspector.nextRun).font(.orbitLabel).foregroundStyle(.secondary)
-                        Text(next).font(.title2.weight(.bold))
-                        if let lastLine {
-                            Text(lastLine).font(.orbitLabel).foregroundStyle(.secondary)
+                if let end = ScheduleDisplay.endText(s, now: now, timezone: zone) {
+                    block {
+                        Text(SC.End.endLabel + SC.separator + end).font(.orbitLabel).foregroundStyle(.secondary)
+                            .accessibilityIdentifier("schedule-end-line")
+                    }
+                }
+                if conditionID != nil {
+                    // A WHEN rule (condition-triggers board ⑥ ② ③): how far the reading is from firing, and how it
+                    // is checked, in place of the next run.
+                    if let condition {
+                        ConditionBlocksView(condition: condition, timezone: zone, now: now)
+                    } else {
+                        ProgressView().frame(maxWidth: .infinity)
+                    }
+                    if let lastLine {
+                        Text(lastLine).font(.orbitLabel).foregroundStyle(.secondary).padding(.leading, 4)
+                    }
+                } else {
+                    block {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(SC.Inspector.nextRun).font(.orbitLabel).foregroundStyle(.secondary)
+                            Text(next).font(.title2.weight(.bold))
+                            if let lastLine {
+                                Text(lastLine).font(.orbitLabel).foregroundStyle(.secondary)
+                            }
                         }
                     }
                 }
@@ -661,10 +835,11 @@ extension ScheduleDetailPanel {
                             .font(.orbitLabel).foregroundStyle(.secondary)
                     }
                 }
-                historySection(scheduled, s, detail, now: now, zone: zone)
+                historySection(scheduled, s, detail, condition: condition, now: now, zone: zone)
             }
             .padding(16)
         }
+        .task(id: conditionID) { if let conditionID { await scheduled.loadCondition(conditionID) } }
         .background(Color.schedulePanelFill)
         .accessibilityIdentifier("schedule-detail-panel")
     }
@@ -706,28 +881,51 @@ extension ScheduleDetailPanel {
     private enum HistoryEntry: Identifiable {
         case run(ScheduleRunView)
         case record(ScheduleChangeRecord)
+        /// A condition's line (board ⑥ ③): Fired, Ready again; a FIRED's run is drawn by its line, not twice.
+        case event(ConditionEventView, ConditionDisplay.HistoryLine, index: Int)
+        /// Consecutive MISSED slots, newest first, as one line (design §9.2).
+        case missed([ScheduleRunView])
         var id: String {
             switch self {
+            case .missed(let runs): return "missed-\(runs[0].id)"
             case .run(let r): return "run-\(r.id)"
             case .record(let r): return "rev-\(r.revision)"
+            case .event(let e, _, let index): return "event-\(index)-\(e.at)"
             }
         }
         var at: String {
             switch self {
+            case .missed(let runs): return runs[0].plannedAt
             case .run(let r): return r.startedAt ?? r.plannedAt
             case .record(let r): return r.createdAt
+            case .event(let e, _, _): return e.at
             }
         }
     }
 
     private func historySection(_ scheduled: ScheduledModel, _ s: ScheduleView, _ detail: ScheduleDetailResponse?,
-                                now: Date, zone: String) -> some View {
-        let entries = ((detail?.recentRuns ?? []).map(HistoryEntry.run) + (detail?.history ?? []).map(HistoryEntry.record))
+                                condition: ConditionView?, now: Date, zone: String) -> some View {
+        let events: [HistoryEntry] = (condition?.events ?? []).enumerated().compactMap { index, e in
+            condition.flatMap { ConditionDisplay.historyLine(e, condition: $0) }.map { HistoryEntry.event(e, $0, index: index) }
+        }
+        let firedRuns = Set((condition?.events ?? []).compactMap { $0.runId.map(PublicID.storageKey) })
+        let runs = (detail?.recentRuns ?? []).filter { !firedRuns.contains(PublicID.storageKey($0.id)) }
+        let sorted = (runs.map(HistoryEntry.run) + events + (detail?.history ?? []).map(HistoryEntry.record))
             .sorted { (ScheduleDisplay.parse($0.at) ?? .distantPast) > (ScheduleDisplay.parse($1.at) ?? .distantPast) }
+        // Consecutive missed slots, with nothing else between them, read as one line.
+        let entries = sorted.reduce(into: [HistoryEntry]()) { out, entry in
+            guard case .run(let run) = entry, run.state == "MISSED" else { return out.append(entry) }
+            switch out.last {
+            case .missed(let streak)?: out[out.count - 1] = .missed(streak + [run])
+            case .run(let last)? where last.state == "MISSED": out[out.count - 1] = .missed([last, run])
+            default: out.append(entry)
+            }
+        }
         return section(SC.Inspector.history) {
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
                     historyRow(entry, scheduled: scheduled, s: s, detail: detail, now: now, zone: zone)
+                        .accessibilityIdentifier("schedule-history-row")
                         .padding(.top, index > 0 ? 16 : 0)
                         .overlay(alignment: .top) { Divider().padding(.top, 8).opacity(index > 0 ? 1 : 0) }
                 }
@@ -740,6 +938,44 @@ extension ScheduleDetailPanel {
                             detail: ScheduleDetailResponse?, now: Date, zone: String) -> some View {
         let when = ScheduleDisplay.parse(entry.at).map { ScheduleDisplay.whenText($0, now: now, timezone: zone) } ?? ""
         switch entry {
+        case .missed(let runs):
+            VStack(alignment: .leading, spacing: 2) {
+                Text(when).font(.orbitSubtext)
+                Text(ScheduleDisplay.missedText(runs, timezone: zone)).font(.orbitLabel).foregroundStyle(.secondary)
+            }
+            .accessibilityIdentifier("schedule-history-missed")
+        case .event(let event, let line, _):
+            let run = line.runId.flatMap { id in
+                detail?.recentRuns.first { PublicID.storageKey($0.id) == PublicID.storageKey(id) }
+            }
+            let at = ScheduleDisplay.parse(event.at).map {
+                "\(ScheduleDisplay.dateText($0, timezone: zone)) \(ScheduleDisplay.localParts($0, timezone: zone).time)"
+            } ?? ""
+            let sub = [at, run.map { ScheduleDisplay.capitalizedRunOf(plannedAt: $0.plannedAt, timezone: zone) }]
+                .compactMap { $0 }.joined(separator: SC.separator)
+            Button {
+                if let session = run?.sessionId {
+                    model.openScheduleRun(sessionID: session)
+                }
+            } label: {
+                HStack(alignment: .center, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(line.text).font(.orbitSubtext)
+                        Text(sub).font(.orbitLabel).foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 6)
+                    if line.runId != nil {
+                        Text(line.chip).font(.orbitMeta.weight(.medium)).foregroundStyle(Color.accentColor)
+                            .padding(.horizontal, 7).padding(.vertical, 2)
+                            .background(Color.accentColor.opacity(0.12), in: Capsule())
+                    } else {
+                        chip(line.chip, tone: .mute)
+                    }
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(run?.sessionId == nil)
         case .run(let run):
             let facts = ScheduleDisplay.runFindingFacts(run, findings: detail?.findings ?? [])
             let view = ScheduleDisplay.runCircle(state: run.state, newFinding: facts.newFinding)
@@ -748,8 +984,7 @@ extension ScheduleDetailPanel {
             } ?? false
             Button {
                 if let session = run.sessionId {
-                    scheduled.inspectedID = nil
-                    model.openScheduleRun(sessionID: session, scheduleID: s.id)
+                    model.openScheduleRun(sessionID: session)
                 }
             } label: {
                 HStack(alignment: .center, spacing: 8) {
@@ -830,13 +1065,7 @@ struct ScheduleDraftPanel: View {
                 }
                 Button(SC.Actions.openConversation) {
                     scheduled?.draftPanel = nil
-                    #if os(iOS)
-                    model.openScheduleRun(sessionID: panel.sessionID, scheduleID: nil)
-                    #else
-                    // The conversation the line opened is the owner's own, listed in its workspace (board 01 ④ 5):
-                    // the Mac opens it there, as the web does.
                     model.route(to: .session(panel.sessionID))
-                    #endif
                 }
                 .frame(maxWidth: .infinity)
                 .foregroundStyle(Color.accentColor)
@@ -847,7 +1076,7 @@ struct ScheduleDraftPanel: View {
             // The agent drafts the card in its conversation; read until it is there.
             while !Task.isCancelled, scheduled?.draft(forSession: panel.sessionID) == nil {
                 await scheduled?.load()
-                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                await VisibilityGate.app.pause(3)   // not while the app cannot be seen (§4 R3)
             }
         }
         .accessibilityIdentifier("schedule-draft-panel")

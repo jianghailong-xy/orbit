@@ -22,7 +22,6 @@ object ScheduleCopy {
         const val showPastRuns = "Show past runs"
     }
     val groups: Map<String, String> = mapOf(
-        "NEEDS_YOU" to "Needs you",
         "TODAY" to "Today",
         "TOMORROW" to "Tomorrow",
         "LATER" to "Later",
@@ -122,6 +121,7 @@ object ScheduleCopy {
     )
     val failureReasons: Map<String, String> = mapOf(
         "RUNNER_UNAVAILABLE" to "found no runner online",
+        "RUNNER_FULL" to "waited for a full runner until its window closed",
         "QUOTA" to "hit the engine's usage limit",
         "ENGINE_CRASHED_BEFORE_START" to "stopped before its engine started",
         "REPORTED_FAILED" to "reported a failure",
@@ -207,11 +207,19 @@ object ScheduleCopy {
         const val alwaysAllow = "Always allow"
         const val allowOnce = "Allow once"
         const val deny = "Deny"
+        const val stop = "Stop"
+        const val openLastRun = "Open last run"
     }
     object DeleteConfirm {
         const val title = "Delete “{title}”?"
         const val body = "It stops running: a run waiting to start is cancelled, and one under way finishes. Its runs and their sessions are kept, but the Scheduled page no longer shows it or its history, and you cannot undo this here."
         const val confirm = "Delete"
+        const val cancel = "Cancel"
+    }
+    object StopConfirm {
+        const val title = "Stop this run?"
+        const val body = "It ends where it is and counts as stopped by you. Its session is kept, and the schedule runs again at its next time."
+        const val confirm = "Stop"
         const val cancel = "Cancel"
     }
     val keep: Map<String, String> = mapOf(
@@ -221,6 +229,30 @@ object ScheduleCopy {
         "WORKSPACE" to "Keep in {workspace}",
         "other" to "Keep as it is",
     )
+    object Every {
+        const val minutes = "Every {count} min"
+        const val hour = "Every hour"
+        const val hours = "Every {count} hours"
+        const val window = "{interval}, {time}–{until}"
+        const val from = "{interval} from {time}"
+        const val days = "{rule}, {days}"
+        const val workweek = "Mon–Fri"
+        const val weekend = "weekends"
+    }
+    object End {
+        const val until = "until {when}"
+        const val today = "{time} today"
+        const val tomorrow = "{time} tomorrow"
+        const val runLeft = "1 run left"
+        const val runsLeft = "{count} runs left"
+        const val missed = "{count} slots missed, {from}–{to}"
+        const val missedDated = "{count} slots missed, {fromDate}, {from}–{toDate}, {to}"
+        const val endLabel = "Ends"
+        const val extend = "Extend the end"
+        const val remove = "Remove the end"
+        const val extendAsk = "{title}: extend the end"
+        const val removeAsk = "{title}: remove the end"
+    }
     object History {
         val who: Map<String, String> = mapOf(
             "USER" to "You",
@@ -235,6 +267,7 @@ object ScheduleCopy {
             "rule" to "Time",
             "timezone" to "Time zone",
             "endAt" to "Ends",
+            "maxRuns" to "Runs",
             "accessLevel" to "Access",
             "runLimitMinutes" to "Run limit",
             "workspaceId" to "Workspace",
@@ -277,6 +310,7 @@ object ScheduleCopy {
             "ACCESS_LEVEL" to "Let {title} open PRs?",
             "RUNS_PER_WEEK" to "Let {title} run more often?",
             "RUN_LIMIT" to "Let {title} run longer?",
+            "PROBE_COMMAND" to "Let {title} check with a new command?",
             "WORKSPACE" to "Let {title} run in {workspace}?",
         )
         const val now = "Now"
@@ -307,6 +341,7 @@ object ScheduleCopy {
     object Push {
         const val failedBody = "The last run {reason}. It keeps running until you pause it."
         const val goalReachedTitle = "{title} ended itself"
+        const val stoppedAsPlanned = "Stopped as planned after {runs}"
     }
     object Empty {
         const val lead = "Nothing scheduled. Say what should happen and when; an agent sets it up and asks you once."
@@ -319,7 +354,7 @@ object ScheduleCopy {
     object RunSession {
         const val crumb = "Scheduled"
         const val runOf = "run of {date}"
-        const val strip = "Scheduled run · planned {planned}, started {started} · access {access} · this session is not in your session list"
+        const val strip = "Scheduled run · planned {planned}, started {started} · access {access}"
         const val reported = "Reported: {state}"
         const val agent = "{engine} agent"
         const val duration = "{minutes} min"
@@ -336,7 +371,6 @@ object ScheduleCopy {
         "page.title" to Page.title,
         "page.allWorkspaces" to Page.allWorkspaces,
         "page.showPastRuns" to Page.showPastRuns,
-        "groups.NEEDS_YOU" to groups.getValue("NEEDS_YOU"),
         "groups.TODAY" to groups.getValue("TODAY"),
         "groups.TOMORROW" to groups.getValue("TOMORROW"),
         "groups.LATER" to groups.getValue("LATER"),
@@ -431,6 +465,7 @@ object ScheduleCopy {
         "runStates.HELD" to runStates.getValue("HELD"),
         "runStates.CANCELLED" to runStates.getValue("CANCELLED"),
         "failureReasons.RUNNER_UNAVAILABLE" to failureReasons.getValue("RUNNER_UNAVAILABLE"),
+        "failureReasons.RUNNER_FULL" to failureReasons.getValue("RUNNER_FULL"),
         "failureReasons.QUOTA" to failureReasons.getValue("QUOTA"),
         "failureReasons.ENGINE_CRASHED_BEFORE_START" to failureReasons.getValue("ENGINE_CRASHED_BEFORE_START"),
         "failureReasons.REPORTED_FAILED" to failureReasons.getValue("REPORTED_FAILED"),
@@ -513,15 +548,41 @@ object ScheduleCopy {
         "actions.alwaysAllow" to Actions.alwaysAllow,
         "actions.allowOnce" to Actions.allowOnce,
         "actions.deny" to Actions.deny,
+        "actions.stop" to Actions.stop,
+        "actions.openLastRun" to Actions.openLastRun,
         "deleteConfirm.title" to DeleteConfirm.title,
         "deleteConfirm.body" to DeleteConfirm.body,
         "deleteConfirm.confirm" to DeleteConfirm.confirm,
         "deleteConfirm.cancel" to DeleteConfirm.cancel,
+        "stopConfirm.title" to StopConfirm.title,
+        "stopConfirm.body" to StopConfirm.body,
+        "stopConfirm.confirm" to StopConfirm.confirm,
+        "stopConfirm.cancel" to StopConfirm.cancel,
         "keep.ACCESS_LEVEL" to keep.getValue("ACCESS_LEVEL"),
         "keep.RUNS_PER_WEEK" to keep.getValue("RUNS_PER_WEEK"),
         "keep.RUN_LIMIT" to keep.getValue("RUN_LIMIT"),
         "keep.WORKSPACE" to keep.getValue("WORKSPACE"),
         "keep.other" to keep.getValue("other"),
+        "every.minutes" to Every.minutes,
+        "every.hour" to Every.hour,
+        "every.hours" to Every.hours,
+        "every.window" to Every.window,
+        "every.from" to Every.from,
+        "every.days" to Every.days,
+        "every.workweek" to Every.workweek,
+        "every.weekend" to Every.weekend,
+        "end.until" to End.until,
+        "end.today" to End.today,
+        "end.tomorrow" to End.tomorrow,
+        "end.runLeft" to End.runLeft,
+        "end.runsLeft" to End.runsLeft,
+        "end.missed" to End.missed,
+        "end.missedDated" to End.missedDated,
+        "end.endLabel" to End.endLabel,
+        "end.extend" to End.extend,
+        "end.remove" to End.remove,
+        "end.extendAsk" to End.extendAsk,
+        "end.removeAsk" to End.removeAsk,
         "history.who.USER" to History.who.getValue("USER"),
         "history.who.SESSION" to History.who.getValue("SESSION"),
         "history.who.RUN" to History.who.getValue("RUN"),
@@ -532,6 +593,7 @@ object ScheduleCopy {
         "history.fields.rule" to History.fields.getValue("rule"),
         "history.fields.timezone" to History.fields.getValue("timezone"),
         "history.fields.endAt" to History.fields.getValue("endAt"),
+        "history.fields.maxRuns" to History.fields.getValue("maxRuns"),
         "history.fields.accessLevel" to History.fields.getValue("accessLevel"),
         "history.fields.runLimitMinutes" to History.fields.getValue("runLimitMinutes"),
         "history.fields.workspaceId" to History.fields.getValue("workspaceId"),
@@ -566,6 +628,7 @@ object ScheduleCopy {
         "envelopeCard.titles.ACCESS_LEVEL" to EnvelopeCard.titles.getValue("ACCESS_LEVEL"),
         "envelopeCard.titles.RUNS_PER_WEEK" to EnvelopeCard.titles.getValue("RUNS_PER_WEEK"),
         "envelopeCard.titles.RUN_LIMIT" to EnvelopeCard.titles.getValue("RUN_LIMIT"),
+        "envelopeCard.titles.PROBE_COMMAND" to EnvelopeCard.titles.getValue("PROBE_COMMAND"),
         "envelopeCard.titles.WORKSPACE" to EnvelopeCard.titles.getValue("WORKSPACE"),
         "envelopeCard.now" to EnvelopeCard.now,
         "envelopeCard.asked" to EnvelopeCard.asked,
@@ -589,6 +652,7 @@ object ScheduleCopy {
         "waiting.widen.body" to Waiting.widenBody,
         "push.failedBody" to Push.failedBody,
         "push.goalReachedTitle" to Push.goalReachedTitle,
+        "push.stoppedAsPlanned" to Push.stoppedAsPlanned,
         "empty.lead" to Empty.lead,
         "empty.examples.0" to Empty.examples[0],
         "empty.examples.1" to Empty.examples[1],

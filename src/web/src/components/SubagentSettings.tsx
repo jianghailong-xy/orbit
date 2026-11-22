@@ -7,31 +7,30 @@ import { useToast } from '../lib/toast';
 import { Button } from './ui/Button';
 import { Dialog } from './ui/Dialog';
 import { NumberInput } from './ui/NumberInput';
-import { Segmented } from './ui/Segmented';
 import { Switch } from './ui/Switch';
-
-export type OptimizeFor = 'cost' | 'balance' | 'intelligence';
 
 /** The most SubAgents of one session the owner can let run at once (workspaces/dto.ts SUBAGENTS_MAX_RUNNING_LIMIT). */
 export const SUBAGENTS_MAX_RUNNING_LIMIT = 16;
 
 /**
- * The Agent settings' SubAgents group (docs/subagent-design.md §7, board docs/mocks/subagent/05.png). The switch,
- * Optimize For and Running at once are the Agent's, saved with the form; Providers is the account's block list,
- * saved as it is changed.
+ * The Agent settings' SubAgents group (docs/subagent-design.md §7, board docs/mocks/subagent/05.png, and its
+ * Workflows row from board docs/mocks/subagent-workflow part 5). The switches and Running at once are the Agent's,
+ * saved with the form; Providers is the account's block list, saved as it is changed. Optimize For is the account's,
+ * on Settings → General (board docs/mocks/routing-mode-account). Workflows follows SubAgents: every call of a
+ * workflow is a SubAgent, so with SubAgents off it reads off and cannot be turned on.
  */
 export function SubagentSettings({
   enabled,
   onEnabledChange,
-  optimizeFor,
-  onOptimizeForChange,
+  workflowsEnabled,
+  onWorkflowsEnabledChange,
   maxRunning,
   onMaxRunningChange,
 }: {
   enabled: boolean;
   onEnabledChange: (value: boolean) => void;
-  optimizeFor: OptimizeFor;
-  onOptimizeForChange: (value: OptimizeFor) => void;
+  workflowsEnabled: boolean;
+  onWorkflowsEnabledChange: (value: boolean) => void;
   maxRunning: number;
   onMaxRunningChange: (value: number) => void;
 }) {
@@ -52,17 +51,14 @@ export function SubagentSettings({
       </div>
       <div className="subagents-row">
         <div className="rd-set-main">
-          <div className="rd-set-label">Optimize For</div>
+          <div className="rd-set-label">Workflows</div>
+          <div className="rd-set-desc">Let this agent run a script that starts many SubAgents and wakes it once</div>
         </div>
-        <Segmented<OptimizeFor>
-          aria-label="Optimize For"
-          value={optimizeFor}
-          onValueChange={onOptimizeForChange}
-          options={[
-            { value: 'cost', label: 'Cost' },
-            { value: 'balance', label: 'Balance' },
-            { value: 'intelligence', label: 'Intelligence' },
-          ]}
+        <Switch
+          checked={enabled && workflowsEnabled}
+          disabled={!enabled}
+          onCheckedChange={onWorkflowsEnabledChange}
+          aria-label="Workflows"
         />
       </div>
       <div className="subagents-row">
@@ -77,7 +73,7 @@ export function SubagentSettings({
       <div className="subagents-row">
         <div className="rd-set-main">
           <div className="rd-set-label">Running at once</div>
-          <div className="rd-set-desc">Per session, foreground and background together</div>
+          <div className="rd-set-desc">Per session: delegated SubAgents and workflow calls together</div>
         </div>
         <NumberInput
           aria-label="Running at once"

@@ -148,8 +148,9 @@ final class ManagedRunnerWiringTests: XCTestCase {
     func testManagedSetupUsesTheSharedNoticeAndSkipsProbes() throws {
         let card = try source("Views/MachineSetupCard.swift")
         XCTAssertTrue(card.contains("ManagedRunnerCopy.Setup.Notice.preparing"))
-        XCTAssertTrue(card.contains("guard managedState == nil, !disabled"))
-        XCTAssertTrue(card.contains("MachineSetup.uncheckedFolder(name: folder, root: root)"))
+        XCTAssertTrue(card.contains("canAsk: managedState == nil && !disabled"))
+        XCTAssertTrue(card.contains("MachineSetup.typedPick(folder: folder, found: found, root: root, machine: machine, managedState: managedState)"),
+                      "a name is taken unchecked (MachineSetupFullPathTests pins the rule)")
         XCTAssertFalse(card.contains("RunnerSignInView"))
         XCTAssertFalse(try source("ConsoleModel.swift").contains("machineSetup"))
     }

@@ -180,7 +180,7 @@ struct NeedsYouCountCapsule: View {
 }
 
 /// How this list's rows navigate — a fact about the container the list is in, not about the rows
-/// (they are the same rows in both shells; see `AgentPanes.sessionRow`).
+/// (they are the same rows in both shells; see `SessionListRow`).
 enum SessionRowNavigation {
     /// Three-column (macOS / iPad regular): `.tag(id)`, and the `List`'s selection — a projection of
     /// the section's stack — fills the detail pane that is always on screen.
@@ -296,7 +296,8 @@ struct AgentContentColumn: View {
         .sessionListSearch(text: $searchQuery,
                            fromBottom: SessionListPresentation.resolve(
                                isCompactWidth: horizontalSizeClass == .compact).searchesFromBottom,
-                           isEnabled: app.projectSessionsColumn == nil || rowNavigation != .selection)
+                           isEnabled: rowNavigation != .selection ||
+                               (app.projectSessionsColumn == nil && app.folderColumn?.isScheduledRuns != true))
         // The query outlives `AgentPanes`' rebuild on a workspace switch (`.id(a.id)`), and a switch
         // keeps it: search mode ends only at the field's close button, and the hits span every
         // workspace anyway.
@@ -401,11 +402,13 @@ struct AgentPanes: View {
     @State private var rowSwipe = RowSwipeState()
     #endif
     /// The row whose Share was tapped — drives the share panel, owned by the list for the same
-    /// reason as `taggingSession`. Share is iOS's row action (`sessionRowActions`), so on the Mac it is
+    /// reason as `taggingSession`. Share is iOS's row action (`SessionRow`), so on the Mac it is
     /// never set and has no panel.
     @State private var sharingSession: Session?
     /// The row whose Move was tapped — drives the Move panel, list-owned like the two above.
     @State private var movingSession: Session?
+    /// A row being dragged onto one of the folder rows (the Mac's shortcut for Move, see `SessionFolderDrop`).
+    @State private var drag = SessionDragState()
     /// The folder whose Rename… was tapped — on a folder row's long-press menu (the folder page's
     /// ⋯ raises the same question through the same modifier). List-owned like the sheets above.
     @State private var renamingFolder: SessionFolder?
@@ -428,6 +431,12 @@ struct AgentPanes: View {
     // without a click; the binding also tracks click-to-focus.
     @FocusState private var listFocused: Bool
 
+    private var scheduledRunsAddress: SessionFolderAddress? {
+        let byTag = tagFilter != nil || groupByTag
+        guard !isSearching, SessionFolderGrouping.listShowsFolders(view: view, byTag: byTag) else { return nil }
+        return .scheduledRuns(agentID: agent.id, view: view)
+    }
+
     var body: some View {
         // The column is the session list with its Open / Completed / Trash scope over it (macOS: a
         // top inset; regular iPad: the same picker in its refresh-safe top inset). The scope used to
@@ -446,6 +455,10 @@ struct AgentPanes: View {
         let timeSections = grouping.timeSections
         let projectRows = grouping.projectRows
         let projectMarks = grouping.projectListing.marks
+        let scheduledAddress = scheduledRunsAddress
+        let scheduledRuns = scheduledAddress.flatMap {
+            ScheduledRunsFolder.summary(agents.scheduledRuns(in: $0) ?? [], view: view, byTag: false)
+        }
         List(selection: listSelection) {
             #if os(macOS)
             // The Mac has no capsule, so the waiting terminals are a Needs you section at the top
@@ -472,11 +485,13 @@ struct AgentPanes: View {
                 }
             } else {
                 groupedSections(folderListing: folderListing, timeSections: timeSections,
-                                projectRows: projectRows, projectMarks: projectMarks)
+                                projectRows: projectRows, projectMarks: projectMarks,
+                                scheduledAddress: scheduledAddress, scheduledRuns: scheduledRuns)
             }
             #else
             groupedSections(folderListing: folderListing, timeSections: timeSections,
-                            projectRows: projectRows, projectMarks: projectMarks)
+                            projectRows: projectRows, projectMarks: projectMarks,
+                            scheduledAddress: scheduledAddress, scheduledRuns: scheduledRuns)
             #endif
         }
         .orbitRevealSurface()   // macOS: reveal the unified `orbitSurface`
@@ -507,7 +522,7 @@ struct AgentPanes: View {
                                            description: Text("Nothing matches \u{201C}\(hitsQuery)\u{201D}."))
                 }
                 #endif
-            } else if agents.agentSessions.isEmpty {
+            } else if agents.agentSessions.isEmpty && scheduledRuns == nil {
                 #if os(iOS)
                 // No list saved yet (a fresh install, a new account): grey rows where the sessions
                 // will be, while the title's line says "Loading sessions…" (board 02 ④).
@@ -525,7 +540,10 @@ struct AgentPanes: View {
         // Pull-to-refresh reloads the current agent + scope's sessions on demand (matching the
         // Open/Tasks/Runners lists). The pull control shows its own spinner, so reload *without*
         // `reset:` to update the rows in place rather than blanking the list mid-gesture.
-        .refreshable { await agents.loadSessions(agentID: agent.id, view: view) }
+        .refreshable {
+            await agents.loadSessions(agentID: agent.id, view: view)
+            if let scheduledAddress { await agents.loadScheduledRuns(scheduledAddress) }
+        }
         // Typing in the column's search field (declared on `AgentContentColumn`) searches the server —
         // every workspace, scope and message text — and the hits show here in place of the sections;
         // clearing the field restores them.
@@ -579,6 +597,9 @@ struct AgentPanes: View {
             await ViewPoll.run(app, every: 4, hints: { app.lifecycleHints }) {
                 await agents.loadSessions(agentID: agent.id, view: view)
             }
+        }
+        .task(id: scheduledAddress) {
+            if let scheduledAddress { await app.pollScheduledRuns(scheduledAddress) }
         }
         #if os(macOS)
         // The scope over the list it filters, centred and content-width; the pane's own surface
@@ -722,13 +743,24 @@ struct AgentPanes: View {
     /// neither searching nor grouped by tag, on every platform (web's list draws the same).
     @ViewBuilder private func groupedSections(folderListing: SessionFolderListing, timeSections: [SessionTimeSection],
                                               projectRows: [String: SessionProjectRow],
-                                              projectMarks: [String: SessionProjectMark]) -> some View {
+                                              projectMarks: [String: SessionProjectMark],
+                                              scheduledAddress: SessionFolderAddress?,
+                                              scheduledRuns: ScheduledRunsFolder.Summary?) -> some View {
+        if let scheduledAddress, let scheduledRuns {
+            Button {
+                app.openFolder(scheduledAddress)
+            } label: {
+                SessionFolderRowView(scheduledRuns: scheduledRuns)
+            }
+            .buttonStyle(.plain)
+            .listRowSeparator(.hidden, edges: .top)
+        }
         // The workspace's folders, at the very top of the list (docs/session-folders-move-design.md
         // §3.3): the sessions filed in one are drawn behind its row and not in the time
         // sections below. Trash, a tag filter and Group by Tag all leave this empty — see
         // `folderListing` — so the list goes on flat there.
         ForEach(Array(folderListing.folders.enumerated()), id: \.element.id) { index, row in
-            folderListRow(row, first: index == 0)
+            folderListRow(row, first: index == 0 && scheduledRuns == nil)
         }
         // The leading "Today" keeps no title. A list that opens on today — which is nearly
         // always — would be saying something its rows already say (each carries its own time
@@ -739,7 +771,7 @@ struct AgentPanes: View {
         // decision is the one the mock put second, `docs/mocks/ios-session-list-first-header.html`
         // — the reporter picked the first: never draw it, rather than only once it pins.)
         ForEach(Array(timeSections.enumerated()), id: \.element.id) { index, section in
-            timeSection(index: index, section: section, foldersEmpty: folderListing.folders.isEmpty,
+            timeSection(index: index, section: section, foldersEmpty: folderListing.folders.isEmpty && scheduledRuns == nil,
                         projectRows: projectRows, projectMarks: projectMarks)
         }
     }
@@ -996,39 +1028,11 @@ struct AgentPanes: View {
                                                          recaps: inputs.recaps) })
     }
 
-    private func projectRow(_ row: SessionProjectRow) -> some View {
-        let address = SessionProjectAddress(projectID: row.projectId, agentID: agent.id, view: view)
-        let onOpen = {
-            switch row.target {
-            case .session(let id):
-                if let session = (app.sessions + agents.allSessions).first(where: { $0.id == id }) {
-                    app.openProjectMember(session, push: rowNavigation == .push)
-                }
-            case .project: app.openProjectSessions(address)
-            }
-        }
-        // A phone opens the coordinator's conversation, not the project's sessions page, which is
-        // the button in that conversation's navigation bar (owner 2026-11-11, board 5). The iPad's
-        // column keeps the page. A row whose line says a member is waiting on you opens that member
-        // instead, at its card, on both (owner 2026-11-14).
-        let onTap = {
-            switch SessionProjectSheet.rowTap(row, held: app.sessions + agents.allSessions, push: rowNavigation == .push) {
-            case .waitingMember(let member): app.openWaitingMember(member, project: address, push: rowNavigation == .push)
-            case .coordinator(let coordinator): app.openProjectMember(coordinator, push: true)
-            case .sessions: app.openProjectSessions(address)
-            }
-        }
-        return SessionProjectRowView(row: row, onOpen: onTap)
-        .sessionProjectRowActions(row, view: view, onOpen: onOpen, onSessions: { app.openProjectSessions(address) }, onProject: {
-            app.openProject(row.projectId)
-        }, onMove: { if let coordinator = row.coordinator { movingSession = coordinator } })
-    }
-
     /// One folder's row: the glyph, name, count and the state it reports, as the whole row (the
     /// page it opens is pushed by the container's own navigation — a tap lands on `AppModel`'s one
     /// entry point for both shells). A long press offers the two management acts (§3.4) — on the
     /// row itself, since a `Button` does not pass its label's modifiers up to the `List` (see
-    /// `sessionRow`).
+    /// `SessionListRow`).
     private func folderRow(_ row: SessionFolderRow) -> some View {
         Button {
             app.openFolder(SessionFolderAddress(folderID: row.folder.id, agentID: agent.id, view: view))
@@ -1036,6 +1040,7 @@ struct AgentPanes: View {
             SessionFolderRowView(row: row)
         }
         .buttonStyle(.plain)
+        .sessionFolderDropTarget(folderID: row.folder.id, workspaceID: agent.id, drag: drag, app: app)
         .contextMenu {
             Button {
                 renamingFolder = row.folder
@@ -1110,44 +1115,21 @@ struct AgentPanes: View {
     /// destination value on the compact stack. There is no third state for "highlighted but not
     /// openable" to live in: the highlight IS the pushed console in both shapes, so a tap always
     /// either selects a row that isn't the page showing or pushes the one that is.
+    ///
+    /// The entry itself — a project's row or a plain session's — is `SessionListEntryRow`, the one
+    /// builder a folder's page also draws its rows through.
     @ViewBuilder private func listRow(_ s: Session, projects: [String: SessionProjectRow],
                                       marks: [String: SessionProjectMark]) -> some View {
-        if let project = projects[s.id] {
-            projectRow(project)
-        } else {
-            sessionRow(s, mark: marks[s.id])
-        }
+        SessionListEntryRow(
+            session: s, projects: projects, marks: marks, view: view, agentID: agent.id,
+            navigation: rowNavigation, drag: drag, dropTargets: folderDropTargets,
+            onTag: { taggingSession = $0 }, onShare: { sharingSession = $0 }, onMove: { movingSession = $0 })
     }
 
-    /// `mark`: the project of a member whose project has no row in this workspace (owner 2026-11-07,
-    /// option A) — drawn on the row, and the long press's Sessions opens that project's sessions.
-    @ViewBuilder private func sessionRow(_ s: Session, mark: SessionProjectMark? = nil) -> some View {
-        let row = AgentSessionRow(session: s, deleted: view == .trash, projectMark: mark)
-        let onSessions: (() -> Void)? = mark.map { mark in
-            { app.openProjectSessions(SessionProjectAddress(projectID: mark.projectId, agentID: agent.id, view: view)) }
-        }
-        switch rowNavigation {
-        case .selection:
-            row.sessionRowActions(s, scope: view, onTag: { taggingSession = s }, onShare: { sharingSession = s },
-                                  onMove: { movingSession = s }, onSessions: onSessions)
-                .tag(s.id)
-        case .push:
-            // A `Button`, not a `NavigationLink(value:)`: the link's disclosure indicator has no
-            // usable hiding place on iOS 17/18 (see `AppModel.push`). `.foregroundStyle(.primary)`:
-            // a button's label otherwise inherits the accent tint, and the rows are unchanged by
-            // design (only the wrapper is new). It presses through `openSessionRow`, the model's
-            // one row entry, which also lands on the owner item the row's own line names — the
-            // three-column rows get the same act from the selection setter they write.
-            Button { app.openSessionRow(s) } label: {
-                row.foregroundStyle(.primary)
-            }
-            // The row's actions attach to the *row*, not to what the row is made of: `.swipeActions`
-            // and `.contextMenu` are read off the view the `List` hosts as its row, and a `Button`
-            // does not pass them up from its label — which is where this wrapper used to leave them,
-            // and why a swipe or a long press on a compact session row did nothing.
-            .sessionRowActions(s, scope: view, onTag: { taggingSession = s }, onShare: { sharingSession = s },
-                               onMove: { movingSession = s }, onSessions: onSessions)
-        }
+    /// Somewhere to drop a row: this workspace's folder rows over the list (none in Trash or by tag).
+    private var folderDropTargets: Bool {
+        !isSearching && SessionFolderGrouping.listShowsFolders(view: view, byTag: tagFilter != nil || groupByTag)
+            && app.sessionFolders.contains { $0.workspaceId == agent.id }
     }
 
     /// New Folder…: make the folder in this workspace and keep it, so its row draws at
@@ -1170,7 +1152,12 @@ struct AgentPanes: View {
     /// draws, so the ForEach closure holds no branch of its own.
     @ViewBuilder private func tagGroupSection(_ section: SessionTagSection) -> some View {
         TitledListSection {
-            ForEach(section.sessions) { sessionRow($0) }
+            ForEach(section.sessions) { s in
+                SessionListEntryRow(
+                    session: s, projects: [:], marks: [:], view: view, agentID: agent.id,
+                    navigation: rowNavigation, drag: drag, dropTargets: folderDropTargets,
+                    onTag: { taggingSession = $0 }, onShare: { sharingSession = $0 }, onMove: { movingSession = $0 })
+            }
         } title: {
             tagSectionHeader(section.tag)
         }
@@ -1299,6 +1286,7 @@ struct AgentConsoleDetail: View {
     /// placeholder.
     private var showsDraft: Bool {
         #if os(iOS)
+        if app.folderColumn?.isScheduledRuns == true { return app.composingAgentSession }
         return app.composingAgentSession || app.sectionAtRoot || app.folderPage != nil
         #else
         return app.composingAgentSession
@@ -1365,7 +1353,7 @@ struct AgentConsoleDetail: View {
                 } description: {
                     Text("The session transcript appears here.")
                 } actions: {
-                    if app.selectedAgentID != nil {
+                    if app.selectedAgentID != nil, app.folderColumn?.isScheduledRuns != true {
                         Button {
                             app.startComposingSession()
                         } label: {
@@ -1491,10 +1479,27 @@ struct NewSessionView: View {
                         .accessibilityLabel("Engine: \(currentEngine.label). Switch")
                     }
                     VStack(spacing: 5) {
+                        // The draft moved off what the workspace last ran on, which can't run here
+                        // (board docs/mocks/new-session-usable-default ② ③): say what it uses now
+                        // and why, with the same route to the reason (web parity).
+                        if draft.draftFallback != nil, let from = draft.rememberedDraftEngine,
+                           let line = SessionProviderChoices.fallbackLine(from: from, to: currentEngine, machine: machineName) {
+                            Button {
+                                if let rid = agent.runnerId, let engine = from.provider?.fixEngine {
+                                    if let url = draft.webFixURL(engine: engine) { openURL(url) }
+                                    else { app.openRunnerEngine(rid, engine: engine) }
+                                }
+                            } label: {
+                                Text("\(line) · \(from.provider?.regionBlocked == true ? ClaudeRegionCopy.CLAUDE_REGION_DETAILS : "Fix it")")
+                                    .font(.callout).foregroundStyle(Color.accentColor).lineLimit(2)
+                                    .multilineTextAlignment(.center)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(agent.runnerId == nil || from.provider?.fixEngine == nil)
                         // The pick is sticky, so it can point at an engine this machine can no
                         // longer run — and the session would only fail minutes later, at the runner.
                         // Say so here, and make the line the route to the fix (web parity).
-                        if let blocker = currentProviderChoice.unavailable,
+                        } else if let blocker = currentProviderChoice.unavailable,
                            currentProviderChoice.fixEngine != nil {
                             Button {
                                 if let rid = agent.runnerId {
@@ -1521,6 +1526,15 @@ struct NewSessionView: View {
                             Text("Send a task to get started.")
                                 .font(.callout).foregroundStyle(.secondary)
                             Text(heroSubtitle).font(.footnote).foregroundStyle(.tertiary).lineLimit(1)
+                        }
+                        // Nothing on this machine runs the draft (board ④): the send waits, and
+                        // another provider's key is the way out here.
+                        if draft.draftCantRun {
+                            Text(SessionProviderChoices.cantRunLine(machine: machineName))
+                                .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                                .padding(.top, 6)
+                            Button(ClaudeRegionCopy.CLAUDE_REGION_USE_ANOTHER_PROVIDER) { openURL(draft.webProvidersURL()) }
+                                .font(.callout).buttonStyle(.plain).foregroundStyle(Color.accentColor)
                         }
                     }
                     #if os(macOS)
@@ -1606,6 +1620,10 @@ struct NewSessionView: View {
             if let pick = app.consoleRegistry?.takeDraftAccount(agentID: agent.id) {
                 draft.pickDraftAccount(pick.engine, pick.account)
             }
+            // Items shared to Orbit for a new session here (ShareHandoff.swift).
+            if let stage = app.consoleRegistry?.takeDraftStaging(agentID: agent.id) {
+                stage(draft)
+            }
             await draft.prepareDraft()
         }
         // @State keeps this ConsoleModel alive while the parent AgentsModel finishes its
@@ -1626,6 +1644,11 @@ struct NewSessionView: View {
         // Re-resolve the effort pill when the account preference lands after the draft was built
         // (async `user` prime on a restored-token launch). The model owns the edit revision, so this
         // account-last-picked refill cannot overwrite a picker action made while it was loading.
+        // Lands the draft on what can run here when what the workspace last ran on can't, and back
+        // once it can again (board docs/mocks/new-session-usable-default).
+        .task(id: draft.draftFallbackTarget) {
+            draft.settleDraftDefault()
+        }
         .task(id: defaultEffort) {
             draft.adoptDraftDefaultEffort(defaultEffort, legacyWorkspaceDefault: agent.effort)
         }
@@ -1683,6 +1706,11 @@ struct NewSessionView: View {
                                              sources: sources)
     }
 
+    /// The machine this draft would run on, by the name its page gives it.
+    private var machineName: String? {
+        agent.runnerId.flatMap { app.agents?.runnerLabel($0) }
+    }
+
     private var currentProviderChoice: ProviderChoice {
         currentEngine.provider
             ?? SessionProviderChoices.current(engine: draft.engine, provider: draft.provider, in: [], sources: sources)
@@ -1723,7 +1751,8 @@ struct AgentSessionRow: View {
     // it and no "Recap · <time>" before it (the owner, 2026-10-22). Tags are filed and filtered by.
     private var line: SessionLine {
         SessionLine.make(for: session, live: !deleted, watching: watching,
-                         recaps: app.user?.preferences?.showRecaps ?? true, machine: machine)
+                         recaps: app.user?.preferences?.showRecaps ?? true, machine: machine,
+                         cloneHeard: app.cloneLedger.heard(session.agent?.id ?? session.agentId))
     }
     /// The machine the session runs on: a session held for the Claude region names it ("Anthropic
     /// unavailable on HPC", web `sessionLine`'s `machine`).
@@ -1748,6 +1777,8 @@ struct AgentSessionRow: View {
                         SessionCoordinatorBadge(session: session)
                         Text(line.text).font(.orbitListSubtitle)
                             .foregroundStyle(lineColor(line.tone)).lineLimit(1)
+                            // A full runner, run or batch: which one, and how its slots are taken.
+                            .help(QueuedCapacity.rowHint(session, machine: machine, now: Date()) ?? "")
                     }
                 }
                 Spacer()
@@ -2061,10 +2092,9 @@ struct AgentFormContent: View {
     @State private var instructions = ""
     @State private var workDir = ""
     @State private var enabled = true
-    @State private var modelRouting = false
     @State private var subagentsEnabled = true
-    @State private var optimizeFor = SubagentSettings.OptimizeFor.cost
     @State private var subagentsMaxRunning = SubagentSettings.defaultMaxRunning
+    @State private var workflowsEnabled = true
     @State private var confirmingDelete = false
     #if os(macOS)
     /// Agent Tools for this workspace (docs/mocks/agent-tools board ⑤), and whether its Edit asked for the
@@ -2144,26 +2174,8 @@ struct AgentFormContent: View {
                           prompt: Text("/path/to/project on the runner (optional)"))
             }
 
-            // Off by default, and only the owner's to turn on: it decides what task runs cost, so the
-            // agent tools cannot set it (docs/model-routing-design.md §7.2). With the account's switch
-            // off (the default) the Agent has no switch of its own; its stored value is left alone,
-            // since Done sends it only when it moved.
-            if app.user?.preferences?.smartModelSelection ?? false {
-                Section("Task runs") {
-                    Toggle(isOn: $modelRouting) {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(TaskDetailCopy.smartSelectionSwitch)
-                            Text(TaskDetailCopy.smartSelectionSwitchDetail)
-                                .font(.orbitLabel)
-                                .foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
-                }
-            }
-
-            SubagentSettingsSection(agents: agents, enabled: $subagentsEnabled, optimizeFor: $optimizeFor,
-                                    maxRunning: $subagentsMaxRunning)
+            SubagentSettingsSection(agents: agents, enabled: $subagentsEnabled,
+                                    workflowsEnabled: $workflowsEnabled, maxRunning: $subagentsMaxRunning)
 
             if let env = agent.env, !env.isEmpty {
                 Section("Environment") {
@@ -2235,10 +2247,9 @@ struct AgentFormContent: View {
         instructions = agent.appendSystemPrompt ?? ""
         workDir = agent.workDir ?? ""
         enabled = agent.enabled ?? true
-        modelRouting = agent.modelRouting ?? false
         subagentsEnabled = agent.subagentsEnabled ?? true
-        optimizeFor = SubagentSettings.OptimizeFor(stored: agent.modelRoutingOptimizeFor)
         subagentsMaxRunning = SubagentSettings.maxRunning(agent.subagentsMaxRunning)
+        workflowsEnabled = agent.workflowsEnabled ?? true
     }
 
     /// True when the working copy diverges from the agent as prefilled — mirrors `prefill()` field
@@ -2254,10 +2265,9 @@ struct AgentFormContent: View {
         || instructions != (agent.appendSystemPrompt ?? "")
         || workDir != (agent.workDir ?? "")
         || enabled != (agent.enabled ?? true)
-        || modelRouting != (agent.modelRouting ?? false)
         || subagentsEnabled != (agent.subagentsEnabled ?? true)
-        || optimizeFor != SubagentSettings.OptimizeFor(stored: agent.modelRoutingOptimizeFor)
         || subagentsMaxRunning != SubagentSettings.maxRunning(agent.subagentsMaxRunning)
+        || workflowsEnabled != (agent.workflowsEnabled ?? true)
     }
 
     /// Save (only if changed and still valid) then close. An emptied name is invalid — the form was
@@ -2278,14 +2288,11 @@ struct AgentFormContent: View {
             effort: effort.rawValue,
             workDir: workDir.isEmpty ? nil : workDir,
             enabled: enabled,
-            // Only when moved: the switch is written by the user API alone, and only by a press.
-            modelRouting: modelRouting != (agent.modelRouting ?? false) ? modelRouting : nil,
-            // SubAgents: each only when moved, like the switch above.
-            modelRoutingOptimizeFor: optimizeFor != SubagentSettings.OptimizeFor(stored: agent.modelRoutingOptimizeFor)
-                ? optimizeFor.rawValue : nil,
+            // SubAgents: each only when moved.
             subagentsEnabled: subagentsEnabled != (agent.subagentsEnabled ?? true) ? subagentsEnabled : nil,
             subagentsMaxRunning: subagentsMaxRunning != SubagentSettings.maxRunning(agent.subagentsMaxRunning)
-                ? subagentsMaxRunning : nil
+                ? subagentsMaxRunning : nil,
+            workflowsEnabled: workflowsEnabled != (agent.workflowsEnabled ?? true) ? workflowsEnabled : nil
         )
         Task { await agents.save(agent.id, req) }
     }

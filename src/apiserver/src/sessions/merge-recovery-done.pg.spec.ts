@@ -322,7 +322,7 @@ async function doneCodeTask(s: Stack, w: ProjectWorld, label: string): Promise<{
       id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, taskId: declared.id, workspaceId: w.workspaceId,
       assignedRunnerId: w.runnerId, title, prompt: title, provider: 'claude', status: RunStatus.RUNNING,
       dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true, startedAt: new Date(),
-      finishedAt: new Date(Date.now() - 60_000), branch: `orbit/${label}-${sessionId.slice(0, 8)}`,
+      branch: `orbit/${label}-${sessionId.slice(0, 8)}`,
       worktreeBranch: `orbit/${label}-${sessionId.slice(0, 8)}`, worktreeDirty: false, isolationStatus: 'worktree',
       baseSha: '0'.repeat(40),
     },
@@ -347,6 +347,17 @@ async function doneCodeTask(s: Stack, w: ProjectWorld, label: string): Promise<{
   });
   const task = await s.db.task.findUniqueOrThrow({ where: { id: declared.id }, select: { status: true } });
   assert.equal(task.status, TaskStatus.DONE, 'the acceptance command agreed');
+  // The DONE asks its idle work session to end (`endIdleWorkOfDoneTask`), and the runner's finalize is that end —
+  // in production within a second. Until then the session is ending, and a merge of it waits for the turn.
+  const { cancelRequestedAt, status, inboxLeaseOwner } = await s.db.session.findUniqueOrThrow({
+    where: { id: sessionId }, select: { cancelRequestedAt: true, status: true, inboxLeaseOwner: true },
+  });
+  if (cancelRequestedAt && status === RunStatus.AWAITING_INPUT) {
+    await s.api.finalize({ id: w.runnerId }, sessionId, {
+      status: SharedRunStatus.SUCCEEDED, subtype: 'success', numTurns: 2, costUsd: 0,
+      ...(inboxLeaseOwner ? { leaseOwner: inboxLeaseOwner } : {}),
+    } as never);
+  }
   return { taskId: declared.id, sessionId };
 }
 

@@ -72,6 +72,7 @@ class QueuedCapacityTest {
         mapOf("RUNNER_FULL_TITLE" to QueuedCapacity.RUNNER_FULL_TITLE, "RUNNER_FULL_TAG" to QueuedCapacity.RUNNER_FULL_TAG,
             "RUN_FULL_TITLE" to QueuedCapacity.RUN_FULL_TITLE, "RUN_FULL_TAG" to QueuedCapacity.RUN_FULL_TAG,
             "BATCH_FULL_TITLE" to QueuedCapacity.BATCH_FULL_TITLE, "BATCH_FULL_TAG" to QueuedCapacity.BATCH_FULL_TAG,
+            "CAPACITY_HELD_LINE" to QueuedCapacity.CAPACITY_HELD_LINE,
         ).forEach { (name, words) -> assertTrue("$name", copy.contains("export const $name = '$words';")) }
         QueuedCapacity.REASONS.forEach { assertTrue(it, copy.contains("reason === '$it'")) }
         sentences().forEach { assertTrue("queuedCapacity.test.ts no longer expects $it", spec.contains("'$it'")) }

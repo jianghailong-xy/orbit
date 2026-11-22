@@ -18,9 +18,16 @@ public struct User: Codable, Equatable, Sendable, Identifiable {
     /// Settings › Translation: the server holds a DeepSeek key and so can translate. False: the
     /// switch is drawn disabled with the board frame 2 notice. Nil in login's user payload.
     public let translationAvailable: Bool?
+    /// Translation is temporarily unavailable until this ISO-8601 instant (MeTranslation, policy board frame 6): the
+    /// server's translator circuit breaker is skipping a failing translator, so a message sent now is held with reason
+    /// UNAVAILABLE. Nil while the translator is in use, from an older server, and in login's user payload.
+    public let translationUnavailableUntil: String?
     /// Settings › Prompt optimizer: the server holds a DeepSeek key and so can optimize a draft.
     /// False: the switch is drawn disabled with the board frame 1b notice. Nil in login's user payload.
     public let promptOptimizerAvailable: Bool?
+    /// Settings last changed from a conversation, by preference key (`GET /users/me`, design §5.3). Nil from an older
+    /// server and in login's user payload.
+    public var changedBy: [String: SettingChangedBy]? = nil
 }
 
 public struct LoginRequest: Codable, Sendable {
@@ -146,17 +153,12 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
     public var cursorAccount: String? = nil
 
     public let enableWorktree: Bool?
-    /// Smart model selection (docs/model-routing-design.md §7.2): on, a fresh task run here gets the
-    /// model and effort of its tier; off (the default), routing is only recorded in shadow. Only the
-    /// owner's user API writes it.
-    public let modelRouting: Bool?
-    /// What smart model selection and SubAgents rank by: `cost`, `balance` or `intelligence`. Nil from an
-    /// older server reads as Cost (`SubagentSettings.OptimizeFor(stored:)`).
-    public var modelRoutingOptimizeFor: String? = nil
     /// Whether this Agent's sessions may hand work to SubAgents (docs/subagent-design.md §7). Nil reads as on.
     public var subagentsEnabled: Bool? = nil
     /// How many of one session's SubAgents run at once. Nil reads as 4 (`SubagentSettings.maxRunning`).
     public var subagentsMaxRunning: Int? = nil
+    /// Whether this Agent's sessions may start a workflow (docs/subagent-workflow-design.md §6). Nil reads as on.
+    public var workflowsEnabled: Bool? = nil
     public let workDirExists: Bool?
     public let workDirIsGit: Bool?
     /// BIGINT columns are serialized as strings by the control plane; numeric fixtures and older
@@ -177,7 +179,7 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         case maxTurns, maxBudgetUsd, targetRunnerId, targetLabels, runnerId, env, enabled
         case antigravityKeyAvailableByRunner
         case autoInitGit, codexAccount, claudeAccount, antigravityAccount, kimiAccount, cursorAccount
-        case enableWorktree, modelRouting, modelRoutingOptimizeFor, subagentsEnabled, subagentsMaxRunning
+        case enableWorktree, subagentsEnabled, subagentsMaxRunning, workflowsEnabled
         case workDirExists, workDirIsGit
         case workDirFreeBytes, workDirTotalBytes, repoHealth, repoCleanup, mainCheckoutActions
     }
@@ -215,10 +217,9 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         kimiAccount = try c.decodeIfPresent(String.self, forKey: .kimiAccount)
         cursorAccount = try c.decodeIfPresent(String.self, forKey: .cursorAccount)
         enableWorktree = try c.decodeIfPresent(Bool.self, forKey: .enableWorktree)
-        modelRouting = try c.decodeIfPresent(Bool.self, forKey: .modelRouting)
-        modelRoutingOptimizeFor = try c.decodeIfPresent(String.self, forKey: .modelRoutingOptimizeFor)
         subagentsEnabled = try c.decodeIfPresent(Bool.self, forKey: .subagentsEnabled)
         subagentsMaxRunning = try c.decodeIfPresent(Int.self, forKey: .subagentsMaxRunning)
+        workflowsEnabled = try c.decodeIfPresent(Bool.self, forKey: .workflowsEnabled)
         workDirExists = try c.decodeIfPresent(Bool.self, forKey: .workDirExists)
         workDirIsGit = try c.decodeIfPresent(Bool.self, forKey: .workDirIsGit)
         workDirFreeBytes = c.flexibleInt64(forKey: .workDirFreeBytes)
@@ -318,6 +319,9 @@ public struct Runner: Codable, Equatable, Sendable, Identifiable {
     /// so a newer control plane cannot make the runner list undecodable.
     public let install: RunnerInstallState?
     public let accountRemove: RunnerAccountRemoveState?
+    /// Set as default for Claude Code: which added account is becoming the Default, and where that
+    /// stands (shared `RunnerClaudeAccountSwapState`). Nil from an older server, and when nothing was asked.
+    public var claudeAccountSwap: RunnerClaudeAccountSwapState? = nil
     /// Where this runner's Claude connection to Anthropic last came out, with the effective verdict
     /// (docs/claude-region-check-contract.md §6). Nil for a runner that does not check, one no check
     /// has decided yet, or an older server: never gated, drawn as before.
@@ -345,6 +349,9 @@ public struct RunnerAgentFix: Codable, Equatable, Sendable {
     public let engineName: String?
     public let blocked: Blocked?
     public let fixing: [RunnerAgentFixing]?
+    /// The latest session each warning was handed to once it was over: a transcript's history row
+    /// shows what was done with it instead of offering a second agent.
+    public let handled: [RunnerAgentFixHandled]?
 
     /// `code` is `offline`, `noWorkspace` or `engineSignedOut`.
     public struct Blocked: Codable, Equatable, Sendable {
@@ -358,13 +365,34 @@ public struct RunnerAgentFix: Codable, Equatable, Sendable {
     }
 
     public init(workspaceId: String?, workspaceName: String?, engine: String?, engineName: String?,
-                blocked: Blocked?, fixing: [RunnerAgentFixing]?) {
+                blocked: Blocked?, fixing: [RunnerAgentFixing]?, handled: [RunnerAgentFixHandled]? = nil) {
         self.workspaceId = workspaceId
         self.workspaceName = workspaceName
         self.engine = engine
         self.engineName = engineName
         self.blocked = blocked
         self.fixing = fixing
+        self.handled = handled
+    }
+}
+
+/// An agent a warning was handed to once its session is over (@orbit/shared `RunnerAgentFixHandled`):
+/// `kind` is a `RunnerAttentionFixKind`'s raw value, `status` how that session ended.
+public struct RunnerAgentFixHandled: Codable, Equatable, Sendable {
+    public let kind: String
+    public let engine: String?
+    public let sessionId: String
+    public let workspaceId: String
+    public let workspaceName: String
+    public let status: String
+
+    public init(kind: String, engine: String?, sessionId: String, workspaceId: String, workspaceName: String, status: String) {
+        self.kind = kind
+        self.engine = engine
+        self.sessionId = sessionId
+        self.workspaceId = workspaceId
+        self.workspaceName = workspaceName
+        self.status = status
     }
 }
 
@@ -394,10 +422,12 @@ public enum RunnerAttentionFixKind: String, Codable, Equatable, Sendable {
     case installFailed
     /// An Update Engines Now report with a failed line: the machine's, whichever engines failed.
     case engineUpdateFailed
+    /// The engine's own prerequisite a session's transcript caught: Codex without bubblewrap on PATH.
+    case sandboxMissing
 }
 
-/// POST /runners/:id/attention/:kind/fix body: `engine` for `engineNotUpdating` and `installFailed`,
-/// `latest` (the newest runner release the client knows of) for `cannotSelfUpdate`. Nil fields are left out.
+/// POST /runners/:id/attention/:kind/fix body: `engine` for `engineNotUpdating`, `installFailed` and
+/// `sandboxMissing`, `latest` (the newest runner release the client knows of) for `cannotSelfUpdate`. Nil fields are left out.
 public struct RunnerAttentionFixRequest: Codable, Equatable, Sendable {
     public let engine: String?
     public let latest: String?
@@ -651,6 +681,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// Legacy internal provenance. Current clients keep every unfiled session in Open and no longer
     /// expose a separate System list; the optional field remains for older-server compatibility.
     public let source: String?
+    /// What opened the session; SCHEDULE marks a scheduled run's, which only the workspace's Scheduled runs folder lists.
+    public let runSource: String?
     /// The scheduled task's run this session is (docs/scheduled-tasks-design.md §6.3), from the session's own
     /// read; nil for every other session. What puts the run's header over its conversation.
     public var scheduleRunId: String? = nil
@@ -767,7 +799,11 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// Whether this row is a landing session (platform work), not a conversation.
     public var isLanding: Bool { sessionKind == "LANDING" }
 
-    public var effectiveRunStatus: RunStatus { runStatus ?? status }
+    /// A `runStatus` word this build does not know defers to the legacy `status`.
+    public var effectiveRunStatus: RunStatus {
+        if let runStatus, runStatus != .unknown { return runStatus }
+        return status
+    }
     public var effectiveRunState: SessionRunState {
         SessionRunState.resolve(runState, legacy: sessionState,
                                 status: effectiveRunStatus, endReason: endReason)
@@ -895,6 +931,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         effort = try values.decodeIfPresent(String.self, forKey: .effort)
         fastMode = try values.decodeIfPresent(Bool.self, forKey: .fastMode)
         source = try values.decodeIfPresent(String.self, forKey: .source)
+        runSource = try values.decodeIfPresent(String.self, forKey: .runSource)
         scheduleRunId = try? values.decodeIfPresent(String.self, forKey: .scheduleRunId)
         projectId = try values.decodeIfPresent(String.self, forKey: .projectId)
         projectTitle = try values.decodeIfPresent(String.self, forKey: .projectTitle)
@@ -948,7 +985,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 taskId: String? = nil,
                 branch: String?,
                 updatedAt: String?, model: String? = nil, permissionMode: String? = nil,
-                effort: String? = nil, fastMode: Bool? = nil, source: String? = nil,
+                effort: String? = nil, fastMode: Bool? = nil, source: String? = nil, runSource: String? = nil,
                 projectId: String? = nil, projectTitle: String? = nil,
                 lastAssistantText: String? = nil,
                 lastToolUse: String? = nil, lastUserText: String? = nil,
@@ -1027,6 +1064,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.effort = effort
         self.fastMode = fastMode
         self.source = source
+        self.runSource = runSource
         self.projectId = projectId
         self.projectTitle = projectTitle
         self.projectMembership = projectMembership
@@ -1700,6 +1738,8 @@ public struct ApprovalInfo: Codable, Equatable, Sendable, Identifiable {
     public let toolName: String?
     public let status: String?
     public let input: JSONValue?
+    /// The engine's call this card asks about: an answered question's record finds its card by it.
+    public let toolUseId: String?
     /// Settings › Translation (3A): what the card shows in the owner's language. Raw, read by
     /// `ApprovalTranslation.parse`.
     public let translation: JSONValue?
@@ -1720,10 +1760,19 @@ public struct BgShellDTO: Decodable, Sendable {
     public let status: String
     public let latestOutput: String?
     public let startedTs: String?
-    /// `shell`, `agent` or `workflow` — what launched it. Absent from older servers, which list shells only.
+    /// `shell`, `agent`, `workflow` or `job` (a runner-hosted bg_run) — what launched it. Absent from
+    /// older servers, which list shells only; a kind this client does not know is drawn as a shell.
     public let kind: String?
+    /// When its end was reported; absent while it runs and from older servers.
+    public let endedAt: String?
     /// An agent's or workflow's last progress, carried by the notification that ended it.
     public let progress: JSONValue?
+    /// Why a killed one was killed (`requested`, `stopped_by_owner`, `runner_shutdown`, …).
+    public let reason: String?
+    /// A runner-hosted job's exit code, once it exited.
+    public let exitCode: Int?
+    /// Whether the owner can stop it from the app; absent from older servers, which reads as not.
+    public let stoppable: Bool?
 
     /// Map to the reducer's `BackgroundProc`: key by `toolUseId`, translate the web status vocab to
     /// the native one, and default a missing output to empty (the tray shows "No output captured yet").
@@ -1735,7 +1784,11 @@ public struct BgShellDTO: Decodable, Sendable {
                        outputTail: latestOutput ?? "",
                        startedAt: startedTs,
                        kind: kind,
-                       taskId: shellId)
+                       taskId: shellId,
+                       endedAt: endedAt,
+                       reason: reason,
+                       exitCode: exitCode,
+                       stoppable: stoppable)
     }
 
     /// The progress this row ended with, for `seedBackground`.
@@ -1892,7 +1945,11 @@ public struct MergeRepairSession: Codable, Equatable, Sendable, Identifiable {
     public let finishedAt: String?
     public let lastAssistantText: String?
 
-    public var effectiveRunStatus: RunStatus? { runStatus ?? status }
+    /// A `runStatus` word this build does not know defers to the legacy `status`.
+    public var effectiveRunStatus: RunStatus? {
+        if let runStatus, runStatus != .unknown { return runStatus }
+        return status ?? runStatus
+    }
     public var effectiveRunState: SessionRunState? {
         SessionRunState.resolveOptional(runState, legacy: sessionState, status: effectiveRunStatus)
     }
@@ -1997,7 +2054,11 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
     /// Whether this detail is a landing session, which is what chooses its renderer.
     public var isLanding: Bool { sessionKind == "LANDING" }
 
-    public var effectiveRunStatus: RunStatus? { runStatus ?? status }
+    /// A `runStatus` word this build does not know defers to the legacy `status`.
+    public var effectiveRunStatus: RunStatus? {
+        if let runStatus, runStatus != .unknown { return runStatus }
+        return status ?? runStatus
+    }
     public var effectiveRunState: SessionRunState? {
         SessionRunState.resolveOptional(runState, legacy: sessionState, status: effectiveRunStatus)
     }
@@ -2280,7 +2341,11 @@ public struct SessionSearchHit: Codable, Equatable, Sendable, Identifiable {
     /// located client-side (see the web `splitHighlight`) — collapsing invalidates any offset.
     public let snippet: String?
 
-    public var effectiveRunStatus: RunStatus { runStatus ?? status }
+    /// A `runStatus` word this build does not know defers to the legacy `status`.
+    public var effectiveRunStatus: RunStatus {
+        if let runStatus, runStatus != .unknown { return runStatus }
+        return status
+    }
     public var effectiveRunState: SessionRunState {
         SessionRunState.resolve(runState, legacy: sessionState,
                                 status: effectiveRunStatus, endReason: endReason)

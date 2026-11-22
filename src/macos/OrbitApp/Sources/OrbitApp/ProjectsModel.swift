@@ -10,7 +10,8 @@ import OrbitKit
 /// is what moves a project's lanes), after every write this client makes, and every 15 seconds
 /// while loaded: integration jobs can move without changing a task or session. With the control
 /// stream live, the nudges carry the changes, and that floor is a minute's safety read
-/// (docs/list-freshness-design.md §4 R1).
+/// (docs/list-freshness-design.md §4 R1), counted from the last read whoever made it. While the app
+/// cannot be seen a nudge reads nothing: its read is owed and made once when it is shown (`ListReads`, R3).
 @MainActor
 @Observable
 final class ProjectsModel {
@@ -23,8 +24,8 @@ final class ProjectsModel {
     private let api: APIClient
     /// Handed out from inside view bodies, so reading and filling it must not invalidate them.
     @ObservationIgnored private var details: [String: ProjectDetailModel] = [:]
-    @ObservationIgnored private var nudgeTask: Task<Void, Never>?
-    @ObservationIgnored private var refreshNotBefore = Date.distantPast
+    /// The nudge's reads, and the floor's cadence (`ListReads`).
+    @ObservationIgnored private let reads = ListReads(key: "projects", delay: 2)
 
     init(baseURL: URL, tokenStore: TokenStore) {
         api = APIClient(baseURL: baseURL, tokenStore: tokenStore)
@@ -51,6 +52,7 @@ final class ProjectsModel {
     }
 
     func load() async {
+        reads.noteRead()
         assignIfChanged(\.loadState, loadState.startingRead())
         async let sidebarRead = api.sidebarProjects()
         do {
@@ -64,19 +66,16 @@ final class ProjectsModel {
 
     /// Called by the app's existing polling task, which stops on sign-out.
     func refreshIfDue(now: Date = Date(), live: Bool = false) async {
-        guard loadState.hasLoaded, now >= refreshNotBefore else { return }
-        refreshNotBefore = now.addingTimeInterval(live ? PollSchedule.liveFallback : 15)
+        guard loadState.hasLoaded, reads.isDue(at: now, interval: live ? PollSchedule.liveFallback : 15) else { return }
         await load()
         for detail in details.values where detail.isVisible { await detail.load(refreshGraph: false) }
     }
 
-    /// A project or its member changed: refetch shortly, once for a burst.
+    /// A project or its member changed: refetch shortly, once for a burst. Hidden, owed.
     func nudge() {
-        guard nudgeTask == nil, loadState.hasLoaded else { return }
-        nudgeTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
+        guard loadState.hasLoaded else { return }
+        reads.nudge { [weak self] in
             guard let self else { return }
-            self.nudgeTask = nil
             await self.load()
             for detail in self.details.values where detail.isVisible { await detail.load() }
         }
@@ -329,6 +328,23 @@ final class ProjectDetailModel {
         await load()
     }
 
+    /// "Land without the check" on the landing in flight (§2.4 J-S5): the server stops it and lands
+    /// it again with the landing check not run. Then the page reads everything again, so the card
+    /// says where the skip stands. Throws what the server answered, for the card to say.
+    func skipLandingCheck(_ taskID: String) async throws {
+        try await api.skipLandingCheck(projectID, taskID: taskID)
+        await load()
+    }
+
+    /// The owner's Revert on one of the coordinator's landing-check changes (§12.15 P-R1): the old
+    /// value goes back as the owner's own; then the page reads everything again, so the list and the
+    /// setting say where things stand. Throws what the server answered, for the page to say.
+    func revertSettingChange(_ changeID: String) async throws {
+        _ = try await api.revertSettingChange(projectID, changeID: changeID)
+        onChanged()
+        await load()
+    }
+
     /// Pause project, or Resume project — the owner's, and a press rather than a setting: it stops
     /// the project moving at once, and resuming undoes it.
     func setPaused(_ paused: Bool) async -> String? {
@@ -398,11 +414,25 @@ final class ProjectDetailModel {
 
     /// "Not yet…" on the coordinator's request: the note goes to the coordinator, and the request
     /// ends. Nil when it went through; otherwise the sentence to show.
-    func declineDone(itemID: String, note: String) async -> String? {
-        await runWrite(ProjectDone.notDeclined) {
-            _ = try await self.api.declineDoneRequest(projectID: self.projectID, itemID: itemID, note: note)
+    func declineDone(itemID: String, note: String, sendAsWritten: Bool = false) async -> String? {
+        var untranslated: [SessionTranslation.FootPart]? = nil
+        let refused = await runWrite(ProjectDone.notDeclined) {
+            do {
+                _ = try await self.api.declineDoneRequest(projectID: self.projectID, itemID: itemID, note: note,
+                                                          sendAsWritten: sendAsWritten)
+            } catch {
+                untranslated = OwnerCardTranslations.refused(error)
+                    ? SessionTranslation.refusedAnswerFoot(after: error) : nil
+                throw error
+            }
         }
+        doneDeclineRefusedUntranslated = untranslated
+        return untranslated != nil ? nil : refused
     }
+
+    /// The last Not yet… note was refused with 422 TRANSLATION_FAILED and not sent: the line the card
+    /// draws (why, then Retry and Send as written), nil otherwise.
+    var doneDeclineRefusedUntranslated: [SessionTranslation.FootPart]? = nil
 
     // MARK: the done card's follow-ups
 

@@ -37,6 +37,8 @@ final class ConsoleRegistry {
     /// The account's managed runner (docs/managed-runner-design.md), set once by `AppModel` and handed
     /// to every console this registry makes, as `onToast` is.
     @ObservationIgnored weak var managedRunner: ManagedRunnerModel?
+    /// The runners a console just read, handed to the app's runner snapshot (`ConsoleModel.onRunnersRead`).
+    @ObservationIgnored var onRunnersRead: ([Runner]) -> Void = { _ in }
 
     private var models: [String: ConsoleModel] = [:]
     /// The one session whose SSE stream is currently running (at most one), or nil when no console is
@@ -113,6 +115,14 @@ final class ConsoleRegistry {
     /// Words the next draft opened for a workspace starts with, by workspace id (a main checkout line's
     /// Open in a new session). Taken by that draft, once.
     var pendingDraftText: [String: String] = [:]
+    /// What the next draft shown for a workspace is handed, by workspace id: shared items to stage
+    /// in its composer (Share to Orbit). Taken by the draft on screen as it appears, once — not as a
+    /// draft model is made, since a view may make several and keep only the first.
+    var pendingDraftStaging: [String: (ConsoleModel) -> Void] = [:]
+
+    func takeDraftStaging(agentID: String) -> ((ConsoleModel) -> Void)? {
+        pendingDraftStaging.removeValue(forKey: agentID)
+    }
 
     func draftModel(for agent: Agent, defaultModel: String,
                     configuredProviders: [ConfiguredProvider] = [],
@@ -150,6 +160,7 @@ final class ConsoleRegistry {
         model.onToast = { [weak self] request in self?.onToast(request, nil) }
         wireAccountDefaults(model)
         model.managedRunner = managedRunner
+        model.onRunnersRead = { [weak self] rows in self?.onRunnersRead(rows) }
         return model
     }
 
@@ -220,10 +231,11 @@ final class ConsoleRegistry {
         }
     }
 
-    /// A GitHub workspace's clone moved to another state: the cached consoles whose conversation made that workspace
+    /// A GitHub workspace's clone moved to another state: the cached consoles whose conversation made or runs in that workspace
     /// read their detail again, which carries the state the server stored and, for a failure, why.
     func cloneStateMoved(workspaceID: String) {
-        for model in models.values where WorkspaceClone.sameWorkspace(model.madeWorkspaceID, workspaceID) {
+        for model in models.values where WorkspaceClone.sameWorkspace(model.madeWorkspaceID, workspaceID)
+            || WorkspaceClone.sameWorkspace(model.cloneWorkspace?.id, workspaceID) {
             Task { await model.refreshMadeWorkspace() }
         }
     }
@@ -271,6 +283,7 @@ final class ConsoleRegistry {
         }
         wireAccountDefaults(model)
         model.managedRunner = managedRunner
+        model.onRunnersRead = { [weak self] rows in self?.onRunnersRead(rows) }
         seedSessionContext(model)
         if let record = pendingRecords.removeValue(forKey: sessionID) { model.openRecord(record) }
         return model

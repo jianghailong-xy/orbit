@@ -29,6 +29,7 @@ import { api, cleanUpWorkspaceRepo } from '../../api';
 import { encodeId, routeId } from '../../lib/idCodec';
 import { machineDraftPath, machineName } from '../../lib/machineSetup';
 import { managedRowOf, useManagedRunner, useWakeForSignIn } from '../../lib/managedRunner';
+import { RunnerBrowserSection } from './RunnerBrowserSection';
 import { ManagedRunnerNotice } from '../ManagedRunnerNotice';
 import { machineEmpty, START_A_SESSION } from '../../lib/machineSetupCopy';
 import { publishedRunnerVersionQuery, workspaceSessionCountsQuery } from '../../lib/queries';
@@ -63,6 +64,7 @@ import {
   runnerAttention,
   runnerCanUpdateNow,
   runnerDisk,
+  runnerLocationLine,
   runnerVersionLine,
   type AttentionItem,
   type AttentionKind,
@@ -131,10 +133,11 @@ import { RunnerUpdateLaterMenu } from '../RunnerUpdateLater';
 import { RunnerUpdateNowButton } from '../RunnerUpdateNow';
 import { runnerTakesUpdateNow } from '../../lib/runnerUpdateNow';
 import { useClaudeRegionCheckAgain } from '../../lib/claudeRegion';
-import { CLAUDE_REGION_CHECK_AGAIN } from '../../lib/claudeRegionCopy';
+import { CLAUDE_REGION_CHECK_AGAIN, claudeRegionChecked } from '../../lib/claudeRegionCopy';
 import { ago, ENGINE_CLI_NAME } from '../../lib/runnerEngines';
 import { useToast } from '../../lib/toast';
 import { MachineResources } from './MachineResources';
+import { MachineSecrets } from './MachineSecrets';
 import { SettingsCard, SettingsRow, SettingsSection } from './SettingsBlocks';
 import './Settings.css';
 
@@ -266,7 +269,11 @@ export function MachineSettingsPage() {
   // Asleep while it waits for a login: opening its page, where it is signed in, wakes it.
   useWakeForSignIn(managed);
 
-  const workspacesQ = useQuery({ queryKey: ['workspaces'], queryFn: () => api<MachineWorkspace[]>('/workspaces') });
+  const workspacesQ = useQuery({
+    queryKey: ['workspaces'],
+    meta: { entities: ['workspace', 'checkout'] },
+    queryFn: () => api<MachineWorkspace[]>('/workspaces'),
+  });
   const workspaces = (workspacesQ.data ?? []).filter((a) => a.runnerId === runnerId);
   // Each workspace's sessions in flight, for its row's "N running" — the sidebar's own tallies.
   const sessionCounts = useQuery(workspaceSessionCountsQuery()).data ?? [];
@@ -729,6 +736,8 @@ export function MachineSettingsPage() {
     runnerVersionLine(version, isManaged),
     runner.online && runner.lastHeartbeatAt ? `${RUNNER_ABOUT_LAST_CHECK_IN} ${ago(runner.lastHeartbeatAt, nowMs)}` : null,
   ].filter(Boolean) as string[];
+  // The country its IP is in, ahead of the rest; hovering it says when it was checked.
+  const location = runnerLocationLine(runner.region);
 
   const runsAs =
     runner.runsAsRoot === true ? RUNNER_RUNS_AS_ROOT : runner.runsAsRoot === false ? RUNNER_RUNS_AS_REGULAR_USER : '—';
@@ -758,7 +767,20 @@ export function MachineSettingsPage() {
             }
           />
         </div>
-        {metaline.length > 0 && <div className="machine-metaline">{metaline.join(RUNNER_LINE_SEPARATOR)}</div>}
+        {(location || metaline.length > 0) && (
+          <div className="machine-metaline">
+            {location && runner.region && (
+              <span
+                data-testid="machine-location"
+                title={claudeRegionChecked(ago(runner.region.checkedAt, nowMs), runner.region.name, runner.region.viaProxy)}
+              >
+                {location}
+              </span>
+            )}
+            {location && metaline.length > 0 && RUNNER_LINE_SEPARATOR}
+            {metaline.join(RUNNER_LINE_SEPARATOR)}
+          </div>
+        )}
       </header>
 
       {/* Terminals on this machine asking to be approved, under the title (docs/mocks/waiting-on-you-removal/02 ①). */}
@@ -958,6 +980,9 @@ export function MachineSettingsPage() {
       </>
       )}
 
+      {/* Orbit Cloud's browser: Open browser, saved logins, Clear saved logins. Nothing while the server has it off. */}
+      {isManaged && <RunnerBrowserSection runnerId={runner.id} />}
+
       <div ref={capacityRef} className="machine-capacity">
         <SettingsSection title={RUNNER_CAPACITY} className="machine-section-capacity">
           <SettingsCard>
@@ -1064,6 +1089,9 @@ export function MachineSettingsPage() {
           </SettingsCard>
         )}
       </SettingsSection>
+
+      {/* Copies of the owner's secrets on this machine (Settings → Secrets, filtered). Renders nothing while there are none. */}
+      <MachineSecrets runnerId={runner.id} />
 
       {/* What worktree GC may never remove: finished sessions' checkouts that still hold uncommitted
           work. Renders nothing while there are none. */}

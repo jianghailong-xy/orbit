@@ -84,6 +84,9 @@ final class PromptOptimizerTests: XCTestCase {
         XCTAssertEqual(draft["workspaceId"] as? String, "W1")
         XCTAssertEqual(draft["projectId"] as? String, "P1")
         XCTAssertNil(draft["sessionId"])
+        XCTAssertNil(draft["replyingTo"])
+        let reply = try encoded(PromptOptimizationRequest(draft: "x", sessionId: "S1", replyingTo: "Which way?"))
+        XCTAssertEqual(reply["replyingTo"] as? String, "Which way?")
     }
 
     // MARK: - Account switch

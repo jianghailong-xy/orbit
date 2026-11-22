@@ -2,11 +2,13 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { uuidToBase62 } from '@orbit/shared';
+import { SessionEndReason, uuidToBase62 } from '@orbit/shared';
 import { test } from 'node:test';
 import { ConfigService } from '@nestjs/config';
 import { RunStatus } from '@prisma/client';
 import { PushService } from './push.service';
+import { releaseFactsOf } from '../common/session-release-shapes.fixture';
+import { findingCollapseId, findingCopy } from '../schedules/schedule-attention';
 
 function enabledConfig(): ConfigService {
   const values: Record<string, string> = {
@@ -199,6 +201,8 @@ function settledSession(over: Record<string, unknown> = {}) {
   return {
     title: 'Fix the login bug',
     ownerId: 'owner-1',
+    // Released having finished the work, as its writer stores it beside SUCCEEDED: the alert reads these (plan step 4.8).
+    ...releaseFactsOf('finished work'),
     status: RunStatus.SUCCEEDED,
     retryAt: null,
     completedAt: null,
@@ -254,7 +258,7 @@ test('a settled session alerts its owner, collapsing on the session', async () =
 
 test('a failure carries its first error line', async () => {
   const { service, sent } = settleHarness(
-    settledSession({ status: RunStatus.FAILED, error: 'API Error: 529 overloaded_error' }),
+    settledSession({ ...releaseFactsOf('failed'), status: RunStatus.FAILED, error: 'API Error: 529 overloaded_error' }),
   );
 
   await service.notifySessionSettled('s-1');
@@ -265,7 +269,7 @@ test('a failure carries its first error line', async () => {
 });
 
 test('an ending not worth an interruption sends nothing', async () => {
-  const { service, sent } = settleHarness(settledSession({ status: RunStatus.CANCELLED }));
+  const { service, sent } = settleHarness(settledSession({ ...releaseFactsOf('ended'), status: RunStatus.CANCELLED }));
   await service.notifySessionSettled('s-1');
   assert.equal(sent.length, 0);
 });
@@ -1302,8 +1306,8 @@ test('an escalated item whose coordinator cannot be reached says so, not "no one
   });
   const live = { status: 'AWAITING_INPUT', endReason: null, completedAt: null, archivedAt: null, deletedAt: null, cancelRequestedAt: null };
   const cases = [
-    { what: 'reaped, runner away', session: { ...live, status: 'FAILED', cancelRequestedAt: new Date() }, blocked: 'RUNNER_OFFLINE',
-      title: 'Now yours — the coordinator can’t take messages' },
+    { what: 'reaped, runner away', session: { ...live, status: 'FAILED', finishedAt: new Date(), cancelRequestedAt: new Date() }, blocked: 'RUNNER_OFFLINE',
+      title: 'Now yours — no one acted on this for 2h 56m' },
     { what: 'live, but no message reaches it', session: live, blocked: 'RUN_RETIRED',
       title: 'Now yours — the coordinator can’t take messages' },
     { what: 'reachable', session: live, blocked: null, title: 'Now yours — no one acted on this for 2h 56m' },
@@ -1344,5 +1348,46 @@ test('a scheduled task pushes its failure and its hold as the shared Android fix
     assert.ok(sample, `the shared Android fixture has no ${name} sample`);
     assert.equal(JSON.stringify(sent[0].payload), JSON.stringify(sample.source), name);
     assert.deepEqual([sample.pushType, sample.collapseId], ['alert', sent[0].collapseId], name);
+  }
+});
+
+// A condition (docs/condition-triggers-design.md §5.3, §6.1): one that cannot be read rings as `condition`, naming the condition,
+// the conversation it came from and its Waiting on you item; one that fires starts a run, whose report rings as the schedule's
+// FINDING. The shared Android fixture's `condition-unknown` and `schedule-finding` samples are these sends, so Android's
+// PushMessage parses exactly what is sent (ConditionPushTest) rather than dropping an unknown kind.
+test('a condition that cannot be read, and the run a firing started, push as the shared Android fixture holds them', async () => {
+  const fixture = JSON.parse(readFileSync(path.resolve(__dirname, '../../../shared/src/android-push.fixture.json'), 'utf8'));
+  const sample = (name: string) => {
+    const found = fixture.samples.find((candidate: { name: string }) => candidate.name === name);
+    assert.ok(found, `the shared Android fixture has no ${name} sample`);
+    return found;
+  };
+  const condition = '019a0000-0000-7000-8000-000000000020';
+  {
+    const { service, sent } = deviceAlertHarness();
+    await service.notifyCondition({
+      ownerId: 'owner-1', conditionId: condition, sessionId: '019a0000-0000-7000-8000-000000000021',
+      ownerRequestId: '019a0000-0000-7000-8000-000000000022', title: "Can't read: Root disk below 5%",
+      body: 'The check timed out 3 times in a row. The last reading was 5%, 16 minutes ago.',
+      collapseId: `condition-unknown:${condition}:2026-11-17T03:40:00.000Z`,
+    });
+    assert.equal(sent.length, 1);
+    const expected = sample('condition-unknown');
+    assert.equal(JSON.stringify(sent[0].payload), JSON.stringify(expected.source));
+    assert.deepEqual([expected.pushType, expected.collapseId], ['alert', sent[0].collapseId]);
+  }
+  {
+    const schedule = '019a0000-0000-7000-8000-000000000023';
+    const { service, sent } = deviceAlertHarness();
+    await service.notifySchedule({
+      kind: 'FINDING', ownerId: 'owner-1', scheduleId: schedule, opens: { sessionId: '019a0000-0000-7000-8000-000000000024' },
+      ownerRequestId: null, ...findingCopy('Ceph capacity guard',
+        'Raw used 90.4%. Above 90% for 10 min. 14 old RBD snapshots hold 1.1 TiB; one proposal is waiting for you.'),
+      collapseId: findingCollapseId(schedule, 'above-90@2026-11-21'),
+    });
+    assert.equal(sent.length, 1);
+    const expected = sample('schedule-finding');
+    assert.equal(JSON.stringify(sent[0].payload), JSON.stringify(expected.source));
+    assert.deepEqual([expected.pushType, expected.collapseId], ['alert', sent[0].collapseId]);
   }
 });

@@ -27,6 +27,8 @@ struct SettingsView: View {
     @State private var orchestration = true
     /// The account's switch for smart model selection. Absent on the server means off.
     @State private var modelRouting = false
+    /// The account's "Optimize For" pick. Absent on the server means Balance.
+    @State private var optimizeFor: OptimizeFor = .balance
     /// The account's switch for suggested replies. Absent on the server means on.
     @State private var promptSuggestions = true
     /// The account's switch for session recaps. Absent on the server means on.
@@ -87,6 +89,7 @@ struct SettingsView: View {
             ?? AgentDefaults.defaultPermissionMode
         orchestration = p?.enableOrchestration ?? true
         modelRouting = p?.smartModelSelection ?? false
+        optimizeFor = OptimizeFor(stored: p?.optimizeFor)
         promptSuggestions = p?.suggestedReplies ?? true
         recaps = p?.showRecaps ?? true
         translation = !SessionTranslation.unavailable(model.user) && p?.translationEnabled == true
@@ -115,12 +118,14 @@ struct SettingsView: View {
         }
         .orbitRevealSurface()   // reveal the unified `orbitSurface` behind the grouped form
         .formStyle(.grouped)
+        .settingsAnchorScroll()
         .navigationTitle("Settings")
         // Persisted the moment it flips: the Save button lives in another section, and a capability
         // switch that looks set but was never written is the one kind of lie this screen cannot
         // afford.
         .onChange(of: orchestration) { saveOrchestration() }
         .onChange(of: modelRouting) { saveModelRouting() }
+        .onChange(of: optimizeFor) { saveOptimizeFor() }
         .onChange(of: promptSuggestions) { savePromptSuggestions() }
         .onChange(of: recaps) { saveRecaps() }
         .onChange(of: translation) { saveTranslation() }
@@ -198,20 +203,49 @@ struct SettingsView: View {
     @ViewBuilder
     private var preferencesSection: some View {
     Section("Preferences") {
-        Picker("Theme", selection: $theme) {
-            Text("System").tag("system")
-            Text("Light").tag("light")
-            Text("Dark").tag("dark")
+        Group {
+            Picker("Theme", selection: $theme) {
+                Text("System").tag("system")
+                Text("Light").tag("light")
+                Text("Dark").tag("dark")
+            }
+            .settingRow("theme")
+            SettingChangedLineView(key: "theme")
         }
-        Picker("Default permission", selection: $permMode) {
-            ForEach(AgentDefaults.permissionModes, id: \.self) { Text(AgentDefaults.label($0)).tag($0) }
+        Group {
+            Picker("Default permission", selection: $permMode) {
+                ForEach(AgentDefaults.permissionModes, id: \.self) { Text(AgentDefaults.label($0)).tag($0) }
+            }
+            .settingRow("defaultPermissionMode")
+            SettingChangedLineView(key: "defaultPermissionMode")
         }
         // Written the moment it flips, like the orchestration switch below; Save is the
         // pickers' alone.
-        Toggle(SettingsCopy.smartModelSelection, isOn: $modelRouting)
+        Group {
+            Toggle(SettingsCopy.smartModelSelection, isOn: $modelRouting)
+            .settingRow("modelRouting")
+            SettingChangedLineView(key: "modelRouting")
+        }
         Text(SettingsCopy.smartModelSelectionHint)
             .font(.orbitLabel).foregroundStyle(.secondary)
-        Toggle(SettingsCopy.suggestedReplies, isOn: $promptSuggestions)
+        // Only smart model selection reads it, so it shows only while that is on (owner, 2026-11-20).
+        if SessionSettings.shows(.optimizeFor, smartModelSelection: modelRouting) {
+            Group {
+                Picker(SettingsCopy.optimizeFor, selection: $optimizeFor) {
+                    ForEach(OptimizeFor.allCases) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .settingRow("optimizeFor")
+                SettingChangedLineView(key: "optimizeFor")
+            }
+            Text(SettingsCopy.optimizeForHint)
+                .font(.orbitLabel).foregroundStyle(.secondary)
+        }
+        Group {
+            Toggle(SettingsCopy.suggestedReplies, isOn: $promptSuggestions)
+            .settingRow("promptSuggestions")
+            SettingChangedLineView(key: "promptSuggestions")
+        }
         Text(SettingsCopy.suggestedRepliesHint)
             .font(.orbitLabel).foregroundStyle(.secondary)
         // Prompt optimizer (board frame 1): under Suggested replies, off by default; a server
@@ -219,6 +253,8 @@ struct SettingsView: View {
         Group {
             Toggle(PromptOptimizerCopy.title, isOn: $promptOptimizer)
             .accessibilityIdentifier(PromptOptimizerCopy.toggleIdentifier)
+            .settingRow("promptOptimizer")
+            SettingChangedLineView(key: "promptOptimizer")
             Text(PromptOptimizerCopy.hint)
                 .font(.orbitLabel).foregroundStyle(.secondary)
             if PromptOptimizer.unavailable(model.user) {
@@ -227,7 +263,11 @@ struct SettingsView: View {
             }
         }
         .disabled(PromptOptimizer.unavailable(model.user))
-        Toggle(SettingsCopy.sessionRecaps, isOn: $recaps)
+        Group {
+            Toggle(SettingsCopy.sessionRecaps, isOn: $recaps)
+            .settingRow("recaps")
+            SettingChangedLineView(key: "recaps")
+        }
         Text(SettingsCopy.sessionRecapsHint)
             .font(.orbitLabel).foregroundStyle(.secondary)
         Button("Save preferences") {
@@ -241,30 +281,44 @@ struct SettingsView: View {
     // Settings › Translation (board frames 1, 2 and 7): account-wide, written the moment it
     // changes. A server without a DeepSeek key draws it disabled with frame 2's notice.
     Section(TranslationCopy.title) {
-        Toggle(TranslationCopy.translateConversations, isOn: $translation)
-            .accessibilityIdentifier(TranslationCopy.toggleIdentifier)
+        Group {
+            Toggle(TranslationCopy.translateConversations, isOn: $translation)
+                .accessibilityIdentifier(TranslationCopy.toggleIdentifier)
+                .settingRow("translationEnabled")
+            SettingChangedLineView(key: "translationEnabled")
+        }
         Text(TranslationCopy.translateConversationsHint(translationAgentLanguage))
             .font(.orbitLabel).foregroundStyle(.secondary)
         if SessionTranslation.unavailable(model.user) {
             Text(TranslationCopy.unavailable)
                 .font(.orbitLabel).foregroundStyle(.orange)
         }
-        Picker(TranslationCopy.yourLanguage, selection: $translationLanguage) {
-            ForEach(TranslationLanguage.allCases, id: \.self) { Text($0.name).tag($0) }
+        Group {
+            Picker(TranslationCopy.yourLanguage, selection: $translationLanguage) {
+                ForEach(TranslationLanguage.allCases, id: \.self) { Text($0.name).tag($0) }
+            }
+            .accessibilityIdentifier(TranslationCopy.languageIdentifier)
+            .settingRow("translationLanguage")
+            SettingChangedLineView(key: "translationLanguage")
         }
-        .accessibilityIdentifier(TranslationCopy.languageIdentifier)
         Text(TranslationCopy.yourLanguageHint)
             .font(.orbitLabel).foregroundStyle(.secondary)
-        Picker(TranslationCopy.agentsWorkIn, selection: $translationAgentLanguage) {
-            ForEach(TranslationLanguage.allCases, id: \.self) { Text($0.name).tag($0) }
+        Group {
+            Picker(TranslationCopy.agentsWorkIn, selection: $translationAgentLanguage) {
+                ForEach(TranslationLanguage.allCases, id: \.self) { Text($0.name).tag($0) }
+            }
+            .accessibilityIdentifier(TranslationCopy.agentLanguageIdentifier)
+            .settingRow("translationAgentLanguage")
+            SettingChangedLineView(key: "translationAgentLanguage")
         }
-        .accessibilityIdentifier(TranslationCopy.agentLanguageIdentifier)
         Text(TranslationCopy.agentsWorkInHint)
             .font(.orbitLabel).foregroundStyle(.secondary)
         // Only while translation is on (mark A).
         if translation {
             Toggle(TranslationCopy.showBothLanguages, isOn: $bilingual)
                 .accessibilityIdentifier(TranslationCopy.bilingualIdentifier)
+                .settingRow("translationBilingual")
+            SettingChangedLineView(key: "translationBilingual")
         }
         Text(TranslationCopy.bilingualFootnote + " " + TranslationCopy.footnote)
             .font(.orbitLabel).foregroundStyle(.secondary)
@@ -277,7 +331,11 @@ struct SettingsView: View {
     // One switch for the whole account, not one per workspace: the server reads it live on
     // every claim, spawn and call, so turning it off takes the tools away everywhere at once.
     Section("Session orchestration") {
-        Toggle(SettingsCopy.letSessionsOrchestrate, isOn: $orchestration)
+        Group {
+            Toggle(SettingsCopy.letSessionsOrchestrate, isOn: $orchestration)
+            .settingRow("enableOrchestration")
+            SettingChangedLineView(key: "enableOrchestration")
+        }
         Text(SettingsCopy.letSessionsOrchestrateHint)
             .font(.orbitLabel).foregroundStyle(.secondary)
     }
@@ -349,6 +407,12 @@ struct SettingsView: View {
     private func saveModelRouting() {
         guard (model.user?.preferences?.smartModelSelection ?? false) != modelRouting else { return }
         Task { await model.savePreferences(UpdatePreferencesRequest(modelRouting: modelRouting)) }
+    }
+
+    /// And for Optimize For.
+    private func saveOptimizeFor() {
+        guard OptimizeFor(stored: model.user?.preferences?.optimizeFor) != optimizeFor else { return }
+        Task { await model.savePreferences(UpdatePreferencesRequest(optimizeFor: optimizeFor.rawValue)) }
     }
 
     /// And for suggested replies.

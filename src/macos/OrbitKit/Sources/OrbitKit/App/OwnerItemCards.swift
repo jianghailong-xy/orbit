@@ -144,6 +144,8 @@ public enum CoordinatorQuestions {
     public static let yourNote = "Your note"
     /// The card's last row.
     public static let viewDetails = "View details"
+    /// The expanded card's last row, folding it back (board card-ui-polish ③).
+    public static let hideDetails = "Hide details"
 
     /// The records the read carries, as the conversation draws them: each at the moment it ended.
     public struct Receipt: Equatable, Sendable, Identifiable {
@@ -1227,6 +1229,17 @@ public enum ExceptionCards {
     /// field for field (`ProjectProgressStatus.tsx`). The one place the two may differ is the font a
     /// row is drawn in; the rows, their order and every word in them are the same.
     public static func facts(_ row: ProjectOpenItemRow) -> ItemFacts {
+        if let baseline = row.baseline {
+            return .rows(FactBlock(rows: [
+                FactRow(label: "", value: LandingCheckCopy.baselineBody),
+                FactRow(label: LandingCheckCopy.held, value: String(row.heldTaskIds.count)),
+                FactRow(label: LandingCheckCopy.upstream, value: baseline.upstreamSha, mono: true),
+                FactRow(label: LandingCheckCopy.tip, value: baseline.targetSha, mono: true),
+                FactRow(label: LandingCheckCopy.baseline, value: baseline.mergeTreeSha, mono: true),
+                FactRow(label: LandingCheckCopy.label, value: baseline.check.command ?? "", mono: true),
+                FactRow(label: "", value: LandingCheckCopy.resumes),
+            ]))
+        }
         // §4.6 X-E5 draws the claim it is about in three rows (board v4 06 c) instead of the
         // item's sentence: which landing, on which runner and since when, and where the runner had
         // got to. An item an older build opened carries no lease and keeps the sentence it always
@@ -1238,7 +1251,9 @@ public enum ExceptionCards {
         var rows: [FactRow] = []
         if let task = facts.task { rows.append(FactRow(label: taskLabel, value: task.title)) }
         if let targetRef = facts.targetRef {
-            var into = targetRef
+            // The branch by its name: `refs/heads/main` is the server's spelling, not a person's.
+            var into = targetRef.hasPrefix("refs/heads/")
+                ? String(targetRef.dropFirst("refs/heads/".count)) : targetRef
             if let sha = facts.targetSha { into += " at \(String(sha.prefix(7)))" }
             if facts.nothingLanded { into += nothingLanded }
             rows.append(FactRow(label: intoLabel, value: into))
@@ -1669,18 +1684,22 @@ public enum ExceptionCards {
     /// what else would do it, and the ways in and out. Each press carries its own label and its one
     /// line of consequence, both the browser's.
     ///
+    /// `quiet` is a repair task already on the item (board card-ui-polish ①, D1 = A): every door is
+    /// a quiet link and none of them is the reader's next step, so no door carries a consequence line.
+    ///
     /// `Mark as handled` is NOT one of these: see `markable`.
     public static func presses(_ row: ProjectOpenItemRow,
-                               mergeCard: String? = nil) -> [CardPress] {
+                               mergeCard: String? = nil,
+                               quiet: Bool = false) -> [CardPress] {
         let actions = drawn(row, mergeCard: mergeCard)
         let leading = leadingDoors(row, actions)
         let primary = leading.first
         let secondary = leading.dropFirst().first
         return (leading + actions.filter { !leading.contains($0) }).map { action in
             CardPress(action: action,
-                      tier: action == primary ? .primary : action == secondary ? .secondary : .link,
+                      tier: quiet ? .link : action == primary ? .primary : action == secondary ? .secondary : .link,
                       label: actionLabel(row, action) ?? action.rawValue,
-                      consequence: actionConsequence(row, action))
+                      consequence: quiet ? "" : actionConsequence(row, action))
         }
     }
 
@@ -1858,6 +1877,7 @@ public enum ExceptionCards {
     /// `escalationHeading`, verbatim. Nil for an item that was the owner's from the start, which is
     /// every other kind this card draws and says so in its own title.
     public static func heading(_ row: ProjectOpenItemRow, now: Date = Date()) -> String? {
+        if row.baseline != nil { return LandingCheckCopy.title(row.facts?.targetRef?.replacingOccurrences(of: "refs/heads/", with: "") ?? "the project branch") }
         // §4.6 X-E5 (revision 23): the item is escalated at birth, so `waitedBeforeEscalation`
         // would only ever say "1s". Its heading is the fact it is about — how long the claim has
         // been silent, counted from the last report the runner made and the moment the clock opened
@@ -1909,6 +1929,33 @@ public enum ExceptionCards {
     public static func requiredAction(_ row: ProjectOpenItemRow) -> String {
         if let said = row.requiredAction { return said }
         return row.detailLine.isEmpty ? requiredActionFallback : row.detailLine
+    }
+
+    // MARK: - a live repair task (board card-ui-polish ①)
+
+    /// The tag an item wears while a repair task filed for it is still live — the browser's
+    /// `FIXING_TAG`, in the same tone the Handling tag has.
+    public static let fixingTag = "Fixing"
+    /// The one line that replaces the server's sentence and the handled-by sentences: the task and
+    /// where its title goes, with nothing for the reader to do under it.
+    public static let beingFixedIn = "Being fixed in"
+    public static let fixingNothingForYou = "In progress · nothing for you to do unless it fails."
+
+    /// The repair tasks still working on an item: any whose state is not DONE or CANCELLED — the
+    /// server's own test (`openItemRequiredAction`'s `hasLiveFix`), so the card and the sentence it
+    /// replaces agree.
+    public static func liveRepairs(_ row: ProjectOpenItemRow) -> [OpenItemFixTask] {
+        (row.handledBy ?? []).filter { $0.state != "DONE" && $0.state != "CANCELLED" }
+    }
+
+    public static func fixing(_ row: ProjectOpenItemRow) -> Bool {
+        !liveRepairs(row).isEmpty
+    }
+
+    /// Where a repair task's title leads: the app's own `orbit-task:` door, or nil for an id that
+    /// names no task — the title is then drawn as plain words rather than as a link that goes nowhere.
+    public static func repairLink(_ task: OpenItemFixTask) -> URL? {
+        link(task.taskId, scheme: "orbit-task")
     }
 
     /// What the card says about the tasks filed as this item's fixes (§4.7): one sentence per task,
@@ -2092,7 +2139,9 @@ extension ExceptionCards {
         "Its runner is offline. Ask again comes back here as soon as it is."
     public static let coordinatorEndedSentence = "Its conversation was completed."
     public static let noCoordinatorSentence = "This project isn’t coordinated."
-    public static let handedOverSentence = "it handed this to you on purpose."
+    public static let handedOverSentence = "It handed this to you on purpose."
+    /// The browser's `HANDOVER_NOTE_CAPTION`: the caption over the coordinator's hand-over note.
+    public static let handoverNoteCaption = "Why the coordinator handed it over"
     /// The browser's `CLOSES_BY_ITSELF`: the green line, in place of the old "After a fix" row.
     public static let closesByItselfLine =
         "Closes by itself once this work lands — push a fix to the task branch and you’re done."
@@ -2136,7 +2185,8 @@ extension ExceptionCards {
 
     /// The kinds the card draws once they are the owner's by escalation, a hand-over, an ended or
     /// missing coordinator. A failed chain's 3rd failure and a silent landing claim keep cards of
-    /// their own.
+    /// their own, and so does a baseline item (`row.baseline`): it is about the project branch with
+    /// main, not one task's branch, so its heading, facts, held tasks and resume line are the card.
     static let whoFixesKinds: Set<ProjectOpenItemKind> = [
         .integrationConflict, .integrationCheckFailed, .integrationError, .taskFailed, .deliveryReview,
     ]
@@ -2144,6 +2194,7 @@ extension ExceptionCards {
     /// Whether this item is drawn as the "Who fixes it?" card — the browser's `whoFixesIt`.
     public static func whoFixesIt(_ row: ProjectOpenItemRow) -> Bool {
         row.assignee == .owner
+            && row.baseline == nil
             && whoFixesKinds.contains(row.kind)
             && row.assigneeReason != .chainLimit
             && row.assigneeReason != .defaultReason
@@ -2222,9 +2273,8 @@ extension ExceptionCards {
         case .escalated:
             return "Reachable. It had this for \(waitedBeforeEscalation(row)) and didn’t get to it."
         case .handedOver:
-            let note = row.handoverNote?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            if !note.isEmpty { return "“\(note)” — \(handedOverSentence)" }
-            return handedOverSentence.prefix(1).uppercased() + String(handedOverSentence.dropFirst())
+            // The coordinator's own note is drawn under its caption (`shownHandoverNote`), not in here.
+            return handedOverSentence
         }
     }
 

@@ -32,6 +32,9 @@ import {
   type TaskCompletionCriterionValue,
 } from './task-completion-criterion';
 import { readPendingEvidenceJudgments } from './pending-evidence-judgments';
+import { EVIDENCE_FIELDS, queueOwnerCardTranslation, translatedInto } from '../sessions/card-translation';
+import { translationLanguages, type TranslationLanguages } from '../sessions/turn-translation';
+import { ownerWordsForAgent } from '../sessions/reply-translation';
 import {
   RESTART_TASK_ACTION,
   unansweredUndecidableRevision,
@@ -55,6 +58,10 @@ import { EvidenceReviewService } from './evidence-review.service';
 import { ownerDecidesInTheRun, ownerEvidenceCard } from './evidence-review';
 import { ownerConfirmationPrincipalRefusal, type OwnerConfirmationPrincipal } from './task-owner-confirmation';
 import { CompletionInputRouter } from '../projects/completion-input-router.service';
+import {
+  resolveUndecidedEvidenceOnDecision,
+  resolveUndecidedEvidenceOnRevision,
+} from '../projects/evidence-undecided';
 import { completionEvidenceRevisedFact } from '../projects/completion-input';
 import { refreshProjectDone } from '../projects/project-done-request';
 import { deliveredIdentityAtDone, enqueueForDoneTask } from '../projects/project-integration-job';
@@ -82,6 +89,9 @@ export interface DecideCompletionEvidence {
   evidenceRevision: string;
   decision: EvidenceDecisionValue;
   note?: string;
+  /** The account owner's press only: deliver a SEND_BACK's note untranslated, the "Send as written" of a note
+   *  refused 422 TRANSLATION_FAILED. */
+  sendAsWritten?: boolean;
 }
 
 export interface CompletionCriterionSnapshotInput {
@@ -449,6 +459,8 @@ export class TaskCompletionEvidenceService {
           },
           include: evidenceInclude,
         });
+        // A newer revision supersedes the owner's item about an older one that waited undecided (1110).
+        await resolveUndecidedEvidenceOnRevision(tx, taskId, evidence.id);
         // Each cited file, and each file of a cited bundle, names the newest revision citing it. That is what says it
         // is evidence at all (`FilesService.readableInSession`) and which revision's fate is its own (§2.8). A file with a
         // tombstone is no longer one a version can hold, so it is refused whole, with these rows locked: the sweep waits
@@ -492,6 +504,12 @@ export class TaskCompletionEvidenceService {
     }, loggedRetry(this.logger, 'taskCompletionEvidence.submit'));
 
     await this.reprojectProjectStatus(ownerId, committed.projectId);
+    // Translated for the owner in the background, when their translation is on (decision 1A).
+    void translationLanguages(this.prisma, ownerId)
+      .then((langs) => {
+        if (langs) this.queueTranslation(ownerId, taskId, committed.evidenceRow.revision.toString(), langs);
+      })
+      .catch((error: Error) => this.logger.warn(`translating evidence of task ${taskId} failed to queue: ${error.message}`));
 
     try {
       // The revision itself is the trigger. A source Session may still be RUNNING or
@@ -717,6 +735,7 @@ export class TaskCompletionEvidenceService {
         },
         include: evidenceInclude,
       });
+      await resolveUndecidedEvidenceOnRevision(tx, taskId, evidence.id);
       await settleCitedFileExpiry(tx, { ownerId, taskId });
       await tx.taskCompletionEvidenceIdempotency.create({
         data: { id: randomUUID(), taskId, idempotencyKey, evidenceId: evidence.id },
@@ -800,6 +819,13 @@ export class TaskCompletionEvidenceService {
     const note = decisionNote(input.decision, input.note);
     const ownerInTheApp = principal !== undefined
       && ownerConfirmationPrincipalRefusal(ownerId, principal) === null;
+    // Settings › Translation, before anything is written: a SEND_BACK the account owner typed in the app reaches the
+    // run in the agent language, or the decision is refused whole (422 TRANSLATION_FAILED). A session's note is an
+    // agent's own words and goes as written. The row keeps the owner's words; the translation rides the turn.
+    const langs = input.decision === 'SEND_BACK' && actor.type === CreatorType.USER && ownerInTheApp
+      ? await translationLanguages(this.prisma, ownerId)
+      : null;
+    const noteForAgent = await ownerWordsForAgent(note, langs, input.sendAsWritten);
 
     const committed = await withTransactionRetry(this.prisma, async (tx) => {
       // The same Task mutex submission takes. It is what makes check 1 a compare-and-set: a
@@ -908,12 +934,17 @@ export class TaskCompletionEvidenceService {
           evidenceDigest: latest.evidenceDigest,
           decision: input.decision,
           note,
+          ...(noteForAgent && langs ? { translatedNote: noteForAgent.text, translationLang: langs.owner } : {}),
           decidedByType: actor.type,
           decidedById: actor.id,
           decidingSessionId: decidingSession.id,
         },
         include: decisionInclude,
       });
+      // The owner's item about this revision waiting undecided ends with the decision (1110).
+      await resolveUndecidedEvidenceOnDecision(tx, taskId, latest.id, actor.type === CreatorType.USER
+        ? { resolvedBy: 'USER', resolvedByUserId: actor.id }
+        : { resolvedBy: 'COORDINATOR', resolvedBySessionId: decidingSession.id });
       // A send-back starts the 30 days of what this version cites, and a CONFIRM holds it until the task goes (§2.8).
       await settleCitedFileExpiry(tx, { ownerId, taskId });
 
@@ -1062,7 +1093,53 @@ export class TaskCompletionEvidenceService {
       select: { id: true, taskId: true },
     });
     if (!session) throw new NotFoundException('deciding session not found');
-    return readPendingEvidenceJudgments(this.prisma, ownerId, session);
+    const queue = await readPendingEvidenceJudgments(this.prisma, ownerId, session);
+    await this.translateUntranslated(ownerId, [...queue.pending, ...queue.waitingOnYou]).catch((error: Error) =>
+      this.logger.warn(`queueing evidence translations failed: ${error.message}`));
+    return queue;
+  }
+
+  /**
+   * Queue the translation of one evidence revision's claim and gaps into the owner's language
+   * (sessions/card-translation.ts): stored in `translation` while no decision answers the revision, then the task
+   * and the conversation its card is drawn in are announced, as a new revision is. Returns at once.
+   */
+  queueTranslation(ownerId: string, taskId: string, revision: string, langs: TranslationLanguages): boolean {
+    const where = { taskId, ownerId, revision: BigInt(revision), decisions: { none: {} } };
+    return queueOwnerCardTranslation({
+      key: `evidence:${taskId}:${revision}`,
+      read: async () => {
+        const row = await this.prisma.taskCompletionEvidence.findFirst({
+          where,
+          select: { evidence: true, translation: true },
+        });
+        return row ? { source: row.evidence, fields: EVIDENCE_FIELDS, translation: row.translation } : null;
+      },
+      write: async (translation) => (await this.prisma.taskCompletionEvidence.updateMany({
+        where,
+        data: { translation: translation as unknown as Prisma.InputJsonValue },
+      })).count > 0,
+      published: () => {
+        this.realtime?.publishForUser(ownerId, RunEventType.TASK_CHANGED, { taskIds: [taskId], resync: false });
+        void this.nudgeCoordinatorRow(ownerId, taskId);
+      },
+    }, langs);
+  }
+
+  /**
+   * Decision 1A: an unanswered revision on this reader's card with no translation in the owner's current language
+   * gets one queued as it is read; one already tried in this language, failed or not, is left.
+   */
+  private async translateUntranslated(
+    ownerId: string,
+    rows: ReadonlyArray<{ taskId: string; evidenceRevision: string; translation?: unknown }>,
+  ): Promise<void> {
+    if (rows.length === 0) return;
+    const langs = await translationLanguages(this.prisma, ownerId);
+    if (!langs) return;
+    for (const row of rows) {
+      if (!translatedInto(row.translation, langs)) this.queueTranslation(ownerId, row.taskId, row.evidenceRevision, langs);
+    }
   }
 
   /**

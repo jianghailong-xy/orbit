@@ -42,7 +42,7 @@ export function routesNamingSession(
  *  did not have). */
 export const ENGINE_SESSION_USER_ROUTES = routesNamingSession(TENANT_ISOLATION_CASES, '/sessions');
 
-/** The runner door: 32 routes today (naming, a turn suggestion, the Cursor key check, a job's alert and the two file doors included). */
+/** Runner routes that act on an engine session. */
 export const ENGINE_SESSION_RUNNER_ROUTES = routesNamingSession(RUNNER_ISOLATION_CASES, '/runner/sessions');
 
 /**
@@ -110,6 +110,11 @@ export const ENGINE_SESSION_GUARD_SITES: Readonly<Record<string, EngineSessionGu
     file: 'sessions/sessions.service.ts',
     snippet: '// Stopping a turn — or stopping one and replacing it — is an engine door (§2.9 LS6).',
     note: 'POST /interrupt and the runner interruption door',
+  },
+  'SessionsService.stopBackgroundJob': {
+    file: 'sessions/sessions.service.ts',
+    snippet: "// Stopping a job is an engine door (§2.9 LS6): the platform's landing container runs no bg_run job.\n    assertEngineSessionRow(session);",
+    note: 'POST /background/jobs/:jobId/stop',
   },
   'SessionsService.getSendable': {
     file: 'sessions/sessions.service.ts',
@@ -181,6 +186,11 @@ export const ENGINE_SESSION_GUARD_SITES: Readonly<Record<string, EngineSessionGu
     file: 'sessions/sessions.service.ts',
     snippet: "assertEngineSessionRow(session);\n      if (session.isolationStatus !== 'worktree') {",
     note: 'POST /adopt-branch',
+  },
+  'SessionsService.dismissMergeFailure': {
+    file: 'sessions/sessions.service.ts',
+    snippet: "assertEngineSessionRow(session);\n    const { count } =",
+    note: 'POST /merge-failure/dismiss',
   },
   'SessionsService.decideApproval': {
     file: 'sessions/sessions.service.ts',
@@ -343,6 +353,7 @@ export const ENGINE_SESSION_DOORS: Readonly<Record<string, string>> = {
   'PATCH /sessions/:id/settings': 'SessionsService.updateSettings',
   'POST /sessions/:id/restart': 'SessionsService.restart',
   'POST /sessions/:id/interrupt': 'SessionsService.interrupt',
+  'POST /sessions/:id/background/jobs/:jobId/stop': 'SessionsService.stopBackgroundJob',
   'POST /sessions/:id/end': 'SessionsService.getSendable',
   'POST /sessions/:id/merge': 'SessionsService.mergeToMain',
   'POST /sessions/:id/merge-repair': 'SessionsService.startMergeRepair',
@@ -350,6 +361,7 @@ export const ENGINE_SESSION_DOORS: Readonly<Record<string, string>> = {
   'POST /sessions/:id/commit': 'SessionsService.commitWorktree',
   'POST /sessions/:id/checkout/discard': 'SessionsService.discardCheckout',
   'POST /sessions/:id/adopt-branch': 'SessionsService.adoptWorktreeBranch',
+  'POST /sessions/:id/merge-failure/dismiss': 'SessionsService.dismissMergeFailure',
   'POST /sessions/:id/retry-message': 'AutoRetryService.resendRetryMessage',
   'POST /sessions/:id/auto-retry': 'SessionsService.armAutoRetry',
   'DELETE /sessions/:id/auto-retry': 'SessionsService.cancelAutoRetry',
@@ -386,6 +398,8 @@ export const ENGINE_SESSION_DOORS: Readonly<Record<string, string>> = {
   'POST /runner/sessions/:id/scheduled-wakeup': 'RunnerApiController.assertSessionOwnership',
   'POST /runner/sessions/:id/naming': 'RunnerApiController.assertSessionOwnership',
   'POST /runner/sessions/:id/subagents': 'RunnerSubagentsController.assertParentOfRunner',
+  'POST /runner/sessions/:id/workflows': 'RunnerSubagentsController.assertParentOfRunner',
+  'PATCH /runner/sessions/:id/workflows/:workflowRunId': 'RunnerSubagentsController.assertParentOfRunner',
   'POST /runner/sessions/:id/cursor-key-check': 'ProvidersService.recordCursorKeyCheck',
   'POST /runner/sessions/:id/turns/:turnId/suggestion': 'RunnerApiController.assertSessionOwnership',
   'POST /runner/sessions/:id/turn-complete': 'RunnerApiController.assertEngineSessionById',
@@ -401,6 +415,7 @@ export const ENGINE_SESSION_DOORS: Readonly<Record<string, string>> = {
   'POST /runner/sessions/:id/merge-receipts': 'MergeReceiptService.record',
   'POST /runner/sessions/:id/end': 'SessionsService.getSendable',
   'POST /runner/sessions/:id/complete-session': 'SessionsService.transitionEnd',
+  'POST /runner/sessions/:id/move': 'SessionsService.move',
   'DELETE /runner/sessions/:id': 'SessionsService.transitionEnd',
   'POST /runner/sessions/:id/archive': 'SessionsService.transitionEnd',
 };

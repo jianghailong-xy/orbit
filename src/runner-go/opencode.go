@@ -488,6 +488,7 @@ func runOpenCodeTurn(ctx context.Context, job *ClaimedSession, execDir, scratchD
 		"ORBIT_ALLOW_ORCHESTRATION":       orchestrationEnv(job.AllowOrchestration),
 		envWatches:                        watchesEnv(job.WatchesDisabled),
 		envWiki:                           wikiEnv(job.WikiDisabled),
+		envWorkflows:                      workflowsEnv(job.WorkflowsDisabled),
 		envScheduleRun:                    scheduleRunEnv(job.ScheduleRun),
 		envOrchestrationToken:             job.OrchestrationToken,
 		envMCPPermissionPrompt:            "0",
@@ -821,7 +822,9 @@ func openCodeError(v interface{}) (message string, providerAuth bool) {
 			message = string(raw)
 		}
 	}
-	return message, name == "ProviderAuthError"
+	// OpenCode can report a rejected API key as an APIError with the 401 only in data.
+	statusCode, _ := data["statusCode"].(float64)
+	return message, name == "ProviderAuthError" || (name == "APIError" && statusCode == 401)
 }
 
 func newOpenCodeAgentName() (string, error) {
@@ -921,6 +924,7 @@ func openCodeConfigContent(job *ClaimedSession, scratchDir, agentName string, es
 			"ORBIT_ALLOW_ORCHESTRATION": orchestrationEnv(job.AllowOrchestration),
 			envWatches:                  watchesEnv(job.WatchesDisabled),
 			envWiki:                     wikiEnv(job.WikiDisabled),
+			envWorkflows:                workflowsEnv(job.WorkflowsDisabled),
 			envScheduleRun:              scheduleRunEnv(job.ScheduleRun),
 			envOrchestrationToken:       job.OrchestrationToken,
 			envMCPPermissionPrompt:      "0",
@@ -934,6 +938,10 @@ func openCodeConfigContent(job *ClaimedSession, scratchDir, agentName string, es
 		// A SubAgent's `orbit mcp` neither offers nor serves delegate (subagentChildJob).
 		if runID := strings.TrimSpace(job.Agent.Env[envSubagentRunID]); runID != "" {
 			environment[envSubagentRunID] = runID
+		}
+		// A remote SubAgent's mode, which its Plan gate reads (sessionPermissionMode).
+		if mode := strings.TrimSpace(job.Agent.Env[envSubagentRemoteMode]); mode != "" {
+			environment[envSubagentRemoteMode] = mode
 		}
 		// Where `orbit mcp` reaches the runner to start a background job the runner
 		// owns. Written here as well as into the OpenCode process env, because this

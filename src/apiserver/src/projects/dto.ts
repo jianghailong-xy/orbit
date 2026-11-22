@@ -233,6 +233,12 @@ export class UpdateProjectIntegrationDto implements IntegrationSettings {
   /** Landing check overrides; null falls back to the merge check setting. */
   @IsOptional() @IsString() landingCheckCommand?: string | null;
   @IsOptional() @IsInt() @Min(1) landingCheckTimeoutSeconds?: number | null;
+  /** `NONE`: run no project landing check, only each task's own acceptance (§12.15 P-C1). Writing
+   *  `landingCheckCommand` lifts it. */
+  @IsOptional() @IsIn(['NONE']) landingCheck?: 'NONE';
+  /** Why the project's coordinator writes the landing check without a card (§12.15 P-R1): required there,
+   *  at most 280 characters, ignored on any other write. */
+  @IsOptional() @IsString() landingCheckReason?: string;
   /**
    * How long one of this project's exception items may wait on its coordinator before it becomes
    * yours (§4.6). Five minutes to a week, the same range the column's CHECK holds; two hours unless
@@ -352,7 +358,8 @@ export class UpdateProjectDto {
    *  marks the project non-code, false clears it. Written by the account owner, or by the
    *  conversation the project is coordinated from (`project_update`); any other session is refused.
    *  Each write records who and when (`nonCodeSetBy`, `nonCodeSetBySessionId`, `nonCodeSetAt`).
-   *  A marked project reads no landing; whether its criteria are met is unchanged. */
+   *  Since revision 42 (§12.15 P-M3) the write is accepted and stored but has no effect: Orbit
+   *  measures whether work lands from its commits, and nothing reads the mark. */
   @IsSent() @IsBoolean() nonCode?: boolean;
   /** An optional short reason for the mark, sent with `nonCode` and stored with it (migration
    *  0555): every `nonCode` write replaces it, null or blank when none is given. Refused 400 sent
@@ -529,6 +536,8 @@ export class DoneProjectDto implements ProjectDoneRequestBody {
 export class DeclineDoneRequestDto implements ProjectDoneRequestDeclineBody {
   @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
   @IsString() @MinLength(1) @MaxLength(MAX_DONE_REQUEST_DECLINE_NOTE) note!: string;
+  /** Deliver the owner's words untranslated: the "Send as written" of an answer refused 422 TRANSLATION_FAILED. */
+  @IsOptional() @IsBoolean() sendAsWritten?: boolean;
 }
 
 /**
@@ -547,7 +556,7 @@ export class StartProjectDto implements StartProjectRequestBody {
   })
   criteriaDigest!: string;
   /** Where finished tasks land: the project's own branch first, or directly into main. */
-  @IsIn(INTEGRATION_LINES) line!: IntegrationLine;
+  @IsOptional() @IsIn(INTEGRATION_LINES) line?: IntegrationLine;
   /** The project branch as a full ref, with `PROJECT_BRANCH` only; `refs/heads/project/<project
    *  id>` unless named. */
   @IsOptional()
@@ -587,7 +596,8 @@ export class StartProjectDto implements StartProjectRequestBody {
  * and so may Automatic, which suggests it on.
  */
 export class RequestProjectStartDto implements ProjectStartRequestBody {
-  @IsIn(INTEGRATION_LINES) line!: IntegrationLine;
+  /** Left out, the project starts with no line: it is decided when the first task with commits is done. */
+  @IsOptional() @IsIn(INTEGRATION_LINES) line?: IntegrationLine;
   @IsOptional()
   @Matches(BRANCH_REF, {
     message: 'CODEBASE_AUTHORITY_INVALID: projectBranchName must be a full branch ref such as refs/heads/project/next',
@@ -776,6 +786,8 @@ export class ConfirmPromotionDto {
 export class AnswerOpenItemDto {
   @IsOptional() @IsInt() @Min(0) @Max(3) option?: number;
   @IsOptional() @IsString() @MaxLength(4_000) text?: string;
+  /** Deliver the owner's words untranslated: the "Send as written" of an answer refused 422 TRANSLATION_FAILED. */
+  @IsOptional() @IsBoolean() sendAsWritten?: boolean;
 }
 
 /**

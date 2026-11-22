@@ -32,6 +32,8 @@ object ManagementFixture {
     val queries = CopyOnWriteArrayList<String>()
     /** The account's switch for smart model selection as users/me's preferences carry it; null leaves it out, as before it was written. */
     @Volatile var modelRouting: Boolean? = null
+    /** The account-wide Optimize For as users/me's preferences carry it; null leaves it out, which reads as "balance". */
+    @Volatile var optimizeFor: String? = null
     /** The account's Session recaps switch as users/me's preferences carry it; null leaves it out, as before it was written. */
     @Volatile var recaps: Boolean? = null
     /** GET access-tokens' tokens, newest first; DELETE access-tokens/:id revokes one (REVOKED, by its USER). */
@@ -59,6 +61,8 @@ object ManagementFixture {
     @Volatile var task = "{}"
     /** GET tasks/:id/evidence for [TASK]: its evidence versions, oldest first. */
     @Volatile var evidence = "[]"
+    /** GET projects/P1: the task's project, as the page reads it for an exempt task's settingChanges. */
+    @Volatile var project = "{}"
     @Volatile var workspaceName = "Alpha"
     @Volatile var runnerAlias = "Old alias"
     @Volatile var runnerCapacity = 2
@@ -78,6 +82,8 @@ object ManagementFixture {
     /** Whether each runner is online; offline, it last checked in yesterday. */
     @Volatile var runnerOnline = true
     @Volatile var runnerTwoOnline = true
+    const val CLOUD_RUNNER = "0198f3a2-7777-7000-8000-000000000008"
+    val reorderRequests = CopyOnWriteArrayList<List<String>>()
     @Volatile var runnerOrder = listOf(RUNNER, RUNNER_TWO)
     @Volatile var removedRunners = emptySet<String>()
     /** The runner's selfUpdate report's state; null is a runner too old to report one. */
@@ -101,6 +107,10 @@ object ManagementFixture {
      * …/default/restore answers ok, or fails while [restoreFails]. Each that goes through runs [onAccountWrite] with its path, as what
      * GET runners serves then changes. */
     @Volatile var defaultRemoveRefusal: String? = null
+    /** POST runners/:id/accounts/:engine/:account/set-default answers [setDefaultAnswer] after [onAccountWrite] — as the server's next GET
+     * runners carries the swap in `claudeAccountSwap` — or, given [setDefaultRefusal], refuses 409 in those words. */
+    @Volatile var setDefaultRefusal: String? = null
+    @Volatile var setDefaultAnswer = """{"account":null,"status":"pending","message":null,"waitingOn":[],"foreignProcesses":[]}"""
     @Volatile var restoreFails = false
     @Volatile var onAccountWrite: (String) -> Unit = {}
     /** POST runners/:id/engines/:engine/update-warning/dismiss runs this with the engine, then answers `{engine, latest}` with [dismissLatest],
@@ -148,14 +158,14 @@ object ManagementFixture {
         wikiLinks = false
         viewerRole = "ADMIN"; viewerCreates = true; membersCanAdd = false; membersCanAddAccounts = false; loginState = "ACTIVE"
         secondRunner = false; runnerOnline = true; runnerTwoOnline = true; runnerOrder = listOf(RUNNER, RUNNER_TWO); removedRunners = emptySet(); selfUpdate = null
-        runnerEngines = "[]"; runnerExtra = ""; runnerTwoExtra = ""; loginRelay = """{"status":null}"""; loginStarted = """{"status":"pending"}"""
+        reorderRequests.clear(); runnerEngines = "[]"; runnerExtra = ""; runnerTwoExtra = ""; loginRelay = """{"status":null}"""; loginStarted = """{"status":"pending"}"""
         codeSent = """{"status":"done"}"""; onCode = {}; loginBodies.clear(); pauseBodies.clear(); installBodies.clear(); onRegionCheck = {}
-        defaultRemoveRefusal = null; restoreFails = false; onAccountWrite = {}; onEngineDismiss = {}; dismissLatest = "0.169.0"
+        defaultRemoveRefusal = null; setDefaultRefusal = null; restoreFails = false; onAccountWrite = {}; onEngineDismiss = {}; dismissLatest = "0.169.0"
         agentFixBodies.clear(); onAgentFix = {}; agentFixRefusal = null
         deviceStatus = "PENDING"; deviceConflict = false; deviceLastSeen = null; deviceGate = null
         drop = CompletableDeferred(); opened = 0
-        queries.clear(); modelRouting = null; recaps = null; accessTokens = emptyList(); accessTokensFail = false; terminals = emptyList(); terminalRequests = emptyList(); terminalRefusal = null; TerminalRequestStore.reset(); providerCatalog = "[]"; providersMine = "[]"
-        balances.clear(); balanceGates.clear(); task = "{}"; evidence = "[]"
+        queries.clear(); modelRouting = null; optimizeFor = null; recaps = null; accessTokens = emptyList(); accessTokensFail = false; terminals = emptyList(); terminalRequests = emptyList(); terminalRefusal = null; TerminalRequestStore.reset(); providerCatalog = "[]"; providersMine = "[]"
+        balances.clear(); balanceGates.clear(); task = "{}"; evidence = "[]"; project = "{}"
         keyCheckAnswer = """{"ok":true,"keyCheck":"VALID","message":"Cursor accepted this key.","recorded":true,"keyCheckState":"VALID","keyCheckedAt":null}"""
         onKeyCheck = {}
         subagentTiers = """{"providers":[]}"""; subagentBlocked = null; workspaceExtra = ""; bodies.clear()
@@ -195,10 +205,16 @@ object ManagementFixture {
 
     private val now get() = Instant.now()
     private fun user() = """{"id":"$ME","email":"a13@example.test","name":"Fixture","role":"MEMBER","avatarUpdatedAt":null,
-        "preferences":{"theme":"$theme","defaultPermissionMode":"auto","enableOrchestration":true${modelRouting?.let { ",\"modelRouting\":$it" }.orEmpty()}${recaps?.let { ",\"recaps\":$it" }.orEmpty()}${subagentBlocked?.let { ",\"subagentBlockedProviders\":" + JsonArray(it.map(::JsonPrimitive)) }.orEmpty()}}}"""
+        "preferences":{"theme":"$theme","defaultPermissionMode":"auto","enableOrchestration":true${modelRouting?.let { ",\"modelRouting\":$it" }.orEmpty()}${optimizeFor?.let { ",\"optimizeFor\":\"$it\"" }.orEmpty()}${recaps?.let { ",\"recaps\":$it" }.orEmpty()}${subagentBlocked?.let { ",\"subagentBlockedProviders\":" + JsonArray(it.map(::JsonPrimitive)) }.orEmpty()}}}"""
     private fun workspace() = """{"id":"$WORKSPACE","name":"$workspaceName","runnerId":"$RUNNER","enabled":true,"workDir":"/srv/alpha",
-        "lastProvider":"claude","effort":"","modelRouting":false,"env":{},"position":0,"createdAt":"2026-09-01T00:00:00Z"$workspaceExtra}"""
-    private fun runners() = runnerOrder.filter { (it == RUNNER || secondRunner) && it !in removedRunners }.joinToString(",", "[", "]") { if (it == RUNNER) runner() else runnerTwo() }
+        "lastProvider":"claude","effort":"","env":{},"position":0,"createdAt":"2026-09-01T00:00:00Z"$workspaceExtra}"""
+    private fun runners() = runnerOrder.filter { (it == RUNNER || secondRunner) && it !in removedRunners }.joinToString(",", "[", "]") {
+        when (it) {
+            RUNNER -> runner()
+            CLOUD_RUNNER -> """{"id":"$CLOUD_RUNNER","name":"orbit-cloud","managed":true,"online":true,"lastHeartbeatAt":"$now"}"""
+            else -> runnerTwo()
+        }
+    }
     private fun runnerTwo() = """{"id":"$RUNNER_TWO","name":"spare","displayName":"Spare box","hostname":"spare-01","version":"0.1.200","online":$runnerTwoOnline,
         "status":"${if (runnerTwoOnline) "ONLINE" else "OFFLINE"}","lastHeartbeatAt":"${if (runnerTwoOnline) now else now.minusSeconds(86_400)}","maxConcurrent":1,
         "activeSessions":0,"runsAsRoot":false,"minFreeDiskMb":null,"engines":[],"enrolledAt":"2026-09-02T00:00:00Z"$runnerTwoExtra}"""
@@ -257,6 +273,7 @@ object ManagementFixture {
             "users/me/preferences" -> {
                 body()["theme"]?.let { theme = it.jsonPrimitive.content }
                 body()["modelRouting"]?.let { modelRouting = it.jsonPrimitive.boolean }
+                body()["optimizeFor"]?.let { optimizeFor = it.jsonPrimitive.content }
                 body()["recaps"]?.let { recaps = it.jsonPrimitive.boolean }
                 body()["subagentBlockedProviders"]?.let { list -> subagentBlocked = list.jsonArray.map { it.jsonPrimitive.content } }
                 ok(user())
@@ -269,6 +286,7 @@ object ManagementFixture {
             "providers/subagent-tiers" -> ok(subagentTiers)
             "tasks/$TASK" -> ok(task)
             "tasks/$TASK/evidence" -> ok(evidence)
+            "projects/P1" -> ok(project)
             "users/me/avatar" -> fail(404, "no avatar")
             "workspaces" -> ok("[${workspace()}]")
             "workspaces/$WORKSPACE" -> { if (api.method == HttpMethod.PATCH) workspaceName = body()["name"]!!.jsonPrimitive.content; ok(workspace()) }
@@ -276,7 +294,12 @@ object ManagementFixture {
             "auth/capabilities" -> capabilities?.let(::ok) ?: fail(404, "Cannot GET /api/auth/capabilities")
             "managed-runner" -> ok(managedStatus)
             "managed-runner/ensure" -> { ensureBodies += body(); ensureRefusal?.let { fail(403, it) } ?: run { onEnsure(); ok(ensured) } }
-            "runners/reorder" -> { runnerOrder = body()["ids"]!!.jsonArray.map { it.jsonPrimitive.content }; ok(runners()) }
+            "runners/reorder" -> {
+                val ids = body()["ids"]!!.jsonArray.map { it.jsonPrimitive.content }
+                reorderRequests += ids
+                runnerOrder = ids + runnerOrder.filterNot { it in ids }
+                ok(runners())
+            }
             "runners/$RUNNER_TWO" -> if (api.method == HttpMethod.DELETE) { removedRunners = removedRunners + RUNNER_TWO; ok("{}") } else ok(runnerTwo())
             "runners/$RUNNER" -> {
                 if (api.method == HttpMethod.DELETE) { removedRunners = removedRunners + RUNNER; return@HttpTransport ok("{}") }
@@ -320,6 +343,8 @@ object ManagementFixture {
                 path.startsWith("runners/$RUNNER/engines/") && path.endsWith("/update-warning/dismiss") && api.method == HttpMethod.POST ->
                     path.split('/')[3].let { engine -> onEngineDismiss(engine); ok("""{"engine":"$engine","latest":"$dismissLatest"}""") }
                 path.startsWith("runners/$RUNNER/accounts/") && path.endsWith("/pause") -> { pauseBodies += "$path ${api.body!!.decodeToString()}"; ok("{}") }
+                path.startsWith("runners/$RUNNER/accounts/") && path.endsWith("/set-default") && api.method == HttpMethod.POST ->
+                    setDefaultRefusal?.let { fail(409, it) } ?: run { onAccountWrite(path); ok(setDefaultAnswer) }
                 path.startsWith("runners/$RUNNER/accounts/") && path.endsWith("/default/restore") ->
                     if (restoreFails) fail(404, "runner not found") else { onAccountWrite(path); ok("""{"ok":true}""") }
                 path.startsWith("runners/$RUNNER/accounts/") && path.endsWith("/default") && api.method == HttpMethod.DELETE ->

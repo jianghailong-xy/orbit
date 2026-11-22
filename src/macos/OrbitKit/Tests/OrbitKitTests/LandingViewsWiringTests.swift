@@ -26,6 +26,13 @@ final class LandingViewsWiringTests: XCTestCase {
             .joined(separator: "\n")
     }
 
+    func testCheckOutputRendersLogTextWithoutApplyingTimelineCopy() throws {
+        let page = code(try appSource("Views/LandingSessionPageView.swift"))
+        let log = try XCTUnwrap(page.components(separatedBy: "private struct LandingCheckLogView: View {").last)
+        XCTAssertTrue(log.contains("Text(entry.text)"), "Check output remains verbatim log text")
+        XCTAssertFalse(log.contains("LandingCheckCopy.timelineText(entry)"), "Log entries are not timeline entries")
+    }
+
     /// A LANDING session draws its project's Landings window, focused on it, in the console frame —
     /// the same `.console` node, so pushes, `orbit-session:` links and `/sessions/<id>` still reach it
     /// (owner 2026-10-27, contract §2.9 LS6 revision 28).
@@ -42,7 +49,7 @@ final class LandingViewsWiringTests: XCTestCase {
         for part in ["struct LandingStatusCardView: View {",
                      "struct LandingTimelineView: View {",
                      "struct LandingLineView: View {",
-                     "LandingSteps.steps(section.entries, kind: section.kind)",
+                     "LandingSteps.steps(LandingCheckCopy.scopedEntries(section.entries, landing: landing, jobID: section.jobId), kind: section.kind)",
                      "LandingPageCopy.attemptCard(landing, now: now, updatedAt: readAt,",
                      "LandingPageCopy.outcomeCard(landing, promotion: promotion)",
                      "LandingPageCopy.gates(landing, now: now, updatedAt: readAt, failed: readFailed)",
@@ -223,8 +230,10 @@ final class LandingViewsWiringTests: XCTestCase {
         let card = code(try appSource("Views/ProjectLandingCard.swift"))
         XCTAssertTrue(card.contains("if card.timedOut, let detail = card.detail {"),
                       "a timed-out card says where its runner stopped")
-        XCTAssertTrue(card.contains("} else if !card.timedOut && (several || !card.mergeJob) {"),
-                      "the task-landing sentence is not said under a lone merge job")
+        XCTAssertTrue(card.contains("} else if !card.timedOut && (several || !card.mergeJob) && actionError == nil {"),
+                      "the task-landing sentence is not said under a lone merge job, nor above a refusal")
+        XCTAssertTrue(card.contains("} else if !card.timedOut && !several && !card.mergeJob, let note = card.skipNote {"),
+                      "a skip under way is said in the sentence's place")
         XCTAssertTrue(card.contains("Text(ProjectPage.landingNothingToDo)"))
     }
 
@@ -237,7 +246,7 @@ final class LandingViewsWiringTests: XCTestCase {
         XCTAssertTrue(card.contains("LandingEntryLink(entry: LandingPageCopy.landingEntry(job.landingSessionId))"))
         XCTAssertTrue(card.contains("if let lead {"), "one job's way in is the card's foot")
         XCTAssertTrue(card.contains("LandingEntryLink(entry: LandingPageCopy.landingEntry(lead.landingSessionId))"))
-        XCTAssertTrue(card.contains("if card.retryJobId != nil || onOpenJobs != nil || lead != nil {"))
+        XCTAssertTrue(card.contains("if card.retryJobId != nil || card.skipTaskId != nil || onOpenJobs != nil || lead != nil {"))
 
         let sheet = code(try appSource("Views/ProjectLandingJobsSheet.swift"))
         XCTAssertTrue(sheet.contains("LandingEntryLink(entry: LandingPageCopy.landingEntry(row.landingSessionId))"),
@@ -274,8 +283,10 @@ final class LandingViewsWiringTests: XCTestCase {
     /// reread while the attempt is live.
     func testTheTaskPageDrawsItsLandingSection() throws {
         let tasks = code(try appSource("Views/TasksView.swift"))
-        XCTAssertTrue(tasks.contains("if let landing = TaskLandingLogic.status(task.integration, taskStatus: task.status.rawValue) {"))
-        XCTAssertTrue(tasks.contains("private func landingSection(_ status: TaskLandingStatus) -> some View {"))
+        XCTAssertTrue(tasks.contains("let landing = TaskLandingLogic.status(task.integration, taskStatus: task.status.rawValue)"))
+        // Drawn for a landing, or for a task exempt from the landing check (board 04 b, D5).
+        XCTAssertTrue(tasks.contains("private func landingSection(_ landing: TaskLandingStatus?, exemption: TaskLandingCheckExemption?,"))
+        XCTAssertTrue(tasks.contains("TaskExemptionRow(exemption: exemption"))
         XCTAssertTrue(tasks.contains("LandingEntryLink(entry: .link(sessionID), compact: false)"))
         XCTAssertTrue(tasks.contains("TaskLandingCopy.refetchInterval(tasks.detail?.integration)"))
         XCTAssertTrue(tasks.contains("private func pollLanding() async {"))
@@ -323,7 +334,9 @@ final class LandingViewsWiringTests: XCTestCase {
     /// READY is a pass, a merge to main's is not).
     func testTheTimelinesMarksReadTheLinesFields() throws {
         let page = code(try appSource("Views/LandingSessionPageView.swift"))
-        XCTAssertTrue(page.contains("} else if entry.kind == \"CHECK_FINISHED\", let check = entry.check, !entry.checkPassed {"))
+        // The inline output's rule reads `checkPassed` and the exempt task's skip
+        // (`LandingCheckSkip.showsInlineOutput`, held in TaskLandingExemptTests).
+        XCTAssertTrue(page.contains("} else if LandingCheckSkip.showsInlineOutput(entry), let check = entry.check {"))
         XCTAssertTrue(page.contains("let mark = glyph(entry, jobKind: section.kind, entries: entries, index: index)"),
                       "a line's mark is read with its section's job kind")
         XCTAssertTrue(page.contains("return entry.succeeded(in: jobKind) ? Mark(glyph: \"✓\", color: .green) : Mark(glyph: \"✗\", color: .red)"))

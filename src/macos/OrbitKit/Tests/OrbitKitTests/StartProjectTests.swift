@@ -314,7 +314,8 @@ final class StartProjectTests: XCTestCase {
         XCTAssertEqual(branch["mergeCheckCommand"] as? String, "npm test")
         XCTAssertEqual(branch["requestId"] as? String, "item-1")
         XCTAssertEqual(Set(branch.keys), ["criteriaDigest", "line", "projectBranchName", "automatic",
-                                          "maxConcurrentTasks", "mergeCheckCommand", "requestId"])
+                                          "maxConcurrentTasks", "mergeCheckCommand", "requestId",
+                                          "landingCheckCommand", "landingCheckTimeoutSeconds", "mergeCheckTimeoutSeconds"])
 
         draft = StartSettingsDraft(line: .main, automatic: true, maxConcurrentTasks: 3,
                                    mergeCheckCommand: "   ")
@@ -444,10 +445,9 @@ final class StartProjectTests: XCTestCase {
         XCTAssertEqual(started.differsFromRequest, [.line, .automatic],
                        "in card order, and nothing this build has no words for")
         XCTAssertEqual(AcceptanceConfirmations.receiptLine(record),
-                       "You started the project on 1 criteria at seal c2b4e16c4b59")
-        XCTAssertEqual(AcceptanceConfirmations.receiptLine(record, changed: "1 new"),
-                       AcceptanceConfirmations.confirmedLine(record),
-                       "what a re-confirmation changed is not said on a start")
+                       "You started the project on 1 criteria")
+        // The seal it locked is the fold's, where it is proof rather than the headline.
+        XCTAssertEqual(AcceptanceConfirmations.receiptSeal(record), "Seal c2b4e16c4b59")
 
         // One that started nothing — or one a server older than this build wrote — says confirmed.
         let plain = try JSONDecoder().decode(RecordedStandardSetConfirmation.self, from: Data("""
@@ -455,10 +455,18 @@ final class StartProjectTests: XCTestCase {
          "confirmedById":"u1","startedWith":null}
         """.utf8))
         XCTAssertNil(plain.startedWith)
-        XCTAssertEqual(AcceptanceConfirmations.receiptLine(plain, changed: "1 new, 1 stricter"),
-                       "You confirmed 0 criteria at seal c2b4e16c4b59 — 1 new, 1 stricter")
-        XCTAssertEqual(AcceptanceConfirmations.receiptLine(plain),
-                       "You confirmed 0 criteria at seal c2b4e16c4b59")
+        XCTAssertEqual(AcceptanceConfirmations.receiptLine(plain), "You confirmed 0 criteria")
+        // …and one whose record keeps what it changed says it, off the record itself rather than
+        // off any window's memory of the press.
+        let moved = try JSONDecoder().decode(RecordedStandardSetConfirmation.self, from: Data("""
+        {"criteriaDigest":"\(Self.seal)","criteriaMaterial":[],"confirmedAt":"2026-09-29T10:13:00.000Z",
+         "confirmedById":"u1","startedWith":null,
+         "changes":{"added":[{"key":"k2","ordinal":2,"text":"B"}],"stricter":[],
+                    "revised":[{"key":"k1","ordinal":1,"text":"A rewritten"}],"removed":[],
+                    "unchanged":[3,4]}}
+        """.utf8))
+        XCTAssertEqual(AcceptanceConfirmations.receiptLine(moved),
+                       "You confirmed 0 criteria · 1 new, 1 changed, 2 unchanged")
         // Settings this build cannot read are a record without them, never a read that fails.
         let odd = try JSONDecoder().decode(RecordedStandardSetConfirmation.self, from: Data("""
         {"criteriaDigest":"\(Self.seal)","criteriaMaterial":[],"confirmedAt":"2026-09-29T10:13:00.000Z",

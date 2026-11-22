@@ -674,6 +674,45 @@ public enum SessionProviderChoices {
                        on: current(engine: engine, provider: provider, in: providers, sources: sources))
     }
 
+    /// Where a new session goes when nobody picked in this draft and what the workspace last ran on
+    /// (`remembered`, from `currentEngine`) can't run on this machine (board
+    /// docs/mocks/new-session-usable-default): that engine's own landing, when one of its credentials
+    /// can run (`landingOf`'s order), else the first of the hero's engines that has one and whose CLI the
+    /// runner reports installed. Nil while the remembered pick can run, and when nothing here can: the
+    /// hero then says why and the send is held. Only a known reason moves it. Mirrors web's
+    /// `draftFallback`.
+    public static func draftFallback(remembered: EngineChoice, engines: [EngineChoice],
+                                     engineHealth: [RunnerEngineHealth]?) -> EnginePick? {
+        guard remembered.unavailable != nil else { return nil }
+        let runs = { (choice: EngineChoice) in choice.provider != nil && choice.unavailable == nil }
+        let installed = { (choice: EngineChoice) in
+            engineHealth?.contains { $0.engine == choice.slug && $0.installed == true } == true
+        }
+        let to = engines.first { $0.slug == remembered.slug && runs($0) }
+            ?? engines.first { $0.slug != remembered.slug && runs($0) && installed($0) }
+        guard let to, let provider = to.provider else { return nil }
+        return EnginePick(engine: to.slug, provider: provider.slug)
+    }
+
+    /// What the new-session hero says when the draft moved off what the workspace last ran on (board
+    /// docs/mocks/new-session-usable-default ② ③), without its trailing link: which credential it uses
+    /// now under the same engine, or which engine could not run. Nil when it did not move. Web's
+    /// `NewSessionProviderHero` says the same words.
+    public static func fallbackLine(from: EngineChoice, to: EngineChoice, machine: String?) -> String? {
+        guard let was = from.provider, let reason = was.unavailable, let now = to.provider else { return nil }
+        let place = was.fixEngine == nil ? "" : machine.map { " on \($0)" } ?? " on this runner"
+        guard from.slug == to.slug else { return "\(from.label) can’t run\(place): \(reason)" }
+        let why = was.regionBlocked && machine != nil
+            ? ClaudeRegionCopy.anthropicUnavailableOn(machine: machine!)
+            : "\(providerName(on: from.slug, was)): \(reason)\(place)"
+        return "Using \(providerName(on: to.slug, now)) · \(why)"
+    }
+
+    /// Board ④: nothing on the machine runs the draft. Web's `NewSessionProviderHero` says the same.
+    public static func cantRunLine(machine: String?) -> String {
+        "Nothing on \(machine ?? "this runner") can run a session yet."
+    }
+
     /// The engine a session runs on, as the composer's model menu titles itself: the CLI's own product
     /// name (`Claude Code`, not `Claude`, because a session on a DeepSeek key writes DeepSeek's models
     /// while Claude Code executes them). Read off the session's own engine, which no pick in the menu

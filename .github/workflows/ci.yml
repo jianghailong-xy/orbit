@@ -89,6 +89,10 @@ jobs:
       # The two-stage release: built and pushed on one host, pulled and brought up on another, which builds nothing.
       - name: Test the two-stage release's build and deploy stages
         run: npm run test:upgrade-two-stage
+      # docker-compose.yml holds only the services and lines the account owner approved; a new one turns this red until it
+      # is approved and pinned in the test. It reads its pinned commits from the full history checked out above.
+      - name: Test the deployment topology (docker-compose.yml)
+        run: npm run test:compose-topology
       # The backup sidecar's rsync --delete is what can wipe the only off-host copy of the archive. Real rsync over local
       # paths, in seconds; it fails, rather than skips, where rsync is not installed.
       - name: Test what the backup sidecar does to its off-host target
@@ -112,8 +116,10 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26
+      # `npm audit --audit-level=high`, except for the advisories scripts/npm-audit-allowlist.json names, each
+      # until it expires or its vulnerable range moves (a patch was published): scripts/npm-audit-gate.mjs.
       - name: Audit dependencies
-        run: npm audit --audit-level=high
+        run: node scripts/npm-audit-gate.mjs
 
   # Every `*.pg.spec` in the apiserver, against a real PostgreSQL, with a skip counted red.
   #
@@ -229,8 +235,10 @@ jobs:
     runs-on: ubuntu-latest
     # Above a passing run rather than at it: a budget is not a second chance. On 2026-11-03 a shard's
     # specs took up to 43 minutes and the checkout before them up to 16, which cut three runs of five
-    # at the 45 this used to say, with no spec failed.
-    timeout-minutes: 60
+    # at the 45 this used to say, with no spec failed. On 2026-11-21 the other two shards finished in
+    # 48 and 43 minutes while the third was cut at 60:00 with no spec failing, so 90 restores the
+    # margin above a passing run this budget has to keep.
+    timeout-minutes: 90
     strategy:
       # Every shard runs to its own end even when a sibling fails: the other two shards' reds are
       # what the next push is fixed against, and cancelling them would hide exactly that.

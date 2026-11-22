@@ -20,6 +20,7 @@ vi.mock('../api', async (importOriginal) => {
     api: vi.fn(),
     getSessionEventPage: vi.fn(),
     listQueuedTurns: vi.fn(),
+    sendTurn: vi.fn(),
     retryTurnTranslation: vi.fn(),
     sendTurnAsWritten: vi.fn(),
     retryReplyTranslation: vi.fn(),
@@ -30,7 +31,7 @@ vi.mock('../lib/transcriptStore', () => ({
   saveTranscript: async () => {},
 }));
 
-const { api, getSessionEventPage, listQueuedTurns, retryTurnTranslation, sendTurnAsWritten } = await import('../api');
+const { api, getSessionEventPage, listQueuedTurns, sendTurn, retryTurnTranslation, sendTurnAsWritten } = await import('../api');
 const apiMock = vi.mocked(api);
 const seedMock = vi.mocked(getSessionEventPage);
 const { WorkspaceView } = await import('./WorkspaceView');
@@ -70,6 +71,7 @@ const PARKED = {
 let session: Record<string, unknown> = PARKED;
 let preferences: Record<string, unknown> = {};
 let translationAvailable = true;
+let translationUnavailableUntil: string | null = null;
 let queue: unknown[] = [];
 let locations: string[] = [];
 let stored: Record<string, string> = {};
@@ -133,10 +135,12 @@ beforeEach(() => {
   session = PARKED;
   preferences = { translationEnabled: true, translationLanguage: 'zh-Hans' };
   translationAvailable = true;
+  translationUnavailableUntil = null;
   queue = [];
   locations = [];
   vi.mocked(listQueuedTurns).mockReset();
   vi.mocked(listQueuedTurns).mockImplementation(async () => queue as never);
+  vi.mocked(sendTurn).mockReset();
   vi.mocked(retryTurnTranslation).mockReset();
   vi.mocked(retryTurnTranslation).mockImplementation(async (_s, turnId) => ({
     turnId,
@@ -164,7 +168,7 @@ beforeEach(() => {
   apiMock.mockImplementation((path: string) => {
     const reply = (value: unknown) => Promise.resolve(value) as Promise<never>;
     if (path === '/users/me') {
-      return reply({ id: 'user-1', email: 'reader@example.com', name: 'Reader', createdAt: '2026-01-01T00:00:00Z', preferences, translationAvailable });
+      return reply({ id: 'user-1', email: 'reader@example.com', name: 'Reader', createdAt: '2026-01-01T00:00:00Z', preferences, translationAvailable, translationUnavailableUntil });
     }
     if (path === '/workspaces') {
       return reply([{ id: WORKSPACE_PUBLIC, name: 'orbit', runnerId: RUNNER_ID, createdAt: '2026-01-01T00:00:00Z', lastProvider: 'claude' }]);
@@ -287,6 +291,38 @@ describe('the composer tag (6A)', () => {
   });
 });
 
+describe('the composer tag while translation is unavailable (policy board frame 6)', () => {
+  it('reads "Chinese → English · unavailable, messages will wait" in the warning style until the instant passes', async () => {
+    translationUnavailableUntil = new Date(Date.now() + 2_000).toISOString();
+    await mount();
+    await waitForUi(() => expect(tag()?.textContent).toBe('Chinese → English · unavailable, messages will wait'));
+    expect(tag()!.classList.contains('is-unavailable')).toBe(true);
+    // Nothing is announced when the 60 s simply run out: the tag goes back by itself, with no refetch.
+    const reads = apiMock.mock.calls.filter(([path]) => path === '/users/me').length;
+    await waitForUi(() => expect(tag()?.textContent).toBe('Chinese → English'));
+    expect(tag()!.classList.contains('is-unavailable')).toBe(false);
+    expect(apiMock.mock.calls.filter(([path]) => path === '/users/me').length).toBe(reads);
+  });
+
+  it('reads the ordinary tag once the instant has passed, or with none', async () => {
+    translationUnavailableUntil = new Date(Date.now() - 1_000).toISOString();
+    await mount();
+    await waitForUi(() => expect(tag()?.textContent).toBe('Chinese → English'));
+    expect(tag()!.classList.contains('is-unavailable')).toBe(false);
+  });
+
+  it('follows /users/me when it is read again (translation.status_changed)', async () => {
+    await mount();
+    await waitForUi(() => expect(tag()?.textContent).toBe('Chinese → English'));
+    translationUnavailableUntil = new Date(Date.now() + 60_000).toISOString();
+    await act(async () => client!.invalidateQueries({ queryKey: ['user', 'me'], exact: true }));
+    await waitForUi(() => expect(tag()?.textContent).toBe('Chinese → English · unavailable, messages will wait'));
+    translationUnavailableUntil = null;
+    await act(async () => client!.invalidateQueries({ queryKey: ['user', 'me'], exact: true }));
+    await waitForUi(() => expect(tag()?.textContent).toBe('Chinese → English'));
+  });
+});
+
 describe('the tray, for a translated message', () => {
   it('says what the reader wrote, not the English delivered', async () => {
     session = { ...PARKED, status: 'RUNNING', runStatus: 'RUNNING', runState: 'RUNNING', engineTurnActive: true };
@@ -310,14 +346,56 @@ describe('the tray, for a translated message', () => {
 });
 
 describe('a message held for its translation', () => {
-  const held = (state: 'TRANSLATING' | 'FAILED') => ({
-    turnId: 'turn-held',
+  const held = (state: 'TRANSLATING' | 'FAILED', why: { failureReason?: string; httpStatus?: number } = {}, turnId = 'turn-held') => ({
+    turnId,
     kind: 'message',
     placement: 'queued',
     content: HELD_TEXT,
     createdAt: '2026-10-08T03:06:00Z',
     attachments: [],
-    translation: { state, from: 'zh-Hans', original: HELD_TEXT },
+    translation: { state, from: 'zh-Hans', original: HELD_TEXT, ...why },
+  });
+
+  // docs/ux/translation-failure-policy.html, frame 7, B column; the generic line without a reason.
+  const REASONS: Array<[{ failureReason?: string; httpStatus?: number }, string]> = [
+    [{ failureReason: 'TIMEOUT' }, "The translator didn't answer in time, so it wasn't sent"],
+    [{ failureReason: 'NETWORK' }, "The translator was unreachable, so it wasn't sent"],
+    [{ failureReason: 'HTTP', httpStatus: 429 }, "The translator was unreachable, so it wasn't sent"],
+    [{ failureReason: 'HTTP', httpStatus: 503 }, "The translator was unreachable, so it wasn't sent"],
+    [{ failureReason: 'HTTP', httpStatus: 401 }, "The translator refused the message, so it wasn't sent"],
+    [{ failureReason: 'TRUNCATED' }, "Too long to translate, so it wasn't sent"],
+    [{ failureReason: 'MANGLED' }, "The translation came back damaged, so it wasn't sent"],
+    [{ failureReason: 'EMPTY' }, "The translation came back damaged, so it wasn't sent"],
+    [{ failureReason: 'UNAVAILABLE' }, "Translation is unavailable right now, so it wasn't sent"],
+    [{}, "Couldn't translate, so it wasn't sent"],
+    [{ failureReason: 'NO_KEY' }, "Couldn't translate, so it wasn't sent"],
+  ];
+
+  it('failed with a reason: the reason-specific sentence, then Retry and Send as written; the generic one without', async () => {
+    queue = REASONS.map(([why], i) => held('FAILED', why, `turn-held-${i}`));
+    await mount();
+    const feet = () => [...mounted().querySelectorAll('.chat-translate-foot.is-error')].map((n) => n.textContent);
+    await waitForUi(() => expect(feet()).toHaveLength(REASONS.length));
+    expect(feet()).toEqual(REASONS.map(([, sentence]) => `${sentence}·Retry·Send as written`));
+    // Each line's row grows below the bubble when it wraps (indexCss.failureFoot.test.ts).
+    for (const foot of mounted().querySelectorAll('.chat-translate-foot.is-error')) {
+      expect(foot.parentElement?.classList.contains('has-failure-foot')).toBe(true);
+    }
+  });
+
+  it('failed TIMEOUT: Retry and Send as written still call the A1 doors for that turn', async () => {
+    queue = [held('FAILED', { failureReason: 'TIMEOUT' })];
+    await mount();
+    await waitForUi(() =>
+      expect(mounted().querySelector('.chat-translate-foot.is-error')?.textContent).toBe(
+        "The translator didn't answer in time, so it wasn't sent·Retry·Send as written",
+      ),
+    );
+    const action = (label: string) =>
+      [...mounted().querySelectorAll<HTMLButtonElement>('.chat-translate-foot button')].find((b) => b.textContent === label)!;
+    await act(async () => action('Retry').click());
+    await waitForUi(() => expect(vi.mocked(retryTurnTranslation)).toHaveBeenCalledWith(SESSION_PUBLIC, 'turn-held'));
+    await waitForUi(() => expect(mounted().querySelector('.chat-translate-chip')?.textContent).toBe('Translating…'));
   });
 
   it('is drawn in the conversation with the "Translating…" chip, not in the tray', async () => {
@@ -328,6 +406,55 @@ describe('a message held for its translation', () => {
     expect(bubble.textContent).toContain(HELD_TEXT);
     expect(bubble.textContent).not.toContain('Queued for next turn');
     expect(mounted().querySelector('.pending-tray')).toBeNull();
+  });
+
+  it.each([false, true])('clears the chip when the held message becomes the accepted head (opening: %s)', async (opening) => {
+    const row = { ...held('TRANSLATING'), opening };
+    if (opening) seedMock.mockResolvedValue({ events: [], hasMore: false });
+    queue = [row];
+    await mount();
+    await waitForUi(() => expect(mounted().querySelector('.chat-translate-chip')?.textContent).toBe('Translating…'));
+
+    queue = [{ ...row, placement: 'accepted', content: 'Run all the tests again', translation: { ...row.translation, state: 'DONE' } }];
+    await publish([{ seq: 0, type: 'queued_turns_changed' }]);
+
+    await waitForUi(() => {
+      expect(mounted().querySelector('.chat-translate-chip')).toBeNull();
+      expect([...mounted().querySelectorAll('.chat-user:not(.chat-queued)')].at(-1)?.textContent).toContain(HELD_TEXT);
+    });
+  });
+
+  it('keeps a translated follow-up in the tray when the older send response arrives', async () => {
+    session = { ...PARKED, status: 'RUNNING', runStatus: 'RUNNING', runState: 'RUNNING', engineTurnActive: true };
+    const response = Promise.withResolvers<Awaited<ReturnType<typeof sendTurn>>>();
+    vi.mocked(sendTurn).mockReturnValueOnce(response.promise);
+    const row = held('TRANSLATING');
+    await mount();
+    await waitForUi(() => expect(box()).toBeTruthy());
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(box(), HELD_TEXT);
+      box().dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => {
+      box().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', altKey: true, bubbles: true, cancelable: true }));
+    });
+    await waitForUi(() => expect(sendTurn).toHaveBeenCalledOnce());
+
+    queue = [row];
+    await publish([{ seq: 0, type: 'queued_turns_changed' }]);
+    await waitForUi(() => expect(mounted().querySelector('.chat-translate-chip')?.textContent).toBe('Translating…'));
+
+    queue = [{ ...row, content: 'Run all the tests again', translation: { ...row.translation, state: 'DONE' } }];
+    await publish([{ seq: 0, type: 'queued_turns_changed' }]);
+    const trayText = () => mounted().querySelector('.pending-tray-text')?.textContent;
+    await waitForUi(() => expect(trayText()).toBe(HELD_TEXT));
+
+    await act(async () => response.resolve({
+      turnId: row.turnId, seq: 2, kind: 'message', placement: 'queued',
+      translation: { state: 'TRANSLATING', from: 'zh-Hans', original: HELD_TEXT },
+    }));
+    expect(mounted().querySelector('.chat-translate-chip')).toBeNull();
+    expect(trayText()).toBe(HELD_TEXT);
   });
 
   it("failed: Retry and Send as written call the A1 doors for that turn", async () => {

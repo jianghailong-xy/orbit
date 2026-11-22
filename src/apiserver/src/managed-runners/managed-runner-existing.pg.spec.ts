@@ -49,6 +49,7 @@ import {
 } from '@orbit/shared';
 import { Client } from 'pg';
 
+import { isReleasedStatus } from '../common/session-release';
 import { call } from '../auth/pat-test-apiserver';
 import { generateToken, hashPassword, sha256 } from '../common/crypto.util';
 import {
@@ -69,7 +70,7 @@ test('managed runners switched off with existing state: nothing is stopped, dele
   const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
   await sql.connect();
   await verifyCoordinatorPgIdentity(sql);
-  const scratch = mkdtempSync(path.join(tmpdir(), 'orbit-managed-existing-'));
+  const scratch = mkdtempSync(path.join(tmpdir(), 'orbit-cloud-existing-'));
   t.after(async () => {
     await sql.end().catch(() => undefined);
     rmSync(scratch, { recursive: true, force: true });
@@ -94,7 +95,7 @@ test('managed runners switched off with existing state: nothing is stopped, dele
     const token = generateToken(32);
     const runnerId = (await sql.query(
       `INSERT INTO runner (id, name, owner_id, token_hash, status, last_heartbeat_at, max_concurrent)
-         VALUES (gen_random_uuid(), 'orbit-managed', $1, $2, 'ONLINE', now() - interval '10 seconds', 2) RETURNING id`,
+         VALUES (gen_random_uuid(), 'Orbit Cloud', $1, $2, 'ONLINE', now() - interval '10 seconds', 2) RETURNING id`,
       [ownerId, sha256(token)],
     )).rows[0].id as string;
     const workspaceId = (await sql.query(
@@ -104,7 +105,7 @@ test('managed runners switched off with existing state: nothing is stopped, dele
     )).rows[0].id as string;
     const columns = {
       id: randomUUID(), owner_id: ownerId, runner_id: runnerId, default_workspace_id: workspaceId,
-      cluster_key: 'previous-cluster', namespace: 'orbit-managed-test', pvc_name: managedPvcName(runnerId),
+      cluster_key: 'previous-cluster', namespace: 'orbit-cloud-test', pvc_name: managedPvcName(runnerId),
       resource_profile_id: 'invited-test-v1', last_request_key: 'ensure-before-the-switch', updated_at: new Date(),
       ...mapping,
     } as Record<string, unknown>;
@@ -174,7 +175,11 @@ test('managed runners switched off with existing state: nothing is stopped, dele
     const columns: Record<string, unknown> = {
       id, owner_id: of.ownerId, creator_id: of.ownerId, workspace_id: of.workspaceId, assigned_runner_id: of.runnerId,
       title: 'earlier work', prompt: 'the opening prompt', provider: 'claude', provider_builtin: true, status, num_turns: 1,
-      runtime_session_id: randomUUID(), ...extra,
+      runtime_session_id: randomUUID(),
+      ...(isReleasedStatus(status) ? {
+        finished_at: new Date(), 
+      } : {}),
+      ...extra,
     };
     const names = Object.keys(columns);
     await sql.query(

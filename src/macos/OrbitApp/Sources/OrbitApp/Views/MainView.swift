@@ -205,8 +205,16 @@ struct SectionSidebar: View {
             ForEach(sections) { row in
                 sectionRow(row)
             }
-            Section(AppSection.agents.title, isExpanded: $workspacesExpanded) {
+            Section(isExpanded: $workspacesExpanded) {
                 workspaceRows(shortcutIndex: commandHeld ? shortcutIndex : [:])
+            } header: {
+                // New workspace on any machine (docs/mocks/new-workspace-form/02-apple-entry, owner A): the + at the
+                // header's trailing edge, a menu of machines or the one machine's page.
+                HStack(spacing: 6) {
+                    Text(AppSection.agents.title)
+                    Spacer(minLength: 6)
+                    NewWorkspaceButton(machines: model.agents?.newWorkspaceMachines ?? []) { model.openNewWorkspace($0) }
+                }
             }
 
             // A group, not a row: an account with no open project draws no Projects group at all.
@@ -373,7 +381,7 @@ struct SectionSidebar: View {
                 .contextMenu { workspaceMenu(agent) }
                 .tag(SidebarSelection.agent(agent.id))
             case .setUp(let machine):
-                setUpRow(machine)
+                setUpRow(machine, separates: machine.isManaged && (agents?.machinesToSetUp.count ?? 0) > 1)
                     .tag(SidebarSelection.machine(machine.id))
             case .placeholder:
                 Text(emptyWorkspacesText("No workspaces"))
@@ -410,12 +418,18 @@ struct SectionSidebar: View {
 
     /// In the tint, as on the phone's drawer, until it is the row selected: blue on the selection's
     /// blue can't be read, and the list knows what a selected row's text should be.
-    private func setUpRow(_ machine: MachineToSetUp) -> some View {
+    private func setUpRow(_ machine: MachineToSetUp, separates: Bool) -> some View {
         let ink = model.machineDraftRunnerID == machine.id ? AnyShapeStyle(.primary) : AnyShapeStyle(Color.accentColor)
-        return Label {
-            Text(MachineSetupCopy.setupTitle(machine: machine.name)).foregroundStyle(ink)
-        } icon: {
-            Image(systemName: "folder.badge.plus").foregroundStyle(ink)
+        return VStack(alignment: .leading, spacing: 4) {
+            Label {
+                Text(MachineSetupCopy.setupTitle(machine: machine.name))
+                    .fontWeight(machine.isManaged ? .semibold : nil)
+                    .foregroundStyle(ink)
+            } icon: {
+                Image(systemName: machine.isManaged ? "cloud" : "folder.badge.plus")
+                    .foregroundStyle(machine.isManaged ? AnyShapeStyle(Color.accentColor) : ink)
+            }
+            if separates { Divider() }
         }
     }
 
@@ -674,7 +688,7 @@ struct SectionDetail: View {
             // The detail is the page's own bottom panel.
             ContentUnavailableView(section.title, systemImage: section.systemImage)
             #else
-            // The right-hand panel: a row's detail, a draft, or a run's session (web boards 01 ②④, 02 ⑤).
+            // The right-hand panel shows a row's detail or a draft.
             ScheduledMacDetail()
             #endif
         case .following:

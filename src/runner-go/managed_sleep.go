@@ -83,6 +83,13 @@ func (m *managedSleep) report(counts ManagedWorkload) ManagedWorkload {
 	return counts
 }
 
+// hasAccepted says whether a sleep request has been accepted and not yet withdrawn.
+func (m *managedSleep) hasAccepted() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.accepted != "" || m.confirmed
+}
+
 // answer acts on a heartbeat's answer. stop: the control plane confirmed the acceptance this process
 // sent, so it stops claiming, drains and exits. beat: an acceptance was just made and should reach
 // the control plane at once rather than at the next tick. A request withdrawn, or one met while busy,

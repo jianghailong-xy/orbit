@@ -33,10 +33,14 @@ public enum FoldedBand {
         return hasMarks ? .marks : .placeholder
     }
 
-    /// The Background processes tray: what still runs, or, once nothing does, how many there are.
-    public static func processes(_ procs: [BackgroundProc]) -> String {
-        let running = procs.filter { $0.status == "running" }.count
-        return running > 0 ? "\(running) running" : "\(procs.count)"
+    /// The Background row (`BackgroundRowRule`): what still runs, or, once nothing does, how many
+    /// it still shows. Nil — no mark — when the rule shows no row.
+    public static func processes(_ procs: [BackgroundProc], clearedAt: String?,
+                                 sessionLive: Bool) -> String? {
+        let shown = BackgroundRowRule.shown(BackgroundRowRule.inputs(procs), clearedAt: clearedAt,
+                                            sessionLive: sessionLive)
+        if !shown.running.isEmpty { return "\(shown.running.count) running" }
+        return shown.ended.isEmpty ? nil : "\(shown.ended.count)"
     }
 
     /// The Tasks card's sentence cut to one part: what failed, the one part drawn red, or else how

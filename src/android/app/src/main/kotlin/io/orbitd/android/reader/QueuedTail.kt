@@ -7,7 +7,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.cards.BackgroundWakeLine
-import io.orbitd.android.cards.SubagentFinishedLine
+import io.orbitd.android.core.cards.BgJob
 import io.orbitd.android.core.cards.SubagentFinished
 import io.orbitd.android.cards.LocalAnsweredQuestions
 import io.orbitd.android.cards.OwnerAnswerLineView
@@ -44,8 +44,11 @@ internal data class QueuedTurn(val turnId: String?, val steer: Boolean, val even
     val wake: JsonObject?, val watch: JsonObject? = null, val shell: Boolean = false, val createdAt: String? = null,
     val readersOwn: Boolean = false, val delivery: String? = null, val deliveryCode: String? = null, val deliveryReason: String? = null,
     val translation: Translation.Turn? = null,
-    /** A SubAgent's end the queue will deliver: its block, read as the line it will be (web `listedWithItsBlock`). */
-    val subagent: SubagentFinished? = null) {
+    /** A SubAgent's end the queue will deliver: its block, which each run's card says is waiting (web `queuedSubagentWake`). */
+    val subagent: SubagentFinished? = null,
+    /** The bg_run jobs whose news the queue will deliver, which each job's card says is waiting (web `queuedJobWake`); [wake] then holds
+     * only the wakeups that came due beside them. */
+    val jobIds: List<String> = emptyList()) {
     /** The reader's own words still on their way — queued for the next turn, or a steer no runner has taken yet — which the tray above
      * the composer holds instead of the tail (docs/mocks/steer-tray; web `inPendingTray`, OrbitKit `PendingTray.holds`). */
     val inTray: Boolean get() = readersOwn && delivery == null && translation?.held != true
@@ -55,6 +58,37 @@ internal data class QueuedTurn(val turnId: String?, val steer: Boolean, val even
     val heldByUpdate: Boolean get() = !steer && delivery == null
     val key: String get() = "queued:" + (turnId?.let { ObjectId.canonical(it) ?: it } ?: event.fields.text("text").hashCode().toString())
 }
+
+/** Whether the tail draws a queued turn: not a SubAgent's end or a job's news alone, each of which waits on its card instead (web
+ * `queuedSubagentWake().alone`, `queuedJobWake().alone`). A wakeup that came due beside them keeps its line. */
+internal fun QueuedTurn.inTail(): Boolean = (subagent == null && jobIds.isEmpty()) || wake != null
+
+/**
+ * The background jobs' wakes still on the queue, by job id: each job's card says the agent has not read it yet, and its `Don't send` does
+ * what the tail's Cancel did (board E1, web `jobQueuedWakes`) — null while [cancelEnabled] is false. A steer is on its way into the running
+ * turn and cannot be withdrawn: it has no entry.
+ */
+internal fun jobQueuedWakes(queued: List<QueuedTurn>, cancelEnabled: Boolean, cancel: (String) -> Unit): Map<String, (() -> Unit)?> =
+    buildMap {
+        queued.forEach { turn ->
+            if (turn.steer || turn.jobIds.isEmpty() || !turn.cancelable) return@forEach
+            val dontSend: (() -> Unit)? = if (cancelEnabled) ({ cancel(turn.turnId!!) }) else null
+            turn.jobIds.forEach { put(it, dontSend) }
+        }
+    }
+
+/**
+ * The SubAgent end turns still on the queue, by run id: each run's card says the agent has not read it yet, and its `Don't send` does what
+ * the tail's Cancel did — null where the turn cannot be taken off the queue (a steer, or while [cancelEnabled] is false).
+ */
+internal fun subagentQueuedWakes(queued: List<QueuedTurn>, cancelEnabled: Boolean, cancel: (String) -> Unit): Map<String, (() -> Unit)?> =
+    buildMap {
+        queued.forEach { turn ->
+            val wake = turn.subagent ?: return@forEach
+            val dontSend: (() -> Unit)? = if (turn.cancelable && cancelEnabled) ({ cancel(turn.turnId!!) }) else null
+            wake.runs.forEach { put(it.runId, dontSend) }
+        }
+    }
 
 /** The queue as the composer's list holds it: every row still waiting, in the listing's order, except one whose echo the window
  * already holds (delivered between the echo and the queue's own re-read) and a receipt or an accepted head. The transcript's tail
@@ -96,14 +130,17 @@ private fun listedTurn(row: JsonObject): QueuedTurn {
     val content = row.text("content").orEmpty()
     val event = RunEvent("user", 0, echoPayload(row), turnId)
     val cards = transcriptCards(event)
-    val wake = io.orbitd.android.core.cards.queuedWake(content)
+    val news = io.orbitd.android.core.cards.queuedWake(content)
+    // A job's news draws nothing in the tail (its card says it is waiting): only a wakeup coming due beside it keeps its line.
+    val wake = BgJob.wakeupsOnly(news)
+    val jobIds = news?.let(BgJob::jobIds).orEmpty()
     val subagent = SubagentFinished.parse(content)
     val orbits = row["authoredByOrbit"] == JsonPrimitive(true) || SteerDelivery.cardKeys.any { row[it] != null && row[it] != JsonNull }
     return QueuedTurn(turnId, row.text("kind") == "steer", event, cards, wake, cards.firstOrNull { it.key.endsWith(":watch") }?.source,
         shell = row.text("kind") == "shell", createdAt = row.text("createdAt"),
-        readersOwn = turnId != null && !orbits && cards.isEmpty() && wake == null && subagent == null,
+        readersOwn = turnId != null && !orbits && cards.isEmpty() && news == null && subagent == null,
         delivery = row.text("delivery"), deliveryCode = row.text("deliveryCode"), deliveryReason = row.text("deliveryReason"),
-        translation = Translation.turn(row["translation"]), subagent = subagent)
+        translation = Translation.turn(row["translation"]), subagent = subagent, jobIds = jobIds)
 }
 
 /**
@@ -166,20 +203,17 @@ internal fun QueuedTurnRow(turn: QueuedTurn, open: (String) -> Unit, cancelEnabl
     }
     Column(Modifier.fillMaxWidth().testTag(turn.key), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         when {
-            // A SubAgent's end, before any job's news the same block carries (which then says how the turn goes, once).
-            turn.subagent != null -> {
-                SubagentFinishedLine(turn.subagent, null, steerState = if (turn.steer && turn.wake == null) "Sending…" else null,
-                    queued = turn.cancelable, onCancelQueued = withdraw.takeIf { turn.wake == null })
-                turn.wake?.let { BackgroundWakeLine(it, null, steerState = if (turn.steer) "Sending…" else null, queued = turn.cancelable,
-                    onCancelQueued = withdraw) }
-            }
+            // A SubAgent's end and a job's news wait on their cards instead ([subagentQueuedWakes], [jobQueuedWakes]): the tail draws
+            // only a wakeup written beside them.
+            turn.subagent != null || turn.jobIds.isNotEmpty() -> turn.wake?.let { BackgroundWakeLine(it, null, steerState = if (turn.steer) "Sending…" else null,
+                queued = turn.cancelable, onCancelQueued = withdraw) }
             turn.wake != null -> BackgroundWakeLine(turn.wake, null, steerState = if (turn.steer) "Sending…" else null, queued = turn.cancelable,
                 onCancelQueued = withdraw)
             // A watch's wake waiting for a runner (A08-14): its line, dashed, and the queue's own line, which asks before it withdraws.
             turn.watch != null -> WatchWakeLine(turn.watch, null, open, queued = turn.cancelable, onWithdraw = withdraw)
             handover != null -> {
                 turn.cards.forEach { card ->
-                    if (card === handover) OwnerAnswerLineView(card, turn.event, queued = turn.delivery == null) else TranscriptCardView(card, open, turn.event)
+                    if (card === handover) OwnerAnswerLineView(card, turn.event, queued = turn.delivery == null, openLink = open) else TranscriptCardView(card, open, turn.event)
                 }
                 foot()
             }

@@ -104,6 +104,9 @@ struct ConsoleView: View {
             isRunning: { id in console.state.background.contains { $0.id == id && $0.status == "running" } },
             subagentItems: { console.state.subagentItems[$0] ?? [] },
             subagentRun: { console.subagentRuns[$0] },
+            workflowRun: { console.workflowRuns[$0] },
+            workflows: { Array(console.workflowRuns.values) },
+            reveal: { console.revealAgent($0) },
             parentEngine: appModel.session(id: console.sessionID)?.engine,
             fullPayload: { await console.fullPayload(seq: $0) })
     }
@@ -187,12 +190,12 @@ struct ConsoleView: View {
         #if os(iOS)
         if #available(iOS 26.0, *) {
             transcript.safeAreaBar(edge: .bottom, spacing: 0) {
-                composerBand(console).environment(\.floatsOverTranscript, true)
+                AnyView(composerBand(console).environment(\.floatsOverTranscript, true))
             }
         } else {
             VStack(spacing: 0) {
                 transcript
-                composerBand(console)
+                AnyView(composerBand(console))
             }
         }
         #else
@@ -248,8 +251,16 @@ struct ConsoleView: View {
     /// tray's waiting rows say which (`PendingTrayView.held`).
     private func trayHeld(_ console: ConsoleModel) -> Session? {
         guard let session = appModel.session(id: console.sessionID),
-              RunnerUpdating.holds(session) || QueuedCapacity.holds(session) else { return nil }
+              RunnerUpdating.holds(session) || QueuedCapacity.holds(session) || QueuedDiskLow.holds(session) else { return nil }
         return session
+    }
+
+    /// What the waiting card of a session its GitHub workspace's clone holds draws, or nil (web `useCloneWait`).
+    private func cloneWaitCard(_ console: ConsoleModel) -> QueuedClone.Card? {
+        guard let session = appModel.session(id: console.sessionID) else { return nil }
+        return QueuedClone.card(session: session, workspace: console.cloneWorkspace,
+                                heard: appModel.cloneLedger.heard(console.cloneWorkspace?.id),
+                                storedAt: console.cloneWorkspaceReadAt)
     }
 
     private func bandMembers(_ console: ConsoleModel) -> some View {
@@ -258,6 +269,11 @@ struct ConsoleView: View {
         // composer's card, above the text they go out with. The band owns the gutter and the
         // gaps; members only say whether they are on screen.
         ComposerBand {
+            // Under a transcript that has content, the clone's wait stands as a note beneath it (web's compact card).
+            if let card = cloneWaitCard(console), !console.state.items.isEmpty {
+                CloneWaitCardView(card: card, machine: console.runnerName, compact: true)
+                    .padding(.bottom, .composerBandGap)
+            }
             // The reader's messages nothing has read yet: the conversation's next lines, so the
             // band's first card, right under the conversation and above the parking strip
             // (docs/mocks/pending-tray-above-parking, decided 2026-10-28). Not folded while
@@ -342,7 +358,14 @@ struct ConsoleView: View {
             VStack(spacing: 0) {
                 // What this session waits on — a watch, not a process — above the real shells.
                 WatchingCardStack(sessionID: console.sessionID)
-                BackgroundTrayView(procs: console.state.background, progress: console.state.taskProgress)
+                // The folded row by the shared rule; its names stop rotating while the band is folded.
+                BackgroundTrayView(procs: console.state.background, progress: console.state.taskProgress,
+                                   row: BackgroundRowRule.row(console.state.background, items: console.state.items,
+                                                              lastAgentTurnStartedAt: console.state.agentTurnStartedAt,
+                                                              sessionLive: console.isLive),
+                                   paused: foldsChrome(console) || foldsBand(console),
+                                   revealJob: { console.revealJob($0) },
+                                   stopJob: { try await console.stopJob($0) })
                 // The tasks this session's agent created, beside the code the bar below
                 // carries — the session's two kinds of output, together.
                 CreatedTasksCard(console: console)
@@ -373,8 +396,11 @@ struct ConsoleView: View {
             let handoffRow = CoordinatorHandoffRow.resolve(handoff, enginePhase: handoffSession?.enginePhase)
             if let handoffRow {
                 if case .completed = handoffRow {} else {
-                    CoordinatorHandoffStatusView(row: handoffRow) { handoffPress(console, $0) }
-                        .padding(.bottom, .composerBandGap)
+                    CoordinatorHandoffStatusView(row: handoffRow, savedSuccessor: handoff?.successor,
+                                                 choiceSources: console.choiceSources) { action, successor in
+                        handoffPress(console, action, successor: successor)
+                    }
+                    .padding(.bottom, .composerBandGap)
                 }
             }
             if case .completed(let successor)? = handoffRow {
@@ -397,10 +423,11 @@ struct ConsoleView: View {
 
     /// A press on the handoff's row: Skip the note, Cancel handover, or a failure's way out. The
     /// project is the one this conversation coordinates — or, once it no longer does, belongs to.
-    private func handoffPress(_ console: ConsoleModel, _ action: CoordinatorHandoffAction) {
+    private func handoffPress(_ console: ConsoleModel, _ action: CoordinatorHandoffAction,
+                              successor: CoordinatorHandoffSuccessor?) {
         let session = appModel.session(id: console.sessionID)
         guard let projectID = session?.projectId ?? session?.projectMembership?.projectId else { return }
-        Task { await console.coordinatorHandoff(projectID: projectID, action) }
+        Task { await console.coordinatorHandoff(projectID: projectID, action, successor: successor) }
     }
 
     private func consoleBody(navTitleWidth: CGFloat) -> some View {
@@ -415,7 +442,10 @@ struct ConsoleView: View {
                         ?? landing.projectMembership?.projectId,
                     focusID: sessionID)
             } else if let console = registry.peek(sessionID) {
-                transcriptAndBand(console, navTitleWidth: navTitleWidth)
+                // Erased on purpose: the two dozen modifiers below each wrapped the transcript and the
+                // whole band's view type, and resolving and sizing that nested type at launch ran the
+                // iPhone's 1 MB main-thread stack out (TestFlight 0.1.261 (13668), 2026-11-21).
+                AnyView(transcriptAndBand(console, navTitleWidth: navTitleWidth))
                 // The owner requests this conversation filed, each drawn where it was asked.
                 .onChange(of: appModel.ownerRequests?.forSession(sessionID), initial: true) { _, requests in
                     console.adoptOwnerRequests(requests ?? [])
@@ -429,6 +459,8 @@ struct ConsoleView: View {
                 .environment(\.sessionImagePreview, sessionImagePreview(console))
                 // The workspace's background agents and workflows, for the cards that draw them.
                 .environment(\.taskActivity, taskActivity(console))
+                // Settings › Translation: an answered question keeps the language its card was in.
+                .environment(\.questionTranslations, console.questionTranslations)
                 // Settings › Translation: what a translated message's foot can do (frames 4–6).
                 .environment(\.translationActions, TranslationActions(
                     on: SessionTranslation.isOn(appModel.user),
@@ -952,6 +984,8 @@ struct TranscriptView: View {
     /// The bar was tapped open; the reader's next drag folds the band again.
     var bandOpened: Binding<Bool> = .constant(false)
     @State private var reviewSessionID: String?
+    /// The settled-items folds the reader opened, by their first card's row id (D1 = A).
+    @State private var settledFoldsOpen: Set<String> = []
     /// Which session's Recap card has stepped aside for this visit. It is set once that conversation
     /// starts a new turn, because the reader is in it now and a card arriving under each answer
     /// would push the answer up. It is cleared when this view opens another session: the Mac and
@@ -1078,6 +1112,8 @@ struct TranscriptView: View {
         // Held by its runner's update (board 5 of docs/mocks/runner-update-drain): the foot row of
         // the reader's last message says so, or, before there is one, the queued page does.
         .environment(\.runnerUpdatingFoot, runnerUpdatingFoot)
+        // …and where that message is one no runner has taken, Cancel beside the tag (`HeldCancel`).
+        .environment(\.heldCancel, { [console] bubble in Task { await console.cancelHeld(bubble) } })
         .overlay { runnerUpdatingPage }
         // macOS shows the session state in this band. iOS gave the state up with the nav-bar title,
         // for reading space (see `ConsoleView`'s toolbar), so the band is retired there.
@@ -1090,7 +1126,7 @@ struct TranscriptView: View {
     /// run or batch, which is said in the same places by the same rules (docs/mocks/queued-card-runner-full).
     private var runnerUpdatingSession: Session? {
         guard let session = app.session(id: console.sessionID),
-              RunnerUpdating.holds(session) || QueuedCapacity.holds(session) else { return nil }
+              RunnerUpdating.holds(session) || QueuedCapacity.holds(session) || QueuedDiskLow.holds(session) else { return nil }
         return session
     }
 
@@ -1112,6 +1148,12 @@ struct TranscriptView: View {
     }
 
     @ViewBuilder private var runnerUpdatingPage: some View {
+        if let session = app.session(id: console.sessionID), console.state.items.isEmpty,
+           let card = QueuedClone.card(session: session, workspace: console.cloneWorkspace,
+                                       heard: app.cloneLedger.heard(console.cloneWorkspace?.id),
+                                       storedAt: console.cloneWorkspaceReadAt) {
+            CloneWaitCardView(card: card, machine: console.runnerName)
+        }
         if let session = runnerUpdatingSession, RunnerUpdating.holds(session), !runnerUpdatingTailHeld,
            RunnerUpdating.footBubbleID(console.state.items, accepted: console.state.accepted) == nil {
             RunnerUpdatingQueuedView(session: session, machine: console.runnerName, runnerID: console.runnerID,
@@ -1127,9 +1169,12 @@ struct TranscriptView: View {
     /// The transcript itself: one flat `ForEach` over the pre-assembled rows, with the row-level
     /// preferences that must sit on the outermost row view.
     private var rowsList: some View {
-        List {
+        // One build of the rows, and the settled-items folds among them (D1 = A).
+        let folded = foldedRows
+        let rows = folded.rows
+        return List {
             ForEach(rows) { row in
-                transcriptRow(row)
+                transcriptRow(row, folds: folded.folds)
                     // Row-level preferences must sit OUT here, not inside `transcriptRow`'s
                     // switch (or inside `AnchorRow`'s `if #available`): `listRow*` set inside a
                     // `_ConditionalContent` branch aren't hoisted to the List on iOS — the
@@ -1156,9 +1201,13 @@ struct TranscriptView: View {
         .environment(\.answeredQuestions, console.answeredQuestions)
         // The item a record link or a search hit asked for: a long message from another session opens to it.
         .environment(\.revealedItemID, console.revealedItemID)
-        // Where a SubAgent's finished line finds the card it was started from, and the scroll to it.
-        .environment(\.subagentCardLinks, SubagentCardLinks(find: { console.delegateCard(forRun: $0) },
-                                                            reveal: { console.revealAgent($0) }))
+        // A SubAgent's end turns, joined to their cards by run id: what the agent read, and a queued one's
+        // Don't send (`SubagentCardEnd`).
+        .environment(\.subagentWakes, console.subagentWakes)
+        .environment(\.subagentQueuedWakes, console.subagentQueuedWakes)
+        // A bg_run job's card: its runner reports, its wake turns and a queued one's Don't send, joined by
+        // job id, and where it reads its tail and asks to stop it (`JobCardView`).
+        .environment(\.jobCardHost, console.jobCardHost(place: app.session(id: console.sessionID)?.agent?.name))
         .scrollContentBackground(.hidden)   // show the window background, not the List's own
         #if os(iOS)
         // Turn OFF the scroll view's touch delay so an in-list control (the jump-to-latest disc, the
@@ -1507,7 +1556,24 @@ struct TranscriptView: View {
     /// The List's rows, assembled from ONE read of each source so the snapshot the List diffs is
     /// always internally consistent (`console.state` publishes on a 200ms coalescing timer while
     /// `localStatusCards` / `showWorkingIndicator` publish immediately).
-    private var rows: [TranscriptRow] {
+    private var rows: [TranscriptRow] { foldedRows.rows }
+
+    /// The rows drawn, and the settled-items folds among them by their first card's row id.
+    /// Settled exception cards directly above an open one fold into one row on a phone (board
+    /// owner-card-ios-text, D1 = A): `settledFoldRow` draws it in the first one's place.
+    private var foldedRows: (rows: [TranscriptRow], folds: [String: SettledExceptionFold.Run]) {
+        let built = builtRows
+        #if os(iOS)
+        let runs = SettledExceptionFold.runs(built) { console.settledFoldStanding($0) }
+        guard !runs.isEmpty else { return (built, [:]) }
+        return (SettledExceptionFold.fold(built, runs: runs, expanded: settledFoldsOpen),
+                Dictionary(uniqueKeysWithValues: runs.map { ($0.headID, $0) }))
+        #else
+        return (built, [:])
+        #endif
+    }
+
+    private var builtRows: [TranscriptRow] {
         TranscriptRows.build(state: console.state,
                              statusCards: console.localStatusCards,
                              canPageOlder: canPageOlder,
@@ -1596,7 +1662,8 @@ struct TranscriptView: View {
     }
 
     @ViewBuilder
-    private func transcriptRow(_ row: TranscriptRow) -> some View {
+    private func transcriptRow(_ row: TranscriptRow,
+                               folds: [String: SettledExceptionFold.Run] = [:]) -> some View {
         switch row {
         case .createdWorkspace(let line):
             // No `AnchorRow`: what the conversation made is no "Your question".
@@ -1619,7 +1686,8 @@ struct TranscriptView: View {
             }
             .onAppear { Task { await console.loadOlder() } }
         case .item(let item):
-            TranscriptItemView(item: item, fullPayload: console.fullPayload, console: console)
+            TranscriptItemView(item: item, fullPayload: console.fullPayload, console: console,
+                               openSession: { app.route(to: .session($0)) })
                 .modifier(AnchorRow(itemID: item.id, ruler: ruler, recompute: recomputeStuck))
         case .turnHead(let line):
             // No `AnchorRow`: the head belongs to the message above it, which is the anchor.
@@ -1627,11 +1695,13 @@ struct TranscriptView: View {
         case .steps(let items):
             // No `AnchorRow`: a steps line is never the "Your question" the sticky header names,
             // so it has no business moving that anchor.
-            // Live while the turn may still be at work (docs/mocks/session-compact-steps: a call in
-            // flight sits under the line until it answers; once the turn is over it joins the line).
-            // `.pending` counts: a window whose pages carry no `status` event stays there, and reading
-            // it as over folded a running call into "ran 2 shell commands" while its row still spun.
-            StepsRowView(items: items, live: [.running, .pending].contains(console.sessionStatus),
+            // Live while the turn is at work (docs/mocks/session-compact-steps: a call in flight sits
+            // under the line until it answers; once the turn is over it joins the line). Read off the
+            // session row, as Stop and "Working for…" are: the stream status never returns to
+            // `.running` — no event says a turn started, and an earlier turn's `turn_end` leaves it
+            // `.awaitingInput` — so it folded a second turn's running call into "Ran 2 shell commands".
+            StepsRowView(items: items,
+                         live: app.session(id: console.sessionID)?.isGenerating ?? (console.state.status == .running),
                          fullPayload: console.fullPayload)
         case .agents(let cards):
             // No `AnchorRow`, for the steps line's reason: a group of Agents is no "Your question".
@@ -1649,10 +1719,18 @@ struct TranscriptView: View {
             // No `AnchorRow`: a question about the project's ruler isn't a "Your question" the
             // sticky header names. Unlike an approval it stops no turn, so later messages render
             // BELOW it — which is why the bar at the top of this console points down at it.
-            DeliveredDecisionCardView(console: console, card: card)
+            #if os(iOS)
+            if let run = folds[card.id] {
+                settledFoldRow(run, card: card).orbitCardWidth()
+            } else {
+                DeliveredDecisionCardView(console: console, card: card).orbitCardWidth()
+            }
+            #else
+            DeliveredDecisionCardView(console: console, card: card).orbitCardWidth()
+            #endif
         case .approval(let approval):
             // No `AnchorRow`: an approval isn't a "Your question" the sticky header names.
-            ApprovalCard(console: console, approval: approval)
+            ApprovalCard(console: console, approval: approval).orbitCardWidth()
         case .recap(let card):
             // No `AnchorRow`: the recap sums the conversation up; it asks nothing.
             RecapCardView(card: card, onHide: hideRecap)
@@ -1671,7 +1749,8 @@ struct TranscriptView: View {
                 Task { await console.cancelQueued(bubble) }
             }, steer: SteerControls(bubble: bubble, withdrawing: console.withdrawingSteers) {
                 Task { await console.withdrawSteer(bubble) }
-            }, putBack: putBack(bubble))
+            }, putBack: putBack(bubble),
+               revealItemCard: { console.revealOpenItemCard($0) })
             .environment(\.runnerUpdatingQueued, runnerUpdatingQueued(bubble))
         case .bottom:
             // Both shapes end in the room the list's fade lies over (`fadesIntoComposerBand`), so a list
@@ -1694,6 +1773,42 @@ struct TranscriptView: View {
         }
     }
 
+    #if os(iOS)
+    /// "✓ 2 sent back to the coordinator · Show": the settled exception cards above an open one, in
+    /// one row that opens in place (board owner-card-ios-text, D1 = A). Opened, the first card is
+    /// drawn under it here and the others in their own rows.
+    @ViewBuilder private func settledFoldRow(_ run: SettledExceptionFold.Run,
+                                             card: DeliveredDecisionCard) -> some View {
+        let open = settledFoldsOpen.contains(run.headID)
+        VStack(alignment: .leading, spacing: 8) {
+            Button {
+                PlatformHaptics.tap()
+                withAnimation(.smooth(duration: 0.25)) {
+                    if open { settledFoldsOpen.remove(run.headID) } else { settledFoldsOpen.insert(run.headID) }
+                }
+            } label: {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text("✓ \(run.line)")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(open ? SettledExceptionFold.hide : SettledExceptionFold.show)
+                        .font(.subheadline).foregroundStyle(.tint)
+                }
+                .padding(.horizontal, 12).padding(.vertical, 9)
+                .background(Color.orange.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
+                .overlay { RoundedRectangle(cornerRadius: 12).strokeBorder(Color.orange.opacity(0.22)) }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("settled-fold")
+            if open {
+                DeliveredDecisionCardView(console: console, card: card)
+            }
+        }
+    }
+    #endif
+
     /// Carry a scroll into the next update rather than making it from here (see `heldScroll`). A new
     /// tick each time, so asking twice for the same row scrolls twice.
     private func holdScroll(to rowID: String, anchor: UnitPoint, opensReview: Bool = false, animated: Bool = true) {
@@ -1708,7 +1823,7 @@ struct TranscriptView: View {
         case .promotionApproval(let promotionID):
             openPromotionReview(promotionID)
         case .criteriaDecision, .acceptanceConfirmation, .startProject, .criteriaChange,
-             .ownerConfirmation, .coordinatorQuestion, .crossingBatch:
+             .ownerConfirmation, .coordinatorQuestion, .crossingBatch, .projectDone:
             openApprovalReview(.delivered(card))
         default:
             break
@@ -1938,7 +2053,10 @@ struct TranscriptView: View {
         guard let session = app.session(id: console.sessionID),
               let subtitle = SessionHeader.subtitle(for: session, watching: watching, now: now,
                                                     machine: console.runnerName) else {
-            return Text(console.state.status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized)
+            // A status word this build does not know reads as the neutral ended wording.
+            let status = console.state.status
+            return Text(status == .unknown ? "Ended"
+                        : status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized)
                 .foregroundColor(.secondary)
         }
         let word = SessionHeader.headerWord(for: session, watching: watching, now: now, machine: console.runnerName)
@@ -2099,7 +2217,7 @@ struct SessionStatusCardView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
         }
-        .frame(maxWidth: 560, alignment: .leading)
+        .frame(maxWidth: ConversationCardWidth.max, alignment: .leading)
         .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 8))
         .overlay {
             RoundedRectangle(cornerRadius: 8)
@@ -2474,14 +2592,24 @@ struct TranscriptItemView: View {
     /// The owning console, for the rows that can act on the session — the sign-in card signs this
     /// session's runner back in and re-sends the message its failure ate.
     var console: ConsoleModel? = nil
+    /// Open another session's conversation, for the row that names the agent fixing a warning. Nil
+    /// where there is no router (a preview, a guest page), which leaves the link out.
+    var openSession: ((String) -> Void)? = nil
     var body: some View {
         switch item {
         case .user(let b):
             // Which card a user turn is — or the owner's bubble — is decided in one place, for the
             // transcript and the queued tail alike (`UserTurnRow`).
-            UserTurnRow(bubble: b, steer: steerControls(b), putBack: putBack(b))
+            UserTurnRow(bubble: b, steer: steerControls(b), putBack: putBack(b), revealItemCard: { console?.revealOpenItemCard($0) ?? false })
         case .assistant(let b): AssistantBubbleView(bubble: b)
         case .thinking(let b):  ThinkingView(block: b)
+        case .toolCall(let c) where c.name == WorkflowBlock.toolName:
+            // An Orbit workflow: its own block, opening to its calls by phase (board subagent-workflow part 4).
+            WorkflowBlockView(card: c, fullPayload: fullPayload)
+        case .toolCall(let c) where BgJobCard.drawsCard(c):
+            // A bg_run call is its job's card from start to end (board A1); one refused, or whose answer
+            // names no job, stays a call.
+            JobCardView(card: c)
         case .toolCall(let c):
             // The owner's "Chat about this" reply to one of Orbit's own cards: their message, drawn as
             // theirs under the call rather than left inside its result (`OwnerChatReply`).
@@ -2505,18 +2633,18 @@ struct TranscriptItemView: View {
             }
         case .error(_, let message):
             if let console, console.executesDsh, let repair = DshRuntime.repair(message) {
-                DshRepairCardView(console: console, repair: repair)
+                DshRepairCardView(console: console, repair: repair).orbitCardWidth()
             } else if let repair = EngineAuth.antigravityRepair(message), let console, console.executesAntigravity {
-                AntigravityRepairCardView(console: console, repair: repair)
+                AntigravityRepairCardView(console: console, repair: repair).orbitCardWidth()
             } else if let summary = ToolFailureSummary.parse(message) {
-                ToolFailureCardView(message: message, summary: summary)
+                ToolFailureCardView(message: message, summary: summary).orbitCardWidth()
             } else {
                 Label(message, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red).textSelection(.enabled)
             }
         case .authError(let id, let message):
             if let console {
-                AuthErrorCardView(console: console, message: message, settled: console.settlement.auth[id])
+                AuthErrorCardView(console: console, message: message, settled: console.settlement.auth[id]).orbitCardWidth()
             } else {
                 // No console to act through (a preview / detached render): the diagnosis alone,
                 // which is what the runtime said in the first place.
@@ -2525,7 +2653,7 @@ struct TranscriptItemView: View {
             }
         case .autoRetry(let notice):
             if let console {
-                AutoRetryCardView(console: console, notice: notice)
+                AutoRetryCardView(console: console, notice: notice).orbitCardWidth()
             } else {
                 // Same as above: with no session to read the armed retry off, or to retry through,
                 // what's left is the runtime's own sentence.
@@ -2541,12 +2669,13 @@ struct TranscriptItemView: View {
                 .foregroundStyle(console?.settlement.settledNotices.contains(id) == true ? Color.secondary : Color.orange)
                 .textSelection(.enabled)
         case .diagnostic(let notice):
-            DiagnosticNoticeRow(notice: notice)
+            DiagnosticNoticeRow(notice: notice, console: notice.isSandboxMissing ? console : nil,
+                                openSession: openSession)
         case .mainCheckout(let item):
             // The main checkout's card (board 01) or one action's line (board 03). Without a console to
             // act through, the event's own sentence, as the notice it used to be.
             if let console, let changed = item.changed {
-                MainCheckoutCardView(console: console, item: item, notice: changed)
+                MainCheckoutCardView(console: console, item: item, notice: changed).orbitCardWidth()
             } else if let console, let result = item.result {
                 MainCheckoutResultRow(console: console, result: result)
             } else {
@@ -2579,21 +2708,90 @@ struct TranscriptItemView: View {
 /// module included, is the row's help text, as it is web's tooltip.
 struct DiagnosticNoticeRow: View {
     let notice: DiagnosticNotice
+    /// The session's console, on the one diagnostic a reader can act on: Codex's missing bubblewrap.
+    var console: ConsoleModel? = nil
+    /// Open the fixing agent's session; nil where there is no router.
+    var openSession: ((String) -> Void)? = nil
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-            if !notice.label.isEmpty {
-                Text(notice.label).font(.orbitMeta).monospacedDigit().foregroundStyle(.tertiary)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                if !notice.label.isEmpty {
+                    Text(notice.label).font(.orbitMeta).monospacedDigit().foregroundStyle(.tertiary)
+                }
+                Text(notice.text).foregroundStyle(.secondary).textSelection(.enabled)
+                if notice.repeats > 1 {
+                    Text("×\(notice.repeats)").font(.orbitMeta).monospacedDigit()
+                        .foregroundStyle(Color.orange.opacity(0.7))
+                }
             }
-            Text(notice.text).foregroundStyle(.secondary).textSelection(.enabled)
-            if notice.repeats > 1 {
-                Text("×\(notice.repeats)").font(.orbitMeta).monospacedDigit()
-                    .foregroundStyle(Color.orange.opacity(0.7))
+            .font(.orbitLabel)
+            .help(notice.message)
+            if notice.isSandboxMissing, let console {
+                SandboxFixActionView(console: console, openSession: openSession)
             }
         }
-        .font(.orbitLabel)
-        .help(notice.message)
+    }
+}
+
+/// Fix with an agent under the transcript's sandbox warning (web parity: Transcript.tsx's
+/// `SandboxFixAction`): the button and where its session runs, the agent at work, or the one that
+/// already finished with the row — a transcript is history, so a handled row offers no second agent.
+struct SandboxFixActionView: View {
+    let console: ConsoleModel
+    var openSession: ((String) -> Void)? = nil
+
+    var body: some View {
+        if let state = RunnerAgentFixLogic.sandboxState(console.runnerAgentFix) {
+            VStack(alignment: .leading, spacing: 6) {
+                switch state {
+                case .ready(let hint):
+                    Button(RunnerPageCopy.AGENT_FIX_BUTTON) { Task { await console.fixSandbox() } }
+                        .buttonStyle(RunnerCapsuleButtonStyle())
+                        .disabled(console.sandboxFixStarting)
+                    hintLine(hint)
+                case .blocked(let reason):
+                    Button(RunnerPageCopy.AGENT_FIX_BUTTON) {}
+                        .buttonStyle(RunnerCapsuleButtonStyle())
+                        .disabled(true)
+                    hintLine(reason)
+                case .fixing(let entry):
+                    HStack(spacing: 6) {
+                        Circle().fill(Color.accentColor).frame(width: 6, height: 6)
+                        Text(RunnerPageCopy.agentFixFixing(workspace: entry.workspaceName))
+                            .foregroundStyle(.secondary)
+                        openLink(entry.sessionId)
+                    }
+                    .font(.orbitLabel)
+                case .handled(let sessionId, let workspaceName):
+                    HStack(spacing: 6) {
+                        Text(RunnerPageCopy.agentFixFixed(workspace: workspaceName))
+                            .foregroundStyle(.secondary)
+                        openLink(sessionId)
+                    }
+                    .font(.orbitLabel)
+                }
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 10).fill(Color.primary.opacity(0.02)))
+            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.secondary.opacity(0.25)))
+        }
+    }
+
+    @ViewBuilder private func hintLine(_ text: String?) -> some View {
+        if let text {
+            Text(text).font(.orbitLabel).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    @ViewBuilder private func openLink(_ sessionId: String) -> some View {
+        if let openSession {
+            Button(RunnerPageCopy.AGENT_FIX_OPEN_SESSION) { openSession(sessionId) }
+                .linkButtonStyle()
+        }
     }
 }
 

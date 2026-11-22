@@ -85,10 +85,10 @@ wl.PROBE = wl.PROBE.replace('for n in range(500):', f'for n in range({PROBE_ROWS
 
 PROJECT_LINE = 'refs/heads/project/34ZteKCnYMpKY46f63Leb'
 # T06b's lab image: deploy/managed-runner/image and src/runner-go unchanged since its source ebf54ab8d.
-IMAGE = 'docker.io/library/orbit-managed-runner-lab@sha256:cdb090148c194e536fe86c22f1507b45f74f2aa6929df26f7360747604102312'
+IMAGE = 'docker.io/library/orbit-cloud-runner-lab@sha256:cdb090148c194e536fe86c22f1507b45f74f2aa6929df26f7360747604102312'
 IMAGE_SOURCE = 'ebf54ab8d'
 # The build before it, T02a's (source 292b2eb43, without T06b's startup heartbeat): the image a rollback goes back to.
-PREVIOUS_IMAGE = 'docker.io/library/orbit-managed-runner-lab@sha256:54441a07125b7cd5ec11def5705608ebcd0f3f7243c98918556dd29d03aef98d'
+PREVIOUS_IMAGE = 'docker.io/library/orbit-cloud-runner-lab@sha256:54441a07125b7cd5ec11def5705608ebcd0f3f7243c98918556dd29d03aef98d'
 PREVIOUS_IMAGE_SOURCE = '292b2eb43'
 T02A = LAB_DIR / 'test-server-t02a'
 USERS = ('ann', 'bob')
@@ -1467,7 +1467,7 @@ def backup_export(ctx, step):
     host_gz = sha256_file(destination / 'volume.img.gz')
     guest(f'sudo rm -f {GUEST_BACKUP}/volume.img.gz {GUEST_BACKUP}/raw.sha256 && sudo rmdir {GUEST_BACKUP}')
     os.chmod(destination / 'volume.img.gz', 0o600)
-    manifest = {'schemaVersion': 1, 'kind': 'orbit-managed-runner-rbd-export', 'createdAt': now(), 'source': {
+    manifest = {'schemaVersion': 1, 'kind': 'orbit-cloud-runner-rbd-export', 'createdAt': now(), 'source': {
         'owner': ml.owner_state('ann')['user']['id'], 'runnerId': ident['runnerId'], 'namespace': NAMESPACE, 'pvc': {'name': ident['pvcName'], 'uid': ident['pvcUid']},
         'pv': {'name': ident['pvName'], 'uid': ident['pvUid']}, 'volumeHandle': ident['volumeHandle'], 'clusterID': ident['clusterID'],
         'pool': ident['pool'], 'image': ident['rbdImage'], 'imageId': info_before.get('id'), 'sizeBytes': info_before.get('size'),

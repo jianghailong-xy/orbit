@@ -9,8 +9,7 @@ import OrbitKit
 /// them — the session's title, which opens it, the agent it runs as, and the task it runs — from the
 /// payload the control plane recorded beside the echo (OrbitKit's `SessionMessage`, read out of
 /// `sessionMessage`). The block delivery appended to tell the recipient the same thing is not shown
-/// again (`SessionMessageCard.splitNote`); anything else delivery appended is named on the foot line,
-/// folded.
+/// again; appended notes stay out of the transcript.
 ///
 /// One view for both native clients: `src/ios/project.yml` compiles this folder in place. Web parity:
 /// `SessionMessageCard.tsx`, with every word from OrbitKit's `SessionMessageCard`, which
@@ -23,8 +22,6 @@ struct SessionMessageCardView: View {
     var undelivered: Bool = false
     /// The line for a sender that runs narrower than this session (`SessionMessageCard.narrower`).
     var narrower: String? = nil
-    /// What delivery appended to the same turn (a `controlPlaneNote`), as its own folded entry.
-    var attached: (kind: String, text: String)?
     /// Withdraws the message while it is still queued behind the running turn; nil once a runner has
     /// taken it. Withdrawing hands none of it back to the composer: the words are the sending
     /// session's, not the reader's (`ComposerLogic.restorableText`).
@@ -41,8 +38,6 @@ struct SessionMessageCardView: View {
     /// (`opensTasksOverPage`, owner decision 2026-11-12).
     @Environment(\.opensTasksOverPage) private var opensTasksOverPage
     @State private var expanded = false
-    /// The "⊕ Orbit attached" line in the foot is open: what it names is drawn under the foot.
-    @State private var attachedOpen = false
     /// The body's full height and one line of its font, measured as drawn: a message taller than
     /// `SessionMessageCard.clampFrom` lines shows its first `clampLines` until "Show more" (web parity:
     /// `SessionMessageCard.tsx`, measured rather than counted, which replaced a 6,000-character cut).
@@ -67,7 +62,6 @@ struct SessionMessageCardView: View {
                     .font(.orbitMeta).foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            if attachedOpen, let attached { AttachedNoteBody(attached: attached) }
             if undelivered {
                 // Amber, not red: the message was handed to a session that has not confirmed it.
                 Text(SessionMessageCard.undelivered)
@@ -105,35 +99,12 @@ struct SessionMessageCardView: View {
     }
 
     /// The sending agent's words: whole, or their first lines fading out while the message is folded.
-    /// The text is laid out at its full height and measured there, then clipped, so opening it moves
-    /// nothing but the foot.
     private var messageBody: some View {
-        MarkdownView(source: text, base: .body, ink: .primary, fillWidth: false)
-            .font(.orbitProse)
-            .textSelection(.enabled)
-            .fixedSize(horizontal: false, vertical: true)
-            .background(GeometryReader { proxy in
-                Color.clear.preference(key: SessionMessageBodyHeightKey.self, value: proxy.size.height)
-            })
-            .background(alignment: .topLeading) {
-                // One line of the body's font, never shown: what "a line" is on this device and size.
-                Text(verbatim: "Ag").font(.orbitProse).fixedSize().hidden()
-                    .background(GeometryReader { proxy in
-                        Color.clear.preference(key: SessionMessageLineHeightKey.self, value: proxy.size.height)
-                    })
-            }
-            .onPreferenceChange(SessionMessageBodyHeightKey.self) { bodyHeight = $0 }
-            .onPreferenceChange(SessionMessageLineHeightKey.self) { lineHeight = $0 }
-            .frame(maxHeight: clamped ? lineHeight * CGFloat(SessionMessageCard.clampLines) : nil, alignment: .top)
-            .clipped()
-            .mask {
-                if clamped {
-                    LinearGradient(stops: [.init(color: .black, location: 0.55), .init(color: .clear, location: 1)],
-                                   startPoint: .top, endPoint: .bottom)
-                } else {
-                    Rectangle()
-                }
-            }
+        FoldedProse(bodyHeight: $bodyHeight, lineHeight: $lineHeight, clamped: clamped) {
+            MarkdownView(source: text, base: .body, ink: .primary, fillWidth: false)
+                .font(.orbitProse)
+                .textSelection(.enabled)
+        }
     }
 
     /// One of this card's links through the app's own link door, told whether the card is in a
@@ -191,30 +162,27 @@ struct SessionMessageCardView: View {
         return "\(label). \(SessionMessageCard.notYou)"
     }
 
-    /// One grey line under the bubble: "2m ago · Its task ↗ · Asked for a reply · Replied · ⊕ Orbit
-    /// attached: …", each item that applies, wrapping between items when the column is narrow.
+    /// One grey line under the bubble: "2m ago · Its task ↗ · Asked for a reply · Replied",
+    /// each item that applies, wrapping between items when the column is narrow.
     private var foot: some View {
         let time = SessionMessageCard.meta(ts: ts)
         let task = SessionMessageCard.taskLink(card)
         let request = card.requestId != nil
         return FlowLayout(spacing: 0) {
             if let time {
-                footItem(more: task != nil || request || attached != nil) { Text(time) }
+                footItem(more: task != nil || request) { Text(time) }
             }
             if let url = task {
-                footItem(more: request || attached != nil) {
+                footItem(more: request) {
                     Button(SessionMessageCard.openTask) { openLink(url) }
                         .buttonStyle(.plain)
                 }
             }
             if let requestId = card.requestId {
                 // The message asks for a reply: what it asks, by when, and where it stands — read live.
-                footItem(more: attached != nil) {
+                footItem(more: false) {
                     SessionRequestStatusView(requestId: requestId)
                 }
-            }
-            if let attached {
-                footItem(more: false) { AttachedNoteLine(attached: attached, open: $attachedOpen) }
             }
         }
         .font(.orbitMeta)
@@ -257,12 +225,54 @@ struct HugWidthLayout: Layout {
 
 /// The widest an Orbit card in a conversation draws: on the agent's side, from the leading edge, and
 /// no wider than this however wide the window (docs/mocks/session-message-bubble, owner 2026-11-12;
-/// web's `max-width: 720px` on `.oic/.tsc/.psc/.crc` and `.smc-wrap`). A phone's column is narrower,
+/// web's `--chat-card-max: 720px` on `.oic/.tsc/.psc/.crc` and `.smc-wrap`). A phone's column is narrower,
 /// and there a card takes the column.
 extension View {
     func orbitCardWidth() -> some View {
-        frame(maxWidth: 720, alignment: .leading)
+        frame(maxWidth: ConversationCardWidth.max, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// A body of prose that folds by its rendered height (docs/mocks/session-message-clamp, approved
+/// 2026-11-11): taller than `SessionMessageCard.clampFrom` lines it shows its first `clampLines` and
+/// fades out, until its card opens it. The text is laid out at its full height and measured there,
+/// then clipped, so opening it moves nothing else. Shared by the "From" message card and the reply
+/// card, so the fold is one rule; whether it folds is the caller's to ask
+/// (`SessionMessageCard.folds(height:lineHeight:)`).
+struct FoldedProse<Content: View>: View {
+    /// The body's full height as laid out before the clip, and one line of its font.
+    @Binding var bodyHeight: CGFloat
+    @Binding var lineHeight: CGFloat
+    /// Whether it shows folded now: measured tall, neither opened by the reader nor revealed.
+    let clamped: Bool
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        content()
+            .fixedSize(horizontal: false, vertical: true)
+            .background(GeometryReader { proxy in
+                Color.clear.preference(key: SessionMessageBodyHeightKey.self, value: proxy.size.height)
+            })
+            .background(alignment: .topLeading) {
+                // One line of the body's font, never shown: what "a line" is on this device and size.
+                Text(verbatim: "Ag").font(.orbitProse).fixedSize().hidden()
+                    .background(GeometryReader { proxy in
+                        Color.clear.preference(key: SessionMessageLineHeightKey.self, value: proxy.size.height)
+                    })
+            }
+            .onPreferenceChange(SessionMessageBodyHeightKey.self) { bodyHeight = $0 }
+            .onPreferenceChange(SessionMessageLineHeightKey.self) { lineHeight = $0 }
+            .frame(maxHeight: clamped ? lineHeight * CGFloat(SessionMessageCard.clampLines) : nil, alignment: .top)
+            .clipped()
+            .mask {
+                if clamped {
+                    LinearGradient(stops: [.init(color: .black, location: 0.55), .init(color: .clear, location: 1)],
+                                   startPoint: .top, endPoint: .bottom)
+                } else {
+                    Rectangle()
+                }
+            }
     }
 }
 

@@ -51,11 +51,16 @@ output into a public report: expanded values can contain secrets.
 | `ORBIT_WATCHES_CANARY_OWNERS` | `string` | Optional; empty | Comma-separated account IDs enabled in Watch canary mode. | No; account identifiers are private diagnostic data | Recreate API |
 | `ORBIT_WIKI_MODE` → container `ORBIT_WIKI` | `enum`: `on`, `canary`, `off` | Optional; `on` | Wiki rollout. Disabled accounts receive `WIKI_DISABLED` and no Wiki tools/context. | No | Recreate API; no migration or runner release |
 | `ORBIT_WIKI_CANARY_OWNERS` | `string` | Optional; empty | Comma-separated account IDs enabled in Wiki canary mode. | No; account identifiers are private diagnostic data | Recreate API |
+| `ORBIT_RUN_STOPPED_WAKE_MODE` → container `ORBIT_RUN_STOPPED_WAKE` | `enum`: `on`, `off` | Optional; `on` | `off` stops the "Run stopped" wake (`TASK_RUN_STOPPED`), which tells a project's lead session when a task's run parks with nothing to wake it. | No | Recreate API; no migration or runner release |
 | `DEEPSEEK_API_KEY` | `secret` | Optional; empty names sessions with their own provider | Asynchronous session title/tag enrichment. When empty, a session is named by its own provider instead: on a configured API key the server holds (title and tags; not a Claude subscription token or an internal-host endpoint), or, for an engine's own sign-in, by Claude Code or Codex from inside the process running the session (title only). | Yes | Recreate API |
 | `DEEPSEEK_BASE_URL` | `URL` | Optional; `https://api.deepseek.com` | Endpoint for title/tag enrichment. | No; avoid credential-bearing URLs | Recreate API |
 | `DEEPSEEK_MODEL` | `string` | Optional; `deepseek-chat` | Model used for title/tag enrichment. | No | Recreate API |
-| `APNS_KEY` | `secret` (base64) | Optional; empty disables push | Base64-encoded contents of the Apple `AuthKey_XXXX.p8` key. Push also needs the key/team identifiers. | Yes | Recreate API |
-| `APNS_KEY_ID` | `string` | Required when APNs is enabled; otherwise empty | Apple push authentication key identifier. | No; redact in public diagnostics | Recreate API |
+| `APNS_KEY` | `secret` (base64) | Optional; empty disables APNs unless environment keys are configured | Base64-encoded contents of the Apple `AuthKey_XXXX.p8` key. Default for both APNs environments; needs the key/team identifiers. | Yes | Recreate API |
+| `APNS_KEY_ID` | `string` | Required with `APNS_KEY`; otherwise empty | Default Apple push authentication key identifier. | No; redact in public diagnostics | Recreate API |
+| `APNS_SANDBOX_KEY` | `secret` (base64) | Optional; falls back to `APNS_KEY` when both sandbox settings are empty | Base64 `.p8` key authorized for sandbox APNs. Set together with `APNS_SANDBOX_KEY_ID`. | Yes | Recreate API |
+| `APNS_SANDBOX_KEY_ID` | `string` | Required with `APNS_SANDBOX_KEY`; otherwise empty | Sandbox signing key identifier. A partial override disables this environment rather than mixing credentials. | No; redact in public diagnostics | Recreate API |
+| `APNS_PRODUCTION_KEY` | `secret` (base64) | Optional; falls back to `APNS_KEY` when both production settings are empty | Base64 `.p8` key authorized for production APNs. Set together with `APNS_PRODUCTION_KEY_ID`. | Yes | Recreate API |
+| `APNS_PRODUCTION_KEY_ID` | `string` | Required with `APNS_PRODUCTION_KEY`; otherwise empty | Production signing key identifier. A partial override disables this environment rather than mixing credentials. | No; redact in public diagnostics | Recreate API |
 | `APNS_TEAM_ID` | `string` | Required when APNs is enabled; otherwise empty | Apple developer team identifier. | No; redact in public diagnostics | Recreate API |
 | `APNS_BUNDLE_ID` | `string` | Optional; `io.orbitd.app` | APNs topic matching the iOS application's bundle ID. | No | Recreate API |
 | `FCM_PROJECT_ID` | `string` | Optional; empty disables Android push | Target Firebase project with Cloud Messaging HTTP v1 enabled, independent of the APNs values. | No; redact in public diagnostics | Recreate API |
@@ -84,6 +89,19 @@ ORBIT_SOURCE_SHA="$(git rev-parse HEAD)" docker compose up -d --build web
 Keep `JWT_SECRET` and `PROVIDER_SECRET_KEY` in a protected backup alongside the database recovery plan.
 They have different jobs; generate them independently. Consult the [security policy](../SECURITY.md)
 before changing credential storage or the runner/server trust boundary.
+
+### Apple push credentials
+
+TestFlight and App Store tokens use production APNs; development builds use sandbox APNs. Apple keys
+may be restricted to one environment. Use an unrestricted default `APNS_KEY` / `APNS_KEY_ID` pair, or
+configure separate sandbox and production pairs above, all under `APNS_TEAM_ID`. The stored device
+environment selects both the host and the signing credentials; never relabel tokens to accommodate a key.
+
+An environment with incomplete credentials is skipped and warned once per API process. If Apple returns
+`403 BadEnvironmentKeyInToken`, that environment is disabled until the API restarts, with one warning
+naming the environment and host. Other environments and push channels continue; device registrations
+are preserved. Requests already in flight may also fail. The server cannot discover a key's environment
+restriction before Apple's first rejection. Correct the credentials and recreate the API to resume sends.
 
 ### Google sign-in
 
@@ -172,6 +190,7 @@ so a deployment installed before them keeps managed runners off.
 | Variable | Type | Required / default | Purpose | Secret? | Apply change |
 | --- | --- | --- | --- | --- | --- |
 | `ORBIT_MANAGED_RUNNERS_ENABLED` | `boolean` (`true` only) | Optional; off. A fresh install writes `true` | The switch. `true` turns managed runners on; absent, empty or `false` is off, and so is any other value, with a warning in the API's log. Off, no account is given a runner and none is started or woken; nothing is stopped or deleted. | No | Recreate API |
+| `ORBIT_MANAGED_RUNNER_BROWSER_ENABLED` | `boolean` (`true` only) | Optional; off. Neither the install nor an upgrade writes it | The Orbit Cloud browser's switch ([runner-browser-design.md §2](runner-browser-design.md#2-the-switch)): `true` lets an account watch and take over its managed runner's Chrome; absent, empty or `false` is off, and so is any other value, with a warning in the API's log. Read only while `ORBIT_MANAGED_RUNNERS_ENABLED` is also on. | No | Recreate API |
 | `ORBIT_MANAGED_RUNNERS_DIR` | `path` | Optional; unset mounts nothing. A fresh install writes `./data/managed-runners` | The managed runners' directory: the API's profile (`profile.json`), the Docker channel's configuration (`channel.json`), token, socket and state. Mounted read-only into the API and read-write into `docker-channel`. | Holds the channel's token | Recreate API and `docker-channel` |
 | `COMPOSE_PROFILES` | `string` (comma-separated list) | Optional; unset. A fresh install writes `managed-runners-docker` | Compose's own variable. `managed-runners-docker` runs `docker-channel`, the restricted Docker channel and the only service given the Docker socket. `managed-runner-firewall` adds the runners' host firewall; an install made with `--no-managed-runner-firewall` leaves it out. Compose takes the last value it reads, so keep one line listing every profile. | No | `docker compose up -d docker-channel` |
 | `ORBIT_MANAGED_RUNNER_FIREWALL_XTABLES_LOCK` | `path` | Optional; `/dev/null` when unset | The host's `/run/xtables.lock` on a host whose iptables uses the legacy backend, which must share the lock with Docker's own iptables calls. The install writes it only where that backend is in use; the nft backend takes no lock and gets `/dev/null`. The mount refuses to create the path (`create_host_path: false`), because a directory made there would break the host's iptables. | No | Recreate `managed-runner-firewall` |
@@ -179,7 +198,7 @@ so a deployment installed before them keeps managed runners off.
 
 `profile.json` chooses the Docker backend (`"backend": "docker"`) and sets each runner's CPU, memory, process and
 volume limits, its image (by local image ID) and the address it reaches the deployment at. `channel.json` names
-the same image and the network `orbit-managed-runners`, and caps what a runner may be given. After editing either,
+the same image and the network `orbit-cloud-runners`, and caps what a runner may be given. After editing either,
 run `docker compose up -d --force-recreate docker-channel apiserver`.
 
 ### Runner link
@@ -285,7 +304,7 @@ network.
 | `8443/tcp` | `link-gateway` | The host, bound by `RUNNER_LINK_BIND`, published as `RUNNER_LINK_PORT` | The link gateway's own WebSocket listener on a link with a host name of its own. A same-origin link sets `RUNNER_LINK_PORT=0` and binds loopback, so nothing useful is published. |
 | `9464/tcp` | `link-gateway` | Host loopback only | `/metrics`. Keep it closed to the internet. |
 | `7300/tcp` | `docker-channel` on a channel host | Only the private addresses named by `--allow-peer` | The remote channel host's control API, over a private link. |
-| none | managed runner containers | The `orbit-managed-runners` network | Runners reach the deployment through the gateway's published port; they publish nothing themselves. |
+| none | managed runner containers | The `orbit-cloud-runners` network | Runners reach the deployment through the gateway's published port; they publish nothing themselves. |
 
 On the runner machine, Orbit publishes no port: the runner makes outbound HTTPS and WebSocket connections only.
 

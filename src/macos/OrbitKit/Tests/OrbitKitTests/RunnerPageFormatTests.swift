@@ -120,6 +120,33 @@ final class RunnerPageFormatTests: XCTestCase {
 
     // MARK: the list row and the page head
 
+    func testManagedFirstKeepsTheOtherMachinesInTheirSavedOrder() throws {
+        let first = try macMini()
+        let second = try wikova()
+        let managed = try runner(Self.hpcJSON, ["managed": true])
+        XCTAssertEqual(RunnerPageFormat.managedFirst([first, managed, second], managedRunnerID: nil),
+                       [managed, first, second])
+    }
+
+    func testManagedFirstUsesTheStatusIDOnOlderServers() throws {
+        let first = try macMini()
+        let managed = try wikova()
+        XCTAssertEqual(RunnerPageFormat.managedFirst([first, managed], managedRunnerID: managed.id),
+                       [managed, first])
+    }
+
+    func testManagedFirstKeepsTheSavedOrderWithoutAManagedRunner() throws {
+        let runners = [try macMini(), try runner(Self.wikovaJSON, ["name": "orbit-cloud"])]
+        XCTAssertEqual(RunnerPageFormat.managedFirst(runners, managedRunnerID: nil), runners)
+    }
+
+    func testOSReadsTheReportedCapabilityAndNothingWithoutOne() throws {
+        XCTAssertEqual(RunnerPageFormat.os(try runner(Self.wikovaJSON, ["capabilities": ["session-worktree-ops-v1", "os:linux"]])), "linux")
+        XCTAssertEqual(RunnerPageFormat.os(try runner(Self.macMiniJSON, ["capabilities": ["os:darwin"]])), "darwin")
+        XCTAssertNil(RunnerPageFormat.os(try runner(Self.wikovaJSON, ["capabilities": ["provider:dsh"]])))
+        XCTAssertNil(RunnerPageFormat.os(try runner(Self.wikovaJSON, ["capabilities": NSNull()])))
+    }
+
     func testTheHeadAndTheRowSayWhereTheMachineStands() throws {
         let wikova = try wikova()
         XCTAssertEqual(RunnerPageFormat.presence(wikova, now: now), .online)
@@ -143,6 +170,17 @@ final class RunnerPageFormatTests: XCTestCase {
 
         let neverSeen = try runner(Self.macMiniJSON, ["lastHeartbeatAt": NSNull()])
         XCTAssertEqual(RunnerPageFormat.statusLine(neverSeen, now: now), "Offline")
+    }
+
+    func testTheLocationIsTheCountryItsIPIsIn() throws {
+        XCTAssertNil(RunnerPageFormat.location(try wikova()), "no check has decided: nothing is shown")
+        let japan: [String: Any] = ["verdict": "allowed", "country": "JP", "regionCode": NSNull(), "name": "Japan",
+                                    "viaProxy": false, "checkedAt": "2026-09-28T11:57:00Z"]
+        XCTAssertEqual(RunnerPageFormat.location(try runner(Self.wikovaJSON, ["region": japan])), "📍 Japan")
+        var proxied = japan
+        proxied["viaProxy"] = true
+        XCTAssertEqual(RunnerPageFormat.location(try runner(Self.wikovaJSON, ["region": proxied])),
+                       "📍 Japan (via proxy)")
     }
 
     func testDrainingAndAFullMachine() throws {

@@ -1,0 +1,1007 @@
+{
+  "about": [
+    "The folded Background row of a session's composer band: `backgroundRow(list, clearedAt,",
+    "sessionLive)` in backgroundRow.ts. The web, OrbitKit and Android tests load this file by path and",
+    "must draw exactly `expect` for every case. Owner decisions D1-D4, E1-E3 (2026-11-17), project",
+    "34yq7HVPsPDGBiMEm8sL2.",
+    "",
+    "`list`: the session's entries from GET /sessions/:id/background, cut to the fields the row reads.",
+    "`lastUserMessageAt`: the time of the session's last user message (null: none yet).",
+    "`lastAgentTurnStartedAt`: when the agent's latest turn started, any turn counting, a wake's included",
+    "(null or absent: none). `sessionLive`: whether the session is live. The row's cut-off is the later of",
+    "`lastUserMessageAt` and `lastAgentTurnStartedAt` (backgroundRowClearedAt in backgroundRow.ts).",
+    "",
+    "Shown items: running ones (only on a live session) plus ended ones (done, failed, killed) whose",
+    "endedAt is later than the cut-off. None shown: `{hidden: true}`, no row and no folded mark.",
+    "`label` is \"Background\". `name.mode`: `one` (one item, still) or `rotate` (2+ running: the running",
+    "items newest started first, perNameMs 3000 per name, changeMs 300 per change). A failure changes",
+    "neither (E2, revised 2026-11-21): the person can do nothing about it. With nothing running the last",
+    "to end is named, failed or not. With one running and others ended, the running one is named.",
+    "An item's name is its description (truncate `tail`), else its command (truncate `middle`).",
+    "`mark`: running = spinner, done = check, failed = cross, killed = stop icon.",
+    "`countParts` / `countLine`: only when more than one item is shown and some run: \"N running\"; a",
+    "failure is never counted (E2); null otherwise.",
+    "`accessibilityLabel`: \"Background processes, \" + countLine, or the one named item's name.",
+    "",
+    "`covers` tags each case with the rules it pins; the shared test requires every tag in `rules`.",
+    "",
+    "`events`, where present, is the session's transcript the clients read `lastUserMessageAt` from: every",
+    "client's own reader must return exactly the case's `lastUserMessageAt` from it (the newest user turn",
+    "the person typed; wake notes, watch wakes and session-to-session messages do not count)."
+  ],
+  "rules": {
+    "hidden": "No shown items: no row.",
+    "endedAfterLastUserMessage": "An ended item is shown only if it ended after the cut-off: the later of the last user message and the agent's latest turn start.",
+    "label": "The visible label is \"Background\".",
+    "single": "One shown item is drawn as its name and status mark.",
+    "nameFallback": "Name = description (tail truncation), else command (middle truncation).",
+    "countLine": "The count line appears only when more than one item is shown and some run, as \"N running\".",
+    "rotation": "Names rotate newest started first, 3000 ms / 300 ms, while 2+ run, a failure shown or not.",
+    "failureNotCounted": "A failure is neither counted nor pinned: it keeps its cross only where it is named.",
+    "nothingRunningLastEnded": "Nothing running: the last ended is shown, failed or not.",
+    "a11yCount": "Accessibility label \"Background processes, \" + the count.",
+    "a11yName": "Accessibility label \"Background processes, \" + the one name.",
+    "notLive": "A non-live session's stale running items are dropped.",
+    "sessionMessage": "A message another Orbit session sent (session_send / project_send, a `sessionMessage` card on the turn) is not the person's message: it does not clear an ended item.",
+    "wakeTurnClears": "A turn the agent opens itself (a wake) starts an agent turn and clears an item that ended before it started.",
+    "endedMidTurn": "An item that ended during a turn already running stays until the next turn starts.",
+    "userMessageClears": "The person's next message after the end clears an ended item."
+  },
+  "rotation": {
+    "perNameMs": 3000,
+    "changeMs": 300
+  },
+  "cases": [
+    {
+      "case": "nothing in the list: no row",
+      "covers": [
+        "hidden"
+      ],
+      "list": [],
+      "lastUserMessageAt": "2026-11-16T02:40:00.000Z",
+      "sessionLive": true,
+      "expect": {
+        "hidden": true
+      }
+    },
+    {
+      "case": "ended before the last user message: not shown, no row",
+      "covers": [
+        "hidden",
+        "endedAfterLastUserMessage"
+      ],
+      "list": [
+        {
+          "shellId": "bgj_a",
+          "command": "",
+          "startedSeq": 10,
+          "status": "done",
+          "description": "Wait until the handoff v2 project branch is on main",
+          "endedAt": "2026-11-16T02:39:00.000Z"
+        }
+      ],
+      "lastUserMessageAt": "2026-11-16T02:40:00.000Z",
+      "sessionLive": true,
+      "expect": {
+        "hidden": true
+      }
+    },
+    {
+      "case": "ended exactly at the last user message: not shown",
+      "covers": [
+        "hidden",
+        "endedAfterLastUserMessage"
+      ],
+      "list": [
+        {
+          "shellId": "bgj_a",
+          "command": "",
+          "startedSeq": 10,
+          "status": "done",
+          "description": "Wait until the handoff v2 project branch is on main",
+          "endedAt": "2026-11-16T02:40:00.000Z"
+        }
+      ],
+      "lastUserMessageAt": "2026-11-16T02:40:00.000Z",
+      "sessionLive": true,
+      "expect": {
+        "hidden": true
+      }
+    },
+    {
+      "case": "ended after the last user message: shown with its result",
+      "covers": [
+        "endedAfterLastUserMessage",
+        "label",
+        "single",
+        "a11yName"
+      ],
+      "list": [
+        {
+          "shellId": "bgj_old",
+          "command": "",
+          "startedSeq": 5,
+          "status": "done",
+          "description": "Older build",
+          "endedAt": "2026-11-16T02:30:00.000Z"
+        },
+        {
+          "shellId": "bgj_a",
+          "command": "",
+          "startedSeq": 10,
+          "status": "done",
+          "description": "Wait until the handoff v2 project branch is on main",
+          "endedAt": "2026-11-16T02:45:00.000Z"
+        }
+      ],
+      "lastUserMessageAt": "2026-11-16T02:40:00.000Z",
+      "sessionLive": true,
+      "expect": {
+        "hidden": false,
+        "label": "Background",
+        "name": {
+          "mode": "one",
+          "item": {
+            "id": "bgj_a",
+            "name": "Wait until the handoff v2 project branch is on main",
+            "truncate": "tail",
+            "mark": "done"
+          }
+        },
+        "countParts": [],
+        "countLine": null,
+        "accessibilityLabel": "Background processes, Wait until the handoff v2 project branch is on main"
+      }
+    },
+    {
+      "case": "a wake turn clears an item that ended before it started",
+      "covers": [
+        "wakeTurnClears",
+        "endedAfterLastUserMessage",
+        "hidden"
+      ],
+      "list": [
+        {
+          "shellId": "bgj_s",
+          "command": "",
+          "startedSeq": 10,
+          "status": "failed",
+          "description": "OrbitKit swift test (swift:6.1) on the full HEAD tree",
+          "endedAt": "2026-11-16T02:45:00.000Z"
+        }
+      ],
+      "lastUserMessageAt": "2026-11-16T02:40:00.000Z",
+      "sessionLive": true,
+      "expect": {
+        "hidden": true
+      },
+      "lastAgentTurnStartedAt": "2026-11-16T02:46:00.000Z"
+    },
+    {
+      "case": "an item that ended during a turn already running stays until the next turn starts",
+      "covers": [
+        "endedMidTurn",
+        "endedAfterLastUserMessage",
+        "single"
+      ],
+      "list": [
+        {
+          "shellId": "bgj_s",
+          "command": "",
+          "startedSeq": 10,
+          "status": "failed",
+          "description": "OrbitKit swift test (swift:6.1) on the full HEAD tree",
+          "endedAt": "2026-11-16T02:45:00.000Z"
+        }
+      ],
+      "lastUserMessageAt": "2026-11-16T02:40:00.000Z",
+      "sessionLive": true,
+      "expect": {
+        "hidden": false,
+        "label": "Background",
+        "name": {
+          "mode": "one",
+          "item": {
+            "id": "bgj_s",
+            "name": "OrbitKit swift test (swift:6.1) on the full HEAD tree",
+            "truncate": "tail",
+            "mark": "failed"
+          }
+        },
+        "countParts": [],
+        "countLine": null,
+        "accessibilityLabel": "Background processes, OrbitKit swift test (swift:6.1) on the full HEAD tree"
+      },
+      "lastAgentTurnStartedAt": "2026-11-16T02:44:00.000Z"
+    },
+    {
+      "case": "the person's next message after the end clears it, an earlier agent turn does not matter",
+      "covers": [
+        "userMessageClears",
+        "endedAfterLastUserMessage",
+        "hidden"
+      ],
+      "list": [
+        {
+          "shellId": "bgj_s",
+          "command": "",
+          "startedSeq": 10,
+          "status": "failed",
+          "description": "OrbitKit swift test (swift:6.1) on the full HEAD tree",
+          "endedAt": "2026-11-16T02:45:00.000Z"
+        }
+      ],
+      "lastUserMessageAt": "2026-11-16T02:47:00.000Z",
+      "lastAgentTurnStartedAt": "2026-11-16T02:44:00.000Z",
+      "sessionLive": true,
+      "expect": {
+        "hidden": true
+      }
+    },
+    {
+      "case": "the session has no user message yet: every ended item counts as after it",
+      "covers": [
+        "endedAfterLastUserMessage",
+        "single"
+      ],
+      "list": [
+        {
+          "shellId": "bgj_a",
+          "command": "",
+          "startedSeq": 10,
+          "status": "killed",
+          "description": "Wait until the handoff v2 project branch is on main",
+          "endedAt": "2026-11-16T02:45:00.000Z"
+        }
+      ],
+      "lastUserMessageAt": null,
+      "sessionLive": true,
+      "expect": {
+        "hidden": false,
+        "label": "Background",
+        "name": {
+          "mode": "one",
+          "item": {
+            "id": "bgj_a",
+            "name": "Wait until the handoff v2 project branch is on main",
+            "truncate": "tail",
+            "mark": "killed"
+          }
+        },
+        "countParts": [],
+        "countLine": null,
+        "accessibilityLabel": "Background processes, Wait until the handoff v2 project branch is on main"
+      }
+    },
+    {
+      "case": "one running: label, name and spinner, no count",
+      "covers": [
+        "label",
+        "single",
+        "countLine",
+        "a11yName"
+      ],
+      "list": [
+        {
+          "shellId": "bgj_w",
+          "command": "",
+          "startedSeq": 10,
+          "status": "running",
+          "description": "Wait until the handoff v2 project branch is on main"
+        }
+      ],
+      "lastUserMessageAt": "2026-11-16T02:40:00.000Z",
+      "sessionLive": true,
+      "expect": {
+        "hidden": false,
+        "label": "Background",
+        "name": {
+          "mode": "one",
+          "item": {
+            "id": "bgj_w",
+            "name": "Wait until the handoff v2 project branch is on main",
+            "truncate": "tail",
+            "mark": "running"
+          }
+        },
+        "countParts": [],
+        "countLine": null,
+        "accessibilityLabel": "Background processes, Wait until the handoff v2 project branch is on main"
+      }
+    },
+    {
+      "case": "no description: the command names it and truncates in the middle",
+      "covers": [
+        "single",
+        "nameFallback"
+      ],
+      "list": [
+        {
+          "shellId": "b8k2",
+          "command": "npm run build -w @orbit/apiserver 2>&1 | tee /tmp/build.log",
+          "startedSeq": 10,
+          "status": "running"
+        }
+      ],
+      "lastUserMessageAt": "2026-11-16T02:40:00.000Z",
+      "sessionLive": true,
+      "expect": {
+        "hidden": false,
+        "label": "Background",
+        "name": {
+          "mode": "one",
+          "item": {
+            "id": "b8k2",
+            "name": "npm run build -w @orbit/apiserver 2>&1 | tee /tmp/build.log",
+            "truncate": "middle",
+            "mark": "running"
+          }
+        },
+        "countParts": [],
+        "countLine": null,
+        "accessibilityLabel": "Background processes, npm run build -w @orbit/apiserver 2>&1 | tee /tmp/build.log"
+      }
+    },
+    {
+      "case": "a blank description falls back to the command",
+      "covers": [
+        "single",
+        "nameFallback"
+      ],
+      "list": [
+        {
+          "shellId": "b8k3",
+          "command": "make test",
+          "startedSeq": 10,
+          "status": "done",
+          "description": "  ",
+          "endedAt": "2026-11-16T02:41:00.000Z"
+        }
+      ],
+      "lastUserMessageAt": "2026-11-16T02:40:00.000Z",
+      "sessionLive": true,
+      "expect": {
+        "hidden": false,
+        "label": "Background",
+        "name": {
+          "mode": "one",
+          "item": {
+            "id": "b8k3",
+            "name": "make test",
+            "truncate": "middle",
+            "mark": "done"
+          }
+        },
+        "countParts": [],
+        "countLine": null,
+        "accessibilityLabel": "Background processes, make test"
+      }
+    },
+    {
+      "case": "three running: names rotate newest started first, count 3 running",
+      "covers": [
+        "rotation",
+        "countLine",
+        "a11yCount",
+        "label"
+      ],
+      "list": [
+        {
+          "shellId": "bgj_web",
+          "command": "",
+          "startedSeq": 10,
+          "status": "running",
+          "description": "web tsc + full Vitest suite"
+        },
+        {
+          "shellId": "bgj_tsc",
+          "command": "",
+          "startedSeq": 30,
+          "status": "running",
+          "description": "apiserver tsc + full npm test at 2ce9dc49e"
+        },
+        {
+          "shellId": "bgj_s",
+          "command": "",
+          "startedSeq": 20,
+          "status": "running",
+          "description": "OrbitKit swift test (swift:6.1) on the full HEAD tree"
+        }
+      ],
+      "lastUserMessageAt": "2026-11-16T02:40:00.000Z",
+      "sessionLive": true,
+      "expect": {
+        "hidden": false,
+        "label": "Background",
+        "name": {
+          "mode": "rotate",
+          "items": [
+            {
+              "id": "bgj_tsc",
+              "name": "apiserver tsc + full npm test at 2ce9dc49e",
+              "truncate": "tail",
+              "mark": "running"
+            },
+            {
+              "id": "bgj_s",
+              "name": "OrbitKit swift test (swift:6.1) on the full HEAD tree",
+              "truncate": "tail",
+              "mark": "running"
+            },
+            {
+              "id": "bgj_web",
+              "name": "web tsc + full Vitest suite",
+              "truncate": "tail",
+              "mark": "running"
+            }
+          ],
+          "perNameMs": 3000,
+          "changeMs": 300
+        },
+        "countParts": [
+          {
+            "kind": "running",
+            "text": "3 running"
+          }
+        ],
+        "countLine": "3 running",
+        "accessibilityLabel": "Background processes, 3 running"
+      }
+    },
+    {
+      "case": "two running and one done since the last message: rotate the running two, done is not counted",
+      "covers": [
+        "rotation",
+        "countLine",
+        "a11yCount"
+      ],
+      "list": [
+        {
+          "shellId": "bgj_web",
+          "command": "",
+          "startedSeq": 10,
+          "status": "running",
+          "description": "web tsc + full Vitest suite"
+        },
+        {
+          "shellId": "bgj_tsc",
+          "command": "",
+          "startedSeq": 30,
+          "status": "running",
+          "description": "apiserver tsc + full npm test at 2ce9dc49e"
+        },
+        {
+          "shellId": "bgj_d",
+          "command": "",
+          "startedSeq": 5,
+          "status": "done",
+          "description": "Lint",
+          "endedAt": "2026-11-16T02:42:00.000Z"
+        }
+      ],
+      "lastUserMessageAt": "2026-11-16T02:40:00.000Z",
+      "sessionLive": true,
+      "expect": {
+        "hidden": false,
+        "label": "Background",
+        "name": {
+          "mode": "rotate",
+          "items": [
+            {
+              "id": "bgj_tsc",
+              "name": "apiserver tsc + full npm test at 2ce9dc49e",
+              "truncate": "tail",
+              "mark": "running"
+            },
+            {
+              "id": "bgj_web",
+              "name": "web tsc + full Vitest suite",
+              "truncate": "tail",
+              "mark": "running"
+            }
+          ],
+          "perNameMs": 3000,
+          "changeMs": 300
+        },
+        "countParts": [
+          {
+            "kind": "running",
+            "text": "2 running"
+          }
+        ],
+        "countLine": "2 running",
+        "accessibilityLabel": "Background processes, 2 running"
+      }
+    },
+    {
+      "case": "one running and one done: no rotation, the running one is named, count 1 running",
+      "covers": [
+        "rotation",
+        "countLine",
+        "a11yCount"
+      ],
+      "list": [
+        {
+          "shellId": "bgj_d",
+          "command": "",
+          "startedSeq": 5,
+          "status": "done",
+          "description": "Lint",
+          "endedAt": "2026-11-16T02:42:00.000Z"
+        },
+        {
+          "shellId": "bgj_w",
+          "command": "",
+          "startedSeq": 10,
+          "status": "running",
+          "description": "Wait until the handoff v2 project branch is on main"
+        }
+      ],
+      "lastUserMessageAt": "2026-11-16T02:40:00.000Z",
+      "sessionLive": true,
+      "expect": {
+        "hidden": false,
+        "label": "Background",
+        "name": {
+          "mode": "one",
+          "item": {
+            "id": "bgj_w",
+            "name": "Wait until the handoff v2 project branch is on main",
+            "truncate": "tail",
+            "mark": "running"
+          }
+        },
+        "countParts": [
+          {
+            "kind": "running",
+            "text": "1 running"
+          }
+        ],
+        "countLine": "1 running",
+        "accessibilityLabel": "Background processes, 1 running"
+      }
+    },
+    {
+      "case": "two running, one failed: the running two rotate, count 2 running, the failure not counted",
+      "covers": [
+        "failureNotCounted",
+        "rotation",
+        "countLine",
+        "a11yCount"
+      ],
+      "list": [
+        {
+          "shellId": "bgj_web",
+          "command": "",
+          "startedSeq": 10,
+          "status": "running",
+          "description": "web tsc + full Vitest suite"
+        },
+        {
+          "shellId": "bgj_tsc",
+          "command": "",
+          "startedSeq": 30,
+          "status": "running",
+          "description": "apiserver tsc + full npm test at 2ce9dc49e"
+        },
+        {
+          "shellId": "bgj_s",
+          "command": "",
+          "startedSeq": 20,
+          "status": "failed",
+          "description": "OrbitKit swift test (swift:6.1) on the full HEAD tree",
+          "endedAt": "2026-11-16T02:48:00.000Z"
+        }
+      ],
+      "lastUserMessageAt": "2026-11-16T02:40:00.000Z",
+      "sessionLive": true,
+      "expect": {
+        "hidden": false,
+        "label": "Background",
+        "name": {
+          "mode": "rotate",
+          "items": [
+            {
+              "id": "bgj_tsc",
+              "name": "apiserver tsc + full npm test at 2ce9dc49e",
+              "truncate": "tail",
+              "mark": "running"
+            },
+            {
+              "id": "bgj_web",
+              "name": "web tsc + full Vitest suite",
+              "truncate": "tail",
+              "mark": "running"
+            }
+          ],
+          "perNameMs": 3000,
+          "changeMs": 300
+        },
+        "countParts": [
+          {
+            "kind": "running",
+            "text": "2 running"
+          }
+        ],
+        "countLine": "2 running",
+        "accessibilityLabel": "Background processes, 2 running"
+      }
+    },
+    {
+      "case": "two failures shown: the running one is named, the failures not counted",
+      "covers": [
+        "failureNotCounted",
+        "countLine"
+      ],
+      "list": [
+        {
+          "shellId": "bgj_f2",
+          "command": "",
+          "startedSeq": 20,
+          "status": "failed",
+          "description": "Second failure",
+          "endedAt": "2026-11-16T02:50:00.000Z"
+        },
+        {
+          "shellId": "bgj_f1",
+          "command": "",
+          "startedSeq": 10,
+          "status": "failed",
+          "description": "First failure",
+          "endedAt": "2026-11-16T02:41:00.000Z"
+        },
+        {
+          "shellId": "bgj_w",
+          "command": "",
+          "startedSeq": 30,
+          "status": "running",
+          "description": "Wait until the handoff v2 project branch is on main"
+        }
+      ],
+      "lastUserMessageAt": "2026-11-16T02:40:00.000Z",
+      "sessionLive": true,
+      "expect": {
+        "hidden": false,
+        "label": "Background",
+        "name": {
+          "mode": "one",
+          "item": {
+            "id": "bgj_w",
+            "name": "Wait until the handoff v2 project branch is on main",
+            "truncate": "tail",
+            "mark": "running"
+          }
+        },
+        "countParts": [
+          {
+            "kind": "running",
+            "text": "1 running"
+          }
+        ],
+        "countLine": "1 running",
+        "accessibilityLabel": "Background processes, 1 running"
+      }
+    },
+    {
+      "case": "a failure before the last user message is not shown, so the rest rotate",
+      "covers": [
+        "failureNotCounted",
+        "rotation",
+        "endedAfterLastUserMessage"
+      ],
+      "list": [
+        {
+          "shellId": "bgj_f",
+          "command": "",
+          "startedSeq": 5,
+          "status": "failed",
+          "description": "Old failure",
+          "endedAt": "2026-11-16T02:39:00.000Z"
+        },
+        {
+          "shellId": "bgj_web",
+          "command": "",
+          "startedSeq": 10,
+          "status": "running",
+          "description": "web tsc + full Vitest suite"
+        },
+        {
+          "shellId": "bgj_tsc",
+          "command": "",
+          "startedSeq": 30,
+          "status": "running",
+          "description": "apiserver tsc + full npm test at 2ce9dc49e"
+        }
+      ],
+      "lastUserMessageAt": "2026-11-16T02:40:00.000Z",
+      "sessionLive": true,
+      "expect": {
+        "hidden": false,
+        "label": "Background",
+        "name": {
+          "mode": "rotate",
+          "items": [
+            {
+              "id": "bgj_tsc",
+              "name": "apiserver tsc + full npm test at 2ce9dc49e",
+              "truncate": "tail",
+              "mark": "running"
+            },
+            {
+              "id": "bgj_web",
+              "name": "web tsc + full Vitest suite",
+              "truncate": "tail",
+              "mark": "running"
+            }
+          ],
+          "perNameMs": 3000,
+          "changeMs": 300
+        },
+        "countParts": [
+          {
+            "kind": "running",
+            "text": "2 running"
+          }
+        ],
+        "countLine": "2 running",
+        "accessibilityLabel": "Background processes, 2 running"
+      }
+    },
+    {
+      "case": "nothing running, several ended: the last to end is shown, no count parts",
+      "covers": [
+        "nothingRunningLastEnded",
+        "countLine",
+        "a11yName"
+      ],
+      "list": [
+        {
+          "shellId": "bgj_a",
+          "command": "",
+          "startedSeq": 10,
+          "status": "done",
+          "description": "Build web",
+          "endedAt": "2026-11-16T02:44:00.000Z"
+        },
+        {
+          "shellId": "bgj_b",
+          "command": "",
+          "startedSeq": 20,
+          "status": "killed",
+          "description": "Watch CI",
+          "endedAt": "2026-11-16T02:47:00.000Z"
+        },
+        {
+          "shellId": "bgj_c",
+          "command": "",
+          "startedSeq": 30,
+          "status": "done",
+          "description": "Build apiserver",
+          "endedAt": "2026-11-16T02:46:00.000Z"
+        }
+      ],
+      "lastUserMessageAt": "2026-11-16T02:40:00.000Z",
+      "sessionLive": true,
+      "expect": {
+        "hidden": false,
+        "label": "Background",
+        "name": {
+          "mode": "one",
+          "item": {
+            "id": "bgj_b",
+            "name": "Watch CI",
+            "truncate": "tail",
+            "mark": "killed"
+          }
+        },
+        "countParts": [],
+        "countLine": null,
+        "accessibilityLabel": "Background processes, Watch CI"
+      }
+    },
+    {
+      "case": "nothing running, a failure among the ended: the last to end is named, not the failure",
+      "covers": [
+        "nothingRunningLastEnded",
+        "failureNotCounted",
+        "countLine",
+        "a11yCount"
+      ],
+      "list": [
+        {
+          "shellId": "bgj_s",
+          "command": "",
+          "startedSeq": 20,
+          "status": "failed",
+          "description": "OrbitKit swift test (swift:6.1) on the full HEAD tree",
+          "endedAt": "2026-11-16T02:45:00.000Z"
+        },
+        {
+          "shellId": "bgj_tsc",
+          "command": "",
+          "startedSeq": 30,
+          "status": "done",
+          "description": "apiserver tsc + full npm test at 2ce9dc49e",
+          "endedAt": "2026-11-16T02:50:00.000Z"
+        },
+        {
+          "shellId": "bgj_web",
+          "command": "",
+          "startedSeq": 10,
+          "status": "done",
+          "description": "web tsc + full Vitest suite",
+          "endedAt": "2026-11-16T02:49:00.000Z"
+        }
+      ],
+      "lastUserMessageAt": "2026-11-16T02:40:00.000Z",
+      "sessionLive": true,
+      "expect": {
+        "hidden": false,
+        "label": "Background",
+        "name": {
+          "mode": "one",
+          "item": {
+            "id": "bgj_tsc",
+            "name": "apiserver tsc + full npm test at 2ce9dc49e",
+            "truncate": "tail",
+            "mark": "done"
+          }
+        },
+        "countParts": [],
+        "countLine": null,
+        "accessibilityLabel": "Background processes, apiserver tsc + full npm test at 2ce9dc49e"
+      }
+    },
+    {
+      "case": "a session that is not live: its stale running item is dropped, no row",
+      "covers": [
+        "notLive",
+        "hidden"
+      ],
+      "list": [
+        {
+          "shellId": "bgj_w",
+          "command": "",
+          "startedSeq": 10,
+          "status": "running",
+          "description": "Wait until the handoff v2 project branch is on main"
+        }
+      ],
+      "lastUserMessageAt": "2026-11-16T02:40:00.000Z",
+      "sessionLive": false,
+      "expect": {
+        "hidden": true
+      }
+    },
+    {
+      "case": "a session that is not live: stale running dropped, its unanswered ended item still shown",
+      "covers": [
+        "notLive",
+        "single",
+        "countLine"
+      ],
+      "list": [
+        {
+          "shellId": "bgj_w",
+          "command": "",
+          "startedSeq": 10,
+          "status": "running",
+          "description": "Wait until the handoff v2 project branch is on main"
+        },
+        {
+          "shellId": "bgj_tsc",
+          "command": "",
+          "startedSeq": 30,
+          "status": "running",
+          "description": "apiserver tsc + full npm test at 2ce9dc49e"
+        },
+        {
+          "shellId": "bgj_s",
+          "command": "",
+          "startedSeq": 20,
+          "status": "failed",
+          "description": "OrbitKit swift test (swift:6.1) on the full HEAD tree",
+          "endedAt": "2026-11-16T02:45:00.000Z"
+        }
+      ],
+      "lastUserMessageAt": "2026-11-16T02:40:00.000Z",
+      "sessionLive": false,
+      "expect": {
+        "hidden": false,
+        "label": "Background",
+        "name": {
+          "mode": "one",
+          "item": {
+            "id": "bgj_s",
+            "name": "OrbitKit swift test (swift:6.1) on the full HEAD tree",
+            "truncate": "tail",
+            "mark": "failed"
+          }
+        },
+        "countParts": [],
+        "countLine": null,
+        "accessibilityLabel": "Background processes, OrbitKit swift test (swift:6.1) on the full HEAD tree"
+      }
+    },
+    {
+      "case": "an item whose end was never observed (unknown) is not shown",
+      "covers": [
+        "notLive",
+        "hidden"
+      ],
+      "list": [
+        {
+          "shellId": "b9x",
+          "command": "",
+          "startedSeq": 10,
+          "status": "unknown",
+          "description": "Tail the deploy log"
+        }
+      ],
+      "lastUserMessageAt": "2026-11-16T02:40:00.000Z",
+      "sessionLive": false,
+      "expect": {
+        "hidden": true
+      }
+    },
+    {
+      "case": "a session-to-session message after the end does not clear it",
+      "covers": [
+        "sessionMessage",
+        "endedAfterLastUserMessage",
+        "single"
+      ],
+      "events": [
+        {
+          "seq": 1,
+          "type": "user",
+          "ts": "2026-11-16T02:40:00.000Z",
+          "payload": {
+            "text": "Run the swift tests"
+          }
+        },
+        {
+          "seq": 2,
+          "type": "user",
+          "ts": "2026-11-16T02:46:00.000Z",
+          "payload": {
+            "text": "Please report when the suite is green",
+            "sessionMessage": {
+              "fromSessionId": "coord_1",
+              "fromTitle": "Coordinator",
+              "fromAgentName": "orbit-ws01"
+            }
+          }
+        }
+      ],
+      "list": [
+        {
+          "shellId": "bgj_s",
+          "command": "",
+          "startedSeq": 10,
+          "status": "failed",
+          "description": "OrbitKit swift test (swift:6.1) on the full HEAD tree",
+          "endedAt": "2026-11-16T02:45:00.000Z"
+        }
+      ],
+      "lastUserMessageAt": "2026-11-16T02:40:00.000Z",
+      "sessionLive": true,
+      "expect": {
+        "hidden": false,
+        "label": "Background",
+        "name": {
+          "mode": "one",
+          "item": {
+            "id": "bgj_s",
+            "name": "OrbitKit swift test (swift:6.1) on the full HEAD tree",
+            "truncate": "tail",
+            "mark": "failed"
+          }
+        },
+        "countParts": [],
+        "countLine": null,
+        "accessibilityLabel": "Background processes, OrbitKit swift test (swift:6.1) on the full HEAD tree"
+      }
+    }
+  ]
+}

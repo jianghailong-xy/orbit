@@ -126,7 +126,7 @@ class StartProjectCardTest {
         compose.onNodeWithTag("$tag-merge-check-value", useUnmergedTree = true).performScrollTo().assertTextEquals(RunSettings.mergeCheckNone)
         shows(RunSettings.mergeCheckNoneSays); shows(RunSettings.automaticOnUnchecked)
         compose.onNodeWithText(RunSettings.noMergeCheckWarning).assertDoesNotExist()
-        compose.onNodeWithTag("$tag-merge-check").performClick()
+        compose.onNodeWithTag("$tag-merge-check").performScrollTo().performClick()
         compose.onNodeWithTag("$tag-merge-check-command").performScrollTo().performTextInput("make check")
         compose.onNodeWithTag("$tag-merge-check-value", useUnmergedTree = true).assertTextEquals(RunSettings.mergeCheckSet)
         shows(RunSettings.mergeCheckHint); shows(RunSettings.automaticOnChecked)
@@ -157,6 +157,21 @@ class StartProjectCardTest {
         card(StartProjectCopy.ownerRequest(StartProjectCopy.Settings("MAIN", null, true, 1, null), seal), asked = false, hasCoordinator = true)
         shows(StartProjectCopy.nobodyAsked)
         compose.onNodeWithText(StartProjectCopy.opensCoordinator).assertDoesNotExist()
+    }
+
+    @Test fun aRequestWithNoLineDrawsOneSentenceInPlaceOfTheLandingRows() {
+        val request = request(check = null)
+        card(request.copy(settings = request.settings.copy(line = null)), asked = true)
+        shows(LandingMeasuredCopy.landsWhenATaskCommits)
+        shows(RunSettings.automaticSays(true, null, true))
+        for (row in listOf(RunSettings.tasksLandOn, RunSettings.mainBranch, RunSettings.delivery, LandingCheckCopy.label)) {
+            compose.onNodeWithText(row).assertDoesNotExist()
+        }
+        compose.onNodeWithTag("$tag-automatic").performScrollTo().performClick()
+        shows(RunSettings.automaticSays(false, null, true))
+        compose.onNodeWithText(StartProjectCopy.mergingIntoMain).assertDoesNotExist()
+        compose.onNodeWithTag("$tag-confirm").performScrollTo().assertIsEnabled().performClick()
+        assertEquals(1, started)
     }
 
     @Test fun aRequestThatNoLongerStandsIsDimmedWithStartDeadAndSaysWhy() {

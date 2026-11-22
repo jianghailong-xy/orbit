@@ -10,6 +10,7 @@ import {
   type RunningWorktreeOperation,
 } from './dispatch-pause';
 import { QueueService } from './queue.service';
+import { sessionHeldIndexedSql } from '../common/session-release';
 
 /** Reads and switches the runner dispatch pause (dispatch-pause.ts). */
 @Injectable()
@@ -25,8 +26,10 @@ export class DispatchPauseService {
   /** The switch, and the turns, integration jobs and merges/commits still running. */
   async read(): Promise<DispatchPauseView> {
     const state = await this.prisma.dispatchPause.findUnique({ where: { id: 1 } });
-    // From the open sessions (OPEN_SESSION_STATUSES) into their turns, both indexed (`session_status_idx`,
-    // `(session_id, status)`): a turn of a session that has ended runs nowhere.
+    // From the held sessions into their turns, both indexed (`session_status_idx`, `(session_id, status)`): a turn of a
+    // session that has ended runs nowhere. The indexed form states the held statuses beside `finished_at IS NULL`
+    // because they are the entry: with the release column alone the planner scans every turn (plan step 4.5, EXPLAIN in
+    // sessions/session-claim-index.pg.spec.ts).
     const turns = await this.prisma.$queryRaw<RunningTurn[]>`
       SELECT t."id"::text AS "turnId", t."session_id"::text AS "sessionId",
              s."assigned_runner_id"::text AS "runnerId", t."kind",
@@ -34,7 +37,7 @@ export class DispatchPauseService {
              floor(extract(epoch FROM now() - t."delivered_at"))::int AS "elapsedSeconds"
         FROM "session" s
         JOIN "conversation_turn" t ON t."session_id" = s."id" AND t."status" = 'IN_FLIGHT'
-       WHERE s."status" IN ('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED')
+       WHERE ${sessionHeldIndexedSql('s')}
          AND t."kind" IN ('message', 'shell')
        ORDER BY t."delivered_at" ASC NULLS FIRST, t."id"`;
     const integrationJobs = await this.prisma.$queryRaw<RunningIntegrationJob[]>`
@@ -117,7 +120,7 @@ export class DispatchPauseService {
         SELECT DISTINCT s."id"::text AS "id"
           FROM "session" s
           JOIN "conversation_turn" t ON t."session_id" = s."id" AND t."status" = 'PENDING'
-         WHERE s."status" IN ('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED')
+         WHERE ${sessionHeldIndexedSql('s')}
            AND t."kind" IN ('message', 'shell', 'reload')`;
       for (const { id } of held) this.realtime.notifyInbox(id);
       const runners = await this.prisma.$queryRaw<Array<{ runnerId: string }>>`

@@ -21,7 +21,7 @@ import {
   ValidateIf,
   ValidateNested,
 } from 'class-validator';
-import { TaskStatus } from '@orbit/shared';
+import { CONDITION_COMPARE_OPS, TaskStatus, type ConditionCompareOp } from '@orbit/shared';
 import type { CreatorType } from '@prisma/client';
 import { IsPublicId } from '../common/public-id';
 import {
@@ -267,6 +267,8 @@ export class DecideRunnerTaskEvidenceDto {
 export class DecideTaskEvidenceDto extends DecideRunnerTaskEvidenceDto {
   @IsPublicId()
   decidingSessionId!: string;
+  /** Deliver the owner's words untranslated: the "Send as written" of an answer refused 422 TRANSLATION_FAILED. */
+  @IsOptional() @IsBoolean() sendAsWritten?: boolean;
 }
 
 /**
@@ -308,6 +310,8 @@ export class DecideOwnerConfirmationDto {
   @IsOptional()
   @IsArray()
   answers?: Array<{ key: string; option?: number | null; text?: string | null }>;
+  /** Deliver the owner's words untranslated: the "Send as written" of an answer refused 422 TRANSLATION_FAILED. */
+  @IsOptional() @IsBoolean() sendAsWritten?: boolean;
 }
 
 /**
@@ -387,6 +391,37 @@ export class TaskVerificationDto {
 
   /** The workspace that runs the check. Must be owned by the caller, like any other assignee. */
   @IsOptional() @IsPublicId() assigneeId?: string;
+}
+
+/** A condition's comparison: the operator and, except under EXIT_ZERO, the line. */
+export class StartWhenCompareDto {
+  @IsIn([...CONDITION_COMPARE_OPS]) op!: ConditionCompareOp;
+  @IsOptional() @Type(() => Number) value?: number | null;
+}
+
+/** What the probe read when the agent ran it before filing (docs/condition-triggers-design.md §4.1, §8). */
+export class StartWhenBaselineDto {
+  @IsOptional() @Type(() => Number) value?: number | null;
+  @IsOptional() @IsInt() exitCode?: number | null;
+}
+
+/**
+ * A task's startWhen (docs/condition-triggers-design.md §6.2): the condition that starts it, in place of `runAt`.
+ * The checks the decorators cannot state (one of runAt and startWhen, a line unless EXIT_ZERO, a baseline that
+ * reads, an assignee) are `task-start-when.ts`'s.
+ */
+export class TaskStartWhenDto {
+  /** The condition in words, written by the agent: "3 or more OSDs are in". */
+  @IsString() @MinLength(1) @MaxLength(200) text!: string;
+  /** The probe: one read-only shell command, shown verbatim on the card. */
+  @IsString() @MinLength(1) @MaxLength(4000) command!: string;
+  @ValidateNested() @Type(() => StartWhenCompareDto) compare!: StartWhenCompareDto;
+  @IsOptional() @IsInt() @Min(0) @Max(30 * 86_400) holdSeconds?: number;
+  @IsOptional() @IsInt() @Min(60) @Max(86_400) intervalSeconds?: number;
+  @IsOptional() @IsInt() @Min(1) @Max(60) timeoutSeconds?: number;
+  @IsOptional() @IsString() @MaxLength(16) unit?: string | null;
+  /** Required: the agent ran the command and passes what it read. */
+  @ValidateNested() @Type(() => StartWhenBaselineDto) baseline!: StartWhenBaselineDto;
 }
 
 /**
@@ -472,11 +507,17 @@ export class CreateTaskDto {
   // criteria said one thing is refused, not silently dropped, after a person rewrites them.
   @IsOptional() @IsString() @MaxLength(64) criterionKey?: string;
   // SR5's escape hatch (migration 0231): this work produces no code — a rollout, a verification, a
-  // piece of research — so it resolves no source and does not take part in its criterion's landing
-  // conjunction (§1.1 isCodeTask, §1.4). Omitted is false, which is every task there has been.
+  // piece of research — so it resolves no source and its run gets a checkout with no branch
+  // (§1.1 isCodeTask); it does not decide landing, which is measured from commits. Omitted is false, which is every task there has been.
   // Declaring it here is the first statement of what the task is and needs no reason; turning an
   // existing task codeless does (UpdateTaskDto.codelessReason, `task-codeless.ts`).
   @IsOptional() @IsBoolean() codeless?: boolean;
+  // §12.15 P-C2 (`task-landing-check-exempt.ts`): when this task lands on its project's branch, skip the
+  // project's landing check; its own acceptance still runs. Only on a PROJECT_BRANCH line, only from the
+  // project's coordinator or the owner, and only with `landingCheckExemptReason` (at most 280 characters,
+  // checked by the service so the refusal carries its code).
+  @IsOptional() @IsBoolean() landingCheckExempt?: boolean;
+  @IsOptional() @IsString() landingCheckExemptReason?: string;
   // SR55: start this task from a snapshot of the session making the call (the runner door posts it;
   // the MCP tool calls it `forkFromSession`). Create-time only: the five columns it becomes are never
   // written again (migration 0615).
@@ -555,6 +596,9 @@ export class CreateTaskDto {
   // One-shot. The first run actually accepted consumes it, so there is no recurrence to express
   // and no cron expression to accept.
   @IsOptional() @IsDateString() runAt?: string;
+  // The condition that starts this task, in place of runAt (docs/condition-triggers-design.md §6.2): it starts once
+  // when the condition fires, and the condition then ends. Refused beside runAt.
+  @IsOptional() @ValidateNested() @Type(() => TaskStartWhenDto) startWhen?: TaskStartWhenDto;
   // Engine/provider/model this task's runs use, overriding the assignee workspace's own
   // (docs/provider-engine-contract.md §1.2, §3.5). The engine is the CLI that runs it (`claude`,
   // `codex`, `kimi`, `antigravity`, `opencode`, `dsh`); the provider is where its credential comes
@@ -734,14 +778,19 @@ export class UpdateTaskDto {
   // declare again — was the one thing no caller could perform. The alternative on offer was
   // deleting the task and filing it afresh, which is the detachment 0232 refused to automate.
   @IsOptional() @IsString() @MaxLength(64) criterionKey?: string | null;
-  // SR5's declaration on the edit door (`task-codeless.ts`): true takes this task out of its
-  // criterion's landing conjunction, false puts it back. Omit to leave it. Turning a task codeless
+  // SR5's declaration on the edit door (`task-codeless.ts`): true declares that it produces no code
+  // (it does not decide landing), false takes that back. Omit to leave it. Turning a task codeless
   // needs `codelessReason` in the same request and is refused outright for a task that already has
   // commits of its own; re-sending the value it has, or taking the declaration back, needs nothing.
   @IsOptional() @IsBoolean() codeless?: boolean;
   // Why this edit turns the task codeless. Read only when it does — stored beside the declaration
   // (`task.codeless_reason`), and cleared when the declaration is taken back.
   @IsOptional() @IsString() @MaxLength(MAX_TASK_CODELESS_REASON_CHARS) codelessReason?: string;
+  // §12.15 P-C2 on the edit door: true exempts this task from its project's landing check and needs
+  // `landingCheckExemptReason` in the same request; false takes it back and clears the reason. A reason
+  // alone replaces the one an exempt task carries. Omit both to leave it.
+  @IsOptional() @IsBoolean() landingCheckExempt?: boolean;
+  @IsOptional() @IsString() landingCheckExemptReason?: string;
   // Null/null clears EXECUTABLE's evidence fields; omission preserves the stored values.
   @IsOptional() @IsString() acceptanceCommand?: string | null;
   @IsOptional() @IsInt() acceptanceExpectedExitCode?: number | null;

@@ -6,7 +6,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import type { ManagedRunnerStatus, PlanUsage, RunnerEngineHealth, RunnerInstallState } from '@orbit/shared';
+import type { ManagedRunnerStatus, PlanUsage, RunnerBrowserState, RunnerEngineHealth, RunnerInstallState } from '@orbit/shared';
 import type { Runner } from '../TasksSidePanel';
 import { openRunnerMenu } from '../RunnerEngines.test-helpers';
 import { MachineSettingsPage } from './MachineSettingsPage';
@@ -19,7 +19,7 @@ import { MachineSettingsPage } from './MachineSettingsPage';
  */
 
 vi.mock('../../api', async (original) => ({ ...(await original<typeof import('../../api')>()), api: vi.fn() }));
-const { api } = await import('../../api');
+const { api, ApiError } = await import('../../api');
 const apiMock = vi.mocked(api);
 
 const RUNNER_ID = '33zx0JhRhJo8rd25d3qAM';
@@ -77,6 +77,9 @@ const relay = (over: Partial<RunnerInstallState>): RunnerInstallState => ({
   ...over,
 });
 
+/** What GET /runners/:id/browser answers: 'off' is the 404 of a server with the browser switch off. */
+let browser: RunnerBrowserState | 'off' = 'off';
+
 let root: Root | null = null;
 let host: HTMLDivElement | null = null;
 let scrolledTo: Element[] = [];
@@ -112,6 +115,7 @@ afterEach(() => {
   root = host = null;
   apiMock.mockReset();
   scrolledTo = [];
+  browser = 'off';
   document.body.innerHTML = '';
   // A group of accounts opened in one case stays open for the next otherwise (useOpenAccounts).
   localStorage.clear();
@@ -138,6 +142,10 @@ async function mount(runner: Runner, managed?: ManagedRunnerStatus) {
     if (path === '/runners') return [runner];
     if (managed && path === '/auth/capabilities') return MANAGED_ON;
     if (managed && path === '/managed-runner') return managed;
+    if (path === `/runners/${RUNNER_ID}/browser`) {
+      if (browser === 'off') throw new ApiError(`Cannot GET /api${path}`, 404);
+      return browser;
+    }
     if (path.endsWith('/login')) {
       return { status: null, engine: null, url: null, userCode: null, message: null, account: null };
     }
@@ -356,7 +364,7 @@ describe('the machine’s own controls over its engines', () => {
     // OpenCode has its card's row here too, with nothing to press: it signs in per provider, on the machine.
     expect([text($('.re-name', row('opencode'))), text($('.re-meta', row('opencode')))]).toEqual([
       'OpenCode',
-      '1.18.33 · the CLI wouldn\'t say',
+      '1.18.33 · sign-in unknown',
     ]);
     expect(text($('.re-login-note', row('opencode')))).toMatch(/^Run opencode auth login on that machine/);
     expect([text($('.re-name', row('dsh'))), text($('.re-status', row('dsh')))]).toEqual(['DeepSeek Harness', 'Uses API keys']);
@@ -393,6 +401,31 @@ describe('the machine’s own controls over its engines', () => {
     expect(text($('.machine-section-engines > .rd-hint'))).toBe(
       'Orbit keeps these CLIs updated every 30 min. Sign-ins live on this machine — a session spends that subscription, nothing to paste.',
     );
+  });
+
+  it('has no Browser section on the Orbit Cloud runner while the server reports the browser off (404)', async () => {
+    await mount(machine(), { ...MANAGED_READY, runnerId: RUNNER_ID });
+    expect($$('.machine-section-engines')).toHaveLength(1);
+    expect(apiMock.mock.calls.map(([path]) => path)).toContain(`/runners/${RUNNER_ID}/browser`);
+    expect($$('.machine-section-browser')).toEqual([]);
+    expect($$('button').map(text)).not.toContain('Open browser');
+    expect(document.body.textContent).not.toContain('Clear saved logins');
+  });
+
+  it('has the Browser section on the Orbit Cloud runner once the server reports a browser', async () => {
+    browser = {
+      runnerId: RUNNER_ID,
+      state: 'IDLE',
+      holderSessionId: null,
+      holderTitle: null,
+      viewers: 0,
+      reportedAt: '2026-11-18T05:00:00.000Z',
+      clearRequestedAt: null,
+      profileClearedAt: null,
+    };
+    await mount(machine(), { ...MANAGED_READY, runnerId: RUNNER_ID });
+    expect($$('.machine-section-browser')).toHaveLength(1);
+    expect($$('button').map(text)).toContain('Open browser');
   });
 
   it('says on a hosted runner that its CLIs move with each Orbit release, not every 30 min', async () => {

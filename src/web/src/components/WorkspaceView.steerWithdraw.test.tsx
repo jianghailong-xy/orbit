@@ -411,6 +411,34 @@ describe('a queued message, sent into the running turn', { timeout: 60_000 }, ()
   });
 });
 
+describe('a translated message, taken back', { timeout: 60_000 }, () => {
+  // Settings › Translation: the engine was given the English; Withdraw hands back what the owner wrote, as the row shows it.
+  it('comes back to the composer as the owner wrote it, not as the English delivered', async () => {
+    const translated = (original: string) => ({ state: 'DONE' as const, from: 'zh-Hans' as const, original });
+    events = RUNNING.map((ev) =>
+      ev.seq === 3 ? { ...ev, payload: { ...ev.payload, text: 'push it into main', translation: translated('推到 main') } } : ev,
+    );
+    queue = [{
+      turnId: 'turn-next', kind: 'message', placement: 'queued', content: 'then update the changelog',
+      createdAt: '2026-10-15T09:43:00Z', translation: translated('然后更新变更日志'),
+    }];
+    cancelMock.mockImplementation(async (_session, turnId) => {
+      if (turnId === 'turn-next') queue = [];
+      return { ok: true, withdrawn: true };
+    });
+    await mountSession(() => {
+      expect(withdrawButton(trayRow('推到 main'))).toBeDefined();
+      expect(withdrawButton(trayRow('然后更新变更日志'))).toBeDefined();
+    });
+
+    await click(withdrawButton(trayRow('推到 main'))!);
+    await waitForUi(() => expect(composer()?.value).toBe('推到 main'));
+
+    await click(withdrawButton(trayRow('然后更新变更日志'))!);
+    await waitForUi(() => expect(composer()?.value).toBe('推到 main\n\n然后更新变更日志'));
+  });
+});
+
 describe('a message sent the other way while a turn runs', { timeout: 60_000 }, () => {
   it('goes into the turn on Enter, and is queued for the next turn on ⌥Enter', async () => {
     events = RUNNING.slice(0, 2);
@@ -485,7 +513,7 @@ describe('where the tray stands', { timeout: 60_000 }, () => {
     ];
     await mountSession(() => {
       expect(rowState(trayRow('push into main'))).toBe('Waiting to be read');
-      expect(mounted().querySelector('.bg-tray')?.textContent).toContain('Background processes');
+      expect(mounted().querySelector('.bg-tray')?.textContent).toBe('BackgroundBackfill the events▸');
     });
     const band = mounted().querySelector('.workspace-composer')!;
     const tray = band.querySelector('.pending-tray')!;

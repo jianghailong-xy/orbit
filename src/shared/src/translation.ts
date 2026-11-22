@@ -11,7 +11,8 @@
  *    absent `translationAgentLanguage` is English. Both languages come from the one list
  *    TRANSLATION_LANGUAGES ("Your language" and "Agents work in" alike). `translationAvailable: false` is board frame 2: the switch is
  *    drawn disabled with the DEEPSEEK_API_KEY notice, and nothing is translated whatever the
- *    preference says.
+ *    preference says. `translationUnavailableUntil` (MeTranslation) is set while a failing translator
+ *    is being skipped (board docs/ux/translation-failure-policy.html, frame 6).
  *    When the two languages are the same, nothing is translated either: messages, replies and
  *    cards go exactly as with translation off (no `translation` on any of them).
  *  - `preferences.translationBilingual` ("Show both languages", board 02-bilingual.png): absent is
@@ -39,6 +40,8 @@
  *    announced on the session's event stream with the existing QUEUED_TURNS_CHANGED run event
  *    (RunEventType.QUEUED_TURNS_CHANGED, RealtimeService.publishQueuedTurnsChanged);
  *    a client refetches the turn list on it, exactly as it already does for its queue.
+ *  - A FAILED turn's `translation` says why in `failureReason` (TranslationFailureReason) and, for an
+ *    HTTP answer, `httpStatus`; both are stored on the held turn and cleared when it leaves FAILED.
  *  - Retry: `POST /sessions/:id/turns/:turnId/translation/retry` (FAILED → TRANSLATING).
  *    Send as written: `POST /sessions/:id/turns/:turnId/translation/send-as-written` — delivers the
  *    original untranslated (state SENT_AS_WRITTEN). Both answer TranslationActionResponse. Withdrawing
@@ -72,7 +75,9 @@
  *    and the live `approval_request`) gains `translation` (ApprovalTranslation) once the server has
  *    translated what it shows the owner: the questions of an AskUserQuestion — question, header,
  *    each option's label and description, index for index with `input.questions` — and a tool
- *    card's `input.description` and `input.plan`. It is written after the card is first published,
+ *    card's `input.description` and `input.plan`; on Orbit's create, blocker and DAG-change cards
+ *    (TRANSLATED_ORBIT_CARDS) also the title, acceptance criteria, batch tasks, goal, instructions,
+ *    criteria items, reason and note. It is written after the card is first published,
  *    so a SECOND `approval_request` with the same id follows, carrying it: replace the card's
  *    display text, nothing else about it. `input` itself is never changed.
  *  - Answering (3A). `POST /sessions/:id/approvals/:approvalId/decision` takes `answers` keyed by the
@@ -80,7 +85,8 @@
  *    the server maps a translated question and a translated label back to the original before the
  *    engine reads it. Any other answer (the owner's own words) and the decision's `message` are
  *    translated into the agent language like a message. If that translation fails the decision is NOT
- *    recorded (1A): 422 with `code: 'TRANSLATION_FAILED'`; the client offers Retry (send it again)
+ *    recorded (1A): 422 with `code: 'TRANSLATION_FAILED'` (TranslationFailedBody, which says why in
+ *    `failureReason` and `httpStatus`); the client offers Retry (send it again)
  *    and Send as written (send it again with `sendAsWritten: true`).
  */
 
@@ -190,7 +196,31 @@ export interface MeTranslation {
   /** The server holds a DeepSeek key and so can translate. False: Settings shows the switch
    *  disabled with the board frame 2 notice, and no message is translated. */
   translationAvailable: boolean;
+  /**
+   * Translation is temporarily unavailable (policy board docs/ux/translation-failure-policy.html, frame 6): the
+   * translator failed TRANSLATION_BREAKER_THRESHOLD times (network, timeout, or 429/5xx after its retries) within
+   * a minute, so until this ISO-8601 instant every owner → agent translation is skipped and fails at once with
+   * reason UNAVAILABLE: a message is held FAILED, a card answer is refused 422 TRANSLATION_FAILED. Null while
+   * the translator is in use (and absent from an older server: read as null).
+   *
+   * While it is set and in the future, the composer's language tag reads "unavailable, messages will wait" and
+   * Settings › Translation shows the same notice. It is not extended by itself: once the instant passes the
+   * client draws the ordinary tag again without being told; the next send is the trial call, which either
+   * closes the breaker or sets a new instant. Every change of it (opened, opened again, closed) is announced on
+   * the account's control stream as `translation.status_changed` (ControlEventType.TRANSLATION_STATUS_CHANGED):
+   * read `GET /users/me` again on it.
+   *
+   * PER APISERVER PROCESS: each replica keeps its own breaker, so with several replicas the answer depends on
+   * which one served the read, and a replica that has seen no failures still asks the translator.
+   */
+  translationUnavailableUntil: string | null;
 }
+
+/** How many transient translator failures within TRANSLATION_BREAKER_WINDOW_MS open the circuit breaker
+ *  (MeTranslation.translationUnavailableUntil), and how long it then stays open. */
+export const TRANSLATION_BREAKER_THRESHOLD = 3;
+export const TRANSLATION_BREAKER_WINDOW_MS = 60_000;
+export const TRANSLATION_BREAKER_OPEN_MS = 60_000;
 
 /**
  * Where one of the owner's messages is in translation.
@@ -212,7 +242,120 @@ export interface TurnTranslation {
   /** What the owner typed, as typed. Draw this in the bubble by default; "Show original" on a DONE
    *  message flips to the turn's `content` / the event's `text` (what the agent got). */
   original: string;
+  /** Why the translation failed: present only while `state` is FAILED, and then always (a turn that
+   *  failed before the reason was stored has none: draw the generic failure line). Retry, Send as
+   *  written and a successful translation clear it. */
+  failureReason?: TranslationFailureReason;
+  /** The translator's HTTP status, beside `failureReason: 'HTTP'` only (e.g. 401, 429, 503). */
+  httpStatus?: number;
 }
+
+/**
+ * Why translating the owner's words into the agent language failed (policy board
+ * docs/ux/translation-failure-policy.html, option B). Carried by a FAILED TurnTranslation
+ * (`failureReason`) and by the 422 TRANSLATION_FAILED answer (TranslationFailedBody).
+ *  - TIMEOUT: no answer within TRANSLATION_TIMEOUT_MS (20 s), retries included.
+ *  - NETWORK: the translator could not be reached (after the retries).
+ *  - HTTP: the translator answered an error; `httpStatus` says which (429 and 5xx after the retries).
+ *  - EMPTY: it answered with no text.
+ *  - TRUNCATED: the message is too long: the answer was cut off at its token limit.
+ *  - MANGLED: the answer lost, invented or repeated code or links the message carried.
+ *  - NO_KEY: this server has no translator key.
+ *  - UNAVAILABLE: the translator was skipped because it has been failing (circuit breaker).
+ * A client meets a value it does not know as no reason: the generic failure line.
+ */
+export const TRANSLATION_FAILURE_REASONS = [
+  'TIMEOUT',
+  'NETWORK',
+  'HTTP',
+  'EMPTY',
+  'TRUNCATED',
+  'MANGLED',
+  'NO_KEY',
+  'UNAVAILABLE',
+] as const;
+export type TranslationFailureReason = (typeof TRANSLATION_FAILURE_REASONS)[number];
+
+export function isTranslationFailureReason(value: unknown): value is TranslationFailureReason {
+  return typeof value === 'string' && (TRANSLATION_FAILURE_REASONS as readonly string[]).includes(value);
+}
+
+/**
+ * The failure line's first sentence, before " · Retry · Send as written" (policy board
+ * docs/ux/translation-failure-policy.html, the B column of frame 7): `message` under a held message (frame 4B),
+ * `answer` under a card whose answer was refused 422 TRANSLATION_FAILED (frame 5). The same words on web, Apple and
+ * Android: OrbitKit and Android core mirror this table, and all three walk `translation-failure-lines.fixture.json`.
+ * GENERIC is today's line, for no reason, NO_KEY (frame 7 has no row for it) or a reason a client does not know.
+ */
+export const TRANSLATION_FAILURE_LINES = {
+  TIMEOUT: {
+    message: "The translator didn't answer in time, so it wasn't sent",
+    answer: "The translator didn't answer in time, so your answer wasn't sent",
+  },
+  UNREACHABLE: {
+    message: "The translator was unreachable, so it wasn't sent",
+    answer: "The translator was unreachable, so your answer wasn't sent",
+  },
+  REFUSED: {
+    message: "The translator refused the message, so it wasn't sent",
+    answer: "The translator refused the message, so your answer wasn't sent",
+  },
+  TRUNCATED: {
+    message: "Too long to translate, so it wasn't sent",
+    answer: "Too long to translate, so your answer wasn't sent",
+  },
+  DAMAGED: {
+    message: "The translation came back damaged, so it wasn't sent",
+    answer: "The translation came back damaged, so your answer wasn't sent",
+  },
+  UNAVAILABLE: {
+    message: "Translation is unavailable right now, so it wasn't sent",
+    answer: "Translation is unavailable right now, so your answer wasn't sent",
+  },
+  GENERIC: {
+    message: "Couldn't translate, so it wasn't sent",
+    answer: "Couldn't translate, so it wasn't sent",
+  },
+} as const;
+export type TranslationFailureLine = keyof typeof TRANSLATION_FAILURE_LINES;
+
+/** Which row of TRANSLATION_FAILURE_LINES a failure draws. HTTP is "unreachable" for 429 and 5xx (the statuses
+ *  that were retried), "refused" for any other 4xx, and GENERIC without a status or with one outside those (frame 7
+ *  names no other, so we do not guess why); MANGLED and EMPTY are both "damaged". */
+export function translationFailureLineOf(reason: unknown, httpStatus?: number | null): TranslationFailureLine {
+  switch (reason) {
+    case 'TIMEOUT':
+      return 'TIMEOUT';
+    case 'NETWORK':
+      return 'UNREACHABLE';
+    case 'HTTP':
+      if (typeof httpStatus !== 'number') return 'GENERIC';
+      if (httpStatus === 429 || httpStatus >= 500) return 'UNREACHABLE';
+      return httpStatus >= 400 && httpStatus < 500 ? 'REFUSED' : 'GENERIC';
+    case 'TRUNCATED':
+      return 'TRUNCATED';
+    case 'MANGLED':
+    case 'EMPTY':
+      return 'DAMAGED';
+    case 'UNAVAILABLE':
+      return 'UNAVAILABLE';
+    default:
+      return 'GENERIC';
+  }
+}
+
+/** The failure line's first sentence for a held message (`message`) or a refused card answer (`answer`). */
+export function translationFailureSentence(
+  of: 'message' | 'answer',
+  reason: unknown,
+  httpStatus?: number | null,
+): string {
+  return TRANSLATION_FAILURE_LINES[translationFailureLineOf(reason, httpStatus)][of];
+}
+
+/** The composer tag's suffix while translation is unavailable (frame 6): "Chinese → English · unavailable, messages
+ *  will wait", drawn in the warning style while MeTranslation.translationUnavailableUntil is in the future. */
+export const TRANSLATION_UNAVAILABLE_TAG = 'unavailable, messages will wait';
 
 /** The answer to Retry and to Send as written. */
 export interface TranslationActionResponse {
@@ -270,10 +413,140 @@ export interface ApprovalTranslation {
   plan?: string;
   /** `input.questions` translated (AskUserQuestion). */
   questions?: TranslatedQuestion[];
+  // Orbit's own cards (board 04-owner-cards.html, part 2). Each field is the input field of the same
+  // name translated, present only when the original has text; arrays go index for index with the
+  // input's, and an entry's field the original lacks is absent there too.
+  /** `input.title` (orbit_task_create, orbit_project_create). */
+  title?: string;
+  /** `input.acceptanceCriteria` (orbit_task_create). */
+  acceptanceCriteria?: string;
+  /** `input.tasks` (orbit_task_batch): index for index, so `tasks[i]` is `input.tasks[i]` and
+   *  `input.preview.tasks[i]`. */
+  tasks?: TranslatedTaskBody[];
+  /** `input.goal` (orbit_project_create). */
+  goal?: string;
+  /** `input.instructions` (orbit_project_create). */
+  instructions?: string;
+  /** `input.acceptanceCriteriaItems` (orbit_project_create), index for index. */
+  acceptanceCriteriaItems?: Array<{ text?: string; verificationMethod?: string }>;
+  /** `input.reason` (orbit_blocker_resolve): the agent's argument that the blocker no longer applies. */
+  reason?: string;
+  /** `input.note` (orbit_dag_change). */
+  note?: string;
 }
+
+/** One task of a batch card as shown in the owner's language (ApprovalTranslation.tasks). */
+export interface TranslatedTaskBody {
+  title?: string;
+  description?: string;
+  acceptanceCriteria?: string;
+}
+
+/**
+ * An owner card that lives outside a session (board 04-owner-cards.html), in the owner's language: a
+ * coordinator's question, start request or done request (`ProjectOpenItemRow.translation`,
+ * `ProjectClosedQuestion.translation`), an owner request (`OwnerRequest.translation`), an owner-confirmation
+ * review (`review.translation`, `problems.translation` on OwnerConfirmationReviewView), a crossing
+ * (`translation` on a `GET /projects/:id/handoffs` row) or a criteria-change proposal (`translation` on a
+ * pending criteria decision). Completion evidence has its own shape, EvidenceTranslation. Stored beside the
+ * card's own fields, which stay exactly what the agent wrote. Absent until it is translated, and on every
+ * card translation is off for.
+ *
+ * Each field is the card's field of the same name translated, present only when the original has text;
+ * arrays go index for index with the card's, and an entry's field the original lacks is absent there too.
+ * A step's `command` and `link` are never translated: the card draws them from the original.
+ */
+export interface OwnerCardTranslation {
+  lang: TranslationLanguage;
+  /** The card could not be translated: draw it as the agent wrote it. Nothing else is set. */
+  failed?: true;
+  /** A coordinator question's `question`. */
+  question?: string;
+  /** A question's or a DECISION request's `options`. */
+  options?: Array<{ label?: string; description?: string }>;
+  /** A question's or a request's `ifUnanswered`. */
+  ifUnanswered?: string;
+  /** An open coordinator question's `detailLine` (`ProjectOpenItemRow.detailLine`) built from the translated
+   *  `ifUnanswered`: "Blocks N tasks · If you don’t answer: <translated>". Served by the open-items read only,
+   *  beside a whole translation in the owner's current language; never stored. Absent from an older server. */
+  detailLine?: string;
+  /** An owner request's `title`. On an open coordinator question, the open-items row's `title`
+   *  (`ProjectOpenItemRow.title`) built from the translated `question`: "Coordinator asks: <translated>".
+   *  Served by the open-items read only, beside a whole translation in the owner's current language; never
+   *  stored. Absent from an older server, and on a START_REQUEST or DONE_REQUEST, whose titles are Orbit's. */
+  title?: string;
+  /** An owner request's `why`. */
+  why?: string;
+  /** An open item's `handoverNote` (`ProjectOpenItemRow.handoverNote`): the coordinator's reason for handing it
+   *  to the owner (open_item_hand_over), on an item of any kind. Absent from an older server. */
+  handoverNote?: string;
+  /** A MANUAL_STEP request's `steps`, the text of each. */
+  steps?: Array<{ text?: string }>;
+  /** An owner request's `verifyHint`. */
+  verifyHint?: string;
+  /** A START_REQUEST's `why` uses `why` above. A DONE_REQUEST's `judgment`, or an owner-confirmation
+   *  review's `judgment`. */
+  judgment?: string;
+  /** A DONE_REQUEST's `gaps`, index for index; `criterionKey` and `evidenceRefs` are drawn from the original. */
+  gaps?: Array<{ title?: string; whyNotProven?: string; coordinatorChecked?: string }>;
+  /** An owner-confirmation review's `needsYou`, index for index: each line's `text` and `options`. */
+  needsYou?: Array<{ text?: string; options?: Array<{ label?: string; description?: string }> }>;
+  /** An owner-confirmation PROBLEMS record's `reason`, or a crossing's `reason`. */
+  reason?: string;
+  /** An owner-confirmation PROBLEMS record's `problems`, the text of each. */
+  problems?: Array<{ text?: string }>;
+  /** A criteria-change proposal's `proposed`, index for index: each criterion's `text` and
+   *  `verificationMethod`. */
+  proposed?: Array<{ text?: string; verificationMethod?: string }>;
+}
+
+/**
+ * A completion-evidence revision's `claim` and `gaps` in the owner's language (`translation` on a
+ * pending evidence judgment). `gaps` goes index for index with the envelope's. Absent until it is
+ * translated, and on every revision translation is off for.
+ */
+export interface EvidenceTranslation {
+  lang: TranslationLanguage;
+  /** The evidence could not be translated: draw it as the agent wrote it. Nothing else is set. */
+  failed?: true;
+  claim?: string;
+  gaps?: string[];
+}
+
+/** The Orbit cards whose agent-written fields beyond `description` are translated. */
+export const TRANSLATED_ORBIT_CARDS = [
+  'orbit_task_create',
+  'orbit_task_batch',
+  'orbit_project_create',
+  'orbit_blocker_resolve',
+  'orbit_dag_change',
+] as const;
 
 /** The 422 a decision whose words could not be translated is refused with: nothing was recorded. */
 export const TRANSLATION_FAILED_CODE = 'TRANSLATION_FAILED' as const;
+
+/** The body of that 422: the same `failureReason` (and `httpStatus`) a FAILED TurnTranslation carries. */
+export interface TranslationFailedBody {
+  code: typeof TRANSLATION_FAILED_CODE;
+  message: string;
+  failureReason: TranslationFailureReason;
+  /** Beside `failureReason: 'HTTP'` only. */
+  httpStatus?: number;
+}
+
+/**
+ * Words the owner typed on an owner card (an answer to a coordinator's question, an owner request's done text or
+ * decline reason, a done request's "Not yet…" note, an owner-confirmation answer), as they were delivered to the
+ * agent: translated from the owner's language into the agent's (`lang`). Stored beside the owner's own words, which
+ * stay what every card shows; absent when translation was off, or the owner pressed Send as written.
+ *
+ * Every door that takes such words takes `sendAsWritten: true` to deliver them untranslated, and refuses them whole
+ * with a 422 TRANSLATION_FAILED, recording nothing, when they cannot be translated — as an approval answer is.
+ */
+export interface OwnerWordsTranslation {
+  lang: TranslationLanguage;
+  text: string;
+}
 
 /**
  * "Show both languages" (board 02-bilingual.png, frame 3 option B), for a reply whose blocks do not

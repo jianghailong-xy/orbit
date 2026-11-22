@@ -23,6 +23,11 @@ internal class OwnerRequestFixture {
     val held = ConcurrentHashMap<String, JsonObject>()
     /** The secret door's refusal, when a test wants one. */
     @Volatile var refuseSecret: String? = null
+    /** Settings › Translation: done and decline refuse the owner's words 422 TRANSLATION_FAILED unless sent as written. */
+    @Volatile var refuseUntranslated = false
+    /** SETTINGS_CHANGE: Save changes is refused 409 SETTINGS_STALE, and `GET /users/me` as the account answers (with its `changedBy`). */
+    @Volatile var staleApply = false
+    @Volatile var me: JsonObject = buildJsonObject { put("id", "u"); put("email", "u@example.test"); put("name", "U") }
 
     private val server = MockWebServer().apply {
         dispatcher = object : Dispatcher() {
@@ -35,6 +40,8 @@ internal class OwnerRequestFixture {
                 return when {
                     path == "/api/auth/login" -> json(200, """{"accessToken":"or-access","refreshToken":"or-refresh","user":{"id":"u","email":"u@example.test","name":"U"}}""")
                     path == "/api/account-secrets" -> json(200, """{"secrets":[]}""")
+                    path == "/api/users/me" -> json(200, me.toString())
+                    path == "/api/users/me/preferences" && request.method == "PATCH" -> json(200, me.toString())
                     parts.first() == "tasks" -> json(200, """{"id":"${parts[1]}","title":"Ship the login page"}""")
                     path == "/api/owner-requests" -> {
                         val state = request.requestUrl!!.queryParameter("state")
@@ -54,8 +61,13 @@ internal class OwnerRequestFixture {
                         val ended = { state: String, extra: JsonObjectBuilder.() -> Unit -> JsonObject(row + buildJsonObject {
                             put("state", state); put("resolvedAt", Instant.now().toString()); put("resolvedByUserId", "u"); extra()
                         }) }
-                        val next = when (parts.drop(2).joinToString("/")) {
+                        val door = parts.drop(2).joinToString("/")
+                        if (refuseUntranslated && door in setOf("done", "decline") && body["sendAsWritten"] != JsonPrimitive(true))
+                            return json(422, """{"code":"TRANSLATION_FAILED","message":"The answer could not be translated, so nothing was recorded."}""")
+                        val next = when (door) {
                             "done" -> ended("DONE") { put("answer", body) }
+                            "apply-settings" -> if (staleApply) return json(409, """{"code":"SETTINGS_STALE","message":"SETTINGS_STALE"}""")
+                                else ended("DONE") {}
                             "decline" -> ended("DECLINED") { put("resolutionNote", body["reason"]!!) }
                             "secret" -> refuseSecret?.let { return json(400, buildJsonObject { put("message", it) }.toString()) }
                                 ?: JsonObject(row + buildJsonObject { putJsonObject("secretGrant") {
@@ -135,6 +147,17 @@ internal class OwnerRequestFixture {
                 addJsonObject { put("label", "Hong Kong") }
             }
             put("recommendedOption", 0)
+        }
+
+        const val SETTINGS_ID = "01a0d6a9-d763-70e1-b4cf-8793e971b505"
+
+        /** An agent's proposal of three changes: two on the Translation page (one a tier-2, new-sessions-only key) and the Theme. */
+        fun settingsChange() = request(SETTINGS_ID, "SETTINGS_CHANGE", "Change 3 settings?", "You asked for the agents to write Chinese and for the app to be dark.", 1) {
+            putJsonObject("payload") { putJsonArray("changes") {
+                addJsonObject { put("key", "translationEnabled"); put("from", false); put("to", true); put("tier", 1) }
+                addJsonObject { put("key", "translationLanguage"); put("from", "en"); put("to", "zh-Hans"); put("tier", 1) }
+                addJsonObject { put("key", "defaultPermissionMode"); put("from", "default"); put("to", "plan"); put("tier", 2) }
+            } }
         }
 
         fun confirm() = request(CONFIRM_ID, "CONFIRM", "Confirm the DNS change", "The new records point the app at the new load balancer.", 45) {}

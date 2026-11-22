@@ -10,6 +10,7 @@ import { parseAnswer } from './helpAsk';
 export const helpAskStuckQuery = (sessionId: string) =>
   queryOptions({
     queryKey: ['help', 'ask', 'stuck', sessionId] as const,
+    meta: { entities: ['workspace'] },
     queryFn: () => api<HelpAskStuck>(`/help/ask/${sessionId}/stuck`),
   });
 

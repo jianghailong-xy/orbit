@@ -90,7 +90,7 @@ final class MachinesAndModelsPageWiringTests: XCTestCase {
         try assertInOrder(body, ["if !terminals.isEmpty || lists.settled {",
                                  "if !attention.isEmpty || !terminals.isEmpty {",
                                  "MachinesAndModelsNeedsYouSection(",
-                                 "ForEach(runners.runners)", "RunnerSectionHeader(MachinesAndModels.machines,",
+                                 "ForEach(movable)", "RunnerSectionHeader(MachinesAndModels.machines,",
                                  "Text(MachinesAndModels.machinesDetail)", "RunnerAddSection { addingRunner = true }",
                                  "MachinesAndModelsPoolsSection(memberPools: lists.memberPools, ownPools: lists.ownPools,",
                                  "MachinesAndModelsKeysSection(keys: lists.keys, balances: model.agents?.deepSeekBalances ?? [:],"],
@@ -98,7 +98,7 @@ final class MachinesAndModelsPageWiringTests: XCTestCase {
         XCTAssertTrue(page.contains(".navigationTitle(title)"))
         XCTAssertTrue(page.contains("case .all:       return AppSection.runners.title"))
         // iOS Settings shows it in two halves, Machines and Providers, as the web's Settings nav groups them.
-        try assertInOrder(body, ["if part != .providers {", "ForEach(runners.runners)", "RunnerAddSection { addingRunner = true }",
+        try assertInOrder(body, ["if part != .providers {", "ForEach(movable)", "RunnerAddSection { addingRunner = true }",
                                  "if part != .machines {", "MachinesAndModelsPoolsSection("], "the two halves")
         // The machines are read again while the page is up, so a row's Offline and its "N / M running"
         // never come from two different reads' worth of time.
@@ -247,7 +247,7 @@ final class MachinesAndModelsPageWiringTests: XCTestCase {
                       "SwiftUI.ShareLink(item: command)",
                       "Text(RunnerPageCopy.RUNNER_WAITING_FOR_NEW)",
                       "arrived = RunnerPageFormat.newlyOnline(runners.runners, baseline: baseline)",
-                      "try? await Task.sleep(for: .seconds(5))",
+                      "await VisibilityGate.app.pause(5)",
                       "Text(MachineSetupCopy.REGISTER_NEXT)",
                       "Button(MachineSetupCopy.START_A_SESSION) { start(arrived) }",
                       "model.startSession(onMachine: runner.id)",
@@ -308,9 +308,11 @@ final class MachinesAndModelsPageWiringTests: XCTestCase {
     func testListReordersAndRemovesAfterAsking() throws {
         let text = try runners()
         for list in try lists() {
-            XCTAssertTrue(list.code.contains(".onMove { moveRunners(runners, from: $0, to: $1) }"), list.name)
-            XCTAssertTrue(list.code.contains(".onDelete { pendingRemoval = runnerToRemove(runners, at: $0) }"),
-                          "\(list.name): a delete only names the runner to ask about")
+            try assertInOrder(list.code, ["RunnerPageFormat.managedFirst(runners.runners",
+                                          "row(pinned, isManaged: true, separates: !movable.isEmpty)",
+                                          "ForEach(movable)", ".onMove { moveRunners(runners, movable: movable, from: $0, to: $1) }",
+                                          ".onDelete { offsets in", "pendingRemoval = movable[index]"],
+                              list.name)
             XCTAssertTrue(list.code.contains(".modifier(RunnerListEditing("), list.name)
         }
         let editing = try slice(text, from: "private struct RunnerListEditing: ViewModifier {", to: "/// A drag in Edit")
@@ -319,10 +321,15 @@ final class MachinesAndModelsPageWiringTests: XCTestCase {
         XCTAssertTrue(asked.contains(".orbitConfirmation({ _ in removalTitle },"))
         XCTAssertTrue(asked.contains("Text(RunnerPageCopy.RUNNER_REMOVE_FOOTER)"))
         XCTAssertTrue(asked.contains("await runners.delete(runner.id)"))
-        let move = code(try slice(text, from: "@MainActor private func moveRunners(", to: "/// The row a delete"))
+        let move = code(try slice(text, from: "@MainActor private func moveRunners(", to: "/// One machine in the list"))
+        XCTAssertTrue(move.contains("var order = movable"))
         XCTAssertTrue(move.contains("order.move(fromOffsets: source, toOffset: destination)"))
         XCTAssertTrue(move.contains("await runners.reorder(ids)"))
-        XCTAssertTrue(code(try appSource("RunnersModel.swift")).contains("runners = try await api.reorderRunners(ids)"))
+        let model = code(try appSource("RunnersModel.swift"))
+        try assertInOrder(model, ["func reorder(", ".filter { !RunnerPageFormat.isManaged($0) }",
+                                  "runners = pinned + ordered + before.filter", "let ids = runners.map(\\.id)",
+                                  "runners = try await api.reorderRunners(ids)"],
+                          "Orbit Cloud stays first in the order sent, and the optimistic list keeps every row")
     }
 
     // MARK: a runner's page (ios-detail.png)
@@ -354,7 +361,7 @@ final class MachinesAndModelsPageWiringTests: XCTestCase {
         let head = try slice(try detail(), from: "private func head(now: Date) -> some View {",
                              to: "private func attentionSection(")
         for piece in ["RunnerMachineTile(presence: RunnerPageFormat.presence(runner, now: now))",
-                      "Text(statusLine(now: now))", "let host = RunnerPageFormat.hostLine(runner, managed: managedRow != nil)",
+                      "Text(statusLine(now: now))", "RunnerPageFormat.hostLine(runner, managed: managedRow != nil)",
                       ".listRowBackground(Color.clear)"] {
             XCTAssertTrue(head.contains(piece), "the head lost \(piece)")
         }
@@ -588,6 +595,49 @@ final class MachinesAndModelsPageWiringTests: XCTestCase {
                       "Use again reads the runners again after the write")
     }
 
+    /// Set as default on an added Claude Code account (web RunnerEngines / Android SetDefaultPageTest):
+    /// the long-press menu offers it with what it does under its name, or why it can't be chosen; the
+    /// confirmation is the web's and Make default POSTs …/set-default; while the swap waits the account
+    /// says how many sessions' turns it waits on; a failed swap shows the machine's reason and that both
+    /// logins are as they were.
+    func testSetAsDefaultIsOnTheMenuWithItsQuestionWaitingLineAndResult() throws {
+        let page = code(try appSource("Views/RunnerEnginePage.swift"))
+        let menu = try slice(page, from: "private func accountMenu(", to: "private func addAccountRow(")
+        try assertInOrder(menu, ["if RunnerPageFormat.offersSetDefault(line, engine: engine) {",
+                                 "RunnerPageFormat.setDefaultBlocked(runner, offline: offline, pressing: swapPressing)",
+                                 "pendingSetDefault = line",
+                                 "RunnerEngineSetDefaultViews.MenuItemLabel(blocked: blocked)",
+                                 ".disabled(blocked != nil)"],
+                          "Set as default is the menu's, with its hint or why it can't be chosen")
+        try assertInOrder(page, [".orbitConfirmation({ _ in setDefaultTitle },",
+                                 "Button(RunnerAccountCopy.RUNNER_ACCOUNT_SET_DEFAULT_CONFIRM) { setDefault(line) }",
+                                 "Text(setDefaultNote(line))"],
+                          "Make default asks first")
+        let row = try slice(page, from: "private func accountRow(", to: "private func withActions<")
+        try assertInOrder(row, ["PoolChip(text: RunnerEngineSetDefaultViews.defaultChip)",
+                                "RunnerEngineSetDefaultViews.SwapStatus(runner: runner, line: line)"],
+                          "DEFAULT chip and the waiting/failed chrome sit under the account")
+        let chrome = code(try appSource("Views/RunnerEngineSetDefaultViews.swift"))
+        for piece in ["struct MenuItemLabel: View", "struct Confirm: View", "struct SwapStatus: View",
+                      "struct AccountRow: View", "struct MenuPanel: View",
+                      "RunnerAccountCopy.RUNNER_ACCOUNT_SET_DEFAULT",
+                      "RunnerAccountCopy.RUNNER_ACCOUNT_SET_DEFAULT_HINT",
+                      "RunnerPageFormat.settingDefaultLine",
+                      "RunnerAccountCopy.runnerAccountSetDefaultFailed",
+                      "RunnerAccountCopy.RUNNER_ACCOUNT_SET_DEFAULT_UNCHANGED"] {
+            XCTAssertTrue(chrome.contains(piece), "Set as default chrome lost \(piece)")
+        }
+        let press = try slice(page, from: "private func setDefault(", to: "private func restoreDefault(")
+        try assertInOrder(press, ["swapPressing = true",
+                                  "await runners.setDefaultAccount(id, engine: login, account: line.id)",
+                                  "RunnerAccountCopy.runnerAccountSetDefaultFailed(name: line.name)",
+                                  "swapPressing = false"],
+                          "a refusal is said over the web's failed title; the menu stays busy until it lands")
+        let model = code(try appSource("RunnersModel.swift"))
+        XCTAssertTrue(model.contains("api.setDefaultRunnerAccount(id, engine: engine, account: account)"),
+                      "Make default POSTs …/set-default and reads the runners again")
+    }
+
     /// On a phone an account's row says only where it stands, and its presses are on its left swipe
     /// and its long-press menu (docs/mocks/account-pause-swipe-ios.html): Pause — Resume while it is
     /// paused — inside Remove on the swipe, drawn as the session list's circles on iOS 26; Rename…,
@@ -615,8 +665,10 @@ final class MachinesAndModelsPageWiringTests: XCTestCase {
                                  "Label(\"Resume Now\", systemImage: \"play.fill\")",
                                  "Label(\"Change Duration…\", systemImage: \"clock\")",
                                  "Label(\"Pause…\", systemImage: \"pause.fill\")",
+                                 "RunnerPageFormat.offersSetDefault(line, engine: engine)",
+                                 "RunnerEngineSetDefaultViews.MenuItemLabel(blocked: blocked)",
                                  "Label(\"Remove…\", systemImage: \"trash\")"],
-                          "the menu holds everything the row and its swipe offer")
+                          "the menu holds everything the row and its swipe offer, and Set as default")
 
         let row = try slice(page, from: "private func accountRow(", to: "private func withActions<")
         XCTAssertTrue(row.contains("AccountPauseLine(pausedUntil: line.pausedUntil)"), "Paused stays, as a line")

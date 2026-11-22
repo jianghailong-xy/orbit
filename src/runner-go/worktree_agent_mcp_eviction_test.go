@@ -365,43 +365,32 @@ func TestMergeProceedsBesideLiveBackgroundJob(t *testing.T) {
 	f.assertJobOutlived(t, "merge", job, runningAsItRan)
 }
 
-// A commit takes the checkout as it stands, so it is refused while a runner-hosted job is still
-// changing it: nothing is committed, the branch does not move, the refusal names the job, and the
-// job is left running. Once the job has ended, the same commit lands.
-func TestCommitRefusedWhileBackgroundJobChangesCheckout(t *testing.T) {
+// A background job is a test run, a build or a dev server, not an edit of the work, so a commit
+// runs beside one: the branch advances with the checkout's work, the job is still running, and the
+// receipt names it.
+func TestCommitProceedsBesideLiveBackgroundJob(t *testing.T) {
 	f := newAgentMcpEngine(t, "jobcommit", nil)
 	before := f.withUncommittedWork(t)
 	job := f.startLiveJob(t)
-	ran := false
-	commit := func(req CommitCommand) commitOutcome {
-		ran = true
-		return commitWorktree(req)
-	}
-	res := heartbeatCommit(f.pool, CommitCommand{SessionID: f.id, Branch: f.branch}, f.advertised(), commit)
-	if res.Status != "error" || ran {
-		t.Fatalf("commit beside the live job %s = %q (ran=%v), want refused before it ran", job.JobID, res.Status, ran)
-	}
-	if !strings.Contains(res.Message, job.JobID) {
-		t.Fatalf("the refusal does not name the job %s still changing the checkout: %q", job.JobID, res.Message)
-	}
-	if after := mustGit(t, f.repo, "rev-parse", "refs/heads/"+f.branch); after != before {
-		t.Fatal("the branch moved under a refused commit")
-	}
-	if !f.jobRunning(job) {
-		t.Fatalf("the job %s was stopped by a refused commit", job.JobID)
-	}
-
-	if _, err := f.bg.killJob(job.JobID, bgKillTeardownGrace); err != nil {
-		t.Fatalf("killing the job failed: %v", err)
-	}
-	f.events.awaitTerminal(t, job.JobID, 30*time.Second)
-	res = heartbeatCommit(f.pool, CommitCommand{SessionID: f.id, Branch: f.branch}, f.advertised(), commit)
+	runningAsItRan := false
+	res := heartbeatCommit(f.pool, CommitCommand{SessionID: f.id, Branch: f.branch}, f.advertised(),
+		func(req CommitCommand) commitOutcome {
+			runningAsItRan = f.jobRunning(job)
+			return commitWorktree(req)
+		})
 	if res.Status != "committed" {
-		t.Fatalf("commit after the job ended = %q (%s), want committed", res.Status, res.Message)
+		t.Fatalf("commit = %q (%s), want committed beside the live job %s", res.Status, res.Message, job.JobID)
+	}
+	if after := mustGit(t, f.repo, "rev-parse", "refs/heads/"+f.branch); after == before {
+		t.Fatal("the branch did not advance after a commit that reported committed")
 	}
 	if _, err := git(f.repo, "cat-file", "-e", "refs/heads/"+f.branch+":more.txt"); err != nil {
 		t.Fatalf("the branch does not carry the checkout's work after a commit that reported committed: %v", err)
 	}
+	if !strings.Contains(res.Message, job.JobID) {
+		t.Fatalf("the commit's receipt does not name the job %s it ran beside: %q", job.JobID, res.Message)
+	}
+	f.assertJobOutlived(t, "commit", job, runningAsItRan)
 }
 
 // A parked engine running MCP servers the agent configured itself is not stopped for a merge or a

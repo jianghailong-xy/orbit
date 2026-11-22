@@ -17,9 +17,9 @@ import type { Prisma, Schedule } from '@prisma/client';
 
 import { isWiderThanStarter, resolvePermissionMode } from '../common/permission-mode';
 import { agentProviderSeed } from '../workspaces/workspace-provider';
-import { scheduleRunMode } from './schedule-access';
+import { scheduleRunMode, scheduleRunPermissionMode } from './schedule-access';
 import { widenedParts, type AccessLevel, type Envelope } from './schedule-envelope';
-import { instantOfLocal, offsetAt, parseRule, runsPerWeek } from './schedule-time';
+import { instantOfLocal, offsetAt, parseRule, ruleCommandHash, runsPerWeek } from './schedule-time';
 
 export type ScheduleHeldReason =
   | 'WORKSPACE_NOT_OWNED'
@@ -33,7 +33,11 @@ export type ScheduleHeldReason =
   | 'NO_REPOSITORY'
   | 'WORKTREE_DISABLED';
 
-/** What a run that passed starts with: its mode, and the engine and credential it runs on (null: the workspace's). */
+/**
+ * What a run that passed starts with: its session's mode, and the engine and credential it runs on (null: the
+ * workspace's). The mode is the one the claim runs it in (Auto on Claude Code, schedule-access.ts), so the session
+ * shows the mode it really runs in.
+ */
 export interface StartPlan {
   mode: PermissionMode;
   engine: string | null;
@@ -86,12 +90,15 @@ export async function scheduleStartCheck(db: Db, schedule: Schedule): Promise<St
     accessLevel: schedule.envelopeAccessLevel,
     runsPerWeek: schedule.envelopeRunsPerWeek,
     runLimitMinutes: schedule.envelopeRunLimitMinutes,
+    commandHash: schedule.envelopeCommandHash,
   };
+  const rule = parseRule(schedule.rule);
   const need: Envelope = {
     workspaceId: schedule.workspaceId,
     accessLevel: schedule.accessLevel,
-    runsPerWeek: runsPerWeek(parseRule(schedule.rule)),
+    runsPerWeek: runsPerWeek(rule),
     runLimitMinutes: schedule.runLimitMinutes,
+    commandHash: ruleCommandHash(rule),
   };
   if (widenedParts(envelope, need).length > 0) return { ok: false, reason: 'OUTSIDE_ENVELOPE' };
 
@@ -111,7 +118,8 @@ export async function scheduleStartCheck(db: Db, schedule: Schedule): Promise<St
   if (schedule.accessLevel === 'LAND' && !workspace.enableWorktree) {
     return { ok: false, reason: 'WORKTREE_DISABLED' };
   }
-  return { ok: true, plan: { mode, engine, provider } };
+  const runMode = scheduleRunPermissionMode(mode, schedule.accessLevel as AccessLevel, judged);
+  return { ok: true, plan: { mode: runMode, engine, provider } };
 }
 
 /** The weekly budget's window: the 7 days before a slot, as the schedule's clock reads them. */
@@ -129,7 +137,7 @@ export function scheduleBudgetWindowStart(plannedAt: Date, timezone: string): Da
 
 /**
  * Whether a slot planned at `plannedAt` is over the envelope's runs per week (§4): the runs that actually started (a
- * session was opened) whose own planned slot lies in the 7 days before it, of every trigger, against
+ * session was opened) and were delivered to their engine or are still live (SCHEDULE_RUN_COUNTS_TOWARD_BUDGET), whose own planned slot lies in the 7 days before it, of every trigger, against
  * `envelopeRunsPerWeek`. Windowed on planned slots, not start times, so a start's latency (the worker's pass, a runner
  * back after an outage) never moves a run into or out of the window: the slots of a rule inside its envelope are never
  * closer than the envelope allows, and a rule moved to "a few minutes from now" still gives each run its own slot. A
@@ -145,15 +153,43 @@ export async function scheduleBudgetStarts(db: Db, schedule: Schedule, plannedAt
   return db.scheduleRun.count({
     where: {
       scheduleId: schedule.id,
-      startedAt: { not: null },
+      ...SCHEDULE_RUN_COUNTS_TOWARD_BUDGET,
       plannedAt: { gt: scheduleBudgetWindowStart(plannedAt, schedule.timezone) },
     },
   });
 }
 
 /**
- * The SCHEDULE_OVER_BUDGET refusal of a Run now that is not the owner's own press (§8.4): the runs actually started in
- * the window, then the number the owner allowed.
+ * A run that costs budget (§4): it started (a session was opened) and either still holds its place (QUEUED, RUNNING
+ * or AWAITING_APPROVAL with a start, so two quick starts cannot overshoot) or its first turn reached the engine
+ * (`delivered_at`). A run that ended without ever being delivered (MISSED, CANCELLED or FAILED with
+ * RUNNER_UNAVAILABLE, QUOTA or ENGINE_CRASHED_BEFORE_START) did nothing and counts 0.
+ */
+export const SCHEDULE_RUN_COUNTS_TOWARD_BUDGET = {
+  startedAt: { not: null },
+  OR: [
+    { state: { in: ['QUEUED', 'RUNNING', 'AWAITING_APPROVAL'] } },
+    { sessions: { some: { turns: { some: { deliveredAt: { not: null } } } } } },
+  ],
+} as const satisfies Prisma.ScheduleRunWhereInput;
+
+/**
+ * A run that started, as the budget counts starts: a session was opened for it, and a retry of a start that never
+ * reached its engine cleared `startedAt` again, so its attempts are one start.
+ */
+export const SCHEDULE_RUN_STARTED = { startedAt: { not: null } } as const satisfies Prisma.ScheduleRunWhereInput;
+
+/**
+ * The runs a schedule has started in all (§8.5), counted as the budget counts them, over the schedule's whole life:
+ * what a planned end by count (`maxRuns`) is measured against. Read under the schedule lock where it decides a start.
+ */
+export function scheduleRunsStarted(db: Db, scheduleId: string): Promise<number> {
+  return db.scheduleRun.count({ where: { scheduleId, ...SCHEDULE_RUN_STARTED } });
+}
+
+/**
+ * The SCHEDULE_OVER_BUDGET refusal of a Run now that is not the owner's own press (§8.4): the runs that count toward the
+ * budget in the window (SCHEDULE_RUN_COUNTS_TOWARD_BUDGET, the count scheduleOverBudget reads), then the number the owner allowed.
  */
 export function scheduleOverBudgetMessage(started: number, allowed: number): string {
   return `This schedule has started ${started} ${started === 1 ? 'run' : 'runs'} in the past 7 days; ` +

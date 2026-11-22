@@ -3,15 +3,20 @@ import { randomUUID } from 'node:crypto';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { after, afterEach, before, test } from 'node:test';
+import { after, afterEach, before, beforeEach, test } from 'node:test';
+import { resetTranslationBreaker } from './translation';
 import { RunStatus } from '@prisma/client';
-import { RunEventType } from '@orbit/shared';
+import { RunEventType, TRANSLATION_TIMEOUT_MS } from '@orbit/shared';
+import { Logger } from '@nestjs/common';
 import { prismaClientFor } from '../prisma/prisma-client';
 import type { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { SessionsService } from './sessions.service';
 import '../test-support/dequeue-under-lease';
+
+// The translator's circuit breaker is the process's: each test starts with it closed and nothing counted.
+beforeEach(() => resetTranslationBreaker());
 
 /**
  * Settings › Translation against the real schema (migration 0532) and the real delivery SQL: a HELD
@@ -34,8 +39,10 @@ let runnerId: string;
 let workspaceId: string;
 let turnsChanged = 0;
 
-/** What DeepSeek answers next: a translation, or an HTTP error status. */
-let deepSeekReplies: Array<string | number> = [];
+/** A translator failure that is not an HTTP status: unreachable, no text, cut off, code lost, or no answer at all. */
+type DeepSeekFailure = { fail: 'NETWORK' | 'EMPTY' | 'TRUNCATED' | 'MANGLED' | 'HANG' };
+/** What DeepSeek answers next: a translation, an HTTP error status, or another failure. */
+let deepSeekReplies: Array<string | number | DeepSeekFailure> = [];
 /** The system prompt of every DeepSeek call, in order. */
 let deepSeekSystems: string[] = [];
 const realFetch = globalThis.fetch;
@@ -56,10 +63,22 @@ before(async () => {
   globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
     if (!String(url).startsWith('https://api.deepseek.com/')) return realFetch(url);
     const body = JSON.parse(String(init?.body)) as { messages: Array<{ role: string; content: string }> };
-    deepSeekSystems.push(body.messages.find((m) => m.role === 'system')!.content);
+    const system = body.messages.find((m) => m.role === 'system')!.content;
+    // Only the translator is answered from deepSeekReplies: another DeepSeek caller in the background (a session's
+    // title) must not take a reply a translation's retry is waiting for.
+    if (!system.startsWith('You are a translator.')) return { ok: false, status: 500, body: null } as Response;
+    deepSeekSystems.push(system);
     const reply = deepSeekReplies.shift();
+    const answer = (choice: unknown) => ({ ok: true, json: async () => ({ choices: [choice] }) }) as Response;
+    if (reply && typeof reply === 'object') {
+      if (reply.fail === 'NETWORK') throw new TypeError('fetch failed');
+      if (reply.fail === 'HANG') return new Promise<Response>(() => undefined);
+      if (reply.fail === 'EMPTY') return answer({ finish_reason: 'stop', message: { content: '' } });
+      if (reply.fail === 'TRUNCATED') return answer({ finish_reason: 'length', message: { content: 'Fix the' } });
+      return answer({ finish_reason: 'stop', message: { content: 'Fix \u27e63\u27e7' } });
+    }
     if (typeof reply !== 'string') return { ok: false, status: reply ?? 500, body: null } as Response;
-    return { ok: true, json: async () => ({ choices: [{ finish_reason: 'stop', message: { content: reply } }] }) } as Response;
+    return answer({ finish_reason: 'stop', message: { content: reply } });
   }) as typeof fetch;
   ownerId = randomUUID();
   runnerId = randomUUID();
@@ -117,6 +136,9 @@ async function liveSession(status: RunStatus): Promise<string> {
       id: sessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
       title: 'translation', prompt: 'opening', provider: 'claude', providerBuiltin: true, engine: 'claude',
       status, numTurns: 1, dispatchOrigin: 'USER', startsTaskWork: false,
+      ...(['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(status)
+        ? { finishedAt: new Date()}
+        : {}),
     },
   });
   await prisma.conversationTurn.create({
@@ -202,7 +224,8 @@ scenario('a failed translation is never delivered; Send as written delivers the 
 
 scenario('Retry after a failure delivers the translation', async () => {
   const sessionId = await liveSession(RunStatus.RUNNING);
-  deepSeekReplies = [500, ENGLISH];
+  // Three failures: the automatic tries are spent, so the message is held for the owner's Retry.
+  deepSeekReplies = [500, 500, 500, ENGLISH];
   const sent = await send(sessionId);
   await sessions.translationsSettled();
   assert.equal((await dequeue(sessionId)).turnId, '');
@@ -212,7 +235,7 @@ scenario('Retry after a failure delivers the translation', async () => {
   assert.equal(delivered.turnId, sent.turnId);
   assert.equal(delivered.content, ENGLISH);
   // The account names no agent language: English, as before.
-  assert.equal(deepSeekSystems.length, 2);
+  assert.equal(deepSeekSystems.length, 4);
   for (const system of deepSeekSystems) assert.match(system, /from Chinese \(Simplified\) into English\./);
 });
 
@@ -288,7 +311,7 @@ scenario('skipTranslation (the prompt optimizer\'s English): an opening message 
   // and the claim answers only whether this session's work is held.
   await prisma.session.updateMany({
     where: { ownerId, id: { not: created.id }, status: { in: [RunStatus.RUNNING, RunStatus.PENDING, RunStatus.AWAITING_INPUT] } },
-    data: { status: RunStatus.SUCCEEDED },
+    data: { status: RunStatus.SUCCEEDED, finishedAt: new Date()},
   });
   const claimed = await queue.claimSessionForRunner({ id: runnerId });
   assert.equal(claimed?.sessionId, created.id, 'not held: the claim hands it out');
@@ -368,4 +391,124 @@ scenario('the owner\'s language the agent\'s: a send is written and delivered as
   } finally {
     await prisma.user.update({ where: { id: ownerId }, data: { preferences: { translationEnabled: true, translationLanguage: 'zh-Hans' } } });
   }
+});
+
+// ── why it failed (translation failure policy B, criterion 1; migration 1100) ─────────────────────
+
+/** Every owner-translation failure line the logger writes while `run` runs. */
+async function failureLines(run: () => Promise<void>): Promise<string[]> {
+  const lines: string[] = [];
+  const realWarn = Logger.prototype.warn;
+  Logger.prototype.warn = function (this: Logger, message: unknown, ...rest: unknown[]) {
+    if (String(message).startsWith('owner translation failed:')) lines.push(String(message));
+    else return (realWarn as (...args: unknown[]) => void).call(this, message, ...rest);
+  } as typeof realWarn;
+  try {
+    await run();
+  } finally {
+    Logger.prototype.warn = realWarn;
+  }
+  return lines;
+}
+
+function assertOneLine(lines: string[], reason: string, httpStatus: number | null, sessionId: string): void {
+  assert.equal(lines.length, 1, lines.join(' | '));
+  assert.match(lines[0], new RegExp(`\\breason=${reason}\\b`));
+  assert.match(lines[0], new RegExp(`\\bhttpStatus=${httpStatus ?? '-'}(\\s|$)`));
+  assert.match(lines[0], /\bdurationMs=\d+\b/);
+  assert.match(lines[0], new RegExp(`\\bsessionId=${sessionId}\\b`));
+  assert.ok(!lines[0].includes(ORIGINAL) && !lines[0].includes('登录'), 'no message text');
+}
+
+const REASONS: Array<{ reason: string; httpStatus: number | null; replies: Array<string | number | DeepSeekFailure>; release: 'retry' | 'as-written' }> = [
+  { reason: 'NETWORK', httpStatus: null, replies: [{ fail: 'NETWORK' }, { fail: 'NETWORK' }, { fail: 'NETWORK' }], release: 'retry' },
+  { reason: 'HTTP', httpStatus: 401, replies: [401], release: 'as-written' },
+  { reason: 'HTTP', httpStatus: 503, replies: [503, 503, 503], release: 'retry' },
+  { reason: 'EMPTY', httpStatus: null, replies: [{ fail: 'EMPTY' }], release: 'as-written' },
+  { reason: 'TRUNCATED', httpStatus: null, replies: [{ fail: 'TRUNCATED' }], release: 'retry' },
+  { reason: 'MANGLED', httpStatus: null, replies: [{ fail: 'MANGLED' }], release: 'as-written' },
+  { reason: 'TIMEOUT', httpStatus: null, replies: [{ fail: 'HANG' }], release: 'retry' },
+];
+
+for (const { reason, httpStatus, replies, release } of REASONS) {
+  const name = httpStatus ? `${reason} ${httpStatus}` : reason;
+  scenario(`a held message that fails ${name} stores why, lists it, logs it once, and ${release === 'retry' ? 'Retry' : 'Send as written'} clears it`, async () => {
+    const sessionId = await liveSession(RunStatus.AWAITING_INPUT);
+    deepSeekReplies = [...replies];
+    let turnId = '';
+    const startedAt = Date.now();
+    const lines = await failureLines(async () => {
+      ({ turnId } = await send(sessionId));
+      await sessions.translationsSettled();
+    });
+    if (reason === 'TIMEOUT') assert.ok(Date.now() - startedAt >= TRANSLATION_TIMEOUT_MS - 50);
+    const held = await prisma.conversationTurn.findUniqueOrThrow({ where: { id: turnId } });
+    assert.equal(held.status, 'HELD');
+    assert.equal(held.translationState, 'FAILED');
+    assert.equal(held.translationFailureReason, reason);
+    assert.equal(held.translationHttpStatus, httpStatus);
+    const expected = { state: 'FAILED', from: 'zh-Hans', original: ORIGINAL, failureReason: reason, ...(httpStatus ? { httpStatus } : {}) };
+    const [queued] = await sessions.listQueuedTurns(ownerId, sessionId);
+    assert.deepEqual(queued.translation, expected);
+    const [active] = await sessions.listQueuedTurns(ownerId, sessionId, 'active');
+    assert.deepEqual(active.translation, expected);
+    assertOneLine(lines, reason, httpStatus, sessionId);
+    if (reason === 'TIMEOUT') assert.match(lines[0], /durationMs=(1999\d|2\d{4})\b/);
+
+    if (release === 'retry') {
+      deepSeekReplies = [ENGLISH];
+      const retried = await sessions.retryTurnTranslation(ownerId, sessionId, turnId);
+      assert.deepEqual(retried.translation, { state: 'TRANSLATING', from: 'zh-Hans', original: ORIGINAL });
+      await sessions.translationsSettled();
+    } else {
+      const sent = await sessions.sendTurnAsWritten(ownerId, sessionId, turnId);
+      assert.deepEqual(sent.translation, { state: 'SENT_AS_WRITTEN', from: 'zh-Hans', original: ORIGINAL });
+    }
+    const released = await prisma.conversationTurn.findUniqueOrThrow({ where: { id: turnId } });
+    assert.equal(released.translationState, release === 'retry' ? 'DONE' : 'SENT_AS_WRITTEN');
+    assert.equal(released.translationFailureReason, null);
+    assert.equal(released.translationHttpStatus, null);
+  });
+}
+
+scenario('a new session\'s held opening message stores why it failed, and Retry clears it', async () => {
+  deepSeekReplies = [429, 429, 429];
+  let createdId = '';
+  const lines = await failureLines(async () => {
+    createdId = (await sessions.create(ownerId, { workspaceId, prompt: ORIGINAL } as never, { translate: true })).id;
+    await sessions.translationsSettled();
+  });
+  const opening = await prisma.conversationTurn.findUniqueOrThrow({
+    where: { sessionId_clientTurnId: { sessionId: createdId, clientTurnId: SessionsService.initialTurnClientId(createdId) } },
+  });
+  assert.equal(opening.translationFailureReason, 'HTTP');
+  assert.equal(opening.translationHttpStatus, 429);
+  const [listed] = await sessions.listQueuedTurns(ownerId, createdId);
+  assert.equal(listed.translation?.failureReason, 'HTTP');
+  assert.equal(listed.translation?.httpStatus, 429);
+  assertOneLine(lines, 'HTTP', 429, createdId);
+
+  deepSeekReplies = [{ fail: 'HANG' }];
+  await sessions.retryTurnTranslation(ownerId, createdId, opening.id);
+  const retrying = await prisma.conversationTurn.findUniqueOrThrow({ where: { id: opening.id } });
+  assert.equal(retrying.translationState, 'TRANSLATING');
+  assert.equal(retrying.translationFailureReason, null);
+  assert.equal(retrying.translationHttpStatus, null);
+  await sessions.translationsSettled();
+});
+
+scenario('the schema keeps a reason to a FAILED turn and a status to HTTP', async () => {
+  const sessionId = await liveSession(RunStatus.AWAITING_INPUT);
+  deepSeekReplies = [{ fail: 'EMPTY' }];
+  const { turnId } = await send(sessionId);
+  await sessions.translationsSettled();
+  const refused = (data: Record<string, unknown>) =>
+    assert.rejects(prisma.conversationTurn.update({ where: { id: turnId }, data }), /conversation_turn_translation_failure_chk/);
+  await refused({ translationFailureReason: 'COSMIC_RAY' });
+  await refused({ translationHttpStatus: 500 });
+  await refused({ translationFailureReason: 'HTTP', translationHttpStatus: 42 });
+  await refused({ translationState: 'TRANSLATING' });
+  await prisma.conversationTurn.update({ where: { id: turnId }, data: { translationFailureReason: 'UNAVAILABLE' } });
+  await prisma.conversationTurn.update({ where: { id: turnId }, data: { translationFailureReason: 'NO_KEY' } });
+  await prisma.conversationTurn.update({ where: { id: turnId }, data: { translationFailureReason: 'HTTP', translationHttpStatus: 500 } });
 });

@@ -103,7 +103,16 @@ type linkWork struct {
 	// slowBeats counts the beats answered after linkBeatSlow since slowLoggedAt, when the last of them was logged.
 	slowBeats    int
 	slowLoggedAt time.Time
+	// browser is what the current connection's Welcome said of the managed runner browser (Welcome.browser,
+	// docs/runner-browser-design.md §2): whether the server offers it to this runner. The runner's browser supervisor
+	// follows it (browser_supervisor.go), and a byte stream to the browser opens only while it does (link_streams.go).
+	browser atomic.Bool
+	// streams is the byte streams open on the link's connections (link_streams.go).
+	streams *linkStreams
 }
+
+// browserOffered reports whether the last Welcome offered this runner the managed runner browser.
+func (w *linkWork) browserOffered() bool { return w.browser.Load() }
 
 // linkWorkConn is the work's state of one of its connections.
 type linkWorkConn struct {
@@ -141,11 +150,13 @@ type linkWorkEvent struct {
 }
 
 func newLinkWork(m *linkMode, client *linkClient, log func(...any)) *linkWork {
-	return &linkWork{
+	w := &linkWork{
 		m: m, client: client, log: log, now: time.Now, pingEvery: linkWorkPingEvery, pingTimeout: linkWorkPingTimeout,
 		beatStuckAfter: linkBeatStuckAfter,
 		changed:        make(chan struct{}), calls: map[string]*linkCall{}, events: make(chan linkWorkEvent, 16),
 	}
+	w.streams = newLinkStreams(w)
+	return w
 }
 
 func (w *linkWork) running() bool {
@@ -406,6 +417,8 @@ func (w *linkWork) adopt(conn, old *linkWorkConn, why string) bool {
 	// Taken before the connection carries anything: a beat can go out on it the moment it is current, and has to find
 	// the release check the Welcome owes it (linkMode.afterHeartbeat).
 	w.m.assignRelease(welcome.GetRelease())
+	w.browser.Store(welcome.GetBrowser())
+	runnerBrowser().SetOffered(welcome.GetBrowser())
 	w.mu.Lock()
 	w.cur = conn
 	// The backoff is not reset here but once the connection has carried a reconciled heartbeat (reconciled): a
@@ -649,10 +662,19 @@ func (w *linkWork) onFrame(conn *linkWorkConn, f *linkpb.Frame) {
 		go func() {
 			_, _ = conn.send(&linkpb.Frame{Body: &linkpb.Frame_TurnPrefixResponse{TurnPrefixResponse: resp}})
 		}()
+	case *linkpb.Frame_BackgroundJobTailRequest:
+		// The newest lines of a bg_run job's output, for its card in the app (background_owner_tail.go).
+		go func() {
+			resp := bgJobTailForOwner(body.BackgroundJobTailRequest)
+			_, _ = conn.send(&linkpb.Frame{Body: &linkpb.Frame_BackgroundJobTailResponse{BackgroundJobTailResponse: resp}})
+		}()
 	case *linkpb.Frame_EventAck:
 		w.m.events.onAck(conn, body.EventAck)
 	case *linkpb.Frame_Credit:
 		w.m.events.onCredit(conn, body.Credit)
+	case *linkpb.Frame_StreamOpen, *linkpb.Frame_StreamData, *linkpb.Frame_StreamCredit, *linkpb.Frame_StreamClose,
+		*linkpb.Frame_StreamPaste:
+		w.streams.onFrame(conn, f)
 	}
 	// A body this binary does not know is ignored, as the protocol asks.
 }

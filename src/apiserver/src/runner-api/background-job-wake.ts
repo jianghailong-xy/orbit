@@ -1,10 +1,5 @@
 import { BackgroundJobWake, ConversationTurn, Prisma } from '@prisma/client';
-import {
-  deriveSessionLifecycleState,
-  deriveSessionRunState,
-  SessionLifecycleState,
-  SessionRunState,
-} from '@orbit/shared';
+import { BG_JOB_STOPPED_BY_OWNER } from '@orbit/shared';
 import { IsIn, IsInt, IsOptional, IsString, Matches, MaxLength, Min, ValidateIf } from 'class-validator';
 import { stripNul } from './strip-nul';
 
@@ -177,21 +172,11 @@ export async function jobExitFiled(
 
 /**
  * Whether a session has ended in any of the ways a turn filed now would undo. `createTurn` refuses
- * the Trash, the terminal statuses and a requested cancel on its own; it does not refuse a session
+ * the Trash, a released session and a requested cancel on its own; it does not refuse a session
  * completed while parked, nor an interrupted one whose end was recorded — and a wake must not
- * bring either back.
+ * bring either back. The rule is common/session-release.ts `sessionHasEnded`.
  */
-export function sessionHasEnded(session: {
-  status: string;
-  endReason: string | null;
-  completedAt: Date | null;
-  archivedAt: Date | null;
-  deletedAt: Date | null;
-}): boolean {
-  if (deriveSessionLifecycleState(session) !== SessionLifecycleState.OPEN) return true;
-  const run = deriveSessionRunState(session);
-  return run === SessionRunState.ENDED || run === SessionRunState.SUCCEEDED || run === SessionRunState.FAILED;
-}
+export { sessionHasEnded } from '../common/session-release';
 
 /**
  * The session's wake turn nobody has been handed yet on this route, if there is one: a queued
@@ -470,6 +455,7 @@ const BACKGROUND_JOB_NOT_ALLOWED = 'not_allowed';
 
 /** What the kill reasons a runner reports mean for somebody deciding whether to wait again. */
 const KILLED_BECAUSE: Record<string, string> = {
+  [BG_JOB_STOPPED_BY_OWNER]: 'the person who owns this session stopped it from the app; you did not stop it, so do not start it again unless they ask',
   runner_shutdown: 'the runner process hosting it stopped — a restart or a self-update — and the job was killed with it',
   session_cancelled: 'the session was cancelled, or handed to another runner process, and the job was killed with it',
   [BACKGROUND_JOB_NOT_ALLOWED]:
@@ -515,8 +501,16 @@ export function buildBackgroundWakeBlock(wakes: StoredWake[], turnKind: string =
   const lines = ['<background-job-wake>', WAKE_HEADS[turnKind === 'steer' ? 'steer' : 'message']];
   for (const wake of wakes) lines.push(...jobLines(wake, (job) => [describeTrigger(job)]));
   lines.push('  The control plane recorded this for you; the user did not say it. Read the full output with mcp__orbit__bg_output by id; pass sinceOffset to read only what is new.');
-  // Not for one the owner refused: nothing was cut short, and asking again is what they just answered.
-  if (wakes.some((wake) => wake.status === 'killed' && wake.reason !== BACKGROUND_JOB_NOT_ALLOWED)) {
+  // The moment a "tell me when it's done" comes due. On 2026-11-17 an agent asked exactly that woke here, answered
+  // in the conversation and stopped, so the person heard nothing until they opened it. Two-space narration, which
+  // the clients' parsers skip as they skip the lines around it.
+  if (wakes.some((wake) => wake.trigger === 'exit')) {
+    lines.push('  If the person asked to hear when this was done, tell them with mcp__orbit__notify: a reply here reaches them only when they next look.');
+  }
+  // Not for one the owner refused: nothing was cut short, and asking again is what they just answered. Nor for one
+  // the owner stopped: starting it again would undo what they just did.
+  if (wakes.some((wake) => wake.status === 'killed' && wake.reason !== BACKGROUND_JOB_NOT_ALLOWED
+    && wake.reason !== BG_JOB_STOPPED_BY_OWNER)) {
     lines.push('  A killed job does not come back on its own: to keep waiting, start it again with bg_run.');
   }
   lines.push('</background-job-wake>');
@@ -572,6 +566,7 @@ export function buildBackgroundStallBlock(wakes: StoredWake[], turnKind: string 
 
 /** The kind a SubAgent's wake is filed under (runner-api/subagent-wake.ts): delivered in its own block. */
 export const SUBAGENT_WAKE_KIND = 'subagent';
+export const WORKFLOW_WAKE_KIND = 'workflow';
 
 /** What each end of a run means for the agent that sent it. */
 const ENDED_BECAUSE: Record<string, string> = {
@@ -580,6 +575,11 @@ const ENDED_BECAUSE: Record<string, string> = {
   STOPPED: 'It was stopped before it finished.',
   FAILED: 'It did not finish its work.',
 };
+
+/** The block's ask to rate each result (subagent-rating.ts). Optional: nothing waits on a rating. */
+export const SUBAGENT_RATE_LINE =
+  '  Once you have used a result, rate it with mcp__orbit__subagent_rate (its run id, score 1-5, an optional note): ' +
+  '1 you discarded it or redid the work, 3 usable after fixes, 5 used as-is. Optional: nothing waits on it.';
 
 /**
  * The block a SubAgent's wake is delivered in. It names the SubAgent by its description and run, says how it
@@ -610,7 +610,32 @@ export function buildSubagentFinishedBlock(wakes: StoredWake[], turnKind: string
     '  The control plane recorded this for you; the user did not say it. Whatever a SubAgent changed is in your working ' +
       'tree, uncommitted: review it before you commit. To continue one, call delegate with resume set to its run id.',
   );
+  lines.push(SUBAGENT_RATE_LINE);
   lines.push('</orbit-subagent-finished>');
+  return lines.join('\n');
+}
+
+/** The block a workflow's completion wake is delivered in. */
+export function buildWorkflowFinishedBlock(wakes: StoredWake[], turnKind: string = 'message'): string {
+  const lines = ['<orbit-workflow-finished>'];
+  for (const wake of wakes) {
+    const description = wake.description ? ` — ${wake.description}` : '';
+    lines.push(`  Workflow ${wake.command}${description} (run ${wake.jobId}) finished: ${wake.status}`);
+    if (wake.status === 'INTERRUPTED') {
+      lines.push(
+        '  The runner process stopped before the workflow finished. What its SubAgents changed so far is in the ' +
+          'working tree, uncommitted. A workflow cannot be resumed yet: start one for the work that is left, or ' +
+          'finish it yourself.',
+      );
+    }
+    for (const line of wake.outputExcerpt.replace(/\r\n?/g, '\n').trimEnd().split('\n')) lines.push(`    ${line}`);
+  }
+  lines.push(
+    turnKind === 'steer'
+      ? '  It ended while you were working, so this was added to the turn you are in.'
+      : '  The control plane opened this turn for it.',
+    '</orbit-workflow-finished>',
+  );
   return lines.join('\n');
 }
 
@@ -638,11 +663,13 @@ export async function appendBackgroundWakeContext(
   // A SubAgent's end reads as a SubAgent's, in a block of its own; a stall goes in a block of its own, after the
   // exits and output beside it.
   const subagents = wakes.filter((wake) => wake.kind === SUBAGENT_WAKE_KIND);
-  const jobs = wakes.filter((wake) => wake.kind !== SUBAGENT_WAKE_KIND);
+  const workflows = wakes.filter((wake) => wake.kind === WORKFLOW_WAKE_KIND);
+  const jobs = wakes.filter((wake) => wake.kind !== SUBAGENT_WAKE_KIND && wake.kind !== WORKFLOW_WAKE_KIND);
   const news = jobs.filter((wake) => wake.trigger !== 'stall');
   const stalls = jobs.filter((wake) => wake.trigger === 'stall');
   const blocks = [
     ...(subagents.length > 0 ? [buildSubagentFinishedBlock(subagents, turnKind)] : []),
+    ...(workflows.length > 0 ? [buildWorkflowFinishedBlock(workflows, turnKind)] : []),
     ...(news.length > 0 ? [buildBackgroundWakeBlock(news, turnKind)] : []),
     ...(stalls.length > 0 ? [buildBackgroundStallBlock(stalls, turnKind)] : []),
   ];

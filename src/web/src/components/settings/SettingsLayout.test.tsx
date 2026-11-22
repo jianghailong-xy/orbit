@@ -61,6 +61,7 @@ vi.mock('../../pages/settings/StoragePage', async () => ({ StorageSettingsPage: 
 vi.mock('../../pages/ProfilePage', () => ({ ProfilePage: () => <p data-page="profile">profile</p> }));
 vi.mock('../../pages/SharedLinksPage', () => ({ SharedLinksPage: () => <p data-page="shared-links">links</p> }));
 vi.mock('../../pages/AccessTokensPage', () => ({ AccessTokensPage: () => <p data-page="access-tokens">tokens</p> }));
+vi.mock('../../pages/settings/ModelRoutingPage', () => ({ ModelRoutingPage: () => <p data-page="routing">routing</p> }));
 vi.mock('../../pages/FeishuIntegrationPage', () => ({ FeishuIntegrationPage: () => <p data-page="feishu">feishu</p> }));
 vi.mock('./SettingsProviderPages', async (original) => {
   const { useParams } = await import('react-router-dom');
@@ -292,6 +293,7 @@ describe('the Settings window', () => {
       ['Storage', '/settings/storage'],
       ['Shared links', '/settings/shared-links'],
       ['Access tokens', '/settings/access-tokens'],
+      ['Secrets', '/settings/secrets'],
     ]);
     expect(rows('Integrations').map((r) => [r.label, r.href])).toEqual([
       ['Feishu', '/settings/integrations/feishu'],
@@ -306,6 +308,7 @@ describe('the Settings window', () => {
       // Two rows however many vendors the keys are (docs/mocks/settings-providers-compact).
       ['API keys', '/settings/providers', '3'],
       ['Account pools', '/settings/providers/pools', '1'],
+      ['Model routing', '/settings/providers/routing', null],
     ]);
     expect(rows('Workspaces').map((r) => [r.label, r.href, r.meta])).toEqual([
       ['orbit', '/settings/workspaces/wsOrbit', 'gpu-box'],
@@ -328,6 +331,7 @@ describe('the Settings window', () => {
       '/settings/machines/studioMac': 'machine:studioMac:',
       '/settings/providers': 'keys',
       '/settings/providers/pools': 'pools',
+      '/settings/providers/routing': 'routing',
       '/settings/workspaces/wsOrbit': 'workspace:wsOrbit',
       '/settings/workspaces/wsSite': 'workspace:wsSite',
     };
@@ -357,6 +361,8 @@ describe('the Settings window', () => {
     await visit('/settings/general');
     expect(rows('Providers').map((r) => [r.label, r.href, r.meta])).toEqual([
       ['Connect a provider', '/settings/providers/new', null],
+      // The built-in engines have model tiers with no key at all.
+      ['Model routing', '/settings/providers/routing', null],
     ]);
     await click(nav().querySelector('a[href="/settings/providers/new"]'));
     expect(page()).toBe('pick-vendor');
@@ -370,9 +376,26 @@ describe('the Settings window', () => {
       ['/settings/providers/new/anthropic', null],
       ['/settings/providers/keys/k1', null],
       ['/settings/providers/pools/p1', '/settings/providers/pools'],
+      ['/settings/providers/routing', '/settings/providers/routing'],
     ] as const) {
       await visit(path);
       expect([path, nav().querySelector('a.active')?.getAttribute('href') ?? null]).toEqual([path, lit]);
+      await act(async () => root?.unmount());
+      root = null;
+      container.remove();
+    }
+  });
+
+  it('leads Model tiers’ and the Routing report’s old addresses to Model routing, keeping the view and period asked for', async () => {
+    for (const [path, landed] of [
+      ['/settings/providers/tiers', '/settings/providers/routing'],
+      ['/settings/routing-report', '/settings/providers/routing'],
+      ['/settings/routing-report?view=workflows&period=7d', '/settings/providers/routing?view=workflows&period=7d'],
+    ] as const) {
+      await visit(path);
+      expect([path, addressBar()]).toEqual([path, landed]);
+      expect(page()).toBe('routing');
+      expect(nav().querySelector('a.active')?.getAttribute('href')).toBe('/settings/providers/routing');
       await act(async () => root?.unmount());
       root = null;
       container.remove();
@@ -385,6 +408,8 @@ describe('the Settings window', () => {
       ['/settings/providers/new/anthropic', 'key'],
       ['/settings/providers/keys/k1', 'key'],
       ['/settings/providers/pools/p1', 'pool'],
+      // Model routing is a page of its own, not the :vendor keys page.
+      ['/settings/providers/routing', 'routing'],
     ] as const) {
       await visit(path);
       expect(addressBar()).toBe(path);
@@ -655,6 +680,64 @@ describe('reordering machines in the nav', () => {
     await settle();
     expect(machineOrder()).toEqual(['gpu-box', 'old-laptop', 'Studio Mac']);
     expect(toast.error).toHaveBeenCalledWith("Couldn't reorder the machines", 'Machine order is stale');
+  });
+
+  it('draws each machine by the OS it reported, a monitor when it has not said', async () => {
+    runners = [
+      { ...RUNNERS[0], capabilities: ['os:linux'] },
+      RUNNERS[1],
+      { ...RUNNERS[2], capabilities: ['os:darwin'] },
+    ] as typeof RUNNERS;
+    await visit('/settings/general');
+    const osOf = (label: string) =>
+      [...group('Machines').querySelectorAll('.settings-nav-row')]
+        .find((row) => row.querySelector('.settings-nav-label')?.textContent === label)!
+        .querySelector('.settings-nav-icon .anticon')!
+        .getAttribute('data-os');
+    expect(osOf('gpu-box')).toBe('linux');
+    expect(osOf('old-laptop')).toBe('unknown');
+    expect(osOf('Studio Mac')).toBe('darwin');
+  });
+
+  describe('with Orbit Cloud among them', () => {
+    // The account's managed runner, saved second: the nav pins it first all the same.
+    const WITH_CLOUD = [RUNNERS[0], { id: 'cloud', name: 'orbit-cloud', online: true, engines: [signedIn], managed: true }, ...RUNNERS.slice(1)];
+    beforeEach(() => {
+      runners = WITH_CLOUD as typeof RUNNERS;
+      reorder = async (ids) => {
+        runners = ids.map((id) => WITH_CLOUD.find((r) => r.id === id)!) as typeof RUNNERS;
+        return runners;
+      };
+    });
+
+    it('pins it first with its cloud, no grip, and a line before the machines you drag', async () => {
+      await visit('/settings/general');
+      expect(machineOrder()).toEqual(['Orbit Cloud', 'gpu-box', 'old-laptop', 'Studio Mac']);
+      const pinned = group('Machines').querySelector('.settings-nav-cloud')!;
+      expect(pinned.querySelector('.settings-nav-label')!.textContent).toBe('Orbit Cloud');
+      expect(pinned.querySelector('.settings-nav-icon .anticon-cloud')).not.toBeNull();
+      expect(pinned.querySelector('.settings-nav-divider')).not.toBeNull();
+      expect(pinned.closest('.settings-nav-sortable')).toBeNull();
+      expect([...group('Machines').querySelectorAll('button.settings-nav-grip')].map((g) => g.getAttribute('aria-label'))).toEqual([
+        'Reorder gpu-box',
+        'Reorder old-laptop',
+        'Reorder Studio Mac',
+      ]);
+    });
+
+    it('a drag moves only your machines, and keeps Orbit Cloud first in the order it saves', async () => {
+      await visit('/settings/general');
+      await dragRow('gpu-box', 2 * ROW_HEIGHT);
+      expect(reorderCalls()).toEqual([{ method: 'POST', body: { ids: ['cloud', 'oldLaptop', 'studioMac', 'gpuBox'] } }]);
+      expect(machineOrder()).toEqual(['Orbit Cloud', 'old-laptop', 'Studio Mac', 'gpu-box']);
+    });
+
+    it('draws no line when Orbit Cloud is the only machine', async () => {
+      runners = [WITH_CLOUD[1]] as typeof RUNNERS;
+      await visit('/settings/general');
+      expect(machineOrder()).toEqual(['Orbit Cloud']);
+      expect(group('Machines').querySelector('.settings-nav-divider')).toBeNull();
+    });
   });
 
   it('a plain click on a machine still opens its page, and sends no reorder', async () => {

@@ -29,6 +29,7 @@ import {
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { isReleasedStatus } from '../common/session-release';
 import { SESSION_CREATED_TASKS_MAX_LIMIT, toUuid, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -197,6 +198,9 @@ test('the tasks a session created: its row, its counts, its order, and the task 
       data: {
         id: randomUUID(), ownerId: me.ownerId, creatorId: me.ownerId, taskId,
         title: `run of ${taskId}`, prompt: 'do the thing', status,
+        ...(isReleasedStatus(status) ? {
+          finishedAt: new Date(),
+        } : {}),
         dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
       },
     });
@@ -268,14 +272,10 @@ test('the tasks a session created: its row, its counts, its order, and the task 
     failedOld, failedNew, running, failedRunning, queued, open, inProgress, done1, done2, cancelled,
     A, C, D, F, I, K, L, M[0], ready,
   ];
-  /** The row, in order: Failed, Running, Queued, the rest of the unfinished, Done, Cancelled. */
+  /** The row, in order, as the Agents list orders its runs: running first, then newest first. */
   const ROWS = [
-    M[10], I, failedNew, failedOld,
     failedRunning, running,
-    queued,
-    ready, E, inProgress, open,
-    L, H, B, done2, done1,
-    cancelled,
+    ready, M[10], L, I, H, E, B, cancelled, done2, done1, inProgress, open, queued, failedNew, failedOld,
   ];
 
   // ── the app: the real controllers and services, and main.ts's pipe, interceptors and filters ──
@@ -372,7 +372,7 @@ test('the tasks a session created: its row, its counts, its order, and the task 
     assert.deepEqual(none.json, { total: 0, running: 0, failed: 0, done: 0, items: [], projects: [] });
   });
 
-  await t.test('rows: Failed, Running, Queued, the rest of the unfinished, Done, Cancelled; newest first in each', () => {
+  await t.test('rows: the running ones first, then every other row newest first, whatever its status', () => {
     assert.deepEqual(titles(full.json.items), titles(ROWS.map((id) => ({ id: pub(id) }))));
     assert.deepEqual(full.json.items.map((item: Json) => item.id), ROWS.map(pub));
   });
@@ -424,14 +424,14 @@ test('the tasks a session created: its row, its counts, its order, and the task 
       assert.equal(three.json[count], full.json[count], `${count} is the session's, not the page's`);
     }
     // `projects` follows the items it is about.
-    assert.deepEqual(three.json.projects, []);
+    assert.deepEqual(three.json.projects, [pub(P2)].map((id) => ({ id, publicId: id, title: 'Runner upkeep' })));
     const six = await createdTasksOf(here, '?limit=6');
     assert.deepEqual(six.json.items.map((item: Json) => item.id), ROWS.slice(0, 6).map(pub));
     assert.deepEqual(six.json.projects.map((project: Json) => project.id), [pub(P2)]);
-    // At five the page cuts `running` itself, which must still be counted as running.
-    const five = await createdTasksOf(here, '?limit=5');
-    assert.deepEqual(five.json.items.map((item: Json) => item.id), ROWS.slice(0, 5).map(pub));
-    assert.equal(five.json.running, 2, 'a running row the page cut is still counted');
+    // At one the page cuts `running` itself, which must still be counted as running.
+    const one = await createdTasksOf(here, '?limit=1');
+    assert.deepEqual(one.json.items.map((item: Json) => item.id), ROWS.slice(0, 1).map(pub));
+    assert.equal(one.json.running, 2, 'a running row the page cut is still counted');
 
     const most = await createdTasksOf(here, `?limit=${SESSION_CREATED_TASKS_MAX_LIMIT}`);
     assert.equal(most.status, 200, most.text);
@@ -622,6 +622,9 @@ test('the row writes no temp file, however many tasks the session created', {
       data: {
         id: randomUUID(), ownerId, creatorId: ownerId, taskId,
         title: `run of ${taskId}`, prompt: 'do the thing', status,
+        ...(isReleasedStatus(status) ? {
+          finishedAt: new Date(),
+        } : {}),
         dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
       },
     });
@@ -668,14 +671,13 @@ test('the row writes no temp file, however many tasks the session created', {
   await sql.query('ANALYZE task');
   await sql.query('ANALYZE session');
 
-  /** The row, worked out from the fixture rather than read back: Failed, Running, Queued, … */
+  /** The row, worked out from the fixture rather than read back: running first, then newest first. */
   const rows = [...filed.filter((row) => row.id !== failedNewest.id), redo].map((row) => ({
     ...row,
     running: row.id === redo.id || row.id === runningHere.id,
     queued: row.id === queuedHere.id,
   }));
-  const GROUP: Record<TaskStatus, number> = { FAILED: 0, OPEN: 3, IN_PROGRESS: 3, DONE: 4, CANCELLED: 5 };
-  const groupOf = (row: (typeof rows)[number]) => (row.running ? 1 : row.queued ? 2 : GROUP[row.status]);
+  const groupOf = (row: (typeof rows)[number]) => (row.running ? 0 : 1);
   const firstRows = (limit: number) => [...rows]
     .sort((a, b) => groupOf(a) - groupOf(b) || b.createdAt.getTime() - a.createdAt.getTime())
     .slice(0, limit)
@@ -724,11 +726,13 @@ test('the row writes no temp file, however many tasks the session created', {
       assert.deepEqual({ total, running, failed, done }, counts, `limit=${limit}: the counts are the session's`);
       assert.deepEqual(answer.items.map((item) => item.id), firstRows(limit), `limit=${limit}: the first rows`);
     }
-    // At the largest page the order reaches past the failures into both live groups and group 3.
+    // At the largest page the two running rows lead, older than most of the page as they are, and
+    // the rest interleave Done with the unfinished by age alone.
     const page = await createdTasks.read(ownerId, here, String(SESSION_CREATED_TASKS_MAX_LIMIT));
+    assert.deepEqual(page.items.slice(0, 2).map((item) => item.id), [redo.id, runningHere.id]);
     assert.deepEqual(
-      [...new Set(page.items.map((item) => (item.running ? 'running' : item.queued ? 'queued' : item.status)))],
-      ['FAILED', 'running', 'queued', 'OPEN', 'IN_PROGRESS'],
+      [...new Set(page.items.slice(2).map((item) => item.status))].sort(),
+      ['DONE', 'IN_PROGRESS', 'OPEN'],
     );
     assert.deepEqual(page.items.find((item) => item.id === redo.id)?.replaces, { id: failedNewest.id, title: `task ${filed.indexOf(failedNewest)}` });
   });

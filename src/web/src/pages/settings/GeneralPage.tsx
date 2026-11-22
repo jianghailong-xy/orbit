@@ -1,5 +1,6 @@
 import { TRANSLATION_LANGUAGE_NAMES, TRANSLATION_LANGUAGES, type TranslationLanguage } from '@orbit/shared';
 import { SettingsCard, SettingsHeader, SettingsRow, SettingsSection } from '../../components/settings';
+import { NumberInput } from '../../components/ui/NumberInput';
 import { Select } from '../../components/ui/Select';
 import { Switch } from '../../components/ui/Switch';
 import { agentLanguageOf, translationLanguageOf } from '../../lib/translation';
@@ -16,10 +17,6 @@ export const GENERAL_HINTS = {
     short: S.defaultPermissionMode.description,
     full: 'The mode a new session starts in, unless the composer picks another. Account-wide: the mode is a property of the run, not of the workspace it runs in.',
   },
-  modelRouting: {
-    short: S.modelRouting.description,
-    full: "Coordinators suggest a tier for each task, and Agents you turn this on for run their tasks on that tier's model and effort. Off: tasks run exactly as before.",
-  },
   promptSuggestions: {
     short: S.promptSuggestions.description,
     full: "When a Claude turn ends, the empty message box offers what you'd probably type next. Each suggestion is one more request on that session's Claude account.",
@@ -31,6 +28,10 @@ export const GENERAL_HINTS = {
   enableOrchestration: {
     short: S.enableOrchestration.description,
     full: 'Sessions in every workspace can start and manage other sessions, and manage your agents and runners, through the orbit MCP tools and CLI: create, change and delete agents, install engines on runners and delete them. Off → those tools are hidden and refused.',
+  },
+  cardFreeTaskCreates: {
+    short: S.cardFreeTaskCreates.description,
+    full: "A session's first tasks are created without a confirmation card; the one after, and every one after that, waits for you. Every task the session created counts, including ones you approved. A session in a narrower mode than your default always asks. 8 unless you set another number, up to 50.",
   },
 } as const;
 
@@ -71,21 +72,6 @@ export function GeneralSettingsPage() {
                 value={prefs.defaultPermissionMode ?? DEFAULT_PERMISSION_MODE}
                 options={MODE_OPTIONS}
                 onValueChange={(v) => v !== null && save.mutate({ defaultPermissionMode: v })}
-                loading={save.isPending}
-              />
-            }
-          />
-          {/* Absent means OFF, unlike the switches below — only turning it on has to be written. */}
-          <SettingsRow
-            anchor={S.modelRouting.anchor}
-            title={S.modelRouting.title}
-            description={h.modelRouting.short}
-            tooltip={h.modelRouting.full}
-            control={
-              <Switch
-                aria-label="Smart model selection"
-                checked={prefs.modelRouting === true}
-                onCheckedChange={(v) => save.mutate({ modelRouting: v })}
                 loading={save.isPending}
               />
             }
@@ -242,6 +228,25 @@ export function GeneralSettingsPage() {
                 checked={prefs.enableOrchestration ?? true}
                 onCheckedChange={(v) => save.mutate({ enableOrchestration: v })}
                 loading={save.isPending}
+              />
+            }
+          />
+          {/* docs/mocks/card-free-task-creates: absent reads as the server's default, 8; 0 cards every create. */}
+          <SettingsRow
+            anchor={S.cardFreeTaskCreates.anchor}
+            title={S.cardFreeTaskCreates.title}
+            description={h.cardFreeTaskCreates.short}
+            tooltip={h.cardFreeTaskCreates.full}
+            control={
+              <NumberInput
+                aria-label="Tasks a session files without asking"
+                style={{ width: 96 }}
+                value={prefs.cardFreeTaskCreates ?? 8}
+                min={0}
+                max={50}
+                step={1}
+                precision={0}
+                onValueChange={(v) => v !== null && v !== (prefs.cardFreeTaskCreates ?? 8) && save.mutate({ cardFreeTaskCreates: v })}
               />
             }
           />

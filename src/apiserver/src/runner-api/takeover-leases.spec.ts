@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { RunStatus } from '@prisma/client';
+import { isReleasedStatus } from '../common/session-release';
 import { SESSION_MERGE_BESIDE_TURN_V1 } from '@orbit/shared';
 import { newTerminalResumeHandoffOwner } from '../common/session-inbox-fence';
 import { RunnerApiController } from './runner-api.controller';
@@ -35,6 +36,7 @@ function harness(
   let queryCalls = 0;
   // The predecessor's SubAgent runs, ended INTERRUPTED (subagent-wake.ts interruptOrphanedSubagentRuns): none here.
   const subagentInterrupts: string[] = [];
+  const workflowInterrupts: string[] = [];
   let notified: string | undefined;
   const tx = {
     runner: { findUnique: async () => ({ capabilities: runnerCapabilities }) },
@@ -46,6 +48,10 @@ function harness(
         subagentInterrupts.push(sql(args));
         return [];
       }
+      if (sql(args).includes('UPDATE "subagent_workflow_run"')) {
+        workflowInterrupts.push(sql(args));
+        return [];
+      }
       queryCalls += 1;
       return owned
         ? [
@@ -54,6 +60,8 @@ function harness(
               inboxLeaseGeneration: currentGeneration,
               inboxLeaseOwner: currentOwner,
               status,
+              // A terminal row carries its release column (session_release_fact_chk).
+              ...(isReleasedStatus(status) ? { finishedAt: new Date() } : {}),
               mergeStatus: null,
               mergeOperationId: null,
               mergeOperationOwner: null,
@@ -91,7 +99,7 @@ function harness(
     published,
     notified: () => notified,
     queryCalls: () => queryCalls,
-    subagentInterrupts,
+    subagentInterrupts, workflowInterrupts,
   };
 }
 
@@ -110,7 +118,9 @@ test('takeover CAS retires the observed process generation and installs the new 
   // The SubAgents the replaced process hosted end with it: INTERRUPTED, owing the parent a wake.
   assert.equal(h.subagentInterrupts.length, 1);
   assert.match(h.subagentInterrupts[0], /"status" = 'INTERRUPTED'/);
-  assert.match(h.subagentInterrupts[0], /"wake_owed" = true/);
+  assert.match(h.subagentInterrupts[0], /"wake_owed" = \("workflow_run_id" IS NULL\)/);
+  assert.equal(h.workflowInterrupts.length, 1);
+  assert.match(h.workflowInterrupts[0], /"status" = 'INTERRUPTED'.*"wake_owed" = true/);
   assert.equal(h.executeCalls.length, 3);
   assert.match(sql(h.executeCalls[0]), /INSERT INTO "inbox_lease_generation"/);
   assert.match(sql(h.executeCalls[0]), /"retired_at"/);

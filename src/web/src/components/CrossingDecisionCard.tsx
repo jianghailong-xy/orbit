@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ReviewCard } from './ReviewCard';
+import { useOwnerCardFlip } from './TranslationParts';
 import { CardActionButton, CardActions } from './CardAction';
 import { decideCrossing } from './ProjectCrossingsCard';
 import type { TranscriptInsert } from './Transcript';
@@ -110,7 +111,7 @@ function ReceiptLine({ batch, receipt }: { batch: CrossingBatch; receipt: Crossi
 }
 
 export function CrossingDecisionCard({
-  batch,
+  batch: asFiled,
   receipt = null,
   busy = false,
   refusals = {},
@@ -128,6 +129,24 @@ export function CrossingDecisionCard({
 }): JSX.Element {
   const [open, setOpen] = useState(false);
   const [all, setAll] = useState(false);
+  // Each crossing's title and reason are the agent's words: one flip for the batch's card (board
+  // 04-owner-cards.html). The decision goes by the rows' ids, which translation never touches.
+  const flip = useOwnerCardFlip(...asFiled.rows.map((row) => row.translation));
+  const batch: CrossingBatch = {
+    ...asFiled,
+    rows: asFiled.rows.map((row) => {
+      const t = flip.pick(row.translation);
+      if (!t) return row;
+      const title = t.title || row.title;
+      return {
+        ...row,
+        title,
+        reason: row.reason ? t.reason || row.reason : row.reason,
+        // A move names its task by the task's own title, which is the crossing's when they agree.
+        subjectTask: row.subjectTask && row.subjectTask.title === row.title ? { ...row.subjectTask, title } : row.subjectTask,
+      };
+    }),
+  };
   const live = isLive(batch);
   const title = crossingTitle(batch.kind, batch.rows.length, batch.targetTitle, batch.out);
   const badge = live ? crossingBadge(batch.kind) : answeredBadge(batch.kind, batchVerdict(batch), batch.out);
@@ -186,6 +205,7 @@ export function CrossingDecisionCard({
             {reasons.map((reason) => (
               <p key={reason} className="crossing-decision-quote">{`“${reason}”`}</p>
             ))}
+            {flip.foot}
             <p className="crossing-decision-note">{approveConsequence(batch)}</p>
             {batchRefusal ? (
               <p className="crossing-decision-item-refused" role="alert">

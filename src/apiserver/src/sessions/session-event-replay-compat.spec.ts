@@ -66,6 +66,7 @@ test('the client tail page applies the replay fence before its LIMIT', async () 
 test('the public shared transcript applies the same historical replay fence', async () => {
   let captured: TaggedQuery | undefined;
   const prisma = {
+    approval: { findMany: async () => [] },
     session: {
       findFirst: async () => ({
         id: SESSION,
@@ -117,6 +118,7 @@ test('what a shared session added after a seq sits behind the same fence, read a
   const reads: string[] = [];
   let captured: TaggedQuery | undefined;
   const prisma = {
+    approval: { findMany: async () => [] },
     session: {
       findFirst: async () => {
         reads.push('header');
@@ -137,8 +139,12 @@ test('what a shared session added after a seq sits behind the same fence, read a
       // The header's own second read, what the session is still doing (readSessionActivities, 29fc026c1), comes as one
       // Prisma.sql object rather than a template: it is part of the header, not an events read.
       if (!Array.isArray(strings)) {
+        const query = strings as unknown as { sql: string; values: unknown[] };
+        assert.match(query.sql, /AS "activity"/);
+        assert.match(query.sql, /FROM "session" s/);
+        assert.deepEqual(query.values, [SESSION]);
         reads.push('activity');
-        return [];
+        return [{ id: SESSION, activity: null }];
       }
       reads.push('events');
       captured = { strings, values };

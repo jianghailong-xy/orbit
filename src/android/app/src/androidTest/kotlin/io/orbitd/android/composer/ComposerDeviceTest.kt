@@ -109,9 +109,9 @@ class ComposerDeviceTest {
 
     @Test fun realModelAccountQueueStopPermissionsAndRefresh() = journey("controls") {
         login()
-        compose.onNodeWithText("Context: 0 tokens · Usage").performClick()
-        awaitText("Primary: 23%");compose.onNodeWithText("Close").performClick()
-        appClick("fixture-model")
+        compose.onNodeWithTag("composer-context").performClick()
+        awaitText("Primary: 23%"); closeSheet()
+        modelChip()
         awaitText("Fixture Two"); appClick("Fixture Two")
         compose.waitUntil(5000) { stats()["config"]!!.jsonObject["model"]?.jsonPrimitive?.content == "fixture-model-2" }
         ready()
@@ -127,11 +127,13 @@ class ComposerDeviceTest {
         compose.onNode(second).performScrollTo().assertIsEnabled()
         assertTrue(compose.onAllNodes(hasText("Expired account")).fetchSemanticsNodes().isEmpty())
         compose.onNodeWithText("Close").performClick()
-        control("""{"status":"RUNNING"}"""); compose.runOnIdle { app.realtime.refreshSession() }; awaitText("Stop")
+        control("""{"status":"RUNNING"}"""); compose.runOnIdle { app.realtime.refreshSession() }
+        // Send turns into Stop: an icon, said aloud as "Stop" (the composer toolbar as iOS draws it).
+        compose.waitUntil(15000) { compose.onAllNodesWithContentDescription("Stop").fetchSemanticsNodes().isNotEmpty() }
         // Queued for the next turn while this one runs — Send held offers it — the message waits in the tray above the composer
         // (A07-22/23, b0f32ebbd), no longer in the + menu's "Queued messages"; withdrawn there, its words come back to the composer.
         compose.onNodeWithTag("composer-input").performTextInput("queued message")
-        compose.waitUntil(10000) { compose.onAllNodes(hasTestTag("composer-send") and isEnabled() and hasText("Send")).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(10000) { compose.onAllNodes(hasTestTag("composer-send") and isEnabled() and hasContentDescription("Send")).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("composer-send").performTouchInput { longClick() }
         compose.waitUntil(10000) { compose.onAllNodesWithTag("composer-queue-next-turn").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("composer-queue-next-turn").performClick()
@@ -217,17 +219,22 @@ class ComposerDeviceTest {
         resolver.openOutputStream(uri)!!.use { it.write(bytes) }
         try {
             control("""{"uploadFailures":1,"uploadDelay":0.3}""")
-            compose.onNodeWithText("+").performClick(); compose.onNodeWithText("File",useUnmergedTree=true).performClick()
-            selectFilesRoot("Downloads")
-            if (systemNode("List view") != null) systemClick("List view")
-            compose.waitUntil(10000) { systemNode(fileName) != null }
-            capture("system-files")
-            clickNode(systemNode(fileName)!!)
-            capture("system-file-selected")
-            compose.waitUntil(5000) { model.state.value.draft.attachments.isNotEmpty() || systemNode("Select") != null || systemNode("Open") != null }
-            if (model.state.value.draft.attachments.isEmpty()) systemClick(if (systemNode("Select") != null) "Select" else "Open")
-            compose.waitUntil(15000) { model.state.value.failures.isNotEmpty() }
-            compose.onNodeWithText("Retry upload").performClick()
+            fun pick(shots: Boolean) {
+                compose.onNodeWithTag("composer-plus").performClick(); compose.onNodeWithText("File",useUnmergedTree=true).performClick()
+                selectFilesRoot("Downloads")
+                if (systemNode("List view") != null) systemClick("List view")
+                compose.waitUntil(10000) { systemNode(fileName) != null }
+                if (shots) capture("system-files")
+                clickNode(systemNode(fileName)!!)
+                if (shots) capture("system-file-selected")
+                compose.waitUntil(5000) { model.state.value.draft.attachments.isNotEmpty() || systemNode("Select") != null || systemNode("Open") != null }
+                if (model.state.value.draft.attachments.isEmpty()) systemClick(if (systemNode("Select") != null) "Select" else "Open")
+            }
+            pick(shots = true)
+            // As iOS: the failed upload's chip goes and the error line above the box says why; picking the file again is the retry.
+            compose.waitUntil(15000) { model.state.value.error?.startsWith("Upload failed — $fileName: ") == true && model.state.value.draft.attachments.isEmpty() }
+            capture("upload-failed")
+            pick(shots = false)
             compose.waitUntil(15000) { model.state.value.draft.attachments.singleOrNull()?.remoteId!=null }
             val staged=model.state.value.draft.attachments.single()
             assertArrayEquals(bytes,runBlocking { model.attachmentBytes(staged.id) })
@@ -326,7 +333,7 @@ class ComposerDeviceTest {
         android.media.MediaScannerConnection.scanFile(app,arrayOf(path),arrayOf("image/jpeg")) { _,_ -> scanned.countDown() }
         assertTrue(scanned.await(10,java.util.concurrent.TimeUnit.SECONDS))
         try {
-            compose.onNodeWithText("+").performClick();compose.onNodeWithText("Image",useUnmergedTree=true).performClick()
+            compose.onNodeWithTag("composer-plus").performClick();compose.onNodeWithText("Image",useUnmergedTree=true).performClick()
             if (Build.VERSION.SDK_INT < 33) {
                 selectFilesRoot("Images")
                 if (systemNode("List view") != null) systemClick("List view")
@@ -370,7 +377,7 @@ class ComposerDeviceTest {
             File(evidence,"photo-save-sha256.txt").writeText(sha(bytes))
             appClick("Close attachment")
             app.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newUri(resolver,"test photo",uri))
-            compose.onNodeWithText("+").performClick();compose.onNodeWithText("Paste image",useUnmergedTree=true).performClick()
+            compose.onNodeWithTag("composer-plus").performClick();compose.onNodeWithText("Paste image",useUnmergedTree=true).performClick()
             compose.waitUntil(10000) { model.state.value.draft.attachments.size==2 && model.state.value.draft.attachments.all { it.remoteId!=null } }
             assertTrue(model.state.value.draft.attachments.any { it.source=="paste" })
             val pasted=model.state.value.draft.attachments.single { it.source=="paste" }
@@ -408,13 +415,22 @@ class ComposerDeviceTest {
         login()
         compose.onNodeWithContentDescription("Back").performClick()
         compose.startNewSession()
+        // The page as it opens: the engine hero over an empty composer (compared against iOS's draft page).
+        compose.waitUntil(15000) { compose.onAllNodes(hasTestTag("new-session-engine") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        // The page opens with the box focused, as iOS's draft does. The keyboard with it is the device's call (see the card
+        // discussion journey): recorded, not asserted.
+        compose.waitUntil(10000) { compose.onAllNodes(hasTestTag("composer-input") and isFocused()).fetchSemanticsNodes().isNotEmpty() }
+        val keyboard = runCatching { compose.waitUntil(10000) {
+            ViewCompat.getRootWindowInsets(compose.activity.window.decorView)?.isVisible(WindowInsetsCompat.Type.ime()) == true }; true }.getOrDefault(false)
+        File(evidence, "new-session-keyboard.txt").writeText("composer focused: yes; soft keyboard shown within 10 s: $keyboard\n")
+        capture("new-session-draft")
         compose.onNodeWithTag("composer-input").performTextInput("新会话的首条消息")
         compose.activityRule.scenario.recreate()
         compose.onNodeWithTag("composer-input").assertTextContains("新会话的首条消息")
         // The recreated page names the workspace's model, and lets the chip be pressed, once it is connected again: until then the
         // chip says "Model" and the box "Reconnect to send" (A15 F-20: pressed at once, 3 of 5 API 36 runs found nothing to press).
-        compose.waitUntil(15000) { compose.onAllNodes(hasText("fixture-model") and hasClickAction() and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
-        appClick("fixture-model"); awaitText("Automatic")
+        compose.waitUntil(15000) { compose.onAllNodes(hasTestTag("composer-model") and hasClickAction() and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        modelChip(); awaitText("Automatic")
         compose.onAllNodesWithText("Automatic").onLast().performScrollTo().performClick()
         compose.onNodeWithText("Close").performClick()
         compose.waitUntil(10000) { compose.onNodeWithTag("composer-send").fetchSemanticsNode().config.getOrNull(SemanticsProperties.Disabled)==null }
@@ -426,6 +442,11 @@ class ComposerDeviceTest {
         assertNull(request["clientTurnId"])
         assertNull(request["codexAccount"])
         capture("created-session")
+        // Back from the session it created goes to the page the draft was opened from, not the draft again (iOS `replaceTop`).
+        compose.onNodeWithContentDescription("Back").performClick()
+        compose.waitUntil(10000) { compose.onAllNodes(hasTestTag("new-session-engine")).fetchSemanticsNodes().isEmpty() }
+        compose.waitForIdle()
+        capture("after-back")
     }
 
     @Test fun explicitRejectionRestoresMessageAndAttachmentThenResumes() = journey("rejected-send") {
@@ -491,15 +512,15 @@ class ComposerDeviceTest {
             val below=all.drop(heading+1).filter { it.config.contains(SemanticsActions.OnClick) }.map { it.id }.toSet()
             return compose.onAllNodesWithText(label).fetchSemanticsNodes().withIndex().filter { it.value.id in below }.map { it.index }
         }
-        fun choose(label:String, current:String="fixture-model") {
-            appClick(current); compose.waitUntil(15000) { inSection(label).isNotEmpty() }
+        fun choose(label:String) {
+            modelChip(); compose.waitUntil(15000) { inSection(label).isNotEmpty() }
             compose.onAllNodesWithText(label)[inSection(label).single()].performScrollTo().performClick()
             compose.onNodeWithText("Close").performClick()
         }
         fun quota(label:String) {
-            appClick("Context: 0 tokens · Usage"); awaitText(label)
+            compose.onNodeWithTag("composer-context").performClick(); awaitText(label)
             compose.onNodeWithText(label).assertIsDisplayed(); capture("usage-${label.hashCode()}")
-            compose.onNodeWithText("Close").performClick()
+            closeSheet()
         }
         choose("Second account"); quota("Primary: 71%")
         choose("Default"); quota("Primary: 23%")
@@ -507,10 +528,10 @@ class ComposerDeviceTest {
         // Claude Code's accounts are under Claude Code: the engine first, then the account — the draft lands on its Default.
         compose.onNodeWithTag("new-session-engine").performClick()
         compose.waitUntil(15000) { compose.onAllNodesWithTag("engine:claude").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithTag("engine:claude").performClick(); awaitText("Claude Code ⌄")
+        compose.onNodeWithTag("engine:claude").performClick(); awaitEngine("Claude Code")
         quota("Primary: 11%")
-        choose("Claude account","claude-model"); quota("No quota reported for this account.")
-        choose("Automatic","claude-model"); clickSendWhenEnabled()
+        choose("Claude account"); quota("No quota reported for this account.")
+        choose("Automatic"); clickSendWhenEnabled()
         awaitCreatedSession()
         val request=stats()["creations"]!!.jsonArray.single().jsonObject
         assertEquals("claude",request["engine"]!!.jsonPrimitive.content)
@@ -526,7 +547,7 @@ class ComposerDeviceTest {
             val pid=Process.myPid()
             compose.runOnIdle { for (source in listOf("photo","paste")) importAttachment(app,model,Uri.fromFile(input),source) }
             compose.waitUntil(30000) { model.state.value.uploads.isEmpty() && model.state.value.draft.attachments.size==2 }
-            assertTrue(model.state.value.failures.toString(),model.state.value.failures.isEmpty())
+            assertTrue("no upload failed: ${model.state.value.error}", model.state.value.error?.startsWith("Upload failed") != true)
             for (attachment in model.state.value.draft.attachments) {
                 assertNotNull(attachment.remoteId)
                 val bytes=runBlocking { model.attachmentBytes(attachment.id) }
@@ -582,7 +603,7 @@ class ComposerDeviceTest {
               {"engine":"claude","installed":true,"auth":"yes","accounts":[{"id":"default","name":"Default","auth":"yes"},{"id":"abcd1234","name":"Claude account","auth":"yes"}]}]},
             "providers":[{"slug":"custom-codex","label":"Custom account","runtime":"codex","models":[{"value":"custom-model","label":"Custom model"}]},
               {"slug":"deepseek","label":"DeepSeek","runtime":"claude","presetSlug":"deepseek","runsOnOpenCode":true,"models":[{"value":"deepseek-chat","label":"DeepSeek Chat"}]}]}""")
-        appClick("fixture-model"); compose.waitUntil(15000) { compose.onAllNodesWithTag("composer-engine-title").fetchSemanticsNodes().isNotEmpty() }
+        modelChip(); compose.waitUntil(15000) { compose.onAllNodesWithTag("composer-engine-title").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("composer-engine-title").assertTextEquals("Codex")
         awaitText("Switches to soonest reset")
         compose.onNodeWithContentDescription("Automatic: starts on the Codex account whose quota resets soonest, and switches when it hits its limit").assertExists()
@@ -602,11 +623,11 @@ class ComposerDeviceTest {
         assertEquals("the engines in the boards' order, whatever the runner's", order,
             engines.map { it.substringBefore(" | ").removeSuffix(" | ✓") }.filter { it in order })
         capture("a07c-draft-engine-list")
-        compose.onNodeWithTag("engine:antigravity").performClick(); awaitText("Antigravity CLI ⌄")
+        compose.onNodeWithTag("engine:antigravity").performClick(); awaitEngine("Antigravity CLI")
         compose.onNodeWithTag("composer-model").performClick(); awaitText("Google account")
         capture("a07c-draft-antigravity-sign-in")
         compose.onNodeWithText("Close").performClick()
-        engineList(); compose.onNodeWithTag("engine:opencode").performClick(); awaitText("OpenCode ⌄")
+        engineList(); compose.onNodeWithTag("engine:opencode").performClick(); awaitEngine("OpenCode")
         // The Provider row says "Own sign-in" for OpenCode's own configuration since A07-19 (d) (A07e, d66ddbc8e); the row under
         // "On Fixture runner" keeps the full name.
         compose.onNodeWithTag("composer-model").performClick(); awaitText("Own sign-in")
@@ -669,13 +690,35 @@ class ComposerDeviceTest {
         engineList()
         val landing = read("landing")
         capture("a07e-engine-list")
-        compose.onNodeWithTag("engine:dsh").performClick(); awaitText("DeepSeek Harness ⌄")
+        compose.onNodeWithTag("engine:dsh").performClick(); awaitEngine("DeepSeek Harness")
         engineList()
         val ticked = read("ticked")
         capture("a07e-engine-list-dsh-ticked")
         File(evidence, "a07e-engine-list.txt").writeText(report.toString())
         assertEquals("no engine's name is cut where a pick of it lands: $report", emptyList<String>(), landing.filterValues { it }.keys.toList())
         assertEquals("no engine's name is cut with Harness ticked: $report", emptyList<String>(), ticked.filterValues { it }.keys.toList())
+    }
+
+    /** The session page with one finished exchange, to set beside iOS's (compare-android-ios: the iOS probe's S2, same words). */
+    @Test fun sessionPageWithOneFinishedExchange() = journey("session-page") {
+        login("""{"rows":[{"seq":1,"type":"user","turnId":"t1","payload":{"text":"Highlight the matches in wiki search results."}},
+              {"seq":2,"type":"assistant","turnId":"t1","payload":{"text":"Done — matches are highlighted in titles and in the body excerpt.","messageId":"m2"}},
+              {"seq":3,"type":"result","turnId":"t1","payload":{"subtype":"success","result":"done"}}]}""")
+        awaitText("Done — matches are highlighted in titles and in the body excerpt.")
+        // The page as it rests: the composer drawn and the stream connected. Sign-in's keyboard can still be closing as the page
+        // opens, and the page folds its composer away while the window reports one; the fixture also drops its stream now and then.
+        fun composerShown() = compose.onAllNodes(hasTestTag("composer-input")).fetchSemanticsNodes().any { it.size.height > 0 }
+        if (runCatching { compose.waitUntil(5000) { composerShown() } }.isFailure) {
+            compose.activityRule.scenario.onActivity { activity ->
+                (activity.currentFocus ?: activity.window.decorView).let { view ->
+                    activity.getSystemService(android.view.inputmethod.InputMethodManager::class.java)?.hideSoftInputFromWindow(view.windowToken, 0)
+                    view.clearFocus()
+                }
+            }
+        }
+        compose.waitUntil(15000) { composerShown() && compose.onAllNodes(hasText("Reconnect", substring = true)).fetchSemanticsNodes().isEmpty() }
+        compose.waitForIdle()
+        capture("session-page")
     }
 
     /** The auto-retry card (baseline): a spent quota counts down to its reset, and its switch turns the armed retry off. */
@@ -751,9 +794,9 @@ class ComposerDeviceTest {
         compose.waitUntil(15000) { compose.onAllNodesWithTag("composer-pool-account").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("composer-pool-account").assertTextEquals("second@example.test")
         capture("a07c-pool-account")
-        appClick("Context: 0 tokens · Usage"); awaitText("Primary: 41%"); awaitText("Account")
+        compose.onNodeWithTag("composer-context").performClick(); awaitText("Primary: 41%"); awaitText("Account")
         capture("a07c-pool-usage-sheet")
-        compose.onNodeWithText("Close").performClick()
+        closeSheet()
         fun resetRunner(available: Int) = """{"runnerExtra":{"capabilities":["codex-account-move/v1","codex-rate-limit-reset-v1"],
             "heartbeatLeaseOwner":"7c9e6679-7425-40de-944b-e07fc1f90ae7","heartbeatDraining":false,
             "planUsage":{"codex":{"provider":"codex","primary":{"utilization":23},"rateLimitReset":{"protocolVersion":1,"support":"SUPPORTED",
@@ -762,7 +805,7 @@ class ComposerDeviceTest {
                 {"id":"c2","resetType":"weekly","status":"available","grantedAt":"2026-10-02T00:00:00Z","expiresAt":"2027-01-05T09:30:00Z"}]},
               "fetchedAt":"${now(-120)}","generation":"3f2b8c1e-9d4a-4b7e-8c2f-1a2b3c4d5e6f","sequence":3}}}}}"""
         login(resetRunner(2))
-        appClick("Context: 0 tokens · Usage"); awaitText("Reset credit"); awaitText("2 available")
+        compose.onNodeWithTag("composer-context").performClick(); awaitText("Reset credit"); awaitText("2 available")
         compose.onNodeWithText("Use reset credit").performScrollTo()
         capture("a07c-reset-credit")
         compose.waitUntil(10000) { compose.onNode(hasText("Use reset credit") and hasClickAction()).fetchSemanticsNode().config.getOrNull(SemanticsProperties.Disabled) == null }
@@ -774,7 +817,7 @@ class ComposerDeviceTest {
         capture("a07c-reset-pending")
         compose.onNodeWithText("Close").performClick()
         login(resetRunner(0))
-        appClick("Context: 0 tokens · Usage"); awaitText("Primary: 23%")
+        compose.onNodeWithTag("composer-context").performClick(); awaitText("Primary: 23%")
         assertTrue("A07-9: no reset section for an account with no credit left", compose.onAllNodesWithText("Reset credit").fetchSemanticsNodes().isEmpty())
         capture("a07c-reset-none-left")
     }
@@ -782,11 +825,11 @@ class ComposerDeviceTest {
     /** A07-8: a Retry pressed after picking a provider in the composer re-sends on it. */
     @Test fun a07cRetryCarriesTheProviderPick() = journey("a07c-retry-provider") {
         login("""{"status":"FAILED"}""")
-        appClick("fixture-model"); awaitText("Custom account"); appClick("Custom account")
+        modelChip(); awaitText("Custom account"); appClick("Custom account")
         // What the pick will do, and when (A07-19 (a)): the session has ended, so its next message.
         awaitText("Your next message uses Custom account.")
         compose.onNodeWithText("Close").performClick()
-        compose.onNodeWithText("+").performClick(); awaitText("Retry last failed message"); appClick("Retry last failed message")
+        compose.onNodeWithTag("composer-plus").performClick(); awaitText("Retry last failed message"); appClick("Retry last failed message")
         compose.waitUntil(10000) { controls().any { it["action"]?.jsonPrimitive?.content == "retry-message" } }
         val retry = controls().last { it["action"]?.jsonPrimitive?.content == "retry-message" }
         assertEquals("custom-codex", retry["body"]!!.jsonObject["provider"]!!.jsonPrimitive.content)
@@ -824,11 +867,19 @@ class ComposerDeviceTest {
         compose.waitUntil(10000) { compose.onNodeWithTag("composer-send").fetchSemanticsNode().config.getOrNull(SemanticsProperties.Disabled)==null }
         compose.onNodeWithTag("composer-send").performSemanticsAction(SemanticsActions.OnClick) { assertTrue(it()) }
     }
+    /** The usage sheet the toolbar's ring opens goes with the system back, as a bottom sheet does. */
+    private fun closeSheet() { InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK); compose.waitForIdle() }
+    /** The composer's model chip, by its tag: it reads the model's id until the catalogue is in, then the catalogue's name. */
+    private fun modelChip() {
+        compose.onNode(hasTestTag("composer-model") and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick) { assertTrue(it()) }
+    }
     private fun appClick(label:String) {
         compose.onNode((hasText(label) or hasContentDescription(label)) and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick) { assertTrue(it()) }
     }
     private fun ready() { compose.waitUntil(10000) { app.realtime.state.value.session?.fresh==true && !model.state.value.busy };compose.waitForIdle() }
     private fun awaitText(text:String) { compose.waitUntil(15000) { compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty() } }
+    /** The new session hero names [engine] (the chevron beside it is an icon). */
+    private fun awaitEngine(engine: String) { compose.waitUntil(15000) { compose.onAllNodes(hasTestTag("new-session-engine") and hasText(engine)).fetchSemanticsNodes().isNotEmpty() } }
     /** The created session's page is up: its ⋯ in the bar has the session to act on — the page draws no title since A06-18. */
     private fun awaitCreatedSession() {
         compose.waitUntil(15000) { compose.onAllNodes(hasContentDescription("Session actions") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }

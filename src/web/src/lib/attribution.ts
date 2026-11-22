@@ -13,6 +13,8 @@
  * the raw code rather than as an empty chip that looks like "fine".
  */
 
+import type { OwnerCardTranslation } from '@orbit/shared';
+
 export type AttributionProjectStatus = 'OPEN' | 'DONE' | 'CANCELLED';
 
 export interface AttributionProjectRef {
@@ -114,6 +116,9 @@ export interface ProjectCrossingRow {
   requestedAt: string;
   decidedAt: string | null;
   expiresAt: string | null;
+  /** `title` and `reason` in the owner's language (Settings › Translation), while PENDING; absent until
+   *  translated, on every crossing translation is off for, and from an older server. */
+  translation?: OwnerCardTranslation | null;
 }
 
 /**

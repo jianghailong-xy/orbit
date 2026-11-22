@@ -47,7 +47,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { createHash, randomUUID } from 'node:crypto';
-import { uuidToBase62 } from '@orbit/shared';
+import { uuidToBase62, type OwnerCardTranslation } from '@orbit/shared';
 
 import type { AuthCredential } from '../common/current-user.decorator';
 import { orderedIds } from '../common/lock-order';
@@ -55,6 +55,8 @@ import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { assertEngineSession } from '../sessions/engine-session';
 import { returnSessionsToOpen } from '../sessions/return-to-open';
+import { CROSSING_FIELDS, queueOwnerCardTranslation, translatedInto } from '../sessions/card-translation';
+import { translationLanguages, type TranslationLanguages } from '../sessions/turn-translation';
 import { IN_FLIGHT_JOB_STATES, LANDING_JOB_KINDS } from './criterion-landing-reason';
 import { criterionKeyOf } from './project-acceptance';
 import {
@@ -153,6 +155,9 @@ export interface HandoffListRow extends HandoffRow {
    *  back. Null when it declares none, or none of the source project's. `ordinal` as above, in
    *  the source project's list. */
   withdrawnCriterion: { key: string; text: string; ordinal: number | null } | null;
+  /** `title` and `reason` in the owner's language (Settings › Translation, migration 1080); absent
+   *  until translated and on every crossing translation is off for. */
+  translation?: OwnerCardTranslation;
 }
 
 /**
@@ -792,6 +797,8 @@ export class ProjectHandoffService {
       this.changeListener?.({ id: answer.row.id, ownerId: answer.row.ownerId, filed: true });
       await this.returnMoveSessionsToOpen(ownerId, answer.row);
       await this.announceMove(ownerId, answer.row);
+      // And translated for the owner in the background, when their translation is on (decision 1A).
+      this.translateFiled(ownerId, answer.row.id);
     }
     return answer;
   }
@@ -1056,6 +1063,7 @@ export class ProjectHandoffService {
       // the row: `title` is the plan's own title, bound into the digest the approval authorises.
       select: {
         ...HANDOFF_SELECT,
+        translation: true,
         fromProject: {
           select: {
             title: true,
@@ -1091,10 +1099,13 @@ export class ProjectHandoffService {
         coordinatorSession: { deletedAt: Date | null } | null;
       } | null;
     }>;
+    await this.translateUntranslated(ownerId, rows).catch((error: Error) =>
+      this.log.warn(`queueing crossing translations failed: ${error.message}`));
     // A coordinator in Trash draws no card (the web skips a trashed conversation's cards), so the
     // row counts as having no conversation to be answered in.
-    return this.withRequestDetail(ownerId, rows.map(({ fromProject, toProject, ...row }) => ({
+    return this.withRequestDetail(ownerId, rows.map(({ fromProject, toProject, translation, ...row }) => ({
       ...row,
+      ...(translation ? { translation } : {}),
       fromProject: {
         title: fromProject.title,
         status: fromProject.status,
@@ -1110,6 +1121,56 @@ export class ProjectHandoffService {
           : toProject.coordinatorSessionId,
       },
     })));
+  }
+
+  /** After a crossing is filed PENDING: queue its translation when the owner's translation is on. Never awaited and
+   *  never a reason the filing fails. */
+  translateFiled(ownerId: string, id: string): void {
+    void translationLanguages(this.prisma, ownerId)
+      .then((langs) => { if (langs) this.queueTranslation(ownerId, id, langs); })
+      .catch((error: Error) => this.log.warn(`translating crossing ${id} failed to queue: ${error.message}`));
+  }
+
+  /**
+   * Queue the translation of one crossing's title and reason into the owner's language
+   * (sessions/card-translation.ts): stored in `translation` while it is still PENDING — a write the row's guard
+   * allows, since neither the state nor any guarded column moves — and the conversation that draws its card
+   * redrawn, as when it was filed. Returns at once: true when it queued one.
+   */
+  queueTranslation(ownerId: string, id: string, langs: TranslationLanguages): boolean {
+    const where = { id, ownerId, state: 'PENDING' };
+    return queueOwnerCardTranslation({
+      key: `crossing:${id}`,
+      read: async () => {
+        const row = await this.prisma.projectHandoffApproval.findFirst({
+          where,
+          select: { title: true, reason: true, translation: true },
+        });
+        return row ? { source: row, fields: CROSSING_FIELDS, translation: row.translation } : null;
+      },
+      write: async (translation) => (await this.prisma.projectHandoffApproval.updateMany({
+        where,
+        data: { translation: translation as unknown as Prisma.InputJsonValue },
+      })).count > 0,
+      published: () => this.changeListener?.({ id, ownerId, filed: false }),
+    }, langs);
+  }
+
+  /**
+   * Decision 1A: a PENDING crossing with no translation in the owner's current language gets one queued as the
+   * list is read; one already tried in this language, failed or not, is left.
+   */
+  private async translateUntranslated(
+    ownerId: string,
+    rows: ReadonlyArray<{ id: string; state: string; translation?: unknown }>,
+  ): Promise<void> {
+    const pending = rows.filter((row) => row.state === 'PENDING');
+    if (pending.length === 0) return;
+    const langs = await translationLanguages(this.prisma, ownerId);
+    if (!langs) return;
+    for (const row of pending) {
+      if (!translatedInto(row.translation, langs)) this.queueTranslation(ownerId, row.id, langs);
+    }
   }
 
   /**

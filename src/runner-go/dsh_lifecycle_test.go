@@ -993,22 +993,30 @@ func TestDshLifecycleMultiTurnQueue(t *testing.T) {
 		h.cp.checkClean(t)
 		h.recordEvidence(t.Name())
 	})
-	t.Run("unsupported-turns-reach-a-terminal", func(t *testing.T) {
+	t.Run("shell-turns-run-on-the-runner", func(t *testing.T) {
 		h := newLCHarness(t)
-		h.cp.add("s1", "shell", "ls")
 		h.cp.add("t1", "message", "m1")
+		h.cp.add("s1", "shell", "printf shell-ok")
+		h.cp.add("t2", "message", "m2")
 		run := h.start(h.job())
-		shell := h.cp.waitSettled(t, "s1")
-		if shell.Status != stFailed || len(shell.Completions) != 1 || shell.Completions[0].Subtype != subtypeUnknownKind {
-			t.Fatalf("shell turn must settle once without ending the session: %+v", shell)
-		}
 		h.settledOnce("t1", stSucceeded, "reply to m1 after []")
+		shell := h.cp.waitSettled(t, "s1")
+		if shell.Status != stSucceeded || len(shell.Completions) != 1 || shell.Completions[0].Subtype != "shell" ||
+			shell.Completions[0].ShellExitCode == nil || *shell.Completions[0].ShellExitCode != 0 ||
+			shell.Completions[0].ShellOutput == nil || *shell.Completions[0].ShellOutput != "shell-ok" {
+			t.Fatalf("a person's shell turn must run and settle once without ending the session: %+v", shell)
+		}
+		h.settledOnce("t2", stSucceeded, "")
 		h.end(run, "end")
-		lcEqual(t, "engine prompts", h.promptTexts(), []string{"m1"})
+		lcEqual(t, "engine prompts", h.promptTexts(), []string{
+			"m1",
+			"<bash-input>printf shell-ok</bash-input>\n<bash-stdout>shell-ok</bash-stdout>\n\nm2",
+		})
+		h.checkNoEngineViolations()
 		h.cp.checkClean(t)
 	})
-	// D3: a task's EXECUTABLE acceptance command is the runner's to run, in the worktree, after the
-	// message ahead of it — never a prompt to dsh — while a person's `!` shell is still refused.
+	// D3: a task's EXECUTABLE acceptance command, and a person's `!` shell, are the runner's to run
+	// in the worktree, after the message ahead of them — never prompts to dsh.
 	t.Run("task-acceptance-runs-on-the-runner", func(t *testing.T) {
 		h := newLCHarness(t)
 		h.cp.busyDelivery = true // the acceptance turn arrives while the message is still running
@@ -1036,12 +1044,12 @@ func TestDshLifecycleMultiTurnQueue(t *testing.T) {
 			t.Fatalf("acceptance ran in %q, not the worktree %q", ran, h.work)
 		}
 		user := h.cp.waitSettled(t, "s1")
-		if user.Status != stFailed || len(user.Completions) != 1 || user.Completions[0].Subtype != subtypeUnknownKind ||
-			user.Completions[0].ShellExitCode != nil {
-			t.Fatalf("a person's shell turn must still be refused: %+v", user)
+		if user.Status != stSucceeded || len(user.Completions) != 1 || user.Completions[0].Subtype != "shell" ||
+			user.Completions[0].ShellExitCode == nil || *user.Completions[0].ShellExitCode != 0 {
+			t.Fatalf("a person's shell turn must run on the runner: %+v", user)
 		}
-		if _, err := os.Stat(filepath.Join(h.work, "user-shell-ran.txt")); !os.IsNotExist(err) {
-			t.Fatalf("a refused shell turn ran: %v", err)
+		if _, err := os.Stat(filepath.Join(h.work, "user-shell-ran.txt")); err != nil {
+			t.Fatalf("a person's shell turn did not run: %v", err)
 		}
 		h.end(run, "end")
 		lcEqual(t, "engine prompts", h.promptTexts(), []string{"m1 [slow]"})

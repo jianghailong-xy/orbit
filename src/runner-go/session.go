@@ -981,6 +981,8 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// The session's background work (newBgTailer below), declared ahead of emitThrough, which
 	// announces its runner-hosted jobs again behind every `resumed` handshake.
 	var bg *bgTailer
+	// What this run's events say is executing, for the heartbeat to state whole (session_executing.go).
+	executing := newExecutingFold()
 	// Declared ahead of emitThrough, which spawns it behind a successful turn_end, and assigned
 	// once emitFor exists: the server's next-message guess for an engine without one
 	// (orbit_prompt_suggestion.go), filed against the turn it follows like the engine's own.
@@ -993,6 +995,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		// The one place a turn the engine runs on its own shows up at all. Told before the
 		// event is buffered, so nothing reading the stream is ahead of the pool.
 		pool.engineTurnEvent(live, eventType, payload)
+		executing.observe(eventType, payload)
 		// A tool may have written to the volume (a commit, an edit): a managed runner syncs it
 		// behind the tool, in the background, without holding the stream up (volume_durability.go).
 		if eventType == evToolResult {
@@ -1173,6 +1176,10 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// A session another runner process took over ends here without being ended: its SubAgents are stopped owing
 	// the parent a wake, which the server delivers in the session's new home (subagent.go).
 	bg.subagentHandoff = func() bool { return ownershipLost.Load() && ctx.Err() == nil }
+	// A coordinator handing over ends here leaving its SubAgents and jobs running (session_keep_work.go). What an
+	// earlier run of this session was told is not this run's: it is cleared as this one starts.
+	clearSessionKeepsWork(sessionID)
+	bg.endKeepsWork = func() bool { return sessionKeepsWork(sessionID) }
 	// A Monitor watches from inside this engine, so the pool's warm timer and LRU order are what
 	// end it — between turns, where the agent is not there to see the events stop coming, and
 	// where Claude writes no terminal notification for it. Lend the pool the one fact that defers
@@ -1221,6 +1228,9 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		}
 		cancelFlush()
 	}
+	// From here on this run states, on every heartbeat, what is executing in the session: its jobs adopted above included.
+	clearExecutingProbe := pool.setExecutingProbe(live, executingProbeFor(executing, bg))
+	defer clearExecutingProbe()
 	// Claude records background-shell completions in its transcript even while the session is
 	// idle, but only streams them to stdout on the next turn; tail the transcript so a shell
 	// that finishes between turns still clears from the "Background processes" tray. (Claude
@@ -1396,6 +1406,8 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			pool.holdFollowUpForUpdate(live, permitGeneration)
 		}
 		pool.endTurnCompletion(live)
+		// The browser lease lasts the holder's turn (browser_supervisor.go).
+		runnerBrowser().Release(sessionID)
 		return err
 	}
 	// The server changes PENDING -> RUNNING before returning a claim and may wake
@@ -2194,11 +2206,11 @@ func pushLiveDiff(t *Transport, job *ClaimedSession) {
 	liveFiles, livePatches := liveDiff(job.WT)
 	liveBaseSha := job.WT.baseSha()
 	if err := t.diffResult(job.SessionID, DiffResultRequest{
-		ChangedFiles:   liveFiles,
-		ChangedDiff:    livePatches,
-		BaseSha:        liveBaseSha,
-		WorktreeDirty:  worktreeIsDirty(job.WT),
-		BranchSha:      effectiveBranchSha(job.WT),
+		ChangedFiles:  liveFiles,
+		ChangedDiff:   livePatches,
+		BaseSha:       liveBaseSha,
+		WorktreeDirty: worktreeIsDirty(job.WT),
+		BranchSha:     effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT),
 		BranchMerged:   branchMergedInto(job.WT),
 		WorktreeBranch: currentBranch(job.WT),
 	}); err != nil {
@@ -2738,7 +2750,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 						TurnID: resp.TurnID, Status: stSucceeded,
 						Result: "started in background", Subtype: "shell",
 						RuntimeSessionID: currentRuntimeSessionID(job),
-						BranchSha:        effectiveBranchSha(job.WT),
+						BranchSha:        effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT),
 					}); err != nil {
 						logln("shell turn-complete failed for", job.SessionID+":", err)
 					}
@@ -2999,7 +3011,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 					Result:           fmt.Sprintf("this runner does not understand turns of kind %q; upgrade the runner", resp.Kind),
 					Subtype:          subtypeUnknownKind,
 					RuntimeSessionID: currentRuntimeSessionID(job),
-					BranchSha:        effectiveBranchSha(job.WT),
+					BranchSha:        effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT),
 				}); err != nil {
 					logln("unknown-kind turn-complete failed for", job.SessionID+":", err)
 				}
@@ -3250,9 +3262,9 @@ scanLoop:
 					ChangedDiff:      livePatches,
 					BaseSha:          liveBaseSha,
 					WorktreeDirty:    worktreeIsDirty(job.WT),
-					BranchSha:        effectiveBranchSha(job.WT),
-					BranchMerged:     branchMergedInto(job.WT),
-					WorktreeBranch:   currentBranch(job.WT),
+					BranchSha:        effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT),
+					BranchMerged:   branchMergedInto(job.WT),
+					WorktreeBranch: currentBranch(job.WT),
 				}); err != nil {
 					logln("turn-complete failed for", job.SessionID+":", err)
 				}

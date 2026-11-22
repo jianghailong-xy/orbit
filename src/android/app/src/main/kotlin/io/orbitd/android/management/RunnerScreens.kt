@@ -33,6 +33,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -71,7 +72,9 @@ import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.composer.CursorRuntime
 import io.orbitd.android.composer.FollowManagedRunner
 import io.orbitd.android.composer.MachineSetupCopy
+import io.orbitd.android.composer.NewWorkspaceCopy
 import io.orbitd.android.composer.ManagedRunner
+import io.orbitd.android.composer.ManagedRunnerIdentity
 import io.orbitd.android.composer.ManagedRunnerNotice
 import io.orbitd.android.composer.rememberManagedRunner
 import io.orbitd.android.composer.ProviderEngines
@@ -79,6 +82,7 @@ import io.orbitd.android.navigation.Destination
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.navigation.OrbitRoute
 import io.orbitd.android.navigation.Origin
+import io.orbitd.android.navigation.newWorkspaceRoute
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -162,10 +166,12 @@ internal class RunnersModel(private val api: ManagementApi) {
             return null
         } finally { regionChecking = regionChecking - id }
     }
+    /** After Update Now went through: read again until the runner reports the restart (its next heartbeat), for up to 30 s. */
+    suspend fun awaitUpdateNowAnswer(id: String) = RunnerUpdateNow.awaitAnswer({ runner(id) }) { load() }
     /** The rows move at once; the server's order settles it. */
     suspend fun reorder(ids: List<String>) {
         val before = runners
-        runners = ids.mapNotNull { id -> before.firstOrNull { it.text("id") == id } }
+        runners = ids.mapNotNull { id -> before.firstOrNull { it.text("id") == id } } + before.filterNot { it.text("id") in ids }
         try { runners = providerObjects(api.post("runners/reorder", buildJsonObject { put("ids", JsonArray(ids.map(::JsonPrimitive))) })) }
         catch (e: CancellationException) { throw e } catch (e: Exception) { runners = before; error = personalFailure(e) }
     }
@@ -252,7 +258,7 @@ private fun styled(text: String, strong: List<String> = emptyList(), code: List<
 }
 
 /** Machines & models' machines (iOS 5e75edbde's Machines section): every runner — a row opens it, its handle reorders it and its ⋯ menu
- * removes it, with no Edit mode (iOS 91316c246). The removal itself is asked by the page that holds the rows ([remove]). */
+ * removes it, with no Edit mode (iOS 91316c246). The managed runner is pinned above the reorderable rows. */
 @Composable
 internal fun MachineRows(model: RunnersModel, now: Long, openRunner: (String) -> Unit, managed: ManagedRunner.Status? = null,
                          remove: (JsonObject) -> Unit) {
@@ -264,38 +270,53 @@ internal fun MachineRows(model: RunnersModel, now: Long, openRunner: (String) ->
     // A row moves by dragging its handle, as the Wiki plan's Edit sheet moves a section (the owner's decision, card
     // 34bs0PdYUHHwiKHYn3rCp): rows trade places as it passes half of the next one, and the order goes out once, when it is let
     // go. The drag is measured on the list, which stays put, not on the row, which moves with the finger.
-    val shown = drag?.order?.mapNotNull { id -> model.runners.firstOrNull { it.text("id") == id } } ?: model.runners
-    Column(Modifier.onPlaced { list = it }.pointerInput(Unit) {
+    val managedId = managed?.runnerId ?: ManagedRunnerIdentity.runnerId
+    val ordered = RunnerPage.managedRunnerFirst(model.runners, managedId)
+    val (pinned, movable) = ordered.partition { RunnerPage.isManaged(it, managedId) }
+    val current = movable.map { it.text("id") }
+    // Orbit Cloud stays first in the order saved too, for a client that does not pin it (as the web sends it).
+    val pinnedIds = pinned.map { it.text("id") }
+    val moving = drag?.order?.takeIf { it.size == current.size && it.containsAll(current) }
+    val shown = pinned + (moving?.mapNotNull { id -> movable.firstOrNull { it.text("id") == id } } ?: movable)
+    Column(Modifier.onPlaced { list = it }.pointerInput(current) {
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false)
             // Only the handle of a row shown now: a removed row's handle lay where the next row moved to.
-            val current = model.runners.map { it.text("id") }
             val id = handles.entries.firstOrNull { it.key in current && it.value.contains(down.position) }?.key ?: return@awaitEachGesture
             drag = RunnerDrag(id, current, 0f)
             // Let go or cancelled: the rows stand in order again.
             try {
                 val ended = verticalDrag(down.id) { change -> drag = drag?.moved(change.positionChange().y, heights); change.consume() }
                 val order = drag?.order
-                if (ended && order != null && order != current) scope.launch { model.reorder(order) }
+                if (ended && order != null && order != current) scope.launch { model.reorder(pinnedIds + order) }
             } finally { drag = null }
         }
     }) {
         shown.forEachIndexed { index, runner ->
             val id = runner.text("id")
-            if (index > 0) HorizontalDivider()
+            val isPinned = index < pinned.size
+            if (pinned.isNotEmpty() && index == pinned.size) {
+                HorizontalDivider(Modifier.testTag("managed-runner-divider"), thickness = with(LocalDensity.current) { 1f.toDp() })
+            } else if (index > 0) HorizontalDivider()
             key(id) {
                 // A row that goes takes its handle with it.
                 DisposableEffect(id) { onDispose { handles.remove(id); heights.remove(id) } }
-                val dragged = drag?.id == id
+                val dragged = moving != null && drag?.id == id
                 Box(Modifier.onSizeChanged { heights[id] = it.height }.zIndex(if (dragged) 1f else 0f)
-                    .graphicsLayer { translationY = if (dragged) drag?.offset ?: 0f else 0f }) {
-                    RunnerRow(runner, model.workspacesOf(id), model.latestVersion, now, ManagedRunner.row(id, managed),
-                        canMoveUp = index > 0, canMoveDown = index < shown.lastIndex,
+                    .graphicsLayer {
+                        val offset = if (dragged) drag?.offset ?: 0f else 0f
+                        translationY = if (pinned.isNotEmpty() && index == pinned.size) offset.coerceAtLeast(0f) else offset
+                    }) {
+                    RunnerRow(runner, model.workspacesOf(id), model.latestVersion, now, ManagedRunner.row(id, managed), isPinned, managedId,
+                        canMoveUp = index > pinned.size, canMoveDown = !isPinned && index < shown.lastIndex,
                         open = { openRunner(id) }, remove = { remove(runner) },
                         move = { by -> scope.launch {
-                            val ids = model.runners.map { it.text("id") }.toMutableList()
-                            ids.add(index + by, ids.removeAt(index))
-                            model.reorder(ids)
+                            val at = current.indexOf(id)
+                            if (at >= 0 && at + by in current.indices) {
+                                val ids = current.toMutableList()
+                                ids.add(at + by, ids.removeAt(at))
+                                model.reorder(pinnedIds + ids)
+                            }
                         } },
                         handle = Modifier.onGloballyPositioned { at -> list?.takeIf { it.isAttached }?.let { handles[id] = it.localBoundingBoxOf(at) } })
                 }
@@ -327,9 +348,10 @@ internal data class RunnerDrag(val id: String, val order: List<String>, val offs
  * (iOS's swipe). TalkBack, which cannot drag, moves it with the row's Move up and Move down actions. */
 @Composable
 private fun RunnerRow(runner: JsonObject, workspaces: List<JsonObject>, latest: String?, now: Long, managed: ManagedRunner.Row?,
-                      canMoveUp: Boolean, canMoveDown: Boolean, open: () -> Unit, remove: () -> Unit, move: (Int) -> Unit, handle: Modifier) {
-    val items = RunnerPage.attention(runner, workspaces, now, latest, managed = managed != null || RunnerPage.isManaged(runner))
-    val name = RunnerPage.displayName(runner)
+                      pinned: Boolean, managedId: String?, canMoveUp: Boolean, canMoveDown: Boolean, open: () -> Unit,
+                      remove: () -> Unit, move: (Int) -> Unit, handle: Modifier) {
+    val items = RunnerPage.attention(runner, workspaces, now, latest, managed = pinned)
+    val name = RunnerPage.displayName(runner, managedId)
     var menu by remember { mutableStateOf(false) }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Row(Modifier.weight(1f).clickable(role = Role.Button, onClick = open).semantics {
@@ -337,10 +359,23 @@ private fun RunnerRow(runner: JsonObject, workspaces: List<JsonObject>, latest: 
                     CustomAccessibilityAction("Move down") { move(1); true }.takeIf { canMoveDown })
             }.padding(vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (pinned) Icon(painterResource(R.drawable.ic_cloud), null, Modifier.size(18.dp).testTag("managed-runner-icon"),
+                tint = MaterialTheme.colorScheme.primary)
+            // Every other machine by the OS it reported, a monitor when it has not said (docs/mocks/machine-menu-icons, A).
+            else {
+                val os = RunnerPage.os(runner)
+                val mark = when (os) {
+                    "darwin" -> R.drawable.ic_os_apple
+                    "linux" -> R.drawable.ic_os_linux
+                    "windows" -> R.drawable.ic_os_windows
+                    else -> R.drawable.ic_runner
+                }
+                Icon(painterResource(mark), null, Modifier.size(16.dp).testTag("runner-os-icon:${os ?: "unknown"}"), tint = Ink.muted)
+            }
             if (managed != null) ManagedRunnerMark(managed.tone) else StatusDot(RunnerPage.presence(runner, now), ringed = true)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(name, Modifier.weight(1f), maxLines = 2)
+                    Text(name, Modifier.weight(1f), maxLines = 2, fontWeight = FontWeight.SemiBold.takeIf { pinned })
                     val slots = RunnerPage.slots(runner, now)
                     // The account's managed runner says the shared state's short label, never the heartbeat's Offline (D4).
                     if (managed != null) Text(managed.label, Modifier.testTag("managed-runner-label"), style = MaterialTheme.typography.bodySmall,
@@ -365,7 +400,7 @@ private fun RunnerRow(runner: JsonObject, workspaces: List<JsonObject>, latest: 
             }
         }
         // The handle a row is dragged by; the drag itself is the list's.
-        Box(handle.size(48.dp).testTag("runner-handle:${runner.text("id")}").clearAndSetSemantics { }, contentAlignment = Alignment.Center) {
+        if (!pinned) Box(handle.size(48.dp).testTag("runner-handle:${runner.text("id")}").clearAndSetSemantics { }, contentAlignment = Alignment.Center) {
             Icon(painterResource(R.drawable.ic_reorder), null, tint = Ink.muted)
         }
     }
@@ -474,7 +509,7 @@ private fun RunnerDetail(api: ManagementApi, id: String, record: String?, revisi
                     }, change = card.phase == "postponed")
                     if (updateNow) RunnerUpdateNowButton(RunnerPage.displayName(runner), updateVersion.orEmpty(), { RunnerPage.updateTurns(runner, System.currentTimeMillis()) }, {
                         model.press { api.post(RunnerUpdateNow.path(id).joinToString("/"), RunnerUpdateNow.request()) }
-                            .also { if (it == null) notice.show(RunnerUpdateNow.toast(updateVersion.orEmpty())) }
+                            .also { if (it == null) { notice.show(RunnerUpdateNow.toast(updateVersion.orEmpty())); scope.launch { model.awaitUpdateNowAnswer(id) } } }
                     })
                     else if (card.phase == "postponed") OutlinedButton({ confirmingUpdateNow = true }, Modifier.testTag("runner-update-now")) {
                         Text(RunnerUpdateLater.UPDATE_NOW)
@@ -584,6 +619,17 @@ private fun RunnerDetail(api: ManagementApi, id: String, record: String?, revisi
                         WorktreeIsolationSwitch(api, workspace, reload = { model.load() }, failed = notice::show)
                     }) { openWorkspace(workspace.text("id")) }
                 }
+                // One more workspace on this machine (docs/mocks/new-workspace-form/02-apple-entry, owner A). With none yet, Start a
+                // session above is the way to its first.
+                if (workspaces.isNotEmpty()) {
+                    HorizontalDivider()
+                    Row(Modifier.fillMaxWidth().clickable(role = Role.Button) { open(newWorkspaceRoute(id, hasWorkspace = true, Origin.LIST)) }
+                        .padding(vertical = 10.dp).testTag("machine-new-workspace"),
+                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Icon(painterResource(R.drawable.ic_add_circle), null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+                        Text(NewWorkspaceCopy.NEW_WORKSPACE, color = MaterialTheme.colorScheme.primary)
+                    }
+                }
             }
             // The terminals approved on this machine, with Revoke (docs/mocks/terminals-on-machine-page); nothing while it has none.
             MachineTerminals(api, id, notice, reread = terminals)
@@ -659,7 +705,7 @@ private fun RunnerHead(runner: JsonObject, now: Long, managed: ManagedRunner.Row
                     if (line.startsWith(word)) addStyle(SpanStyle(color = wordColor, fontWeight = FontWeight.Medium), 0, word.length)
                 }, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
             }
-            RunnerPage.hostLine(runner, managed = managed != null || RunnerPage.isManaged(runner)).takeIf { it.isNotEmpty() }?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Ink.muted) }
+            RunnerPage.headLine(runner, managed = managed != null || RunnerPage.isManaged(runner)).takeIf { it.isNotEmpty() }?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Ink.muted) }
         }
     }
 }
@@ -807,7 +853,8 @@ private fun EngineRow(runner: JsonObject, health: JsonObject, offline: Boolean, 
     val installed = health.bool("installed") == true
     val status = RunnerPage.engineStatus(health, runner)
     // Kimi's site after its version while it has the one login: `2.1.1 · kimi.ai`.
-    val version = if (installed) listOfNotNull(RunnerPage.engineVersion(health.str("version")), RunnerPage.engineSite(health))
+    val version = if (installed) listOfNotNull(RunnerPage.engineVersion(health.str("version")), RunnerPage.engineSite(health),
+        RunnerPage.engineKeyNote(health))
         .takeIf { it.isNotEmpty() }?.joinToString(RunnerCopy.SEP) else null
     val hint = RunnerPage.signInHint(runner, engine)
     val next = RunnerPage.engineNextAccount(runner, engine, now)
@@ -928,6 +975,10 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
     var renaming by remember { mutableStateOf<RunnerPage.AccountLine?>(null) }
     var removing by remember { mutableStateOf<RunnerPage.AccountLine?>(null) }
     var pausing by remember { mutableStateOf<RunnerPage.AccountLine?>(null) }
+    // Set as default (Claude Code, added accounts): the runner swaps that login with the one in ~/.claude, after any turn in progress on
+    // either account ends. One swap per runner at a time; busy from the press until the list says where it stands.
+    var settingDefault by remember { mutableStateOf<RunnerPage.AccountLine?>(null) }
+    var swapPressing by remember(id, engine) { mutableStateOf(false) }
     fun show(failure: String?) { failure?.let(notice::show) }
     fun closeSignIn() { signingIn = null; landedHere = null; scope.launch { model.load() } }
     // Said for a moment, then read again now rather than on the next pass.
@@ -1013,6 +1064,8 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
                             foldsBack = signingIn == line.id && landedHere == line.id && line.auth == "yes" && RunnerPage.loginExpiresLine(line, now) == null,
                             signIn = { signingIn = line.id }, close = ::closeSignIn, landed = { landed(line.id) },
                             rename = { renaming = line }, remove = { removing = line }, pause = { pausing = line },
+                            setDefault = if (RunnerPage.offersSetDefault(engine, line)) { { settingDefault = line } } else null,
+                            setDefaultBlocked = RunnerPage.setDefaultBlocked(runner, offline, swapPressing),
                             resume = { scope.launch { show(pause(line, null)) } }, openSession = ::openSession)
                     }
                     // A Default removed from Orbit ends the accounts that remain, with the way back.
@@ -1095,6 +1148,19 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
             } }) { Text("Remove", color = Ink.red) } },
             dismissButton = { TextButton(onClick = { removing = null }) { Text("Cancel") } })
     }
+    settingDefault?.let { line ->
+        val question = health?.let { RunnerPage.setDefaultQuestion(runner, it, line) }
+        if (question != null) AlertDialog(onDismissRequest = { settingDefault = null }, title = { Text(question.first) }, text = { Text(question.second) },
+            confirmButton = { TextButton(onClick = { settingDefault = null; scope.launch {
+                swapPressing = true
+                model.press { api.post("runners/$id/accounts/$engine/${line.id}/set-default") }?.let {
+                    notice.show("${RunnerAccountCopy.setDefaultFailed(line.name)} — $it")
+                    model.load()
+                }
+                swapPressing = false
+            } }) { Text(RunnerAccountCopy.SET_DEFAULT_CONFIRM) } },
+            dismissButton = { TextButton(onClick = { settingDefault = null }) { Text("Cancel") } })
+    }
     pausing?.let { line -> AccountPauseDialog(line.name, PAUSE_SCOPE, onDismiss = { pausing = null }) { minutes -> pause(line, minutes) } }
 }
 
@@ -1151,14 +1217,16 @@ private const val PAUSE_SCOPE = "Personal account · This runner. Paused session
  * One account: its name — NEXT beside it where a new session starts on it ([next]) — and where it lives, where it stands,
  * its windows — a login about to lapse, a pause, what being signed out costs — and its way (back) in where it is out. Its
  * presses are its ⋯ menu's (the swipe iOS gives it): Rename…, Sign In Again, Pause… or Resume Now and Change Duration…,
- * Remove… where it is [removable] — an added one, and Default while another account stays. None reach an offline machine but
+ * Set as default on an added Claude Code account ([setDefault]), Remove… where it is [removable] — an added one, and Default
+ * while another account stays. None reach an offline machine but
  * Rename…, the pause and Default's Remove…, which Orbit keeps.
  */
 @Composable
 private fun AccountRow(api: ManagementApi, runner: JsonObject, engine: String, line: RunnerPage.AccountLine, offline: Boolean, now: Long,
                        signingIn: Boolean, next: Boolean, canPause: Boolean, alone: Boolean, removable: Boolean, foldsBack: Boolean, signIn: () -> Unit,
                        close: () -> Unit, landed: () -> Unit, rename: () -> Unit, remove: () -> Unit, pause: () -> Unit, resume: () -> Unit,
-                       openSession: (String) -> Unit, regionBlocked: Boolean = false) {
+                       openSession: (String) -> Unit, regionBlocked: Boolean = false, setDefault: (() -> Unit)? = null,
+                       setDefaultBlocked: String? = null) {
     val windows = RunnerPage.accountWindows(runner, engine, line.id)
     val removal = RunnerPage.removal(runner.obj("accountRemove"), engine, line.id)
     val paused = RunnerPage.isPaused(line.pausedUntil, now)
@@ -1195,6 +1263,13 @@ private fun AccountRow(api: ManagementApi, runner: JsonObject, engine: String, l
                             DropdownMenuItem(text = { Text(AccountCopy.CHANGE_DURATION) }, onClick = { menu = false; pause() })
                         } else if (line.auth == "yes") DropdownMenuItem(text = { Text(AccountCopy.PAUSE) }, onClick = { menu = false; pause() })
                     }
+                    // What it does under its name, or why it can't be chosen now.
+                    if (setDefault != null) DropdownMenuItem(text = {
+                        Column {
+                            Text(RunnerAccountCopy.SET_DEFAULT)
+                            Text(setDefaultBlocked ?: RunnerAccountCopy.SET_DEFAULT_HINT, style = MaterialTheme.typography.labelSmall, color = Ink.muted)
+                        }
+                    }, enabled = setDefaultBlocked == null, modifier = Modifier.testTag("account-set-default"), onClick = { menu = false; setDefault() })
                     if (removable) {
                         // Default comes off Orbit's list, not the machine: nothing goes to the runner, so it is offered offline too.
                         val enabled = line.isDefault || !offline
@@ -1228,6 +1303,18 @@ private fun AccountRow(api: ManagementApi, runner: JsonObject, engine: String, l
         // Under way, and waiting on the sessions it moved to another account to leave this one.
         RunnerPage.movingLine(runner.obj("accountRemove"), engine, line.id)?.let {
             Text(it, Modifier.testTag("account-moving"), style = MaterialTheme.typography.labelMedium, color = Ink.muted)
+        }
+        // Becoming the Default: said under the account, as a removal's move is, until the swap is done.
+        RunnerPage.settingDefaultLine(runner, line)?.let {
+            Text(it, Modifier.testTag("account-setting-default"), style = MaterialTheme.typography.labelMedium, color = Ink.muted)
+        }
+        // The machine could not swap the logins, and put both back: its reason, as a refused removal's.
+        RunnerPage.failedSwap(runner, line)?.let { failed ->
+            Column(Modifier.testTag("account-swap-failed")) {
+                Text(RunnerAccountCopy.setDefaultFailed(line.name), style = MaterialTheme.typography.labelMedium, color = Ink.red)
+                failed.str("message")?.takeIf { it.isNotEmpty() }?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = Ink.red) }
+                Text(RunnerAccountCopy.SET_DEFAULT_UNCHANGED, style = MaterialTheme.typography.labelMedium, color = Ink.muted)
+            }
         }
         // Refused over sessions running in it: those sessions, each a way to it, in place of the machine's sentence.
         val inUse = RunnerPage.inUseSessions(runner.obj("accountRemove"), engine, line.id)

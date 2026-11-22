@@ -339,7 +339,6 @@ describe('ProjectsPage', () => {
       [
         'import {',
         '  projectCoordinatorStatusQuery,',
-        '  projectIntegrationQuery,',
         '  projectsPath,',
         '  projectsQueryKey,',
         '  runnersQuery,',
@@ -347,6 +346,9 @@ describe('ProjectsPage', () => {
         "} from '../lib/queries';",
       ].join('\n'),
     );
+    // The integration line is read through the hook every part of a page shares, so one of them polls it
+    // (lib/pollOwner); the hook reads projectIntegrationQuery, whose one call is held below.
+    expect(source).toContain("import { useProjectIntegration } from '../lib/pollOwner';");
 
     // The page's SEVENTH and EIGHTH endpoints — the coordinator card's read, and the integration
     // line's. Their `api(...)` calls live in lib/queries.ts, so the scan above cannot see them and
@@ -2583,6 +2585,25 @@ describe('ProjectDetailPage — a project nobody has started', () => {
     return html.slice(at, html.indexOf('data-project-block=', at + 1));
   };
 
+  it('shows owner open items and hides open and settled coordinator items', () => {
+    const owner = { ...startRow, kind: 'INTEGRATION_CHECK_FAILED', title: 'Owner exception', startRequest: null };
+    const coordinator = { ...owner, itemId: 'coordinator-open', assignee: 'COORDINATOR', title: 'Coordinator open exception' };
+    const html = page({ startedAt: '2026-09-29T08:26:00.000Z' }, {
+      needsYou: [owner],
+      withCoordinator: [coordinator],
+      settled: [{
+        ...coordinator,
+        itemId: 'coordinator-settled',
+        title: 'Coordinator settled exception',
+        outcome: { state: 'RESOLVED', resolution: 'HANDLED', resolvedAt: owner.waitingSince },
+      }],
+    });
+
+    expect(text(openItemsOf(html))).toContain('Owner exception');
+    expect(html).not.toContain('Coordinator open exception');
+    expect(html).not.toContain('Coordinator settled exception');
+  });
+
   it('tags it Not started, where a started project reads Open', () => {
     const unstarted = page({ startedAt: null }, null);
     expect(unstarted).toContain('>Not started</span>');
@@ -2604,7 +2625,7 @@ describe('ProjectDetailPage — a project nobody has started', () => {
     expect(items).toContain('You waiting 2m');
     expect(openItemsOf(html)).toMatch(/<button[^>]*class="project-open-item-action is-primary"[^>]*>Review<\/button>/);
     // Counted with what needs you, because somebody is waiting on you.
-    expect(items).toContain('1 need you · 0 with the coordinator');
+    expect(items).toContain('1 need you');
     expect(items).not.toContain('not asked yet');
   });
 
@@ -2616,7 +2637,7 @@ describe('ProjectDetailPage — a project nobody has started', () => {
     expect(text(items)).toContain('not asked yet');
     expect(text(items)).not.toContain('Start this project?');
     // Nobody is waiting on the owner for it, so it is not counted as something that needs them.
-    expect(text(items)).toContain('0 need you · 0 with the coordinator');
+    expect(text(items)).toContain('0 need you');
   });
 
   it('draws neither row once the project is started', () => {

@@ -26,7 +26,7 @@ class ExceptionCardsTest {
         detailLine: String = "the run ended with exit code 1", delivery: String? = null, facts: JsonElement = JsonNull,
         fuseEpisodeId: String? = null, title: String = "Task failed: P5.1 Route Handlers",
         landingSessionId: String? = null, integrationJobId: String? = null, lease: JsonElement = JsonNull,
-        coordinatorUnreachable: Boolean? = null) = buildJsonObject {
+        coordinatorUnreachable: Boolean? = null, handledByStates: List<String>? = null) = buildJsonObject {
         put("itemId", "01a0bb0b-b3fb-744c-b9a6-2fd68b4420b4"); put("kind", kind); put("title", title); put("detailLine", detailLine)
         put("assignee", assignee); put("assigneeReason", reason); put("waitingSince", waitingSince); put("escalatedAt", escalatedAt)
         put("taskId", taskId); put("sessionId", sessionId); put("promotionId", promotionId); put("fuseEpisodeId", fuseEpisodeId)
@@ -35,7 +35,7 @@ class ExceptionCardsTest {
         putJsonArray("actions") { actions.forEach { add(it) } }
         requiredAction?.let { put("requiredAction", it) }
         primaryAction?.let { put("primaryAction", it) }
-        handledBy?.let { titles -> putJsonArray("handledBy") { titles.forEachIndexed { i, t -> addJsonObject { put("taskId", "t$i"); put("title", t); put("state", "OPEN") } } } }
+        handledBy?.let { titles -> putJsonArray("handledBy") { titles.forEachIndexed { i, t -> addJsonObject { put("taskId", "t$i"); put("title", t); put("state", handledByStates?.get(i) ?: "OPEN") } } } }
         put("question", JsonNull); put("facts", facts); put("lease", lease)
         coordinatorUnreachable?.let { put("coordinatorUnreachable", it) }
     }
@@ -44,6 +44,26 @@ class ExceptionCardsTest {
     private fun cards(vararg rows: JsonObject): List<InteractionCard> = CardCatalog.project("s1", "p1", mapOf(
         "project" to buildJsonObject { put("id", "p1") },
         "openItems" to buildJsonObject { putJsonArray("needsYou") { rows.forEach { add(it) } }; putJsonArray("withCoordinator") {} }))
+
+    @Test fun onlyOwnerExceptionsBecomeConversationCards() {
+        val owner = row()
+        val coordinator = JsonObject(row(assignee = "COORDINATOR", reason = "DEFAULT", escalatedAt = null) +
+            ("itemId" to JsonPrimitive("coordinator")))
+        val settled = JsonObject(coordinator + mapOf(
+            "itemId" to JsonPrimitive("coordinator-settled"),
+            "outcome" to buildJsonObject { put("state", "RESOLVED"); put("resolution", "HANDLED") },
+        ))
+        val items = buildJsonObject {
+            put("needsYou", JsonArray(listOf(owner)))
+            put("withCoordinator", JsonArray(listOf(coordinator)))
+            put("settled", JsonArray(listOf(settled)))
+        }
+        val cards = CardCatalog.project("s1", "p1", mapOf(
+            "project" to buildJsonObject { put("id", "p1") },
+            "openItems" to items,
+        ))
+        assertEquals(listOf("item:${owner.text("itemId")}"), cards.map { it.key })
+    }
 
     private fun body(request: ApiRequest) = Wire.json.parseToJsonElement(request.body!!.decodeToString()).jsonObject
 
@@ -229,6 +249,41 @@ class ExceptionCardsTest {
         assertNull(ExceptionCards.handledByLine(row(handledBy = emptyList())))
         assertEquals("The coordinator is fixing this in Fix the branch. · The coordinator is fixing this in Re-check later.",
             ExceptionCards.handledByLine(row(handledBy = listOf("Fix the branch", "Re-check later"))))
+    }
+
+    /** Board card-ui-polish ① (OrbitKit `testALiveRepairIsOneLinkedLineAndQuietDoors`, web `liveRepairs`): any `handledBy` entry not DONE
+     * or CANCELLED — the server's own `hasLiveFix` — is a live repair, and turns the card into one linked line and quiet doors with no
+     * line under them. Once every repair has ended the card is the plain one again. The words are the browser's and OrbitKit's. */
+    @Test fun aLiveRepairIsOneLinkedLineAndQuietDoors() {
+        val live = row(kind = "INTEGRATION_CHECK_FAILED", actions = listOf("ASK_COORDINATOR_AGAIN", "RETRY", "OPEN_TASK_SESSION"),
+            handledBy = listOf("Fix the branch", "Re-check later"), handledByStates = listOf("IN_PROGRESS", "OPEN"))
+        assertEquals(listOf("Fix the branch", "Re-check later"), ExceptionCards.liveRepairs(live).map { it.text("title") })
+        assertTrue(ExceptionCards.fixing(live))
+        val ended = row(handledBy = listOf("Fix the branch", "Re-check later"), handledByStates = listOf("DONE", "CANCELLED"))
+        assertTrue(ExceptionCards.liveRepairs(ended).isEmpty())
+        assertFalse(ExceptionCards.fixing(ended))
+        assertFalse(ExceptionCards.fixing(row()))
+        val quiet = ExceptionCards.presses(live, quiet = true)
+        assertTrue(quiet.isNotEmpty())
+        assertTrue("a repair in flight asks nothing of the reader", quiet.all { it.tier == ExceptionCards.PressTier.LINK && it.consequence.isEmpty() })
+        assertTrue(ExceptionCards.presses(live).any { it.tier != ExceptionCards.PressTier.LINK && it.consequence.isNotEmpty() })
+        val web = File(root(), "src/web/src/components/ProjectProgressStatus.tsx").readText()
+        assertTrue(web.contains("export const FIXING_TAG = '${ExceptionCards.fixingTag}';"))
+        assertTrue(web.contains("export const BEING_FIXED_IN = '${ExceptionCards.beingFixedIn}';"))
+        assertTrue(web.contains("export const FIXING_NOTHING_FOR_YOU = '${ExceptionCards.fixingNothingForYou}';"))
+        assertTrue(web.contains("row.handledBy ?? []).filter((task) => task.state !== 'DONE' && task.state !== 'CANCELLED')"))
+        val swift = File(root(), "src/macos/OrbitKit/Sources/OrbitKit/App/OwnerItemCards.swift").readText()
+        assertTrue(swift.contains("public static let fixingTag = \"${ExceptionCards.fixingTag}\""))
+        assertTrue(swift.contains("public static let beingFixedIn = \"${ExceptionCards.beingFixedIn}\""))
+        assertTrue(swift.contains("public static let fixingNothingForYou = \"${ExceptionCards.fixingNothingForYou}\""))
+        assertTrue(swift.contains("\$0.state != \"DONE\" && \$0.state != \"CANCELLED\""))
+    }
+
+    /** The Into row names the branch a person knows, never the ref the server stores it under (OrbitKit `testTheIntoRowNamesTheBranchNotItsRef`). */
+    @Test fun theIntoRowNamesTheBranchNotItsRef() {
+        val facts = ExceptionCards.facts(row(facts = Wire.json.parseToJsonElement(
+            """{"targetRef":"refs/heads/main","targetSha":"928ed7e0000","nothingLanded":true}"""))) as ExceptionCards.Facts.Rows
+        assertEquals("main at 928ed7e · nothing landed", facts.rows.single { it.label == ExceptionCards.intoLabel }.value)
     }
 
     /** 2026-11-15: an escalated card said "no one acted on this" over doors and a chat that could not reach the coordinator. With the
@@ -647,7 +702,7 @@ class ExceptionCardsTest {
                 "Now yours — the coordinator didn’t get to it", "Reachable. It had this for 2h 56m and didn’t get to it.",
                 listOf("Ask the coordinator again", "or Chat about this first"), "Ask the coordinator again"),
             Part6(ExceptionCards.CoordinatorCause.HANDED_OVER, read(handed), handed,
-                "Now yours — the coordinator handed it over", "“The conflict is in your retry policy” — it handed this to you on purpose.",
+                "Now yours — the coordinator handed it over", "It handed this to you on purpose.",
                 listOf("Ask the coordinator again", "or Chat about this first"), null),
         )
     }
@@ -846,7 +901,7 @@ class ExceptionCardsTest {
         val web = File(root(), "src/web/src/components/ProjectProgressStatus.tsx").readText()
         listOf(ExceptionCards.whoFixesIt, ExceptionCards.whoFixesCoordinator, ExceptionCards.whoFixesYou, ExceptionCards.fixItMyself,
             ExceptionCards.startNewCoordinator, ExceptionCards.setUpCoordinator, ExceptionCards.chatFirstLink, ExceptionCards.askAgainOnceBack,
-            ExceptionCards.runnerDownSentence, ExceptionCards.coordinatorEndedSentence, ExceptionCards.noCoordinatorSentence, ExceptionCards.handedOverSentence,
+            ExceptionCards.runnerDownSentence, ExceptionCards.coordinatorEndedSentence, ExceptionCards.noCoordinatorSentence, ExceptionCards.handedOverSentence, ExceptionCards.handoverNoteCaption,
             ExceptionCards.closesByItself, ExceptionCards.alreadySettled, ExceptionCards.markHandledSettledConsequence, ExceptionCards.cancelTaskSettledConsequence,
             ExceptionCards.detailsLabel, ExceptionCards.openLandingDetail, ExceptionCards.escalatedUnreachableHeading, ExceptionCards.escalatedReachableHeading,
             ExceptionCards.coordinatorEndedHeading, ExceptionCards.handedOverHeading, ExceptionCards.noCoordinatorHeading,
@@ -858,7 +913,7 @@ class ExceptionCardsTest {
         listOf("is disabled, so it can’t take messages.`", "is in Trash, so it can’t take messages.`", "isn’t bound to a runner.`",
             "`Reachable. It had this for \${waitedBeforeEscalation(row)} and didn’t get to it.`", "`after \${waitedBeforeEscalation(row)} with the coordinator`",
             "`waiting \${formatSpan(waitedMs(row, now))}`", "`\${folded.projectName}’s branch `", "` and \${facts.files.length - DETAIL_FILES_SHOWN} more`",
-            "`\${name.slice(0, 16)}…`", "Its workspace \${reading.workspaceName}", "`“\${note}” — \${HANDED_OVER_SENTENCE}`",
+            "`\${name.slice(0, 16)}…`", "Its workspace \${reading.workspaceName}",
         ).forEach { assertTrue("ProjectProgressStatus.tsx no longer says $it", web.contains(it)) }
         val workspace = File(root(), "src/web/src/lib/coordinatorWorkspace.ts").readText()
         assertTrue(workspace.contains("button: '${ExceptionCards.changeWorkspace}'"))

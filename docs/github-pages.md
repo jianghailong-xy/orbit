@@ -136,7 +136,9 @@ After a successful Pages workflow, check both language URLs from a desktop and a
 - `curl -I https://jianghailong-xy.github.io/orbit/zh/` returns 200;
 - `curl -I https://jianghailong-xy.github.io/orbit/appcast.xml` returns 200 and application/xml.
 
-A release must continue to seed the current appcast before generate_appcast and publish with keep_files: true.
+A release merges its own appcast entry into `appcast.xml` on gh-pages when it publishes, reading the branch as it
+stands then (`scripts/sparkle-appcast.mjs`), and touches no other file there. This site's deploy keeps that file
+with `keep_files: true`.
 
 ## Reused onboarding evidence
 

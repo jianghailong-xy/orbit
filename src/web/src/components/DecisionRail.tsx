@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import type { ProjectOpenItemRow } from '@orbit/shared';
+import type { EvidenceTranslation, ProjectOpenItemRow } from '@orbit/shared';
 import { ACCEPTANCE_CONFIRMATION_TITLE } from './AcceptanceConfirmationCard';
 import {
   CRITERIA_CHANGE_TITLE,
@@ -202,6 +202,9 @@ export interface PendingDecisionRow {
   /** The action the owner can take on an undecidable row nobody else can move: `RESTART_TASK`
    *  (`EvidenceRestartAction.tsx`). Null or absent on every other row, and from an older server. */
   ownerAction?: typeof RESTART_TASK_OWNER_ACTION | null;
+  /** `claim` and `gaps` in the owner's language (Settings › Translation); absent until translated,
+   *  on every revision translation is off for, and from an older server. */
+  translation?: EvidenceTranslation | null;
 }
 
 export interface PendingDecisionQueue {

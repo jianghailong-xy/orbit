@@ -148,6 +148,22 @@
 // unless set. The upgrade skill sets both. No service, mount, port or environment is added. It reached main without a
 // pin here, which left this file red there. The owner approved these two lines on 2026-11-14 (22:40Z, Orbit item
 // 34xf9Nns4Dnab9eXTNyCa, project 34w2hTuJ3qOR1aQWnyGbS), and the block below pins them.
+//
+// Three more reached main without a pin, which left this file red there: VIEWER_STREAMS_MAX (92190ad890, the anonymous
+// viewer stream caps; unset, 2000), APNS_SANDBOX_KEY/_KEY_ID and APNS_PRODUCTION_KEY/_KEY_ID (27cab27299, one APNs key
+// per environment, falling back to APNS_KEY/APNS_KEY_ID) and ORBIT_RELEASE_REPOSITORY (6447f03346, where Help → Still
+// stuck → Report on GitHub opens an issue). Each is one optional apiserver environment line, empty unless the host's .env
+// sets it. No service, mount or port is added. The account owner approved all six lines on 2026-11-19 (in session
+// 34zBKhFsZ22eRi985pbrK: "Approve them and add them to the baseline"), and the blocks below pin them.
+//
+// On 2026-11-19 the Orbit Cloud browser's switch (project 34z8OKBXxDRYsIZwzJ35E, docs/runner-browser-design.md §2)
+// gained its apiserver environment line, ORBIT_MANAGED_RUNNER_BROWSER_ENABLED, off unless the host's .env says true,
+// right after the managed runners' switch (Orbit task 3507XXbnib94qfwmCPaOA, filed by that project's coordinator).
+// No service, mount or port is added; the managed runners' block below pins the line.
+//
+// ce80000db8 then added one apiserver environment line, ORBIT_RUN_STOPPED_WAKE (on unless the host's .env sets
+// ORBIT_RUN_STOPPED_WAKE_MODE to off), and the three comment lines that explain it; the account owner approved it as a
+// deployment setting on 2026-11-20. No service, mount or port is added; the block below pins the line.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -373,7 +389,7 @@ test('(s) the two-stage release names each image through variables, and changes 
   // two-stage release deploys, still built where they run and named as before.
   assert.deepEqual(lines.filter((line) => /^\s+image:/.test(line) && !TWO_STAGE_IMAGES.has(line) && !TWO_STAGE_WEB_IMAGE.endsWith(line)),
     ['    image: postgres:16-alpine', '    image: postgres:16-alpine', '    image: orbit-docker-channel:local',
-      '    image: orbit-managed-runner-firewall:local']);
+      '    image: orbit-cloud-runner-firewall:local']);
 });
 
 /** What Compose acts on: comments and blank lines document a block, they cannot run a process. */
@@ -425,6 +441,11 @@ const APPROVED_APISERVER_BLOCKS = [
   [
     '    stop_grace_period: 30s',
   ],
+  // The Run stopped wake's switch (2026-11-20, ce80000db8, the top of this file): on unless the host's .env sets
+  // ORBIT_RUN_STOPPED_WAKE_MODE to off. It comes right after the Wiki's canary owners in the file, before PORT.
+  [
+    '      ORBIT_RUN_STOPPED_WAKE: "${ORBIT_RUN_STOPPED_WAKE_MODE:-on}"',
+  ],
   // Claude Code on an OpenAI key (2026-11-11, the top of this file): its flag, the flag of the owner's own Codex login
   // pool, and the upstream hosts an admin lists besides api.openai.com, each empty unless the host's .env sets it. They
   // come right after PUBLIC_ORIGIN's line in the file, before the proxies'.
@@ -437,6 +458,19 @@ const APPROVED_APISERVER_BLOCKS = [
   // The line comes right after those of Claude Code on an OpenAI key, before the runner link's.
   [
     '      TRUSTED_PROXIES: "${TRUSTED_PROXIES:-}"',
+  ],
+  // The live viewer streams' cap (2026-11-19, the top of this file), empty unless the host's .env sets it. The line comes
+  // right after the proxies', before the push channels.
+  [
+    '      VIEWER_STREAMS_MAX: "${VIEWER_STREAMS_MAX:-}"',
+  ],
+  // One APNs key per environment (2026-11-19, the top of this file), each empty unless the host's .env sets it. The lines
+  // come right after APNS_KEY_ID, before the runner link's.
+  [
+    '      APNS_SANDBOX_KEY: "${APNS_SANDBOX_KEY:-}"',
+    '      APNS_SANDBOX_KEY_ID: "${APNS_SANDBOX_KEY_ID:-}"',
+    '      APNS_PRODUCTION_KEY: "${APNS_PRODUCTION_KEY:-}"',
+    '      APNS_PRODUCTION_KEY_ID: "${APNS_PRODUCTION_KEY_ID:-}"',
   ],
   // The runner link's connection tokens (2026-10-25, the top of this file): the Ed25519 signing key, the link
   // gateway's address and the secret the gateway reads revocations with, each empty unless the host's .env sets it.
@@ -466,6 +500,11 @@ const APPROVED_APISERVER_BLOCKS = [
   [
     '      RUNNER_RELEASE_DL_URL: "${RUNNER_RELEASE_DL_URL:-http://web/dl/}"',
   ],
+  // The repository a report opens its issue in (2026-11-19, the top of this file), empty unless the host's .env sets it.
+  // The line comes right after the releases', before Orbit Files' store.
+  [
+    '      ORBIT_RELEASE_REPOSITORY: "${ORBIT_RELEASE_REPOSITORY:-}"',
+  ],
   // Orbit Files' store (2026-11-02, the top of this file): local unless the host's .env says s3, and the S3-compatible
   // bucket's endpoint, bucket, key pair and region, each empty unless .env sets it. It comes after the releases' line in
   // the file, and before the managed runners'.
@@ -490,8 +529,12 @@ const APPROVED_APISERVER_BLOCKS = [
   // existing deployment gains nothing on its disk.
   [
     '      ORBIT_MANAGED_RUNNERS_ENABLED: "${ORBIT_MANAGED_RUNNERS_ENABLED:-false}"',
-    '      ORBIT_MANAGED_RUNNERS_PROFILE: /var/lib/orbit-managed-runners/profile.json',
+    '      ORBIT_MANAGED_RUNNER_BROWSER_ENABLED: "${ORBIT_MANAGED_RUNNER_BROWSER_ENABLED:-false}"',
+    '      ORBIT_MANAGED_RUNNERS_PROFILE: /var/lib/orbit-cloud-runners/profile.json',
     '    volumes:',
+    '      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-cloud-runners:ro"',
+    // Amended on 2026-11-20, when the owner renamed orbit-managed to orbit-cloud with a migration: the same directory,
+    // read-only, at its path from before, which profile.json and channel.json written by an earlier install name.
     '      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-managed-runners:ro"',
   ],
   // Orbit Files' directory (2026-11-02, the top of this file): the local store and the uploads' temporary files, a bind
@@ -674,15 +717,18 @@ test('(m) the Docker channel is exactly the service the owner allowed on 2026-10
     '    container_name: orbit-docker-channel',
     '    restart: unless-stopped',
     '    network_mode: none',
-    '    command: ["serve", "--config", "/var/lib/orbit-managed-runners/channel.json", "--disk-probe-path", "/var/lib/orbit-docker-volumes"]',
+    '    command: ["serve", "--config", "/var/lib/orbit-cloud-runners/channel.json", "--disk-probe-path", "/var/lib/orbit-docker-volumes"]',
     '    volumes:',
     '      - /var/run/docker.sock:/var/run/docker.sock',
+    '      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-cloud-runners"',
+    // Amended on 2026-11-20 (orbit-managed renamed orbit-cloud, with a migration): the same directory at its path from
+    // before, which an earlier install's channel.json names.
     '      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-managed-runners"',
     '      - type: volume',
     '        target: /var/lib/orbit-docker-volumes',
     '        read_only: true',
     '    healthcheck:',
-    '      test: ["CMD", "python3", "-c", "import socket; socket.socket(socket.AF_UNIX).connect(\'/var/lib/orbit-managed-runners/channel.sock\')"]',
+    '      test: ["CMD", "python3", "-c", "import socket; socket.socket(socket.AF_UNIX).connect(\'/var/lib/orbit-cloud-runners/channel.sock\')"]',
     '      interval: 5s',
     '      timeout: 5s',
     '      retries: 6',
@@ -717,8 +763,8 @@ test('(n) the managed runners\' firewall is exactly the service the owner allowe
     '    build:',
     '      context: .',
     '      dockerfile: deploy/managed-runner/firewall/Dockerfile',
-    '    image: orbit-managed-runner-firewall:local',
-    '    container_name: orbit-managed-runner-firewall',
+    '    image: orbit-cloud-runner-firewall:local',
+    '    container_name: orbit-cloud-runner-firewall',
     '    restart: unless-stopped',
     '    network_mode: host',
     '    cap_drop: [ALL]',
@@ -726,14 +772,14 @@ test('(n) the managed runners\' firewall is exactly the service the owner allowe
     '    security_opt: ["no-new-privileges:true"]',
     '    read_only: true',
     '    volumes:',
-    '      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}/firewall:/var/lib/orbit-managed-runner-firewall"',
+    '      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}/firewall:/var/lib/orbit-cloud-runner-firewall"',
     '      - type: bind',
     '        source: "${ORBIT_MANAGED_RUNNER_FIREWALL_XTABLES_LOCK:-/dev/null}"',
     '        target: /run/xtables.lock',
     '        bind:',
     '          create_host_path: false',
     '    healthcheck:',
-    '      test: ["CMD", "python3", "-I", "/opt/orbit-managed-runner-firewall/firewall.py", "status"]',
+    '      test: ["CMD", "python3", "-I", "/opt/orbit-cloud-runner-firewall/firewall.py", "status"]',
     '      interval: 10s',
     '      timeout: 5s',
     '      retries: 3',
@@ -868,7 +914,8 @@ test('(p) NATS is named to the apiserver and the link gateway alone, and stores 
 // two users, each by the public key the environment names, with exactly what it may do. The apiserver publishes runners'
 // hints and turn prefix requests and reads live streams and the answers to its requests, and its processes ask and
 // answer each other on api.> (2026-10-28, the top of this file); the gateway reads runners' hints and requests, publishes
-// live streams and answers a request once. No trace or debug logging, here or in the service's command (p). Changing
+// live streams, answers a request once, and relays the browser's byte streams on vnc.> (docs/runner-browser-design.md §4,
+// 2026-11-17), which the apiserver sends on vnc.*.down and reads on vnc.*.up (the viewer route, 2026-11-18). No trace or debug logging, here or in the service's command (p). Changing
 // any of it is a new decision, made here.
 test('(q) the runner link\'s NATS configuration is exactly the one task B4 added: two nkey users, each allowed only what it does', () => {
   const conf = readFileSync(path.join(repo, NATS_CONF), 'utf8');
@@ -881,16 +928,16 @@ test('(q) the runner link\'s NATS configuration is exactly the one task B4 added
     '{',
     'nkey: $RUNNER_LINK_NATS_APISERVER_KEY',
     'permissions: {',
-    'publish: { allow: ["rnr.>", "api.>"] }',
-    'subscribe: { allow: ["ses.*.live", "_INBOX.>", "api.>"] }',
+    'publish: { allow: ["rnr.>", "api.>", "vnc.*.down"] }',
+    'subscribe: { allow: ["ses.*.live", "_INBOX.>", "api.>", "vnc.*.up"] }',
     'allow_responses: true',
     '}',
     '}',
     '{',
     'nkey: $RUNNER_LINK_NATS_GATEWAY_KEY',
     'permissions: {',
-    'publish: { allow: ["ses.*.live"] }',
-    'subscribe: { allow: ["rnr.>"] }',
+    'publish: { allow: ["ses.*.live", "vnc.>"] }',
+    'subscribe: { allow: ["rnr.>", "vnc.>"] }',
     'allow_responses: true',
     '}',
     '}',

@@ -150,9 +150,10 @@ says decides what it may do, and no line of `.env` ever changes:
   warning, by name, never by value.
 
 After the images are built and before the apiserver is recreated, it starts `nats` and
-`link-gateway`, recreates the web gateway if the `gateway/nginx.conf` it runs is not this
-checkout's (a single-file bind mount Compose does not see change: a moment's break for web
-traffic and streams, once per change), and checks that `/runner-link` reaches the link
+`link-gateway`, recreates `nats` if the `src/link-gateway/nats.conf` it runs is not this
+checkout's, and the web gateway if the `gateway/nginx.conf` it runs is not this checkout's
+(single-file bind mounts Compose does not see change: a moment's break, once per change, for the
+runner link's NATS connections or for web traffic and streams), and checks that `/runner-link` reaches the link
 gateway. This build's `docker-compose.yml` requires `RUNNER_LINK_SIGNING_KEY`, since it has no
 HTTPS work path, so a failure there stops the upgrade before the apiserver is recreated, and
 the deployment goes on running the build it has.
@@ -235,7 +236,7 @@ runs: this host's own containers, `.env` and runner link are left as they are.
 `<registry>/orbit-apiserver:<commit>`, which `wiki-worker` runs too, `<registry>/orbit-web:<commit>`, and
 `<registry>/orbit-link-gateway:<commit>`, where that commit is the last one under `src/link-gateway`, its
 whole build context, so that a release which does not change the gateway recreates nothing, and
-`<registry>/orbit-managed-runner:<commit>`, the hosted runners' image, where that commit is the last one that
+`<registry>/orbit-cloud-runner:<commit>`, the hosted runners' image, where that commit is the last one that
 changed what `deploy/managed-runner/image` builds it from (the runner's Go sources but its tests, its module
 files, DeepSeek Harness's lockfile, and the image's directory), so that a release which does not change the
 runner builds none and moves no hosted runner. A commit without `deploy/managed-runner/image` has none. A tag names one
@@ -279,15 +280,15 @@ the two Compose files a target lists beside `docker-compose.yml`, `deploy/postgr
    release's images are all there: a deploy that stops before then puts them back, and takes away the files
    and directories it added, having changed nothing;
 4. prints the plan: each service's `docker compose config --hash` for this release against the hash its
-   container was made with, as `create`, `unchanged`, `start` or `recreate`. `db-proxy`, `gateway` and
-   `pgbackup` each bind-mount one file on its own (`deploy/db-proxy/haproxy.cfg`, `gateway/nginx.conf`,
-   `scripts/pg-backup.sh`), which a running container keeps from its start whatever Compose sees, so one that
+   container was made with, as `create`, `unchanged`, `start` or `recreate`. `db-proxy`, `nats`, `gateway`
+   and `pgbackup` each bind-mount one file on its own (`deploy/db-proxy/haproxy.cfg`,
+   `src/link-gateway/nats.conf`, `gateway/nginx.conf`, `scripts/pg-backup.sh`), which a running container keeps from its start whatever Compose sees, so one that
    runs another than the release's is `recreate` too, and says which file. Under the table it says how the
    apiserver and web are replaced: `Replacing the apiserver and web: without a gap`, or `stop, then start` with
    the reason ([Without a gap](#without-a-gap), below). Where the target runs managed runners on Kubernetes (its
    `.env` sets `ORBIT_MANAGED_RUNNERS_ENABLED=true`, and `profile.json` in `ORBIT_MANAGED_RUNNERS_DIR` says
    `"backend": "kubernetes"`), it also prints the hosted runners' image: `unchanged`, or the profile's
-   `runner.image` and the release's image by digest, `<registry>/orbit-managed-runner@sha256:<64 hex>`;
+   `runner.image` and the release's image by digest, `<registry>/orbit-cloud-runner@sha256:<64 hex>`;
 5. stops, having changed nothing, if an image the release runs does not come from the registry: `postgres` and
    `pgbackup` have theirs only from `deploy/postgres-pinned.yml`, so a target whose `COMPOSE_FILE` does not
    list it is refused. `--plan` stops here in any case, with every file put back;
@@ -310,7 +311,12 @@ the two Compose files a target lists beside `docker-compose.yml`, `deploy/postgr
    gap, and a `gateway` it recreates then goes first, ahead of the `apiserver` ([Without a gap](#without-a-gap));
    `wiki-worker`, which serves no HTTP, is simply recreated;
 9. prints `docker compose ps`, and adds the release to `.upgrade/history`. Its whole output is in
-   `.upgrade/deploy.log`.
+   `.upgrade/deploy.log`;
+10. removes the target's earlier release images: every `<registry>/orbit-apiserver`, `orbit-web` and
+   `orbit-link-gateway` image except those of the last 3 releases in `.upgrade/history`, and any a container still
+   uses, which Docker refuses to remove. Nothing else removed them: on 2026-11-18 production had kept 77 releases'
+   images, 137 GB, with 6.6 GB of its disk left. This runs on every deploy, `--prune` or not; `--prune` still
+   prunes dangling images as well.
 
 A lost ssh connection does not stop it halfway: it ignores the hangup and goes on, writing its log.
 
@@ -345,7 +351,7 @@ to be copied to the registry, as `base-images.env` says, before a release names 
 
 **Rollback.** Deploy an earlier release: `upgrade.sh --deploy <its commit>`, with the same
 `ORBIT_REGISTRY` and `ORBIT_DEPLOY_HOST`; `--plan <its commit>` first shows what it changes. Its images are in
-the registry, its files come from its commit, nothing is built, and `up` recreates what differs from it. Its hosted
+the registry (the target keeps only the last 3 releases' images, so an older one is pulled again), its files come from its commit, nothing is built, and `up` recreates what differs from it. Its hosted
 runners' image is its own too: the profile names it again, and the runners move back onto it once idle. The
 target's `.upgrade/history` lists the releases it ran, newest last. The database keeps the migrations a later
 release applied: roll back past a migration only to code that runs on the database as that migration left it.
@@ -563,8 +569,8 @@ the checkout's files named in step 4. Stop and report at the first step that fai
 ## Notes
 
 - Managed runners stay as the deployment's `.env` has them: the script never writes `.env`. A
-  deployment installed before them, or with `--no-managed-runners`, keeps them off; only a fresh
-  install (`scripts/install-server.sh`) or an administrator switches them on (docs/self-hosting.md,
+  deployment installed before them, or without `--managed-runners`, keeps them off; only a fresh
+  install with `--managed-runners` (`scripts/install-server.sh`) or an administrator switches them on (docs/self-hosting.md,
   "Managed runners"). Where `.env` does not turn on the `managed-runners-docker` Compose profile,
   Compose does not list `docker-channel`, and the script builds, recreates and writes exactly what it
   did before managed runners existed: nothing under `data/`, no managed runner image.
@@ -572,7 +578,7 @@ the checkout's files named in step 4. Stop and report at the first step that fai
   1. finds the managed runners' directory where Compose binds it into `docker-channel`, and stops
      before building anything if its `channel.json` and `profile.json` are not there;
   2. builds `docker-channel` with the other images, then the managed runner image from
-     `deploy/managed-runner/image` as `orbit-managed-runner:local` (local, never pushed; `--no-cache`
+     `deploy/managed-runner/image` as `orbit-cloud-runner:local` (local, never pushed; `--no-cache`
      applies to it too);
   3. when its image ID is new, writes that ID into both files, each replaced whole by a rename;
   4. recreates the other services as above, then the apiserver again if that did not recreate it

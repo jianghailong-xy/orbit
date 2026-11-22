@@ -20,6 +20,7 @@ import {
   StreamableFile,
   UseGuards,
 } from '@nestjs/common';
+import { createHash } from 'node:crypto';
 import type { Response } from 'express';
 import { ModuleRef } from '@nestjs/core';
 import { ProjectsService } from '../projects/projects.service';
@@ -62,6 +63,7 @@ import { ifNoneMatchHits, isOpenListView, openListEtag } from './open-list-versi
 import { assertClientTurnIdNotReserved } from './watch-turn-key';
 import { parseMaxPayload, truncatePayload } from './truncate-payload';
 import { coalesceDeltas, isStreamingDelta } from './coalesce-deltas';
+import { parseTailLines } from './background-job-tail';
 import { translationEventOf } from './reply-translation';
 import {
   KEEPALIVE_MS,
@@ -227,10 +229,14 @@ export class SessionsController {
     @Query('since') since?: string,
     @Headers('if-none-match') ifNoneMatch?: string,
     @Res({ passthrough: true }) res?: Response,
+    // `scheduled=1`: a workspace's Scheduled runs folder, the sessions its scheduled runs opened and no other.
+    // Always a plain array: no delta and no version, since a run's start is not on the Open list's version.
+    @Query('scheduled') scheduledParam?: string,
   ) {
     const confinedTo = workspaceConfinement(user);
     const withLanding = includeLanding === '1' && projectId !== undefined;
-    if (since !== undefined && (view === undefined || view === 'open' || view === 'active')) {
+    const scheduled = scheduledParam === '1';
+    if (!scheduled && since !== undefined && (view === undefined || view === 'open' || view === 'active')) {
       return this.sessions.listOpenSince(
         user.userId,
         { runnerId, workspaceId: workspaceId ?? agentId, tagId, projectId, includeLanding: withLanding, confinedTo },
@@ -247,6 +253,7 @@ export class SessionsController {
       confinedTo,
       view,
       limit: Number.isFinite(parsed) && parsed > 0 ? parsed : undefined,
+      scheduled,
     };
     // The Open list is polled every few seconds with the last ETag. Answer that from the data
     // version (open-list-version.ts) before building anything: on a hit nothing is read or
@@ -263,7 +270,7 @@ export class SessionsController {
     // page's own) is a few rows too: the account-wide version answered only ~5% of its polls with
     // 304, so it now keeps Express's body-hash ETag like the plain one, and pays no version at all.
     let version: string | undefined;
-    if (res && isOpenListView(view) && projectId === undefined) {
+    if (res && isOpenListView(view) && projectId === undefined && !scheduled) {
       version = await this.sessions.openListVersion(user.userId);
       const etag = openListEtag(version, {
         runnerId: filters.runnerId,
@@ -289,6 +296,53 @@ export class SessionsController {
   counts(@CurrentUser() user: AuthUser) {
     return this.sessions.workspaceSessionCounts(user.userId);
   }
+
+  /**
+   * Where a workspace list's project rows go, for every project it names at once
+   * (SessionsService.projectPlacement): each one's coordinator, Open or Completed, the sessions in
+   * `view` waiting on the owner, and how many sessions in `view` it has. `projectIds` is a
+   * comma-separated list of public ids. One read for the whole list, where it used to make one or two
+   * `GET /sessions?projectId=` a project (docs/list-freshness-design.md W4); that read stays, and its
+   * shape, for every client that still sends it.
+   *
+   * Conditional: the answer carries an ETag of its own bytes and a read that names it is answered 304,
+   * decided here for the reason the Open list's is (Express's own check refuses `Cache-Control:
+   * no-cache`). Above `@Get(':id')` for the reason `search` is.
+   */
+  @PatScope('sessions:read', { workspaceConfinable: 'LIST' })
+  @Get('project-placement')
+  async projectPlacement(
+    @CurrentUser() user: AuthUser,
+    @Query('projectIds') projectIdsParam?: string,
+    @Query('view') view?: string,
+    @Headers('if-none-match') ifNoneMatch?: string,
+    @Res({ passthrough: true }) res?: Response,
+  ) {
+    const lifecycle = view === undefined || view === 'open' ? 'open' : view === 'completed' ? 'completed' : null;
+    if (!lifecycle) throw new BadRequestException('view must be open or completed');
+    const parts = (projectIdsParam ?? '').split(',').map((part) => part.trim()).filter(Boolean);
+    if (parts.length > SessionsController.PLACEMENT_MAX_PROJECTS) {
+      throw new BadRequestException(`at most ${SessionsController.PLACEMENT_MAX_PROJECTS} projectIds`);
+    }
+    const pipe = new PublicIdPipe();
+    const projectIds = parts.map((part) => pipe.transform(part, { type: 'query', data: 'projectIds' }) as string);
+    const projects = await this.sessions.projectPlacement(user.userId, {
+      projectIds, view: lifecycle, confinedTo: workspaceConfinement(user),
+    });
+    const body = { projects };
+    if (res) {
+      const etag = `W/"pp1-${createHash('sha256').update(JSON.stringify(body)).digest('base64url').slice(0, 27)}"`;
+      res.setHeader('ETag', etag);
+      if (ifNoneMatchHits(ifNoneMatch, etag)) {
+        res.status(304);
+        return undefined;
+      }
+    }
+    return body;
+  }
+
+  /** More project ids than any workspace list shows; a longer list is refused rather than read. */
+  private static readonly PLACEMENT_MAX_PROJECTS = 500;
 
   // Cross-scope search for the clients' ⌘K palette. MUST stay above `@Get(':id')` — Nest matches
   // routes in declaration order, so below it the literal path would be swallowed as an id.
@@ -707,6 +761,14 @@ export class SessionsController {
     return this.sessions.adoptWorktreeBranch(user.userId, id);
   }
 
+  /** Close a failed merge's strip: clear the stored conflict or error so the bar shows Merge (or
+   *  "✓ In main") again. Changes nothing in git; the next failed merge shows a new strip. */
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
+  @Post(':id/merge-failure/dismiss')
+  dismissMergeFailure(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.sessions.dismissMergeFailure(user.userId, id);
+  }
+
   // A session's public link — `GET | PUT | POST | DELETE /sessions/:id/share` — is served by
   // ShareLinksController, beside the task's and the project's.
 
@@ -843,7 +905,7 @@ export class SessionsController {
     return this.sessions.purge(user.userId, id);
   }
 
-  /** Tool-permission approvals for this session (optionally filtered by status). */
+  /** Tool-permission approvals for this session (optionally filtered by status and tool name). */
   @PatScope('sessions:read', { workspaceConfinable: { params: { id: 'session' } } })
   @TerminalRoute('SESSION')
   @Get(':id/approvals')
@@ -851,8 +913,9 @@ export class SessionsController {
     @CurrentUser() user: AuthUser,
     @Param('id', PublicIdPipe) id: string,
     @Query('status') status?: string,
+    @Query('toolName') toolName?: string,
   ) {
-    return this.sessions.listApprovals(user.userId, id, status);
+    return this.sessions.listApprovals(user.userId, id, status, toolName);
   }
 
   /** Allow or deny a pending tool-permission approval. */
@@ -879,6 +942,17 @@ export class SessionsController {
   }
 
   /**
+   * The session's Orbit workflows (docs/subagent-workflow-design.md §5.1), oldest first, each keyed by its
+   * `mcp__orbit__workflow` call: name, phases, status, calls done and failed, cost and limit. Its calls are the
+   * SubAgent runs above whose `workflowRunId` is its id.
+   */
+  @PatScope('sessions:read', { workspaceConfinable: { params: { id: 'session' } } })
+  @Get(':id/workflows')
+  workflowRuns(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.sessions.listWorkflowRuns(user.userId, id);
+  }
+
+  /**
    * The authoritative, complete list of background shells the session ever launched (every
    * Bash(run_in_background), with output recovered from the workspace's Read polls). Derived over ALL
    * persisted events, so the "Background processes" tray shows the same complete list on every
@@ -889,6 +963,52 @@ export class SessionsController {
   @Get(':id/background')
   backgroundShells(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.getBackgroundShells(user.userId, id);
+  }
+
+  /**
+   * The newest lines of one bg_run job's output (`?lines=N`, at most and by default 40; at most 8 KB in all), without
+   * terminal colour codes, read just now from the job's file by the runner hosting the session, over the runner link.
+   * A running job answers what it has written so far; one that ended answers from its file while its runner still
+   * holds it, else 404 BACKGROUND_JOB_OUTPUT_GONE, and the client shows the end of the output the job's wake carried.
+   * 404 BACKGROUND_JOB_NOT_FOUND for a job the session never ran; 409 RUNNER_CANNOT_READ_JOB_OUTPUT for a runner
+   * that predates the read; 503 RUNNER_OFFLINE, 503 RUNNER_LINK_UNAVAILABLE and 504 RUNNER_DID_NOT_ANSWER when it
+   * cannot be asked now (SessionsService.readBackgroundJobTail).
+   *
+   * Pacing, which every client keeps: ask only while the job's card is on screen (opened, or folded showing its newest
+   * line) with the app in the foreground, and the job is running — the first time when the card appears, then 5 s
+   * after the previous answer, one request at a time. Stop when the card leaves the screen, the app goes to the
+   * background, or the job ends (an answer's `status` is no longer `running`, or the job's end arrives in the
+   * transcript); read once more then for the final lines. Nothing is asked for a card that is not visible. A 404 or 409
+   * stops asking for that job; a 503 or 504 waits 30 s before the next try.
+   */
+  @PatScope('sessions:read', { workspaceConfinable: { params: { id: 'session' } } })
+  @Get(':id/background/jobs/:jobId/tail')
+  backgroundJobTail(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('jobId') jobId: string,
+    @Query('lines') lines?: string,
+  ) {
+    return this.sessions.readBackgroundJobTail(user.userId, id, jobId, parseTailLines(lines));
+  }
+
+  /**
+   * The owner's stop of one running bg_run job (`bgj_…`) of the session: the runner hosting it kills it as bg_kill
+   * does, under the reason `stopped_by_owner`. 202 `stopping` once asked; a repeat answers the same, or 200 `killed`
+   * once it ended that way. 404 for an unknown job, 409 BACKGROUND_JOB_ENDED for one that ended otherwise, 409
+   * RUNNER_CANNOT_STOP_JOB for a runner that predates the stop (GET /background lists its jobs not `stoppable`).
+   */
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
+  @Post(':id/background/jobs/:jobId/stop')
+  async stopBackgroundJob(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('jobId') jobId: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const answer = await this.sessions.stopBackgroundJob(user.userId, id, jobId);
+    res.status(answer.status === 'stopping' ? 202 : 200);
+    return answer;
   }
 
   /**
@@ -1073,7 +1193,7 @@ export class SessionsController {
         );
         // Only the live half can contain deltas — they are broadcast-only and never persisted, so
         // a replay never carries them and the history stream is left exactly as it was.
-        const live$ = this.realtime.streamForRun(id).pipe(coalesceDeltas());
+        const live$ = this.realtime.streamForRun(id, { owner: true }).pipe(coalesceDeltas());
         return replayThenLive(history$, live$, () => this.realtime.turnPrefix(id));
       }),
       map((e: StreamedEvent) => {

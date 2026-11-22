@@ -17,6 +17,7 @@ export function OwnerRequestRedirect(): JSX.Element {
   const requestId = routeId(params.get('request'));
   const request = useQuery({
     queryKey: ['owner-request', requestId] as const,
+    meta: { entities: ['ownerRequest'] },
     queryFn: () => api<OwnerRequest>(`/owner-requests/${encodeURIComponent(requestId!)}`),
     enabled: requestId !== null,
     retry: false,

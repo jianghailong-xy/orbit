@@ -21,6 +21,9 @@ describe('resolutionTurnLabel', () => {
     expect(resolutionTurnLabel(turn('DECLINED'))).toBe('Owner declined the request · turn started automatically');
     expect(resolutionTurnLabel(turn('EXPIRED'))).toBe('Owner request expired · turn started automatically');
     expect(resolutionTurnLabel(turn('WITHDRAWN'))).toBe('Owner request withdrawn · turn started automatically');
+    const wiki = turn('DONE').replace('(MANUAL_STEP) ended DONE: the owner did what was asked.',
+      '(WIKI_CREATE) ended DONE. The owner created the wiki w. You can propose to it now.');
+    expect(resolutionTurnLabel(wiki)).toBe('Owner action resolved · turn started automatically');
   });
 
   it('leaves what a person typed alone', () => {

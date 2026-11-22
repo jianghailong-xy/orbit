@@ -457,9 +457,10 @@ test('the compatibility arguments still describe the code they are about', () =>
   assert.equal(/FOR (UPDATE|SHARE|NO KEY UPDATE|KEY SHARE)/g.exec(body.slice(body.indexOf('projectMember'))), null,
     'workspace delete took a second lock — its "cannot be in a cycle" argument no longer holds');
 
-  // runner: nothing in these paths takes FOR UPDATE on a runner row.
-  assert.equal(/FROM "runner"[^;]*FOR UPDATE/.test(runnerApi), false);
-  assert.equal(/FROM "runner"[^;]*FOR UPDATE/.test(tasksService), false);
+  // runner: nothing in these paths takes FOR UPDATE on a runner row. A runner read in a subquery of a statement that
+  // locks another row (dequeueTurn's pending-swap EXISTS) locks nothing: the match may not cross the `)` closing it.
+  assert.equal(/FROM "runner"[^;)]*FOR UPDATE/.test(runnerApi), false);
+  assert.equal(/FROM "runner"[^;)]*FOR UPDATE/.test(tasksService), false);
 });
 
 test('the triggers the order is derived from are still declared the way it assumes', () => {

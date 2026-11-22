@@ -96,6 +96,12 @@ type liveSession struct {
 	// held for an update (holdFollowUpForUpdate).
 	completingTurn         bool
 	startedWhileCompleting bool
+	// heldForSwap: this session's turn is held back by a Claude login swap on the folder it runs in
+	// (claude_account_swap_relay.go): its permit is here, but waitActive does not let the turn start
+	// until the swap ends, and the swap does not count it as a turn to wait for. jobAfterSwap: its
+	// claim arrived after the swap was reported, so it already names the account's new folder.
+	heldForSwap  bool
+	jobAfterSwap bool
 
 	resident         bool // an engine is starting/running/being reaped
 	engineGeneration uint64
@@ -124,6 +130,9 @@ type liveSession struct {
 	// (subagent.go), nil where no job service is at stake. Lock-free on the service's side, like
 	// monitorProbe, because it is called under p.mu.
 	subagentProbe func() bool
+	// executingProbe is this run's "what is executing in it" (session_executing.go), nil until the run has its
+	// tailer and adopted jobs. Unlike the two above it is never called under p.mu (executingEntries).
+	executingProbe func(resident bool) executingSnapshot
 }
 
 // heartbeatSupervisorSnapshot binds a heartbeat response to the exact local
@@ -230,6 +239,9 @@ type sessionPool struct {
 	// updateAskedByOwner: the owner pressed Update Runner Now. Their update waits only for the turns
 	// in flight, not for the quiet window (updateWhenNoTurnInFlight).
 	updateAskedByOwner bool
+	// accountSwap is the Claude login swap in progress, nil when none is: every session on one of its
+	// two folders starts no turn until it ends (claude_account_swap_relay.go).
+	accountSwap *poolAccountSwap
 }
 
 func newSessionPool(max int) *sessionPool {
@@ -310,11 +322,11 @@ func (p *sessionPool) worktreeOpLocked(id string) *worktreeOperationState {
 // manual operation that has already linearized. It says who is there, not who may
 // proceed — the fence and `running` decide that (beginHeartbeatWorktreeOperation).
 //
-// The turn's engine, a running operation and a live background job are what refuse a
-// commit, and the refusal names them (worktreeOperationRefusal,
-// beginManualWorktreeOperation): a commit takes the checkout as it stands. None of them
+// The turn's engine and a running operation are what refuse a commit, and the refusal
+// names them (worktreeOperationRefusal). A background job refuses nothing: a commit runs
+// beside it and names it in its receipt (beginManualWorktreeOperation). None of them
 // holds a merge, which replays committed work in a scratch worktree (heartbeatMerge).
-// The worktree GC, which deletes the directory, is held off by a live job too (ids).
+// The worktree GC, which deletes the directory, is the one thing a live job holds off (ids).
 //
 // A parked engine is no holder at all, whatever it left running: between turns
 // neither it nor its MCP servers — Orbit's own, or any the agent configured — are
@@ -641,8 +653,8 @@ func (p *sessionPool) beginHeartbeatWorktreeOperation(
 		p.mu.Unlock()
 		return nil, false
 	}
-	// A live background job is not asked about here: a commit's own admission refuses
-	// it (beginManualWorktreeOperation).
+	// A live background job is deliberately not asked about: a commit runs beside it
+	// (beginManualWorktreeOperation).
 	state := p.worktreeOpLocked(id)
 	state.running = true
 	state.done = make(chan struct{})
@@ -667,13 +679,14 @@ func (p *sessionPool) beginHeartbeatWorktreeOperation(
 
 // beginManualWorktreeOperation is how a commit (or a discard) enters a checkout. It admits the
 // operation exactly as beginHeartbeatWorktreeOperation does — no turn in the checkout, the epoch
-// the heartbeat advertised — and refuses one more thing: a live background job. A commit takes
-// the checkout as it stands, so it must not be taken while anything is still changing it; a job
-// writing a file would have that file committed half-written. A parked engine is not stopped for
-// it, whatever MCP servers it runs. A merge does not come through here at all (heartbeatMerge).
+// the heartbeat advertised — and nothing else running in the checkout comes into that. A live
+// background job is a test run, a build or a dev server, not an edit of the work, so it holds no
+// commit up; the receipt names it instead. A parked engine is not stopped for it, whatever MCP
+// servers it runs. A merge does not come through here at all (heartbeatMerge).
 //
-// Admitted, it returns the release func and an empty receipt note. Refused, it returns a nil
-// release and the refusal itself.
+// Admitted, it returns the release func and the operation's receipt note, which names the live
+// background jobs it ran beside ("" when there are none). Refused, it returns a nil release and
+// the refusal itself.
 func (p *sessionPool) beginManualWorktreeOperation(
 	id string,
 	expected *liveSession,
@@ -697,9 +710,8 @@ func (p *sessionPool) beginManualWorktreeOperation(
 	if len(jobs) == 0 {
 		return release, "", true
 	}
-	release()
-	return nil, operation + " was refused: background jobs are still changing this checkout (" +
-		strings.Join(jobs, ", ") + ") — wait for them to finish or stop them, then " + operation + " again", false
+	return release, "this " + operation + " ran while background jobs were still running in the checkout (" +
+		strings.Join(jobs, ", ") + ")", true
 }
 
 // appendWorktreeReceipt puts an operation's receipt note after the operation's own message,
@@ -1319,6 +1331,12 @@ func (p *sessionPool) activatePrepared(job *ClaimedSession, prepare func()) (*li
 		job.IsolationStatus = s.job.IsolationStatus
 		job.CheckoutCreation = s.job.CheckoutCreation
 		job.SourceRefusal = s.job.SourceRefusal
+		// The session's live mode, too: the job service started for this run (startSessionBgJobService) keeps the
+		// first claim's job and reads the mode from this holder, for its Plan gate and for what a read-only Kimi
+		// SubAgent's shell calls follow. A mode the owner chose while the engine was cold arrives only in this
+		// claim, so it is published here; left alone, the holder would go on saying the mode the run began in.
+		job.liveMode = s.job.liveMode
+		job.notePermissionMode(job.Agent.PermissionMode)
 	}
 	s.job = job
 	var cancels []context.CancelFunc
@@ -1332,6 +1350,7 @@ func (p *sessionPool) activatePrepared(job *ClaimedSession, prepare func()) (*li
 	// running a turn here (drainClaimScope): its message waits for the update, as a held follow-up
 	// does, and the row stays RUNNING for the updated runner to reclaim.
 	s.heldForUpdate = p.drainingForUpdate
+	s.jobAfterSwap = p.accountSwap != nil && p.accountSwap.reported
 	p.fenceWorktreeOperationLocked(s.id)
 	s.permitGeneration++
 	s.idleGeneration++
@@ -1523,7 +1542,13 @@ func (p *sessionPool) waitActive(s *liveSession, sessionCtx, shutdown context.Co
 			p.mu.Unlock()
 			return false
 		}
-		if s.active && !p.closedForUpdate && !s.heldForUpdate {
+		if s.active && !p.closedForUpdate && !s.heldForUpdate && p.accountSwapHoldsLocked(s) {
+			if !s.heldForSwap {
+				s.heldForSwap = true
+				p.signalLocked(nil) // the swap waiting on this session's turn looks again
+			}
+		} else if s.active && !p.closedForUpdate && !s.heldForUpdate {
+			s.heldForSwap = false
 			if s.completingTurn {
 				s.startedWhileCompleting = true
 			}
@@ -1678,6 +1703,10 @@ func (p *sessionPool) finish(s *liveSession) {
 			p.markActivityLocked() // a turn ends with its supervisor
 		}
 		delete(p.sessions, s.id)
+		// A session that ends holds no browser lease (browser_supervisor.go).
+		if !s.detaching {
+			runnerBrowser().Release(s.id)
+		}
 		// A detached supervisor's fence is the takeover's to lower — but only while there is
 		// one. Left raised without a takeover it can never come down: this id is out of the
 		// pool, so no register, park or finish will ever run for it again, and every later

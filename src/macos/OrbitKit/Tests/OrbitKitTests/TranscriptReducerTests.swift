@@ -853,28 +853,27 @@ final class TranscriptReducerTests: XCTestCase {
         return RunEvent(seq: seq, type: .user, turnId: turnId, payload: .object(payload))
     }
 
-    /// The bubble keeps what was typed; what delivery appended rides alongside it as the one entry the
-    /// view names, and a snapshot keeps it. Where the typed words end is the note the apiserver
+    /// The bubble keeps what was typed; what delivery appended is kept apart as the note, and a
+    /// snapshot keeps it. Where the typed words end is the note the apiserver
     /// recorded when it stored the event — the only thing that tells these two blocks apart at all.
     func testDurableUserEventSplitsAppendedContextOutOfTheBubble() throws {
-        for (typed, block, kind) in [("这个列表现在什么情况？", listConditionsBlock, "list conditions")] {
+        for (typed, block) in [("这个列表现在什么情况？", listConditionsBlock)] {
             var r = TranscriptReducer()
 
             r.apply(userEvent(seq: 1, "\(typed)\n\n\(block)", note: "\n\n\(block)"))
 
             let bubble = r.state.items[0].asUser
             XCTAssertEqual(bubble?.text, typed, "only what was typed is the person's own")
-            XCTAssertEqual(bubble?.attached?.kind, kind)
-            XCTAssertEqual(bubble?.attached?.text, block, "the entry opens to the block verbatim")
+            XCTAssertEqual(bubble?.note, block, "the block is kept verbatim, out of the bubble")
 
             let restored = try JSONDecoder().decode(TranscriptReducer.self, from: JSONEncoder().encode(r))
-            XCTAssertEqual(restored.state.items[0].asUser?.attached?.text, block,
-                           "a session rehydrated from its snapshot still draws the entry")
+            XCTAssertEqual(restored.state.items[0].asUser?.note, block,
+                           "a session rehydrated from its snapshot keeps it apart too")
         }
     }
 
     /// Without a note nothing tells a block apart from words: someone who typed one sees it in their
-    /// bubble exactly as typed, and no entry is drawn for it, however much it looks like one.
+    /// bubble exactly as typed, however much it looks like one.
     func testWithoutANoteATypedBlockStaysInTheBubbleAsTyped() {
         for block in [backgroundJobsBlock, listConditionsBlock] {
             var r = TranscriptReducer()
@@ -883,14 +882,14 @@ final class TranscriptReducerTests: XCTestCase {
             r.apply(userEvent(seq: 1, typed))
 
             XCTAssertEqual(r.state.items[0].asUser?.text, typed)
-            XCTAssertNil(r.state.items[0].asUser?.attached)
+            XCTAssertNil(r.state.items[0].asUser?.note)
         }
     }
 
     /// The blocks Orbit's own delivery also uses for a `#`-reference and a promoted coordinator's
     /// standing role, pasted at the end of a message the person typed themselves. Nothing records
-    /// anything appended to that event, so the paste is their own words: shown as typed, uncut, and
-    /// drawn as nothing — Orbit's entry is only ever what the apiserver recorded (`controlPlaneNote`).
+    /// anything appended to that event, so the paste is their own words: shown as typed and uncut —
+    /// Orbit's note is only ever what the apiserver recorded (`controlPlaneNote`).
     func testWithoutANoteAPastedReferenceOrCoordinatorBlockIsShownAsTyped() {
         for block in [refListBlock, refTaskBlock, coordinatorBlock] {
             var r = TranscriptReducer()
@@ -900,7 +899,7 @@ final class TranscriptReducerTests: XCTestCase {
 
             XCTAssertEqual(r.state.items[0].asUser?.text, typed,
                            "an event with no note is shown exactly as it was echoed")
-            XCTAssertNil(r.state.items[0].asUser?.attached, "and nothing is drawn as Orbit's own")
+            XCTAssertNil(r.state.items[0].asUser?.note, "and nothing is taken as Orbit's own")
         }
     }
 
@@ -935,11 +934,10 @@ final class TranscriptReducerTests: XCTestCase {
         }
     }
 
-    /// A promoted coordinator's standing role is kept off the bubble, as any recorded note is, but
-    /// draws no entry: Orbit appends it to every coordinator turn, so nobody attached it.
+    /// A promoted coordinator's standing role is kept off the bubble, as any recorded note is.
     /// An event with no note is shown as it was echoed instead — a pasted coordinator block stays in
     /// the bubble it was typed into (`testWithoutANoteAPastedReferenceOrCoordinatorBlockIsShownAsTyped`).
-    func testCoordinatorContextDrawsNoEntry() {
+    func testCoordinatorContextIsKeptOffTheBubble() {
         let typed = "把这个项目协调起来"
         var r = TranscriptReducer()
         r.apply(userEvent(seq: 1, "\(typed)\n\n\(coordinatorBlock)", note: "\n\n\(coordinatorBlock)"))
@@ -947,13 +945,11 @@ final class TranscriptReducerTests: XCTestCase {
         let bubble = r.state.items[0].asUser
         XCTAssertEqual(bubble?.note, coordinatorBlock)
         XCTAssertEqual(bubble?.text, typed)
-        XCTAssertNil(bubble?.attached)
     }
 
-    /// A wiki chat's first message (board 42 ①, C15): the entry under the owner's words is named for the page and the
-    /// selection they sent, not for the chat's words to its agent, and still opens to every block the agent read.
-    /// Sent with neither, the note names nothing and no entry is drawn (web parity: `UserBubble`).
-    func testAWikiChatsFirstMessageNamesOnlyWhatTheOwnerAttached() {
+    /// A wiki chat's first message (board 42 ①, C15): every block the agent read — the chat's words to
+    /// its agent, the page and the selection — is kept off the owner's words.
+    func testAWikiChatsFirstMessageKeepsEveryBlockOffTheBubble() {
         let rules = "<orbit_wiki_chat>\nYou are chatting beside a page of this repository's Orbit wiki.\n</orbit_wiki_chat>"
         let page = "<orbit_wiki_page of=\"doc\" doc=\"3.1\" slug=\"sessions-runtime\" section=\"3\" key=\"turn-delivery\">\n"
             + "§3 Turn delivery\n</orbit_wiki_page>"
@@ -965,15 +961,13 @@ final class TranscriptReducerTests: XCTestCase {
 
         let bubble = sent.state.items[0].asUser
         XCTAssertEqual(bubble?.text, "Record this as a decision.")
-        XCTAssertEqual(bubble?.attached?.kind, "Wiki page · 3.1 §3, Wiki selection · 3.1 §3 · 1 sentence · 2 sources")
-        XCTAssertEqual(bubble?.attached?.text, "\(rules)\n\n\(page)\n\n\(selection)", "it opens to every block the agent read")
+        XCTAssertEqual(bubble?.note, "\(rules)\n\n\(page)\n\n\(selection)", "every block the agent read is the note")
 
         var bare = TranscriptReducer()
         bare.apply(userEvent(seq: 1, "Is this still true?\n\n\(rules)", note: "\n\n\(rules)"))
 
         XCTAssertEqual(bare.state.items[0].asUser?.text, "Is this still true?")
         XCTAssertEqual(bare.state.items[0].asUser?.note, rules, "the note is recorded")
-        XCTAssertNil(bare.state.items[0].asUser?.attached, "but names nothing, so no line is drawn")
     }
 
     /// Regression (the reported iOS bug): the durable `user` event can beat the POST /turns response
@@ -1426,6 +1420,27 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertEqual(r.state.items.count, 1)
         XCTAssertEqual(r.state.items[0].asUser?.turnId, "t1")
         XCTAssertEqual(r.state.items[0].asUser?.queued, false)
+    }
+
+    /// Translated while the runner is full: the listing says DONE long before the runner's echo can,
+    /// and the bubble kept in the conversation drops its "Translating…" chip on that listing.
+    func testHeldSendTakesTheListingsTranslationBeforeItsEcho() {
+        var r = TranscriptReducer()
+        r.addOptimisticUser(clientTurnId: "c1", text: "先给我效果图")
+        r.setOptimisticTurnId(clientTurnId: "c1", turnId: "t1",
+                              translation: TurnTranslation(state: .translating, from: .zhHans, original: "先给我效果图"),
+                              placement: "queued")
+        let done: JSONValue = .object([
+            "state": .string("DONE"), "from": .string("zh-Hans"), "original": .string("先给我效果图"),
+        ])
+        r.reconcileQueuedTurns([
+            QueuedTurnInfo(turnId: "t1", kind: "message", content: "Show me the mockup first",
+                           placement: "accepted", translation: done),
+        ], knownBefore: r.state.listedTurnIDs)
+        XCTAssertEqual(r.state.items.count, 1)
+        XCTAssertEqual(r.state.items[0].asUser?.translation?.state, .done)
+        XCTAssertEqual(r.state.items[0].asUser?.pending, true, "still waiting on its echo")
+        XCTAssertTrue(r.state.queued.isEmpty && r.state.accepted.isEmpty, "drawn once")
     }
 
     /// The other way round: a send guessed queued that the server `accepted` is delivered now, so it
@@ -2176,6 +2191,26 @@ final class TranscriptReducerTests: XCTestCase {
 
         XCTAssertEqual(r.state.items.map(\.asDiagnostic), [DiagnosticRead(
             label: "mcp", text: "model refresh 401 request id: req_first", message: "model refresh 401 request id: req_first")])
+    }
+
+    /// Codex's sandbox setup asks for the system bubblewrap and falls back to its bundled copy
+    /// (docs/mocks/codex-sandbox-fix-with-agent): a degraded sandbox diagnostic, with the code the
+    /// transcript's row acts on.
+    func testMissingBubblewrapIsADegradedSandboxDiagnostic() {
+        let line = "2026-08-14T14:31:13.780609Z ERROR codex_app_server: Codex could not find bubblewrap on PATH. "
+            + "Install bubblewrap with your OS package manager. See the sandbox prerequisites: "
+            + "https://developers.openai.com/codex/concepts/sandboxing#prerequisites. "
+            + "Codex will use the bundled bubblewrap in the meantime."
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .system, payload: .object(["stderr": .string(line)])))
+
+        guard case .diagnostic(let notice)? = r.state.items.first else {
+            return XCTFail("the missing-bubblewrap line was not a diagnostic: \(r.state.items)")
+        }
+        XCTAssertTrue(notice.isSandboxMissing)
+        XCTAssertEqual(notice.component, "sandbox")
+        XCTAssertEqual(notice.code, "bubblewrap_missing")
+        XCTAssertEqual(notice.label, "Startup · sandbox · bubblewrap_missing")
     }
 
     func testUnrelatedErrorStderrStaysAnErrorRow() {

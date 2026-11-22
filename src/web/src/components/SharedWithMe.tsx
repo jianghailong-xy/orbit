@@ -1,16 +1,27 @@
 import { CaretDownOutlined } from '@ant-design/icons';
-import { useQuery } from '@tanstack/react-query';
+import { queryOptions, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useMatch } from 'react-router-dom';
 import type { GuestSessionSummary } from '@orbit/shared';
 import { listGuestSessions } from '../api';
 import { encodeId, routeId } from '../lib/idCodec';
 import { sessionStateWord } from '../lib/sessionState';
+import type { SessionReach } from '../lib/sessionReach';
 import { titleFirstLine } from '../lib/title';
 
 export const guestSessionsQueryKey = ['guest-sessions'] as const;
 /** How often Shared with me is read again: a session can be shared with you, or stop being, at any time. */
 const SHARED_WITH_ME_POLL_MS = 60_000;
+
+/** The sessions other people shared with this reader. */
+export const guestSessionsQuery = () =>
+  queryOptions({
+    queryKey: guestSessionsQueryKey,
+    // Other owners' sessions: this reader's stream carries none of their events (lib/sessionReach).
+    meta: { entities: ['session'], sessionReach: 'none' satisfies SessionReach },
+    queryFn: listGuestSessions,
+    refetchInterval: SHARED_WITH_ME_POLL_MS,
+  });
 
 /**
  * Where a session shared with you opens: the same `/sessions/<id>` its owner opens, which draws the guest view for
@@ -36,11 +47,7 @@ function ago(at: string | null, now = Date.now()): string {
  */
 export function SharedWithMeGroup({ onOpen }: { onOpen: (path: string) => void }) {
   const [open, setOpen] = useState(true);
-  const q = useQuery({
-    queryKey: guestSessionsQueryKey,
-    queryFn: listGuestSessions,
-    refetchInterval: SHARED_WITH_ME_POLL_MS,
-  });
+  const q = useQuery(guestSessionsQuery());
   const sessions = q.data?.sessions ?? [];
   const openId = routeId(useMatch('/sessions/:id')?.params.id ?? '');
   if (sessions.length === 0) return null;

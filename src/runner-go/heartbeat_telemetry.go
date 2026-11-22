@@ -265,6 +265,13 @@ func sendHeartbeatCycle(
 	request.SupervisedSessionIDs = supervised
 	request.Sessions = sessions
 	request.IdleCapacity, request.BackgroundJobSessionIDs = pool.admissionOccupancy()
+	// Taken before the probes are read: an event the probes miss was observed after them, so its TS is no earlier
+	// than this (session_executing.go).
+	executingAt := time.Now().UnixMilli()
+	request.Executing = pool.executingEntries()
+	if request.Executing != nil {
+		request.ExecutingAt = executingAt
+	}
 	if request.Draining {
 		request.IdleCapacity = 0
 	}

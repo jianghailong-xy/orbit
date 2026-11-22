@@ -6,7 +6,9 @@
  *   2. By `needs` with two candidates: the one with more quota headroom is chosen, and its reason says so.
  *   3. By `needs` with none: refused, listing what each candidate lacked, including other repositories.
  *   4. By name: another repository and an empty repoUrl on either side are allowed.
- *   5. SUBAGENT_WORKSPACE_NOT_GIT: a workspace whose work dir is not a git repository.
+ *   5. SUBAGENT_WORKSPACE_NOT_GIT: a workspace whose work dir is not a git repository refuses a SubAgent that may
+ *      change files, naming the read-only route and warning off git init; a read-only one is placed there in place,
+ *      its claim saying so, unless the target runner does not declare SUBAGENT_REMOTE_IN_PLACE_V1.
  *   6. A target whose agent has SubAgents off is refused.
  *   7. An event for the run from a runner other than target_runner_id is refused, and writes nothing.
  *   8. Events from the target runner land in the PARENT session's stream under the delegate call, with every child
@@ -34,7 +36,13 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import { type PrismaClient, type Runner, RunStatus, SessionDispatchOrigin } from '@prisma/client';
-import { CLAUDE_REGION_V1, RunEventType, SUBAGENT_REMOTE_RESUME_V1, type SubagentRemoteRunCreateResponse } from '@orbit/shared';
+import {
+  CLAUDE_REGION_V1,
+  RunEventType,
+  SUBAGENT_REMOTE_IN_PLACE_V1,
+  SUBAGENT_REMOTE_RESUME_V1,
+  type SubagentRemoteRunCreateResponse,
+} from '@orbit/shared';
 import { HttpException } from '@nestjs/common';
 import { Client } from 'pg';
 
@@ -309,20 +317,46 @@ test('Cross-workspace SubAgents: choice of workspace, refusals, hand-over, relay
     }
   });
 
-  await t.test('SUBAGENT_WORKSPACE_NOT_GIT: a work dir that is not a git repository is refused', async () => {
+  await t.test('SUBAGENT_WORKSPACE_NOT_GIT: a work dir that is not a git repository takes only a read-only SubAgent, in place', async () => {
     const ownerId = await account();
     const hpc = await machine(ownerId, 'workstation-gpu');
-    const mac = await machine(ownerId, 'mac-mini', { capabilities: ['os:darwin'] });
+    const mac = await machine(ownerId, 'mac-mini', { capabilities: ['os:darwin', SUBAGENT_REMOTE_IN_PLACE_V1] });
+    const old = await machine(ownerId, 'old-mac', { capabilities: ['os:darwin'] });
     const develop = await workspace(ownerId, hpc, 'orbit-develop');
-    await workspace(ownerId, mac, 'orbit-macos', { workDirIsGit: false });
+    const macos = await workspace(ownerId, mac, 'orbit-macos', { workDirIsGit: false });
+    await workspace(ownerId, old, 'old-macos', { workDirIsGit: false });
     const sessionId = await parentIn(ownerId, develop, hpc);
     let message = '';
     await assert.rejects(
       subagents.openSubagentRun(hpc, sessionId, create({ toolUseId: 'toolu_01NotGit', workspace: 'orbit-macos' })),
       refusedWith('SUBAGENT_WORKSPACE_NOT_GIT', (said) => { message = said; }),
     );
-    assert.equal(message, "orbit-macos's work directory is not a git repository, so a SubAgent cannot run there in a worktree of its own.");
+    assert.equal(message,
+      "orbit-macos's work directory is not a git repository. A SubAgent that may change files runs in a worktree of its own, " +
+      'so it cannot run there; a read-only one (type "explore", or a definition with readonly: true) runs in the work ' +
+      'directory itself. Delegate the work as read-only, or open a session on orbit-macos. Do not make that directory a git ' +
+      'repository to get round this: git init and a first commit change it, and commit whatever it holds, secrets included.');
     assert.equal(await prisma.subagentRun.count({ where: { sessionId } }), 0);
+
+    const opened = await subagents.openSubagentRun(hpc, sessionId, create({
+      toolUseId: 'toolu_01NotGitReadonly', workspace: 'orbit-macos', type: 'explore', readonly: true,
+    })) as SubagentRemoteRunCreateResponse;
+    assert.deepEqual(opened.remote, { workspaceId: macos, workspaceName: 'orbit-macos' });
+    assert.equal(opened.decision.workspace?.reason,
+      'Named by the delegate call: orbit-macos, read-only in its work directory, which is not a git repository');
+    const claim = await subagents.claimRemoteSubagentRun(mac, opened.runId);
+    assert.equal(claim.inPlace, true, 'the claim tells the target runner to run in the work dir itself');
+    assert.equal(claim.workDir, '/work/orbit-macos');
+
+    let tooOld = '';
+    await assert.rejects(
+      subagents.openSubagentRun(hpc, sessionId, create({
+        toolUseId: 'toolu_01NotGitOld', workspace: 'old-macos', type: 'explore', readonly: true,
+      })),
+      refusedWith('SUBAGENT_WORKSPACE_LACKS_NEEDS', (said) => { tooOld = said; }),
+    );
+    assert.equal(tooOld, 'old-macos cannot run this SubAgent: its work directory is not a git repository, and its runner is too ' +
+      'old to run a read-only SubAgent in it.');
   });
 
   await t.test('a target whose agent has SubAgents off is refused', async () => {
@@ -628,7 +662,8 @@ test('Cross-workspace SubAgents: choice of workspace, refusals, hand-over, relay
     const local = await subagents.openSubagentRun(e.hpc, e.sessionId, create({ toolUseId: 'toolu_01Local' }));
     await assert.rejects(
       subagents.openSubagentRun(e.hpc, e.sessionId, create({ toolUseId: 'toolu_01NotRemote', resumeOf: local.runId })),
-      refusedWith('SUBAGENT_RESUME_NOT_FOUND'), "a run on the parent's own machine is resumed there, not through the server");
+      refusedWith('SUBAGENT_RESUME_RUNNING'),
+      "a run on the parent's own machine is resumed on this machine where it ran (resumeInPlace), and not while it runs");
 
     const resumed = await again('toolu_01Again') as SubagentRemoteRunCreateResponse;
     assert.deepEqual(resumed.remote, { workspaceId: e.macos, workspaceName: 'orbit-macos' });

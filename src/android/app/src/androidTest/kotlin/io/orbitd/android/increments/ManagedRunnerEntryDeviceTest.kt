@@ -25,6 +25,7 @@ class ManagedRunnerEntryDeviceTest : IncrementDeviceTest() {
     override val ids get() = listOf(workspace, runner, laptop, managed, managedWorkspace, managedSession, project, coord)
 
     @Volatile private var hasManagedWorkspace = true
+    @Volatile private var laptopOnline = false
     @Volatile private var featureOn = true
     @Volatile private var state = "NOT_PROVISIONED"
     private val mapped get() = state != "NOT_PROVISIONED"
@@ -48,7 +49,7 @@ class ManagedRunnerEntryDeviceTest : IncrementDeviceTest() {
         else """{"id":"$managed","name":"managed-runner","displayName":"managed-runner","hostname":null,"version":null,"online":false,
         "status":"OFFLINE","lastHeartbeatAt":null,"maxConcurrent":2,"activeSessions":0,"runsAsRoot":false,"minFreeDiskMb":null,"selfUpdate":null,
         "engines":null,"enrolledAt":"2026-11-15T00:00:00Z"}"""
-    private fun machines() = listOfNotNull(machine(runner, "workstation", true), machine(laptop, "laptop", false),
+    private fun machines() = listOfNotNull(machine(runner, "workstation", true), machine(laptop, "laptop", laptopOnline),
         managedMachine().takeIf { mapped }).joinToString(",", "[", "]")
     private fun sessionRow() = """{"id":"$managedSession","title":"Tidy the release notes","status":"AWAITING_INPUT","runState":"AWAITING_INPUT",
         "lifecycleState":"OPEN","provider":"claude","engine":"claude","model":"claude-opus-5-5","assignedRunnerId":"$managed",
@@ -72,7 +73,7 @@ class ManagedRunnerEntryDeviceTest : IncrementDeviceTest() {
         req.path == "managed-runner" -> json(status())
         req.path == "managed-runner/ensure" && req.method == "POST" -> { state = "REQUESTED"; json(status()) }
         req.path == "runners" -> json(machines())
-        req.path == "runners/$laptop" -> json(machine(laptop, "laptop", false))
+        req.path == "runners/$laptop" -> json(machine(laptop, "laptop", laptopOnline))
         req.path == "runners/$managed" -> json(managedMachine())
         req.path == "runners/$managed/resources" -> json("""{"at":"${Instant.now()}","latest":{"cpuPercent":12,"cpuCores":2,"load1":0.3,
             "memTotalBytes":4294967296,"memAvailableBytes":3221225472},"samples":[]}""")
@@ -106,7 +107,7 @@ class ManagedRunnerEntryDeviceTest : IncrementDeviceTest() {
     private fun machinesAndModels() {
         signIn()
         compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
-        compose.onNode(hasText("Settings") and hasClickAction()).performClick()
+        compose.onNodeWithTag("drawer:settings").performClick()
         await("Settings") { exists(hasText("Machines & models") and hasClickAction()) }
         compose.onNode(hasText("Machines & models") and hasClickAction()).performScrollTo().performClick()
         await("Machines & models") { exists(hasText("laptop"), unmerged = true) }
@@ -172,9 +173,16 @@ class ManagedRunnerEntryDeviceTest : IncrementDeviceTest() {
     @Test fun theDrawerOffersSetupForAnAsleepManagedMachineWithoutAWorkspace() = journey {
         state = "SLEEPING"
         hasManagedWorkspace = false
+        laptopOnline = true
         signIn()
         compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
         awaitTag("setup-machine:$managed")
+        awaitTag("setup-machine:$laptop")
+        awaitTag("setup-managed-runner-icon")
+        awaitTag("setup-managed-runner-divider")
+        verify("the managed machine stands above the laptop",
+            compose.onNodeWithTag("setup-machine:$managed").fetchSemanticsNode().positionInRoot.y <
+                compose.onNodeWithTag("setup-machine:$laptop").fetchSemanticsNode().positionInRoot.y)
         compose.onNodeWithTag("setup-machine:$managed").performClick()
         awaitTag("machine-setup-card")
         awaitText(ManagedRunner.Setup.NOTICE.getValue("asleep"))

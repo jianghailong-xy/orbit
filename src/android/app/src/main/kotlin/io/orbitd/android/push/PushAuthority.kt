@@ -14,8 +14,9 @@ enum class PushCheck { ACTIVE, STALE, MISSING, FORBIDDEN, UNKNOWN }
 
 /** Push supplies identities only. Every decision here is read with the current authenticated handle. */
 class PushAuthority(private val api: OrbitApi, private val handle: SessionHandle) {
-    /** An unsuccessful/invalid read throws: an offline snapshot must never look like an empty set. */
-    suspend fun needsYou(): Set<String> = array(get(listOf("sessions"), listOf("view" to "open")))
+    /** The sessions waiting on the owner, from the Open rows the store holds (its `since=` delta reads): this class sends no
+     * `GET /sessions` of its own. An invalid row throws: a broken snapshot must never look like an empty set. */
+    fun needsYou(rows: List<JsonObject>): Set<String> = rows
         .mapNotNull { row ->
             val id = canonical(row.text("id"))
             val pending = row.number("pendingApprovals")
@@ -84,6 +85,12 @@ class PushAuthority(private val api: OrbitApi, private val handle: SessionHandle
                 val row = objectRead(listOf("tasks", payload.taskId!!, "owner-confirmation"))
                 if (session.present("deletedAt") || session.text("lifecycleState") == "TRASH") PushCheck.MISSING
                 else if (ObjectId.same(row.obj("waiting")?.text("sessionId"), payload.sessionId)) PushCheck.ACTIVE else PushCheck.STALE
+            }
+            // A can't-read alert stands while its Waiting on you item is still PENDING: a check that reads again closes it.
+            payload.kind == PushPayload.CONDITION && payload.ownerRequestId != null -> {
+                val row = objectRead(listOf("owner-requests", payload.ownerRequestId))
+                if (!ObjectId.same(row.text("id"), payload.ownerRequestId) || row.text("state") == null) throw ProtocolException()
+                if (row.text("state") == "PENDING") PushCheck.ACTIVE else PushCheck.STALE
             }
             // A schedule alert that opens a run's session falls through to the session's own check below.
             payload.sessionId != null -> {

@@ -24,6 +24,7 @@ import {
   deriveSessionLifecycleState,
   type ProjectIntegrationRead,
   type ProjectListCoordinatorActivity,
+  type ProjectSidebarFuse,
   type ProjectPauseState,
   RunEventType,
   SessionLifecycleState,
@@ -32,6 +33,7 @@ import {
   toUuid,
   type MoveCriterionRefusal,
   type MoveCriterionResult,
+  type TaskSignInHold,
 } from '@orbit/shared';
 import { countLiveApprovals } from '../sessions/abandoned-approvals';
 import { refuseOwnerFieldsToToken } from '../auth/pat-scope.decorator';
@@ -54,6 +56,8 @@ export interface CoordinatorHandoffBinding {
   note: string | null;
   /** The pending-waits preview read before the swap, for the moved waits' labels. */
   waits: readonly CoordinatorPendingWait[];
+  /** What the owner named for the successor to run on; null keeps the previous coordinator's. */
+  successor?: CoordinatorHandoffSuccessor | null;
 }
 import { MergeReceiptRow, mergeReceiptRow } from '../sessions/merge-receipt';
 import {
@@ -66,6 +70,7 @@ import {
   MAX_TASK_PAGE_SIZE,
   decodeTaskPageCursor,
   encodeTaskPageCursor,
+  mayBeSweepCandidate,
 } from '../tasks/tasks.service';
 import {
   // §13.3 DEP's epoch, the same fragments the run gate and the sweeps read: the graph counts them
@@ -73,7 +78,7 @@ import {
   verificationEpochNeedsHumanSql,
   verificationEpochOpenSql,
 } from '../tasks/verification-dependency';
-import { ProjectStatus as SharedProjectStatus, uuidToBase62 } from '@orbit/shared';
+import { type CoordinatorHandoffSuccessor, ProjectStatus as SharedProjectStatus, uuidToBase62 } from '@orbit/shared';
 import {
   CRITERIA_DECISIONS,
   CreateProjectDto,
@@ -91,6 +96,8 @@ import {
 import { type PendingAddresseeRead, readPendingAddressees } from './pending-addressees';
 import { planCriterionMove, readCriterionMoveFacts, writeCriterionMove } from './criterion-move';
 import { readCriterionMoveRecord } from './criterion-move-record';
+import { readSettingChanges, type ProjectSettingChangeView } from './project-setting-change';
+import { putSettingChangeBack, readSettingChange } from './project-setting-revert';
 import { readLiveRulings } from './project-ruling';
 import { settleTaskSegmentAfterMove } from './landing-session';
 import { lockOwnerTaskGraph, orderedIds } from '../common/lock-order';
@@ -100,8 +107,11 @@ import {
   criteriaDecisionRecorded,
   criteriaProposalDiff,
   readPendingCriteriaDecisionsForOwner,
+  stillUnanswered,
   type OwnerPendingCriteriaDecisionQueue,
 } from './criteria-pending-decisions';
+import { CRITERIA_CHANGE_FIELDS, queueOwnerCardTranslation, translatedInto } from '../sessions/card-translation';
+import { translationLanguages, type TranslationLanguages } from '../sessions/turn-translation';
 import { type CriteriaEditDirection, classifyCriteriaEdit } from './criteria-edit-classification';
 import { type CriteriaDecisionReply, sendCriteriaDecisionReply } from './criteria-decision-reply';
 import {
@@ -153,11 +163,12 @@ import {
   type TaskRunOverlay,
 } from '../sessions/task-work-carrier';
 import { SessionsService, type SessionReceiveBlockedReason } from '../sessions/sessions.service';
+import { isReleased } from '../common/session-release';
 import { tellEvidenceUndecidable } from '../tasks/undecidable-evidence';
 import { CoordinatorConvergenceService } from './coordinator-convergence.service';
 import { CoordinatorEvidenceQueueService } from './coordinator-evidence-queue.service';
 import { coordinatorFuseUsage, readCoordinatorWakeups } from './coordinator-progress';
-import { openFuseEpisodeId } from './project-fuse';
+import { type OpenFuseEpisode, openFuseEpisodeId, readOpenFuseEpisodes } from './project-fuse';
 import { ProjectPanorama, readProjectPanorama } from './project-panorama';
 import { readTaskIntegrationViews } from './project-task-integration';
 import {
@@ -190,6 +201,8 @@ import {
 } from './criterion-landing-reason';
 import {
   configureProjectIntegration,
+  coordinatorLandingCheckRefusal,
+  coordinatorLandingCheckRefusalReason,
   type IntegrationReadSelectors,
   type IntegrationSettings,
   lastMainBranchView,
@@ -203,6 +216,7 @@ import {
 } from './project-integration-line';
 import {
   findMergeCheckApproval,
+  isLandingCheckField,
   isMergeCheckField,
   MERGE_CHECK_AUDIT_TYPE,
   type MergeCheckApproval,
@@ -290,6 +304,25 @@ export const COORDINATOR_MESSAGE_UNDELIVERED_CODE = 'COORDINATOR_MESSAGE_UNDELIV
 export const START_COORDINATOR_UNAVAILABLE = 'START_COORDINATOR_UNAVAILABLE';
 /** The non-code mark written from a session that does not coordinate the project (`nonCodeWriter`). */
 export const NON_CODE_COORDINATOR_ONLY = 'NON_CODE_COORDINATOR_ONLY';
+
+/**
+ * Who a session's integration write rests on (`assertIntegrationIsWrittenByItsOwner`): a card the
+ * account owner answered, or the project's coordinator writing its landing check with no card
+ * (§12.15 P-C1).
+ */
+type IntegrationSessionWrite =
+  | { by: 'CARD'; approval: MergeCheckApproval }
+  | { by: 'COORDINATOR'; sessionId: string };
+
+/** A cardless landing-check write whose session stopped coordinating the project before it landed. */
+function coordinatorNoLongerCoordinates(): ForbiddenException {
+  return new ForbiddenException({
+    statusCode: 403,
+    code: 'INTEGRATION_SETTINGS_OWNER_ONLY',
+    message: 'this session no longer coordinates the project, so it cannot change the landing check '
+      + 'without the owner’s card. Nothing was written',
+  });
+}
 
 /**
  * Which press `coordinator` is answering.
@@ -521,6 +554,9 @@ const SIDEBAR_PROJECT_SELECT = {
   status: true,
   createdAt: true,
   startedAt: true,
+  // The row's pause line and its Pause / Resume action (design §4.2 2b, §4.3).
+  pausedAt: true,
+  pausedReason: true,
   coordinatorSession: { select: COORDINATOR_ACTIVITY_SELECT },
 } satisfies Prisma.ProjectSelect;
 
@@ -681,6 +717,13 @@ function coordinatorActivityOf(
     (isSessionGenerating(session) ||
       (session.status === RunStatus.AWAITING_INPUT && session.runningSubagents.length > 0));
   return { working, lastTurnAt: session.lastTurnAt };
+}
+
+/** A sidebar row's `fuse`: never absent, so a client reads one shape whether or not it is paused. */
+function sidebarFuse(episode: OpenFuseEpisode | undefined): ProjectSidebarFuse {
+  return episode
+    ? { paused: true, episodeId: episode.id, observed: episode.observed, limit: episode.limit }
+    : { paused: false, episodeId: null, observed: null, limit: null };
 }
 
 type WithAcceptanceDefinitions = {
@@ -1222,9 +1265,17 @@ export class ProjectsService {
    *     field added to `IntegrationSettings` later is owner-only until somebody deliberately gives
    *     it a card.
    *
-   * Returns the card that authorised the write, or null when the request carried no merge check —
-   * the caller records it beside the write it is about. Async and query-free in the common cases:
-   * a session sending only a line field, or only an unwritable field, is refused without a lookup.
+   *   - One exception needs no card (§12.15 P-C1): the project's current coordinator writing only
+   *     the landing check (`landingCheckCommand`, `landingCheckTimeoutSeconds`, `landingCheck`
+   *     NONE) on a `PROJECT_BRANCH` line that has a merge check, when the owner has not written the
+   *     landing check themselves or through a card. The landing check then guards the project branch,
+   *     and the merge check still guards main. Any other case looks for the card as before. The
+   *     binding's conditions are read again under its lock, and the coordinator under the project's.
+   *
+   * Returns who the session write rests on — the card that authorised it, or the coordinator with
+   * no card — or null when the request carried no integration fields or no session. The caller
+   * records it beside the write it is about. Async and query-free in the common cases: a session
+   * sending only a line field, or only an unwritable field, is refused without a lookup.
    *
    * Checked BEFORE the update's transaction, like `status` above, so a refusal writes nothing at
    * all — not the merge check, and not the title the same request happened to carry.
@@ -1234,7 +1285,8 @@ export class ProjectsService {
     projectId: string,
     dto: UpdateProjectDto,
     actingSessionId: string | undefined,
-  ): Promise<MergeCheckApproval | null> {
+    coordinatorSessionId: string | null,
+  ): Promise<IntegrationSessionWrite | null> {
     const settings = dto.integration as Record<string, unknown> | undefined;
     if (settings === undefined) return null;
     const sessionId = actingSessionId?.trim();
@@ -1242,7 +1294,9 @@ export class ProjectsService {
     // to ask and no card to bind, so the field is theirs exactly as it was before this existed.
     if (!sessionId) return null;
 
-    const named = namedIntegrationFields(settings);
+    // `landingCheckReason` is the words of a cardless write, not a setting: it is neither refused as an
+    // owner field nor part of any card's proposal.
+    const named = namedIntegrationFields(settings).filter((field) => field !== 'landingCheckReason');
     const refused = named.filter((field) => !isMergeCheckField(field));
     const mergeCheck = named.filter(isMergeCheckField);
     if (refused.length > 0 || mergeCheck.length === 0) {
@@ -1262,6 +1316,15 @@ export class ProjectsService {
       });
     }
 
+    // P-C1: the coordinator's own landing check, with no card, where the binding allows it.
+    let cardless: string | null = null;
+    if (named.every(isLandingCheckField) && coordinatorSessionId !== null
+      && ProjectsService.sameSession(sessionId, coordinatorSessionId)) {
+      const refusal = coordinatorLandingCheckRefusal(await readProjectCodebase(this.prisma, projectId));
+      if (!refusal) return { by: 'COORDINATOR', sessionId: coordinatorSessionId };
+      cardless = coordinatorLandingCheckRefusalReason(refusal);
+    }
+
     const approval = await findMergeCheckApproval(this.prisma, { projectId, sessionId, settings });
     if (!approval) {
       throw new ForbiddenException({
@@ -1271,11 +1334,24 @@ export class ProjectsService {
           + 'confirmation card they have answered for this project, from this session, for exactly '
           + `this change (${mergeCheck.join(', ')}). No such card was found — none was filed, the `
           + 'one filed was declined or is still unanswered, or it authorised a different change — '
-          + 'so nothing was written. Call project_update with the change you want: it puts the '
+          + 'so nothing was written. '
+          + (cardless !== null
+            ? `The coordinator could set the landing check without a card, but not here: ${cardless}. `
+            : '')
+          + 'Call project_update with the change you want: it puts the '
           + 'question in front of them and performs the write once they answer',
       });
     }
-    return approval;
+    return { by: 'CARD', approval };
+  }
+
+  /** Whether an acting session id names this session, in either spelling. */
+  private static sameSession(acting: string, sessionId: string): boolean {
+    try {
+      return toUuid(acting) === sessionId;
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -1855,11 +1931,61 @@ export class ProjectsService {
     // an empty queue, so this route cannot be used to learn which project ids exist by the
     // difference between two successful answers.
     await this.assertOwned(ownerId, projectId);
-    return readPendingCriteriaDecisionsForOwner(
+    const queue = await readPendingCriteriaDecisionsForOwner(
       this.prisma as unknown as Prisma.TransactionClient,
       ownerId,
       projectId,
     );
+    // Decision 1A: a pending proposal with no translation in the owner's current language gets one queued as it
+    // is read; one already tried in this language, failed or not, is left.
+    if (queue.pending.length > 0) {
+      await translationLanguages(this.prisma, ownerId)
+        .then((langs) => {
+          if (!langs) return;
+          for (const row of queue.pending) {
+            if (!translatedInto(row.translation, langs)) this.queueProposalTranslation(ownerId, projectId, row.intentId, langs);
+          }
+        })
+        .catch((error: Error) => this.logger.warn(`queueing proposal translations failed: ${error.message}`));
+    }
+    return queue;
+  }
+
+  /**
+   * Queue the translation of one criteria proposal's words into the owner's language
+   * (sessions/card-translation.ts) while it is still a question. 0195 freezes the proposal itself, so the
+   * translation is kept in project_criteria_change_translation beside it; the owner's pending criteria
+   * decisions are then announced changed, as filing it was. Returns at once: true when it queued one.
+   */
+  queueProposalTranslation(ownerId: string, projectId: string, intentId: string, langs: TranslationLanguages): boolean {
+    return queueOwnerCardTranslation({
+      key: `criteria-change:${intentId}`,
+      read: async () => {
+        const db = this.prisma as unknown as Prisma.TransactionClient;
+        const rows = await db.projectRatifiedActionIntent.findMany({
+          where: { ownerId, projectId, effectClass: CRITERIA_WEAKENING_EFFECT_CLASS },
+          select: { id: true, action: true },
+        });
+        const open = (await stillUnanswered(db, rows)).find((row) => row.id === intentId);
+        if (!open) return null;
+        const stored = await this.prisma.projectCriteriaChangeTranslation.findUnique({
+          where: { intentId },
+          select: { translation: true },
+        });
+        const proposed = (open.action as { request?: { proposed?: unknown } } | null)?.request?.proposed;
+        return { source: { proposed }, fields: CRITERIA_CHANGE_FIELDS, translation: stored?.translation ?? null };
+      },
+      write: async (translation) => {
+        const value = translation as unknown as Prisma.InputJsonValue;
+        await this.prisma.projectCriteriaChangeTranslation.upsert({
+          where: { intentId },
+          create: { intentId, ownerId, translation: value },
+          update: { translation: value },
+        });
+        return true;
+      },
+      published: () => this.realtime?.publishForUser(ownerId, RunEventType.PROJECT_CRITERIA_DECISIONS_CHANGED, projectId),
+    }, langs);
   }
 
   /**
@@ -2072,9 +2198,10 @@ export class ProjectsService {
         // the definition's BEFORE trigger out of the assertion AND its verification method, and
         // the hash this service computes elsewhere covers the assertion alone. A `resultingSeal`
         // calculated here would be a second recipe, and the one that disagrees.
-        const resulting = standardSetVersion(criteriaFromDefinitions(
+        const resultingCriteria = criteriaFromDefinitions(
           await ProjectsService.acceptanceDefinitions(tx, projectId),
-        ));
+        );
+        const resulting = standardSetVersion(resultingCriteria);
         resultingSeal = resulting.digest;
 
         // THE CONFIRMATION MOVES WITH THE EDIT — when, and only when, it named the set this answer
@@ -2097,6 +2224,7 @@ export class ProjectsService {
         if (confirmed?.criteriaDigest === currentSeal) {
           await tx.projectStandardSetConfirmation.create({
             data: {
+              ...(await ProjectAcceptanceService.confirmationWords(tx, projectId, resultingCriteria)),
               projectId,
               ownerId,
               confirmedById: ownerId,
@@ -2823,6 +2951,7 @@ export class ProjectsService {
       mainBranchMemory,
       moveRecord,
       rulings,
+      settingChanges,
     ] = await Promise.all([
       // One lookup by primary key, not a tally of this project's tasks.
       //
@@ -2887,6 +3016,8 @@ export class ProjectsService {
       readCriterionMoveRecord(this.prisma, ownerId, id, criterionKeyOf),
       // And the owner rulings still live (coordinator handoff v2 §2): one statement, oldest first.
       readLiveRulings(this.prisma, ownerId, id),
+      // And the coordinator's cardless landing-check changes, newest first (§12.15 P-R1): one statement.
+      readSettingChanges(this.prisma, ownerId, id),
     ]);
     const landingAnswers = criterionLandingWithReasons(
       landingFacts,
@@ -2941,6 +3072,8 @@ export class ProjectsService {
       criteriaMovedOut: moveRecord.movedOut,
       // The owner rulings still live, oldest first; a superseded one is kept but not listed.
       rulings,
+      // The coordinator's cardless landing-check changes, newest first, each one the owner can revert.
+      settingChanges,
       blockers,
       integration: {
         ...projectIntegrationView(codebase, project.exceptionEscalationSeconds),
@@ -2955,7 +3088,6 @@ export class ProjectsService {
         landingAnswers,
         independence,
         standardSetConfirmation,
-        project.nonCode,
       ),
     };
   }
@@ -2995,12 +3127,15 @@ export class ProjectsService {
       select: SIDEBAR_PROJECT_SELECT,
     });
     if (projects.length === 0) return [];
-    const [rollups, attention, bindings] = await Promise.all([
+    const projectIds = projects.map((project) => project.id);
+    const [rollups, attention, bindings, fuses] = await Promise.all([
       readProjectSidebarRollups(this.prisma, ownerId),
       // The same reader the index folds, narrowed to the projects this read returns, so the rail
       // and the page cannot disagree about what waits on the reader.
       readProjectListAttention(this.prisma, ownerId, ProjectStatus.OPEN),
-      readProjectListBindings(this.prisma, projects.map((project) => project.id)),
+      readProjectListBindings(this.prisma, projectIds),
+      // One statement for the whole page, never one per project: this read is the 15-second poll.
+      readOpenFuseEpisodes(this.prisma, projectIds),
     ]);
     return projects.map(({ coordinatorSession, ...project }) => ({
       ...project,
@@ -3016,6 +3151,9 @@ export class ProjectsService {
       integration: bindings.get(project.id)?.integration ?? null,
       // The main branch the session list's landing line names; null with no repository bound.
       mainBranch: bindings.get(project.id)?.mainBranch ?? null,
+      // The daily limit's pause (design §4.2 2a), lifted by `/fuse/:episodeId/resume`; apart from
+      // `pausedAt`, which is the owner's Pause (or the older Automatic switch) and `/resume`'s.
+      fuse: sidebarFuse(fuses.get(project.id)),
     }));
   }
 
@@ -3141,6 +3279,33 @@ export class ProjectsService {
     // queue is doing is not part of what was just decided, and reading it in the transaction would
     // put two more statements under the binding's lock for a row nobody is waiting on.
     return readProjectIntegrationView(this.prisma, id, written);
+  }
+
+  /**
+   * The account owner putting one recorded landing-check change back to its old value (§12.15 P-R1). Owner
+   * only, like every integration write: a request that carries an acting session is refused whole.
+   */
+  async revertSettingChange(
+    ownerId: string,
+    id: string,
+    changeId: string,
+    actingSessionId?: string,
+  ): Promise<ProjectSettingChangeView> {
+    if (actingSessionId?.trim()) {
+      throw new ForbiddenException({
+        statusCode: 403,
+        code: 'INTEGRATION_SETTINGS_OWNER_ONLY',
+        message: 'putting a recorded landing-check change back is the account owner\'s to do, not this '
+          + 'session\'s. Nothing was written',
+      });
+    }
+    await this.assertOwned(ownerId, id);
+    const row = await readSettingChange(this.prisma, ownerId, id, changeId);
+    return withTransactionRetry(
+      this.prisma,
+      (tx) => putSettingChangeBack(tx, ownerId, id, row),
+      loggedRetry(this.logger, 'projects.revertSettingChange'),
+    );
   }
 
   /**
@@ -3297,7 +3462,8 @@ export class ProjectsService {
     // One pass over the project's graph for the whole page, never one per row: the level a task
     // sits at is a fact about the graph rather than about the row, so it cannot be answered by
     // selecting more columns of `task`.
-    const [dependencies, workStates, integrations] = await Promise.all([
+    const openIds = page.filter(mayBeSweepCandidate).map((task) => task.id);
+    const [dependencies, workStates, integrations, holds] = await Promise.all([
       this.taskDependencyFields(
         ownerId,
         projectId,
@@ -3318,6 +3484,10 @@ export class ProjectsService {
         projectId,
         page.map((task) => task.id),
       ),
+      // Why the sweep holds a row that reads Ready (the task read's `hold`, by the same read).
+      openIds.length > 0 && this.openItems
+        ? this.openItems.signInHolds(ownerId, Prisma.sql`t.id = ANY(${openIds}::uuid[])`)
+        : new Map<string, TaskSignInHold>(),
     ]);
     const items = page.map(({ _count, ...task }) => {
       const dependency = dependencies.get(task.id) ?? UNCONNECTED_TASK;
@@ -3348,6 +3518,7 @@ export class ProjectsService {
         // report dependencies" rather than as "this task has none".
         ...dependency,
         blocked: dependency.dependencyState !== 'READY',
+        hold: holds.get(task.id) ?? null,
       };
     });
     return {
@@ -3773,8 +3944,9 @@ export class ProjectsService {
   /**
    * Who writes the non-code mark on this request, or null when it carries none. The account owner
    * (no acting session) or the conversation this project is coordinated from (COORDINATOR, with its
-   * session id); any other session is refused whole before anything is written — the mark decides
-   * whether a project reads landing at all, so it is not a side effect of some task's edit.
+   * session id); any other session is refused whole before anything is written. Since revision 42
+   * (§12.15 P-M3) the mark is stored and returned but decides nothing: landing follows from the
+   * commits the project's tasks delivered.
    */
   static nonCodeWriter(
     dto: Pick<UpdateProjectDto, 'nonCode' | 'nonCodeReason'>,
@@ -3825,9 +3997,10 @@ export class ProjectsService {
     const nonCodeWriter = ProjectsService.nonCodeWriter(dto, actingSessionId, current.coordinatorSessionId);
     // The card this write rests on, when it carries a merge check. Read BEFORE the transaction
     // with the rest of the guards, so a request no card covers is refused having written nothing.
-    const mergeCheckApproval = await this.assertIntegrationIsWrittenByItsOwner(
-      ownerId, id, dto, actingSessionId,
+    const integrationWrite = await this.assertIntegrationIsWrittenByItsOwner(
+      ownerId, id, dto, actingSessionId, current.coordinatorSessionId,
     );
+    const mergeCheckApproval = integrationWrite?.by === 'CARD' ? integrationWrite.approval : null;
     refuseOwnerFieldsToToken(credential, {
       status: dto.status,
       integration: dto.integration,
@@ -3935,7 +4108,20 @@ export class ProjectsService {
         // The integration line, under its binding's own lock: rank 55, after the project row above
         // and before any criterion row below.
         if (dto.integration !== undefined) {
-          await configureProjectIntegration(tx, { ownerId, projectId: id, settings: dto.integration });
+          // A cardless write is the CURRENT coordinator's: a rotation that committed since the
+          // guard read the project leaves this session nothing to write with.
+          if (integrationWrite?.by === 'COORDINATOR'
+            && locked.coordinator_session_id !== integrationWrite.sessionId) {
+            throw coordinatorNoLongerCoordinates();
+          }
+          await configureProjectIntegration(tx, {
+            ownerId,
+            projectId: id,
+            settings: dto.integration,
+            landingCheckWriter: integrationWrite?.by === 'COORDINATOR'
+              ? { by: 'COORDINATOR', sessionId: integrationWrite.sessionId }
+              : integrationWrite?.by === 'CARD' ? { by: 'CARD' } : { by: 'OWNER' },
+          });
         }
         // Who let this merge check through, when a card did — and in the same transaction as the
         // write it is about, so a rolled-back attempt leaves no row claiming the change happened.
@@ -4084,13 +4270,17 @@ export class ProjectsService {
       // owner's own read.
       if (held) {
         this.realtime?.publishForUser(ownerId, RunEventType.PROJECT_CRITERIA_DECISIONS_CHANGED, id);
+        // And translated for the owner in the background, when their translation is on (decision 1A).
+        const { intentId } = held;
+        void translationLanguages(this.prisma, ownerId)
+          .then((langs) => { if (langs) this.queueProposalTranslation(ownerId, id, intentId, langs); })
+          .catch((error: Error) => this.logger.warn(`translating proposal ${intentId} failed to queue: ${error.message}`));
       }
       // The criteria a project states are one of the two facts its `status` is projected from, and
       // this write is the only thing that moves them — when it moves them at all. A HELD edit
       // moved none of them, so there is nothing to re-project and no reason to re-decide a column
       // the owner may have just written by hand.
-      // So is the non-code mark: a marked project's criteria are no longer withheld for landing.
-      if ((dto.acceptanceCriteriaItems !== undefined && !held) || nonCodeWriter) {
+      if (dto.acceptanceCriteriaItems !== undefined && !held) {
         await this.reprojectProjectStatus(ownerId, id);
         // And the same applied edit may have reworded or deleted a criterion some task's unanswered
         // evidence is bound to: told to whoever can file it again, after the commit.
@@ -4850,7 +5040,9 @@ export class ProjectsService {
     // coordinate, so a swap that left this one open would demote a conversation still being written
     // to — it would go on being talked to and quietly stop being able to act. Already-completed is
     // the no-op case, and the one this call reached through the ordinary route.
-    if (standing && !finished) await this.sessions.complete(ownerId, standing.id);
+    // A handoff's outgoing coordinator leaves its SubAgent runs and bg_run jobs running; their end wakes the
+    // successor (docs/coordinator-handoff-v2-design.md §1).
+    if (standing && !finished) await this.sessions.complete(ownerId, standing.id, { handingOver: handoff != null });
 
     // Ownership, soft-deletion, "is it disabled" and "is it bound to a runner" are all checked by
     // sessions.create, which is the only thing that may build a session row. Re-deriving any of
@@ -4864,9 +5056,12 @@ export class ProjectsService {
     // with a different addressee. Anything that is not one of those two refusals is a fault rather
     // than a state of this project, and is left alone.
     // A successor opens with the project's state rendered in (docs/coordinator-handoff-v2-design.md
-    // §3), read here, after the outgoing conversation is completed, so it is as of the swap.
-    const openingHandoff = handoff
-      ? { note: handoff.note, digest: await readStateDigest(this.prisma, ownerId, project.id) }
+    // §3), read here, after the outgoing conversation is completed, so it is as of the swap. Every
+    // successor, not only a handoff's: one opened by the owner's replace, a workspace switch or a
+    // recovery has no note, and the digest is all it inherits of the decisions made before it —
+    // including the owner's answers, which are no longer replayed to it one turn each (§5.2 R11).
+    const openingHandoff = handoff || project.coordinatorSessionId
+      ? { note: handoff?.note ?? null, digest: await readStateDigest(this.prisma, ownerId, project.id) }
       : null;
     let session: { id: string };
     try {
@@ -4874,6 +5069,11 @@ export class ProjectsService {
         ownerId,
         {
           workspaceId: runIn,
+          // A handoff's successor on what the owner named, when they named something: the previous
+          // coordinator's model may be the very reason for handing over. Otherwise the anchor below.
+          ...(handoff?.successor?.engine ? { engine: handoff.successor.engine } : {}),
+          ...(handoff?.successor?.provider ? { provider: handoff.successor.provider } : {}),
+          ...(handoff?.successor?.model ? { model: handoff.successor.model } : {}),
           title: coordinatorSessionTitle(project.title),
           prompt: buildCoordinatorOpening(
             project.title,
@@ -5149,10 +5349,10 @@ export class ProjectsService {
     for (const watchId of claimed.movedWatches) this.realtime?.publishWatchChanged(ownerId, watchId);
     this.sessions?.announceProjectSessionChanged?.(session.id);
     // §4.4 X-D4 (2): the conversation this project's open exceptions are owed to is now this one, so
-    // everything still waiting is handed over rather than left addressed to the conversation before.
-    // The conversation being REPLACED goes with it (§5.2 R11): an owner's answer to a question that
-    // one asked was addressed to it, and this rotation is the moment it stops being able to read it.
-    await this.openItems?.deliverOwed(id, project.coordinatorSessionId ?? undefined);
+    // everything still waiting is handed over rather than left addressed to the conversation before,
+    // with every owner answer no coordinator has read yet (§5.2 R11); the ones already read are in
+    // this conversation's opening digest instead.
+    await this.openItems?.deliverOwed(id);
     // And the evidence revisions waiting for a coordinator: handed to this one, oldest first
     // (projects/coordinator-evidence-queue.service.ts).
     await this.evidenceQueue?.deliverOwed(id);
@@ -5659,8 +5859,8 @@ export class ProjectsService {
   /**
    * Whether this conversation's run is over — the branch the delivery above takes.
    *
-   * Deliberately the same line `resume` draws for itself (`SessionsService.TERMINAL`): a terminal
-   * run is what a revive is for, and every other state a resolved coordinator can be in — live,
+   * Deliberately the same line `resume` draws for itself: a released run (the release column,
+   * common/session-release.ts) is what a revive is for, and every other state a resolved coordinator can be in — live,
    * waiting for a runner, awaiting input — is written to directly. Read here rather than inferred
    * from `receiveBlockedReasonFor`'s answer, which says whether a message CAN be delivered and not
    * which verb delivers it. A row that vanished between the resolution and this read is not read as
@@ -5669,9 +5869,9 @@ export class ProjectsService {
   private async conversationHasEnded(ownerId: string, sessionId: string): Promise<boolean> {
     const session = await this.prisma.session.findFirst({
       where: { id: sessionId, ownerId },
-      select: { status: true },
+      select: { finishedAt: true },
     });
-    return session != null && SessionsService.TERMINAL.includes(session.status);
+    return session != null && isReleased(session);
   }
 
   /** The sentence an `HttpException` carries, for the refusal that wraps it. */

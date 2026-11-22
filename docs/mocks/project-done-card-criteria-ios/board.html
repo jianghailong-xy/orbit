@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>“Is this project done?” · Done when 行 · iOS</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #e9e9ee; font: 15px/1.55 Inter, "Noto Sans SC", sans-serif; color: #1c1c1e; }
+  .b-part { width: 1480px; padding: 36px 44px; background: #f5f5f7; margin: 0 0 2px; }
+  .b-part h1 { font-size: 30px; margin: 0 0 6px; }
+  .b-part h2 { font-size: 22px; margin: 0 0 14px; }
+  .b-sub { color: #6e6e73; margin: 0 0 24px; }
+  .b-row { display: flex; gap: 40px; align-items: flex-start; }
+  .b-stage { display: flex; flex-direction: column; gap: 12px; }
+  .b-stage-title { font-size: 18px; font-weight: 700; }
+  .b-stage-title small { font-weight: 400; color: #6e6e73; font-size: 14px; display: block; }
+
+  /* phone: the owner's Pro Max, 440 × 956 pt, dark */
+  .ph { position: relative; width: 440px; height: 956px; border-radius: 54px; background: #000; overflow: hidden;
+        box-shadow: 0 0 0 10px #2c2c2e, 0 18px 40px rgba(0,0,0,.25); color: #f2f2f7;
+        font: 17px/1.35 Inter, "Noto Sans SC", sans-serif; }
+  .ph-status { height: 54px; display: flex; justify-content: space-between; align-items: center; padding: 0 34px; font-weight: 600; font-size: 16px; }
+  .ph-bar { position: absolute; top: 58px; left: 12px; right: 12px; height: 52px; display: flex; gap: 8px; z-index: 5; }
+  .ph-bar span { background: rgba(40,40,42,.92); border-radius: 26px; height: 52px; display: flex; align-items: center; padding: 0 16px; font-size: 16px; font-weight: 600; }
+  .ph-bar .q { flex: 1; }
+  .ph-bar .q b { background: #f0a43a; color: #000; border-radius: 6px; padding: 0 7px; margin-right: 10px; }
+  .ph-scroll { position: absolute; top: 118px; left: 0; right: 0; bottom: 0; overflow: hidden; padding: 0 16px; }
+  .ph-fold { position: absolute; left: 0; right: 0; bottom: 0; height: 54px; background: linear-gradient(transparent, rgba(0,0,0,.85)); z-index: 4; }
+
+  .msg { font-size: 16px; color: #e5e5ea; }
+  .msg .tr { color: #8e8e93; font-size: 13px; }
+
+  /* the card: ApprovalReviewLayout, blue tone, dark */
+  .card { position: relative; border: 1px solid #1d3557; background: #050b16; border-radius: 22px; padding: 16px; margin-top: 10px; }
+  .card-head { display: flex; gap: 10px; align-items: center; font-weight: 700; font-size: 19px; }
+  .card-head i { width: 28px; height: 28px; border-radius: 8px; background: #12305a; color: #4a90ff; display: grid; place-items: center; font-style: normal; font-size: 16px; }
+  .meta { color: #8e8e93; font-size: 14px; margin: 8px 0 0; }
+  .sh { color: #8e8e93; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .02em; margin: 16px 0 6px; }
+  .tally { color: #8e8e93; font-size: 14px; margin: -2px 0 8px; }
+  .panel { background: #2b2b2e; border-radius: 12px; }
+  .panel .r { padding: 10px 12px; position: relative; }
+  .panel .r + .r { border-top: 1px solid #3a3a3c; }
+  .prose { font-size: 16px; line-height: 1.4; }
+
+  /* today: number | words | trailing state */
+  .crit-today { display: flex; gap: 8px; align-items: flex-start; }
+  .crit-today .n { color: #8e8e93; font-size: 13px; min-width: 14px; padding-top: 2px; }
+  .crit-today .t { flex: 1; font-size: 15px; line-height: 1.38; }
+  .crit-today .s { width: 128px; text-align: right; color: #30d158; font-size: 13px; font-weight: 600; }
+  .band { height: 150px; }
+
+  /* after: number | words, state under them */
+  .crit { display: flex; gap: 8px; align-items: baseline; }
+  .crit .n { color: #8e8e93; font-size: 13px; min-width: 14px; font-variant-numeric: tabular-nums; }
+  .crit .body { flex: 1; min-width: 0; }
+  .crit .t { font-size: 15px; line-height: 1.38; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+  .crit.open .t { -webkit-line-clamp: unset; display: block; }
+  .crit .s { color: #30d158; font-size: 13px; font-weight: 600; margin-top: 4px; display: flex; gap: 4px; align-items: baseline; }
+  .crit .s.warn { color: #ffd60a; }
+  .crit .s.unmet { color: #ff453a; }
+  .crit .s em { font-style: normal; }
+  .check { color: #8e8e93; font-size: 14px; margin-top: 12px; }
+  .check b { color: #30d158; }
+  .explain { font-size: 16px; line-height: 1.4; margin-top: 10px; }
+  .btns { display: flex; gap: 10px; margin-top: 14px; }
+  .btns span { flex: 1; text-align: center; border-radius: 22px; padding: 11px 0; font-weight: 600; font-size: 16px; }
+  .btns .p { background: #0a84ff; color: #fff; }
+  .btns .s2 { background: #2c2c2e; color: #0a84ff; }
+
+  /* marks */
+  .b-mk { position: absolute; z-index: 9; width: 26px; height: 26px; border-radius: 13px; background: #ff3b30; color: #fff;
+          font: 700 15px/26px Inter, sans-serif; text-align: center; box-shadow: 0 0 0 2px #fff; }
+  .b-ring { position: absolute; z-index: 8; border: 2.5px dashed #ff3b30; border-radius: 10px; pointer-events: none; }
+
+  .b-notes { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 40px; }
+  .b-note { display: flex; gap: 12px; align-items: flex-start; }
+  .b-note .b-num { flex: none; width: 28px; height: 28px; border-radius: 14px; background: #ff3b30; color: #fff; font-weight: 700; text-align: center; line-height: 28px; }
+  .b-note .b-num.ok { background: #34c759; }
+  .b-note p { margin: 0; }
+  .b-note code, .b-part code { font: 13px "JetBrains Mono", "DejaVu Sans Mono", monospace; background: #e5e5ea; padding: 1px 5px; border-radius: 4px; }
+  .b-ab { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .b-ab > div { background: #fff; border-radius: 14px; padding: 18px 22px; border: 2px solid #d1d1d6; }
+  .b-ab > div.rec { border-color: #34c759; }
+  .b-ab h3 { margin: 0 0 8px; font-size: 18px; }
+  .b-tag { display: inline-block; background: #34c759; color: #fff; font-size: 13px; border-radius: 6px; padding: 0 8px; margin-left: 8px; vertical-align: 2px; }
+  .b-part ol, .b-part ul { margin: 0; padding-left: 22px; }
+  .b-part li { margin: 4px 0; }
+  .ubub { align-self: flex-end; background: #2c2c2e; border-radius: 20px; padding: 10px 16px; margin: 14px 0; font-size: 16px; }
+  .card.sm { padding: 14px; margin-top: 12px; }
+  .card.sm .meta { margin-top: 6px; }
+  .sm-div { height: 1px; background: #1d3557; margin: 12px 0 10px; }
+  .sm-go { color: #0a84ff; font-weight: 600; font-size: 15px; display: flex; justify-content: space-between; }
+  .composer { position: absolute; left: 12px; right: 12px; bottom: 30px; height: 52px; border-radius: 26px; background: #1c1c1e;
+              display: flex; align-items: center; justify-content: space-between; padding: 0 8px 0 18px; color: #8e8e93; font-size: 16px; }
+  .composer b { width: 36px; height: 36px; border-radius: 18px; background: #3a3a3c; color: #8e8e93; display: grid; place-items: center; }
+  .sheet { position: absolute; top: 62px; left: 0; right: 0; bottom: 0; background: #1c1c1e; border-radius: 38px 38px 0 0; overflow: hidden; }
+  .grab { width: 40px; height: 5px; border-radius: 3px; background: #48484a; margin: 7px auto 0; }
+  .nav { height: 50px; display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; padding: 0 14px; }
+  .nav b { text-align: center; font-size: 17px; }
+  .nav .x { position: relative; width: 36px; height: 36px; border-radius: 18px; background: #2c2c2e; display: grid; place-items: center; font-size: 15px; color: #d1d1d6; }
+  .sheet-body { position: absolute; top: 62px; left: 0; right: 0; bottom: 104px; overflow: hidden; padding: 4px 16px 0; }
+  .sheet-body.bottom { display: flex; flex-direction: column; justify-content: flex-end; padding-bottom: 14px; }
+  .sheet-body .panel { background: #2c2c2e; }
+  .sheet-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 104px; padding: 12px 16px 0; background: rgba(28,28,30,.96); border-top: 1px solid #38383a; }
+</style>
+</head>
+<body>
+
+<section class="b-part" id="part-1">
+  <h1>“Is this project done?” 卡片 · Done when 的每一行（iOS）</h1>
+  <p class="b-sub">三台手机滚到同一位置：卡片顶端贴着顶栏下沿，看一屏里能读到什么。数据为示例（仓库公开），长度照你截图里那张卡的六条标准。改后 ②③ 的卡片内容出现在弹窗里（下一节）；会话里只剩小卡片。</p>
+  <div class="b-row">
+    <div class="b-stage">
+      <div class="b-stage-title">① 今天<small>你的截图：状态挤在右栏，行高算错</small></div>
+      <div class="ph" id="ph-today">
+        <div class="ph-status"><span>9:44</span><span>􀙇 51</span></div>
+        <div class="ph-bar"><span>‹</span><span class="q"><b>?</b>1 open questi… ⌄</span><span>▦ 30 ···</span></div>
+        <div class="ph-scroll">
+          <div class="msg">The release watcher will call me when the run finishes, and I'll report each job's result.<div class="tr">Translated</div></div>
+          <div class="card" style="margin-top:-62px;background:rgba(5,11,22,.55)">
+            <i class="b-mk" style="left:-12px;top:14px">1</i>
+            <div class="card-head"><i>✓</i>Is this project done?</div>
+            <div class="meta">CSV export for reports · asked by the coordinator · waiting 1h 26m</div>
+            <div class="sh">Coordinator’s call</div>
+            <div class="panel"><div class="r prose">Done. All six criteria are met, and the project branch merged into main as 4f2a91c. That commit is deployed to production (health ok, the export route answers), and clients v0.4.2 are released (DMG, TestFlight, Android; release run all green).</div></div>
+            <div class="sh">Done when · 6 criteria</div>
+            <div class="tally">6 met · 5 landed on main</div>
+            <div class="panel">
+              <div class="r">
+                <div class="band"></div>
+                <i class="b-mk" style="right:8px;top:40px">2</i>
+                <div class="crit-today">
+                  <span class="n">1</span>
+                  <span class="t">The export endpoint (GET /api/reports/:id/export.csv) never carries a column the matching report table does not: every column passes the same visibility predicate as the table’s paged read, hidden columns stay hidden for viewers without the reports.read-hidden scope, and a column added after the export started is not emitted mid-file.</span>
+                  <span class="s" style="position:relative">met · On the project branch<i class="b-mk" style="right:-6px;top:44px">3</i></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="ph-fold"></div>
+      </div>
+    </div>
+
+    <div class="b-stage">
+      <div class="b-stage-title">② 改后 · 默认态<small>状态挪到文字下方；每条最多 3 行</small></div>
+      <div class="ph" id="ph-after">
+        <div class="ph-status"><span>9:44</span><span>􀙇 51</span></div>
+        <div class="ph-bar"><span>‹</span><span class="q"><b>?</b>1 open questi… ⌄</span><span>▦ 30 ···</span></div>
+        <div class="ph-scroll">
+          <div class="msg">The release watcher will call me when the run finishes, and I'll report each job's result.<div class="tr">Translated</div></div>
+          <div class="card">
+            <i class="b-mk" style="left:-12px;top:-14px">4</i>
+            <div class="card-head"><i>✓</i>Is this project done?</div>
+            <div class="meta">CSV export for reports · asked by the coordinator · waiting 1h 26m</div>
+            <div class="sh">Coordinator’s call</div>
+            <div class="panel"><div class="r prose">Done. All six criteria are met, and the project branch merged into main as 4f2a91c. That commit is deployed to production (health ok, the export route answers), and clients v0.4.2 are released (DMG, TestFlight, Android; release run all green).</div></div>
+            <div class="sh">Done when · 6 criteria</div>
+            <div class="tally">6 met · 5 landed on main</div>
+            <div class="panel">
+              <div class="r"><i class="b-mk" style="right:8px;top:8px">5</i><div class="crit"><span class="n">1</span><div class="body">
+                <div class="t">The export endpoint (GET /api/reports/:id/export.csv) never carries a column the matching report table does not: every column passes the same visibility predicate as the table’s paged read, hidden columns stay hidden for viewers without the reports.read-hidden scope, and a column added after the export started is not emitted mid-file.</div>
+                <div class="s" style="position:relative"><em>✓</em>Met · On the project branch<i class="b-mk" style="right:-40px;top:-4px">6</i></div></div></div></div>
+              <div class="r"><div class="crit"><span class="n">2</span><div class="body">
+                <div class="t">Large reports stream: a 2 million-row report starts sending within 2 seconds and the apiserver’s memory stays under 300 MB during the export, measured on the staging dataset with three concurrent exports.</div>
+                <div class="s"><em>✓</em>Met · on main</div></div></div></div>
+              <div class="r"><div class="crit"><span class="n">3</span><div class="body">
+                <div class="t">Dates, numbers and empty values are written the same way on every client: ISO 8601 in UTC, a dot decimal separator regardless of locale, and an empty field (not the string null) for a missing value; covered by fixture tests on web, iOS and Android.</div>
+                <div class="s"><em>✓</em>Met · on main</div></div></div></div>
+              <div class="r"><div class="crit"><span class="n">4</span><div class="body">
+                <div class="t">The web, macOS, iOS and Android report pages each offer Export CSV in the report’s overflow menu, disabled with a reason while the report is still loading.</div>
+                <div class="s"><em>✓</em>Met · on main</div></div></div></div>
+              <div class="r"><div class="crit"><span class="n">5</span><div class="body">
+                <div class="t">An export the viewer cancels stops its database query within 5 seconds, and no partial file is left in the download store.</div>
+                <div class="s"><em>✓</em>Met · on main</div></div></div></div>
+              <div class="r"><div class="crit"><span class="n">6</span><div class="body">
+                <div class="t">The public guide explains the export, its column rules and its size limit, and docs:check passes.</div>
+                <div class="s"><em>✓</em>Met · on main</div></div></div></div>
+            </div>
+            <div class="check"><b>●</b> Orbit checked: criteria you confirmed on Nov 16 · no open items · no landings in flight</div>
+          </div>
+        </div>
+        <div class="ph-fold"></div>
+      </div>
+    </div>
+
+    <div class="b-stage">
+      <div class="b-stage-title">③ 点开第 1 条<small>再点一次收回；其余几条不动</small></div>
+      <div class="ph" id="ph-open">
+        <div class="ph-status"><span>9:44</span><span>􀙇 51</span></div>
+        <div class="ph-bar"><span>‹</span><span class="q"><b>?</b>1 open questi… ⌄</span><span>▦ 30 ···</span></div>
+        <div class="ph-scroll" style="padding-top:0">
+          <div class="card" style="margin-top:-300px">
+            <div class="card-head"><i>✓</i>Is this project done?</div>
+            <div class="meta">CSV export for reports · asked by the coordinator · waiting 1h 26m</div>
+            <div class="sh">Coordinator’s call</div>
+            <div class="panel"><div class="r prose">Done. All six criteria are met, and the project branch merged into main as 4f2a91c. That commit is deployed to production (health ok, the export route answers), and clients v0.4.2 are released (DMG, TestFlight, Android; release run all green).</div></div>
+            <div class="sh">Done when · 6 criteria</div>
+            <div class="tally">6 met · 5 landed on main</div>
+            <div class="panel">
+              <div class="r"><i class="b-mk" style="right:8px;top:8px">7</i><div class="crit open"><span class="n">1</span><div class="body">
+                <div class="t">The export endpoint (GET /api/reports/:id/export.csv) never carries a column the matching report table does not: every column passes the same visibility predicate as the table’s paged read, hidden columns stay hidden for viewers without the reports.read-hidden scope, and a column added after the export started is not emitted mid-file.</div>
+                <div class="s"><em>✓</em>Met · On the project branch</div></div></div></div>
+              <div class="r"><div class="crit"><span class="n">2</span><div class="body">
+                <div class="t">Large reports stream: a 2 million-row report starts sending within 2 seconds and the apiserver’s memory stays under 300 MB during the export, measured on the staging dataset with three concurrent exports.</div>
+                <div class="s"><em>✓</em>Met · on main</div></div></div></div>
+              <div class="r"><div class="crit"><span class="n">3</span><div class="body">
+                <div class="t">Dates, numbers and empty values are written the same way on every client: ISO 8601 in UTC, a dot decimal separator regardless of locale, and an empty field (not the string null) for a missing value; covered by fixture tests on web, iOS and Android.</div>
+                <div class="s"><em>✓</em>Met · on main</div></div></div></div>
+              <div class="r"><div class="crit"><span class="n">4</span><div class="body">
+                <div class="t">The web, macOS, iOS and Android report pages each offer Export CSV in the report’s overflow menu, disabled with a reason while the report is still loading.</div>
+                <div class="s"><em>✓</em>Met · on main</div></div></div></div>
+              <div class="r"><div class="crit"><span class="n">5</span><div class="body">
+                <div class="t">An export the viewer cancels stops its database query within 5 seconds, and no partial file is left in the download store.</div>
+                <div class="s"><em>✓</em>Met · on main</div></div></div></div>
+              <div class="r"><div class="crit"><span class="n">6</span><div class="body">
+                <div class="t">The public guide explains the export, its column rules and its size limit, and docs:check passes.</div>
+                <div class="s"><em>✓</em>Met · on main</div></div></div></div>
+            </div>
+            <div class="check"><b>●</b> Orbit checked: criteria you confirmed on Nov 16 · no open items · no landings in flight</div>
+            <div class="explain">Recording it done is yours. Orbit keeps your record — a later check won’t reopen the project unless the criteria change or one of their tasks is reopened.</div>
+            <div class="btns"><span class="p">Record as done</span><span class="s2">Not yet…</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="b-part" id="part-1b">
+  <h1>会话里：小卡片，点开是弹窗</h1>
+  <p class="b-sub">会话里只留一张小卡片；点它（或点顶栏的 “1 open question”）从底部弹出整张卡，Record as done / Not yet… 钉在弹窗底部，随时按得到。弹窗内的卡片内容就是上一节的 ②③。</p>
+  <div class="b-row">
+    <div class="b-stage">
+      <div class="b-stage-title">④ 会话里 · 小卡片<small>标题 + 项目与汇总一行 + “View details &amp; act ›”</small></div>
+      <div class="ph">
+        <div class="ph-status"><span>9:44</span><span>􀙇 51</span></div>
+        <div class="ph-bar"><span>‹</span><span class="q"><b>?</b>1 open questi… ⌄</span><span>▦ 30 ···</span></div>
+        <i class="b-mk" style="left:52px;top:96px">11</i>
+        <div class="ph-scroll" style="display:flex;flex-direction:column;justify-content:flex-end;padding-bottom:104px">
+          <div class="msg">Merged the project branch into main as 4f2a91c and deployed it: health is ok and the export route answers on production.</div>
+          <div class="ubub">Release the clients too.</div>
+          <div class="msg">Clients v0.4.2 are released: the DMG, the TestFlight build and the Android APK, all on the same GitHub Release. Older clients keep polling, so anyone who hasn’t updated is unaffected.</div>
+          <div class="msg" style="margin-top:12px">The release watcher will call me when the run finishes, and I'll report each job's result.<div class="tr">Translated</div></div>
+          <div class="card sm" style="position:relative">
+            <i class="b-mk" style="left:-12px;top:-14px">8</i>
+            <div class="card-head"><i>✓</i>Is this project done?</div>
+            <div class="meta">CSV export for reports · 6 met · 5 landed on main</div>
+            <div class="sm-div"></div>
+            <div class="sm-go">View details &amp; act<span>›</span></div>
+          </div>
+        </div>
+        <div class="composer"><span>Message the coordinator…</span><b>↑</b></div>
+      </div>
+    </div>
+
+    <div class="b-stage">
+      <div class="b-stage-title">⑤ 点开 · 弹窗<small>整张卡在弹窗里滚动；按钮钉在底部</small></div>
+      <div class="ph">
+        <div class="ph-status"><span>9:44</span><span>􀙇 51</span></div>
+        <div class="sheet">
+          <div class="grab"></div>
+          <div class="nav"><span></span><b>Is this project done?</b><span class="x">✕<i class="b-mk" style="right:-12px;top:-12px">9</i></span></div>
+          <div class="sheet-body" id="sheet-top">
+            <div class="meta" style="margin-top:0">CSV export for reports · asked by the coordinator · waiting 1h 26m</div>
+            <div class="sh">Coordinator’s call</div>
+            <div class="panel"><div class="r prose">Done. All six criteria are met, and the project branch merged into main as 4f2a91c. That commit is deployed to production (health ok, the export route answers), and clients v0.4.2 are released (DMG, TestFlight, Android; release run all green).</div></div>
+            <div class="sh">Done when · 6 criteria</div>
+            <div class="tally">6 met · 5 landed on main</div>
+            <div class="panel crit-panel"></div>
+          </div>
+          <div class="sheet-bar"><div class="btns" style="position:relative;margin:0"><span class="p">Record as done</span><span class="s2">Not yet…</span><i class="b-mk" style="right:-14px;top:-16px">10</i></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="b-stage">
+      <div class="b-stage-title">⑥ 弹窗滚到底<small>Orbit checked 与说明；按钮位置不变</small></div>
+      <div class="ph">
+        <div class="ph-status"><span>9:44</span><span>􀙇 51</span></div>
+        <div class="sheet">
+          <div class="grab"></div>
+          <div class="nav"><span></span><b>Is this project done?</b><span class="x">✕</span></div>
+          <div class="sheet-body bottom">
+            <div class="panel crit-panel"></div>
+            <div class="check"><b>●</b> Orbit checked: criteria you confirmed on Nov 16 · no open items · no landings in flight</div>
+            <div class="explain">Recording it done is yours. Orbit keeps your record — a later check won’t reopen the project unless the criteria change or one of their tasks is reopened.</div>
+          </div>
+          <div class="sheet-bar"><div class="btns" style="margin:0"><span class="p">Record as done</span><span class="s2">Not yet…</span></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+<script>
+  // The six rows of phone ② in the sheets too: one source, so the frames cannot drift apart.
+  const rows = document.querySelectorAll('#ph-after .panel')[1].innerHTML.replace(/<i class="b-mk"[^>]*>\d+<\/i>/g, '');
+  document.querySelectorAll('.crit-panel').forEach((p) => { p.innerHTML = rows; });
+</script>
+
+<section class="b-part" id="part-2">
+  <h2>标注</h2>
+  <div class="b-notes">
+    <div class="b-note"><span class="b-num">1</span><p><b>今天：卡片压在上一条消息上。</b>卡头 “Is this project done?” 和上一条回复的最后两行、“Translated” 叠在一起——卡片实际高度比列表给它的位置高，往上溢出。</p></div>
+    <div class="b-note"><span class="b-num ok">4</span><p><b>改后：卡片落在自己的位置上。</b>行里不再有两段并排的可换行文字，列表量出的高度和画出来的一致，卡片不再盖住上一条。</p></div>
+    <div class="b-note"><span class="b-num">2</span><p><b>今天：第 1 条上方一大块空白</b>（截图里约 90 pt）。同一个原因：行高量大了，内容在多出的高度里被纵向居中。</p></div>
+    <div class="b-note"><span class="b-num ok">5</span><p><b>改后：每条最多 3 行</b>，编号与首行基线对齐。卡片顶端贴着顶栏时，一屏读到第 4 条；今天一屏只读到第 1 条的一半。</p></div>
+    <div class="b-note"><span class="b-num">3</span><p><b>今天：状态占右侧一栏</b>（“met · On the project branch” 折成两行），把标准正文挤进约 60% 的宽度，每条拉到 10 行以上。</p></div>
+    <div class="b-note"><span class="b-num ok">6</span><p><b>改后：状态是正文下方的一行</b>：图标 + 文字，绿 = met，红 ○ = not met，黄 ! = 警告；首字母大写（只改显示，三端共用的文案不动）。确认行和 Confirm… 按钮也排在它下面。</p></div>
+    <div class="b-note"><span class="b-num ok">7</span><p><b>点正文展开全文</b>，再点收回。只展开被点的那一条；状态行和按钮不受影响。</p></div>
+    <div class="b-note"><span class="b-num ok">8</span><p><b>会话里只占约 130 pt 的小卡片</b>：标题、项目名与汇总（“6 met · 5 landed on main”）、“View details &amp; act ›”。和开项目卡、确认卡等已有的预览卡同一个样子，不新造外观。点卡片任意处打开弹窗。</p></div>
+    <div class="b-note"><span class="b-num ok">9</span><p><b>弹窗</b>：标题在导航栏，右上 ✕ 关闭，下拉也能关。卡片内容（Coordinator’s call、Done when、Orbit checked、说明）在弹窗里滚动。</p></div>
+    <div class="b-note"><span class="b-num ok">10</span><p><b>Record as done / Not yet… 钉在弹窗底部</b>：不论滚到哪都按得到；今天在会话里要滑约三屏才到。点 Not yet… 后输入框出现在内容末尾，按钮换成 Send to coordinator / Back。记录成功后弹窗里换成回执，会话里留下的回执照旧整张显示。</p></div>
+    <div class="b-note"><span class="b-num ok">11</span><p><b>顶栏 “1 open question”</b> 现在直接打开同一个弹窗，和其他预览卡一致；今天它只把会话滚到卡片处。</p></div>
+  </div>
+  <p class="b-sub" style="margin:22px 0 0">顺带看到的（不是排版问题，不在这次改动里）：汇总写 “5 landed on main”、底部写 “In main”，第 1 条却是 “On the project branch”。这一条的落地状态来自服务端数据；如果整个项目分支已合入 main，它可能是旧数据。</p>
+</section>
+
+<section class="b-part" id="part-3">
+  <h2>已定 · 你选了 A（2026-11-18）</h2>
+  <div class="b-ab">
+    <div class="rec">
+      <h3>方案 A：折叠到 3 行，点开看全文<span class="b-tag">已选</span></h3>
+      <ul>
+        <li>弹窗里一屏读到第 4 条，约一屏半读完六条和状态。</li>
+        <li>要细看哪条就点哪条；第 1 条这种长标准才需要点。</li>
+        <li>代价：判断“做完没有”时，被折掉的半句需要多点一下。</li>
+      </ul>
+    </div>
+    <div>
+      <h3>方案 B：不折叠，始终显示全文</h3>
+      <ul>
+        <li>只做“状态挪到下方”这一项；正文宽度回到满宽，每条从 10+ 行降到约 6 行。</li>
+        <li>不需要点击，没有隐藏内容。</li>
+        <li>代价：六条长标准要滑约两屏半才读完（按钮已钉在弹窗底部，不受影响）。</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="b-part" id="part-4">
+  <h2>落地（按代价排）</h2>
+  <ol>
+    <li><b>iOS / macOS 的行</b>：<code>ProjectDoneCards.swift</code> 的 <code>criterionRow</code>——状态挪到正文下方、3 行折叠、点击展开。文案、计数不动。</li>
+    <li><b>iOS / macOS 的小卡片 + 弹窗</b>：<code>ApprovalCards.swift</code> 删掉一行强制整张显示的代码，卡片走已有的“预览 → 弹窗”路径；<code>ConsoleView.swift</code> 让 “1 open question” 打开弹窗；两个接线测试跟着改。OrbitKit 全套 5528 个测试在 Linux 通过；SwiftUI 本身在 Linux 编不了，没在真机上看过（可推分支跑 macOS/iOS 构建，约 25 分钟）。</li>
+    <li><b>Android（与 iOS 一致）</b>：<code>DoneCriterionRow</code> 状态挪到正文下方、3 行折叠、点击展开；会话里 <code>CoordinatorDoneCard</code> 用已有的预览卡（<code>CardPreviewView</code>），点开是底部弹窗，按钮钉在底部；顶栏 “open question” 打开同一个弹窗。</li>
+    <li><b>Web</b>：桌面宽度下右栏状态不挤，暂不动。</li>
+  </ol>
+</section>
+
+</body>
+</html>

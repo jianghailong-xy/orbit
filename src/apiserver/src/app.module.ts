@@ -43,6 +43,9 @@ import { WikiModule } from './wiki/wiki.module';
 import { RunnerAttentionFixModule } from './runners/runner-attention-fix.module';
 import { WikiChatModule } from './wiki/wiki-chat.module';
 import { ManagedRunnerGateModule } from './managed-runners/managed-runner-gate';
+import { ManagedRunnerBrowserGateModule } from './managed-runners/managed-runner-browser-gate';
+import { ManagedRunnerBrowserModule } from './managed-runners/browser-state';
+import { BrowserViewerModule } from './managed-runners/browser-viewer';
 import { ManagedRunnerModule } from './managed-runners/managed-runner.module';
 import { FeishuModule } from './feishu/feishu.module';
 import { FeishuActionsModule } from './feishu/feishu-actions.module';
@@ -52,6 +55,7 @@ import { TerminalsModule } from './terminals/terminals.module';
 import { ScheduleRunsModule } from './schedules/schedule-runs.module';
 import { SchedulesModule } from './schedules/schedules.module';
 import { ScheduleDoorsModule } from './schedules/schedule-doors.module';
+import { ConditionsModule } from './conditions/conditions.module';
 
 @Module({
   imports: [
@@ -102,7 +106,12 @@ import { ScheduleDoorsModule } from './schedules/schedule-doors.module';
     // Fix with an agent: its own module, as it makes sessions through SessionsService (runner-attention-fix.module.ts).
     RunnerAttentionFixModule,
     ManagedRunnerGateModule,
+    // The browser switch over it (docs/runner-browser-design.md §2).
+    ManagedRunnerBrowserGateModule,
     ManagedRunnerModule,
+    // The browser's viewer, a WebSocket that listens only while that switch is on (managed-runners/browser-viewer.ts).
+    BrowserViewerModule,
+    ManagedRunnerBrowserModule,
     // Each account's own Feishu (Lark) app, and the administrators' switch for them (docs/feishu-bot-design.md).
     FeishuModule,
     FeishuActionsModule,
@@ -117,6 +126,8 @@ import { ScheduleDoorsModule } from './schedules/schedule-doors.module';
     ScheduleRunsModule,
     // Its REST doors: read, control, and the owner's press on a card (schedules/schedules.controller.ts).
     ScheduleDoorsModule,
+    // Conditions (docs/condition-triggers-design.md): the silence worker and the owner's read.
+    ConditionsModule,
   ],
   // Registered here rather than in main.ts (where WorkspaceAliasInterceptor is) because it needs
   // PrismaService injected, which only the DI container can provide.

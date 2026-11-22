@@ -314,6 +314,9 @@ public struct RunnerEngineHealth: Codable, Equatable, Sendable, Identifiable {
     /// Kimi only: the site its login is on, `mainland-cn` (kimi.com) or `global` (kimi.ai) — see
     /// `KimiSite`. Absent before the first Kimi sign-in on that machine, and from an older runner.
     public let kimiRegion: String?
+    /// OpenCode only: its CLI listed no provider key, stored or in its environment. `auth` stays
+    /// unknown — OpenCode's free models need none. Absent otherwise, and from an older runner.
+    public let openCodeNoKey: Bool?
     /// The Default the owner removed from Orbit on this runner (`DELETE /runners/:id/accounts/:engine/
     /// default`), which `POST …/default/restore` brings back (shared `RunnerEngineHealth.removedDefault`).
     /// Present only while the runner reports another account of this engine: Default is then left out
@@ -329,8 +332,9 @@ public struct RunnerEngineHealth: Codable, Equatable, Sendable, Identifiable {
                 accounts: [RunnerEngineAccount]? = nil, update: RunnerEngineUpdate? = nil,
                 authSource: String? = nil, planUsage: PlanUsageSnapshot? = nil,
                 installationError: String? = nil, dsh: DshRuntimeHealth? = nil, kimiRegion: String? = nil,
-                removedDefault: RunnerRemovedDefault? = nil) {
+                removedDefault: RunnerRemovedDefault? = nil, openCodeNoKey: Bool? = nil) {
         self.engine = engine
+        self.openCodeNoKey = openCodeNoKey
         self.installationError = installationError
         self.dsh = dsh
         self.kimiRegion = kimiRegion
@@ -415,11 +419,17 @@ public struct RunnerEngineAccount: Codable, Equatable, Sendable, Identifiable {
     /// Kimi only: the site this account's login is on, `mainland-cn` (kimi.com) or `global` (kimi.ai)
     /// — each account's own (`KimiSite.site(of:)`). Absent before its first sign-in.
     public let kimiRegion: String?
+    /// Claude Code only: this added slot holds the account a Set as default moved out of ~/.claude.
+    /// Unless the owner renamed it, it has no `name` and is called by `email`, else "Former default".
+    public let formerDefault: Bool?
+    /// With `formerDefault`: the account's email as Claude reported it at the swap.
+    public let email: String?
 
     public init(id: String, name: String? = nil, auth: String? = nil,
                 home: String? = nil, codexHome: String? = nil,
                 fingerprintPrefix: String? = nil, pausedUntil: String? = nil,
-                loginExpiresAt: String? = nil, kimiRegion: String? = nil, activeSessions: Int? = nil) {
+                loginExpiresAt: String? = nil, kimiRegion: String? = nil, activeSessions: Int? = nil,
+                formerDefault: Bool? = nil, email: String? = nil) {
         self.id = id
         self.name = name
         self.auth = auth
@@ -430,6 +440,8 @@ public struct RunnerEngineAccount: Codable, Equatable, Sendable, Identifiable {
         self.loginExpiresAt = loginExpiresAt
         self.kimiRegion = kimiRegion
         self.activeSessions = activeSessions
+        self.formerDefault = formerDefault
+        self.email = email
     }
 }
 
@@ -572,6 +584,69 @@ public struct RunnerSelfUpdatePostponeResponse: Codable, Equatable, Sendable {
 /// the check was asked for (shared `ClaudeRegionCheckRequest`); the runner checks once per value.
 public struct ClaudeRegionCheckRequest: Codable, Equatable, Sendable {
     public let requestedAt: String?
+}
+
+/// A Claude process on either folder of a Set as default that is not an Orbit session (a terminal
+/// `claude`) — shared `ClaudeAccountSwapForeignProcess`.
+public struct ClaudeAccountSwapForeignProcess: Codable, Equatable, Sendable {
+    public let pid: Int
+    public let command: String
+
+    public init(pid: Int, command: String) {
+        self.pid = pid
+        self.command = command
+    }
+}
+
+/// Browser-facing view of a runner's Set as default relay for Claude Code (shared
+/// `RunnerClaudeAccountSwapState`): which added account is becoming the Default, and where that stands.
+public struct RunnerClaudeAccountSwapState: Codable, Equatable, Sendable {
+    /// The added account being made the Default, or null when nothing was asked.
+    public let account: String?
+    public let status: String?
+    /// The reason it failed; null otherwise.
+    public let message: String?
+    /// With `pending`: the sessions with a turn in progress the swap waits on. Empty otherwise, and from
+    /// an older server; one entry this build can't read is dropped rather than failing the runner.
+    public let waitingOn: [RunnerAccountRemoveSession]
+    /// With `pending`: Claude processes on either folder that are not Orbit sessions. Empty otherwise.
+    public let foreignProcesses: [ClaudeAccountSwapForeignProcess]
+
+    public init(account: String?, status: String?, message: String?,
+                waitingOn: [RunnerAccountRemoveSession] = [],
+                foreignProcesses: [ClaudeAccountSwapForeignProcess] = []) {
+        self.account = account
+        self.status = status
+        self.message = message
+        self.waitingOn = waitingOn
+        self.foreignProcesses = foreignProcesses
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case account, status, message, waitingOn, foreignProcesses
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        account = try c.decodeIfPresent(String.self, forKey: .account)
+        status = try c.decodeIfPresent(String.self, forKey: .status)
+        message = try c.decodeIfPresent(String.self, forKey: .message)
+        waitingOn = ((try? c.decodeIfPresent([LossyDecodable<RunnerAccountRemoveSession>].self,
+                                             forKey: .waitingOn)) ?? [])
+            .compactMap(\.value)
+        foreignProcesses = ((try? c.decodeIfPresent([LossyDecodable<ClaudeAccountSwapForeignProcess>].self,
+                                                    forKey: .foreignProcesses)) ?? [])
+            .compactMap(\.value)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encodeIfPresent(account, forKey: .account)
+        try c.encodeIfPresent(status, forKey: .status)
+        try c.encodeIfPresent(message, forKey: .message)
+        try c.encode(waitingOn, forKey: .waitingOn)
+        try c.encode(foreignProcesses, forKey: .foreignProcesses)
+    }
 }
 
 /// Browser-facing account-removal relay. Raw engine/status strings preserve forward compatibility.

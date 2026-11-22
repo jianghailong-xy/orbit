@@ -415,28 +415,12 @@ private struct CompactSections: View {
             // and the line a rewrite floats (docs/wiki-chat-design.md §9).
             .wikiChatHost()
 
-        // SCHEDULED — the timeline (board 01 ②); a row's detail is the page's own bottom panel, and a run's
-        // session is pushed over the page, so back returns to the schedule it ran for.
+        // SCHEDULED — the timeline and its bottom panel.
         case .scheduled:
-            NavigationStack(path: $model.nav.path) {
+            NavigationStack {
                 ScheduledPage()
                     .drawerToggle(open: openDrawer)
                     .refreshable { await model.scheduled?.load() }
-                    .navigationDestination(for: NavNode.self) { node in
-                        switch node {
-                        case .console(let sessionID, _):
-                            AgentConsolePage(sessionID: sessionID)
-                                .environment(\.opensPagesOverConsole, true)
-                        // What a console opens over itself, as on the Agents stack.
-                        case .taskDetail(let taskID):       TaskDetailPage(taskID: taskID)
-                        case .projectDetail(let projectID, _): ProjectDetailView(projectID: projectID)
-                        case .createdTasks(let sessionID):  CreatedTasksPage(sessionID: sessionID)
-                        case .watches:                      FollowingListView(rowNavigation: .push)
-                        case .watchDetail(let watchID):     WatchDetailView(watchID: watchID)
-                        case .wikiEntry(let entryID):       WikiEntryView(entryID: entryID, rowNavigation: .push)
-                        default:                            EmptyView()
-                        }
-                    }
             }
 
         // RUNNERS — the Machines & models page → a machine's record → an engine's or its name's page, a
@@ -1137,12 +1121,22 @@ struct NavigationDrawer: View {
             Divider()
                 .padding(.leading, DrawerMetrics.textLeading)
                 .padding(.trailing, DrawerMetrics.hInset)
-            Text(AppSection.agents.title)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .padding(.leading, DrawerMetrics.textLeading)
-                .padding(.top, 14)
-                .padding(.bottom, 4)
+            // New workspace on any machine (docs/mocks/new-workspace-form/02-apple-entry, owner A): the + at the
+            // group's trailing edge, a menu of machines or the one machine's page.
+            HStack(spacing: 8) {
+                Text(AppSection.agents.title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+                NewWorkspaceButton(machines: model.agents?.newWorkspaceMachines ?? []) { runnerID in
+                    model.openNewWorkspace(runnerID)
+                    close()
+                }
+            }
+            .padding(.leading, DrawerMetrics.textLeading)
+            .padding(.trailing, DrawerMetrics.textLeading - 4)
+            .padding(.top, 14)
+            .padding(.bottom, 4)
         }
         .padding(.top, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1271,7 +1265,7 @@ struct NavigationDrawer: View {
                 agentRow(agent, agents: agents)
             }
             ForEach(agents.machinesToSetUp) { machine in
-                setUpRow(machine)
+                setUpRow(machine, separates: machine.isManaged && agents.machinesToSetUp.count > 1)
             }
         }
     }
@@ -1279,20 +1273,24 @@ struct NavigationDrawer: View {
     /// An online machine with no workspace, after every workspace: its new session page, where its first
     /// one is made (board 03 ①, rule 9). In the tint, since it asks for something the rest of the rail
     /// doesn't.
-    private func setUpRow(_ machine: MachineToSetUp) -> some View {
+    private func setUpRow(_ machine: MachineToSetUp, separates: Bool) -> some View {
         let selected = model.drawerDestination == .machine(runnerID: machine.id)
         return Button {
             open(.machine(runnerID: machine.id))
         } label: {
-            pill(selected: selected) {
-                HStack(spacing: 12) {
-                    Image(systemName: "folder.badge.plus")
-                        .frame(width: 24)
-                    Text(MachineSetupCopy.setupTitle(machine: machine.name))
-                        .lineLimit(1)
-                    Spacer(minLength: 0)
+            VStack(spacing: 0) {
+                pill(selected: selected) {
+                    HStack(spacing: 12) {
+                        Image(systemName: machine.isManaged ? "cloud" : "folder.badge.plus")
+                            .frame(width: 24)
+                        Text(MachineSetupCopy.setupTitle(machine: machine.name))
+                            .fontWeight(machine.isManaged ? .semibold : nil)
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                    }
+                    .foregroundStyle(Color.accentColor)
                 }
-                .foregroundStyle(Color.accentColor)
+                if separates { Divider().padding(.horizontal, DrawerMetrics.textLeading) }
             }
         }
         .buttonStyle(.plain)

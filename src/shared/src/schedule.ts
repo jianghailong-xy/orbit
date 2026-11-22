@@ -9,6 +9,8 @@
  * their text is in web/capture/*.mjs and 02-agent-first.html. Placeholders are `{name}`, filled by scheduleFill.
  */
 
+import { CONDITION_KEEPS_AWAKE_LINE, type ConditionCompareOp, type ConditionState } from './condition';
+
 // ---------------------------------------------------------------------------------------------------------------
 // Closed sets (schema.prisma, schedule-envelope.ts, schedule-attention.ts, schedule-runs.service.ts)
 // ---------------------------------------------------------------------------------------------------------------
@@ -25,7 +27,8 @@ export type ScheduleChangedBy = (typeof SCHEDULE_CHANGED_BY)[number];
 export const SCHEDULE_ENDED_REASONS = ['DELETED', 'END_REACHED', 'GOAL_REACHED'] as const;
 export type ScheduleEndedReason = (typeof SCHEDULE_ENDED_REASONS)[number];
 
-export const SCHEDULE_RUN_TRIGGERS = ['SCHEDULED', 'CATCH_UP', 'MANUAL'] as const;
+/** CONDITION: a WHEN rule's condition fired; its `plannedAt` is the firing sample's time. */
+export const SCHEDULE_RUN_TRIGGERS = ['SCHEDULED', 'CATCH_UP', 'MANUAL', 'CONDITION'] as const;
 export type ScheduleRunTrigger = (typeof SCHEDULE_RUN_TRIGGERS)[number];
 
 export const SCHEDULE_RUN_STATES = [
@@ -35,7 +38,7 @@ export type ScheduleRunState = (typeof SCHEDULE_RUN_STATES)[number];
 
 /** §7.2, plus OVER_BUDGET, which S2d adds for a MISSED run. */
 export const SCHEDULE_FAILURE_REASONS = [
-  'RUNNER_UNAVAILABLE', 'QUOTA', 'ENGINE_CRASHED_BEFORE_START', 'REPORTED_FAILED', 'NO_REPORT', 'ENGINE_CRASHED',
+  'RUNNER_UNAVAILABLE', 'RUNNER_FULL', 'QUOTA', 'ENGINE_CRASHED_BEFORE_START', 'REPORTED_FAILED', 'NO_REPORT', 'ENGINE_CRASHED',
   'APPROVAL_TIMEOUT', 'RUN_LIMIT', 'CANCELLED_BY_OWNER', 'OVER_BUDGET', 'LANDING_FAILED',
 ] as const;
 export type ScheduleFailureReason = (typeof SCHEDULE_FAILURE_REASONS)[number];
@@ -47,7 +50,8 @@ export const SCHEDULE_HELD_REASONS = [
 ] as const;
 export type ScheduleHeldReason = (typeof SCHEDULE_HELD_REASONS)[number];
 
-export const SCHEDULE_ENVELOPE_PARTS = ['WORKSPACE', 'ACCESS_LEVEL', 'RUNS_PER_WEEK', 'RUN_LIMIT'] as const;
+/** PROBE_COMMAND: a WHEN rule's probe command other than the one the owner approved. */
+export const SCHEDULE_ENVELOPE_PARTS = ['WORKSPACE', 'ACCESS_LEVEL', 'RUNS_PER_WEEK', 'RUN_LIMIT', 'PROBE_COMMAND'] as const;
 export type ScheduleEnvelopePart = (typeof SCHEDULE_ENVELOPE_PARTS)[number];
 
 export const SCHEDULE_REQUEST_KINDS = ['CREATE', 'UPDATE'] as const;
@@ -92,7 +96,6 @@ export const SCHEDULE_COPY = {
     showPastRuns: 'Show past runs',
   },
   groups: {
-    NEEDS_YOU: 'Needs you',
     TODAY: 'Today',
     TOMORROW: 'Tomorrow',
     LATER: 'Later',
@@ -191,6 +194,7 @@ export const SCHEDULE_COPY = {
   /** Why a run failed, as a clause ("The last run ended without a report"); a run's own reasonText wins. */
   failureReasons: {
     RUNNER_UNAVAILABLE: 'found no runner online',
+    RUNNER_FULL: 'waited for a full runner until its window closed',
     QUOTA: "hit the engine's usage limit",
     ENGINE_CRASHED_BEFORE_START: 'stopped before its engine started',
     REPORTED_FAILED: 'reported a failure',
@@ -288,6 +292,8 @@ export const SCHEDULE_COPY = {
     alwaysAllow: 'Always allow',
     allowOnce: 'Allow once',
     deny: 'Deny',
+    stop: 'Stop',
+    openLastRun: 'Open last run',
   },
   deleteConfirm: {
     title: 'Delete “{title}”?',
@@ -297,6 +303,13 @@ export const SCHEDULE_COPY = {
     confirm: 'Delete',
     cancel: 'Cancel',
   },
+  /** The phone's Stop on a run under way: asks first, as Delete does. */
+  stopConfirm: {
+    title: 'Stop this run?',
+    body: 'It ends where it is and counts as stopped by you. Its session is kept, and the schedule runs again at its next time.',
+    confirm: 'Stop',
+    cancel: 'Cancel',
+  },
   /** The decline button of an envelope card, by what it widens. */
   keep: {
     ACCESS_LEVEL: 'Keep check only',
@@ -304,6 +317,31 @@ export const SCHEDULE_COPY = {
     RUN_LIMIT: 'Keep {minutes} min',
     WORKSPACE: 'Keep in {workspace}',
     other: 'Keep as it is',
+  },
+  every: {
+    minutes: 'Every {count} min',
+    hour: 'Every hour',
+    hours: 'Every {count} hours',
+    window: '{interval}, {time}–{until}',
+    from: '{interval} from {time}',
+    days: '{rule}, {days}',
+    workweek: 'Mon–Fri',
+    weekend: 'weekends',
+  },
+  /** The planned end (§8.5) and the line a run of missed slots collapses into. */
+  end: {
+    until: 'until {when}',
+    today: '{time} today',
+    tomorrow: '{time} tomorrow',
+    runLeft: '1 run left',
+    runsLeft: '{count} runs left',
+    missed: '{count} slots missed, {from}–{to}',
+    missedDated: '{count} slots missed, {fromDate}, {from}–{toDate}, {to}',
+    endLabel: 'Ends',
+    extend: 'Extend the end',
+    remove: 'Remove the end',
+    extendAsk: '{title}: extend the end',
+    removeAsk: '{title}: remove the end',
   },
   history: {
     who: { USER: 'You', SESSION: 'Session', RUN: 'Run', ALLOWED: 'You allowed' },
@@ -315,6 +353,7 @@ export const SCHEDULE_COPY = {
       rule: 'Time',
       timezone: 'Time zone',
       endAt: 'Ends',
+      maxRuns: 'Runs',
       accessLevel: 'Access',
       runLimitMinutes: 'Run limit',
       workspaceId: 'Workspace',
@@ -359,6 +398,7 @@ export const SCHEDULE_COPY = {
       RUNS_PER_WEEK: 'Let {title} run more often?',
       RUN_LIMIT: 'Let {title} run longer?',
       WORKSPACE: 'Let {title} run in {workspace}?',
+      PROBE_COMMAND: 'Let {title} check with a new command?',
     },
     now: 'Now',
     asked: 'Asked',
@@ -397,6 +437,8 @@ export const SCHEDULE_COPY = {
   push: {
     failedBody: 'The last run {reason}. It keeps running until you pause it.',
     goalReachedTitle: '{title} ended itself',
+    /** §8.5: a planned end (endAt or maxRuns) reached; also the ENDED row's read. */
+    stoppedAsPlanned: 'Stopped as planned after {runs}',
   },
   empty: {
     lead: 'Nothing scheduled. Say what should happen and when; an agent sets it up and asks you once.',
@@ -413,9 +455,7 @@ export const SCHEDULE_COPY = {
   runSession: {
     crumb: 'Scheduled',
     runOf: 'run of {date}',
-    strip:
-      'Scheduled run · planned {planned}, started {started} · access {access} · this session is not in your session '
-      + 'list',
+    strip: 'Scheduled run · planned {planned}, started {started} · access {access}',
     reported: 'Reported: {state}',
     agent: '{engine} agent',
     duration: '{minutes} min',
@@ -437,20 +477,96 @@ function lowerFirst(text: string): string {
 
 const C = SCHEDULE_COPY;
 
+/**
+ * A WHEN rule's words (docs/condition-triggers-design.md §6.1; condition-triggers board ③ ⑥): the rule as a row and a
+ * card say it, the create card's When lines, and what an envelope card for a new probe command says beside its title
+ * (SCHEDULE_COPY.envelopeCard.titles.PROBE_COMMAND). Not yet in contracts/schedule.contract.json: OrbitKit and Android
+ * take it there when they draw these lines (C6).
+ */
+export const SCHEDULE_CONDITION_COPY = {
+  rules: {
+    /** "Raw used above 90%": the condition in the agent's words. */
+    short: '{condition}',
+    long: 'When {condition}',
+  },
+  /** "Raw used above 90% for 10 min". */
+  held: '{condition} for {duration}',
+  rearm: 'Fires again only after it {rearm}.',
+  rearmWhenFalse: 'Fires again once it no longer holds.',
+  rearmOps: {
+    GT: 'goes above {value}',
+    GTE: 'reaches {value}',
+    LT: 'drops below {value}',
+    LTE: 'drops to {value}',
+    EQ: 'reads {value}',
+    EXIT_ZERO: 'succeeds again',
+  },
+  /** A repeat (§5.1): one more line under When, and the inspector's Condition block, in words. */
+  repeat: 'And again every {interval} while it stays that way.',
+  repeatUnits: { hour: 'hour', hours: '{count} hours', minute: 'minute', minutes: '{count} minutes' },
+  checked: 'Checked every {interval} on {runner}, no model.',
+  checkedNoRunner: 'Checked every {interval}, no model.',
+  /** Under the check line, when the workspace is on Orbit Cloud (§4.2): it stays awake while the condition waits. */
+  keepsAwake: CONDITION_KEEPS_AWAKE_LINE,
+  seconds: '{count} s',
+  minutes: '{count} min',
+  hours: '{count} h',
+  /** The decline button of a card for a new probe command. */
+  keep: 'Keep the approved command',
+  /** Under a card for a new probe command: changing the command is changing what was approved (board ⑥). */
+  commandNote: 'It runs on its own, without a model, every time the condition is checked. Read it before you allow it.',
+} as const;
+
+const CC = SCHEDULE_CONDITION_COPY;
+
 // ---------------------------------------------------------------------------------------------------------------
 // REST shapes (schedule-views.ts, schedule-reads.service.ts, schedules.controller.ts)
 // ---------------------------------------------------------------------------------------------------------------
 
+/** A WHEN rule's condition (docs/condition-triggers-design.md §3), every default written out. */
+export interface ScheduleWhenCondition {
+  text: string;
+  command: string;
+  compare: { op: ConditionCompareOp; value: number | null };
+  holdSeconds: number;
+  rearm: { op: ConditionCompareOp; value: number | null } | null;
+  intervalSeconds: number;
+  unit: string | null;
+  timeoutSeconds: number;
+  /** Fire again every this many seconds while it still holds; null (or absent on an older rule) fires once. */
+  repeatSeconds?: number | null;
+}
+
 export type ScheduleRule =
   | { kind: 'ONCE'; at: string }
   | { kind: 'DAILY'; time: string }
-  | { kind: 'WEEKLY'; time: string; weekdays: ScheduleWeekday[] };
+  | { kind: 'WEEKLY'; time: string; weekdays: ScheduleWeekday[] }
+  /**
+   * Sub-daily: slots every `minutes` (30, 60, 120, 180, 240, 360, 480 or 720) from `time` through `until`
+   * (inclusive) or the end of the day, on `weekdays`, on the local wall clock. The server always writes `time` and
+   * `weekdays`, so a client that predates EVERY reads it as a weekly rule.
+   */
+  | { kind: 'EVERY'; minutes: number; time: string; weekdays: ScheduleWeekday[]; until?: string }
+  /** Starts when its condition fires; `conditionId` is null on a create card, before Create writes the condition. */
+  | { kind: 'WHEN'; conditionId: string | null; runsPerWeek: number; condition: ScheduleWhenCondition };
+
+/** A WHEN schedule's condition as a list shows it: the newest reading and its age (condition-triggers board ④). */
+export interface ScheduleConditionReading {
+  id: string;
+  text: string;
+  unit: string | null;
+  state: ConditionState;
+  lastValue: number | null;
+  lastSampleAt: string | null;
+}
 
 export interface ScheduleEnvelope {
   workspaceId: string;
   accessLevel: ScheduleAccessLevel;
   runsPerWeek: number;
   runLimitMinutes: number;
+  /** A WHEN rule's approved probe command, as its sha256; null or absent for a timed schedule. */
+  commandHash?: string | null;
 }
 
 export interface ScheduleLink {
@@ -510,12 +626,21 @@ export interface ScheduleView {
   note: string | null;
   revision: number;
   startAt: string;
+  /** The planned end by time (§8.5); null for none. */
   endAt: string | null;
+  /** The planned end by count of started runs (§8.5); null for none. Absent from servers before it. */
+  maxRuns?: number | null;
+  /** The runs it has started in all, counted as the weekly budget counts them. Absent from servers before it. */
+  runsStarted?: number;
+  /** maxRuns minus runsStarted, at least 0; null without maxRuns. Absent from servers before it. */
+  runsLeft?: number | null;
   nextDueAt: string | null;
   consecutiveFailures: number;
   createdFromSessionId: string | null;
   createdAt: string;
   endedAt: string | null;
+  /** A WHEN rule's condition and its newest reading; null for a timed schedule. */
+  condition?: ScheduleConditionReading | null;
 }
 
 export interface ScheduleListRow extends ScheduleView {
@@ -538,6 +663,21 @@ export interface ScheduleListResponse {
    * ended runs planned in the last 24 hours (the viewer's today, in any zone). The page needs no other read.
    */
   runs?: ScheduleTimelineRun[];
+  /**
+   * On the REST list only: the OPEN tasks that wait for their startWhen condition (docs/condition-triggers-design.md
+   * §9), which the page lists beside the WHEN schedules in "Waiting for a condition", tagged Can't read when it
+   * cannot be read. A task whose condition has fired or ended is not waiting and is not here.
+   */
+  waitingTasks?: ScheduleWaitingTask[];
+}
+
+/** A task that starts when its condition holds, as the Scheduled page lists it (condition-triggers board ④). */
+export interface ScheduleWaitingTask {
+  id: string;
+  title: string;
+  workspaceId: string;
+  workspaceName: string | null;
+  condition: ScheduleConditionReading;
 }
 
 export interface ScheduleFindingView {
@@ -621,10 +761,30 @@ export interface ScheduleCreateCard extends ScheduleCardBase, ScheduleEnvelopeLi
   title: string;
   readBack: string;
   intent: string;
-  when: { rule: ScheduleRule; timezone: string | null; firstRunAt: string | null; text: string };
+  when: {
+    rule: ScheduleRule;
+    timezone: string | null;
+    firstRunAt: string | null;
+    text: string;
+    /** A WHEN rule's lines: the condition, the re-arm and how it is checked, and the command verbatim. */
+    condition?: ScheduleWhenLines | null;
+  };
   today: { key: string; summary: string | null; text: string } | null;
   notice: string;
+  /** The Ends line (§8.5); null when the card names no end. Absent from servers before it. */
+  ends?: ScheduleCardEnds | null;
   envelope: null;
+}
+
+/**
+ * A create card's planned end (§8.5): the end the agent named, or on an EVERY rule that named none the server's
+ * suggestion 7 days out. A PENDING card's suggestion offers No end (`ScheduleAllowBody.dropSuggestedEnd`); once
+ * allowed, the card reads the end Create wrote, still `suggested`, or null after No end.
+ */
+export interface ScheduleCardEnds {
+  endAt: string | null;
+  maxRuns: number | null;
+  suggested: boolean;
 }
 
 /** The envelope card (§4): *Now* and *Asked*. */
@@ -716,9 +876,13 @@ export interface SessionScheduleCardsResponse {
   records: ScheduleChangeRecord[];
 }
 
-/** `POST /api/schedule-requests/:id/allow`: a zone only for a CREATE card that names none. */
+/**
+ * `POST /api/schedule-requests/:id/allow`: a zone only for a CREATE card that names none; `dropSuggestedEnd` is the
+ * create card's No end (§8.5), so Create writes no end instead of the suggested one.
+ */
 export interface ScheduleAllowBody {
   timezone?: string;
+  dropSuggestedEnd?: boolean;
 }
 
 /** `POST /api/schedule-requests/:id/{allow,decline}`. */
@@ -803,7 +967,7 @@ export function scheduleDayText(at: Date, now: Date, timezone: string): string {
   return scheduleFill(C.dates.day, { month: C.months[p.month - 1]!, day: p.day });
 }
 
-/** "Today 02:00", "Tomorrow 09:00", "Monday 09:00", "Nov 24 09:00": the inspector's next run, a Needs you row. */
+/** "Today 02:00", "Tomorrow 09:00", "Monday 09:00", "Nov 24 09:00": the inspector's next run. */
 export function scheduleWhenText(at: Date, now: Date, timezone: string): string {
   return scheduleFill(C.dates.at, { day: scheduleDayText(at, now, timezone), time: localParts(at, timezone).time });
 }
@@ -837,7 +1001,11 @@ const WORKWEEK: readonly ScheduleWeekday[] = ['MON', 'TUE', 'WED', 'THU', 'FRI']
 export function scheduleRuleText(rule: ScheduleRule, form: 'short' | 'long' = 'short'): string {
   const t = C.rules[form];
   if (rule.kind === 'ONCE') return t.once;
+  if (rule.kind === 'WHEN') {
+    return scheduleFill(CC.rules[form], { condition: form === 'long' ? lowerFirst(rule.condition.text) : rule.condition.text });
+  }
   if (rule.kind === 'DAILY') return scheduleFill(t.daily, { time: rule.time });
+  if (rule.kind === 'EVERY') return everyRuleText(rule);
   const days = SCHEDULE_WEEKDAYS.filter((d) => rule.weekdays.includes(d));
   if (days.length === 7) return scheduleFill(t.daily, { time: rule.time });
   if (days.length === 5 && WORKWEEK.every((d) => days.includes(d))) return scheduleFill(t.weekdays, { time: rule.time });
@@ -850,9 +1018,189 @@ export function scheduleRuleText(rule: ScheduleRule, form: 'short' | 'long' = 's
   return scheduleFill(t.days, { days: days.map((d) => C.weekdaysShort[d]).join(C.rules.daysSeparator), time: rule.time });
 }
 
+/** An EVERY rule's sentence, the same in both forms (design §9.2): "Every 30 min, 09:00–18:00, Mon–Fri", "Every hour". */
+function everyRuleText(rule: Extract<ScheduleRule, { kind: 'EVERY' }>): string {
+  const e = C.every;
+  const interval = rule.minutes < 60
+    ? scheduleFill(e.minutes, { count: rule.minutes })
+    : rule.minutes === 60 ? e.hour : scheduleFill(e.hours, { count: rule.minutes / 60 });
+  const text = rule.until
+    ? scheduleFill(e.window, { interval, time: rule.time, until: rule.until })
+    : rule.time === '00:00' ? interval : scheduleFill(e.from, { interval, time: rule.time });
+  const days = SCHEDULE_WEEKDAYS.filter((d) => rule.weekdays.includes(d));
+  if (days.length === 7) return text;
+  const named = days.length === 5 && WORKWEEK.every((d) => days.includes(d))
+    ? e.workweek
+    : days.length === 2 && days.includes('SAT') && days.includes('SUN')
+      ? e.weekend
+      : days.map((d) => C.weekdaysShort[d]).join(C.rules.daysSeparator);
+  return scheduleFill(e.days, { rule: text, days: named });
+}
+
+/**
+ * A schedule's planned end as one line: "until 18:00 today", "until Nov 25", "3 runs left", or both joined by the
+ * separator when it has an end by time and one by count. Null when it has no end.
+ */
+export function scheduleEndText(
+  schedule: Pick<ScheduleView, 'endAt' | 'maxRuns' | 'runsLeft'>,
+  now: Date,
+  timezone: string,
+): string | null {
+  const e = C.end;
+  const parts: string[] = [];
+  if (schedule.endAt) {
+    const at = new Date(schedule.endAt);
+    const day = scheduleDayText(at, now, timezone);
+    const time = localParts(at, timezone).time;
+    const when = day === C.dates.today ? scheduleFill(e.today, { time })
+      : day === C.dates.tomorrow ? scheduleFill(e.tomorrow, { time })
+        : scheduleDateText(at, timezone);
+    parts.push(scheduleFill(e.until, { when }));
+  }
+  if (schedule.maxRuns != null) {
+    const left = schedule.runsLeft ?? schedule.maxRuns;
+    parts.push(left === 1 ? e.runLeft : scheduleFill(e.runsLeft, { count: left }));
+  }
+  return parts.length ? parts.join(C.separator) : null;
+}
+
+/** "16 slots missed, 01:00–08:30", or with dates when the range spans days: "…, Nov 19, 22:00–Nov 20, 06:30". */
+export function scheduleMissedText(runs: readonly Pick<ScheduleRunView, 'plannedAt'>[], timezone: string): string {
+  const times = runs.map((r) => Date.parse(r.plannedAt));
+  const first = localParts(new Date(Math.min(...times)), timezone);
+  const last = localParts(new Date(Math.max(...times)), timezone);
+  if (first.month === last.month && first.day === last.day) {
+    return scheduleFill(C.end.missed, { count: runs.length, from: first.time, to: last.time });
+  }
+  const date = (p: typeof first) => scheduleFill(C.dates.day, { month: C.months[p.month - 1]!, day: p.day });
+  return scheduleFill(C.end.missedDated, {
+    count: runs.length, fromDate: date(first), from: first.time, toDate: date(last), to: last.time,
+  });
+}
+
+/**
+ * Collapses consecutive MISSED runs of one schedule into one item (two or more; a single one stays a run). A
+ * schedule's streak ends at any other run of it between two missed ones. The collapsed item takes the place of the
+ * first member in the list and the time of its last.
+ */
+export interface ScheduleMissedItem {
+  kind: 'MISSED';
+  schedule: ScheduleListRow;
+  runs: ScheduleRunView[];
+  at: string;
+}
+export function scheduleCollapseMissed(items: ScheduleTimelineItem[]): Array<ScheduleTimelineItem | ScheduleMissedItem> {
+  const runItems = items.filter((i): i is Extract<ScheduleTimelineItem, { kind: 'RUN' }> => i.kind === 'RUN');
+  const streakOf = new Map<ScheduleTimelineItem, ScheduleTimelineItem[]>();
+  const bySchedule = new Map<string, typeof runItems>();
+  for (const item of runItems) {
+    const list = bySchedule.get(item.schedule.id) ?? [];
+    list.push(item);
+    bySchedule.set(item.schedule.id, list);
+  }
+  for (const list of bySchedule.values()) {
+    list.sort((a, b) => Date.parse(a.run.plannedAt) - Date.parse(b.run.plannedAt));
+    let streak: typeof runItems = [];
+    const close = () => {
+      if (streak.length > 1) for (const m of streak) streakOf.set(m, streak);
+      streak = [];
+    };
+    for (const item of list) {
+      if (item.run.state === 'MISSED') streak.push(item);
+      else close();
+    }
+    close();
+  }
+  const out: Array<ScheduleTimelineItem | ScheduleMissedItem> = [];
+  const done = new Set<ScheduleTimelineItem[]>();
+  for (const item of items) {
+    const streak = item.kind === 'RUN' ? (streakOf.get(item) as typeof runItems | undefined) : undefined;
+    if (!streak || item.kind !== 'RUN') {
+      out.push(item);
+      continue;
+    }
+    if (done.has(streak)) continue;
+    done.add(streak);
+    out.push({ kind: 'MISSED', schedule: item.schedule, runs: streak.map((m) => m.run), at: streak[streak.length - 1]!.at });
+  }
+  return out;
+}
+
 /** Whether a row shows the repeat mark (↻) before its rule: a one-off does not. */
 export function scheduleRuleRepeats(rule: ScheduleRule): boolean {
   return rule.kind !== 'ONCE';
+}
+
+/** "10 min", "45 s", "2 h": a hold or an interval as the card says it. */
+export function scheduleDurationText(seconds: number): string {
+  if (seconds < 60) return scheduleFill(CC.seconds, { count: seconds });
+  if (seconds < 7200 || seconds % 3600 !== 0) return scheduleFill(CC.minutes, { count: Math.round(seconds / 60) });
+  return scheduleFill(CC.hours, { count: seconds / 3600 });
+}
+
+/** A reading with its unit: "85%", "3 in", "2.0 GiB". */
+export function scheduleReadingText(value: number, unit: string | null): string {
+  if (!unit) return String(value);
+  return unit === '%' ? `${value}%` : `${value} ${unit}`;
+}
+
+/** A WHEN rule's lines on the create card (condition-triggers board ③). */
+export interface ScheduleWhenLines {
+  /** "Raw used above 90% for 10 min". */
+  text: string;
+  /** "Fires again only after it drops below 85%. Checked every 5 min on workstation-gpu, no model." */
+  detail: string;
+  /** The probe command, verbatim: what Create approves. */
+  command: string;
+  /** "And again every 2 hours while it stays that way."; null for a condition with no repeat. */
+  repeat: string | null;
+  /** "Keeps this cloud workspace awake while it waits." under the check line, for a workspace on Orbit Cloud; null
+   *  otherwise. */
+  awake: string | null;
+}
+
+/** "2 hours", "hour", "90 minutes": a repeat's interval as the sentence says it. */
+function repeatIntervalText(seconds: number): string {
+  if (seconds % 3600 === 0) return seconds === 3600 ? CC.repeatUnits.hour : scheduleFill(CC.repeatUnits.hours, { count: seconds / 3600 });
+  const minutes = Math.round(seconds / 60);
+  return minutes === 1 ? CC.repeatUnits.minute : scheduleFill(CC.repeatUnits.minutes, { count: minutes });
+}
+
+/**
+ * A WHEN condition's repeat in words, for the create card's When block and the inspector's Condition block:
+ * "And again every 2 hours while it stays that way."; null with no repeat.
+ */
+export function scheduleRepeatText(repeatSeconds: number | null | undefined): string | null {
+  if (repeatSeconds === null || repeatSeconds === undefined) return null;
+  return scheduleFill(CC.repeat, { interval: repeatIntervalText(repeatSeconds) });
+}
+
+export function scheduleWhenLines(
+  condition: ScheduleWhenCondition,
+  runner: string | null,
+  keepsWorkspaceAwake = false,
+): ScheduleWhenLines {
+  const text = condition.holdSeconds > 0
+    ? scheduleFill(CC.held, { condition: condition.text, duration: scheduleDurationText(condition.holdSeconds) })
+    : condition.text;
+  const rearm = condition.rearm
+    ? scheduleFill(CC.rearm, {
+        rearm: scheduleFill(CC.rearmOps[condition.rearm.op], {
+          value: condition.rearm.value === null ? '' : scheduleReadingText(condition.rearm.value, condition.unit),
+        }),
+      })
+    : CC.rearmWhenFalse;
+  const interval = scheduleDurationText(condition.intervalSeconds);
+  const checked = runner
+    ? scheduleFill(CC.checked, { interval, runner })
+    : scheduleFill(CC.checkedNoRunner, { interval });
+  return {
+    text,
+    detail: `${rearm} ${checked}`,
+    command: condition.command,
+    repeat: scheduleRepeatText(condition.repeatSeconds),
+    awake: keepsWorkspaceAwake ? CC.keepsAwake : null,
+  };
 }
 
 /** "7 runs a week", "1 run a week". */
@@ -939,7 +1287,7 @@ export function scheduleCreateWhen(card: Pick<ScheduleCreateCard, 'when'>, now: 
 // ---------------------------------------------------------------------------------------------------------------
 
 /**
- * A row's circle (board 1/2 ①): `open` is to come, `running` turns, `done` a grey tick (no change, or already
+ * A row's circle (board 1/2 ①): `open` is to come (a queued run wears clock hands in it), `running` turns, `done` a grey tick (no change, or already
  * reported), `new` a green tick (a new finding), `failed` red, `held` amber, `draft` dashed, `paused` faint, `muted`
  * a run that never did the work (skipped, missed, cancelled).
  */
@@ -951,7 +1299,7 @@ export type ScheduleTagTone = 'new' | 'fail' | 'held' | 'mute';
 export interface ScheduleCircleView {
   circle: ScheduleCircle;
   /** What sits inside the circle. */
-  mark: 'check' | 'alert' | null;
+  mark: 'check' | 'alert' | 'clock' | null;
   /** The label at the right of a row, if any. */
   tag: { tone: ScheduleTagTone; text: string } | null;
 }
@@ -967,7 +1315,7 @@ export function scheduleRunCircle(
   const label = C.runStates[run.state];
   switch (run.state) {
     case 'QUEUED':
-      return { circle: 'open', mark: null, tag: null };
+      return { circle: 'open', mark: 'clock', tag: null };
     case 'RUNNING':
       return { circle: 'running', mark: null, tag: null };
     case 'AWAITING_APPROVAL':
@@ -989,7 +1337,7 @@ export function scheduleRunCircle(
   }
 }
 
-/** A schedule's circle on its next occurrence, or in Needs you / Paused. */
+/** A schedule's circle on its next occurrence, or in Paused. A failing one whose next run is under way: scheduleRowCircle. */
 export function scheduleCircle(
   schedule: Pick<ScheduleView, 'state' | 'consecutiveFailures'>,
   opts: { draft?: boolean } = {},
@@ -1019,9 +1367,50 @@ export function scheduleCircle(
   }
 }
 
-/** Needs you: failing or held (§9.2) — also the count beside Scheduled in the drawer. */
-export function scheduleNeedsYou(schedule: Pick<ScheduleView, 'state' | 'consecutiveFailures'>): boolean {
-  return schedule.state === 'HELD' || (schedule.state === 'ACTIVE' && schedule.consecutiveFailures > 0);
+/** Whether one of `runs` (the list's timeline runs) is a run of this schedule under way: queued, running or waiting. */
+export function scheduleRunUnderWay(
+  schedule: Pick<ScheduleView, 'id'>,
+  runs: readonly Pick<ScheduleRunView, 'scheduleId' | 'state'>[],
+): boolean {
+  return runs.some((run) => run.scheduleId === schedule.id && IN_PROGRESS.includes(run.state));
+}
+
+/**
+ * Needs you: held, or failing with no run under way (§9.2) — the count beside Scheduled in the drawer. A failing
+ * schedule whose next run is already under way (Run now, owner 2026-11-19) waits for that run: a failure puts it back,
+ * an ended run that did not fail clears it.
+ */
+export function scheduleNeedsYou(
+  schedule: Pick<ScheduleView, 'id' | 'state' | 'consecutiveFailures'>,
+  runs: readonly Pick<ScheduleRunView, 'scheduleId' | 'state'>[] = [],
+): boolean {
+  if (schedule.state === 'HELD') return true;
+  return schedule.state === 'ACTIVE' && schedule.consecutiveFailures > 0 && !scheduleRunUnderWay(schedule, runs);
+}
+
+/**
+ * The count beside Scheduled in the drawer, the same on every client (owner 2026-11-19): the schedules that need you
+ * (scheduleNeedsYou), the ACTIVE ones whose condition cannot be read, and the tasks waiting on a condition that cannot
+ * be read.
+ */
+export function scheduleNeedsCount(
+  list: Pick<ScheduleListResponse, 'schedules' | 'runs' | 'waitingTasks'> | null | undefined,
+): number {
+  if (!list) return 0;
+  const runs = list.runs ?? [];
+  const cantRead = (reading: Pick<ScheduleConditionReading, 'state'> | null | undefined) => reading?.state === 'UNKNOWN';
+  const schedules = (list.schedules ?? []).filter((s) =>
+    scheduleNeedsYou(s, runs) || (s.state === 'ACTIVE' && cantRead(s.condition))).length;
+  return schedules + (list.waitingTasks ?? []).filter((t) => cantRead(t.condition)).length;
+}
+
+/** A schedule's row circle on the page: its Failed tag stays off while a run of it is under way. */
+export function scheduleRowCircle(
+  schedule: Pick<ScheduleView, 'id' | 'state' | 'consecutiveFailures'>,
+  runs: readonly Pick<ScheduleRunView, 'scheduleId' | 'state'>[],
+): ScheduleCircleView {
+  if (schedule.state === 'ACTIVE' && !scheduleNeedsYou(schedule, runs)) return { circle: 'open', mark: null, tag: null };
+  return scheduleCircle(schedule);
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -1130,7 +1519,7 @@ export function scheduleRunLine(
 // The timeline
 // ---------------------------------------------------------------------------------------------------------------
 
-export type ScheduleTimelineGroupKey = 'NEEDS_YOU' | 'TODAY' | 'TOMORROW' | 'DAY' | 'LATER' | 'PAUSED';
+export type ScheduleTimelineGroupKey = 'TODAY' | 'TOMORROW' | 'DAY' | 'LATER' | 'PAUSED';
 
 export type ScheduleTimelineItem =
   | { kind: 'SCHEDULE'; schedule: ScheduleListRow; at: string | null }
@@ -1139,9 +1528,9 @@ export type ScheduleTimelineItem =
 
 export interface ScheduleTimelineGroup {
   key: ScheduleTimelineGroupKey;
-  /** "Needs you", "Today", "Monday", "Later", "Paused". */
+  /** "Today", "Monday", "Later", "Paused". */
   title: string;
-  /** "Fri, Nov 14" under Today and Tomorrow, "Nov 17" under a day, the count under Needs you and Paused. */
+  /** "Fri, Nov 14" under Today and Tomorrow, "Nov 17" under a day, the count under Paused. */
   subtitle: string | null;
   items: ScheduleTimelineItem[];
 }
@@ -1151,14 +1540,14 @@ const IN_PROGRESS: readonly ScheduleRunState[] = ['QUEUED', 'RUNNING', 'AWAITING
 /**
  * The Scheduled page's groups (§9.2), in the viewer's zone:
  *
- *   * Needs you: the failing and held schedules. A failing one still appears on its next day too.
  *   * Today, Tomorrow, then each day of the coming week by its name ("Monday"), then Later. A schedule appears on
  *     the day of its next run, a draft on the day of its first. A run under way (queued, running or waiting for an
  *     approval) appears on its planned day; a run that has ended appears on today's list only with `showPastRuns`.
- *   * Paused: the paused schedules.
+ *   * Paused: the schedules that do not run, held before paused; a held one has no next run to be placed on.
  *
- * Ended schedules appear nowhere; empty groups are left out. Within a day, items are in time order; Needs you lists
- * the failing before the held.
+ * There is no group of errors (owner 2026-11-19): the page lists the schedules, and a failing one is tagged on its own
+ * row on the day of its next run (scheduleRowCircle). Ended schedules appear nowhere; empty groups are left out.
+ * Within a day, items are in time order.
  */
 export function scheduleTimeline(input: {
   schedules: ScheduleListRow[];
@@ -1180,9 +1569,8 @@ export function scheduleTimeline(input: {
     else days.set(day, [...(days.get(day) ?? []), item]);
   };
 
-  const needs = input.schedules.filter(scheduleNeedsYou).sort((a, b) =>
-    (a.state === 'HELD' ? 1 : 0) - (b.state === 'HELD' ? 1 : 0) || a.title.localeCompare(b.title));
-  const paused = input.schedules.filter((s) => s.state === 'PAUSED').sort((a, b) => a.title.localeCompare(b.title));
+  const paused = input.schedules.filter((s) => s.state === 'PAUSED' || s.state === 'HELD').sort((a, b) =>
+    (a.state === 'HELD' ? 0 : 1) - (b.state === 'HELD' ? 0 : 1) || a.title.localeCompare(b.title));
 
   for (const s of input.schedules) {
     if (s.state === 'ACTIVE' && s.nextDueAt) place({ kind: 'SCHEDULE', schedule: s, at: s.nextDueAt });
@@ -1203,14 +1591,6 @@ export function scheduleTimeline(input: {
   const byTime = (a: ScheduleTimelineItem, b: ScheduleTimelineItem) =>
     new Date(a.at ?? 0).getTime() - new Date(b.at ?? 0).getTime();
   const groups: ScheduleTimelineGroup[] = [];
-  if (needs.length) {
-    groups.push({
-      key: 'NEEDS_YOU',
-      title: C.groups.NEEDS_YOU,
-      subtitle: String(needs.length),
-      items: needs.map((s) => ({ kind: 'SCHEDULE' as const, schedule: s, at: s.nextDueAt })),
-    });
-  }
   for (const day of [...days.keys()].sort((a, b) => a - b)) {
     const items = days.get(day)!.sort(byTime);
     const at = new Date(items[0]!.at!);
@@ -1252,6 +1632,7 @@ export function scheduleWidenedParts(before: ScheduleEnvelope, after: ScheduleEn
   if (ACCESS_ORDER[after.accessLevel] > ACCESS_ORDER[before.accessLevel]) parts.push('ACCESS_LEVEL');
   if (after.runsPerWeek > before.runsPerWeek) parts.push('RUNS_PER_WEEK');
   if (after.runLimitMinutes > before.runLimitMinutes) parts.push('RUN_LIMIT');
+  if (after.commandHash && after.commandHash !== (before.commandHash ?? null)) parts.push('PROBE_COMMAND');
   return parts;
 }
 
@@ -1264,7 +1645,7 @@ export interface ScheduleEnvelopeSide {
 
 /** The part a card is about: access first, then where it runs, how often, how long. */
 function headPart(widens: readonly ScheduleEnvelopePart[]): ScheduleEnvelopePart | null {
-  for (const p of ['ACCESS_LEVEL', 'WORKSPACE', 'RUNS_PER_WEEK', 'RUN_LIMIT'] as const) if (widens.includes(p)) return p;
+  for (const p of ['ACCESS_LEVEL', 'WORKSPACE', 'PROBE_COMMAND', 'RUNS_PER_WEEK', 'RUN_LIMIT'] as const) if (widens.includes(p)) return p;
   return null;
 }
 
@@ -1293,6 +1674,11 @@ export function scheduleEnvelopeSides(input: {
       const a = C.access[e.accessLevel];
       const detail = isNow ? a.brief : a.detail;
       return { lead: a.label, detail, text: `${a.label}${C.envelopeCard.accessJoin}${detail}` };
+    }
+    if (part === 'PROBE_COMMAND') {
+      // The command verbatim on both sides: what was approved, and what Allow would approve (board ⑥).
+      const command = rule?.kind === 'WHEN' ? rule.condition.command : '';
+      return { lead: command, detail: '', text: command };
     }
     const sameLimit = input.now?.runLimitMinutes === input.asked.runLimitMinutes;
     const costs = isNow && sameLimit
@@ -1326,11 +1712,13 @@ export function scheduleKeepLabel(
   if (part === 'RUNS_PER_WEEK' && now?.runsPerWeek === 1) return C.keep.RUNS_PER_WEEK;
   if (part === 'RUN_LIMIT' && now) return scheduleFill(C.keep.RUN_LIMIT, { minutes: now.runLimitMinutes });
   if (part === 'WORKSPACE' && workspaceName) return scheduleFill(C.keep.WORKSPACE, { workspace: workspaceName });
+  if (part === 'PROBE_COMMAND') return CC.keep;
   return C.keep.other;
 }
 
 /** The note under an envelope card. */
 export function scheduleEnvelopeNote(widens: readonly ScheduleEnvelopePart[]): string {
+  if (widens.includes('PROBE_COMMAND')) return CC.commandNote;
   return widens.includes('ACCESS_LEVEL')
     ? `${C.envelopeCard.appliesFromNextRun} ${C.envelopeCard.checkedEachRun}`
     : C.envelopeCard.appliesFromNextRun;
@@ -1381,7 +1769,7 @@ export function scheduleHistoryWho(record: Pick<ScheduleChangeRecord, 'changedBy
 }
 
 function fieldValueText(field: string, value: unknown, names: Record<string, string>): string {
-  if (value === null || value === undefined) return field === 'endAt' ? C.history.noEnd : '';
+  if (value === null || value === undefined) return field === 'endAt' || field === 'maxRuns' ? C.history.noEnd : '';
   if (field === 'accessLevel') return C.access[value as ScheduleAccessLevel]?.label ?? String(value);
   if (field === 'runLimitMinutes') return scheduleFill(C.history.minutes, { minutes: Number(value) });
   if (field === 'workspaceId') return names[String(value)] ?? String(value);
@@ -1389,7 +1777,10 @@ function fieldValueText(field: string, value: unknown, names: Record<string, str
 }
 
 function ruleChangeText(before: ScheduleRule | undefined, after: ScheduleRule): { field: string | null; text: string } {
-  if (before && before.kind !== 'ONCE' && after.kind !== 'ONCE') {
+  if (
+    before && before.kind !== 'ONCE' && after.kind !== 'ONCE' && before.kind !== 'WHEN' && after.kind !== 'WHEN'
+    && before.kind !== 'EVERY' && after.kind !== 'EVERY'
+  ) {
     const sameShape = before.kind === after.kind
       && (before.kind !== 'WEEKLY' || after.kind !== 'WEEKLY' || before.weekdays.join() === after.weekdays.join());
     if (sameShape && before.time !== after.time) {
@@ -1553,6 +1944,11 @@ export function scheduleGoalReachedPushTitle(title: string): string {
   return scheduleFill(C.push.goalReachedTitle, { title });
 }
 
+/** §8.5: "Stopped as planned after 12 runs", "after 1 run": the planned-end push and an ENDED row's read. */
+export function scheduleStoppedAsPlannedText(runs: number): string {
+  return scheduleFill(C.push.stoppedAsPlanned, { runs: `${runs} ${runs === 1 ? 'run' : 'runs'}` });
+}
+
 /** A held schedule's card: "Weekly dependency audit is held". */
 export function scheduleHeldWaiting(input: {
   title: string;
@@ -1607,7 +2003,7 @@ export function scheduleApprovalWaiting(input: {
 // A run's session
 // ---------------------------------------------------------------------------------------------------------------
 
-/** "Scheduled run · planned 10:00, started 10:01 · access Check only · this session is not in your session list". */
+/** "Scheduled run · planned 10:00, started 10:01 · access Check only". */
 export function scheduleRunStripText(
   run: Pick<ScheduleRunView, 'plannedAt' | 'startedAt'>,
   accessLevel: ScheduleAccessLevel,
@@ -1618,25 +2014,6 @@ export function scheduleRunStripText(
     started: run.startedAt ? localParts(new Date(run.startedAt), timezone).time : '—',
     access: C.access[accessLevel].label,
   });
-}
-
-/**
- * A run's session's header line (board web/run.png): "Open · Codex agent · 4 min" — the session's state word, the
- * engine it ran on, and how long the run took (until now while it runs). A part that is not known is left out.
- */
-export function scheduleRunHeadText(input: {
-  state: string | null;
-  engine: string | null;
-  run: Pick<ScheduleRunView, 'startedAt' | 'endedAt'>;
-  now: Date;
-}): string {
-  const { run } = input;
-  const parts = [input.state, input.engine ? scheduleFill(C.runSession.agent, { engine: input.engine }) : null];
-  if (run.startedAt) {
-    const ms = (run.endedAt ? Date.parse(run.endedAt) : input.now.getTime()) - Date.parse(run.startedAt);
-    parts.push(scheduleFill(C.runSession.duration, { minutes: Math.max(1, Math.round(ms / 60_000)) }));
-  }
-  return parts.filter(Boolean).join(C.separator);
 }
 
 /** "run of Nov 13". */

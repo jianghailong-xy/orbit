@@ -297,7 +297,7 @@ struct LandingTimelineView: View {
     @ViewBuilder private func sectionView(_ section: IntegrationTimelineSection,
                                           landing: SessionLandingView) -> some View {
         let current = section.jobId == landing.currentAttempt?.jobId
-        let steps = LandingSteps.steps(section.entries, kind: section.kind)
+        let steps = LandingSteps.steps(LandingCheckCopy.scopedEntries(section.entries, landing: landing, jobID: section.jobId), kind: section.kind)
         let live = current && landing.currentAttempt?.state == "RUNNING" && landing.currentAttempt?.timedOut == false
         VStack(alignment: .leading, spacing: 3) {
             if (landing.timeline?.sections.count ?? 0) > 1 {
@@ -311,10 +311,23 @@ struct LandingTimelineView: View {
             }
             ForEach(Array(steps.enumerated()), id: \.element.key) { index, step in
                 let last = index == steps.count - 1
-                let status: StepStatus = LandingSteps.failed(step, kind: section.kind) ? .failed
-                    : last && live ? .running
-                    : last && current && landing.currentAttempt?.state == "QUEUED" ? .pending : .ok
+                // A task exempt from the landing check (P-C2, board 04 b): Skipped, with its reason.
+                let status = LandingStepStatus.of(step, kind: section.kind, isLast: last, live: live,
+                                                  queued: current && landing.currentAttempt?.state == "QUEUED")
                 stepRow(step, status: status, section: section)
+            }
+            // A task exempt from the landing check (board 04 b, D5): the merge check still runs on the
+            // way into main, said under the list.
+            if steps.contains(where: { LandingCheckSkip.taskExempt($0) != nil }) {
+                HStack(spacing: 7) {
+                    Image(systemName: "figure.walk").font(.orbitMeta).foregroundStyle(.secondary)
+                        .frame(width: 20, height: 20)
+                    Text(LandingProvenanceCopy.mergeCheckStillRuns).font(.orbitMono.weight(.semibold))
+                    Text(LandingProvenanceCopy.stillRuns).font(.orbitLabel).foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                }
+                .padding(.leading, 28).padding(.vertical, 6)
+                .accessibilityElement(children: .combine)
             }
             // A check streaming before its attempt wrote any line has no step to sit in.
             if steps.isEmpty, live, let attempt = landing.currentAttempt, attempt.check != nil {
@@ -331,8 +344,6 @@ struct LandingTimelineView: View {
         .padding(.vertical, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
-
-    enum StepStatus { case ok, failed, running, pending }
 
     private static func icon(_ key: String) -> String {
         switch key {
@@ -356,7 +367,7 @@ struct LandingTimelineView: View {
     /// One step as the chat's tool row (`ToolCardView`'s row): the tone bar, the caret, the icon tile,
     /// its name in the mono face, its summary line and its mark. No time on a phone's row; the lines it
     /// opens to carry theirs.
-    @ViewBuilder private func stepRow(_ step: LandingStep, status: StepStatus,
+    @ViewBuilder private func stepRow(_ step: LandingStep, status: LandingStepStatus,
                                       section: IntegrationTimelineSection) -> some View {
         let key = "\(section.jobId)|\(step.key)"
         let open = pressed[key] ?? (status == .failed || status == .running)
@@ -370,10 +381,10 @@ struct LandingTimelineView: View {
                     .font(.orbitMeta).foregroundStyle(tone)
                     .frame(width: 20, height: 20)
                     .background(tone.opacity(0.14), in: RoundedRectangle(cornerRadius: 5))
-                Text(step.name)
-                    .font(.orbitMono.weight(.semibold)).foregroundStyle(.primary)
+                Text(LandingStepStatus.name(step, status))
+                    .font(.orbitMono.weight(.semibold)).foregroundStyle(status == .skipped ? .orange : .primary)
                     .lineLimit(1).fixedSize()
-                Text(step.summary.text)
+                Text(LandingStepStatus.summary(step, status))
                     .font(.orbitLabel).foregroundStyle(.secondary)
                     .lineLimit(1).truncationMode(.tail)
                 Spacer(minLength: 4)
@@ -382,6 +393,7 @@ struct LandingTimelineView: View {
                 case .running: ProgressView().controlSize(.mini)
                 case .pending: Image(systemName: "clock").foregroundStyle(.secondary)
                 case .ok: Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                case .skipped: Image(systemName: "arrow.right.circle.fill").foregroundStyle(.orange)
                 }
             }
             .contentShape(Rectangle())
@@ -425,7 +437,7 @@ struct LandingTimelineView: View {
                     .font(.orbitMeta.weight(.semibold))
                     .foregroundStyle(mark.color)
                     .frame(width: 16)
-                Text(entry.text)
+                Text(LandingCheckCopy.timelineText(entry))
                     .font(.orbitLabel)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
@@ -450,9 +462,9 @@ struct LandingTimelineView: View {
                openLog.check == check.index {
                 LandingCheckLogView(sessionID: sessionID, selectors: openLog)
                     .padding(.leading, 24)
-            } else if entry.kind == "CHECK_FINISHED", let check = entry.check, !entry.checkPassed {
+            } else if LandingCheckSkip.showsInlineOutput(entry), let check = entry.check {
                 // A check that failed shows the tail it died on, inline (mockup 05 g); a passed
-                // one keeps its `Log ›` and stays one line.
+                // one keeps its `Log ›` and stays one line, and one its exempt task skipped has none.
                 LandingInlineOutput(
                     sessionID: sessionID,
                     selectors: LandingLogSelectors(jobId: section.jobId, claim: entry.claim,
@@ -470,6 +482,8 @@ struct LandingTimelineView: View {
     /// What a timeline mark says, and the ink it says it in (mockups 05 a/e/i).
     private func glyph(_ entry: IntegrationTimelineEntry, jobKind: String,
                        entries: [IntegrationTimelineEntry], index: Int) -> Mark {
+        if entry.data?["skipped"]?.stringValue == "TASK_EXEMPT" { return Mark(glyph: "→", color: .orange) }
+        if LandingCheckSkip.isSkip(entry) { return Mark(glyph: "≡", color: .secondary) }
         switch entry.kind {
         case "TAKEN_OVER":
             return Mark(glyph: "↗", color: .accentColor)

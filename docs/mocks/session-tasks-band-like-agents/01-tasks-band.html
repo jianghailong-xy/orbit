@@ -1,0 +1,145 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+@font-face{font-family:Inter;src:url(/mnt/tmp/01a1-usable-default/Inter.ttf);font-weight:100 900}
+@font-face{font-family:JBM;src:url(/mnt/tmp/01a1-usable-default/JetBrainsMono.ttf);font-weight:100 900}
+*{box-sizing:border-box}
+body{margin:0;background:#e7e7ec}
+.board{padding:32px;background:#e7e7ec;font-family:Inter,sans-serif;color:#000;width:1400px}
+h1{font-size:26px;margin:0 0 6px}.sub{color:#555;font-size:15px;margin-bottom:22px;line-height:1.5;max-width:1200px}
+h2{font-size:18px;margin:0 0 4px}.h2s{color:#666;font-size:13px;margin-bottom:12px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:26px 34px}
+.frame{background:#fff;border-radius:18px;padding:18px 18px 20px}
+.frame.today{outline:2px solid #c7c7cc}
+.frame.new{outline:2px solid #3b82f6}
+.tag{display:inline-block;font-size:12px;font-weight:600;border-radius:6px;padding:2px 8px;margin-right:6px;vertical-align:2px}
+.tag.t{background:#eee;color:#555}.tag.n{background:#dbeafe;color:#1d4ed8}.tag.s{background:#e7f6ec;color:#1f7a3a}
+.stack{width:600px;margin-top:6px}
+/* the iOS composer band cards */
+.cb{display:flex;align-items:center;gap:8px;height:44px;border:1px solid #d7d7dc;border-radius:12px;background:#fff;padding:0 14px;margin-bottom:9px;box-shadow:0 2px 8px rgba(0,0,0,.05);font-size:17px;white-space:nowrap}
+.cb .ico{width:16px;height:16px;border:1.5px solid #8e8e93;border-radius:3px;flex:none;position:relative}
+.cb .ico.chk::after{content:"";position:absolute;left:4px;top:1px;width:4px;height:8px;border:solid #8e8e93;border-width:0 1.5px 1.5px 0;transform:rotate(45deg)}
+.cb b{font-weight:600}
+.sec{color:#8e8e93;font-size:15px}
+.tint{color:#3b6fe0}
+.red{color:#e5484d}
+.ttl{overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1 1 auto}
+.spacer{flex:1}
+.chev{color:#8e8e93;font-weight:600;font-size:18px;flex:none}
+.eye{color:#3b6fe0;font-size:15px;flex:none;display:flex;align-items:center;gap:3px}
+.eye svg{width:17px;height:12px}
+.pill{font-size:13px;font-weight:600;border-radius:7px;padding:3px 8px;flex:none}
+.p-run{background:#e0ecff;color:#2563eb}.p-done{background:#e3f5e8;color:#1f8a46}.p-fail{background:#fde4e4;color:#d13434}.p-q{background:#f1f1f4;color:#6b6b70}
+.spin{display:inline-block;width:16px;height:16px;border-radius:50%;border:2px solid #d5d5da;border-top-color:#8e8e93;flex:none}
+.mono{font-family:JBM,monospace;font-size:16px;color:#8e8e93}
+.br{display:inline-flex;align-items:center;background:#efefef;border:1px solid #ddd;border-radius:8px;padding:2px 8px;color:#000}
+.hl{outline:2.5px dashed #3b82f6;outline-offset:3px;border-radius:12px}
+.why{font-size:13.5px;color:#333;line-height:1.55;margin-top:10px}
+.why code{font-family:JBM,monospace;font-size:12.5px;background:#f2f2f5;border-radius:4px;padding:1px 4px}
+.ref{font-size:13px;color:#666;margin:2px 0 8px}
+table{border-collapse:collapse;width:100%;font-size:13.5px;line-height:1.45}
+td,th{border-top:1px solid #e5e5ea;padding:7px 8px;text-align:left;vertical-align:top}
+th{color:#666;font-weight:600;border-top:none}
+.panel{background:#fff;border-radius:18px;padding:18px 22px;margin-top:26px}
+.q{background:#fff8e6;border:1px solid #f2d27a;border-radius:14px;padding:14px 18px;margin-top:20px;font-size:14px;line-height:1.6}
+</style></head><body><div class="board">
+
+<h1>Tasks bar above the composer: make it work like the Agents bar</h1>
+<div class="sub">Drawn by hand from <code>CreatedTasksCard.swift</code> and <code>AgentsBandRow</code> (iPhone; Mac, web and Android follow the same rule). Only the <b>collapsed line</b> changes. The list it opens, the eye and the "1 task: name + pill" case stay as they are.</div>
+
+<div class="grid">
+
+<div class="frame today" style="grid-column:1/3">
+ <h2><span class="tag t">① Today</span>Your screenshot</h2>
+ <div class="h2s">The Tasks line only counts. It doesn't say what is being worked on or how the latest task ended.</div>
+ <div style="display:flex;gap:40px;align-items:flex-start">
+ <div class="stack">
+  <div class="cb"><span class="ico"></span><b>Background processes</b><span class="sec">1 total</span><span class="spacer"></span><span class="chev">›</span></div>
+  <div class="cb hl"><span class="ico chk"></span><b>Tasks</b><span class="eye"><svg viewBox="0 0 24 16"><path d="M1 8c3-5 7-7 11-7s8 2 11 7c-3 5-7 7-11 7S4 13 1 8z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="8" r="3.2" fill="currentColor"/></svg>1</span><span class="sec">13/14 done</span><span class="spacer"></span><span class="chev">›</span></div>
+  <div class="cb"><span class="br mono" style="color:#000">⑂ p…5E</span><span class="mono" style="color:#34a853">+558</span><span class="mono" style="color:#e5484d">−0</span><span class="mono">· 8 files · committed</span><span class="spacer"></span><span style="color:#34c759;font-weight:600">✓ Merged</span></div>
+ </div>
+ <div style="flex:1">
+  <div class="ref"><b>For reference, the Agents bar today</b> (<code>SubagentSessionSummary.band</code>):</div>
+  <div class="cb" style="width:560px"><span style="color:#8b5cf6">✦</span><b>Agents</b><span class="sec ttl">Check production runs ddec47f84</span><span class="spin"></span><span class="chev">›</span></div>
+  <div class="cb" style="width:560px"><span style="color:#8b5cf6">✦</span><b>Agents</b><span class="sec ttl">3 · Read-only preflight of the orbit-op de…</span><span style="color:#34c759">●</span><span class="sec">58s</span><span class="chev">›</span></div>
+  <div class="why">Something running → <b>its name</b> + spinner. Nothing running → <b>count · newest name</b> + how it ended.</div>
+ </div>
+ </div>
+</div>
+
+<div class="frame new">
+ <h2><span class="tag n">② A</span>One task running</h2>
+ <div class="h2s">13 of 14 done; the one still open is running now.</div>
+ <div class="stack"><div class="cb hl"><span class="ico chk"></span><b>Tasks</b><span class="eye"><svg viewBox="0 0 24 16"><path d="M1 8c3-5 7-7 11-7s8 2 11 7c-3 5-7 7-11 7S4 13 1 8z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="8" r="3.2" fill="currentColor"/></svg>1</span><span class="sec ttl">Deploy the gateway to orbit-prod</span><span class="pill p-run">Running</span><span class="chev">›</span></div></div>
+ <div class="why">Shows the running task's name. On the right is <b>that task's own status pill</b>, the same one the open list and today's one-task line use.</div>
+</div>
+
+<div class="frame new">
+ <h2><span class="tag n">② B</span>Several running</h2>
+ <div class="h2s">3 running; the line names the newest of them.</div>
+ <div class="stack"><div class="cb hl"><span class="ico chk"></span><b>Tasks</b><span class="sec ttl">3 running · Deploy the gateway to orbit-prod</span><span class="pill p-run">Running</span><span class="chev">›</span></div></div>
+ <div class="why">Same words as Agents: <code>3 running · &lt;newest running&gt;</code>.</div>
+</div>
+
+<div class="frame new">
+ <h2><span class="tag n">② C</span>Nothing running, all fine</h2>
+ <div class="h2s">14 tasks; the newest one finished.</div>
+ <div class="stack"><div class="cb hl"><span class="ico chk"></span><b>Tasks</b><span class="sec ttl">14 · Deploy the gateway to orbit-prod</span><span class="pill p-done">Done</span><span class="chev">›</span></div></div>
+ <div class="why">Same words as Agents: <code>&lt;count&gt; · &lt;newest&gt;</code>, and the newest task's pill on the right. If the newest is still waiting, the pill says so (<span class="pill p-q">Queued</span>, Open, In progress…).</div>
+</div>
+
+<div class="frame new">
+ <h2><span class="tag n">② D</span>A failure somewhere</h2>
+ <div class="h2s">One older task failed; the newest finished.</div>
+ <div class="stack">
+  <div class="cb hl"><span class="ico chk"></span><b>Tasks</b><span class="sec ttl"><span class="red">1 failed</span> · 14 · Deploy the gateway to orbit-prod</span><span class="pill p-done">Done</span><span class="chev">›</span></div>
+  <div class="cb"><span class="ico chk"></span><b>Tasks</b><span class="sec ttl">2 running · <span class="red">1 failed</span> · Deploy the gateway to…</span><span class="pill p-run">Running</span><span class="chev">›</span></div>
+ </div>
+ <div class="why">Agents has nothing like this. I kept the red <b>N failed</b> at the front so an older failure isn't hidden behind a green "Done". (Open question 1)</div>
+</div>
+
+<div class="frame new" style="grid-column:1/3">
+ <h2><span class="tag s">Unchanged</span>One task · watched tasks · the open list · the folded pill</h2>
+ <div style="display:flex;gap:30px;align-items:flex-start">
+ <div class="stack" style="width:560px">
+  <div class="cb"><span class="ico chk"></span><b>Tasks</b><span class="tint ttl">Deploy the gateway to orbit-prod</span><span class="pill p-run">Running</span><span class="chev">›</span></div>
+  <div class="cb"><span class="ico chk"></span><b>Tasks</b><span class="eye"><svg viewBox="0 0 24 16"><path d="M1 8c3-5 7-7 11-7s8 2 11 7c-3 5-7 7-11 7S4 13 1 8z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="8" r="3.2" fill="currentColor"/></svg>1</span><span class="sec ttl">14 · Deploy the gateway to orbit-prod</span><span class="pill p-done">Done</span><span class="chev">›</span></div>
+ </div>
+ <div class="why" style="margin-top:0;flex:1">
+  • <b>Exactly one task</b>: already shows its name and pill (blue name). Nothing changes; the new rule is the same idea applied to many tasks.<br>
+  • <b>Eye</b>: stays before the words, blue or orange as today.<br>
+  • <b>Tapping</b> still opens the same list: watched rows first, each with its pill and age.<br>
+  • <b>Folded pill</b> (shown while you scroll back through the history, <code>FoldedBand.tasks</code>) keeps its short <code>13/14</code> / <code>1 failed</code> mark. (Open question 3)
+ </div>
+ </div>
+</div>
+
+</div>
+
+<div class="panel">
+<h2>Rule</h2>
+<table>
+<tr><th style="width:210px">State</th><th>Words after "Tasks" (and the eye)</th><th style="width:240px">Right side</th></tr>
+<tr><td>1 task</td><td>Its name (blue), as today</td><td>Its pill, as today</td></tr>
+<tr><td>1 running</td><td><code>[N failed · ]</code>&lt;running task&gt;</td><td>That task's pill</td></tr>
+<tr><td>2+ running</td><td><code>[N failed · ]</code>N running · &lt;newest running task&gt;</td><td>That task's pill</td></tr>
+<tr><td>Nothing running</td><td><code>[N failed · ]</code>&lt;total&gt; · &lt;newest task&gt;</td><td>That task's pill</td></tr>
+</table>
+<div class="why">"Newest" means the latest <code>createdAt</code>. A watched task created in another session has no age here, so it counts as the oldest. Long names are cut with "…"; the pill and the red part are never cut.</div>
+
+<h2 style="margin-top:18px">Files it would touch</h2>
+<table>
+<tr><th style="width:420px">File</th><th>Change</th></tr>
+<tr><td><code>OrbitKit/App/SessionTaskCard.swift</code> + <code>SessionCreatedTasksCopy.swift</code></td><td>Add the band (words and the row whose pill is shown), next to <code>countParts</code></td></tr>
+<tr><td><code>shared/src</code> <code>sessionTaskCard</code> + <code>session-created-tasks.fixture.json</code></td><td>The same band for web, with new fixture cases so the parity tests hold</td></tr>
+<tr><td><code>OrbitApp/Views/CreatedTasksCard.swift</code></td><td>The collapsed line uses the band</td></tr>
+<tr><td><code>web/components/SessionCreatedTasksStrip.tsx</code></td><td>Same</td></tr>
+<tr><td><code>android/…/cards/SessionTasksCard.kt</code></td><td>Same</td></tr>
+</table>
+</div>
+
+<div class="q"><b>Your call:</b><br>
+1. <b>Keep the red "N failed"</b> at the front (D)? Or drop it and match Agents exactly? I recommend keeping it.<br>
+2. <b>Right side</b>: the task's status pill (as drawn)? Or the Agents marks (spinner / green ✓ / red ✗)? I recommend the pill: tasks have more states than agents (Queued, Open, Cancelled…).<br>
+3. <b>Folded pill</b>: keep <code>13/14</code>? I recommend keeping it.
+</div>
+
+</div></body></html>

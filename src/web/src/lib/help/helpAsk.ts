@@ -1,6 +1,7 @@
 import { queryOptions } from '@tanstack/react-query';
 import type { HelpArticleMeta, HelpAskChoices, HelpAskCreateBody, HelpAskList, HelpAskMachine, HelpAskPage } from '@orbit/shared';
 import { api } from '../../api';
+import type { SessionReachDeclaration } from '../sessionReach';
 import type { RunEvent } from '../useSessionStream';
 import { helpArticleLink, ORBIT_LINK_PREFIX } from './helpContent';
 
@@ -16,10 +17,18 @@ export const helpAskChoicesQuery = () =>
     staleTime: 15_000,
   });
 
-/** GET /api/help/ask/sessions: /help → Your questions. Under ['sessions'] so a session event refreshes it. */
+/** GET /api/help/ask/sessions: /help → Your questions. It declares `session`, so an event of one of its questions'
+ *  sessions refreshes it, and a session.created, which may be a question asked elsewhere (lib/sessionReach). */
 export const helpAskListQuery = () =>
   queryOptions({
     queryKey: ['sessions', 'help-ask'] as const,
+    meta: {
+      entities: ['session'],
+      sessionReach: ((data: unknown) => ({
+        sessions: ((data as HelpAskList | undefined)?.questions ?? []).map((row) => row.sessionId),
+        created: true,
+      })) satisfies SessionReachDeclaration,
+    },
     queryFn: () => api<HelpAskList>('/help/ask/sessions'),
   });
 

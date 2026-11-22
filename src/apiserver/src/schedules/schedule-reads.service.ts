@@ -8,9 +8,11 @@
  *   * the cards: requests the owner has to answer, the drafts of the Scheduled page (PENDING CREATE requests), and
  *     what one session put up — its cards and the records of the changes it made.
  */
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, NotFoundException, Optional } from '@nestjs/common';
+import type { ScheduleWaitingTask } from '@orbit/shared';
 import type { Prisma, Schedule, ScheduleChangeRequestKind, ScheduleChangeRequestState, ScheduleState } from '@prisma/client';
 
+import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/managed-runner-gate';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   scheduleCardViews,
@@ -67,7 +69,11 @@ function badState(name: string, value: string, allowed: readonly string[]): neve
 
 @Injectable()
 export class ScheduleReadsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    /** The managed-runner switch, for a WHEN card's "Keeps this cloud workspace awake" line. Absent, off. */
+    @Optional() @Inject(MANAGED_RUNNER_GATE) private readonly gate?: ManagedRunnerGate,
+  ) {}
 
   private now(): Date {
     return new Date();
@@ -113,7 +119,57 @@ export class ScheduleReadsService {
     return {
       schedules: schedules.map((s) => ({ ...s, pausedAt: timeline.pausedAt.get(s.id) ?? null })),
       runs: timeline.runs,
+      waitingTasks: await this.waitingTasks(ownerId, filter.workspaceId),
     };
+  }
+
+  /**
+   * The OPEN tasks waiting for their startWhen condition (docs/condition-triggers-design.md §9): the page's "Waiting
+   * for a condition" group lists them beside the WHEN schedules, with the newest reading and its age. Not fired and
+   * not ended: a fired condition has started its task, or will within the minute.
+   */
+  private async waitingTasks(ownerId: string, workspaceId?: string): Promise<ScheduleWaitingTask[]> {
+    const tasks = await this.prisma.task.findMany({
+      where: {
+        ownerId,
+        status: 'OPEN',
+        // Stated on the task row as well as implied by the relation: without it the planner walks the
+        // owner's tasks newest first looking for 200 with a live condition, and when there are none it
+        // reads every one (production, 2026-11-19: 109,840 rows, 115,834 buffers, 285 ms). With it the
+        // entry is task_start_when_condition_id_key, which holds only tasks that have a condition.
+        startWhenConditionId: { not: null },
+        startWhenCondition: { state: { not: 'ENDED' }, firedAt: null },
+        ...(workspaceId ? { assigneeId: workspaceId } : {}),
+      },
+      orderBy: { createdAt: 'asc' },
+      take: 200,
+      select: {
+        id: true,
+        title: true,
+        assigneeId: true,
+        startWhenCondition: {
+          select: { id: true, text: true, unit: true, state: true, lastValue: true, lastSampleAt: true, workspaceId: true },
+        },
+      },
+    });
+    const names = await workspaceNames(this.prisma, ownerId, tasks.map((t) => t.startWhenCondition!.workspaceId));
+    return tasks.map((t) => {
+      const c = t.startWhenCondition!;
+      return {
+        id: t.id,
+        title: t.title,
+        workspaceId: c.workspaceId,
+        workspaceName: names.get(c.workspaceId) ?? null,
+        condition: {
+          id: c.id,
+          text: c.text,
+          unit: c.unit,
+          state: c.state,
+          lastValue: c.lastValue,
+          lastSampleAt: c.lastSampleAt?.toISOString() ?? null,
+        },
+      };
+    });
   }
 
   /** The list's timeline part; `rows` are already the caller's own, so every read below is scoped by them. */
@@ -186,7 +242,7 @@ export class ScheduleReadsService {
       findings: findings.map(scheduleFindingView),
       usage,
       history: revisions.map((r) => scheduleRecordView(schedule.id, schedule.title, r, undone.get(r.revision) ?? null)),
-      pendingCards: await scheduleCardViews(tx, ownerId, pending, now),
+      pendingCards: await scheduleCardViews(tx, ownerId, pending, now, this.gate),
     };
   }
 
@@ -223,13 +279,13 @@ export class ScheduleReadsService {
       orderBy: { createdAt: 'desc' },
       take: 200,
     });
-    return { requests: await scheduleCardViews(this.prisma, ownerId, rows, this.now()) };
+    return { requests: await scheduleCardViews(this.prisma, ownerId, rows, this.now(), this.gate) };
   }
 
   async request(ownerId: string, requestId: string) {
     const row = await this.prisma.scheduleChangeRequest.findFirst({ where: { id: requestId, ownerId } });
     if (!row) throw new NotFoundException({ code: 'SCHEDULE_REQUEST_NOT_FOUND', message: 'No such schedule request.' });
-    const [card] = await scheduleCardViews(this.prisma, ownerId, [row], this.now());
+    const [card] = await scheduleCardViews(this.prisma, ownerId, [row], this.now(), this.gate);
     return card;
   }
 
@@ -293,7 +349,7 @@ export class ScheduleReadsService {
       const schedule = await this.rowView(ownerId, result.schedule);
       return { outcome: 'EXISTS' as const, scheduled: false, note: SCHEDULE_EXISTS_NOTE, scheduleId: schedule.id, schedule };
     }
-    const [card] = await scheduleCardViews(this.prisma, ownerId, [result.request], this.now());
+    const [card] = await scheduleCardViews(this.prisma, ownerId, [result.request], this.now(), this.gate);
     return { outcome: 'PENDING' as const, scheduled: false, note: SCHEDULE_PENDING_CREATE_NOTE, card };
   }
 
@@ -301,7 +357,7 @@ export class ScheduleReadsService {
     const kept = result.intentKept ? ` ${SCHEDULE_INTENT_KEPT_NOTE}` : '';
     const intentKept = result.intentKept ? { intentKept: true as const } : {};
     if (result.outcome === 'PENDING') {
-      const [card] = await scheduleCardViews(this.prisma, ownerId, [result.request], this.now());
+      const [card] = await scheduleCardViews(this.prisma, ownerId, [result.request], this.now(), this.gate);
       return { outcome: 'PENDING' as const, changed: false, note: SCHEDULE_PENDING_UPDATE_NOTE + kept, ...intentKept, card };
     }
     const schedule = await this.rowView(ownerId, result.schedule);
@@ -320,7 +376,7 @@ export class ScheduleReadsService {
   }
 
   async decisionAnswer(ownerId: string, result: ScheduleDecisionResult) {
-    const [card] = await scheduleCardViews(this.prisma, ownerId, [result.request], this.now());
+    const [card] = await scheduleCardViews(this.prisma, ownerId, [result.request], this.now(), this.gate);
     return {
       outcome: result.outcome,
       card,

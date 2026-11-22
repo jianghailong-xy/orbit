@@ -34,6 +34,7 @@ Usage:
   orbit session merge-receipt SESSION_ID --result RESULT --source-sha SHA --target-branch BRANCH [options]
   orbit session merge-receipts SESSION_ID [--limit N] [--json]
   orbit session end SESSION_ID [--json]
+  orbit session move SESSION_ID [--workspace-id ID] [--folder-id ID | --no-folder] [--json]
   orbit session complete SESSION_ID [--json]
   orbit session delete SESSION_ID [--json]
 
@@ -127,7 +128,9 @@ Options:
                            even when the agent isolates each session: for work that changes
                            no code. The session shares that checkout and has no branch to merge
   --wait[=BOOL]            Wait until the first turn settles. Inside a session the wait is first
-                           recorded as a watch that wakes this session when the turn settles: if
+                           recorded as a watch that wakes this session when the session has
+                           finished all its work, no job or subagent of its own still running,
+                           and the inline answer waits for that watch too: if
                            the wait runs out or the server stops answering, the output carries
                            that watch under "watch" instead of losing it. If no watch could be
                            recorded, a session that has not settled carries why under "watch"
@@ -242,6 +245,22 @@ default target, as a pick there does.
 
 Usage:
   orbit session end SESSION_ID [--json]
+`,
+	"move": `orbit session move — file a session in a folder, or move it to another workspace
+
+Usage:
+  orbit session move SESSION_ID [--workspace-id ID] [--folder-id ID | --no-folder] [--json]
+
+Options:
+  --workspace-id ID   move the session to this workspace (an id from 'orbit agent list')
+  --folder-id ID      file it in this folder of its workspace (of the new one with --workspace-id)
+  --no-folder         take it out of its folder
+  --json              emit compact JSON
+
+The Move panel's rules apply. Only an ended session can change workspace: end it first
+('orbit session end'), which is also what commits what it left uncommitted. A move to
+another workspace without --folder-id lands in no folder. A move the rules refuse is
+answered 409 with the reason, and nothing is moved.
 `,
 	"complete": `orbit session complete — move a session to Completed
 
@@ -388,6 +407,8 @@ func cmdSessionCLI(args []string, in io.Reader, out io.Writer) error {
 		return cliSessionMergeReceipts(args[1:], out, ctx)
 	case "end":
 		return cliSessionEnd(args[1:], out, ctx)
+	case "move":
+		return cliSessionMove(args[1:], out, ctx)
 	case "complete":
 		return cliSessionComplete(args[1:], out, ctx)
 	case "delete":
@@ -723,7 +744,7 @@ func cliSessionImport(args []string, out io.Writer, ctx cliOrchestrationContext)
 	if !claudeSessionUUID.MatchString(claudeID) {
 		return fmt.Errorf("claude session id must be a UUID, e.g. 4e453ab7-f37c-494d-8017-bb4e9beffeef")
 	}
-	if flagWasSet(fs, "workspace") {
+	if flagWasSet(fs, "workspace-id") {
 		if err := validatePathSegmentID(*workspace); err != nil {
 			return fmt.Errorf("workspace %w", err)
 		}
@@ -756,7 +777,7 @@ func cliSessionImport(args []string, out io.Writer, ctx cliOrchestrationContext)
 		return err
 	}
 	body := map[string]interface{}{"claudeSessionId": claudeID, "sourceCwd": sourceCwd}
-	if flagWasSet(fs, "workspace") {
+	if flagWasSet(fs, "workspace-id") {
 		body["workspaceId"] = *workspace
 	}
 	raw, err := t.importSession(ctx.sessionID, ctx.token, body)
@@ -1191,6 +1212,52 @@ func cliSessionEnd(args []string, out io.Writer, ctx cliOrchestrationContext) er
 		return fmt.Errorf("end session: %w", err)
 	}
 	return writeCLIRawJSON(out, raw, jsonOut)
+}
+
+func cliSessionMove(args []string, out io.Writer, ctx cliOrchestrationContext) error {
+	id, rest := peelLeadingID(args)
+	fs := newCLIFlagSet("orbit session move")
+	workspace := fs.String("workspace-id", "", "move the session to this workspace")
+	folder := fs.String("folder-id", "", "file the session in this folder")
+	noFolder := fs.Bool("no-folder", false, "take the session out of its folder")
+	jsonOut := fs.Bool("json", false, "emit compact JSON")
+	if err := fs.Parse(rest); err != nil {
+		return err
+	}
+	id, err := resolveSessionCLIId(id, fs.Args())
+	if err != nil {
+		return err
+	}
+	body := map[string]interface{}{}
+	if flagWasSet(fs, "workspace-id") {
+		if strings.TrimSpace(*workspace) == "" {
+			return fmt.Errorf("--workspace-id cannot be empty")
+		}
+		body["workspaceId"] = strings.TrimSpace(*workspace)
+	}
+	if flagWasSet(fs, "folder-id") {
+		if *noFolder {
+			return fmt.Errorf("--folder-id and --no-folder cannot be used together")
+		}
+		if strings.TrimSpace(*folder) == "" {
+			return fmt.Errorf("--folder-id cannot be empty; pass --no-folder to take the session out of its folder")
+		}
+		body["folderId"] = strings.TrimSpace(*folder)
+	} else if *noFolder {
+		body["folderId"] = nil
+	}
+	if len(body) == 0 {
+		return fmt.Errorf("orbit session move needs --workspace-id, --folder-id or --no-folder")
+	}
+	t, err := sessionCommandTransport(ctx)
+	if err != nil {
+		return err
+	}
+	raw, err := t.moveSession(ctx.sessionID, ctx.token, id, body)
+	if err != nil {
+		return fmt.Errorf("move session: %w", err)
+	}
+	return writeCLIRawJSON(out, raw, *jsonOut)
 }
 
 func cliSessionComplete(args []string, out io.Writer, ctx cliOrchestrationContext) error {

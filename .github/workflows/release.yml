@@ -1,7 +1,7 @@
 # Release workflow for all three Orbit clients — one `vX.Y.Z` tag ships them from a single push:
 #   • identity        → refuses a tag whose version is not the root package.json version or that has no
 #                       human-written release-notes/<version>.md; every build job waits for it.
-#   • dmg             → macOS: signed + notarized + stapled DMG, its Sparkle payload and the appcast.
+#   • dmg             → macOS: signed + notarized + stapled DMG, its Sparkle payload and its appcast entry.
 #                       Builds on a tag push and on workflow_dispatch; publishes nothing itself.
 #   • testflight      → iOS: signed .ipa archived and uploaded to TestFlight.
 #   • android-build   → Android: signed release APK, built and verified with the android-internal environment.
@@ -12,7 +12,8 @@
 #                       stops the release here.
 #   • publish         → creates the GitHub Release (body = release-notes/<version>.md) with the DMG, Sparkle
 #                       payload, runner reference binaries, checksums, SBOM, provenance and manifest, and
-#                       publishes the Sparkle appcast to GitHub Pages. The only job that creates a Release.
+#                       merges the release's appcast entry into the Sparkle feed on gh-pages as the feed
+#                       stands then (scripts/sparkle-appcast.mjs). The only job that creates a Release.
 #   • android-publish → attaches the APK, its .sha256 and android-update.json (what installed apps
 #                       read to update themselves) to the Release publish created.
 #
@@ -154,11 +155,13 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: Orbit-dmg
-          path: src/macos/build/Orbit-v*
+          path: src/macos/build/Orbitd-v*
           if-no-files-found: error
 
-      # The appcast is generated here, where the Sparkle key and the zip are, and published by the
-      # `publish` job only after the supply chain has verified the artifacts.
+      # This release's appcast entry is generated here, where the Sparkle key and the zip are. It holds this
+      # release alone: the `publish` job merges it into the feed as the feed stands when it publishes, after
+      # the supply chain has verified the artifacts. Seeding from the feed live now would write back what the
+      # feed was when this build ran, dropping any release published while it waited for a macOS runner.
       - name: Generate Sparkle appcast
         if: github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/v')
         env:
@@ -171,9 +174,7 @@ jobs:
             https://github.com/sparkle-project/Sparkle/releases/download/2.9.6/Sparkle-2.9.6.tar.xz
           mkdir -p "$RUNNER_TEMP/sparkle"; tar -xf "$RUNNER_TEMP/sparkle.tar.xz" -C "$RUNNER_TEMP/sparkle"
           work="$RUNNER_TEMP/updates"; mkdir -p "$work/out"
-          cp "src/macos/build/Orbit-v$ver-arm64.zip" "$work/"
-          # Seed with the currently-published appcast so prior versions are preserved.
-          curl -fsSL -o "$work/appcast.xml" https://jianghailong-xy.github.io/orbit/appcast.xml || true
+          cp "src/macos/build/Orbitd-v$ver-arm64.zip" "$work/"
           printf '%s' "$SPARKLE_ED_PRIVATE_KEY" | "$RUNNER_TEMP/sparkle/bin/generate_appcast" "$work" \
             --ed-key-file - $channel \
             --download-url-prefix "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/" \
@@ -227,6 +228,9 @@ jobs:
           IOS_DIST_CERT_P12_BASE64:     ${{ secrets.IOS_DIST_CERT_P12_BASE64 }}
           IOS_DIST_CERT_PASSWORD:       ${{ secrets.IOS_DIST_CERT_PASSWORD }}
           IOS_PROVISION_PROFILE_BASE64: ${{ secrets.IOS_PROVISION_PROFILE_BASE64 }}
+          # The OrbitShare extension's own App Store profile (bundle io.orbitd.app.OrbitShare, App
+          # Group group.io.orbitd.app). Both profiles must carry that App Group — src/ios/README.md.
+          IOS_SHARE_PROVISION_PROFILE_BASE64: ${{ secrets.IOS_SHARE_PROVISION_PROFILE_BASE64 }}
           KEYCHAIN_PASSWORD:            ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
           set -euo pipefail
@@ -243,16 +247,31 @@ jobs:
           security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | sed s/\"//g)
           security default-keychain -s "$KEYCHAIN"
           rm -f "$RUNNER_TEMP/dist.p12"
-          # Install the App Store provisioning profile; surface its Name for the signer / ExportOptions.
-          echo "$IOS_PROVISION_PROFILE_BASE64" | base64 --decode > "$RUNNER_TEMP/profile.mobileprovision"
-          security cms -D -i "$RUNNER_TEMP/profile.mobileprovision" > "$RUNNER_TEMP/profile.plist"
-          UUID="$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$RUNNER_TEMP/profile.plist")"
-          NAME="$(/usr/libexec/PlistBuddy -c 'Print :Name' "$RUNNER_TEMP/profile.plist")"
+          # Install the two App Store provisioning profiles (the app's and the Share Extension's);
+          # surface each Name for the signer / ExportOptions.
+          if [ -z "${IOS_SHARE_PROVISION_PROFILE_BASE64:-}" ]; then
+            echo "::error::IOS_SHARE_PROVISION_PROFILE_BASE64 is not set: the OrbitShare extension needs its own App Store profile (src/ios/README.md → Release)."
+            exit 1
+          fi
           mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
-          cp "$RUNNER_TEMP/profile.mobileprovision" \
-            "$HOME/Library/MobileDevice/Provisioning Profiles/$UUID.mobileprovision"
-          echo "PROVISION_PROFILE_NAME=$NAME" >> "$GITHUB_ENV"
-          echo "Installed profile '$NAME' ($UUID)"
+          install_profile() {   # $1 = base64 profile, $2 = env var to export its Name as
+            local file="$RUNNER_TEMP/$2.mobileprovision"
+            echo "$1" | base64 --decode > "$file"
+            security cms -D -i "$file" > "$RUNNER_TEMP/$2.plist"
+            local uuid name groups
+            uuid="$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$RUNNER_TEMP/$2.plist")"
+            name="$(/usr/libexec/PlistBuddy -c 'Print :Name' "$RUNNER_TEMP/$2.plist")"
+            groups="$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.security.application-groups' "$RUNNER_TEMP/$2.plist" 2>/dev/null || true)"
+            if ! grep -q 'group.io.orbitd.app' <<<"$groups"; then
+              echo "::error::Profile '$name' does not carry the App Group group.io.orbitd.app; regenerate it after enabling the group on its App ID."
+              exit 1
+            fi
+            cp "$file" "$HOME/Library/MobileDevice/Provisioning Profiles/$uuid.mobileprovision"
+            echo "$2=$name" >> "$GITHUB_ENV"
+            echo "Installed profile '$name' ($uuid)"
+          }
+          install_profile "$IOS_PROVISION_PROFILE_BASE64" PROVISION_PROFILE_NAME
+          install_profile "$IOS_SHARE_PROVISION_PROFILE_BASE64" SHARE_PROVISION_PROFILE_NAME
 
       - name: Generate Xcode project
         working-directory: src/ios
@@ -274,7 +293,7 @@ jobs:
           MKT="${MKT%%-*}"                 # strip any -beta.N → numeric X.Y.Z (CFBundleShortVersionString)
           MKT="${MKT:-0.0.0}"              # no tags (shallow clone) → placeholder
           BUILD="$(git rev-list --count HEAD)"
-          echo "Building marketing $MKT (build $BUILD) with profile '$PROVISION_PROFILE_NAME'"
+          echo "Building marketing $MKT (build $BUILD) with profiles '$PROVISION_PROFILE_NAME' + '$SHARE_PROVISION_PROFILE_NAME'"
           xcodebuild \
             -project Orbit.xcodeproj \
             -scheme Orbit \
@@ -284,10 +303,21 @@ jobs:
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
             CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY="Apple Distribution" \
-            PROVISIONING_PROFILE_SPECIFIER="$PROVISION_PROFILE_NAME" \
+            ORBIT_APP_PROFILE="$PROVISION_PROFILE_NAME" \
+            ORBIT_SHARE_PROFILE="$SHARE_PROVISION_PROFILE_NAME" \
             MARKETING_VERSION="$MKT" \
             CURRENT_PROJECT_VERSION="$BUILD" \
             archive
+
+      # App Store Connect keeps a build's symbols but offers no download, and a rebuild is not
+      # byte-identical: a TestFlight crash report is only symbolicated against this archive's dSYM.
+      - name: Keep the iOS dSYM
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ios-dsym-${{ github.run_id }}-${{ github.run_attempt }}   # a dispatched branch name may hold a slash
+          path: ${{ runner.temp }}/Orbit.xcarchive/dSYMs
+          if-no-files-found: error
+          retention-days: 90
 
       - name: Export + upload to TestFlight
         working-directory: src/ios
@@ -299,6 +329,8 @@ jobs:
           sed "s/REPLACE_WITH_TEAM_ID/${APPLE_TEAM_ID}/" ExportOptions.plist > "$RUNNER_TEMP/ExportOptions.plist"
           # Overwrite the profile-name placeholder via PlistBuddy (handles spaces in the name safely).
           /usr/libexec/PlistBuddy -c "Set :provisioningProfiles:io.orbitd.app $PROVISION_PROFILE_NAME" \
+            "$RUNNER_TEMP/ExportOptions.plist"
+          /usr/libexec/PlistBuddy -c "Set :provisioningProfiles:io.orbitd.app.OrbitShare $SHARE_PROVISION_PROFILE_NAME" \
             "$RUNNER_TEMP/ExportOptions.plist"
           xcodebuild -exportArchive \
             -archivePath "$RUNNER_TEMP/Orbit.xcarchive" \
@@ -551,18 +583,37 @@ jobs:
           # The body is the release's own human-written notes; the identity job refused the tag without them.
           gh release create "$GITHUB_REF_NAME" --title "Orbit $ver" \
             --notes-file "release-notes/$ver.md" $prerelease "${assets[@]}"
-      - name: Stage the appcast for Pages
-        run: |
-          mkdir -p "$RUNNER_TEMP/appcast"
-          cp "$RUNNER_TEMP/supply-chain/appcast.xml" "$RUNNER_TEMP/appcast/appcast.xml"
-      - name: Publish appcast to GitHub Pages
-        uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453 # v4.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          github_token: ${{ github.token }}
-          publish_branch: gh-pages
-          publish_dir: ${{ runner.temp }}/appcast
-          # Keep the public entrance deployed by pages.yml alongside Sparkle's feed.
-          keep_files: true
+          node-version: 26
+      # The feed is merged now, at publish time, from gh-pages as it stands — not from the Pages site, which
+      # trails the branch while a Pages build waits — so a release published meanwhile stays in it. A push that
+      # loses to another release's reads the branch again and merges again. Only appcast.xml is touched; the
+      # public entrance pages.yml deploys stays as it is.
+      - name: Merge the appcast into GitHub Pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          pages="$RUNNER_TEMP/gh-pages"
+          git clone --quiet --depth 1 --branch gh-pages \
+            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$pages"
+          git -C "$pages" config user.name 'github-actions[bot]'
+          git -C "$pages" config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          for attempt in 1 2 3 4 5; do
+            node scripts/sparkle-appcast.mjs merge --feed "$pages/appcast.xml" \
+              --release "$RUNNER_TEMP/supply-chain/appcast.xml" --out "$pages/appcast.xml"
+            git -C "$pages" add appcast.xml
+            if git -C "$pages" diff --cached --quiet; then echo "the feed already holds $GITHUB_REF_NAME"; exit 0; fi
+            git -C "$pages" commit --quiet -m "appcast: ${GITHUB_REF_NAME#v}"
+            if git -C "$pages" push --quiet origin HEAD:gh-pages; then exit 0; fi
+            echo "::warning::gh-pages moved while the appcast was merged (attempt $attempt); merging again"
+            git -C "$pages" fetch --quiet --depth 1 origin gh-pages
+            git -C "$pages" reset --quiet --hard FETCH_HEAD
+            sleep $((attempt * 5))
+          done
+          echo "::error::could not push the merged appcast to gh-pages"
+          exit 1
 
   # Holds the write token but never the signing environment or its secrets. It does not create the
   # Release or change its pre-release/latest state, and never replaces an asset already there.

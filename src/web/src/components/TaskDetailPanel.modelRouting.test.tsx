@@ -360,14 +360,15 @@ describe('the Suggested tier in Details', { timeout: 60_000 }, () => {
     await vi.waitFor(() => expect(patches()).toEqual([expect.objectContaining({ model: 'claude-sonnet-5-5' })]));
   });
 
-  it('reads ✦ Smart selection in an unpinned Model while the assignee has it on, and Provider default otherwise', async () => {
-    await mount(detail(), { modelRouting: true });
+  it('reads ✦ Smart selection in an unpinned Model while the account has it on, whatever the assignee\'s old flag says', async () => {
+    // The Agent has no switch of its own any more (owner, 2026-11-20): an old `modelRouting: false` on it changes nothing.
+    await mount(detail(), { modelRouting: false });
     expect(placeholderOf('Model')).toBe('✦ Smart selection');
     await act(async () => root!.unmount());
     root = null;
     container!.remove();
 
-    await mount(detail(), { modelRouting: false });
+    await mount(detail(), {}, {}, [], { modelRouting: false });
     expect(placeholderOf('Model')).toBe('Provider default');
   });
 });
@@ -662,8 +663,7 @@ describe('what each run was routed to, and why', { timeout: 60_000 }, () => {
 
 describe('with the account switch off', { timeout: 60_000 }, () => {
   const cases: Array<[string, UserPreferences]> = [
-    ['preferences without modelRouting', {}],
-    ['modelRouting: false', { modelRouting: false }],
+    ['preferences with modelRouting explicitly off', { modelRouting: false }],
   ];
   for (const [what, preferences] of cases) {
     it(`(${what}) nothing of smart selection shows`, async () => {

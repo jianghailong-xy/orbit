@@ -95,6 +95,7 @@ func orbitCLIInstructions(executable string, insideRecordedWork, watches, delega
 		orbitProjectInstructions(insideRecordedWork) +
 		orbitProgressInstructions(insideRecordedWork) +
 		orbitWaitInstructionsFor(watches) +
+		orbitNotifyInstructions +
 		orbitDelegateInstructionsFor(delegates) +
 		orbitWikiPathInstructions +
 		"Write to Orbit with the `mcp__orbit__*` tools when your tool list has them: they are schema-checked and need " +
@@ -166,6 +167,14 @@ func orbitWaitInstructionsFor(watches bool) string {
 	return orbitWaitInstructions
 }
 
+// orbitNotifyInstructions says when notify is called: when a wait the person asked to hear about ends. On
+// 2026-11-17 an agent told "tell me when the upgrade is complete" waited on a bg_run job with wakeOnExit, woke,
+// answered in the conversation and stopped: nothing in these instructions named notify, and in Claude Code its
+// description, which says exactly this, was behind ToolSearch. Every session is offered notify, so every form of
+// these instructions carries it. ASCII like the rest of the paragraph.
+const orbitNotifyInstructions = "When the person asked to hear once something is done, tell them with notify when " +
+	"it is: an answer in this conversation reaches them only when they next look.\n\n"
+
 // orbitDelegateInstructions says when to reach for the delegate tool (subagent.go). Its description says what it
 // does, but nothing said when: in Claude Code it is a deferred MCP tool, seen by name only until ToolSearch loads it,
 // while the engine's own Agent tool is always loaded and does a similar job without Orbit's routing, cost record or
@@ -175,11 +184,16 @@ func orbitWaitInstructionsFor(watches bool) string {
 // Measured 2026-11-15 in three fresh sessions asked to read production data: each one thought of "the orbit-prod
 // agent", found it with agent_list and used session_create, never delegate. So the paragraph says that workspace
 // is another agent's name, and when delegate beats session_create.
-const orbitDelegateInstructions = "Use delegate to hand a self-contained piece of work to a cheaper or stronger model " +
-	"than yours, to run it on another machine (needs: [\"os:darwin\"], or workspace: another agent's name from " +
-	"agent_list), or to run an independent piece in the background while you go on. Prefer it to session_create " +
-	"when you only need that piece's result back, and to your engine's built-in subagent or Agent tool when Orbit " +
-	"should pick the model, record the cost or run the work elsewhere." + orbitDelegateClaudeCodeLoad + "\n\n"
+//
+// Measured 2026-11-19 with headless Claude Code on Opus, Sonnet and Haiku 5.5: when the paragraph only said to
+// prefer delegate "when Orbit should pick the model, record the cost or run the work elsewhere", a request to work
+// in the background or to "use a subagent" went to the engine's own Agent tool. So it now claims both outright.
+const orbitDelegateInstructions = "Use delegate whenever you would start a subagent or run an independent piece in " +
+	"the background, in place of your engine's built-in subagent or Agent tool: Orbit picks the model, records the " +
+	"cost and brings the result back even if this engine is recycled. Use it too to hand work to a cheaper or " +
+	"stronger model than yours, or to run it on another machine (needs: [\"os:darwin\"], or workspace: another " +
+	"agent's name from agent_list). Prefer it to session_create when you only need that piece's result back." +
+	orbitDelegateClaudeCodeLoad + "\n\n"
 
 // orbitDelegateClaudeCodeLoad is the paragraph's Claude Code sentence. Cursor, which never shows mcp__orbit__*
 // names, is given the paragraph without it (cursorAgentInstructions). Delegate is marked to load up front
@@ -266,6 +280,9 @@ func (s *ClaimedSession) appendSystemPrompt() string {
 		wt = s.Detached
 	}
 	note := checkoutInstructions(wt)
+	if commits := branchCommitInstructions(s.WT); commits != "" {
+		note = strings.TrimSpace(commits + "\n\n" + note)
+	}
 	repo := s.WorkDir
 	if wt != nil && wt.RepoDir != "" {
 		repo = wt.RepoDir
@@ -280,6 +297,21 @@ func (s *ClaimedSession) appendSystemPrompt() string {
 		return note
 	}
 	return strings.TrimRight(s.Agent.AppendSystemPrompt, "\r\n") + "\n\n" + note
+}
+
+// branchCommitInstructions asks the agent of a session on its own branch to commit each step itself. The person reads
+// that branch as a list of commits (docs/mocks/session-commits-first), and only the agent knows why a change was made,
+// so a commit it writes says what the runner's end-of-session commit cannot. It is said outright that no one has to
+// ask first, because an engine's own rules otherwise hold commits back until the user asks for one. "" for a session
+// with no branch of its own. ASCII, like the rest of the instructions it goes out with.
+func branchCommitInstructions(wt *Worktree) string {
+	if wt == nil || wt.Branch == "" {
+		return ""
+	}
+	return "This session works on its own branch, `" + wt.Branch + "`, and the person reads its work as a list of " +
+		"commits. Commit each logical step when it is done, without being asked: a subject that says what changed and " +
+		"a body that says why in a sentence or two. Whatever is left uncommitted is " +
+		"saved when the session ends, under a generic message."
 }
 
 // instructionAgent is the session's agent as an engine's instructions are built from it: its appended prompt is

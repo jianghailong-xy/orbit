@@ -139,6 +139,7 @@ final class RunnerPageCopyParityTests: XCTestCase {
         ("RUNNER_ENGINE_NO_QUOTA_LIMIT", RunnerPageCopy.RUNNER_ENGINE_NO_QUOTA_LIMIT),
         ("RUNNER_ENGINE_COULDNT_CHECK", RunnerPageCopy.RUNNER_ENGINE_COULDNT_CHECK),
         ("RUNNER_ENGINE_NO_READING", RunnerPageCopy.RUNNER_ENGINE_NO_READING),
+        ("RUNNER_ENGINE_NO_PROVIDER_KEY", RunnerPageCopy.RUNNER_ENGINE_NO_PROVIDER_KEY),
         ("RUNNER_SIGN_IN", RunnerPageCopy.RUNNER_SIGN_IN),
         ("RUNNER_UPDATE_ENGINES_NOW", RunnerPageCopy.RUNNER_UPDATE_ENGINES_NOW),
         ("RUNNER_ENGINE_UPDATE_DISMISS", RunnerPageCopy.RUNNER_ENGINE_UPDATE_DISMISS),
@@ -293,6 +294,8 @@ final class RunnerPageCopyParityTests: XCTestCase {
     /// afterwards — so the whole sentence is compared, and not only the words around a value.
     private static let templates: [(name: String, rendered: String)] = [
         ("runnerOfflineLastSeen", RunnerPageCopy.runnerOfflineLastSeen(when: "${when}")),
+        ("runnerLocation", RunnerPageCopy.runnerLocation(place: "${place}")),
+        ("runnerLocationViaProxy", RunnerPageCopy.runnerLocationViaProxy(place: "${place}")),
         ("runnerVersionTag", RunnerPageCopy.runnerVersionTag(version: "${version}")),
         ("runnerVersionInstallsWhenQuiet", put(RunnerPageCopy.runnerVersionInstallsWhenQuiet(minutes: 90_001),
                                                [90_001: "minutes"])),
@@ -422,9 +425,11 @@ final class RunnerPageCopyParityTests: XCTestCase {
         ("attentionDismissUntilNextRelease",
          RunnerPageCopy.attentionDismissUntilNextRelease(engine: "${engine}")),
         ("agentFixFixing", RunnerPageCopy.agentFixFixing(workspace: "${workspace}")),
+        ("agentFixFixed", RunnerPageCopy.agentFixFixed(workspace: "${workspace}")),
         ("agentFixStartsIn", RunnerPageCopy.agentFixStartsIn(workspace: "${workspace}", engine: "${engine}")),
         ("agentFixSignInAbove", RunnerPageCopy.agentFixSignInAbove(engine: "${engine}")),
         ("agentFixSignInBelow", RunnerPageCopy.agentFixSignInBelow(engine: "${engine}")),
+        ("agentFixSignInOnMachinePage", RunnerPageCopy.agentFixSignInOnMachinePage(engine: "${engine}")),
     ]
 
     // MARK: the words

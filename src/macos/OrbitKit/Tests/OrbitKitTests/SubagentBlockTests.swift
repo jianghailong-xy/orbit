@@ -149,7 +149,8 @@ final class SubagentBlockTests: XCTestCase {
             let block = SubagentBlock.describe(input: call, run: run(status: status, changedFiles: ["a.ts"]),
                                                status: .ok, result: "partial")
             XCTAssertEqual(block.outcome, word)
-            XCTAssertTrue(block.outcomeIsFailure)
+            // A stop is no failure: grey, not red (board docs/mocks/subagent-card-and-end-line D1).
+            XCTAssertEqual(block.outcomeIsFailure, status != "STOPPED")
         }
     }
 
@@ -244,7 +245,6 @@ final class SubagentBlockTests: XCTestCase {
         XCTAssertEqual(summary.count, 3)
         XCTAssertEqual(summary.running, 1)
         XCTAssertEqual(summary.capsule, "3", "the capsule shows no cost")
-        XCTAssertEqual(summary.spread, "3 engines · 2 machines")
         XCTAssertEqual(summary.rows.map(\SubagentRunView.description), ["iOS tests", "Backoff", "Audit"])
         XCTAssertNil(SubagentSessionSummary.make([]), "no Agent, no capsule")
         XCTAssertEqual(SubagentSessionSummary.make([run(costUsd: 0)])?.capsule, "1")
@@ -259,7 +259,51 @@ final class SubagentBlockTests: XCTestCase {
         XCTAssertEqual(SubagentSessionSummary.make([done, older, one])?.band, "2 running · \(deploy)", "the newest running one")
         XCTAssertEqual(SubagentSessionSummary.make([done, run(status: "RUNNING", endedAt: nil)])?.band, "2 · 1 running",
                        "no description keeps the counts")
-        XCTAssertEqual(SubagentSessionSummary.make([done, done])?.band, "2", "nothing running: the count alone")
+        let broke = run(status: "FAILED", createdAt: "2026-11-11T07:00:00.000Z", description: "Audit")
+        let both = try XCTUnwrap(SubagentSessionSummary.make([broke, one]))
+        XCTAssertEqual(both.spoken, "Agents: \(deploy)", "a failure is not counted: the owner can do nothing about it")
+        XCTAssertEqual(SubagentSessionSummary.make([done, one])?.current?.description, " \(deploy) ")
+    }
+
+    func testTheIdleBandSaysTheCountAlone() throws {
+        let older = run(status: "DONE", createdAt: "2026-11-11T07:00:00.000Z", endedAt: "2026-11-11T07:01:00.000Z",
+                        description: "Audit")
+        let newest = run(status: "DONE", createdAt: "2026-11-11T08:00:00.000Z", endedAt: "2026-11-11T08:00:50.000Z",
+                         description: "Deploy dacad7403 to production")
+        let idle = try XCTUnwrap(SubagentSessionSummary.make([older, newest]))
+        XCTAssertEqual(idle.band, "2", "the newest run's title is on its row, not the band")
+        XCTAssertNil(idle.current)
+
+        let failed = run(status: "FAILED", createdAt: "2026-11-11T09:00:00.000Z", endedAt: "2026-11-11T09:04:12.000Z",
+                         description: "Run the OrbitKit test suite")
+        let red = try XCTUnwrap(SubagentSessionSummary.make([older, newest, failed]))
+        XCTAssertEqual(red.band, "3")
+        XCTAssertFalse(red.spoken.contains("failed"), "a failure is not counted on the band")
+    }
+
+    func testTheBandCountsModelsAndMachines() throws {
+        func at(_ place: String?, _ model: String, _ label: String, _ minute: Int) -> SubagentRunView {
+            run(model: model, modelLabel: label, createdAt: "2026-11-11T08:0\(minute):00.000Z",
+                endedAt: "2026-11-11T08:0\(minute):30.000Z", workspaceName: place, engine: "claude")
+        }
+        let runs = [at("orbit-op", "deepseek", "DeepSeek V4.1 Flash", 1), at(nil, "opus", "Opus 5.5", 2),
+                    at("orbit-prod", "opus", "Opus 5.5", 3), at("orbit-prod", "opus", "Opus 5.5", 4)]
+        let s = try XCTUnwrap(SubagentSessionSummary.make(runs, parentEngine: "claude", parentModel: "opus"))
+        XCTAssertEqual(s.models, [.init(label: "Opus 5.5", engine: "claude", count: 3),
+                                  .init(label: "DeepSeek V4.1 Flash", engine: "claude", count: 1)])
+        XCTAssertEqual(s.machines, [.init(name: "orbit-prod", count: 2), .init(name: "orbit-op", count: 1),
+                                    .init(name: nil, count: 1)])
+        XCTAssertTrue(s.elsewhere)
+        XCTAssertTrue(s.spread)
+        XCTAssertEqual(s.spoken, "Agents: 4, 3 machines, Opus 5.5 3 runs, DeepSeek V4.1 Flash 1 run")
+
+        let own = try XCTUnwrap(SubagentSessionSummary.make([at(nil, "opus", "Opus 5.5", 1)],
+                                                            parentEngine: "claude", parentModel: "opus"))
+        XCTAssertFalse(own.spread, "the session's own model on its own machine: nothing to show")
+        let haiku = try XCTUnwrap(SubagentSessionSummary.make([at(nil, "haiku", "Haiku 5.5", 1)],
+                                                              parentEngine: "claude", parentModel: "opus"))
+        XCTAssertTrue(haiku.spread)
+        XCTAssertFalse(haiku.elsewhere)
     }
 
     func testAnOlderServerWithoutTheNewFieldsStillDecodes() throws {
@@ -376,6 +420,27 @@ final class SubagentBlockTests: XCTestCase {
         XCTAssertEqual(SubagentResult.text(callResult: receipt,
                                            run: run(background: true, resultSummary: "The spec is written.")),
                        "The spec is written.")
+    }
+
+    /// The server clips a long result to a 2 KB preview: the runner's pretty JSON no longer parses,
+    /// and its first line is a lone `{`. The block reads the run's own text instead.
+    func testAClippedResultReadsTheRunNotTheBrace() {
+        let clipped = "{\n  \"changedFiles\": [],\n  \"costUsd\": 0.21,\n  \"result\": \"Route 1 worked: the transcript is"
+        let handedBack = "Route 1 worked: the transcript is at x.jsonl.\nMore."
+        let text = SubagentResult.text(callResult: clipped, run: run(resultSummary: handedBack))
+        XCTAssertEqual(text, handedBack)
+        XCTAssertEqual(SubagentBlock.describe(input: call, run: run(resultSummary: handedBack, readonly: true),
+                                              status: .ok, result: text).outcome,
+                       "Route 1 worked: the transcript is at x.jsonl.")
+        // Before the run is read there is nothing to say yet, which is better than `{`.
+        XCTAssertNil(SubagentResult.text(callResult: clipped, run: nil))
+    }
+
+    func testAHandBackThatIsJSONSkipsItsBrackets() {
+        let block = SubagentBlock.describe(
+            input: call, run: run(readonly: true), status: .ok,
+            result: "```json\n{\n  \"route\": \"transcript file\"\n}\n```")
+        XCTAssertEqual(block.outcome, #""route": "transcript file""#)
     }
 
     func testPlainTextIsShownAsItCame() {

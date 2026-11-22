@@ -8,7 +8,7 @@
  * One transaction per due schedule, under the per-account lock and the schedule row FOR UPDATE (the order
  * SchedulesService takes them in): the slots from `nextDueAt` up to now are read from the rule; the latest is the
  * one that runs — SCHEDULED when it is on time, CATCH_UP (with its own `plannedAt`) when it is late — and every
- * earlier one is written MISSED; a latest slot older than one period (24 hours for ONCE) is MISSED too. The new run
+ * earlier one is written MISSED; a latest slot older than one period (24 hours for ONCE, one interval for EVERY) is MISSED too. The new run
  * is QUEUED, and an older QUEUED run is SKIPPED, so at most one waits. `nextDueAt` moves to the first slot after now,
  * and a rule with none left ENDS the schedule (END_REACHED). The slot's unique index is the belt to the lock: two
  * workers, or one after a restart, write one run for a slot.
@@ -26,12 +26,14 @@
  * WATCHING AND ENDING (§6.4, §7)
  * ==============================
  * `schedule_run_report` ends a run, once, from the session serving it. Without one, what the session does decides:
- * an engine that ended or went idle is NO_REPORT; a run past its limit is interrupted, RUN_LIMIT; a card nobody
+ * an engine that ended, or went idle with no `bg_run` job running and no turn still to answer, is NO_REPORT;
+ * a run past its limit is interrupted, RUN_LIMIT; a card nobody
  * answered for two hours interrupts it, APPROVAL_TIMEOUT. Whether the run reached its engine is read from its first
  * turn's `delivered_at`: a run that never did (RUNNER_UNAVAILABLE, QUOTA, ENGINE_CRASHED_BEFORE_START) has its
  * session retired and is retried after 1, 5 and 15 minutes, then hourly, inside its catch-up window, and is MISSED
  * past it (§5.2: a slot not run, not a failure); one that did is never retried. A runner that is offline at the
- * start leaves the run waiting without an attempt. One run never has two live sessions (`start`, `fail`). `consecutiveFailures` counts
+ * start leaves the run waiting without an attempt. A session a full runner, run or batch holds keeps waiting for a
+ * slot, with no 10-minute limit and no new attempt, until the catch-up deadline, then is MISSED (RUNNER_FULL). One run never has two live sessions (`start`, `fail`). `consecutiveFailures` counts
  * and nothing pauses. A NO_CHANGE run's session is completed; CHANGED and FAILED ones stay open.
  */
 import {
@@ -49,10 +51,12 @@ import { SCHEDULE_COPY, scheduleFill, isUsageLimitErrorText } from '@orbit/share
 import { Prisma, RunStatus, type Schedule, type ScheduleRun } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 
+import { isSessionExecuting } from '../common/session-working';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { RUNNER_BEATS, runnerIsOnline } from '../runners/runner-presence';
 import { openingTurnKey } from '../sessions/orbit-authored-turn';
+import { sessionHeldByCapacity } from '../sessions/queued-reason-sql';
 import {
   SCHEDULE_NOTIFIER,
   approvalCopy,
@@ -65,17 +69,22 @@ import {
   heldCopy,
   onceMissedCopy,
   overBudgetCopy,
+  plannedEndCopy,
   runReasonText,
   scheduleHomeSession,
   sendAlerts,
   type ScheduleAlert,
   type ScheduleNotifier,
 } from './schedule-attention';
-import { scheduledRunTurn } from './schedule-run-block';
+import { closeUnknownItems } from '../conditions/condition-attention';
+import type { ConditionFiring } from '../conditions/conditions.service';
+import { sampleHolds } from '../conditions/condition-evaluation';
+import { RUN_BLOCK_MAX_SAMPLES, scheduledRunTurn, type RunBlockFiring } from './schedule-run-block';
 import {
   scheduleBudgetStarts,
   scheduleOverBudget,
   scheduleOverBudgetMessage,
+  scheduleRunsStarted,
   scheduleStartCheck,
   type StartPlan,
 } from './schedule-start-check';
@@ -87,6 +96,13 @@ import {
   runSessionScheduleId,
   type ScheduleActor,
 } from './schedules.service';
+import {
+  heldFilter,
+  isReleased,
+  releaseFinishedTheWork,
+  releaseWasFailure,
+  releaseWasFailureFilter,
+} from '../common/session-release';
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -95,7 +111,10 @@ const HOUR = 60 * MINUTE;
 export const SCHEDULE_RETRY_DELAYS_MINUTES = [1, 5, 15] as const;
 /** A card nobody answers for this long fails its run (§6.4). */
 export const SCHEDULE_APPROVAL_TIMEOUT_MS = 2 * HOUR;
-/** A run whose first turn has not reached its engine this long after the start never will: RUNNER_UNAVAILABLE. */
+/**
+ * A run whose first turn has not reached its engine this long after the start (or after a full runner last held
+ * it) never will: RUNNER_UNAVAILABLE. A session a full runner, run or batch holds is not timed by it (§7.2).
+ */
 export const SCHEDULE_UNDELIVERED_LIMIT_MS = 10 * MINUTE;
 /** A slot fired within this of its time is SCHEDULED; later, it is a CATCH_UP. */
 export const SCHEDULE_LATE_GRACE_MS = 10 * MINUTE;
@@ -116,6 +135,7 @@ const MAX_SLOTS_PER_FIRING = 400;
 /** §7.2's closed set. */
 export type ScheduleFailureReason =
   | 'RUNNER_UNAVAILABLE'
+  | 'RUNNER_FULL'
   | 'QUOTA'
   | 'ENGINE_CRASHED_BEFORE_START'
   | 'REPORTED_FAILED'
@@ -129,6 +149,8 @@ export type ScheduleFailureReason =
 /** The reasons of a run that never reached its engine: the only ones retried. */
 export const RETRIED_FAILURES: ReadonlySet<ScheduleFailureReason> = new Set([
   'RUNNER_UNAVAILABLE',
+  // Only ever written past the catch-up deadline, so it settles as MISSED (or CANCELLED / SKIPPED), never a retry.
+  'RUNNER_FULL',
   'QUOTA',
   'ENGINE_CRASHED_BEFORE_START',
 ]);
@@ -192,8 +214,8 @@ export type ReconcileOutcome =
   | FailOutcome;
 
 /**
- * A session that may still run: not ended, not filed away, and not FAILED with an auto-retry that would bring it
- * back. Ended means a terminal status or an end requested (SessionsService.transitionEnd).
+ * A session that may still run: not ended, not filed away, or released by a failure with an auto-retry that would
+ * bring it back. Ended means released or an end requested (SessionsService.transitionEnd).
  */
 const LIVE_SESSION: Prisma.SessionWhereInput = {
   deletedAt: null,
@@ -201,14 +223,22 @@ const LIVE_SESSION: Prisma.SessionWhereInput = {
   archivedAt: null,
   cancelRequestedAt: null,
   OR: [
-    { status: { notIn: [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED] } },
-    { status: RunStatus.FAILED, retryAt: { not: null } },
+    heldFilter(),
+    { AND: [releaseWasFailureFilter(), { retryAt: { not: null } }] },
   ],
 };
 
 type Tx = Prisma.TransactionClient;
 
 const IN_PROGRESS = ['RUNNING', 'AWAITING_APPROVAL'] as const;
+
+/**
+ * A run that is not over yet, as §8.5's planned-end push waits for it: waiting (QUEUED, a retry's wait included), under
+ * way, or reported on a LAND schedule and still landing, whose landing may yet fail it (LANDING_FAILED).
+ */
+const RUN_NOT_OVER = {
+  OR: [{ state: { in: ['QUEUED', ...IN_PROGRESS] } }, { landingStatus: { in: ['WAITING', 'MERGING'] } }],
+} satisfies Prisma.ScheduleRunWhereInput;
 
 function refusal(kind: 'BAD_REQUEST' | 'CONFLICT' | 'FORBIDDEN' | 'NOT_FOUND', code: string, message: string): Error {
   const body = { code, message };
@@ -237,7 +267,10 @@ export function waitedOnCards(cards: Array<{ createdAt: Date; decidedAt: Date | 
 
 /** How far back a slot may still be caught up, or retried: one period of its rule. */
 export function catchUpWindowMs(rule: ScheduleRule, timezone: string, slot: Date): number {
-  if (rule.kind === 'ONCE') return SCHEDULE_ONCE_CATCH_UP_MS;
+  // A WHEN run's slot is its firing: like a ONCE slot, it may start for a day, and is MISSED after.
+  if (rule.kind === 'ONCE' || rule.kind === 'WHEN') return SCHEDULE_ONCE_CATCH_UP_MS;
+  // An EVERY rule's period is its interval, also for a day's last slot, whose next one is the next morning.
+  if (rule.kind === 'EVERY') return rule.minutes * MINUTE;
   const next = nextDueAt(rule, timezone, slot);
   return next ? next.getTime() - slot.getTime() : 7 * 24 * HOUR;
 }
@@ -345,6 +378,32 @@ export class ScheduleRunsService {
     return fired;
   }
 
+  /**
+   * A WHEN schedule's condition fired (docs/condition-triggers-design.md §5.2), inside the transaction that fired it,
+   * which holds the condition's row lock: one firing, one run. The run is CONDITION, planned at the firing sample's
+   * time, QUEUED under the overlap rule; from there it is any run's — the start checks, the weekly budget (a firing
+   * over it is MISSED OVER_BUDGET at its start), the report, findings and who hears. A schedule that is not ACTIVE
+   * (HELD) starts nothing, as a held schedule fires no slot; the condition waits for its re-arm either way. Returns the
+   * run's id, written on the FIRED event, or null.
+   */
+  async fireCondition(tx: Tx, firing: ConditionFiring): Promise<string | null> {
+    const scheduleId = firing.condition.scheduleId;
+    if (!scheduleId) return null;
+    const schedule = await this.lock(tx, scheduleId);
+    if (!schedule || schedule.state !== 'ACTIVE') return null;
+    const rule = schedule.rule as unknown as ScheduleRule;
+    if (rule.kind !== 'WHEN' || rule.conditionId !== firing.condition.id) return null;
+    await this.skipQueued(tx, scheduleId, this.clock());
+    const id = randomUUID();
+    await tx.scheduleRun.create({
+      data: {
+        id, scheduleId, scheduleRevision: schedule.revision, plannedAt: firing.at, trigger: 'CONDITION', state: 'QUEUED',
+      },
+    });
+    await tx.conditionEvent.update({ where: { id: firing.eventId }, data: { runId: id } });
+    return id;
+  }
+
   // -------------------------------------------------------------------------------------------------------------
   // Starting (§6)
   // -------------------------------------------------------------------------------------------------------------
@@ -413,6 +472,11 @@ export class ScheduleRunsService {
           await this.holdRun(tx, run, schedule.heldReason ?? 'HELD', now);
           return { outcome: 'HELD' };
         }
+        if (schedule.maxRuns !== null && (await scheduleRunsStarted(tx, schedule.id)) >= schedule.maxRuns) {
+          // §8.5: the planned end by count is reached; nothing starts past it.
+          await tx.scheduleRun.update({ where: { id: runId }, data: { state: 'CANCELLED', endedAt: now, notBeforeAt: null } });
+          return { outcome: 'CANCELLED' };
+        }
         // Computed under the lock, so a session another replica opens for this run after this commits is never one.
         const strays = await tx.session.findMany({
           where: { scheduleRunId: runId, ...LIVE_SESSION },
@@ -467,6 +531,11 @@ export class ScheduleRunsService {
           // The level the run starts with is the one its session is held to (schedule-access.ts runAccessLevel).
           data: { state: 'RUNNING', startedAt: now, sessionId, notBeforeAt: null, accessLevel: schedule.accessLevel },
         });
+        // §8.5: the start that reaches maxRuns ends the schedule, in this transaction and under the lock the count was
+        // read under. The run itself goes on.
+        if (schedule.maxRuns !== null && schedule.state !== 'ENDED' && (await scheduleRunsStarted(tx, schedule.id)) >= schedule.maxRuns) {
+          await this.endAtMaxRuns(tx, schedule, now);
+        }
         return { outcome: 'STARTED', open: this.openInput(schedule, run, sessionId, prompt, check.plan) };
       },
       loggedRetry(this.logger, 'scheduleRuns.start'),
@@ -557,7 +626,13 @@ export class ScheduleRunsService {
   async reconcileRun(runId: string): Promise<ReconcileOutcome> {
     const run = await this.prisma.scheduleRun.findUnique({
       where: { id: runId },
-      include: { schedule: { select: { runLimitMinutes: true, ownerId: true } } },
+      include: {
+        schedule: {
+          select: {
+            runLimitMinutes: true, ownerId: true, rule: true, timezone: true, state: true, endedReason: true,
+          },
+        },
+      },
     });
     if (!run || (run.state !== 'RUNNING' && run.state !== 'AWAITING_APPROVAL')) return 'SETTLED_ELSEWHERE';
     const now = this.clock();
@@ -566,7 +641,11 @@ export class ScheduleRunsService {
     const session = sessionId
       ? await this.prisma.session.findUnique({
           where: { id: sessionId },
-          select: { status: true, completedAt: true, archivedAt: true, deletedAt: true, cancelRequestedAt: true, error: true },
+          select: {
+            status: true, finishedAt: true, endReason: true, lastTurnOutcome: true, completedAt: true, archivedAt: true,
+            deletedAt: true,
+            cancelRequestedAt: true, error: true, runningBgJobs: true,
+          },
         })
       : null;
     if (!session || !sessionId) {
@@ -583,19 +662,38 @@ export class ScheduleRunsService {
     const deliveredAt = opening?.deliveredAt ?? null;
     const delivered = deliveredAt !== null;
 
-    if (session.status === RunStatus.FAILED) {
+    // Released by a failure (common/session-release.ts). An end that was asked for and not honoured is a stop, below.
+    if (releaseWasFailure(session)) {
       if (delivered) return this.fail(runId, 'ENGINE_CRASHED', { sessionId });
       return this.fail(runId, isUsageLimitErrorText(session.error) ? 'QUOTA' : 'ENGINE_CRASHED_BEFORE_START', { sessionId });
     }
     const ended = session.deletedAt !== null || session.completedAt !== null || session.archivedAt !== null
       || session.cancelRequestedAt !== null
-      || session.status === RunStatus.SUCCEEDED || session.status === RunStatus.CANCELLED;
+      // Released any other way (a stop, or the work finished): the failures returned above.
+      || isReleased(session);
     // Ended before its first turn reached the engine: the run never started (a retire that committed before its
     // re-queue did, among others), so it is retried like one that met no runner.
     if (ended) return this.fail(runId, delivered ? 'NO_REPORT' : 'RUNNER_UNAVAILABLE', { sessionId });
 
     if (!delivered) {
-      if (now.getTime() - startedAt.getTime() >= SCHEDULE_UNDELIVERED_LIMIT_MS) {
+      // §7.2: a full runner, run or batch is not a runner that is not coming. The session keeps its place in the
+      // queue until a slot frees, however long that takes, up to the slot's catch-up deadline; past it the slot is
+      // MISSED (RUNNER_FULL). A schedule paused (a MANUAL run aside), held or deleted retires it now, as a retry
+      // would have been.
+      if (await sessionHeldByCapacity(this.prisma, sessionId)) {
+        const schedule = run.schedule;
+        const stopped = schedule.state === 'HELD'
+          || (schedule.state === 'ENDED' && schedule.endedReason === 'DELETED')
+          || (schedule.state === 'PAUSED' && run.trigger !== 'MANUAL');
+        if (stopped || now.getTime() > this.deadline(schedule, run)) {
+          return this.fail(runId, 'RUNNER_FULL', { sessionId });
+        }
+        return this.noteCapacityHeld(runId, sessionId, now);
+      }
+      // Held by nothing the server can name: the runner is not taking it. Counted from the start, or from the last
+      // time a full runner held it, so a slot that has just freed is given the same 10 minutes to be claimed.
+      const since = Math.max(startedAt.getTime(), run.capacityHeldAt?.getTime() ?? 0);
+      if (now.getTime() - since >= SCHEDULE_UNDELIVERED_LIMIT_MS) {
         return this.fail(runId, 'RUNNER_UNAVAILABLE', { sessionId });
       }
       return 'UNCHANGED';
@@ -629,10 +727,28 @@ export class ScheduleRunsService {
       if (run.state === 'RUNNING') return this.moveInProgress(runId, 'RUNNING', 'AWAITING_APPROVAL');
       return 'UNCHANGED';
     }
-    const idle = (session.status === RunStatus.AWAITING_INPUT || session.status === RunStatus.INTERRUPTED)
-      && opening?.status === 'ANSWERED';
+    // Idle is not finished while the run still has work coming back to it: a `bg_run` job the runner still
+    // reports running (`runningBgJobs`: job or watch, never a service; silent or not, since a job waiting on a
+    // lock writes nothing), or a turn not yet answered, such as the wake a job's end files a moment after its
+    // end is reported. Its working time still counts toward RUN_LIMIT above.
+    // Held (a released session returned above) and no turn queued or running: AWAITING_INPUT or INTERRUPTED.
+    const idle = session.status !== RunStatus.PENDING && session.status !== RunStatus.RUNNING
+      && opening?.status === 'ANSWERED'
+      && session.runningBgJobs.length === 0
+      && (await this.prisma.conversationTurn.count({
+        where: { sessionId, status: { in: ['PENDING', 'IN_FLIGHT'] } },
+      })) === 0;
     if (idle) return this.fail(runId, 'NO_REPORT', { sessionId });
     if (run.state === 'AWAITING_APPROVAL') return this.moveInProgress(runId, 'AWAITING_APPROVAL', 'RUNNING');
+    return 'UNCHANGED';
+  }
+
+  /** A full runner holds the run's session: when it was last seen so, for the 10-minute limit once it no longer is. */
+  private async noteCapacityHeld(runId: string, sessionId: string, now: Date): Promise<'UNCHANGED'> {
+    await this.prisma.scheduleRun.updateMany({
+      where: { id: runId, sessionId, state: 'RUNNING' },
+      data: { capacityHeldAt: now },
+    });
     return 'UNCHANGED';
   }
 
@@ -653,14 +769,20 @@ export class ScheduleRunsService {
 
   private async landRun(run: ScheduleRun): Promise<void> {
     const session = run.sessionId ? await this.prisma.session.findUnique({ where: { id: run.sessionId } }) : null;
-    if (!session || session.deletedAt || session.status === RunStatus.FAILED || session.status === RunStatus.CANCELLED
+    // Released for anything but its work finishing (decision D5, design §12.3: the end reason, never the terminal
+    // status) is a run that ended unsuccessfully, an engine that exited by itself included; INTERRUPTED is a held run
+    // stopped mid-turn.
+    const released = session != null && isReleased(session);
+    if (!session || session.deletedAt || (released && !releaseFinishedTheWork(session))
         || session.status === RunStatus.INTERRUPTED || session.cancelRequestedAt) {
       await this.settleLanding(run.id, 'FAILED', null, 'The run session ended unsuccessfully; nothing was landed.');
       return;
     }
-    // The tool reports during the turn. A commit and its final worktree report may still be on the way.
-    if (session.status !== RunStatus.AWAITING_INPUT && session.status !== RunStatus.SUCCEEDED) {
-      // Reporting does not exempt the rest of a LAND turn from its run limit.
+    // The tool reports during the turn. A commit and its final worktree report may still be on the way, and
+    // AWAITING_INPUT says only that the turn is over: a background job, a subagent or an engine turn still
+    // executing can commit more. The worker's next pass looks again; the run limit bounds the wait.
+    if ((!released && session.status !== RunStatus.AWAITING_INPUT) || isSessionExecuting(session)) {
+      // Reporting does not exempt the rest of a LAND run from its run limit.
       const opening = await this.prisma.conversationTurn.findFirst({
         where: { sessionId: session.id, clientTurnId: openingTurnKey(session.id) }, select: { deliveredAt: true },
       });
@@ -740,6 +862,55 @@ export class ScheduleRunsService {
       }
     }, loggedRetry(this.logger, 'scheduleRuns.settleLanding'));
     await this.alert(alerts);
+  }
+
+  /**
+   * §8.5's one push, "Stopped as planned after N runs", for each schedule ENDED (END_REACHED) by its endAt or maxRuns
+   * once no run of it is waiting, under way or still landing, so the last run's own push comes first. `plannedEndToldAt`,
+   * set under the schedule lock in the transaction that decides the push, keeps it to one. A ONCE rule, whose end is
+   * its only slot, is marked told and sends none.
+   */
+  async tellPlannedEnds(batch = 25): Promise<string[]> {
+    const ended = await this.prisma.schedule.findMany({
+      where: { state: 'ENDED', endedReason: 'END_REACHED', plannedEndToldAt: null, runs: { none: RUN_NOT_OVER } },
+      orderBy: [{ endedAt: 'asc' }, { id: 'asc' }],
+      take: batch,
+      select: { id: true },
+    });
+    const told: string[] = [];
+    for (const { id } of ended) {
+      const alerts: ScheduleAlert[] = [];
+      try {
+        await withTransactionRetry(
+          this.prisma,
+          async (tx) => {
+            alerts.length = 0;
+            const schedule = await this.lock(tx, id);
+            if (!schedule || schedule.state !== 'ENDED' || schedule.endedReason !== 'END_REACHED' || schedule.plannedEndToldAt) return;
+            if ((await tx.scheduleRun.count({ where: { scheduleId: id, ...RUN_NOT_OVER } })) > 0) return;
+            await tx.schedule.update({ where: { id }, data: { plannedEndToldAt: this.clock() } });
+            if ((schedule.rule as { kind?: string } | null)?.kind === 'ONCE') return;
+            alerts.push({
+              kind: 'PLANNED_END',
+              ownerId: schedule.ownerId,
+              scheduleId: id,
+              runId: null,
+              opens: { scheduleId: id },
+              ownerRequestId: null,
+              ...plannedEndCopy(schedule.title, await scheduleRunsStarted(tx, id)),
+              collapseId: `schedule-planned-end-${id}`,
+            });
+          },
+          loggedRetry(this.logger, 'scheduleRuns.tellPlannedEnds'),
+        );
+      } catch (error) {
+        this.logger.error(`the planned end of schedule ${id} was not told: ${messageOf(error)}`);
+        continue;
+      }
+      await this.alert(alerts);
+      if (alerts.length > 0) told.push(id);
+    }
+    return told;
   }
 
   /** §7.4: a NO_CHANGE run's session is completed once its turn has settled. */
@@ -919,7 +1090,11 @@ export class ScheduleRunsService {
     return run;
   }
 
-  /** Stop this run: CANCELLED (CANCELLED_BY_OWNER) and its session interrupted. The schedule is unchanged. */
+  /**
+   * Stop this run: CANCELLED (CANCELLED_BY_OWNER) and its session interrupted, or ended when its first turn never
+   * reached the engine (a session still waiting for a slot would otherwise start once one frees). The schedule is
+   * unchanged.
+   */
   async stopRun(actor: ScheduleActor, runId: string): Promise<ScheduleRun> {
     const result = await withTransactionRetry(
       this.prisma,
@@ -945,7 +1120,15 @@ export class ScheduleRunsService {
       },
       loggedRetry(this.logger, 'scheduleRuns.stop'),
     );
-    if (result.interrupt) await this.quietly(() => this.sessions.interrupt(result.ownerId, result.interrupt!), 'interrupt');
+    if (result.interrupt) {
+      const sessionId = result.interrupt;
+      const opening = await this.prisma.conversationTurn.findFirst({
+        where: { sessionId, clientTurnId: openingTurnKey(sessionId) },
+        select: { deliveredAt: true },
+      });
+      if (opening?.deliveredAt) await this.quietly(() => this.sessions.interrupt(result.ownerId, sessionId), 'interrupt');
+      else await this.quietly(() => this.sessions.end(result.ownerId, sessionId), 'end');
+    }
     await this.startNext(result.stopped.scheduleId);
     return result.stopped;
   }
@@ -1071,7 +1254,7 @@ export class ScheduleRunsService {
   }
 
   /** The last instant a run's slot may still start: its plannedAt plus one period of its rule (§5.2). */
-  private deadline(schedule: Schedule, run: ScheduleRun): number {
+  private deadline(schedule: Pick<Schedule, 'rule' | 'timezone'>, run: Pick<ScheduleRun, 'plannedAt'>): number {
     try {
       return run.plannedAt.getTime() + catchUpWindowMs(parseRule(schedule.rule), schedule.timezone, run.plannedAt);
     } catch {
@@ -1424,6 +1607,28 @@ export class ScheduleRunsService {
     });
   }
 
+  /**
+   * §8.5: a start reached the schedule's maxRuns. ENDED (END_REACHED) in that start's transaction, under the schedule
+   * lock the count was read under, so two replicas cannot both start a last run; no next slot, and a WHEN rule's
+   * condition ended as syncCondition ends it. No other run is QUEUED (schedule_run_one_queued_key: the one queued was
+   * the one starting), and start() cancels any run that would start past the count. The run that reached it goes on;
+   * tellPlannedEnds pushes once it is over.
+   */
+  private async endAtMaxRuns(tx: Tx, schedule: Schedule, now: Date): Promise<void> {
+    await tx.schedule.update({
+      where: { id: schedule.id },
+      data: { state: 'ENDED', endedReason: 'END_REACHED', endedAt: now, nextDueAt: null },
+    });
+    const rule = schedule.rule as unknown as ScheduleRule;
+    if (rule.kind === 'WHEN' && rule.conditionId) {
+      const ended = await tx.condition.updateMany({
+        where: { id: rule.conditionId, state: { not: 'ENDED' } },
+        data: { state: 'ENDED', endedAt: now, trueSince: null, repeatFrom: null },
+      });
+      if (ended.count > 0) await closeUnknownItems(tx, rule.conditionId, now);
+    }
+  }
+
   private async holdRun(tx: Tx, run: ScheduleRun, reason: string, now: Date): Promise<void> {
     await tx.scheduleRun.update({
       where: { id: run.id },
@@ -1472,7 +1677,68 @@ export class ScheduleRunsService {
       note: schedule.note,
       accessLevel: schedule.accessLevel,
       runLimitMinutes: schedule.runLimitMinutes,
+      firing: run.trigger === 'CONDITION' ? await this.firingOf(tx, schedule, run) : null,
     });
+  }
+
+  /**
+   * What a CONDITION run's block says about its firing (docs/condition-triggers-design.md §6.1): the condition, the
+   * reading that fired it, since when the comparison held (the oldest of the unbroken true readings up to the firing;
+   * a failed check neither breaks nor starts it), and the recent samples up to the firing, newest first.
+   */
+  private async firingOf(tx: Tx, schedule: Schedule, run: ScheduleRun): Promise<RunBlockFiring | null> {
+    const rule = schedule.rule as unknown as ScheduleRule;
+    if (rule.kind !== 'WHEN' || !rule.conditionId) return null;
+    const condition = await tx.condition.findUnique({ where: { id: rule.conditionId } });
+    if (!condition) return null;
+    const samples = await tx.conditionSample.findMany({
+      where: { conditionId: condition.id, at: { lte: run.plannedAt } },
+      orderBy: { at: 'desc' },
+      take: 200,
+    });
+    const fired = samples[0] && samples[0].at.getTime() === run.plannedAt.getTime() ? samples[0] : null;
+    let since: Date | null = null;
+    for (const sample of samples) {
+      const held = sampleHolds(condition.compareOp, condition.compareValue, sample);
+      if (held === false) break;
+      if (held) since = sample.at;
+    }
+    return {
+      text: condition.text,
+      unit: condition.unit,
+      at: run.plannedAt,
+      value: fired ? (condition.compareOp === 'EXIT_ZERO' ? fired.exitCode : fired.value) : null,
+      since,
+      samples: samples.slice(0, RUN_BLOCK_MAX_SAMPLES).map((s) => ({
+        at: s.at,
+        value: condition.compareOp === 'EXIT_ZERO' ? (s.outcome === 'EXIT' ? s.exitCode : null) : s.outcome === 'VALUE' ? s.value : null,
+        outcome: s.outcome,
+      })),
+      repeat: await this.repeatOf(tx, condition.id, run),
+    };
+  }
+
+  /**
+   * A repeat firing's line (docs/condition-triggers-design.md §5.1): the crossing it follows, the newest FIRED that is
+   * not a repeat up to it, and the runs of this schedule's condition that started from then until this one. Null when
+   * the run's firing is a crossing.
+   */
+  private async repeatOf(tx: Tx, conditionId: string, run: ScheduleRun): Promise<{ firstFiredAt: Date; runsSince: number } | null> {
+    const event = await tx.conditionEvent.findFirst({ where: { conditionId, runId: run.id, kind: 'FIRED' }, select: { at: true, repeat: true } });
+    if (!event?.repeat) return null;
+    const first = await tx.conditionEvent.findFirst({
+      where: { conditionId, kind: 'FIRED', repeat: false, at: { lte: event.at } },
+      orderBy: [{ at: 'desc' }, { id: 'desc' }],
+      select: { at: true },
+    });
+    if (!first) return null;
+    const runsSince = await tx.scheduleRun.count({
+      where: {
+        scheduleId: run.scheduleId, trigger: 'CONDITION', id: { not: run.id }, startedAt: { not: null },
+        plannedAt: { gte: first.at, lt: run.plannedAt },
+      },
+    });
+    return { firstFiredAt: first.at, runsSince };
   }
 
   private openInput(schedule: Schedule, run: ScheduleRun, sessionId: string, prompt: string, plan: StartPlan): OpenRunSession {

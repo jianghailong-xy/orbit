@@ -12,8 +12,9 @@
 # script builds the link gateway's image, has that image make the link's secrets, and writes them into .env, unshown. It
 # never writes RUNNER_LINK_REQUIRED, which is an administrator's.
 #
-# Managed runners are on in a new deployment (docs/self-hosting.md, "Managed runners"): every account
-# gets a runner of its own, a container on this host's Docker, when it signs in. For them this script
+# Managed runners (Orbit Cloud) are off in a new deployment unless --managed-runners asks for them
+# (docs/self-hosting.md, "Managed runners"): every account then gets a runner of its own, a container on
+# this host's Docker, when it signs in. For them this script
 #   - builds the managed runner image from deploy/managed-runner/image, on this host and never pushed,
 #     or takes the local image --managed-runner-image names;
 #   - creates their network, an IPv4-only bridge on which managed runners cannot reach one another;
@@ -22,7 +23,8 @@
 #     profile and the firewall's configuration;
 #   - writes the switch, that directory and the Compose profiles of the Docker backend and of the
 #     firewall into .env.
-# With --no-managed-runners it writes ORBIT_MANAGED_RUNNERS_ENABLED=false instead and prepares nothing.
+# Without --managed-runners it writes ORBIT_MANAGED_RUNNERS_ENABLED=false instead and prepares nothing.
+# --no-managed-runners, the switch from when they were on by default, still says the same.
 #
 # The managed runners' host firewall (docs/self-hosting.md, "Isolation and its limits";
 # deploy/managed-runner/firewall): rules on this host's iptables that leave a managed runner the
@@ -34,7 +36,7 @@
 # why: fix that, or install with --no-managed-runner-firewall, which leaves this host's firewall alone
 # and says so in .env.
 #
-# --enable-managed-runners is an administrator's explicit choice for the deployment already in this
+# --enable-managed-runners is the same choice made later, for the deployment already in this
 # checkout, one installed without managed runners: it prepares them the same way, firewall included,
 # writes those lines into its .env (adding its Compose profiles to the ones that .env already lists),
 # and starts the channel, the firewall and the apiserver. --enable-managed-runner-firewall is the same
@@ -44,14 +46,16 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: scripts/install-server.sh [--public-origin URL] [--no-managed-runners] [--no-managed-runner-firewall]
+Usage: scripts/install-server.sh [--public-origin URL] [--no-start]
+       scripts/install-server.sh [--public-origin URL] --managed-runners [--no-managed-runner-firewall]
                                  [--managed-runner-image IMAGE] [--no-start]
        scripts/install-server.sh --enable-managed-runners [--no-managed-runner-firewall]
                                  [--managed-runner-image IMAGE] [--no-start]
        scripts/install-server.sh --enable-managed-runner-firewall [--no-start]
 
   --public-origin URL     the origin people open Orbit at (default http://localhost:2086)
-  --no-managed-runners    install with managed runners switched off
+  --managed-runners       install with managed runners (Orbit Cloud) switched on; they are off
+                          without it
   --no-managed-runner-firewall
                           leave this host's firewall alone: managed runners can then reach every
                           service this host listens to and the private networks behind it
@@ -68,7 +72,9 @@ EOF
 }
 
 PUBLIC_ORIGIN=""
-MANAGED=1
+MANAGED=0
+# The install flag that decided MANAGED, if any: --managed-runners or --no-managed-runners.
+MANAGED_FLAG=""
 FIREWALL=1
 ENABLE_EXISTING=0
 ENABLE_FIREWALL=0
@@ -77,7 +83,8 @@ START=1
 while [ $# -gt 0 ]; do
   case "$1" in
     --public-origin) PUBLIC_ORIGIN="${2:?--public-origin needs a URL}"; shift ;;
-    --no-managed-runners) MANAGED=0 ;;
+    --managed-runners) MANAGED=1; MANAGED_FLAG="$1" ;;
+    --no-managed-runners) MANAGED=0; MANAGED_FLAG="$1" ;;
     --no-managed-runner-firewall) FIREWALL=0 ;;
     --enable-managed-runners) ENABLE_EXISTING=1 ;;
     --enable-managed-runner-firewall) ENABLE_FIREWALL=1 ;;
@@ -99,11 +106,11 @@ cd "$REPO_ROOT"
 
 STAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 MR_DIR=data/managed-runners
-MR_NETWORK=orbit-managed-runners
+MR_NETWORK=orbit-cloud-runners
 # The gateway's published port in docker-compose.yml: how a managed runner reaches the apiserver, at the host's
 # address on its network, and the one port of this host the firewall leaves it.
 MR_API_PORT=2086
-FW_IMAGE=orbit-managed-runner-firewall:local
+FW_IMAGE=orbit-cloud-runner-firewall:local
 FW_PROFILE=managed-runner-firewall
 FW_SERVICE=managed-runner-firewall
 FW_LOCK_LINE=""
@@ -162,7 +169,7 @@ FIREWALL_OFF_WARNING="the managed runners' host firewall is off (--no-managed-ru
          (docs/self-hosting.md, \"Isolation and its limits\")."
 
 if [ "$ENABLE_FIREWALL" -eq 1 ]; then
-  [ "$MANAGED" -eq 1 ] && [ "$FIREWALL" -eq 1 ] && [ "$ENABLE_EXISTING" -eq 0 ] && [ -z "$PUBLIC_ORIGIN" ] && [ -z "$RUNNER_IMAGE" ] \
+  [ -z "$MANAGED_FLAG" ] && [ "$FIREWALL" -eq 1 ] && [ "$ENABLE_EXISTING" -eq 0 ] && [ -z "$PUBLIC_ORIGIN" ] && [ -z "$RUNNER_IMAGE" ] \
     || die "--enable-managed-runner-firewall takes no other option than --no-start"
   [ -e .env ] || die "no .env here: there is no deployment whose managed runners could be firewalled."
   grep -Eq '^[[:space:]]*ORBIT_MANAGED_RUNNERS_DIR=' .env \
@@ -183,13 +190,14 @@ if [ "$ENABLE_FIREWALL" -eq 1 ]; then
   MR_DIR="${MR_DIR#./}"
   [ -f "$MR_DIR/profile.json" ] || die "$MR_DIR/profile.json is missing: this is not a deployment the install prepared."
 elif [ "$ENABLE_EXISTING" -eq 1 ]; then
-  [ "$MANAGED" -eq 1 ] && [ -z "$PUBLIC_ORIGIN" ] \
-    || die "--enable-managed-runners takes neither --no-managed-runners nor --public-origin"
+  [ -z "$MANAGED_FLAG" ] && [ -z "$PUBLIC_ORIGIN" ] \
+    || die "--enable-managed-runners takes neither --managed-runners, --no-managed-runners nor --public-origin"
   [ -e .env ] || die "no .env here: there is no deployment to switch managed runners on for. Run without --enable-managed-runners to install one."
   if grep -Eq '^[[:space:]]*ORBIT_MANAGED_RUNNERS_DIR=' .env; then
     die "managed runners were prepared for this deployment already: switch them with
        ORBIT_MANAGED_RUNNERS_ENABLED in .env (docs/self-hosting.md, \"Managed runners\")."
   fi
+  MANAGED=1
 else
   if [ -e .env ]; then
     die ".env already exists: a deployment lives in this checkout, and an install never rewrites it.
@@ -202,7 +210,9 @@ else
   fi
 fi
 [ "$MANAGED" -eq 1 ] || [ "$FIREWALL" -eq 1 ] \
-  || die "--no-managed-runner-firewall is about managed runners, which --no-managed-runners leaves off"
+  || die "--no-managed-runner-firewall is about managed runners, which are off without --managed-runners"
+[ "$MANAGED" -eq 1 ] || [ -z "$RUNNER_IMAGE" ] \
+  || die "--managed-runner-image is about managed runners, which are off without --managed-runners"
 case "$PUBLIC_ORIGIN" in
   ''|http://*|https://*) ;;
   *) die "--public-origin must be an http:// or https:// origin" ;;
@@ -212,6 +222,20 @@ case "$PUBLIC_ORIGIN" in
 esac
 command -v openssl >/dev/null || die "openssl is needed to generate the deployment's secrets"
 docker compose version >/dev/null 2>&1 || die "Docker with the Compose plugin (docker compose) is needed"
+# Compose builds through Bake, which needs the buildx plugin. Ubuntu's and Debian's docker.io packages leave it
+# out (docker-buildx is a package of its own there), and Compose then warns on every build and falls back to its
+# own builder. Where apt can install it, install it; elsewhere say how, and build without it.
+if ! docker buildx version >/dev/null 2>&1; then
+  if command -v apt-get >/dev/null 2>&1 && { [ "$(id -u)" -eq 0 ] || command -v sudo >/dev/null 2>&1; }; then
+    echo "==> Installing docker-buildx, the Docker build plugin Compose builds with"
+    as_root_apt() { if [ "$(id -u)" -eq 0 ]; then env DEBIAN_FRONTEND=noninteractive "$@"; else sudo env DEBIAN_FRONTEND=noninteractive "$@"; fi; }
+    as_root_apt apt-get update -qq && as_root_apt apt-get install -y -qq docker-buildx >/dev/null \
+      || echo "!! warning: could not install docker-buildx (above); the images build without it, and Compose warns that buildx is missing." >&2
+  else
+    echo "!! warning: Docker's buildx plugin is missing: install it (docker-buildx, or docker-buildx-plugin from Docker's own" >&2
+    echo "!! packages) so that Compose builds with it. The images build without it, and Compose warns that buildx is missing." >&2
+  fi
+fi
 if [ "$MANAGED" -eq 1 ] && [ "$FIREWALL" -eq 0 ]; then
   echo "!! warning: $FIREWALL_OFF_WARNING" >&2
 fi
@@ -301,6 +325,9 @@ runner_link_warning() {
 # ── an administrator adds the firewall to a deployment that has managed runners ─────────────────────
 
 if [ "$ENABLE_FIREWALL" -eq 1 ]; then
+  # The network channel.json names: an install from before the rename made orbit-managed-runners, and its runners are there.
+  configured_network="$(grep -oE '"network"[[:space:]]*:[[:space:]]*"[^"]*"' "$MR_DIR/channel.json" 2>/dev/null | sed -E 's/.*"([^"]*)"$/\1/' || true)"
+  MR_NETWORK="${configured_network:-$MR_NETWORK}"
   docker network inspect "$MR_NETWORK" >/dev/null 2>&1 || die "network $MR_NETWORK does not exist"
   server="$(grep -oE '"serverUrl"[[:space:]]*:[[:space:]]*"[^"]*"' "$MR_DIR/profile.json" | sed -E 's/.*"([^"]*)"$/\1/')"
   gateway=""
@@ -351,7 +378,7 @@ prepare_managed_runners() {
     [[ "$source_sha" =~ ^[0-9a-f]{40}$ ]] \
       || die "the managed runner image is stamped with its full source commit: run from a Git checkout, or set ORBIT_SOURCE_SHA"
     managed_runner_image_build_from "$source_sha"
-    RUNNER_IMAGE=orbit-managed-runner:local
+    RUNNER_IMAGE=orbit-cloud-runner:local
   fi
   local image_id
   image_id="$(docker image inspect -f '{{.Id}}' "$RUNNER_IMAGE")" || die "no local image $RUNNER_IMAGE"
@@ -366,17 +393,17 @@ prepare_managed_runners() {
   chmod 700 "$MR_DIR"
   ( umask 077 && openssl rand -hex 32 >"$MR_DIR/token" )
   # Both files name paths inside the containers, where root Compose mounts this directory at
-  # /var/lib/orbit-managed-runners. A runner may ask for no more than the channel's limits; the
+  # /var/lib/orbit-cloud-runners. A runner may ask for no more than the channel's limits; the
   # profile's amounts are what each runner is given, and the pool is what the host has, less a quarter
   # of its CPU and memory and a tenth of its disk.
   ( umask 077 && cat >"$MR_DIR/channel.json" <<EOF
 {
   "schemaVersion": 1,
   "instanceId": "$instance",
-  "listen": { "unixSocket": "/var/lib/orbit-managed-runners/channel.sock" },
-  "tokenFile": "/var/lib/orbit-managed-runners/token",
+  "listen": { "unixSocket": "/var/lib/orbit-cloud-runners/channel.sock" },
+  "tokenFile": "/var/lib/orbit-cloud-runners/token",
   "dockerSocket": "/var/run/docker.sock",
-  "stateDir": "/var/lib/orbit-managed-runners/state",
+  "stateDir": "/var/lib/orbit-cloud-runners/state",
   "image": "$image_id",
   "network": "$MR_NETWORK",
   "limits": {
@@ -402,8 +429,8 @@ EOF
   "resourceProfileId": "docker-default",
   "docker": {
     "instanceId": "$instance",
-    "channel": { "socketPath": "/var/lib/orbit-managed-runners/channel.sock" },
-    "tokenFile": "/var/lib/orbit-managed-runners/token"
+    "channel": { "socketPath": "/var/lib/orbit-cloud-runners/channel.sock" },
+    "tokenFile": "/var/lib/orbit-cloud-runners/token"
   },
   "storage": { "capacity": "20Gi" },
   "runner": {

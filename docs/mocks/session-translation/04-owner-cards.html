@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<style>
+:root{--line:#e6e4df;--text:#1d1d1b;--t2:#55534e;--t3:#8b8882;--acc:#d97757;--blue:#3b6fe0;--ok:#2e8b57;--warn:#c4581b}
+*{box-sizing:border-box}
+body{margin:0;background:#e9e7e2;font-family:Inter,'Noto Sans SC',sans-serif;color:var(--text)}
+.b-part{width:2000px;padding:36px 40px;background:#e9e7e2;font:15px/1.6 Inter,'Noto Sans SC',sans-serif}
+h1{font-size:30px;margin:0 0 6px}
+.sub{color:var(--t2);font-size:16px;margin-bottom:26px;line-height:1.65}
+.row{display:flex;gap:30px;align-items:flex-start}
+.cap{font-size:15px;font-weight:600;margin:0 0 10px;color:#333;width:440px}
+.cap small{display:block;font-weight:400;color:var(--t2);margin-top:2px}
+.num{display:inline-flex;width:24px;height:24px;border-radius:12px;background:var(--acc);color:#fff;font-size:13px;align-items:center;justify-content:center;margin-right:6px;font-weight:700}
+.mk{display:inline-flex;width:20px;height:20px;border-radius:10px;background:var(--acc);color:#fff;font-size:11px;align-items:center;justify-content:center;font-weight:700;vertical-align:middle;margin-left:6px;box-shadow:0 0 0 2px #fff;flex:none}
+/* iPhone Pro Max sheet */
+.ph{width:440px;height:956px;border-radius:52px;background:#000;padding:10px;flex:none}
+.ps{width:420px;height:936px;border-radius:44px;overflow:hidden;background:#9a9a9a;position:relative;font-size:16px}
+.behind{padding:58px 22px 0;color:#3a3a3a;font-size:14px;line-height:1.5;opacity:.6}
+.sheet{position:absolute;left:0;right:0;top:64px;bottom:0;background:#fff;border-radius:40px 40px 0 0;display:flex;flex-direction:column}
+.grab{width:56px;height:5px;border-radius:3px;background:#c7c7cc;margin:8px auto 0}
+.sh-top{display:flex;align-items:center;padding:16px 18px 6px}
+.sh-top .t{flex:1;text-align:center;font-weight:700;font-size:18px;padding-left:40px}
+.x{width:42px;height:42px;border-radius:21px;border:1px solid #e3e3e6;display:flex;align-items:center;justify-content:center;font-size:20px}
+.body{padding:14px 18px 0;flex:1;overflow:hidden}
+.from{font-size:12.5px;letter-spacing:.04em;color:#8e8e93;margin:6px 0 8px}
+.q{font-size:16px;line-height:1.55}
+.q code{font-family:'JetBrains Mono',monospace;font-size:13.5px;background:#f0f0f2;padding:1px 4px;border-radius:4px}
+.tfoot{font-size:12.5px;color:#8e8e93;margin:8px 0 4px;display:flex;align-items:center;gap:6px}
+.tfoot a{color:#636366;text-decoration:underline;text-underline-offset:2px}
+.opt{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid #ececef}
+.radio{width:18px;height:18px;border-radius:9px;border:2px solid #c7c7cc;flex:none;margin-top:3px}
+.radio.on{border:5px solid var(--blue)}
+.ol{font-size:16px;line-height:1.35;flex:1}
+.ol .d{font-size:13.5px;color:#8e8e93;margin-top:3px;line-height:1.45}
+.rec{font-size:13px;color:var(--blue);flex:none}
+.box{border:1px solid #d1d1d6;border-radius:10px;padding:8px 10px;margin-top:8px;font-size:15px;min-height:56px}
+.bar{padding:12px 18px 26px;background:#f7f7f8;border-top:1px solid #ececef}
+.send{background:var(--blue);color:#fff;text-align:center;border-radius:24px;padding:11px;font-size:17px}
+.asked{font-size:13px;color:#8e8e93;margin-top:8px}
+.err{color:var(--warn);font-size:13px;margin-top:8px}
+.err a{color:var(--warn);text-decoration:underline;margin-left:8px}
+.orig{border-left:3px solid #e3e3e6;padding-left:10px;color:#3a3a3c}
+.hl{outline:2.5px solid var(--acc);outline-offset:3px;border-radius:6px}
+/* notes */
+.notes{background:#fff;border-radius:14px;padding:22px 26px;font-size:14.5px;line-height:1.65;box-shadow:0 2px 10px rgba(0,0,0,.06)}
+.notes h3{margin:0 0 10px;font-size:18px}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+td,th{border-bottom:1px solid #eee;padding:7px 8px;text-align:left;vertical-align:top}
+th{color:#666;font-weight:600;background:#faf9f7}
+code{font-family:'JetBrains Mono',monospace;font-size:12.5px;background:#f3f1ec;padding:1px 5px;border-radius:4px}
+.no{color:var(--warn);font-weight:600}.yes{color:var(--ok);font-weight:600}.part{color:#a07a12;font-weight:600}
+.dec{border:2px dashed var(--acc);background:#fffaf7}
+.dec li{margin-bottom:12px}
+.r{color:var(--ok);font-weight:600}
+.legend{font-size:14px;color:var(--t2);line-height:1.7;margin-top:14px;width:440px}
+</style>
+</head>
+<body>
+
+<!-- PART 1: the coordinator question, today vs proposed -->
+<section class="b-part">
+<h1>翻译开着，卡片却是英文 · 所有向你提问的卡片一起翻</h1>
+<div class="sub">今天服务器只翻两样：Agent 的正文回复，以及会话里的提问/计划卡片（<code>approval.translation</code>）。项目里的卡片（Coordinator 提问、Owner request、开工/完工确认、任务确认、证据……）存的是 Agent 原话，一个字都没翻；你在这些卡片上打的字也原样（中文）送回给 Agent。<br>本板：以 iPhone「The coordinator has a question」为例画四个状态；第 2 部分列出全部卡片；第 3 部分是做法和待你拍板的点。界面文字一律英文（CLAUDE.md §5），标注用中文。示例内容为虚构。</div>
+<div class="row">
+
+  <!-- ① today -->
+  <div>
+    <div class="cap"><span class="num">1</span>今天<small>翻译已开，卡片仍是 Agent 写的英文；背后的对话已经是中文</small></div>
+    <div class="ph"><div class="ps">
+      <div class="behind">导出任务这一轮的检查已经全部通过……<br>Show English · 6 lines</div>
+      <div class="sheet"><div class="grab"></div>
+        <div class="sh-top"><div class="t">The coordinator has a question</div><div class="x">✕</div></div>
+        <div class="body">
+          <div class="from">FROM COORDINATOR</div>
+          <div class="q">The CSV export drops two columns that the old report had. The finance sheet still reads <code>cost_center</code>. Should the new export keep the old columns, or should the sheet be updated to the new shape?</div>
+          <div class="opt" style="margin-top:10px"><div class="radio on"></div><div class="ol">Keep the old columns<div class="d">The export writes both shapes for one release, then drops the old ones.</div></div><div class="rec">Recommended</div></div>
+          <div class="opt"><div class="radio"></div><div class="ol">Update the finance sheet<div class="d">I file a task to change the sheet's formulas.</div></div></div>
+          <div class="opt" style="border:0"><div class="radio"></div><div class="ol">Other</div></div>
+        </div>
+        <div class="bar"><div class="send">Send answer</div><div class="asked">asked 31s ago</div></div>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- ② proposed -->
+  <div>
+    <div class="cap"><span class="num">2</span>建议 · 默认看译文<small>问题、选项、选项说明、“if unanswered”都翻；标题/按钮是 Orbit 自己的英文，不动</small></div>
+    <div class="ph"><div class="ps">
+      <div class="behind">导出任务这一轮的检查已经全部通过……<br>Show English · 6 lines</div>
+      <div class="sheet"><div class="grab"></div>
+        <div class="sh-top"><div class="t">The coordinator has a question</div><div class="x">✕</div></div>
+        <div class="body">
+          <div class="from">FROM COORDINATOR</div>
+          <div class="q">CSV 导出少了旧报表里的两列。财务表还在读 <code>cost_center</code>。新导出要保留旧列，还是把财务表改成新格式？</div>
+          <div class="tfoot hl">Translated · <a>Show original</a><span class="mk">A</span></div>
+          <div class="opt" style="margin-top:6px"><div class="radio on"></div><div class="ol">保留旧列<div class="d">导出在一个版本内同时写两种格式，之后删掉旧列。</div></div><div class="rec">Recommended</div></div>
+          <div class="opt"><div class="radio"></div><div class="ol">改财务表<div class="d">我建一个任务去改表里的公式。</div></div></div>
+          <div class="opt" style="border:0"><div class="radio"></div><div class="ol">Other</div></div>
+        </div>
+        <div class="bar"><div class="send">Send answer</div><div class="asked">asked 31s ago</div></div>
+      </div>
+    </div></div>
+    <div class="legend"><b>A</b> 和对话里同一个脚注：<code>Translated · Show original</code>。一张卡一个开关，整张卡要么全中文要么全原文，不会半翻。选了哪个选项按序号回传，不受翻译影响。</div>
+  </div>
+
+  <!-- ③ show original -->
+  <div>
+    <div class="cap"><span class="num">3</span>点了 Show original<small>整张卡回到 Agent 原文；再点回译文</small></div>
+    <div class="ph"><div class="ps">
+      <div class="behind">导出任务这一轮的检查已经全部通过……<br>Show English · 6 lines</div>
+      <div class="sheet"><div class="grab"></div>
+        <div class="sh-top"><div class="t">The coordinator has a question</div><div class="x">✕</div></div>
+        <div class="body">
+          <div class="from">FROM COORDINATOR</div>
+          <div class="q orig">The CSV export drops two columns that the old report had. The finance sheet still reads <code>cost_center</code>. Should the new export keep the old columns, or should the sheet be updated to the new shape?</div>
+          <div class="tfoot">Original · <a>Show translation</a></div>
+          <div class="opt" style="margin-top:6px"><div class="radio on"></div><div class="ol">Keep the old columns<div class="d">The export writes both shapes for one release, then drops the old ones.</div></div><div class="rec">Recommended</div></div>
+          <div class="opt"><div class="radio"></div><div class="ol">Update the finance sheet<div class="d">I file a task to change the sheet's formulas.</div></div></div>
+          <div class="opt" style="border:0"><div class="radio"></div><div class="ol">Other</div></div>
+        </div>
+        <div class="bar"><div class="send">Send answer</div><div class="asked">asked 31s ago</div></div>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- ④ typed answer -->
+  <div>
+    <div class="cap"><span class="num">4</span>你用中文写的答案<small>发出前译成 Agent 的语言；翻不了就不发</small></div>
+    <div class="ph"><div class="ps">
+      <div class="behind">导出任务这一轮的检查已经全部通过……<br>Show English · 6 lines</div>
+      <div class="sheet"><div class="grab"></div>
+        <div class="sh-top"><div class="t">The coordinator has a question</div><div class="x">✕</div></div>
+        <div class="body">
+          <div class="from">FROM COORDINATOR</div>
+          <div class="q">CSV 导出少了旧报表里的两列。财务表还在读 <code>cost_center</code>。新导出要保留旧列，还是把财务表改成新格式？</div>
+          <div class="tfoot">Translated · <a>Show original</a></div>
+          <div class="opt" style="margin-top:6px"><div class="radio"></div><div class="ol">保留旧列</div><div class="rec">Recommended</div></div>
+          <div class="opt"><div class="radio"></div><div class="ol">改财务表</div></div>
+          <div class="opt" style="border:0"><div class="radio on"></div><div class="ol">Other
+            <div class="box">两列都留，但 cost_center 改名前先问财务那边</div></div></div>
+          <div class="err hl">Couldn't translate, so it wasn't sent<a>Retry</a><a>Send as written</a><span class="mk">B</span></div>
+        </div>
+        <div class="bar"><div class="send">Send answer</div><div class="asked">asked 2m ago</div></div>
+      </div>
+    </div></div>
+    <div class="legend"><b>B</b> 只在翻译失败时出现，文案、按钮和会话里提问卡片的回答完全一样（<code>agentDecision</code> 那一套）。成功时卡片直接关掉；之后在已回答的卡片上，你的话照常显示中文，脚注 <code>Sent to the coordinator in English</code>。</div>
+  </div>
+</div>
+</section>
+
+<!-- PART 2: every card -->
+<section class="b-part">
+<div class="notes">
+<h3>全部卡片 · 哪些字是 Agent 写的，今天翻没翻</h3>
+<table>
+<tr><th style="width:200px">卡片</th><th style="width:190px">谁提交</th><th>Agent 写的字段（要翻）</th><th style="width:110px">卡片今天</th><th style="width:270px">你打的字回给 Agent</th><th style="width:300px">建议</th></tr>
+<tr><td>The coordinator has a question</td><td><code>ask_owner</code></td><td>question · options 的 label/description · ifUnanswered</td><td class="no">不翻</td><td>Other 文本 → <span class="no">中文原样</span></td><td>翻卡片 + 回答译成英文（本板 ①–④）</td></tr>
+<tr><td>Owner request（决定 / 手动步骤 / 密钥）</td><td><code>request_owner_action</code></td><td>title · why · ifUnanswered · options · steps 的文字（命令、链接不翻）· verifyHint</td><td class="no">不翻</td><td>Done 的 text、Decline 理由 → <span class="no">中文原样</span></td><td>同上</td></tr>
+<tr><td>Start this project?</td><td><code>project_request_start</code></td><td>why</td><td class="no">不翻</td><td>— （Chat about this 走对话，已翻）</td><td>翻 why</td></tr>
+<tr><td>Is this project done?</td><td><code>project_request_done</code></td><td>judgment · gaps 的 title/whyNotProven/coordinatorChecked</td><td class="no">不翻</td><td>Not yet 备注 → <span class="no">中文原样</span></td><td>翻卡片 + 备注译成英文</td></tr>
+<tr><td>任务确认（Is this task done?）</td><td><code>task_request_confirmation</code></td><td>Agent 最后一段报告 · 审查的 judgment / needsYou / problems</td><td class="no">不翻</td><td>note、answers 文本 → <span class="no">中文原样</span></td><td>报告直接用对话里那段回复已有的译文；审查文字新翻；回复译成英文</td></tr>
+<tr><td>完成证据（Evidence）</td><td><code>task_evidence_submit</code></td><td>claim · gaps</td><td class="no">不翻</td><td>Send back 备注 → <span class="no">中文原样</span></td><td>翻卡片 + 备注译成英文</td></tr>
+<tr><td>验收标准变更提案</td><td><code>project_update</code>（被拦下的弱化）</td><td>proposed 的 text · verificationMethod</td><td class="no">不翻</td><td>—（只有同意/拒绝）</td><td>翻</td></tr>
+<tr><td>跨项目 Crossing</td><td>带 handoff 的 <code>task_create</code> 等</td><td>title · reason</td><td class="no">不翻</td><td>—</td><td>翻</td></tr>
+<tr><td>Create task 卡片</td><td><code>task_create</code></td><td>title · description · acceptanceCriteria</td><td class="part">半翻</td><td>Chat about this（已翻）</td><td>description 服务器早已翻好，但只有 Android 画；Web、iOS/macOS 补上。title、标准一起翻</td></tr>
+<tr><td>Create tasks（批量）/ Create project</td><td><code>task_create_batch</code> · <code>project_create</code></td><td>各任务 title/description/标准 · goal · instructions · 标准</td><td class="no">不翻</td><td>Chat about this（已翻）</td><td>翻</td></tr>
+<tr><td>Blocker / DAG 变更等其他 Orbit 卡</td><td><code>project_blocker_resolve</code> 等</td><td>reason · note</td><td class="no">不翻</td><td>Chat about this（已翻）</td><td>翻</td></tr>
+<tr><td>会话里的提问 / 计划 / 工具卡</td><td>AskUserQuestion · ExitPlanMode</td><td>questions · plan · description</td><td class="yes">已翻</td><td class="yes">已翻</td><td>不变；Apple 通用工具卡补画 description 译文</td></tr>
+<tr><td>推送 · 飞书卡片</td><td>以上各卡</td><td>推送正文引用的 question / title / notify 文字</td><td class="no">不翻</td><td>飞书私聊直接回复 → <span class="no">中文原样</span></td><td>见待定 ③</td></tr>
+<tr><td>Handover 说明</td><td><code>open_item_hand_over</code></td><td>note</td><td class="no">没有客户端画它</td><td>—</td><td>另开一项：先画出来，再翻</td></tr>
+</table>
+<p style="margin:14px 0 0;color:var(--t2)">不在本次范围：Agent 之间的消息（<code>session_send</code> / <code>project_send</code>）、Wiki 草稿——它们不是问你要决定的卡片，单独再议。</p>
+</div>
+</section>
+
+<!-- PART 3: how + decisions -->
+<section class="b-part">
+<div class="row" style="align-items:stretch">
+<div class="notes" style="width:960px">
+<h3>怎么做（服务器为主，三端只读字段）</h3>
+<table>
+<tr><th style="width:150px">环节</th><th>做法</th></tr>
+<tr><td>翻什么</td><td>每种卡片列出它的“Agent 写的字段”（第 2 部分），一个共用函数照会话提问卡的 <code>translateCard</code>：整张卡全成功才算，失败就记 <code>{ failed: true }</code>，卡片照原文画。代码、命令、链接、路径照旧不翻。</td></tr>
+<tr><td>存哪</td><td>每张卡自己的行加一列 <code>translation</code>（jsonb，带 <code>lang</code>）：<code>project_open_item</code>、<code>owner_request</code>、证据、确认审查、标准提案、crossing。会话里的 Orbit 卡已有 <code>approval.translation</code>，只是扩大要翻的字段。</td></tr>
+<tr><td>什么时候翻</td><td>卡片提交后在后台队列翻（和回复同一个 DeepSeek 队列），翻完写列、发一次刷新事件，客户端原地换成中文。见待定 ①。</td></tr>
+<tr><td>你的回答</td><td>每个能打字的门（回答问题、Owner request Done/Decline、Not yet、任务确认、Send back）都先把你的话译成 Agent 的语言再交付；翻不了返回 <code>TRANSLATION_FAILED</code>，什么都不记录。你的中文原话也存着，卡片上照常显示。</td></tr>
+<tr><td>三端</td><td>Web、iOS/macOS、Android：有译文就画译文 + <code>Translated · Show original</code>；没有就画原文。文案三端逐字一致，进现有的 copy parity 测试。</td></tr>
+<tr><td>测试</td><td>服务器：每种卡一个 spec（翻好 / 翻失败 / 翻译关）、每个回答门一个 spec（译成英文 / 失败拒收 / Send as written）。三端各一组卡片渲染测试。</td></tr>
+</table>
+<h3 style="margin-top:22px">落地（按代价排）</h3>
+<ol style="margin:0;padding-left:20px">
+<li><b>小：</b>Create task 卡的 description 译文，Web 与 iOS/macOS 补画（服务器已有数据）。</li>
+<li><b>中：</b>服务器：Coordinator 提问 + Owner request 的翻译与回答翻译（你截图的那张，最常见）。三端画出来。</li>
+<li><b>中：</b>开工/完工、任务确认、证据，同一套。</li>
+<li><b>小：</b>标准提案、crossing、批量建任务/建项目、blocker 卡。</li>
+<li><b>小：</b>推送与飞书（待定 ③）。</li>
+</ol>
+</div>
+
+<div class="notes dec" style="width:940px">
+<h3>已定 · 11-16 owner 全选 A（“Optimize as suggested”）</h3>
+<ol style="margin:0;padding-left:20px">
+<li><b>什么时候翻</b><br><span class="r">A</span> 提交时翻；另外，读到一张<b>还开着</b>、却没有你当前语言译文的卡（翻译是后来才开的、或换了语言），就补翻一次 · B 只在提交时翻，开翻译之前的卡保持英文 · C 每次打开时现翻（慢 1–3 秒，费用高）</li>
+<li><b>你的回答翻不了时</b><br><span class="r">A</span> 不发，显示 <code>Couldn't translate, so it wasn't sent · Retry · Send as written</code>（与会话提问卡一致）· B 直接发中文，加注 “Sent untranslated”</li>
+<li><b>推送和飞书</b><br><span class="r">A</span> 推送最多等译文 20 秒（翻译的超时），拿到就推中文，拿不到推原文 · B 立即推原文，不等 · C 先推原文，译好后再更新飞书卡片（推送不能改）</li>
+<li><b>开了 “Show both languages” 时</b><br><span class="r">A</span> 卡片仍只显示一种语言，用 Show original 切换（卡片要短，选项逐条配英文太长）· B 和对话一样每段下面附原文</li>
+<li><b>Handover 说明没有客户端画</b><br><span class="r">A</span> 另开一个任务先把它画出来，不放进这次 · B 并入这次</li>
+</ol>
+</div>
+</div>
+</section>
+
+</body>
+</html>

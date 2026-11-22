@@ -50,6 +50,18 @@ final class SessionPreviewImagesTests: XCTestCase {
         ])
     }
 
+    func testImagesInATableArePagesInReadingOrder() {
+        let items = [assistant("a1", """
+        | Slide | Diagram |
+        |---|---|
+        | 3 | ![Flywheel](orbit-attachment:fly) |
+        | 8 | **Improve** ![Improve](orbit-attachment:imp) |
+        """)]
+
+        XCTAssertEqual(keys(SessionPreviewImages.collect(items)),
+                       ["a1/markdown/orbit-attachment:fly", "a1/markdown/orbit-attachment:imp"])
+    }
+
     func testAUserTurnsThumbnailsComeBeforeImagesInItsWordsAndFilesAreSkipped() {
         let items = [user("u1", "![typed](orbit-attachment:typed)", attachments: [
             TurnAttachment(id: "notes", mime: "application/pdf", name: "notes.pdf"),

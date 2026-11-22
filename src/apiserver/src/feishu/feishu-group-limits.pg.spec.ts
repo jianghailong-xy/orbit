@@ -53,9 +53,9 @@ const DAY = `oc_day_${RUN}`;
 const BARE = `oc_bare_${RUN}`;
 
 /** The sentences the bot answers with, spelled out here so the spec pins the words themselves. */
-const BUSY_1 = "Orbit didn't start a session: this group already has 1 session running, the most its connection allows at a time. Try again when one finishes.";
-const DAILY_2 = "Orbit didn't start a session: this group has started 2 sessions today, the most its connection allows in a day. Try again after midnight UTC.";
-const NO_RUNNER = "Orbit didn't start a session: pick a workspace bound to a runner, or pass assignedRunnerId.";
+const BUSY_1 = "Nothing was started: this group already has 1 session running, the most its connection allows at a time. Try again when one finishes.";
+const DAILY_2 = "Nothing was started: this group has started 2 sessions today, the most its connection allows in a day. Try again after midnight UTC.";
+const NO_RUNNER = "Nothing was started: pick a workspace bound to a runner, or pass assignedRunnerId.";
 
 async function until<T>(what: string, probe: () => Promise<T> | T, ms = 30_000): Promise<NonNullable<T>> {
   const deadline = Date.now() + ms;

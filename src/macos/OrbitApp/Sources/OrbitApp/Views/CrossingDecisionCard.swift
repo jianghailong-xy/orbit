@@ -12,6 +12,10 @@ struct CrossingDecisionCard: View {
     @Environment(\.inApprovalReview) private var inReview
     @State private var deciding = false
     @State private var showAll = false
+    @Environment(AppModel.self) private var app: AppModel?
+    /// Settings › Translation: every crossing's title and reason flip back to the asker's words.
+    @State private var showOriginal = false
+    private var owner: TranslationLanguage? { OwnerCardTranslations.ownerLanguage(app?.user) }
 
     var body: some View {
         if let batch = console.crossingBatch(batchID) {
@@ -31,7 +35,10 @@ struct CrossingDecisionCard: View {
                                  dimmed: !live,
                                  badge: inReview && live ? CrossingBatches.waitingLine(batch)
                                                          : CrossingBatches.badge(batch)) {
-                review(batch)
+                review(batch.shown(owner: owner, showOriginal: showOriginal))
+                TranslationFootView(parts: batch.translationFoot(owner: owner, showOriginal: showOriginal)) { _ in
+                    showOriginal.toggle()
+                }
             } actions: {
                 if live {
                     ApprovalActions {

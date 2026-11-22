@@ -1,5 +1,6 @@
 import Foundation
 import XCTest
+@testable import OrbitKit
 
 /// Both native shells draw session requests — and only where a turn carries one.
 ///
@@ -57,7 +58,7 @@ final class SessionRequestWiringTests: XCTestCase {
     func testTheTranscriptDrawsReplyCardsForATurnThatHandedOutcomesBack() throws {
         // The row the transcript and the queue both draw a user turn with (`UserTurnRow`).
         let view = try section(try source(Self.rowPath),
-                               from: "struct UserTurnRow: View", to: "private func attachedRest")
+                               from: "struct UserTurnRow: View", to: "private func told")
         let user = statements(try section(view, from: "var body: some View {",
                                           to: "UserBubbleView(bubble: b, onCancelQueued: cancel, steer: steer, onPutBack: putBack)\n"))
         let branch = try XCTUnwrap(user.firstIndex(of: "} else if let replies = b.sessionReplies, !replies.isEmpty {"),
@@ -67,9 +68,9 @@ final class SessionRequestWiringTests: XCTestCase {
         let watch = try XCTUnwrap(user.firstIndex(where: { $0.hasPrefix("} else if let wake = WatchWakeText.parse(") }))
         XCTAssertTrue(started < branch && branch < watch, "the reply-card branch moved out of its place")
         let body = user[branch..<watch].joined(separator: "\n")
-        XCTAssertTrue(body.contains("SessionReplyCardsView(replies: replies, ts: b.ts, attached: replyRest(b),"))
-        // The owner's own words, when the turn had any, stay theirs — without the note the cards drew.
-        XCTAssertTrue(body.contains("UserBubbleView(bubble: withoutNote(b))"))
+        XCTAssertTrue(body.contains("SessionReplyCardsView(replies: replies, ts: b.ts,"))
+        // The owner's own words, when the turn had any, stay in their bubble.
+        XCTAssertTrue(body.contains("UserBubbleView(bubble: b)"))
         XCTAssertFalse(user.contains { $0.hasPrefix("#if") }, "the cards are drawn on one platform only")
     }
 
@@ -110,6 +111,33 @@ final class SessionRequestWiringTests: XCTestCase {
         for control in ["TextField", "TextEditor", "sessionReply(", "session-requests/"] {
             XCTAssertFalse(code.contains(control), "a request card offers \(control)")
         }
+    }
+
+    /// A long reply folds as a long message does (web 94c8a172be, docs/mocks/session-message-clamp):
+    /// by its rendered height, to the same lines, behind the same words, and through the one fold
+    /// the message card draws (`FoldedProse`) rather than a second copy of it. A reply of six lines
+    /// shows whole; more than six folds.
+    func testALongReplyFoldsByItsHeightAsALongMessageDoes() throws {
+        let file = try source(Self.replyCardPath)
+        let card = statements(try section(file, from: "struct SessionReplyCardView: View", to: "\n}\n"))
+        func says(_ line: String) -> Bool { card.contains { $0.contains(line) } }
+        XCTAssertTrue(says("SessionMessageCard.folds(height: bodyHeight, lineHeight: lineHeight)"),
+                      "whether the reply folds is no longer read off its measured height")
+        XCTAssertTrue(card.contains("private var clamped: Bool { tall && !expanded && !revealed }"),
+                      "a revealed reply stays folded")
+        XCTAssertTrue(says("FoldedProse(bodyHeight: $bodyHeight, lineHeight: $lineHeight, clamped: clamped)"),
+                      "the reply no longer goes through the message card's own fold")
+        XCTAssertTrue(says("Button(expanded ? SessionMessageCard.showLess : SessionMessageCard.showMore)"),
+                      "the fold's button no longer says the web's words")
+        XCTAssertFalse(says(".frame(maxHeight: clamped"),
+                       "a second clamp was written into the reply card")
+        let message = statements(try source(Self.messageCardPath))
+        XCTAssertTrue(message.contains { $0.contains(
+                          "FoldedProse(bodyHeight: $bodyHeight, lineHeight: $lineHeight, clamped: clamped)") },
+                      "the message card no longer draws the fold the reply reuses")
+        XCTAssertFalse(SessionMessageCard.folds(height: 6 * 20, lineHeight: 20), "six lines show whole")
+        XCTAssertTrue(SessionMessageCard.folds(height: 6 * 20 + 1, lineHeight: 20), "past six lines folds")
+        XCTAssertFalse(SessionMessageCard.folds(height: 900, lineHeight: 0), "nothing measured folds nothing")
     }
 
     func testBothNativeClientsDrawTheOneCard() throws {

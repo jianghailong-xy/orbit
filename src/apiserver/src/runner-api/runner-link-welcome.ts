@@ -2,6 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { toUuid } from '@orbit/shared';
 
 import type { PrismaService } from '../prisma/prisma.service';
+import { sessionHeldSql } from '../common/session-release';
 
 /**
  * Where a runner process's sessions stand as it connects to the runner link (docs/runner-link-design.md §5.3, §5.4,
@@ -45,6 +46,11 @@ export interface RunnerLinkWelcomeAnswer {
   sessions: RunnerLinkSessionState[];
   /** The release the runner is assigned (runner-release-feed.ts); absent when none can be stated now. */
   release?: { version: string; rollback: boolean };
+  /**
+   * Whether the runner is offered the managed runner browser (Welcome.browser, docs/runner-browser-design.md §2): the
+   * browser switch on and the runner a managed instance the manager authorized.
+   */
+  browser: boolean;
 }
 
 /** As many sessions as a heartbeat may name (RunnerApiController.heartbeat). */
@@ -100,7 +106,7 @@ export async function readRunnerLinkSessionStates(
                  (SELECT max(e."seq") FROM "run_event" e WHERE e."session_id" = s.id AND e."seq" > 0),
                  0
                )::int AS "durableSeq",
-               (s.status IN ('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED')
+               (${sessionHeldSql('s')}
                  AND s."kind" = 'CONVERSATION'
                  AND s."inbox_lease_owner" = ${leaseOwner}::uuid) AS "leaseHeld"
         FROM "session" s

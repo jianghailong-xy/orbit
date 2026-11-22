@@ -19,9 +19,12 @@ public struct SessionLine: Equatable, Sendable {
     }
     public let text: String
     public let tone: Tone
-    public init(text: String, tone: Tone) {
+    /// A pause glyph leads the line: a project row's 2a and 2b (design §4.2).
+    public let pauseGlyph: Bool
+    public init(text: String, tone: Tone, pauseGlyph: Bool = false) {
         self.text = text
         self.tone = tone
+        self.pauseGlyph = pauseGlyph
     }
 
     /// Build the line for a session. `live` is false in Trash. Always yields a line: a run that
@@ -32,9 +35,11 @@ public struct SessionLine: Equatable, Sendable {
     /// means the row falls through to the raw reply exactly as it did before the recap existed. It
     /// gates that one line and nothing else — every live line above it is untouched. `machine` is the
     /// runner the session runs on, by name: a session held for the Claude region says that Anthropic is
-    /// unavailable there (`ClaudeRegion.heldWords`), where it is known.
+    /// unavailable there (`ClaudeRegion.heldWords`), where it is known. `cloneHeard` is what the stream last said about the session's
+    /// workspace's clone, for a session it holds.
     public static func make(for s: Session, live: Bool, watching: WatchSessionSummary? = nil,
-                            recaps: Bool = true, machine: String? = nil) -> SessionLine {
+                            recaps: Bool = true, machine: String? = nil,
+                            cloneHeard: CloneHeard? = nil) -> SessionLine {
         // Somebody is waiting on YOU here, which outranks everything else the row could say: every
         // other line reports what the agent is doing, and this one is the only one you can act on.
         //
@@ -59,6 +64,11 @@ public struct SessionLine: Equatable, Sendable {
             return SessionLine(text: OwnerConfirmations.underReviewLine(review.reviewerTitle), tone: .review)
         }
         if live && s.isGenerating {
+            // A sub-agent launch still in flight (a synchronous Agent, a foreground delegate) names
+            // the sub-agent's work rather than the tool (web parity).
+            if let t = s.lastToolUse, subagentLaunchTools.contains(fmtTool(t)), let n = s.runningSubagentCount, n > 0 {
+                return SessionLine(text: subagentRunningLine(n, title: s.runningSubagentTitle), tone: .running)
+            }
             if let t = s.lastToolUse, !t.isEmpty { return SessionLine(text: "Running \(fmtTool(t))…", tone: .running) }
             // A sub-agent or workflow in flight: its launch result cleared the tool line at once, so
             // say it rather than fall through to a preview that reads as idle (web parity).
@@ -78,8 +88,14 @@ public struct SessionLine: Equatable, Sendable {
             // A runner draining for its update is the one queue word in the warning colour (board 5,
             // web `sessionLine`): it can last hours, and only the owner can shorten it.
             if RunnerUpdating.holds(s) { return SessionLine(text: RunnerUpdating.title(s), tone: .warning) }
-            // A full runner, run or batch names itself, in the queue's own colour (web `queuedLabel`).
-            if QueuedCapacity.holds(s) { return SessionLine(text: QueuedCapacity.title(s), tone: .queued) }
+            // A full runner, run or batch reads in plain words, in the queue's own colour (board
+            // session-row-runner-full, web `sessionLine`); the Mac row's tooltip says which is full.
+            if QueuedCapacity.holds(s) { return SessionLine(text: QueuedCapacity.CAPACITY_HELD_LINE, tone: .queued) }
+            // Keep Free holds a new session on a runner short of disk (web `queuedLabel`).
+            if QueuedDiskLow.holds(s) { return SessionLine(text: QueuedDiskLow.title, tone: .queued) }
+            // Held by its GitHub workspace's clone: git's percentage once the stream has relayed one (board
+            // clone-progress-wait-card ④, web `sessionLine`).
+            if let cloned = QueuedClone.rowLine(s, heard: cloneHeard) { return SessionLine(text: cloned, tone: .queued) }
             return SessionLine(text: "Queued", tone: .queued)
         }
         // Parked while a sub-agent or workflow it started works on: the workspace itself still
@@ -206,6 +222,9 @@ public struct SessionLine: Equatable, Sendable {
         s = s.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
         return s.trimmingCharacters(in: .whitespacesAndNewlines)
     }
+
+    /// The calls that launch a sub-agent (the server's RUNTIME_SUBAGENT_TOOLS, shortened by fmtTool).
+    static let subagentLaunchTools: Set<String> = ["Task", "Agent", "Workflow", "delegate"]
 
     /// Shorten a tool id for the live status line: mcp__orbit__task_create -> task_create; plain
     /// tool names (Bash, Read, Edit) pass through unchanged.

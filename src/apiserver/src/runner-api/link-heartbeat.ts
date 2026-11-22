@@ -1,10 +1,10 @@
 import { hash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import type { PlanUsage, RunnerHeartbeatRequest, RunnerHeartbeatResponse, RunnerResources } from '@orbit/shared';
-import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
 import { sanitizeRunnerRepoHealth } from '../common/runner-repo-health';
 import { sanitizeRunnerSelfUpdate } from '../common/runner-self-update';
 import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
+import { sessionHeldSql } from '../common/session-release';
 import { PREPARED_STATEMENT } from '../prisma/prisma-client';
 import type { PrismaService } from '../prisma/prisma.service';
 import { sanitizePlanUsageAccounts } from '../providers/plan-usage-accounts';
@@ -57,7 +57,8 @@ export type HeartbeatFactRole =
   | 'REPORT'
   /** Written on every beat by the statement that writes the beat itself (readLinkBeat, recordRunnerResources,
    *  recordRunnerBeat), so it needs no digest: the machine's resources, which change on nearly every beat, and the
-   *  sessions its background jobs hold slots for. */
+   *  sessions its background jobs hold slots for; and what is executing in each session, which replaceExecutingSets
+   *  writes on every beat that carries it. */
   | 'PRESENCE'
   /** The heartbeat route does not read it. */
   | 'UNREAD';
@@ -75,9 +76,15 @@ export type HeartbeatFactRole =
  *   managedWorkload                              a managed runner's beat always reconciles in full.
  *   cloneReports                                 a clone's report moves its workspace's state, which decides the
  *                                                cloneRequests the answer lists and whether its sessions dispatch.
+ *   conditionSamples                             every sample is stored and moves a condition's state, which may fire
+ *                                                it (conditions.service.ts intake): a beat that carries any reconciles
+ *                                                in full, so none is dropped by a quiet answer.
  *   resources                                    kept on the presence row by the beat's own write (runners/runner-resources.ts).
  *   backgroundJobSessionIds                      kept on the presence row by the beat's own write, replaced on every beat
  *                                                (runners/runner-background-holders.ts).
+ *   executing, executingAt                       what runs in each supervised session, and when the runner composed it,
+ *                                                replacing the sessions' inferred sets on every beat that carries it, by its
+ *                                                own statement beside the beat's (runners/runner-executing-sets.ts).
  *   the rest but idleCapacity                    reports: the runner row's catalogues and state, its plan usage, its
  *                                                sessions' worktrees, its workspaces' directories.
  */
@@ -98,13 +105,17 @@ export const HEARTBEAT_FACTS = {
   sessions: 'REPORT',
   agentDirProbes: 'REPORT',
   cloneReports: 'DELIVERY',
+  conditionSamples: 'DELIVERY',
   repos: 'REPORT',
   runsAsRoot: 'REPORT',
   reposRoot: 'REPORT',
   selfUpdate: 'REPORT',
   managedWorkload: 'DELIVERY',
+  browser: 'REPORT',
   resources: 'PRESENCE',
   backgroundJobSessionIds: 'PRESENCE',
+  executing: 'PRESENCE',
+  executingAt: 'PRESENCE',
 } as const satisfies { [K in keyof Required<RunnerHeartbeatRequest>]: HeartbeatFactRole };
 
 export type HeartbeatFactKind = keyof typeof HEARTBEAT_FACTS;
@@ -115,7 +126,7 @@ export const HEADERS_FACT = '@headers';
 /** The kinds the runner row is written from; unchanged, a full reconcile leaves the row as it is (item 4 of O1). */
 export const RUNNER_ROW_FACTS: readonly string[] = [
   'status', 'version', 'leaseOwner', 'draining', 'commands', 'skills', 'modelCatalog', 'engines', 'runtimeDefaultModels',
-  'repos', 'runsAsRoot', 'reposRoot', 'selfUpdate', 'managedWorkload', HEADERS_FACT,
+  'repos', 'runsAsRoot', 'reposRoot', 'selfUpdate', 'managedWorkload', 'browser', HEADERS_FACT,
 ];
 
 /**
@@ -138,8 +149,15 @@ export const HEARTBEAT_DELIVERIES = {
     writers: [
       'sessions/sessions.service.ts#publishEndIntent', 'realtime/reaper.service.ts#forceFinalize',
       'realtime/reaper.service.ts#endParked', 'runner-api/runner-api.controller.ts#turnComplete',
+      'realtime/parked-session-end.ts#endIdleWorkOfDoneTask',
     ],
     pending: 'drained for an hour, or until five minutes after its session finished: every full answer carries it',
+  },
+  // A subset of cancelSessionIds, read with it: delivered exactly when that is.
+  keepWorkSessionIds: {
+    how: 'MARKED',
+    writers: ['sessions/sessions.service.ts#publishEndIntent'],
+    pending: 'carried beside cancelSessionIds, for as long as it carries the session',
   },
   leaseLostSessionIds: { how: 'EVERY_BEAT', reads: 'the lease of every supervised session, by the leaseLostSessionIds rule' },
   maxConcurrent: { how: 'EVERY_BEAT', reads: 'runner.max_concurrent, which the quiet answer carries' },
@@ -175,6 +193,7 @@ export const HEARTBEAT_DELIVERIES = {
   },
   accountRemoveRequest: { how: 'MARKED', writers: ['runners/runners.service.ts#removeAccount'], pending: 'a removal pending' },
   codexAccountRemoveRequest: { how: 'MARKED', writers: ['runners/runners.service.ts#removeAccount'], pending: 'a removal pending' },
+  claudeAccountSwapRequest: { how: 'MARKED', writers: ['runners/runners.service.ts#setDefaultAccount'], pending: 'a Set as default swap pending' },
   installRequest: {
     how: 'MARKED',
     writers: ['runners/runners.service.ts#startInstall', 'runners/runners.service.ts#startEngineUpdate'],
@@ -206,6 +225,7 @@ export const HEARTBEAT_DELIVERIES = {
   },
   postponeSelfUpdateUntil: { how: 'MARKED', writers: ['runners/runners.service.ts#postponeSelfUpdate'], pending: 'until a beat claims it' },
   selfUpdateNow: { how: 'MARKED', writers: ['runners/runners.service.ts#updateSelfNow'], pending: 'until a beat claims it' },
+  clearBrowserProfile: { how: 'MARKED', writers: ['managed-runners/browser-state.ts#clear'], pending: 'until a beat claims it' },
   codexRateLimitResetRequest: {
     how: 'MARKED',
     writers: ['runners/codex-rate-limit-reset.service.ts#create'],
@@ -236,6 +256,11 @@ export const HEARTBEAT_DELIVERIES = {
     writers: ['runner-api/runner-subagents.controller.ts#stopRemoteSubagentRun'],
     pending: "a remote SubAgent run of the runner RUNNING, whose parent's end is read on every beat (remoteSubagentHeartbeat)",
   },
+  stopBackgroundJobs: {
+    how: 'MARKED',
+    writers: ['sessions/sessions.service.ts#stopBackgroundJob'],
+    pending: "an owner's stop of a bg_run job still in its session's running set: every full answer lists it (backgroundJobStopsFor)",
+  },
   managedSleep: { how: 'FULL_ONLY', reads: 'a managed runner is admitted by RunnerAuthGuard and reconciles in full on every beat' },
   cursorKeyChecks: {
     how: 'IN_PROCESS',
@@ -262,6 +287,10 @@ export const HEARTBEAT_DELIVERIES = {
       'owner-requests/owner-secrets.service.ts#sweep',
     ],
     pending: 'a grant of the runner being removed (readLinkReconcilePending)',
+  },
+  conditionProbes: {
+    how: 'FULL_ONLY',
+    reads: 'the live conditions of the runner\'s workspaces, on every full reconcile (at least every five minutes); a quiet answer leaves it out, which the runner reads as "keep the probes you have"',
   },
   forkSnapshotsOpen: {
     how: 'FULL_ONLY',
@@ -422,8 +451,6 @@ export interface LinkBeatRow extends RunnerLinkHintColumns {
   planUsage: unknown;
 }
 
-const OPEN_STATUSES_SQL = Prisma.raw(OPEN_SESSION_STATUSES.map((status) => `'${status}'`).join(', '));
-
 /**
  * The beat, in one statement. Admits the caller exactly as RunnerAuthGuard does for a link call — the runner exists,
  * its credential is still the one the token was minted with (the fingerprint migration 0443's trigger computes), its
@@ -491,7 +518,7 @@ export async function readLinkBeat(prisma: Pick<PrismaService, '$queryRaw'>, inp
            (SELECT count(*)::int FROM "session" s
              WHERE s."id" = ANY(${input.supervisedSessionIds}::uuid[])
                AND s."assigned_runner_id" = c."id"
-               AND s."status" IN (${OPEN_STATUSES_SQL})
+               AND ${sessionHeldSql('s')}
                AND s."kind" = 'CONVERSATION'
                AND s."inbox_lease_owner" = ${input.processId}::uuid) AS "leasesHeld",
            ${readPlanUsage} AS "planUsageRead",
@@ -784,7 +811,7 @@ function worktreeSnapshotsSql(runnerId: string, leaseOwner: string | null, sessi
              "branchSha" text, "branchShaGiven" boolean, "branchShaRaw" text, "branchMergedGiven" boolean, "branchMerged" boolean)
      WHERE s."id" = v."sessionId"
        AND s."assigned_runner_id" = ${runnerId}::uuid
-       AND s."status" IN (${OPEN_STATUSES_SQL})
+       AND ${sessionHeldSql('s')}
        AND s."kind" = 'CONVERSATION'
        ${leaseOwner ? Prisma.sql`AND s."inbox_lease_owner" = ${leaseOwner}::uuid` : Prisma.empty}
        AND ${after}
@@ -902,6 +929,7 @@ export async function readLinkReconcilePending(prisma: Pick<PrismaService, '$que
            AND (r."login_status" IN ('pending', 'awaiting_code', 'awaiting_approval', 'cancelling')
              OR r."install_status" IN ('pending', 'installing')
              OR r."codex_account_remove_status" = 'pending'
+             OR r."claude_account_swap_status" = 'pending'
              OR r."repo_cleanup_status" = 'pending'
              OR r."claude_history_status" IN ('pending', 'scanning')
              OR r."dir_probe_status" IN ('pending', 'probing')
@@ -927,6 +955,7 @@ export function heartbeatAnswerHandsOut(answer: RunnerHeartbeatResponse): boolea
     || (answer.wikiRepoOps?.length ?? 0) > 0
     || (answer.remoteSubagentRuns?.length ?? 0) > 0
     || (answer.stopSubagentRunIds?.length ?? 0) > 0
+    || (answer.stopBackgroundJobs?.length ?? 0) > 0
     || (answer.mainCheckoutRequests?.length ?? 0) > 0
     || (answer.cursorKeyChecks?.length ?? 0) > 0
     || (answer.secretGrantsRemoving?.length ?? 0) > 0
@@ -934,6 +963,7 @@ export function heartbeatAnswerHandsOut(answer: RunnerHeartbeatResponse): boolea
     || answer.loginRequest !== undefined
     || answer.accountRemoveRequest !== undefined
     || answer.codexAccountRemoveRequest !== undefined
+    || answer.claudeAccountSwapRequest !== undefined
     || answer.installRequest !== undefined
     || answer.repoCleanupRequest !== undefined
     || answer.claudeHistoryRequest !== undefined
@@ -945,6 +975,7 @@ export function heartbeatAnswerHandsOut(answer: RunnerHeartbeatResponse): boolea
     || answer.checkSelfUpdate === true
     || answer.postponeSelfUpdateUntil !== undefined
     || answer.selfUpdateNow === true
+    || answer.clearBrowserProfile === true
   );
 }
 

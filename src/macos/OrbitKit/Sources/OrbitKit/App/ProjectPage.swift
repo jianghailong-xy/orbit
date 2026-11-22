@@ -237,10 +237,15 @@ public enum ProjectPage {
         /// A round of merging into main: its row carries the word and no "Open landing ›" — the
         /// merge card is that round's way in.
         public let mergeJob: Bool
+        /// Whether to offer "Land without the check": the server's `skippable`.
+        public let skippable: Bool
+        /// Where a skip of this job's check stands: the server's `skipCheck`.
+        public let skipCheck: String?
         public var id: String { jobId }
 
         public init(jobId: String, taskId: String?, line: LandingLine, detail: String?,
-                    retryable: Bool, landingSessionId: String? = nil, mergeJob: Bool = false) {
+                    retryable: Bool, landingSessionId: String? = nil, mergeJob: Bool = false,
+                    skippable: Bool = false, skipCheck: String? = nil) {
             self.jobId = jobId
             self.taskId = taskId
             self.line = line
@@ -248,6 +253,8 @@ public enum ProjectPage {
             self.retryable = retryable
             self.landingSessionId = landingSessionId
             self.mergeJob = mergeJob
+            self.skippable = skippable
+            self.skipCheck = skipCheck
         }
     }
 
@@ -260,6 +267,17 @@ public enum ProjectPage {
     public static let landingMayHaveBeenPushed = "may have been pushed"
     public static let landingRetriedByOwner = "retried by you"
     public static let landingRetriedByCoordinator = "retried by the coordinator"
+    /// The owner's skip of a landing still in flight (§2.4 J-S5), in the web's `LANDING_WORDS`
+    /// (`SKIP_CHECK_*`): the press, its question and two answers, its refusal, the reason it
+    /// records, and the two notes that say where a skip stands in the place of "Nothing to do".
+    public static let landingSkipCheck = "Land without the check"
+    public static let landingSkipCheckConfirm = "The landing check won't run for this landing. It stops now and lands again without the check, recorded as skipped by you."
+    public static let landingSkipCheckGo = "Land without it"
+    public static let landingSkipCheckCancel = "Keep checking"
+    public static let landingSkipCheckFailed = "Could not skip the check"
+    public static let landingSkipCheckReason = "The owner chose to land this without waiting for the landing check."
+    public static let landingSkipCheckStopping = "Stopping — it lands again without the landing check."
+    public static let landingSkipCheckSkipped = "Landing without the landing check — you skipped it."
     /// The card's own three: the branch the work lands on ("onto project/…"), the sentence that
     /// takes the reader off the hook while it lands, and the way into the jobs from the card that
     /// also offers Retry.
@@ -285,6 +303,18 @@ public enum ProjectPage {
     public static let landingTakenOver = "Taken over"
     public static let landingFirstStarted = "first started"
     public static let landingUsually = "usually"
+    /// The state word of a claimed job waiting for its runner's local lock: it has not started its
+    /// work, so it is not fetching and has no output to be quiet about. Web: `LANDING_LIVENESS_WORDS.WAITING`.
+    public static let landingWaiting = "waiting"
+
+    /// The server's sentence about a claimed job waiting for its runner's local lock, naming the job
+    /// holding it — or nil for any other job. A SILENT runner keeps its own words. Web: `localLockWait`.
+    private static func localLockWait(running: Bool, liveness: String?,
+                                      blockingReason: LandTaskBlockingReason?) -> String? {
+        guard running, liveness != "SILENT", liveness != "LEASE_EXPIRED",
+              let blockingReason, blockingReason.code == "WAITING_LOCAL_LOCK" else { return nil }
+        return blockingReason.summary
+    }
     /// The most rounds one claim of a `LAND_TASK` can run: the M of "round N of M" (§7.2 V6). The
     /// first round plus up to two refetches when the push loses a race (contract J5, appendix A-Q5;
     /// runner-go `integrate.go` `integrationRefetchRounds + 1`). Web: `LAND_TASK_ROUNDS_PER_CLAIM`.
@@ -416,7 +446,8 @@ public enum ProjectPage {
                         round: inFlight.round, check: inFlight.check, stepStartedAt: inFlight.stepStartedAt,
                         outputMovedAt: inFlight.outputMovedAt, typicalMs: inFlight.typicalMs,
                         livenessWord: inFlight.liveness,
-                        firstStartedAt: firstStartedAt(view, jobId: inFlight.jobId))
+                        firstStartedAt: firstStartedAt(view, jobId: inFlight.jobId),
+                        blockingReason: inFlight.blockingReason)
     }
 
     /// When the attempt behind a job FIRST started: the `landTask` row's own `startedAt` is the
@@ -497,12 +528,14 @@ public enum ProjectPage {
                            runner: job.runnerName, kind: job.kind, claim: job.claim, round: job.round,
                            check: job.check, stepStartedAt: job.stepStartedAt, outputMovedAt: job.outputMovedAt,
                            typicalMs: job.typicalMs, livenessWord: job.liveness,
-                           firstStartedAt: firstStartedAt(view, jobId: job.jobId))
+                           firstStartedAt: firstStartedAt(view, jobId: job.jobId),
+                           blockingReason: job.blockingReason)
             return LandingJobLine(
                 jobId: job.jobId, taskId: job.taskId, line: line,
                 detail: landingJobDetail(job, main: main), retryable: job.retryable,
                 landingSessionId: job.landingSessionId,
-                mergeJob: ProjectMergeCard.mergeJobKinds.contains(job.kind))
+                mergeJob: ProjectMergeCard.mergeJobKinds.contains(job.kind),
+                skippable: job.skippable, skipCheck: job.skipCheck)
         }
     }
 
@@ -524,7 +557,8 @@ public enum ProjectPage {
                                         heartbeatAt: String?, kind: String?, claim: Int?, round: Int?,
                                         check: ProjectIntegrationCheck?, stepStartedAt: String?,
                                         outputMovedAt: String?, typicalMs: Int?, runner: String?,
-                                        firstStartedAt: String?, now: Date, updatedAt: Date?) -> LandingLiveness? {
+                                        firstStartedAt: String?, now: Date, updatedAt: Date?,
+                                        lockWait: String? = nil) -> LandingLiveness? {
         guard let liveness, liveness != "LEASE_EXPIRED", running else { return nil }
         let stepStart = RelativeTime.parse(stepStartedAt ?? startedAt)
         let heartbeat = heartbeatAt.flatMap(RelativeTime.parse)
@@ -550,7 +584,11 @@ public enum ProjectPage {
         // board says the liveness there — "checking · output 1s ago" (v4 04 and 07). The claim,
         // round and the usual duration follow it and are read in full on the wider rows.
         var clauses: [String] = []
-        if liveness == "LIVE" {
+        // A job waiting for its runner's local lock has not started: what holds it leads the line,
+        // and the step's clock is the wait's.
+        if let lockWait {
+            clauses.append(lockWait)
+        } else if liveness == "LIVE" {
             if let outputMoved {
                 clauses.append("\(lowercasingFirst(landingOutput)) "
                     + "\(max(0, Int(now.timeIntervalSince(outputMoved).rounded())))s ago")
@@ -598,7 +636,9 @@ public enum ProjectPage {
                                  round: Int? = nil, check: ProjectIntegrationCheck? = nil,
                                  stepStartedAt: String? = nil, outputMovedAt: String? = nil,
                                  typicalMs: Int? = nil, livenessWord: String? = nil,
-                                 firstStartedAt: String? = nil) -> LandingLine {
+                                 firstStartedAt: String? = nil,
+                                 blockingReason: LandTaskBlockingReason? = nil) -> LandingLine {
+        let lockWait = localLockWait(running: running, liveness: livenessWord, blockingReason: blockingReason)
         // A queued job's heartbeat and phase can be an earlier claim's: only a running job's count.
         let reported = heartbeatAt.flatMap(RelativeTime.parse)
         let lastUpdate = running ? (reported ?? updatedAt) : updatedAt
@@ -620,7 +660,7 @@ public enum ProjectPage {
             liveness: livenessWord, running: running, startedAt: startedAt, heartbeatAt: heartbeatAt,
             kind: kind, claim: claim, round: round, check: check, stepStartedAt: stepStartedAt,
             outputMovedAt: outputMovedAt, typicalMs: typicalMs, runner: runner,
-            firstStartedAt: firstStartedAt, now: now, updatedAt: updatedAt)
+            firstStartedAt: firstStartedAt, now: now, updatedAt: updatedAt, lockWait: lockWait)
         return LandingLine(what: what,
                            // A legacy claim's runner reports only between steps, so its quiet is
                            // not a stall: the ring keeps turning and the line says why. SILENT is
@@ -628,7 +668,8 @@ public enum ProjectPage {
                            running: running && !unavailable && !silent && livenessWord != "SILENT",
                            state: unavailable ? "Update unavailable"
                                : silent ? landingNoReport
-                                   : running ? (integrationPhaseWords(main)[phase ?? ""] ?? "running") : "queued",
+                                   : running && lockWait != nil ? landingWaiting
+                                       : running ? (integrationPhaseWords(main)[phase ?? ""] ?? "running") : "queued",
                            clock: v6?.clock ?? landingClock(elapsed), word: word,
                            clockLabel: running ? "Elapsed" : "Queued for",
                            updated: report, wait: wait, liveness: v6)
@@ -705,12 +746,16 @@ public enum ProjectPage {
             /// A round of merging into main: its row carries the word and no "Open landing ›" —
             /// the merge card is that round's way in.
             public let mergeJob: Bool
+            /// The server's `skippable`.
+            public let skippable: Bool
+            /// The server's `skipCheck`.
+            public let skipCheck: String?
             public var id: String { jobId }
 
             public init(jobId: String, taskId: String?, title: String?, state: String,
                         running: Bool, timedOut: Bool, retryable: Bool, detail: String?,
                         word: String = "", landingSessionId: String? = nil,
-                        mergeJob: Bool = false) {
+                        mergeJob: Bool = false, skippable: Bool = false, skipCheck: String? = nil) {
                 self.jobId = jobId
                 self.taskId = taskId
                 self.title = title
@@ -722,6 +767,8 @@ public enum ProjectPage {
                 self.word = word
                 self.landingSessionId = landingSessionId
                 self.mergeJob = mergeJob
+                self.skippable = skippable
+                self.skipCheck = skipCheck
             }
         }
 
@@ -756,6 +803,12 @@ public enum ProjectPage {
         public let detail: String?
         /// The job Retry takes, when the server says a retry takes one.
         public let retryJobId: String?
+        /// The task whose landing "Land without the check" skips, when the card holds that one
+        /// landing and the server says the skip takes it; nil otherwise.
+        public let skipTaskId: String?
+        /// Where a skip of the one landing's check stands, said in the place of "Nothing to do";
+        /// nil when nobody skipped it.
+        public let skipNote: String?
         /// The card holds one job — by the same counts its head is named by — and it is a round of
         /// merging into main (a merge check, or the merge itself). It lands no task, so the card
         /// says no "Nothing to do" (board v4 04 draws no body under that head). Read off
@@ -791,7 +844,8 @@ public enum ProjectPage {
                                 retryable: job.retryable, detail: job.detail,
                                 word: job.line.word,
                                 landingSessionId: job.landingSessionId,
-                                mergeJob: job.mergeJob)
+                                mergeJob: job.mergeJob,
+                                skippable: job.skippable, skipCheck: job.skipCheck)
             }
         // The row's own rule for the name slot, one row down: several jobs are a count in the head
         // and a row each in the body; one job is its title in the body.
@@ -808,6 +862,10 @@ public enum ProjectPage {
             liveness: line.liveness,
             detail: line.timedOut ? lead?.detail : nil,
             retryJobId: lead?.retryable == true ? lead?.jobId : nil,
+            skipTaskId: !several && lead?.skippable == true ? lead?.taskId : nil,
+            skipNote: several ? nil
+                : lead?.skipCheck == "STOPPING" ? landingSkipCheckStopping
+                : lead?.skipCheck == "SKIPPED" ? landingSkipCheckSkipped : nil,
             mergeJob: !several && ProjectMergeCard.isMergeJob(view.inFlight))
     }
 
@@ -1047,24 +1105,17 @@ public enum ProjectPage {
 
     public static let openItemsHeading = "Open items"
     public static let needsYouGroup = "Needs you"
-    public static let withCoordinatorGroup = "With the coordinator"
 
-    /// The toolbar counts every open item; only the owner's share raises a reminder on the page.
     public struct OpenItemsSummary: Equatable, Sendable {
         public let needsYou: Int
-        public let withCoordinator: Int
-        public var count: Int { needsYou + withCoordinator }
+        public var count: Int { needsYou }
 
         public var attention: String? {
             guard needsYou > 0 else { return nil }
             return needsYou == 1 ? "1 item needs you" : "\(needsYou) items need you"
         }
 
-        public var subtitle: String {
-            if count == 0 { return "No open items" }
-            let owner = attention ?? "No action needed from you"
-            return withCoordinator > 0 ? "\(owner) · \(withCoordinator) with the coordinator" : owner
-        }
+        public var subtitle: String { attention ?? "No open items" }
     }
 
     /// A missing read is not an empty inbox. A start request counts only while the page can answer
@@ -1077,8 +1128,7 @@ public enum ProjectPage {
         let start = StartProject.pageRow(status: status, started: started, openItems: items)
         let done = ProjectDone.live(openItems: items, status: status.rawValue)
         return OpenItemsSummary(needsYou: needsYouRows(items).count + (start?.request == nil ? 0 : 1)
-                                    + (done == nil ? 0 : 1),
-                                withCoordinator: items.withCoordinator.count)
+                                    + (done == nil ? 0 : 1))
     }
 
     /// The owner's rows, without the request to record the project done should a server ever list

@@ -50,6 +50,8 @@ type supervisedSession struct {
 	subagentsOpened int
 	// subagentProvider is the engine the server names for a SubAgent's child; "" is the parent's own, Claude.
 	subagentProvider string
+	// subagentExec, when set, is the exec the server names for a SubAgent's child, in place of the default.
+	subagentExec map[string]interface{}
 	// subagentRemote, when set, places every delegate call on that workspace (docs/subagent-design.md §10): the
 	// answer has no exec, the relayed events are remoteEvents, the run's end remoteStatus and remoteResult, and
 	// the bodies of the opening POSTs and the count of stop requests are kept.
@@ -59,6 +61,14 @@ type supervisedSession struct {
 	remoteResult   string
 	remoteOpens    []map[string]interface{}
 	remoteStops    int
+	// Workflows (subagent_workflow.go): the body of every SubAgent POST, a limit on runs open at once (0: none)
+	// answered with SUBAGENT_LIMIT_REACHED as the server does, how many POSTs it refused, and the workflow POSTs
+	// and end reports.
+	subagentOpenBodies []map[string]interface{}
+	subagentLimit      int
+	subagentRefusals   int
+	workflowOpens      []map[string]interface{}
+	workflowReports    []map[string]interface{}
 }
 
 // superviseClaudeSession registers the session active, as a claim does, with one message
@@ -172,17 +182,43 @@ func (s *supervisedSession) serve(w http.ResponseWriter, r *http.Request) {
 			s.settled = append(s.settled, req)
 			s.mu.Unlock()
 		}
+	case strings.HasSuffix(r.URL.Path, "/workflows") && r.Method == http.MethodPost:
+		var body map[string]interface{}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		s.mu.Lock()
+		s.workflowOpens = append(s.workflowOpens, body)
+		id := fmt.Sprintf("wf-%d", len(s.workflowOpens))
+		s.mu.Unlock()
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"workflowRunId": id, "status": "RUNNING"})
+		return
+	case strings.Contains(r.URL.Path, "/workflows/") && r.Method == http.MethodPatch:
+		var report map[string]interface{}
+		if json.NewDecoder(r.Body).Decode(&report) == nil {
+			report["workflowRunId"] = r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:]
+			s.mu.Lock()
+			s.workflowReports = append(s.workflowReports, report)
+			s.mu.Unlock()
+		}
 	case strings.HasSuffix(r.URL.Path, "/subagents") && r.Method == http.MethodPost:
 		// A delegate call opens a run on the parent's own engine (runner-subagents.controller.ts).
+		var opened map[string]interface{}
+		_ = json.NewDecoder(r.Body).Decode(&opened)
 		s.mu.Lock()
+		if s.subagentLimit > 0 && s.subagentsOpened-len(s.subagentReports) >= s.subagentLimit {
+			s.subagentRefusals++
+			s.mu.Unlock()
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"code": "SUBAGENT_LIMIT_REACHED", "message": "limit reached"})
+			return
+		}
+		s.subagentOpenBodies = append(s.subagentOpenBodies, opened)
 		s.subagentsOpened++
 		runID := fmt.Sprintf("run-%d", s.subagentsOpened)
 		provider := firstNonEmpty(s.subagentProvider, providerClaude)
 		remote := s.subagentRemote
+		execOverride := s.subagentExec
 		if remote != "" {
-			var body map[string]interface{}
-			_ = json.NewDecoder(r.Body).Decode(&body)
-			s.remoteOpens = append(s.remoteOpens, body)
+			s.remoteOpens = append(s.remoteOpens, opened)
 		}
 		s.mu.Unlock()
 		if remote != "" {
@@ -193,10 +229,13 @@ func (s *supervisedSession) serve(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
+		execAnswer := map[string]interface{}{"provider": provider, "model": "claude-test", "permissionMode": "acceptEdits",
+			"env": map[string]string{"ANTHROPIC_API_KEY": "test"}}
+		if execOverride != nil {
+			execAnswer = execOverride
+		}
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"runId": runID, "status": "RUNNING", "decision": map[string]interface{}{},
-			"exec": map[string]interface{}{"provider": provider, "model": "claude-test", "permissionMode": "acceptEdits",
-				"env": map[string]string{"ANTHROPIC_API_KEY": "test"}},
+			"runId": runID, "status": "RUNNING", "decision": map[string]interface{}{}, "exec": execAnswer,
 		})
 		return
 	case strings.Contains(r.URL.Path, "/subagents/") && strings.HasSuffix(r.URL.Path, "/events") && r.Method == http.MethodGet:

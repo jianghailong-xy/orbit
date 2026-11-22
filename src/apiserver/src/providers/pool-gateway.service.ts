@@ -6,7 +6,7 @@ import type { LookupFunction } from 'node:net';
 import { AgentProvider } from '@orbit/shared';
 import { ACCOUNT_DISABLED, DisabledAccounts } from '../auth/disabled-accounts';
 import { sha256 } from '../common/crypto.util';
-import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
+import { isHeld } from '../common/session-release';
 import { PrismaService } from '../prisma/prisma.service';
 import { poolPauseBlocksRequest } from './pool-pause';
 import { responseCostMicros } from './openai-prices';
@@ -16,6 +16,7 @@ import { decryptSecret } from './provider-crypto';
 import { readResponsesEvent, ResponsesStreamTap, type ResponsesOutcome } from './responses-stream-tap';
 import { maskedKey, nextUsageWindowStart, sharedPoolKeyCandidates, usageWindowStart } from './shared-pool';
 import { SharedPoolsService } from './shared-pools.service';
+import { servesKeptSubagent } from './kept-subagent-gateway';
 
 /**
  * Where the pool gateway sends every request it forwards: OpenAI's API. Fixed here — no request, header,
@@ -335,7 +336,7 @@ export class PoolGatewayService {
         person: { select: { pool: { select: { slug: true, label: true, engine: true, ownerId: true } } } },
         session: {
           select: {
-            status: true, ownerId: true, provider: true, poolKeyId: true, poolCodexAccountId: true,
+            finishedAt: true, ownerId: true, provider: true, poolKeyId: true, poolCodexAccountId: true,
             completedAt: true, deletedAt: true, owner: { select: { disabledAt: true } },
           },
         },
@@ -344,15 +345,16 @@ export class PoolGatewayService {
     if (!row || row.revokedAt || row.expiresAt.getTime() <= Date.now()) return null;
     const { pool } = row.person;
     const { session } = row;
+    const open = isHeld(session) && !session.completedAt;
     const current =
       pool.engine === AgentProvider.CODEX &&
-      OPEN_SESSION_STATUSES.includes(session.status) &&
-      !session.completedAt &&
       !session.deletedAt &&
       session.ownerId === row.userId &&
       // A session moved onto another provider since: its old tokens name a pool it no longer runs on.
       session.provider === pool.slug;
     if (!current) return null;
+    // A session no longer open serves on only while its handover left a SubAgent running on its tokens.
+    if (!open && !(await servesKeptSubagent(this.prisma, row.sessionId))) return null;
     // The session's owner is the token's person (above). Asked last, as the runner credential asks it:
     // the token itself is good, and works again once the account is enabled.
     if (session.owner.disabledAt) return ACCOUNT_DISABLED;

@@ -5,7 +5,8 @@
    than the pane starts at its top, where the scroller can reach it. */
 .msc-draft {
   box-sizing: border-box;
-  width: min(668px, 100%);
+  /* The card plus this box's 24px sides: the conversation's card width there, 620px elsewhere. */
+  width: min(calc(var(--chat-card-max, 620px) + 48px), 100%);
   margin: auto;
   /* The scroller keeps 20px of its own below this, for the conversation's fade. */
   padding: 24px 24px 4px;

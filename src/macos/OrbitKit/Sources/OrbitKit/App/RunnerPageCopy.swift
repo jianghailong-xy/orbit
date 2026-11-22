@@ -6,8 +6,13 @@ public enum RunnerPageCopy {
     public static let RUNNER_ONLINE = "Online"
     public static let RUNNER_OFFLINE = "Offline"
     public static let RUNNER_LINE_SEPARATOR = " · "
+    public static let RUNNER_ENGINE_NO_PROVIDER_KEY = "no provider key found"
 
     public static func runnerOfflineLastSeen(when: String) -> String { "Offline · last seen \(when)" }
+    /// The country a machine's IP is in, first in the line under a machine page's title: `📍 Japan`.
+    public static func runnerLocation(place: String) -> String { "📍 \(place)" }
+    /// The same, when the check went through a proxy: the country is the proxy's, not the machine's.
+    public static func runnerLocationViaProxy(place: String) -> String { "📍 \(place) (via proxy)" }
     public static func runnerVersionTag(version: String) -> String { "v\(version)" }
     public static func runnerRunningOf(active: Int, max: Int) -> String { "\(active) of \(max) running" }
     public static func runnerSlots(active: Int, max: Int) -> String { "\(active)/\(max)" }
@@ -70,8 +75,8 @@ public enum RunnerPageCopy {
     public static let RUNNER_KEEP_FREE_20_GB = "20 GB"
     public static let RUNNER_KEEP_FREE_50_GB = "50 GB"
     public static let RUNNER_CAPACITY_FOOTER =
-        "Max Concurrent applies to the next session it picks up — no restart. Below Keep Free, task "
-        + "runs stop being sent here and finished worktrees are cleaned up sooner."
+        "Max Concurrent applies to the next session it picks up — no restart. Below Keep Free, new sessions and "
+        + "task runs wait until space frees up, and finished worktrees are cleaned up sooner."
 
     public static func runnerGb(amount: String) -> String { "\(amount) GB" }
     public static func runnerDiskUsed(used: String, total: String) -> String {
@@ -149,7 +154,7 @@ public enum RunnerPageCopy {
     }
     public static let RUNNER_VERSION_NOT_ROLLED_OUT = "not rolled out to it yet"
     /// A managed runner — the machine Orbit runs for the account — wherever its name is shown, unless the
-    /// owner renamed it. Its stored name (`orbit-managed`) is the server's, not a word for anyone to read.
+    /// owner renamed it. Its stored name (`orbit-managed` on a server before migration 1250) is the server's, not a word for anyone to read.
     public static let MANAGED_RUNNER_LABEL = "Orbit Cloud"
     /// A managed runner's version, when it reports none that is a release (its image is `managed-<sha>`).
     public static let MANAGED_RUNNER_KEPT_UP_TO_DATE = "Kept up to date by Orbit"
@@ -412,7 +417,7 @@ public enum RunnerPageCopy {
     }
     public static func attentionDiskBelowReserve(free: String, total: String,
                                                   reserve: String) -> String {
-        "\(free) GB free of \(total) GB, under the \(reserve) GB it keeps free — task runs stop being sent here until space frees up."
+        "\(free) GB free of \(total) GB, under the \(reserve) GB it keeps free — new sessions and task runs wait until space frees up."
     }
 
     public static let ATTENTION_CANT_UPDATE_ITSELF = "Can’t update itself"
@@ -462,6 +467,8 @@ public enum RunnerPageCopy {
     public static let AGENT_FIX_BUTTON = "Fix with an agent"
     /// In place of the button while that session is open; the link after it opens it.
     public static func agentFixFixing(workspace: String) -> String { "An agent is fixing this in \(workspace) · " }
+    /// A transcript's history row, after the agent it was handed to finished; the link opens it.
+    public static func agentFixFixed(workspace: String) -> String { "Fixed by an agent in \(workspace) · " }
     public static let AGENT_FIX_OPEN_SESSION = "Open session"
     /// Under the button on an Install failed panel: where the session would run.
     public static func agentFixStartsIn(workspace: String, engine: String) -> String {
@@ -471,6 +478,10 @@ public enum RunnerPageCopy {
     public static func agentFixSignInAbove(engine: String) -> String { " Sign in to \(engine) above to use this." }
     /// The same, after a signed-out reason on the web's Update engines report, which sits above its engine rows.
     public static func agentFixSignInBelow(engine: String) -> String { " Sign in to \(engine) below to use this." }
+    /// The same, after a signed-out reason in a transcript, which has no engine list of its own.
+    public static func agentFixSignInOnMachinePage(engine: String) -> String {
+        " Sign in to \(engine) on the machine page to use this."
+    }
     /// The head of what a press that didn't start a session says, before the server's own sentence.
     public static let AGENT_FIX_FAILED = "Couldn’t start the agent"
     /// The Needs Attention card's second action, beside Update Engines Now; `engine` is the CLI's own name.

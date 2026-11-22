@@ -47,6 +47,20 @@ object ExceptionCards {
     fun handledByLine(row: JsonObject): String? = row.objects("handledBy").takeIf { it.isNotEmpty() }
         ?.joinToString(" · ") { "The coordinator is fixing this in ${it.text("title").orEmpty()}." }
 
+    // MARK: a live repair task (board card-ui-polish ①)
+
+    /** The tag an item wears while a repair task filed for it is still live — OrbitKit's `fixingTag`, the browser's `FIXING_TAG`. */
+    const val fixingTag = "Fixing"
+    /** The one line that replaces the server's sentence and the handled-by sentences, with nothing for the reader to do under it. */
+    const val beingFixedIn = "Being fixed in"
+    const val fixingNothingForYou = "In progress · nothing for you to do unless it fails."
+
+    /** The repair tasks still working on an item: any whose state is not DONE or CANCELLED — the server's own test (`hasLiveFix`), so
+     * the card and the sentence it replaces agree. */
+    fun liveRepairs(row: JsonObject): List<JsonObject> = row.objects("handledBy").filter { it.text("state") != "DONE" && it.text("state") != "CANCELLED" }
+
+    fun fixing(row: JsonObject): Boolean = liveRepairs(row).isNotEmpty()
+
     // MARK: the doors (mock 7, 方案 B)
 
     /** The three weights a press is drawn in: the step this kind of exception asks for, the other way to take it, and the quiet rest. */
@@ -177,15 +191,17 @@ object ExceptionCards {
         return listOf(next) + leading.filter { it != next }
     }
 
-    /** The card's whole action row: the pair it leads with in their own order, then the rest of the server's list, quiet. */
-    fun presses(row: JsonObject, mergeCard: String? = null): List<CardPress> {
+    /** The card's whole action row: the pair it leads with in their own order, then the rest of the server's list, quiet. [quiet] is a
+     * repair task already on the item (board card-ui-polish ①, D1 = A): every door is a quiet link and none of them is the reader's
+     * next step, so no door carries a consequence line. */
+    fun presses(row: JsonObject, mergeCard: String? = null, quiet: Boolean = false): List<CardPress> {
         val actions = drawn(row, mergeCard)
         val leading = leadingDoors(row, actions)
         val primary = leading.firstOrNull()
         val secondary = leading.getOrNull(1)
         return (leading + actions.filter { it !in leading }).map { action ->
-            CardPress(action, if (action == primary) PressTier.PRIMARY else if (action == secondary) PressTier.SECONDARY else PressTier.LINK,
-                actionLabel(row, action) ?: action, actionConsequence(row, action))
+            CardPress(action, if (quiet) PressTier.LINK else if (action == primary) PressTier.PRIMARY else if (action == secondary) PressTier.SECONDARY
+                else PressTier.LINK, actionLabel(row, action) ?: action, if (quiet) "" else actionConsequence(row, action))
         }
     }
 
@@ -307,6 +323,7 @@ object ExceptionCards {
 
     /** How the item became the owner's, one sentence per way; null for an item that was the owner's from the start. */
     fun heading(row: JsonObject, now: Instant = Instant.now()): String? {
+        if (row.obj("baseline") != null) return LandingCheckCopy.title(row.obj("facts")?.text("targetRef")?.removePrefix("refs/heads/") ?: "the project branch")
         // §4.6 X-E5 (revision 23): the item is escalated at birth, so `waitedBeforeEscalation` would only ever say "1s". Its heading
         // is the fact it is about — how long the claim has been silent, counted from the last report the runner made (board v4 06).
         if (row.text("kind") == "LANDING_LEASE_EXPIRED") {
@@ -442,13 +459,23 @@ object ExceptionCards {
     /** The rows of the item's payload, in the browser's order (`ItemFactRows`), field for field. X-E5 draws the claim it is about in
      * three rows instead of the item's sentence; an item an older build opened carries no lease and keeps that sentence. */
     fun facts(row: JsonObject): Facts {
+        row.obj("baseline")?.let { baseline -> return Facts.Rows(listOf(
+            FactRow("", LandingCheckCopy.baselineBody),
+            FactRow(LandingCheckCopy.held, row.strings("heldTaskIds").size.toString()),
+            FactRow(LandingCheckCopy.upstream, baseline.text("upstreamSha").orEmpty(), mono = true),
+            FactRow(LandingCheckCopy.tip, baseline.text("targetSha").orEmpty(), mono = true),
+            FactRow(LandingCheckCopy.baseline, baseline.text("mergeTreeSha").orEmpty(), mono = true),
+            FactRow(LandingCheckCopy.label, baseline.obj("check")?.text("command").orEmpty(), mono = true),
+            FactRow("", LandingCheckCopy.resumes))) }
+
         if (row.text("kind") == "LANDING_LEASE_EXPIRED") row.obj("lease")?.let { return Facts.Rows(leaseFacts(row, it)) }
         val facts = row.obj("facts") ?: return Facts.DetailLine(row.text("detailLine").orEmpty())
         val rows = mutableListOf<FactRow>()
         val task = facts.obj("task")
         task?.text("title")?.let { rows += FactRow(taskLabel, it) }
         facts.text("targetRef")?.let { ref ->
-            var into = ref
+            // The branch by its name: `refs/heads/main` is the server's spelling, not a person's.
+            var into = ref.removePrefix("refs/heads/")
             facts.text("targetSha")?.let { into += " at ${it.take(7)}" }
             if (facts.flag("nothingLanded")) into += nothingLanded
             rows += FactRow(intoLabel, into)
@@ -557,7 +584,9 @@ object ExceptionCards {
     const val runnerDownSentence = "Its runner is offline. Ask again comes back here as soon as it is."
     const val coordinatorEndedSentence = "Its conversation was completed."
     const val noCoordinatorSentence = "This project isn’t coordinated."
-    const val handedOverSentence = "it handed this to you on purpose."
+    const val handedOverSentence = "It handed this to you on purpose."
+    /** The web's `HANDOVER_NOTE_CAPTION`: the caption over the coordinator's hand-over note, in the coordinator row. */
+    const val handoverNoteCaption = "Why the coordinator handed it over"
     const val closesByItself = "Closes by itself once this work lands — push a fix to the task branch and you’re done."
     const val alreadySettled = "Already settled?"
     const val markHandledSettledConsequence = "The work landed another way. Your reason goes on the record."
@@ -623,10 +652,11 @@ object ExceptionCards {
     private fun bool(row: JsonObject, key: String): Boolean? = (row[key] as? JsonPrimitive)?.booleanOrNull
 
     /** The kinds the card draws once they are the owner's by escalation, a hand-over, an ended or missing coordinator. A failed
-     * chain's 3rd failure and a silent landing claim keep cards of their own. */
+     * chain's 3rd failure, a silent landing claim, and a failing landing baseline keep cards of their own. */
     private val whoFixesKinds = setOf("INTEGRATION_CONFLICT", "INTEGRATION_CHECK_FAILED", "INTEGRATION_ERROR", "TASK_FAILED", "DELIVERY_REVIEW")
 
-    fun whoFixesIt(row: JsonObject): Boolean = row.text("assignee") == "OWNER" && row.text("kind") in whoFixesKinds &&
+    fun whoFixesIt(row: JsonObject): Boolean = row.obj("baseline") == null &&
+        row.text("assignee") == "OWNER" && row.text("kind") in whoFixesKinds &&
         row.text("assigneeReason") != "CHAIN_LIMIT" && row.text("assigneeReason") != "DEFAULT"
 
     /** Whether the server drew Ask again: the coordinator can take it, and the status is not read. */
@@ -682,8 +712,8 @@ object ExceptionCards {
             CoordinatorCause.COORDINATOR_ENDED -> coordinatorEndedSentence
             CoordinatorCause.NO_COORDINATOR -> noCoordinatorSentence
             CoordinatorCause.ESCALATED -> "Reachable. It had this for ${waitedBeforeEscalation(row)} and didn’t get to it."
-            CoordinatorCause.HANDED_OVER -> row.text("handoverNote")?.trim()?.takeIf { it.isNotEmpty() }?.let { "“$it” — $handedOverSentence" }
-                ?: handedOverSentence.replaceFirstChar { it.uppercaseChar() }
+            // The coordinator's own note is drawn under its caption (OwnerCardTranslation.handoverNote), not in here.
+            CoordinatorCause.HANDED_OVER -> handedOverSentence
         }
     }
 

@@ -60,7 +60,8 @@ final class OwnerAnswerCardWiringTests: XCTestCase {
 
     /// The turn asks the records the conversation holds, and is the question's card where one is held:
     /// dashed while queued, or saying its delivery went unconfirmed — and with no Cancel, which would
-    /// leave the coordinator never told. Its press opens the record's own review.
+    /// leave the coordinator never told. The card unfolds itself in place, so the turn hands it no
+    /// review target (board card-ui-polish ③: no sheet).
     func testTheTurnIsTheQuestionsCardWhereTheConversationHoldsItsRecord() throws {
         let line = try source(Self.linePath)
         XCTAssertTrue(statements(line).contains("@Environment(\\.answeredQuestions) private var answered"))
@@ -68,7 +69,6 @@ final class OwnerAnswerCardWiringTests: XCTestCase {
         for code in ["if let record = OwnerAnswer.record(of: card, in: answered) {",
                      "CoordinatorQuestionRecordView(record: record, queued: queued && !undelivered,",
                      "notice: undelivered ? OwnerAnswerCard.undelivered : nil)",
-                     ".delivered(DeliveredDecisionCard(kind: .coordinatorQuestionRecord(record: record))))",
                      "} else {", "line"] {
             XCTAssertTrue(body.contains(code), "the turn's body no longer reads \(code)")
         }
@@ -76,6 +76,8 @@ final class OwnerAnswerCardWiringTests: XCTestCase {
                                           to: "} else {")).joined(separator: "\n")
         XCTAssertFalse(card.contains("onCancelQueued"), "the card hands the queue's Cancel on")
         XCTAssertFalse(card.contains("Cancel"), "the card offers a Cancel")
+        XCTAssertFalse(card.contains("approvalReviewTarget"),
+                       "the record opens in place; nothing hands it a sheet to open")
     }
 
     /// One list holds the transcript and the queued tail, so the records handed to it reach a turn in
@@ -93,7 +95,7 @@ final class OwnerAnswerCardWiringTests: XCTestCase {
         XCTAssertTrue(model.contains("CoordinatorQuestions.held(drawn: decisionCards, read: openItems)"))
         XCTAssertTrue(model.contains(
             "guard let turn = OwnerAnswer.handover(of: itemID, in: state), let card = turn.ownerAnswer else { return nil }"))
-        XCTAssertTrue(model.contains("return OwnerAnswerTold(card: card, text: turn.text, attached: turn.attached)"))
+        XCTAssertTrue(model.contains("return OwnerAnswerTold(card: card, text: turn.text)"))
     }
 
     /// The answered card leaves the blue for the neutral frame, with a grey chip and the answer ticked
@@ -107,8 +109,7 @@ final class OwnerAnswerCardWiringTests: XCTestCase {
         for line in [".approvalChrome(.gray, dashed: queued)", ".foregroundStyle(Color.gray)",
                      ".font(.orbitMeta).foregroundStyle(Color.green)",
                      "Text(CoordinatorQuestions.queuedForCoordinator)", "if let notice {",
-                     "if let told { toldFold(told) }", "Text(OwnerAnswerCard.told)", "Text(told.text)",
-                     "if let attached = told.attached { AttachedNoteEntry(attached: attached) }"] {
+                     "if let told { toldFold(told) }", "Text(OwnerAnswerCard.told)", "Text(told.text)"] {
             XCTAssertTrue(code.contains(line), "the record view no longer draws \(line)")
         }
         XCTAssertFalse(code.joined(separator: "\n").contains(".approvalChrome(.blue"),

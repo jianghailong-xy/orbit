@@ -11,6 +11,7 @@ import {
 import {
   CRITERIA_CHANGE_CHAT_PLACEHOLDER,
   START_CHAT_PLACEHOLDER,
+  criteriaChangeSummary,
   projectStarted,
   type SettlementQuestion,
 } from '../lib/projectStart';
@@ -27,6 +28,7 @@ import { PROVENANCE_LABEL, receiptClock, shortSeal } from './CriteriaDecisionCar
 // its temporal dead zone depending on which of the three a bundle enters first.
 import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 import { SessionCriteriaChangeCard, criteriaChangeHeld } from './CriteriaChangeCard';
+import { CriteriaChangeList, criteriaChangeRows } from './CriteriaChangeList';
 import { RunSettingsSummary } from './RunSettingsSummary';
 import { SessionStartProjectCard } from './StartProjectCard';
 
@@ -355,42 +357,96 @@ export function acceptanceConfirmationStaleExplanation(
   );
 }
 
-/** What a START records: the count it was given over, and the seal it locked.
+/** What a START records: how many criteria the project was started on.
  *
- *  Read off the RECORD and never off the version standing now. Those are the same version exactly
- *  while the confirmation counts, and the whole point of the record is what it says when they are
- *  not: after an edit the standing names the new seal, and this line still has to name the one
- *  somebody actually signed. One sentence, whether it is drawn the second the door answers or a
- *  week later on another device (`AcceptanceConfirmationCopyParityTests`). */
+ *  Read off the RECORD and never off the version standing now: after an edit the standing names the
+ *  new set, and this line still has to name the one somebody actually signed. The seal it locked is
+ *  in the fold (`acceptanceReceiptSeal`), where it is proof rather than the headline. One sentence,
+ *  whether it is drawn the second the door answers or a week later on another device
+ *  (`AcceptanceConfirmationCopyParityTests`). */
 export function acceptanceConfirmedLine(confirmation: RecordedStandardSetConfirmation): string {
   const count = confirmation.criteriaMaterial.length;
-  const seal = shortSeal(confirmation.criteriaDigest);
-  return `You started the project on ${count} criteria at seal ${seal}`;
+  return `You started the project on ${count} criteria`;
 }
 
 /** …and what every other confirmation records: the project was running already, and the press
- *  confirmed a version of its criteria rather than starting it. `changed` is what that version
- *  changed — "1 new, 1 stricter" — when this window pressed it and so knows; the read says only the
- *  seal, because once a set is confirmed nothing is left changed. */
-export function acceptanceReconfirmedLine(
-  confirmation: RecordedStandardSetConfirmation,
-  changed: string | null = null,
-): string {
+ *  confirmed a version of its criteria rather than starting it — with what that version changed
+ *  since the confirmation before it, which the record now keeps (`changes`), so every device and
+ *  every reload says the same. A record older than that keeps no changes and says the count alone. */
+export function acceptanceReconfirmedLine(confirmation: RecordedStandardSetConfirmation): string {
   const count = confirmation.criteriaMaterial.length;
-  const seal = shortSeal(confirmation.criteriaDigest);
-  const line = `You confirmed ${count} criteria at seal ${seal}`;
-  return changed ? `${line} — ${changed}` : line;
+  const line = `You confirmed ${count} criteria`;
+  const changes = confirmation.changes;
+  if (!changes) return line;
+  const moved = criteriaChangeSummary({
+    added: changes.added.length,
+    stricter: changes.stricter.length,
+    revised: changes.revised.length,
+    removed: changes.removed.length,
+  });
+  const unchanged = changes.unchanged.length > 0 ? `${changes.unchanged.length} unchanged` : '';
+  const summary = [moved, unchanged].filter(Boolean).join(', ');
+  return summary ? `${line} · ${summary}` : line;
 }
 
 /** Which of the two a record says: a confirmation that started the project carries what the start
  *  left it with (`startedWith`), and one that started nothing does not. */
-export function acceptanceReceiptLine(
-  confirmation: RecordedStandardSetConfirmation,
-  changed: string | null = null,
-): string {
+export function acceptanceReceiptLine(confirmation: RecordedStandardSetConfirmation): string {
   return confirmation.startedWith
     ? acceptanceConfirmedLine(confirmation)
-    : acceptanceReconfirmedLine(confirmation, changed);
+    : acceptanceReconfirmedLine(confirmation);
+}
+
+/** The fold's toggle, closed: what it opens and how much of it there is. */
+export function acceptanceReceiptOpenLabel(count: number): string {
+  return `What this confirmed · ${count} ${count === 1 ? 'criterion' : 'criteria'}`;
+}
+/** …and open. */
+export const ACCEPTANCE_RECEIPT_CLOSE_LABEL = 'Hide what this confirmed';
+/** A criterion whose confirmed words nothing kept: a record older than keeping them, about a
+ *  criterion that has changed since. */
+export const ACCEPTANCE_RECEIPT_WORDS_GONE = 'Its words are not on record';
+/** The tags after a criterion's words. */
+export const ACCEPTANCE_RECEIPT_TAG_NEW = 'new';
+export const ACCEPTANCE_RECEIPT_TAG_EDITED = 'edited since';
+export const ACCEPTANCE_RECEIPT_TAG_REMOVED = 'removed since';
+/** Under a record older than keeping the words. */
+export const ACCEPTANCE_RECEIPT_WORDING_NOT_KEPT =
+  'This confirmation was recorded before Orbit kept the wording. Criteria that still match it show '
+  + 'their words today, which are the same words.';
+
+/** …and, after it, how many of those criteria have changed and lost the words that were confirmed. */
+export function acceptanceReceiptWordsGone(n: number): string {
+  return n === 1
+    ? ' One criterion has changed since and its old words are gone.'
+    : ` ${n} criteria have changed since and their old words are gone.`;
+}
+
+/** Under a record whose words were kept, once some of them have moved: which, by number. */
+export function acceptanceReceiptMovedNote(ordinals: number[]): string {
+  const sorted = [...ordinals].sort((a, b) => a - b);
+  const who = sorted.length === 1
+    ? `Criterion ${sorted[0]} has`
+    : `Criteria ${sorted.slice(0, -1).join(', ')} and ${sorted[sorted.length - 1]} have`;
+  return `These are the words you confirmed. ${who} changed since; Orbit asks about the criteria standing now on its own card.`;
+}
+
+/** The last line of the fold: the version this record names, as proof. */
+export function acceptanceReceiptSeal(confirmation: RecordedStandardSetConfirmation): string {
+  return `Seal ${shortSeal(confirmation.criteriaDigest)}`;
+}
+
+/** The note under the fold's list, or null when there is nothing to say. */
+export function acceptanceReceiptNote(confirmation: RecordedStandardSetConfirmation): string | null {
+  const criteria = confirmation.criteria ?? [];
+  if (confirmation.wordingRecorded === false) {
+    const gone = criteria.filter((item) => item.text === null).length;
+    return ACCEPTANCE_RECEIPT_WORDING_NOT_KEPT + (gone > 0 ? acceptanceReceiptWordsGone(gone) : '');
+  }
+  const moved = criteria
+    .filter((item) => item.since !== 'UNCHANGED' && item.ordinal !== null)
+    .map((item) => item.ordinal as number);
+  return moved.length > 0 ? acceptanceReceiptMovedNote(moved) : null;
 }
 
 /** Who made it and when, under that line — the stamp the other receipts carry (`by you at 09:15`),
@@ -568,8 +624,9 @@ export function AcceptanceConfirmationCard({
  * DRAWN FROM THE READ, NOT FROM THE WINDOW THAT PRESSED. `confirmation` is the newest record
  * `GET /projects/:id/acceptance/confirmation` publishes, so this is here on a device that never saw
  * the card, after a reload, and with the door's clock and seal on it rather than the pressing
- * page's. What it says is what was signed: the count, the seal it locked, who, and when. Nothing
- * on it is pressable — it is a record, and the question it answers is not on it.
+ * page's. What it says is what was signed: the count and what it changed, who, and when — and,
+ * folded, the criteria in the words confirmed and the seal it locked. Nothing on it is an action:
+ * it is a record, and the question it answers is not on it; the fold only opens.
  *
  * A STALE SET DRAWS BOTH OF THEM: this, naming the version somebody signed, and the card asking
  * about the version standing now. They are two different facts — what was agreed, and what nobody
@@ -586,12 +643,9 @@ export function AcceptanceConfirmationCard({
  */
 export function AcceptanceConfirmationReceipt({
   confirmation,
-  changed = null,
 }: {
   /** The newest confirmation on record, as the standing read publishes it. */
   confirmation: RecordedStandardSetConfirmation;
-  /** What a re-confirmation pressed in this window changed, when it knows (`confirmedChangesKey`). */
-  changed?: string | null;
 }): JSX.Element {
   const started = confirmation.startedWith ?? null;
   return (
@@ -603,7 +657,7 @@ export function AcceptanceConfirmationReceipt({
         </span>
       </div>
       <div className="approval-body settlement-receipt-body">
-        <p className="settlement-receipt-line">{acceptanceReceiptLine(confirmation, changed)}</p>
+        <p className="settlement-receipt-line">{acceptanceReceiptLine(confirmation)}</p>
         {/* A start's record says what the project was started WITH — the settings the owner
             pressed, as the start recorded them, and which of them the owner changed from the
             coordinator's suggestion. Off the record, not off today's settings. */}
@@ -615,8 +669,69 @@ export function AcceptanceConfirmationReceipt({
           />
         ) : null}
         <p className="settlement-receipt-stamp">{acceptanceReceiptStamp(confirmation)}</p>
+        <AcceptanceReceiptFold confirmation={confirmation} />
       </div>
     </div>
+  );
+}
+
+/**
+ * WHAT THE CONFIRMATION WAS ABOUT, folded under its record (docs/mocks/acceptance-receipt-fold).
+ *
+ * Pressing the button used to be the moment the criteria became unreadable: the card had them, and
+ * the receipt that replaced it had a count and a seal (the account owner, 2026-11-19). So the
+ * receipt carries the confirmed set, closed by default — its job is to say the answer was recorded,
+ * and what it was about is the question a reader asks second. `<details>` rather than state, as on
+ * the criteria decision's receipt: a record drawn from the read keeps nothing across renders.
+ *
+ * In order: what changed, in the change card's own rows; the set, numbered, in the words that were
+ * confirmed; a note when some of it has moved or its words were never kept; and the seal.
+ */
+function AcceptanceReceiptFold({
+  confirmation,
+}: {
+  confirmation: RecordedStandardSetConfirmation;
+}): JSX.Element | null {
+  const criteria = confirmation.criteria ?? [];
+  if (criteria.length === 0) return null;
+  const added = new Set((confirmation.changes?.added ?? []).map((change) => change.key));
+  const note = acceptanceReceiptNote(confirmation);
+  return (
+    <details className="settlement-receipt-fold">
+      <summary className="settlement-card-read">
+        <span className="settlement-receipt-when-closed">
+          {acceptanceReceiptOpenLabel(confirmation.criteriaMaterial.length)}
+        </span>
+        <span className="settlement-receipt-when-open">{ACCEPTANCE_RECEIPT_CLOSE_LABEL}</span>
+      </summary>
+      {confirmation.changes ? <CriteriaChangeList rows={criteriaChangeRows(confirmation.changes)} /> : null}
+      <ol className="settlement-card-criteria is-open">
+        {criteria.map((item) => (
+          <li
+            key={item.key}
+            value={item.ordinal ?? undefined}
+            className={item.ordinal === null ? 'settlement-receipt-unnumbered' : undefined}
+          >
+            <span className="settlement-card-criterion">
+              {item.text === null
+                ? <span className="settlement-receipt-gone">{ACCEPTANCE_RECEIPT_WORDS_GONE}</span>
+                : item.text}
+              {added.has(item.key)
+                ? <span className="settlement-receipt-tag is-new">{ACCEPTANCE_RECEIPT_TAG_NEW}</span>
+                : null}
+              {item.since === 'EDITED'
+                ? <span className="settlement-receipt-tag is-moved">{ACCEPTANCE_RECEIPT_TAG_EDITED}</span>
+                : null}
+              {item.since === 'REMOVED'
+                ? <span className="settlement-receipt-tag is-moved">{ACCEPTANCE_RECEIPT_TAG_REMOVED}</span>
+                : null}
+            </span>
+          </li>
+        ))}
+      </ol>
+      {note ? <p className="settlement-card-explains">{note}</p> : null}
+      <p className="settlement-receipt-seal">{acceptanceReceiptSeal(confirmation)}</p>
+    </details>
   );
 }
 
@@ -730,6 +845,7 @@ export function SessionCriteriaConfirmationCard({
   });
   const documentRead = useQuery({
     queryKey: ['project', project],
+    meta: { entities: ['project', 'task'] },
     queryFn: () =>
       api<ConfirmationProjectDocument>(`/projects/${encodeURIComponent(project)}`),
     enabled: Boolean(projectId),

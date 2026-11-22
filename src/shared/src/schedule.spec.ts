@@ -10,13 +10,16 @@ import {
   scheduleCreateWhen,
   scheduleFailedWaiting,
   scheduleHeldWaiting,
+  scheduleNeedsCount,
   scheduleNeedsYou,
   scheduleReportedText,
-  scheduleRunHeadText,
+  scheduleRowCircle,
   scheduleRowLine,
   scheduleRunCircle,
   scheduleRunLine,
   scheduleRunOfText,
+  scheduleRuleRepeats,
+  scheduleRuleText,
   scheduleRunStripText,
   scheduleTimeline,
   scheduleWhenText,
@@ -89,7 +92,7 @@ const names = (groups: ReturnType<typeof scheduleTimeline>) =>
   groups.map((g) => [g.title, g.subtitle, g.items.map((i) => (i.kind === 'DRAFT' ? i.card.title : i.schedule.title))]);
 
 describe('scheduleTimeline', () => {
-  it('lays out board 1/2 ①: Needs you, Today, Tomorrow, Monday, Paused', () => {
+  it('lays out board 1/2 ①: Today, Tomorrow, Monday, Paused — no group of errors (owner 2026-11-19)', () => {
     const sweep = schedule({ title: 'Nightly pg spec sweep', consecutiveFailures: 3, nextDueAt: sh('2025-11-15T02:00') });
     const audit = schedule({ title: 'Weekly dependency audit', state: 'HELD', heldReason: 'AGENT_DISABLED' });
     const docs = schedule({ title: 'Docs link check', nextDueAt: sh('2025-11-15T12:00') });
@@ -106,14 +109,14 @@ describe('scheduleTimeline', () => {
       timezone: TZ,
     });
     expect(names(groups)).toEqual([
-      ['Needs you', '2', ['Nightly pg spec sweep', 'Weekly dependency audit']],
       ['Today', 'Fri, Nov 14', ['Docs link check', 'Release notes draft', 'Deploy health check']],
       ['Tomorrow', 'Sat, Nov 15', ['Nightly pg spec sweep', 'Codex stable check', 'Docs link check']],
       ['Monday', 'Nov 17', ['Weekly cost report']],
-      ['Paused', '1', ['Gateway CSP report digest']],
+      // A held schedule has no next run: it is listed with the paused ones, before them.
+      ['Paused', '2', ['Weekly dependency audit', 'Gateway CSP report digest']],
     ]);
-    expect(groups.map((g) => g.key)).toEqual(['NEEDS_YOU', 'TODAY', 'TOMORROW', 'DAY', 'PAUSED']);
-    expect(groups[1]!.items[0]!.kind).toBe('RUN');
+    expect(groups.map((g) => g.key)).toEqual(['TODAY', 'TOMORROW', 'DAY', 'PAUSED']);
+    expect(groups[0]!.items[0]!.kind).toBe('RUN');
   });
 
   it('splits at local midnight, not at UTC midnight', () => {
@@ -214,7 +217,7 @@ describe('scheduleTimeline', () => {
 
 describe('circles', () => {
   const EXPECTED: Record<ScheduleRunState, [string, string | null, string | null]> = {
-    QUEUED: ['open', null, null],
+    QUEUED: ['open', 'clock', null],
     RUNNING: ['running', null, null],
     AWAITING_APPROVAL: ['held', 'alert', 'Waiting for you'],
     NO_CHANGE: ['done', 'check', 'No change'],
@@ -250,7 +253,43 @@ describe('circles', () => {
     expect(scheduleCircle({ state: 'PAUSED', consecutiveFailures: 0 }).circle).toBe('paused');
     expect(scheduleCircle({ state: 'ENDED', consecutiveFailures: 0 }).circle).toBe('muted');
     expect(scheduleCircle({ state: 'ACTIVE', consecutiveFailures: 0 }, { draft: true }).circle).toBe('draft');
-    expect(scheduleNeedsYou({ state: 'PAUSED', consecutiveFailures: 2 })).toBe(false);
+    expect(scheduleNeedsYou({ id: 's', state: 'PAUSED', consecutiveFailures: 2 })).toBe(false);
+  });
+
+  it('counts for the drawer as Apple and Android do: needs-you schedules, then conditions that cannot be read', () => {
+    const reading = (state: 'WAITING' | 'UNKNOWN') =>
+      ({ id: `c-${state}`, text: 'raw used above 90%', unit: '%', state, lastValue: null, lastSampleAt: null });
+    const failing = schedule({ consecutiveFailures: 1 });
+    const held = schedule({ state: 'HELD', heldReason: 'AGENT_DISABLED' });
+    const unread = schedule({ condition: reading('UNKNOWN') });
+    const unreadPaused = schedule({ state: 'PAUSED', condition: reading('UNKNOWN') });
+    const readable = schedule({ condition: reading('WAITING') });
+    const task = (state: 'WAITING' | 'UNKNOWN') =>
+      ({ id: `t-${state}`, title: 'Set pool size', workspaceId: 'ws', workspaceName: null, condition: reading(state) });
+    const schedules = [failing, held, unread, unreadPaused, readable, schedule()];
+    expect(scheduleNeedsCount({ schedules, waitingTasks: [task('UNKNOWN'), task('WAITING')] })).toBe(4);
+    // A failing schedule whose retry is under way is left out until that run ends.
+    expect(scheduleNeedsCount({ schedules, runs: [run(failing, 'RUNNING', sh('2025-11-14T12:27'))] })).toBe(2);
+    expect(scheduleNeedsCount(undefined)).toBe(0);
+  });
+
+  it('a failing schedule with a run under way waits for that run: no tag, not counted (owner 2026-11-19)', () => {
+    const failing = schedule({ consecutiveFailures: 2, nextDueAt: sh('2025-11-15T18:00') });
+    const held = schedule({ state: 'HELD', heldReason: 'AGENT_DISABLED' });
+    const other = schedule();
+    expect(scheduleNeedsYou(failing)).toBe(true);
+    expect(scheduleRowCircle(failing, []).tag?.text).toBe('Failed 2 in a row');
+    for (const state of ['QUEUED', 'RUNNING', 'AWAITING_APPROVAL'] as const) {
+      const retry = [run(failing, state, sh('2025-11-14T12:27'), { trigger: 'MANUAL' })];
+      expect(scheduleNeedsYou(failing, retry)).toBe(false);
+      expect(scheduleRowCircle(failing, retry)).toEqual({ circle: 'open', mark: null, tag: null });
+    }
+    // An ended run, or another schedule's run under way, leaves the failure standing.
+    expect(scheduleNeedsYou(failing, [run(failing, 'FAILED', sh('2025-11-14T12:27'))])).toBe(true);
+    expect(scheduleNeedsYou(failing, [run(other, 'RUNNING', sh('2025-11-14T12:27'))])).toBe(true);
+    // A hold is not waited out by a run.
+    expect(scheduleNeedsYou(held, [run(held, 'QUEUED', sh('2025-11-14T12:27'))])).toBe(true);
+    expect(scheduleRowCircle(held, []).tag?.text).toBe('Held');
   });
 });
 
@@ -370,19 +409,31 @@ describe('the run\'s session (board 2/2 ⑥)', () => {
     const s = schedule();
     const r = run(s, 'CHANGED', sh('2025-11-13T10:00'), { startedAt: sh('2025-11-13T10:01'), key: 'codex@0.49.0' });
     expect(scheduleRunStripText(r, 'CHECK_ONLY', TZ)).toBe(
-      'Scheduled run · planned 10:00, started 10:01 · access Check only · this session is not in your session list',
+      'Scheduled run · planned 10:00, started 10:01 · access Check only',
     );
     expect(scheduleRunOfText(r, TZ)).toBe('run of Nov 13');
     expect(scheduleReportedText(r, { notified: true })).toBe('Reported: Changed · codex@0.49.0 · you were notified');
     expect(scheduleReportedText({ state: 'NO_CHANGE', key: null })).toBe('Reported: No change');
   });
 
-  it('header line: state · agent · duration, leaving out what is not known', () => {
-    const ended = { startedAt: sh('2025-11-13T10:01'), endedAt: sh('2025-11-13T10:05') };
-    expect(scheduleRunHeadText({ state: 'Open', engine: 'Codex', run: ended, now: NOW })).toBe('Open · Codex agent · 4 min');
-    const running = { startedAt: sh('2025-11-14T12:17'), endedAt: null };
-    expect(scheduleRunHeadText({ state: 'Open', engine: null, run: running, now: NOW })).toBe('Open · 2 min');
-    expect(scheduleRunHeadText({ state: 'Completed', engine: 'Codex', run: { startedAt: null, endedAt: null }, now: NOW }))
-      .toBe('Completed · Codex agent');
+});
+
+describe('an EVERY rule (design §3, §9.2)', () => {
+  const WORK = ['MON', 'TUE', 'WED', 'THU', 'FRI'] as const;
+  const ALL = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'] as const;
+  it('reads as the doc\'s rule sentence, the same short and long, with seven weekdays left unsaid', () => {
+    const window = { kind: 'EVERY', minutes: 30, time: '09:00', until: '18:00', weekdays: [...WORK] } as const;
+    expect(scheduleRuleText(window)).toBe('Every 30 min, 09:00–18:00, Mon–Fri');
+    expect(scheduleRuleText(window, 'long')).toBe('Every 30 min, 09:00–18:00, Mon–Fri');
+    expect(scheduleRuleText({ kind: 'EVERY', minutes: 60, time: '00:00', weekdays: [...ALL] })).toBe('Every hour');
+    expect(scheduleRuleText({ kind: 'EVERY', minutes: 120, time: '08:00', weekdays: ['SUN', 'SAT'] }))
+      .toBe('Every 2 hours from 08:00, weekends');
+    expect(scheduleRuleText({ kind: 'EVERY', minutes: 720, time: '00:00', weekdays: ['MON', 'THU'] })).toBe('Every 12 hours, Mon, Thu');
+  });
+
+  it('shows the repeat mark, and its row line carries the sentence', () => {
+    const rule = { kind: 'EVERY', minutes: 30, time: '09:00', until: '18:00', weekdays: [...WORK] } as const;
+    expect(scheduleRuleRepeats(rule)).toBe(true);
+    expect(scheduleRowLine(schedule({ rule }))).toBe('Every 30 min, 09:00–18:00, Mon–Fri · apiserver · Check only');
   });
 });

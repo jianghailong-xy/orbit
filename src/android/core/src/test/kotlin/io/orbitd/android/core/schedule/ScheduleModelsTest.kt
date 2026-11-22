@@ -6,7 +6,10 @@ import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.net.ApiRequest
 import io.orbitd.android.core.net.ApiResponse
+import io.orbitd.android.core.net.NetworkException
+import io.orbitd.android.core.protocol.ProtocolException
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
@@ -155,6 +158,15 @@ class ScheduleModelsTest {
         assertEquals(ScheduleApi.UNREACHABLE, ScheduleApi.refusal(IllegalStateException()))
     }
 
+    @Test fun aFailedPressSaysWhatWentWrong() {
+        assertEquals("Couldn't reach Orbit. Try again.", ScheduleApi.refusal(NetworkException()))
+        assertEquals("Orbit answered, but this version of the app couldn't read the reply. Update the app; the card shows what Orbit did.",
+            ScheduleApi.refusal(ProtocolException()))
+        assertEquals(ScheduleApi.UNREADABLE, ScheduleApi.refusal(SerializationException("bad")))
+        assertEquals("Orbit couldn't do this (error 502). Try again.", ScheduleApi.refusal(ApiError.parse(502, "<html>".encodeToByteArray())))
+        assertEquals("You're signed out. Sign in and try again.", ScheduleApi.refusal(ApiError.parse(401, "{}".encodeToByteArray())))
+    }
+
     @Test fun anOlderServersListIsA404() = runTest {
         val failure = runCatching { ScheduleApi(Server(404, """{"message":"Cannot GET /api/schedules"}"""), handle).list() }.exceptionOrNull()
         assertEquals(404, (failure as ApiError).status)
@@ -183,5 +195,34 @@ class ScheduleModelsTest {
         assertEquals("a", api.detail("a").schedule.id)
         assertEquals("q", api.request("q").id)
         assertEquals(listOf("GET schedules/a", "GET schedule-requests/q"), server.asked)
+    }
+
+    private val everyJson = """{"kind":"EVERY","minutes":30,"time":"09:00","until":"18:00","weekdays":["MON","TUE","WED","THU","FRI"]}"""
+
+    /** The rule reader of the builds before EVERY: ONCE, DAILY and WHEN by name, any other kind weekly. */
+    private fun oldFallbackRule(o: kotlinx.serialization.json.JsonObject): ScheduleRule? {
+        val kind = o.scheduleText("kind") ?: return null
+        return when (kind) {
+            "ONCE" -> ScheduleRule.Once(o.scheduleText("at") ?: return null)
+            "DAILY" -> ScheduleRule.Daily(o.scheduleText("time") ?: return null)
+            else -> ScheduleRule.Weekly(o.scheduleText("time") ?: return null, o.scheduleStrings("weekdays") ?: emptyList())
+        }
+    }
+
+    @Test fun everyRuleReadsAndTheOldWeeklyFallbackKeepsIt() {
+        val rule = ScheduleRule.parse(json(everyJson))
+        assertEquals(ScheduleRule.Every(30, "09:00", listOf("MON", "TUE", "WED", "THU", "FRI"), "18:00"), rule)
+        assertEquals(rule, ScheduleRule.parse(rule!!.toJson()))
+        // The same JSON through the old fallback is a weekly rule, not null: a shipped build keeps the schedule.
+        assertEquals(ScheduleRule.Weekly("09:00", listOf("MON", "TUE", "WED", "THU", "FRI")),
+            oldFallbackRule(json(everyJson) as kotlinx.serialization.json.JsonObject))
+        // A list holding an EVERY schedule still reads whole.
+        val list = """{"schedules":[{"id":"s1","title":"Poll","workspaceId":"w","timezone":"UTC","rule":$everyJson,"maxRuns":3,"runsLeft":2}]}"""
+        val view = ScheduleListResponse.parse(json(list))!!.schedules.single()
+        assertEquals(rule, view.rule)
+        assertEquals(3, view.maxRuns)
+        assertEquals(2, view.runsLeft)
+        // EVERY without a readable interval is read as weekly, not dropped.
+        assertEquals(ScheduleRule.Weekly("09:00", emptyList()), ScheduleRule.parse(json("""{"kind":"EVERY","time":"09:00"}""")))
     }
 }

@@ -69,8 +69,8 @@ import Foundation
 public struct ProposedCriterion: Codable, Equatable, Sendable, Identifiable {
     public let id: String?
     public let ordinal: Int
-    public let text: String
-    public let verificationMethod: String
+    public var text: String
+    public var verificationMethod: String
     /// The reason the proposer gave, when the edit carried one. Null far more often than not.
     public let completionCriterionOverrideReason: String?
 
@@ -113,8 +113,8 @@ public enum CriteriaProposalField: String, Codable, Equatable, Sendable {
 
 /// One criterion's words, on either side of the comparison.
 public struct CriterionWording: Codable, Equatable, Sendable {
-    public let text: String
-    public let verificationMethod: String?
+    public var text: String
+    public var verificationMethod: String?
     public let completionCriterionOverrideReason: String?
 
     public init(text: String, verificationMethod: String? = nil,
@@ -170,13 +170,13 @@ public struct CriteriaProposalChangeEntry: Codable, Equatable, Sendable {
     /// Its place in the proposed set — or, for one being dropped, in the set on record.
     public let ordinal: Int
     /// The proposal's words. Nil for `.removed`: the proposal states none.
-    public let proposed: CriterionWording?
+    public var proposed: CriterionWording?
     /// THE WORDS IT REPLACES, off the definition in force. Nil for `.new`: it replaces nothing.
     public let onRecord: CriterionWording?
     /// Which fields differ. Empty except on `.changed`.
     public let changed: [CriteriaProposalField]
     /// Each of those fields cut into what the rewrite keeps, drops and adds, in `changed` order.
-    public let rewrites: [CriterionFieldRewrite]
+    public var rewrites: [CriterionFieldRewrite]
 
     public init(change: CriteriaProposalChange, definitionId: String? = nil, ordinal: Int,
                 proposed: CriterionWording? = nil, onRecord: CriterionWording? = nil,
@@ -217,7 +217,7 @@ public struct CriteriaProposalChangeEntry: Codable, Equatable, Sendable {
 /// SERVER said rather than one a collapsed list implies — otherwise "5 unchanged" would be a claim
 /// about how many rows this client chose not to draw.
 public struct CriteriaProposalDiff: Codable, Equatable, Sendable {
-    public let entries: [CriteriaProposalChangeEntry]
+    public var entries: [CriteriaProposalChangeEntry]
     public let sameCount: Int
     public let changedCount: Int
     public let newCount: Int
@@ -268,12 +268,15 @@ public struct PendingCriteriaDecisionRow: Codable, Equatable, Sendable, Identifi
     public let baselineSeal: String
     /// The seal standing NOW. Equal to `baselineSeal` exactly when the proposal is decidable.
     public let currentSeal: String
-    public let proposed: [ProposedCriterion]
+    public var proposed: [ProposedCriterion]
     /// The same restatement read against the criteria in force — what the card is drawn from.
-    public let diff: CriteriaProposalDiff
+    public var diff: CriteriaProposalDiff
     /// The proposal this one displaced, or nil when it displaced nothing.
     public let supersededIntentId: String?
     public let decidability: CriteriaDecisionDecidability
+    /// `proposed[].text` and `verificationMethod` in the owner's language (Settings › Translation),
+    /// index for index; nil until translated.
+    public let translation: OwnerCardTranslation?
 
     public var id: String { intentId }
 
@@ -281,7 +284,8 @@ public struct PendingCriteriaDecisionRow: Codable, Equatable, Sendable, Identifi
                 filedAt: String, ageSeconds: Int, baselineSeal: String, currentSeal: String,
                 proposed: [ProposedCriterion], diff: CriteriaProposalDiff = .unreadable,
                 supersededIntentId: String? = nil,
-                decidability: CriteriaDecisionDecidability) {
+                decidability: CriteriaDecisionDecidability,
+                translation: OwnerCardTranslation? = nil) {
         self.intentId = intentId
         self.projectId = projectId
         self.commitToken = commitToken
@@ -294,6 +298,7 @@ public struct PendingCriteriaDecisionRow: Codable, Equatable, Sendable, Identifi
         self.diff = diff
         self.supersededIntentId = supersededIntentId
         self.decidability = decidability
+        self.translation = translation
     }
 }
 
@@ -435,6 +440,54 @@ public struct StandardSetVersion: Codable, Equatable, Sendable {
     }
 }
 
+/// One criterion of a RECORDED confirmation, as its receipt reads it: the words that were
+/// confirmed, and whether the criterion has moved since. `@orbit/shared`'s
+/// `ConfirmedCriterionReading`.
+///
+/// `text` and `verificationMethod` are the words stored with the confirmation. A confirmation
+/// written before they were stored (`wordingRecorded == false`) gets today's words where the
+/// criterion's content hash still matches the one confirmed — the same hash means the same words —
+/// and null where it does not, because those words were never kept anywhere.
+public struct ConfirmedCriterionReading: Codable, Equatable, Sendable, Identifiable {
+    /// Whether it stands with the content confirmed, stands changed, or no longer stands.
+    public enum Since: String, Codable, Equatable, Sendable {
+        case unchanged = "UNCHANGED"
+        case edited = "EDITED"
+        case removed = "REMOVED"
+    }
+
+    public let key: String
+    /// Its place in the set that was confirmed; on an older record, its place now, or null once
+    /// it is gone.
+    public let ordinal: Int?
+    public let text: String?
+    public let verificationMethod: String?
+    public let since: Since
+
+    public var id: String { key }
+
+    public init(key: String, ordinal: Int? = nil, text: String? = nil,
+                verificationMethod: String? = nil, since: Since = .unchanged) {
+        self.key = key
+        self.ordinal = ordinal
+        self.text = text
+        self.verificationMethod = verificationMethod
+        self.since = since
+    }
+
+    /// Decoded by hand, for the receipt's rule: a row whose words were never kept is still a row,
+    /// and a `since` this build cannot read is a criterion left untagged — never a confirmation
+    /// read that fails to decode.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        key = try c.decode(String.self, forKey: .key)
+        ordinal = (try? c.decodeIfPresent(Int.self, forKey: .ordinal)) ?? nil
+        text = (try? c.decodeIfPresent(String.self, forKey: .text)) ?? nil
+        verificationMethod = (try? c.decodeIfPresent(String.self, forKey: .verificationMethod)) ?? nil
+        since = (try? c.decodeIfPresent(Since.self, forKey: .since)) ?? .unchanged
+    }
+}
+
 /// One recorded exercise of `CONFIRM_ACCEPTANCE_CRITERIA`.
 public struct RecordedStandardSetConfirmation: Codable, Equatable, Sendable {
     public let criteriaDigest: String
@@ -445,20 +498,36 @@ public struct RecordedStandardSetConfirmation: Codable, Equatable, Sendable {
     /// that started nothing — a re-confirmation, or one made before starts recorded their settings.
     /// The receipt reads it: a start says "started" and what with, anything else says "confirmed".
     public let startedWith: ProjectStartRecord?
+    /// What this confirmation changed since the one before it, as the card that asked showed it —
+    /// the receipt's headline and the fold's change rows read it. Nil when there was no
+    /// confirmation before it or the record predates keeping it; absent from an older server.
+    public let changes: CriteriaChangesSinceConfirmed?
+    /// The confirmed set, criterion by criterion: the words confirmed and whether each moved
+    /// since, for the receipt's fold. Empty on a record from a server that predates keeping them.
+    public let criteria: [ConfirmedCriterionReading]
+    /// Whether the words were kept with the confirmation; false on a record older than that, and
+    /// on one from a server that predates the field.
+    public let wordingRecorded: Bool
 
     public init(criteriaDigest: String, criteriaMaterial: [ConfirmedCriterionVersion],
                 confirmedAt: String, confirmedById: String,
-                startedWith: ProjectStartRecord? = nil) {
+                startedWith: ProjectStartRecord? = nil,
+                changes: CriteriaChangesSinceConfirmed? = nil,
+                criteria: [ConfirmedCriterionReading] = [],
+                wordingRecorded: Bool = false) {
         self.criteriaDigest = criteriaDigest
         self.criteriaMaterial = criteriaMaterial
         self.confirmedAt = confirmedAt
         self.confirmedById = confirmedById
         self.startedWith = startedWith
+        self.changes = changes
+        self.criteria = criteria
+        self.wordingRecorded = wordingRecorded
     }
 
-    /// Decoded by hand for `startedWith`: absent from a server older than this build, and settings
-    /// this build cannot read are a record without them — the receipt still names the seal — rather
-    /// than a confirmation read that fails to decode.
+    /// Decoded by hand for the fields a server older than this build does not send: absent reads
+    /// as no start, no changes, no words — the receipt still names the seal — and a shape this
+    /// build cannot read is none of, rather than a confirmation read that fails to decode.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         criteriaDigest = try c.decode(String.self, forKey: .criteriaDigest)
@@ -466,6 +535,9 @@ public struct RecordedStandardSetConfirmation: Codable, Equatable, Sendable {
         confirmedAt = try c.decode(String.self, forKey: .confirmedAt)
         confirmedById = try c.decode(String.self, forKey: .confirmedById)
         startedWith = (try? c.decodeIfPresent(ProjectStartRecord.self, forKey: .startedWith)) ?? nil
+        changes = (try? c.decodeIfPresent(CriteriaChangesSinceConfirmed.self, forKey: .changes)) ?? nil
+        criteria = (try? c.decodeIfPresent([ConfirmedCriterionReading].self, forKey: .criteria)) ?? []
+        wordingRecorded = (try? c.decodeIfPresent(Bool.self, forKey: .wordingRecorded)) ?? false
     }
 }
 
@@ -1374,41 +1446,110 @@ public enum AcceptanceConfirmations {
         return out
     }
 
-    /// What a START records: the count it was given over, and the seal it locked.
+    /// What a START records: how many criteria the project was started on.
     ///
     /// Read off the RECORD and never off the version standing now. Those are the same version
     /// exactly while the confirmation counts, and the whole point of the record is what it says when
     /// they are not: after an edit the standing names the new seal, and this line still has to name
-    /// the one somebody actually signed. Web's `acceptanceConfirmedLine`, word for word — one
+    /// the one somebody actually signed. The seal it locked is in the fold (`receiptSeal`), where it
+    /// is proof rather than the headline. Web's `acceptanceConfirmedLine`, word for word — one
     /// sentence, whether it is drawn the second the door answers or a week later on another device.
     public static func confirmedLine(_ confirmation: RecordedStandardSetConfirmation) -> String {
         let count = confirmation.criteriaMaterial.count
-        let seal = CriteriaDecisions.shortSeal(confirmation.criteriaDigest)
-        return "You started the project on \(count) criteria at seal \(seal)"
+        return "You started the project on \(count) criteria"
     }
 
     /// …and what every other confirmation records: the project was running already, and the press
-    /// confirmed a version of its criteria rather than starting it. `changed` is what that version
-    /// changed — "1 new, 1 stricter" — when this console pressed it and so knows; the read says only
-    /// the seal, because once a set is confirmed nothing is left changed. Web's
-    /// `acceptanceReconfirmedLine`.
-    public static func reconfirmedLine(_ confirmation: RecordedStandardSetConfirmation,
-                                       changed: String? = nil) -> String {
+    /// confirmed a version of its criteria rather than starting it — with what that version changed
+    /// since the confirmation before it, which the record now keeps (`changes`), so every device
+    /// and every reload says the same. A record older than that keeps no changes and says the count
+    /// alone. Web's `acceptanceReconfirmedLine`.
+    public static func reconfirmedLine(_ confirmation: RecordedStandardSetConfirmation) -> String {
         let count = confirmation.criteriaMaterial.count
-        let seal = CriteriaDecisions.shortSeal(confirmation.criteriaDigest)
-        let line = "You confirmed \(count) criteria at seal \(seal)"
-        guard let changed, !changed.isEmpty else { return line }
-        return "\(line) — \(changed)"
+        let line = "You confirmed \(count) criteria"
+        guard let changes = confirmation.changes else { return line }
+        let moved = CriteriaChanges.summary(added: changes.added.count,
+                                            stricter: changes.stricter.count,
+                                            revised: changes.revised.count,
+                                            removed: changes.removed.count)
+        let unchanged = changes.unchanged.isEmpty ? "" : "\(changes.unchanged.count) unchanged"
+        let summary = [moved, unchanged].filter { !$0.isEmpty }.joined(separator: ", ")
+        return summary.isEmpty ? line : "\(line) · \(summary)"
     }
 
     /// Which of the two a record says: a confirmation that started the project carries what the
     /// start left it with (`startedWith`), and one that started nothing does not. Web's
     /// `acceptanceReceiptLine`.
-    public static func receiptLine(_ confirmation: RecordedStandardSetConfirmation,
-                                   changed: String? = nil) -> String {
+    public static func receiptLine(_ confirmation: RecordedStandardSetConfirmation) -> String {
         confirmation.startedWith != nil
             ? confirmedLine(confirmation)
-            : reconfirmedLine(confirmation, changed: changed)
+            : reconfirmedLine(confirmation)
+    }
+
+    // MARK: the fold — what this confirmation was about (docs/mocks/acceptance-receipt-fold)
+
+    /// The fold's toggle, closed: what it opens and how much of it there is. Web's
+    /// `acceptanceReceiptOpenLabel`.
+    public static func receiptOpenLabel(count: Int) -> String {
+        "What this confirmed · \(count) \(count == 1 ? "criterion" : "criteria")"
+    }
+
+    /// …and open. Web's `ACCEPTANCE_RECEIPT_CLOSE_LABEL`.
+    public static let receiptCloseLabel = "Hide what this confirmed"
+
+    /// A criterion whose confirmed words nothing kept: a record older than keeping them, about a
+    /// criterion that has changed since. Web's `ACCEPTANCE_RECEIPT_WORDS_GONE`.
+    public static let receiptWordsGone = "Its words are not on record"
+
+    /// The tags after a criterion's words. Web's `ACCEPTANCE_RECEIPT_TAG_*`.
+    public static let receiptTagNew = "new"
+    public static let receiptTagEdited = "edited since"
+    public static let receiptTagRemoved = "removed since"
+
+    /// Under a record older than keeping the words. Web's `ACCEPTANCE_RECEIPT_WORDING_NOT_KEPT`.
+    public static let receiptWordingNotKept =
+        "This confirmation was recorded before Orbit kept the wording. Criteria that still match "
+        + "it show their words today, which are the same words."
+
+    /// …and, after it, how many of those criteria have changed and lost the words that were
+    /// confirmed. Web's `acceptanceReceiptWordsGone`, leading space included.
+    public static func receiptWordsGoneSentence(_ count: Int) -> String {
+        count == 1
+            ? " One criterion has changed since and its old words are gone."
+            : " \(count) criteria have changed since and their old words are gone."
+    }
+
+    /// Under a record whose words were kept, once some of them have moved: which, by number.
+    /// Web's `acceptanceReceiptMovedNote`.
+    public static func receiptMovedNote(_ ordinals: [Int]) -> String {
+        let sorted = ordinals.sorted()
+        let who: String
+        if sorted.count == 1 {
+            who = "Criterion \(sorted[0]) has"
+        } else {
+            let rest = sorted.dropLast().map(String.init).joined(separator: ", ")
+            who = "Criteria \(rest) and \(sorted[sorted.count - 1]) have"
+        }
+        return "These are the words you confirmed. \(who) changed since; Orbit asks about the "
+            + "criteria standing now on its own card."
+    }
+
+    /// The last line of the fold: the version this record names, as proof. Web's
+    /// `acceptanceReceiptSeal`.
+    public static func receiptSeal(_ confirmation: RecordedStandardSetConfirmation) -> String {
+        "Seal \(CriteriaDecisions.shortSeal(confirmation.criteriaDigest))"
+    }
+
+    /// The note under the fold's list, or nil when there is nothing to say. Web's
+    /// `acceptanceReceiptNote`.
+    public static func receiptNote(_ confirmation: RecordedStandardSetConfirmation) -> String? {
+        let criteria = confirmation.criteria
+        if !confirmation.wordingRecorded {
+            let gone = criteria.filter { $0.text == nil }.count
+            return receiptWordingNotKept + (gone > 0 ? receiptWordsGoneSentence(gone) : "")
+        }
+        let moved = criteria.filter { $0.since != .unchanged }.compactMap(\.ordinal)
+        return moved.isEmpty ? nil : receiptMovedNote(moved)
     }
 
     /// The record's heading: the two words the receipts Orbit already draws into a conversation use

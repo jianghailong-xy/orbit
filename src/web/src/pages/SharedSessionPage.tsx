@@ -43,6 +43,7 @@ import { settleThinking } from '../lib/thinkingDraft';
 import { openViewerStream, reconnectDelay, type ViewerFrame } from '../lib/viewerStream';
 import { NEAR_BOTTOM, sampleTail } from '../lib/tailPinning';
 import { titleFirstLine } from '../lib/title';
+import type { SessionReach } from '../lib/sessionReach';
 
 // Tail-first, like the app's own transcript (WorkspaceView): the page opens on the newest page and
 // pulls in the one before it when the reader scrolls within LOAD_OLDER_AT px of the top.
@@ -72,6 +73,8 @@ export function followDelay(state: SessionStateSource, moved: boolean): number |
  */
 export const sharedRootQuery = (token: string, preview = false) => ({
   queryKey: ['shared', token] as QueryKey,
+  // The share pages are drawn outside the control-plane stream (App.tsx `/s/` routes): no event reaches them.
+  meta: { entities: ['session'], sessionReach: 'none' satisfies SessionReach },
   queryFn: () => getSharedSession(token, { limit: TAIL_PAGE, preview }),
   enabled: !!token,
   retry: false,
@@ -166,6 +169,7 @@ function SharedConversation() {
     sessionId
       ? {
           queryKey: ['shared', token, 'c', sessionId] as QueryKey,
+          meta: { entities: ['session'], sessionReach: 'none' satisfies SessionReach },
           queryFn: () => getSharedSession(token, { limit: TAIL_PAGE, sessionId }),
           enabled: !!token,
           retry: false,

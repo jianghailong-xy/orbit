@@ -212,7 +212,7 @@ func (op *operation) action() string {
 	}
 	tool := op.Tool
 	for _, prefix := range []string{"tasklist_", "task_", "project_", "session_", "agent_", "provider_", "runner_",
-		"watch_", "wiki_", "file_", "bg_", "integration_", "criterion_", "open_item_"} {
+		"watch_", "wiki_", "file_", "bg_", "integration_", "criterion_", "open_item_", "settings_"} {
 		if strings.HasPrefix(tool, prefix) && len(tool) > len(prefix) {
 			tool = strings.TrimPrefix(tool, prefix)
 			break
@@ -224,7 +224,7 @@ func (op *operation) action() string {
 // The arguments that address an entity or steer the call rather than writing a field, in the order a
 // receipt falls back to for its id when the answer names none.
 var receiptAddressArguments = []string{"taskId", "listId", "projectId", "sessionId", "agentId", "runnerId",
-	"providerId", "watchId", "jobId", "entryId", "attachmentId", "fileId", "itemId", "criterionId", "promotionId"}
+	"providerId", "watchId", "jobId", "entryId", "attachmentId", "fileId", "itemId", "criterionId", "promotionId", "runId"}
 
 var receiptControlArguments = map[string]bool{"idempotencyKey": true, "clientTurnId": true, "dryRun": true,
 	"wait": true, "summary": true, "handoff": true, "expectedConfigRevision": true, "expectedRevision": true,
@@ -793,14 +793,14 @@ func compactReceiptJSON(text string) string {
 }
 
 // entityIdentity is a document's own id and status: `id` (or `publicId`, or a background job's
-// `jobId`), and `status` (or `state`) when it is a string. An array, or a document that names
+// `jobId` or SubAgent `runId`), and `status` (or `state`) when it is a string. An array, or a document that names
 // neither, has none.
 func entityIdentity(doc json.RawMessage) (id, status *string) {
 	var m map[string]interface{}
 	if len(doc) == 0 || json.Unmarshal(doc, &m) != nil {
 		return nil, nil
 	}
-	for _, key := range []string{"id", "publicId", "jobId"} {
+	for _, key := range []string{"id", "publicId", "jobId", "runId"} {
 		if s, ok := m[key].(string); ok && s != "" {
 			id = &s
 			break

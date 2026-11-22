@@ -1,0 +1,464 @@
+<!doctype html>
+<html lang="zh" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<title>v2 · Background processes：短标签、名字轮播、留到你发消息</title>
+<!-- The shipped stylesheet: the web frames in part 2 are drawn with the tray's own classes (.bg-tray…). -->
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<style>
+  /* Phone kit: session-tasks-watch-merge-ios.html (393×852, dark, the band's card = RoundedRectangle(8),
+     4% fill, 12% hairline, 30pt row; orbitLabel 13 semibold, orbitMeta 11, orbitMono 12.4). */
+  :root { --tint: #0A84FF; --sec: #8D8D93; --ter: #5A5A5F; --blue: #0A84FF; --orange: #FF9F0A; --green: #30D158; --red: #FF453A; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #e9ebef; }
+  .b-part { width: 1900px; padding: 26px 30px 34px; background: #e9ebef;
+    font: 13px/1.6 Inter, "Noto Sans SC", sans-serif; color: #1f2329; }
+  .b-part h1 { font-size: 21px; font-weight: 650; margin: 0 0 6px; color: #1f2329; }
+  .b-part h2 { font-size: 17px; font-weight: 650; margin: 0 0 6px; color: #1f2329; }
+  .bsub { color: #4a4f57; margin: 0 0 16px; font-size: 13px; line-height: 1.65; max-width: 1780px; }
+  .b-part code { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11.5px; background: #dfe2e7; border-radius: 4px; padding: 1px 4px; color: #30343b; }
+  .data { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin: 0 0 20px; max-width: 1780px; }
+  .data div { background: #fff; border: 1px solid #d5d8dd; border-radius: 8px; padding: 8px 12px; font-size: 12px; color: #4a4f57; line-height: 1.45; }
+  .data b { display: block; font-size: 19px; color: #1f2329; font-weight: 650; }
+  .phones { display: flex; gap: 30px; align-items: flex-start; }
+  .cap { font-size: 12.5px; font-weight: 650; margin: 0 0 8px; }
+  .cap.before { color: #b3380a; } .cap.after { color: #1a7f37; }
+  .cap span { font-weight: 400; color: #646a73; margin-left: 6px; }
+  .bezel { padding: 11px; background: #2c2c2e; border-radius: 66px; box-shadow: 0 12px 30px rgba(0,0,0,.25); }
+  .screen { position: relative; width: 393px; height: 852px; border-radius: 55px; overflow: hidden; background: #000; color: #fff;
+    font-family: Inter, "Noto Sans SC", sans-serif; }
+  .abs { position: absolute; }
+  .time { left: 51px; top: 17px; font-size: 17px; font-weight: 600; }
+  .island { left: 134px; top: 11px; width: 125px; height: 37px; border-radius: 20px; background: #111; box-shadow: inset 0 0 0 1px #222; }
+  .glass { top: 59px; width: 44px; height: 44px; border-radius: 22px; background: rgba(60,60,64,.7); display: flex; align-items: center; justify-content: center; color: #fff; }
+  .navtitle { left: 70px; right: 70px; top: 62px; text-align: center; }
+  .navtitle b { display: block; font-size: 16.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .navtitle span { display: block; font-size: 12.5px; color: var(--sec); margin-top: 2px; }
+  .chat { left: 16px; right: 16px; top: 110px; display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden; gap: 12px; }
+  .chat p { margin: 0; font-size: 16px; line-height: 1.45; color: #f2f2f7; }
+  .chat ul { margin: 0; padding-left: 20px; font-size: 16px; line-height: 1.45; color: #f2f2f7; }
+  .bubble { align-self: flex-end; max-width: 260px; background: #1c2a4a; border-radius: 12px; padding: 6px 12px 4px; font-size: 16px; line-height: 1.45; }
+  .card { left: 16px; width: 361px; border-radius: 8px; background: rgba(255,255,255,.04); box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); overflow: hidden; }
+  .brow { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px; }
+  .t13 { font-size: 13px; } .semi { font-weight: 600; }
+  .bmeta { font-size: 11px; color: var(--sec); white-space: nowrap; }
+  .bmono { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12.4px; white-space: nowrap; }
+  .bgrow { flex: 1 1 auto; min-width: 0; }
+  .ell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .one { flex: 0 1 auto; min-width: 0; color: var(--tint); font-size: 13px; }
+  .bpill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: 6px; background: rgba(255,255,255,.05); box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
+  .composer { left: 16px; width: 361px; top: 712px; height: 92px; border-radius: 24px; background: #1c1c1e; box-shadow: inset 0 0 0 1px rgba(255,255,255,.08); }
+  .composer .ph { position: absolute; left: 16px; top: 13px; font-size: 17px; color: #6c6c70; }
+  .composer .bbar { position: absolute; left: 14px; right: 10px; bottom: 9px; display: flex; align-items: center; gap: 14px; font-size: 15px; color: #c7c7cc; }
+  .composer .bbar b { color: #fff; font-weight: 600; margin-left: 14px; }
+  .send { margin-left: auto; width: 32px; height: 32px; border-radius: 16px; background: #636366; display: flex; align-items: center; justify-content: center; }
+  .bhome { left: 129.5px; top: 839px; width: 134px; height: 5px; border-radius: 3px; background: #fff; }
+  .bspin { flex: none; width: 13px; height: 13px; border-radius: 50%; border: 2px solid rgba(235,235,245,.22); border-top-color: rgba(235,235,245,.75); }
+  .list { border-top: .5px solid rgba(255,255,255,.12); }
+  .prow { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 12px; }
+  .prow + .prow { border-top: .5px solid rgba(255,255,255,.08); }
+  .prow .bic { flex: none; width: 18px; display: flex; justify-content: center; }
+  .bchip { flex: none; font-family: "JetBrains Mono", monospace; font-size: 10.5px; color: var(--sec); padding: 1px 5px; border-radius: 4px; background: rgba(142,142,147,.14); }
+  .bnew { outline: 2px dashed #e8590c; outline-offset: 3px; }
+  .bgone { outline: 2px dashed #8d8d93; outline-offset: 3px; display: flex; align-items: center; justify-content: center; color: #8d8d93; font-size: 11px; height: 30px; background: transparent; box-shadow: none; }
+  .ann { font-size: 12px; color: #646a73; margin: 10px 4px 0; line-height: 1.55; max-width: 415px; }
+  .ann b { color: #1f2329; }
+  .strip { background: #000; border-radius: 14px; padding: 14px 16px; width: 393px; color: #fff; font-family: Inter, "Noto Sans SC", sans-serif; }
+  .strip .card { position: static; }
+  .strip .card + .card { margin-top: 6px; }
+  .strip .say { font-size: 13.5px; color: #c7c7cc; margin: 0 0 10px; line-height: 1.45; }
+  .cases { display: flex; gap: 28px; margin-top: 8px; align-items: flex-start; flex-wrap: wrap; }
+  .case { width: 425px; }
+  .case h4 { margin: 0 0 8px; font-size: 12.5px; font-weight: 650; color: #1a7f37; }
+  .case h4.alt { color: #646a73; }
+  .case h4.now { color: #b3380a; }
+  .case h4 span { font-weight: 400; color: #646a73; margin-left: 6px; }
+  /* Web mobile frames: the real tray classes, dark theme, at a phone's width. */
+  .webm { width: 393px; padding: 12px 12px 14px; border-radius: 14px; background: var(--bg-base); color: var(--text-1);
+    font: 13px/1.5 Inter, "Noto Sans SC", sans-serif; }
+  .webm .bg-tray + .bg-tray { margin-top: 0; }
+  .webm .one-web { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--brand); }
+  .webm .tail { margin: 0 0 10px; color: var(--text-1); font-size: 13.5px; }
+  .webm .wt-fake { margin: 0 0 8px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-subtle); min-height: 30px;
+    display: flex; align-items: center; gap: 8px; padding: 2px 10px; font-size: 12px; color: var(--text-3); font-family: "JetBrains Mono", monospace; }
+  .webm .cmp { height: 64px; border-radius: 16px; background: var(--bg-raised); border: 1px solid var(--border-subtle); color: var(--text-4); padding: 10px 14px; font-size: 14px; }
+  .webm .ico { width: 13px; height: 13px; color: var(--text-3); flex: none; }
+  .webm .spinw { flex: none; width: 12px; height: 12px; border-radius: 50%; border: 2px solid rgba(91,140,255,.25); border-top-color: var(--brand); }
+  .bwhy { margin-top: 24px; background: #fff; border: 1px solid #d5d8dd; border-radius: 10px; padding: 16px 20px; display: grid;
+    grid-template-columns: repeat(3, 1fr); gap: 6px 30px; font-size: 12.5px; line-height: 1.6; color: #30343b; }
+  .bwhy h3 { margin: 0 0 6px; font-size: 14px; color: #1f2329; }
+  .bwhy ul { margin: 0; padding-left: 16px; }
+  .bwhy li { margin: 0 0 5px; }
+  .pick { margin-top: 20px; background: #fff; border: 1px solid #d5d8dd; border-radius: 10px; padding: 16px 20px; }
+  .pick h3 { margin: 0 0 8px; font-size: 15px; }
+  .rec { display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: 5px; background: #dff3e4; color: #1d7a3a; font-size: 12px; font-weight: 600; }
+  table.btab { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  table.btab th, table.btab td { padding: 7px 10px; border-top: 1px solid #e6e6ea; text-align: left; vertical-align: top; }
+  table.btab th { color: #6b6b70; font-weight: 600; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="task" viewBox="0 0 16 16"><rect x="1.4" y="1.4" width="13.2" height="13.2" rx="2.6" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4.6 8.2 7 10.5l4.6-5.2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="sf-branch" viewBox="0 0 16 16"><path d="M5 2.5v11M5 9c0-2.6 6-2 6-5.2V2.5M11 2.5l-2 2M11 2.5l2 2" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="cr" viewBox="0 0 16 16"><path d="M6 3.5 10.5 8 6 12.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="cd" viewBox="0 0 16 16"><path d="M3.5 6 8 10.5 12.5 6" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="cl" viewBox="0 0 16 16"><path d="M10.5 3 5.5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="dots" viewBox="0 0 16 16"><circle cx="3.5" cy="8" r="1.3"/><circle cx="8" cy="8" r="1.3"/><circle cx="12.5" cy="8" r="1.3"/></symbol>
+  <symbol id="up" viewBox="0 0 16 16"><path d="M8 13V3.5M3.8 7.6 8 3.4l4.2 4.2" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="term" viewBox="0 0 16 16"><rect x="1.2" y="2.2" width="13.6" height="11.6" rx="2.4" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4.2 6.2 6.4 8 4.2 9.8M7.6 10.2h4" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="ok" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="#30D158"/><path d="M4.8 8.2 7 10.3l4.2-4.6" fill="none" stroke="#000" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="x" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="#FF453A"/><path d="M5.4 5.4l5.2 5.2M10.6 5.4l-5.2 5.2" stroke="#000" stroke-width="1.6" stroke-linecap="round"/></symbol>
+</svg>
+
+<template id="chrome">
+  <div class="abs time">9:41</div>
+  <div class="abs island"></div>
+  <div class="abs glass" style="left:16px"><svg width="20" height="20"><use href="#cl"/></svg></div>
+  <div class="abs glass" style="left:333px"><svg width="20" height="20"><use href="#dots"/></svg></div>
+  <div class="abs navtitle"><b>Coordinator handoff v2</b><span>Claude Opus 5.5</span></div>
+</template>
+
+<!-- The coordinator's own last reply (session_get on the project's coordinatorSessionId), trimmed. -->
+<template id="talk">
+  <p>It hasn't merged yet; I'll deploy once it does.</p>
+  <p><b>What happens next:</b></p>
+  <ul><li><b>When it reaches main:</b> a background job checks every 2 minutes and wakes me. I'll then deploy main to production.</li>
+  <li><b>If it hasn't reached main within 3 hours:</b> the job stops, and I'll look into why.</li></ul>
+</template>
+
+<template id="tasks">
+  <div class="brow">
+    <svg width="12" height="12" style="color:var(--sec);flex:none"><use href="#task"/></svg>
+    <span class="t13 semi" style="white-space:nowrap">Tasks</span>
+    <span class="bmeta ell">6/7 done</span>
+    <span class="bgrow"></span>
+    <svg width="11" height="11" style="color:var(--sec);flex:none"><use href="#cr"/></svg>
+  </div>
+</template>
+
+<template id="branch">
+  <div class="brow">
+    <span class="bpill"><svg width="11" height="11" style="color:var(--sec)"><use href="#sf-branch"/></svg><span class="bmono" style="color:#c7c7cc">orbit…887194</span></span>
+    <span class="bmono ell bgrow"><span style="color:var(--green)">+324</span> <span style="color:var(--red)">−0</span><span style="color:var(--sec)"> · 7 files</span></span>
+  </div>
+</template>
+
+<template id="bottom">
+  <div class="abs composer">
+    <span class="ph">Message…</span>
+    <div class="bbar">
+      <svg width="20" height="20" viewBox="0 0 22 22"><path d="M11 3v16M3 11h16" stroke="#c7c7cc" stroke-width="1.8" stroke-linecap="round"/></svg>
+      <span>Auto</span><b>Opus 5.5</b>
+      <span class="send"><svg width="15" height="15"><use href="#up"/></svg></span>
+    </div>
+  </div>
+  <div class="abs bhome"></div>
+</template>
+
+<style>
+  /* v2 additions, all prefixed. */
+  .rot { position: relative; flex: 1 1 auto; min-width: 0; height: 30px; overflow: hidden; }
+  .rot > span { position: absolute; left: 0; right: 0; height: 30px; line-height: 30px; color: var(--tint); font-size: 13px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rot.mid > span:first-child { top: -13px; opacity: .45; }
+  .rot.mid > span:last-child { top: 15px; opacity: .55; }
+  .film { display: flex; flex-direction: column; gap: 10px; }
+  .film .fr { display: flex; align-items: center; gap: 10px; }
+  .film .tlab { flex: none; width: 74px; font-size: 12px; color: #646a73; text-align: right; }
+  .film .strip { padding: 8px 10px; width: 393px; }
+  .ubub { align-self: flex-end; max-width: 260px; background: #1c2a4a; border-radius: 12px; padding: 6px 12px 4px; font-size: 16px; line-height: 1.45; }
+  .fit { color: #b3380a; font-weight: 650; }
+  .dec td:first-child { white-space: nowrap; }
+  .done-tag { display: inline-block; padding: 0 7px; border-radius: 5px; background: #e1e9fd; color: #2a55c8; font-size: 12px; font-weight: 600; }
+  .webm .rotw { position: relative; flex: 1 1 auto; min-width: 0; height: 26px; overflow: hidden; }
+  .webm .rotw span { position: absolute; left: 0; right: 0; line-height: 26px; color: var(--brand); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+</style>
+
+<template id="talk3">
+  <p>OrbitKit run failed only because my archive left out paths the parity tests read (docs/mocks, apiserver).</p>
+</template>
+
+<template id="talk2">
+  <p>Web suite still running. Starting the pg specs on a throwaway Postgres.</p>
+  <p>Meanwhile, preparing the Apple probe re-run.</p>
+</template>
+
+<!-- ═══════════════════════════ Part 1 ═══════════════════════════ -->
+<section class="b-part" id="part-1">
+  <h1>v2 · Background processes：标签缩成「Background」，几个在跑时名字轮播，结束的留到你发下一条消息</h1>
+  <p class="bsub">
+    按你 11-17 的拍板改：<b>D1</b> 结束的那条留到<b>你发出下一条消息</b>（agent 自己被唤醒开的新一轮不算）；<b>D2 选 A</b>，但标签太长——缩成
+    <code>Background</code>，这个词三端已有（后台 sub-agent 的标签：web <code>Transcript.tsx:5330</code>、iOS <code>SubagentBlock.swift:78</code>、Android <code>SubagentBlock.kt:71</code>），
+    读屏仍读完整的「Background processes」；<b>D3</b> <code>bg_run</code> 任务算进来；<b>D4 选 A</b>，不加新入口；几个在跑时，<b>名字轮流出现</b>，右边保留今天的计数。
+    第 1 部分的标题是 coordinator 会话真实在跑的那个；几个在跑的三条，是本 runner 11-16 02:40 另一个会话里<b>真实同时在跑</b>的三个 <code>bg_run</code>（其中 OrbitKit 那条后来失败了）。
+  </p>
+
+  <div class="phones">
+    <!-- ① one running -->
+    <div>
+      <div class="cap after">① 一个在跑 <span>短标签 + 名字 + 转圈</span></div>
+      <div class="bezel"><div class="screen">
+        <div class="abs chat" style="bottom:262px"></div>
+        <div class="abs card bnew" style="top:598px"><div class="brow">
+          <svg width="12" height="12" style="color:var(--sec);flex:none"><use href="#term"/></svg>
+          <span class="t13 semi" style="white-space:nowrap;flex:none">Background</span>
+          <span class="one ell" data-fit="f1">Wait until the handoff v2 project branch is on main</span>
+          <span class="bspin"></span><span class="bgrow"></span>
+          <svg width="11" height="11" style="color:var(--sec);flex:none"><use href="#cr"/></svg>
+        </div></div>
+        <div class="abs card" style="top:636px" data-t="tasks"></div>
+        <div class="abs card" style="top:674px" data-t="branch"></div>
+      </div></div>
+      <p class="ann">v1 名字只露约 20 个字符；标签缩短后露 <span class="fit" data-out="f1">?</span> 个（实测，51 个里）。真实标题 p50 是 43 个字符：一半的标题能露出七成以上。</p>
+    </div>
+
+    <!-- ② several running, rotating -->
+    <div>
+      <div class="cap after">② 几个在跑 <span>名字轮播 + 今天的计数</span></div>
+      <div class="bezel"><div class="screen" data-talk="talk2">
+        <div class="abs chat" style="bottom:262px"></div>
+        <div class="abs card bnew" style="top:598px"><div class="brow">
+          <svg width="12" height="12" style="color:var(--sec);flex:none"><use href="#term"/></svg>
+          <span class="t13 semi" style="white-space:nowrap;flex:none">Background</span>
+          <span class="rot" data-fit="f2"><span>apiserver tsc + full npm test at 2ce9dc49e</span></span>
+          <span class="bmeta" style="flex:none">3 running</span>
+          <span class="bspin"></span>
+          <svg width="11" height="11" style="color:var(--sec);flex:none"><use href="#cr"/></svg>
+        </div></div>
+        <div class="abs card" style="top:636px" data-t="tasks"></div>
+        <div class="abs card" style="top:674px" data-t="branch"></div>
+      </div></div>
+      <p class="ann">名字每 3 秒向上换一个（见第 2 部分的逐帧），从<b>最新启动</b>的开始；露 <span class="fit" data-out="f2">?</span> 个字符。右边是今天计数句的前半「3 running」（<code>FoldedBand.processes</code> 已经这么写），去掉了「· N total」：行只在有在跑时出现，总数不再有用。</p>
+    </div>
+
+    <!-- ③ ended, not yet answered -->
+    <div>
+      <div class="cap after">③ 结束了、你还没发消息 <span>留着，图标换成结果</span></div>
+      <div class="bezel"><div class="screen" data-talk="talk3">
+        <div class="abs chat" style="bottom:262px"></div>
+        <div class="abs card bnew" style="top:598px"><div class="brow">
+          <svg width="12" height="12" style="color:var(--sec);flex:none"><use href="#term"/></svg>
+          <span class="t13 semi" style="white-space:nowrap;flex:none">Background</span>
+          <span class="one ell">OrbitKit swift test (swift:6.1) on the full HEAD tree</span>
+          <svg width="13" height="13" style="flex:none"><use href="#x"/></svg><span class="bgrow"></span>
+          <svg width="11" height="11" style="color:var(--sec);flex:none"><use href="#cr"/></svg>
+        </div></div>
+        <div class="abs card" style="top:636px" data-t="tasks"></div>
+        <div class="abs card" style="top:674px" data-t="branch"></div>
+      </div></div>
+      <p class="ann">全部结束、你还没开口：显示最后结束的那个和它的结果（红 ✕ / 绿 ✓，列表行今天的图标）。agent 被唤醒、自己接着说话，<b>都不收</b>——要等的是你。</p>
+    </div>
+
+    <!-- ④ you sent a message -->
+    <div>
+      <div class="cap after">④ 你发了下一条消息 <span>这一行收起</span></div>
+      <div class="bezel"><div class="screen" data-talk="talk3">
+        <div class="abs chat" style="bottom:224px"><div class="ubub" data-after>Rerun the swift test after fixing the archive</div></div>
+        <div class="abs card" style="top:636px" data-t="tasks"></div>
+        <div class="abs card" style="top:674px" data-t="branch"></div>
+      </div></div>
+      <p class="ann">规则不需要新状态：<b>结束时间晚于你最后一条消息</b>的才画。三端都能从事件流算出来，换设备、重开 App 结果一样。你这条消息新启动的进程，会让行带着新名字重新出现。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ Part 2 ═══════════════════════════ -->
+<section class="b-part" id="part-2">
+  <h2>轮播逐帧、一个失败了另外还在跑、点开的列表、web 手机版</h2>
+  <div class="cases">
+    <div class="case" style="width:520px">
+      <h4>② 的轮播：每 3 秒，名字整行向上推 <span>只动名字，标签/计数/转圈不动</span></h4>
+      <div class="film">
+        <div class="fr"><span class="tlab">0 s</span><div class="strip"><div class="card"><div class="brow">
+          <svg width="12" height="12" style="color:var(--sec);flex:none"><use href="#term"/></svg>
+          <span class="t13 semi" style="flex:none">Background</span>
+          <span class="rot"><span>apiserver tsc + full npm test at 2ce9dc49e</span></span>
+          <span class="bmeta" style="flex:none">3 running</span><span class="bspin"></span>
+          <svg width="11" height="11" style="color:var(--sec);flex:none"><use href="#cr"/></svg></div></div></div></div>
+        <div class="fr"><span class="tlab">3.0–3.3 s</span><div class="strip"><div class="card"><div class="brow">
+          <svg width="12" height="12" style="color:var(--sec);flex:none"><use href="#term"/></svg>
+          <span class="t13 semi" style="flex:none">Background</span>
+          <span class="rot mid"><span>apiserver tsc + full npm test at 2ce9dc49e</span><span>OrbitKit swift test (swift:6.1) on the full HEAD tree</span></span>
+          <span class="bmeta" style="flex:none">3 running</span><span class="bspin"></span>
+          <svg width="11" height="11" style="color:var(--sec);flex:none"><use href="#cr"/></svg></div></div></div></div>
+        <div class="fr"><span class="tlab">3.3 s</span><div class="strip"><div class="card"><div class="brow">
+          <svg width="12" height="12" style="color:var(--sec);flex:none"><use href="#term"/></svg>
+          <span class="t13 semi" style="flex:none">Background</span>
+          <span class="rot"><span>OrbitKit swift test (swift:6.1) on the full HEAD tree</span></span>
+          <span class="bmeta" style="flex:none">3 running</span><span class="bspin"></span>
+          <svg width="11" height="11" style="color:var(--sec);flex:none"><use href="#cr"/></svg></div></div></div></div>
+        <div class="fr"><span class="tlab">6.3 s</span><div class="strip"><div class="card"><div class="brow">
+          <svg width="12" height="12" style="color:var(--sec);flex:none"><use href="#term"/></svg>
+          <span class="t13 semi" style="flex:none">Background</span>
+          <span class="rot"><span>web tsc + full Vitest suite</span></span>
+          <span class="bmeta" style="flex:none">3 running</span><span class="bspin"></span>
+          <svg width="11" height="11" style="color:var(--sec);flex:none"><use href="#cr"/></svg></div></div></div></div>
+        <div class="fr"><span class="tlab">9.6 s</span><div class="strip" style="background:transparent;color:#646a73;padding:0 10px;font-size:12px">→ 回到第一条，循环</div></div>
+      </div>
+      <p class="ann">动画 0.3 秒，新名字从下方推上来、旧的向上推走并淡出——计数类文字变化的 iOS 写法（SwiftUI <code>.transition(.push(from: .bottom))</code>；web 用 transform，Android <code>AnimatedContent</code> + <code>slideInVertically</code>）。<b>只在有 2 个以上在跑时轮播</b>；暂停：列表点开时、App 在后台、打字把 band 折起时。</p>
+    </div>
+
+    <div class="case">
+      <h4>一个失败了，另外两个还在跑 <span>失败的那条钉住，不轮播</span></h4>
+      <div class="strip">
+        <div class="card bnew"><div class="brow">
+          <svg width="12" height="12" style="color:var(--sec);flex:none"><use href="#term"/></svg>
+          <span class="t13 semi" style="flex:none">Background</span>
+          <span class="one ell" style="flex:1 1 auto" data-fit="f3">OrbitKit swift test (swift:6.1) on the full HEAD tree</span>
+          <svg width="13" height="13" style="flex:none"><use href="#x"/></svg>
+          <span class="bmeta" style="flex:none">2 running · <span style="color:var(--red)">1 failed</span></span>
+          <svg width="11" height="11" style="color:var(--sec);flex:none"><use href="#cr"/></svg>
+        </div></div>
+      </div>
+      <p class="ann">失败的才是要你看的，轮播会让它每 9 秒只露 3 秒。代价：这里名字只露 <span class="fit" data-out="f3">?</span> 个字符（计数句变长了），完整的点开就有。计数句用 Tasks 卡已有的「N running · N failed」写法，failed 那段红色（<code>createdTasksCountLine</code> + <code>.ct-failed</code>）。你发消息后失败的收起，剩下的两个恢复轮播。</p>
+      <h4 class="alt" style="margin-top:14px">另一种：失败的也一起轮播</h4>
+      <p class="ann" style="margin-top:0">规则更少，但失败很容易错过；7 天里 44% 的会话碰到过失败。</p>
+    </div>
+
+    <div class="case">
+      <h4>点开：列表不变，bg_run 任务也在里面</h4>
+      <div class="strip">
+        <div class="card"><div class="brow">
+          <svg width="12" height="12" style="color:var(--sec);flex:none"><use href="#term"/></svg>
+          <span class="t13 semi" style="white-space:nowrap">Background processes</span>
+          <span class="bmeta">2 running · 1 failed</span><span class="bgrow"></span>
+          <svg width="11" height="11" style="color:var(--sec);flex:none"><use href="#cd"/></svg>
+        </div>
+        <div class="list">
+          <div class="prow"><span class="bic"><svg width="14" height="14"><use href="#x"/></svg></span><span class="bmono ell bgrow">OrbitKit swift test (swift:6.1) on the full HEAD tree</span><span class="bmeta">1m ago</span><svg width="10" height="10" style="color:var(--ter);flex:none"><use href="#cr"/></svg></div>
+          <div class="prow"><span class="bic"><span class="bspin"></span></span><span class="bmono ell bgrow">apiserver tsc + full npm test at 2ce9dc49e</span><span class="bmeta">2m ago</span><svg width="10" height="10" style="color:var(--ter);flex:none"><use href="#cr"/></svg></div>
+          <div class="prow"><span class="bic"><span class="bspin"></span></span><span class="bmono ell bgrow">web tsc + full Vitest suite</span><span class="bmeta">8m ago</span><svg width="10" height="10" style="color:var(--ter);flex:none"><use href="#cr"/></svg></div>
+        </div></div>
+      </div>
+      <p class="ann">点开后头部还是今天的全称「Background processes」+ 计数，轮播停下。bg_run 任务和 Bash 后台命令一样画（没有 Agent/Workflow 那种小标）；点开一行看输出尾巴，和今天一样。收起的、更早的进程只在对话里（D4 = A）。</p>
+    </div>
+
+    <div class="case">
+      <h4>读屏与「减弱动态效果」</h4>
+      <div class="strip">
+        <p class="say" style="margin:0">VoiceOver 读：<br><b style="color:#fff">“Background processes, 3 running. Button.”</b><br>不读轮播的名字（每 3 秒换一次会被打断）；点开列表逐条读。</p>
+        <p class="say" style="margin:12px 0 0">减弱动态效果打开：名字<b style="color:#fff">原地淡入淡出</b>，不推动；</p>
+      </div>
+      <p class="ann">全称留在读屏标签里，所以短标签不丢信息。web 对应 <code>prefers-reduced-motion</code> 与 <code>aria-label</code>，Android 对应「移除动画」与 <code>contentDescription</code>。</p>
+    </div>
+  </div>
+
+  <h2 style="margin-top:26px">web 手机版：同一个 band、同一个顺序（真的 <code>.bg-tray</code> 类）</h2>
+  <p class="bsub">顺序不变：Watching → <b>Background processes</b> → Tasks → Main checkout → 分支条；与第 1 部分 ①②③④ 一一对应。</p>
+  <div class="cases">
+    <div class="case"><h4>web · ① 一个在跑</h4>
+      <div class="webm"><p class="tail">It hasn't merged yet; I'll deploy once it does.</p>
+        <div class="bg-tray bnew"><div class="bg-tray-row"><svg class="ico"><use href="#term"/></svg><span class="bg-tray-title" style="flex:none">Background</span><span class="one-web">Wait until the handoff v2 project branch is on main</span><span class="spinw"></span><span style="flex:1"></span><span style="color:var(--text-3)">▸</span></div></div>
+        <div class="bg-tray"><div class="bg-tray-row"><svg class="ico"><use href="#task"/></svg><span class="bg-tray-title">Tasks</span><span class="bg-tray-count">6/7 done</span><span style="flex:1"></span><span style="color:var(--text-3)">▸</span></div></div>
+        <div class="wt-fake">orbit…887194 <span style="color:var(--success)">+324</span> <span style="color:var(--error)">−0</span> · 7 files</div><div class="cmp">Message…</div></div></div>
+    <div class="case"><h4>web · ② 几个在跑（轮播）</h4>
+      <div class="webm"><p class="tail">Web suite still running. Starting the pg specs on a throwaway Postgres.</p>
+        <div class="bg-tray bnew"><div class="bg-tray-row"><svg class="ico"><use href="#term"/></svg><span class="bg-tray-title" style="flex:none">Background</span><span class="rotw"><span>apiserver tsc + full npm test at 2ce9dc49e</span></span><span class="bg-tray-count" style="flex:none">3 running</span><span class="spinw"></span><span style="color:var(--text-3)">▸</span></div></div>
+        <div class="bg-tray"><div class="bg-tray-row"><svg class="ico"><use href="#task"/></svg><span class="bg-tray-title">Tasks</span><span class="bg-tray-count">6/7 done</span><span style="flex:1"></span><span style="color:var(--text-3)">▸</span></div></div>
+        <div class="wt-fake">orbit…887194 <span style="color:var(--success)">+324</span> <span style="color:var(--error)">−0</span> · 7 files</div><div class="cmp">Message…</div></div></div>
+    <div class="case"><h4>web · ③ 结束了、还没发消息</h4>
+      <div class="webm"><p class="tail">OrbitKit run failed only because my archive left out paths the parity tests read (docs/mocks, apiserver).</p>
+        <div class="bg-tray bnew"><div class="bg-tray-row"><svg class="ico"><use href="#term"/></svg><span class="bg-tray-title" style="flex:none">Background</span><span class="one-web">OrbitKit swift test (swift:6.1) on the full HEAD tree</span><svg width="13" height="13" style="flex:none"><use href="#x"/></svg><span style="flex:1"></span><span style="color:var(--text-3)">▸</span></div></div>
+        <div class="bg-tray"><div class="bg-tray-row"><svg class="ico"><use href="#task"/></svg><span class="bg-tray-title">Tasks</span><span class="bg-tray-count">6/7 done</span><span style="flex:1"></span><span style="color:var(--text-3)">▸</span></div></div>
+        <div class="wt-fake">orbit…887194 <span style="color:var(--success)">+324</span> <span style="color:var(--error)">−0</span> · 7 files</div><div class="cmp">Message…</div></div></div>
+    <div class="case"><h4>web · ④ 发了消息</h4>
+      <div class="webm"><p class="tail" style="text-align:right"><span style="background:var(--brand-tint);padding:4px 10px;border-radius:10px">Rerun the swift test after fixing the archive</span></p>
+        <div class="bg-tray"><div class="bg-tray-row"><svg class="ico"><use href="#task"/></svg><span class="bg-tray-title">Tasks</span><span class="bg-tray-count">6/7 done</span><span style="flex:1"></span><span style="color:var(--text-3)">▸</span></div></div>
+        <div class="wt-fake">orbit…887194 <span style="color:var(--success)">+324</span> <span style="color:var(--error)">−0</span> · 7 files</div><div class="cmp">Message…</div></div></div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ Part 3 ═══════════════════════════ -->
+<section class="b-part" id="part-3">
+  <h2>为什么这样画：三栏（v2）</h2>
+  <div class="bwhy" style="margin-top:8px">
+    <div>
+      <h3>iOS 习惯</h3>
+      <ul>
+        <li><b>轮播 = 一个位置轮流显示几件事</b>：主屏的 Smart Stack 就是这样自动轮换；变化用向上推的 <code>.push</code>，不用横向跑马灯（跑马灯要读者追着读，在 30pt 的行里还和截断冲突）。</li>
+        <li><b>3 秒、0.3 秒</b>：露出的约 20 个字符一眼能读完；切换比 band 展开用的 0.12 秒慢一点，看得出是换了一条。band 里以前没有定时轮换，这两个数是新的，写成常量放进共享 fixture（E1 请你确认）。</li>
+        <li><b>可访问性先于动画</b>：减弱动态效果 → 淡入淡出；VoiceOver 不读轮播内容，读全称 + 计数；App 在后台不跑定时器。</li>
+        <li>短标签 + 完整读屏标签：系统控件常见做法（可见文字短、<code>accessibilityLabel</code> 完整）。</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Orbit 一致</h3>
+      <ul>
+        <li><b>「Background」不是新词</b>：后台 sub-agent 的标签三端都写「Background」。点开后的头部仍是全称「Background processes」，和今天一样。</li>
+        <li><b>计数句只用已有的词</b>：「3 running」（<code>FoldedBand.processes</code>）、「2 running · 1 failed」（Tasks 卡 <code>createdTasksCountLine</code>，failed 红色同 <code>.ct-failed</code>）。</li>
+        <li><b>颜色/图标不新增</b>：名字 tint 同 Tasks 单条名字；转圈 / ✓ / ✕ 是列表行今天的。</li>
+        <li><b>「你发了消息」用的是对话里已有的东西</b>：你的消息本来就是事件流里的用户消息，三端都画成你的气泡；比较它的时间就够，不加「已读」状态。agent 自己开的唤醒轮不算你看过。</li>
+        <li>bg_run 任务画成和 Bash 后台命令一样的行；列表、展开输出不改。</li>
+      </ul>
+    </div>
+    <div>
+      <h3>协调</h3>
+      <ul>
+        <li><b>一份规则、三端同步</b>：显示条件（有在跑的，或结束晚于你最后一条消息）、点名/计数、轮播顺序与时长、失败钉住——全写进 <code>src/shared</code> 的新 fixture，web / OrbitKit / Android 各一组 parity 测试读它。</li>
+        <li><b>服务端（D3）</b>：<code>getBackgroundShells</code> 加上 runner 托管的 <code>bg_run</code> 任务（id、label、command、开始/结束时间、结果），三端拿同一份；先做这步，否则新规则下这一行很少出现。</li>
+        <li><b>Android 是新建</b>：今天没有这一行，按 iOS 在 band 里 Watching 与 Tasks 之间新加，直接按 v2 规则做。</li>
+        <li><b>假 running</b>：会话不在线时 web 已用 <code>sessionLive</code> 收掉；iOS 核对，Android 新做时带上——否则轮播会永远转。</li>
+        <li>折起的 pill（<code>FoldedBand.processes</code>）：没有该画的就不出标记。文案英文（CLAUDE.md §5）。</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="pick">
+    <h3>已拍板（11-17）</h3>
+    <table class="btab dec">
+      <tr><th style="width:120px">#</th><th>你的决定</th><th>板上的样子</th></tr>
+      <tr><td><b>D1</b> <span class="done-tag">定</span></td><td>结束的留到你发出下一条消息</td><td>③ 留着、图标换结果；④ 发消息后收起。agent 唤醒轮不收</td></tr>
+      <tr><td><b>D2</b> <span class="done-tag">定 A</span></td><td>标签 + 名字，但「Background processes」太长</td><td>可见标签缩成「Background」（已有的词），读屏和点开后的头部仍是全称</td></tr>
+      <tr><td><b>D3</b> <span class="done-tag">定</span></td><td>bg_run 任务算进来</td><td>② 的三条都是真实 bg_run；列表里和 Bash 后台命令同一种行</td></tr>
+      <tr><td><b>D4</b> <span class="done-tag">定 A</span></td><td>收起后只在对话里</td><td>不加入口</td></tr>
+      <tr><td><b>多个</b> <span class="done-tag">定</span></td><td>几个在跑时滚动轮换名字</td><td>② + 第 2 部分逐帧：每 3 秒向上推，计数不动</td></tr>
+    </table>
+  </div>
+
+  <div class="pick">
+    <h3>还要你看一眼</h3>
+    <table class="btab">
+      <tr><th style="width:200px">问题</th><th>建议</th><th>另一种</th></tr>
+      <tr><td><b>E1</b> 轮播节奏</td><td>每条 3 秒、切换 0.3 秒 <span class="rec">建议</span></td><td>更慢（5 秒）：更安静，但 3 个以上要 15 秒才转一圈</td></tr>
+      <tr><td><b>E2</b> 失败时</td><td>失败的钉住，不轮播，计数写「1 failed」（红） <span class="rec">建议</span></td><td>失败的也一起轮播</td></tr>
+      <tr><td><b>E3</b> 几个都结束、还没发消息</td><td>只显示最后结束的那个（③）；有失败的就显示失败的 <span class="rec">建议</span></td><td>结束的也轮播</td></tr>
+    </table>
+  </div>
+
+  <div class="pick">
+    <h3>落地（按依赖排）</h3>
+    <table class="btab">
+      <tr><th style="width:40px">#</th><th>改动</th><th style="width:520px">文件</th></tr>
+      <tr><td>1</td><td>服务端：后台列表加入 bg_run 任务（含结束时间、结果）</td><td><code>sessions.service.ts</code> <code>getBackgroundShells</code>、<code>src/shared/src/background.ts</code></td></tr>
+      <tr><td>2</td><td>共享规则 + fixture：显示条件、短标签、点名/计数、轮播顺序与时长、失败钉住</td><td><code>src/shared</code> 新 fixture（参照 <code>watch-strip.fixture.json</code>）</td></tr>
+      <tr><td>3</td><td>三端实现 + parity 测试：web、iOS/macOS（含 <code>FoldedBand</code>）、Android 新建</td><td><code>BackgroundShellsTray.tsx</code>、<code>WorktreeBar.swift</code>、<code>FoldedBand.swift</code>、Android band</td></tr>
+    </table>
+  </div>
+</section>
+
+<script>
+  const tpl = (id) => document.getElementById(id).content.cloneNode(true);
+  for (const screen of document.querySelectorAll('.screen')) {
+    screen.prepend(tpl('chrome'));
+    const chat = screen.querySelector('.chat');
+    if (chat) { const after = chat.querySelector('[data-after]'); chat.prepend(tpl(screen.dataset.talk || 'talk')); if (after) chat.append(after); }
+    for (const el of screen.querySelectorAll('[data-t]')) el.append(tpl(el.dataset.t));
+    screen.append(tpl('bottom'));
+  }
+  // Measure how many characters of a name show before the ellipsis, from the laid-out width.
+  window.drawMarks = () => {
+    const ctx = document.createElement('canvas').getContext('2d');
+    for (const el of document.querySelectorAll('[data-fit]')) {
+      const target = el.matches('.rot') ? el.firstElementChild : el;
+      const cs = getComputedStyle(target);
+      ctx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+      const text = target.textContent, room = target.clientWidth - ctx.measureText('…').width;
+      let n = 0; while (n < text.length && ctx.measureText(text.slice(0, n + 1)).width <= room) n++;
+      document.querySelectorAll(`[data-out="${el.dataset.fit}"]`).forEach((o) => (o.textContent = n));
+    }
+  };
+</script>
+</body>
+</html>

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -43,6 +44,10 @@ const (
 	// envSubagentRunID marks an engine started as a SubAgent. Its `orbit mcp` offers no delegate tool:
 	// a SubAgent cannot hand work on again (§0).
 	envSubagentRunID = "ORBIT_SUBAGENT_RUN_ID"
+	// envSubagentRemoteMode is the permission mode a remote SubAgent was claimed in (docs/subagent-design.md §10.2).
+	// Its machine hosts no socket for the parent session, so this is the mode Orbit's Plan gate reads for it
+	// (sessionPermissionMode).
+	envSubagentRemoteMode = "ORBIT_SUBAGENT_REMOTE_MODE"
 
 	delegateToolName = "delegate"
 	// The tool's name as the parent's engine reports it, which the events ingest counts (RUNTIME_SUBAGENT_TOOLS).
@@ -179,16 +184,20 @@ func delegateToolDescriptor(obj func(map[string]interface{}, ...string) map[stri
 		// delegate up front, and only it; measured on Claude Code 2.1.325: about 692 o200k tokens per request.
 		"_meta": map[string]interface{}{"anthropic/alwaysLoad": true},
 		"description": "Hand a self-contained piece of work to a SubAgent: another coding engine that Orbit starts in this" +
-			" session's own working directory. It sees your uncommitted changes, edits files directly and never commits;" +
+			" session's own working directory. Use it instead of your engine's built-in subagent or Agent tool whenever" +
+			" you would start a subagent or run work in the background: Orbit picks its model (or runs the one you name)," +
+			" records its cost and brings its result back even if this engine is recycled." +
+			" It sees your uncommitted changes, edits files directly and never commits;" +
 			" its edits stay in your working tree for you to review and commit. Its progress is shown nested under this" +
-			" call. In the foreground (the default) the call returns { runId, status, result, changedFiles, model, costUsd }" +
+			" call. In the foreground (the default) the call returns { runId, status, result, changedFiles, model, costUsd, rate }" +
 			" when it ends; if it runs longer than this call may wait, the call returns status \"running\" and Orbit starts" +
 			" a turn in this session with the result when it ends: end your turn then instead of polling. With" +
 			" background: true it returns { runId, status: \"running\" } at once and Orbit wakes this session with the" +
 			" result when it ends. SubAgents share your working tree; give parallel ones disjoint files. A SubAgent cannot" +
 			" ask the user anything and cannot delegate further. With workspace (any workspace of this account, by" +
 			" name) or needs (runner capabilities such as \"os:darwin\"), it runs on that workspace's machine instead:" +
-			" remote SubAgents run on that workspace's own HEAD in its own repository and return text only. They do not see your uncommitted" +
+			" remote SubAgents run on that workspace's own HEAD in its own repository and return text only, plus" +
+			" any file they keep with file_upload. They do not see your uncommitted" +
 			" changes (commit and push first if they must), and nothing they change comes back; the result names what" +
 			" they discarded. Before naming a workspace, provider_list with that workspace says which provider × engine" +
 			" its runner can run, with the reason for each it cannot. " + subagentTypesDescription(defs),
@@ -305,6 +314,9 @@ func delegateResult(r subagentReport) map[string]interface{} {
 	if r.Workspace != "" {
 		out["workspace"] = r.Workspace
 	}
+	if r.Status != subagentStatusRunning {
+		out["rate"] = "Once you have used this result, rate it with subagent_rate (runId, score 1-5, optional note): 1 discarded or redone, 3 usable after fixes, 5 used as-is. Optional; nothing waits on it."
+	}
 	return toolResult(prettyJSON(subagentJSON(out)), r.Status == subagentStatusFailed)
 }
 
@@ -365,6 +377,9 @@ type subagentRun struct {
 	// workspace names the workspace a remote run runs on (§10): its child is another runner's, and this one only
 	// follows its events. Empty for a run on this machine.
 	workspace string
+	// workflowID is the workflow run whose agent() call this run is (subagent_workflow.go), empty for a delegate
+	// call's. Its end is answered to the workflow's script, never as a wake or a background_task of its own.
+	workflowID string
 }
 
 func (r *subagentRun) reportLocked() subagentReport {
@@ -751,9 +766,13 @@ func (s *bgJobService) startSubagent(args map[string]interface{}) (subagentRepor
 			return subagentReport{}, errors.New("resume continues a SubAgent where it ran; leave out workspace and needs, or start a new SubAgent with the full brief")
 		}
 	}
-	if strings.TrimSpace(toolUseID) == "" {
+	workflowID := strings.TrimSpace(getString(args, "workflowRunId"))
+	if workflowID != "" {
+		// A workflow's agent() call: the workflow names it, and nothing waits for it inline or owes a wake for it.
+		background = false
+	} else if strings.TrimSpace(toolUseID) == "" {
 		// An engine that does not say which call this is: the call its engine announced in the session's stream.
-		toolUseID = delegateCalls.take(s.sessionID, getString(args, "prompt"), getString(args, "description"), delegateCallWait)
+		toolUseID = delegateCalls.take(s.sessionID, delegateToolName, getString(args, "prompt"), getString(args, "description"), delegateCallWait)
 	} else {
 		delegateCalls.claim(s.sessionID, toolUseID)
 	}
@@ -766,13 +785,25 @@ func (s *bgJobService) startSubagent(args map[string]interface{}) (subagentRepor
 		toolUseID = "delegate_" + strings.TrimPrefix(id, "bgj_")
 	}
 	body := subagentStartBody(args, def, toolUseID, background)
-	if resumeFrom != nil && resumeFrom.Workspace != "" {
-		// The server sends it to the workspace and runner that ran it, which continues its conversation (§10.2).
+	if resumeFrom != nil {
+		// The server opens it where it ran: on another workspace's runner (§10.2), or here on the engine, provider and model
+		// its last attempt ran on, which hold its conversation, rather than routing it again.
 		body["resumeOf"] = resumeFrom.RunID
-		body["prompt"] = prompt
+		if resumeFrom.Workspace != "" {
+			body["prompt"] = prompt
+		}
 	}
 	if description := strings.TrimSpace(getString(args, "description")); description != "" {
 		body["description"] = description
+	}
+	if workflowID != "" {
+		body["workflowRunId"] = workflowID
+		body["callIndex"] = args["callIndex"]
+		for _, key := range []string{"label", "phase"} {
+			if v := strings.TrimSpace(getString(args, key)); v != "" {
+				body[key] = v
+			}
+		}
 	}
 	var created subagentCreateResponse
 	if err := s.t.do(nil, "POST", "/runner/sessions/"+s.sessionID+"/subagents", body, &created, 30*time.Second); err != nil {
@@ -799,8 +830,9 @@ func (s *bgJobService) startSubagent(args map[string]interface{}) (subagentRepor
 		run := &subagentRun{
 			id: created.RunID, toolUseID: toolUseID, description: getString(args, "description"), background: background,
 			kind: def.Name, done: make(chan struct{}), startedAt: time.Now(), status: subagentStatusRunning, cancel: cancel,
-			workspace: firstNonEmpty(created.Remote.WorkspaceName, created.Remote.WorkspaceID),
-			model:     remoteSubagentModel(created.Decision),
+			workspace:  firstNonEmpty(created.Remote.WorkspaceName, created.Remote.WorkspaceID),
+			model:      remoteSubagentModel(created.Decision),
+			workflowID: workflowID,
 		}
 		s.subagents.add(run)
 		s.bg.subagentsLive.Add(1)
@@ -815,6 +847,14 @@ func (s *bgJobService) startSubagent(args map[string]interface{}) (subagentRepor
 	}
 	engine := subagentEngine(created.Exec, s.job)
 	if resumeFrom != nil && resumeFrom.Engine != "" {
+		if engine != resumeFrom.Engine {
+			// A control plane that routed the resume afresh, onto another engine: that engine would get the model and
+			// credential without the conversation, and the conversation's engine a model it cannot run.
+			why := fmt.Sprintf("the control plane would resume it on %s, but its conversation is %s's. Start a new SubAgent with the full brief instead",
+				engine, resumeFrom.Engine)
+			s.patchSubagent(created.RunID, subagentReport{RunID: created.RunID, Status: subagentStatusFailed, Result: "The SubAgent failed: " + why + "."}, nil, false)
+			return subagentReport{}, errors.New(why)
+		}
 		engine = resumeFrom.Engine
 	}
 	engineSession, stateDir := "", subagentDir(s.sessionID, created.RunID)
@@ -835,7 +875,7 @@ func (s *bgJobService) startSubagent(args map[string]interface{}) (subagentRepor
 	run := &subagentRun{
 		id: created.RunID, toolUseID: toolUseID, description: getString(args, "description"),
 		background: background, model: created.Exec.Model, engine: engine, engineSession: engineSession, stateDir: stateDir, kind: def.Name,
-		done: make(chan struct{}), startedAt: time.Now(), status: subagentStatusRunning, cancel: cancel,
+		done: make(chan struct{}), startedAt: time.Now(), status: subagentStatusRunning, cancel: cancel, workflowID: workflowID,
 	}
 	s.subagents.add(run)
 	s.bg.subagentsLive.Add(1)
@@ -878,8 +918,13 @@ func (s *bgJobService) runSubagent(ctx context.Context, run *subagentRun, target
 	files := newSubagentFileCollector(s.execDir)
 	// The tree as the child found it, so a stop can tell what changed while it ran (subagent_tree.go).
 	before, treeKnown := takeSubagentTreeSnapshot(s.execDir)
+	stderr := &subagentStderrTail{}
 	emit := func(eventType string, payload map[string]interface{}) {
 		files.note(eventType, payload)
+		if line, ok := payload["stderr"].(string); ok && eventType == evSystem {
+			// An engine that reports its stderr as events (Codex's app-server): kept for a failed end.
+			stderr.write(line)
+		}
 		if out, ok := rewriteSubagentEvent(run.id, run.toolUseID, eventType, payload); ok {
 			s.bg.emit(eventType, out)
 		}
@@ -903,7 +948,7 @@ func (s *bgJobService) runSubagent(ctx context.Context, run *subagentRun, target
 	// Every attempt's spend is the run's: a limit failure can still have cost something.
 	spent := 0.0
 	for attempt := 1; ; attempt++ {
-		res, err = s.runSubagentChild(ctx, run, target, def, prompt, resume, scratch, dir, emit, spawned)
+		res, err = s.runSubagentChild(ctx, run, target, def, prompt, resume, scratch, dir, emit, spawned, stderr)
 		spent += res.CostUsd
 		s.subagents.mu.Lock()
 		stopping := run.stopReason != ""
@@ -967,8 +1012,24 @@ func (s *bgJobService) runSubagent(ctx context.Context, run *subagentRun, target
 		result = strings.TrimSpace("The SubAgent failed: " + err.Error() + "\n" + result)
 	case res.Status != stSucceeded || isAPIError(result) || isAuthError(result):
 		status = subagentStatusFailed
+		why := firstNonEmpty(strings.TrimSpace(res.ErrorMsg), res.Subtype, "no result")
 		if result == "" {
-			result = "The SubAgent failed: " + firstNonEmpty(res.ErrorMsg, res.Subtype, "no result")
+			result = "The SubAgent failed: " + why
+		} else if !strings.Contains(result, why) {
+			// What the model last wrote is not why its turn ended: the engine's own error comes first.
+			result = "The SubAgent failed: " + why + "\n" + result
+		}
+	}
+	if status == subagentStatusFailed {
+		// So the next failure like this is diagnosable after the engine and its records are gone.
+		tail := stderr.String()
+		if tail != "" && !strings.Contains(result, tail) {
+			result = strings.TrimSpace(result + "\n\nThe engine's stderr ended with:\n" + tail)
+		}
+		logln(fmt.Sprintf("SubAgent %s of session %s FAILED: %s", run.id, s.sessionID,
+			strings.ReplaceAll(firstNonEmpty(strings.TrimSpace(res.ErrorMsg), errString(err), limit, res.Subtype, "no result"), "\n", " | ")))
+		if tail != "" {
+			logln(fmt.Sprintf("SubAgent %s stderr tail: %s", run.id, strings.ReplaceAll(tail, "\n", " | ")))
 		}
 	}
 	if status == subagentStatusStopped || status == subagentStatusInterrupted {
@@ -1029,12 +1090,19 @@ func (s *bgJobService) runSubagent(ctx context.Context, run *subagentRun, target
 	// to a run stopped because its session ended: there is nobody left to wake.
 	// A run stopped because the session moved owes one too: the session goes on in its new home.
 	answeredElsewhere := run.background || run.detached || status == subagentStatusInterrupted
-	wake := (answeredElsewhere && status != subagentStatusStopped) || stopReason == subagentStopHandedOver
+	// And a run its session left running when the coordinator handed over: its parent's engine has gone, and the
+	// server forwards the wake to the successor (session_keep_work.go).
+	wake := (answeredElsewhere && status != subagentStatusStopped) || stopReason == subagentStopHandedOver ||
+		(s.keptPastEnd.Load() && stopReason == "")
+	if run.workflowID != "" {
+		// Its end is the workflow script's to read; the workflow's own end is what wakes the parent.
+		answeredElsewhere, wake = false, false
+	}
 	s.subagents.mu.Unlock()
 
 	_ = os.WriteFile(filepath.Join(dir, "result.txt"), []byte(result), 0o600)
 	s.patchSubagent(run.id, report, res.Usage, wake)
-	if answeredElsewhere || status == subagentStatusStopped {
+	if run.workflowID == "" && (answeredElsewhere || status == subagentStatusStopped) {
 		// The terminal background_task clears the delegate call from the session's running SubAgents, as a
 		// background Agent's does.
 		bgStatus := map[string]string{subagentStatusDone: bgStatusCompleted, subagentStatusFailed: bgStatusFailed}[status]
@@ -1057,6 +1125,23 @@ func (s *bgJobService) runSubagent(ctx context.Context, run *subagentRun, target
 // subagentStopReportWait after the kill. Run before the session's finalize commit (§5.2), so nothing a
 // SubAgent is still writing is captured by it.
 func (s *bgJobService) stopSubagents(reason string) {
+	// A workflow's script first, so it starts no call while its running ones are stopped; it reports its own end
+	// once they have (subagent_workflow.go).
+	workflows := s.stopWorkflows(reason)
+	defer func() {
+		if len(workflows) == 0 {
+			return
+		}
+		deadline := time.After(subagentStopGrace + subagentStopReportWait)
+		for _, w := range workflows {
+			select {
+			case <-w.done:
+			case <-deadline:
+				logln("workflows of session", s.sessionID, "were stopped but not all reported in time")
+				return
+			}
+		}
+	}()
 	s.subagents.mu.Lock()
 	var running []*subagentRun
 	for _, r := range s.subagents.runs {
@@ -1111,7 +1196,8 @@ func (s *bgJobService) announceSubagents() {
 	var toolUseIDs []string
 	var orphaned []string
 	for _, r := range s.subagents.runs {
-		if r.status != subagentStatusRunning {
+		if r.status != subagentStatusRunning || r.workflowID != "" {
+			// A workflow's call is announced as its workflow (announceWorkflows), whose end answers for it.
 			continue
 		}
 		if !r.background && !r.detached {
@@ -1130,6 +1216,7 @@ func (s *bgJobService) announceSubagents() {
 	for _, id := range orphaned {
 		go s.recordSubagentDetach(id)
 	}
+	s.announceWorkflows()
 }
 
 // recordSubagentDetach tells the server that the call waiting for a run has stopped waiting, so the run's end
@@ -1152,7 +1239,7 @@ func (s *bgJobService) recordSubagentDetach(runID string) {
 // runSubagentChild runs one attempt of a run: its engine's child runner in the parent's cwd, with scratch as the
 // attempt's own dir, and records the conversation the engine opened, which a resume continues.
 func (s *bgJobService) runSubagentChild(ctx context.Context, run *subagentRun, exec AgentExecConfig, def subagentDefinition,
-	prompt string, resume bool, scratch, dir string, emit emitFn, spawned func(*exec.Cmd)) (ExecResult, error) {
+	prompt string, resume bool, scratch, dir string, emit emitFn, spawned func(*exec.Cmd), stderr *subagentStderrTail) (ExecResult, error) {
 	s.subagents.mu.Lock()
 	engine, engineSession, stateDir := run.engine, run.engineSession, run.stateDir
 	s.subagents.mu.Unlock()
@@ -1162,7 +1249,7 @@ func (s *bgJobService) runSubagentChild(ctx context.Context, run *subagentRun, e
 	}
 	res, conversation, err := runChild(withSubagentApprovals(ctx, run.id), subagentChild{
 		t: s.t, parent: s.job, exec: exec, def: def, runID: run.id, engineSession: engineSession, resume: resume,
-		cwd: s.execDir, scratch: scratch, stateDir: stateDir, prompt: prompt, emit: emit, spawned: spawned,
+		cwd: s.execDir, scratch: scratch, stateDir: stateDir, prompt: prompt, emit: emit, spawned: spawned, stderr: stderr,
 	})
 	if conversation != "" && conversation != engineSession {
 		// The conversation the engine opened, which a resume continues.
@@ -1226,12 +1313,12 @@ func claudeChildSession(parent *ClaimedSession, target AgentExecConfig, def suba
 // cwd, in child mode — its own scratch dir, its own conversation, one prompt, no checkout of its own, nothing
 // finalized and nothing committed. Every stream message is parsed by the session's own handleMessage.
 func runClaudeChild(ctx context.Context, c subagentChild) (ExecResult, string, error) {
-	res, err := runClaudeChildProcess(ctx, c.parent, c.exec, c.def, c.runID, c.engineSession, c.resume, c.cwd, c.scratch, c.prompt, c.emit, c.spawned)
+	res, err := runClaudeChildProcess(ctx, c.parent, c.exec, c.def, c.runID, c.engineSession, c.resume, c.cwd, c.scratch, c.prompt, c.emit, c.spawned, c.stderr)
 	return res, c.engineSession, err
 }
 
 func runClaudeChildProcess(ctx context.Context, parent *ClaimedSession, exec AgentExecConfig, def subagentDefinition, runID,
-	engineSession string, resume bool, cwd, scratch, prompt string, emit emitFn, spawned func(*exec.Cmd)) (ExecResult, error) {
+	engineSession string, resume bool, cwd, scratch, prompt string, emit emitFn, spawned func(*exec.Cmd), tail *subagentStderrTail) (ExecResult, error) {
 	child, args := claudeChildSession(parent, exec, def, runID, engineSession, resume, scratch)
 	sp, err := spawnClaude(ctx, child, cwd, args)
 	if err != nil {
@@ -1249,6 +1336,7 @@ func runClaudeChildProcess(ctx context.Context, parent *ClaimedSession, exec Age
 			if stderrTail.Len() < 4000 {
 				stderrTail.WriteString(sc.Text() + "\n")
 			}
+			tail.write(sc.Text())
 		}
 	}()
 	frame := userFrame(engineSession, []map[string]interface{}{{"type": "text", "text": prompt}})
@@ -1402,6 +1490,46 @@ type subagentChild struct {
 	// spawned is told the child's process once it is started, so a stop can interrupt its process group before
 	// the kill (stopSubagents). Every engine's runner calls it through started.
 	spawned func(*exec.Cmd)
+	// stderr keeps the end of what the child's engine wrote to stderr, for a failed end's result. An engine whose
+	// runner reports stderr as events (Codex) fills it through emit; one that reads it itself writes here. May be nil.
+	stderr *subagentStderrTail
+}
+
+// subagentStderrTailBytes is how much of a child engine's stderr a failed run keeps: its last lines.
+const subagentStderrTailBytes = 2000
+
+// subagentStderrTail is the last subagentStderrTailBytes of a child engine's stderr, whole lines where it can.
+type subagentStderrTail struct {
+	mu  sync.Mutex
+	buf []byte
+}
+
+func (t *subagentStderrTail) write(line string) {
+	if t == nil || strings.TrimSpace(line) == "" {
+		return
+	}
+	if !strings.HasSuffix(line, "\n") {
+		line += "\n"
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.buf = append(t.buf, line...)
+	if over := len(t.buf) - subagentStderrTailBytes; over > 0 {
+		cut := over
+		if i := bytes.IndexByte(t.buf[over:], '\n'); i >= 0 && over+i+1 < len(t.buf) {
+			cut = over + i + 1
+		}
+		t.buf = append([]byte(nil), t.buf[cut:]...)
+	}
+}
+
+func (t *subagentStderrTail) String() string {
+	if t == nil {
+		return ""
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return strings.TrimSpace(string(t.buf))
 }
 
 type subagentSpawnedKey struct{}
@@ -1499,6 +1627,17 @@ func subagentChildJob(parent *ClaimedSession, exec AgentExecConfig, def subagent
 			// The server already narrows a read-only run on any other engine to plan mode (§5.3); kept here so the
 			// child never reads wider.
 			child.Agent.PermissionMode = "plan"
+			// Plan mode asks about every shell call; the parent's mode, read when one is asked, answers it instead
+			// (owner, 2026-11-20; kimiReadonlyShellFollowsParent).
+			parentLive, parentMode := parent.liveMode, parent.Agent.PermissionMode
+			child.readonlyParentMode = func() string {
+				if parentLive != nil {
+					if mode := parentLive.current(); mode != "" {
+						return mode
+					}
+				}
+				return parentMode
+			}
 		}
 	}
 	child.RuntimeSessionID = engineSession
@@ -1566,6 +1705,8 @@ var delegateCallWait = 3 * time.Second
 
 // delegateCall is a delegate tool call one session's engine announced.
 type delegateCall struct {
+	// tool is the Orbit tool the call is: delegate, or workflow (subagent_workflow.go).
+	tool                    string
 	id, prompt, description string
 	taken                   bool
 }
@@ -1595,7 +1736,17 @@ func isDelegateToolName(name string) bool {
 
 // note reads one event the session emitted.
 func (l *delegateCallLog) note(sessionID, eventType string, payload map[string]interface{}) {
-	if eventType != evToolUse || !isDelegateToolName(asString(payload["name"])) || asString(payload["subagentRunId"]) != "" {
+	// A workflow's own agent() calls are drawn as delegate calls, and are no engine's: skipped by their workflowRunId.
+	if eventType != evToolUse || asString(payload["subagentRunId"]) != "" || asString(payload["workflowRunId"]) != "" {
+		return
+	}
+	tool := ""
+	switch name := asString(payload["name"]); {
+	case isDelegateToolName(name):
+		tool = delegateToolName
+	case isWorkflowToolName(name):
+		tool = workflowToolName
+	default:
 		return
 	}
 	id := asString(payload["id"])
@@ -1617,7 +1768,7 @@ func (l *delegateCallLog) note(sessionID, eventType string, payload map[string]i
 			return
 		}
 	}
-	calls := append(l.sessions[key], &delegateCall{id: id, prompt: asString(input["prompt"]), description: asString(input["description"])})
+	calls := append(l.sessions[key], &delegateCall{tool: tool, id: id, prompt: asString(input["prompt"]), description: asString(input["description"])})
 	if len(calls) > delegateCallLogCap {
 		calls = calls[len(calls)-delegateCallLogCap:]
 	}
@@ -1637,16 +1788,16 @@ func (l *delegateCallLog) claim(sessionID, id string) {
 	}
 }
 
-// take is the id of the call a delegate with this prompt is, waiting up to wait for it to be announced; "" when
-// none was.
-func (l *delegateCallLog) take(sessionID, prompt, description string, wait time.Duration) string {
+// take is the id of the call of tool (delegate or workflow) with this prompt, waiting up to wait for it to be
+// announced; "" when none was. A workflow call has no prompt: its description picks it.
+func (l *delegateCallLog) take(sessionID, tool, prompt, description string, wait time.Duration) string {
 	key := decodeSessionID(sessionID)
 	deadline := time.Now().Add(wait)
 	for {
 		l.mu.Lock()
 		var match, oldest *delegateCall
 		for _, c := range l.sessions[key] {
-			if c.taken {
+			if c.taken || c.tool != tool {
 				continue
 			}
 			if oldest == nil {

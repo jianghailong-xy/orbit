@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import { claudeSwapHoldsSession } from '../runners/claude-account-swap';
 import { setTimeout as delay } from 'node:timers/promises';
 import { BadRequestException, ConflictException, Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { Prisma, type ManagedRunnerManagementState } from '@prisma/client';
@@ -80,6 +81,7 @@ import {
   normalizeEffortForRuntimeModel,
 } from '../common/runtime-provider';
 import { worktreeOperationFenceSql } from '../common/session-inbox-fence';
+import { sessionDiskHoldSql } from '../common/runner-disk-gate';
 import { workspaceCloneHoldSql } from '../common/workspace-clone-gate';
 import { engineNamingJob } from '../sessions/naming';
 import {
@@ -115,6 +117,7 @@ import { RunnerHints } from '../realtime/runner-hints';
 import { forkAuthorityBindings, sessionSourceSnapshot } from '../projects/session-source';
 import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout';
 import { currentWikiRollout, wikiClaimFields } from '../wiki/wiki-rollout';
+import { workflowClaimFields } from '../runner-api/workflow-run';
 import { branchName } from '../projects/project-criterion-landing';
 import { codelessClaimFields } from '../sessions/codeless-checkout';
 import { managedRunnerInstanceClaimable, type ManagedRunnerInstance } from '../managed-runners/managed-runner-instance';
@@ -252,6 +255,8 @@ export class QueueService {
           // blocked, or waiting with a region sentence already (claudeRegionHold). Keys and pools are read above.
           { provider: AgentProvider.CLAUDE, providerBuiltin: true, assignedRunner: { region: { path: ['verdict'], equals: 'blocked' } } },
           { provider: AgentProvider.CLAUDE, providerBuiltin: true, error: { startsWith: CLAUDE_REGION_ERROR_PREFIX } },
+          // Claude Code on its own sign-in, on a runner where a Set as default swap is pending (claude-account-swap.ts).
+          { provider: AgentProvider.CLAUDE, providerBuiltin: true, assignedRunner: { claudeAccountSwapStatus: 'pending' } },
         ],
       },
       select: {
@@ -269,6 +274,8 @@ export class QueueService {
             engines: true, accountPauses: true, defaultRemoved: true, planUsage: true, capabilities: true,
             // What the region check holds a session on, and the name its sentence gives the machine.
             name: true, displayName: true, region: true,
+            // The Set as default swap pending there, if one is, and the account it makes the Default.
+            claudeAccountSwapStatus: true, claudeAccountSwapAccount: true,
           },
         },
       },
@@ -277,6 +284,13 @@ export class QueueService {
     const poolPauses = new Map<string, Date | null>();
     for (const session of pending) {
       const runner = session.assignedRunner;
+      // A pending Set as default for Claude Code holds back the sessions on either of its accounts: a claim now would
+      // start one in the folder that is about to change. It writes no notice; the swap ends within minutes, and a
+      // session it held is woken then.
+      if (runner && claudeSwapHoldsSession(session, runner)) {
+        blocked.push(session.id);
+        continue;
+      }
       let until = runner ? sessionAccountPausedUntil(session, session.workspace, runner, now) : null;
       const slug = session.provider;
       // The engine it runs on: its own, else — for a row an older replica wrote — the old rules'.
@@ -714,6 +728,9 @@ export class QueueService {
             -- reports it READY the work dir is not there, and an engine started in it would fail. Shared with the
             -- session list, which names this gate (WORKSPACE_CLONING / WORKSPACE_CLONE_FAILED) to the person waiting.
             AND NOT ${workspaceCloneHoldSql(Prisma.sql`s."workspace_id"`)}
+            -- Keep Free (runner-disk-gate.ts): a session that has never run waits while its workspace's disk is below the
+            -- runner's floor; one that has run takes its next message. Shared with the session list (disk_below_floor).
+            AND NOT ${sessionDiskHoldSql('s')}
           -- Fair-queue across spawn trees, then oldest first. A hard sub-cap can only make a
           -- runner idle while work waits; ordering gives the same protection without that —
           -- the tree already holding the most active turns is picked last, so one tree may use
@@ -1229,6 +1246,9 @@ export class QueueService {
       // The same for the wiki (ORBIT_WIKI, wiki/wiki-rollout.ts): `wikiDisabled` when it is not on for the owner, so
       // the runner spawns the session without the wiki tools.
       ...wikiClaimFields(currentWikiRollout(), session.ownerId),
+      // The Agent's Workflows switch (runner-api/workflow-run.ts): `workflowsDisabled` when its sessions may not start
+      // a workflow, so the runner spawns the session without the `workflow` tool. Absent otherwise.
+      ...workflowClaimFields(workspace),
       // A scheduled task's run (docs/scheduled-tasks-design.md §7.1): the runner spawns it with ORBIT_SCHEDULE_RUN=1,
       // which is what lists schedule_run_report in its `orbit mcp`. Absent for every other session.
       ...(session.scheduleRunId ? { scheduleRun: true } : {}),
@@ -1254,7 +1274,6 @@ export class QueueService {
           (workspace?.disallowedTools as string[] | null) ?? [],
           runAccessLevel(session.scheduleRun),
           provider,
-          session.assignedRunner?.capabilities,
         ),
         // A CHECK_ONLY run's Plan runs Codex in its read-only sandbox (design §6.2); absent for every other session.
         ...scheduleRunAgentFields(runAccessLevel(session.scheduleRun)),
@@ -1266,10 +1285,8 @@ export class QueueService {
         permissionMode: normalizeBuiltinPermissionMode(
           provider,
           runnerModel,
-          // A CHECK_ONLY run on Claude Code asks only on a runner that closes the rest (schedule-access.ts).
-          scheduleRunPermissionMode(
-            permissionMode, runAccessLevel(session.scheduleRun), provider, session.assignedRunner?.capabilities,
-          ),
+          // A scheduled run on Claude Code runs in Auto, whatever its level (schedule-access.ts).
+          scheduleRunPermissionMode(permissionMode, runAccessLevel(session.scheduleRun), provider),
           customRow?.enabled === true,
           session.assignedRunner?.runsAsRoot,
           session.assignedRunner?.modelCatalog,

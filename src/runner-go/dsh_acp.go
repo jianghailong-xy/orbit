@@ -612,6 +612,7 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 		p.emitFor(turnID, kind, payload)
 	})
 	permissions.workspace = spec.Cwd
+	permissions.uploads = uploadsDir(p.job.SessionID)
 	app, err := startDshACP(p.ctx, *spec, mapper, permissions, p.emit)
 	if err != nil {
 		return fail("failed to start DeepSeek Harness: " + err.Error())
@@ -688,6 +689,8 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 	var activeID string
 	stopped := false // a local stop of the active turn; see dshSettlementOutcome
 	var queued []*RunInboxResponse
+	// A person's `!` command and its output, fed to their next message as on every other engine.
+	var shellContext []string
 	worktree := func(req *TurnCompleteRequest) {
 		req.IsolationStatus = p.job.IsolationStatus
 		req.ChangedFiles, req.ChangedDiff = liveDiff(p.job.WT)
@@ -777,7 +780,8 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 		// This composition takes text only (no image, audio or embedded-context prompts), so attachments
 		// are saved as files and named in the prompt. Fetched before the turn is recorded: a crash until
 		// then leaves a turn that is safe to run again.
-		text, refs := prepareTextOnlyPrompt(p.ctx, p.t, p.job, resp, nil)
+		text, refs := prepareTextOnlyPrompt(p.ctx, p.t, p.job, resp, shellContext)
+		shellContext = nil
 		userEvent := map[string]interface{}{"text": resp.Content, "runtimeSessionId": sessionID, "localTurnId": activeID}
 		if len(refs) > 0 {
 			userEvent["attachments"] = refs
@@ -807,23 +811,37 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 			app.fail(err)
 		}
 	}
-	// runAcceptance runs a task's EXECUTABLE acceptance command on the runner in the session's
-	// worktree, with the same runSynchronousShellTurn every other engine uses, and reports its exit
-	// code and output in the same shape. dsh is idle while it runs and is never told about it.
-	runAcceptance := func(resp *RunInboxResponse) bool {
+	// runShell runs a shell turn on the runner in the session's worktree, with the same
+	// runSynchronousShellTurn every other engine uses, and reports its exit code and output in the
+	// same shape: a task's EXECUTABLE acceptance command, or a person's `!` command. dsh is idle
+	// while it runs and is never told about it.
+	runShell := func(resp *RunInboxResponse) bool {
 		if !p.waitTurnPermit(p.ctx) {
 			return false
 		}
 		p.setTurn(resp.TurnID)
-		req, err := runSynchronousShellTurn(p.ctx, p.t, p.job, p.execDir, resp,
-			func(typ string, payload map[string]interface{}) { p.emitFor(resp.TurnID, typ, payload) })
-		if err != nil {
-			req = TurnCompleteRequest{TurnID: resp.TurnID, Status: stFailed, Result: err.Error(), Subtype: "shell"}
+		emit := func(typ string, payload map[string]interface{}) { p.emitFor(resp.TurnID, typ, payload) }
+		var req TurnCompleteRequest
+		if command, background := shellTurnBackgroundCommand(resp); background {
+			runShellTurnBackground(p.bg, p.execDir, p.scratchDir, command, resp.TurnID, emit, p.job.Agent.Env)
+			req = TurnCompleteRequest{TurnID: resp.TurnID, Status: stSucceeded, Result: "started in background", Subtype: "shell"}
+		} else {
+			var err error
+			req, err = runSynchronousShellTurn(p.ctx, p.t, p.job, p.execDir, resp, emit)
+			if err != nil {
+				req = TurnCompleteRequest{TurnID: resp.TurnID, Status: stFailed, Result: err.Error(), Subtype: "shell"}
+			}
+			// A person's command and its output are context for their next message; an acceptance
+			// command is the runner's own.
+			if req.ShellOutput != nil && !resp.TaskAcceptance {
+				shellContext = append(shellContext,
+					fmt.Sprintf("<bash-input>%s</bash-input>\n<bash-stdout>%s</bash-stdout>", resp.Content, *req.ShellOutput))
+			}
 		}
 		req.RuntimeSessionID = sessionID
 		req.BranchSha = effectiveBranchSha(p.job.WT)
 		if err := p.completeTurn(req); err != nil {
-			logln("dsh acceptance turn-complete failed:", err)
+			logln("dsh shell turn-complete failed:", err)
 		}
 		p.setTurn("")
 		return true
@@ -833,7 +851,7 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 			next := queued[0]
 			queued = queued[1:]
 			if next.Kind == "shell" {
-				if !runAcceptance(next) {
+				if !runShell(next) {
 					return stCancelled, true, false
 				}
 				continue
@@ -941,7 +959,7 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 				if err := p.t.diffResult(p.job.SessionID, DiffResultRequest{
 					ChangedFiles: files, ChangedDiff: patches, BaseSha: p.job.WT.baseSha(),
 					WorktreeDirty: worktreeIsDirty(p.job.WT), BranchMerged: branchMergedInto(p.job.WT),
-					BranchSha: effectiveBranchSha(p.job.WT), WorktreeBranch: currentBranch(p.job.WT),
+					BranchSha: effectiveBranchSha(p.job.WT), BranchCommits: branchCommits(p.job.WT), WorktreeBranch: currentBranch(p.job.WT),
 				}); err != nil {
 					logln("diff-result failed for", p.job.SessionID+":", err)
 				}
@@ -949,19 +967,11 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 				if !poller.markInflight(resp.TurnID) {
 					continue
 				}
-				if resp.TaskAcceptance {
-					// The server-generated EXECUTABLE command is the runner's, not the engine's: it
-					// waits behind the messages ahead of it and then runs in the worktree exactly as
-					// every other engine runs it (runAcceptance), never through dsh or its model.
-					queued = append(queued, resp)
-					continue
-				}
-				// A person's `!` shell has no bridge in this composition (P5); the turn still reaches a terminal.
-				if err := p.completeTurn(TurnCompleteRequest{TurnID: resp.TurnID, Status: stFailed, Subtype: subtypeUnknownKind,
-					Result: "DeepSeek Harness sessions do not run shell turns", RuntimeSessionID: sessionID,
-					BranchSha: effectiveBranchSha(p.job.WT)}); err != nil {
-					logln("dsh shell refusal turn-complete failed:", err)
-				}
+				// A shell turn is the runner's, not the engine's: the server-generated EXECUTABLE
+				// acceptance command, or a person's `!` command. It waits behind the turns ahead of
+				// it and then runs in the worktree exactly as every other engine runs it (runShell),
+				// never through dsh or its model.
+				queued = append(queued, resp)
 			default:
 				reportUnknownInboxKind(resp, p.job, p.completeTurn)
 			}

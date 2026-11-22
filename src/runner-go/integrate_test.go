@@ -2279,6 +2279,72 @@ func TestIntegrationLandingPathsExempt(t *testing.T) {
 	}
 }
 
+// §12.15 P-C2: an exempt task's landing is handed its acceptance alone (the control plane leaves the
+// landing check out of the command) and the reason. The acceptance runs on the combined tree; the
+// landing check is recorded skipped as TASK_EXEMPT with that reason, and nothing else is skipped.
+func TestIntegrationLandingTaskExempt(t *testing.T) {
+	const reason = "Docs-only change; the landing build has nothing to say about it."
+	for _, scenario := range []string{"exempt", "acceptance-red", "older-command"} {
+		t.Run(scenario, func(t *testing.T) {
+			r := newIntegrationRepo(t)
+			r.checkoutNew("project/line", "main")
+			r.write("line.txt", "line\n")
+			r.commit("line work")
+			r.push("project/line")
+			r.checkoutNew("task/exempt", "main")
+			r.write("task.txt", "task\n")
+			r.commit("task work")
+			r.push("task/exempt")
+			r.checkout("main")
+			lineBefore := r.originRev("refs/heads/project/line")
+			// The acceptance sees the combined tree: the task's file and the line's together.
+			script := "test -f task.txt && test -f line.txt && echo acceptance-ran"
+			if scenario == "acceptance-red" {
+				script = "echo acceptance-ran; exit 3"
+			}
+			acceptance := IntegrationCheckSpec{Name: "TASK_ACCEPTANCE", Command: script, ExpectedExitCode: 0, TimeoutSeconds: 10}
+			cmd := r.command("task/exempt", "project/line", acceptance)
+			if scenario != "older-command" {
+				cmd.LandingCheckExemptReason = reason
+			}
+			result := runIntegrationJob(cmd, silent)
+			if len(result.Checks) == 0 || result.Checks[0].Name != "TASK_ACCEPTANCE" || !strings.Contains(result.Checks[0].OutputTail, "acceptance-ran") {
+				t.Fatalf("the acceptance did not run: %+v", result)
+			}
+			switch scenario {
+			case "exempt":
+				if result.State != "LANDED" || len(result.Checks) != 2 || result.Checks[0].ExitCode == nil || *result.Checks[0].ExitCode != 0 {
+					t.Fatalf("exempt landing: %+v", result)
+				}
+				skipped := result.Checks[1]
+				if skipped.Name != "LANDING_CHECK" || skipped.Skipped != "TASK_EXEMPT" || skipped.Reason != reason || skipped.ExitCode != nil || len(skipped.Files) != 0 {
+					t.Fatalf("skip record: %+v", skipped)
+				}
+				encoded, _ := json.Marshal(skipped)
+				if !strings.Contains(string(encoded), `"skipped":"TASK_EXEMPT"`) || !strings.Contains(string(encoded), `"reason":"`+reason+`"`) {
+					t.Fatalf("wire result: %s", encoded)
+				}
+				if r.originRev("refs/heads/project/line") == lineBefore {
+					t.Fatalf("the exempt task did not land on the line")
+				}
+			case "acceptance-red":
+				// The exemption covers the project's landing check only: a red acceptance still stops the landing.
+				if result.State != "CHECK_FAILED" || len(result.Checks) != 1 || result.Checks[0].ExitCode == nil || *result.Checks[0].ExitCode != 3 {
+					t.Fatalf("a red acceptance must stop an exempt landing: %+v", result)
+				}
+				if r.originRev("refs/heads/project/line") != lineBefore {
+					t.Fatalf("a red acceptance pushed")
+				}
+			case "older-command":
+				// A command without the reason (what a runner without TASK_EXEMPT reads too) runs what it holds.
+				if result.State != "LANDED" || len(result.Checks) != 1 {
+					t.Fatalf("plain landing: %+v", result)
+				}
+			}
+		})
+	}
+}
+
 func TestIntegrationBaselineAttribution(t *testing.T) {
 	for _, scenario := range []string{"baseline-red", "task-red", "no-absorb", "timed-out", "baseline-timed-out", "source-absorb", "baseline-unprepared", "baseline-worktree-failed"} {
 		t.Run(scenario, func(t *testing.T) {
@@ -2344,6 +2410,14 @@ func TestIntegrationBaselineAttribution(t *testing.T) {
 			}
 			if expected == 2 {
 				baseline := result.Checks[1]
+				expectedTree, err := git(r.work, "rev-parse", "main^{tree}")
+				if err != nil {
+					t.Fatal(err)
+				}
+				expectedTree = strings.TrimSpace(expectedTree)
+				if baseline.TreeSha != expectedTree {
+					t.Fatalf("baseline tree = %q, want task-free tree %q", baseline.TreeSha, expectedTree)
+				}
 				if baseline.Scope != "BASELINE" {
 					t.Fatalf("scope: %+v", baseline)
 				}

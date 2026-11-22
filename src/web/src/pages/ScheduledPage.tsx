@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type JSX, type KeyboardEvent } from 'reac
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
+  CONDITION_KEEPS_AWAKE_LINE,
   SCHEDULE_COPY,
   scheduleAllowedText,
   scheduleCircle,
@@ -9,14 +10,20 @@ import {
   scheduleFill,
   scheduleHistoryWho,
   scheduleRecordText,
+  scheduleRowCircle,
   scheduleRowLine,
   scheduleRuleRepeats,
   scheduleRuleText,
+  scheduleCollapseMissed,
+  scheduleEndText,
+  scheduleMissedText,
   scheduleRunCircle,
   scheduleRunLine,
+  scheduleRunOfText,
   scheduleTimeline,
   scheduleUsageText,
   scheduleWhenText,
+  type ConditionEventView,
   type ScheduleChangeRecord,
   type ScheduleCircleView,
   type ScheduleCreateCard,
@@ -25,11 +32,13 @@ import {
   type ScheduleRunView,
   type ScheduleTimelineGroup,
   type ScheduleTimelineItem,
+  type ScheduleView,
 } from '@orbit/shared';
 import { api } from '../api';
 import {
   scheduleClock,
   scheduleDetailQuery,
+  awaitDraftFrom,
   scheduleDraftsQuery,
   scheduleRecordUndoable,
   scheduleRunSessionPath,
@@ -37,11 +46,29 @@ import {
   undoScheduleRecord,
   viewerTimezone,
 } from '../lib/schedules';
+import type { SessionReach } from '../lib/sessionReach';
 import { ownerRequestsQuery } from '../lib/queries';
 import { sameResourceId } from '../lib/watches';
 import { OwnerRequestCard } from '../components/OwnerRequestCard';
 import { isScheduleWaitingKind } from '../components/ScheduleWaitingCard';
-import { runFindingFacts, scheduleErrorText, ScheduleCreateCardView } from '../components/ScheduleCards';
+import { isConditionWaitingKind } from '../components/ConditionWaitingCard';
+import {
+  CONDITION_COPY,
+  conditionCantRead,
+  conditionEveryText,
+  conditionEventText,
+  conditionFiringLines,
+  conditionGauge,
+  conditionQuery,
+  conditionRowReading,
+  conditionScheduleLine,
+  conditionTaskLine,
+  readingAgeText,
+  readingText,
+  type ConditionScheduleList,
+  type ScheduleWaitingTask,
+} from '../lib/conditions';
+import { GaugeIcon, runFindingFacts, scheduleErrorText, ScheduleCreateCardView } from '../components/ScheduleCards';
 import { Button } from '../components/ui/Button';
 import { useConfirm } from '../components/ui/ConfirmDialog';
 import { Menu } from '../components/ui/Menu';
@@ -49,6 +76,7 @@ import { Switch } from '../components/ui/Switch';
 import '../components/Scheduled.css';
 
 const C = SCHEDULE_COPY;
+const K = CONDITION_COPY;
 const REPEAT = '↻';
 const LAST_WORKSPACE_KEY = 'orbit:scheduled-quick-add-workspace';
 
@@ -83,17 +111,24 @@ function selectionOf(params: URLSearchParams): Selection {
 function Circle({ view }: { view: ScheduleCircleView }): JSX.Element {
   return (
     <span className="sched-circle" data-circle={view.circle} aria-hidden="true">
-      {view.mark === 'check' ? '✓' : view.mark === 'alert' ? '!' : null}
+      {view.mark === 'check' ? '✓' : view.mark === 'alert' ? '!' : view.mark === 'clock' ? (
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M6 2.5V6l2.3 1.4" />
+        </svg>
+      ) : null}
     </span>
   );
 }
 
-function RowLine({ repeats, text }: { repeats: boolean; text: string }): JSX.Element {
+function RowLine({ repeats, text, end }: { repeats: boolean; text: string; end?: string | null }): JSX.Element {
   return (
-    <div className="sched-row-line">
-      {repeats ? <span className="sched-repeat" aria-hidden="true">{REPEAT}</span> : null}
-      {text}
-    </div>
+    <>
+      <div className="sched-row-line">
+        {repeats ? <span className="sched-repeat" aria-hidden="true">{REPEAT}</span> : null}
+        {text}
+      </div>
+      {end ? <div className="sched-row-line sched-row-end">{end}</div> : null}
+    </>
   );
 }
 
@@ -102,11 +137,16 @@ interface RowView {
   circle: ScheduleCircleView;
   title: string;
   line: string;
+  /** The planned end, on its own line so it is never the part that is cut off. */
+  end?: string | null;
   repeats: boolean;
   time: string;
   cls: string;
   selected: boolean;
   onSelect: () => void;
+  /** A condition's row: the gauge in place of the circle, and the newest reading and its age in place of a time. */
+  gauge?: 'waiting' | 'cant-read';
+  reading?: { value: string | null; age: string };
 }
 
 function Row({ row }: { row: RowView }): JSX.Element {
@@ -118,20 +158,41 @@ function Row({ row }: { row: RowView }): JSX.Element {
       data-row={row.key}
       onClick={row.onSelect}
     >
-      <Circle view={row.circle} />
+      {row.gauge ? (
+        <span className="sched-gauge" data-gauge={row.gauge}><GaugeIcon /></span>
+      ) : <Circle view={row.circle} />}
       <span className="sched-row-body">
         <span className="sched-row-text">
           <span className="sched-row-title">{row.title}</span>
-          <RowLine repeats={row.repeats} text={row.line} />
+          <RowLine repeats={row.repeats} text={row.line} end={row.end} />
         </span>
         {row.circle.tag ? <span className="sched-tag" data-tone={row.circle.tag.tone}>{row.circle.tag.text}</span> : null}
-        <span className="sched-row-time">{row.time}</span>
+        {row.reading ? (
+          <span className="sched-row-time sched-row-reading" data-reading="">
+            {row.reading.value ? <b>{row.reading.value}</b> : null}
+            {row.reading.value ? C.separator : null}
+            {row.reading.age}
+          </span>
+        ) : <span className="sched-row-time">{row.time}</span>}
       </span>
     </button>
   );
 }
 
+/** A schedule's planned end for its row's own line: "until Nov 25", "3 runs left"; null without an end. */
+function endOf(schedule: Pick<ScheduleListRow, 'endAt' | 'maxRuns' | 'runsLeft'>, now: Date, timezone: string): string | null {
+  return scheduleEndText(schedule, now, timezone);
+}
+
 const OPEN_CIRCLE: ScheduleCircleView = { circle: 'open', mark: null, tag: null };
+
+/** A group as the page draws it: the timeline's, or the conditions' own. */
+interface Section {
+  key: string;
+  title: string;
+  subtitle: string | null;
+  rows: RowView[];
+}
 
 export function ScheduledPage(): JSX.Element {
   const [params, setParams] = useSearchParams();
@@ -144,10 +205,16 @@ export function ScheduledPage(): JSX.Element {
 
   const list = useQuery(schedulesQuery(workspaceFilter));
   const drafts = useQuery(scheduleDraftsQuery());
-  const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: () => api<WorkspaceRow[]>('/workspaces') });
+  const workspaces = useQuery({
+    queryKey: ['workspaces'],
+    meta: { entities: ['workspace', 'checkout'] },
+    queryFn: () => api<WorkspaceRow[]>('/workspaces'),
+  });
   // One read draws the whole timeline: the rows, the runs of the shown window and their findings (the list's
   // timeline part). A schedule's detail is read only when it is opened in the inspector.
   const schedules = useMemo(() => list.data?.schedules ?? [], [list.data]);
+  // The tasks that start when their condition holds (condition-triggers ④), listed beside the WHEN schedules.
+  const waitingTasks = useMemo(() => (list.data as ConditionScheduleList | undefined)?.waitingTasks ?? [], [list.data]);
 
   const [pending, setPending] = useState<PendingDraft[]>([]);
   const draftCards = useMemo(
@@ -159,14 +226,16 @@ export function ScheduledPage(): JSX.Element {
   const pendingRows = pending.filter((p) =>
     !(drafts.data?.drafts ?? []).some((card) => card.askedBySessionId && sameResourceId(card.askedBySessionId, p.sessionId)));
 
-  // A scheduled task's items (failed, held, a run's approval, a run's wider envelope) are drawn whole here, newest
-  // first, each a card with its own doors (board docs/mocks/scheduled-tasks/web/02-board.png ④). There is no Waiting on
-  // you page (docs/mocks/waiting-on-you-removal); the run's session draws the same card where it was filed.
+  // A scheduled task's items (failed, held, a run's approval, a run's wider envelope) and a condition's (it cannot be
+  // read, or a task's has not held in 30 days) are drawn whole here, newest first, each a card with its own doors
+  // (board docs/mocks/scheduled-tasks/web/02-board.png ④). There is no Waiting on you page
+  // (docs/mocks/waiting-on-you-removal); the run's session draws the same card where it was filed.
   const openRequests = useQuery(ownerRequestsQuery('open'));
   const scheduleItems = (openRequests.data?.requests ?? [])
-    .filter((request) => isScheduleWaitingKind(request.kind) && request.state === 'PENDING')
+    .filter((request) => (isScheduleWaitingKind(request.kind) || isConditionWaitingKind(request.kind)) && request.state === 'PENDING')
     .filter((request) => !workspaceFilter
-      || schedules.some((schedule) => request.scheduleId && sameResourceId(schedule.id, request.scheduleId)))
+      || schedules.some((schedule) => request.scheduleId && sameResourceId(schedule.id, request.scheduleId))
+      || (isConditionWaitingKind(request.kind) && !!request.workspaceId && sameResourceId(request.workspaceId, workspaceFilter)))
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 
   const now = new Date();
@@ -191,7 +260,21 @@ export function ScheduledPage(): JSX.Element {
     setParams(p, { replace: true });
   };
 
-  const rowOf = (group: ScheduleTimelineGroup, item: ScheduleTimelineItem): RowView => {
+  const rowOf = (group: ScheduleTimelineGroup, item: ReturnType<typeof scheduleCollapseMissed>[number]): RowView => {
+    if (item.kind === 'MISSED') {
+      const first = item.runs[0]!;
+      return {
+        key: `missed:${first.id}`,
+        circle: scheduleRunCircle(first, { newFinding: false }),
+        title: item.schedule.title,
+        line: scheduleMissedText(item.runs, timezone),
+        repeats: false,
+        time: scheduleClock(item.at, timezone),
+        cls: ' is-past',
+        selected: false,
+        onSelect: () => select({ kind: 'schedule', id: item.schedule.id }),
+      };
+    }
     if (item.kind === 'DRAFT') {
       const card = item.card;
       return {
@@ -226,6 +309,7 @@ export function ScheduledPage(): JSX.Element {
         line: underWay
           ? scheduleRowLine(schedule, { agentName: schedule.agentName, runningMinutes: minutes })
           : scheduleRunLine(run, { notified: facts.notified }),
+        end: underWay ? endOf(schedule, now, timezone) : null,
         repeats: underWay && scheduleRuleRepeats(schedule.rule),
         time: scheduleClock(run.plannedAt, timezone),
         cls: underWay ? '' : ' is-past',
@@ -233,33 +317,79 @@ export function ScheduledPage(): JSX.Element {
         onSelect,
       };
     }
-    const inNeeds = group.key === 'NEEDS_YOU';
     const inPaused = group.key === 'PAUSED';
-    const circle = inNeeds || inPaused ? scheduleCircle(schedule) : OPEN_CIRCLE;
-    const failing = inNeeds && schedule.state === 'ACTIVE' && schedule.lastRun;
     return {
       key: `${group.key}:${schedule.id}`,
-      circle,
+      circle: scheduleRowCircle(schedule, runs),
       title: schedule.title,
       line: scheduleRowLine(schedule, {
         agentName: schedule.agentName,
         pausedAt: schedule.pausedAt ? new Date(schedule.pausedAt) : null,
         timezone,
       }),
+      end: endOf(schedule, now, timezone),
       repeats: scheduleRuleRepeats(schedule.rule),
-      time: failing && schedule.lastRun
-        ? scheduleWhenText(new Date(schedule.lastRun.plannedAt), now, timezone)
-        : item.at && !inNeeds && !inPaused ? scheduleClock(item.at, timezone) : '',
+      time: item.at && !inPaused ? scheduleClock(item.at, timezone) : '',
       cls: inPaused ? ' is-paused' : '',
       selected,
       onSelect,
     };
   };
 
+  // A WHEN schedule that is on and fine waits for its condition: it has no time, so the timeline places it nowhere,
+  // and it gets a group of its own above Today. One that cannot be read is there too, tagged Can't read.
+  const nowMs = now.getTime();
+  const conditionScheduleRow = (schedule: ScheduleListRow, cantRead: boolean): RowView => ({
+    key: `CONDITION:${schedule.id}`,
+    circle: cantRead ? { circle: 'open', mark: null, tag: { tone: 'held', text: K.cantRead } } : scheduleRowCircle(schedule, runs),
+    title: schedule.title,
+    line: conditionScheduleLine(schedule),
+    repeats: true,
+    time: '',
+    cls: '',
+    selected: selection?.kind === 'schedule' && sameResourceId(selection.id, schedule.id),
+    onSelect: () => select({ kind: 'schedule', id: schedule.id }),
+    gauge: cantRead ? 'cant-read' : 'waiting',
+    reading: !cantRead && schedule.condition ? conditionRowReading(schedule.condition, nowMs) : undefined,
+  });
+  const conditionTaskRow = (task: ScheduleWaitingTask, cantRead: boolean): RowView => ({
+    key: `CONDITION:task:${task.id}`,
+    circle: cantRead ? { circle: 'open', mark: null, tag: { tone: 'held', text: K.cantRead } } : OPEN_CIRCLE,
+    title: task.title,
+    line: conditionTaskLine(task),
+    repeats: false,
+    time: '',
+    cls: '',
+    selected: false,
+    onSelect: () => navigate(`/tasks/${encodeURIComponent(task.id)}`),
+    gauge: cantRead ? 'cant-read' : 'waiting',
+    reading: cantRead ? undefined : conditionRowReading(task.condition, nowMs),
+  });
+  const waitingWhen = schedules.filter((s) => s.rule.kind === 'WHEN' && s.state === 'ACTIVE');
+  // Can't read first: the rows that need the owner lead the group.
+  const waitingRows = [
+    ...waitingWhen.filter((s) => conditionCantRead(s.condition)).map((s) => conditionScheduleRow(s, true)),
+    ...waitingTasks.filter((t) => conditionCantRead(t.condition)).map((t) => conditionTaskRow(t, true)),
+    ...waitingWhen.filter((s) => !conditionCantRead(s.condition)).map((s) => conditionScheduleRow(s, false)),
+    ...waitingTasks.filter((t) => !conditionCantRead(t.condition)).map((t) => conditionTaskRow(t, false)),
+  ];
+  const sections: Section[] = groups.map((group) => ({
+    key: group.key,
+    title: group.title,
+    subtitle: group.subtitle,
+    rows: scheduleCollapseMissed(group.items).map((item) => rowOf(group, item)),
+  }));
+  if (waitingRows.length) {
+    sections.unshift({
+      key: 'CONDITION', title: K.group, subtitle: String(waitingRows.length), rows: waitingRows,
+    });
+  }
+
   const workspaceName = (id: string | null) =>
     workspaces.data?.find((w) => sameResourceId(w.id, id ?? ''))?.name ?? null;
   const filterLabel = workspaceFilter ? (workspaceName(workspaceFilter) ?? C.page.allWorkspaces) : C.page.allWorkspaces;
-  const empty = list.isSuccess && schedules.length === 0 && draftCards.length === 0 && pendingRows.length === 0;
+  const empty = list.isSuccess && schedules.length === 0 && waitingTasks.length === 0 && draftCards.length === 0
+    && pendingRows.length === 0;
 
   const selectedSchedule = selection?.kind === 'schedule'
     ? schedules.find((s) => sameResourceId(s.id, selection.id)) ?? null
@@ -288,6 +418,7 @@ export function ScheduledPage(): JSX.Element {
       initialWorkspaceId={workspaceFilter}
       onSent={(draft) => {
         setPending((rows) => [...rows, draft]);
+        awaitDraftFrom(draft.sessionId);
         void qc.invalidateQueries({ queryKey: ['schedules', 'drafts'] });
         select({ kind: 'pending', sessionId: draft.sessionId });
       }}
@@ -299,7 +430,7 @@ export function ScheduledPage(): JSX.Element {
       <div className="sched-list">
         <header className="sched-head">
           <h1>{C.page.title}</h1>
-          <span className="sched-total" data-schedule-total="">{schedules.length}</span>
+          <span className="sched-total" data-schedule-total="">{schedules.length + waitingTasks.length}</span>
         </header>
         {empty && !workspaceFilter ? (
           <>
@@ -345,13 +476,10 @@ export function ScheduledPage(): JSX.Element {
                 {scheduleItems.map((request) => <OwnerRequestCard key={request.id} request={request} now={now.getTime()} />)}
               </div>
             ) : null}
-            {groups.map((group) => (
-              <section key={`${group.key}:${group.title}`} className="sched-group" data-group={group.key}>
-                <h2>{group.title}{group.subtitle ? <small>{group.subtitle}</small> : null}</h2>
-                {group.items.map((item) => {
-                  const row = rowOf(group, item);
-                  return <Row key={row.key} row={row} />;
-                })}
+            {sections.map((section) => (
+              <section key={`${section.key}:${section.title}`} className="sched-group" data-group={section.key}>
+                <h2>{section.title}{section.subtitle ? <small>{section.subtitle}</small> : null}</h2>
+                {section.rows.map((row) => <Row key={row.key} row={row} />)}
               </section>
             ))}
             {pendingRows.map((p) => (
@@ -469,7 +597,89 @@ function DraftInspector({ card, onOpenConversation }: { card: ScheduleCreateCard
 
 type HistoryEntry =
   | { kind: 'run'; at: string; run: ScheduleRunView }
-  | { kind: 'record'; at: string; record: ScheduleChangeRecord };
+  | { kind: 'record'; at: string; record: ScheduleChangeRecord }
+  | { kind: 'condition'; at: string; event: ConditionEventView; run: ScheduleRunView | null }
+  | { kind: 'missed'; at: string; runs: ScheduleRunView[] };
+
+/** The condition's events the history shows (§9): each firing, with the run it started, and each re-arm. */
+const HISTORY_EVENTS: ReadonlySet<string> = new Set(['FIRED', 'READY_AGAIN']);
+
+/**
+ * A WHEN schedule's Condition and How it checks blocks (condition-triggers ⑥): the newest reading, its age and where it
+ * stands against the firing and re-arm lines; then the interval, the runner, the command and when it was approved.
+ */
+function ConditionBlocks({ schedule, condition, now, timezone }: {
+  schedule: ScheduleView;
+  condition: ReturnType<typeof useConditionRead>;
+  now: Date;
+  timezone: string;
+}): JSX.Element | null {
+  if (schedule.rule.kind !== 'WHEN') return null;
+  const rule = schedule.rule.condition;
+  const unit = condition?.unit ?? rule.unit;
+  const lastValue = condition?.lastValue ?? schedule.condition?.lastValue ?? null;
+  const lastAt = condition?.lastReadAt ?? condition?.lastSampleAt ?? schedule.condition?.lastSampleAt ?? null;
+  const compare = condition?.compare ?? { op: rule.compare.op, value: rule.compare.value };
+  const rearm = condition ? condition.rearm : rule.rearm;
+  const gauge = conditionGauge({ compare, rearm, unit, lastValue });
+  const lines = conditionFiringLines({
+    compare,
+    holdSeconds: condition?.holdSeconds ?? rule.holdSeconds,
+    rearm,
+    unit,
+    repeatSeconds: condition ? condition.repeatSeconds : rule.repeatSeconds,
+  });
+  const pct = (n: number) => `${(n * 100).toFixed(1)}%`;
+  return (
+    <>
+      <div className="sched-section">{K.sections.condition}</div>
+      <div className="sched-block" data-inspector-block="condition">
+        <div className="cond-reading">
+          <span className="sched-big">{lastValue === null ? '—' : readingText(lastValue, unit)}</span>
+          <span className="sched-label">{scheduleFill(K.checked, { age: readingAgeText(lastAt, now.getTime()) })}</span>
+        </div>
+        {gauge ? (
+          <div className="cond-bar" data-condition-bar="">
+            <span className="cond-bar-track">
+              {gauge.value !== null ? <span className="cond-bar-fill" style={{ width: pct(gauge.value) }} /> : null}
+              {gauge.rearm !== null ? <span className="cond-bar-mark is-rearm" style={{ left: pct(gauge.rearm) }} /> : null}
+              {gauge.fire !== null ? <span className="cond-bar-mark is-fire" style={{ left: pct(gauge.fire) }} /> : null}
+            </span>
+            <span className="cond-bar-labels">
+              {gauge.rearm !== null && rearm?.value != null ? (
+                <span className="is-rearm" style={{ left: pct(gauge.rearm) }}>{readingText(rearm.value, unit)}</span>
+              ) : null}
+              {gauge.fire !== null && compare.value != null ? (
+                <span className="is-fire" style={{ left: pct(gauge.fire) }}>{readingText(compare.value, unit)}</span>
+              ) : null}
+            </span>
+          </div>
+        ) : null}
+        <div className="sched-label" data-condition-firing="">{lines.firing}</div>
+        {lines.repeat ? <div className="sched-label" data-condition-repeat="">{lines.repeat}</div> : null}
+      </div>
+      <div className="sched-section">{K.sections.howItChecks}</div>
+      <div className="sched-block" data-inspector-block="checks">
+        <div>{conditionEveryText(condition?.intervalSeconds ?? rule.intervalSeconds, condition?.runnerName)}</div>
+        <code className="sched-command">{condition?.probe.command ?? rule.command}</code>
+        {condition ? (
+          <div className="sched-label">{scheduleFill(K.approved, { date: scheduleDateText(new Date(condition.approvedAt), timezone) })}</div>
+        ) : null}
+        {condition?.keepsWorkspaceAwake ? <div className="sched-label" data-condition-awake="">{CONDITION_KEEPS_AWAKE_LINE}</div> : null}
+      </div>
+    </>
+  );
+}
+
+/** A WHEN schedule's condition, read whole: its samples and events. */
+function useConditionRead(schedule: Pick<ScheduleView, 'rule' | 'condition'>) {
+  const id = schedule.rule.kind === 'WHEN' ? (schedule.rule.conditionId ?? schedule.condition?.id ?? null) : null;
+  return useQuery({ ...conditionQuery(id ?? ''), enabled: Boolean(id) }).data ?? null;
+}
+
+function capitalFirst(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
 
 const LATE_MS = 15 * 60_000;
 
@@ -483,10 +693,13 @@ function ScheduleInspector({ schedule }: { schedule: ScheduleListRow }): JSX.Ele
   const detail = detailQ.data;
   const s = detail?.schedule ?? schedule;
   const lastRun = detail?.lastRun ?? schedule.lastRun;
+  const condition = useConditionRead(s);
+  const isWhen = s.rule.kind === 'WHEN';
   // The conversation the words were said in, by its title. Its own key: the session detail's read goes through the
   // same door, but this needs the title alone.
   const asked = useQuery({
     queryKey: ['schedules', 'asked-in', s.createdFromSessionId] as const,
+    meta: { entities: ['session'], sessionReach: { session: s.createdFromSessionId ?? '' } satisfies SessionReach },
     queryFn: () => api<{ title?: string | null }>(`/sessions/${encodeURIComponent(s.createdFromSessionId!)}`),
     enabled: Boolean(s.createdFromSessionId),
     staleTime: 300_000,
@@ -520,13 +733,38 @@ function ScheduleInspector({ schedule }: { schedule: ScheduleListRow }): JSX.Ele
     C.access[s.accessLevel].label,
   ].filter(Boolean).join(C.separator);
 
+  // A firing names the run it started: that run is drawn on the Fired line, not again on a line of its own.
+  const events = (condition?.events ?? []).filter((event) => HISTORY_EVENTS.has(event.kind));
+  const runOf = (event: ConditionEventView) => (event.runId
+    ? (detail?.recentRuns ?? []).find((run) => sameResourceId(run.id, event.runId!)) ?? null
+    : null);
+  const folded = events.map(runOf).filter((run): run is ScheduleRunView => run !== null);
   const history: HistoryEntry[] = [
-    ...(detail?.recentRuns ?? []).map((run) => ({ kind: 'run' as const, at: run.startedAt ?? run.plannedAt, run })),
+    ...(detail?.recentRuns ?? [])
+      .filter((run) => !folded.includes(run))
+      .map((run) => ({ kind: 'run' as const, at: run.startedAt ?? run.plannedAt, run })),
     ...(detail?.history ?? []).map((record) => ({ kind: 'record' as const, at: record.createdAt, record })),
-  ].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+    ...events.map((event) => ({ kind: 'condition' as const, at: event.at, event, run: runOf(event) })),
+  ].sort((a, b) => Date.parse(b.at) - Date.parse(a.at))
+    // Consecutive missed slots, with nothing else between them, read as one line.
+    .reduce<HistoryEntry[]>((out, entry) => {
+      const last = out[out.length - 1];
+      if (entry.kind === 'run' && entry.run.state === 'MISSED') {
+        if (last?.kind === 'missed') last.runs.push(entry.run);
+        else if (last?.kind === 'run' && last.run.state === 'MISSED') out[out.length - 1] = { kind: 'missed', at: last.at, runs: [last.run, entry.run] };
+        else out.push(entry);
+      } else out.push(entry);
+      return out;
+    }, []);
 
   const change = () => navigate(`/workspaces/${encodeURIComponent(s.workspaceId)}/new`, {
     state: { composerText: `${s.title}: ` },
+  });
+
+  const endLine = scheduleEndText(s, now, timezone);
+  // The end is the agent's to change, like every other part of a schedule: the composer opens with the ask.
+  const askChange = (template: string) => navigate(`/workspaces/${encodeURIComponent(s.workspaceId)}/new`, {
+    state: { composerText: scheduleFill(template, { title: s.title }) },
   });
 
   return (
@@ -536,7 +774,23 @@ function ScheduleInspector({ schedule }: { schedule: ScheduleListRow }): JSX.Ele
         {scheduleRuleRepeats(s.rule) ? <span className="sched-repeat" aria-hidden="true">{REPEAT}</span> : null}
         {meta}
       </div>
-      <div className="sched-block" data-inspector-block="next">
+      {endLine ? (
+        <div className="sched-block" data-inspector-block="end">
+          <span className="sched-label">{C.end.endLabel}</span>
+          {C.separator}
+          {endLine}
+          {' '}
+          <button type="button" className="sched-link" onClick={() => askChange(C.end.extendAsk)}>
+            {C.end.extend}
+          </button>
+          {' '}
+          <button type="button" className="sched-link" onClick={() => askChange(C.end.removeAsk)}>
+            {C.end.remove}
+          </button>
+        </div>
+      ) : null}
+      {isWhen ? <ConditionBlocks schedule={s} condition={condition} now={now} timezone={timezone} /> : null}
+      <div className="sched-block" data-inspector-block="next" hidden={isWhen}>
         <div className="sched-label">{C.inspector.nextRun}</div>
         <div className="sched-big">{s.nextDueAt ? scheduleWhenText(new Date(s.nextDueAt), now, timezone) : '—'}</div>
         {lastRun ? (
@@ -623,6 +877,41 @@ function ScheduleInspector({ schedule }: { schedule: ScheduleListRow }): JSX.Ele
       <div className="sched-section">{C.inspector.history}</div>
       <div className="sched-block sched-history" data-inspector-block="history">
         {history.map((entry) => {
+          if (entry.kind === 'missed') {
+            return (
+              <div key={`missed:${entry.runs[0]!.id}`} className="sched-history-row" data-history="missed">
+                <span className="sched-history-when">{scheduleWhenText(new Date(entry.at), now, timezone)}</span>
+                <span className="sched-history-what" data-tone="failed">{scheduleMissedText(entry.runs, timezone)}</span>
+              </div>
+            );
+          }
+          if (entry.kind === 'condition') {
+            const { event, run } = entry;
+            const path = run ? scheduleRunSessionPath(run) : null;
+            const ruleCondition = s.rule.kind === 'WHEN' ? s.rule.condition : null;
+            return (
+              <div key={`condition:${event.kind}:${event.at}`} className="sched-history-row" data-history="condition">
+                <span className="sched-history-when">{scheduleWhenText(new Date(entry.at), now, timezone)}</span>
+                <span className="sched-history-what">
+                  {conditionEventText(event, {
+                    unit: condition?.unit ?? ruleCondition?.unit ?? null,
+                    holdSeconds: condition?.holdSeconds ?? ruleCondition?.holdSeconds ?? 0,
+                  })}
+                  {run ? (
+                    <>
+                      {C.separator}
+                      {path ? (
+                        <button type="button" className="sched-link" onClick={() => navigate(path)}>
+                          {capitalFirst(scheduleRunOfText(run, timezone))}
+                        </button>
+                      ) : capitalFirst(scheduleRunOfText(run, timezone))}
+                    </>
+                  ) : null}
+                </span>
+                <span className="sched-who" data-who={run ? 'RUN' : 'CONDITION'}>{run ? K.history.run : K.history.condition}</span>
+              </div>
+            );
+          }
           if (entry.kind === 'run') {
             const { run } = entry;
             const facts = runFindingFacts(detail, run);
