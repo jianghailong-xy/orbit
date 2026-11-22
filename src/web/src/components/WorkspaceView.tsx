@@ -1085,9 +1085,11 @@ const STICKY_LABEL = 'Your question';
  *  question, a request Orbit's owner door asked, a coordinator's question not yet answered, an open
  *  item. Answered and snoozed forms carry none of these. On a phone a coordinator's question is its
  *  `ReviewCard` preview, the form itself in the dialog the preview opens: the preview is the one
- *  in the transcript, under the card's `question-<itemId>` id. */
+ *  in the transcript, under the card's `question-<itemId>` id. An answered question's record is a
+ *  `review-card` under `question-record-<itemId>`, drawn inside the transcript above the open one,
+ *  so it is excluded by name: matching it sent the row to the oldest record loaded. */
 export const WAITING_CARD_SELECTOR =
-  '[data-waiting-card], .owner-request-card, .coordinator-question:not(.answered-question), .review-card[id^="question-"], [data-open-item]';
+  '[data-waiting-card], .owner-request-card, .coordinator-question:not(.answered-question), .review-card[id^="question-"]:not(.answered-question-inline), [data-open-item]';
 /** How far below the scroller's top edge a revealed waiting card's top comes to rest: clear of the
  *  floating "Jump to the beginning" pill when the transcript has one (`.chat-older-top`). */
 export const waitingCardGap = (olderPill: boolean): number => (olderPill ? 48 : 12);

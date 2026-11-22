@@ -154,6 +154,7 @@ let merges: Array<Record<string, unknown>> = [];
 let startRequest: Record<string, unknown> | null = null;
 /** The exceptions the open-items door serves as the coordinator's — a blocked candidate's holder. */
 let withCoordinatorItems: Array<Record<string, unknown>> = [];
+let closedQuestions: Array<Record<string, unknown>> = [];
 /** The items the open-items door serves as the owner's — a coordinator's question. */
 let needsYouItems: Array<Record<string, unknown>> = [];
 let openItemsCalls = 0;
@@ -268,6 +269,7 @@ beforeEach(() => {
   merges = [];
   startRequest = null;
   withCoordinatorItems = [];
+  closedQuestions = [];
   needsYouItems = [];
   openItemsCalls = 0;
   integrationView = null;
@@ -314,7 +316,7 @@ beforeEach(() => {
     if (path === `/projects/${PROJECT_ID}/handoffs`) return reply([]);
     if (path === `/projects/${PROJECT_ID}/open-items`) {
       openItemsCalls += 1;
-      return reply({ needsYou: needsYouItems, withCoordinator: withCoordinatorItems, startRequest });
+      return reply({ needsYou: needsYouItems, withCoordinator: withCoordinatorItems, closedQuestions, startRequest });
     }
     if (path === `/projects/${PROJECT_ID}/integration`) return reply(integrationView ?? []);
     if (path === `/projects/${PROJECT_ID}/acceptance/confirmation`) return reply(null);
@@ -1259,7 +1261,10 @@ describe('a project row whose member is waiting on you', { timeout: 60_000 }, ()
       value(this: HTMLElement) {
         const waitingCard = this.classList.contains('owner-request-card') || this.classList.contains('coordinator-question')
           || (this.classList.contains('review-card') && this.id.startsWith('question-'));
-        const top = waitingCard ? 900 - (scrollTops.get(conversation()!) ?? 0)
+        // An answered question's record sits higher up the transcript than anything still waiting.
+        const record = this.classList.contains('answered-question-inline');
+        const top = record ? 500 - (scrollTops.get(conversation()!) ?? 0)
+          : waitingCard ? 900 - (scrollTops.get(conversation()!) ?? 0)
           : this.classList.contains('workspace-sessions') ? 100 : 0;
         return { top, bottom: top + 400, left: 0, right: 400, width: 400, height: 400, x: 0, y: top, toJSON: () => ({}) };
       },
@@ -1314,10 +1319,18 @@ describe('a project row whose member is waiting on you', { timeout: 60_000 }, ()
         waitingSince: '2026-10-03T09:00:00Z',
         question: { question: 'Can you restore Nacos?', options: [{ label: 'I’ll restore it now' }], recommendedOption: 0, blocksTaskIds: [], ifUnanswered: null },
       }];
+      // A question answered earlier in the conversation is drawn above as its record: a record is
+      // not waiting on anyone, so the open question below it is where the row lands.
+      closedQuestions = [{
+        itemId: 'item-answered', question: { question: 'Which region?', options: [{ label: 'us-east' }], recommendedOption: 0 },
+        askedAt: '2026-10-03T08:00:00Z', resolution: 'ANSWERED', resolvedBy: 'USER', resolvedAt: '2026-10-03T08:00:00.500Z',
+        answer: { option: 0, text: null }, delivery: null, withdrawReason: null,
+      }];
       await mount();
       await click(projectRow(), 'the project row');
       await until(() => expect(location).toBe(coordinatorAddress));
       await until(() => expect(conversation()?.querySelector('#question-item-question')).not.toBeNull());
+      await until(() => expect(conversation()?.querySelector('#question-record-item-answered')).not.toBeNull());
       await until(() => expect(conversation()!.scrollTop).toBe(900 - 100 - 12));
     });
 
