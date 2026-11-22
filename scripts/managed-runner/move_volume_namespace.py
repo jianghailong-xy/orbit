@@ -107,7 +107,6 @@ def new_claim(old, namespace, pv_name):
 def move(source_ns, target_ns, claim, backup, dry_run, timeout):
     if source_ns == target_ns:
         raise Refused("--from and --to are the same namespace")
-    backup.mkdir(parents=True, exist_ok=True, mode=0o700)
     saved_claim = backup / f"{claim}.{source_ns}.pvc.json"
     saved_pv = backup / f"{claim}.{source_ns}.pv.json"
 
@@ -171,6 +170,7 @@ def move(source_ns, target_ns, claim, backup, dry_run, timeout):
         return None
 
     if not resumed:
+        backup.mkdir(parents=True, exist_ok=True, mode=0o700)
         for path, obj in ((saved_claim, old), (saved_pv, pv)):
             tmp = path.with_suffix(".tmp")
             tmp.write_text(json.dumps(obj, indent=2) + "\n")
