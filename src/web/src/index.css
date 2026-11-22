@@ -9921,6 +9921,34 @@ button.chat-jump-start:hover {
   font-weight: 600;
 }
 
+/* A clone's progress in the waiting card (docs/mocks/clone-progress-wait-card ②): git's percentage between
+   the title and where it runs, on the bar the conversation's first line uses, drawn wider here. */
+.chat-clone-meter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.chat-clone-meter .msc-clone-bar {
+  width: 220px;
+}
+.chat-clone-meter .msc-clone-pct {
+  min-width: 34px;
+  text-align: left;
+}
+.chat-queued-desc.chat-clone-desc {
+  max-width: 480px;
+}
+.chat-queued-desc b {
+  color: var(--text-2);
+  font-weight: 600;
+}
+.chat-slot-wait.chat-clone-wait {
+  gap: 8px;
+  padding: 14px 16px;
+}
+
 /* How long the wait above has been going. Rides inside the title so it shares that line, at
    normal weight because .chat-slot-wait bolds its first child. Tabular figures so the ticking
    second does not shift the title beside it once a second. */
