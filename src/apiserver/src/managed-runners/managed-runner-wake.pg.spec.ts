@@ -274,7 +274,10 @@ test('managed runners wake on demand and sleep through the real application', {
       title: 'earlier work', prompt: 'the opening prompt', provider: 'claude', provider_builtin: true, status, num_turns: 1,
       runtime_session_id: randomUUID(),
       ...(isReleasedStatus(status) ? {
-        finished_at: new Date(), 
+        finished_at: new Date(),
+        // A failure release carries FAILED on its turn, copied here (removal step R2); since the status bridge went
+        // (R7) that is what reads it as a failure.
+        ...(status === 'FAILED' ? { last_turn_outcome: 'FAILED' } : {}),
       } : {}),
       ...extra,
     };

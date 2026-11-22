@@ -583,9 +583,10 @@ test('the revived coordinator fails again before answering: FAILED at the sweep,
   const f = await fixture();
   const s = services(f);
   await s.handoffs.start(f.ownerId, f.projectId);
-  // Its model cannot run: the claim fails and the conversation is FAILED, the note turn never delivered.
+  // Its model cannot run: the claim fails and the conversation is FAILED, the note turn never delivered. The failure is
+  // on the turn the claim was for, copied to lastTurnOutcome (removal step R2), which is what reads it as failed (R7).
   await f.db.session.update({
-    where: { id: f.outgoing }, data: { status: 'FAILED', finishedAt: new Date()},
+    where: { id: f.outgoing }, data: { status: 'FAILED', finishedAt: new Date(), lastTurnOutcome: 'FAILED' },
   });
   assert.equal(await s.handoffs.sweep(), 1);
   const { coordinatorHandoff } = await readSessionCoordinatorHandoffs(f.db as unknown as PrismaService, f.outgoing);
