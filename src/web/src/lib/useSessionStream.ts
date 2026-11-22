@@ -13,6 +13,7 @@ import {
   listQueuedTurns,
   sessionEventsUrl,
   type TranscriptAroundPage,
+  type TranscriptWindowPage,
   type TurnCards,
 } from '../api';
 import type { TaskActivity } from '../components/Transcript';
@@ -146,6 +147,21 @@ interface TranscriptCacheEntry {
   hasMoreOlder: boolean; // older events exist before oldestSeq on the server
 }
 
+/**
+ * A cached window as a reopen draws it: its newest TAIL_PAGE events, as a cold open draws. The reader
+ * lands at the latest message, so the rest is history they have not asked for: drawing all of it
+ * cost a render of every row a long day had loaded, and it landed above a reader already placed at
+ * a card. Trimming moves the older edge up to what is kept and turns "older exists" on, so scrolling
+ * up pages the dropped events back in (loadOlder) rather than ending at a hole.
+ */
+export function reopenWindow<E extends { seq: number }>(
+  entry: { events: E[]; oldestSeq: number | null; hasMoreOlder: boolean },
+): { events: E[]; oldestSeq: number | null; hasMoreOlder: boolean } {
+  if (entry.events.length <= TAIL_PAGE) return entry;
+  const events = entry.events.slice(-TAIL_PAGE);
+  return { events, oldestSeq: events[0].seq, hasMoreOlder: true };
+}
+
 export interface SessionStreamOptions {
   /** The session on screen, or null when none is. */
   sessionId: string | null;
@@ -258,9 +274,9 @@ export function useSessionStream({
   const bgCacheRef = useRef<Map<string, { at: number; shells: BgShell[] }>>(new Map());
   const seen = useRef<Set<number>>(new Set());
   // Per-session transcript cache (mount-scoped): switching seeds events from here for
-  // an instant paint and resumes the SSE just past the cached seq, instead of replaying
-  // each session's full history from seq 0 on every visit. Stores the older-pagination
-  // boundary too, so a reopened session keeps its "load earlier" state.
+  // an instant paint (its newest page, reopenWindow) and reads only what is newer than the
+  // cached seq (catchUp), instead of each session's full history on every visit. Stores the
+  // older-pagination boundary too, so a reopened session keeps its "load earlier" state.
   const transcriptCache = useRef<Map<string, TranscriptCacheEntry>>(new Map());
   // Live mirror of `events`, so the SSE handler (append) and loadOlder (prepend) both mutate
   // one source of truth without racing stale closures — see the load effect below.
@@ -538,7 +554,8 @@ export function useSessionStream({
     // replaying the whole history over SSE — that's what caused a long session to "fast-forward"
     // on open). The older-pagination boundary is restored from cache, or established by boot().
     const cache = transcriptCache.current;
-    const entry = openAt ? undefined : cache.get(selectedId);
+    const stored = openAt ? undefined : cache.get(selectedId);
+    const entry = stored && reopenWindow(stored);
     const cached = entry?.events ?? [];
     if (entry) {
       cache.delete(selectedId);
@@ -1130,21 +1147,57 @@ export function useSessionStream({
         if (page.after === null && !paused) connect();
       })();
     };
+    // A cached window ends where the session stood when it was last open. What happened since comes in
+    // as one page in one commit, before the stream opens past it. Replaying it over the stream instead
+    // drew it one event at a time — up to SSE_GAP_CAP of them — so a reopened session visibly ran
+    // through its own history before settling. A gap wider than one page is not caught up at all:
+    // the window is dropped and the newest page taken, as a cold open does, since the reader lands at
+    // the latest message and the middle of the gap is history they can page back to. A failed read
+    // changes nothing: the stream resumes from the cache's last seq and replays the gap as before.
+    const catchUp = async (): Promise<void> => {
+      if (lastSeq === 0) return;
+      let page: TranscriptWindowPage;
+      try {
+        page = await getSessionEventPageAfter(selectedId, lastSeq, {
+          limit: TAIL_PAGE,
+          signal: seedAbort.signal,
+        });
+      } catch {
+        return;
+      }
+      if (closed) return;
+      if (page.after !== null) {
+        accRef.current = [];
+        seen.current = new Set();
+        oldestSeqRef.current = null;
+        hasMoreOlderRef.current = false;
+        lastSeq = 0;
+        await seedTail(false);
+        return;
+      }
+      const fresh = page.events.filter((e) => isSeq(e.seq) && !seen.current.has(e.seq));
+      if (fresh.length === 0) return;
+      for (const e of fresh) seen.current.add(e.seq);
+      accRef.current = [...accRef.current, ...fresh];
+      lastSeq = Math.max(lastSeq, maxSeqOf(fresh));
+      setEvents(accRef.current);
+      writeCache();
+    };
     // Tail-first seed, fired NOW rather than from the debounced block below: on a cache miss it
     // is the only request whose answer the transcript is waiting on, so making it wait out the
     // debounce — behind a whole-history /background scan, no less — was pure dead time under a
     // blank pane. What the debounce protected against is covered by the abort in stop() instead.
-    // Null on a cache hit, where the SSE's replay of the gap after the cached seq is enough. The
-    // debounced block awaits this before connect(), so the stream still opens at the seq the
-    // page established, however long it took.
-    const seedTail = async (): Promise<void> => {
+    // On a cache hit catchUp (above) runs in its place. The debounced block awaits either before
+    // connect(), so the stream still opens at the seq the page established, however long it took.
+    const seedTail = async (fromStore = true): Promise<void> => {
       // L2 first: the same transcript, kept in IndexedDB so it outlives the page. A hit skips
-      // the tail page entirely — the SSE resumes from the stored max seq and replays only what
-      // happened since, exactly as an L1 hit does. A miss (or any error) returns null and falls
+      // the tail page entirely — catchUp reads what happened since the stored max seq, exactly as
+      // on an L1 hit. Not when catchUp itself is here for a gap too wide to close (`fromStore`). A miss (or any error) returns null and falls
       // through to the network below, so this can only save a request, never cost correctness.
-      const stored = await loadTranscript(selectedId);
+      const kept = fromStore ? await loadTranscript(selectedId) : null;
       if (closed) return;
-      if (stored && stored.events.length > 0) {
+      if (kept && kept.events.length > 0) {
+        const stored = reopenWindow(kept);
         accRef.current = stored.events;
         for (const e of stored.events) if (isSeq(e.seq)) seen.current.add(e.seq);
         oldestSeqRef.current = stored.oldestSeq;
@@ -1160,6 +1213,7 @@ export function useSessionStream({
             if (!closed) setEvents(accRef.current);
           }, 0);
         }
+        await catchUp();
         return;
       }
       // Retry the tail seed a few times before giving up. A transient failure here used to fall
@@ -1222,11 +1276,11 @@ export function useSessionStream({
       }
       await seedTail();
     };
-    const seed: Promise<void> | null = openAt
+    const seed: Promise<void> = openAt
       ? seedRecord(openAt)
       : cached.length === 0
         ? seedTail()
-        : null;
+        : catchUp();
     // Debounce the rest of the network work: scrubbing the list with the arrow keys shouldn't
     // open (and tear down) a connection — nor re-fetch approvals/queued turns — for each
     // session skipped past. The cached transcript above is already on screen meanwhile.
