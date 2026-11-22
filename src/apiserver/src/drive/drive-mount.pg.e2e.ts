@@ -81,7 +81,7 @@ const results: RowResult[] = [];
 function table(): string {
   const lines = ['| # | Row | Result | What happened |', '|---|---|---|---|'];
   for (const r of results) {
-    lines.push(`| ${r.row} | ${r.what} | ${r.outcome} | ${r.detail.join('; ').replace(/\|/g, '\\|').replace(/\n/g, ' ')} (${(r.ms / 1000).toFixed(1)} s) |`);
+    lines.push(`| ${r.row} | ${r.what.replace(/\|/g, '\\|')} | ${r.outcome} | ${r.detail.join('; ').replace(/\|/g, '\\|').replace(/\n/g, ' ')} (${(r.ms / 1000).toFixed(1)} s) |`);
   }
   return lines.join('\n');
 }
@@ -501,6 +501,8 @@ test('Orbit Files drive: the mount daemon passes the shell-operation list (§5.9
   };
   const rootSh = (script: string) => spawnSync('bash', ['-c', script], { encoding: 'utf8' });
   const errorsLog = (r: Runner) => (existsSync(path.join(r.root, 'errors.log')) ? readFileSync(path.join(r.root, 'errors.log'), 'utf8') : '');
+  /** What the daemon wrote to errors.log since mark (errorsLog's length then), on one line for a row's table cell. */
+  const loggedSince = (r: Runner, mark: number) => errorsLog(r).slice(mark).trim().split('\n').filter(Boolean).join(' / ') || 'no lines';
   const status = (r: Runner) => JSON.parse(readFileSync(path.join(r.root, 'status.json'), 'utf8')) as {
     connected: boolean; since: string | null; uncommittedHandles: number; unsentFiles: number; fenced?: string; spoolBytes: number; spoolPeakBytes: number;
   };
@@ -526,7 +528,8 @@ test('Orbit Files drive: the mount daemon passes the shell-operation list (§5.9
         await fn(detail);
         results.push({ row: n, what, outcome: 'PASS', detail, ms: Date.now() - started });
       } catch (error) {
-        results.push({ row: n, what, outcome: 'FAIL', detail: [...detail, `FAILED: ${(error as Error).message.split('\n')[0]}`], ms: Date.now() - started });
+        const why = (error as Error).message.split('\n').map((l) => l.trim()).filter(Boolean).join(' / ').slice(0, 800);
+        results.push({ row: n, what, outcome: 'FAIL', detail: [...detail, `FAILED: ${why}`], ms: Date.now() - started });
         t.diagnostic(`row ${n}: runner a's log tail:\n${a.log.slice(-3000)}\nrunner b's log tail:\n${b.log.slice(-1500)}`);
         throw error;
       } finally {
@@ -627,6 +630,7 @@ test('Orbit Files drive: the mount daemon passes the shell-operation list (§5.9
 
   await row('6', 'cp ~/big.bin $F/ then sha256sum both', async (d) => {
     const size = FULL ? 5 * 1024 : 256;
+    const mark = errorsLog(a).length;
     const s = ok(await sh(a, `
       head -c ${size}M /dev/urandom > ~/big.bin
       before=$(du -sk ~ | cut -f1)
@@ -635,6 +639,7 @@ test('Orbit Files drive: the mount daemon passes the shell-operation list (§5.9
       sha256sum ~/big.bin $F/big.bin | cut -d' ' -f1 | uniq | wc -l
       after=$(du -sk ~ | cut -f1); echo "home grew KiB=$((after - before))"
     `, { timeoutMs: 3_600_000 }), 'cp and sha256sum');
+    d.push(`stderr ${s.err.trim() || 'empty'}; errors.log during the row: ${loggedSince(a, mark)}`);
     assert.match(s.out, /cp rc=0/, `${s.out}${s.err}errors.log: ${errorsLog(a).slice(-3000)}`);
     assert.match(s.out, /\n1\n/, 'the two hashes are one');
     const st = status(a);
@@ -648,12 +653,14 @@ test('Orbit Files drive: the mount daemon passes the shell-operation list (§5.9
   await row('7', 'five parallel cp into $F/ with the spool limited', async (d) => {
     const size = FULL ? 900 : 64;
     const limit = FULL ? '1 GiB' : '96 MiB';
+    const mark = errorsLog(b).length;
     const s = ok(await sh(b, `
       for i in 1 2 3 4 5; do head -c ${size}M /dev/urandom > ~/p$i.bin; done
       for i in 1 2 3 4 5; do ( timeout 3000 cp ~/p$i.bin $F/p$i.bin; echo "cp$i rc=$?" ) & done; wait
       for i in 1 2 3 4 5; do test "$(sha256sum < ~/p$i.bin)" = "$(sha256sum < $F/p$i.bin)" && echo "hash$i ok"; done
       rm -f ~/p?.bin
     `, { timeoutMs: 3_600_000 }), 'parallel cp');
+    d.push(`stderr ${s.err.trim() || 'empty'}; errors.log during the row: ${loggedSince(b, mark)}`);
     for (let i = 1; i <= 5; i += 1) {
       assert.match(s.out, new RegExp(`cp${i} rc=0`), `${s.out}${s.err}errors.log: ${errorsLog(b).slice(-3000)}`);
       assert.match(s.out, new RegExp(`hash${i} ok`));
@@ -664,9 +671,13 @@ test('Orbit Files drive: the mount daemon passes the shell-operation list (§5.9
   });
 
   await row('8', 'cp $F/a.txt $F/b.txt; cp -r ~/dir $F/ (1,000 files, 100 folders)', async (d) => {
+    const mark = errorsLog(a).length;
+    // Its own a.txt: run alone (DRIVE_MOUNT_E2E_ROWS), the row has no row 2 before it to make one.
     ok(await sh(a, 'test -f $F/a.txt || echo bye > $F/a.txt; cp $F/a.txt $F/b.txt && cmp $F/a.txt $F/b.txt'), 'cp');
     ok(await sh(a, 'for j in $(seq 1 100); do mkdir -p ~/dir/d$j; for k in $(seq 1 10); do echo "file $j $k" > ~/dir/d$j/f$k; done; done'), 'make dir');
-    const s = ok(await sh(a, 'cp -r ~/dir $F/ && diff -r ~/dir $F/dir && echo identical'), 'cp -r');
+    const s = await sh(a, 'cp -r ~/dir $F/ && diff -r ~/dir $F/dir && echo identical');
+    d.push(`cp -r exit ${s.code}, stderr ${s.err.trim() || 'empty'}; errors.log during the row: ${loggedSince(a, mark)}`);
+    ok(s, 'cp -r');
     assert.match(s.out, /identical/);
     d.push(`trees identical; cp -r of 1,000 files in ${(s.ms / 1000).toFixed(1)} s (${(s.ms / 1000).toFixed(0)} ms per file)`);
     if (FULL) assert.ok(s.ms < 120_000, 'cp -r of 1,000 small files within the budget (tar x of 2,000 in 2 min, §5.5)');
