@@ -1739,7 +1739,7 @@ func TestWikiInstructionsLinkEntriesAndPreApproveTheCommands(t *testing.T) {
 			t.Errorf("instructions (inside=%v, watches=%v) do not say to look a file up before changing it: %q", form.inside, form.watches, got)
 		}
 	}
-	rules := strings.Join(orbitCLIAllowedTools(exe, false), "\n")
+	rules := strings.Join(orbitCLIAllowedTools(exe, false, false), "\n")
 	for _, action := range []string{"search", "get", "propose", "verify", "import"} {
 		if !strings.Contains(rules, "Bash("+exe+" wiki "+action+" *)") {
 			t.Errorf("orbit wiki %s is advertised and pre-approved for nobody: %q", action, rules)

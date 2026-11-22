@@ -450,6 +450,12 @@ func (s *mcpServer) listedToolDescriptors() []map[string]interface{} {
 	if s.wikiOff {
 		tools = withoutWikiTools(tools)
 	}
+	if !s.browserOn {
+		tools = withoutBrowserTools(tools)
+	} else if !onOrbitCloudRunner() {
+		// browser_request_sign_in is the Orbit Cloud runner's sessions' only (browser_tools.go).
+		tools = withoutBrowserSignIn(tools)
+	}
 	// schedule_run_report is a scheduled run's own (schedule_tools.go).
 	if !s.scheduleRun {
 		tools = withoutScheduleRunReport(tools)
@@ -641,7 +647,7 @@ var recoveryUtilityCLI = []cliCapabilitySpec{
 }
 
 func recoveryCLISpecGroups() [][]cliCapabilitySpec {
-	return [][]cliCapabilitySpec{baseCLICapabilities, projectCLICapabilities, sessionCLICapabilities, agentCLICapabilities, runnerCLICapabilities, providerCLICapabilities, notifyCLICapabilities, watchCLICapabilities, wikiCLICapabilities, wikiImportCLICapabilities, fileCLICapabilities, subagentCLICapabilities, settingsCLICapabilities, userCLICapabilities, mergeReceiptCLICapabilities, guideCLICapabilities, recoveryUtilityCLI}
+	return [][]cliCapabilitySpec{baseCLICapabilities, projectCLICapabilities, sessionCLICapabilities, agentCLICapabilities, runnerCLICapabilities, providerCLICapabilities, notifyCLICapabilities, watchCLICapabilities, wikiCLICapabilities, wikiImportCLICapabilities, fileCLICapabilities, subagentCLICapabilities, settingsCLICapabilities, browserCLICapabilities, userCLICapabilities, mergeReceiptCLICapabilities, guideCLICapabilities, recoveryUtilityCLI}
 }
 
 func recoveryCLIOptions(argv []string) (map[string]bool, int, int) {

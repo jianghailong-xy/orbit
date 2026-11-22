@@ -522,7 +522,100 @@ func TestBrowserClearWireNamesAndCapability(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(body), `"browser":{"running":true,"holderSessionId":"s","viewers":2}`) {
+	if !strings.Contains(string(body), `"browser":{"running":true,"holderSessionId":"s","viewers":2,"savedLogins":false}`) {
 		t.Fatalf("heartbeat body: %s", body)
+	}
+}
+
+// browser_request_sign_in (board 03-agent-tools ①, Q2 = A): the asker gives the lease up while the owner is asked to
+// sign in, nobody's browser call is taken meanwhile, Chrome keeps running (the page stays), and after the answer the
+// asker takes the lease back.
+func TestBrowserSignInReleasesTheLeaseWhileWaitingAndTakesItBack(t *testing.T) {
+	r := newBrowserRig(t)
+	if err := r.b.Acquire("sess-a", "Export the monthly report"); err != nil {
+		t.Fatal(err)
+	}
+	held, err := r.b.YieldForSignIn("sess-a", "")
+	if err != nil || !held {
+		t.Fatalf("yield = %v, %v; want held, nil", held, err)
+	}
+	if h := r.b.Holder(); h != "" {
+		t.Fatalf("holder = %q while the owner is asked to sign in; want none", h)
+	}
+	if rep := r.b.Report(); rep.HolderSessionID != "" {
+		t.Fatalf("the heartbeat reports holder %q while the owner signs in", rep.HolderSessionID)
+	}
+	if w := r.b.SignInWaiting(); w != "sess-a" {
+		t.Fatalf("sign-in waiting = %q", w)
+	}
+	for _, s := range []string{"sess-a", "sess-b"} {
+		err := r.b.Acquire(s, "")
+		if err == nil || !strings.Contains(err.Error(), "waiting for the owner to sign in") ||
+			!strings.Contains(err.Error(), "Export the monthly report") {
+			t.Fatalf("%s's browser call while the owner signs in = %v; want a refusal naming the asker", s, err)
+		}
+	}
+	// The owner's Open browser and viewer are never refused.
+	if err := r.b.Open(); err != nil {
+		t.Fatalf("the owner's Open browser while a sign-in waits: %v", err)
+	}
+	// An hour with no viewer and no call: the browser keeps the agent's page for the owner.
+	r.clock.Advance(time.Hour)
+	if !r.b.Running() || len(r.starter.started) != 3 {
+		t.Fatalf("the browser stopped or restarted while the owner was asked to sign in: %v", r.starter.live())
+	}
+	if err := r.b.EndSignIn("sess-a", "", true); err != nil {
+		t.Fatalf("take back after the answer: %v", err)
+	}
+	if h := r.b.Holder(); h != "sess-a" {
+		t.Fatalf("holder = %q after the answer; want the asker back", h)
+	}
+	if rep := r.b.Report(); rep.HolderTitle != "Export the monthly report" {
+		t.Fatalf("holder title after the answer = %q", rep.HolderTitle)
+	}
+	if len(r.starter.started) != 3 {
+		t.Fatal("taking the lease back restarted the browser: the page the agent was on is lost")
+	}
+	if err := r.b.Acquire("sess-b", ""); err == nil || !strings.Contains(err.Error(), "in use by session") {
+		t.Fatalf("another session after the answer = %v; want refused by the asker's lease", err)
+	}
+	// Idle again once the wait is over: the lease's own clock and the idle stop apply.
+	r.b.Release("sess-a")
+	r.clock.Advance(15 * time.Minute)
+	if r.b.Running() {
+		t.Fatal("the browser does not idle-stop after the sign-in ended")
+	}
+}
+
+func TestBrowserSignInRefusedUnderAnotherHolderOrASecondWait(t *testing.T) {
+	r := newBrowserRig(t)
+	_ = r.b.Acquire("sess-b", "Other work")
+	if _, err := r.b.YieldForSignIn("sess-a", ""); err == nil || !strings.Contains(err.Error(), "Other work") {
+		t.Fatalf("a sign-in under another session's lease = %v; want refused naming the holder", err)
+	}
+	if r.b.Holder() != "sess-b" {
+		t.Fatal("a refused sign-in took the other session's lease")
+	}
+	r.b.Release("sess-b")
+	held, err := r.b.YieldForSignIn("sess-a", "Asker")
+	if err != nil || held {
+		t.Fatalf("a sign-in with no lease held = %v, %v; want not held, nil", held, err)
+	}
+	if _, err := r.b.YieldForSignIn("sess-b", ""); err == nil || !strings.Contains(err.Error(), "already waiting") {
+		t.Fatalf("a second sign-in while one waits = %v", err)
+	}
+	// Ending without retake (the asker did not hold it, or filing failed) frees the browser for anyone.
+	if err := r.b.EndSignIn("sess-a", "", false); err != nil {
+		t.Fatal(err)
+	}
+	if r.b.SignInWaiting() != "" || r.b.Holder() != "" {
+		t.Fatal("the wait or a lease outlived EndSignIn without retake")
+	}
+	if err := r.b.Acquire("sess-b", ""); err != nil {
+		t.Fatalf("acquire after the wait ended: %v", err)
+	}
+	var none *browserSupervisor
+	if _, err := none.YieldForSignIn("sess-a", ""); !errors.Is(err, errBrowserUnavailable) {
+		t.Fatalf("yield with no supervisor = %v", err)
 	}
 }
