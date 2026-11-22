@@ -366,7 +366,8 @@ export class ManagedRunnerManager {
   readonly holder: string;
   /** Where instances run: every infrastructure call this manager makes. */
   readonly backend: ManagedRunnerBackend;
-  private readonly now: () => Date;
+  /** The clock this manager judges everything by; an owner's sleep request is stamped on it too. */
+  readonly now: () => Date;
   private readonly random: () => number;
   private readonly log: Pick<Logger, 'warn' | 'error'>;
   private readonly linkOnly: () => boolean | Promise<boolean>;
@@ -1027,7 +1028,9 @@ export class ManagedRunnerManager {
   /**
    * READY, and asked to sleep — by the owner, or by the idle interval having passed since the
    * runner became READY, since the last demand and by the instance's own count — with nothing in the
-   * records and nothing in flight on the instance: drain. Claims stop at once (the claim refuses a
+   * records and nothing in flight on the instance: drain. The owner's request is answered only by a
+   * report the instance sent after it (`sleepRequestedAt`): one from before may predate a write or a
+   * turn begun since, and draining on it would stop claims on a busy runner. Claims stop at once (the claim refuses a
    * draining mapping), and the instance's heartbeats carry the sleep request from now on. The
    * compare-and-set includes the demand revision this decision read, so demand that came meanwhile
    * keeps the runner READY.
@@ -1043,6 +1046,7 @@ export class ManagedRunnerManager {
     if (!asked && now.getTime() - quietSince < idleMs) return null;
     const report = await this.instanceReport(mapping, now);
     if (!report || !workloadIdle(report) || report.draining) return null;
+    if (asked && mapping.sleepRequestedAt && Date.parse(report.receivedAt) <= mapping.sleepRequestedAt.getTime()) return null;
     if (!asked && Date.parse(report.receivedAt) - report.idleSeconds * 1000 > now.getTime() - idleMs) return null;
     if ((await managedRunnerWork(this.prisma, mapping.runnerId)).length > 0) return null;
     const { count } = await this.prisma.managedRunner.updateMany({
