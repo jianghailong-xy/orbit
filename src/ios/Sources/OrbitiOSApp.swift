@@ -91,6 +91,18 @@ struct OrbitiOSApp: App {
                     }
                 }
                 .task {
+                    let args = ProcessInfo.processInfo.arguments
+                    if let index = args.firstIndex(of: "-probe.mode"), args.indices.contains(index + 1) {
+                        if let base = model.baseURL {
+                            model.user = try? await APIClient(baseURL: base, tokenStore: InMemoryTokenStore()).me()
+                        }
+                        await model.agents?.load()
+                        try? await Task.sleep(for: .seconds(2))
+                        model.selectedSection = .agents
+                        model.selectedAgentID = model.agents?.items.first?.id
+                        model.route(to: .session(args[index + 1]))
+                        return
+                    }
                     model.bootstrap()
                     // A share left in the App Group inbox: sweep a day-old one, open a fresh one.
                     model.noticeSharedItems(launching: true)
@@ -107,7 +119,7 @@ private struct RootView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.horizontalSizeClass) private var hSize
     var body: some View {
-        if model.signedIn {
+        if model.signedIn || ProcessInfo.processInfo.arguments.contains("-probe.mode") {
             Group {
                 // Either shell drives the same navigation state: one section's `NavigationStack`
                 // bound to its stack here, or a three-column split whose column selection is a
