@@ -272,7 +272,7 @@ A task write could be traced to workspaces: by `task_id` (`project_event_session
 **The read side does not change.** The probe and the version add counters up per base source, `split_part(split_part(source, '#', 1), '@', 1)`. Their `epochs`, the version hash and `openListMovesAreRowLocal` then see exactly what they see today.
 
 **The poller.** It reads per `(owner, scope, source)` in one statement for every watched account. For each account and tick:
-- An account-wide key (other than D1's, §5.4), a clock threshold, the token's runner part, or a new stream moved: hint with no scopes, meaning anything may have moved.
+- An account-wide key, a clock threshold, the token's runner part, or a new stream moved: hint with no scopes, meaning anything may have moved.
 - Otherwise, if any `w:` scope moved, directly or through the dependency map: hint with those scopes.
 - Otherwise: no hint. That covers a `c:` scope with no dependants.
 
