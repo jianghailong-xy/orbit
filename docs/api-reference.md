@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 37 |
-| `user` | 494 |
+| `user` | 495 |
 | `admin` | 31 |
 | `runner` | 207 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **773** |
+| **Total** | **774** |
 
 ## Public routes
 
@@ -738,11 +738,11 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/runner/sessions/:id/end` | path `id` | `RunnerSessionsController.endSession` |
 | `GET` | `/api/runner/sessions/:id/events` | path `id`; query `after`, `limit` | `RunnerApiController.sessionEvents` |
 | `POST` | `/api/runner/sessions/:id/events` | body `Object`; path `id` | `RunnerApiController.events` |
-| `POST` | `/api/runner/sessions/:id/file-bundles` | body `CreateFileBundleDto`; path `id` | `RunnerFilesController.createBundle` |
-| `POST` | `/api/runner/sessions/:id/files` | body `UploadFileDto`; path `id` | `RunnerApiController.uploadFile` |
+| `POST` | `/api/runner/sessions/:id/file-bundles` | body `CreateFileBundleDto`; path `id`; query `subagentRunId` | `RunnerFilesController.createBundle` |
+| `POST` | `/api/runner/sessions/:id/files` | body `UploadFileDto`; path `id`; query `subagentRunId` | `RunnerApiController.uploadFile` |
 | `GET` | `/api/runner/sessions/:id/files/:fileId` | path `fileId`, `id` | `RunnerFilesController.describe` |
-| `DELETE` | `/api/runner/sessions/:id/files/:fileId/pin` | path `fileId`, `id` | `RunnerFilesController.unpin` |
-| `PUT` | `/api/runner/sessions/:id/files/:fileId/pin` | path `fileId`, `id` | `RunnerFilesController.pin` |
+| `DELETE` | `/api/runner/sessions/:id/files/:fileId/pin` | path `fileId`, `id`; query `subagentRunId` | `RunnerFilesController.unpin` |
+| `PUT` | `/api/runner/sessions/:id/files/:fileId/pin` | path `fileId`, `id`; query `subagentRunId` | `RunnerFilesController.pin` |
 | `POST` | `/api/runner/sessions/:id/finalize` | body `Object`; path `id` | `RunnerApiController.finalize` |
 | `POST` | `/api/runner/sessions/:id/import-result` | body `Object`; path `id` | `RunnerApiController.importResult` |
 | `GET` | `/api/runner/sessions/:id/inbox` | path `id`; query `acceptsSteer`, `leaseGeneration`, `runningTurnId` | `RunnerApiController.inbox` |

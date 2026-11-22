@@ -3298,7 +3298,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // bumps no Open-list counter. It creates, alters or drops no table, column, constraint or trigger, and it names
       // or replaces none of the preserved triggers or functions. No INSERT, UPDATE or DELETE runs at apply time.
       // Written as 1423 and then 1427 on the project line, it was renumbered after main took 1427.
-      '1428_open_list_workspace_probes'],
+      '1428_open_list_workspace_probes',
+      // 1430 adds managed_runner.update_interrupt_turns, BOOLEAN NOT NULL with a constant default (catalog-only, no
+      // rewrite), for an owner's Update Now of a busy runner; `managed_runner` is none of the preserved relations, no
+      // row is written, and no trigger, function or DONE fence changes.
+      '1430_managed_runner_update_interrupt'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

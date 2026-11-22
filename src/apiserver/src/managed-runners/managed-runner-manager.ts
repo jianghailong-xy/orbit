@@ -43,7 +43,7 @@ import { ownerAccountDisabled } from './managed-runner-eligibility';
 import { stopProofFor, type ManagedRunnerPredecessor, type ManagedRunnerStopProof } from './managed-runner-fencing';
 import type { ManagedRunnerProfile } from './managed-runner-profile';
 import { freshInstanceReport, workloadIdle, type StoredManagedWorkload } from './managed-runner-sleep';
-import { ownerUpdatePending } from './managed-runner-status';
+import { ownerUpdateDrain, ownerUpdatePending } from './managed-runner-status';
 import { readVolumeMeasurement, type VolumeMeasurement } from './managed-runner-storage';
 import { managedKeySupply, managedRuntimeSupply, type ManagedSupplyRunner } from './managed-runner-supply';
 import {
@@ -890,12 +890,18 @@ export class ManagedRunnerManager {
   }
 
   /**
-   * The owner's Update Now (ManagedRunnerService.updateNow), in progress on a READY instance: the same roll as
-   * `rollPreviousImage`, on any backend — once the instance is idle, by its own fresh report and by the records, it
-   * drains marked as a roll and wakes at once as the next generation, made from the image the backend makes instances
-   * from now, on the same volume and runner. Nothing in flight is cut short: while busy it stays READY and the next
-   * pass asks again. An instance found already on the current image ends the request (`updateCompletedAt`). The
-   * mark names the backend's roll image, or where it has none the current build's commit. Null when it stays.
+   * The owner's Update Now (ManagedRunnerService.updateNow), in progress on a READY instance. An instance found already
+   * on the current image ends the request (`updateCompletedAt`). Otherwise, null when it stays:
+   *
+   *   - Asked of a busy runner with the owner's word that its turns may be interrupted (`updateInterruptTurns`), on a
+   *     backend whose host reports every stop it makes (`stopInstance`, Docker): the instance is asked to stop
+   *     (`stopForOwnerUpdate`), and its host's report of the exit is read as for any stop (`terminated`).
+   *   - Otherwise — an idle runner's request, or a busy one's on a backend that cannot stop it (Kubernetes) — the same
+   *     roll as `rollPreviousImage`, on any backend: once the instance is idle, by its own fresh report and by the
+   *     records, it drains marked as a roll and wakes at once as the next generation, made from the image the backend
+   *     makes instances from now, on the same volume and runner. Nothing in flight is cut short: while busy it stays
+   *     READY and the next pass asks again. The mark names the backend's roll image, or where it has none the current
+   *     build's commit. Demand does not call that drain off (`drainAbort`).
    */
   private async ownerUpdate(mapping: ManagedRunner, instance: ManagedInstance): Promise<Step | null> {
     if (!ownerUpdatePending(mapping)) return null;
@@ -908,12 +914,32 @@ export class ManagedRunnerManager {
       return null;
     }
     if (!instance.running || mapping.desiredState !== 'RUNNING') return null;
+    if (mapping.updateInterruptTurns && this.backend.stopInstance) return this.stopForOwnerUpdate(mapping, instance);
     const image = this.backend.rollImage ?? mapping.currentImageSha ?? instance.currentImageRevision ?? instance.previousImage;
     return this.rollWhenIdle(
       mapping,
       image,
       `its owner asked to update it (${mapping.updateRequestedAt!.toISOString()}), idle on a previous image (${instance.previousImage})`,
     );
+  }
+
+  /**
+   * The owner's Update Now of a busy runner, with their word that its turns may be interrupted, on a backend whose host
+   * reports every stop it makes: the READY instance is asked to stop (`stopInstance`), as `stopSilentPrevious` asks.
+   * Docker sends SIGTERM with the profile's stop grace, and the runner's ordinary shutdown stops its turns, which stay
+   * resumable; that works on every runner image. Asking is no proof: the mapping stays READY, nothing is created, and
+   * every pass asks again until its host reports the exit. That report is the stop proof (`terminated`): recorded, the
+   * container removed by UID, its volume released, and only then the next generation made from the image the backend
+   * makes instances from now, on the same volume and runner. Demand changes none of it.
+   */
+  private async stopForOwnerUpdate(mapping: ManagedRunner, instance: ManagedInstance): Promise<Step> {
+    this.log.warn(
+      `managed runner ${mapping.id}: its owner asked to update it now (${mapping.updateRequestedAt!.toISOString()}), interrupting its turns; `
+        + `asking its ${this.backend.terms.instance} ${instance.uid} of generation ${mapping.generation}, made from a previous image `
+        + `(${instance.previousImage}), to stop`,
+    );
+    await this.backend.stopInstance!(mapping);
+    return { done: 'READY' };
   }
 
   /**
@@ -1120,10 +1146,15 @@ export class ManagedRunnerManager {
     await this.backend.stopInstance(mapping);
   }
 
-  /** Why an unaccepted drain is called off now, or null to keep waiting for the instance. */
+  /**
+   * Why an unaccepted drain is called off now, or null to keep waiting for the instance. The owner's Update Now
+   * (`ownerUpdateDrain`) is not called off by demand, nor by work waiting in the records: what came meanwhile waits for
+   * the next generation, which wakes at once. Its instance still has to report idle, as every drain's does.
+   */
   private async drainAbort(mapping: ManagedRunner, now: Date): Promise<DrainAbort | null> {
-    if (mapping.desiredState === 'RUNNING' || mapping.demandRevision !== mapping.drainDemandRevision) return 'DEMAND';
-    if ((await managedRunnerWork(this.prisma, mapping.runnerId)).length > 0) return 'WORK';
+    const owners = ownerUpdateDrain(mapping);
+    if (!owners && (mapping.desiredState === 'RUNNING' || mapping.demandRevision !== mapping.drainDemandRevision)) return 'DEMAND';
+    if (!owners && (await managedRunnerWork(this.prisma, mapping.runnerId)).length > 0) return 'WORK';
     const report = await this.instanceReport(mapping, now);
     if (!report) return 'TELEMETRY_MISSING';
     if (!workloadIdle(report)) return 'RUNNER_BUSY';
@@ -1340,6 +1371,12 @@ export class ManagedRunnerManager {
    *
    * Every such stop is logged with its exit code and whether it ran out of memory, and the owner's
    * reason says which, while it restarts and once it has failed.
+   *
+   * The stop the owner's Update Now asked for (`stopForOwnerUpdate`: their request may interrupt turns, and it is in
+   * progress, and the instance is the READY one of a previous image) is no failure: wanted running, it goes back to
+   * REQUESTED at once with the proof recorded and no attempt spent, no backoff and no restart reason (the status says
+   * `updating`), and the same gate makes the next generation from the current image. A stop of that next generation,
+   * made from the current image, is counted as any other.
    */
   private async terminated(mapping: ManagedRunner, instance: ManagedInstance): Promise<Step> {
     if (!instance.stopConfirmed) {
@@ -1356,6 +1393,20 @@ export class ManagedRunnerManager {
       this.log.warn(`${stopped}; its owner asked it to sleep, so it goes to sleep`);
       return {
         next: await this.commit(mapping, { ...recorded, managementState: 'DRAINING', imageRollTo: null, stateEnteredAt: now, drainDemandRevision: mapping.demandRevision, lastError: Prisma.DbNull }),
+      };
+    }
+    if (mapping.managementState === 'READY' && instance.previousImage && ownerUpdatePending(mapping) && mapping.updateInterruptTurns) {
+      this.log.warn(`${stopped}; stopped for its owner's Update Now, so generation ${mapping.generation + 1} is started on the same volume from the current image`);
+      return {
+        next: await this.commit(mapping, {
+          ...recorded,
+          managementState: 'REQUESTED',
+          stateEnteredAt: now,
+          attempt: 0,
+          nextAttemptAt: null,
+          startupDeadlineAt: null,
+          lastError: Prisma.DbNull,
+        }),
       };
     }
     const { maxAttempts } = this.profile.lifecycle;

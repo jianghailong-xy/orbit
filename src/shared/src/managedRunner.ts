@@ -232,13 +232,16 @@ export interface ManagedRunnerBuild {
 
 /**
  * The managed runner's container was made from an older image than the one it would be made from now
- * (docs/managed-runner-update-now-design.md). `available`: READY on the older build. `updating`: draining to
- * be made again from the current one.
+ * (docs/managed-runner-update-now-design.md). `available`: READY on the older build. `updating`: the owner's
+ * Update Now, or an image roll, is on its way to the next container, made from the current one.
  */
 export interface ManagedRunnerUpdate {
   running: ManagedRunnerBuild;
   current: ManagedRunnerBuild;
   phase: 'available' | 'updating';
+  /** `updating` on a busy runner whose backend cannot stop it (Kubernetes): the owner's Update Now waits for the
+   *  runner to be idle and interrupts nothing. Absent otherwise. */
+  waitsForIdle?: true;
 }
 
 /** The body of every managed runner write. */

@@ -25,6 +25,7 @@ import {
 } from '@orbit/shared';
 
 import { generateToken, sha256 } from '../common/crypto.util';
+import { heldStatusFilter } from '../common/session-release';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -37,6 +38,7 @@ import {
   type ManagedRunnerEligibility,
 } from './managed-runner-eligibility';
 import { MANAGED_RUNNER_GATE, managedRunnerDisabledError, type ManagedRunnerGate } from './managed-runner-gate';
+import type { ManagedRunnerManager } from './managed-runner-manager';
 import { MANAGED_RUNNER_NAME } from './managed-runner-resources';
 import { placeNewMapping } from './managed-runner-placement';
 import { MANAGED_RUNNER_RUNTIME, type ManagedRunnerRuntime } from './managed-runner-runtime';
@@ -58,6 +60,9 @@ import type { ManagedRunnerVolumeSwitchDto } from './dto';
 import { RUNNER_BEATS, runnerLastBeatAt } from '../runners/runner-presence';
 
 export const MANAGED_RUNNER_NOT_FOUND = 'MANAGED_RUNNER_NOT_FOUND';
+
+/** The record of each accepted Update Now (`updateNow`): who asked, the builds, and the sessions whose turns it interrupts. */
+export const MANAGED_RUNNER_UPDATE_NOW_ACTIVITY = 'managed_runner.update_now';
 
 type AvailableRuntime = Extract<ManagedRunnerRuntime, { available: true }>;
 
@@ -140,6 +145,7 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
         : null,
       now: new Date(),
       heartbeatFreshMs: this.runtime?.available ? this.runtime.profile.lifecycle.heartbeatFreshSeconds * 1000 : DEFAULT_HEARTBEAT_FRESH_MS,
+      stopsInstances: mapping && this.runtime?.available ? !!this.managerOf(this.runtime, mapping).backend.stopInstance : undefined,
     });
   }
 
@@ -330,19 +336,25 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
 
   /**
    * The owner's Update Now (docs/managed-runner-update-now-design.md, "What changes" 3): a READY runner whose status
-   * says it runs an older image (`update`) is moved onto the current one through the drain and wake an image roll
-   * takes. Refused 409 MANAGED_RUNNER_CURRENT without an `update`, and 409 MANAGED_RUNNER_TRANSITION_REFUSED unless
-   * it is READY and wanted running (a sleeping runner already wakes on the current image). Asked again while one is
-   * in progress, it is answered with the status as it stands.
+   * says it runs an older image (`update`) is moved onto the current one. Refused 409 MANAGED_RUNNER_CURRENT without an
+   * `update`, and 409 MANAGED_RUNNER_TRANSITION_REFUSED unless it is READY and wanted running (a sleeping runner already
+   * wakes on the current image). Asked again while one is in progress, it is answered with the status as it stands.
    *
-   * Only an idle runner is updated here — idle by its instance's fresh report and with nothing in the records
-   * (`managedRunnerWork`), as for an image roll. A busy one is refused 409 MANAGED_RUNNER_BUSY with the turns running
-   * on it (session, title, start) and how many background jobs a new container would end; this server interrupts
-   * nothing, whatever `interruptTurns` says. Accepted, the request records when and by whom on the mapping and wakes
-   * the manager, whose READY pass drains it marked `imageRollTo` without waiting out the idle interval
-   * (ManagedRunnerManager.ownerUpdate); the status reads `updating` until the next generation is READY.
+   *   - Idle — by its instance's fresh report and with nothing in the records (`managedRunnerWork`), as for an image
+   *     roll: the manager's READY pass drains it marked `imageRollTo` without waiting out the idle interval, and it
+   *     wakes at once as the next generation (ManagedRunnerManager.ownerUpdate). It interrupts nothing.
+   *   - Busy, without `interruptTurns`: refused 409 MANAGED_RUNNER_BUSY with the turns running on it (session, title,
+   *     start) and how many background jobs a new container would end. Nothing is written.
+   *   - Busy, with `interruptTurns: true`, the owner's word: recorded as a request that may interrupt its turns
+   *     (`updateInterruptTurns`). The manager asks the backend to stop the instance, and its host's report of the exit
+   *     starts the next generation from the current image on the same volume and runner. On a backend that cannot stop
+   *     an instance (Kubernetes) it waits for idle instead, and the status says so (`update.waitsForIdle`).
+   *
+   * Accepted, one transaction records when, by whom and whether it may interrupt on the mapping, by a compare-and-set
+   * on the revision read, and a `managed_runner.update_now` activity naming the sessions whose turns it interrupts; then
+   * the manager is woken. The status reads `updating` until the next generation is READY, and demand never calls it off.
    */
-  async updateNow(ownerId: string): Promise<ManagedRunnerStatus> {
+  async updateNow(ownerId: string, interruptTurns = false): Promise<ManagedRunnerStatus> {
     const runtime = this.operable();
     await this.refuseDisabledOwner(ownerId);
     const mapping = await this.owned(ownerId);
@@ -350,7 +362,8 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
     if (mapping.managementState !== 'READY' || mapping.desiredState !== 'RUNNING') {
       throw new ConflictException({ code: MANAGED_RUNNER_TRANSITION_REFUSED, message: `A ${mapping.managementState} managed runner is not updated.` });
     }
-    if (!(await this.status(ownerId)).update) {
+    const { update } = await this.status(ownerId);
+    if (!update) {
       throw new ConflictException({ code: MANAGED_RUNNER_CURRENT, message: 'This managed runner already runs the current version.' });
     }
     const now = new Date();
@@ -360,20 +373,56 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
     });
     const report = freshInstanceReport(runner, runnerLastBeatAt(runner), mapping, now, runtime.profile.lifecycle.heartbeatFreshSeconds * 1000);
     const work = await managedRunnerWork(this.prisma, mapping.runnerId);
-    if (!report || !workloadIdle(report) || report.draining || work.length > 0) {
+    const busy = !report || !workloadIdle(report) || report.draining || work.length > 0;
+    const stopping = busy ? await this.busyWith(mapping.runnerId, report) : { turns: [], backgroundJobs: 0 };
+    if (busy && !interruptTurns) {
       throw new ConflictException({
         code: MANAGED_RUNNER_BUSY,
         message: 'This managed runner is busy, and updating it now would stop its work. It updates by itself once it is idle.',
         work,
-        ...(await this.busyWith(mapping.runnerId, report)),
+        ...stopping,
       });
     }
-    const { count } = await this.prisma.managedRunner.updateMany({
-      where: { id: mapping.id, ownerId, revision: mapping.revision, managementState: 'READY', desiredState: 'RUNNING' },
-      data: { updateRequestedAt: now, updateRequestedBy: ownerId, revision: { increment: 1 } },
-    });
-    if (count === 0) throw this.revisionConflict(await this.owned(ownerId));
-    this.log.log(`managed runner ${mapping.id}: its owner asked to update it now; idle, it is rolled onto the current image`);
+    const waitsForIdle = busy && !this.managerOf(runtime, mapping).backend.stopInstance;
+    const payload = {
+      mappingId: mapping.id,
+      runnerId: mapping.runnerId,
+      interruptTurns: busy,
+      waitsForIdle,
+      running: update.running.sha,
+      current: update.current.sha,
+      // The turns it interrupts; on a backend that waits for idle instead, the ones it waits for.
+      sessionIds: stopping.turns.map((turn) => turn.sessionId),
+      backgroundJobs: stopping.backgroundJobs,
+    };
+    const accepted = await withTransactionRetry(
+      this.prisma,
+      async (tx) => {
+        const { count } = await tx.managedRunner.updateMany({
+          where: { id: mapping.id, ownerId, revision: mapping.revision, managementState: 'READY', desiredState: 'RUNNING' },
+          data: { updateRequestedAt: now, updateRequestedBy: ownerId, updateInterruptTurns: busy, revision: { increment: 1 } },
+        });
+        if (count === 0) return false;
+        await tx.activity.create({
+          data: {
+            actorId: ownerId,
+            type: MANAGED_RUNNER_UPDATE_NOW_ACTIVITY,
+            payload: payload as unknown as Prisma.InputJsonValue,
+            credentialKind: 'LOGIN',
+            createdAt: now,
+          },
+        });
+        return true;
+      },
+      loggedRetry(this.log, 'managedRunners.updateNow'),
+    );
+    if (!accepted) throw this.revisionConflict(await this.owned(ownerId));
+    this.log.log(
+      `managed runner ${mapping.id}: its owner asked to update it now; `
+        + (!busy ? 'idle, it is rolled onto the current image'
+          : waitsForIdle ? `busy with ${payload.sessionIds.length} turn(s), and its backend cannot stop it: it is rolled once idle`
+            : `interrupting ${payload.sessionIds.length} turn(s) and ${payload.backgroundJobs} background job(s), it is stopped and made again from the current image`),
+    );
     runtime.worker.kick();
     return this.status(ownerId);
   }
@@ -389,7 +438,7 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
       orderBy: [{ startedAt: 'asc' }, { id: 'asc' }],
     });
     const open = await this.prisma.session.findMany({
-      where: { assignedRunnerId: runnerId, status: { in: ['PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'] } },
+      where: { assignedRunnerId: runnerId, status: heldStatusFilter() },
       select: { runningBgShells: true },
     });
     const recorded = open.reduce((sum, s) => sum + s.runningBgShells.length, 0);
@@ -413,9 +462,7 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
     if (!mapping) throw new NotFoundException({ code: MANAGED_RUNNER_NOT_FOUND, message: 'No managed runner has this runner id.' });
     let outcome: ManagedVolumeSwitchOutcome;
     try {
-      // The manager of the mapping's own host: on several Docker hosts each drives only its location's mappings.
-      const manager = runtime.hosts?.find((host) => host.manager.owns(mapping))?.manager ?? runtime.manager;
-      outcome = await manager.switchVolume({
+      outcome = await this.managerOf(runtime, mapping).switchVolume({
         mappingId: mapping.id,
         actorId,
         revision: dto.revision,
@@ -457,6 +504,11 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
       code: MANAGED_RUNNER_TRANSITION_REFUSED,
       message: `This Orbit server cannot ${action} a managed runner yet; nothing was changed.`,
     });
+  }
+
+  /** The manager of the mapping's own host: on several Docker hosts each drives only its location's mappings. */
+  private managerOf(runtime: AvailableRuntime, mapping: Pick<ManagedRunner, 'backend' | 'clusterKey' | 'namespace'>): ManagedRunnerManager {
+    return runtime.hosts?.find((host) => host.manager.owns(mapping))?.manager ?? runtime.manager;
   }
 
   /** The enabled runtime, or the refusal of a server that has none. Checked before anything is written. */

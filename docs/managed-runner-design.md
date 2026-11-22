@@ -1218,8 +1218,9 @@ Left to later work, or not shown here:
 
 - No model was used: the owner's DeepSeek key file was not there, so READY came from a placeholder Codex sign-in
   and the work the upgrade did not interrupt was a process in the container, not an engine session.
-- A runner that is never idle keeps the previous image (an idle one rolls by itself since 2026-11-18, above); there
-  is no administrator command to move every runner at once.
+- A runner that is never idle keeps the previous image until its owner asks for Update Now, which may interrupt its
+  turns (docs/managed-runner-update-now-design.md); an idle one rolls by itself since 2026-11-18, above. There is no
+  administrator command to move every runner at once.
 - Every commit rebuilds the image's last stage. Moving `ARG ORBIT_SOURCE_SHA` and the label below the package and
   `chown` steps in `deploy/managed-runner/image/Dockerfile` (T03's) would keep those cached.
 - The by-hand upgrade steps (self-hosting's "Upgrading") rebuild no managed runner image; they now list the commands

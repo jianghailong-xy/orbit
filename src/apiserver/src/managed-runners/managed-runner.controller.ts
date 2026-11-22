@@ -58,13 +58,14 @@ export class ManagedRunnerController {
     return this.managed.sleep(user.userId, dto.idempotencyKey, dto.revision);
   }
 
-  /** The owner's Update Now: an idle runner is moved onto the current image (ManagedRunnerService.updateNow). */
+  /** The owner's Update Now: the runner is moved onto the current image — an idle one at once, a busy one only with
+   *  `interruptTurns: true`, which interrupts its running turns (ManagedRunnerService.updateNow). */
   @PatForbidden('RUNNER_CONTROL')
   @UseGuards(ManagedRunnerEnabledGuard)
   @Post('update-now')
   @HttpCode(202)
-  updateNow(@CurrentUser() user: AuthUser, @Body() _dto: ManagedRunnerUpdateNowDto): Promise<ManagedRunnerStatus> {
-    return this.managed.updateNow(user.userId);
+  updateNow(@CurrentUser() user: AuthUser, @Body() dto: ManagedRunnerUpdateNowDto): Promise<ManagedRunnerStatus> {
+    return this.managed.updateNow(user.userId, dto.interruptTurns === true);
   }
 
   @PatForbidden('RUNNER_CONTROL')
