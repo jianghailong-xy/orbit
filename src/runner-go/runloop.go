@@ -1555,6 +1555,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// in the UI takes effect within one heartbeat, no restart. The local config value is
 	// only the initial seed; the DB value is authoritative once the first heartbeat lands.
 	pool := newSessionPool(cfg.MaxConcurrent)
+	// A managed instance claims nothing, and starts no reclaimed RUNNING session, while its container has less than one
+	// more turn's memory left (memory_reserve.go). Nil anywhere else: it admits.
+	turnMemory := newTurnMemoryGate(currentManagedInstance() != nil)
 	// Before this image does anything else — spawns a probe, reclaims a session, sweeps a checkout. A
 	// job the image before handed on as it re-executed is still this process's child, and until the
 	// pool holds it again the sweep takes its checkout for one nobody is using.
@@ -2886,6 +2889,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		// prepared locally first as the single takeover above prepares one.
 		startupStarts.batchSize = t.takeoverBatchSize
 		startupStarts.takeoverMany = batchIdleTakeover(loopCtx, t, prepareTakeover)
+		// A RUNNING session takes its turn permit as a claim does, one at a time: a free slot, and the memory reserve.
+		startupStarts.admit = func() { pool.waitReclaimPermit(loopCtx, turnMemory) }
 		startupStarts.onStarted = func(id string) { reclaimDeferred.started(id, beatNow) }
 		startupStarts.run(reclaimStartWorkers, func() {
 			idleHanded, idleTook := startupStarts.idlePhase()
@@ -3060,6 +3065,15 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		//
 		// Draining for an update, the pool admits nothing, with one exception (drainClaimScope): a session
 		// whose engine is running a turn here and whose queued message moved its row to PENDING.
+		//
+		// And no claim while memory has no room for one more turn (turnMemoryReserveBytes): the session waits queued.
+		if !turnMemory.admits() {
+			select {
+			case <-loopCtx.Done():
+			case <-time.After(500 * time.Millisecond):
+			}
+			continue
+		}
 		var scope []string
 		if pool.admissionIdleCapacity() <= 0 {
 			if scope = drainClaimScope(pool, drainScopedClaims.Load()); len(scope) == 0 {
