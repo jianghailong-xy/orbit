@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ApprovalTranslation } from '@orbit/shared';
+import type { SessionReach } from './sessionReach';
 import { listQuestionApprovals, type ApprovalInfo } from '../api';
 import { LIVE_FALLBACK_MS } from './listBudget';
 
@@ -35,6 +36,8 @@ export function useQuestionTranslations(sessionId: string | null, approvals: rea
   const qc = useQueryClient();
   const { data } = useQuery({
     queryKey: translationsKey(sessionId),
+    // A decided question never changes and the live approvals add what is new, so no session event reads it again.
+    meta: { entities: ['session'], sessionReach: 'none' satisfies SessionReach },
     // Merged over what the live approvals added while the read was out.
     queryFn: async () => {
       const cards = await listQuestionApprovals(sessionId!);

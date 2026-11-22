@@ -113,7 +113,7 @@ with driver options are left out of `/system/df` sizes altogether.
 | overlayfs or fuse-overlayfs per checkout | Needs `CAP_SYS_ADMIN` or `/dev/fuse`, which the channel refuses. On user machines it adds mounts that must be restored after every reboot. Rejected. |
 | Hardlink deduplication (`hardlink`, `jdupes -L`) | Unsafe. Node's `fs.writeFile` and shell `>` rewrite a file in place, which changes every linked copy; each session's turn-end commit would then spread the change into its branch. Rejected. |
 | Filesystem snapshots and clones per checkout (ZFS, btrfs) | Needs root and a specific filesystem; not portable. Rejected. |
-| Out-of-band dedup (`duperemove`, `FIDEDUPERANGE`) | Works on XFS and btrfs, not on OpenZFS 2.3 (returns `EOPNOTSUPP`). It needs a background scan; cloning at creation gets the same sharing without one. Rejected for now. |
+| Out-of-band dedup (`duperemove`, `FIDEDUPERANGE`) | Works on XFS and btrfs, not on OpenZFS 2.3 (returns `EOPNOTSUPP`). It needs a background scan; cloning at creation gets the same sharing without one. Rejected for checkouts; adopted later for what sessions write themselves (`node_modules` above all): a managed runner runs it on its own volume while idle (`src/runner-go/managed_dedupe.go`), never from the host, so nothing outside the Pod holds the volume. |
 | Moving artifacts out of git | Orbit Files (project `34qIISTdcSurVokwRlp4w`) stops new evidence from entering the Orbit repository. It does not help other repositories or the existing tree; this design does both. |
 
 ## 5. Layer 1: budget-aware reclamation
