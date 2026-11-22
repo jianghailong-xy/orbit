@@ -43,6 +43,8 @@ export function buildName(build: ManagedRunnerBuild): string {
   return managedBuildNamed(buildDay(build.builtAt) ?? buildSha7(build.sha));
 }
 
+const capitalized = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
+
 /** What an Update Now left behind, kept on this browser for the Updated card's day. */
 export interface ManagedUpdateOutcome {
   to: ManagedRunnerBuild;
@@ -127,7 +129,7 @@ export function managedUpdateCard(
     return {
       phase: 'available',
       tone: 'quiet',
-      title: managedUpdateAvailableTitle(buildName(update.current)),
+      title: managedUpdateAvailableTitle(capitalized(buildName(update.current))),
       tag: RUNNER_UPDATE_TAG_AVAILABLE,
       body: MANAGED_UPDATE_AVAILABLE_BODY,
       to: update.current,
@@ -213,5 +215,5 @@ export function managedUpdateNowBody(build: string, turns: number): string {
 }
 /** The amber note below the turns: the jobs that stop, or just the services when none is counted. */
 export function managedUpdateNowJobsNote(jobs: number): string {
-  return jobs > 0 ? managedUpdateNowJobs(jobs) : MANAGED_UPDATE_NOW_SERVICES;
+  return jobs > 0 ? managedUpdateNowJobs(jobs, jobs === 1 ? 'background job' : 'background jobs') : MANAGED_UPDATE_NOW_SERVICES;
 }

@@ -273,14 +273,15 @@ export function managedBuildLine(sha: string): string {
   return `Build ${sha}`;
 }
 export function managedBuildLineBuilt(sha: string, built: string): string {
-  return `Build ${sha}${RUNNER_LINE_SEPARATOR}${built}`;
+  return `Build ${sha} · ${built}`;
 }
 /** A build named by the day it was built: `the Nov 18 build`. */
 export function managedBuildNamed(name: string): string {
   return `the ${name} build`;
 }
+/** `build` is the build's name with its first letter capital: `The Nov 18 build`. */
 export function managedUpdateAvailableTitle(build: string): string {
-  return `${build[0].toUpperCase()}${build.slice(1)} is available`;
+  return `${build} is available`;
 }
 /** Orbit Cloud's machine row while a newer build waits: the update dot's word and its tooltip. */
 export const MANAGED_UPDATE_ROW_LABEL = 'Update';
@@ -304,9 +305,8 @@ export function managedUpdateNowBodyMany(build: string): string {
   return `It stops these turns and restarts on ${build} — usually under a minute. Each one then continues where it stopped, with a note that the update interrupted it.`;
 }
 /** Below the turns: a new container ends background jobs and the services they started. */
-export function managedUpdateNowJobs(jobs: number): string {
-  const these = jobs === 1 ? '1 background job in these sessions stops' : `${jobs} background jobs in these sessions stop`;
-  return `${these}, and so do the services they started. Waiting work starts once it is back.`;
+export function managedUpdateNowJobs(jobs: number, noun: string): string {
+  return `${jobs} ${noun} in these sessions stop, and so do the services they started. Waiting work starts once it is back.`;
 }
 export const MANAGED_UPDATE_NOW_SERVICES =
   'Services started in these sessions stop. Waiting work starts once it is back.';
