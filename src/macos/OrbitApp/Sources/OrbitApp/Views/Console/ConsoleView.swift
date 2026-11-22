@@ -1378,11 +1378,14 @@ struct TranscriptView: View {
             guard let request else { return }
             atBottom = false
             console.recordRequestFollowed(request)
-            landing = TranscriptLanding(rowID: request.rowID, sessionID: console.sessionID, place: .center, at: Date())
             #if os(iOS)
             transcriptScroll.halt()
             #endif
-            DispatchQueue.main.async { holdScroll(to: request.rowID, anchor: .center) }
+            let sessionID = console.sessionID
+            DispatchQueue.main.async {
+                landing = TranscriptLanding(rowID: request.rowID, sessionID: sessionID, place: .center, at: Date())
+                holdScroll(to: request.rowID, anchor: .center)
+            }
         }
         // A conversation opened from a project row that says it is waiting on you (owner
         // 2026-11-14): the top of its waiting card, header and title, rather than the transcript's
@@ -1398,9 +1401,10 @@ struct TranscriptView: View {
             #if os(iOS)
             transcriptScroll.halt()
             #endif
-            landing = TranscriptLanding(rowID: request.rowID, sessionID: console.sessionID, place: .top, at: Date())
+            let sessionID = console.sessionID
             DispatchQueue.main.async {
                 atBottom = false
+                landing = TranscriptLanding(rowID: request.rowID, sessionID: sessionID, place: .top, at: Date())
                 holdScroll(to: request.rowID, anchor: .top, animated: false)
             }
         }

@@ -239,7 +239,7 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(card.contains("holdScroll(to: request.rowID, anchor: .top, animated: false)"),
                       "the card's top — header and title — not its middle or the transcript's end")
         XCTAssertFalse(card.contains("opensReview"), "the card is answered in place, no review sheet")
-        XCTAssertTrue(card.contains("landing = TranscriptLanding(rowID: request.rowID, sessionID: console.sessionID, place: .top, at: Date())"),
+        XCTAssertTrue(card.contains("landing = TranscriptLanding(rowID: request.rowID, sessionID: sessionID, place: .top, at: Date())"),
                       "held while the rows above are measured: a self-sizing List lands by estimates first")
         let publishFollow = try slice(view, from: ".onChange(of: console.stateRevision) {", to: "recomputeStuck()")
         XCTAssertTrue(publishFollow.contains("if keepLanding(proxy) {"),

@@ -50,15 +50,23 @@ final class TranscriptLandingWiringTests: XCTestCase {
         let view = try app("Views/Console/ConsoleView.swift")
         let card = try code(view, from: ".onChange(of: console.cardRequest, initial: true) { _, request in",
                             to: ".onChange(of: heldScroll)")
-        XCTAssertTrue(card.contains("landing = TranscriptLanding(rowID: request.rowID, sessionID: console.sessionID, place: .top, at: Date())"),
+        XCTAssertTrue(card.contains("landing = TranscriptLanding(rowID: request.rowID, sessionID: sessionID, place: .top, at: Date())"),
                       "the waiting card is held by its top")
         XCTAssertFalse(card.contains("asyncAfter"), "held until it is let go, not re-aimed on a fixed clock")
         XCTAssertFalse(card.contains("addingTimeInterval"), "no fixed 2.5 s hold")
 
         let record = try code(view, from: ".onChange(of: console.recordRequest, initial: true) { _, request in",
                               to: ".onChange(of: console.cardRequest")
-        XCTAssertTrue(record.contains("landing = TranscriptLanding(rowID: request.rowID, sessionID: console.sessionID, place: .center, at: Date())"),
+        XCTAssertTrue(record.contains("landing = TranscriptLanding(rowID: request.rowID, sessionID: sessionID, place: .center, at: Date())"),
                       "a record jump is held where it lands, in the middle of the view")
+
+        // Made in the hop that carries the scroll, after a session switch's own clearing of the hold
+        // in the same update, for the session the request was made in.
+        for handler in [card, record] {
+            let hop = try XCTUnwrap(handler.range(of: "let sessionID = console.sessionID DispatchQueue.main.async {"))
+            let made = try XCTUnwrap(handler.range(of: "landing = TranscriptLanding("))
+            XCTAssertLessThan(hop.upperBound, made.lowerBound)
+        }
     }
 
     func testAHeldRowIsPutBackOnEveryPublishAndEveryContentResize() throws {
