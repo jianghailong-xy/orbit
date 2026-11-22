@@ -21,7 +21,8 @@
  *   (5) `cutOffTurnOutcome: 'FAILED'` with no end asked: the turn in flight FAILED with the error, the release FAILED
  *       (the old finalize's W6); the release is refused without the token and for any other cut-off outcome
  *   (6) the backstop: a failed turn whose release never comes is released by the reaper's cancel grace with
- *       `end_reason` null and `last_turn_outcome` FAILED, reads as a failure, and the retry armed for it fires
+ *       `end_reason` null, `last_turn_outcome` FAILED and the failure's own error, reads as a failure, and the retry armed
+ *       for it fires
  *   (7) the token is read per request: declared on the failed turn and not on the end (the old finalize), or the
  *       reverse (the old failed turn, then a release), the session ends released and reads as the failure
  *   (8) the token in the body's `releaseProtocol` (how a runner on the link declares it, step 6.2) is the same
@@ -466,6 +467,8 @@ test('one server serves the old and the new runner protocol (plan step 6.1)', {
     assert.equal(f.released, true, 'released by the backstop');
     assert.equal(f.end_reason, null);
     assert.equal(f.last_turn_outcome, 'FAILED', 'the copy of the failed turn is kept, not overwritten with CANCELLED');
+    assert.equal(f.error, FAILED_TURN.error,
+      'and the session keeps the failure\'s own words, as the release would have, not the sweep\'s "cancel not honored"');
     assert.equal(f.turn_outcome, 'FAILED');
     assert.deepEqual(await questions(s.db, id), { failed: true, finished: false }, 'it reads as the failure it is');
 

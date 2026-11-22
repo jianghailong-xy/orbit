@@ -559,6 +559,9 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
                   ? { resetTaskTo: TaskStatus.FAILED, taskFailure: 'RUN_FAILED' as const, failureDetail: s.error ?? undefined }
                   : { keepTask: true })
                 : {}),
+              // And the session keeps the failure's own words, which its turn report wrote, as the release it stands
+              // in for would have: "cancel not honored" is this sweep's reason, not what failed (step 6.2's walk).
+              ...(failedTurnHeld ? { keepError: true } : {}),
             },
           );
           continue;
@@ -988,6 +991,9 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
       /** Leave the task as it is: a retry armed for the run's failure goes on with it (the new runner protocol's held
        *  failed turn, released by the cancel grace). */
       keepTask?: boolean;
+      /** Leave the session's `error` as it is rather than writing `reason` over it: the failure a held failed turn's
+       *  report already recorded (the new runner protocol's hold, released by the cancel grace). */
+      keepError?: boolean;
     },
   ): Promise<void> {
     const status = opts.status ?? RunStatus.FAILED;
@@ -1032,7 +1038,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         // recovering from a partition to stop (the session is already finalized here).
         data: {
           status,
-          ...(failed ? { error: reason } : {}),
+          ...(failed && !opts.keepError ? { error: reason } : {}),
           // Due immediately: AutoRetryService's own sweep is what waits for the runner to
           // come back, so arming for "now" makes the first sweep after this the first check
           // rather than a fixed delay guessing when the runner returns.
