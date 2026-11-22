@@ -65,6 +65,13 @@ func withoutScheduleRunReport(tools []map[string]interface{}) []map[string]inter
 	return kept
 }
 
+// scheduleDurationGuidance is how an agent turns a stated span or count into a schedule's end, and keeps a frequent
+// schedule quiet.
+const scheduleDurationGuidance = "\"Check every hour\" is {kind: \"EVERY\", minutes: 60}. \"For 6 hours\" or \"for 2 weeks\" is an endAt " +
+	"that long from now, written in the schedule's time zone; \"3 times\" is maxRuns: 3. Without either, the card suggests a 7-day end. " +
+	"Prefer active hours (time and until, weekdays) over around-the-clock runs unless the person wants every hour. A frequent " +
+	"schedule's prompt must say to report CHANGED only when something changed, and NO_CHANGE otherwise. When the person has stated how often and for how long, call schedule_create at once: the card is a proposal they can change, so do not ask where or how to check first; write the prompt so a run finds the target itself and reports FAILED if it cannot."
+
 // scheduleToolDescriptors are the tools/list entries, in the catalogue's descriptor form.
 func scheduleToolDescriptors(obj func(map[string]interface{}, ...string) map[string]interface{}) []map[string]interface{} {
 	str := func(description string) map[string]interface{} {
@@ -75,10 +82,12 @@ func scheduleToolDescriptors(obj func(map[string]interface{}, ...string) map[str
 	// condition names only what it changes; schedule-time.ts mergeRule keeps the rest).
 	ruleSchema := func(create bool) map[string]interface{} {
 		props := map[string]interface{}{
-			"kind":     map[string]interface{}{"type": "string", "enum": []string{"ONCE", "DAILY", "WEEKLY", "WHEN"}},
-			"time":     str("DAILY and WEEKLY: local HH:mm."),
+			"kind":     map[string]interface{}{"type": "string", "enum": []string{"ONCE", "DAILY", "WEEKLY", "EVERY", "WHEN"}},
+			"time":     str("DAILY and WEEKLY: local HH:mm. EVERY: the first slot of each day's window, local HH:mm (00:00 when omitted)."),
+			"minutes":  map[string]interface{}{"type": "integer", "enum": []int{30, 60, 120, 180, 240, 360, 480, 720}, "description": "EVERY: minutes between runs."},
+			"until":    str("EVERY: the last slot of each day's window, local HH:mm, later than time (end of day when omitted). Use it for active hours."),
 			"at":       str("ONCE: local YYYY-MM-DDTHH:mm."),
-			"weekdays": map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string", "enum": []string{"MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"}}},
+			"weekdays": map[string]interface{}{"type": "array", "description": "WEEKLY: the days. EVERY: the days it runs (all seven when omitted).", "items": map[string]interface{}{"type": "string", "enum": []string{"MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"}}},
 		}
 		for key, value := range whenRuleProps(obj) {
 			props[key] = value
@@ -93,7 +102,8 @@ func scheduleToolDescriptors(obj func(map[string]interface{}, ...string) map[str
 			"type": "object",
 			"description": "When it runs, in the schedule's time zone: {kind: \"DAILY\", time: \"10:00\"}, " +
 				"{kind: \"WEEKLY\", time: \"09:00\", weekdays: [\"MON\", \"THU\"]} (MON to SUN), {kind: \"ONCE\", at: " +
-				"\"2026-11-16T18:00\"} for one run, or {kind: \"WHEN\", condition: {text, command, compare, ...}} for a run " +
+				"\"2026-11-16T18:00\"} for one run, {kind: \"EVERY\", minutes: 60, time: \"09:00\", until: \"18:00\", weekdays: [\"MON\", ...]} " +
+				"for several runs a day (minutes is 30, 60, 120, 180, 240, 360, 480 or 720), or {kind: \"WHEN\", condition: {text, command, compare, ...}} for a run " +
 				"each time something outside Orbit becomes true. A WHEN rule has no time; a schedule cannot change between " +
 				"WHEN and a time.",
 			"properties": props,
@@ -110,7 +120,8 @@ func scheduleToolDescriptors(obj func(map[string]interface{}, ...string) map[str
 	}
 	runLimit := map[string]interface{}{"type": "integer", "minimum": 1, "maximum": 120, "description": "Minutes one run may work, 30 when omitted, at most 120."}
 	timezone := str("IANA time zone the person named (\"Beijing time\" is Asia/Shanghai). Leave it out when they named none.")
-	endAt := str("When the schedule ends by itself, as an ISO 8601 date-time.")
+	endAt := str("When the schedule ends by itself, as an ISO 8601 date-time. For \"for 6 hours\" or \"for 2 weeks\", compute it from the current time in the schedule's time zone (6 hours or 2 weeks from now), with that zone's offset.")
+	maxRuns := map[string]interface{}{"type": "integer", "minimum": 1, "description": "The schedule ends after this many runs. For \"3 times\" or \"run it 10 times\", pass the count here instead of an endAt."}
 	return []map[string]interface{}{
 		{
 			"name": "schedule_create",
@@ -127,7 +138,7 @@ func scheduleToolDescriptors(obj func(map[string]interface{}, ...string) map[str
 				"won't report it as news. Ask the person only for what is theirs to decide (how often, what it may do), and " +
 				"fill in the rest yourself. A WHEN rule needs that baseline and is refused without one: run the condition's " +
 				"command once and pass what it read, such as {key: \"raw-used@87%\", summary: \"Raw used is 87% now\"}. " +
-				conditionProbeRules,
+				conditionProbeRules + " " + scheduleDurationGuidance,
 			"inputSchema": obj(map[string]interface{}{
 				"intent":   str("The person's own words, verbatim. Kept as what was asked."),
 				"title":    str("A short name for the list, such as \"Codex stable check\"."),
@@ -140,6 +151,7 @@ func scheduleToolDescriptors(obj func(map[string]interface{}, ...string) map[str
 				"accessLevel":     access,
 				"runLimitMinutes": runLimit,
 				"endAt":           endAt,
+				"maxRuns":         maxRuns,
 				"baseline": map[string]interface{}{
 					"type":        "object",
 					"description": "What your own check found today: recorded as already told, so the first run doesn't announce it. Required with a WHEN rule: what the condition's command read when you ran it.",
@@ -177,7 +189,8 @@ func scheduleToolDescriptors(obj func(map[string]interface{}, ...string) map[str
 				"timezone":        str("A new IANA time zone."),
 				"accessLevel":     access,
 				"runLimitMinutes": runLimit,
-				"endAt":           map[string]interface{}{"type": []string{"string", "null"}, "description": "When it ends by itself (ISO 8601); null for never."},
+				"endAt":           map[string]interface{}{"type": []string{"string", "null"}, "description": "When it ends by itself (ISO 8601); null for never. For \"for 6 hours\", compute it from now in the schedule's time zone."},
+				"maxRuns":         map[string]interface{}{"type": []string{"integer", "null"}, "minimum": 1, "description": "It ends after this many runs; null for no limit. Must be more than the runs already started."},
 				"workspaceId":     str("Run it in another of the person's workspaces. Always needs their Allow."),
 			}, "scheduleId"),
 		},
@@ -287,8 +300,8 @@ func scheduleToolText(name string, raw json.RawMessage) string {
 
 // scheduleBodyFields are the fields each write sends, as given.
 var scheduleBodyFields = map[string][]string{
-	"schedule_create":     {"intent", "title", "readBack", "findings", "prompt", "rule", "timezone", "accessLevel", "runLimitMinutes", "endAt", "baseline"},
-	"schedule_update":     {"intent", "title", "readBack", "prompt", "rule", "timezone", "accessLevel", "runLimitMinutes", "endAt", "workspaceId"},
+	"schedule_create":     {"intent", "title", "readBack", "findings", "prompt", "rule", "timezone", "accessLevel", "runLimitMinutes", "endAt", "maxRuns", "baseline"},
+	"schedule_update":     {"intent", "title", "readBack", "prompt", "rule", "timezone", "accessLevel", "runLimitMinutes", "endAt", "maxRuns", "workspaceId"},
 	scheduleRunReportTool: {"outcome", "key", "summary", "links", "note"},
 }
 

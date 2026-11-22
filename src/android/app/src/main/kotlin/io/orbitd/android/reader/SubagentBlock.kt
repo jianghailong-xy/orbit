@@ -23,7 +23,15 @@ internal data class SubagentRun(val toolUseId: String, val type: String, val bac
     /** The workspace a remote SubAgent ran on; null on the parent's machine. */
     val workspaceName: String? = null,
     /** Paths the child's edit tools wrote: what an ended run left uncommitted in the working tree. */
-    val changedFiles: List<String> = emptyList()) {
+    val changedFiles: List<String> = emptyList(),
+    /** The Orbit workflow this run is a call of: its [WorkflowRun.id]. Such a run's `toolUseId` is `<the workflow call's tool_use
+     * id>#<callIndex>`. Null, as are the three below, on a `delegate` call's run and from a server before it sent them. */
+    val workflowRunId: String? = null,
+    /** The call's place in the script, from 0 in the order the script made its `agent()` calls. */
+    val callIndex: Int? = null,
+    /** The `agent()` call's `label` and `phase`, as the script gave them. */
+    val label: String? = null,
+    val phase: String? = null) {
     /** A background call answers at once, so its card's own status cannot say whether the work still goes on. */
     val isRunning: Boolean get() = status == "RUNNING"
 
@@ -43,7 +51,8 @@ internal data class SubagentRun(val toolUseId: String, val type: String, val bac
                     Removed(provider, c.string("engine"), c.string("model"), c.string("effort"), c.string("reason").orEmpty())
                 },
                 row.string("workspaceName"),
-                (row["changedFiles"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.ifEmpty { null } })
+                (row["changedFiles"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.ifEmpty { null } },
+                row.string("workflowRunId"), (row["callIndex"] as? JsonPrimitive)?.intOrNull, row.string("label"), row.string("phase"))
         }
 
         /** The list by `delegate` call; the later row wins a repeated id, as on iOS. */

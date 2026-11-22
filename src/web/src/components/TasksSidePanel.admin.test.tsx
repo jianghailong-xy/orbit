@@ -119,7 +119,7 @@ describe('Admin, for an admin', () => {
     expect(topEntries()).toEqual(['Projects', 'Tasks', 'Scheduled', 'Waiting on you', 'Wiki']);
 
     await openAccountMenu();
-    expect(menuRows()).toEqual(['MachinesNone', 'Settings', 'Help center', 'Admin', 'Log out']);
+    expect(menuRows()).toEqual(['MachinesNone', 'Model routingBalance', 'Settings', 'Help center', 'Admin', 'Log out']);
   });
 
   it('opens the Users page', async () => {
@@ -150,6 +150,6 @@ describe('Admin, for a member', () => {
     expect(topEntries()).toEqual(['Projects', 'Tasks', 'Scheduled', 'Waiting on you', 'Wiki']);
 
     await openAccountMenu();
-    expect(menuRows()).toEqual(['MachinesNone', 'Settings', 'Help center', 'Log out']);
+    expect(menuRows()).toEqual(['MachinesNone', 'Model routingBalance', 'Settings', 'Help center', 'Log out']);
   });
 });

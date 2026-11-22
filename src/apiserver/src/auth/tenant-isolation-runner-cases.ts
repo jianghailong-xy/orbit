@@ -788,7 +788,7 @@ export const RUNNER_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
   'GET /runner/owner-requests/:id':
     'read by (id, the runner\'s owner) and nothing else, so another account\'s id answers 404 (owner-requests/owner-requests.service.ts:193); owner-requests.pg.spec.ts (f) sends it',
   'POST /runner/owner-requests/:id/withdraw':
-    'the calling session must be one this runner hosts for its owner (runner-api/runner-owner-requests.controller.ts:66), the request is read by (id, that owner) (owner-requests/owner-requests.service.ts:193), and only the session that filed it may withdraw it (owner-requests/owner-requests.service.ts:233)',
+    'the calling session must be one this runner hosts for its owner (runner-api/runner-owner-requests.controller.ts:100), the request is read by (id, that owner) (owner-requests/owner-requests.service.ts:193), and only the session that filed it may withdraw it (owner-requests/owner-requests.service.ts:233)',
   'PATCH /runner/sessions/:id/subagents/:runId':
     'the session must be one of the runner\'s owner that this runner hosts, else 404 as for an id that names nothing '
     + '(runner-api/runner-subagents.controller.ts:137), and the run is matched by (id, that session) only, on an end '
@@ -798,6 +798,11 @@ export const RUNNER_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
     'the session must be one of the runner\'s owner that this runner hosts, else 404 as for an id that names nothing '
     + '(runner-api/runner-subagents.controller.ts:137), and the run is matched by (id, that session) only '
     + '(runner-api/runner-subagents.controller.ts:303); subagent-fallback.pg.spec.ts sends another account\'s session and run',
+  'POST /runner/sessions/:id/subagents/:runId/rating':
+    'the session must be one of the runner\'s owner that this runner hosts, else 404 as for an id that names nothing '
+    + '(runner-api/runner-subagents.controller.ts:213), and the run is matched by (id, that session) only, '
+    + 'on the read and on the write (runner-api/subagent-rating.ts:52, runner-api/subagent-rating.ts:60); subagent-rating.pg.spec.ts sends '
+    + 'another session of the same runner and another account\'s runner, and finds the rating unchanged',
   'POST /runner/subagent-runs/:runId/claim':
     'the run is read by id and refused 404 unless it is a remote run of the runner\'s own account, 403 '
     + 'SUBAGENT_RUN_NOT_TARGET unless this runner is its target_runner_id (runner-api/subagent-remote.ts:403); '
@@ -989,6 +994,12 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
       params: {},
       body: heartbeat({ sessions: [{ sessionId: of.runner.machineSessionId, isolationStatus: 'worktree', changedFiles: [], worktreeDirty: true }] }),
     }),
+  },
+  // What a runner states is executing in a session is written only to a session assigned to it and leased to its process
+  // (runners/runner-executing-sets.ts): another account's session under that id matches no row and is left as it is.
+  'POST /runner/heartbeat body executing[].sessionId': {
+    as: RUNNER,
+    request: (of) => ({ params: {}, body: heartbeat({ executing: [{ sessionId: of.runner.machineSessionId, jobs: [], shells: [], subagents: [], engineTurnActive: false }] }) }),
   },
   'POST /runner/heartbeat body expiredCommitErrors[].sessionId': {
     as: RUNNER,
@@ -1580,15 +1591,19 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
   'POST /runner/owner-requests body blocksTaskIds[]':
     'counted among the runner owner\'s own tasks before anything is written; one that is not answers 404 (owner-requests/owner-requests.service.ts:128); owner-requests.pg.spec.ts (f) sends another account\'s',
   'POST /runner/owner-requests body secretSpec.runnerId':
-    'never used: the runner is the asking session\'s own (design §4.1), and any other one is refused 400 before anything is written (owner-requests/owner-secrets.service.ts:182); owner-requests.pg.spec.ts (c) sends another account\'s',
+    'never used: the runner is the asking session\'s own (design §4.1), and any other one is refused 400 before anything is written (owner-requests/owner-secrets.service.ts:187); owner-requests.pg.spec.ts (c) sends another account\'s',
   'POST /runner/owner-requests body clientRequestId':
     'the caller\'s own idempotency key, unique per asking session, and read back only by (the runner\'s owner, the asking session, the key) (owner-requests/owner-requests.service.ts:169); it names nothing of anybody else\'s',
   'POST /runner/owner-requests body projectId':
     'counted among the runner owner\'s own projects before anything is written; one that is not answers 404 (owner-requests/owner-requests.service.ts:132); owner-requests.pg.spec.ts (f) sends another account\'s',
   'POST /runner/owner-requests header x-orbit-session-id':
-    'must be a session of the runner\'s owner that this runner hosts, else 403 (runner-api/runner-owner-requests.controller.ts:66); owner-requests.pg.spec.ts (f) sends another account\'s',
+    'must be a session of the runner\'s owner that this runner hosts, else 403 (runner-api/runner-owner-requests.controller.ts:100); owner-requests.pg.spec.ts (f) sends another account\'s',
+  'POST /runner/settings-proposals header x-orbit-session-id':
+    'must be a session of the runner\'s owner that this runner hosts, else 403 before anything is read or written (runner-api/runner-owner-requests.controller.ts:100); the proposal acts on that owner\'s own preferences only, and settings-proposals.pg.spec.ts (t) sends another account\'s session',
+  'GET /runner/settings header x-orbit-session-id':
+    'must be a session of the runner\'s owner that this runner hosts, else 403 before anything is read (runner-api/runner-owner-requests.controller.ts:100); the answer is that owner\'s own preferences, read by the runner\'s owner, never by the header, and settings-cli.pg.spec.ts sends another account\'s session',
   'POST /runner/owner-requests/:id/withdraw header x-orbit-session-id':
-    'must be a session of the runner\'s owner that this runner hosts, else 403 (runner-api/runner-owner-requests.controller.ts:66), and must be the session that filed the request (owner-requests/owner-requests.service.ts:233)',
+    'must be a session of the runner\'s owner that this runner hosts, else 403 (runner-api/runner-owner-requests.controller.ts:100), and must be the session that filed the request (owner-requests/owner-requests.service.ts:233)',
   // ── the wiki's import on the server ──────────────────────────────────────────────────────────────
   'POST /runner/wiki/spaces/:id/import-jobs body id':
     'the id the command names for the job it is making: the insert does nothing when the id is taken, and the job '
@@ -1644,6 +1659,25 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
   'POST /runner/sessions/:id/approvals body backgroundJobId':
     'the id the machine gave one of its own processes, stored on the approval of the session the path names '
     + '(runner-api.controller.ts:3900)',
+  // A remote SubAgent's runner keeping files under the parent session it does not host (5bc9c25f00): the run it names is
+  // looked up only among the RUNNING runs of the session the path names that belong to the calling runner's account
+  // and were handed to that runner, and the session is then read under the same account (sessionOfRemoteSubagent,
+  // runner-api/subagent-remote.ts:659). Another account's run, or another account's session, is the same 403 as
+  // naming no run. files/file-tools.pg.spec.ts (11) sends a run of another session, a runner it was not handed to and
+  // an ended run.
+  'POST /runner/sessions/:id/files query subagentRunId':
+    'a SubAgent run looked up only among the calling account\'s RUNNING runs of the session the path names that were '
+    + 'handed to this runner (runner-api/subagent-remote.ts:659); any other id, another account\'s run included, is '
+    + 'the 403 of naming none; files/file-tools.pg.spec.ts (11)',
+  'PUT /runner/sessions/:id/files/:fileId/pin query subagentRunId':
+    'the same lookup as the upload\'s subagentRunId (runner-api/subagent-remote.ts:659), then the file is read within '
+    + 'that session; files/file-tools.pg.spec.ts (11)',
+  'DELETE /runner/sessions/:id/files/:fileId/pin query subagentRunId':
+    'the same lookup as the upload\'s subagentRunId (runner-api/subagent-remote.ts:659), then the file is read within '
+    + 'that session; files/file-tools.pg.spec.ts (11)',
+  'POST /runner/sessions/:id/file-bundles query subagentRunId':
+    'the same lookup as the upload\'s subagentRunId (runner-api/subagent-remote.ts:659); the bundle\'s files are read '
+    + 'within that session; files/file-tools.pg.spec.ts (11)',
   'POST /runner/sessions/:id/approvals body subagentRunId':
     'a SubAgent run, looked up only among the runs of the session the path names, whose ownership the door checked '
     + 'first; any other id, another account\'s run included, is 404 (runner-api.controller.ts:5509); '

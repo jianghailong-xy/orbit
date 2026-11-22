@@ -120,6 +120,13 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
     /// detail read's `integration`, which the task page's Landing section is drawn from. Nil on a
     /// task in no project, and from a server that predates the read.
     public let integration: TaskIntegrationView?
+    /// Exempt from its project's landing check (§12.15 P-C2), why, and who: the coordinator session
+    /// that marked it, or nil with `landingCheckExemptOwnerSetAt` when the owner did. All nil from a
+    /// server that predates them.
+    public var landingCheckExempt: Bool? = nil
+    public var landingCheckExemptReason: String? = nil
+    public var landingCheckExemptBySessionId: String? = nil
+    public var landingCheckExemptOwnerSetAt: String? = nil
     public let assignee: TaskAssignee?
     /// Where a run of this task last said it was (`task_progress_report`). Detail payload only.
     public let progress: TaskProgressView?
@@ -149,6 +156,7 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
         case running, queued, runningSince, awaitingOwnerConfirmation, confirmationUnderReview, blocked
         case dependencyState, runnable
         case integration
+        case landingCheckExempt, landingCheckExemptReason, landingCheckExemptBySessionId, landingCheckExemptOwnerSetAt
         case assignee, progress, comments, sessions, creatorSession, dependsOn, dependedOnBy
         case counts = "_count"
     }
@@ -593,6 +601,9 @@ public struct UpdateTaskRequest: Encodable, Sendable {
     /// both: a tier picked by hand clears the reason that argued for another).
     public var modelHint: FieldUpdate<String>
     public var modelHintReason: FieldUpdate<String>
+    /// §12.15 P-C2: false is the owner's Remove exemption; true needs a reason. Nil leaves it.
+    public var landingCheckExempt: Bool?
+    public var landingCheckExemptReason: String?
 
     public init(title: String? = nil, description: String? = nil, status: TaskStatus? = nil,
                 assigneeId: FieldUpdate<String> = .keep, listId: FieldUpdate<String> = .keep,
@@ -607,7 +618,10 @@ public struct UpdateTaskRequest: Encodable, Sendable {
                 acceptanceCommand: FieldUpdate<String> = .keep,
                 acceptanceExpectedExitCode: FieldUpdate<Int> = .keep,
                 modelHint: FieldUpdate<String> = .keep,
-                modelHintReason: FieldUpdate<String> = .keep) {
+                modelHintReason: FieldUpdate<String> = .keep,
+                landingCheckExempt: Bool? = nil, landingCheckExemptReason: String? = nil) {
+        self.landingCheckExempt = landingCheckExempt
+        self.landingCheckExemptReason = landingCheckExemptReason
         self.title = title
         self.description = description
         self.status = status
@@ -635,6 +649,7 @@ public struct UpdateTaskRequest: Encodable, Sendable {
         case supersededByTaskId, terminalReason
         case runAt, acceptanceCriteria, acceptanceCommand, acceptanceExpectedExitCode
         case modelHint, modelHintReason
+        case landingCheckExempt, landingCheckExemptReason
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -658,6 +673,8 @@ public struct UpdateTaskRequest: Encodable, Sendable {
         try acceptanceExpectedExitCode.encode(into: &c, forKey: .acceptanceExpectedExitCode)
         try modelHint.encode(into: &c, forKey: .modelHint)
         try modelHintReason.encode(into: &c, forKey: .modelHintReason)
+        try c.encodeIfPresent(landingCheckExempt, forKey: .landingCheckExempt)
+        try c.encodeIfPresent(landingCheckExemptReason, forKey: .landingCheckExemptReason)
     }
 }
 

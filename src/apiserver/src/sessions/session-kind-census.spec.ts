@@ -49,10 +49,18 @@ const SCANS: readonly KindFilteredScan[] = [
     anchor: 'const sessions = await this.prisma.session.findMany({',
     filter: "sessionKind: 'CONVERSATION'",
   },
+  // Since 2b41655592 the sweep's filter is the one it shares with the managed runner's DUE_RETRY work: the sweep
+  // spreads it, and the shared filter holds the kind.
   {
     file: 'src/sessions/auto-retry.service.ts',
-    name: 'the auto-retry sweep',
+    name: 'the auto-retry sweep (through autoRetryEligibleWhere)',
     anchor: 'const due = await this.prisma.session.findMany({',
+    filter: '...autoRetryEligibleWhere(),',
+  },
+  {
+    file: 'src/sessions/auto-retry-eligibility.ts',
+    name: 'autoRetryEligibleWhere (what the auto-retry sweep and DUE_RETRY may fire)',
+    anchor: 'export function autoRetryEligibleWhere',
     filter: "sessionKind: 'CONVERSATION',",
   },
   {

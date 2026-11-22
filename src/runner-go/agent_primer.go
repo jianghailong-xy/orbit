@@ -31,7 +31,7 @@ package main
 // a change to a word is a new agentPrimerVersion, reviewed as a diff.
 
 // agentPrimerVersion is the version of the primer's text. Any change to it is a new version.
-const agentPrimerVersion = "1.4.3"
+const agentPrimerVersion = "1.4.4"
 
 // agentContractVersion is the Agent Contract version the primer was written from: the header of
 // docs/orbit-agent-contract.md and contractVersion in contracts/orbit-agent.contract.json.
@@ -41,8 +41,10 @@ const agentContractVersion = "1.11.0"
 // client that shows only the beginning of a server's instructions, and by a model skimming them.
 const agentPrimerLeadMaxChars = 512
 
-// agentPrimerMaxBytes is the most the whole primer may take, so that being always on stays cheap.
-const agentPrimerMaxBytes = 3200
+// agentPrimerMaxBytes is the most the whole primer may take, so that being always on stays cheap. Raised from 3,200 on
+// 2026-11-20, with the owner's agreement, for the settings paragraph (agentPrimerSettings, 189 bytes with its break,
+// docs/settings-from-conversation-design.md §7): primer 1.4.3 took all 3,200.
+const agentPrimerMaxBytes = 3456
 
 // orbitInstructionsMaxBytes is the most the instructions the runner writes into an engine may take,
 // the primer included (orbitCLIInstructions, in its longest shape: a task's session with Watch on). Raised from
@@ -51,8 +53,9 @@ const agentPrimerMaxBytes = 3200
 // raised it to 6,656 for the paragraph on an engine's own sub-agents (orbitSubAgentInstructions), which the
 // agent-contract eval measured agents need. Merged in contract 1.10.0, the instructions carry both paragraphs and
 // the longest shape is 7,178 bytes, so the budget is 7,424 (7.25 KiB); reconciling the two paragraphs, which both
-// speak of handing work to another agent, is P2-01's follow-up, not the merge's.
-const orbitInstructionsMaxBytes = 7424
+// speak of handing work to another agent, is P2-01's follow-up, not the merge's. Raised to 7,680 on 2026-11-20, with
+// the owner's agreement, for the primer's settings paragraph: the longest shape went from 7,236 bytes to 7,425.
+const orbitInstructionsMaxBytes = 7680
 
 // The primer, one rule set per paragraph. The first states the choices an agent gets wrong most
 // often (contract §8.3: S1-S4), and every later one is one or two of §0's ten rules.
@@ -98,6 +101,9 @@ const (
 		"task_list shows it recorded, else record it as a task, tell the user the switch is in Settings -> Session " +
 		"orchestration, and never claim a delegation."
 
+	agentPrimerSettings = "When a person's problem is one of their own Settings, call settings_get, then settings_propose " +
+		"the change; for a key it refuses, link the row it returns instead of describing where it is."
+
 	agentPrimerRederive = "After compaction or a resume, read before you act -- task_get with no id reads this " +
 		"session's task -- and never rebuild an id, a status or an approval from memory or a summary."
 )
@@ -110,4 +116,5 @@ const agentPrimer = agentPrimerLead + "\n\n" +
 	agentPrimerCLI + "\n\n" +
 	agentPrimerReceipts + "\n\n" +
 	agentPrimerOrchestration + "\n\n" +
+	agentPrimerSettings + "\n\n" +
 	agentPrimerRederive

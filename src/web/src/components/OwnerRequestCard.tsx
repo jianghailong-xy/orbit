@@ -62,6 +62,7 @@ import { Textarea } from './ui/Textarea';
 import { WikiCreateDialog, sameId, useWikiWorkspaceChoices } from './WikiSetUpDialog';
 import { ScheduleWaitingCard, isScheduleWaitingKind } from './ScheduleWaitingCard';
 import { ConditionWaitingCard, isConditionWaitingKind } from './ConditionWaitingCard';
+import { SettingsChangeCard, SettingsChangeFolded } from './SettingsChangeCard';
 import './OwnerRequest.css';
 import { useMachineName } from '../lib/managedRunner';
 
@@ -105,6 +106,7 @@ const PRIMARY: Readonly<Record<AgentRequestKind, string>> = {
   MANUAL_STEP: 'Mark done',
   CONFIRM: 'Confirm',
   WIKI_CREATE: 'Create wiki',
+  SETTINGS_CHANGE: 'Save changes',
 };
 
 /** The runner a secret goes to, by the name the owner knows it by. */
@@ -401,6 +403,12 @@ export function OwnerRequestCard(props: {
 }): JSX.Element {
   // A scheduled task's items (failed, held, a run's approval, a run's wider envelope) are answered through the door of
   // what they point at, so they draw their own body in the same frame.
+  // A proposed change to the owner's Settings is drawn as a confirmation card (docs/settings-from-conversation-design.md
+  // §8.1); answered, as its own one-line fold. Expired or withdrawn, it reads as any request does.
+  if (props.request.kind === 'SETTINGS_CHANGE') {
+    if (props.request.state === 'PENDING') return <SettingsChangeCard request={props.request} />;
+    if (props.request.state === 'DONE' || props.request.state === 'DECLINED') return <SettingsChangeFolded request={props.request} />;
+  }
   if (props.request.state === 'PENDING' && isConditionWaitingKind(props.request.kind)) {
     return <ConditionWaitingCard request={props.request} now={props.now} />;
   }
@@ -722,7 +730,14 @@ const ENDING_ICON: Readonly<Record<string, ReactNode>> = {
 };
 
 /** A request that has ended, as one row: how, who, when, and from which device. */
-export function OwnerRequestResolved({ request: given, now = Date.now() }: { request: OwnerRequest; now?: number }): JSX.Element {
+export function OwnerRequestResolved({ request, now = Date.now() }: { request: OwnerRequest; now?: number }): JSX.Element {
+  if (request.kind === 'SETTINGS_CHANGE' && (request.state === 'DONE' || request.state === 'DECLINED')) {
+    return <SettingsChangeFolded request={request} />;
+  }
+  return <AgentRequestResolved request={request} now={now} />;
+}
+
+function AgentRequestResolved({ request: given, now }: { request: OwnerRequest; now: number }): JSX.Element {
   const door = useSecretDoor(given);
   const request = door.current;
   // A delivered key's whole story on a DONE request; on any other ending, only a removal the owner must be told of —

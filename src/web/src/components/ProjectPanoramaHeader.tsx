@@ -13,7 +13,7 @@ import {
 import { api } from '../api';
 import { streamPoll } from '../lib/listBudget';
 import { DEFAULT_MAIN_BRANCH, mainBranchName } from '../lib/projectStart';
-import { projectIntegrationQuery, projectReadyToRunQuery } from '../lib/queries';
+import { projectReadyToRunQuery } from '../lib/queries';
 import { LandingJobsSheet } from './LandingJobsSheet';
 import { ProjectLandingCard } from './ProjectLandingCard';
 import { ProjectTaskLink } from './ProjectTaskLink';
@@ -21,6 +21,7 @@ import { Alert } from './ui/Alert';
 import { Button } from './ui/Button';
 import { Spinner } from './ui/Spinner';
 import './ui/Typography.css';
+import { useProjectIntegration } from '../lib/pollOwner';
 
 /**
  * Where a project's work stands, and — when none of it is moving — why (the header card of the
@@ -895,6 +896,8 @@ export function landingCard(
   now: number,
   observation: { updatedAt?: number; failed?: boolean } = {},
 ): LandingCard | null {
+  // A project whose line has not started draws no Landing card (revision 42 §12.16, ruling D2).
+  if (view.line === null) return null;
   const line = landingLine(view, now, observation);
   if (!line) return null;
   const jobs = landingJobLines(view, now, observation).map((job) => ({
@@ -1343,7 +1346,7 @@ export function ProjectPanoramaHeader({
   // — one query key, so the card mounting this is not a second request. It is read here rather than
   // handed in because the row is drawn inside this card, and a card that only knew there was a line
   // (the `integrationLine` prop) could not say what the line is doing.
-  const integration = useQuery({ ...projectIntegrationQuery(projectId), enabled: Boolean(projectId) });
+  const integration = useProjectIntegration(projectId);
   const ready = useQuery({ ...projectReadyToRunQuery(projectId), enabled: Boolean(projectId) });
   const inFlight = integration.data?.inFlight ?? null;
   // The clock counts in SECONDS while something is landing, rather than stepping with the 30s poll

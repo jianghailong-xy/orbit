@@ -2,6 +2,7 @@ import { lazy, useEffect, useMemo, useRef, useState, type ReactNode } from 'reac
 import {
   SessionLifecycleState,
   type ProjectIntegrationSettings,
+  type ProjectSettingChangeView,
   type ProjectListIntegration,
   type ProjectListCoordinatorActivity,
   type TaskIntegrationView,
@@ -76,7 +77,6 @@ import {
 } from '../lib/projectAttention';
 import {
   projectCoordinatorStatusQuery,
-  projectIntegrationQuery,
   projectsPath,
   projectsQueryKey,
   runnersQuery,
@@ -118,6 +118,7 @@ import {
   type CriterionMovedOut,
   type ProjectDoneDocument,
 } from '../lib/projectDone';
+import { useProjectIntegration } from '../lib/pollOwner';
 
 // The panel a task opens in over this page — TaskDetailPanel, and the transcript and editors it
 // draws — is needed only once a task is open, so it is not on the page's own import path: the
@@ -224,6 +225,8 @@ interface ProjectDetail extends Omit<Project, 'integration'> {
   nonCodeReason?: string | null;
   /** The criteria this project moved out to a follow-up (board 02 G). */
   criteriaMovedOut?: readonly CriterionMovedOut[];
+  /** The coordinator's and the owner's landing-check history, newest first (§12.15 P-R1). */
+  settingChanges?: ProjectSettingChangeView[];
 }
 
 export const STATUS_COLOR: Record<Project['status'], string> = {
@@ -2283,10 +2286,7 @@ export function ProjectTasks({ projectId }: { projectId: string }) {
   // The same entry the integration row above already holds, under the same key: a landed row has
   // to NAME the branch it landed on, and reading it here costs nothing — two `useQuery` calls on
   // one key are one request and one cache entry.
-  const integration = useQuery({
-    ...projectIntegrationQuery(projectId),
-    enabled: Boolean(projectId),
-  });
+  const integration = useProjectIntegration(projectId);
   const branches: TaskLandingBranches = {
     ref: integration.data?.ref ?? null,
     upstreamRef: integration.data?.upstreamRef ?? null,

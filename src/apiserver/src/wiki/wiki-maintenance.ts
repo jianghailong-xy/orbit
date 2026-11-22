@@ -254,7 +254,7 @@ export function factsSql(scope: SpaceScope, from: FactPosition | null): Prisma.S
        -- v1 feeds no scheduled task's run to the wiki (docs/scheduled-tasks-design.md §12.1).
        AND s."run_source" <> 'SCHEDULE'
        AND s."last_turn_at" IS NOT NULL
-       AND s."status"::text IN ('AWAITING_INPUT', 'SUCCEEDED', 'FAILED', 'CANCELLED', 'INTERRUPTED')
+       AND s."status" NOT IN ('PENDING', 'RUNNING')
        AND ${ours(Prisma.sql`s."id"`)}
        AND ${notMaintenance(Prisma.sql`t."list_id"`)} ${onOrAfter(Prisma.sql`s."last_turn_at"`)}
     UNION ALL
@@ -332,7 +332,7 @@ export async function wikiSessionsOfSpace(reader: DossierReader, scope: SpaceSco
      WHERE s."owner_id" = ${scope.ownerId}::uuid AND s."id" = ANY(${[...sessionIds]}::uuid[])
        AND s."workspace_id" = ANY(${scope.workspaceIds}::uuid[]) AND s."deleted_at" IS NULL
        AND s."run_source" <> 'SCHEDULE'
-       AND s."status"::text IN ('AWAITING_INPUT', 'SUCCEEDED', 'FAILED', 'CANCELLED', 'INTERRUPTED')
+       AND s."status" NOT IN ('PENDING', 'RUNNING')
        AND s."id" <> ALL(${scope.foreignSessionIds}::uuid[])
        AND (${scope.maintenanceListId}::uuid IS NULL OR t."list_id" IS NULL OR t."list_id" <> ${scope.maintenanceListId}::uuid)`;
   return new Set(rows.map((row) => row.id));

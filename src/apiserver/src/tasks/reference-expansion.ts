@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma, RunStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { classifyFailure, FailureCause, toUuid, uuidToBase62 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { releaseWasFailureFilter } from '../common/session-release';
 import { countTaskWorkCarriers } from '../sessions/task-work-carrier';
 
 /**
@@ -102,7 +103,7 @@ export class ReferenceExpansionService {
           SELECT list_task."id" FROM "task" list_task WHERE list_task."list_id" = ${id}::uuid)`,
       ),
       this.prisma.session.findMany({
-        where: { task: { listId: id }, status: RunStatus.FAILED },
+        where: { task: { listId: id }, ...releaseWasFailureFilter() },
         select: { error: true },
       }),
       // "为什么卡住了" is the reason people reference a list at all, and the answer is here rather

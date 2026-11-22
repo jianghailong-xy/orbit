@@ -216,6 +216,8 @@ test('a failed import Trashes the session with the runner’s reason', async () 
   assert.equal(h.updateCalls[0].data.status, RunStatus.FAILED);
   assert.equal(h.updateCalls[0].data.error, 'transcript holds no conversation');
   assert.ok(h.updateCalls[0].data.deletedAt instanceof Date, 'the failed import goes to Trash');
+  // Released with the status (plan step 3.1).
+  assert.ok(h.updateCalls[0].data.finishedAt instanceof Date, 'the failed import sets the release column');
   assert.deepEqual(h.published, [SESSION_ID]);
 });
 

@@ -49,6 +49,7 @@ import {
 } from '@orbit/shared';
 import { Client } from 'pg';
 
+import { isReleasedStatus } from '../common/session-release';
 import { call } from '../auth/pat-test-apiserver';
 import { generateToken, hashPassword, sha256 } from '../common/crypto.util';
 import {
@@ -174,7 +175,11 @@ test('managed runners switched off with existing state: nothing is stopped, dele
     const columns: Record<string, unknown> = {
       id, owner_id: of.ownerId, creator_id: of.ownerId, workspace_id: of.workspaceId, assigned_runner_id: of.runnerId,
       title: 'earlier work', prompt: 'the opening prompt', provider: 'claude', provider_builtin: true, status, num_turns: 1,
-      runtime_session_id: randomUUID(), ...extra,
+      runtime_session_id: randomUUID(),
+      ...(isReleasedStatus(status) ? {
+        finished_at: new Date(), 
+      } : {}),
+      ...extra,
     };
     const names = Object.keys(columns);
     await sql.query(

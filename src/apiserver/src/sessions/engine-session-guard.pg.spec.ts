@@ -306,8 +306,13 @@ const USER_DRIVERS: Readonly<Record<string, Drive>> = {
   'POST /sessions/:id/commit': (s, w, id) => s.sessions.commitWorktree(w.ownerId, id),
   'POST /sessions/:id/checkout/discard': (s, w, id) => s.sessions.discardCheckout(w.ownerId, id),
   'POST /sessions/:id/adopt-branch': (s, w, id) => s.sessions.adoptWorktreeBranch(w.ownerId, id),
+  'POST /sessions/:id/merge-failure/dismiss': (s, w, id) => s.sessions.dismissMergeFailure(w.ownerId, id),
   'POST /sessions/:id/retry-message': (s, w, id) => s.autoRetry.resendRetryMessage(w.ownerId, id),
   'POST /sessions/:id/auto-retry': (s, w, id) => s.sessions.armAutoRetry(w.ownerId, id, future()),
+  // The job id is checked after the engine-session guard, so a landing session is refused before any
+  // job of it is looked for.
+  'POST /sessions/:id/background/jobs/:jobId/stop': (s, w, id) =>
+    s.sessions.stopBackgroundJob(w.ownerId, id, 'bgj_0000000000a1'),
   'DELETE /sessions/:id/auto-retry': (s, w, id) => s.sessions.cancelAutoRetry(w.ownerId, id),
   'POST /sessions/:id/complete': (s, w, id) => s.sessions.complete(w.ownerId, id),
   'POST /sessions/:id/archive': (s, w, id) => s.sessions.complete(w.ownerId, id),
@@ -627,7 +632,7 @@ async function landingFixture(stack: Stack, label: string): Promise<LandingFixtu
       taskId,
       title: `${label} work`,
       prompt: 'do the work',
-      status: RunStatus.SUCCEEDED,
+      status: RunStatus.SUCCEEDED, 
       provider: 'claude',
       providerBuiltin: true,
       engine: 'claude',
@@ -807,9 +812,13 @@ test('only a claimed subject gets a session row, and the compensation points ins
     });
     const settled = await ensureLandingSession(stack.db, g.landingId, claimed);
     assert.ok(settled?.created);
-    assert.equal((await stack.db.session.findUniqueOrThrow({
-      where: { id: settled!.sessionId }, select: { status: true },
-    })).status, RunStatus.SUCCEEDED);
+    const settledRow = await stack.db.session.findUniqueOrThrow({
+      where: { id: settled!.sessionId }, select: { status: true, finishedAt: true},
+    });
+    assert.equal(settledRow.status, RunStatus.SUCCEEDED);
+    // Released from the start, at the moment its landing settled (plan step 3.1).
+    const settledAt = (await stack.db.projectLanding.findUniqueOrThrow({ where: { id: g.landingId } })).settledAt;
+    assert.equal(settledRow.finishedAt?.getTime(), settledAt?.getTime(), 'the release column is the settlement time');
   } finally {
     await stack.db.$disconnect();
   }
@@ -900,7 +909,7 @@ test('a SESSION_TURN_SETTLED watch on an open landing waits for the landing to e
     // The landing ends: the same watch now matches, and its row is the one that moved.
     await stack.db.session.update({
       where: { id: landing },
-      data: { status: RunStatus.SUCCEEDED, completedAt: new Date() },
+      data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), completedAt: new Date() },
     });
     const evaluation = await new WatchEvaluatorService(stack.prisma, noopRealtime(), {
       rollout: { mode: 'on', canaryOwners: new Set<string>(), problems: [] },

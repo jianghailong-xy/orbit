@@ -11,11 +11,11 @@ import {
   type SubagentRunCreateRequest,
   type SubagentWorkspaceChoice,
 } from '@orbit/shared';
-import { Prisma, RunStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import {
   ALWAYS_ALLOWED_TOOLS,
   isWiderThanParent,
-  resolvePermissionMode,
+  runningPermissionMode,
 } from '../common/permission-mode';
 import { dispatchAllowedTools } from '../common/permission-rules';
 import { normalizeBuiltinPermissionMode, normalizeEffortForRuntimeModel } from '../common/runtime-provider';
@@ -31,6 +31,8 @@ import { agentProviderSeed } from '../workspaces/workspace-provider';
 import { stripNul } from './strip-nul';
 import { appliedDecision, fallbackCandidates, noProviderMessage } from './subagent-run';
 import { subagentRouteInput, type SubagentPlanUsageReader } from './subagent-route';
+import { sessionReleasedSql } from '../common/session-release';
+import { assertEngineSession } from '../sessions/engine-session';
 
 /**
  * Cross-workspace SubAgents (docs/subagent-design.md §10): a delegate call that runs on another workspace of the
@@ -339,7 +341,7 @@ export async function remoteSubagentExec(
   const parent = await tx.session.findUnique({
     where: { id: args.parentSessionId },
     select: {
-      engine: true, provider: true, permissionMode: true, owner: { select: { preferences: true } },
+      engine: true, provider: true, permissionMode: true, actualPermissionMode: true, owner: { select: { preferences: true } },
       scheduleRun: { select: { accessLevel: true, schedule: { select: { accessLevel: true } } } },
     },
   });
@@ -387,7 +389,8 @@ export async function remoteSubagentExec(
   const provider = resolved.provider;
   const runnerModel = resolved.runnerModel ?? resolved.model;
   const catalog = workspace.runner.modelCatalog;
-  const parentMode = resolvePermissionMode(parent.permissionMode, parent.owner);
+  // R3: the mode the parent is actually running in.
+  const parentMode = runningPermissionMode(parent, parent.owner);
   const parentEngine = parent.engine ?? parent.provider ?? provider;
   // Never wider than the parent's mode (§5.3), judged on the engine the child runs on.
   const asked = !args.facts.readonly && args.facts.permissionMode
@@ -642,10 +645,30 @@ export async function runOfTarget(
   return run;
 }
 
+/**
+ * The parent session a remote SubAgent keeps a file under (§10.2): its `file_upload` acts for the parent's session, which
+ * the run's target runner does not host. Only while the run is RUNNING, of this session and account, and handed to this
+ * runner; null otherwise, and the caller's own door then decides as for any session.
+ */
+export async function sessionOfRemoteSubagent(
+  db: Prisma.TransactionClient,
+  runner: { id: string; ownerId?: string },
+  sessionId: string,
+  subagentRunId: string | undefined,
+) {
+  if (!subagentRunId || !runner.ownerId) return null;
+  const run = await db.subagentRun.findFirst({
+    where: { id: subagentRunId, sessionId, ownerId: runner.ownerId, targetRunnerId: runner.id, status: 'RUNNING' },
+    select: { id: true },
+  });
+  if (!run) return null;
+  const session = await db.session.findFirst({ where: { id: sessionId, ownerId: runner.ownerId, deletedAt: null } });
+  if (session) assertEngineSession(session);
+  return session;
+}
+
 /** A run whose parent stopped it or ended: the target is to stop it. */
-const PARENT_GONE = Prisma.sql`(r."stop_requested_at" IS NOT NULL OR s."status"::text IN (${Prisma.join([
-  RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED,
-])}) OR s."cancel_requested_at" IS NOT NULL)`;
+const PARENT_GONE = Prisma.sql`(r."stop_requested_at" IS NOT NULL OR ${sessionReleasedSql('s')} OR s."cancel_requested_at" IS NOT NULL)`;
 
 /**
  * What a runner's heartbeat says of the remote SubAgent runs it is the target of (§10.2, §10.3): the ones to claim,

@@ -72,6 +72,24 @@ export class OwnerRequestsController {
   }
 
   /**
+   * The owner's Save changes on a SETTINGS_CHANGE card (docs/settings-from-conversation-design.md §5.2): writes the
+   * card's settings, marks each as changed from the asking conversation, and settles the card DONE. Answers with the
+   * card. 409 SETTINGS_STALE, writing nothing, when a setting changed since it was proposed; refused
+   * SETTINGS_OWNER_CHANNEL_ONLY to a request carrying an acting session.
+   */
+  @Post(':id/apply-settings')
+  @PatForbidden('OWNER_INTERACTIVE')
+  @HttpCode(HttpStatus.OK)
+  applySettings(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Req() request: { headers: Record<string, string | string[] | undefined> },
+    @Headers('x-orbit-client') client?: string,
+  ) {
+    return this.requests.applySettings(user.userId, id, actingSession(request.headers), ownerRequestClient(client));
+  }
+
+  /**
    * The owner enters a SECRET request's key (design §4.2 step 1). Answers with the request as the card shows it, which
    * never carries the value. The request becomes DONE only when the runner acknowledges delivery.
    */

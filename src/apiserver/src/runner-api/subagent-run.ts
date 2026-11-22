@@ -376,6 +376,11 @@ export function subagentRunView(
     attempts?: unknown;
     changedFiles?: string[];
     description?: string | null;
+    /** A workflow call's (docs/subagent-workflow-design.md §5.2); absent or null on a delegate call's run. */
+    workflowRunId?: string | null;
+    callIndex?: number | null;
+    label?: string | null;
+    phase?: string | null;
   },
   labels?: ReadonlyMap<string, string>,
 ): SubagentRunView {
@@ -405,6 +410,11 @@ export function subagentRunView(
     engine,
     readonly: decision.readonly === true,
     changedFiles: row.changedFiles ?? [],
+    workflowRunId: row.workflowRunId ?? null,
+    callIndex: row.callIndex ?? null,
+    // The runner sends a call's label and phase as it has them, "" for none.
+    label: row.label || null,
+    phase: row.phase || null,
     createdAt: row.createdAt.toISOString(),
     endedAt: row.endedAt ? row.endedAt.toISOString() : null,
   };

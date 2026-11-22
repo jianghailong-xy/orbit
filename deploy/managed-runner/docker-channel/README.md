@@ -9,7 +9,7 @@ the apiserver process nor any managed runner container is given `docker.sock`.
 
 Root Compose runs it as the `docker-channel` service, built from [Dockerfile](Dockerfile) (Python's
 standard library and this one file), under the `managed-runners-docker` profile: a fresh install
-(`scripts/install-server.sh`) switches that profile on in `.env`, and an upgrade never does, so a
+with `--managed-runners` (`scripts/install-server.sh`) switches that profile on in `.env`, and an upgrade never does, so a
 deployment installed without it does not run the channel. The design record is
 [docs/managed-runner-design.md](../../../docs/managed-runner-design.md), "Implementation record:
 Docker backend" and "Implementation record: new deployments"; operating it is in

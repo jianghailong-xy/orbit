@@ -22,6 +22,7 @@ import {
 } from './feishu-transport';
 import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { PushService } from './push.service';
+import { releaseFactsOf } from '../common/session-release-shapes.fixture';
 
 /** Neither APNs nor FCM: Feishu is the only channel. */
 const NO_DEVICES = { get: () => undefined } as unknown as ConfigService;
@@ -112,7 +113,10 @@ test('a settlement reaches Feishu: Finished / Failed, one card per settlement, a
     const prisma: { session: { findUnique: () => Promise<unknown> }; conversationTurn: unknown } = {
       session: {
         findUnique: async () => ({
-          title: 'Ship the release', ownerId: OWNER, status, retryAt: null, completedAt: null, deletedAt: null,
+          title: 'Ship the release', ownerId: OWNER,
+          // The release facts its writer stores beside the status (plan step 4.8: the alert reads these).
+          ...releaseFactsOf(status === RunStatus.FAILED ? 'failed' : 'finished work'),
+          status, retryAt: null, completedAt: null, deletedAt: null,
           error: 'provider error: overloaded', recapText: 'Tagged v1.2.3', owner: { preferences: prefs },
         }),
       },
@@ -384,7 +388,7 @@ test('a transport that throws costs the devices nothing', async () => {
   const sessionId = randomUUID();
   const sent: string[] = [];
   const prisma = {
-    session: { findUnique: async () => ({ title: 'T', ownerId: OWNER, status: RunStatus.SUCCEEDED, retryAt: null, completedAt: null, deletedAt: null, error: null, recapText: null, owner: { preferences: {} } }) },
+    session: { findUnique: async () => ({ title: 'T', ownerId: OWNER, ...releaseFactsOf('finished work'), status: RunStatus.SUCCEEDED, retryAt: null, completedAt: null, deletedAt: null, error: null, recapText: null, owner: { preferences: {} } }) },
     conversationTurn: { findFirst: async () => { throw new Error('database gone'); } },
     deviceToken: { findMany: async () => [{ id: 'd', token: 'device', platform: 'ios', bundleId: 'io.orbitd.app', environment: 'sandbox', loginSessionId: null }] },
   };

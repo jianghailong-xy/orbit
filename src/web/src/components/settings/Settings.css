@@ -379,6 +379,28 @@
 .settings-row-control {
   flex-shrink: 0;
 }
+/* A setting last changed from a conversation (docs/settings-from-conversation-design.md §8.2, board 3 note 8): one
+   more line in the description's grey, no colour, no frame. */
+.settings-row-changed {
+  margin-top: 4px;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+.settings-row-changed a,
+.settings-row-changed-undo {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.settings-row-changed a:hover,
+.settings-row-changed-undo:hover {
+  color: var(--text-1);
+}
 /* A row that opens something from a press anywhere on it: lit across the card's width on hover, its
    control level with the title's line however many lines the description takes. */
 .settings-row--link {

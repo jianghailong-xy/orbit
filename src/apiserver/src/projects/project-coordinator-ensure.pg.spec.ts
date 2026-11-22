@@ -15,6 +15,7 @@ import {
 import { TaskStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
+import { isReleasedStatus } from '../common/session-release';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
@@ -246,12 +247,14 @@ async function world(
   }
 
   if (!shape.neverOpened) {
+    const status = shape.status ?? RunStatus.AWAITING_INPUT;
     await db.session.create({
       data: {
         id: coordinatorSessionId, ownerId, creatorId: ownerId, workspaceId: landingWorkspaceId,
         assignedRunnerId: shape.offlineRunner ? offlineRunnerId : runnerId,
         title: `coordinator: ${label}`, prompt: `coordinator: ${label}`, provider: 'claude',
-        status: shape.status ?? RunStatus.AWAITING_INPUT,
+        status,
+        ...(isReleasedStatus(status) ? { finishedAt: new Date()} : {}),
         startedAt: shape.startedAt === undefined ? new Date() : shape.startedAt,
         completedAt: shape.completedAt ?? null,
         deletedAt: shape.deletedAt ?? null,
@@ -275,7 +278,7 @@ async function world(
     // the retirement, which 0130 refuses while a live session is working on the task.
     await db.session.update({
       where: { id: coordinatorSessionId },
-      data: { status: RunStatus.FAILED },
+      data: { status: RunStatus.FAILED, finishedAt: new Date()},
     });
     await stack.tasks.update(ownerId, taskId, { status: TaskStatus.CANCELLED });
     await stack.tasks.update(ownerId, taskId, { supersededByTaskId: successorId });

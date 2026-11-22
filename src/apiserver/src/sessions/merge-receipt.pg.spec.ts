@@ -75,7 +75,7 @@ async function world(db: PrismaClient, label: string): Promise<World> {
   await db.session.create({
     data: {
       id: sessionId, ownerId, creatorId: ownerId, workspaceId, taskId,
-      title: label, prompt: 'p', status: RunStatus.SUCCEEDED,
+      title: label, prompt: 'p', status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
       branch: 'orbit/25c-work', isolationStatus: 'worktree',
     },
   });
@@ -482,7 +482,7 @@ suite('merge receipts, on real PostgreSQL', async (t) => {
     await db.session.create({
       data: {
         id: second, ownerId: w.ownerId, creatorId: w.ownerId, workspaceId: original.workspaceId,
-        taskId: w.taskId, title: 'takeover', prompt: 'p', status: RunStatus.SUCCEEDED,
+        taskId: w.taskId, title: 'takeover', prompt: 'p', status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
         branch: 'orbit/25c-work', isolationStatus: 'worktree',
       },
     });

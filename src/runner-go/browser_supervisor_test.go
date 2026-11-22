@@ -16,10 +16,22 @@ type fakeBrowserProcess struct {
 	args    []string
 	exited  bool
 	stopped bool
+	done    chan struct{}
+	once    sync.Once
 }
 
-func (p *fakeBrowserProcess) Exited() bool { return p.exited }
-func (p *fakeBrowserProcess) Stop()        { p.stopped = true }
+func (p *fakeBrowserProcess) Exited() bool          { return p.exited }
+func (p *fakeBrowserProcess) Done() <-chan struct{} { return p.done }
+func (p *fakeBrowserProcess) Stop()                 { p.ended() }
+
+// ended is this program ending, by Stop or by itself, as Chrome does when its last tab closes.
+func (p *fakeBrowserProcess) ended() {
+	p.once.Do(func() {
+		p.exited = true
+		p.stopped = true
+		close(p.done)
+	})
+}
 
 type fakeBrowserStarter struct {
 	mu      sync.Mutex
@@ -30,9 +42,16 @@ type fakeBrowserStarter struct {
 func (s *fakeBrowserStarter) Start(name string, args []string) (browserProcess, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	p := &fakeBrowserProcess{name: name, args: args}
+	p := &fakeBrowserProcess{name: name, args: args, done: make(chan struct{})}
 	s.started = append(s.started, p)
 	return p, nil
+}
+
+// count is how many programs have been started, for a watcher running in its own goroutine.
+func (s *fakeBrowserStarter) count() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.started)
 }
 func (s *fakeBrowserStarter) WaitDisplay(string) error { return nil }
 func (s *fakeBrowserStarter) Reap()                    { s.reaped++ }
@@ -304,6 +323,67 @@ func TestBrowserRestartsWhenAProgramEnded(t *testing.T) {
 	}
 	if got := strings.Join(r.starter.live(), ","); got != "Xvfb,x11vnc,chromium" || len(r.starter.started) != 6 {
 		t.Fatalf("after a crash: live %s of %d started", got, len(r.starter.started))
+	}
+}
+
+// Chromium quits with its last tab or window. Under a viewer, Chrome alone starts again on the display and VNC server
+// still running, so the owner's stream stays open and draws the new window instead of a black display forever.
+func TestBrowserStartsWithChromeAgainWhenItsLastTabClosesUnderAViewer(t *testing.T) {
+	r := newBrowserRig(t)
+	if err := r.b.Open(); err != nil {
+		t.Fatal(err)
+	}
+	closeViewer := r.b.ViewerOpened()
+	defer closeViewer()
+
+	r.starter.started[browserProgramChrome].ended() // the owner closed the last tab: Chromium exits with it
+	waitUntil(t, func() bool { return r.starter.count() == 4 }, "Chrome did not start again under the viewer")
+	if got := strings.Join(r.starter.live(), ","); got != "Xvfb,x11vnc,chromium" {
+		t.Fatalf("after Chrome ended under a viewer: live %s of %d started", got, r.starter.count())
+	}
+	if r.b.Viewers() != 1 || !r.b.Running() {
+		t.Fatalf("viewers = %d, running = %v", r.b.Viewers(), r.b.Running())
+	}
+	// The display and VNC server were not restarted: the viewer's stream still names the same socket.
+	for i, want := range []string{"Xvfb", "x11vnc", "chromium", "chromium"} {
+		if r.starter.started[i].name != want {
+			t.Fatalf("started %d is %s, want %s", i, r.starter.started[i].name, want)
+		}
+	}
+	// The new Chrome is watched too.
+	r.starter.started[3].ended()
+	waitUntil(t, func() bool { return r.starter.count() == 5 }, "the restarted Chrome was not watched")
+}
+
+// With no viewer, Chrome ending leaves the browser nothing to serve: the programs stop, the report says so, and the
+// next Open or browser call starts them together again.
+func TestBrowserStopsWhenChromeEndsWithNoViewer(t *testing.T) {
+	r := newBrowserRig(t)
+	if err := r.b.Acquire("sess-a", ""); err != nil {
+		t.Fatal(err)
+	}
+	r.starter.started[browserProgramChrome].ended()
+	waitUntil(t, func() bool { return !r.b.Running() }, "the browser did not stop")
+	if live := r.starter.live(); len(live) != 0 {
+		t.Fatalf("still running after Chrome ended: %v", live)
+	}
+	if err := r.b.Acquire("sess-a", ""); err != nil || !r.b.Running() {
+		t.Fatalf("acquire after Chrome ended: %v", err)
+	}
+}
+
+// The display ending ends the browser whatever else runs, viewer or not: the VNC server has nothing to show.
+func TestBrowserStopsWhenTheDisplayEndsUnderAViewer(t *testing.T) {
+	r := newBrowserRig(t)
+	if err := r.b.Open(); err != nil {
+		t.Fatal(err)
+	}
+	closeViewer := r.b.ViewerOpened()
+	defer closeViewer()
+	r.starter.started[browserProgramXvfb].ended()
+	waitUntil(t, func() bool { return !r.b.Running() }, "the browser did not stop")
+	if live := r.starter.live(); len(live) != 0 {
+		t.Fatalf("still running after the display ended: %v", live)
 	}
 }
 
