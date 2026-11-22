@@ -620,6 +620,78 @@ test('a landing insert and its settlement leave the flat Open list alone', { ski
 });
 
 /**
+ * The pin behind the hint poller leaving out the five LANDING-only sources (docs/list-freshness-scope-hints.md
+ * §5.4 D1): a write to each of them leaves every flat and project-scoped Open-list row exactly as it was and a
+ * `since=` read from before the write answers an empty delta. Were a non-LANDING row to start reading one,
+ * the poller would miss that write silently, and this case goes red.
+ */
+test('a write to each LANDING-only source leaves every flat Open-list row as it was', { skip }, async (t) => {
+  const f = await fixture(t);
+  const { db } = f;
+  const project = await db.project.create({ data: { ownerId: f.ownerId, title: 'olv d1 project' } });
+  const task = await db.task.create({
+    data: {
+      ownerId: f.ownerId, creatorType: 'USER', creatorId: f.ownerId, title: 'olv d1 task',
+      projectId: project.id, completionCriterion: 'OWNER_CONFIRMED',
+    },
+  });
+  await db.session.update({ where: { id: f.sessionId }, data: { taskId: task.id } });
+  const scope = { projectId: project.id };
+  const read = async () => [await openList(f), await openList(f, scope)];
+  let cursor = (await pollSince(f, '')).delta.cursor;
+  const base = await read();
+  let codebaseId = '';
+  const writes: Array<[string, () => Promise<unknown>]> = [
+    ['a codebase', async () => {
+      codebaseId = (await db.projectCodebase.create({
+        data: {
+          ownerId: f.ownerId, projectId: project.id, canonicalRepoUrl: `https://github.com/example/olv-d1-${project.id}`,
+          upstreamRef: 'refs/heads/main', integrationRef: 'refs/heads/main', refAuthority: 'REMOTE',
+        },
+      })).id;
+    }],
+    ['a promotion', () => db.projectPromotion.create({
+      data: {
+        projectId: project.id, ownerId: f.ownerId, codebaseId, sourceKind: 'TASK', sourceRef: 'refs/heads/olv-d1',
+        upstreamRef: 'refs/heads/main', includedTaskIds: [task.id],
+      },
+    })],
+    ['an integration job', () => db.projectIntegrationJob.create({
+      data: {
+        projectId: project.id, ownerId: f.ownerId, codebaseId, kind: 'LAND_TASK', serialKey: `olv-d1-${project.id}`,
+        targetRef: 'refs/heads/main', upstreamRef: 'refs/heads/main', sourceRef: 'refs/heads/olv-d1',
+        idempotencyKey: `olv-d1-${project.id}`,
+      },
+    })],
+    ['an integration open item', () => db.projectOpenItem.create({
+      data: {
+        projectId: project.id, ownerId: f.ownerId, kind: 'INTEGRATION_ERROR', assignee: 'COORDINATOR',
+        assigneeReason: 'olv d1', dedupeKey: `olv-d1-${project.id}`, title: 'olv d1 item', payload: {},
+        taskId: task.id, waitingSince: new Date(), assignedAt: new Date(),
+      },
+    })],
+    ['a merge receipt', () => db.sessionMergeReceipt.create({
+      data: {
+        ownerId: f.ownerId, sessionId: f.sessionId, result: 'MERGED', sourceBranch: 'olv-d1', sourceSha: 'a'.repeat(40),
+        targetBranch: 'main', recordedBy: 'olv', idempotencyKey: `olv-d1-${f.sessionId}`,
+      },
+    })],
+  ];
+  for (const [label, write] of writes) {
+    const version = await readOpenListVersion(f.db as never, f.ownerId);
+    await write();
+    assert.notEqual(await readOpenListVersion(f.db as never, f.ownerId), version,
+      `${label}: the write did not move the version (the case proves nothing)`);
+    assert.deepEqual(await read(), base, `${label}: a flat or project-scoped Open-list row read it`);
+    const answer = (await pollSince(f, cursor)).delta;
+    assert.equal(answer.full, false, `${label}: the since= read was not a delta`);
+    const d = answer as Extract<Delta, { full: false }>;
+    assert.deepEqual([d.upserts, d.removedIds], [[], []], `${label}: the since= read carried a change`);
+    cursor = d.cursor;
+  }
+});
+
+/**
  * `since=` is the native clients' poll (every 4 s on macOS and iOS), and it answers from the same
  * version first: while the version the cursor was built at stands, the answer is an empty delta
  * under the same cursor and the list is not built. One write that moves the version costs exactly
