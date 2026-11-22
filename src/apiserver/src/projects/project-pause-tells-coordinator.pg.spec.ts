@@ -354,7 +354,7 @@ test('Pause and Resume tell the coordinator once per changed pause episode', {
     const f = await fixture('ended');
     await db.session.update({
       where: { id: f.sessionId! },
-      data: { status: RunStatus.FAILED, completedAt: new Date() },
+      data: { status: RunStatus.FAILED, finishedAt: new Date(), completedAt: new Date() },
     });
     const before = await db.conversationTurn.count({ where: { sessionId: f.sessionId! } });
     assert.equal((await press(f.id, 'pause')).status, 201);

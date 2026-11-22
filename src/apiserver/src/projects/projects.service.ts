@@ -163,6 +163,7 @@ import {
   type TaskRunOverlay,
 } from '../sessions/task-work-carrier';
 import { SessionsService, type SessionReceiveBlockedReason } from '../sessions/sessions.service';
+import { isReleased } from '../common/session-release';
 import { tellEvidenceUndecidable } from '../tasks/undecidable-evidence';
 import { CoordinatorConvergenceService } from './coordinator-convergence.service';
 import { CoordinatorEvidenceQueueService } from './coordinator-evidence-queue.service';
@@ -5858,8 +5859,8 @@ export class ProjectsService {
   /**
    * Whether this conversation's run is over — the branch the delivery above takes.
    *
-   * Deliberately the same line `resume` draws for itself (`SessionsService.TERMINAL`): a terminal
-   * run is what a revive is for, and every other state a resolved coordinator can be in — live,
+   * Deliberately the same line `resume` draws for itself: a released run (the release column,
+   * common/session-release.ts) is what a revive is for, and every other state a resolved coordinator can be in — live,
    * waiting for a runner, awaiting input — is written to directly. Read here rather than inferred
    * from `receiveBlockedReasonFor`'s answer, which says whether a message CAN be delivered and not
    * which verb delivers it. A row that vanished between the resolution and this read is not read as
@@ -5868,9 +5869,9 @@ export class ProjectsService {
   private async conversationHasEnded(ownerId: string, sessionId: string): Promise<boolean> {
     const session = await this.prisma.session.findFirst({
       where: { id: sessionId, ownerId },
-      select: { status: true },
+      select: { finishedAt: true },
     });
-    return session != null && SessionsService.TERMINAL.includes(session.status);
+    return session != null && isReleased(session);
   }
 
   /** The sentence an `HttpException` carries, for the refusal that wraps it. */

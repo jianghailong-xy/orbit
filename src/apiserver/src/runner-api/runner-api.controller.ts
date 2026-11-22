@@ -201,9 +201,13 @@ import {
 } from '../common/runtime-provider';
 import { OPEN_SESSION_STATUSES, statusAfterTurnCompleted } from '../common/session-scheduling';
 import {
-  finalizeReleaseCause,
+  reportsSuccessWithNoEnd,
   HELD_SESSION_STATUSES,
   RELEASED_SESSION_STATUSES,
+  heldFilter,
+  isHeld,
+  isReleased,
+  releasedFilter,
 } from '../common/session-release';
 import { assertValidUpload, MAX_UPLOAD_BYTES } from '../attachments/attachments.media';
 import { FileUploadCleanupInterceptor } from '../files/file-upload-cleanup.interceptor';
@@ -573,6 +577,7 @@ import { DELETE_APPROVAL_TOOL_NAMES, deleteCardInput } from './runner-delete-app
 import { sanitizeWorkspaceWrite } from './runner-agents.controller';
 import { workspaceWriteCardInput } from './runner-workspace-approval';
 import { turnOutcomeOf } from './turn-outcome';
+import { carryingTurnOf, recordCarryingTurnOutcome } from '../common/carrying-turn';
 import { authorizeManagedRunnerInstance, type ManagedRunnerInstance } from '../managed-runners/managed-runner-instance';
 import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/managed-runner-gate';
 import {
@@ -681,6 +686,8 @@ const INGEST_SESSION_SELECT = {
   // Whose rows a control-plane turn's card may be read from (project-started.ts).
   ownerId: true,
   status: true,
+  // The release column: a released session's events are refused (common/session-release.ts).
+  finishedAt: true,
   runtimeSessionId: true,
   // Read under the row lock so the three conditional writes this transaction used to
   // issue as separate guarded statements can be decided here instead. Nothing can move
@@ -4087,7 +4094,7 @@ export class RunnerApiController {
     const held = sessionIds ?? (await this.prisma.session.findMany({
       where: {
         assignedRunnerId: runnerId, provider: 'claude', providerBuiltin: true, sessionKind: 'CONVERSATION',
-        status: { notIn: [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED] },
+        ...heldFilter(),
       },
       select: { id: true },
     })).map((row) => row.id);
@@ -4689,7 +4696,7 @@ export class RunnerApiController {
         s.assignedRunnerId === runner.id &&
         s.deletedAt === null &&
         s.cancelRequestedAt === null &&
-        OPEN.includes(s.status) &&
+        isHeld(s) &&
         workspace?.deletedAt === null &&
         orchestrationEnabled(s.owner);
       out.push({
@@ -4822,7 +4829,9 @@ export class RunnerApiController {
     // control plane's own business. And only the winner recorded one — the task row moved
     // (publishTaskChanged) and the project's coordinator is told, because a start that never became
     // a run is the one thing a project's timeline would otherwise never mention.
-    const { refused, ...response } = outcome;
+    const { refused, droppedWakeups, ...response } = outcome;
+    // The one-shot wakeups the refused run's drain dropped: their owners are told once, now it has committed.
+    signalDrainedWakeups(this.push, this.logger, droppedWakeups ?? []);
     // §12.15 P-M1: the refused run's finish decided the route a DONE task's work had left open.
     const settledWork = settledBox.work;
     if (settledWork) {
@@ -4871,6 +4880,7 @@ export class RunnerApiController {
           inboxLeaseGeneration: string | null;
           inboxLeaseOwner: string | null;
           status: RunStatus;
+          finishedAt: Date | null;
           mergeStatus: string | null;
           mergeOperationId: string | null;
           mergeOperationOwner: string | null;
@@ -4882,7 +4892,7 @@ export class RunnerApiController {
         }>
       >`
         SELECT id, provider, "provider_builtin" AS "providerBuiltin", engine, "owner_id" AS "ownerId", "inbox_lease_generation" AS "inboxLeaseGeneration",
-               "inbox_lease_owner" AS "inboxLeaseOwner", status,
+               "inbox_lease_owner" AS "inboxLeaseOwner", status, "finished_at" AS "finishedAt",
                "merge_status" AS "mergeStatus",
                "merge_operation_id" AS "mergeOperationId",
                "merge_operation_owner" AS "mergeOperationOwner",
@@ -4899,7 +4909,7 @@ export class RunnerApiController {
         throw new ForbiddenException('session does not belong to this runner');
       }
       const declared = await assertDeclaredLeaseSupport(tx, runner.id, owned[0], providerHeader);
-      if (!OPEN.includes(owned[0].status)) {
+      if (!isHeld(owned[0])) {
         throw new ConflictException('session is no longer open');
       }
       const currentOwner = owned[0].inboxLeaseOwner;
@@ -5096,6 +5106,7 @@ export class RunnerApiController {
           inboxLeaseGeneration: string | null;
           inboxLeaseOwner: string | null;
           status: RunStatus;
+          finishedAt: Date | null;
           mergeStatus: string | null;
           mergeOperationId: string | null;
           mergeOperationOwner: string | null;
@@ -5107,7 +5118,7 @@ export class RunnerApiController {
         }>
       >`
         SELECT id, provider, "provider_builtin" AS "providerBuiltin", engine, "owner_id" AS "ownerId", "inbox_lease_generation" AS "inboxLeaseGeneration",
-               "inbox_lease_owner" AS "inboxLeaseOwner", status,
+               "inbox_lease_owner" AS "inboxLeaseOwner", status, "finished_at" AS "finishedAt",
                "merge_status" AS "mergeStatus",
                "merge_operation_id" AS "mergeOperationId",
                "merge_operation_owner" AS "mergeOperationOwner",
@@ -5145,7 +5156,7 @@ export class RunnerApiController {
           continue;
         }
         const conflict = (message: string) => answers.set(sessionId, { sessionId, error: { statusCode: 409, message } });
-        if (!OPEN.includes(row.status)) {
+        if (!isHeld(row)) {
           conflict('session is no longer open');
           continue;
         }
@@ -5282,14 +5293,14 @@ export class RunnerApiController {
     // below is: a session of another runner is one this one has never heard of.
     const preflight = await this.prisma.session.findFirst({
       where: { id: sessionId, assignedRunnerId: runner.id },
-      select: { inboxLeaseOwner: true, inboxLeaseGeneration: true, status: true, provider: true, providerBuiltin: true, engine: true, ownerId: true },
+      select: { inboxLeaseOwner: true, inboxLeaseGeneration: true, status: true, finishedAt: true, provider: true, providerBuiltin: true, engine: true, ownerId: true },
     });
     const preflightEngine = preflight ? await sessionEngine(this.prisma, preflight) : undefined;
     if (
       preflight &&
       preflightEngine !== AgentProvider.DSH &&
       preflightEngine !== AgentProvider.CURSOR &&
-      OPEN.includes(preflight.status) &&
+      isHeld(preflight) &&
       preflight.inboxLeaseOwner === leaseOwner &&
       preflight.inboxLeaseGeneration === generation
     ) {
@@ -5313,10 +5324,11 @@ export class RunnerApiController {
           inboxLeaseGeneration: string | null;
           inboxLeaseOwner: string | null;
           status: RunStatus;
+          finishedAt: Date | null;
         }>
       >`
         SELECT id, provider, "provider_builtin" AS "providerBuiltin", engine, "owner_id" AS "ownerId", "inbox_lease_generation" AS "inboxLeaseGeneration",
-               "inbox_lease_owner" AS "inboxLeaseOwner", status
+               "inbox_lease_owner" AS "inboxLeaseOwner", status, "finished_at" AS "finishedAt"
         FROM "session"
         WHERE id = ${sessionId}::uuid AND "assigned_runner_id" = ${runner.id}::uuid
         FOR UPDATE
@@ -5325,7 +5337,7 @@ export class RunnerApiController {
         throw new ForbiddenException('session does not belong to this runner');
       }
       const declared = await assertDeclaredLeaseSupport(tx, runner.id, owned[0], providerHeader);
-      if (!OPEN.includes(owned[0].status)) {
+      if (!isHeld(owned[0])) {
         throw new ConflictException('session is no longer open');
       }
       if (owned[0].inboxLeaseOwner !== leaseOwner) {
@@ -5735,6 +5747,7 @@ export class RunnerApiController {
           inboxLeaseGeneration: string | null;
           inboxLeaseOwner: string | null;
           status: RunStatus;
+          finishedAt: Date | null;
           ownerId: string;
           provider: string;
           providerBuiltin: boolean;
@@ -5750,7 +5763,7 @@ export class RunnerApiController {
         }>
       >`
         SELECT id, "inbox_lease_generation" AS "inboxLeaseGeneration",
-               "inbox_lease_owner" AS "inboxLeaseOwner", status,
+               "inbox_lease_owner" AS "inboxLeaseOwner", status, "finished_at" AS "finishedAt",
                "owner_id" AS "ownerId", provider, "provider_builtin" AS "providerBuiltin", engine
                , "task_id" AS "taskId", ${DISPATCH_PAUSED} AS "dispatchPaused"
                , "inbox_request_id" AS "inboxRequestId", "inbox_request_turn_id" AS "inboxRequestTurnId"
@@ -5763,7 +5776,7 @@ export class RunnerApiController {
       if (owned.length === 0) {
         throw new ForbiddenException('session does not belong to this runner');
       }
-      if (!OPEN.includes(owned[0].status)) {
+      if (!isHeld(owned[0])) {
         throw new ConflictException('session is no longer open');
       }
       if (owned[0].inboxLeaseGeneration !== leaseGeneration) {
@@ -7746,19 +7759,6 @@ export class RunnerApiController {
             : unanswered && noEngineTurnRan && current.retryAt == null
               ? nextAutoRetryAt(current.retryAttempts, new Date())
               : null;
-      // How the turn ended, for the turn row and the session's copy of it (docs/session-three-state-design.md
-      // §4.2), and the words it ended with: see turn-outcome.ts. A steer and a withdraw settled above.
-      const turnEnd = turnOutcomeOf({
-        kind: completedTurn?.kind,
-        status: dto.status,
-        regionStopped,
-        swallowed,
-        unanswered,
-        failureError: (swallowed ? swallowedMessageError(failureText) : failureText) || 'run failed',
-        error: dto.error,
-        result: dto.result,
-      });
-      const turnOutcome = turnEnd?.outcome ?? null;
       // Idempotent ack: only the first turn-complete for this turn applies. `deliveredAt` is the
       // other half of that compare-and-set now that a completion can leave the row un-ANSWERED: a
       // turn put back in the queue is no longer out on a delivery, so a retried completion for it
@@ -7788,14 +7788,6 @@ export class RunnerApiController {
           await tx.session.update({ where: { id: sessionId }, data: { ...CLEARED_MERGE_STATE } });
         }
         return { applied: false, steer: false, requeued: false, status: current.status, failSession, retryAt: current.retryAt };
-      }
-      // Beside the status the ack just wrote, in its transaction and only when it won, so a retried completion
-      // records nothing twice. The session's copy rides on the park below, the one Session write (I3).
-      if (turnEnd) {
-        await tx.conversationTurn.updateMany({
-          where: { id: dto.turnId, sessionId },
-          data: { outcome: turnEnd.outcome, error: turnEnd.error },
-        });
       }
       let acceptanceTaskChanged = false;
       let acceptanceTaskCompleted = false;
@@ -7900,6 +7892,29 @@ export class RunnerApiController {
       // database exactly once. Still this transaction, so the FAILED and the project's record of
       // it commit together or not at all (contract §4.3 A).
       if (acceptanceFailure) await recordTaskFailure(tx, acceptanceFailure);
+      // How the turn ended, for the turn row and the session's copy of it (docs/session-three-state-design.md
+      // §4.2), and the words it ended with: see turn-outcome.ts. A steer and a withdraw settled above. Decided
+      // after the acceptance comparison, whose failure is this turn's (design §12.1 W1a, W1b).
+      const turnEnd = turnOutcomeOf({
+        kind: completedTurn?.kind,
+        status: dto.status,
+        regionStopped,
+        swallowed,
+        unanswered,
+        failureError: (swallowed ? swallowedMessageError(failureText) : failureText) || 'run failed',
+        acceptanceFailure: acceptanceFailureReason,
+        error: dto.error,
+        result: dto.result,
+      });
+      const turnOutcome = turnEnd?.outcome ?? null;
+      // Beside the status the ack wrote, in its transaction and only when it won, so a retried completion
+      // records nothing twice. The session's copy rides on the park below, the one Session write (I3).
+      if (turnEnd) {
+        await tx.conversationTurn.updateMany({
+          where: { id: dto.turnId, sessionId },
+          data: { outcome: turnEnd.outcome, error: turnEnd.error },
+        });
+      }
       // And the mirror of it, for the comparison that PASSED: a code task whose acceptance held on
       // the merged tree is what the platform integrates, and the queueing happens in the same
       // transaction as the DONE so the two commit together (contract §2.3 J-T1a). Outside the
@@ -8144,7 +8159,6 @@ export class RunnerApiController {
                 error: (acceptanceFailureReason ?? (swallowed ? swallowedMessageError(failureText) : failureText)) || 'run failed',
                 finishedAt: new Date(),
                 // Released for the turn that failed (design §4.2), in the statement that writes FAILED.
-                releaseCause: 'turn_failed',
                 cancelRequestedAt: new Date(),
                 // FAILED is where this session stops being live, so whatever it had running
                 // goes with it (CLEARED_RUNNING_WORK). This write is the reason the runner
@@ -8942,7 +8956,7 @@ export class RunnerApiController {
       const sessions = new Map(rows.map(({ id, ...session }) => [id, session as IngestSessionRow]));
       // A session no longer open is refused there too, before anything is written.
       const open = fenced
-        .filter(({ batch }) => OPEN.includes(sessions.get(batch.sessionId)!.status))
+        .filter(({ batch }) => isHeld(sessions.get(batch.sessionId)!))
         .sort((x, y) => (x.batch.sessionId < y.batch.sessionId ? -1 : x.batch.sessionId > y.batch.sessionId ? 1 : 0));
       const stored = await storedLinkCallSeqs(tx, open.map(({ batch }) => ({
         sessionId: batch.sessionId,
@@ -9030,7 +9044,7 @@ export class RunnerApiController {
         // answered. One that fails fails the call, once the rest is announced: every batch is then forwarded alone,
         // finds its seqs stored, and is announced again (restated).
         const told = this.realtime.sendNotices(committed.ingested.flatMap(({ batch, outcome }) => (
-          OPEN.includes(outcome.session.status)
+          isHeld(outcome.session)
             ? this.realtime.batchNotices(batch.sessionId, outcome.events.filter((e) => !isNoiseSystemEvent(e)), outcome.engineStarted, outcome.restated)
             : []
         ))).then(() => null, (error: unknown) => error);
@@ -9177,7 +9191,7 @@ export class RunnerApiController {
       // survives a control-plane terminal transition. Reject before every event-
       // derived write, including empty and streaming-only batches. The runner drains
       // a task-failure tail through a bounded send barrier before terminalizing it.
-      if (!OPEN.includes(session.status)) {
+      if (!isHeld(session)) {
         throw new ConflictException('session is no longer open');
       }
       // ONE write of this Session row, accumulated here and issued once at the end
@@ -9953,7 +9967,7 @@ export class RunnerApiController {
     if (eventOutcome.currentWorkAcknowledged > 0) {
       this.realtime.publishQueuedTurnsChanged(sessionId);
     }
-    if (OPEN.includes(eventOutcome.session.status)) {
+    if (isHeld(eventOutcome.session)) {
       // Persisted above either way — but a `system` progress ping renders as nothing on every
       // client, so spending a frame on it only costs the reader bandwidth. The replay paths
       // drop the same events (notNoiseSql), so live and replayed transcripts agree. Published
@@ -10097,8 +10111,9 @@ export class RunnerApiController {
       // prose inside `error`. Arm the same retry from it, so `retryAt` answers "when does this come
       // back" for every quota failure rather than only the ones that got far enough to talk. Never
       // an overwrite: an ingestion-armed retry already knows more than the terminal message does.
+      const failedRun = effectiveStatus === RunStatus.FAILED;
       const quotaSpent =
-        effectiveStatus === RunStatus.FAILED && current.retryAt == null && isUsageLimitErrorText(dto.error);
+        failedRun && current.retryAt == null && isUsageLimitErrorText(dto.error);
       // A run that ended because its account refused the sign-in, on the runner's own login for its
       // engine. Most often the runner's check before it starts the engine (engineAuthPreflight) finds
       // the account signed out and ends the run with the message it took undelivered. Moved below.
@@ -10172,6 +10187,16 @@ export class RunnerApiController {
           }
         : {};
 
+      // The runner failed the session with no end asked: released by the engine's failure (design §12.1 W6).
+      const engineFailed = !current.cancelRequestedAt && failedRun;
+      // Released with no end asked and no failure (the runner's word SUCCEEDED or CANCELLED): the turn the release cuts
+      // off ends CANCELLED, as the one an end nobody honoured cut off does (design §12.1 W7), so the session's copy of
+      // the last outcome is this run's, not one a revive kept from the run before (R3/R4, the coordinator's option A,
+      // 2026-11-21). R2's rule without its last resort: the work turn in flight, else the oldest queued one; read here,
+      // under the Session lock lockSessionLeaseOwner took, so the copy below is written only when there is one.
+      const cutOffTurn = !current.cancelRequestedAt && !failedRun
+        ? await carryingTurnOf(tx, sessionId, { orLatest: false })
+        : null;
       // Only a LIVE session is finalized (updateMany count); duplicate/late completion
       // is a safe no-op but still returns the result derived from this locked snapshot.
       const res = await tx.session.updateMany({
@@ -10184,9 +10209,10 @@ export class RunnerApiController {
           // id, so it only serves as a fallback here and is never persisted on its own.
           runtimeSessionId: dto.runtimeSessionId ?? dto.claudeSessionId ?? undefined,
           finishedAt: new Date(),
-          // Why it was released: the requested end's reason, which also chose the status above, or the
-          // engine exiting by itself (engine_failed when the runner reported FAILED, the status written then).
-          releaseCause: finalizeReleaseCause(current, dto.status),
+          // The engine failed with no end asked (design §12.1 W6): the failure is the carrying turn's, recorded below,
+          // and copied here in the release's own write. A release with no end asked and no failure: the CANCELLED of the
+          // turn it cut off, recorded below, when there is one.
+          ...(engineFailed ? { lastTurnOutcome: 'FAILED' } : cutOffTurn ? { lastTurnOutcome: 'CANCELLED' } : {}),
           // Worktree isolation outcome reported by the runner: the branch it committed
           // the work to, the base it forked from, what it did (worktree/shared-nogit),
           // and the per-file diff summary. Each left untouched when the runner omits it.
@@ -10237,6 +10263,21 @@ export class RunnerApiController {
       });
       const retryAt = quotaRetryAt ?? signInRetryAt ?? current.retryAt;
       if (res.count === 0) return { finalized: false, effectiveStatus, keepCheckout, retryAt };
+      // The turn that carries the engine's failure, under the Session lock taken above and before the drain below
+      // answers it: the one in flight, else the one the claim was for, else, with nothing queued (the events the
+      // runner's link gave up were the last turn's), the latest (common/carrying-turn.ts).
+      if (engineFailed) {
+        const carrying = await carryingTurnOf(tx, sessionId, { orLatest: true });
+        if (carrying) await recordCarryingTurnOutcome(tx, carrying, 'FAILED', dto.error ?? null);
+      }
+      // The turn a release with no end asked and no failure cut off, read above, before the drain below answers it.
+      if (cutOffTurn) await recordCarryingTurnOutcome(tx, cutOffTurn, 'CANCELLED', dto.error ?? null);
+      // A runner that reports success on a finalize nobody asked for: released engine_exited, which no reader takes for
+      // finished work (common/session-release.ts releaseFinishedTheWork: no end reason). No current runner sends it;
+      // said here if one does.
+      if (reportsSuccessWithNoEnd(current, dto.status)) {
+        this.logger.warn(`session ${sessionId}: the runner reported success with no end requested; released engine_exited`);
+      }
       // This finish may be the one a DONE task's identity was waiting for: its work has stopped moving
       // once every work session has finished (§10.5 O-L4 3).
       const delivered = await settleDeliveredIdentityAfterFinish(tx, current);
@@ -10612,7 +10653,6 @@ export class RunnerApiController {
           deletedAt: new Date(),
           // Released with the status, as every terminal write is (design §4.2).
           finishedAt: new Date(),
-          releaseCause: 'import_failed',
         },
       });
       return { applied: false, failed: true, announced: true };
@@ -10665,6 +10705,7 @@ export class RunnerApiController {
             completedAt: true,
             archivedAt: true,
             deletedAt: true,
+            finishedAt: true,
             cancelRequestedAt: true,
             startedAt: true,
             numTurns: true,
@@ -10714,7 +10755,7 @@ export class RunnerApiController {
                 id: { in: ids },
                 ownerId,
                 assignedRunnerId: runner.id,
-                status: { in: TERMINAL },
+                ...releasedFilter(),
               },
               select: { id: true },
             })
@@ -10828,6 +10869,7 @@ export class RunnerApiController {
       const locked = await tx.$queryRaw<
         Array<{
           status: RunStatus;
+          finishedAt: Date | null;
           inboxLeaseOwner: string | null;
           mergeStatus: string | null;
           mergeOperationId: string | null;
@@ -10842,7 +10884,7 @@ export class RunnerApiController {
           mergeRequestedBy: string | null;
         }>
       >`
-        SELECT status, "inbox_lease_owner" AS "inboxLeaseOwner",
+        SELECT status, "finished_at" AS "finishedAt", "inbox_lease_owner" AS "inboxLeaseOwner",
                "merge_status" AS "mergeStatus",
                "merge_operation_id" AS "mergeOperationId",
                "merge_operation_owner" AS "mergeOperationOwner",
@@ -10874,7 +10916,7 @@ export class RunnerApiController {
         current.mergeStatus === 'pending' &&
         current.mergeOperationId === operationId &&
         current.mergeOperationOwner === leaseOwner &&
-        (!OPEN.includes(current.status) || current.inboxLeaseOwner === leaseOwner);
+        (!isHeld(current) || current.inboxLeaseOwner === leaseOwner);
       if (!legacyAttempt && !modernAttempt) {
         throw new ConflictException('merge operation is no longer current');
       }
@@ -11122,13 +11164,14 @@ export class RunnerApiController {
       const locked = await tx.$queryRaw<
         Array<{
           status: RunStatus;
+          finishedAt: Date | null;
           inboxLeaseOwner: string | null;
           commitStatus: string | null;
           commitOperationId: string | null;
           commitOperationOwner: string | null;
         }>
       >`
-        SELECT status, "inbox_lease_owner" AS "inboxLeaseOwner",
+        SELECT status, "finished_at" AS "finishedAt", "inbox_lease_owner" AS "inboxLeaseOwner",
                "commit_status" AS "commitStatus",
                "commit_operation_id" AS "commitOperationId",
                "commit_operation_owner" AS "commitOperationOwner"
@@ -11156,7 +11199,7 @@ export class RunnerApiController {
         // The command was admitted while idle. Lifecycle terminalization may win
         // before its receipt POST; accept that exact process/epoch so Resume can
         // safely wait for completion instead of stranding a claimed operation.
-        (TERMINAL.includes(current.status) ||
+        (isReleased(current) ||
           (current.status === RunStatus.AWAITING_INPUT && current.inboxLeaseOwner === leaseOwner));
       if (!legacyAttempt && !modernAttempt) {
         throw new ConflictException('commit operation is no longer current');
@@ -11230,7 +11273,7 @@ export class RunnerApiController {
       where: {
         id: sessionId,
         assignedRunnerId: runner.id,
-        status: { in: OPEN },
+        ...heldFilter(),
       },
       data: {
         ...(changedFilesSnapshot !== undefined

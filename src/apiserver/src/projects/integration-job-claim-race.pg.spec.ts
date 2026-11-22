@@ -114,7 +114,7 @@ test('a claim narrowed to the job row neither waits for nor skips a concurrently
     data: {
       ownerId: w.ownerId, creatorId: w.ownerId, taskId: created.id, workspaceId: w.workspaceId,
       assignedRunnerId: w.runnerId, title: 'the work', prompt: 'the work', branch,
-      isolationStatus: 'worktree', baseSha: sha('b'), status: RunStatus.SUCCEEDED,
+      isolationStatus: 'worktree', baseSha: sha('b'), status: RunStatus.SUCCEEDED, 
       startsTaskWork: true, finishedAt: new Date(Date.now() - 60_000), worktreeBranch: branch,
       worktreeDirty: false, changedFiles: [{ path: 'src/work.ts' }] as never,
     },
@@ -133,7 +133,7 @@ test('a claim narrowed to the job row neither waits for nor skips a concurrently
     // A resume begins: the session is unfinished again, in a transaction that has not committed.
     await side.query('BEGIN');
     const held = await side.query(
-      `UPDATE "session" SET "finished_at" = NULL WHERE "id" = $1::uuid`, [session.id],
+      `UPDATE "session" SET "status" = 'AWAITING_INPUT', "finished_at" = NULL WHERE "id" = $1::uuid`, [session.id],
     );
     assert.equal(held.rowCount, 1);
 
@@ -165,7 +165,7 @@ test('a claim narrowed to the job row neither waits for nor skips a concurrently
 
   await t.test('once the work has stopped, the same answer is final', async () => {
     // The resumed session finishes again.
-    await db.session.update({ where: { id: session.id }, data: { finishedAt: new Date() } });
+    await db.session.update({ where: { id: session.id }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date()} });
     const [claimed] = await beat(`lease-final-${randomUUID()}`);
     assert.ok(claimed);
     assert.equal(claimed.jobId, job.id);

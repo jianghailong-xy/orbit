@@ -186,6 +186,9 @@ async function conversation(
       prompt: title,
       provider: 'claude',
       status: options.status ?? RunStatus.AWAITING_INPUT,
+      ...(['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(options.status ?? RunStatus.AWAITING_INPUT)
+        ? { finishedAt: new Date()}
+        : {}),
       dispatchOrigin: SessionDispatchOrigin.USER,
       ...(options.taskId === undefined ? { titleManagedByProject: true } : {}),
       ...(options.ended ? { completedAt: new Date() } : {}),

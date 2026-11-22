@@ -91,6 +91,7 @@ async function fixture(t: { after: (fn: () => Promise<void>) => void }): Promise
       data: {
         id, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId, title: `olv ${id}`,
         prompt: 'olv', provider: 'claude', providerBuiltin: true, status, startedAt: new Date(),
+        ...(status === RunStatus.SUCCEEDED ? { finishedAt: new Date()} : {}),
         dispatchOrigin: SessionDispatchOrigin.USER,
       },
     });
@@ -612,7 +613,7 @@ test('a landing insert and its settlement leave the flat Open list alone', { ski
   await db.projectLanding.update({
     where: { sessionId }, data: { settledAt: new Date(), settledAs: 'LANDED' },
   });
-  await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.SUCCEEDED, completedAt: new Date() } });
+  await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), completedAt: new Date() } });
   const plainAfterSettlement = await poll(f, plain.etag);
   assert.equal(plainAfterSettlement.status, 304, 'a settlement moved the plain list');
   assert.equal(plainAfterSettlement.etag, plain.etag);

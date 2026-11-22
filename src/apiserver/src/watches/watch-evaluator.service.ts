@@ -722,7 +722,7 @@ async function readFacts(tx: Prisma.TransactionClient, targets: readonly TargetR
       runningBgJobs: string[];
       runningBgJobActivity: unknown;
     }>>`
-      SELECT s."id", s."owner_id" AS "ownerId", s."kind" AS "sessionKind", s."status"::text AS "status",
+      SELECT s."id", s."owner_id" AS "ownerId", s."kind" AS "sessionKind", s."status"::text AS "status", s."finished_at" AS "finishedAt",
              s."end_reason" AS "endReason",
              s."completed_at" AS "completedAt", s."archived_at" AS "archivedAt", s."deleted_at" AS "deletedAt",
              EXISTS (SELECT 1 FROM "approval" a WHERE a."session_id" = s."id" AND a."status" = 'PENDING') AS "pendingApproval",

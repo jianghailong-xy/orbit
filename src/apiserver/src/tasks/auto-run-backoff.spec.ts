@@ -9,7 +9,6 @@ import {
 } from './tasks.service';
 import { encryptSecret } from '../providers/provider-crypto';
 import { QueueService } from '../queue/queue.service';
-import { TASK_OCCUPYING } from './reclaim-stalled-task';
 import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { recordingQueryRaw } from './query-raw-test-helper';
 
@@ -673,11 +672,11 @@ test('the sweep selects candidates on all five READY conditions, anchored on a p
   // the control loop that wrote those is gone, so inside a project that clause never released.
   assert.match(
     sql,
-    /NOT EXISTS \(\s*SELECT 1 FROM "session" passed_live[\s\S]*passed_live\."status"::text IN \('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'\)/,
+    /NOT EXISTS \(\s*SELECT 1 FROM "session" passed_live[\s\S]*passed_live\."finished_at" IS NULL/,
   );
   assert.match(
     sql,
-    /AND EXISTS \(\s*SELECT 1 FROM "session" passed_run[\s\S]*passed_run\."status"::text = 'SUCCEEDED'[\s\S]*passed_run\."end_reason" = 'task_done'/,
+    /AND EXISTS \(\s*SELECT 1 FROM "session" passed_run[\s\S]*passed_run\."finished_at" IS NOT NULL[\s\S]*passed_run\."end_reason" = 'task_done'/,
   );
   // Load-bearing, and the SHAPE is the whole of why: this is where the plan enters the
   // deployment's dependency graph, or nowhere. "HAS an edge" is 110,872 edges over 110,502 tasks
@@ -695,7 +694,8 @@ test('the sweep selects candidates on all five READY conditions, anchored on a p
     sql,
     /AND EXISTS \(\s*SELECT 1 FROM task_dependency d\s+JOIN task x ON x\.id = d\.depends_on_task_id\s+WHERE d\.task_id = t\.id\s+AND \(x\.status = 'DONE'::task_status OR NOT \(x\."terminal_reason" IS NULL AND x\."superseded_by_task_id" IS NULL\)\)/,
   );
-  // The occupied-session set is the wider TASK_OCCUPYING (incl. idle-but-live AWAITING_INPUT /
-  // INTERRUPTED), not the two states the Ready tab's own predicate uses.
-  assert.equal((sql.match(/::run_status/g) ?? []).length, TASK_OCCUPYING.length);
+  // The occupied-session set is every held session (incl. idle-but-live AWAITING_INPUT / INTERRUPTED: the release
+  // column, the same sessions as TASK_OCCUPYING since plan step 4.3), not the two states the Ready tab's own
+  // predicate uses.
+  assert.match(sql, /NOT EXISTS \(\s*SELECT 1 FROM session s\s+WHERE s\.task_id = t\.id\s+AND s\."finished_at" IS NULL\s*\)/);
 });

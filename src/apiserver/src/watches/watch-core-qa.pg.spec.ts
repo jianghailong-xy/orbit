@@ -392,8 +392,9 @@ async function insertSession(owner: string, status: string, runnerId: string | n
   const id = randomUUID();
   await sql.query(
     `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","updated_at","status","assigned_runner_id",
-                           "provider","provider_builtin","num_turns","started_at","runtime_session_id")
-     VALUES ($1,'watch qa','the opening prompt',$2,$2,now(),$3,$4,'claude',TRUE,1,now(),$5)`,
+                           "provider","provider_builtin","num_turns","started_at","runtime_session_id", "finished_at")
+     VALUES ($1,'watch qa','the opening prompt',$2,$2,now(),$3,$4,'claude',TRUE,1,now(),$5,
+             CASE WHEN $3::run_status IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN now() END)`,
     [id, owner, status, runnerId, `runtime-${id}`],
   );
   await sql.query(

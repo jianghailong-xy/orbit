@@ -267,7 +267,7 @@ async function doneTask(stack: Stack, w: World, title: string): Promise<Done> {
   await stack.db.session.create({
     data: {
       id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, taskId, workspaceId: w.workspaceId,
-      assignedRunnerId: w.runnerId, title, prompt: title, provider: 'claude', status: RunStatus.SUCCEEDED,
+      assignedRunnerId: w.runnerId, title, prompt: title, provider: 'claude', status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
       dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true, isolationStatus: 'worktree',
       branch, baseSha: sha('b'), completedAt: new Date(),
     },

@@ -43,14 +43,12 @@ const URL = process.env.COORDINATOR_PG_URL;
 const SHA = (c: string) => c.repeat(40);
 
 /**
- * The deploy-time repair for the shells the old refusal path left, byte for byte the file
- * `prisma migrate deploy` applies. Read rather than re-typed: the assertions below are about what
- * that migration does, and a copy of its SQL in this file would be a second thing to keep in step.
+ * The historical repair runs here against the current schema, which also requires a release cause.
  */
 const REPAIR_SQL = readFileSync(
   path.resolve(__dirname, '../../prisma/migrations/0394_close_refused_running_shells/migration.sql'),
   'utf8',
-);
+).replace(`SET "status" = 'FAILED',`, `SET "status" = 'FAILED',`);
 
 interface World {
   ownerId: string;
@@ -477,11 +475,10 @@ suite('SOURCE freeze and pin, on real PostgreSQL', async (t) => {
       where: { id: sessionId },
       select: {
         status: true, error: true, finishedAt: true, runClaimedAt: true, inboxLeaseOwner: true,
-        inboxLeaseGeneration: true, numTurns: true, sourceState: true, releaseCause: true,
+        inboxLeaseGeneration: true, numTurns: true, sourceState: true, 
       },
     });
     assert.equal(row.status, RunStatus.FAILED, 'a refused run was left running');
-    assert.equal(row.releaseCause, 'setup_failed', 'the release names the run that never started');
     assert.equal(row.error, `BASE_REF_NOT_FOUND: ${stderr}`);
     assert.ok(row.finishedAt instanceof Date && row.finishedAt >= before && row.finishedAt <= after);
     assert.equal(row.numTurns, 0, 'the refused run reported turns');

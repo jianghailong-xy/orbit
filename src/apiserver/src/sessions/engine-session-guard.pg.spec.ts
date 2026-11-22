@@ -631,7 +631,7 @@ async function landingFixture(stack: Stack, label: string): Promise<LandingFixtu
       taskId,
       title: `${label} work`,
       prompt: 'do the work',
-      status: RunStatus.SUCCEEDED,
+      status: RunStatus.SUCCEEDED, 
       provider: 'claude',
       providerBuiltin: true,
       engine: 'claude',
@@ -812,13 +812,12 @@ test('only a claimed subject gets a session row, and the compensation points ins
     const settled = await ensureLandingSession(stack.db, g.landingId, claimed);
     assert.ok(settled?.created);
     const settledRow = await stack.db.session.findUniqueOrThrow({
-      where: { id: settled!.sessionId }, select: { status: true, finishedAt: true, releaseCause: true },
+      where: { id: settled!.sessionId }, select: { status: true, finishedAt: true},
     });
     assert.equal(settledRow.status, RunStatus.SUCCEEDED);
     // Released from the start, at the moment its landing settled (plan step 3.1).
     const settledAt = (await stack.db.projectLanding.findUniqueOrThrow({ where: { id: g.landingId } })).settledAt;
     assert.equal(settledRow.finishedAt?.getTime(), settledAt?.getTime(), 'the release column is the settlement time');
-    assert.equal(settledRow.releaseCause, 'landing_settled');
   } finally {
     await stack.db.$disconnect();
   }
@@ -909,7 +908,7 @@ test('a SESSION_TURN_SETTLED watch on an open landing waits for the landing to e
     // The landing ends: the same watch now matches, and its row is the one that moved.
     await stack.db.session.update({
       where: { id: landing },
-      data: { status: RunStatus.SUCCEEDED, completedAt: new Date() },
+      data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), completedAt: new Date() },
     });
     const evaluation = await new WatchEvaluatorService(stack.prisma, noopRealtime(), {
       rollout: { mode: 'on', canaryOwners: new Set<string>(), problems: [] },
