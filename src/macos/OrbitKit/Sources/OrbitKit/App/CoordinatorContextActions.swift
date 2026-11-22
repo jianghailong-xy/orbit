@@ -115,6 +115,7 @@ public enum CoordinatorHandoffCopy {
         .timedOut: "the turn timed out.",
         .emptyNote: "the reply was empty.",
         .replaceFailed: "the new coordinator could not be opened.",
+        .coordinatorCantRun: "the model of this coordinator could not start. Pick another model and hand over without a note.",
     ]
     public static func failureSentence(_ code: CoordinatorHandoffFailureCode) -> String {
         "The handoff note wasn't written: \(failureReasons[code] ?? "")"

@@ -500,6 +500,8 @@ public enum RunnerPageCopy {
     public static let AGENT_FIX_BUTTON = "Fix with an agent"
     /// In place of the button while that session is open; the link after it opens it.
     public static func agentFixFixing(workspace: String) -> String { "An agent is fixing this in \(workspace) · " }
+    /// A transcript's history row, after the agent it was handed to finished; the link opens it.
+    public static func agentFixFixed(workspace: String) -> String { "Fixed by an agent in \(workspace) · " }
     public static let AGENT_FIX_OPEN_SESSION = "Open session"
     /// Under the button on an Install failed panel: where the session would run.
     public static func agentFixStartsIn(workspace: String, engine: String) -> String {
@@ -509,6 +511,10 @@ public enum RunnerPageCopy {
     public static func agentFixSignInAbove(engine: String) -> String { " Sign in to \(engine) above to use this." }
     /// The same, after a signed-out reason on the web's Update engines report, which sits above its engine rows.
     public static func agentFixSignInBelow(engine: String) -> String { " Sign in to \(engine) below to use this." }
+    /// The same, after a signed-out reason in a transcript, which has no engine list of its own.
+    public static func agentFixSignInOnMachinePage(engine: String) -> String {
+        " Sign in to \(engine) on the machine page to use this."
+    }
     /// The head of what a press that didn't start a session says, before the server's own sentence.
     public static let AGENT_FIX_FAILED = "Couldn’t start the agent"
     /// The Needs Attention card's second action, beside Update Engines Now; `engine` is the CLI's own name.

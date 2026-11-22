@@ -1049,8 +1049,8 @@ export function routeSubagent(input: SubagentRoutingInput): SubagentRoutingDecis
       : `${input.definitionName} names ${definitionModel}, which no enabled provider lists — routed as auto`);
   }
   if (input.smartSelection === false) {
-    return { ...base, level: null, tierSource: 'not-routed', tierNote: 'Smart model selection is off', ...parentPick,
-      reasons: [...autoNotes, `Smart model selection is off: runs on the parent's ${input.parent.model}`] };
+    return { ...base, level: null, tierSource: 'not-routed', tierNote: 'Route by tier is off', ...parentPick,
+      reasons: [...autoNotes, `Route by tier is off: runs on the parent's ${input.parent.model}`] };
   }
 
   // Rows 3 to 5: the tier.

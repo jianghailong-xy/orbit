@@ -1,57 +1,57 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { SubagentSize } from '@orbit/shared';
 import { api } from '../api';
 import { PROVIDERS_BASE } from '../lib/providerAdmin';
-import { modelTierText, priceText, subagentTiersQuery, TIER_LEVELS, type ProviderModelTier, type ProviderTierRow } from '../lib/subagentTiers';
+import {
+  modelTierText,
+  qualityLines,
+  subagentTiersQuery,
+  TIER_LEVELS,
+  type ProviderModelTier,
+  type ProviderTierRow,
+} from '../lib/subagentTiers';
 import { useToast } from '../lib/toast';
 import { Menu, type MenuItem } from './ui/Menu';
+import { Tooltip } from './ui/Tooltip';
 
 /**
- * The Providers page's Tier column (docs/subagent-design.md §7, board docs/mocks/subagent/05.png): every model
- * SubAgents can be routed onto, with its tier. A preset's tier and price follow the catalogue; a custom
- * endpoint's model reads Not set, and the owner sets one here. Until then it ranks after every tiered model.
- * A built-in engine lists its whole catalogue, every model the owner's to tier, overriding the catalogue's tier
- * (board 2026-11-20: list all; a tier the owner set carries a "Yours" tag).
+ * A model's tier on Settings → Providers → Model routing (docs/subagent-design.md §7, board docs/mocks/subagent/05.png):
+ * a menu of S to XL where the owner may set it, else the tier as text. A preset's tier follows the catalogue; a custom
+ * endpoint's model reads Not set until the owner sets one, and ranks after every tiered model until then. A built-in
+ * engine's every model is the owner's to tier, overriding the catalogue (board 2026-11-20); a tier the owner set
+ * carries a "Yours" tag.
  */
-export function ModelTiers() {
-  const tiers = useQuery(subagentTiersQuery());
-  const rows = (tiers.data?.providers ?? []).flatMap((provider) =>
-    provider.models.map((model) => ({ provider, model })));
-  if (!tiers.isSuccess || rows.length === 0) return null;
+export function ModelTierCell({ provider, model }: { provider: ProviderTierRow; model: ProviderModelTier }) {
   return (
-    <div id="tiers">
-      <div className="re-sec-head" style={{ marginTop: 28 }}>
-        <h3>Model tiers</h3>
-        <span className="re-sec-sub">The tier SubAgents are routed by, per model.</span>
-      </div>
-      <table className="model-tiers">
-        <thead>
-          <tr>
-            <th>Provider</th>
-            <th>Model</th>
-            <th>Tier</th>
-            <th>Price / M out</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(({ provider, model }) => (
-            <tr key={`${provider.slug}:${model.model}`}>
-              <td>{provider.label}</td>
-              <td className="model-tiers-model">{model.model}</td>
-              <td>
-                <TierCell provider={provider} model={model} />
-                {model.source === 'owner' && <span className="model-tiers-yours">Yours</span>}
-              </td>
-              <td className="model-tiers-price">{priceText(model, provider.billing)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <div className="model-tiers-foot">
-        Preset tiers and prices follow the catalogue. A model with no tier still runs SubAgents, after every model whose
-        tier fits.
-      </div>
+    <>
+      <TierCell provider={provider} model={model} />
+      {model.source === 'owner' && <span className="model-tiers-yours">Yours</span>}
+    </>
+  );
+}
+
+/**
+ * A model's Quality cell: how well it completed work, for display only (docs/subagent-design.md §7.1, board
+ * docs/mocks/model-quality/01-board.png).
+ */
+export function QualityCell({ model }: { model: ProviderModelTier }) {
+  const lines = qualityLines(model.quality);
+  if (lines.empty) return <span className="model-tiers-muted">No runs yet</span>;
+  const subagents = (
+    <div className={`model-tiers-quality-line${lines.subagents.raters ? ' model-tiers-rated' : ''}`}
+      tabIndex={lines.subagents.raters ? 0 : undefined}>
+      <span className="model-tiers-quality-source">SubAgents</span>
+      <span className={lines.subagents.muted ? 'model-tiers-muted' : undefined}>{lines.subagents.text}</span>
     </div>
+  );
+  return (
+    <>
+      {lines.subagents.raters ? <Tooltip content={lines.subagents.raters} toggleOnClick popupStyle={{ whiteSpace: 'nowrap' }}>{subagents}</Tooltip> : subagents}
+      <div className="model-tiers-quality-line">
+        <span className="model-tiers-quality-source">Tasks</span>
+        <span className={lines.tasks.muted ? 'model-tiers-muted' : undefined}>{lines.tasks.text}</span>
+      </div>
+    </>
   );
 }
 

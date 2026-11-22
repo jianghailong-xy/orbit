@@ -612,6 +612,10 @@ export function agentFixFixing(workspace: string): string {
   return `An agent is fixing this in ${workspace} · `;
 }
 export const AGENT_FIX_OPEN_SESSION = 'Open session';
+/** A transcript's history row, after the agent it was handed to finished; the link opens it. */
+export function agentFixFixed(workspace: string): string {
+  return `Fixed by an agent in ${workspace} · `;
+}
 /** Under the button on an Install failed panel: where the session would run. */
 export function agentFixStartsIn(workspace: string, engine: string): string {
   return `Starts a session in ${workspace} on this machine, with ${engine}.`;
@@ -623,6 +627,10 @@ export function agentFixSignInAbove(engine: string): string {
 /** The same, after a signed-out reason on the Update engines report, which sits above the engine rows. */
 export function agentFixSignInBelow(engine: string): string {
   return ` Sign in to ${engine} below to use this.`;
+}
+/** The same, after a signed-out reason in a transcript, which has no engine list of its own. */
+export function agentFixSignInOnMachinePage(engine: string): string {
+  return ` Sign in to ${engine} on the machine page to use this.`;
 }
 export const AGENT_FIX_FAILED = 'Couldn’t start the agent';
 

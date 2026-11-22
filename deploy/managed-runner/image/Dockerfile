@@ -115,7 +115,7 @@ RUN mkdir -p /etc/ssl/certs \
       > /etc/apt/sources.list \
  && apt-get -o Acquire::https::CAInfo=/etc/ssl/certs/ca-certificates.crt update \
  && apt-get -o Acquire::https::CAInfo=/etc/ssl/certs/ca-certificates.crt install --no-install-recommends -y \
-      bash ca-certificates curl git openssh-client ripgrep sqlite3 python3 procps tini \
+      bash ca-certificates curl duperemove git openssh-client ripgrep sqlite3 python3 procps tini \
  && apt-get install --no-install-recommends -y \
       chromium=154.0.8037.57-1~deb13u1 chromium-common=154.0.8037.57-1~deb13u1 \
       xvfb=2:21.1.16-1.3+deb13u4 x11vnc=0.9.17-1 \
@@ -213,6 +213,8 @@ actual = {
     'ripgrep': version('rg', '--version'),
     'sqlite': version('sqlite3', '--version'),
     'tini': version('/usr/bin/tini', '--version'),
+    # The runner shares duplicate files on its volume with it while idle (src/runner-go/managed_dedupe.go).
+    'duperemove': package('duperemove', '/usr/bin/duperemove'),
     'opencode': version('opencode', '--version'),
     'kimi': version('kimi', '--version'),
     'agy': version('agy', '--version'),

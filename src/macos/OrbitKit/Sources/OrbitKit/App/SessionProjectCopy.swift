@@ -33,28 +33,26 @@ public enum SessionProjectCopy {
         return "Paused at the daily limit · \(observed)/\(limit) today"
     }
     /// 2b: the owner paused it; runs already going finish, then it says since when.
-    public static func paused(runsFinishing: Int, ago: String?) -> String {
-        if runsFinishing > 0 { return "Paused · \(runsFinishing) \(runsFinishing == 1 ? "run" : "runs") finishing" }
-        return ago.map { "Paused · \($0)" } ?? "Paused"
-    }
+    public static func pausedRuns(_ n: Int) -> String { "Paused · \(n) \(n == 1 ? "run" : "runs") finishing" }
+    public static func pausedAgo(_ ago: String?) -> String { ago.map { "Paused · \($0)" } ?? "Paused" }
 
     /// The toast after Pause (§4.3), with Undo.
-    public static let projectPaused = "Project paused"
-    public static func pausedDetail(running: Int) -> String {
+    public static let pausedTitle = "Project paused"
+    public static func pausedStill(running: Int) -> String {
         running > 0
             ? "\(running) \(running == 1 ? "run" : "runs") still going · nothing new starts or merges"
             : "Nothing new starts or merges"
     }
     public static let undo = "Undo"
     /// The toast after a daily-limit Resume: the limit stays where it was.
-    public static let resumed = "Resumed"
-    public static let limitNotRaised = "The daily limit was not raised · Change on the project page"
-    public static func pauseRefused(resuming: Bool) -> String {
+    public static let resumedTitle = "Resumed"
+    public static let resumedLimitNote = "The daily limit was not raised · Change on the project page"
+    public static func refusedTitle(resuming: Bool) -> String {
         resuming ? "Couldn't resume the project" : "Couldn't pause the project"
     }
     /// The refusal's reason in words, never a code: 403 owner-only, `PROJECT_NOT_STARTED`, else the
     /// server's own message.
-    public static func pauseRefusal(status: Int?, body: String?, resuming: Bool) -> String? {
+    public static func refusedReason(status: Int?, body: String?, resuming: Bool) -> String? {
         if status == 403 { return "Only the project's owner can \(resuming ? "resume" : "pause") it" }
         let text = body?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if text.contains("PROJECT_NOT_STARTED") { return "The project hasn't started yet" }

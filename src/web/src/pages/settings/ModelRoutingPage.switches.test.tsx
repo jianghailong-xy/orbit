@@ -7,8 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { meQuery, type Me, type UserPreferences } from '../../lib/queries';
 
 /**
- * Smart model selection, one switch for the whole account (`preferences.modelRouting`) under General's
- * New sessions. Like the other switches on the page it is ON until turned off: an account that never
+ * Route by tier (once Smart model selection), one switch for the whole account (`preferences.modelRouting`), first on Providers →
+ * Model routing. Like the other switches on the page it is ON until turned off: an account that never
  * wrote it reads on. Under it, Optimize For: one for every Agent (`preferences.optimizeFor`, board
  * docs/mocks/routing-mode-account), Balance until the owner picks another.
  */
@@ -21,11 +21,11 @@ vi.mock('../../api', async (importOriginal) => ({
 }));
 const { api } = await import('../../api');
 const apiMock = vi.mocked(api);
-const { GeneralSettingsPage } = await import('./GeneralPage');
+const { ModelRoutingPage } = await import('./ModelRoutingPage');
 
-const LABEL = 'Smart model selection';
+const LABEL = 'Route by tier';
 /** The one line the board shortens it to, and the full text kept as the control's tooltip. */
-const HINT = 'Task runs and SubAgents get a model matched to how hard the work is.';
+const HINT = 'Task runs and SubAgents run on a model of the tier their work needs.';
 const FULL_HINT =
   "Coordinators suggest a tier for each task, and a SubAgent's size sets its own. Task runs and SubAgents run on a model of that tier from your providers. Off: tasks keep their Agent's model and SubAgents their parent session's.";
 
@@ -64,7 +64,7 @@ async function mount(preferences: UserPreferences): Promise<void> {
     created.render(
       <QueryClientProvider client={next}>
         <MemoryRouter>
-          <GeneralSettingsPage />
+          <ModelRoutingPage />
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -194,16 +194,15 @@ describe('smart model selection, one switch for the whole account', () => {
     expect(selectedMode()).toBe('Intelligence');
   });
 
-  it('sits in New sessions under Default permission mode, saying what it does in one line and in full on hover', async () => {
+  it('opens the page in Routing, above the models, saying what it does in one line and in full on hover', async () => {
     await mount({});
     expect(label().nextElementSibling?.textContent).toBe(HINT);
     expect(smartSwitch().closest('[title]')?.getAttribute('title')).toBe(FULL_HINT);
-    // The section it sits in is a region named by its title.
-    const card = label().closest<HTMLElement>('section[aria-labelledby]')!;
-    expect(document.getElementById(card.getAttribute('aria-labelledby')!)?.textContent).toBe('New sessions');
-    const text = card.textContent ?? '';
-    expect(text.indexOf('Default permission mode')).toBeGreaterThanOrEqual(0);
-    expect(text.indexOf(LABEL)).toBeGreaterThan(text.indexOf('Default permission mode'));
+    // The section it sits in is a region named by its title, the page's first.
+    const sections = [...container!.querySelectorAll<HTMLElement>('section[aria-labelledby]')];
+    const title = (section: HTMLElement) => document.getElementById(section.getAttribute('aria-labelledby')!)?.textContent;
+    expect(sections.map(title)).toEqual(['Routing', 'Models']);
+    expect(label().closest('section')).toBe(sections[0]);
   });
 
   it('is on for an account that never said otherwise', async () => {

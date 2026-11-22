@@ -255,12 +255,25 @@ struct ConsoleView: View {
         return session
     }
 
+    /// What the waiting card of a session its GitHub workspace's clone holds draws, or nil (web `useCloneWait`).
+    private func cloneWaitCard(_ console: ConsoleModel) -> QueuedClone.Card? {
+        guard let session = appModel.session(id: console.sessionID) else { return nil }
+        return QueuedClone.card(session: session, workspace: console.cloneWorkspace,
+                                heard: appModel.cloneLedger.heard(console.cloneWorkspace?.id),
+                                storedAt: console.cloneWorkspaceReadAt)
+    }
+
     private func bandMembers(_ console: ConsoleModel) -> some View {
         // Unread messages, error, background tray, git bar, composer — web's order
         // (`workspace-composer`). Staged attachments are not a member: they sit inside the
         // composer's card, above the text they go out with. The band owns the gutter and the
         // gaps; members only say whether they are on screen.
         ComposerBand {
+            // Under a transcript that has content, the clone's wait stands as a note beneath it (web's compact card).
+            if let card = cloneWaitCard(console), !console.state.items.isEmpty {
+                CloneWaitCardView(card: card, machine: console.runnerName, compact: true)
+                    .padding(.bottom, .composerBandGap)
+            }
             // The reader's messages nothing has read yet: the conversation's next lines, so the
             // band's first card, right under the conversation and above the parking strip
             // (docs/mocks/pending-tray-above-parking, decided 2026-10-28). Not folded while
@@ -1135,6 +1148,12 @@ struct TranscriptView: View {
     }
 
     @ViewBuilder private var runnerUpdatingPage: some View {
+        if let session = app.session(id: console.sessionID), console.state.items.isEmpty,
+           let card = QueuedClone.card(session: session, workspace: console.cloneWorkspace,
+                                       heard: app.cloneLedger.heard(console.cloneWorkspace?.id),
+                                       storedAt: console.cloneWorkspaceReadAt) {
+            CloneWaitCardView(card: card, machine: console.runnerName)
+        }
         if let session = runnerUpdatingSession, RunnerUpdating.holds(session), !runnerUpdatingTailHeld,
            RunnerUpdating.footBubbleID(console.state.items, accepted: console.state.accepted) == nil {
             RunnerUpdatingQueuedView(session: session, machine: console.runnerName, runnerID: console.runnerID,
@@ -1654,7 +1673,8 @@ struct TranscriptView: View {
             }
             .onAppear { Task { await console.loadOlder() } }
         case .item(let item):
-            TranscriptItemView(item: item, fullPayload: console.fullPayload, console: console)
+            TranscriptItemView(item: item, fullPayload: console.fullPayload, console: console,
+                               openSession: { app.route(to: .session($0)) })
                 .modifier(AnchorRow(itemID: item.id, ruler: ruler, recompute: recomputeStuck))
         case .turnHead(let line):
             // No `AnchorRow`: the head belongs to the message above it, which is the anchor.
@@ -2570,6 +2590,9 @@ struct TranscriptItemView: View {
     /// The owning console, for the rows that can act on the session — the sign-in card signs this
     /// session's runner back in and re-sends the message its failure ate.
     var console: ConsoleModel? = nil
+    /// Open another session's conversation, for the row that names the agent fixing a warning. Nil
+    /// where there is no router (a preview, a guest page), which leaves the link out.
+    var openSession: ((String) -> Void)? = nil
     var body: some View {
         switch item {
         case .user(let b):
@@ -2644,7 +2667,8 @@ struct TranscriptItemView: View {
                 .foregroundStyle(console?.settlement.settledNotices.contains(id) == true ? Color.secondary : Color.orange)
                 .textSelection(.enabled)
         case .diagnostic(let notice):
-            DiagnosticNoticeRow(notice: notice)
+            DiagnosticNoticeRow(notice: notice, console: notice.isSandboxMissing ? console : nil,
+                                openSession: openSession)
         case .mainCheckout(let item):
             // The main checkout's card (board 01) or one action's line (board 03). Without a console to
             // act through, the event's own sentence, as the notice it used to be.
@@ -2682,21 +2706,90 @@ struct TranscriptItemView: View {
 /// module included, is the row's help text, as it is web's tooltip.
 struct DiagnosticNoticeRow: View {
     let notice: DiagnosticNotice
+    /// The session's console, on the one diagnostic a reader can act on: Codex's missing bubblewrap.
+    var console: ConsoleModel? = nil
+    /// Open the fixing agent's session; nil where there is no router.
+    var openSession: ((String) -> Void)? = nil
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-            if !notice.label.isEmpty {
-                Text(notice.label).font(.orbitMeta).monospacedDigit().foregroundStyle(.tertiary)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                if !notice.label.isEmpty {
+                    Text(notice.label).font(.orbitMeta).monospacedDigit().foregroundStyle(.tertiary)
+                }
+                Text(notice.text).foregroundStyle(.secondary).textSelection(.enabled)
+                if notice.repeats > 1 {
+                    Text("×\(notice.repeats)").font(.orbitMeta).monospacedDigit()
+                        .foregroundStyle(Color.orange.opacity(0.7))
+                }
             }
-            Text(notice.text).foregroundStyle(.secondary).textSelection(.enabled)
-            if notice.repeats > 1 {
-                Text("×\(notice.repeats)").font(.orbitMeta).monospacedDigit()
-                    .foregroundStyle(Color.orange.opacity(0.7))
+            .font(.orbitLabel)
+            .help(notice.message)
+            if notice.isSandboxMissing, let console {
+                SandboxFixActionView(console: console, openSession: openSession)
             }
         }
-        .font(.orbitLabel)
-        .help(notice.message)
+    }
+}
+
+/// Fix with an agent under the transcript's sandbox warning (web parity: Transcript.tsx's
+/// `SandboxFixAction`): the button and where its session runs, the agent at work, or the one that
+/// already finished with the row — a transcript is history, so a handled row offers no second agent.
+struct SandboxFixActionView: View {
+    let console: ConsoleModel
+    var openSession: ((String) -> Void)? = nil
+
+    var body: some View {
+        if let state = RunnerAgentFixLogic.sandboxState(console.runnerAgentFix) {
+            VStack(alignment: .leading, spacing: 6) {
+                switch state {
+                case .ready(let hint):
+                    Button(RunnerPageCopy.AGENT_FIX_BUTTON) { Task { await console.fixSandbox() } }
+                        .buttonStyle(RunnerCapsuleButtonStyle())
+                        .disabled(console.sandboxFixStarting)
+                    hintLine(hint)
+                case .blocked(let reason):
+                    Button(RunnerPageCopy.AGENT_FIX_BUTTON) {}
+                        .buttonStyle(RunnerCapsuleButtonStyle())
+                        .disabled(true)
+                    hintLine(reason)
+                case .fixing(let entry):
+                    HStack(spacing: 6) {
+                        Circle().fill(Color.accentColor).frame(width: 6, height: 6)
+                        Text(RunnerPageCopy.agentFixFixing(workspace: entry.workspaceName))
+                            .foregroundStyle(.secondary)
+                        openLink(entry.sessionId)
+                    }
+                    .font(.orbitLabel)
+                case .handled(let sessionId, let workspaceName):
+                    HStack(spacing: 6) {
+                        Text(RunnerPageCopy.agentFixFixed(workspace: workspaceName))
+                            .foregroundStyle(.secondary)
+                        openLink(sessionId)
+                    }
+                    .font(.orbitLabel)
+                }
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 10).fill(Color.primary.opacity(0.02)))
+            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.secondary.opacity(0.25)))
+        }
+    }
+
+    @ViewBuilder private func hintLine(_ text: String?) -> some View {
+        if let text {
+            Text(text).font(.orbitLabel).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    @ViewBuilder private func openLink(_ sessionId: String) -> some View {
+        if let openSession {
+            Button(RunnerPageCopy.AGENT_FIX_OPEN_SESSION) { openSession(sessionId) }
+                .linkButtonStyle()
+        }
     }
 }
 

@@ -32,7 +32,8 @@
  * turn's `delivered_at`: a run that never did (RUNNER_UNAVAILABLE, QUOTA, ENGINE_CRASHED_BEFORE_START) has its
  * session retired and is retried after 1, 5 and 15 minutes, then hourly, inside its catch-up window, and is MISSED
  * past it (§5.2: a slot not run, not a failure); one that did is never retried. A runner that is offline at the
- * start leaves the run waiting without an attempt. One run never has two live sessions (`start`, `fail`). `consecutiveFailures` counts
+ * start leaves the run waiting without an attempt. A session a full runner, run or batch holds keeps waiting for a
+ * slot, with no 10-minute limit and no new attempt, until the catch-up deadline, then is MISSED (RUNNER_FULL). One run never has two live sessions (`start`, `fail`). `consecutiveFailures` counts
  * and nothing pauses. A NO_CHANGE run's session is completed; CHANGED and FAILED ones stay open.
  */
 import {
@@ -55,6 +56,7 @@ import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { RUNNER_BEATS, runnerIsOnline } from '../runners/runner-presence';
 import { openingTurnKey } from '../sessions/orbit-authored-turn';
+import { sessionHeldByCapacity } from '../sessions/queued-reason-sql';
 import {
   SCHEDULE_NOTIFIER,
   approvalCopy,
@@ -109,7 +111,10 @@ const HOUR = 60 * MINUTE;
 export const SCHEDULE_RETRY_DELAYS_MINUTES = [1, 5, 15] as const;
 /** A card nobody answers for this long fails its run (§6.4). */
 export const SCHEDULE_APPROVAL_TIMEOUT_MS = 2 * HOUR;
-/** A run whose first turn has not reached its engine this long after the start never will: RUNNER_UNAVAILABLE. */
+/**
+ * A run whose first turn has not reached its engine this long after the start (or after a full runner last held
+ * it) never will: RUNNER_UNAVAILABLE. A session a full runner, run or batch holds is not timed by it (§7.2).
+ */
 export const SCHEDULE_UNDELIVERED_LIMIT_MS = 10 * MINUTE;
 /** A slot fired within this of its time is SCHEDULED; later, it is a CATCH_UP. */
 export const SCHEDULE_LATE_GRACE_MS = 10 * MINUTE;
@@ -130,6 +135,7 @@ const MAX_SLOTS_PER_FIRING = 400;
 /** §7.2's closed set. */
 export type ScheduleFailureReason =
   | 'RUNNER_UNAVAILABLE'
+  | 'RUNNER_FULL'
   | 'QUOTA'
   | 'ENGINE_CRASHED_BEFORE_START'
   | 'REPORTED_FAILED'
@@ -143,6 +149,8 @@ export type ScheduleFailureReason =
 /** The reasons of a run that never reached its engine: the only ones retried. */
 export const RETRIED_FAILURES: ReadonlySet<ScheduleFailureReason> = new Set([
   'RUNNER_UNAVAILABLE',
+  // Only ever written past the catch-up deadline, so it settles as MISSED (or CANCELLED / SKIPPED), never a retry.
+  'RUNNER_FULL',
   'QUOTA',
   'ENGINE_CRASHED_BEFORE_START',
 ]);
@@ -618,7 +626,13 @@ export class ScheduleRunsService {
   async reconcileRun(runId: string): Promise<ReconcileOutcome> {
     const run = await this.prisma.scheduleRun.findUnique({
       where: { id: runId },
-      include: { schedule: { select: { runLimitMinutes: true, ownerId: true } } },
+      include: {
+        schedule: {
+          select: {
+            runLimitMinutes: true, ownerId: true, rule: true, timezone: true, state: true, endedReason: true,
+          },
+        },
+      },
     });
     if (!run || (run.state !== 'RUNNING' && run.state !== 'AWAITING_APPROVAL')) return 'SETTLED_ELSEWHERE';
     const now = this.clock();
@@ -662,7 +676,24 @@ export class ScheduleRunsService {
     if (ended) return this.fail(runId, delivered ? 'NO_REPORT' : 'RUNNER_UNAVAILABLE', { sessionId });
 
     if (!delivered) {
-      if (now.getTime() - startedAt.getTime() >= SCHEDULE_UNDELIVERED_LIMIT_MS) {
+      // §7.2: a full runner, run or batch is not a runner that is not coming. The session keeps its place in the
+      // queue until a slot frees, however long that takes, up to the slot's catch-up deadline; past it the slot is
+      // MISSED (RUNNER_FULL). A schedule paused (a MANUAL run aside), held or deleted retires it now, as a retry
+      // would have been.
+      if (await sessionHeldByCapacity(this.prisma, sessionId)) {
+        const schedule = run.schedule;
+        const stopped = schedule.state === 'HELD'
+          || (schedule.state === 'ENDED' && schedule.endedReason === 'DELETED')
+          || (schedule.state === 'PAUSED' && run.trigger !== 'MANUAL');
+        if (stopped || now.getTime() > this.deadline(schedule, run)) {
+          return this.fail(runId, 'RUNNER_FULL', { sessionId });
+        }
+        return this.noteCapacityHeld(runId, sessionId, now);
+      }
+      // Held by nothing the server can name: the runner is not taking it. Counted from the start, or from the last
+      // time a full runner held it, so a slot that has just freed is given the same 10 minutes to be claimed.
+      const since = Math.max(startedAt.getTime(), run.capacityHeldAt?.getTime() ?? 0);
+      if (now.getTime() - since >= SCHEDULE_UNDELIVERED_LIMIT_MS) {
         return this.fail(runId, 'RUNNER_UNAVAILABLE', { sessionId });
       }
       return 'UNCHANGED';
@@ -709,6 +740,15 @@ export class ScheduleRunsService {
       })) === 0;
     if (idle) return this.fail(runId, 'NO_REPORT', { sessionId });
     if (run.state === 'AWAITING_APPROVAL') return this.moveInProgress(runId, 'AWAITING_APPROVAL', 'RUNNING');
+    return 'UNCHANGED';
+  }
+
+  /** A full runner holds the run's session: when it was last seen so, for the 10-minute limit once it no longer is. */
+  private async noteCapacityHeld(runId: string, sessionId: string, now: Date): Promise<'UNCHANGED'> {
+    await this.prisma.scheduleRun.updateMany({
+      where: { id: runId, sessionId, state: 'RUNNING' },
+      data: { capacityHeldAt: now },
+    });
     return 'UNCHANGED';
   }
 
@@ -1050,7 +1090,11 @@ export class ScheduleRunsService {
     return run;
   }
 
-  /** Stop this run: CANCELLED (CANCELLED_BY_OWNER) and its session interrupted. The schedule is unchanged. */
+  /**
+   * Stop this run: CANCELLED (CANCELLED_BY_OWNER) and its session interrupted, or ended when its first turn never
+   * reached the engine (a session still waiting for a slot would otherwise start once one frees). The schedule is
+   * unchanged.
+   */
   async stopRun(actor: ScheduleActor, runId: string): Promise<ScheduleRun> {
     const result = await withTransactionRetry(
       this.prisma,
@@ -1076,7 +1120,15 @@ export class ScheduleRunsService {
       },
       loggedRetry(this.logger, 'scheduleRuns.stop'),
     );
-    if (result.interrupt) await this.quietly(() => this.sessions.interrupt(result.ownerId, result.interrupt!), 'interrupt');
+    if (result.interrupt) {
+      const sessionId = result.interrupt;
+      const opening = await this.prisma.conversationTurn.findFirst({
+        where: { sessionId, clientTurnId: openingTurnKey(sessionId) },
+        select: { deliveredAt: true },
+      });
+      if (opening?.deliveredAt) await this.quietly(() => this.sessions.interrupt(result.ownerId, sessionId), 'interrupt');
+      else await this.quietly(() => this.sessions.end(result.ownerId, sessionId), 'end');
+    }
     await this.startNext(result.stopped.scheduleId);
     return result.stopped;
   }
@@ -1202,7 +1254,7 @@ export class ScheduleRunsService {
   }
 
   /** The last instant a run's slot may still start: its plannedAt plus one period of its rule (§5.2). */
-  private deadline(schedule: Schedule, run: ScheduleRun): number {
+  private deadline(schedule: Pick<Schedule, 'rule' | 'timezone'>, run: Pick<ScheduleRun, 'plannedAt'>): number {
     try {
       return run.plannedAt.getTime() + catchUpWindowMs(parseRule(schedule.rule), schedule.timezone, run.plannedAt);
     } catch {

@@ -104,14 +104,25 @@ public struct DiagnosticNotice: Equatable, Sendable, Codable, Identifiable {
     public let message: String
     /// How many reports folded into this row; 1 when it was seen once.
     public var repeats: Int
+    /// The diagnostic's own component and code, when it gave them: `sandbox` and `bubblewrap_missing`
+    /// are the one the transcript can act on (docs/mocks/codex-sandbox-fix-with-agent). Optional so a
+    /// snapshot written before these were kept still decodes.
+    public let component: String?
+    public let code: String?
 
-    public init(id: String, label: String, text: String, message: String, repeats: Int = 1) {
+    public init(id: String, label: String, text: String, message: String, repeats: Int = 1,
+                component: String? = nil, code: String? = nil) {
         self.id = id
         self.label = label
         self.text = text
         self.message = message
         self.repeats = repeats
+        self.component = component
+        self.code = code
     }
+
+    /// Whether this is Codex's missing system bubblewrap: the row that offers Fix with an agent.
+    public var isSandboxMissing: Bool { component == "sandbox" && code == "bubblewrap_missing" }
 }
 
 /// The transcript's record of one self-healing outage. What the *card* then shows depends on the

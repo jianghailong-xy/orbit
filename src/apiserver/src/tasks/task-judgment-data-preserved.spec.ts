@@ -3299,10 +3299,18 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // or replaces none of the preserved triggers or functions. No INSERT, UPDATE or DELETE runs at apply time.
       // Written as 1423 and then 1427 on the project line, it was renumbered after main took 1427.
       '1428_open_list_workspace_probes',
-      // 1430 adds managed_runner.update_interrupt_turns, BOOLEAN NOT NULL with a constant default (catalog-only, no
+      // 1429 adds six nullable rating columns, a check on rating_score and an (owner_id, created_at) index on
+      // subagent_run; no row is written, and no preserved relation, trigger, function or DONE fence changes.
+      // Written as 1420 on its task branch, it was renumbered after main took 1420 to 1428.
+      '1429_subagent_run_rating',
+      // 1430 adds one nullable column, capacity_held_at, to schedule_run; no row is written, and no preserved
+      // relation, trigger, function or DONE fence changes.
+      '1430_schedule_run_capacity_held_at',
+      // 1431 adds managed_runner.update_interrupt_turns, BOOLEAN NOT NULL with a constant default (catalog-only, no
       // rewrite), for an owner's Update Now of a busy runner; `managed_runner` is none of the preserved relations, no
       // row is written, and no trigger, function or DONE fence changes.
-      '1430_managed_runner_update_interrupt'],
+      // Written as 1430 on the project line, it was renumbered after main took 1430.
+      '1431_managed_runner_update_interrupt'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
