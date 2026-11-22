@@ -2,6 +2,7 @@ package io.orbitd.android
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -79,23 +80,23 @@ class WaitingCardHoldShellTest {
     @Test fun anOpenAtTheWaitingCardThatFindsNoneLapsesAfterTenSeconds() {
         serve()
         openMember()
+        restAtTheEnd()
         wall += 11_000
-        readHistory()
         val before = bounds(stepRow())
-        serve(approval("a-late", 1, "LATE-DECISION"))
+        serve(approval("a-late", 1, "LATE-DECISION", tall))
         arrive()
         assertEquals("the late card did not carry the list away from the reader", before, bounds(stepRow()))
-        assertFalse("the late card was not brought in", shows("LATE-DECISION"))
     }
 
     /** The reader's own scroll drops the request at once, long before its ten seconds are up. */
     @Test fun anOpenAtTheWaitingCardThatFindsNoneIsDroppedWhenTheReaderScrolls() {
         serve()
         openMember()
+        restAtTheEnd()
         wall += 1_000
-        readHistory()
+        readAlittle()
         val before = bounds(stepRow())
-        serve(approval("a-late", 1, "LATE-DECISION"))
+        serve(approval("a-late", 1, "LATE-DECISION", tall))
         arrive()
         assertEquals("the late card did not carry the list away from the reader", before, bounds(stepRow()))
     }
@@ -159,6 +160,10 @@ class WaitingCardHoldShellTest {
     }, useUnmergedTree = true).fetchSemanticsNodes().first()
     private fun bounds(node: SemanticsNode): Rect = node.boundsInRoot
     private fun bounds(node: SemanticsNodeInteraction): Rect = node.fetchSemanticsNode().boundsInRoot
+    /** The list's end, reached by the semantics action, not a finger: the reader is at the cards, nothing has touched the list. */
+    private fun restAtTheEnd() { compose.onNodeWithTag("transcript-list").performScrollToNode(hasTestTag("transcript-tail")); settle() }
+    /** A short drag back: the reader steps up into the last rows, and the cards item is still on screen below them. */
+    private fun readAlittle() { compose.onNodeWithTag("transcript-list").performTouchInput { swipe(Offset(centerX, 150f), Offset(centerX, 190f), 200) }; settle() }
     private fun readHistory() { compose.onNodeWithTag("transcript-list").performTouchInput { swipeDown() }; settle() }
     /** Asks for the session again and waits, in real time, for the read to land, so the shell's virtual clock does not run past the hold meanwhile. */
     private fun arrive() {

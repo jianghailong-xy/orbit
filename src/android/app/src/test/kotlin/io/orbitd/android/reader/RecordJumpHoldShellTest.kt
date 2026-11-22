@@ -39,8 +39,14 @@ class RecordJumpHoldShellTest : ComposerShellTest() {
             put("events", JsonArray(transcript.take(24))); put("hasMore", false); put("after", 24)
             put("anchor", buildJsonObject { put("kind", "event"); put("id", record); put("seq", 16) })
         }
+        // The transcript is held until the session's detail has been read, so the note is there to be counted when the rows land.
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        ComposerShell.pageGate = gate
         signIn()
         open("orbit-session:${ComposerShell.SESSION}?at=$record")
+        await { ComposerShell.calls.any { it == "GET sessions/${ComposerShell.SESSION}" } }
+        repeat(3) { compose.mainClock.advanceTimeBy(300); compose.waitForIdle() }
+        gate.complete(Unit)
         await { has(hasTestTag("composer-model") and isEnabled()) }
         await { has(hasTestTag("event:16")) }
         repeat(5) { compose.mainClock.advanceTimeBy(300); compose.waitForIdle() }
@@ -49,9 +55,8 @@ class RecordJumpHoldShellTest : ComposerShellTest() {
     /** The row a record link names is at the top of the list, whatever stands between "older" and the first row. */
     @Test fun aRecordJumpLandsOnItsRowBehindAHandoffNote() {
         openAtRecord(withHandoffNote = true)
-        await { has(hasTestTag("handoff-note-card")) || top("event:16") != null }
         val gap = top("event:16")!! - listTop()
-        assertTrue("the record's row is the first row in view, not the one before it: $gap below the list's top", gap in 0f..80f)
+        assertTrue("the record's row is the first row in view, not the one before it: $gap px below the list's top, event:15 at ${top("event:15")}", gap in 0f..80f)
     }
 
     @Test fun aRecordJumpLandsOnItsRowWithNothingAheadOfTheRows() {
