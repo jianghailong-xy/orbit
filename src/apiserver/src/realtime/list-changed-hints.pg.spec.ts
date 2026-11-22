@@ -301,6 +301,13 @@ test('f: heartbeats and runner-row writes outside steady send no hint; going off
   await quiet('a runner column outside steady', () =>
     f.db.runner.update({ where: { id: f.runnerId }, data: { capabilitiesReportedAt: new Date() } }));
 
+  // Past a 15 s clock tick, which is where the version used to be read and found new by a beat.
+  await f.db.runnerPresence.update({ where: { runnerId: f.runnerId }, data: { lastBeatAt: new Date() } });
+  await sleep(16_000);
+  await f.db.runnerPresence.update({ where: { runnerId: f.runnerId }, data: { lastBeatAt: new Date() } });
+  await sleep(1_500);
+  assert.equal(hintsIn(declared.received).length, 1, 'a beat sent a hint at the clock tick');
+
   // A name is read on the next clock tick (15 s), status likewise.
   await f.db.runner.update({ where: { id: f.runnerId }, data: { name: 'renamed' } });
   assert.ok(await until(() => hintsIn(declared.received).length === 2, 20_000), 'a rename sent no hint within 20 s');
