@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -125,10 +126,11 @@ func TestARequestPastItsDeadlineIsOfflineAtOnce(t *testing.T) {
 func TestARequestPastItsDeadlineWhileOthersAreAnsweredIsOneFailure(t *testing.T) {
 	// A loaded server: one request is held past its deadline while the others are answered. It is slow, not gone.
 	held := make(chan struct{})
+	var once sync.Once
 	release := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("id") == "slow" {
-			close(held)
+			once.Do(func() { close(held) }) // held again when it is sent once more
 			<-release
 			return
 		}
@@ -154,6 +156,69 @@ func TestARequestPastItsDeadlineWhileOthersAreAnsweredIsOneFailure(t *testing.T)
 	}
 	if _, err := c.StatID(context.Background(), "fast"); err != nil {
 		t.Fatalf("still sent: %v", err)
+	}
+}
+
+func TestOneSlowAnswerOnItsOwnIsNotOffline(t *testing.T) {
+	// The 5 GiB walk: a sequential rm -rf, one stat answered after 17 s while nothing else was in flight, and the
+	// mount went offline for a server that was up. Here one stat answers after 12/9 of its deadline (12 s of 9 s).
+	const meta = 300 * time.Millisecond
+	var stats, probes atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/runner/drive/changes":
+			probes.Add(1)
+			_, _ = w.Write([]byte(`{"changes":[],"cursor":"1:1","more":false,"resync":false}`))
+		case "/api/runner/drive/stat":
+			if stats.Add(1) == 1 {
+				time.Sleep(meta * 12 / 9)
+			}
+			_, _ = w.Write([]byte(`{"id":"x","name":"x","kind":"FILE"}`))
+		}
+	}))
+	defer srv.Close()
+	c := New(Config{BaseURL: srv.URL, Token: "t", MetaTimeout: meta})
+	var changes []bool
+	c.Health().OnChange(func(online bool, _ time.Time) { changes = append(changes, online) })
+	if _, err := c.StatID(context.Background(), "x"); err != nil {
+		t.Fatalf("a slow stat is sent once more on a server that answers: %v", err)
+	}
+	if stats.Load() != 2 || probes.Load() != 1 {
+		t.Fatalf("stats %d, probes %d: one stat past its deadline, the probe it sent while waiting, the stat once more", stats.Load(), probes.Load())
+	}
+	for i := 0; i < 100; i++ {
+		if _, err := c.StatID(context.Background(), "x"); err != nil {
+			t.Fatalf("request %d after the slow one: %v", i, err)
+		}
+	}
+	if c.Health().Offline() || len(changes) != 0 {
+		t.Fatalf("offline %v, health changes %v: a slow answer is not an unreachable server", c.Health().Offline(), changes)
+	}
+}
+
+func TestARefusedConnectionIsStillOffline(t *testing.T) {
+	// Nothing listens: three failures within 10 s are offline, and from then on nothing is sent (§5.7).
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := ln.Addr().String()
+	ln.Close()
+	c := New(Config{BaseURL: "http://" + addr, Token: "t"})
+	start := time.Now()
+	for i := 0; i < 3; i++ {
+		if _, err := c.StatID(context.Background(), "x"); !Transient(err) || errors.Is(err, ErrOffline) {
+			t.Fatalf("refused %d: %v", i, err)
+		}
+	}
+	if !c.Health().Offline() {
+		t.Fatal("three refused connections: offline")
+	}
+	if _, err := c.StatID(context.Background(), "x"); !errors.Is(err, ErrOffline) {
+		t.Fatalf("offline: %v", err)
+	}
+	if time.Since(start) > 2*time.Second {
+		t.Fatalf("a refused connection is not waited for: %s", time.Since(start))
 	}
 }
 

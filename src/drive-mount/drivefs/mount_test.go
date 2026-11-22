@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"errors"
+	"fmt"
 	"math/rand"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -23,6 +25,12 @@ import (
 // shell-operation list against the real door.
 
 func mountFake(t *testing.T, opts Options) (*fakeDoor, string, *Reporter) {
+	t.Helper()
+	return mountFakeDoor(t, opts, door.Config{})
+}
+
+// mountFakeDoor is mountFake with the door client's deadlines of cfg.
+func mountFakeDoor(t *testing.T, opts Options, cfg door.Config) (*fakeDoor, string, *Reporter) {
 	t.Helper()
 	if os.Geteuid() != 0 {
 		t.Skip("mounting needs root")
@@ -43,7 +51,8 @@ func mountFake(t *testing.T, opts Options) (*fakeDoor, string, *Reporter) {
 	rep := NewReporter(ReporterOptions{Dir: state, ShownDir: "/run/orbit-files"})
 	opts.SpoolDir = filepath.Join(dir, "spool")
 	opts.Reporter = rep
-	fsys, err := New(door.New(door.Config{BaseURL: f.srv.URL, Token: "t"}), opts)
+	cfg.BaseURL, cfg.Token = f.srv.URL, "t"
+	fsys, err := New(door.New(cfg), opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -442,6 +451,89 @@ func TestACloseThatCannotReachTheServerKeepsTheBytes(t *testing.T) {
 		t.Fatalf("write offline: %v", err)
 	}
 	fh.Close()
+}
+
+func TestOneSlowAnswerDoesNotFailTheRestOfAnRmRf(t *testing.T) {
+	// The 5 GiB walk, §5.9 row 30 on S3: rm -rf of a big tree, one metadata answer slower than its deadline while
+	// nothing else was answered, and every folder after it failed EIO on a server that was up. Here the first stat or
+	// listing rm -rf needs answers after 12/9 of its deadline (12 s of 9 s), while the feed's long poll has nothing to say.
+	const meta = time.Second
+	f, mnt, rep := mountFakeDoor(t, Options{FeedWait: 5 * time.Second}, door.Config{MetaTimeout: meta})
+	f.mu.Lock()
+	huge := f.add("root", "FOLDER", "huge")
+	for i := 0; i < 10; i++ {
+		d := f.add(huge.id, "FOLDER", fmt.Sprintf("d%d", i))
+		for j := 0; j < 10; j++ {
+			f.add(d.id, "FILE", fmt.Sprintf("f%d", j))
+		}
+	}
+	f.mu.Unlock()
+	time.Sleep(500 * time.Millisecond) // the feed takes the tree in
+	var slowed atomic.Bool
+	var after atomic.Int32
+	f.mu.Lock()
+	f.delay = func(r *http.Request) time.Duration {
+		if r.URL.Query().Get("wait") != "" {
+			return 4 * time.Second // a long poll with nothing to say
+		}
+		route := strings.TrimPrefix(r.URL.Path, "/api/runner/drive")
+		if r.Method == http.MethodGet && (route == "/stat" || route == "/list") && slowed.CompareAndSwap(false, true) {
+			return meta * 12 / 9
+		}
+		if slowed.Load() {
+			after.Add(1)
+		}
+		return 0
+	}
+	f.mu.Unlock()
+	time.Sleep(200 * time.Millisecond) // the long poll answered before the delay is gone; the next one is held
+	if err := os.RemoveAll(filepath.Join(mnt, "huge")); err != nil {
+		t.Fatalf("rm -rf: %v; errors.log %v", err, rep.Lines())
+	}
+	if !slowed.Load() || after.Load() < 100 {
+		t.Fatalf("slowed %v, requests after it %d: rm -rf met no slow answer, or sent too little after it", slowed.Load(), after.Load())
+	}
+	if !rep.CurrentStatus().Connected {
+		t.Fatal("a slow answer is not an unreachable server")
+	}
+	if lines := strings.Join(rep.Lines(), "\n"); strings.Contains(lines, "EIO") {
+		t.Fatalf("errors.log %s", lines)
+	}
+	f.mu.Lock()
+	left := 0
+	for _, e := range f.entries {
+		if e.id != "root" && !e.trashed {
+			left++
+		}
+	}
+	f.mu.Unlock()
+	if left != 0 {
+		t.Fatalf("%d entries left after rm -rf", left)
+	}
+	if _, err := os.ReadDir(mnt); err != nil {
+		t.Fatalf("ls after rm -rf: %v", err)
+	}
+}
+
+func TestADoorThatRefusesConnectionsIsStillOffline(t *testing.T) {
+	// Nothing listens: three failures within 10 s are offline, and what needs the server fails EIO at once (§5.7).
+	f, mnt, rep := mountFake(t, Options{})
+	f.srv.Close()
+	start := time.Now()
+	for i := 0; i < 4; i++ {
+		if err := os.Mkdir(filepath.Join(mnt, fmt.Sprintf("d%d", i)), 0o755); !errors.Is(err, syscall.EIO) {
+			t.Fatalf("mkdir %d with nothing listening: %v", i, err)
+		}
+	}
+	if time.Since(start) > 2*time.Second {
+		t.Fatalf("a refused connection is not waited for: %s", time.Since(start))
+	}
+	if rep.CurrentStatus().Connected {
+		t.Fatal("refused connections: offline")
+	}
+	if lines := strings.Join(rep.Lines(), "\n"); !strings.Contains(lines, "cannot be reached") {
+		t.Fatalf("errors.log %s", lines)
+	}
 }
 
 func TestRefusalsSayWhy(t *testing.T) {

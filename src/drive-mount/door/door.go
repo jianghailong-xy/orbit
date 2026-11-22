@@ -8,6 +8,10 @@
 //     request allowed to wait longer, by the wait it asks for.
 //   - Health counts failures: three within 10 s and the client is offline, failing every request at once until a probe
 //     answers (§5.7). A refusal the server answered (a 4xx) is not a failure of reachability.
+//   - A slow answer is not no answer. A request still waiting halfway to its deadline, with nothing answered since it
+//     was sent, probes the door meanwhile: past its deadline, it puts the client offline only if the probe did not
+//     answer either. A read (stat, list) past its deadline on a server that answered is sent once more, given three
+//     deadlines, rather than failing the call.
 //   - A superseded, fenced or revoked instance is fenced for good: the daemon stops (§8.2).
 package door
 
@@ -24,6 +28,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -286,7 +291,7 @@ type Config struct {
 	Generation string
 	PodUID     string
 
-	MetaTimeout        time.Duration // 9 s
+	MetaTimeout        time.Duration // 9 s; a read sent again after a slow answer gets three
 	ChunkTimeout       time.Duration // 60 s
 	ChunkHeaderTimeout time.Duration // 9 s
 	FailureWindow      time.Duration // 10 s
@@ -325,6 +330,8 @@ type Client struct {
 	short  *http.Client // metadata and chunks: headers within ChunkHeaderTimeout
 	long   *http.Client // the change feed's long poll
 	health *Health
+
+	witnessing atomic.Bool // a probe sent for a request that waits is in flight
 
 	fenceMu sync.Mutex
 	fenced  *FencedError
@@ -398,6 +405,7 @@ const (
 	kindChunk
 	kindLongPoll
 	kindProbe
+	kindSlowRead // a read sent again after its first deadline passed on a server that answered: no header deadline
 )
 
 func (c *Client) url(route string, query url.Values) string {
@@ -442,11 +450,20 @@ func (c *Client) send(ctx context.Context, k kind, method, route string, query u
 		}
 	}
 	client := c.short
-	if k == kindLongPoll {
+	if k == kindLongPoll || k == kindSlowRead {
 		client = c.long
 	}
 	sent := c.health.now()
+	stopWitness := func() {}
+	if k != kindLongPoll && k != kindProbe {
+		wait := timeout
+		if client == c.short && c.cfg.ChunkHeaderTimeout < wait {
+			wait = c.cfg.ChunkHeaderTimeout
+		}
+		stopWitness = c.witness(sent, wait/2)
+	}
 	resp, err := client.Do(req)
+	stopWitness()
 	if err != nil {
 		// The caller giving up (the kernel interrupting the request) is not the server's failure; a refused or reset
 		// connection, or one past its deadline, is.
@@ -512,6 +529,10 @@ func (c *Client) json(ctx context.Context, k kind, method, route string, query u
 		timeout = c.cfg.MetaTimeout + longPollWait(query)
 	}
 	resp, cancel, err := c.send(ctx, k, method, route, query, body, contentType, nil, timeout)
+	if err != nil && k == kindMeta && method == http.MethodGet && c.slowNotGone(ctx, err) {
+		// A read is safe to send again, and the server is busy, not gone: waiting longer beats failing the call.
+		resp, cancel, err = c.send(ctx, kindSlowRead, method, route, query, nil, "", nil, 3*c.cfg.MetaTimeout)
+	}
 	if err != nil {
 		return err
 	}
@@ -725,6 +746,30 @@ func (c *Client) Usage(ctx context.Context) (Usage, error) {
 	return u, err
 }
 
+// witness probes the door once a request sent at sent has waited after, unless something answered meanwhile, so that
+// when the request's deadline passes the health can tell a slow server from one out of reach (§5.7). One such probe
+// is in flight at a time. The answer stops the timer, once the request has its answer.
+func (c *Client) witness(sent time.Time, after time.Duration) func() {
+	t := time.AfterFunc(after, func() {
+		if c.health.answeredSince(sent) || !c.witnessing.CompareAndSwap(false, true) {
+			return
+		}
+		defer c.witnessing.Store(false)
+		_ = c.Probe(context.Background())
+	})
+	return func() { t.Stop() }
+}
+
+// slowNotGone reports whether err is a request past its deadline that left the client online: the server answered
+// something while it waited, so it is slow, not gone.
+func (c *Client) slowNotGone(ctx context.Context, err error) bool {
+	var t *TransportError
+	if !errors.As(err, &t) || ctx.Err() != nil || c.health.Offline() {
+		return false
+	}
+	return errors.Is(t.Err, context.DeadlineExceeded) || isTimeout(t.Err)
+}
+
 // Probe asks the door whether it answers, offline or not: the feed's start, the cheapest route there is.
 func (c *Client) Probe(ctx context.Context) error {
 	var ch Changes
@@ -805,15 +850,20 @@ func (h *Health) unreachable() {
 	}
 }
 
-// timedOut is a request sent at sent that passed its deadline. If the server answered nothing while it waited, it is
-// out of reach and the client goes offline at once: held unanswered, requests fail a deadline apart and three of them
-// never fall within 10 s (§5.7). If it answered others meanwhile, it is slow, not gone, and this is one failure among
-// others: one slow request on a loaded server does not fail every write on the mount.
-func (h *Health) timedOut(sent time.Time) {
+// answeredSince reports whether the server answered a request after t.
+func (h *Health) answeredSince(t time.Time) bool {
 	h.mu.Lock()
-	silent := !h.answered.After(sent)
-	h.mu.Unlock()
-	if silent {
+	defer h.mu.Unlock()
+	return h.answered.After(t)
+}
+
+// timedOut is a request sent at sent that passed its deadline. If the server answered nothing while it waited (not
+// even the probe the request sent halfway, see witness), it is out of reach and the client goes offline at once: held
+// unanswered, requests fail a deadline apart and three of them never fall within 10 s (§5.7). If it answered
+// meanwhile, it is slow, not gone, and this is one failure among others: one slow answer on a loaded server does not
+// fail every operation on the mount.
+func (h *Health) timedOut(sent time.Time) {
+	if !h.answeredSince(sent) {
 		h.unreachable()
 		return
 	}
