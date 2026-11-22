@@ -80,7 +80,13 @@ def main():
     parser.add_argument("--earlier-channel", type=Path,
                         help="the channel.py the runner first starts under, from an image before the /home/orbit layout "
                              "(git show 95884b154f:deploy/managed-runner/docker-channel/channel.py)")
+    parser.add_argument("--middle-image",
+                        help="with --earlier-channel: an image of the /home/orbit layout without the earlier home's move "
+                             "(e.g. built at 5c0ea49508) the runner is restarted on once before --next-image, so that it "
+                             "starts on an empty home at the volume root beside its earlier one")
     args = parser.parse_args()
+    if args.middle_image and not args.earlier_channel:
+        parser.error("--middle-image needs --earlier-channel")
 
     run_id = time.strftime("%m%d%H%M", time.gmtime()) + secrets.token_hex(2)
     label = ("orbit.test", f"d2-it-{run_id}")
@@ -110,6 +116,13 @@ def main():
         revision = docker("image", "inspect", "-f", '{{index .Config.Labels "org.opencontainers.image.revision"}}', args.image).stdout.strip()
         log(f"managed runner image {args.image} = {image}, source revision {revision}")
         (evidence / "image.txt").write_text(f"{args.image} {image} org.opencontainers.image.revision={revision}\n")
+        middle_image = None
+        if args.middle_image:
+            middle_image = docker("image", "inspect", "-f", "{{.Id}}", args.middle_image).stdout.strip()
+            middle_revision = docker("image", "inspect", "-f", '{{index .Config.Labels "org.opencontainers.image.revision"}}', args.middle_image).stdout.strip()
+            log(f"middle managed runner image {args.middle_image} = {middle_image}, source revision {middle_revision}")
+            with open(evidence / "image.txt", "a") as out:
+                out.write(f"middle: {args.middle_image} {middle_image} org.opencontainers.image.revision={middle_revision}\n")
         next_image = None
         if args.next_image:
             next_image = docker("image", "inspect", "-f", "{{.Id}}", args.next_image).stdout.strip()
@@ -185,6 +198,7 @@ def main():
             "instanceId": instance, "image": image, "network": network, "gateway": gateway,
             "testLabel": {"key": label[0], "value": label[1]},
             **({"nextImage": next_image} if next_image else {}),
+            **({"middleImage": middle_image} if middle_image else {}),
             **({"linkGateway": str(args.link_gateway.resolve())} if args.link_gateway else {}),
             **({"earlierChannel": str(args.earlier_channel.resolve())} if args.earlier_channel else {}),
         }, indent=2))

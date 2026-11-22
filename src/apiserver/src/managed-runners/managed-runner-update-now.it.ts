@@ -41,6 +41,13 @@
  * from the next image, must have moved that home to the volume root (deploy/managed-runner/image/entrypoint.py,
  * move_earlier_home) with the sign-ins, the workspace's files at its stored path and the transcript where `--resume`
  * reads it, and (5) must continue the turn on that same transcript, its first prompt still in the conversation.
+ *
+ * With --middle-image as well (an image of the /home/orbit layout without that move, e.g. built at 5c0ea49508), the
+ * runner is restarted once on it before the upgrade, as a runner of that kind was by a sleep and wake or a crash
+ * restart before the move landed: (1m) Update Now moves it to the middle image, which mounts the volume at /home/orbit
+ * and starts on an empty, signed-out home at the root beside the earlier one, and the turn carries on there (the model
+ * asks for the long command again, so it is still in flight). After (4) the next generation must have set that unused
+ * home aside in a dated .orbit-empty-home-<ts> folder, not deleted it, and moved the earlier home to the root as above.
  */
 import assert from 'node:assert/strict';
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
@@ -92,6 +99,8 @@ interface ItConfig {
   instanceId: string;
   image: string;
   nextImage?: string;
+  /** An image of today's layout without the earlier home's move, which the runner is restarted on once (--middle-image). */
+  middleImage?: string;
   linkGateway?: string;
   /** The channel the runner first starts under, when it is to be one made before the /home/orbit layout. */
   earlierChannel?: string;
@@ -222,6 +231,8 @@ test('Update Now of a busy Orbit Cloud runner, on real Docker', { skip: !CONFIG 
 
   // ── the fake model, on the gateway address ─────────────────────────────────────────────────
   const modelRequests: ModelRequest[] = [];
+  /** Whether a continuation is answered with the long command again, keeping the turn in flight (the middle image). */
+  let continueWithCommand = false;
   const modelLog = createWriteStream(evidence('model-requests.jsonl'), { flags: 'a' });
   type Block = { type: 'text'; text: string } | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> };
   const textOf = (content: unknown): string => {
@@ -263,7 +274,11 @@ test('Update Now of a busy Orbit Cloud runner, on real Docker', { skip: !CONFIG 
       }
       let blocks: Block[];
       let stop: 'end_turn' | 'tool_use' = 'end_turn';
-      if (tools && lastUserText.includes('[Orbit]')) {
+      if (tools && lastUserText.includes('[Orbit]') && continueWithCommand) {
+        record('continuation');
+        blocks = [{ type: 'tool_use', id: `toolu_${randomBytes(8).toString('hex')}`, name: 'Bash', input: { command: LONG_COMMAND, description: 'Run the long command again', timeout: 590_000 } }];
+        stop = 'tool_use';
+      } else if (tools && lastUserText.includes('[Orbit]')) {
         record('continuation');
         blocks = [{ type: 'text', text: CONTINUED }];
       } else if (tools && lastUserText.includes(MARK) && !askedForCommand) {
@@ -311,6 +326,8 @@ test('Update Now of a busy Orbit Cloud runner, on real Docker', { skip: !CONFIG 
   const channelLog = createWriteStream(evidence('channel.log'), { flags: 'a' });
   const nextConfig = path.join(cfg.runDir, 'channel-next.json');
   writeFileSync(nextConfig, JSON.stringify({ ...JSON.parse(readFileSync(cfg.channel.config, 'utf8')), image: cfg.nextImage }, null, 2));
+  const middleConfig = path.join(cfg.runDir, 'channel-middle.json');
+  if (cfg.middleImage) writeFileSync(middleConfig, JSON.stringify({ ...JSON.parse(readFileSync(cfg.channel.config, 'utf8')), image: cfg.middleImage }, null, 2));
   let channel: ChildProcess | undefined;
   async function startChannel(config: string, script = cfg.channel.script): Promise<void> {
     channel = spawn(cfg.python, ['-I', script, 'serve', '--config', config], { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -518,6 +535,12 @@ test('Update Now of a busy Orbit Cloud runner, on real Docker', { skip: !CONFIG 
   let turnId!: string;
   // A runner made before the /home/orbit layout: its home, and what (1) leaves in it.
   const earlier = cfg.earlierChannel ? '/var/lib/orbit/home' : null;
+  assert.ok(!cfg.middleImage || earlier, 'the middle image follows an earlier one (--earlier-channel)');
+  /** The generation (2) upgrades around, and the image it runs: the first one, or the middle one's. */
+  let current!: ManagedRunner;
+  let currentImage = cfg.image;
+  /** Where in modelRequests the update (4) starts: the continuation (5) looks for is the one after it. */
+  let continuationsFrom = 0;
   const SIGN_INS = {
     '.claude/.credentials.json': JSON.stringify({ claudeAiOauth: { accessToken: 'sk-ant-oat01-update-now-it-not-a-token', refreshToken: 'sk-ant-ort01-update-now-it-not-a-token', expiresAt: 4102444800000, scopes: ['user:inference'], subscriptionType: 'max' } }),
     '.codex/auth.json': JSON.stringify({ OPENAI_API_KEY: null, tokens: { id_token: 'update-now-it-not-a-token', access_token: 'update-now-it-not-a-token', refresh_token: 'update-now-it-not-a-token', account_id: 'update-now-it' }, last_refresh: '2026-11-16T00:00:00Z' }),
@@ -547,6 +570,7 @@ test('Update Now of a busy Orbit Cloud runner, on real Docker', { skip: !CONFIG 
       return m?.managementState === 'READY' ? m : null;
     }, 900_000, 1_000);
     watched.set(first.runnerId, first.pvcName);
+    current = first;
     const container = await inspect(containerOf(first));
     assert.equal(container?.Image, cfg.image, 'made from the old image');
     const runner = await db.runner.findUniqueOrThrow({ where: { id: first.runnerId } });
@@ -589,12 +613,60 @@ test('Update Now of a busy Orbit Cloud runner, on real Docker', { skip: !CONFIG 
     note('(1) turn in flight', { sessionId, turnId, status: running.status, toolUse: toolUse.payload, longCommandProcesses: processes });
   });
 
+  if (cfg.middleImage) {
+    await t.test('(1m) restarted once on an image of today\'s layout without the move: an empty home at the root beside the earlier one, the turn carried on there', async () => {
+      await stopApp();
+      await stopChannel();
+      writeFileSync(profilePath, JSON.stringify({ ...profile, runner: { ...profile.runner, image: cfg.middleImage } }, null, 2));
+      await startChannel(middleConfig);
+      // The release that brought the /home/orbit layout rewrote the stored paths of managed runners' workspaces.
+      const before = await db.workspace.findMany({ where: { runnerId: first.runnerId }, select: { workDir: true } });
+      await sql.query(readFileSync(path.resolve('prisma/migrations/0980_managed_runner_home_orbit/migration.sql'), 'utf8'));
+      const after = await db.workspace.findMany({ where: { runnerId: first.runnerId }, select: { workDir: true } });
+      assert.deepEqual(after.map((w) => w.workDir), ['/home/orbit/update-now-it'], 'migration 0980 names the folder under /home/orbit');
+      note('(1m) migration 0980 applied', { before: before.map((w) => w.workDir), after: after.map((w) => w.workDir) });
+      await startApp();
+      await until('the status offering the middle image', async () => (await statusOf())?.update?.phase === 'available', 300_000, 1_000);
+      continueWithCommand = true;
+      const from = modelRequests.length;
+      const accepted = await api('POST', '/api/managed-runner/update-now', alice.token, { interruptTurns: true });
+      assert.equal(accepted.status, 202, accepted.text);
+      const middle = await until('the generation on the middle image READY', async () => {
+        const m = await mappingOf();
+        return m.managementState === 'READY' && m.generation > first.generation ? m : null;
+      }, 900_000, 1_000);
+      const name = containerOf(middle);
+      const container = await inspect(name);
+      assert.equal(container?.Image, cfg.middleImage, 'made from the middle image');
+      assert.equal(middle.runnerId, first.runnerId, 'the same runner');
+      // The turn carried on in the empty home, and asked for the long command again: still in flight.
+      await until('the turn carried on on the middle image', async () => modelRequests.slice(from).some((r) => r.answered === 'continuation'), 600_000, 1_000);
+      await until('the long command running again', async () => {
+        const out = await shell(name, `for p in /proc/[0-9]*; do tr '\\0' ' ' < $p/cmdline 2>/dev/null; echo; done | grep -c '^${LONG_COMMAND}' || true`);
+        return Number(out) > 0;
+      }, 300_000, 1_000);
+      const session = await db.session.findUniqueOrThrow({ where: { id: sessionId } });
+      assert.equal(session.status, 'RUNNING', 'the turn is in flight on the middle image');
+      continueWithCommand = false;
+      const root = (await shell(name, 'echo "$HOME"; ls -A /home/orbit | sort | tr "\\n" " "')).split('\n');
+      const signedIn = await shell(name, `for f in ${Object.keys(SIGN_INS).join(' ')}; do [ -e /home/orbit/$f ] && echo $f; done; true`);
+      const listing = await shell(name, 'cd /home/orbit && find . -maxdepth 4 -not -path "./home/*" | sort | head -200');
+      const logs = await docker('logs', name).catch((error: Error) => error.message);
+      note('(1m) on the middle image', { generation: middle.generation, podUid: middle.podUid, image: container?.Image, root, signedIn, rootHome: listing.split('\n'), entrypoint: logs.split('\n').filter((line) => line.includes('orbit-container')) });
+      assert.equal(root[0], '/home/orbit');
+      assert.ok(/(^| )home( |$)/.test(root[1]), `the earlier home is still in its \`home\` folder: ${root[1]}`);
+      assert.equal(signedIn, '', 'the root home is signed out');
+      current = middle;
+      currentImage = cfg.middleImage!;
+    });
+  }
+
   await t.test('(2) the upgrade: the apiserver and the channel restarted on the next image; the container and its turn keep running', async () => {
     await stopApp();
     await stopChannel();
     writeFileSync(profilePath, JSON.stringify({ ...profile, runner: { ...profile.runner, image: cfg.nextImage } }, null, 2));
     await startChannel(nextConfig);
-    if (earlier) {
+    if (earlier && !cfg.middleImage) {
       // The release that brought the /home/orbit layout rewrote the stored paths of managed runners' workspaces.
       const before = await db.workspace.findMany({ where: { runnerId: first.runnerId }, select: { workDir: true } });
       await sql.query(readFileSync(path.resolve('prisma/migrations/0980_managed_runner_home_orbit/migration.sql'), 'utf8'));
@@ -610,7 +682,7 @@ test('Update Now of a busy Orbit Cloud runner, on real Docker', { skip: !CONFIG 
     const m = await mappingOf();
     const container = await inspect(containerOf(m));
     const session = await db.session.findUniqueOrThrow({ where: { id: sessionId } });
-    assert.deepEqual({ generation: m.generation, podUid: m.podUid, image: container?.Image, session: session.status }, { generation: first.generation, podUid: first.podUid, image: cfg.image, session: 'RUNNING' });
+    assert.deepEqual({ generation: m.generation, podUid: m.podUid, image: container?.Image, session: session.status }, { generation: current.generation, podUid: current.podUid, image: currentImage, session: 'RUNNING' });
     note('(2) upgraded around the running container', { update, currentImageSha: m.currentImageSha, imageOutdatedSince: m.imageOutdatedSince, session: session.status });
   });
 
@@ -629,6 +701,7 @@ test('Update Now of a busy Orbit Cloud runner, on real Docker', { skip: !CONFIG 
   await t.test('(4) with interruptTurns: recorded, stopped through the channel, and made again from the next image only after Docker reports the exit', async () => {
     const before = await mappingOf();
     const askedAt = new Date();
+    continuationsFrom = modelRequests.length;
     const accepted = await api('POST', '/api/managed-runner/update-now', alice.token, { interruptTurns: true });
     assert.equal(accepted.status, 202, accepted.text);
     assert.equal(accepted.json.update?.phase, 'updating');
@@ -651,7 +724,7 @@ test('Update Now of a busy Orbit Cloud runner, on real Docker', { skip: !CONFIG 
         samples += 1;
         return null;
       }
-      return state && state.Id === oldId ? state : { Id: oldId, Image: cfg.image, State: { Status: 'removed', ExitCode: -1, FinishedAt: '', StartedAt: '' }, Mounts: [] };
+      return state && state.Id === oldId ? state : { Id: oldId, Image: currentImage, State: { Status: 'removed', ExitCode: -1, FinishedAt: '', StartedAt: '' }, Mounts: [] };
     }, 600_000, 500);
     note('(4) old container stopped', { exit: exited.State, sampledWhileStopping: samples, stopTookSeconds: Math.round((Date.now() - askedAt.getTime()) / 1000) });
 
@@ -701,11 +774,30 @@ test('Update Now of a busy Orbit Cloud runner, on real Docker', { skip: !CONFIG 
       assert.ok(moved, 'the transcript is in the folder Claude Code reads for the workspace');
       assert.equal(moved!.sha256, transcript!.sha256, 'the same transcript, byte for byte, as far as the old generation wrote it');
       assert.ok(!logs.includes('leaves the first as it is'), 'no second home to choose between');
+      if (cfg.middleImage) {
+        // The empty home the middle image ran in, set aside and kept: its own config, for the same runner.
+        const aside = root[1].split(' ').filter((entry) => entry.startsWith('.orbit-empty-home-'));
+        assert.equal(aside.length, 1, `one folder the empty home is set aside in: ${root[1]}`);
+        assert.match(aside[0], /^\.orbit-empty-home-\d{8}T\d{6}Z$/);
+        const asideConfig = JSON.parse(await shell(name, `cat /home/orbit/${aside[0]}/.orbit/config.json`)) as { runnerId: string; workDir: string };
+        const asideListing = await shell(name, `cd /home/orbit/${aside[0]} && find . -maxdepth 3 | sort | head -120`);
+        const identity = JSON.parse(await shell(name, 'cat /home/orbit/.orbit/container-identity.json')) as { runnerId: string };
+        const instance = JSON.parse(await shell(name, 'cat /home/orbit/.orbit/managed-instance.json')) as { runnerId: string; generation: number; podUid: string };
+        const signedOut = await shell(name, `for f in ${Object.keys(SIGN_INS).join(' ')}; do [ -e /home/orbit/${aside[0]}/$f ] && echo $f; done; true`);
+        note('(4b) the empty home set aside', { aside: aside[0], config: asideConfig, listing: asideListing.split('\n'), signInsInIt: signedOut, identity, instance, setAside: logs.split('\n').filter((line) => line.includes('set aside in')) });
+        assert.equal(asideConfig.runnerId, next.runnerId, 'the empty home\'s own config, kept');
+        assert.equal(asideConfig.workDir, '/home/orbit/orbit-repos');
+        assert.equal(signedOut, '', 'the home set aside held no sign-in');
+        assert.ok(logs.includes('set aside in /home/orbit/.orbit-empty-home-'), 'the start says where it set the home aside');
+        assert.deepEqual([identity.runnerId, instance.runnerId, instance.generation, instance.podUid], [next.runnerId, next.runnerId, next.generation, next.podUid], 'the runner\'s identity, from the earlier home');
+        const runner = await db.runner.findUniqueOrThrow({ where: { id: next.runnerId } });
+        assert.ok(runner.lastHeartbeatAt && runner.lastHeartbeatAt.getTime() > Date.now() - 120_000, 'the runner heartbeats as itself');
+      }
     });
   }
 
   await t.test('(5) the interrupted turn continues on the next generation, as the update\'s continuation', async () => {
-    const continuation = await until('the model asked to carry on', async () => modelRequests.find((r) => r.answered === 'continuation'), 600_000, 1_000);
+    const continuation = await until('the model asked to carry on', async () => modelRequests.slice(continuationsFrom).find((r) => r.answered === 'continuation'), 600_000, 1_000);
     const cut = await db.runEvent.findMany({ where: { sessionId, turnId, type: 'interrupt' }, orderBy: { seq: 'asc' } });
     note('(5) continuation sent to the model', { at: continuation.at, lastUserText: continuation.lastUserText.slice(0, 1500), cut: cut.map((e) => e.payload) });
     const answered = await until('the continued turn answered', async () => {
