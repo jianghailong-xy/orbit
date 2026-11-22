@@ -1,6 +1,15 @@
 package io.orbitd.android.reader
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -131,7 +140,7 @@ internal fun CloneWaitNotice(clone: QueuedClone.Wait?, failed: Boolean, machine:
     Column(modifier.fillMaxWidth().then(pad).testTag("clone-wait"), horizontalAlignment = align, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             // The full-height card's own dots already say it is waiting; the compact one has none, so it spins until a percentage is heard.
-            if (compact && clone != null && clone.progress == null) CircularProgressIndicator(Modifier.size(20.dp).testTag("clone-wait:spinner"), strokeWidth = 2.dp)
+            if (compact && clone != null && clone.progress == null) CloneSpinner(Modifier.testTag("clone-wait:spinner"))
             Text(title, Modifier.testTag("clone-wait:title"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold,
                 textAlign = TextAlign.Center)
         }
@@ -152,5 +161,18 @@ internal fun CloneWaitNotice(clone: QueuedClone.Wait?, failed: Boolean, machine:
             },
             Modifier.testTag("clone-wait:description"), style = MaterialTheme.typography.bodyMedium, color = secondary,
             textAlign = TextAlign.Center)
+    }
+}
+
+/** A turning three-quarter ring the size of the card's title: drawn in full at every moment, where the indeterminate indicator's arc passes through a sliver. */
+@Composable
+private fun CloneSpinner(modifier: Modifier = Modifier) {
+    val angle by rememberInfiniteTransition(label = "clone-spin").animateFloat(0f, 360f,
+        infiniteRepeatable(tween(1_000, easing = LinearEasing)), label = "clone-spin")
+    val color = MaterialTheme.colorScheme.primary
+    Canvas(modifier.size(20.dp)) {
+        val stroke = 2.dp.toPx()
+        drawArc(color, startAngle = angle, sweepAngle = 270f, useCenter = false, topLeft = Offset(stroke / 2, stroke / 2),
+            size = Size(size.width - stroke, size.height - stroke), style = Stroke(stroke, cap = StrokeCap.Round))
     }
 }

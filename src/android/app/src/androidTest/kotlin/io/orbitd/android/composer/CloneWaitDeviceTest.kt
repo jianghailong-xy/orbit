@@ -70,7 +70,7 @@ class CloneWaitDeviceTest {
         // The spinner turns: several frames, so one shows its arc open.
         // The rule's clock stands still while the test sleeps, so it is stepped by hand: each frame is the spinner a little further round.
         compose.mainClock.autoAdvance = false
-        for (i in 1..8) { compose.mainClock.advanceTimeBy(260L); capture("compact-pending-$i") }
+        for (i in 1..3) { compose.mainClock.advanceTimeBy(260L); capture("compact-pending-$i") }
         compose.mainClock.autoAdvance = true
         control("""{"extraDetail":${extra("CLONING")},"events":[${frame("CLONING", 57)}]}""")
         awaitText("Cloning acme/widgets"); awaitText("57%"); capture("compact-cloning-57")
