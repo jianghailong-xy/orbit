@@ -29277,6 +29277,29 @@ button.agent-progress-agent:hover {
   font-size: 12px;
   color: var(--text-3);
 }
+/* The Quality column (docs/subagent-design.md §7.1, board docs/mocks/model-quality/01-board.png): two lines per model. */
+.model-tiers-quality {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.model-tiers-quality-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  line-height: 19px;
+  width: max-content;
+}
+.model-tiers-quality-source {
+  min-width: 57px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.model-tiers-muted {
+  color: var(--text-3);
+}
+.model-tiers-rated {
+  cursor: help;
+}
 
 /* Settings → Routing report (docs/subagent-design.md §7, board docs/mocks/subagent-workflow/08-report.html). */
 .routing-report-filters {
