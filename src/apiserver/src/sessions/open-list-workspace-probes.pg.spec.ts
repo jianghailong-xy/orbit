@@ -1,6 +1,6 @@
 /**
  * A runner heartbeat's directory and disk probe of its workspaces neither moves the Open list's
- * version nor sends `sessions.list_changed` (migration 1427_open_list_workspace_probes), unless it
+ * version nor sends `sessions.list_changed` (migration 1428_open_list_workspace_probes), unless it
  * flips the disk gate's verdict for a queued session; a write of a column an Open list draws still
  * does both.
  *

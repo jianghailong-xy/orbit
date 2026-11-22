@@ -238,7 +238,7 @@ export const OPEN_LIST_UNDRAWN_TURN_COLUMNS = [
 
 /**
  * The `workspace` columns a runner heartbeat's directory and disk probe writes, none of which an Open
- * list draws (migration 1427_open_list_workspace_probes, `open_list_bump_owner`): the row reads a
+ * list draws (migration 1428_open_list_workspace_probes, `open_list_bump_owner`): the row reads a
  * workspace's id, name, model and effort, and the queued gates its clone_state and, against the
  * floor of a never-started PENDING session's runner, its free bytes. So an UPDATE that changes only
  * these moves no counter, except a free-bytes change that flips that disk gate's verdict
