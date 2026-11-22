@@ -4,7 +4,13 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as apiModule from '../api';
+import * as store from './transcriptStore';
 import { reopenWindow, useSessionStream } from './useSessionStream';
+
+vi.mock('./transcriptStore', async (importOriginal) => {
+  const real = await importOriginal<typeof import('./transcriptStore')>();
+  return { ...real, saveTranscript: vi.fn(real.saveTranscript) };
+});
 
 vi.mock('../api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api')>()),
@@ -25,6 +31,7 @@ class FakeEventSource {
   onerror: (() => void) | null = null;
   constructor(public url: string) { FakeEventSource.all.push(this); }
   close(): void {}
+  emit(event: object): void { this.onmessage?.({ data: JSON.stringify(event) }); }
 }
 const lastStream = (): string => FakeEventSource.all[FakeEventSource.all.length - 1].url;
 
@@ -99,6 +106,15 @@ describe('reopening a cached session', () => {
     expect(latest.events.map((e) => e.seq)).toEqual(range(4801, 5000).map((e) => e.seq));
     expect(latest.hasOlderNow()).toBe(true);
     expect(lastStream()).toContain('sinceSeq=5000');
+  });
+
+  it('marks a reply a translation was folded into for the stored copy to write again', async () => {
+    await open('S1');
+    await act(async () => {
+      FakeEventSource.all[FakeEventSource.all.length - 1].emit({ seq: 0, type: 'translation', payload: { of: 150, lang: 'en', text: 'hello' } });
+    });
+    expect(latest.events.find((e) => e.seq === 150)?.payload.translation).toEqual({ lang: 'en', text: 'hello' });
+    expect(vi.mocked(store.saveTranscript).mock.calls.at(-1)?.[2]).toEqual([150]);
   });
 
   it('keeps a window that fits as it was', () => {

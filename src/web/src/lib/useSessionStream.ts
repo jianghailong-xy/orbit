@@ -681,7 +681,9 @@ export function useSessionStream({
     // first event the replay brings decides it (push). Left unset, the edge read "nothing older", and
     // a session whose replay began mid-conversation could never be scrolled back past that point.
     let olderEdgeUnknown = false;
-    const writeCache = (): void => {
+    // `rewrite`: seqs already in the window whose event changed in place, which the stored copy has to
+    // write again (transcriptStore's `dirty`).
+    const writeCache = (rewrite?: readonly number[]): void => {
       // A window opened at a record ends at a gap, not at the tail: a reopen must not resume from it.
       if (newerCursorRef.current !== null) return;
       const snapshot = {
@@ -697,7 +699,7 @@ export function useSessionStream({
       // Mirror into the persistent L2 so the same transcript survives a reload. Returns at once —
       // this runs on every appended event, and the store batches the actual write into an idle
       // callback rather than opening a transaction per token.
-      saveTranscript(selectedId, snapshot);
+      saveTranscript(selectedId, snapshot, rewrite);
     };
     const seedAbort = new AbortController();
     // Pending release of the events the first paint held back (see firstPaintSlice).
@@ -934,7 +936,7 @@ export function useSessionStream({
           const folded = foldTranslationEvent(accRef.current, ev.payload);
           if (folded) {
             accRef.current = folded;
-            writeCache();
+            writeCache([(ev.payload as { of: number }).of]);
             setEvents(accRef.current);
           }
           return;
