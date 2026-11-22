@@ -138,6 +138,11 @@ const SLOW_RECONNECT_MS = 60_000;
 // noticed at all: nothing arrives, nothing errors, and no reconnect is ever attempted.
 const WATCHDOG_SILENCE_MS = 45_000;
 const WATCHDOG_TICK_MS = 15_000;
+// How long the session's first read of its pending approvals waits for the stream to open, which is
+// what reads them (refreshApprovals). A healthy stream opens well inside it; one that hangs while
+// connecting — no open, no error, until the watchdog above gives up on it — would otherwise leave a
+// card awaiting a decision off the page for most of a minute.
+const APPROVALS_OPEN_GRACE_MS = 3_000;
 
 /**
  * A session's whole background-shell inventory (`/background`), which scans its whole tool-event
@@ -621,9 +626,11 @@ export function useSessionStream({
     // This is also the session's first read of its cards: a startup read beside it asked the same
     // question 150 ms before the stream opened, and got the same answer. Where no stream opens to ask
     // it — a hidden tab, a window opened at a record, a stream that fails before it opens — the startup
-    // block and dropStream ask it once instead (`approvalsAsked`).
+    // block and dropStream ask it once instead (`approvalsAsked`), and so does a stream that has not
+    // opened within APPROVALS_OPEN_GRACE_MS (`approvalsGrace`).
     let approvalsGeneration = 0;
     let approvalsAsked = false;
+    let approvalsGrace: ReturnType<typeof setTimeout> | undefined;
     let approvalsLive: { raised: Map<string, ApprovalInfo>; resolved: Set<string> } | null = null;
     const refreshApprovals = (): void => {
       approvalsAsked = true;
@@ -753,6 +760,7 @@ export function useSessionStream({
     const stop = (): void => {
       closed = true;
       if (retry) clearTimeout(retry);
+      clearTimeout(approvalsGrace);
       if (paintRest) clearTimeout(paintRest);
       es?.close();
       // Scrubbing the list fires one tail page per session passed through (they're no longer
@@ -867,6 +875,11 @@ export function useSessionStream({
       es = new EventSource(sessionEventsUrl(selectedId, lastSeq));
       // Once the stream is subscribed, so nothing resolved after the read can slip between the two.
       es.onopen = () => refreshApprovals();
+      if (!approvalsAsked && approvalsGrace === undefined) {
+        approvalsGrace = setTimeout(() => {
+          if (!closed && !approvalsAsked) refreshApprovals();
+        }, APPROVALS_OPEN_GRACE_MS);
+      }
       es.onmessage = (e) => {
         lastMsgAt = Date.now();
         fails = 0; // a message means the stream is healthy

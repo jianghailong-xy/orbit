@@ -132,6 +132,14 @@ describe('pending approvals', () => {
     expect(reads(apiModule.listApprovals, 'S1')).toBe(1);
   });
 
+  it('are still read when the stream neither opens nor fails', async () => {
+    await open('S1');
+    await advance(2_000);
+    expect(reads(apiModule.listApprovals, 'S1')).toBe(0);
+    await advance(1_500);
+    expect(reads(apiModule.listApprovals, 'S1')).toBe(1);
+  });
+
   it('show the cards the read returns', async () => {
     vi.mocked(apiModule.listApprovals).mockResolvedValueOnce([
       { id: 'A1', sessionId: 'S1', toolName: 'Bash', input: {}, status: 'PENDING', createdAt: '2026-11-22T00:00:00Z' },
