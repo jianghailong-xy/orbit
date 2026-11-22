@@ -68,10 +68,13 @@ const dshMissingKeyMessage = "DSH_CREDENTIAL_MISSING: DeepSeek Harness runs on a
 
 // PrepareDshSessionLaunch uses the same Agent.Env populated by encrypted provider dispatch.
 func PrepareDshSessionLaunch(ctx context.Context, job *ClaimedSession, executionDir, fileMode string) (DshLaunchSpec, error) {
-	return prepareDshLaunch(ctx, DshLaunchInput{
+	spec, err := prepareDshLaunch(ctx, DshLaunchInput{
 		OrbitSessionID: job.SessionID, ExecutionDir: executionDir,
 		APIKey: job.Agent.Env["ORBIT_DSH_API_KEY"], BaseURL: job.Agent.Env["ORBIT_DSH_BASE_URL"], FileMode: fileMode,
 	}, dshSessionAgentOverlay(job))
+	// On the Orbit Cloud runner with the browser on, a tool the agent runs opens its pages there (browser_opener.go).
+	spec.Env = browserOpenerEnv(spec.Env, err == nil && job.BrowserEnabled)
+	return spec, err
 }
 
 func PrepareDshLaunch(ctx context.Context, input DshLaunchInput) (DshLaunchSpec, error) {

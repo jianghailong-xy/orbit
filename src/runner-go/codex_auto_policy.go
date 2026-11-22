@@ -54,6 +54,10 @@ func codexRuntimeWorkspaceRoots(permissionMode string, job *ClaimedSession, exec
 }
 
 func codexSandboxPolicy(permissionMode string, job *ClaimedSession, execDir, upDir string) map[string]interface{} {
+	if codexCloudSandboxOff(job, permissionMode) {
+		// Codex's sandbox cannot start in this Orbit Cloud Pod (codex_cloud_sandbox.go).
+		return map[string]interface{}{"type": "dangerFullAccess"}
+	}
 	if permissionMode == "auto" {
 		return map[string]interface{}{
 			"type":          "workspaceWrite",
@@ -65,6 +69,15 @@ func codexSandboxPolicy(permissionMode string, job *ClaimedSession, execDir, upD
 		return map[string]interface{}{"type": "readOnly", "networkAccess": false}
 	}
 	return map[string]interface{}{"type": "dangerFullAccess"}
+}
+
+// codexThreadSandboxMode is codexSandboxMode for this claim: Auto with the sandbox off on an Orbit
+// Cloud runner whose Codex sandbox cannot start (codex_cloud_sandbox.go).
+func codexThreadSandboxMode(job *ClaimedSession, permissionMode string) string {
+	if codexCloudSandboxOff(job, permissionMode) {
+		return "danger-full-access"
+	}
+	return codexSandboxMode(permissionMode)
 }
 
 func codexSandboxMode(permissionMode string) string {

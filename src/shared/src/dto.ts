@@ -925,6 +925,9 @@ export interface RunnerBrowserReport {
   viewers: number;
   /** When this runner last cleared the saved logins (RFC 3339); absent if it never has since it started. */
   profileClearedAt?: string;
+  /** Whether the saved profile holds a cookie store, so saved logins may exist. Only that: never which sites. Absent
+   *  from a runner that predates it. */
+  savedLogins?: boolean;
 }
 
 /** GET /runners/:id/browser: the owner's managed runner browser, as its last heartbeat reported it. */
@@ -942,11 +945,63 @@ export interface RunnerBrowserState {
   clearRequestedAt: string | null;
   /** When the runner last reported clearing the saved logins. */
   profileClearedAt: string | null;
+  /** Whether saved logins exist, as the last report said (RunnerBrowserReport.savedLogins); null when no report said
+   *  it. Never which sites. */
+  savedLogins: boolean | null;
+}
+
+/**
+ * GET /runner/browser: browser_status and `orbit browser status`, the account's Orbit Cloud browser for any session of
+ * the account. Answered only while the browser switch is on (404 otherwise), so `enabled` is always true here; a client
+ * that gets a 404 reports it off.
+ */
+export interface RunnerBrowserStatus {
+  enabled: true;
+  /** The account's Orbit Cloud (managed) runner, or null when the account has none. */
+  runnerId: string | null;
+  state: RunnerBrowserState['state'];
+  /** Chrome is started. */
+  running: boolean;
+  /** The session holding the browser lease (public id), or null. */
+  holderSessionId: string | null;
+  holderTitle: string | null;
+  /** How many viewers are connected. */
+  viewers: number;
+  /** Whether saved logins exist; null when the runner has not said. Never which sites. */
+  savedLogins: boolean | null;
+  /** When the heartbeat this was read from arrived, or null. */
+  reportedAt: string | null;
+}
+
+/** The body of POST /runner/browser/open (browser_open, `orbit browser open [--url]`). */
+export interface RunnerBrowserOpenRequest {
+  /** A page for the remote Chrome to open (http or https). Absent: the browser is started and left on its page. */
+  url?: string;
+}
+
+/** Its answer: the open is handed to the Orbit Cloud runner's next heartbeat, which the runner is woken for at once. */
+export interface RunnerBrowserOpenResponse {
+  /** The account's Orbit Cloud runner. */
+  runnerId: string;
+  /** The browser's tab on this server (`/runners/:id/browser`, absolute), for a person to watch or take control in. */
+  tabUrl: string;
+  /** The page asked for, or null when none was. */
+  url: string | null;
+  requestedAt: string;
 }
 
 /** POST /runners/:id/browser/clear: Clear saved logins, accepted and waiting for the runner's next heartbeat. */
 export interface RunnerBrowserClearResponse {
   requestedAt: string;
+}
+
+/**
+ * `POST /runner/browser/clear` (browser_clear_logins, `orbit browser clear-logins`): the clear the owner's card allowed,
+ * requested of the account's Orbit Cloud runner, and the card it spent.
+ */
+export interface RunnerBrowserClearLoginsResponse extends RunnerBrowserClearResponse {
+  runnerId: string;
+  approvalId: string;
 }
 
 /** What a runner's self-updater last found:
@@ -1597,6 +1652,11 @@ export interface RunnerHeartbeatResponse {
    *  Set once per request and cleared as it is handed over, like `checkSelfUpdate`; only a runner that declares
    *  BROWSER_CLEAR_V1 is asked, and its `browser.profileClearedAt` is the answer. */
   clearBrowserProfile?: boolean;
+  /** A session's browser_open (POST /runner/browser/open): start the browser if it is not running, and when `url` is
+   *  set open that page in it, unless another session than `sessionId` holds the browser's lease. Set once per request
+   *  and cleared as it is handed over, like `clearBrowserProfile`; only a runner that declares BROWSER_OPEN_V1 is
+   *  asked. */
+  openBrowser?: { sessionId: string; url?: string };
   /** This machine's free-space floor in MB (Runner.minFreeDiskMb), the same number the auto-run
    *  disk gate reads. Sent so the runner can apply it to work only it can see — reclaiming the
    *  session checkouts on its own disk — without keeping a second copy of the setting.
@@ -1705,6 +1765,11 @@ export const SELF_UPDATE_NOW_V1 = 'self-update-now/v1';
  *  on each heartbeat (`browser`) and honours Clear saved logins (`clearBrowserProfile`). A runner without it is
  *  refused a clear. runner-go asserts the same string. */
 export const BROWSER_CLEAR_V1 = 'browser-clear/v1';
+
+/** Declared by a managed runner that honours a session's browser_open (`openBrowser`): it starts the browser and opens
+ *  the page asked for through Chrome's DevTools. A runner without it is refused an open as too old. runner-go asserts
+ *  the same string. */
+export const BROWSER_OPEN_V1 = 'browser-open/v1';
 
 /** Declared by a runner that keeps a remote SubAgent's conversation when the run ends and continues it on a claim's
  *  `resumeOf` (docs/subagent-design.md §10.2). A resume is refused for a target runner without it, which would start
@@ -3182,8 +3247,12 @@ export interface ProviderModelTier {
   supersededBy?: string;
   /** USD per million output tokens, when known (models.dev); null for a subscription or an unpriced key. */
   outputPricePerMTok: number | null;
-  /** How well this model completed work, for display only: routing never reads it (docs/subagent-design.md §7.1). */
+  /** How well this model completed work, for display only: routing never reads it (docs/subagent-design.md §7.1).
+   *  Pooled over every row of the same `identity`, on any provider or engine. */
   quality: ModelQuality;
+  /** Which model this is on any provider or engine (apiserver model-identity.ts): rows with one `key` are one
+   *  model, `name` its vendor name (null when none is known). Display only. */
+  identity?: { key: string; name: string | null };
 }
 
 /** How far back the Model tiers quality reads, in days. */
@@ -3391,6 +3460,10 @@ export interface ClaimedSession {
    *  ORBIT_WIKI, wiki/wiki-rollout.ts). Injected as ORBIT_WIKI=off so `orbit mcp` and the CLI leave out the wiki
    *  tools. Absent means on. */
   wikiDisabled?: boolean;
+  /** Present, and true, only while the Orbit Cloud browser is switched on on this server
+   *  (ORBIT_MANAGED_RUNNER_BROWSER_ENABLED with managed runners on, managed-runner-browser-gate.ts). Injected as
+   *  ORBIT_BROWSER=on so `orbit mcp` and the CLI offer the browser tools; absent, they are not there at all. */
+  browserEnabled?: boolean;
   /** Present, and true, only when this session's Agent may not start a workflow: its Workflows switch is off, or its
    *  SubAgents are (docs/subagent-workflow-design.md §9 D2). Injected as ORBIT_WORKFLOWS=off so `orbit mcp` leaves out
    *  the `workflow` tool; `delegate` is not affected. Absent means on. */
@@ -3871,6 +3944,8 @@ export interface ReclaimSession {
   watchesDisabled?: boolean;
   /** The wiki not switched on for the owner, cf. ClaimedSession.wikiDisabled. */
   wikiDisabled?: boolean;
+  /** The Orbit Cloud browser switched on, cf. ClaimedSession.browserEnabled. */
+  browserEnabled?: boolean;
   /** Workflows not on for the session's Agent, cf. ClaimedSession.workflowsDisabled. */
   workflowsDisabled?: boolean;
   /** A scheduled task's run, cf. ClaimedSession.scheduleRun. */

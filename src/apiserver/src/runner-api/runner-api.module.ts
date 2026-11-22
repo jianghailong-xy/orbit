@@ -26,6 +26,8 @@ import { RunnerNotifyController } from './runner-notify.controller';
 import { RunnerServiceTokensController } from './runner-service-tokens.controller';
 import { RunnerWatchesController } from './runner-watches.controller';
 import { RunnerOwnerRequestsController } from './runner-owner-requests.controller';
+import { RunnerBrowserController } from './runner-browser.controller';
+import { ManagedRunnerBrowserModule } from '../managed-runners/browser-state';
 import { RunnerConditionsController } from './runner-conditions.controller';
 import { RunnerSchedulesController } from './runner-schedules.controller';
 import { SchedulesModule } from '../schedules/schedules.module';
@@ -93,6 +95,8 @@ import { AdminRoleGuard } from '../users/admin-role.guard';
     WatchesModule,
     // RunnerOwnerRequestsController files through the one OwnerRequestsService the owner's door reads.
     OwnerRequestsModule,
+    // RunnerBrowserController (browser_status) reads through the service behind GET /runners/:id/browser.
+    ManagedRunnerBrowserModule,
     // And RunnerWikiController through the one WikiService the user door writes with: one entry point
     // underneath both doors is what makes "there is one write path" true rather than intended.
     WikiModule,
@@ -139,6 +143,7 @@ import { AdminRoleGuard } from '../users/admin-role.guard';
     RunnerProjectsController,
     RunnerWatchesController,
     RunnerOwnerRequestsController,
+    RunnerBrowserController,
     RunnerSecretGrantsController,
     // A GitHub workspace's installation token, for the runner's own git commands (docs/github-workspace-design.md §5.4).
     RunnerGitCredentialController,

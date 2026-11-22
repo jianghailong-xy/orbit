@@ -1,0 +1,18 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Lab OAuth: sign in</title>
+<!-- The lab's stand-in for a sign-in provider (scenarios/browser_cli_sign_in.sh): one button over the whole page, so
+     a click anywhere on the viewer signs in. It sends the browser to the redirect_uri it was given, with a code and the
+     state, as an OAuth provider does. -->
+<body style="margin:0;font:32px sans-serif">
+<button id="go" style="position:fixed;inset:0;width:100%;height:100%;border:0;background:#2f6feb;color:#fff;font:600 44px sans-serif;cursor:pointer">
+  Sign in to Lab OAuth<br><span style="font:400 24px sans-serif">The owner signs in here; the command-line tool on the runner gets the callback.</span>
+</button>
+<script>
+  const query = new URLSearchParams(location.search);
+  document.getElementById('go').addEventListener('click', () => {
+    const code = 'LABCODE' + Math.random().toString(36).slice(2);
+    location.href = query.get('redirect_uri') + '?code=' + code + '&state=' + encodeURIComponent(query.get('state'));
+  });
+</script>
+</body>

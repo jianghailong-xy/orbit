@@ -592,10 +592,8 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'DELETE /runners/:id/accounts/:engine/:account': {
     request: (of) => ({ params: { id: of.runnerId, ...of.runnerAccount } }),
   },
-  // Claude Code only (setDefaultAccount refuses any other engine with a 400 before it reads the runner), so the probe
-  // names a Claude account to reach the owner check.
   'POST /runners/:id/accounts/:engine/:account/set-default': {
-    request: (of) => ({ params: { id: of.runnerId, engine: 'claude', account: of.runnerAccount.account } }),
+    request: (of) => ({ params: { id: of.runnerId, ...of.runnerAccount } }),
   },
   'POST /runners/:id/accounts/:engine/default/restore': {
     request: (of) => ({ params: { id: of.runnerId, engine: of.runnerAccount.engine } }),

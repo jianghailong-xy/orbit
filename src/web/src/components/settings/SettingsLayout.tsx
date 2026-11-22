@@ -598,12 +598,20 @@ function MachineRow({
   const node = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!isDragging) return;
+    let giveUp: ReturnType<typeof setTimeout> | undefined;
+    const remove = () => {
+      clearTimeout(giveUp);
+      window.removeEventListener('click', swallow, true);
+    };
     const swallow = (event: MouseEvent) => {
+      remove();
       if (node.current?.contains(event.target as Node)) event.preventDefault();
     };
     window.addEventListener('click', swallow, true);
     return () => {
-      setTimeout(() => window.removeEventListener('click', swallow, true), 50);
+      // The click follows pointerup even when React's work between them is delayed. Keep a generous
+      // cap only so a synthetic or cancelled drag that produces no click cannot leave the listener.
+      giveUp = setTimeout(remove, 1000);
     };
   }, [isDragging]);
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {

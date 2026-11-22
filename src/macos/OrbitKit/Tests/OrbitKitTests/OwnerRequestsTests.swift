@@ -156,15 +156,54 @@ final class OwnerRequestsTests: XCTestCase {
     }
 
     func testEachKindsCardSaysWhatItAsksFor() {
-        XCTAssertEqual(OwnerRequestKind.allCases.map(OwnerRequests.kindTag), ["DECISION", "SECRET", "STEPS", "CONFIRM", "WIKI", "SETTINGS"])
+        XCTAssertEqual(OwnerRequestKind.allCases.map(OwnerRequests.kindTag), ["DECISION", "SECRET", "STEPS", "CONFIRM", "WIKI", "SETTINGS", "SIGN IN"])
         XCTAssertEqual(OwnerRequestKind.allCases.map(OwnerRequests.primaryLabel),
-                       ["Send answer", "Provide key", "Mark done", "Confirm", "Create wiki", "Save changes"])
+                       ["Send answer", "Provide key", "Mark done", "Confirm", "Create wiki", "Save changes", "Open browser"])
         XCTAssertEqual(OwnerRequestKind.allCases.map(OwnerRequests.declineLabel),
-                       ["Decline…", "Decline…", "Can’t do this…", "Decline…", "Decline…", "Decline…"])
+                       ["Decline…", "Decline…", "Can’t do this…", "Decline…", "Decline…", "Decline…", "Decline…"])
         XCTAssertEqual(OwnerRequestKind.allCases.map(OwnerRequests.inboxAction),
-                       ["Answer", "Provide", "Open steps", "Review", "Review", "Review"])
+                       ["Answer", "Provide", "Open steps", "Review", "Review", "Review", "Sign in"])
+        XCTAssertEqual(OwnerRequests.symbol(.browserSignIn), "person.badge.key")
         XCTAssertEqual(OwnerRequests.askedLine(secret(), now: now), "Asked 2m ago · expires in 2d 23h")
         XCTAssertEqual(OwnerRequests.removedText(secret()), "When the task ends, or after 7 days")
+    }
+
+    /// BROWSER_SIGN_IN (Orbit Cloud browser): the site, runner and asking session's title are read; the card's words are
+    /// the web's `BROWSER_SIGN_IN_COPY`; Open browser goes to the runner's browser tab; Not now reads as Not now.
+    func testBrowserSignInCardReadsItsFieldsAndSaysWhatTheWebSays() throws {
+        let json = #"{"id":"b1","kind":"BROWSER_SIGN_IN","state":"PENDING","title":"Sign in to github.com","why":"Needs to push the release notes","askedBySessionId":"s1","browserSite":"github.com","browserRunnerId":"runner-1","askedBySessionTitle":"Release notes","createdAt":"2026-11-19T00:00:00.000Z"}"#
+        let request = try JSONDecoder().decode(OwnerRequest.self, from: Data(json.utf8))
+        XCTAssertEqual(request.kind, .browserSignIn)
+        XCTAssertEqual(request.browserSite, "github.com")
+        XCTAssertEqual(request.browserRunnerId, "runner-1")
+        XCTAssertEqual(request.askedBySessionTitle, "Release notes")
+        XCTAssertEqual(Notifications.ownerRequestCategory(.browserSignIn), "ORBIT_OWNER_REQUEST_BROWSER_SIGN_IN")
+        XCTAssertNil(OwnerRequests.inboxDetail(request))
+        XCTAssertTrue(OwnerRequests.canSubmit(request, draft: .init(spec: nil), option: nil, text: "", now: now))
+
+        XCTAssertEqual(BrowserSignInCopy.eyebrow, "Sign in needed · Orbit Cloud browser")
+        XCTAssertEqual(BrowserSignInCopy.fromSessionLine(request), "From session Release notes")
+        XCTAssertEqual(BrowserSignInCopy.note,
+                       "You sign in yourself; Orbit never sees your password. The login stays on this runner, and every agent on it can use it.")
+        XCTAssertEqual([BrowserSignInCopy.openBrowser, BrowserSignInCopy.notNow], ["Open browser", "Not now"])
+        XCTAssertEqual(BrowserSignInCopy.browserURL(baseURL: URL(string: "https://orbit.example.com/")!, runnerId: "runner-1")?.absoluteString,
+                       "https://orbit.example.com/runners/runner-1/browser?control=1")
+        XCTAssertNil(BrowserSignInCopy.browserURL(baseURL: URL(string: "https://orbit.example.com")!, runnerId: nil))
+
+        let untitled = OwnerRequest(id: "b2", kind: .browserSignIn, title: "Sign in to github.com", why: "w",
+                                    askedBySessionTitle: " ", askedBySessionId: sessionID, createdAt: "2026-11-19T00:00:00Z")
+        XCTAssertNil(BrowserSignInCopy.fromSessionLine(untitled))
+        let old = try JSONDecoder().decode(OwnerRequest.self, from: Data(#"{"id":"b3","kind":"BROWSER_SIGN_IN","state":"PENDING","title":"t","askedBySessionId":"s1","createdAt":"2026-11-19T00:00:00Z"}"#.utf8))
+        XCTAssertNil(old.browserSite)
+        XCTAssertNil(old.askedBySessionTitle)
+
+        let done = OwnerRequest(id: "b4", kind: .browserSignIn, state: .done, title: "t", why: "", browserSite: "github.com",
+                                askedBySessionId: sessionID, createdAt: "2026-11-19T00:00:00Z")
+        XCTAssertEqual(OwnerRequests.outcomeLine(done, runner: ""), "Signed in to github.com")
+        let declined = OwnerRequest(id: "b5", kind: .browserSignIn, state: .declined, title: "t", why: "",
+                                    browserSite: "github.com", askedBySessionId: sessionID, resolutionNote: "Not now",
+                                    createdAt: "2026-11-19T00:00:00Z")
+        XCTAssertEqual(OwnerRequests.outcomeLine(declined, runner: ""), "Not now")
     }
 
     /// The web's `ownerRequestChatContext` and composer copy, word for word.
@@ -365,9 +404,10 @@ final class OwnerRequestsTests: XCTestCase {
             "ORBIT_OWNER_REQUEST_DECISION", "ORBIT_OWNER_REQUEST_SECRET",
             "ORBIT_OWNER_REQUEST_MANUAL_STEP", "ORBIT_OWNER_REQUEST_CONFIRM", "ORBIT_OWNER_REQUEST_WIKI_CREATE",
             "ORBIT_OWNER_REQUEST_SETTINGS_CHANGE",
+            "ORBIT_OWNER_REQUEST_BROWSER_SIGN_IN",
         ])
         XCTAssertEqual(OwnerRequestKind.allCases.map(Notifications.ownerRequestActionTitle),
-                       ["Answer", "Provide key", "Mark done", "Review", "Review", "Review"])
+                       ["Answer", "Provide key", "Mark done", "Review", "Review", "Review", "Sign in"])
         XCTAssertEqual(Notifications.ownerRequestLaterTitle, "Later")
         let reminder = Notifications.ownerRequestReminder(requestID: requestID, kind: .secret,
                                                           title: "Provide a DeepSeek API key", sessionID: sessionID)
@@ -389,6 +429,7 @@ final class OwnerRequestsTests: XCTestCase {
         XCTAssertEqual(OwnerRequestLink.focus(.decision), .answer)
         XCTAssertEqual(OwnerRequestLink.focus(.manualStep), .primary)
         XCTAssertEqual(OwnerRequestLink.focus(.confirm), .primary)
+        XCTAssertEqual(OwnerRequestLink.focus(.browserSignIn), .primary)
     }
 
     func testTheCardIsPlacedWhereItWasAsked() {
