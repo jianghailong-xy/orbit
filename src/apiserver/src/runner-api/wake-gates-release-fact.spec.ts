@@ -200,8 +200,8 @@ test('named cases: a FAILED session with a retry armed, and a session a person e
 });
 
 test('rows 1262 left FAILED with no end reason read as failed, as their status says', () => {
-  // (85 in production.) The readers read the end reason, the turn outcome (1202 wrote FAILED on every FAILED row) and
-  // the status bridge, and answer what the status, and production today, answer.
+  // (85 in production.) The readers read the end reason and the turn outcome (1202 wrote FAILED on every FAILED row),
+  // and answer what the status, and production today, answer.
   const row = { ...rowOf('FAILED', 'FAILED', null, true, 'open', 'none') };
   assert.equal(oldTickStanding(row, NOW), 'FAILED');
   assert.equal(tickStanding(row, NOW), 'FAILED');

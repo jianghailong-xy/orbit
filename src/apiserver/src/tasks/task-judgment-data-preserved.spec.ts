@@ -3282,7 +3282,15 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1426 builds the partial unique index session_task_execution_claim_idx_finished_at on session(task_id) CONCURRENTLY
       // beside 0130's claim index (plan step 4.5, release A), dropping a leftover INVALID one first. Session is not a
       // preserved relation, and no function, trigger, type, constraint or DONE fence changes. No INSERT, UPDATE or DELETE.
-      '1426_session_task_execution_claim_finished_at_idx'],
+      '1426_session_task_execution_claim_finished_at_idx',
+      // 1428 to 1431, deploy 3 of design §12.6 (removal steps R6 to R8). 1428 writes session.last_turn_outcome (FAILED on a
+      // release the status alone records as a failure, CANCELLED on the residual A2 shape) and conversation_turn.outcome
+      // and error on the carrying turn; 1429 re-creates 1425's three ended-triggers without the status bridge; 1431 drops
+      // session_release_cause_chk and session.release_cause after checking pg_depend. Session and conversation_turn are
+      // not preserved relations: no preserved relation is read, written or dropped, and the DONE fence is unchanged.
+      '1428_session_turn_outcome_backfill',
+      '1429_ended_triggers_drop_status_bridge',
+      '1431_session_release_cause_drop'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
