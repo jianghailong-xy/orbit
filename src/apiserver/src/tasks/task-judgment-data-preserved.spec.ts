@@ -3283,10 +3283,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // beside 0130's claim index (plan step 4.5, release A), dropping a leftover INVALID one first. Session is not a
       // preserved relation, and no function, trigger, type, constraint or DONE fence changes. No INSERT, UPDATE or DELETE.
       '1426_session_task_execution_claim_finished_at_idx',
-      // 1428 drops 0130's claim index session_task_execution_claim_idx CONCURRENTLY (plan step 4.5, release B); 1426's
+      // 1432 drops 0130's claim index session_task_execution_claim_idx CONCURRENTLY (plan step 4.5, release B); 1426's
       // index goes on enforcing one live run per task. Session is not a preserved relation, and no function, trigger,
       // type, constraint or DONE fence changes. No INSERT, UPDATE or DELETE.
-      '1428_drop_session_task_execution_claim_idx'],
+      '1432_drop_session_task_execution_claim_idx'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

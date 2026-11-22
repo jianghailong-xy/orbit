@@ -51,7 +51,7 @@ path is the index (`sessions/task-work-carrier.ts` `sessionCarriesTaskSql`, the 
 `apiserver/src/sessions/session-claim-index.pg.spec.ts`; the production pre-check is
 `../scripts/session-claim-index-precheck.sql`.
 
-Plan step 4.5, release B (migration 1428) drops 0130's `session_task_execution_claim_idx` CONCURRENTLY, and
+Plan step 4.5, release B (migration 1432) drops 0130's `session_task_execution_claim_idx` CONCURRENTLY, and
 1426's index is the claim from then on. No product code changes with it. The sites that still name the old
 index are below, with what each does after the drop:
 - `tasks/task-supersession.ts` `LEGACY_EXECUTION_CLAIM_INDEX` and `namesExecutionClaimIndex`. The classifiers

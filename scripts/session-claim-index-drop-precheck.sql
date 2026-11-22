@@ -1,4 +1,4 @@
--- Before deploy 3: may migration 1428 drop session_task_execution_claim_idx on this database?
+-- Before deploy 3: may migration 1432 drop session_task_execution_claim_idx on this database?
 -- (docs/session-three-state-plan.md §7 step 4.5, release B; the migration's header says what a server one release
 -- older does after the drop.)
 --
@@ -15,9 +15,9 @@
 --   release_a_applied        true. 1426 is recorded applied and not rolled back. false: deploy 2 is not live here.
 --   new_index_valid          true. 1426's index exists, is valid and unique. Anything else: it does not enforce the claim,
 --                            and dropping the old one would leave none. Do not deploy.
---   old_index_valid          true, or null once 1428 has run. false: an earlier drop (or build) was cut short. 1428's
+--   old_index_valid          true, or null once 1432 has run. false: an earlier drop (or build) was cut short. 1432's
 --                            IF EXISTS drops it all the same.
---   invalid_session_indexes  empty. Any name: a build or drop on session was cut short. Read 1426's and 1428's headers.
+--   invalid_session_indexes  empty. Any name: a build or drop on session was cut short. Read 1426's and 1432's headers.
 --   tasks_doubled            0. Tasks with two live runs by the new predicate. Not 0 cannot happen while the new index
 --                            is valid.
 --   old_carrier_statements   how many distinct statements pg_stat_statements holds that state the task carrier
@@ -27,7 +27,7 @@
 --                            reads and the project rollups all state it, so a deploy-1 server sends it every minute.
 --                            Deploy 1's statements stay in the view after it stopped, so the first run may well show
 --                            some; their total calls must not grow between the two runs. Growth: a server still sends
---                            deploy 1's carrier, and 1428 must wait. null: pg_stat_statements is not installed here,
+--                            deploy 1's carrier, and 1432 must wait. null: pg_stat_statements is not installed here,
 --                            and only the container check stands.
 SELECT
   EXISTS (SELECT 1 FROM "_prisma_migrations"

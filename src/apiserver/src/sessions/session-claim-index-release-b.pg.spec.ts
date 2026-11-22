@@ -21,12 +21,12 @@ import { AutoRetryService } from './auto-retry.service';
 import { SessionsService } from './sessions.service';
 
 /**
- * ONE LIVE RUN PER TASK, RELEASE B: the rehearsal before 1428 drops 0130's index, and the drop itself.
+ * ONE LIVE RUN PER TASK, RELEASE B: the rehearsal before 1432 drops 0130's index, and the drop itself.
  *
- * docs/session-three-state-plan.md §7 step 4.5; migration 1428's header says why each piece is there.
+ * docs/session-three-state-plan.md §7 step 4.5; migration 1432's header says why each piece is there.
  *
  * The database: this branch's migrations by the real `prisma migrate deploy` (run-pg-spec.sh and the CI matrix
- * migrate the template so), put back to production's state at deploy 2 (a7f28ff0ac: 1426 applied, 1428 not, both
+ * migrate the template so), put back to production's state at deploy 2 (a7f28ff0ac: 1426 applied, 1432 not, both
  * claim indexes, 0130's built first), then populated with a SYNTHETIC set of more than 2,000 sessions: released runs
  * of every terminal status, tasks whose run is held (each held status), and failure releases that can be revived.
  *
@@ -35,9 +35,9 @@ import { SessionsService } from './sessions.service';
  *       (TasksService.execute), resume (SessionsService.resume) and the auto-retry revive (AutoRetryService.sweep).
  *       Every statement any of them sends is watched at the pg driver: zero 42P10, and after each path zero tasks
  *       with more than one session whose finished_at is null
- *   (2) 1428 by the real `prisma migrate deploy`, first interrupted as production would interrupt it (a lock_timeout
+ *   (2) 1432 by the real `prisma migrate deploy`, first interrupted as production would interrupt it (a lock_timeout
  *       behind a transaction that holds `session`): the INVALID index left, P3009, `migrate resolve --rolled-back`,
- *       the deploy after it drops the index. Then the index list of `session`, and a second run of 1428 (IF EXISTS)
+ *       the deploy after it drops the index. Then the index list of `session`, and a second run of 1432 (IF EXISTS)
  *   (3) with the new index alone: the four paths again, the same counts. Release A's code is what runs here, so this
  *       is also what a deploy-2 server does against the database during deploy 3's hand-over
  *   (4) scripts/session-claim-index-drop-precheck.sql, before and after the drop, and its pg_stat_statements
@@ -48,7 +48,7 @@ import { SessionsService } from './sessions.service';
  *     bash scripts/run-pg-spec.sh src/apiserver/src/sessions/session-claim-index-release-b.pg.spec.ts
  *
  * Not destructive beyond its own database: run-pg-spec.sh gives the spec a clone. It leaves that database migrated to
- * the head: the new index alone, 1428 recorded applied.
+ * the head: the new index alone, 1432 recorded applied.
  */
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -56,7 +56,7 @@ const skip = !URL;
 const NEW_INDEX = 'session_task_execution_claim_idx_finished_at';
 const OLD_INDEX = 'session_task_execution_claim_idx';
 const RELEASE_A = '1426_session_task_execution_claim_finished_at_idx';
-const RELEASE_B = '1428_drop_session_task_execution_claim_idx';
+const RELEASE_B = '1432_drop_session_task_execution_claim_idx';
 const OLD_DEF = `CREATE UNIQUE INDEX ${OLD_INDEX} ON public.session USING btree (task_id) `
   + "WHERE ((task_id IS NOT NULL) AND (deleted_at IS NULL) AND (status = ANY (ARRAY['PENDING'::run_status, "
   + "'RUNNING'::run_status, 'AWAITING_INPUT'::run_status, 'INTERRUPTED'::run_status])))";
@@ -428,7 +428,7 @@ function sqlOf(path: string): string {
   return readFileSync(path, 'utf8').split('\n').filter((line) => line.trim() !== '\\gx').join('\n');
 }
 
-test('one live run per task, release B (migration 1428): rehearsal before and after the drop', {
+test('one live run per task, release B (migration 1432): rehearsal before and after the drop', {
   skip, concurrency: 1, timeout: 1_800_000,
 }, async (t) => {
   const url = URL!;
@@ -448,11 +448,11 @@ test('one live run per task, release B (migration 1428): rehearsal before and af
     (Client.prototype as unknown as { query: unknown }).query = pgQuery;
   });
 
-  // ── Production's state at deploy 2: every migration of a7f28ff0ac applied, 1428 not; 0130's index, then 1426's.
+  // ── Production's state at deploy 2: every migration of a7f28ff0ac applied, 1432 not; 0130's index, then 1426's.
   const migrations = (await sql.query(
     `SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL ORDER BY 1`,
   )).rows.map((r: { migration_name: string }) => r.migration_name);
-  assert.equal(migrations.at(-1), RELEASE_B, 'the template was migrated to this branch\'s head, 1428 last');
+  assert.equal(migrations.at(-1), RELEASE_B, 'the template was migrated to this branch\'s head, 1432 last');
   if ((await claimIndexes(sql)).some(([name]) => name === OLD_INDEX) === false) {
     await sql.query(`DROP INDEX "${NEW_INDEX}"`);
     await sql.query(OLD_DEF);
@@ -463,7 +463,7 @@ test('one live run per task, release B (migration 1428): rehearsal before and af
   await sql.query(`DELETE FROM _prisma_migrations WHERE migration_name = $1`, [RELEASE_B]);
   const status = await prisma(url, ['migrate', 'status']);
   console.log(`# migrate status at production's state:\n${status.out.split('\n').map((l) => `#   ${l}`).join('\n')}`);
-  assert.match(status.out, new RegExp(RELEASE_B), 'migrate status names 1428 as not yet applied');
+  assert.match(status.out, new RegExp(RELEASE_B), 'migrate status names 1432 as not yet applied');
   assert.equal(await recorded(sql, RELEASE_A), 'applied');
   assert.equal(await recorded(sql, RELEASE_B), 'absent');
   assert.deepEqual(await claimIndexes(sql), [[OLD_INDEX, true, true], [NEW_INDEX, true, true]]);
@@ -513,7 +513,7 @@ test('one live run per task, release B (migration 1428): rehearsal before and af
     assert.equal(before.tasks_doubled, '0');
   });
 
-  await t.test('(2) 1428 by prisma migrate deploy: interrupted behind a transaction, resolved, applied', async () => {
+  await t.test('(2) 1432 by prisma migrate deploy: interrupted behind a transaction, resolved, applied', async () => {
     // Production's lock_timeout is 30 s (docker-compose.yml); 2 s here, for the same failure sooner.
     await sql.query(`ALTER DATABASE "${database}" SET lock_timeout = '2s'`);
     const holder = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
@@ -522,7 +522,7 @@ test('one live run per task, release B (migration 1428): rehearsal before and af
       await holder.query('BEGIN');
       await holder.query('SELECT 1 FROM session LIMIT 1');
       const interrupted = await prisma(url, ['migrate', 'deploy']);
-      console.log(`# 1428 behind an open transaction: exit ${interrupted.code}\n${interrupted.out.split('\n').map((l) => `#   ${l}`).join('\n')}`);
+      console.log(`# 1432 behind an open transaction: exit ${interrupted.code}\n${interrupted.out.split('\n').map((l) => `#   ${l}`).join('\n')}`);
       assert.notEqual(interrupted.code, 0, 'the deploy fails');
       assert.match(interrupted.out, /lock timeout/);
     } finally {
@@ -558,7 +558,7 @@ test('one live run per task, release B (migration 1428): rehearsal before and af
     assert.equal(await recorded(sql, RELEASE_B), 'rolled back, applied');
 
     const indexes = await sessionIndexes(sql);
-    console.log(`# indexes of session after 1428 (${indexes.length}):\n${indexes.map((i) => `#   ${i.name} valid=${i.valid} ready=${i.ready} unique=${i.unique} | ${i.def}`).join('\n')}`);
+    console.log(`# indexes of session after 1432 (${indexes.length}):\n${indexes.map((i) => `#   ${i.name} valid=${i.valid} ready=${i.ready} unique=${i.unique} | ${i.def}`).join('\n')}`);
     assert.equal(indexes.some((i) => i.name === OLD_INDEX), false, 'the old index is gone');
     const claim = indexes.find((i) => i.name === NEW_INDEX);
     assert.deepEqual(claim && [claim.valid, claim.ready, claim.unique, claim.def], [true, true, true, NEW_DEF]);
