@@ -500,6 +500,14 @@ test('W-T6: W4 condition 4 — after two generations asked for by the work sessi
 
     // One round: the work session's next generation, recorded as a retry of the CONFLICT one (R1).
     const rerun = async (ofJobId: string): Promise<string> => {
+      // The failure's landing-fix turn revived the work session (W6), and J-T1e holds the next landing
+      // until that session's work settles: its fix turn ends and it finishes, task_done again.
+      const revived = await stack.db.session.findUniqueOrThrow({ where: { id: t.sessionId }, select: { finishedAt: true } });
+      assert.equal(revived.finishedAt, null, 'CONTROL: the landing-fix turn revived the work session');
+      await stack.db.session.update({
+        where: { id: t.sessionId },
+        data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), endReason: 'task_done' },
+      });
       const queued = await stack.db.$transaction((tx) => queueLandingRetry(tx, {
         ownerId: w.ownerId, projectId: w.projectId, taskId: t.taskId,
         retry: {
