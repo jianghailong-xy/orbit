@@ -241,7 +241,13 @@ fun SessionCards(cards: SessionCardsModel, open: (String) -> Unit, discuss: ((St
                 // The waiting card a project row opened onto shows its top, not its foot: a span from its top nearly the list's height.
                 if (asked == CardFocus.WAITING && viewport > 0) requester.bringIntoView(Rect(0f, 0f, 1f, viewport * 0.9f))
                 else requester.bringIntoView()
+                // Spent, and then held where it was brought to: the reader re-applies it as the conversation moves around it.
+                CardFocus.hold(session.id, card.key, asked == CardFocus.WAITING)
                 CardFocus.spend(session.id)
+            }
+            val held = CardFocus.held(session.id)?.takeIf { it.key == card.key }
+            if (held != null && held.tick > 0) LaunchedEffect(held.tick) {
+                if (held.waiting && viewport > 0) requester.bringIntoView(Rect(0f, 0f, 1f, viewport * 0.9f)) else requester.bringIntoView()
             }
             Box(Modifier.bringIntoViewRequester(requester).then(if (CoordinatorQueue.isSent(card)) Modifier else Modifier.conversationCard())) {
                 val preview = CardPreviews.preview(card)
