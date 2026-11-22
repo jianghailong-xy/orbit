@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import signal
 import stat
 import subprocess
@@ -19,6 +20,17 @@ ROOT = Path("/home/orbit")
 UID = GID = 10001
 UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 GENERATION = re.compile(r"[1-9][0-9]{0,9}")
+# Where an image before a944a7f362 (2026-11-17) kept home: the volume was mounted at /var/lib/orbit with home in its
+# `home` folder. A volume it ran on is moved to today's layout on the next start (move_earlier_home); the paths the old
+# home recorded inside itself (git worktree links, the runner's session state) still name it, and the image keeps this
+# path as a link to /home/orbit so they resolve.
+EARLIER_HOME = "/var/lib/orbit/home"
+# The earlier home, set aside at the volume root while its entries are moved out of it: its existence says a move is
+# under way, and nothing a runner or a workspace makes is called this.
+MOVING_HOME = ".orbit-earlier-home"
+# What prepare() and a managed or enrolled start write before `orbit run`: all a start of this image on an earlier
+# volume could have left beside `home` without running anything.
+BOOTSTRAP_FILES = ("config.json", "container-identity.json", "container.lock", "managed-instance.json")
 # The instance identity the Pod states through the Downward API; `orbit run` sends it with every
 # request (src/runner-go/managed_instance.go).
 INSTANCE_ENV = ("ORBIT_MANAGED_RUNNER_GENERATION", "ORBIT_MANAGED_RUNNER_POD_UID")
@@ -162,8 +174,8 @@ def durable_json(path, value):
             os.unlink(temporary)
 
 
-def lock_volume():
-    fd = os.open(paths()[1] / "container.lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+def lock_volume(orbit=None):
+    fd = os.open((orbit or paths()[1]) / "container.lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
     try:
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
@@ -340,6 +352,131 @@ def adopt_managed_credential(instance, credential):
     durable_json(marker, instance)
 
 
+def fsync_directory(path):
+    directory_fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
+
+
+def claude_slug(path):
+    """Claude Code's folder for a working directory's conversations: every character outside [A-Za-z0-9] becomes `-`
+    (src/runner-go/transcript_rebuild.go, claudeTranscriptPath). `--resume` reads only the one for its cwd."""
+    return re.sub(r"[^A-Za-z0-9]", "-", path)
+
+
+def earlier_home():
+    """The home an earlier image left on this volume: `home` at the root, holding that runner's .orbit, whose config
+    names its work directory under EARLIER_HOME. A workspace folder that happens to be called `home` does not."""
+    home = ROOT / "home"
+    config = home / ".orbit" / "config.json"
+    if home.is_symlink() or not home.is_dir() or (home / ".orbit").is_symlink() or not config.is_file() \
+            or config.is_symlink():
+        return None
+    work_dir = read_json(config).get("workDir")
+    return home if isinstance(work_dir, str) and work_dir.startswith(EARLIER_HOME + "/") else None
+
+
+def fresh_home_beside(home):
+    """Today's folders beside the earlier home, when they hold nothing a runner wrote: only folders, and in .orbit the
+    bootstrap's own files. A start of a pre-move image of today's layout leaves that and nothing more before it runs;
+    the earlier home is the runner's and this is not. None when anything else is there: a home this image has run in
+    is not replaced."""
+    found = []
+    for path in ROOT.iterdir():
+        if path.name in ("home", "lost+found"):
+            continue
+        if path.name not in (".orbit", ".codex", ".claude", "orbit-repos") or path.is_symlink() or not path.is_dir():
+            return None
+        for parent, folders, files in os.walk(path):
+            allowed = BOOTSTRAP_FILES if Path(parent) == ROOT / ".orbit" else ()
+            if any((Path(parent) / name).is_symlink() for name in folders) or any(
+                    name not in allowed and not (allowed and name.startswith(".container-")) for name in files):
+                return None
+        found.append(path)
+    return found
+
+
+def move_earlier_home():
+    """Move the home an earlier image left in `home` to the volume root, which is home now, before anything else
+    touches the volume. Under the volume lock: the earlier home's own lock file, which moves with its .orbit and stays
+    held. Returns that lock, or None when there is nothing to move.
+
+    Each step is a rename, made durable before the next, and a start stopped half-way finishes on the next one:
+    `home` is first set aside as MOVING_HOME, its entries then move out one by one (.orbit last), the paths this image
+    reads are rewritten, and the empty MOVING_HOME goes last. Folders this image made beside `home` before it moved
+    anything are removed first; a home it has run in is left as it is, and so is `home`, with a warning.
+    """
+    moving = ROOT / MOVING_HOME
+    if not moving.exists() and not moving.is_symlink():
+        home = earlier_home()
+        if home is None:
+            return None
+        private_path(home, directory=True)
+        private_path(home / ".orbit", directory=True)
+        lock_fd = lock_volume(home / ".orbit")
+        try:
+            fresh = fresh_home_beside(home)
+            if fresh is None:
+                print(f"orbit-container: this volume holds an earlier image's home in {home} and a home this image "
+                      "has run in; it starts on the second and leaves the first as it is", file=sys.stderr)
+                os.close(lock_fd)
+                return None
+            if (ROOT / ".orbit" / "container.lock").exists():
+                os.close(lock_volume(ROOT / ".orbit"))  # Nothing runs on the folders about to go.
+            for path in fresh:
+                shutil.rmtree(path)
+            fsync_directory(ROOT)
+            os.rename(home, moving)
+            fsync_directory(ROOT)
+        except BaseException:
+            os.close(lock_fd)
+            raise
+    else:
+        private_path(moving, directory=True)
+        lock_fd = lock_volume(moving / ".orbit" if (moving / ".orbit").is_dir() else None)
+    try:
+        for path in sorted(moving.iterdir(), key=lambda entry: (entry.name == ".orbit", entry.name)):
+            target = ROOT / path.name
+            if target.exists() or target.is_symlink():
+                raise ValueError(f"{target} is in the way of the earlier home's {path.name}; move it to finish "
+                                 f"moving {moving} to the volume root")
+            os.rename(path, target)
+            fsync_directory(ROOT)
+            fsync_directory(moving)
+        rewrite_earlier_paths()
+        moving.rmdir()
+        fsync_directory(ROOT)
+    except BaseException:
+        os.close(lock_fd)
+        raise
+    return lock_fd
+
+
+def rewrite_earlier_paths():
+    """What this image reads by path, moved from EARLIER_HOME to today's home: the work directory the config and the
+    identity marker name, and Claude Code's folders of conversations, named after the working directory they were
+    held in. Anything else the earlier home recorded by path resolves through the image's link at EARLIER_HOME."""
+    _, orbit, _ = paths()
+    for name in ("config.json", "container-identity.json"):
+        path = orbit / name
+        if path.exists():
+            value = read_json(path)
+            work_dir = value.get("workDir")
+            if isinstance(work_dir, str) and work_dir.startswith(EARLIER_HOME + "/"):
+                durable_json(path, {**value, "workDir": str(ROOT) + work_dir[len(EARLIER_HOME):]})
+    projects = ROOT / ".claude" / "projects"
+    if projects.is_dir() and not projects.is_symlink():
+        earlier, today = claude_slug(EARLIER_HOME), claude_slug(str(ROOT))
+        for path in sorted(projects.iterdir()):
+            if path.name == earlier or path.name.startswith(earlier + "-"):
+                target = projects / (today + path.name[len(earlier):])
+                if not target.exists() and not target.is_symlink():
+                    os.rename(path, target)
+        fsync_directory(projects)
+
+
 def retire_legacy_workdir():
     """Move a volume an earlier image ran on to today's work directory, under the volume lock: its config and
     identity marker name the repos folder instead of `orbit-repos/default`, and that folder goes if it is still the
@@ -364,9 +501,15 @@ def retire_legacy_workdir():
 
 
 def run():
-    prepare()
-    lock_fd = lock_volume()
+    require_mount()
+    if os.geteuid() != UID:
+        raise ValueError("init-volume requires root; run/check require UID 10001")
+    os.umask(0o077)
+    lock_fd = move_earlier_home()
     try:
+        prepare()
+        if lock_fd is None:
+            lock_fd = lock_volume()
         retire_legacy_workdir()
         config = paths()[1] / "config.json"
         instance = None
@@ -387,7 +530,8 @@ def run():
             env.update({INSTANCE_ENV[0]: str(instance["generation"]), INSTANCE_ENV[1]: instance["podUid"]})
         os.execvpe("/usr/local/bin/orbit", ["orbit", "run"], env)
     finally:
-        os.close(lock_fd)
+        if lock_fd is not None:
+            os.close(lock_fd)
 
 
 def main(argv=None):

@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """Scratch-filesystem checks with mocked mount and mapped UID; no container proof."""
 
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 import fcntl
 import importlib.util
 import io
 import json
 import os
 from pathlib import Path
+import shutil
 import signal
 import stat
 import sys
@@ -661,6 +662,159 @@ class DockerInstanceFileTest(ManagedBootstrapFixture):
                 self.assertFalse((self.orbit / "registration-pending.json").exists())
         with mock.patch.dict(os.environ, {"ORBIT_RUNNER_SERVER_URL": "https://orbit.example.test"}):
             self.assertEqual(self.runner.server_url(), "https://orbit.example.test")
+
+
+class EarlierHomeTest(ManagedBootstrapFixture):
+    """A volume an image before a944a7f362 ran on: mounted at /var/lib/orbit, with home in its `home` folder. Today's
+    image mounts it at /home/orbit, which is home, and moves that home to the volume root on its first start."""
+
+    CONVERSATION = "4f1c2b8e-0d3a-4e5f-9a6b-7c8d9e0f1a2b"
+
+    def earlier_volume(self):
+        """What the earlier image's managed start left: its config, markers and lock, sign-ins, the runner's state, a
+        workspace with files, the empty default folder it made, and a Claude conversation held in a worktree."""
+        earlier = "/var/lib/orbit/home"
+        home = self.runner.ROOT / "home"
+        files = {
+            ".orbit/config.json": json.dumps(
+                {"serverUrl": "https://control.example.test", "runnerId": RUNNER_ID, "runnerToken": "generation-1-credential",
+                 "name": "orbit-managed", "labels": [], "maxConcurrent": 1, "workDir": f"{earlier}/orbit-repos/default",
+                 "autoInstallEngines": False}, sort_keys=True),
+            ".orbit/container-identity.json": json.dumps(
+                {"layoutVersion": 1, "runnerId": RUNNER_ID, "serverUrl": "https://control.example.test",
+                 "workDir": f"{earlier}/orbit-repos/default"}, sort_keys=True),
+            ".orbit/managed-instance.json": json.dumps({"runnerId": RUNNER_ID, "generation": 1, "podUid": POD_UID}),
+            ".orbit/container.lock": "",
+            ".orbit/runs/session-1/meta.json": json.dumps({"codexStateHome": f"{earlier}/.codex"}),
+            ".orbit/worktrees/session-1/.git": f"gitdir: {earlier}/orbit-repos/project/.git/worktrees/session-1\n",
+            ".codex/auth.json": "codex sign-in",
+            ".claude/.credentials.json": "claude sign-in",
+            f".claude/projects/-var-lib-orbit-home--orbit-worktrees-session-1/{self.CONVERSATION}.jsonl": "conversation\n",
+            ".claude/projects/-root-elsewhere/other.jsonl": "another folder's\n",
+            "orbit-repos/project/README.md": "somebody's work",
+        }
+        for name, content in files.items():
+            path = home / name
+            path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            path.write_text(content)
+            path.chmod(0o600)
+        (home / "orbit-repos/default").mkdir(mode=0o700)
+        self.next_generation()
+        return files
+
+    def next_generation(self):
+        self.issue(2, "generation-2-credential")
+        os.environ.update({"ORBIT_MANAGED_RUNNER_GENERATION": "2",
+                           "ORBIT_MANAGED_RUNNER_POD_UID": "9e8d7c6b-5a49-4382-9716-152433221100"})
+
+    def assert_moved(self, files):
+        root = self.runner.ROOT
+        self.assertFalse((root / "home").exists())
+        self.assertFalse((root / self.runner.MOVING_HOME).exists())
+        config = json.loads(self.config.read_text())
+        self.assertEqual(config["runnerId"], RUNNER_ID)
+        self.assertEqual(config["runnerToken"], "generation-2-credential")
+        self.assertEqual(config["name"], "orbit-managed", "the earlier config is kept, not written afresh")
+        self.assertEqual(config["workDir"], str(root / "orbit-repos"))
+        self.assertEqual(json.loads((self.orbit / "container-identity.json").read_text())["workDir"],
+                         str(root / "orbit-repos"))
+        self.assertEqual(json.loads((self.orbit / "managed-instance.json").read_text())["generation"], 2)
+        for name in (".codex/auth.json", ".claude/.credentials.json", "orbit-repos/project/README.md",
+                     ".orbit/runs/session-1/meta.json", ".orbit/worktrees/session-1/.git",
+                     ".claude/projects/-root-elsewhere/other.jsonl"):
+            self.assertEqual((root / name).read_text(), files[name], name)
+        # Claude Code's folder for the worktree's conversations, under the name `--resume` reads from today's path.
+        today = self.runner.claude_slug(str(root / ".orbit/worktrees/session-1"))
+        self.assertEqual((root / ".claude/projects" / today / f"{self.CONVERSATION}.jsonl").read_text(), "conversation\n")
+        self.assertFalse((root / ".claude/projects/-var-lib-orbit-home--orbit-worktrees-session-1").exists())
+        self.assertFalse((root / "orbit-repos/default").exists(), "the empty default folder goes, as on any volume")
+
+    def test_a_managed_start_moves_the_earlier_home_to_the_volume_root(self):
+        files = self.earlier_volume()
+        env = self.started_env()
+        self.assertEqual(env["HOME"], str(self.runner.ROOT))
+        self.assert_moved(files)
+        # The next start reads the moved volume as its own and moves nothing.
+        self.foreground.reset_mock()
+        self.started_env()
+        self.assert_moved(files)
+
+    def test_the_folders_an_earlier_start_of_this_image_made_beside_it_give_way(self):
+        files = self.earlier_volume()
+        # What a start of this image before the move left: today's folders, a config and markers, and nothing more.
+        self.runner.prepare()
+        (self.orbit / "config.json").write_text(json.dumps({"runnerId": RUNNER_ID, "name": "Orbit Cloud"}))
+        (self.orbit / "managed-instance.json").write_text(json.dumps({"runnerId": RUNNER_ID, "generation": 1}))
+        (self.orbit / "container.lock").write_text("")
+        self.started_env()
+        self.assert_moved(files)
+
+    def test_a_home_this_image_has_run_in_is_kept_and_the_earlier_one_left(self):
+        self.earlier_volume()
+        self.runner.prepare()
+        conversation = self.runner.ROOT / ".claude/projects/-home-orbit-orbit-repos-x/today.jsonl"
+        conversation.parent.mkdir(parents=True)
+        conversation.write_text("held in today's home")
+        with redirect_stderr(io.StringIO()) as err:
+            self.started_env()
+        self.assertIn("leaves the first as it is", err.getvalue())
+        self.assertEqual(conversation.read_text(), "held in today's home")
+        self.assertEqual(json.loads(self.config.read_text())["name"], "Orbit Cloud", "today's home, as before")
+        self.assertTrue((self.runner.ROOT / "home/.orbit/config.json").is_file())
+        self.assertFalse((self.runner.ROOT / self.runner.MOVING_HOME).exists())
+
+    def test_a_start_stopped_at_any_step_finishes_the_move_on_the_next(self):
+        rename = os.rename
+        steps = 0
+
+        def counting(*args):
+            nonlocal steps
+            steps += 1
+            rename(*args)
+
+        files = self.earlier_volume()
+        with mock.patch.object(self.runner.os, "rename", side_effect=counting):
+            self.started_env()
+        self.assertGreater(steps, 3)
+        for stop_at in range(1, steps + 1):
+            with self.subTest(stop_at=stop_at):
+                shutil.rmtree(self.runner.ROOT)
+                self.runner.ROOT.mkdir(mode=0o700)
+                files = self.earlier_volume()
+                done = 0
+
+                def stopped(*args):
+                    nonlocal done
+                    done += 1
+                    if done == stop_at:
+                        raise OSError("the container stopped here")
+                    rename(*args)
+
+                self.foreground.reset_mock()
+                with mock.patch.object(self.runner.os, "rename", side_effect=stopped):
+                    with self.assertRaises(OSError):
+                        self.runner.main(["run"])
+                self.foreground.assert_not_called()
+                self.started_env()
+                self.assert_moved(files)
+
+    def test_a_folder_called_home_on_today_s_volume_is_not_an_earlier_home(self):
+        self.runner.prepare()
+        workspace = self.runner.ROOT / "home/.orbit"
+        workspace.mkdir(parents=True)
+        (workspace / "checkout-exclude").write_text("a repository's own .orbit")
+        self.started_env()
+        self.assertEqual((workspace / "checkout-exclude").read_text(), "a repository's own .orbit")
+        self.assertEqual(json.loads(self.config.read_text())["name"], "Orbit Cloud")
+
+    def test_a_runner_holding_the_earlier_home_s_lock_stops_the_move(self):
+        self.earlier_volume()
+        holder = os.open(self.runner.ROOT / "home/.orbit/container.lock", os.O_RDWR)
+        self.addCleanup(os.close, holder)
+        fcntl.flock(holder, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        self.assert_refused()
+        self.assertTrue((self.runner.ROOT / "home/.orbit/config.json").is_file())
+        self.assertFalse((self.runner.ROOT / ".orbit").exists())
 
 
 if __name__ == "__main__":

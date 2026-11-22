@@ -163,8 +163,13 @@ Expose both states and `lastHeartbeatAt`, with an explicit server-derived `usabl
 
 Mount the entire per-user PVC at **`/home/orbit`** as an ext4 filesystem: the volume's root is the
 `orbit` user's home itself. (Until 2026-11-17 it was mounted at `/var/lib/orbit` with home in its `home`
-folder; volumes in that layout were discarded and rebuilt rather than migrated, and migration 0980
-moved the workspaces on managed runners to the same folders under `/home/orbit`.) The managed image uses
+folder. Migration 0980 moved the workspaces on managed runners to the same folders under `/home/orbit`.
+The entrypoint's first start on such a volume moves that `home` folder's contents to the volume root, under
+the volume lock and one durable rename at a time (`move_earlier_home`; owner 2026-11-22, replacing the
+2026-11-17 choice to discard those volumes). It rewrites the config's work directory and renames Claude
+Code's conversation folders to today's paths. The image keeps `/var/lib/orbit/home` as a link to
+`/home/orbit`, so the paths the old home recorded inside itself still resolve. A volume that also holds a
+home this image has already run in keeps that one, and the old `home` folder is left in place.) The managed image uses
 the following fixed absolute locations on every node and image rebuild:
 
 | Location or environment | Data to retain |

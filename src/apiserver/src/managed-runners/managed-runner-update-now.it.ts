@@ -32,6 +32,15 @@
  *       the turn back as a continuation and the model is asked to carry on, with the note an update's continuation
  *       opens with. What the runner reported of the cut, what the model was sent and how the turn ended are recorded.
  * Throughout: never two containers on one volume (sampled), never a Docker socket in this process.
+ *
+ * With --earlier-channel (the channel.py of an image before a944a7f362, e.g. 95884b154f's, with --image built at that
+ * commit), the runner starts as one made before the /home/orbit layout: that channel mounts the volume at
+ * /var/lib/orbit, the image keeps home in its `home` folder, and the workspace is stored under /var/lib/orbit/home until
+ * the upgrade applies migration 0980 to it, as the release that brought the layout did. (1) also leaves sign-ins in the
+ * engines' homes and records the turn's Claude Code transcript; after (4) the next generation, made by today's channel
+ * from the next image, must have moved that home to the volume root (deploy/managed-runner/image/entrypoint.py,
+ * move_earlier_home) with the sign-ins, the workspace's files at its stored path and the transcript where `--resume`
+ * reads it, and (5) must continue the turn on that same transcript, its first prompt still in the conversation.
  */
 import assert from 'node:assert/strict';
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
@@ -84,6 +93,8 @@ interface ItConfig {
   image: string;
   nextImage?: string;
   linkGateway?: string;
+  /** The channel the runner first starts under, when it is to be one made before the /home/orbit layout. */
+  earlierChannel?: string;
   network: string;
   gateway: string;
   testLabel: { key: string; value: string };
@@ -112,6 +123,8 @@ interface ModelRequest {
   stream: boolean;
   tools: boolean;
   lastUserText: string;
+  /** Whether the conversation sent still holds the session's first prompt. */
+  firstPrompt: boolean;
   answered: 'tool_use' | 'continuation' | 'text' | 'count_tokens' | 'other';
 }
 
@@ -233,7 +246,8 @@ test('Update Now of a busy Orbit Cloud runner, on real Docker', { skip: !CONFIG 
       const tools = Array.isArray(body.tools) && body.tools.some((tool: { name?: string }) => tool?.name === 'Bash');
       const askedForCommand = messages.some((m) => m.role === 'assistant' && Array.isArray(m.content) && m.content.some((b: { type?: string }) => b?.type === 'tool_use'));
       const record = (answered: ModelRequest['answered']) => {
-        const entry: ModelRequest = { at: new Date().toISOString(), path: pathname, model: typeof body.model === 'string' ? body.model : null, stream: body.stream === true, tools, lastUserText: lastUserText.slice(0, 4000), answered };
+        const firstPrompt = messages.some((m) => m.role === 'user' && textOf(m.content).includes(MARK));
+        const entry: ModelRequest = { at: new Date().toISOString(), path: pathname, model: typeof body.model === 'string' ? body.model : null, stream: body.stream === true, tools, lastUserText: lastUserText.slice(0, 4000), firstPrompt, answered };
         modelRequests.push(entry);
         modelLog.write(`${JSON.stringify(entry)}\n`);
       };
@@ -298,8 +312,8 @@ test('Update Now of a busy Orbit Cloud runner, on real Docker', { skip: !CONFIG 
   const nextConfig = path.join(cfg.runDir, 'channel-next.json');
   writeFileSync(nextConfig, JSON.stringify({ ...JSON.parse(readFileSync(cfg.channel.config, 'utf8')), image: cfg.nextImage }, null, 2));
   let channel: ChildProcess | undefined;
-  async function startChannel(config: string): Promise<void> {
-    channel = spawn(cfg.python, ['-I', cfg.channel.script, 'serve', '--config', config], { stdio: ['ignore', 'pipe', 'pipe'] });
+  async function startChannel(config: string, script = cfg.channel.script): Promise<void> {
+    channel = spawn(cfg.python, ['-I', script, 'serve', '--config', config], { stdio: ['ignore', 'pipe', 'pipe'] });
     channel.stdout!.pipe(channelLog, { end: false });
     channel.stderr!.pipe(channelLog, { end: false });
     await until('the channel answering', async () => existsSync(cfg.channel.socket) && (await channelClient.call('GET', '/v1/resources').then((a) => a.status === 200, () => false)), 60_000);
@@ -491,7 +505,7 @@ test('Update Now of a busy Orbit Cloud runner, on real Docker', { skip: !CONFIG 
   const containerOf = (m: ManagedRunner) => `mr-${m.runnerId}`;
   const statusOf = async () => (await api('GET', '/api/managed-runner', alice.token)).json;
 
-  await startChannel(cfg.channel.config);
+  await startChannel(cfg.channel.config, cfg.earlierChannel ?? cfg.channel.script);
   await startApp();
   await until('the link gateway healthy', async () => {
     if (linkGateway.exitCode !== null) assert.fail(`the link gateway exited ${linkGateway.exitCode}`);
@@ -502,6 +516,23 @@ test('Update Now of a busy Orbit Cloud runner, on real Docker', { skip: !CONFIG 
   let first!: ManagedRunner;
   let sessionId!: string;
   let turnId!: string;
+  // A runner made before the /home/orbit layout: its home, and what (1) leaves in it.
+  const earlier = cfg.earlierChannel ? '/var/lib/orbit/home' : null;
+  const SIGN_INS = {
+    '.claude/.credentials.json': JSON.stringify({ claudeAiOauth: { accessToken: 'sk-ant-oat01-update-now-it-not-a-token', refreshToken: 'sk-ant-ort01-update-now-it-not-a-token', expiresAt: 4102444800000, scopes: ['user:inference'], subscriptionType: 'max' } }),
+    '.codex/auth.json': JSON.stringify({ OPENAI_API_KEY: null, tokens: { id_token: 'update-now-it-not-a-token', access_token: 'update-now-it-not-a-token', refresh_token: 'update-now-it-not-a-token', account_id: 'update-now-it' }, last_refresh: '2026-11-16T00:00:00Z' }),
+  };
+  let transcript: { file: string; bytes: number; sha256: string; lines: number } | null = null;
+  /** Claude Code's folder for a working directory's conversations, as it names it (and `--resume` reads it). */
+  const claudeSlug = (dir: string) => dir.replace(/[^A-Za-z0-9]/g, '-');
+  /** The newest transcript in one such folder: its path, size, line count and the digest of its first `bytes` bytes. */
+  async function transcriptIn(name: string, folder: string, bytes?: number) {
+    const out = await shell(name, `f=$(ls -t ${folder}/*.jsonl 2>/dev/null | head -1); [ -n "$f" ] || exit 0; `
+      + `n=${bytes ?? '$(wc -c < "$f")'}; echo "$f"; wc -c < "$f"; head -c "$n" "$f" | sha256sum | cut -d' ' -f1; wc -l < "$f"`);
+    if (!out) return null;
+    const [file, size, sha256, lines] = out.split('\n');
+    return { file, bytes: Number(size), sha256, lines: Number(lines) };
+  }
 
   await t.test('(1) READY on the old image, with a turn in flight: Claude Code running the command the model asked for', async () => {
     const key = await api('POST', '/api/providers/mine', alice.token, {
@@ -521,9 +552,18 @@ test('Update Now of a busy Orbit Cloud runner, on real Docker', { skip: !CONFIG 
     const runner = await db.runner.findUniqueOrThrow({ where: { id: first.runnerId } });
     note('(1) READY on the old image', { generation: first.generation, podUid: first.podUid, image: container?.Image, runnerVersion: runner.version, initialProvider: first.initialProvider });
 
-    // The project lives on the data volume, where the next generation finds it.
-    const workDir = '/home/orbit/update-now-it';
+    // The project lives on the data volume, where the next generation finds it. On a runner made before the
+    // /home/orbit layout it is under that image's home, and so is the path the server stores for it.
+    const workDir = `${earlier ?? '/home/orbit'}/update-now-it`;
     await shell(containerOf(first), `mkdir -p ${workDir} && echo "a project" > ${workDir}/README.md`);
+    if (earlier) {
+      const layout = await shell(containerOf(first), 'echo "$HOME"; ls -A /var/lib/orbit');
+      assert.deepEqual(layout.split('\n'), [earlier, 'home'], 'the earlier layout: the volume at /var/lib/orbit, home in its `home` folder');
+      // Sign-ins, where the engines keep them under that home.
+      for (const [file, content] of Object.entries(SIGN_INS)) {
+        await shell(containerOf(first), `umask 077 && printf '%s' '${content}' > ${earlier}/${file}`);
+      }
+    }
     const workspace = await db.workspace.create({ data: { ownerId: alice.userId, runnerId: first.runnerId, targetRunnerId: first.runnerId, name: 'Update Now project', workDir } });
     const created = await api('POST', '/api/sessions', alice.token, {
       workspaceId: workspace.id, title: 'A long command', prompt: `${MARK}: run the long command and tell me when it is done.`,
@@ -541,6 +581,11 @@ test('Update Now of a busy Orbit Cloud runner, on real Docker', { skip: !CONFIG 
     const running = await db.session.findUniqueOrThrow({ where: { id: sessionId } });
     assert.equal(running.status, 'RUNNING', 'the turn is in flight');
     const processes = await shell(containerOf(first), `for p in /proc/[0-9]*; do tr '\\0' ' ' < $p/cmdline 2>/dev/null; echo; done | grep -c '^${LONG_COMMAND}' || true`);
+    if (earlier) {
+      transcript = await until('the turn\'s Claude Code transcript', () => transcriptIn(containerOf(first), `${earlier}/.claude/projects/${claudeSlug(workDir)}`), 120_000, 1_000);
+      const volume = await shell(containerOf(first), `cd /var/lib/orbit && find . -maxdepth 3 -not -path './home/.orbit/*/*' | sort | head -80`);
+      note('(1) the earlier layout', { home: earlier, workDir, transcript, signIns: Object.keys(SIGN_INS), volume: volume.split('\n') });
+    }
     note('(1) turn in flight', { sessionId, turnId, status: running.status, toolUse: toolUse.payload, longCommandProcesses: processes });
   });
 
@@ -549,6 +594,14 @@ test('Update Now of a busy Orbit Cloud runner, on real Docker', { skip: !CONFIG 
     await stopChannel();
     writeFileSync(profilePath, JSON.stringify({ ...profile, runner: { ...profile.runner, image: cfg.nextImage } }, null, 2));
     await startChannel(nextConfig);
+    if (earlier) {
+      // The release that brought the /home/orbit layout rewrote the stored paths of managed runners' workspaces.
+      const before = await db.workspace.findMany({ where: { runnerId: first.runnerId }, select: { workDir: true } });
+      await sql.query(readFileSync(path.resolve('prisma/migrations/0980_managed_runner_home_orbit/migration.sql'), 'utf8'));
+      const after = await db.workspace.findMany({ where: { runnerId: first.runnerId }, select: { workDir: true } });
+      assert.deepEqual(after.map((w) => w.workDir), ['/home/orbit/update-now-it'], 'migration 0980 names the folder under /home/orbit');
+      note('(2) migration 0980 applied', { before: before.map((w) => w.workDir), after: after.map((w) => w.workDir) });
+    }
     await startApp();
     const update = await until('the status offering the update', async () => {
       const status = await statusOf();
@@ -628,6 +681,29 @@ test('Update Now of a busy Orbit Cloud runner, on real Docker', { skip: !CONFIG 
     note('(4) next generation READY', { generation: next.generation, podUid: next.podUid, image: container?.Image, runnerVersion: runner.version, lifecycle, maxContainersAtOnce: maxAtOnce.get(before.runnerId) });
   });
 
+  if (earlier) {
+    await t.test('(4b) the next generation moved the earlier home to the volume root: sign-ins, the workspace\'s files at its stored path, the transcript where --resume reads it', async () => {
+      const name = containerOf(next);
+      const root = (await shell(name, 'echo "$HOME"; ls -A /home/orbit | sort | tr "\\n" " "; echo; readlink /var/lib/orbit/home')).split('\n');
+      const workspace = await db.workspace.findFirstOrThrow({ where: { runnerId: next.runnerId }, select: { workDir: true } });
+      const readme = await shell(name, `cat ${workspace.workDir}/README.md`);
+      const signIns = Object.fromEntries(await Promise.all(Object.keys(SIGN_INS).map(async (file) => [file, await shell(name, `cat /home/orbit/${file}`)] as const)));
+      const config = JSON.parse(await shell(name, 'cat /home/orbit/.orbit/config.json')) as { runnerId: string; workDir: string; runnerToken?: string };
+      const moved = await transcriptIn(name, `/home/orbit/.claude/projects/${claudeSlug(workspace.workDir!)}`, transcript!.bytes);
+      const logs = await docker('logs', name).catch((error: Error) => error.message);
+      note('(4b) the earlier home moved', { root, workDir: workspace.workDir, readme, config: { runnerId: config.runnerId, workDir: config.workDir }, transcriptBefore: transcript, transcriptAfter: moved, warnings: logs.split('\n').filter((line) => line.includes('orbit-container')) });
+      assert.equal(root[0], '/home/orbit');
+      assert.ok(!/(^| )(home|\.orbit-earlier-home)( |$)/.test(root[1]), `no earlier home left at the root: ${root[1]}`);
+      assert.equal(root[2], '/home/orbit', 'the earlier home\'s path is a link to today\'s');
+      assert.equal(readme, 'a project', 'the workspace\'s files at its stored path');
+      assert.deepEqual(signIns, SIGN_INS, 'the engines\' sign-ins');
+      assert.deepEqual({ runnerId: config.runnerId, workDir: config.workDir }, { runnerId: next.runnerId, workDir: '/home/orbit/orbit-repos' }, 'the runner\'s own config, moved and rewritten');
+      assert.ok(moved, 'the transcript is in the folder Claude Code reads for the workspace');
+      assert.equal(moved!.sha256, transcript!.sha256, 'the same transcript, byte for byte, as far as the old generation wrote it');
+      assert.ok(!logs.includes('leaves the first as it is'), 'no second home to choose between');
+    });
+  }
+
   await t.test('(5) the interrupted turn continues on the next generation, as the update\'s continuation', async () => {
     const continuation = await until('the model asked to carry on', async () => modelRequests.find((r) => r.answered === 'continuation'), 600_000, 1_000);
     const cut = await db.runEvent.findMany({ where: { sessionId, turnId, type: 'interrupt' }, orderBy: { seq: 'asc' } });
@@ -645,6 +721,17 @@ test('Update Now of a busy Orbit Cloud runner, on real Docker', { skip: !CONFIG 
     assert.equal(settled.assignedRunnerId, next.runnerId, 'on the same runner');
     assert.ok(cut.length > 0, 'the runner marked the cut');
     assert.ok(continuation.lastUserText.includes(RUNNER_UPDATE_RESUME_NOTE), `the continuation opens with the update's note: ${continuation.lastUserText.slice(0, 400)}`);
+    if (earlier) {
+      // The turn went on in the conversation the old generation held: Claude Code resumed its transcript, which the
+      // continuation was appended to, and the model was sent the session's first prompt with it.
+      const workspace = await db.workspace.findFirstOrThrow({ where: { runnerId: next.runnerId }, select: { workDir: true } });
+      const after = await transcriptIn(containerOf(next), `/home/orbit/.claude/projects/${claudeSlug(workspace.workDir!)}`, transcript!.bytes);
+      note('(5) the conversation continued', { transcriptBefore: transcript, transcriptAfter: after, continuationCarriedFirstPrompt: continuation.firstPrompt });
+      assert.ok(continuation.firstPrompt, 'the continuation carries the conversation, from its first prompt');
+      assert.equal(after?.file.split('/').pop(), transcript!.file.split('/').pop(), 'the same conversation file');
+      assert.equal(after?.sha256, transcript!.sha256, 'which still begins with what the old generation wrote');
+      assert.ok(after!.bytes > transcript!.bytes, 'and the continued turn was appended to it');
+    }
   });
 
   await t.test('Docker and the database agree, and this process never opened the Docker socket', async () => {
