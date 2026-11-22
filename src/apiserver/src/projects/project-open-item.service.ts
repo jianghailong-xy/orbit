@@ -3645,7 +3645,10 @@ export class ProjectOpenItemService {
       ? new Set((await this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
           SELECT item."id" FROM "project_open_item" item
            WHERE item."project_id" = ${projectId}::uuid AND item."state" = 'OPEN'
-             AND NOT ${openItemVisible('item')}`)).map((row) => row.id))
+             AND NOT ${openItemVisible('item')}
+             -- W9 (revision 42): an item in its task's own work session's hands is never delivered to
+             -- the coordinator, and the coordinator and the owner still see it here, with Chat about this.
+             AND NOT (item."work_session_offered_at" IS NOT NULL AND item."work_session_returned_at" IS NULL)`)).map((row) => row.id))
       : new Set<string>();
     const rows = open.filter((row) => !settled.has(row.id) && !hidden.has(row.id));
     const keys = rows.flatMap((row) => row.deliveries);
