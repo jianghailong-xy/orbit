@@ -83,15 +83,24 @@ interface LockedRow {
  * `claimedBefore` is the line a claim must be older than to be the lost runner's (the reaper's reap window), and
  * `looksOffline` the reaper's own verdict on a runner row, re-asked here as forceFinalize re-asks it.
  */
+/**
+ * What the reaper reads of a runner to say whether it is lost (ReaperService `runnerLooksOffline`): its status, both
+ * records of its heartbeat, and whether it is a managed runner, whose OFFLINE its manager writes on a proven stop and
+ * is no sign-off.
+ */
+export const RUNNER_LIVENESS = { status: true, ...RUNNER_BEATS, managedRunner: { select: { id: true } } } as const;
+
+export type RunnerLiveness = RunnerBeats & { status: string; managedRunner?: { id: string } | null };
+
 export async function settleLostRunnerWork(
   tx: Prisma.TransactionClient,
   sessionId: string,
   runnerId: string,
   claimedBefore: Date,
-  looksOffline: (runner: (RunnerBeats & { status: string }) | null) => boolean,
+  looksOffline: (runner: RunnerLiveness | null) => boolean,
 ): Promise<LostRunnerWork | null> {
   // The verdict came from the sweep's one snapshot; re-asked here.
-  const runner = await tx.runner.findUnique({ where: { id: runnerId }, select: { status: true, ...RUNNER_BEATS } });
+  const runner = await tx.runner.findUnique({ where: { id: runnerId }, select: RUNNER_LIVENESS });
   if (!looksOffline(runner)) return null;
   const rows = await tx.$queryRaw<LockedRow[]>`
     SELECT "owner_id" AS "ownerId", "status", "assigned_runner_id" AS "assignedRunnerId",
