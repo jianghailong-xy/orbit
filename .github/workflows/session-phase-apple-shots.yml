@@ -1,0 +1,37 @@
+name: Apple session wording screenshots
+
+on:
+  push:
+    branches: [probe/session-phase-apple-shots-86c2ef4e]
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    runs-on: macos-26
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        revision: [before, after]
+        client: [mac, ios]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 2
+      - uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90
+        with:
+          xcode-version: latest-stable
+      - run: brew install xcodegen
+      - name: Capture the native session surfaces
+        env:
+          PROBE_REVISION: ${{ matrix.revision }}
+          PROBE_CLIENT: ${{ matrix.client }}
+        run: bash scripts/session-phase-apple-shots.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: apple-session-words-${{ matrix.revision }}-${{ matrix.client }}
+          path: .session-phase-probe/shots
+          if-no-files-found: error
