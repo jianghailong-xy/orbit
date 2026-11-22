@@ -1100,8 +1100,9 @@ const STICKY_LABEL = 'Your question';
 export const WAITING_CARD_SELECTOR =
   '[data-waiting-card], .owner-request-card, .coordinator-question:not(.answered-question), .review-card[id^="question-"]:not(.answered-question-inline), [data-open-item]';
 /** How far below the scroller's top edge a revealed waiting card's top comes to rest: clear of the
- *  floating "Jump to the beginning" pill when the transcript has one (`.chat-older-top`). */
-export const waitingCardGap = (olderPill: boolean): number => (olderPill ? 48 : 12);
+ *  floating "Jump to the beginning" pill (`.chat-older-top`), which any transcript scrolled off both
+ *  its top and its tail offers — as a revealed card's is, unless it clamps at the top. */
+export const WAITING_CARD_GAP = 48;
 
 // Shell-style composer history, kept per-session in localStorage so the Up/Down arrows
 // recall only this session's recently sent prompts (never another session's). Stored
@@ -2783,6 +2784,9 @@ export function WorkspaceView({
   // setAtBottom is: it decides whether the top of the transcript offers the way back to the first
   // message.
   const [hasMoreOlder, setHasMoreOlder] = useState(false);
+  // Whether the scroller has left its top: with the whole session loaded, the way back is still
+  // offered to a reader scrolled up into it, and only the top itself has nothing to go back to.
+  const [offTop, setOffTop] = useState(false);
   // Set while "Jump to the beginning" is walking the pages back, so each page it asks for is
   // stamped as one that wants the top (see prependAnchorRef).
   const jumpingToStartRef = useRef(false);
@@ -4816,6 +4820,7 @@ export function WorkspaceView({
     }
     setAtBottom(atBottomRef.current); // React bails out when unchanged, so no per-scroll re-render
     setHasMoreOlder(hasOlderNow()); // same bail-out; drives the way back to the start
+    setOffTop(top > 0);
     // Near the top with older history still on the server → pull in the next page.
     if (top < LOAD_OLDER_AT) loadOlder();
     const topY = el.getBoundingClientRect().top;
@@ -5868,10 +5873,9 @@ export function WorkspaceView({
     setWaitingReveal(null);
     atBottomRef.current = false;
     setAtBottom(false);
-    const gap = waitingCardGap(hasMoreOlder);
-    holdLanding(card, (view, box) => box.top - view.top - gap);
+    holdLanding(card, (view, box) => box.top - view.top - WAITING_CARD_GAP);
     keepLanding();
-  }, [waitingReveal, selectedId, seeding, eventsSessionId, transcriptEvents, transcriptInserts, approvals, hasMoreOlder, holdLanding, keepLanding]);
+  }, [waitingReveal, selectedId, seeding, eventsSessionId, transcriptEvents, transcriptInserts, approvals, holdLanding, keepLanding]);
   // A request to open at a waiting card that never found one lapses rather than standing.
   useEffect(() => {
     if (!waitingReveal) return;
@@ -11126,8 +11130,10 @@ export function WorkspaceView({
                   before the page it triggers lands and re-anchors the view a page below it. Offered
                   only once the reader has left the live tail, the mirror of the jump-to-bottom
                   button: at the tail nobody is looking for the beginning, and the pill floats over
-                  the transcript, so there it is only something covering a message. */}
-              {(loadingOlder || (hasMoreOlder && !atBottom)) && (
+                  the transcript, so there it is only something covering a message. With nothing
+                  older left on the server it still scrolls to the top: the reader scrolled up into
+                  a fully loaded session wants the same way back. */}
+              {(loadingOlder || (!atBottom && (hasMoreOlder || offTop))) && (
                 <div className="chat-older-top">
                   {loadingOlder ? (
                     <span className="chat-older-pill">Loading earlier messages…</span>
