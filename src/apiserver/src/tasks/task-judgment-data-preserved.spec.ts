@@ -3305,7 +3305,15 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // bumps no Open-list counter. It creates, alters or drops no table, column, constraint or trigger, and it names
       // or replaces none of the preserved triggers or functions. No INSERT, UPDATE or DELETE runs at apply time.
       // Written as 1423 and then 1427 on the project line, it was renumbered after main took 1427.
-      '1428_open_list_workspace_probes'],
+      '1428_open_list_workspace_probes',
+      // 1438 creates drive_removed_entry (Orbit Files drive: the file a replacing rename removed, §3.2) and its index; no
+      // existing row is written, and no preserved relation, trigger, function or DONE fence changes. Numbered past every
+      // migration on main and the project and task branches (1437 the highest) when it was written.
+      '1438_drive_removed_entry',
+      // 1439 creates the partial trigram index drive_entry_name_trgm on drive_entry(name) for drive search, IF NOT EXISTS,
+      // and the pg_trgm extension if it is missing; no row is written, and no preserved relation, trigger, function or
+      // DONE fence changes. Written as 1427 on the project line, it was renumbered after main took 1427.
+      '1439_drive_entry_name_trgm'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

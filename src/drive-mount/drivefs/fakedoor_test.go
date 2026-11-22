@@ -31,6 +31,9 @@ type fakeDoor struct {
 	stagings map[string]map[int]string
 	commits  map[string]door.CommitResult
 	changes  []door.Change
+	// removed is what a rename onto a file removed outright (§3.2): its folder and name, and the file in Trash a later
+	// commit of a handle still bound to it made.
+	removed  map[string]*fakeRemoved
 	puts     int
 	fail     func(r *http.Request) int // a status to answer instead, or 0
 	// loseCommitAnswers commits are applied and then answered 502, as when the answer is lost on the way.
@@ -44,6 +47,10 @@ type fakeEntry struct {
 	trashed                         bool
 }
 
+type fakeRemoved struct {
+	parent, name, successor string
+}
+
 type fakeVersion struct {
 	id, entry, handle string
 	chunks            []door.Chunk
@@ -52,7 +59,7 @@ type fakeVersion struct {
 
 func newFakeDoor() *fakeDoor {
 	f := &fakeDoor{entries: map[string]*fakeEntry{}, versions: map[string]*fakeVersion{}, blobs: map[string][]byte{},
-		stagings: map[string]map[int]string{}, commits: map[string]door.CommitResult{}}
+		stagings: map[string]map[int]string{}, commits: map[string]door.CommitResult{}, removed: map[string]*fakeRemoved{}}
 	f.entries["root"] = &fakeEntry{id: "root", kind: "FOLDER", mtime: time.Now()}
 	f.srv = httptest.NewServer(http.HandlerFunc(f.serve))
 	return f
@@ -268,8 +275,22 @@ func (f *fakeDoor) serve(w http.ResponseWriter, r *http.Request) {
 				refuse(w, 409, door.CodeNameTaken, nil)
 				return
 			}
-			target.trashed = true
-			f.change(target, "REMOVE")
+			// §3.2: the target keeps its id and takes the source's current version; its previous one is replaced; the
+			// source entry is removed outright.
+			f.versions[target.version].replaced = true
+			for _, v := range f.versions {
+				if v.entry == e.id {
+					v.entry = target.id
+				}
+			}
+			f.versions[e.version].handle = ""
+			target.version, target.mtime = e.version, e.mtime
+			f.removed[e.id] = &fakeRemoved{parent: e.parent, name: e.name}
+			delete(f.entries, e.id)
+			f.change(e, "REMOVE")
+			f.change(target, "UPSERT")
+			reply(f.view(target))
+			return
 		}
 		e.parent, e.name = parent.id, name
 		f.change(e, "UPSERT")
@@ -310,6 +331,24 @@ func (f *fakeDoor) commit(w http.ResponseWriter, body map[string]interface{}) {
 		return
 	}
 	e := f.entries[c.EntryID]
+	fresh := false
+	if e == nil {
+		gone := f.removed[c.EntryID]
+		if gone == nil {
+			refuse(w, 404, "DRIVE_ENTRY_NOT_FOUND", nil)
+			return
+		}
+		if gone.successor == "" {
+			// A handle still writing a removed source: a new file in Trash named after it.
+			v := &fakeVersion{id: f.id("v"), handle: c.HandleID}
+			n := &fakeEntry{id: f.id("e"), parent: gone.parent, kind: "FILE", name: gone.name, version: v.id, mtime: time.Now(), trashed: true}
+			v.entry = n.id
+			f.entries[n.id], f.versions[v.id] = n, v
+			gone.successor = n.id
+			fresh = true
+		}
+		e = f.entries[gone.successor]
+	}
 	for _, ch := range c.Chunks {
 		if data, ok := f.blobs[ch.SHA256]; !ok || int64(len(data)) != ch.Size {
 			refuse(w, 409, door.CodeChunkNotHeld, nil)
@@ -330,6 +369,9 @@ func (f *fakeDoor) commit(w http.ResponseWriter, body map[string]interface{}) {
 	mode := c.Mode
 	if mode == "CONTINUE" && !(c.BaseVersionID == cur.id && cur.handle != "" && cur.handle == c.HandleID) {
 		mode = "OVERWRITE"
+	}
+	if fresh && mode != "APPEND" {
+		mode = "CONTINUE"
 	}
 	switch mode {
 	case "CONTINUE":

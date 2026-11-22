@@ -777,15 +777,36 @@ export class DriveService {
       if (options.fence) await options.fence(tx);
       const answered = await tx.driveCommit.findUnique({ where: { ownerId_commitId: { ownerId, commitId: input.commitId } } });
       if (answered) return { result: answered.result as unknown as DriveCommitResult, replayed: true };
-      const locked = await tx.$queryRaw<Array<{ id: string }>>`
-        SELECT "id" FROM "drive_entry" WHERE "id" = ${input.entryId}::uuid AND "owner_id" = ${ownerId}::uuid FOR UPDATE`;
-      if (!locked.length) throw notFound();
-      const entry = await tx.driveEntry.findUniqueOrThrow({ where: { id: input.entryId } });
-      if (entry.kind !== 'FILE') throw refusal(HttpStatus.CONFLICT, DRIVE_NOT_A_FILE, 'A folder has no content to commit.');
-      await assertChunksHeld(tx, ownerId, input.chunks);
+      const lockEntry = async (entryId: string) => (await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT "id" FROM "drive_entry" WHERE "id" = ${entryId}::uuid AND "owner_id" = ${ownerId}::uuid FOR UPDATE`).length > 0;
       const writer = await checkedWriter(tx, ownerId, input.writer);
-      const current = await tx.driveVersion.findUniqueOrThrow({ where: { id: entry.currentVersionId! } });
       const now = new Date();
+      let entryId = input.entryId;
+      // A handle still writing a file a replacing rename removed (§3.2) lands in a new file in Trash named after it.
+      let fresh: { groupId: string } | null = null;
+      if (!(await lockEntry(entryId))) {
+        const removed = await tx.$queryRaw<Array<{ parent_id: string; name: string; successor_id: string | null }>>`
+          SELECT "parent_id", "name", "successor_id" FROM "drive_removed_entry"
+           WHERE "owner_id" = ${ownerId}::uuid AND "entry_id" = ${input.entryId}::uuid FOR UPDATE`;
+        if (!removed.length) throw notFound();
+        const { parent_id: parentId, name, successor_id: successor } = removed[0];
+        if (successor && (await lockEntry(successor))) {
+          entryId = successor;
+        } else {
+          await assertChunksHeld(tx, ownerId, input.chunks);
+          const created = await createInTrash(tx, ownerId, parentId, name, input.handleId ?? null, writer, now);
+          await tx.driveRemovedEntry.update({
+            where: { ownerId_entryId: { ownerId, entryId: input.entryId } },
+            data: { successorId: created.entryId },
+          });
+          entryId = created.entryId;
+          fresh = { groupId: created.groupId };
+        }
+      }
+      const entry = await tx.driveEntry.findUniqueOrThrow({ where: { id: entryId } });
+      if (entry.kind !== 'FILE') throw refusal(HttpStatus.CONFLICT, DRIVE_NOT_A_FILE, 'A folder has no content to commit.');
+      if (!fresh) await assertChunksHeld(tx, ownerId, input.chunks);
+      const current = await tx.driveVersion.findUniqueOrThrow({ where: { id: entry.currentVersionId! } });
 
       let mode = input.mode;
       if (mode === 'CONTINUE' && !(input.baseVersionId === current.id && current.handleId !== null && current.handleId === input.handleId)) {
@@ -832,8 +853,12 @@ export class DriveService {
           return seq;
         }
         // Overwritten since the append was built: the base's content plus the appended bytes become a new version.
+        // A new file in Trash appends to the version its removed source had, which the rename gave the target.
         const base = input.baseVersionId
-          ? await tx.driveVersion.findFirst({ where: { id: input.baseVersionId, ownerId, entryId: entry.id }, include: { chunks: { orderBy: { idx: 'asc' } } } })
+          ? await tx.driveVersion.findFirst({
+            where: { id: input.baseVersionId, ownerId, ...(fresh ? {} : { entryId: entry.id }) },
+            include: { chunks: { orderBy: { idx: 'asc' } } },
+          })
           : null;
         if (!base) throw refusal(HttpStatus.CONFLICT, DRIVE_BASE_GONE, 'The version this append was built on is gone; write the file again.');
         const keep = input.replaceTail ? input.replaceTail.idx : base.chunkCount;
@@ -850,13 +875,15 @@ export class DriveService {
       }
 
       const size = chunks.reduce((sum, c) => sum + c.size, 0);
-      if (mode === 'CONTINUE') {
+      if (mode === 'CONTINUE' || fresh) {
+        // A new file in Trash: whatever the mode, the commit's content fills its empty first version.
         await tx.driveVersionChunk.deleteMany({ where: { versionId: current.id } });
         await insertChunks(tx, ownerId, current.id, chunks);
         await tx.driveVersion.update({
           where: { id: current.id },
           data: { sizeBytes: BigInt(size), chunkCount: chunks.length, ...versionWriterFields(writer) },
         });
+        if (fresh) await tx.driveTrashGroup.update({ where: { id: fresh.groupId }, data: { itemCount: 1, sizeBytes: BigInt(size) } });
         return this.finishCommit(tx, ownerId, entry, writer, now, BigInt(size), input, {
           entryId: entry.id, versionId: current.id, newVersion: false, replacedVersionId: null, trashGroupId: null, sizeBytes: size, seq: 0,
         });
@@ -909,11 +936,10 @@ export class DriveService {
 
   /**
    * Rename and/or move a live entry (§3.2, §4.1). A taken name is refused 409 DRIVE_NAME_TAKEN unless `replace` (the
-   * door's rename, a write-then-`os.replace` save): then a file onto a file moves to the target's place keeping its own
-   * id, so a handle still writing it commits there (`open a.tmp; write; rename a.tmp a.txt; close` ends with a.txt
-   * holding the bytes), and the file it replaced goes to Trash whole, its versions with it, for the owner to restore. A
-   * folder moved into itself, or below itself, is refused 409 DRIVE_MOVE_INTO_ITSELF; a folder move takes the account's
-   * lock, so no two moves can interleave into a cycle (§1.4).
+   * door's rename, a write-then-`os.replace` save): then a file onto a file is renameOnto, which answers the target, its
+   * id kept. A folder moved into itself, or below itself, is refused 409 DRIVE_MOVE_INTO_ITSELF; a folder move takes the
+   * account's lock, so no two moves can interleave into a cycle (§1.4). So does a replacing rename, before any row lock:
+   * when a target appears only after the unlocked look, the transaction runs again with the lock.
    */
   async rename(
     ownerId: string,
@@ -921,69 +947,92 @@ export class DriveService {
     input: { name?: string; parentId?: string; writer?: DriveWriter; replace?: boolean },
   ): Promise<DriveEntryView> {
     const newName = input.name === undefined ? undefined : assertDriveName(input.name);
-    const outcome = await withTransactionRetry(this.prisma, async (tx) => {
-      await bound(tx);
-      const seen = await tx.driveEntry.findFirst({ where: { id, ownerId } });
-      if (!seen || seen.trashedAt) throw notFound();
-      if (seen.parentId === null) throw refusal(HttpStatus.CONFLICT, DRIVE_ROOT, 'The root folder cannot be renamed or moved.');
-      const moving = input.parentId !== undefined && input.parentId !== seen.parentId;
-      if (moving && seen.kind === 'FOLDER') await lockAccount(tx, ownerId);
-      // Folders before files: the destination first, as a folder trash locks its folders before it marks any file.
-      const dest = await lockLiveFolder(tx, ownerId, moving ? input.parentId! : seen.parentId);
-      const locked = await tx.$queryRaw<Array<{ id: string }>>`
-        SELECT "id" FROM "drive_entry"
-         WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid AND "trashed_at" IS NULL FOR UPDATE`;
-      if (!locked.length) throw notFound();
-      const entry = await tx.driveEntry.findUniqueOrThrow({ where: { id } });
-      if (moving && entry.kind === 'FOLDER' && (await isWithin(tx, ownerId, dest.id, entry.id))) {
-        throw refusal(HttpStatus.CONFLICT, DRIVE_MOVE_INTO_ITSELF, 'A folder cannot be moved into itself.');
+    let lockFirst = false;
+    for (;;) {
+      const outcome = await withTransactionRetry(this.prisma, async (tx) => {
+        await bound(tx);
+        const seen = await tx.driveEntry.findFirst({ where: { id, ownerId } });
+        if (!seen || seen.trashedAt) throw notFound();
+        if (seen.parentId === null) throw refusal(HttpStatus.CONFLICT, DRIVE_ROOT, 'The root folder cannot be renamed or moved.');
+        const moving = input.parentId !== undefined && input.parentId !== seen.parentId;
+        const replacing = input.replace === true && seen.kind === 'FILE' && (lockFirst || await tx.driveEntry.count({
+          where: { ownerId, parentId: moving ? input.parentId! : seen.parentId, name: newName ?? seen.name, kind: 'FILE', trashedAt: null, NOT: { id } },
+        }) > 0);
+        const locked = (moving && seen.kind === 'FOLDER') || replacing;
+        if (locked) await lockAccount(tx, ownerId);
+        // Folders before files: the destination first, as a folder trash locks its folders before it marks any file.
+        const dest = await lockLiveFolder(tx, ownerId, moving ? input.parentId! : seen.parentId);
+        const rows = await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT "id" FROM "drive_entry"
+           WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid AND "trashed_at" IS NULL FOR UPDATE`;
+        if (!rows.length) throw notFound();
+        const entry = await tx.driveEntry.findUniqueOrThrow({ where: { id } });
+        if (moving && entry.kind === 'FOLDER' && (await isWithin(tx, ownerId, dest.id, entry.id))) {
+          throw refusal(HttpStatus.CONFLICT, DRIVE_MOVE_INTO_ITSELF, 'A folder cannot be moved into itself.');
+        }
+        const name = newName ?? entry.name;
+        if (dest.id === entry.parentId && name === entry.name) return { entry, seq: null };
+        const writer = await checkedWriter(tx, ownerId, input.writer ?? OWNER_WRITER);
+        const now = new Date();
+        const target = await tx.driveEntry.findFirst({ where: { ownerId, parentId: dest.id, name, trashedAt: null, NOT: { id } } });
+        if (target) {
+          if (!input.replace || target.kind !== 'FILE' || entry.kind !== 'FILE') throw nameTaken(name);
+          if (!locked) return { again: true as const };
+          return this.renameOnto(tx, ownerId, entry, target, writer, now);
+        }
+        const updated = await tx.driveEntry.update({
+          where: { id },
+          data: { parentId: dest.id, name, updatedAt: now, ...lastWriterFields(writer, now) },
+        });
+        const changes: ChangeRow[] = moving
+          ? [{ entryId: id, parentId: entry.parentId, op: 'REMOVE' }, { entryId: id, parentId: dest.id, op: 'UPSERT' }]
+          : [{ entryId: id, parentId: dest.id, op: 'UPSERT' }];
+        const seq = await recordChanges(tx, ownerId, changes);
+        return { entry: { ...updated, seq: BigInt(seq) }, seq };
+      }, loggedRetry(this.logger, 'drive.rename', { transaction: TRANSACTION }));
+      if ('again' in outcome) {
+        lockFirst = true;
+        continue;
       }
-      const name = newName ?? entry.name;
-      if (dest.id === entry.parentId && name === entry.name) return { entry, seq: null };
-      const writer = await checkedWriter(tx, ownerId, input.writer ?? OWNER_WRITER);
-      const now = new Date();
-      const target = await tx.driveEntry.findFirst({ where: { ownerId, parentId: dest.id, name, trashedAt: null, NOT: { id } } });
-      if (target) {
-        if (!input.replace || target.kind !== 'FILE' || entry.kind !== 'FILE') throw nameTaken(name);
-        return this.renameOnto(tx, ownerId, entry, target, dest.id, name, writer, now);
-      }
-      const updated = await tx.driveEntry.update({
-        where: { id },
-        data: { parentId: dest.id, name, updatedAt: now, ...lastWriterFields(writer, now) },
-      });
-      const changes: ChangeRow[] = moving
-        ? [{ entryId: id, parentId: entry.parentId, op: 'REMOVE' }, { entryId: id, parentId: dest.id, op: 'UPSERT' }]
-        : [{ entryId: id, parentId: dest.id, op: 'UPSERT' }];
-      const seq = await recordChanges(tx, ownerId, changes);
-      return { entry: { ...updated, seq: BigInt(seq) }, seq };
-    }, loggedRetry(this.logger, 'drive.rename', { transaction: TRANSACTION }));
-    this.announce(ownerId, outcome.seq);
-    return entryView(outcome.entry);
+      this.announce(ownerId, outcome.seq);
+      return entryView(outcome.entry);
+    }
   }
 
   /**
-   * A file renamed onto a live file (§3.1, §3.2): the source keeps its id and takes the target's place; the target goes to
-   * Trash as an entry, in a DELETE group of its own, with every version it had. Handles are bound to entry ids, so a
-   * handle still writing the source commits into the file now at the target's path, and one still writing the target
-   * commits into it in Trash: nothing either was writing is lost, and the owner can restore what was replaced.
+   * A file renamed onto a live file (§3.2), under the account's lock. The **target** keeps its id: the source's current
+   * version becomes its current version, chunk rows and all, and the target's previous one goes to Trash in a VERSION
+   * group, so a share link pinned to it still serves it. The source entry is removed outright, not put in Trash: its
+   * content lives on as the target's version, and so do its replaced versions, which move to the target with it. What
+   * still names the source moves to the target or lets go of it first: its commit answers (a retried commit is answered,
+   * never applied twice), its stagings (kept, bound to no entry). Its name and folder are kept in drive_removed_entry, so
+   * a handle still writing the source commits as a new file in Trash named after it (§3.1, commit).
    */
-  private async renameOnto(tx: Tx, ownerId: string, source: EntryRow, target: EntryRow, dest: string, name: string, writer: DriveWriter, now: Date) {
+  private async renameOnto(tx: Tx, ownerId: string, source: EntryRow, target: EntryRow, writer: DriveWriter, now: Date) {
     await tx.$queryRaw`SELECT "id" FROM "drive_entry" WHERE "id" = ${target.id}::uuid AND "owner_id" = ${ownerId}::uuid FOR UPDATE`;
-    const groupId = await deleteGroupFor(tx, ownerId, target, writer, now, null);
-    // The target leaves the name first, so the live-name index lets the source take it.
-    await tx.driveEntry.update({
-      where: { id: target.id },
-      data: { trashedAt: now, trashGroupId: groupId, trashTop: true, updatedAt: now },
-    });
-    await tx.driveTrashGroup.update({ where: { id: groupId }, data: { lastAddedAt: now, itemCount: 1, sizeBytes: target.sizeBytes } });
+    const replaced = await tx.driveVersion.findUniqueOrThrow({ where: { id: target.currentVersionId! } });
+    const content = await tx.driveVersion.findUniqueOrThrow({ where: { id: source.currentVersionId! } });
+    await replaceVersion(tx, ownerId, target, replaced, writer, now);
+    await tx.driveVersion.updateMany({ where: { ownerId, entryId: source.id }, data: { entryId: target.id } });
+    await tx.driveVersion.update({ where: { id: content.id }, data: { handleId: null } });
     const updated = await tx.driveEntry.update({
-      where: { id: source.id },
-      data: { parentId: dest, name, updatedAt: now, ...lastWriterFields(writer, now) },
+      where: { id: target.id },
+      data: {
+        currentVersionId: content.id, sizeBytes: content.sizeBytes, mtime: source.mtime, updatedAt: now, ...lastWriterFields(writer, now),
+      },
     });
-    const changes: ChangeRow[] = [{ entryId: target.id, parentId: target.parentId, op: 'REMOVE' }];
-    if (source.parentId !== dest) changes.push({ entryId: source.id, parentId: source.parentId, op: 'REMOVE' });
-    changes.push({ entryId: source.id, parentId: dest, op: 'UPSERT' });
-    const seq = await recordChanges(tx, ownerId, changes);
+    await tx.driveCommit.updateMany({ where: { ownerId, entryId: source.id }, data: { entryId: target.id } });
+    await tx.driveStaging.updateMany({ where: { ownerId, entryId: source.id }, data: { entryId: null } });
+    await tx.driveRemovedEntry.upsert({
+      where: { ownerId_entryId: { ownerId, entryId: source.id } },
+      create: { ownerId, entryId: source.id, parentId: source.parentId!, name: source.name, removedAt: now },
+      update: { parentId: source.parentId!, name: source.name, removedAt: now, successorId: null },
+    });
+    await tx.driveEntry.delete({ where: { id: source.id } });
+    const seq = await recordChanges(tx, ownerId, [
+      { entryId: source.id, parentId: source.parentId, op: 'REMOVE' },
+      { entryId: target.id, parentId: target.parentId, op: 'UPSERT' },
+    ]);
     return { entry: { ...updated, seq: BigInt(seq) }, seq };
   }
 
@@ -1473,6 +1522,41 @@ async function restoreAsCurrent(tx: Tx, ownerId: string, version: VersionRow, wr
   });
   const seq = await recordChanges(tx, ownerId, [{ entryId: entry.id, parentId: entry.parentId, op: 'UPSERT' }]);
   return { entry: { ...updated, seq: BigInt(seq) }, seq };
+}
+
+/**
+ * A new file in Trash named `name`, in folder `parentId` when that folder is still there (live or in Trash), else in the
+ * root, in a DELETE group of its own, with an empty first version written by `handleId`: where a handle still writing a
+ * file a replacing rename removed commits (§3.2). Its commit fills the version.
+ */
+async function createInTrash(
+  tx: Tx,
+  ownerId: string,
+  parentId: string,
+  name: string,
+  handleId: string | null,
+  writer: DriveWriter,
+  now: Date,
+): Promise<{ entryId: string; groupId: string }> {
+  const folder = await tx.driveEntry.findFirst({ where: { id: parentId, ownerId, kind: 'FOLDER' }, select: { id: true } });
+  const parent = folder?.id ?? (await rootIn(tx, ownerId)).id;
+  const group = await tx.driveTrashGroup.create({
+    data: {
+      id: uuidv7(), ownerId, kind: 'DELETE', folderId: parent, folderPath: await pathOf(tx, ownerId, parent),
+      createdAt: now, lastAddedAt: now, closedAt: now, actorKind: writer.kind, actorSessionId: writer.sessionId ?? null,
+      actorRunnerId: writer.runnerId ?? null, itemCount: 1,
+    },
+  });
+  const entryId = uuidv7();
+  const versionId = uuidv7();
+  await tx.driveEntry.create({
+    data: {
+      id: entryId, ownerId, parentId: parent, kind: 'FILE', name, currentVersionId: versionId, mtime: now, createdAt: now,
+      updatedAt: now, trashedAt: now, trashGroupId: group.id, trashTop: true, ...lastWriterFields(writer, now),
+    },
+  });
+  await tx.driveVersion.create({ data: { id: versionId, ownerId, entryId, createdAt: now, handleId, ...versionWriterFields(writer) } });
+  return { entryId, groupId: group.id };
 }
 
 /**

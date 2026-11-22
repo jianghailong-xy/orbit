@@ -386,10 +386,36 @@ func (fs *FS) Rename(cancel <-chan struct{}, input *fuse.RenameIn, oldName strin
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 	fs.forgetChildLocked(source.parentID, source.name)
+	if e.ID == source.id {
+		fs.upsertLocked(e)
+		fs.rememberChildLocked(e)
+		return fuse.OK
+	}
+	// Onto a file (§3.2): the target keeps its id and takes the source's content as a version, and the source entry is
+	// gone. The kernel holds the source's inode at the target's name now, so that inode is the target's from here, as
+	// rename(2) leaves it. A handle still writing the source stays bound to the source's id, whose commit the door lands
+	// in Trash: then the source's node stays the source's, and the kernel is told to forget the name, after this answer.
 	if target != nil {
-		// The replaced file is in Trash whole; a handle still writing it commits there (§3.1).
 		fs.forgetChildLocked(target.parentID, target.name)
-		fs.forgetEntryLocked(target)
+	}
+	if source.wf == nil {
+		if old := fs.byID[e.ID]; old != nil {
+			// The target's old inode: the kernel dropped it from the name, and no path reaches it again.
+			old.gone = true
+			delete(fs.byID, e.ID)
+			fs.dropIfUnusedLocked(old)
+		}
+		delete(fs.byID, source.id)
+		source.id = e.ID
+		fs.inoByID[e.ID] = source.ino
+		fs.byID[e.ID] = source
+	} else {
+		source.gone = true
+		if fs.byID[source.id] == source {
+			delete(fs.byID, source.id)
+		}
+		name := kernelName{newParent.ino, newName}
+		fs.go_(func() { fs.notify(nil, []kernelName{name}) })
 	}
 	fs.upsertLocked(e)
 	fs.rememberChildLocked(e)
