@@ -233,6 +233,9 @@ services:
       # Optional: Claude Code on the account owner's own Codex login pool, through the same gateway (docs/configuration.md).
       # `true` turns it on; anything else leaves every pool's engines and dispatch environment as they were.
       ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY: "${ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY:-}"
+      # Optional: tell runners this deployment serves session-release/v1 (docs/configuration.md). Off unless `on`; turn it
+      # on only once every apiserver replica serves it, and off before going back to a release that does not.
+      ORBIT_SESSION_RELEASE_V1: "${ORBIT_SESSION_RELEASE_V1:-}"
       # Optional: hosts besides api.openai.com that gateway may call (comma-separated; public https only, no redirects).
       ORBIT_GATEWAY_UPSTREAM_HOSTS: "${ORBIT_GATEWAY_UPSTREAM_HOSTS:-}"
       # Optional: the proxies in front of the gateway (a CDN such as Cloudflare, a load balancer, a TLS proxy on the host),

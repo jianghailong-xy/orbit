@@ -1583,6 +1583,10 @@ export interface RunnerHeartbeatResponse {
    *  which a runner draining for an update sends for the sessions whose engine is running a turn on it.
    *  Absent from an older server, to which such a runner sends no claim while it drains. */
   drainScopedClaims?: boolean;
+  /** This server's operator says every replica serves SESSION_RELEASE_V1 (the switch ORBIT_SESSION_RELEASE_V1): a runner
+   *  may declare it on its turn-complete and release reports. Absent from an older server and while the switch is
+   *  off; a runner that does not read it on its latest answer declares nothing. */
+  sessionReleaseV1?: boolean;
   /** The owner's Later (ISO time): stop draining for the waiting release now and put it off until
    *  then, when it waits for idle again under a fresh deferral limit. Set once per request and
    *  cleared as it is handed over, like `checkSelfUpdate`; only a runner that declares
@@ -3872,6 +3876,9 @@ export interface TurnCompleteRequest {
   branchCommits?: BranchCommit[] | null;
   /** The worktree's actual current HEAD branch (see SessionLiveState.worktreeBranch). */
   worktreeBranch?: string;
+  /** SESSION_RELEASE_V1, declared in the body: how a runner on the runner link declares it per request, since the link
+   *  carries no request header. The same declaration as the capabilities header. */
+  releaseProtocol?: string;
 }
 
 /**
@@ -4097,6 +4104,8 @@ export interface RunReleaseRequest extends Omit<RunFinalizeRequest, 'status' | '
    * for is a stop, not a failure.
    */
   cutOffTurnOutcome?: 'FAILED';
+  /** SESSION_RELEASE_V1, declared in the body (see TurnCompleteRequest.releaseProtocol). */
+  releaseProtocol?: string;
 }
 
 /** @deprecated Compatibility type alias; use {@link RunFinalizeRequest}. */

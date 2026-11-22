@@ -580,7 +580,7 @@ import { sanitizeWorkspaceWrite } from './runner-agents.controller';
 import { workspaceWriteCardInput } from './runner-workspace-approval';
 import { turnOutcomeOf } from './turn-outcome';
 import { carryingTurnOf, recordCarryingTurnOutcome } from '../common/carrying-turn';
-import { readRelease } from './run-release';
+import { declaresSessionRelease, readRelease, sessionReleaseOffered } from './run-release';
 import { authorizeManagedRunnerInstance, type ManagedRunnerInstance } from '../managed-runners/managed-runner-instance';
 import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/managed-runner-gate';
 import {
@@ -2204,6 +2204,7 @@ export class RunnerApiController {
       const cursorKeyChecks = await cursorKeyCheckRelay.takeAnywhere(runnerId);
       return quietHeartbeatAnswer(row, {
         cursorKeyChecks, linkHints: this.linkHintsOf(runnerId, row, supervised), draining: dto?.draining === true,
+        sessionRelease: sessionReleaseOffered(),
       });
     }
     // The full reconcile reads the runner row the guard would have read; the beat statement admitted it.
@@ -2964,6 +2965,9 @@ export class RunnerApiController {
       // To a draining beat: this server takes a claim scoped to named sessions (GET sessions/claim?drainScope=),
       // which is what a runner draining for an update claims with. A runner that sees no such word sends none.
       ...(dto?.draining === true ? { drainScopedClaims: true } : {}),
+      // While the operator's switch says every replica serves it (run-release.ts sessionReleaseOffered): a runner may
+      // report a failed turn and its release as two reports. Absent, a runner declares nothing.
+      ...(sessionReleaseOffered() ? { sessionReleaseV1: true } : {}),
       postponeSelfUpdateUntil,
       selfUpdateNow,
       ...(clearBrowserProfile ? { clearBrowserProfile } : {}),
@@ -7161,7 +7165,8 @@ export class RunnerApiController {
     await this.assertEngineSessionById(sessionId, (runner as { ownerId?: string }).ownerId);
     // Which protocol this report speaks, by what the runner declares on it (SESSION_RELEASE_V1, plan step 6.1): under
     // the new one a failed turn is the turn's outcome and the release is a report of its own (`release` below).
-    const releasesSeparately = runnerSupportsCapability(capabilities, SESSION_RELEASE_V1);
+    const releasesSeparately = declaresSessionRelease(
+      runnerSupportsCapability(capabilities, SESSION_RELEASE_V1), body, SESSION_RELEASE_V1);
     // Stripped once, at the edge, rather than at each write: `result` alone reaches the session's
     // `error`, a turn's `deliveryFailureReason` and two different task comments below, and the
     // worktree snapshot reaches two rows more — a per-write strip is a list to keep in sync, which
@@ -10109,7 +10114,7 @@ export class RunnerApiController {
   ): Promise<RunFinalizeResponse> {
     // Whose session this is, before anything about the request is judged (finalize asks it again).
     await this.assertEngineSessionById(sessionId, (runner as { ownerId?: string }).ownerId);
-    if (!runnerSupportsCapability(capabilities, SESSION_RELEASE_V1)) {
+    if (!declaresSessionRelease(runnerSupportsCapability(capabilities, SESSION_RELEASE_V1), body, SESSION_RELEASE_V1)) {
       throw new BadRequestException(`a release report is part of ${SESSION_RELEASE_V1}, which this request does not declare`);
     }
     const cutOff = (body as { cutOffTurnOutcome?: unknown } | undefined)?.cutOffTurnOutcome;
