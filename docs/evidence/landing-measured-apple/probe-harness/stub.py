@@ -13,6 +13,7 @@
 #            Revert asks first, then `POST …/setting-changes/c1/revert` puts the command back
 #   T1, L1   ④ the task exempt from the landing check, on its page (Remove exemption writes
 #            `landingCheckExempt: false`) and in its landing's check list (Skipped, TASK_EXEMPT)
+#   T2       ④ an exempt task with no landing yet, its exemption approved on a card (record c4)
 #
 # `POST /__reset` puts everything back; `GET /__log` is the request log with each written body as JSON
 # (sorted keys). Anything not served is a 404 and is logged. All data is made up.
@@ -53,6 +54,7 @@ TASKS = ["Rotate the staging database password", "Move cron jobs off the old VM"
          "Delete unused staging buckets", "Restart the staging services",
          "Revoke the old password", "Write the rotation runbook"]
 EXEMPT_REASON = "Only moves cron entries; the landing check needs a database this task cannot reach."
+EXEMPT_REASON_2 = "Restarts services only; nothing the landing check builds changes."
 
 # ① The coordinator's request with no line (P-M2): Automatic, at most 3, no merge check.
 START_REQUEST = {
@@ -163,9 +165,13 @@ def reset():
                        {"exempt": True, "reason": EXEMPT_REASON}, 20, reason=EXEMPT_REASON, task="T1",
                        revertible=True),
                 change("c3", "LANDING_CHECK", "OWNER", MERGE, CMD, 2 * DAY),
+                # ④ T2's exemption, approved on a card 7 minutes ago: the badge reads the record's origin.
+                change("c4", "TASK_LANDING_CHECK_EXEMPT", "CARD", {"exempt": False, "reason": None},
+                       {"exempt": True, "reason": EXEMPT_REASON_2}, 7, reason=EXEMPT_REASON_2, task="T2"),
             ],
         },
         exempt=True,
+        exempt2=True,
         writes=[])
 
 
@@ -293,6 +299,20 @@ def task_item():
                                          "finishedAt": ago(3), "targetRef": "refs/heads/" + BRANCH,
                                          "waitMs": 30_000, "blockingReason": None, "liveness": None,
                                          "runnerName": "orbit-develop"}}}
+
+
+def task_item_2():
+    """④ an exempt task with no landing yet: its page still has the Landing section, for the exemption."""
+    exempt = STATE["exempt2"]
+    return {"id": "T2", "publicId": "T2", "title": "Restart the staging services", "status": "OPEN",
+            "projectId": "P3", "description": "Restart the staging services on the new password.",
+            "createdAt": ago(60), "updatedAt": ago(3), "completionCriterion": "EVIDENCE_JUDGMENT",
+            "project": {"id": "P3", "title": TITLE, "status": "OPEN"},
+            "assignee": {"id": "a1", "name": "orbit-develop"},
+            "landingCheckExempt": exempt,
+            "landingCheckExemptReason": EXEMPT_REASON_2 if exempt else None,
+            "landingCheckExemptBySessionId": "C3" if exempt else None,
+            "landingCheckExemptOwnerSetAt": None}
 
 
 def entry(kind, text, minutes, *, check=None, phase=None, data=None):
@@ -433,7 +453,10 @@ class Handler(BaseHTTPRequestHandler):
 
         if parts in (["api", "tasks", "T1"], ["api", "tasks", "T1", "row"]):
             return self.send(200, task_item())
-        if parts[:3] == ["api", "tasks", "T1"] and parts[3:] in (["comments"], ["sessions"], ["evidence"]):
+        if parts in (["api", "tasks", "T2"], ["api", "tasks", "T2", "row"]):
+            return self.send(200, task_item_2())
+        if parts[:2] == ["api", "tasks"] and parts[2:3] in (["T1"], ["T2"]) \
+                and parts[3:] in (["comments"], ["sessions"], ["evidence"]):
             return self.send(200, [])
         if parts == ["api", "tasks", "page"]:
             return self.send(200, {"items": [], "nextCursor": None})
@@ -528,6 +551,10 @@ class Handler(BaseHTTPRequestHandler):
             if body.get("landingCheckExempt") is False:
                 STATE["exempt"] = False
             return self.send(200, task_item())
+        if parts == ["api", "tasks", "T2"]:
+            if body.get("landingCheckExempt") is False:
+                STATE["exempt2"] = False
+            return self.send(200, task_item_2())
         return self.send(409, {"statusCode": 409, "code": "PROBE_PRESSES_NOTHING",
                                "message": "the probe does not run anything"})
 
