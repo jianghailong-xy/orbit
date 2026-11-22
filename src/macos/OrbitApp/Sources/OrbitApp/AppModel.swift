@@ -1475,6 +1475,9 @@ final class AppModel {
                 }
             }
         case .sessionRow:
+            if let console = consoleRegistry?.peek(ev.sessionId) {
+                Task { await console.refreshPermissionMode() }
+            }
             if let summary = ev.payload(ControlSessionSummary.self) {
                 // Progress comes from the sidebar read rather than the session summary. Include
                 // a former member too, so removing its relation refreshes that project at once.

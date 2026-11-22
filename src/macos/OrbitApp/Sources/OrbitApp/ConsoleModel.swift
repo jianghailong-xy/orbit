@@ -534,11 +534,39 @@ final class ConsoleModel {
     private var modelSelectionRevision = ModelSelectionRevision()
     /// The floor until `loadContext` adopts the session's real posture — the same value the server
     /// would resolve for a session that stores none, so the pill can't flash a mode nobody chose.
-    var permissionMode = AgentDefaults.defaultPermissionMode
+    private(set) var permissionMode = AgentDefaults.defaultPermissionMode
+    private(set) var permissionModeUpdating = false
+    private var actualPermissionMode: String?
+    private var actualPermissionModeAt: String?
+    private var permissionModeChanges: [SessionPermissionModeChange] = []
+    private var permissionIntentUpdatedAt: String?
+
+    var modeDisplay: SessionModeDisplay {
+        SessionModeDisplay(intent: permissionMode, actual: actualPermissionMode,
+                           beforeStart: isDraft || sessionStatus == .pending,
+                           latestChange: permissionModeChanges.last,
+                           runsAsRoot: runnerRunsAsRoot == true,
+                           autoStartsInDefault: autoStartHint != nil)
+    }
+
+    var autoStartHint: String? {
+        SessionModeDisplay.autoStartHint(model: modelID, engine: engine, provider: provider,
+                                         configured: configuredProviders, catalog: modelCatalog)
+    }
+
+    var permissionModeCards: [DeliveredDecisionCard] {
+        permissionModeChanges.map {
+            DeliveredDecisionCard(kind: .permissionModeChange($0), placement: .at($0.at))
+        }
+    }
+
+    func modeChangeShowsGap(_ change: SessionPermissionModeChange) -> Bool {
+        change == permissionModeChanges.last && change.toMode == actualPermissionMode && modeDisplay.reason != nil
+    }
     /// True once the user picks a Mode themselves. Only an edited pick is remembered as the account
     /// default (web parity — `modeWasEdited`): the untouched seed is the app floor, and writing that
     /// back would erase what Settings actually asked for.
-    var permissionModeWasEdited = false
+    private var permissionModeWasEdited = false
     /// The account's synced `defaultPermissionMode` and its write-back, injected by `ConsoleRegistry`
     /// so a console needn't know about `AppModel`. A closure, not a value: the `user` payload primes
     /// asynchronously, so a console built before it lands must still read the current one.
@@ -1346,16 +1374,6 @@ final class ConsoleModel {
         // list ("Claude Opus 5") until the catalogue lands and settles on "Opus 5".
         self.modelCatalog = modelCatalog
         self.modelID = defaultModel
-        // A new session starts at the app floor (Auto), clamped when this model can't run it —
-        // web parity (WorkspaceView's `pickedModeSeed`). Deliberately NOT read off the agent:
-        // migration 0094 dropped the workspace's mode column and moved the seed to the account,
-        // so the field the wire still carries is always nil — which seeded every draft "Don't Ask".
-        let seed = AgentDefaults.defaultPermissionMode
-        self.permissionMode = providerCapabilitiesResolved
-            ? AgentDefaults.clampPermissionMode(
-                seed, for: defaultModel, engine: engine, provider: provider,
-                configured: configuredProviders, catalog: modelCatalog)
-            : seed
         // The account's last-picked effort is the interactive default. `agent.effort` is the legacy
         // workspace default retained for accounts that have never written that preference. `??` in
         // the resolver deliberately preserves an explicit account "" (Default).
@@ -1394,7 +1412,8 @@ final class ConsoleModel {
         sharedPools = draft.sharedPools
         modelID = session.model ?? AgentDefaults.defaultModel(
             engine: engine, provider: provider, catalog: modelCatalog, configured: configuredProviders)
-        permissionMode = PermissionMode(rawValue: session.permissionMode ?? "") ?? draft.permissionMode
+        permissionMode = draft.permissionMode
+        adoptPermissionMode(session)
         effort = Effort(rawValue: session.effort ?? draft.effort.rawValue) ?? draft.effort
         fastMode = session.fastMode ?? draft.fastMode
         if ComposerLogic.isLive(status: session.effectiveRunStatus), session.model != nil {
@@ -1629,6 +1648,13 @@ final class ConsoleModel {
                                 Task { [weak self] in await self?.refreshQueuedTurns() }
                                 reconnectPolicy.noteHealthy()
                                 continue
+                            }
+                            if ev.type == .system {
+                                switch ev.payload["subtype"]?.stringValue {
+                                case "agent_tools", "permission_mode_corrected":
+                                    Task { [weak self] in await self?.refreshPermissionMode() }
+                                default: break
+                                }
                             }
                             foldQueuedBackIntoComposer(before: ev)   // salvage queued text before an interrupt drops it
                             reducer.apply(ev)
@@ -2579,11 +2605,6 @@ final class ConsoleModel {
                 runnerSnapshotLoaded: runnerSnapshotLoaded,
                 configuredProvidersLoaded: configuredProvidersLoaded)
         }
-        if providerCapabilitiesResolved {
-            permissionMode = AgentDefaults.clampPermissionMode(
-                permissionMode, for: modelID, engine: engine, provider: provider,
-                configured: configuredProviders, catalog: modelCatalog)
-        }
         // OpenCode variants are model-defined, so this is the first point where a stored
         // value can be validated against the runner catalog.
         effort = AgentDefaults.normalizedEffort(
@@ -2627,8 +2648,7 @@ final class ConsoleModel {
                 engine: engine, provider: provider, catalog: modelCatalog, configured: configuredProviders,
                 runtimeDefaults: runtimeDefaultModels)
         }
-        permissionMode = AgentDefaults.resolvePermissionMode(
-            session: session.permissionMode, accountDefault: accountDefaultPermissionMode())
+        adoptPermissionMode(session)
         effort = AgentDefaults.normalizeEffort(
             Effort(rawValue: session.effort ?? session.agent?.effort ?? "") ?? .default,
             for: engine)
@@ -2640,10 +2660,40 @@ final class ConsoleModel {
         }
     }
 
+    private func adoptPermissionMode(_ session: Session) {
+        if !permissionModeUpdating, !permissionModeWasEdited,
+           (session.updatedAt ?? "") >= (permissionIntentUpdatedAt ?? "") {
+            permissionMode = AgentDefaults.resolvePermissionMode(
+                session: session.permissionMode, accountDefault: accountDefaultPermissionMode())
+            permissionIntentUpdatedAt = session.updatedAt
+            if let baseline = syncedConfig {
+                syncedConfig = (baseline.model, permissionMode.rawValue, baseline.effort, baseline.fastMode)
+            }
+        }
+        // A list refresh may arrive before the detail refresh, or finish after a newer one.
+        guard (session.actualPermissionModeAt ?? "") >= (actualPermissionModeAt ?? "") else { return }
+        let changed = session.actualPermissionModeAt != actualPermissionModeAt
+        actualPermissionMode = session.actualPermissionMode
+        actualPermissionModeAt = session.actualPermissionModeAt
+        if let changes = session.permissionModeChanges {
+            permissionModeChanges = changes
+        } else if changed {
+            Task { [weak self] in await self?.refreshPermissionMode() }
+        }
+    }
+
+    func refreshPermissionMode() async {
+        if owedWhileHidden("permission-mode", { await $0.refreshPermissionMode() }) { return }
+        if let session = try? await api.session(sessionID) {
+            adoptPermissionMode(session)
+        }
+    }
+
     /// Adopt a fresh list/detail snapshot too. The app's control-plane-driven list refresh carries
     /// heartbeat-derived capability changes, so an open console needn't keep an older denial.
     func adoptServerSnapshot(_ session: Session?) {
         guard let session, session.id == sessionID else { return }
+        adoptPermissionMode(session)
         conversationCreatedAt = session.createdAt
         // A list row carries no flag, so only the detail moves this; it never goes back to false.
         if let agent = session.agent, agent.cloneState != nil {
@@ -2745,18 +2795,22 @@ final class ConsoleModel {
 
     /// Record an explicit picker action separately from the selected string. Async context loads
     /// must never overwrite it, even when the user returns to the same value they started with.
-    @discardableResult
-    func selectModel(_ model: String) -> Bool {
+    func selectModel(_ model: String) {
         modelID = model
         modelSelectionRevision.markUserEdit()
-        let clamped = providerCapabilitiesResolved
-            ? AgentDefaults.clampPermissionMode(
-                permissionMode, for: model, engine: engine, provider: provider,
-                configured: configuredProviders, catalog: modelCatalog)
-            : permissionMode
-        let changedPermissionMode = clamped != permissionMode
-        permissionMode = clamped
-        return changedPermissionMode
+    }
+
+    func selectPermissionMode(_ mode: PermissionMode) async {
+        guard !permissionModeUpdating else { return }
+        guard isLive else {
+            permissionMode = mode
+            permissionModeWasEdited = true
+            return
+        }
+        permissionModeUpdating = true
+        await applyConfig(permissionMode: mode.rawValue)
+        permissionModeUpdating = false
+        await refreshPermissionMode()
     }
 
     /// What the pickers judge this draft's or session's engine and credentials by: the account's keys
@@ -2810,9 +2864,8 @@ final class ConsoleModel {
 
     /// Move an existing session to another provider on the same runtime. The model comes along only
     /// when the new provider offers it (two Anthropic accounts share the runtime's model space; an
-    /// endpoint with a list of its own does not), and mode/effort are re-clamped to what that pair
-    /// accepts — the same follow-on a model change makes. Live pushes it now; ended holds it for
-    /// the resume.
+    /// endpoint with a list of its own does not). Effort follows the new model. A live session
+    /// pushes the switch now; an ended one holds it for the resume.
     ///
     /// `account`, when the pick was one of the engine's accounts listed under it rather than the
     /// engine's own row: the switch lands the session there (`ConfigUpdateRequest.account`) —
@@ -2844,7 +2897,7 @@ final class ConsoleModel {
         recordedEngine = engine
         // Each credential owns its model space on the engine, so carry the running model only when the
         // new one offers it (two Anthropic accounts do; a third-party endpoint with its own list does
-        // not) and otherwise take that one's default. Mode and effort follow the model.
+        // not) and otherwise take that one's default. Effort follows the model.
         let offersCurrent = AgentDefaults
             .models(engine: engine, provider: slug, catalog: modelCatalog, configured: configuredProviders)
             .contains { $0.id == modelID }
@@ -2852,11 +2905,6 @@ final class ConsoleModel {
             ? modelID
             : AgentDefaults.defaultModel(engine: engine, provider: slug, catalog: modelCatalog,
                                          configured: configuredProviders, runtimeDefaults: runtimeDefaultModels)
-        let nextMode = providerCapabilitiesResolved
-            ? AgentDefaults.clampPermissionMode(permissionMode, for: nextModel, engine: engine, provider: slug,
-                                                configured: configuredProviders,
-                                                catalog: modelCatalog)
-            : permissionMode
         let nextEffort = AgentDefaults.normalizedEffort(effort, for: engine, provider: slug, model: nextModel,
                                                         catalog: modelCatalog,
                                                         configured: configuredProviders)
@@ -2880,7 +2928,6 @@ final class ConsoleModel {
             modelID = nextModel
             modelSelectionRevision.markUserEdit()
         }
-        permissionMode = nextMode
         effort = nextEffort
         guard isLive else {
             pendingResumeProvider = slug
@@ -2892,15 +2939,14 @@ final class ConsoleModel {
         pendingResumeProvider = nil
         pendingResumeAccount = nil
         pendingResumeFrom = nil
-        await applyConfig(model: nextModel, permissionMode: nextMode.rawValue,
+        await applyConfig(model: nextModel,
                           effort: nextEffort.rawValue, provider: slug, account: account)
     }
 
     /// Pick the engine and a credential of it for this draft: an engine on the new-session hero, landing
     /// where it says, or a credential of the draft's engine in the composer's Provider menu. The model
     /// space is the pair's, so the model can't survive the switch — it is re-seeded from the workspace's
-    /// lastModel when the incoming pair is the one it last ran on, else the pair's default, and the mode/effort pills are re-clamped to what it
-    /// accepts. The seed is marked pristine again on purpose: a model chosen for the outgoing pair is not
+    /// lastModel when the incoming pair is the one it last ran on, else the pair's default. Effort is re-resolved for that model. The seed is marked pristine again on purpose: a model chosen for the outgoing pair is not
     /// a choice about this one, and keeping it would pin an id the new one may not even offer.
     func pickDraft(engine: String, provider slug: String) {
         guard isDraft, engine != self.engine || slug != provider else { return }
@@ -2908,7 +2954,7 @@ final class ConsoleModel {
         landDraft(engine: engine, provider: slug)
     }
 
-    /// Put the draft on `engine` and `slug`, re-seeding the model and re-clamping the pills to the pair
+    /// Put the draft on `engine` and `slug`, re-seeding the model and effort
     /// (`pickDraft`, and the fallback `settleDraftDefault` lands on).
     private func landDraft(engine: String, provider slug: String) {
         recordedEngine = engine
@@ -2917,10 +2963,8 @@ final class ConsoleModel {
             engine: engine, provider: slug, catalog: modelCatalog, configured: configuredProviders,
             runtimeDefaults: runtimeDefaultModels))
         modelSelectionRevision = ModelSelectionRevision()
-        if providerCapabilitiesResolved {
-            permissionMode = AgentDefaults.clampPermissionMode(
-                permissionMode, for: modelID, engine: engine, provider: slug, configured: configuredProviders,
-                catalog: modelCatalog)
+        if !AgentDefaults.isSupported(permissionMode, engine: engine) {
+            permissionMode = AgentDefaults.fallbackPermissionMode(engine)
         }
         effort = AgentDefaults.normalizedEffort(effort, for: engine, provider: slug, model: modelID,
                                                 catalog: modelCatalog,
@@ -3048,11 +3092,6 @@ final class ConsoleModel {
                 : AgentDefaults.defaultModel(engine: engine, provider: provider, catalog: modelCatalog,
                                              configured: configuredProviders, runtimeDefaults: runtimeDefaultModels)
             modelID = draftModelSeed(fallback)
-        }
-        if providerCapabilitiesResolved {
-            permissionMode = AgentDefaults.clampPermissionMode(
-                permissionMode, for: modelID, engine: engine, provider: provider,
-                configured: configuredProviders, catalog: modelCatalog)
         }
         // The provider list is also where a key's model declares the efforts it accepts on Claude Code.
         effort = AgentDefaults.normalizedEffort(
@@ -3407,6 +3446,10 @@ final class ConsoleModel {
                 publishStateNow()
                 handedOverSessionID = routed
                 return
+            }
+            if resuming {
+                permissionModeWasEdited = false
+                Task { [weak self] in await self?.refreshPermissionMode() }
             }
             // Tag the optimistic bubble with the server's turnId so the durable `user` event
             // reconciles it instead of appending a duplicate (the runner echoes turnId, not
@@ -3937,11 +3980,6 @@ final class ConsoleModel {
                 runnerSnapshotLoaded: runnerSnapshotLoaded,
                 configuredProvidersLoaded: configuredProvidersLoaded)
             modelID = draftModelSeed(fallback, runtimeDefaults: runtimeDefaults)
-        }
-        if providerCapabilitiesResolved {
-            permissionMode = AgentDefaults.clampPermissionMode(
-                permissionMode, for: modelID, engine: engine, provider: provider,
-                configured: configuredProviders, catalog: modelCatalog)
         }
         applySlashItems(from: agentRunner)
         // OpenCode variants are model-defined, so this is the first point where a stored
@@ -4897,7 +4935,7 @@ final class ConsoleModel {
             case .scheduleCard(let requestID):
                 // Create or Allow on the card itself, by pressing.
                 return waiting(scheduleCard(requestID)?.isPending == true, question: false)
-            case .scheduleRecord, .scheduleRunStrip, .scheduleRunReport:
+            case .scheduleRecord, .scheduleRunStrip, .scheduleRunReport, .permissionModeChange:
                 return nil
             }
         }
