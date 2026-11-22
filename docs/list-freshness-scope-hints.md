@@ -79,7 +79,7 @@ Paths in this doc are shortened. Each starts under one of these roots:
 - **How a `since=` read classes the sources** (`sessions/sessions.service.ts:535-563`):
   - **Row sources** are found row by row: `session`, `conversation_turn`, `task`, `project`, `coordinator_wake`, `workspace`, `watch`.
   - **Overlay sources** make the read re-read every row's cards and decisions: approvals, requests, decisions, confirmations, evidence, criteria, ratified actions, standard sets, criterion definitions and task status counts.
-  - **LANDING-only sources** are five: `promotion`, `integration_job`, `project_open_item`, `merge_receipt` and `codebase`. Only a LANDING row's summary reads them, and a LANDING row is in no flat list (`:543-544`).
+  - **The five sources once called LANDING-only** are `promotion`, `integration_job`, `project_open_item`, `merge_receipt` and `codebase`. A LANDING row's summary reads them, and the project page's `includeLanding=1` Open list draws LANDING rows, but flat-list rows read them too, through `listOverlay` on every coordinator conversation (readOwnerDecisionsBySession, readOwnerDecisionSignals, readOwnerItemSignals in `projects/owner-decision-signal.ts`): `project_open_item` (OPEN items assigned to OWNER: `pendingApprovals`, `waitingKind`, `ownerItems`); `promotion` and `integration_job`, through `openItemsNoLongerOwed` and `openItemOwed` (a PROMOTION_APPROVAL is owed only while its promotion is READY, a LANDING_LEASE_EXPIRED only while its job is RUNNING at that claim generation); `codebase` (the item's `mainBranch`); and `merge_receipt`, through `openItemOwed`'s LANDING_UNOBSERVED branch and `taskLandingSql` (`projects/project-criterion-landing.ts`). So the comment at `sessions.service.ts` `OPEN_LIST_OVERLAY_SOURCES` was wrong, and none of the five can leave the hint token (§5.4).
   - **Whole-build sources** send a `since=` read to a whole build: `session_tag`, `session_tag_link` and `scheduled_wakeup`.
 
 ### 2.2 The poller
@@ -274,7 +274,7 @@ A task write could be traced to workspaces: by `task_id` (`project_event_session
 **The poller.** It reads per `(owner, scope, source)` in one statement for every watched account. For each account and tick:
 - An account-wide key (other than D1's, §5.4), a clock threshold, the token's runner part, or a new stream moved: hint with no scopes, meaning anything may have moved.
 - Otherwise, if any `w:` scope moved, directly or through the dependency map: hint with those scopes.
-- Otherwise: no hint. That covers a `c:` scope with no dependants, or a D1 source only.
+- Otherwise: no hint. That covers a `c:` scope with no dependants.
 
 The token is §5.0's: the counters plus the clock part cached at the last clock tick.
 
@@ -372,12 +372,12 @@ The account-keyed sources fall into three groups:
 
 | Group | Sources | Treatment | Per write | Per tick |
 |---|---|---|---|---|
-| **D1: read only by LANDING rows** | `promotion`, `integration_job`, `project_open_item`, `merge_receipt`, `codebase` | No flat-list row reads them (`sessions.service.ts:543-544`), so they leave the hint token entirely. Verify that first against the source-per-field pins of `open-list-version.pg.spec.ts`. Taking them out of the version and the `since=` read's every-overlay rule is a later step. | none | none |
+| **D1: read only by LANDING rows (withdrawn)** | `promotion`, `integration_job`, `project_open_item`, `merge_receipt`, `codebase` | **Withdrawn.** The premise is false: flat-list coordinator rows read all five (§2.1), so taking them out of the token would delay a new merge approval to the 60 s safety read and a done request to the next 15 s clock read, against the 2 s of criterion 1. The most it could have removed was 1 hint in 418 (§7.3). `list-changed-hints.pg.spec.ts` carries a guard: an OPEN owner item on a flat-list coordinator conversation changes the row and sends a hint within 2 s. | none | none |
 | **D2: keyed by a session** | `approval` (its session), `session_request` (both peers) | Per scope, as in §5.1. `open_list_bump_via_session` already joins the session. | as §5.1 | as §5.1 |
 | **D3: keyed by a task or a project** | `task`, `project`, `coordinator_wake`, `criterion_definition`, `task_status_count`, `owner_decision`, the confirmation, evidence, criteria, ratified and standard-set sources, `session_tag` | Account-wide in the first cut. | as today | as today |
 | **D3′: `task` traced to workspaces** (follow-up) | `task` | The trigger finds the Open sessions that carry the written tasks: by `task_id` (0118's `project_event_session_task_provider_idx`), by `context_task_id` (0131), and roots' children by `(root_session_id, status)`. It bumps `task@w:…` for each. It bumps only when a column a row reads changed (the token reads the title and the project, `sessions.service.ts:4674-4683`), with a compare like 1420's. | a few index probes per task statement (not measured) | as §5.1 |
 
-D1 is independent of the workspace split and helps flat lists too. It removes the hints that landings, merges and open-item churn cause today. A landing renewal already moves nothing (0512).
+D1 is withdrawn for the reason in its row. A landing renewal already moves nothing (0512).
 
 D3′ is worth building only if the profile after §5.1 shows task writes among the remaining out-of-scope hints. Its soundness rests on the row token naming every task column a row shows, which is P4's own invariant.
 
@@ -419,7 +419,7 @@ interface ControlListChanged {
 **Rollout order.**
 
 0. **Server: the workspace trigger fix** (task 0, filed separately). No client changes.
-1. **Server: §5.0 and D1.** No client changes. Every client, every flat list and every shipped app gains at once.
+1. **Server: §5.0.** (D1 is withdrawn, §5.4.) No client changes. Every client, every flat list and every shipped app gains at once.
 2. **Measure** (§8.4). The next three steps follow only if hints from outside the column's workspace are still material (§8.1).
 3. **Server: Option A.** This is the migration, the read-side aggregation by base source, the poller per scope, the dependency map and `hints=list_scopes`. It ships alone. No client declares the hint yet, so nothing changes on the wire except the token.
 4. **Web.** It ships in the same image as the server, so it can ride step 3's release. It declares `list_scopes` and filters its column, tag and settings reads.
@@ -465,7 +465,7 @@ The window is 2026-11-22 03:10:29–03:25:28Z: 900 one-second samples, every gap
 |---|---:|---:|---|
 | `now` | 418 | 27.9 | Today's poller. Causes: 408 counter moves, 6 presence-only clock ticks, 2 runner-row clock ticks, 1 LANDING-only move, 1 first hint. |
 | `p0` | 434 | 29.0 | §5.0 as first drafted, comparing the runner rows without their beat, not `steady`. |
-| `p0d1` | 433 | 28.9 | `p0`, plus D1. |
+| `p0d1` | 433 | 28.9 | `p0`, plus D1 (withdrawn, §5.4). |
 | `pA` | 417 | 27.8 | `p0d1`, plus per-workspace keys. This replay is conservative: it counts `workspace`, approvals, tag links, scheduled wake-ups and watches as the column's own, because the sampler cannot attribute them. Causes: 385 this workspace, 25 runner-row clock ticks, 7 account-wide sources. |
 
 **Cross-check against the tab.** The owner's tab made 394 Open-list reads in the same 15 minutes, 26.3 a minute:
@@ -488,7 +488,7 @@ Hints removed for the orbit-ws01 column in [P3], step by step:
 |---|---|---|
 | The workspace trigger compares drawn columns (filed separately by the coordinator, [P3]) | At most 184: the seconds in which `workspace` moved, less those in which another source moved as well | the seconds counted above |
 | §5.0 with `steady` | 6 presence-only ticks, and the 2 runner-row ticks unless they moved `steady`. In a stretch with no counter moves it is about 4 a minute [L1]. | `now`'s causes |
-| D1 | 1 | `now`'s causes |
+| D1 (withdrawn) | 1 | `now`'s causes |
 | §5.1 with web scopes | At most 84 (20%): the 39 seconds in which other workspaces' sessions moved, the 40 in which a turn moved anywhere, and the 5 of watches, scheduled wake-ups and approvals. All of these overlap with orbit-ws01's 279 seconds, and the conservative replay removed 1. | the seconds counted above, and `pA` |
 
 **For the tab's reads, the estimate:**
@@ -512,7 +512,7 @@ Hints removed for the orbit-ws01 column in [P3], step by step:
 ### 8.1 Recommendation
 
 0. **The workspace trigger's drawn-column compare comes first**, because it is the one fix sized to the measured problem (§7.3). It is the 1420 approach applied to the workspace trigger, and the coordinator is filing it on its own ([P3]). It is not part of this design. It changes no protocol and helps every client.
-1. **§5.0 with `steady`, and D1.** Both are server-only and small. No client has to ship, and every list benefits, the flat lists included.
+1. **§5.0 with `steady`.** (D1 is withdrawn, §5.4.) It is server-only and small. No client has to ship, and every list benefits, the flat lists included.
    - §5.0 removes the presence ticks. They are few in a busy window but about 4 a minute in a quiet one.
    - Its `steady` runner part keeps runner-row churn from turning into hints once the workspace writes stop masking it.
    - Comparing only on the clock tick also removes the poller's version read on every busy second.
@@ -549,7 +549,7 @@ Hints removed for the orbit-ws01 column in [P3], step by step:
 - A task title write gives a hint without `scopes`.
 - An OPEN RUN_QUESTION from an A session to a coordinator in B: a write to the coordinator's turn gives `scopes ⊇ [A, B]`.
 - A runner going offline by the clock alone gives a hint without `scopes` within 20 s, as `list-changed-hints.pg.spec.ts` (b) does.
-- A write to an integration job (D1) gives no hint.
+- ~~A write to an integration job (D1) gives no hint.~~ Withdrawn: an owner item on a flat-list coordinator row sends a hint within 2 s (the guard in `list-changed-hints.pg.spec.ts`).
 - The first hint after a subscribe has no `scopes`.
 - **The soundness property that makes skipping safe.** For a seeded random sequence of writes over every source and three workspaces: whenever a tick sends no hint naming W, a `since=` read of W's column at that tick is an empty delta. Seeded, so a red reproduces.
 
@@ -586,7 +586,7 @@ Set the gateway log beside it, as task 351V4gGnbPbm9hlmbKNjq read it:
 |---|---|---|
 | 0 | Outside this design, filed by the coordinator ([P3]): the workspace trigger bumps only when a column a list draws changed, the 1420 approach. Pinned the way `open-list-undrawn-writes.pg.spec.ts` pins sessions and turns. | — |
 | 1 | Server: a hint token without heartbeats, whose runner part is `steady`, read on the clock tick only (§5.0). With the poller-side pg case: beats alone, and runner-row writes outside `steady`, send no hint. | S |
-| 2 | Server: D1, the LANDING-only sources out of the hint token, after pinning that no flat-list row reads them. | S |
+| 2 | ~~Server: D1, the LANDING-only sources out of the hint token.~~ Withdrawn: flat-list coordinator rows read all five (§2.1, §5.4). | none |
 | 3 | Production re-measure after tasks 0–2: the [P3] sampler on the same column, read-only, and the gateway log. It decides whether tasks 4–6 are built. | S |
 | 4 | Only if task 3 shows out-of-scope hints above the threshold: the keyed counters (§5.1). This is the migration replacing the session, via-session, owner and watch bump functions with the scope and root rules, plus the read-side aggregation by base source. It brings `open-list-scope-keys.pg.spec.ts`, extensions of the undrawn-writes and no-wait specs, and `postgres-lock-order.md` §4. | L |
 | 5 | With task 4: the poller per scope, the dependency map, `hints=list_scopes` and `scopes` in the shared types; `list-scope-hints.pg.spec.ts`; `realtime-control-plane-stream.md` §4.10. | M |

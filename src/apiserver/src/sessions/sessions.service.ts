@@ -545,7 +545,10 @@ const OPEN_LIST_OVERLAY_SOURCES: ReadonlySet<string> = new Set([
   'confirmation_request', 'confirmation_claim', 'confirmation_review', 'confirmation_review_record',
   'completion_evidence', 'evidence_decision', 'criteria_decision', 'criteria_authorship',
   'ratified_intent', 'ratified_commit', 'standard_set_confirmation', 'criterion_definition', 'task_status_count',
-  // Read only by a LANDING row's summary, and a LANDING row is in no flat list.
+  // A LANDING row's summary reads these, and so does every coordinator conversation in the flat list:
+  // project_open_item (OPEN owner items), promotion and integration_job (an item's owed state), codebase
+  // (a merge approval's main branch) and merge_receipt (a LANDING_UNOBSERVED item, via taskLandingSql).
+  // None of them leaves the hint token (docs/list-freshness-scope-hints.md §5.4, D1 withdrawn).
   'promotion', 'integration_job', 'project_open_item', 'merge_receipt', 'codebase',
 ]);
 
