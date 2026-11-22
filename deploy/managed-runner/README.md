@@ -1,10 +1,10 @@
 # Optional managed runner image and restore contract
 
 This directory is an independent test delivery, except for the two parts a new deployment's Docker
-backend uses: the image below, which `scripts/install-server.sh` builds on the host and `/upgrade`
+backend uses: the image below, which `scripts/install-server.sh --managed-runners` builds on the host and `/upgrade`
 rebuilds there (docs/self-hosting.md, "What an upgrade does"), and the
 [restricted Docker channel](docker-channel/README.md), which root Compose runs under the
-`managed-runners-docker` profile a fresh install switches on (docs/self-hosting.md, "Managed
+`managed-runners-docker` profile a fresh install with `--managed-runners` switches on (docs/self-hosting.md, "Managed
 runners"). Root Compose, installation, release and upgrade entry points reference nothing else here
 and nothing of Kubernetes, Rook, Ceph or CSI (`scripts/managed-runner/deployment_boundary_test.py`
 checks that). The server's switch is off unless a deployment's `.env` turns it on, which an upgrade
