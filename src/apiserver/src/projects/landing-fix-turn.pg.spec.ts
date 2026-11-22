@@ -62,6 +62,8 @@ import { SessionAttemptService } from './session-attempt.service';
  *    one that ended any other way — ended, cancelled, completed, deleted, failed — is not revived.
  *  - R2: the task's delivered identity is cleared exactly when the turn row is written, and is untouched
  *    when delivery is refused.
+ *  - A convergence-managed task's session is revived as well (migration 1449), and the projection trigger
+ *    still refuses an unverified landing claim.
  *  - Across the turn and its end: the task stays DONE with the same evidence, decisions, acceptance,
  *    lifecycle epoch and attempt generation; evidence submitted during it is refused; the coordinator's
  *    §6.1 spend and wake rows do not move, the open attempt is not metered; no stale SEND_BACK is handed
@@ -514,6 +516,59 @@ test('W6: a work session still open is handed the turn as its next turn', { skip
   }
 });
 
+test('W6: a task_done session of a convergence-managed task is revived too (1449: a cleared merge state is no claim)',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'managed');
+      const t = await finishedTask(stack, w, 'managed', (run) => attemptOpen(stack, w, run));
+      const [managed] = await stack.db.$queryRaw<Array<{ managed: boolean }>>(Prisma.sql`
+        SELECT "task_is_convergence_managed"(${t.taskId}::uuid) AS "managed"`);
+      assert.equal(managed?.managed, true, 'CONTROL: the task is convergence-managed (a task_scope_revision row)');
+      const command = await claimJob(stack, w, 'LAND_TASK');
+      const itemId = await fail(stack, w, command, conflict('MERGE'));
+
+      await deliver(stack, w, itemId);
+
+      const [turn] = await turnOf(stack, t.sessionId, command.jobId);
+      assert.ok(turn, 'the managed task\'s task_done session was not handed the landing-fix turn');
+      const session = await stack.db.session.findUniqueOrThrow({ where: { id: t.sessionId } });
+      assert.equal(session.finishedAt, null, 'the managed task\'s session was not revived');
+      assert.equal(session.endReason, null);
+      assert.equal(session.mergeStatus, null);
+      assert.deepEqual(await identityOf(stack, t.taskId), { status: TaskStatus.DONE, ...CLEARED });
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('1449: the projection trigger still refuses a managed task\'s unverified landing claim', { skip, timeout: 180_000 },
+  async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'claim');
+      const t = await finishedTask(stack, w, 'claim', (run) => attemptOpen(stack, w, run));
+      const refusal = async (data: Prisma.SessionUpdateInput): Promise<string | null> => {
+        try {
+          await stack.db.session.update({ where: { id: t.sessionId }, data });
+          return null;
+        } catch (error) {
+          return error instanceof Error ? error.message : String(error);
+        }
+      };
+      // A newly claimed merge, or a new merged sha, with no accepted checkpoint there: refused.
+      assert.match((await refusal({ mergeStatus: 'merged', mergedSourceSha: sha('f') })) ?? 'accepted',
+        /CHECKPOINT_AUTHORITY_REQUIRED/);
+      assert.match((await refusal({ mergeStatus: 'merged' })) ?? 'accepted', /CHECKPOINT_AUTHORITY_REQUIRED/);
+      assert.match((await refusal({ mergedSourceSha: sha('f') })) ?? 'accepted', /CHECKPOINT_AUTHORITY_REQUIRED/);
+      // Clearing the merge state claims nothing — it is what every revive writes — and neither does a failed merge.
+      assert.equal(await refusal({ mergeStatus: null, mergedSourceSha: null, branchMerged: null }), null);
+      assert.equal(await refusal({ mergeStatus: 'error' }), null);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
 /** The other ways a session ends, written onto a work session that was handed the failure. */
 const OTHER_ENDINGS: Record<string, Prisma.SessionUpdateInput> = {
   ended: { endReason: 'ended' },
@@ -624,31 +679,24 @@ async function snapshot(stack: Stack, w: World, t: Finished) {
 }
 
 /**
- * The fix turn, end to end on the runner's doors, and everything the task and the coordinator are must
- * read the same after it as before the turn was delivered. `revived` delivers to a session that ended
- * with its task's DONE; otherwise the session is open when the item reaches it, and the run's attempt is
- * still open — the two are apart because a revive of a convergence-managed task's session is refused by
- * migration 0152's projection trigger, whatever revives it (named in this task's evidence).
+ * The fix turn, end to end on the runner's doors, delivered to a session that ended with its task's DONE
+ * and revived for it, and everything the task and the coordinator are must read the same after it as
+ * before the turn was delivered. `withAttempt`: the run's attempt is still open, which also makes the task
+ * convergence-managed (a task_scope_revision row) — the revive that 0152's trigger refused before 1449.
  */
-async function acrossTheTurn(label: string, revived: boolean): Promise<void> {
+async function acrossTheTurn(label: string, withAttempt: boolean): Promise<void> {
   const stack = await connect();
   try {
     const w = await world(stack, label);
     const t = await finishedTask(stack, w, label, async (run) => {
-      if (!revived) await attemptOpen(stack, w, run);
+      if (withAttempt) await attemptOpen(stack, w, run);
       await sentBack(stack, w, run);
     });
     const command = await claimJob(stack, w, 'LAND_TASK');
     const itemId = await fail(stack, w, command, redCheck());
-    if (!revived) {
-      await stack.db.session.update({
-        where: { id: t.sessionId },
-        data: { status: RunStatus.AWAITING_INPUT, finishedAt: null, endReason: null, cancelRequestedAt: null },
-      });
-    }
     const before = await snapshot(stack, w, t);
     assert.equal(before.task.status, TaskStatus.DONE);
-    if (!revived) {
+    if (withAttempt) {
       assert.ok(before.attempts.some((attempt) => attempt.status !== 'CLOSED'), 'CONTROL: the run\'s attempt is still open');
     }
     assert.equal(before.evidenceDecisions, 1, 'CONTROL: the SEND_BACK is recorded');
@@ -721,10 +769,10 @@ async function acrossTheTurn(label: string, revived: boolean): Promise<void> {
 
 test('W6: across a revived landing-fix turn the task stays DONE, no evidence is taken, no SEND_BACK is redelivered, '
   + 'and neither the coordinator\'s spend nor its wakes move', { skip, timeout: 240_000 }, async () => {
-  await acrossTheTurn('across-revived', true);
+  await acrossTheTurn('across-revived', false);
 });
 
-test('W6: across a landing-fix turn the run\'s open attempt is not metered and wakes no coordinator',
+test('W6: across a revived landing-fix turn the run\'s open attempt is not metered and wakes no coordinator',
   { skip, timeout: 240_000 }, async () => {
-    await acrossTheTurn('across-attempt', false);
+    await acrossTheTurn('across-attempt', true);
   });
