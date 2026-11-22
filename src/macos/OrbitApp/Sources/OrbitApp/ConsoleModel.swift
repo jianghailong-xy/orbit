@@ -6303,12 +6303,12 @@ final class ConsoleModel {
         Task { await refreshRulerQuestions(force: true) }
     }
 
-    /// Until when this conversation, opened from a project row whose line says it is waiting on you,
-    /// still lands on its waiting card (`focusWaitingCard`). The reader's own scroll or send ends it
-    /// sooner (`readerTookOver`); the ceiling only keeps a card read much later from moving a reader
-    /// who has been reading a while. Long enough for a slow first read: 15 s was not, on a cold
-    /// simulator.
-    private var pendingWaitingCardUntil: Date?
+    /// When this conversation was opened from a project row whose line says it is waiting on you, to
+    /// land on its waiting card (`focusWaitingCard`). The request lapses after
+    /// `TranscriptLanding.waitingRequestLifetime` with no such card drawn (web parity: 10 s), so a card
+    /// that appears later cannot move a reader who has moved on. The reader's own scroll or send ends
+    /// it sooner (`readerTookOver`).
+    private var pendingWaitingCardAt: Date?
     /// The waiting card's row, for the transcript to open at its top. Its own request, apart from
     /// `scrollRequest` (the bar's, which centres the card and opens its review) and `recordRequest`
     /// (a link's, which marks the row): this one only places the reader at the card's header.
@@ -6319,20 +6319,23 @@ final class ConsoleModel {
     /// than the screen would otherwise show its buttons with its title above the fold. Spent by the
     /// first publish or read that has the card; the reads run as the console opens.
     func focusWaitingCard() {
-        pendingWaitingCardUntil = Date().addingTimeInterval(60)
+        pendingWaitingCardAt = Date()
         followPendingWaitingCard()
         Task { await refreshRulerQuestions(force: true) }
     }
 
     private func followPendingWaitingCard() {
-        guard let until = pendingWaitingCardUntil else { return }
-        guard Date() < until else { pendingWaitingCardUntil = nil; return }
+        guard let asked = pendingWaitingCardAt else { return }
+        guard TranscriptLanding.waitingRequestStands(askedAt: asked, now: Date()) else {
+            pendingWaitingCardAt = nil
+            return
+        }
         let rows = TranscriptRows.build(state: state, statusCards: localStatusCards, canPageOlder: false,
                                         showWorkingIndicator: false, decisionCards: decisionCards,
                                         conversationCreatedAt: conversationCreatedAt)
         guard let rowID = SessionProjectSheet.waitingCardRowID(rows: rows, openCards: openBelowRows)
         else { return }
-        pendingWaitingCardUntil = nil
+        pendingWaitingCardAt = nil
         scrollTick += 1
         cardRequest = ScrollRequest(rowID: rowID, tick: scrollTick)
     }
@@ -6346,7 +6349,7 @@ final class ConsoleModel {
     /// The reader moved the list or sent something before the card was reached: the conversation is
     /// theirs now, and a card read after this does not move them.
     func readerTookOver() {
-        pendingWaitingCardUntil = nil
+        pendingWaitingCardAt = nil
         cardRequest = nil
     }
 

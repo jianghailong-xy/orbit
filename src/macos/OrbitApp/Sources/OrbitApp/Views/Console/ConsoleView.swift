@@ -1002,9 +1002,12 @@ struct TranscriptView: View {
     // history isn't yanked back down by streaming updates. Maintained by `ScrollTracker` (macOS 15+);
     // on the macOS 14 floor it stays true — the view keeps the unconditional follow and hides the button.
     @State private var atBottom = true
-    /// The waiting card a project row's tap opened this conversation at (`console.cardRequest`), held
-    /// for a moment while the rows above it are measured.
-    @State private var cardHold: TranscriptCardHold?
+    /// The row this conversation was opened at, held in place while the rest of it lands: the waiting
+    /// card a project row's tap opened it on (`console.cardRequest`), or the record a link named
+    /// (`console.recordRequest`). Put back on every publish and every change in the content's height,
+    /// and dropped on the reader's own scroll, a jump to the latest, a send, or another session
+    /// (`TranscriptLanding`; web `landingRef`).
+    @State private var landing: TranscriptLanding?
     // Whether more than `TailPinning.nearBottom` of content sits below the viewport right now, for any
     // reason. `atBottom` can't say: it un-pins on a scroll UP alone, so a pinned transcript whose tail
     // left the view some other way — a row that grew under it (a card opened, an image or link card
@@ -1050,11 +1053,13 @@ struct TranscriptView: View {
                              recompute: recomputeStuck, follow: repinAfterResize, scroll: transcriptScroll,
                              readingBack: readingBack,
                              dragged: { if bandOpened.wrappedValue { bandOpened.wrappedValue = false } },
-                             readerScrolled: { cardHold = nil; console.readerTookOver() })
+                             readerScrolled: { landing = nil; console.readerTookOver() },
+                             landingHolds: landingHolds)
         #else
         return ScrollTracker(atBottom: $atBottom, tailOutOfView: $tailOutOfView, ruler: ruler,
                              recompute: recomputeStuck, follow: repinAfterResize,
-                             readerScrolled: { cardHold = nil; console.readerTookOver() })
+                             readerScrolled: { landing = nil; console.readerTookOver() },
+                             landingHolds: landingHolds)
         #endif
     }
 
@@ -1065,9 +1070,10 @@ struct TranscriptView: View {
     /// (`heldScroll`: this arrives off a layout report, so the rows it names are the ones the next
     /// update has, not whatever this frame holds).
     private func repinAfterResize() {
-        // A window opened at a record ends at a gap, and a preview's place is held while its sheet
-        // is up: neither follows the tail, so neither follows a resize to it.
-        guard !console.detached, !reviewingCard else { return }
+        // A window opened at a record ends at a gap, a preview's place is held while its sheet is up,
+        // and so is a row the transcript was opened at: none follows the tail, so none follows a
+        // resize to it.
+        guard !console.detached, !reviewingCard, landing == nil else { return }
         #if os(iOS)
         // A lazy List's `contentSize` is an estimate until it lays out again, and a programmatic
         // scroll is CLAMPED to it: asked in the same update that grew the composer, the scroll
@@ -1079,6 +1085,38 @@ struct TranscriptView: View {
         #else
         holdScroll(to: bottomID, anchor: .bottom, animated: false)
         #endif
+    }
+
+    /// The scroll geometry changed under a held row (`ScrollTracker.landingHolds`): put it back when
+    /// the content took a new height, and say whether it is still held. This arrives off a layout
+    /// report, so the put-back is a held scroll (`heldScroll`), as `repinAfterResize`'s is.
+    private func landingHolds(resizedTo height: Double?) -> Bool {
+        guard var held = landing else { return false }
+        guard held.keep(in: console.sessionID, contentHeight: height, at: Date()) else {
+            landing = nil
+            return false
+        }
+        if held != landing { landing = held }
+        if height != nil { holdScroll(to: held.rowID, anchor: landingAnchor(held), animated: false) }
+        return true
+    }
+
+    /// A publish under a held row: put it back, inside this update, and say whether it is still held.
+    private func keepLanding(_ proxy: ScrollViewProxy) -> Bool {
+        guard var held = landing else { return false }
+        guard held.keep(in: console.sessionID, contentHeight: nil, at: Date()) else {
+            landing = nil
+            return false
+        }
+        proxy.scrollTo(held.rowID, anchor: landingAnchor(held))
+        return true
+    }
+
+    private func landingAnchor(_ held: TranscriptLanding) -> UnitPoint {
+        switch held.place {
+        case .top: return .top
+        case .center: return .center
+        }
     }
 
     /// What `stranded` is re-decided on: the tail leaving or entering the view, the pin, and every
@@ -1261,9 +1299,8 @@ struct TranscriptView: View {
             let prependAnchor = console.takePrependAnchor()
             // A window opened at a record ends at a gap, so its bottom is never the live tail to
             // follow — pinning there would only walk the window down page by page.
-            if let hold = cardHold, hold.sessionID == console.sessionID, Date() < hold.until {
-                // Opened at a waiting card: a publish in the first moments keeps the card's top.
-                proxy.scrollTo(hold.rowID, anchor: .top)
+            if keepLanding(proxy) {
+                // Opened at a waiting card or a record: a publish while it is held puts it back.
             } else if atBottom && !console.detached && !reviewingCard {
                 proxy.scrollTo(bottomID, anchor: .bottom)
             } else if let prependAnchor {
@@ -1292,7 +1329,7 @@ struct TranscriptView: View {
             }
         }
         .onChange(of: console.sessionID) {
-            atBottom = true; stranded = false; ruler.reset(); stuckID = nil; cardHold = nil
+            atBottom = true; stranded = false; ruler.reset(); stuckID = nil; landing = nil
             console.setReadingHistory(false)
             // The reader's place went with the transcript that was on screen: the new one has
             // not been laid out yet, and the bar's direction word must not answer for the
@@ -1304,13 +1341,13 @@ struct TranscriptView: View {
         // they'd scrolled up to read history (the stateRevision follow above only re-pins while
         // already at the bottom). Web parity: onSend re-pins atBottom on send (AgentView.tsx).
         .onChange(of: console.localSendTick) {
-            atBottom = true; cardHold = nil; console.readerTookOver()
+            atBottom = true; landing = nil; console.readerTookOver()
             proxy.scrollTo(bottomID, anchor: .bottom)
         }
         // A local command is an explicit new tail item, so reveal it even when the reader had
         // scrolled up. This matches a normal local send and web's `pinToBottom()` behavior.
         .onChange(of: console.localStatusCards.count) {
-            atBottom = true; cardHold = nil
+            atBottom = true; landing = nil
             proxy.scrollTo(bottomID, anchor: .bottom)
         }
         // The "N open questions below" bar, pressed. It sits outside this reader (it is an
@@ -1321,6 +1358,7 @@ struct TranscriptView: View {
         .onChange(of: console.scrollRequest) { _, request in
             guard let request else { return }
             atBottom = false
+            landing = nil   // the reader chose another card to read
             #if os(iOS)
             // Same coast fix as the jump-to-latest disc: cancel the momentum first, or the
             // deceleration swallows the scroll.
@@ -1335,10 +1373,12 @@ struct TranscriptView: View {
         // jump is no drag the scroll tracker could read, and the next publish would pull them back.
         // `initial: true` because the page can land before this transcript first appears; the
         // console consumes the request once followed, so reappearing does not jump back to it.
+        // Held where it lands (`landing`): the rows still arriving around it must not carry it off.
         .onChange(of: console.recordRequest, initial: true) { _, request in
             guard let request else { return }
             atBottom = false
             console.recordRequestFollowed(request)
+            landing = TranscriptLanding(rowID: request.rowID, sessionID: console.sessionID, place: .center, at: Date())
             #if os(iOS)
             transcriptScroll.halt()
             #endif
@@ -1348,27 +1388,20 @@ struct TranscriptView: View {
         // 2026-11-14): the top of its waiting card, header and title, rather than the transcript's
         // end. Off the live tail first, as above; set on the next turn of the run loop with the
         // scroll, after the session switch's own re-pin (`console.sessionID` above) has run. `initial`
-        // because the request is made before this transcript appears; consumed once followed.
+        // because the request is made before this transcript appears; consumed once followed. Then
+        // held there (`landing`): a self-sizing List places a row it has not laid out by estimates,
+        // which put the card's first landing far above it, and the rest of the conversation, its
+        // cards and images keep landing above it after that.
         .onChange(of: console.cardRequest, initial: true) { _, request in
             guard let request else { return }
             console.cardRequestFollowed()
             #if os(iOS)
             transcriptScroll.halt()
             #endif
-            let hold = TranscriptCardHold(rowID: request.rowID, sessionID: console.sessionID,
-                                until: Date().addingTimeInterval(2.5))
-            cardHold = hold
+            landing = TranscriptLanding(rowID: request.rowID, sessionID: console.sessionID, place: .top, at: Date())
             DispatchQueue.main.async {
                 atBottom = false
-                holdScroll(to: hold.rowID, anchor: .top, animated: false)
-            }
-            // Again while the rows above take their measured heights: a self-sizing List places a
-            // row it has not laid out by estimates, which put the card's first landing far above it.
-            for delay in [0.4, 1.0, 2.0] {
-                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                    guard cardHold == hold, console.sessionID == hold.sessionID else { return }
-                    holdScroll(to: hold.rowID, anchor: .top, animated: false)
-                }
+                holdScroll(to: request.rowID, anchor: .top, animated: false)
             }
         }
         // The scrolls `heldScroll` carried here, made inside this update — after the List has taken
@@ -1829,6 +1862,7 @@ struct TranscriptView: View {
         let shown = SessionTranslation.shownUserText(bubble.text, bubble.translation, flipped: false)
         // `CoastingButton` (not a plain `Button`) so the tap fires even while the List is still coasting.
         return CoastingButton {
+            landing = nil   // the reader's own jump: a row held in place lets go
             #if os(iOS)
             // The person moving the transcript themselves, said outright rather than inferred: this
             // client decides "a reader did that" from the platform's own drag reports, and an
@@ -1985,6 +2019,7 @@ struct TranscriptView: View {
 
     /// The jump to the latest: the floating disc's.
     private func jumpToLatest(_ proxy: ScrollViewProxy) {
+        landing = nil   // the reader asked for the latest: a row held in place lets go
         // A window opened at a record ends at a gap: the latest message is past it, so reaching it
         // re-seeds the window from the tail (`jumpToLatest`), after which the follow pins the bottom.
         if console.detached {
@@ -2231,15 +2266,6 @@ struct SessionStatusCardView: View {
 }
 
 /// A transcript scroll waiting for the next update to make it (`TranscriptView.heldScroll`).
-/// A waiting card the transcript keeps its top on until `until` (`TranscriptView.cardHold`).
-/// Internal, not private: Swift 6.2.4 crashed in IRGen on the private type held in `@State`
-/// ("Global is external, but doesn't have external or weak linkage", the iOS gate on ac6416097).
-struct TranscriptCardHold: Equatable {
-    let rowID: String
-    let sessionID: String
-    let until: Date
-}
-
 private struct HeldScroll: Equatable {
     let rowID: String
     let anchor: UnitPoint
@@ -2446,9 +2472,13 @@ private struct ScrollTracker: ViewModifier {
     var dragged: () -> Void = {}
     #endif
     /// The reader started moving the list themselves — a finger on iOS, the trackpad or wheel on
-    /// macOS (`.interacting`; a `scrollTo` the app makes never reports it): a waiting card's hold
-    /// lets go (`TranscriptView.cardHold`).
+    /// macOS (`.interacting`; a `scrollTo` the app makes never reports it): a held row lets go
+    /// (`TranscriptView.landing`).
     var readerScrolled: () -> Void = {}
+    /// Whether a row the transcript was opened at is held in place (`TranscriptView.landingHolds`),
+    /// handed the content's height when this reading changed it, so the row is put back. The tail is
+    /// not pinned while one is held (web: `measure()` reads `!landingRef.current`).
+    var landingHolds: (_ resizedTo: Double?) -> Bool = { _ in false }
     /// Whether the reader is the one moving the list: a finger on it, or the momentum of one.
     /// `.animating` is SwiftUI moving it (a jump-to-latest, the sticky header) and `.idle` is it
     /// sitting still while content is re-laid-out underneath — neither is a reader. `TailPinning`
@@ -2507,9 +2537,10 @@ private struct ScrollTracker: ViewModifier {
                                      topInset: Double(geo.contentInsets.top),
                                      bottomInset: Double(geo.contentInsets.bottom))
                 } action: { was, now in
-                    let pinned = TailPinning.pinned(wasPinned: atBottom, from: was, to: now,
-                                                    readerDriven: readerIsMoving,
-                                                    evidence: Self.evidence)
+                    let held = landingHolds(now.contentHeight != was.contentHeight ? now.contentHeight : nil)
+                    let pinned = !held && TailPinning.pinned(wasPinned: atBottom, from: was, to: now,
+                                                             readerDriven: readerIsMoving,
+                                                             evidence: Self.evidence)
                     atBottom = pinned
                     tailOutOfView = now.bottomGap > TailPinning.nearBottom
                     #if os(iOS)
