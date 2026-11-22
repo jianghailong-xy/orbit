@@ -315,13 +315,14 @@ final class BgJobCardTests: XCTestCase {
 
     // MARK: the Background list
 
-    /// R1: a failed job counts in red on the row; tapping a job in the opened list goes to its card.
-    func testTheBackgroundListCountsAFailedJobRedAndGoesToTheCard() {
+    /// R1 (E2, revised 2026-11-21): the owner can do nothing about a failed job, so the row does not count it;
+    /// tapping a job in the opened list goes to its card.
+    func testTheBackgroundListDoesNotCountAFailedJobAndGoesToTheCard() {
         let failed = proc(status: "failed", exitCode: 1, endedAt: "2026-11-21T10:32:40.000Z")
         let other = BackgroundProc(id: "bgj_other", command: "npm run dev", status: "running", outputTail: "",
                                    startedAt: Self.ts, kind: "job")
         let row = BackgroundRowRule.row([failed, other], items: [], sessionLive: true)
-        XCTAssertEqual(row?.countParts.first { $0.kind == "failed" }?.text, "1 failed", "counted, in the error colour")
+        XCTAssertNil(row?.countParts.first { $0.kind == "failed" }, "a failed job is not counted")
         XCTAssertTrue(WorktreeBarLogic.jobRowScrollsToCard(failed))
         var shell = failed
         shell.kind = "shell"

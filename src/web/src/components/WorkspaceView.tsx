@@ -156,7 +156,6 @@ import {
   runnersQuery,
   pendingCriteriaDecisionsQuery,
   pendingDecisionsQuery,
-  projectIntegrationQuery,
   projectMergedPromotionsQuery,
   projectOpenItemsQuery,
   projectPromotionQuery,
@@ -411,7 +410,7 @@ import {
 } from './CriteriaDecisionCard';
 import { AnsweredQuestionCard, CoordinatorQuestions, closedQuestionRows, coordinatorQuestions } from './CoordinatorQuestionCard';
 import { useSessionOwnerRequestInserts } from './OwnerRequestCard';
-import { useScheduleRunOfSession, useSessionScheduleInserts } from './ScheduleCards';
+import { useScheduleRunOfSession, useSessionScheduleCards, useSessionScheduleInserts } from './ScheduleCards';
 import {
   OWNER_REQUEST_CHAT_PLACEHOLDER,
   OWNER_REQUEST_CHAT_PREFIX,
@@ -686,6 +685,7 @@ import {
   type OptimizedInsert,
   type PromptOptimizerTarget,
 } from './PromptOptimizer';
+import { useProjectIntegration } from '../lib/pollOwner';
 
 // The queue's types live with the stream that keeps the queue (lib/useSessionStream); the modules
 // and tests that import them from here still can.
@@ -1625,7 +1625,7 @@ function SessionProjectStartRow({ start, projectId }: { start: StartPageRow; pro
   const settings = asked?.startRequest?.settings ?? null;
   // The integration read the landing line beside it holds (one query key): what the suggestion's
   // Directly into names is the main branch the start card opens with.
-  const integration = useQuery(projectIntegrationQuery(projectId));
+  const integration = useProjectIntegration(projectId);
   const standing = integration.data && typeof integration.data === 'object' ? integration.data : null;
   return (
     <div className="session-project-start">
@@ -1671,7 +1671,7 @@ function SessionProjectStartRow({ start, projectId }: { start: StartPageRow; pro
  *  (`ProjectMergeStrip`). Its own component, so the second hand redraws this card and not the
  *  console around it. */
 function SessionProjectLanding({ projectId, onOpen }: { projectId: string; onOpen: () => void }) {
-  const integration = useQuery(projectIntegrationQuery(projectId));
+  const integration = useProjectIntegration(projectId);
   const view = integration.data && typeof integration.data === 'object' ? integration.data : null;
   const live = view?.inFlight != null && !isMergeJob(view.inFlight);
   const listed = view?.inFlightJobs !== undefined;
@@ -3618,7 +3618,7 @@ export function WorkspaceView({
   // day's counts, over the project's landing sessions and its merges into main.
   // No Landings row while the project's line has not started (revision 42 §12.16, ruling D2): the
   // integration read says so with `line: null`; an unanswered read draws as it always did.
-  const pageIntegrationQ = useQuery({ ...projectIntegrationQuery(openProjectId ?? ''), enabled: !!openProjectId });
+  const pageIntegrationQ = useProjectIntegration(openProjectId ?? '');
   const pageLineNotStarted = pageIntegrationQ.data != null && typeof pageIntegrationQ.data === 'object'
     && pageIntegrationQ.data.line === null;
   const landingsSummary = useMemo(
@@ -3844,10 +3844,7 @@ export function WorkspaceView({
   const titleBarPageShown = !!titleBarProjectId && (isMobile ? sheetProjectId === titleBarProjectId
     : titleBarProjectId === columnProjectId && projectColumnOpen);
   const titleBarReadsLine = !!titleBarProjectId && !selectedTrashed && !titleBarPageShown;
-  const titleBarIntegrationQ = useQuery({
-    ...projectIntegrationQuery(titleBarProjectId ?? ''),
-    enabled: titleBarReadsLine,
-  });
+  const titleBarIntegrationQ = useProjectIntegration(titleBarProjectId ?? '', titleBarReadsLine);
   const titleBarPromotionQ = useQuery({
     ...projectPromotionQuery(titleBarProjectId ?? ''),
     enabled: titleBarReadsLine,
@@ -5738,8 +5735,10 @@ export function WorkspaceView({
   // A scheduled task's run: its schedule and run (crumb, strip, report), and the cards and change lines a session put
   // up, each where it happened (docs/mocks/scheduled-tasks/web/02-board.png).
   const isScheduleRun = detailForSelected?.runSource === 'SCHEDULE';
-  const scheduleRun = useScheduleRunOfSession(isScheduleRun && !selectedTrashed ? selectedId : null);
-  const scheduleInserts = useSessionScheduleInserts(selectedTrashed ? null : selectedId, transcriptEvents, scheduleRun);
+  // One read of the conversation's schedule cards serves the cards, the change records and a run's strip and report.
+  const scheduleCards = useSessionScheduleCards(selectedTrashed ? null : selectedId);
+  const scheduleRun = useScheduleRunOfSession(isScheduleRun && !selectedTrashed ? selectedId : null, scheduleCards);
+  const scheduleInserts = useSessionScheduleInserts(selectedTrashed ? null : selectedId, scheduleCards, transcriptEvents, scheduleRun);
 
   // Cross-project requests into the project this conversation coordinates, one decision card per
   // batch, drawn where the batch was first asked (board docs/mocks/handoff-in-chat). The batches
@@ -11710,7 +11709,7 @@ export function WorkspaceView({
         {/* The tasks this session's agent created, beside the branch below: the conversation's two
             kinds of output next to each other. Hidden until it has created one. */}
         {selectedId && !selectedTrashed && (
-          <SessionCreatedTasksStrip sessionId={selectedId} openRequest={createdTasksOpenRequest} />
+          <SessionCreatedTasksStrip sessionId={selectedId} tasks={createdTasks.data} openRequest={createdTasksOpenRequest} />
         )}
         {/* The Orbit Cloud runner's browser, while it runs: opens the live view (docs/runner-browser-design.md §5). */}
         {selectedId && !selectedTrashed && (
