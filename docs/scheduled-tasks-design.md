@@ -250,14 +250,19 @@ The inspector shows what was used: "This month: 14 runs · 41 min", with a cost 
 **Runs per week bounds the runs that start, not only the rule.** Moving the time of day or the weekdays is inside
 the envelope, and a session that moved its rule to "a few minutes from now" after every run would otherwise run back
 to back. So before a run starts (§6.1) the server counts, under the schedule lock the start takes (so two replicas
-cannot both pass), **the schedule's runs that actually started, of every trigger, whose planned slot (`plannedAt`; a
+cannot both pass), **the schedule's runs that actually started and count (below), of every trigger, whose planned slot (`plannedAt`; a
 MANUAL run's is when it was asked for) lies after the same local time 7 days before this run's own slot, in the
 schedule's time zone.** The window is on planned slots, not start times, so how late a start is (the worker's pass,
 a runner back after an outage) never moves a run into or out of it: a rule inside its envelope never trips it, and a
 rule moved to "a few minutes from now" still gives each run its own slot. It is local time, not 7×24 hours, so a
 week across a daylight-saving change is still a week. At `envelope.runsPerWeek` or more, the slot is not started: it is MISSED with
 `failureReason = OVER_BUDGET`, the schedule stays ACTIVE (not HELD, not paused) and its next slot is computed as
-usual. A start retried because it never reached its engine (§7.2) is one start. The owner is told once, by push,
+usual. A start retried because it never reached its engine (§7.2) is one start. **A run counts only if its first turn
+was delivered (`delivered_at`, §7.2) or it is still live (QUEUED, RUNNING or AWAITING_APPROVAL with a start), so an
+in-flight run holds its place and two quick starts cannot overshoot.** A run that ended without ever being
+delivered (MISSED, CANCELLED, or FAILED with `RUNNER_UNAVAILABLE`, `QUOTA` or `ENGINE_CRASHED_BEFORE_START`) counts 0:
+it did nothing, so it must not cost a later slot its place. The `SCHEDULE_OVER_BUDGET` refusal of §8.4 reports this same
+count. The owner is told once, by push,
 for a slot over budget, and not again for the next ones in a row; the run list says "Not started: it had already
 started as many runs in the past 7 days as you allowed." Run now follows §8.4.
 
