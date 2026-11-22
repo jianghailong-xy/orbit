@@ -87,7 +87,7 @@ import {
 } from './taskPages';
 import { integrationInFlight, pollWhileInFlight, streamPoll, streamStaleTime } from './listBudget';
 import { readOpenList, type OpenListAnswer } from './openListDelta';
-import type { SessionReach, SessionReachDeclaration } from './sessionReach';
+import type { SessionReach, SessionReachDeclaration, TaskReachDeclaration } from './sessionReach';
 
 export type { ConfiguredProvider };
 
@@ -647,6 +647,12 @@ export const sessionFoldersQuery = () =>
  * One session's detail — resolves the runner/workspace behind a `/sessions/:id` deep link.
  * Shares its key with the row in the list query so the two dedupe. Disabled when there
  * is no id; call sites tighten `enabled` further as needed.
+ *
+ * One read serves the page: the session page (WorkspaceView) owns its poll, and every other part
+ * that draws the detail — the splash, the side panel, the console, the settings drawer — reads the
+ * same entry with no interval of its own. The stream marks it stale on every `session.*` event
+ * about it (useControlPlane refetchSessionDetail), so while the stream is live a part mounted on
+ * what was just read draws that rather than reading it again (`streamStaleTime`).
  */
 export const sessionQuery = (id: string | null | undefined) =>
   queryOptions({
@@ -654,6 +660,7 @@ export const sessionQuery = (id: string | null | undefined) =>
     meta: { entities: ['session'] },
     queryFn: () => getSession(id!),
     enabled: id != null,
+    staleTime: streamStaleTime,
   });
 
 /**
@@ -784,23 +791,33 @@ export const taskCountsQuery = (
     staleTime: 10_000,
   });
 
+/** The tasks a created-tasks read holds: each row's own, and the one of this session's it took over. */
+const createdTaskIds = (data: unknown): string[] =>
+  ((data as SessionCreatedTasks | undefined)?.items ?? []).flatMap((row) => [row.id, row.replaces?.id ?? ''].filter(Boolean));
+
 /**
  * The tasks a session's agent created, as the "Tasks created here" row above its composer draws
- * them. Under `['tasks']`, so the refresh `useControlPlane` runs on every `task.*` event reaches it
- * with no entry of its own. Polled while a row is running or queued besides: a queued task starting
- * is a session event, not a `task.changed`, and nothing else would redraw its pill.
+ * them. The session page (WorkspaceView) reads it and hands it to the strip, so one observer reads
+ * it. Read on the events that can move it, and otherwise only on the list budget's safety read:
+ * - a `task.changed` whose rows this session created, or that names a row it holds (`taskReach`,
+ *   lib/sessionReach), or that cannot say which (a resync, a server that names no creators);
+ * - this session's own `session.*` events, and those of a session running one of its rows: the rows
+ *   carry `running` / `queued`, which come from the sessions carrying the tasks (`sessionReach`).
+ * While a row is running or queued it is polled besides, at the safety read's minute while the
+ * stream is live: a run's start is an event, but one lost on its way would leave the pill wrong.
  */
 export const sessionCreatedTasksQuery = (sessionId: string) =>
   queryOptions({
     queryKey: ['tasks', 'created-by-session', sessionId] as const,
-    // The rows carry `running` / `queued`, which come from the sessions carrying the tasks — the
-    // poll below is the safety read of exactly that fact, so the declaration names its source.
-    // Of the session events, only this session's own read it again (lib/sessionReach): the runs its rows draw are
-    // other sessions, whose events every open session page would otherwise read for. The poll covers those.
-    meta: { entities: ['task', 'session'], sessionReach: { session: sessionId } satisfies SessionReach },
+    meta: {
+      entities: ['task', 'session'],
+      sessionReach: ((data: unknown) => ({ session: sessionId, tasks: createdTaskIds(data) })) satisfies SessionReachDeclaration,
+      taskReach: ((data: unknown) => ({ creatorSession: sessionId, tasks: createdTaskIds(data) })) satisfies TaskReachDeclaration,
+    },
     queryFn: () => api<SessionCreatedTasks>(`/sessions/${sessionId}/created-tasks`),
+    staleTime: streamStaleTime,
     refetchInterval: (q) =>
-      q.state.data?.items.some((row) => row.running || row.queued) ? 15_000 : false,
+      q.state.data?.items.some((row) => row.running || row.queued) ? streamPoll(15_000)(q) : false,
   });
 
 /**
@@ -1261,10 +1278,16 @@ export const projectIntegrationQuery = (projectId: string) =>
     meta: { entities: ['project', 'task', 'session'] },
     queryFn: () =>
       api<ProjectIntegrationView>(`/projects/${encodeURIComponent(projectId)}/integration`),
-    // A landing or a merge in flight announces nothing on the stream (LANDING sessions publish no
-    // event), so the line keeps its cadence while one is; otherwise it follows the stream.
-    refetchInterval: pollWhileInFlight(30_000, (query) => integrationInFlight(query.state.data)),
+    // One read serves the page: no interval here. The part of the page that owns the poll is the
+    // first to mount (lib/pollOwner useProjectIntegration, PROJECT_INTEGRATION_POLL); every other
+    // part reads this entry, and one mounted on what was just read draws it rather than asking again.
+    staleTime: streamStaleTime,
   });
+
+/** The integration line's poll, held by one part of a page (lib/pollOwner): a landing or a merge
+ *  in flight announces nothing on the stream (LANDING sessions publish no event), so the line keeps
+ *  its cadence while one is; otherwise it follows the stream. */
+export const PROJECT_INTEGRATION_POLL = pollWhileInFlight(30_000, (query) => integrationInFlight(query.state.data));
 
 /** The selectors one page of a landing's check output is read by (contract §2.2 J-T4, §2.9 LS2). */
 export interface LandingLogSelectors {

@@ -1587,9 +1587,10 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * A bounded `task.changed` with the sessions that created its rows (`creatorSessionIds`), so a client can tell which
-   * session's "Tasks created here" it can move. Left as it was — the client then reads every such list — for a
-   * resync, when a row it names is not found (deleted, or not this owner's), or when the read fails.
+   * A bounded `task.changed` with the sessions that created its rows (`creatorSessionIds`) and the projects they are in
+   * (`rowProjectIds`), so a client can tell which session's "Tasks created here" and which project's integration line
+   * it can move. Left as it was — the client then reads every such read — for a resync, when a row it names is not
+   * found (deleted, or not this owner's), or when the read fails.
    */
   private async withCreatorSessions(
     change: ControlTaskChanged & Record<string, unknown>,
@@ -1599,11 +1600,12 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     try {
       const rows = await this.prisma.task.findMany({
         where: { id: { in: change.taskIds }, ownerId },
-        select: { creatorSessionId: true },
+        select: { creatorSessionId: true, projectId: true },
       });
       if (rows.length !== change.taskIds.length) return change;
       const creators = rows.map((row) => row.creatorSessionId).filter((id): id is string => !!id);
-      return { ...change, creatorSessionIds: [...new Set(creators)] };
+      const projects = rows.map((row) => row.projectId).filter((id): id is string => !!id);
+      return { ...change, creatorSessionIds: [...new Set(creators)], rowProjectIds: [...new Set(projects)] };
     } catch (error) {
       this.log.warn(`task.changed creators not read: ${(error as Error).message}`);
       return change;

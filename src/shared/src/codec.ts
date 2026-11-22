@@ -504,9 +504,11 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // response bodies, so they follow the same rule (see the `@IsPublicId({ each: true })` DTOs).
   'tagIds',
   'taskIds',
-  // `task.changed`'s `creatorSessionIds` and `schedule_cards.changed`'s `cardSessionIds` (control-plane stream): the
-  // sessions that created the changed tasks, and the sessions whose schedule cards moved — session addresses.
+  // `task.changed`'s `creatorSessionIds` and `rowProjectIds`, and `schedule_cards.changed`'s `cardSessionIds`
+  // (control-plane stream): the sessions that created the changed tasks and the projects they are in, and the sessions
+  // whose schedule cards moved.
   'creatorSessionIds',
+  'rowProjectIds',
   'cardSessionIds',
   // `owner_request.blocks_task_ids` (0503): the tasks an owner request blocks — task addresses like `taskIds`.
   'blocksTaskIds',

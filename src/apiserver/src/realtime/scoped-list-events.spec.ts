@@ -28,7 +28,10 @@ const T3 = '00000000-0000-4000-8000-0000000000b3';
 
 const delay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
-/** The task rows the creator read answers from, each with its creator session; and how often it was asked. */
+const P1 = '00000000-0000-4000-8000-0000000000c1';
+
+/** The task rows the creator read answers from, each with its creator session (and T1 and T2 in project P1); and how
+ *  often it was asked. */
 function service(tasks: Record<string, string | null>, reads = { n: 0 }): RealtimeService {
   const prisma = {
     $executeRawUnsafe: async () => 0,
@@ -36,7 +39,8 @@ function service(tasks: Record<string, string | null>, reads = { n: 0 }): Realti
       findMany: async ({ where }: { where: { id: { in: string[] }; ownerId: string } }) => {
         reads.n += 1;
         assert.equal(where.ownerId, OWNER, 'only the owner\'s rows are read');
-        return where.id.in.filter((id) => id in tasks).map((id) => ({ creatorSessionId: tasks[id] }));
+        return where.id.in.filter((id) => id in tasks)
+          .map((id) => ({ creatorSessionId: tasks[id], projectId: id === T3 ? null : P1 }));
       },
     },
   } as unknown as PrismaService;
@@ -52,7 +56,7 @@ async function heard(svc: RealtimeService, options: Parameters<RealtimeService['
   return got;
 }
 
-test('a bounded task.changed names the sessions that created its rows, read once for every stream', async () => {
+test('a bounded task.changed names the sessions that created its rows and their projects, read once for every stream', async () => {
   const reads = { n: 0 };
   const svc = service({ [T1]: S1, [T2]: S1, [T3]: null }, reads);
   const got: ControlEvent[] = [];
@@ -65,7 +69,7 @@ test('a bounded task.changed names the sessions that created its rows, read once
   for (const ev of got) {
     assert.equal(ev.type, ControlEventType.TASK_CHANGED);
     assert.equal(ev.sessionId, '');
-    assert.deepEqual(ev.data, { taskId: T1, taskIds: [T1, T2, T3], resync: false, creatorSessionIds: [S1] });
+    assert.deepEqual(ev.data, { taskId: T1, taskIds: [T1, T2, T3], resync: false, creatorSessionIds: [S1], rowProjectIds: [P1] });
   }
   assert.notEqual(got[0].data, got[1].data, 'each stream is sent its own copy');
   assert.equal(reads.n, 1, 'one read per event, not per stream');
@@ -94,7 +98,7 @@ test('a session-keyed task.changed is bounded only when it names its rows, and t
   });
   assert.deepEqual(got.map((ev) => ev.data), [
     { taskId: T1, taskIds: [], resync: true },
-    { taskId: T1, taskIds: [T1], resync: false, creatorSessionIds: [S2] },
+    { taskId: T1, taskIds: [T1], resync: false, creatorSessionIds: [S2], rowProjectIds: [P1] },
   ]);
   assert.equal(reads.n, 1);
 });

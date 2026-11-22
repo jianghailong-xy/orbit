@@ -424,6 +424,10 @@ export interface ControlTaskChanged {
    *  session adds none. Sent only with a bounded change (`resync: false`), and absent from an older server: a client
    *  scoping a session's "Tasks created here" read by it reads that row again on any change that does not carry it. */
   creatorSessionIds?: string[];
+  /** The projects the rows `taskIds` names are in (`task.projectId`), each once; a row in no project adds none. Sent
+   *  and absent exactly as `creatorSessionIds` is: a client scoping a project's reads by it reads them again on any
+   *  change that does not carry it. */
+  rowProjectIds?: string[];
 }
 
 /** `data` for `agent.changed`. As with `task.changed`, the client refetches its agent list. Some
