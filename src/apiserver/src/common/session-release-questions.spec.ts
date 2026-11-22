@@ -130,6 +130,35 @@ test('the bridge is the failure question\'s only read of the status, and the wor
   }
 });
 
+test('the new runner protocol: each shape answers both questions as the old protocol\'s shape for the same event', () => {
+  const answersOfName = (name: string) => ANSWERS.find((a) => a.shape.name === name)!;
+  const newShapes = ANSWERS.filter((a) => a.shape.name.startsWith('P'));
+  assert.deepEqual(newShapes.map((a) => a.shape.name), ['P1 hold', 'P2 released after a failed turn',
+    'P3 released by the backstop', 'P4 cut-off turn failed', 'P5 end asked in the hold', 'P6 end asked, cut-off ignored',
+    'P7 stopped', 'P8 revived, then stopped']);
+  for (const a of newShapes) {
+    const { name, oldProtocol } = a.shape;
+    if (!oldProtocol) {
+      // The hold is no release: held, so neither question answers yes; its release (P2, P3, P5) is compared below.
+      assert.equal(a.shape.released, false, `${name}: held`);
+      assert.equal(a.failed, false, `${name}: no release, no failure yet`);
+      assert.equal(a.finished, false, `${name}: no release, the work not finished`);
+      continue;
+    }
+    const old = answersOfName(oldProtocol);
+    assert.equal(a.failed, old.failed, `${name}: released by a failure, as ${oldProtocol}`);
+    assert.equal(a.failedWithoutBridge, old.failedWithoutBridge, `${name}: and without the bridge, as ${oldProtocol}`);
+    assert.equal(a.finished, old.finished, `${name}: the work finished, as ${oldProtocol}`);
+  }
+  // The four failures read as failures, the stops as stops.
+  for (const name of ['P2 released after a failed turn', 'P3 released by the backstop', 'P4 cut-off turn failed', 'P5 end asked in the hold']) {
+    assert.equal(answersOfName(name).failed, true, name);
+  }
+  for (const name of ['P6 end asked, cut-off ignored', 'P7 stopped', 'P8 revived, then stopped']) {
+    assert.equal(answersOfName(name).failed, false, name);
+  }
+});
+
 test('the table, printed', () => {
   const yes = (value: boolean) => (value ? 'yes' : '-');
   const lines = [

@@ -149,6 +149,46 @@ need the owner's look at mocks before 5.2.
 | 6.1 | Server: turn-complete accepts an outcome without ending the run, and a separate release call carries the cause. The old calls keep working | both protocols pass the runner-API specs |
 | 6.2 | Runner: a failed turn is reported as an outcome; release is its own call with a cause, which also decides permanent commit or undoable checkpoint (`src/runner-go/worktree.go:1071`) | Go suite; a real-stack walk with an old and a new runner against one server |
 
+Step 6.1 as built (2026-11-22, the coordinator's ruling on the failed turn). Under D9 there is no cause, so the
+release carries none.
+
+- **Declaration.** The runner sends the capability token `session-release/v1` (`SESSION_RELEASE_V1`,
+  `src/shared/src/dto.ts`) in `X-Orbit-Runner-Capabilities`. The server reads it on each request. Without it, the
+  old protocol applies unchanged.
+- **Turn-complete.** `status` is still the turn's outcome word. With the token, a FAILED turn does everything the
+  old failed-turn write does except release the session:
+  - it records the turn outcome and error and copies them to `last_turn_outcome` and the session error;
+  - it drains the queue, arms any retry and settles the checks;
+  - the session stays held (RUNNING, on the runner's slot), with `cancel_requested_at` set as the teardown signal
+    and no `end_reason`;
+  - the answer is RUNNING, where the old protocol answers FAILED.
+
+  Status FAILED, `finished_at`, the cleared running work, the inbox generation retirement, the delivered-identity
+  settlement and the task's reclaim with its comment all wait for the release. The reclaim has to wait:
+  `reclaimStalledTask` reclaims nothing while a session of the task is held.
+- **Release.** `POST /runner/sessions/:id/release` takes the finalize body with no status word. The server reads the
+  release from the locked row (`runner-api/run-release.ts`):
+
+  | Reading | When | Result |
+  |---|---|---|
+  | `FAILED_TURN` | the hold above | FAILED; the task is told as the old failed turn tells it; nothing is armed again |
+  | `END_ASKED` | an end reason, or a cancel without a failed turn | settles as the old finalize settles a cancel |
+  | `FAILED_CUT_OFF` | `cutOffTurnOutcome: 'FAILED'` with no end asked (an engine that died before any turn it could report) | the old finalize's W6 FAILED |
+  | `STOPPED` | none of the above | CANCELLED; the turn it cuts off ends CANCELLED |
+
+  The old finalize reads the hold as `FAILED_TURN` too, so a runner that mixes the two protocols still ends failed.
+- **Backstop.** If no release follows a failed turn, the reaper's cancel-grace sweep releases the session FAILED and
+  keeps `last_turn_outcome` FAILED, so the row reads as a failure and an armed retry fires. With no retry armed,
+  the sweep sets the task FAILED with the run-failure comment.
+- **Commit or checkpoint.** The runner chooses from what it knows itself: a failure it reported gets the permanent
+  commit, and a stop it was told to make gets the undoable checkpoint.
+- **Version skew.**
+  - A new runner against an older server is answered FAILED on its failed turn (the old release) and 404 on
+    `/release`. It should read both as the old protocol and finalize.
+  - An older server meeting a held row (deploy skew of the apiserver itself): its finalize reads the cancel and
+    settles CANCELLED. `releaseWasFailure` still reads the row as a failure through `last_turn_outcome`, and the
+    status bridge does not.
+
 ## 10. Risks
 
 | Risk | Where | Guard |

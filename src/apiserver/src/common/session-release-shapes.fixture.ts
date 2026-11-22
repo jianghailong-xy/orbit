@@ -42,6 +42,11 @@ export interface ReleaseShape {
   production?: string;
   /** Why "released by a failure" answers otherwise than the cause reading; absent when it answers the same. */
   failureChange?: FailureChange;
+  /**
+   * A shape the new runner protocol leaves (SESSION_RELEASE_V1, plan step 6.1): the name of the shape the old protocol
+   * leaves for the same event, which both release questions answer alike for. Absent on every other shape.
+   */
+  oldProtocol?: string;
 }
 
 const W = 'src/apiserver/src';
@@ -167,6 +172,32 @@ export const RELEASE_SHAPES: readonly ReleaseShape[] = [
   { name: 'B7', what: '1262: an old LANDING container', writer: 'migration 1262',
     status: 'SUCCEEDED', released: true, endReason: null, lastTurnOutcome: null,
     sessionKind: 'LANDING', carriesTurnOutcome: true },
+  // The new runner protocol (SESSION_RELEASE_V1, plan step 6.1): a failed turn is reported as the turn's outcome and
+  // the release as a report of its own. `oldProtocol` names the shape the old protocol leaves for the same event.
+  { name: 'P1 hold', what: 'new protocol: a failed turn reported, its release not yet (held RUNNING, the teardown cancel set)', writer: `${W}/runner-api/runner-api.controller.ts turnComplete`,
+    status: 'RUNNING', released: false, endReason: null, lastTurnOutcome: 'FAILED',
+    sessionKind: 'CONVERSATION', carriesTurnOutcome: true },
+  { name: 'P2 released after a failed turn', what: 'new protocol: the release report after a failed turn (FAILED_TURN)', writer: `${W}/runner-api/runner-api.controller.ts release`,
+    status: 'FAILED', released: true, endReason: null, lastTurnOutcome: 'FAILED',
+    sessionKind: 'CONVERSATION', carriesTurnOutcome: true, oldProtocol: 'W1' },
+  { name: 'P3 released by the backstop', what: 'new protocol: a failed turn whose release never came, released by the reaper\'s cancel grace', writer: `${W}/realtime/reaper.service.ts forceFinalize`,
+    status: 'FAILED', released: true, endReason: null, lastTurnOutcome: 'FAILED',
+    sessionKind: 'CONVERSATION', carriesTurnOutcome: true, oldProtocol: 'W1' },
+  { name: 'P4 cut-off turn failed', what: 'new protocol: a release with cutOffTurnOutcome FAILED and no end asked (FAILED_CUT_OFF)', writer: `${W}/runner-api/runner-api.controller.ts release`,
+    status: 'FAILED', released: true, endReason: null, lastTurnOutcome: 'FAILED',
+    sessionKind: 'CONVERSATION', carriesTurnOutcome: true, oldProtocol: 'W6' },
+  { name: 'P5 end asked in the hold', what: 'new protocol: an end asked between the failed turn and its release (it files, records no reason), then the release', writer: `${W}/runner-api/runner-api.controller.ts release`,
+    status: 'FAILED', released: true, endReason: null, lastTurnOutcome: 'FAILED',
+    sessionKind: 'CONVERSATION', carriesTurnOutcome: true, oldProtocol: 'W1' },
+  { name: 'P6 end asked, cut-off ignored', what: 'new protocol: a release with cutOffTurnOutcome FAILED after an end was asked (END_ASKED: ignored)', writer: `${W}/runner-api/runner-api.controller.ts release`,
+    status: 'CANCELLED', released: true, endReason: 'ended', lastTurnOutcome: 'ANSWERED',
+    sessionKind: 'CONVERSATION', carriesTurnOutcome: true, oldProtocol: 'N1' },
+  { name: 'P7 stopped', what: 'new protocol: a release with no end asked and no failure, the turn it cut off CANCELLED (STOPPED)', writer: `${W}/runner-api/runner-api.controller.ts release`,
+    status: 'CANCELLED', released: true, endReason: null, lastTurnOutcome: 'CANCELLED',
+    sessionKind: 'CONVERSATION', carriesTurnOutcome: true, oldProtocol: 'N4' },
+  { name: 'P8 revived, then stopped', what: 'new protocol: a failure release revived, then released before a turn completed (STOPPED, option A)', writer: `${W}/runner-api/runner-api.controller.ts release`,
+    status: 'CANCELLED', released: true, endReason: null, lastTurnOutcome: 'CANCELLED',
+    sessionKind: 'CONVERSATION', carriesTurnOutcome: true, oldProtocol: 'A1' },
   // A deploy-1 server's releases during deploy 2's hand-over: the status says FAILED, the turn outcome is the last
   // turn's from before (design §12.6 fact 1). The status bridge carries them until R6 backfills them (deploy 3).
   { name: 'H2', what: 'deploy-1 reaper: runner lost, no turn outcome recorded', writer: 'deploy 1 realtime/reaper.service.ts',
