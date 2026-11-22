@@ -570,7 +570,7 @@ function ItemLink({
 
 /** `POST /projects/:id/fuse/:episodeId/resume` — the owner's alone (§6.3 F-T4). An empty body
  *  resumes without raising anything, which is what the plain press means. */
-function resumeFuse(projectId: string, episodeId: string): Promise<unknown> {
+export function resumeFuse(projectId: string, episodeId: string): Promise<unknown> {
   return api(
     `/projects/${encodeURIComponent(projectId)}/fuse/${encodeURIComponent(episodeId)}/resume`,
     { method: 'POST', body: {} },

@@ -65,6 +65,20 @@ export const MODEL_FAMILY_TIERS: ReadonlyArray<{
   { family: 'Kimi K3', match: /^kimi-k3(?!\.)/, tiers: { S: 'low', M: 'high' } },
   { family: 'Kimi K3.1 Pro', match: /^kimi-k3\.\d+-pro/, tiers: { L: 'high', XL: 'max' } },
   { family: 'Kimi K3 (no Pro listed)', match: /^kimi-k3(?!\.)/, tiers: { L: 'high', XL: 'max' }, unless: /^kimi-k3\.\d+-pro/ },
+  // Measured 2026-11-21 against the tier anchors (task 351AxJztYRw7WA2Ik86DK, owner-approved). Pinned to the
+  // measured ids where a wider pattern would let the newest-member rule pick an unmeasured model.
+  // Fable passed everything, at ~1.8x Opus's cost: L/XL, after Opus.
+  { family: 'Claude Fable', match: /^claude-fable-\d/, tiers: { L: 'high', XL: 'max' } },
+  // Passed everything on Antigravity, slower than Neon and one run stalled: L/XL, after Gemini.
+  { family: 'Gemini Pro Orchestrator', match: /^gemini-pro-orchestrator-neon$/, tiers: { L: 'high', XL: 'max' } },
+  { family: 'DeepSeek Flash', match: /^deepseek-flash$/, tiers: { S: 'low', M: 'medium' } },
+  // S and M only measured: its L/XL runs died on Cursor transport errors.
+  { family: 'Grok', match: /^grok-\d[\d.]*$/, tiers: { S: 'low', M: 'medium' } },
+  // Pass S/M/L, miss the XL task (Sol 1/2, Terra 0/2, Luna 0/2); in that order of preference.
+  { family: 'GPT Sol', match: /^gpt-5\.6-sol$/, tiers: { S: 'low', M: 'medium' } },
+  { family: 'GPT Terra', match: /^gpt-5\.6-terra$/, tiers: { S: 'low', M: 'medium' } },
+  { family: 'GPT Luna', match: /^gpt-5\.6-luna$/, tiers: { S: 'low', M: 'medium' } },
+  // gpt-oss-120b failed every S task: no entry, so it stays untiered.
 ];
 
 const EFFORT_ORDER = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
@@ -110,6 +124,15 @@ function familyTierRows(catalog: readonly RunnerModelInfo[]): SubagentModelRow[]
     }
   }
   return [...rows, ...catalog.filter((row) => !tiered.has(row.value)).map((row) => ({ model: row.value, effort: null, level: null }))];
+}
+
+/** The newest model of `model`'s family in a catalogue (the one familyTierRows tiers), or null for a model of no
+ *  family. It is `model` itself when nothing newer is reported. */
+export function familyNewest(model: string, catalog: readonly RunnerModelInfo[]): string | null {
+  const rule = MODEL_FAMILY_TIERS.find(({ match }) => match.test(model));
+  if (!rule) return null;
+  const newest = catalog.filter((row) => rule.match.test(row.value)).sort((a, b) => newerFirst(a.value, b.value))[0];
+  return newest?.value ?? null;
 }
 
 /** The effort each tier asks of a model the owner tiers: clamped to the model's own levels (clampEffort). */
@@ -347,9 +370,10 @@ export function routeTaskRun(input: ModelRoutingInput): ModelRoutingDecision {
     reasons.push(`[default] Tier ${floor}: ${mode === 'balance' ? 'Balance' : 'Intelligence'} minimum for a task without a suggestion`);
   }
   const lastLevel = last ? priorLevel(last, runtime) : null;
-  const failure = last?.outcome && last.outcome !== 'OK'
-    ? last.outcome
-    : last?.status === 'FAILED' ? 'FAILED' : null;
+  // How the last run ended is its outcome (task-route-decision.ts readRunHistory reads it off the release, design
+  // §12.3), never its terminal status word: an end that was asked for and not honoured left the status FAILED and
+  // reads OK there (W7, removal step R4).
+  const failure = last?.outcome && last.outcome !== 'OK' ? last.outcome : null;
   if (last && lastLevel && failure) {
     const next = Math.min(MODEL_ROUTING_LEVELS.indexOf(lastLevel) + 1, 3);
     level = MODEL_ROUTING_LEVELS[Math.max(next, level ? MODEL_ROUTING_LEVELS.indexOf(level) : 0)];

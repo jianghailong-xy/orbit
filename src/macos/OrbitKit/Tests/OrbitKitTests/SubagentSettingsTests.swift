@@ -48,6 +48,12 @@ final class SubagentSettingsTests: XCTestCase {
         XCTAssertEqual(SubagentSettings.tierText(["S", "M", "L", "XL"]), "S–XL by effort")
         XCTAssertEqual(SubagentSettings.tierText(["L", "XL"]), "L · XL")
         XCTAssertEqual(SubagentSettings.tierText(["M"]), "M")
+        let older = ProviderModelTier(model: "claude-opus-5", levels: [], supersededBy: "claude-opus-5-5")
+        XCTAssertEqual(SubagentSettings.modelTierText(older), "Older · uses claude-opus-5-5")
+        XCTAssertTrue(SubagentSettings.tierIsOlder(older))
+        let tiered = ProviderModelTier(model: "claude-opus-5", levels: ["M"], supersededBy: "claude-opus-5-5")
+        XCTAssertEqual(SubagentSettings.modelTierText(tiered), "M")
+        XCTAssertEqual(SubagentSettings.modelTierText(ProviderModelTier(model: "grok", levels: [])), "Not set")
         XCTAssertFalse(SubagentSettings.tierIsUnset(["M"]))
     }
 

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { AgentProvider, PermissionMode } from '@orbit/shared';
 import { RunStatus } from '@prisma/client';
+import { isReleasedStatus } from '../common/session-release';
 import { encryptSecret } from '../providers/provider-crypto';
 import { resolveProviderExec } from '../providers/custom-provider';
 import { SessionsService } from './sessions.service';
@@ -92,6 +93,8 @@ function historyFixture(
     assignedRunner: { id: 'runner-1', status: 'ONLINE', lastHeartbeatAt: now, capabilities: ['provider:dsh'], capabilitiesReportedAt: now },
     workspace: null, cancelRequestedAt: null, completedAt: null, archivedAt: null,
     deletedAt: null, mergeStatus: null, commitStatus: null,
+    // A terminal row carries its release column (session_release_fact_chk).
+    ...(isReleasedStatus(String(overrides.status ?? RunStatus.FAILED)) ? { finishedAt: now } : {}),
     ...overrides,
   };
   const updates: Array<Record<string, unknown>> = [];
@@ -330,7 +333,7 @@ test('dsh compatibility: other built-in engine creation and runtime routes remai
 
 test('dsh admission: Harness history cannot move to a different workspace', () => {
   const verdict = sessionMoveVerdict({
-    runtime: AgentProvider.DSH, status: RunStatus.SUCCEEDED, deletedAt: null,
+    runtime: AgentProvider.DSH, status: RunStatus.SUCCEEDED, finishedAt: new Date(), deletedAt: null,
     completedAt: null, importSourceCwd: null, taskId: null,
     dispatchOrigin: 'USER', cancelRequestedAt: null, engineTurnActive: false,
     runningBgShells: [], liveApprovals: 0, queuedTurns: 0, mergeStatus: null,

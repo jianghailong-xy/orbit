@@ -10,7 +10,7 @@
  *      HUMAN_ONLY_WORKSPACE_FIELD and nothing is written, and a runner's provider write carries no tier.
  *   4. A custom endpoint's model with no tier is listed `Not set` and skipped by routeSubagent with its reason;
  *      once the owner sets a tier through PATCH /providers/mine/:id/model-tier it is listed and picked.
- *   5. A built-in engine's model (Cursor's grok-4.7) is tiered through PATCH /providers/builtin/:engine/model-tier:
+ *   5. A built-in engine's model (Cursor's muse-spark-1.3) is tiered through PATCH /providers/builtin/:engine/model-tier:
  *      stored in the owner's preferences, read by the Tier column and routeSubagent, overriding a family tier, and
  *      cleared back to untiered.
  *   6. Workflows (docs/subagent-workflow-design.md §9 D2, board docs/mocks/subagent-workflow part 5): on, a session
@@ -327,7 +327,7 @@ test('SubAgents settings: defaults, the human doors, the runner refusals, Workfl
           codex: [{ value: 'gpt-5.6-sol', label: 'GPT-5.6 Sol' }],
           cursor: [
             { value: 'default', label: 'Auto' },
-            { value: 'grok-4.7', label: 'Grok 4.7', reasoningLevels: ['low', 'medium', 'high'] },
+            { value: 'muse-spark-1.3', label: 'Muse Spark 1.3', reasoningLevels: ['low', 'medium', 'high'] },
             { value: 'claude-opus-5-6', label: 'Opus 5.6', reasoningLevels: ['low', 'medium', 'high', 'xhigh', 'max'] },
           ],
         },
@@ -347,26 +347,26 @@ test('SubAgents settings: defaults, the human doors, the runner refusals, Workfl
     const tier = async (model: string, value: 'S' | 'M' | 'L' | 'XL' | null) =>
       providersDoor.setBuiltinModelTier(user, 'cursor', await asSent(UpdateProviderModelTierDto, { model, tier: value }));
 
-    // Before: the family tiers Opus; grok-4.7 and Auto are of no family, listed Not set, and the owner's to tier.
+    // Before: the family tiers Opus; muse-spark-1.3 and Auto are of no family, listed Not set, and the owner's to tier.
     assert.deepEqual(await cursor(), [
       { model: 'claude-opus-5-6', levels: ['L', 'XL'], source: 'catalogue', editable: true, outputPricePerMTok: null },
       { model: 'default', levels: [], source: null, editable: true, outputPricePerMTok: null },
-      { model: 'grok-4.7', levels: [], source: null, editable: true, outputPricePerMTok: null },
+      { model: 'muse-spark-1.3', levels: [], source: null, editable: true, outputPricePerMTok: null },
     ]);
     const before = await plan('S');
     t.diagnostic(`before: ${JSON.stringify(before)}`);
     assert.deepEqual([before.provider, before.model, before.pickLevel], ['cursor', 'claude-opus-5-6', 'L'], 'nothing at S: the tier up');
-    assert.ok(before.candidates.some((c) => c.model === 'grok-4.7' && c.reason === 'The model has no tier'));
+    assert.ok(before.candidates.some((c) => c.model === 'muse-spark-1.3' && c.reason === 'The model has no tier'));
 
-    // Set grok-4.7 to S: stored under the engine, listed as the owner's, and routed at S at its clamped effort.
-    assert.deepEqual(await tier('grok-4.7', 'S'), { engine: 'cursor', model: 'grok-4.7', tier: 'S' });
+    // Set muse-spark-1.3 to S: stored under the engine, listed as the owner's, and routed at S at its clamped effort.
+    assert.deepEqual(await tier('muse-spark-1.3', 'S'), { engine: 'cursor', model: 'muse-spark-1.3', tier: 'S' });
     const stored = (await prisma.user.findUniqueOrThrow({ where: { id: ownerId } })).preferences as Record<string, unknown>;
-    assert.deepEqual(stored.builtinModelTiers, { cursor: { 'grok-4.7': 'S' } });
+    assert.deepEqual(stored.builtinModelTiers, { cursor: { 'muse-spark-1.3': 'S' } });
     assert.equal(stored.theme, 'dark', 'the rest of the preferences is left alone');
-    assert.deepEqual((await cursor())?.find((row) => row.model === 'grok-4.7'),
-      { model: 'grok-4.7', levels: ['S'], source: 'owner', editable: true, outputPricePerMTok: null });
+    assert.deepEqual((await cursor())?.find((row) => row.model === 'muse-spark-1.3'),
+      { model: 'muse-spark-1.3', levels: ['S'], source: 'owner', editable: true, outputPricePerMTok: null });
     const set = await plan('S');
-    assert.deepEqual([set.provider, set.model, set.effort, set.pickLevel], ['cursor', 'grok-4.7', 'low', 'S']);
+    assert.deepEqual([set.provider, set.model, set.effort, set.pickLevel], ['cursor', 'muse-spark-1.3', 'low', 'S']);
 
     // The owner's tier overrides the family's: Opus at S leaves L and XL with nothing but the tier below.
     await tier('claude-opus-5-6', 'S');
@@ -377,25 +377,25 @@ test('SubAgents settings: defaults, the human doors, the runner refusals, Workfl
     assert.deepEqual([opus, ...opus.fallbacks].filter((pick) => pick.model === 'claude-opus-5-6')
       .map((pick) => ('pickLevel' in pick ? pick.pickLevel : pick.level)), ['S']);
 
-    // Clearing restores the family tier and returns grok-4.7 to Not set and untiered.
+    // Clearing restores the family tier and returns muse-spark-1.3 to Not set and untiered.
     await tier('claude-opus-5-6', null);
-    await tier('grok-4.7', null);
+    await tier('muse-spark-1.3', null);
     assert.deepEqual(
       ((await prisma.user.findUniqueOrThrow({ where: { id: ownerId } })).preferences as Record<string, unknown>).builtinModelTiers,
       { cursor: {} });
     assert.deepEqual((await cursor())?.map((row) => [row.model, row.levels, row.source]), [
-      ['claude-opus-5-6', ['L', 'XL'], 'catalogue'], ['default', [], null], ['grok-4.7', [], null],
+      ['claude-opus-5-6', ['L', 'XL'], 'catalogue'], ['default', [], null], ['muse-spark-1.3', [], null],
     ]);
     const cleared = await plan('S');
     assert.deepEqual([cleared.model, cleared.pickLevel], ['claude-opus-5-6', 'L']);
-    assert.ok(cleared.candidates.some((c) => c.model === 'grok-4.7' && c.reason === 'The model has no tier'));
-    assert.deepEqual(await tier('grok-4.7', null), { engine: 'cursor', model: 'grok-4.7', tier: null }, 'a second clear is taken');
+    assert.ok(cleared.candidates.some((c) => c.model === 'muse-spark-1.3' && c.reason === 'The model has no tier'));
+    assert.deepEqual(await tier('muse-spark-1.3', null), { engine: 'cursor', model: 'muse-spark-1.3', tier: null }, 'a second clear is taken');
 
     // Refused: a model no runner of the owner's reports for that engine, a name that is no engine, and a bad tier.
     await assert.rejects(tier('kimi-k3', 'M'), BadRequestException);
     await assert.rejects(providersDoor.setBuiltinModelTier(user, 'not-an-engine',
-      await asSent(UpdateProviderModelTierDto, { model: 'grok-4.7', tier: 'M' })), NotFoundException);
-    await assert.rejects(asSent(UpdateProviderModelTierDto, { model: 'grok-4.7', tier: 'XXL' }), BadRequestException);
+      await asSent(UpdateProviderModelTierDto, { model: 'muse-spark-1.3', tier: 'M' })), NotFoundException);
+    await assert.rejects(asSent(UpdateProviderModelTierDto, { model: 'muse-spark-1.3', tier: 'XXL' }), BadRequestException);
   });
 
   await t.test('Workflows: on, a workflow opens; off, 403 WORKFLOWS_DISABLED while delegate opens, and the claim says so', async () => {

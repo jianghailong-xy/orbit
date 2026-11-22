@@ -182,6 +182,9 @@ test('Feishu: the owner replies to a session and starts one from their direct me
       numTurns: 1, startedAt: new Date(), runtimeSessionId: `runtime-${randomUUID()}`,
       dispatchOrigin: SessionDispatchOrigin.USER, runSource: SessionRunSource.MANUAL,
       ...(status === RunStatus.SUCCEEDED ? { completedAt: new Date() } : {}),
+      ...(status === RunStatus.SUCCEEDED || status === RunStatus.FAILED
+        ? { finishedAt: new Date()}
+        : status === RunStatus.CANCELLED ? { finishedAt: new Date()} : {}),
     },
   });
   /** An alert card the transport sent the owner about a session. */

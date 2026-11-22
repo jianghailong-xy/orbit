@@ -203,7 +203,8 @@ async function workSession(
       status: RunStatus.SUCCEEDED, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
       isolationStatus: s.isolationStatus, branch: s.branch, branchSha: s.branchSha ?? null,
       baseSha: s.baseSha ?? null, changedFiles: (s.changedFiles ?? []) as Prisma.InputJsonValue,
-      numTurns: 1, startedAt: minutesAgo(30), createdAt: minutesAgo(30), finishedAt: minutesAgo(1),
+      numTurns: 1, startedAt: minutesAgo(30), createdAt: minutesAgo(30),
+      finishedAt: minutesAgo(1), 
     },
   });
 }
@@ -232,6 +233,7 @@ async function landOnMain(stack: Stack, w: World, taskId: string, nibble: string
       id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, taskId, workspaceId: w.workspaceId,
       assignedRunnerId: w.runnerId, title: 'merge', prompt: 'merge', provider: 'claude',
       status: RunStatus.SUCCEEDED, dispatchOrigin: SessionDispatchOrigin.USER,
+      finishedAt: new Date(), 
     },
   });
   await stack.db.sessionMergeReceipt.create({

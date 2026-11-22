@@ -8,7 +8,7 @@ import {
   TASK_BATCH_CARD_TOOL,
   TASK_CREATE_CARD_TOOL,
 } from './verifier-write-authority';
-import { RELEASED_SESSION_STATUSES } from '../common/session-release';
+import { heldFilter } from '../common/session-release';
 
 /**
  * The card that authorises an in-session task write, and the server's half of reading it.
@@ -66,9 +66,6 @@ import { RELEASED_SESSION_STATUSES } from '../common/session-release';
 export const TASK_WRITE_NEEDS_OWNER_CARD_CODE = 'TASK_WRITE_NEEDS_OWNER_CARD';
 export const TASK_WRITE_NEEDS_OWNER_CARD_ACTION = 'ASK_THROUGH_THE_SAME_TOOL';
 export const TASK_WRITE_NEEDS_SESSION_ACTION = 'USE_A_PERSONAL_ACCESS_TOKEN';
-
-/** Session statuses a write may no longer be made under: the conversation is over. */
-const ENDED_SESSION_STATUSES = RELEASED_SESSION_STATUSES;
 
 /**
  * How many of a session's answered cards of one kind are read looking for the covering one.
@@ -283,7 +280,8 @@ export async function assertSessionTaskWriteHasCard(
       ownerId: input.ownerId,
       assignedRunnerId: input.runnerId,
       deletedAt: null,
-      status: { notIn: [...ENDED_SESSION_STATUSES] },
+      // Held: a write may no longer be made under a released session, whose conversation is over.
+      ...heldFilter(),
     },
     select: { id: true },
   });

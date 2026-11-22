@@ -1,6 +1,7 @@
 import { readByLiveBackgroundJob, runningSubagentCards } from '../sessions/abandoned-approvals';
 import { isSessionGenerating } from '../common/session-generating';
 import { ENGINE_TURN } from '../common/session-working';
+import { RELEASE_FACTS_SELECT } from '../common/session-release';
 import { visibleQuestions, questionHolds } from '../sessions/run-question';
 import http2 from 'node:http2';
 import { randomUUID } from 'node:crypto';
@@ -602,7 +603,7 @@ export class PushService {
         select: {
           title: true,
           ownerId: true,
-          status: true,
+          ...RELEASE_FACTS_SELECT,
           retryAt: true,
           completedAt: true,
           deletedAt: true,

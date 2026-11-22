@@ -6,6 +6,7 @@ import {
   type ProjectListAttention,
   type ProjectListCoordinatorActivity,
   type ProjectListIntegration,
+  type ProjectSidebarPause,
   type ProjectSidebarTaskCounts,
 } from '@orbit/shared';
 import type { ProjectSection, SectionProject } from '../components/ProjectSections';
@@ -655,7 +656,7 @@ export function integrationChipOf(project: AttentionProject): IntegrationChip | 
  * lists, in what order, and with which marks — the iPhone drawer's rows (OrbitKit
  * `ProjectAttention.drawerProjects` / `drawerMark`), so the two rails agree about one project.
  */
-export interface SidebarProject {
+export interface SidebarProject extends ProjectSidebarPause {
   id: string;
   title: string;
   status: 'OPEN' | 'DONE' | 'CANCELLED';

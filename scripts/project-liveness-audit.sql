@@ -233,7 +233,7 @@ SELECT item."project_id"                                       AS project_id,
              SELECT 1 FROM "session" owed_session
               WHERE owed_session."task_id" = owed_task."id"
                 AND owed_session."starts_task_work"
-                AND owed_session."status" IN ('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED')
+                AND owed_session."finished_at" IS NULL
                 AND (owed_session."id" IS DISTINCT FROM "item"."session_id"
                      OR EXISTS (
                        SELECT 1 FROM "conversation_turn" resumed_turn

@@ -26,7 +26,7 @@ final class SessionProjectSheetTests: XCTestCase {
                           sessionCount: 11, coordinator: coordinator, folderId: nil, pinnedAt: nil,
                           lastTurnAt: nil, createdAt: nil, needsYou: false, running: false, jobs: false,
                           indicator: nil, line: line, target: target,
-                          taskCounts: nil, runningCount: 0)
+                          taskCounts: nil, runningCount: 0, started: true, pause: nil)
     }
 
     private let waitingLine = SessionLine(text: "Waiting on you · GitHub workspaces P0", tone: .approval)

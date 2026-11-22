@@ -195,7 +195,7 @@ async function makeWorld(db: PrismaClient): Promise<World> {
       taskId: verifierPassed,
       title: 'settled verifier',
       prompt: 'verify independently',
-      status: RunStatus.SUCCEEDED,
+      status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
       dispatchOrigin: SessionDispatchOrigin.USER,
       endReason: 'task_done',
       completedAt: new Date(),

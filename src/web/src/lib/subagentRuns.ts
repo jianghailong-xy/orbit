@@ -246,8 +246,6 @@ export interface SubagentSessionSummary {
   rows: SubagentRunView[];
   /** The words after "Agents" (see `subagentSessionSummary`). */
   band: string;
-  /** How many ended without finishing, in every state: red at the band's right edge, before the spinner while one runs. */
-  failed: number;
   /** The models the runs took, most runs first. */
   models: AgentModelCount[];
   /** Every place the runs ran, most runs first; the session's own machine is `name: null`. */
@@ -324,7 +322,6 @@ export function subagentSessionSummary(
     running,
     rows,
     band,
-    failed: all.filter(subagentRunFailed).length,
     models: byCount([...models.values()]),
     machines: byCount([...machines.values()]),
     elsewhere: all.some((run) => !!run.workspaceName),

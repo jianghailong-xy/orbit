@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 37 |
-| `user` | 491 |
+| `user` | 494 |
 | `admin` | 31 |
 | `runner` | 211 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **774** |
+| **Total** | **777** |
 
 ## Public routes
 
@@ -203,10 +203,10 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/projects/:id/acceptance/merge-evidence` | body `RecordMergeEvidenceDto`; path `id` | `ProjectsController.recordMergeEvidence` |
 | `POST` | `/api/projects/:id/blockers/:blockerId/resolve` | body `ResolveProjectBlockerDto`; path `blockerId`, `id` | `ProjectsController.resolveBlocker` |
 | `POST` | `/api/projects/:id/coordinator` | body `OpenProjectCoordinatorDto`; path `id` | `ProjectsController.openCoordinator` |
-| `POST` | `/api/projects/:id/coordinator/handoff` | path `id` | `CoordinatorHandoffController.start` |
+| `POST` | `/api/projects/:id/coordinator/handoff` | body `Object`; path `id` | `CoordinatorHandoffController.start` |
 | `POST` | `/api/projects/:id/coordinator/handoff/cancel` | path `id` | `CoordinatorHandoffController.cancel` |
-| `POST` | `/api/projects/:id/coordinator/handoff/retry` | path `id` | `CoordinatorHandoffController.retry` |
-| `POST` | `/api/projects/:id/coordinator/handoff/skip` | path `id` | `CoordinatorHandoffController.skip` |
+| `POST` | `/api/projects/:id/coordinator/handoff/retry` | body `Object`; path `id` | `CoordinatorHandoffController.retry` |
+| `POST` | `/api/projects/:id/coordinator/handoff/skip` | body `Object`; path `id` | `CoordinatorHandoffController.skip` |
 | `GET` | `/api/projects/:id/coordinator/pending-waits` | path `id` | `CoordinatorHandoffController.pendingWaits` |
 | `POST` | `/api/projects/:id/coordinator/rebind` | body `RebindProjectCoordinatorDto`; path `id` | `ProjectsController.rebindCoordinator` |
 | `POST` | `/api/projects/:id/coordinator/replace` | body `ReplaceProjectCoordinatorDto`; path `id` | `ProjectsController.replaceCoordinator` |
@@ -381,6 +381,8 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `DELETE` | `/api/sessions/:id/auto-retry` | path `id` | `SessionsController.cancelAutoRetry` |
 | `POST` | `/api/sessions/:id/auto-retry` | body `Object`; path `id` | `SessionsController.armAutoRetry` |
 | `GET` | `/api/sessions/:id/background` | path `id` | `SessionsController.backgroundShells` |
+| `POST` | `/api/sessions/:id/background/jobs/:jobId/stop` | path `id`, `jobId` | `SessionsController.stopBackgroundJob` |
+| `GET` | `/api/sessions/:id/background/jobs/:jobId/tail` | path `id`, `jobId`; query `lines` | `SessionsController.backgroundJobTail` |
 | `POST` | `/api/sessions/:id/checkout/discard` | path `id` | `SessionsController.discardCheckout` |
 | `POST` | `/api/sessions/:id/commit` | path `id` | `SessionsController.commitWorktree` |
 | `GET` | `/api/sessions/:id/compact` | path `id` | `SessionsController.getCompact` |
@@ -402,6 +404,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/sessions/:id/interrupt` | body `Object`; path `id` | `SessionsController.interrupt` |
 | `GET` | `/api/sessions/:id/landing/log` | path `id`; query `check`, `claim`, `cursor`, `jobId`, `round` | `SessionsController.landingLog` |
 | `POST` | `/api/sessions/:id/merge` | body `Object`; path `id` | `SessionsController.mergeToMain` |
+| `POST` | `/api/sessions/:id/merge-failure/dismiss` | path `id` | `SessionsController.dismissMergeFailure` |
 | `GET` | `/api/sessions/:id/merge-receipts` | path `id`; query `limit` | `SessionsController.listMergeReceipts` |
 | `POST` | `/api/sessions/:id/merge-receipts` | body `RecordMergeReceiptDto`; path `id` | `SessionsController.recordMergeReceipt` |
 | `POST` | `/api/sessions/:id/merge-repair` | body `Object`; path `id` | `SessionsController.mergeRepair` |

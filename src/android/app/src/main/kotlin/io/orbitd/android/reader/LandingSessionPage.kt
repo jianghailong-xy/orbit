@@ -32,6 +32,7 @@ import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.cards.number
 import io.orbitd.android.core.cards.obj
 import io.orbitd.android.core.cards.text
+import io.orbitd.android.core.cards.TaskExemptCopy
 import io.orbitd.android.directory.DirectoryApi
 import io.orbitd.android.directory.DirectoryData
 import io.orbitd.android.navigation.ObjectId
@@ -470,7 +471,7 @@ private fun LandingBudgetMeter(progress: Float, usual: Float?) {
  *  then its lines gathered into steps (`LandingSteps`), each a tool row. A step opens to its own lines, the server's sentences as they
  *  were, a check's to its output too; a step that failed or runs now starts open. */
 @Composable
-private fun LandingTimelineSectionView(section: LandingSection, view: LandingView, now: Instant, zone: ZoneId,
+internal fun LandingTimelineSectionView(section: LandingSection, view: LandingView, now: Instant, zone: ZoneId,
     onLog: suspend (LandingLogSelectors, String?) -> LandingLogPage?) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val current = section.jobId == view.currentAttempt?.jobId
@@ -498,6 +499,7 @@ private fun LandingTimelineSectionView(section: LandingSection, view: LandingVie
             val last = index == steps.lastIndex
             val status = when {
                 LandingSteps.failed(step, section.kind) -> StepStatus.FAILED
+                LandingSteps.skippedReason(step) != null -> StepStatus.SKIPPED
                 last && live -> StepStatus.RUNNING
                 last && current && attempt?.state == "QUEUED" -> StepStatus.PENDING
                 else -> StepStatus.OK
@@ -520,7 +522,7 @@ private fun LandingTimelineSectionView(section: LandingSection, view: LandingVie
     }
 }
 
-private enum class StepStatus { OK, FAILED, RUNNING, PENDING }
+private enum class StepStatus { OK, FAILED, RUNNING, PENDING, SKIPPED }
 
 /** One step as the session chat's tool row on Android: the tone bar, the caret, its name in the mono face, its summary line and the
  *  word that says how it stands (`Complete`, `Failed`, `Running`), as the chat's own tool rows say it. No time on a phone's row; the
@@ -544,17 +546,25 @@ private fun LandingStepRow(section: LandingSection, step: LandingStep, status: S
             .padding(start = 11.dp, end = 8.dp, top = 6.dp, bottom = 6.dp).testTag("landing:step-row:${step.key}"),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
             Icon(painterResource(R.drawable.ic_chevron_forward), null, Modifier.size(12.dp).rotate(if (open) 90f else 0f), tint = muted.copy(alpha = 0.6f))
-            Text(step.name, Modifier.testTag("landing:step-name"), style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+            // A landing check its task is exempt from reads Skipped with the reason, as the web's row does (D5).
+            val skipped = if (status == StepStatus.SKIPPED) LandingSteps.skippedReason(step) else null
+            Text(if (skipped != null) "${step.name} · ${TaskExemptCopy.skipped}" else step.name, Modifier.testTag("landing:step-name"), style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
                 fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
-            Text(LandingSessionModel.timelineText(step.summary), Modifier.weight(1f).testTag("landing:step-summary"), style = MaterialTheme.typography.bodyMedium, color = muted,
+            Text(skipped?.let(TaskExemptCopy::reason) ?: LandingSessionModel.timelineText(step.summary), Modifier.weight(1f).testTag("landing:step-summary"), style = MaterialTheme.typography.bodyMedium, color = muted,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(when (status) {
                 StepStatus.FAILED -> LandingStepWords.FAILED
                 StepStatus.RUNNING -> LandingStepWords.RUNNING
                 StepStatus.PENDING -> LandingStepWords.QUEUED
                 StepStatus.OK -> LandingStepWords.COMPLETE
+                // Web's skipped arrow, in its warning ink: the row's name already says Skipped.
+                StepStatus.SKIPPED -> LandingStepWords.SKIPPED
             }, Modifier.testTag("landing:step-status"), style = MaterialTheme.typography.bodySmall,
-                color = if (status == StepStatus.FAILED) MaterialTheme.colorScheme.error else muted, maxLines = 1, softWrap = false)
+                color = when (status) {
+                    StepStatus.FAILED -> MaterialTheme.colorScheme.error
+                    StepStatus.SKIPPED -> LocalOrbitColors.current.needsYou
+                    else -> muted
+                }, maxLines = 1, softWrap = false)
         }
         if (open) Column(Modifier.fillMaxWidth().padding(start = 28.dp, end = 8.dp, bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp),
             content = content)
@@ -567,6 +577,8 @@ internal object LandingStepWords {
     const val FAILED = "Failed"
     const val RUNNING = "Running"
     const val QUEUED = "Queued"
+    /** A step not run (web's `ArrowRightOutlined` on a skipped row). */
+    const val SKIPPED = "→"
 }
 
 /** One of the server's lines, as it was: its time, its mark and its sentence; a finished check's `Log ›` and, when it failed, the tail
@@ -596,7 +608,7 @@ private fun LandingEntryLine(section: LandingSection, index: Int, entry: Landing
         }
         when {
             selectors != null && openLog == selectors -> LandingLogBlock(selectors, onLog)
-            selectors != null && !LandingSessionModel.checkPassed(entry) -> LandingInlineOutput(selectors, onLog)
+            selectors != null && !LandingSessionModel.checkPassed(entry) && LandingSteps.taskExempt(entry) == null -> LandingInlineOutput(selectors, onLog)
         }
     }
 }
@@ -605,7 +617,9 @@ private fun LandingEntryLine(section: LandingSection, index: Int, entry: Landing
 private fun landingMark(entry: LandingEntry, jobKind: String, entries: List<LandingEntry>, index: Int): Pair<String, Color> = when (entry.kind) {
     "TAKEN_OVER" -> "↗" to Color(0xFF0066BE)
     "CHECK_FINISHED", "RESULT", "RESULT_FALLBACK" ->
-        if (entry.data?.text("skipped") == "PATHS_EXEMPT") "≡" to Color.Unspecified else if (LandingSessionModel.entryOk(entry, jobKind)) "✓" to Color(0xFF247344) else "✗" to Color(0xFFB3261E)
+        if (entry.data?.text("skipped") == "PATHS_EXEMPT") "≡" to Color.Unspecified
+        else if (LandingSteps.taskExempt(entry) != null) "→" to Color(0xFF985900)
+        else if (LandingSessionModel.entryOk(entry, jobKind)) "✓" to Color(0xFF247344) else "✗" to Color(0xFFB3261E)
     "STOP_REQUESTED", "CANCELLED", "ABANDONED", "TIMED_OUT", "PUSH_REFUSED" -> "✗" to Color(0xFFB3261E)
     "ENQUEUED", "REQUEUED", "NEXT_GENERATION", "SKIPPED_CHECK", "FIX_TASK" -> "≡" to Color.Unspecified
     "RELEASED" -> "↩" to Color.Unspecified

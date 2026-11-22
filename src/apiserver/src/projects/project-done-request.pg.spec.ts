@@ -384,7 +384,7 @@ test('a coordinator asks its owner to record the project done, and the project i
         prompt: 'do the work',
         branch,
         isolationStatus: 'worktree',
-        status: RunStatus.SUCCEEDED,
+        status: RunStatus.SUCCEEDED, 
         baseSha: sha('1'),
         changedFiles: [] as never,
         createdAt: new Date(Date.now() - 10 * 60_000),
@@ -770,7 +770,8 @@ test('a coordinator asks its owner to record the project done, and the project i
     data: {
       id: randomUUID(), ownerId, creatorId: ownerId, taskId: branchlessTask.id, workspaceId: p.workspaceId,
       assignedRunnerId: runnerId, title: 'ran the walkthrough', prompt: 'do the work', isolationStatus: 'shared',
-      status: RunStatus.SUCCEEDED, startsTaskWork: true, changedFiles: ['walkthrough.md'] as never,
+      status: RunStatus.SUCCEEDED, 
+      startsTaskWork: true, changedFiles: ['walkthrough.md'] as never,
       createdAt: new Date(Date.now() - 10 * 60_000), finishedAt: new Date(Date.now() - 10 * 60_000),
     },
   });

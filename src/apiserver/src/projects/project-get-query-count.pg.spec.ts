@@ -282,7 +282,7 @@ test('the project detail read costs the same number of statements at either size
             taskId: task.id,
             title: `ran ${task.id}`,
             prompt: 'do the work',
-            status: RunStatus.SUCCEEDED,
+            status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
             branch: `orbit/${label}-${position}-${index}`,
             isolationStatus: 'worktree',
           },

@@ -91,7 +91,7 @@ test('dsh install gate on PostgreSQL', { timeout: 300_000 }, async (t) => {
       title: 'persisted dsh', prompt: 'first', ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: id,
       provider, providerBuiltin: provider === 'dsh', status, numTurns: 1, usesRuntimeDefaultModel: true,
       runtimeSessionId: randomUUID(), startedAt: new Date(), permissionMode: 'default',
-      ...(status === RunStatus.CANCELLED ? { completedAt: new Date(), endReason: 'ended' } : {}),
+      ...(status === RunStatus.CANCELLED ? { finishedAt: new Date(), completedAt: new Date(), endReason: 'ended' } : {}),
     } })).id;
     const create = (provider: string, prompt = `create ${randomUUID()}`) =>
       sessions.create(ownerId, { workspaceId, provider, prompt, permissionMode: 'default' });
@@ -157,7 +157,7 @@ test('dsh install gate on PostgreSQL', { timeout: 300_000 }, async (t) => {
     const job = await f.poll(CURRENT);
     assert.equal(job?.sessionId, claude.id);
     assert.equal(job?.provider, AgentProvider.CLAUDE);
-    await db.session.update({ where: { id: claude.id }, data: { status: RunStatus.CANCELLED, completedAt: new Date() } });
+    await db.session.update({ where: { id: claude.id }, data: { status: RunStatus.CANCELLED, finishedAt: new Date(), completedAt: new Date() } });
   });
 
   await t.test('IG-PG5 after the install the next heartbeat hands the same sessions over and new ones are created', async () => {

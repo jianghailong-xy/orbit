@@ -6,7 +6,7 @@ import { StringDecoder } from 'node:string_decoder';
 import { AgentProvider, keyDialect, providerPreset } from '@orbit/shared';
 import { ACCOUNT_DISABLED, ACCOUNT_DISABLED_MESSAGE, DisabledAccounts } from '../auth/disabled-accounts';
 import { sha256 } from '../common/crypto.util';
-import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
+import { isHeld } from '../common/session-release';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   anthropicError,
@@ -134,7 +134,7 @@ export class AnthropicGatewayService {
         },
         session: {
           select: {
-            status: true, ownerId: true, provider: true, engine: true, model: true, completedAt: true, deletedAt: true,
+            status: true, finishedAt: true, ownerId: true, provider: true, engine: true, model: true, completedAt: true, deletedAt: true,
             cancelRequestedAt: true, endReason: true,
             owner: { select: { disabledAt: true } },
           },
@@ -144,7 +144,7 @@ export class AnthropicGatewayService {
     if (!row || row.revokedAt || row.expiresAt.getTime() <= Date.now()) return null;
     const { session, provider } = row;
     const open =
-      OPEN_SESSION_STATUSES.includes(session.status) &&
+      isHeld(session) &&
       !session.completedAt &&
       // An end asked for (SessionsService.end): the runner has yet to stop it, but it serves no more turns.
       !session.cancelRequestedAt &&
