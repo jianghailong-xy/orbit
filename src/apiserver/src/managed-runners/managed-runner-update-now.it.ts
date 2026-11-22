@@ -684,7 +684,7 @@ test('Update Now of a busy Orbit Cloud runner, on real Docker', { skip: !CONFIG 
   if (earlier) {
     await t.test('(4b) the next generation moved the earlier home to the volume root: sign-ins, the workspace\'s files at its stored path, the transcript where --resume reads it', async () => {
       const name = containerOf(next);
-      const root = (await shell(name, 'echo "$HOME"; ls -A /home/orbit | sort | tr "\\n" " "; readlink /var/lib/orbit/home')).split('\n');
+      const root = (await shell(name, 'echo "$HOME"; ls -A /home/orbit | sort | tr "\\n" " "; echo; readlink /var/lib/orbit/home')).split('\n');
       const workspace = await db.workspace.findFirstOrThrow({ where: { runnerId: next.runnerId }, select: { workDir: true } });
       const readme = await shell(name, `cat ${workspace.workDir}/README.md`);
       const signIns = Object.fromEntries(await Promise.all(Object.keys(SIGN_INS).map(async (file) => [file, await shell(name, `cat /home/orbit/${file}`)] as const)));
