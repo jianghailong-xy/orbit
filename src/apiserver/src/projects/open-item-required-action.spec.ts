@@ -250,9 +250,9 @@ test('a coordinator\'s own sentence is untouched by whether the owner could ask 
 });
 
 test('readCoordinatorReach: Ask again can wait for recovery, and unreachable means neither action works', async () => {
-  const live: SessionEnding = { status: 'AWAITING_INPUT', endReason: null, completedAt: null, archivedAt: null, deletedAt: null, cancelRequestedAt: null };
-  const reaped: SessionEnding = { ...live, status: 'FAILED', cancelRequestedAt: new Date() };
-  const closed: SessionEnding = { ...live, status: 'CANCELLED', endReason: 'COMPLETED', completedAt: new Date() };
+  const live: SessionEnding = { status: 'AWAITING_INPUT', finishedAt: null, lastTurnOutcome: 'ANSWERED', endReason: null, completedAt: null, archivedAt: null, deletedAt: null, cancelRequestedAt: null };
+  const reaped: SessionEnding = { ...live, status: 'FAILED', finishedAt: new Date(), lastTurnOutcome: 'FAILED', cancelRequestedAt: new Date() };
+  const closed: SessionEnding = { ...live, status: 'CANCELLED', finishedAt: new Date(), endReason: 'COMPLETED', completedAt: new Date() };
   const answering = (reason: string | null) => ({ receiveBlockedReasonFor: async () => reason });
   const project = (session: SessionEnding | null) => ({ coordinatorSessionId: session ? 'coordinator' : null, coordinatorSession: session });
   const read = async (reason: string | null, session: SessionEnding | null) => {

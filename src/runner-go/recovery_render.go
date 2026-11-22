@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -449,14 +450,29 @@ func (s *mcpServer) listedToolDescriptors() []map[string]interface{} {
 	if s.wikiOff {
 		tools = withoutWikiTools(tools)
 	}
+	if !s.browserOn {
+		tools = withoutBrowserTools(tools)
+	} else if !onOrbitCloudRunner() {
+		// browser_request_sign_in is the Orbit Cloud runner's sessions' only (browser_tools.go).
+		tools = withoutBrowserSignIn(tools)
+	}
 	// schedule_run_report is a scheduled run's own (schedule_tools.go).
 	if !s.scheduleRun {
 		tools = withoutScheduleRunReport(tools)
 	}
-	// A SubAgent cannot hand work on again (subagent.go).
+	// A SubAgent cannot hand work on again (subagent.go), and a session whose Agent has Workflows off is not offered a
+	// workflow (subagent_workflow.go); delegate does not depend on that switch.
 	if os.Getenv(envSubagentRunID) == "" {
 		cwd, _ := os.Getwd()
-		tools = append(tools, delegateToolDescriptor(schemaObject, sessionSubagentDefinitions(cwd)), workflowToolDescriptor(schemaObject))
+		tools = append(tools, delegateToolDescriptor(schemaObject, sessionSubagentDefinitions(cwd)))
+		if !s.workflowsOff {
+			tools = append(tools, workflowToolDescriptor(schemaObject))
+		}
+	} else {
+		// A SubAgent cannot rate another run.
+		tools = slices.DeleteFunc(tools, func(tool map[string]interface{}) bool {
+			return tool["name"] == "subagent_rate"
+		})
 	}
 	if s.onlyTools != nil {
 		tools = onlyMCPTools(tools, s.onlyTools)
@@ -631,7 +647,7 @@ var recoveryUtilityCLI = []cliCapabilitySpec{
 }
 
 func recoveryCLISpecGroups() [][]cliCapabilitySpec {
-	return [][]cliCapabilitySpec{baseCLICapabilities, projectCLICapabilities, sessionCLICapabilities, agentCLICapabilities, runnerCLICapabilities, providerCLICapabilities, notifyCLICapabilities, watchCLICapabilities, wikiCLICapabilities, wikiImportCLICapabilities, fileCLICapabilities, userCLICapabilities, mergeReceiptCLICapabilities, guideCLICapabilities, recoveryUtilityCLI}
+	return [][]cliCapabilitySpec{baseCLICapabilities, projectCLICapabilities, sessionCLICapabilities, agentCLICapabilities, runnerCLICapabilities, providerCLICapabilities, notifyCLICapabilities, watchCLICapabilities, wikiCLICapabilities, wikiImportCLICapabilities, fileCLICapabilities, subagentCLICapabilities, settingsCLICapabilities, browserCLICapabilities, userCLICapabilities, mergeReceiptCLICapabilities, guideCLICapabilities, recoveryUtilityCLI}
 }
 
 func recoveryCLIOptions(argv []string) (map[string]bool, int, int) {

@@ -21,6 +21,7 @@ var mcpHelpObjects = []struct {
 	{objectTaskList, "task lists"},
 	{objectProject, "projects"},
 	{objectSession, "sessions"},
+	{objectSubagent, "SubAgents"},
 	{objectAgent, "agents"},
 	{objectRunner, "runners"},
 	{objectProvider, "providers"},
@@ -28,10 +29,12 @@ var mcpHelpObjects = []struct {
 	{objectWiki, "the wiki"},
 	{objectFile, "files"},
 	{objectOwner, "the account owner"},
+	{objectAccount, "the owner's Settings"},
 	{objectBackgroundJob, "background jobs"},
 	{objectPermission, "engine permission prompts"},
 	{objectMergeReceipt, "merge receipts"},
 	{objectSchedule, "scheduled tasks"},
+	{objectBrowser, "the Orbit Cloud browser"},
 	{objectCatalog, "the operation catalogue itself (the guide)"},
 }
 
@@ -88,7 +91,12 @@ func mcpHelpOrchestratedTools(ops []*operation) []string {
 }
 
 func mcpHelp() string {
-	ops := operationCatalog().Ops
+	var ops []*operation
+	for _, op := range operationCatalog().Ops {
+		if !browserOpAbsent(op) {
+			ops = append(ops, op)
+		}
+	}
 	served := mcpHelpServedObjects(ops)
 	orchestrated := mcpHelpOrchestratedTools(ops)
 	paragraphs := []string{

@@ -1,0 +1,228 @@
+# TEMPORARY (probe branch probe/new-workspace, never merged). Task 350iNy7QepKiSO4d2lVku. The commit under test is
+# this commit's parent (the task branch), plus .nw-probe/ and this file, which replaces .github/workflows/client.yml on
+# this branch only. Adapted from docs/evidence/held-cancel-native/probe-harness/client.probe.yml.
+#
+#   • macos — client.yml's macOS job, step for step (OrbitKit `swift test`, then OrbitApp `swift build`), with each
+#     step's log kept and the build run even when the test step is red.
+#   • macos-main — the same OrbitKit `swift test` on main's commit (.nw-probe/MAIN_SHA), to tell main's reds from ours.
+#   • ios — client.yml's iOS job, step for step.
+#   • shots — .nw-probe/run.sh on macos-26: the iPhone and Mac probe apps built from the commit's own shell and shared
+#     sources, driven by XCUITest against .nw-probe/stub.py.
+#   • report — pushes every job's result, logs and pictures to probe/new-workspace-results.
+name: New workspace probe (gates + iPhone + Mac)
+
+on:
+  push:
+    branches: ["probe/new-workspace"]
+
+concurrency:
+  group: client-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    name: macOS (build + test)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with:
+          xcode-version: latest-stable
+      - name: Toolchain
+        run: swift --version && xcodebuild -version
+      - name: Test OrbitKit (macOS)
+        id: test
+        continue-on-error: true
+        working-directory: src/macos/OrbitKit
+        run: |
+          mkdir -p ../../../gates
+          swift test 2>&1 | tee ../../../gates/orbitkit-test.log
+          exit "${PIPESTATUS[0]}"
+      - name: Build OrbitApp
+        id: build
+        continue-on-error: true
+        working-directory: src/macos/OrbitApp
+        run: |
+          swift build 2>&1 | tee ../../../gates/orbitapp-build.log
+          exit "${PIPESTATUS[0]}"
+      - name: Summaries
+        if: always()
+        run: |
+          cd gates
+          grep -E "error:|Executed [0-9]+ tests|Test Suite '(All tests|MachineSetup[A-Za-z]*Tests|ManagedRunnerWiringTests|ProjectsWiringTests)'" orbitkit-test.log > orbitkit-summary.txt || true
+          grep -E "Test Case '.*MachineSetup(FullPath|CopyParity|Wiring)Tests" orbitkit-test.log > orbitkit-new-workspace-cases.txt || true
+          grep -E "error:|Compiling|Build complete|warning: .*(MachineSetupCard|NewWorkspaceButton)" orbitapp-build.log | grep -E "error:|Build complete|MachineSetupCard|NewWorkspaceButton|CompactShell|MainView|SkillsRunnersView|AppModel" > orbitapp-summary.txt || true
+          { echo "test=${{ steps.test.outcome }}"; echo "build=${{ steps.build.outcome }}"; } > outcomes.txt
+          gzip -9 orbitkit-test.log orbitapp-build.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nw-gates-macos
+          path: gates
+      - name: Fail as the steps did
+        if: steps.test.outcome != 'success' || steps.build.outcome != 'success'
+        run: exit 1
+
+  macos-main:
+    name: OrbitKit swift test on main (the base, for comparison)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check out main's commit (.nw-probe/MAIN_SHA)
+        run: |
+          base=$(cat .nw-probe/MAIN_SHA)
+          git fetch -q --depth=1 origin "$base"
+          git checkout -q "$base"
+          git log -1 --format='%H %s' | tee main-head.txt
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with:
+          xcode-version: latest-stable
+      - name: Test OrbitKit (macOS) on main
+        id: test
+        continue-on-error: true
+        working-directory: src/macos/OrbitKit
+        run: |
+          mkdir -p ../../../gates-main
+          swift test 2>&1 | tee ../../../gates-main/orbitkit-test-main.log
+          exit "${PIPESTATUS[0]}"
+      - name: Summaries
+        if: always()
+        run: |
+          cp main-head.txt gates-main/
+          cd gates-main
+          grep -E "error:|Executed [0-9]+ tests" orbitkit-test-main.log > orbitkit-summary-main.txt || true
+          echo "test=${{ steps.test.outcome }}" > outcomes.txt
+          gzip -9 orbitkit-test-main.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nw-gates-macos-main
+          path: gates-main
+
+  ios:
+    name: iOS (generate + build)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Toolchain
+        run: swift --version && xcodebuild -version && xcodegen --version
+      - name: Generate Xcode project
+        working-directory: src/ios
+        run: xcodegen generate
+      - name: Build for iOS Simulator
+        working-directory: src/ios
+        run: |
+          xcodebuild \
+            -project Orbit.xcodeproj \
+            -scheme Orbit \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            -derivedDataPath build/dd \
+            build
+      - name: Check the Share Extension is embedded with its App Group
+        working-directory: src/ios
+        run: |
+          set -euo pipefail
+          app=build/dd/Build/Products/Debug-iphonesimulator/Orbit.app
+          test -d "$app/PlugIns/OrbitShare.appex" || { echo "::error::OrbitShare.appex is not embedded in Orbit.app"; exit 1; }
+          plutil -extract NSExtension.NSExtensionPointIdentifier raw "$app/PlugIns/OrbitShare.appex/Info.plist" | grep -qx com.apple.share-services
+          for f in Support/Orbit.entitlements Support/Orbit.Debug.entitlements OrbitShare/OrbitShare.entitlements; do
+            /usr/libexec/PlistBuddy -c 'Print :com.apple.security.application-groups:0' "$f" | grep -qx group.io.orbitd.app \
+              || { echo "::error::$f lacks the App Group group.io.orbitd.app"; exit 1; }
+          done
+          echo "OrbitShare.appex embedded; App Group on all three entitlements"
+
+  shots:
+    name: New workspace probe (iPhone + Mac)
+    runs-on: macos-26
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Toolchain
+        run: swift --version && xcodebuild -version && xcodegen --version && sw_vers
+      - name: Build, drive and capture
+        id: capture
+        continue-on-error: true
+        run: |
+          bash .nw-probe/run.sh 2>&1 | tee run-output.log
+          exit "${PIPESTATUS[0]}"
+      - name: Keep the build's errors and the run's output beside the shots
+        if: always()
+        run: |
+          mkdir -p .nw-probe/shots
+          cp run-output.log .nw-probe/shots/run-output.log 2>/dev/null || true
+          { swift --version 2>&1 | head -2; xcodebuild -version; xcodegen --version; sw_vers; } > .nw-probe/shots/toolchain.txt
+          for log in .nw-probe/build-*.log; do
+            [ -f "$log" ] || continue
+            base=$(basename "$log" .log)
+            grep -E "error:|Test Case|Executed|\*\* TEST|\*\* BUILD" "$log" | head -400 > ".nw-probe/shots/summary-$base.txt" || true
+            tail -300 "$log" > ".nw-probe/shots/tail-$base.txt" || true
+          done
+          find .nw-probe/shots -name 'xcodebuild-*.log' -size +20M -exec gzip -9 {} \;
+          python3 - .nw-probe/shots <<'PY'
+          import os, re, sys
+          for root, dirs, files in os.walk(sys.argv[1], topdown=False):
+              for name in files + dirs:
+                  safe = re.sub(r'[\"\\:<>|*?\r\n]', '_', name)
+                  if safe != name:
+                      os.rename(os.path.join(root, name), os.path.join(root, safe))
+                      print("renamed", name, "->", safe)
+          PY
+          echo "capture=${{ steps.capture.outcome }}" > .nw-probe/shots/outcomes.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nw-shots
+          path: .nw-probe/shots
+      - name: Fail as the capture did
+        if: steps.capture.outcome != 'success'
+        run: exit 1
+
+  report:
+    name: Push the results where a clone can read them
+    needs: [macos, macos-main, ios, shots]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+      - name: Push to probe/new-workspace-results
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd out
+          {
+            echo "run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo "sha: ${{ github.sha }}"
+            echo "macos: ${{ needs.macos.result }}"
+            echo "macos-main: ${{ needs.macos-main.result }}"
+            echo "ios: ${{ needs.ios.result }}"
+            echo "shots: ${{ needs.shots.result }}"
+          } > RESULTS.txt
+          cat RESULTS.txt
+          git init -q
+          git config user.name "orbit-probe"
+          git config user.email "probe@orbit.invalid"
+          git checkout -q -b results
+          git add -A
+          git commit -q -m "probe results for ${{ github.sha }} (run ${{ github.run_id }})"
+          git push -q -f "https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git" \
+            results:refs/heads/probe/new-workspace-results

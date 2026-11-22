@@ -111,6 +111,11 @@ export const ENGINE_SESSION_GUARD_SITES: Readonly<Record<string, EngineSessionGu
     snippet: '// Stopping a turn — or stopping one and replacing it — is an engine door (§2.9 LS6).',
     note: 'POST /interrupt and the runner interruption door',
   },
+  'SessionsService.stopBackgroundJob': {
+    file: 'sessions/sessions.service.ts',
+    snippet: "// Stopping a job is an engine door (§2.9 LS6): the platform's landing container runs no bg_run job.\n    assertEngineSessionRow(session);",
+    note: 'POST /background/jobs/:jobId/stop',
+  },
   'SessionsService.getSendable': {
     file: 'sessions/sessions.service.ts',
     snippet: '// A LANDING row is never sendable: the composer, End and the queued-turn doors all reach this',
@@ -181,6 +186,11 @@ export const ENGINE_SESSION_GUARD_SITES: Readonly<Record<string, EngineSessionGu
     file: 'sessions/sessions.service.ts',
     snippet: "assertEngineSessionRow(session);\n      if (session.isolationStatus !== 'worktree') {",
     note: 'POST /adopt-branch',
+  },
+  'SessionsService.dismissMergeFailure': {
+    file: 'sessions/sessions.service.ts',
+    snippet: "assertEngineSessionRow(session);\n    const { count } =",
+    note: 'POST /merge-failure/dismiss',
   },
   'SessionsService.decideApproval': {
     file: 'sessions/sessions.service.ts',
@@ -338,6 +348,7 @@ export const ENGINE_SESSION_DOORS: Readonly<Record<string, string>> = {
   'PATCH /sessions/:id/settings': 'SessionsService.updateSettings',
   'POST /sessions/:id/restart': 'SessionsService.restart',
   'POST /sessions/:id/interrupt': 'SessionsService.interrupt',
+  'POST /sessions/:id/background/jobs/:jobId/stop': 'SessionsService.stopBackgroundJob',
   'POST /sessions/:id/end': 'SessionsService.getSendable',
   'POST /sessions/:id/merge': 'SessionsService.mergeToMain',
   'POST /sessions/:id/merge-repair': 'SessionsService.startMergeRepair',
@@ -345,6 +356,7 @@ export const ENGINE_SESSION_DOORS: Readonly<Record<string, string>> = {
   'POST /sessions/:id/commit': 'SessionsService.commitWorktree',
   'POST /sessions/:id/checkout/discard': 'SessionsService.discardCheckout',
   'POST /sessions/:id/adopt-branch': 'SessionsService.adoptWorktreeBranch',
+  'POST /sessions/:id/merge-failure/dismiss': 'SessionsService.dismissMergeFailure',
   'POST /sessions/:id/retry-message': 'AutoRetryService.resendRetryMessage',
   'POST /sessions/:id/auto-retry': 'SessionsService.armAutoRetry',
   'DELETE /sessions/:id/auto-retry': 'SessionsService.cancelAutoRetry',

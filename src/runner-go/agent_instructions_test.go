@@ -65,8 +65,8 @@ func TestAppendClaudeAgentInstructionArgsAddsOnlyAbsolutePhase1Rules(t *testing.
 		SystemPrompt:       "Base agent instructions.",
 		AppendSystemPrompt: "Owner append instructions.",
 		AllowedTools:       []string{"Read", "mcp__orbit__*"},
-	}, exe, false, false, true)
-	wantAllowed := append([]string{"Read", "mcp__orbit__*"}, orbitCLIAllowedTools(exe, false)...)
+	}, exe, false, false, true, false)
+	wantAllowed := append([]string{"Read", "mcp__orbit__*"}, orbitCLIAllowedTools(exe, false, false)...)
 	want := []string{
 		"-p",
 		"--system-prompt", "Base agent instructions.",
@@ -100,13 +100,13 @@ func TestAppendClaudeAgentInstructionArgsFailsClosedWithoutSafeExecutable(t *tes
 		AllowedTools:       []string{"Read"},
 	}
 	want := []string{"-p", "--append-system-prompt", "Owner instructions.", "--allowedTools", "Read"}
-	if got := appendClaudeAgentInstructionArgs([]string{"-p"}, agent, "", false, false, true); !reflect.DeepEqual(got, want) {
+	if got := appendClaudeAgentInstructionArgs([]string{"-p"}, agent, "", false, false, true, false); !reflect.DeepEqual(got, want) {
 		t.Fatalf("missing executable args = %#v, want %#v", got, want)
 	}
 	if got := withOrbitCLIInstructions("Owner instructions.", "", false, true, true); got != "Owner instructions." {
 		t.Fatalf("missing executable instructions = %q", got)
 	}
-	if got := appendClaudeAgentInstructionArgs([]string{"-p"}, AgentExecConfig{}, "", false, false, true); !reflect.DeepEqual(got, []string{"-p"}) {
+	if got := appendClaudeAgentInstructionArgs([]string{"-p"}, AgentExecConfig{}, "", false, false, true, false); !reflect.DeepEqual(got, []string{"-p"}) {
 		t.Fatalf("empty fail-closed args = %#v", got)
 	}
 }
@@ -117,13 +117,13 @@ func TestOrbitCLIAllowedToolsRejectsPolicyMetacharacters(t *testing.T) {
 			t.Fatalf("unsafe executable %q accepted as %q", executable, got)
 		}
 	}
-	if got := orbitCLIAllowedTools("", false); len(got) != 0 {
+	if got := orbitCLIAllowedTools("", false, false); len(got) != 0 {
 		t.Fatalf("empty executable rules = %#v", got)
 	}
 	if got := orbitCLIInstructions("/tmp/or`bit", false, true, true); got != "" {
 		t.Fatalf("Markdown-unsafe executable instructions = %q", got)
 	}
-	spaced := orbitCLIAllowedTools("/opt/orbit runner/bin/orbit", false)
+	spaced := orbitCLIAllowedTools("/opt/orbit runner/bin/orbit", false, false)
 	for _, rule := range spaced {
 		if strings.Contains(rule, "Bash(/opt/orbit runner") {
 			t.Fatalf("space-containing executable gained unquoted rule %q", rule)
@@ -133,7 +133,7 @@ func TestOrbitCLIAllowedToolsRejectsPolicyMetacharacters(t *testing.T) {
 
 func TestOrbitCLIAllowedToolsAddsSessionRulesOnlyForOrchestrators(t *testing.T) {
 	exe := "/usr/local/bin/orbit"
-	base := strings.Join(orbitCLIAllowedTools(exe, false), "\n")
+	base := strings.Join(orbitCLIAllowedTools(exe, false, false), "\n")
 	// Asserted verb by verb rather than as the substring " session ", because the merge receipts
 	// ARE pre-approved without the grant — they are advertised ungated (§13.7) — and a substring
 	// check would have to be widened to the point of not saying anything. What must not be here is
@@ -148,7 +148,7 @@ func TestOrbitCLIAllowedToolsAddsSessionRulesOnlyForOrchestrators(t *testing.T) 
 			t.Errorf("non-orchestrator gained agent %s rule: %q", action, base)
 		}
 	}
-	enabled := strings.Join(orbitCLIAllowedTools(exe, true), "\n")
+	enabled := strings.Join(orbitCLIAllowedTools(exe, true, false), "\n")
 	for _, action := range []string{"create", "list", "search", "get", "await", "send", "interrupt", "merge", "end", "complete", "delete"} {
 		if !strings.Contains(enabled, "Bash("+exe+" session "+action+" *)") {
 			t.Errorf("orchestrator missing session %s rule in %q", action, enabled)
@@ -301,6 +301,9 @@ var advertisedCapabilityFamilies = []struct {
 	{"wikiImportCLICapabilities", wikiImportCLICapabilities, false},
 	// Ungated, for the same reason: keeping and reading back your own files.
 	{"fileCLICapabilities", fileCLICapabilities, false},
+	// Ungated too: any session of the account reads the Orbit Cloud browser (Q3 = A), behind the browser switch.
+	{"browserCLICapabilities", browserCLICapabilities, false},
+	{"subagentCLICapabilities", subagentCLICapabilities, false},
 	// Ungated and offered everywhere: the guide reads the catalogue and asks the server nothing.
 	{"guideCLICapabilities", guideCLICapabilities, false},
 	// The person's own commands: every one HeadlessOnly, so no running agent is offered any of them.
@@ -330,8 +333,16 @@ func TestEveryAdvertisedCapabilityIsPreApproved(t *testing.T) {
 	exe := "/usr/local/bin/orbit"
 	// The path the document rewrites argv[0] to, and a shellWordSafe one, so the unquoted rule is
 	// the form that matches the argv an agent copies out of `capabilities --json`.
-	ungated := stringSet(orbitCLIAllowedTools(exe, false))
-	orchestrated := stringSet(orbitCLIAllowedTools(exe, true))
+	// With the browser switch on, as advertisedCapabilityFamilies lists its family; off, no browser rule at all. On the
+	// Orbit Cloud runner, where browser_request_sign_in is offered too.
+	t.Setenv(envManagedRunnerGeneration, "3")
+	ungated := stringSet(orbitCLIAllowedTools(exe, false, true))
+	orchestrated := stringSet(orbitCLIAllowedTools(exe, true, true))
+	for _, rule := range orbitCLIAllowedTools(exe, true, false) {
+		if strings.Contains(rule, " browser ") {
+			t.Errorf("the browser is off and %s is pre-approved", rule)
+		}
+	}
 
 	missing := []string{}
 	for _, family := range advertisedCapabilityFamilies {
@@ -391,7 +402,7 @@ func TestTheCLIAllowlistIsExactlyWhatCapabilitiesOffersTheSession(t *testing.T) 
 			want["Bash("+strings.Join(capability.Argv, " ")+" *)"] = true
 		}
 		got := map[string]bool{}
-		for _, rule := range orbitCLIAllowedTools(exe, orchestration) {
+		for _, rule := range orbitCLIAllowedTools(exe, orchestration, true) {
 			if !strings.HasPrefix(rule, "Bash('") { // the same commands, in the quoted spelling
 				got[rule] = true
 			}
@@ -420,7 +431,7 @@ func TestClaudeInstructionArgsFollowTheSessionShape(t *testing.T) {
 		t.Error("a session dispatched for a task does not read as inside recorded work")
 	}
 	appendPromptFor := func(job *ClaimedSession) string {
-		args := appendClaudeAgentInstructionArgs(nil, AgentExecConfig{}, exe, false, job.insideRecordedWork(), true)
+		args := appendClaudeAgentInstructionArgs(nil, AgentExecConfig{}, exe, false, job.insideRecordedWork(), true, false)
 		for i, arg := range args {
 			if arg == "--append-system-prompt" && i+1 < len(args) {
 				return args[i+1]
@@ -446,7 +457,7 @@ func TestOnlyATopLevelSessionIsToldWhenToDelegate(t *testing.T) {
 	child := subagentChildJob(parent, AgentExecConfig{}, subagentDefinition{}, "run-1", providerClaude, "")
 	builders := map[string]func(job *ClaimedSession) string{
 		"claude": func(job *ClaimedSession) string {
-			return strings.Join(appendClaudeAgentInstructionArgs(nil, job.instructionAgent(), exe, false, job.insideRecordedWork(), job.watchesOn()), "\n")
+			return strings.Join(appendClaudeAgentInstructionArgs(nil, job.instructionAgent(), exe, false, job.insideRecordedWork(), job.watchesOn(), false), "\n")
 		},
 		"codex context": func(job *ClaimedSession) string {
 			return codexAgentContext(job.instructionAgent(), exe, job.insideRecordedWork(), job.watchesOn())

@@ -23,11 +23,21 @@ private struct RunnerUpdatingFootKey: EnvironmentKey {
     static let defaultValue: RunnerUpdatingFoot? = nil
 }
 
+private struct HeldCancelKey: EnvironmentKey {
+    static let defaultValue: ((UserBubble) -> Void)? = nil
+}
+
 private struct RunnerUpdatingQueuedKey: EnvironmentKey {
     static let defaultValue: RunnerUpdatingFoot? = nil
 }
 
 extension EnvironmentValues {
+    /// Set by `TranscriptView`: the held tag's Cancel under a message no runner has taken yet
+    /// (`HeldCancel.offers`). Nil where there is no console to act through.
+    var heldCancel: ((UserBubble) -> Void)? {
+        get { self[HeldCancelKey.self] }
+        set { self[HeldCancelKey.self] = newValue }
+    }
     /// Set by `TranscriptView` while the session is held by its runner's update.
     var runnerUpdatingFoot: RunnerUpdatingFoot? {
         get { self[RunnerUpdatingFootKey.self] }
@@ -124,6 +134,9 @@ struct RunnerUpdatingQueuedView: View {
 /// A new session Keep Free holds reads `Queued · low disk space` (`QueuedDiskLow`), likewise.
 struct RunnerUpdatingTagView: View {
     let foot: RunnerUpdatingFoot
+    /// ` · Cancel` after the tag, under a message no runner has taken yet (`HeldCancel`): in the
+    /// tint, the tag staying muted. Nil draws the tag alone.
+    var onCancel: (() -> Void)? = nil
     @State private var open = false
 
     private var full: Bool { QueuedCapacity.holds(foot.session) }
@@ -139,6 +152,15 @@ struct RunnerUpdatingTagView: View {
             }
             .buttonStyle(.plain)
             .popover(isPresented: $open) { pop }
+            if let onCancel {
+                Text("·")
+                Button { onCancel() } label: {
+                    Text(HeldCancel.label)
+                }
+                .buttonStyle(.plain).foregroundStyle(.tint)
+                .contentShape(Rectangle())
+                .accessibilityIdentifier("held-cancel")
+            }
         }
         .font(.orbitMeta)
         .foregroundStyle(.secondary)
@@ -171,5 +193,45 @@ struct RunnerUpdatingTagView: View {
             .padding(14)
         }
         .presentationCompactAdaptation(.popover)
+    }
+}
+
+/// The waiting card of a session held by its GitHub workspace's clone (web `CloneWaitNotice`, board
+/// docs/mocks/clone-progress-wait-card ②): what is cloning, git's percentage once the stream has relayed one, and
+/// where. `compact` is the one under a transcript; the full-height one stands alone on an empty conversation. Neither
+/// has a waiting animation of its own, so the spinner shows while there is no percentage.
+struct CloneWaitCardView: View {
+    let card: QueuedClone.Card
+    let machine: String?
+    var compact = false
+
+    var body: some View {
+        VStack(spacing: compact ? 4 : 10) {
+            HStack(spacing: 6) {
+                if card.progress == nil { ProgressView().controlSize(.small) }
+                Text(card.title).font(compact ? .subheadline.weight(.semibold) : .headline)
+            }
+            if let progress = card.progress {
+                HStack(spacing: 8) {
+                    Capsule().fill(.quaternary).frame(width: 160, height: 4)
+                        .overlay(alignment: .leading) {
+                            Capsule().fill(Color.accentColor).frame(width: 160 * CGFloat(progress) / 100, height: 4)
+                        }
+                        .accessibilityElement()
+                        .accessibilityLabel(card.title)
+                        .accessibilityValue("\(progress)%")
+                    Text(verbatim: "\(progress)%").font(.footnote).monospacedDigit().foregroundStyle(.secondary)
+                }
+            }
+            Text(QueuedClone.sentence(machine: machine))
+                .font(compact ? .footnote : .callout)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding(.horizontal, compact ? 16 : 32)
+        .padding(.vertical, compact ? 10 : 0)
+        .frame(maxWidth: compact ? .infinity : 420)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier(compact ? "clone-wait-compact" : "clone-wait")
     }
 }

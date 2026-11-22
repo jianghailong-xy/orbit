@@ -154,6 +154,7 @@ func antigravityPermissionRules(job *ClaimedSession, orbitExe string) (allow, de
 	rules := appendUnique(job.Agent.AllowedTools, orbitCLIAllowedTools(
 		orbitCLIPermissionExecutable(orbitExe),
 		job.AllowOrchestration && strings.TrimSpace(job.OrchestrationToken) != "",
+		job.BrowserEnabled,
 	)...)
 	for _, rule := range rules {
 		allow = appendUnique(allow, antigravityRule(rule, false)...)
@@ -300,6 +301,9 @@ func antigravityMCPServers(agent AgentExecConfig, orbitExe string) map[string]in
 			// A SubAgent's `orbit mcp` offers no delegate. agy hands its own environment on too; named here so
 			// the server gets it whatever agy passes.
 			env[envSubagentRunID] = runID
+		}
+		if mode := strings.TrimSpace(agent.Env[envSubagentRemoteMode]); mode != "" {
+			env[envSubagentRemoteMode] = mode
 		}
 		servers["orbit"] = map[string]interface{}{
 			"command": orbitExe,

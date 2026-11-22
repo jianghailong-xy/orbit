@@ -9,6 +9,7 @@ import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.protocol.Wire
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
+import kotlinx.serialization.json.JsonObject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -98,6 +99,9 @@ class RealtimeStore(
             else Selection(id, it.revision + 1, handle)
         }
     }
+    /** The Open rows by one `since=` read on the store's cursor, connected or not (the first read has none, and is answered whole with
+     * a cursor the next builds on). For a reconcile that must not wait for the stream, which a stopped Activity has closed. */
+    suspend fun readOpen(handle: SessionHandle): List<JsonObject> = rest.open(handle, state.value.directory?.sessions?.get("open"))
     fun refreshDirectory() { directoryRevision.update { it + 1 } }
     /** Reads the directory again and returns once a read that left after this call has landed — one that saw a write the
      * caller already had answered. A read still on the wire from before is not it: the revision this bumps makes the loop

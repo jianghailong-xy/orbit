@@ -104,14 +104,25 @@ public struct DiagnosticNotice: Equatable, Sendable, Codable, Identifiable {
     public let message: String
     /// How many reports folded into this row; 1 when it was seen once.
     public var repeats: Int
+    /// The diagnostic's own component and code, when it gave them: `sandbox` and `bubblewrap_missing`
+    /// are the one the transcript can act on (docs/mocks/codex-sandbox-fix-with-agent). Optional so a
+    /// snapshot written before these were kept still decodes.
+    public let component: String?
+    public let code: String?
 
-    public init(id: String, label: String, text: String, message: String, repeats: Int = 1) {
+    public init(id: String, label: String, text: String, message: String, repeats: Int = 1,
+                component: String? = nil, code: String? = nil) {
         self.id = id
         self.label = label
         self.text = text
         self.message = message
         self.repeats = repeats
+        self.component = component
+        self.code = code
     }
+
+    /// Whether this is Codex's missing system bubblewrap: the row that offers Fix with an agent.
+    public var isSandboxMissing: Bool { component == "sandbox" && code == "bubblewrap_missing" }
 }
 
 /// The transcript's record of one self-healing outage. What the *card* then shows depends on the
@@ -295,6 +306,10 @@ public struct UserBubble: Equatable, Sendable, Codable {
     /// the English the engine got (or, while held, the same words). Nil on every message translation
     /// was not involved in.
     public var translation: TurnTranslation?
+    /// The session's opening prompt, while it is the accepted head no runner has echoed yet
+    /// (`QueuedTurnInfo.opening`). The server keeps it, so the held tag offers no Cancel under it
+    /// (`HeldCancel.offers`). False on every other message.
+    public var opening: Bool = false
 
     public init(id: String, text: String, attachments: [TurnAttachment] = [], ts: String? = nil,
                 clientTurnId: String? = nil, turnId: String? = nil, pending: Bool, queued: Bool = false,
@@ -364,7 +379,7 @@ public struct UserBubble: Equatable, Sendable, Codable {
         case sessionMessage, externalSender, sessionReplies
         case authoredByOrbit, reviewRequest, reviewReturn, reviewAnswers, withdrawable, shell
         case evidenceReview, evidenceSendBack, runQuestion, runNotice, sessionOpening
-        case receipt, deliveryCode, deliveryReason, opensTurn, translation
+        case receipt, deliveryCode, deliveryReason, opensTurn, translation, opening
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -416,6 +431,7 @@ public struct UserBubble: Equatable, Sendable, Codable {
         // A snapshot from before turn heads existed draws none until the window is re-read.
         opensTurn = try? c.decodeIfPresent(TurnOpening.self, forKey: .opensTurn)
         translation = try? c.decodeIfPresent(TurnTranslation.self, forKey: .translation)
+        opening = (try? c.decodeIfPresent(Bool.self, forKey: .opening)) ?? false
     }
 }
 
@@ -614,6 +630,34 @@ public struct BackgroundProc: Equatable, Sendable, Identifiable, Codable {
     /// runs and on rows from before this existed. The folded row shows an ended process until the
     /// person's next message (`BackgroundRowRule`). Web parity: `BgShell.endedAt`.
     public var endedAt: String? = nil
+    /// Why a killed one was killed, as its terminal background_task names it: a runner-hosted job's
+    /// `requested` (the agent's bg_kill), `stopped_by_owner`, `runner_shutdown`, `session_cancelled`, …
+    /// Web parity: `BgShell.reason`.
+    public var reason: String? = nil
+    /// A runner-hosted job's exit code, as its terminal background_task names it; nil for one killed
+    /// before it exited. Web parity: `BgShell.exitCode`.
+    public var exitCode: Int? = nil
+    /// Whether the session's owner can stop it from the app (POST /sessions/:id/background/jobs/:jobId/stop):
+    /// a running `job` whose runner can do it. Stated only by GET /sessions/:id/background; nil reads as
+    /// not stoppable. Web parity: `BgShell.stoppable`.
+    public var stoppable: Bool? = nil
+
+    public init(id: String, command: String?, description: String? = nil, status: String, outputTail: String,
+                startedAt: String? = nil, kind: String? = nil, taskId: String? = nil, endedAt: String? = nil,
+                reason: String? = nil, exitCode: Int? = nil, stoppable: Bool? = nil) {
+        self.id = id
+        self.command = command
+        self.description = description
+        self.status = status
+        self.outputTail = outputTail
+        self.startedAt = startedAt
+        self.kind = kind
+        self.taskId = taskId
+        self.endedAt = endedAt
+        self.reason = reason
+        self.exitCode = exitCode
+        self.stoppable = stoppable
+    }
 }
 
 /// A live tool-permission / question / plan prompt awaiting a human decision.

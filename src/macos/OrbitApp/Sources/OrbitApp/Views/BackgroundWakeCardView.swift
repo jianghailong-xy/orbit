@@ -1,27 +1,23 @@
 import SwiftUI
 import OrbitKit
 
-/// A turn the control plane opened because a background job had news, or because a wakeup came due
-/// (OrbitKit's `BackgroundWakeText.parse`), drawn as one event line in the agent's stream — the
-/// grammar the transcript's "Interrupted" line already uses — rather than as a card on the reader's
-/// side of the conversation. The card it replaced sat where the person's own messages sit, in a
-/// tint, so a run of wakes read as somebody cutting in and split one answer into pieces; after
-/// nearly all of them the agent simply carries on with the same work.
+/// A turn the control plane opened because a wakeup came due (OrbitKit's `BackgroundWakeText.parse`),
+/// drawn as one event line in the agent's stream — the grammar the transcript's "Interrupted" line
+/// already uses — rather than as a card on the reader's side of the conversation.
 ///
-/// The line says what happened, which job, how it came out and when; tapping it opens the rest — a
-/// row per job or wakeup, who queued the turn, and what the agent actually read. A failure stays
-/// loud: the line takes the error tone and the output's tail stays out of the fold. It is no anchor
-/// for the sticky bar (`StickySummary.isAnchor`), which keeps naming the question.
+/// The line says a wakeup came due, why and when; tapping it opens the rest — a row per wakeup, who
+/// queued the turn, and what the agent actually read. It is no anchor for the sticky bar
+/// (`StickySummary.isAnchor`), which keeps naming the question.
+///
+/// A background job's end, new output or stall draws no line here any more (board C1): the job is one
+/// card from start to end (`JobCardView`), and only a wakeup that came due beside it is drawn
+/// (`BgJobCard.wakeupsOnly`).
 ///
 /// The same line draws a wake still waiting behind the running turn, dashed, with the queue's own
-/// line under it, so it keeps its shape when a runner takes it. Web parity: `BackgroundWakeCard.tsx`,
-/// drawn from `Transcript.tsx`'s `NodeView` once delivered and from `WorkspaceView.tsx`'s queued
-/// tail until then. The words are OrbitKit's `BackgroundWakeCard`, which
-/// `BackgroundWakeCopyParityTests` holds to the web's.
-///
-/// A job that ends while a turn runs is written into that turn (a steer): the same line, inside the
-/// running turn, saying how far it got (`steerState`) — and, while it waits for the runner, with no
-/// Cancel: a steer is taken back only by its own Withdraw, and nobody typed this one.
+/// line under it, so it keeps its shape when a runner takes it. Web parity: `BackgroundWakeCard.tsx`.
+/// The words are OrbitKit's `BackgroundWakeCard`, which `BackgroundWakeCopyParityTests` holds to the
+/// web's. A wake written into a running turn (a steer) says how far it got (`steerState`) — and, while
+/// it waits for the runner, offers no Cancel.
 struct BackgroundWakeCardView: View {
     let wake: BackgroundWake
     var ts: String?
@@ -40,27 +36,11 @@ struct BackgroundWakeCardView: View {
 
     @State private var open = false
     @State private var showingRaw = false
-    private var failed: Bool { wake.jobs.contains(where: BackgroundWakeCard.isFailed) }
-    private var several: Bool { wake.jobs.count > 1 }
-    /// The tails a failure leaves out of the fold: why it failed is what woke anybody.
-    private var failedTails: [BackgroundWakeJob] {
-        wake.jobs.filter { BackgroundWakeCard.isFailed($0) && !$0.outputTail.isEmpty }
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             line
             if open { fold }
-            ForEach(failedTails, id: \.id) { job in
-                VStack(alignment: .leading, spacing: 2) {
-                    if several {
-                        Text(BackgroundWakeCard.name(job))
-                            .font(.orbitMeta).foregroundStyle(Color.secondary)
-                    }
-                    BackgroundWakeOutputTail(text: job.outputTail)
-                }
-                .padding(.leading, 20)
-            }
             if undelivered {
                 // Amber, not red: the turn was queued and the session simply hasn't confirmed it.
                 Text(BackgroundWakeCard.undelivered)
@@ -116,46 +96,29 @@ struct BackgroundWakeCardView: View {
         .onTapGesture { withAnimation(.easeOut(duration: 0.15)) { open.toggle() } }
     }
 
-    /// Green where it came out clean, red where it did not, the clock where nothing has come out yet.
-    @ViewBuilder
+    /// The clock: nothing has come out of a wakeup, it only came due.
     private var mark: some View {
-        if failed {
-            Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
-        } else if BackgroundWakeCard.isPending(wake) {
-            Image(systemName: "clock").foregroundStyle(Color.secondary)
-        } else {
-            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-        }
+        Image(systemName: "clock").foregroundStyle(Color.secondary)
     }
 
     private var title: some View {
         Text(BackgroundWakeCard.title(wake))
-            .foregroundStyle(failed ? Color.red : Color.secondary)
+            .foregroundStyle(Color.secondary)
             .lineLimit(1)
             .fixedSize()
     }
 
     private func nameText(_ name: String) -> some View {
-        let isCommand = wake.jobs.count == 1 && wake.jobs.first?.description?.isEmpty != false
-        return Text(name)
-            .font(isCommand ? Font.orbitMono : Font.orbitLabel)
-            .foregroundStyle(Color.primary.opacity(0.75))
+        Text(name).font(.orbitLabel).foregroundStyle(Color.primary.opacity(0.75))
     }
 
-    /// How it came out, when, and the chevron that opens the rest — never squeezed.
+    /// When, and the chevron that opens the rest — never squeezed.
     @ViewBuilder
     private var closing: some View {
-        if let status = BackgroundWakeCard.lineStatus(wake) {
-            Text(status)
-                .font(.orbitMonoFine).foregroundStyle(Color.secondary)
-                .fixedSize()
-                .padding(.horizontal, 5).padding(.vertical, 1)
-                .background(Color.gray.opacity(0.14), in: RoundedRectangle(cornerRadius: 4))
-        }
         if let ts, let when = RelativeTime.format(ts) {
             Text(when).font(.orbitMeta).foregroundStyle(Color.secondary).fixedSize()
         }
-        Text(wake.jobs.isEmpty ? "Details" : "Job details")
+        Text("Details")
             .font(.orbitMeta).foregroundStyle(Color.secondary).fixedSize()
         // One glyph turned, never two swapped (`ToolCardView`'s chevron, for the same reason).
         Image(systemName: "chevron.right")
@@ -166,11 +129,10 @@ struct BackgroundWakeCardView: View {
     /// What the line carried, opened: hung under its title off a rule, like a tool card's detail.
     private var fold: some View {
         VStack(alignment: .leading, spacing: 6) {
-            ForEach(wake.jobs, id: \.id) { jobRow($0) }
             ForEach(Array(wake.wakeups.enumerated()), id: \.offset) { _, wakeup in
                 wakeupRow(wakeup)
             }
-            Text(BackgroundWakeCard.meta(wake))
+            Text(BackgroundWakeCard.meta)
                 .font(.orbitMeta).foregroundStyle(Color.secondary)
             raw
         }
@@ -179,48 +141,6 @@ struct BackgroundWakeCardView: View {
             Rectangle().fill(Color.secondary.opacity(0.25)).frame(width: 2)
         }
         .padding(.leading, 20)
-    }
-
-    /// One job in the fold. A lone job is the line itself, so its row here names it in full only
-    /// where a description did the naming; several each name themselves, with how they ended. The
-    /// command shows wherever the row above did not already spell it out.
-    private func jobRow(_ job: BackgroundWakeJob) -> some View {
-        let described = job.description?.isEmpty == false
-        return VStack(alignment: .leading, spacing: 2) {
-            if several || described {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    if several { jobMark(job) }
-                    Text(BackgroundWakeCard.name(job))
-                        .font(.orbitLabel).foregroundStyle(Color.primary.opacity(0.75))
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    if several, let status = BackgroundWakeCard.status(job) {
-                        Text(status)
-                            .font(.orbitMonoFine).foregroundStyle(Color.secondary)
-                            .padding(.horizontal, 5).padding(.vertical, 1)
-                            .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 4))
-                    }
-                }
-            }
-            if described || !several {
-                Text(job.command)
-                    .font(.orbitMono).foregroundStyle(Color.secondary)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Text(BackgroundWakeCard.jobMeta(job))
-                .font(.orbitMonoFine).foregroundStyle(Color.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            if let stall = job.stall {
-                Text(BackgroundWakeCard.stallLine(stall))
-                    .font(.orbitMonoFine).foregroundStyle(Color.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                // A quiet job is no bad news: what it last wrote stays in the fold, not under the line.
-                if !job.outputTail.isEmpty {
-                    BackgroundWakeOutputTail(text: job.outputTail).padding(.top, 4)
-                }
-            }
-        }
     }
 
     /// One wakeup in the fold: why it was asked for, when it was asked and came due, and whatever the
@@ -268,47 +188,6 @@ struct BackgroundWakeCardView: View {
                 .foregroundStyle(.tint)
                 .contentShape(Rectangle())
         }
-    }
-
-    /// The glyph a job's row in the fold opens on: green where it exited cleanly, red where it did
-    /// not, and the clock for a wake its new output opened rather than its exit.
-    @ViewBuilder
-    private func jobMark(_ job: BackgroundWakeJob) -> some View {
-        if BackgroundWakeCard.isFailed(job) {
-            Image(systemName: "xmark.circle.fill").font(.orbitLabel).foregroundStyle(.red)
-        } else if job.ended {
-            Image(systemName: "checkmark.circle.fill").font(.orbitLabel).foregroundStyle(.green)
-        } else {
-            Image(systemName: "clock").font(.orbitLabel).foregroundStyle(Color.secondary)
-        }
-    }
-}
-
-/// A job's received output tail — a failure's under the line, a quiet job's in its row in the fold —
-/// bounded by rendered lines so compact JSON cannot fill the transcript. Its disclosure is
-/// independent of the job details above it.
-private struct BackgroundWakeOutputTail: View {
-    let text: String
-    @State private var open = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Output tail")
-                .font(.orbitMeta).foregroundStyle(.secondary)
-            Text(text)
-                .font(.orbitMono)
-                .foregroundStyle(.secondary)
-                .textSelection(.enabled)
-                .lineLimit(open ? nil : 3)
-                .truncationMode(.tail)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Button(open ? "Show less" : "Show full output") { open.toggle() }
-                .buttonStyle(.plain).font(.orbitLabel).foregroundStyle(.tint)
-        }
-        .padding(.horizontal, 10).padding(.vertical, 8)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 6))
     }
 }
 

@@ -1,6 +1,6 @@
 ---
 name: upgrade
-description: Upgrade the Orbit Docker Compose deployment — rebuild the apiserver and web images from the current source and recreate only the services that changed (apiserver applies DB migrations on boot); an unchanged postgres is left running. Refreshing the postgres/gateway base images is opt-in via --pull-base. With ORBIT_REGISTRY set it is a two-stage release instead: build, boot-check and push here, tagged by commit, then pull and recreate on ORBIT_DEPLOY_HOST, which builds nothing, handing the apiserver and web over without a gap; a rollback deploys an earlier commit (--deploy). From a session on another workspace, production is deployed through SubAgents: orbit-op builds and deploys, then orbit-prod checks the host and moves its checkout to the release. Use whenever someone wants to deploy the latest code, update/upgrade the running containers, bring a Compose deployment up to date, or roll one back.
+description: Upgrade the Orbit Docker Compose deployment — rebuild the apiserver and web images from the current source and recreate only the services that changed (apiserver applies DB migrations on boot); an unchanged postgres is left running. Refreshing the postgres/gateway base images is opt-in via --pull-base. With ORBIT_REGISTRY set it is a two-stage release instead: build, boot-check and push here, tagged by commit, then pull and recreate on ORBIT_DEPLOY_HOST, which builds nothing, handing the apiserver and web over without a gap; a rollback deploys an earlier commit (--deploy). From a session on another workspace, production is deployed through SubAgents: orbit-ws04 builds and deploys, then orbit-prod checks the host and moves its checkout to the release. Use whenever someone wants to deploy the latest code, update/upgrade the running containers, bring a Compose deployment up to date, or roll one back.
 ---
 
 # Upgrade the Orbit stack
@@ -442,20 +442,20 @@ at it, and `<name>` runs on.
 
 Orbit's production spans two workspaces, each with its own git checkout of this repository at `/root/orbit`:
 
-- **orbit-op** is wikova, the build host. Other sessions share its `/root/orbit`, so a release is never built there
+- **orbit-ws04** is wikova, the build host. Other sessions share its `/root/orbit`, so a release is never built there
   and nothing is checked out or merged in it. Each release is built and driven from a fresh detached worktree of it,
   `/dev/shm/wkdir-release-main-<first 9 characters of the commit>`. That worktree gets the small build-only `.env`
   (`PUBLIC_ORIGIN`, `JWT_SECRET`, `PROVIDER_SECRET_KEY`, `RUNNER_LINK_SIGNING_KEY`), copied from the newest earlier one.
 - **orbit-prod** is `10.66.0.4`, where the release runs. Its `/root/orbit` is the deploy directory. It is also a git
   checkout, detached at the commit production runs, so that a SubAgent can run there. The deploy stage does not read
-  it as a checkout: it ships the release's files from orbit-op, and nothing is built on `10.66.0.4`. Its
+  it as a checkout: it ships the release's files from orbit-ws04, and nothing is built on `10.66.0.4`. Its
   `.git/info/exclude` keeps the host's own files out of git: `.env*` (the secrets and their backups), `.upgrade/` and
   `docker-compose.override.yml`. `data/` is in `.gitignore`.
 
 A session on another workspace, such as orbit-develop on HPC or orbit-macos, runs nothing locally, because its checkout
-deploys nothing. It coordinates the two through cross-workspace SubAgents (docs/subagent-design.md §10): orbit-op
+deploys nothing. It coordinates the two through cross-workspace SubAgents (docs/subagent-design.md §10): orbit-ws04
 builds and deploys, then orbit-prod checks production on the host itself and moves its checkout to the release. A
-session on orbit-op runs step 2's work itself, as in [Two-stage release](#two-stage-release), and still delegates step
+session on orbit-ws04 runs step 2's work itself, as in [Two-stage release](#two-stage-release), and still delegates step
 4 to orbit-prod. Either kind of SubAgent runs on its workspace's default engine, in a temporary worktree of that
 workspace's `/root/orbit`, which is deleted when it ends, so each brief works by absolute path. A
 SubAgent cannot ask anyone anything, so each brief settles every choice in advance, and any case the brief does not
@@ -465,9 +465,9 @@ Deploying is the owner's decision. Delegate only when the owner asked for this d
 
 1. **Name the commit.** `git fetch origin main && git rev-parse origin/main` gives the 40-character commit to deploy,
    unless the owner named another one. Both SubAgents work on exactly that commit, even if main moves on meanwhile.
-2. **Deploy through orbit-op**, in the background, because the build takes about 12 minutes and the deploy 1 to 2
-   more: `delegate({ description: "Deploy <short commit> to production", workspace: "orbit-op", background: true,
-   size: "M", prompt: <the orbit-op brief> })`. End the turn: Orbit wakes this session with the result.
+2. **Deploy through orbit-ws04**, in the background, because the build takes about 12 minutes and the deploy 1 to 2
+   more: `delegate({ description: "Deploy <short commit> to production", workspace: "orbit-ws04", background: true,
+   size: "M", prompt: <the orbit-ws04 brief> })`. End the turn: Orbit wakes this session with the result.
 3. A result without `✓ Release <commit> runs on root@10.66.0.4` is not a deploy. Report what it stopped at, and stop
    there: do not delegate again before you have read why.
 4. **Check through orbit-prod**: `delegate({ description: "Check production runs <short commit>", workspace:
@@ -475,11 +475,11 @@ Deploying is the owner's decision. Delegate only when the owner asked for this d
 5. **Report** both results: the commit, the plan table, how the apiserver and web were replaced, the target's
    `docker compose ps`, the history line, where orbit-prod's checkout now is, and the log path.
 
-The orbit-op brief: fill in `<commit>`, and `<c9>`, its first 9 characters. Add `--stop-then-start` or `--pull-base` to
+The orbit-ws04 brief: fill in `<commit>`, and `<c9>`, its first 9 characters. Add `--stop-then-start` or `--pull-base` to
 the `--deploy` command in step 6 only when the owner asked for it.
 
 ```text
-You are on wikova, workspace orbit-op. Deploy Orbit commit <commit> to production (10.66.0.4) with the two-stage
+You are on wikova, workspace orbit-ws04. Deploy Orbit commit <commit> to production (10.66.0.4) with the two-stage
 release, as .claude/skills/upgrade/SKILL.md describes under "Two-stage release". You run in a temporary worktree that
 is deleted when you end: work by absolute path. Stop and report at the first step that fails, and do not improvise
 around a guard. Do not retry, and do not roll back. Answer in English.
@@ -569,8 +569,8 @@ the checkout's files named in step 4. Stop and report at the first step that fai
 ## Notes
 
 - Managed runners stay as the deployment's `.env` has them: the script never writes `.env`. A
-  deployment installed before them, or with `--no-managed-runners`, keeps them off; only a fresh
-  install (`scripts/install-server.sh`) or an administrator switches them on (docs/self-hosting.md,
+  deployment installed before them, or without `--managed-runners`, keeps them off; only a fresh
+  install with `--managed-runners` (`scripts/install-server.sh`) or an administrator switches them on (docs/self-hosting.md,
   "Managed runners"). Where `.env` does not turn on the `managed-runners-docker` Compose profile,
   Compose does not list `docker-channel`, and the script builds, recreates and writes exactly what it
   did before managed runners existed: nothing under `data/`, no managed runner image.

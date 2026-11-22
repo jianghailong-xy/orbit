@@ -22,20 +22,28 @@ import {
   deriveSessionLifecycleState,
   deriveSessionRunState,
   SessionLifecycleState,
-  SessionRunState,
   TASK_PROGRESS_LIMITS,
   TaskStatus,
   WATCH_LIMITS,
   type WatchTargetObservation,
 } from '@orbit/shared';
 
+import { runIsOver } from '../common/session-release';
 import { UNSETTLED_SESSION_STATUSES } from '../common/session-scheduling';
+import {
+  ARMED_RETRY,
+  isSessionExecuting,
+  PENDING_WAKEUP,
+  RESUME_WATCH,
+  type SessionWorkingRow,
+} from '../common/session-working';
+import { sessionHasEnded } from '../runner-api/background-job-wake';
 import { readBgJobActivity } from '../sessions/background-job-activity';
 
 /** The newest grammar this build evaluates. */
-export const WATCH_PREDICATE_VERSION = 3;
+export const WATCH_PREDICATE_VERSION = 4;
 /** Every grammar this build evaluates. A watch stored under another version is left to a build that serves it. */
-export const WATCH_PREDICATE_VERSIONS: readonly number[] = [1, 2, 3];
+export const WATCH_PREDICATE_VERSIONS: readonly number[] = [1, 2, 3, 4];
 
 export type WatchTargetKind = 'SESSION' | 'TASK';
 
@@ -51,6 +59,7 @@ export const WATCH_LEAF_TARGET_KIND = {
   TASK_PROGRESS_AT_LEAST: 'TASK',
   TASK_NO_PROGRESS_FOR: 'TASK',
   SESSION_JOB_NO_OUTPUT_FOR: 'SESSION',
+  SESSION_QUIESCENT: 'SESSION',
 } as const satisfies Record<string, WatchTargetKind>;
 
 export type WatchLeaf = keyof typeof WATCH_LEAF_TARGET_KIND;
@@ -67,10 +76,12 @@ export const WATCH_LEAF_SINCE_VERSION: Readonly<Record<WatchLeaf, number>> = {
   TASK_PROGRESS_AT_LEAST: 2,
   TASK_NO_PROGRESS_FOR: 2,
   SESSION_JOB_NO_OUTPUT_FOR: 3,
+  SESSION_QUIESCENT: 4,
 };
 
 const PROGRESS_LEAVES: ReadonlySet<WatchLeaf> = new Set(['TASK_PROGRESS_AT_LEAST', 'TASK_NO_PROGRESS_FOR']);
 const JOB_LEAVES: ReadonlySet<WatchLeaf> = new Set(['SESSION_JOB_NO_OUTPUT_FOR']);
+const QUIESCENT_LEAVES: ReadonlySet<WatchLeaf> = new Set(['SESSION_QUIESCENT']);
 
 /**
  * A job id as bg_run hands it out (runner-go newBgJobID: `bgj_` and twelve hex digits), with room for a
@@ -125,6 +136,8 @@ export type WatchTargetFact =
       /** CONVERSATION, or LANDING for the platform-driven container a landing subject opens. */
       sessionKind: string;
       status: string;
+      /** `session.finished_at`: the release column. */
+      finishedAt: Date | null;
       endReason: string | null;
       completedAt: Date | null;
       archivedAt: Date | null;
@@ -133,7 +146,55 @@ export type WatchTargetFact =
       pendingApproval: boolean;
       /** `running_bg_jobs`, each with its instant from `running_bg_job_activity` (`sessionJobsOf`). */
       jobs: readonly WatchSessionJob[];
+      /**
+       * What SESSION_QUIESCENT reads beside the columns above (common/session-working.ts): the work running
+       * outside a dispatched turn, and what is armed to give the session a turn without a message.
+       */
+      engineTurnActive: boolean;
+      runningSubagents: readonly string[];
+      retryAt: Date | null;
+      /** An ACTIVE RESUME_SESSION watch has this session as its observer. */
+      hasResumeWatch: boolean;
+      /** A PENDING scheduled wake-up is queued for this session. */
+      hasPendingWakeup: boolean;
     };
+
+type WatchSessionFact = Extract<WatchTargetFact, { kind: 'SESSION' }>;
+
+function workingRow(fact: WatchSessionFact): SessionWorkingRow {
+  return {
+    status: fact.status as SessionWorkingRow['status'],
+    engineTurnActive: fact.engineTurnActive,
+    runningSubagents: fact.runningSubagents,
+    runningBgJobs: fact.jobs.map((job) => job.id),
+    hasResumeWatch: fact.hasResumeWatch,
+    hasPendingWakeup: fact.hasPendingWakeup,
+    retryAt: fact.retryAt,
+  };
+}
+
+/** SESSION_QUIESCENT's first half: something is running for the session (`isSessionExecuting`). */
+export function sessionFactExecuting(fact: WatchSessionFact): boolean {
+  return isSessionExecuting(workingRow(fact));
+}
+
+/**
+ * SESSION_QUIESCENT's second half: nothing is executing, and something will still give the session a turn
+ * without anybody sending it a message. The shared module's `sessionWillWake` reads its three facts on any
+ * status; this reads them as what acts on them does:
+ *
+ * - a RESUME_SESSION watch and a scheduled wake-up reach a session only while it has not ended
+ *   (`sessionHasEnded`, which every machine wake asks first), so on an ended or filed session either one is
+ *   stale and wakes nobody;
+ * - an armed retry is re-sent by the auto-retry sweep to a session that is not filed away, a FAILED one
+ *   included (the sweep's own `completedAt`/`deletedAt` filter), so it counts while the session is Open.
+ */
+export function sessionFactWakeArmed(fact: WatchSessionFact): boolean {
+  if (sessionFactExecuting(fact)) return false;
+  const row = workingRow(fact);
+  if (ARMED_RETRY.holds(row) && deriveSessionLifecycleState(fact) === SessionLifecycleState.OPEN) return true;
+  return !sessionHasEnded(fact) && (RESUME_WATCH.holds(row) || PENDING_WAKEUP.holds(row));
+}
 
 /** The latest instant a `Date` can hold, either side of the epoch: a stored number past it names no time. */
 const MAX_INSTANT_MS = 8.64e15;
@@ -152,11 +213,6 @@ export function sessionJobsOf(runningBgJobs: readonly string[], activity: unknow
 }
 
 const TERMINAL_TASK_STATUSES: readonly string[] = [TaskStatus.DONE, TaskStatus.CANCELLED, TaskStatus.FAILED];
-const TERMINAL_RUN_STATES: readonly SessionRunState[] = [
-  SessionRunState.SUCCEEDED,
-  SessionRunState.FAILED,
-  SessionRunState.ENDED,
-];
 const TERMINAL_LIFECYCLE_STATES: readonly SessionLifecycleState[] = [
   SessionLifecycleState.COMPLETED,
   SessionLifecycleState.TRASH,
@@ -270,8 +326,20 @@ export function leafHolds(test: WatchLeafTest, fact: WatchTargetFact, now: numbe
       // row is terminal only once the settlement wrote `completed_at` (SUCCEEDED / CANCELLED).
       if (fact.sessionKind === 'LANDING') return fact.completedAt !== null;
       return !(UNSETTLED_SESSION_STATUSES as readonly string[]).includes(fact.status);
+    case 'SESSION_QUIESCENT':
+      if (fact.kind !== 'SESSION') return false;
+      // The same LANDING reading as SESSION_TURN_SETTLED: a landing is quiet only once it has ended.
+      if (fact.sessionKind === 'LANDING') return fact.completedAt !== null;
+      // A settled turn, and nothing else running or armed: no queued or dispatched turn, no engine turn,
+      // subagent or background job, and no watch, wake-up or retry that will give it a turn by itself.
+      return !(UNSETTLED_SESSION_STATUSES as readonly string[]).includes(fact.status)
+        && !sessionFactExecuting(fact)
+        && !sessionFactWakeArmed(fact);
     case 'SESSION_RUN_TERMINAL':
-      return fact.kind === 'SESSION' && TERMINAL_RUN_STATES.includes(deriveSessionRunState(fact));
+      // The run is over: released (`finished_at`), or interrupted with an end recorded. Never which terminal value
+      // the session holds: the stored meaning (the derived run state is SUCCEEDED, FAILED or ENDED) is the same
+      // rows under session_release_fact_chk (plan step 4.8; common/session-release.ts runIsOver).
+      return fact.kind === 'SESSION' && runIsOver(fact);
     case 'SESSION_LIFECYCLE_TERMINAL':
       return fact.kind === 'SESSION' && TERMINAL_LIFECYCLE_STATES.includes(deriveSessionLifecycleState(fact));
     case 'SESSION_NEEDS_ATTENTION':
@@ -428,6 +496,10 @@ export function observationOf(fact: WatchTargetFact, tests: readonly WatchLeafTe
           id: job.id,
           lastOutputAt: job.lastOutputAt === null ? null : new Date(job.lastOutputAt).toISOString(),
         })),
+      }),
+      ...(tests.some((test) => QUIESCENT_LEAVES.has(test.leaf)) && {
+        executing: sessionFactExecuting(fact),
+        wakeArmed: sessionFactWakeArmed(fact),
       }),
     };
   }

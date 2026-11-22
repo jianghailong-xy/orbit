@@ -1,6 +1,15 @@
 package io.orbitd.android.reader
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -22,12 +31,17 @@ import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import io.orbitd.android.directory.QueuedCapacity
+import io.orbitd.android.directory.QueuedClone
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import io.orbitd.android.directory.QueuedDiskLow
 import io.orbitd.android.directory.QueuedGate
 import io.orbitd.android.directory.RunnerUpdating
 import io.orbitd.android.directory.RunnerUpdatingPart
 import java.time.Instant
 import kotlinx.coroutines.delay
+
+private const val CANCEL = "Cancel"
 
 /** A clock that moves every 30 seconds, for the waits counted in minutes (web `useMinuteNow`). */
 @Composable
@@ -72,11 +86,12 @@ internal fun RunnerUpdatingQueued(gate: QueuedGate, machine: String?, openSessio
  * voice, the reason dotted-underlined because a press opens why — the update's account and, on its own line, how long it has waited.
  * A full runner, run or batch is drawn the same way in [QueuedCapacity]'s words, `Queued · runner full` (web `CapacityHeldTag`,
  * docs/mocks/queued-card-runner-full), with nothing to press in its popover. A new session Keep Free holds reads
- * `Queued · low disk space` ([QueuedDiskLow]), likewise.
+ * `Queued · low disk space` ([QueuedDiskLow]), likewise. With [cancel] — under an accepted message no runner has taken yet
+ * ([cancellableHeldTurn]) — the row ends ` · Cancel`, which takes the message back (web `HeldFoot`).
  */
 @Composable
 internal fun RunnerUpdatingFoot(gate: QueuedGate, machine: String?, modifier: Modifier = Modifier, now: Instant = rememberMinuteNow(),
-    later: (@Composable () -> Unit)? = null) {
+    later: (@Composable () -> Unit)? = null, cancel: (() -> Unit)? = null) {
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
     val style = MaterialTheme.typography.labelSmall
     var open by remember { mutableStateOf(false) }
@@ -91,6 +106,11 @@ internal fun RunnerUpdatingFoot(gate: QueuedGate, machine: String?, modifier: Mo
                 drawLine(secondary, Offset(0f, y), Offset(size.width, y), strokeWidth = 1.dp.toPx(),
                     pathEffect = PathEffect.dashPathEffect(floatArrayOf(2.dp.toPx(), 2.dp.toPx())))
             }.testTag("runner-updating-foot:reason"), style = style, color = secondary)
+        if (cancel != null) {
+            Text("·", style = style, color = secondary)
+            Text(CANCEL, Modifier.clickable(role = Role.Button, onClick = cancel).testTag("runner-updating-foot:cancel"), style = style,
+                color = MaterialTheme.colorScheme.primary)
+        }
     }
     if (open) Dialog({ open = false }) {
         Surface(shape = RoundedCornerShape(14.dp), tonalElevation = 6.dp, modifier = Modifier.widthIn(max = 320.dp).testTag("runner-updating-pop")) {
@@ -106,5 +126,61 @@ internal fun RunnerUpdatingFoot(gate: QueuedGate, machine: String?, modifier: Mo
                 if (!full && !disk) later?.invoke()
             }
         }
+    }
+}
+
+/**
+ * The waiting card of a session held by its workspace's clone (web `CloneWaitNotice`, board docs/mocks/clone-progress-wait-card ②):
+ * what is cloning, git's percentage once it has said one, and where. [clone] is null for a failed clone, which says its two plain
+ * sentences. [compact] is the card under a transcript: the same centred card, with a spinner while no percentage is heard.
+ */
+@Composable
+internal fun CloneWaitNotice(clone: QueuedClone.Wait?, failed: Boolean, machine: String?, compact: Boolean, modifier: Modifier = Modifier) {
+    val secondary = MaterialTheme.colorScheme.onSurfaceVariant
+    val title = when {
+        clone != null -> QueuedClone.waitTitle(clone.state, clone.repository)
+        failed -> QueuedClone.FAILED_TITLE
+        else -> QueuedClone.TITLE
+    }
+    // Both cards are centred, as web and iOS draw them.
+    val align = Alignment.CenterHorizontally
+    val pad = if (compact) Modifier.padding(horizontal = 16.dp, vertical = 14.dp) else Modifier.padding(horizontal = 24.dp, vertical = 32.dp)
+    Column(modifier.fillMaxWidth().then(pad).testTag("clone-wait"), horizontalAlignment = align, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            // The full-height card's own dots already say it is waiting; the compact one has none, so it spins until a percentage is heard.
+            if (compact && clone != null && clone.progress == null) CloneSpinner(Modifier.testTag("clone-wait:spinner"))
+            Text(title, Modifier.testTag("clone-wait:title"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center)
+        }
+        clone?.progress?.let { progress ->
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                LinearProgressIndicator(progress = { progress / 100f },
+                    modifier = Modifier.width(220.dp).height(4.dp).semantics { contentDescription = title }.testTag("clone-wait:bar"),
+                    drawStopIndicator = {}, gapSize = 0.dp)
+                Text("$progress%", Modifier.testTag("clone-wait:percent"), style = MaterialTheme.typography.bodyMedium, color = secondary)
+            }
+        }
+        val where = machine?.takeIf { clone != null }
+        Text(
+            when {
+                clone == null && failed -> QueuedClone.FAILED_WAIT
+                where != null -> "On $where. ${QueuedClone.STARTS}"
+                else -> QueuedClone.STARTS
+            },
+            Modifier.testTag("clone-wait:description"), style = MaterialTheme.typography.bodyMedium, color = secondary,
+            textAlign = TextAlign.Center)
+    }
+}
+
+/** A turning three-quarter ring the size of the card's title: drawn in full at every moment, where the indeterminate indicator's arc passes through a sliver. */
+@Composable
+private fun CloneSpinner(modifier: Modifier = Modifier) {
+    val angle by rememberInfiniteTransition(label = "clone-spin").animateFloat(0f, 360f,
+        infiniteRepeatable(tween(1_000, easing = LinearEasing)), label = "clone-spin")
+    val color = MaterialTheme.colorScheme.primary
+    Canvas(modifier.size(20.dp)) {
+        val stroke = 2.dp.toPx()
+        drawArc(color, startAngle = angle, sweepAngle = 270f, useCenter = false, topLeft = Offset(stroke / 2, stroke / 2),
+            size = Size(size.width - stroke, size.height - stroke), style = Stroke(stroke, cap = StrokeCap.Round))
     }
 }

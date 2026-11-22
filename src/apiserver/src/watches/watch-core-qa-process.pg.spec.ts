@@ -31,6 +31,7 @@ import {
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
 import '../test-support/daemon-routes-over-http';
+import { WATCH_PREDICATE_VERSION } from './watch-predicate';
 
 const PG_URL = process.env.COORDINATOR_PG_URL;
 const skip = !PG_URL;
@@ -413,7 +414,7 @@ qa('P-01', 'the production AppModule boots with the Watch modules, and the Watch
     ['a TTL under a minute', { ttlSeconds: 10 }, token, 400, 'TTL_OUT_OF_RANGE'],
     ['no targets', { targets: [] }, token, 400, 'EMPTY_TARGET_SET'],
     ['a session leaf over a task', { predicate: ALL('SESSION_TURN_SETTLED') }, token, 400, 'TARGET_KIND_MISMATCH'],
-    ['an unknown predicate version', { predicateVersion: 4 }, token, 400, 'PREDICATE_VERSION_UNSUPPORTED'],
+    ['an unknown predicate version', { predicateVersion: WATCH_PREDICATE_VERSION + 1 }, token, 400, 'PREDICATE_VERSION_UNSUPPORTED'],
   ];
   for (const [name, change, caller, status, code] of refusals) {
     const refused = await request(server, 'POST', '/api/watches', {

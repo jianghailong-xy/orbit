@@ -109,6 +109,24 @@ export enum ControlEventType {
    *  told, at most one per second. Derived from the Open list's own counters and clock thresholds, so
    *  it also covers writes that publish no event at all. */
   SESSIONS_LIST_CHANGED = 'sessions.list_changed',
+  /** One of the owner's requests (`GET /owner-requests`) may read differently than it did: filed, answered,
+   *  expired, withdrawn or otherwise settled, by any writer. USER-SCOPED (see above). `data` is
+   *  `{ version }`, an opaque string: a nudge to re-read `GET /owner-requests`, which is the truth. Sent
+   *  ONLY to a stream that declared it with `GET /api/events?hints=owner_requests`
+   *  (`CONTROL_HINT_OWNER_REQUESTS`): shipped clients treat a type they do not know as "re-read
+   *  everything", so an undeclared stream never receives it. Like `sessions.list_changed` it is derived
+   *  from the stored rows, not published by the writers: a new stream is told the current version about a
+   *  second after it connects, and after that only a version that differs from the one it holds, at most
+   *  once a second. The asking session's `session.updated` is still published as before. */
+  OWNER_REQUESTS_CHANGED = 'owner_requests.changed',
+  /** What some sessions' schedule cards (`GET /sessions/:id/schedule-cards`) read may have moved: one of them put up a
+   *  card or the owner decided it, a change it made was recorded or undone, or a schedule its cards and records name
+   *  was edited, paused, resumed, ended or deleted. USER-SCOPED (see above). `data` is a
+   *  `ControlScheduleCardsChanged` naming those sessions: a nudge to re-read their cards, nothing more. Published by
+   *  the writers after they commit. Sent ONLY to a stream that declared it with `GET /api/events?hints=schedule_cards`
+   *  (`CONTROL_HINT_SCHEDULE_CARDS`): shipped clients treat a type they do not know as "re-read everything", so an
+   *  undeclared stream never receives it, and the session events they re-read the cards on are published as before. */
+  SCHEDULE_CARDS_CHANGED = 'schedule_cards.changed',
   /** Reserved generic notification channel — future pushes ride this without a protocol bump. */
   NOTIFICATION = 'notification',
 }
@@ -119,7 +137,7 @@ export interface ControlEvent {
   type: ControlEventType;
   /** The session this event is about — EMPTY for the user-scoped events (`task.list.changed` /
    *  `tag.changed` / `folder.changed` / `provider.changed` / `project.criteria_decisions.changed` /
-   *  `project.changed` / `watch.changed` / `wiki.changed` / `terminals.changed` / `translation.status_changed` / `sessions.list_changed`), which belong to the owner, not to any
+   *  `project.changed` / `watch.changed` / `wiki.changed` / `terminals.changed` / `translation.status_changed` / `sessions.list_changed` / `owner_requests.changed` / `schedule_cards.changed`), which belong to the owner, not to any
    *  one session. Clients must dispatch on `type`, not on the presence of a
    *  session id. */
   sessionId: string;
@@ -134,12 +152,30 @@ export interface ControlEvent {
  *  Comma-separated with any other hint a later server may learn; unknown values are ignored. */
 export const CONTROL_HINT_LIST_CHANGED = 'list_changed';
 
+/** The `hints=` value a `GET /api/events` connection declares to receive `owner_requests.changed`. */
+export const CONTROL_HINT_OWNER_REQUESTS = 'owner_requests';
+
+/** The `hints=` value a `GET /api/events` connection declares to receive `schedule_cards.changed`. */
+export const CONTROL_HINT_SCHEDULE_CARDS = 'schedule_cards';
+
+/** At most this many sessions are named by one `schedule_cards.changed`; a wider change is a `resync`. */
+export const SCHEDULE_CARDS_CHANGED_MAX_SESSIONS = 100;
+
+/** `data` for `schedule_cards.changed`. */
+export interface ControlScheduleCardsChanged {
+  /** The sessions whose schedule cards may read differently now. */
+  cardSessionIds: string[];
+  /** True when the change named more sessions than one event carries: every session's cards may have moved. */
+  resync: boolean;
+}
+
 /** `data` for `sessions.list_changed`. */
 export interface ControlListChanged {
-  /** The account's Open-list data version as it stood when the hint was sent: the opaque part of the
-   *  ETag the unfiltered Open list is served with (`W/"ol1-<version>"`). A filtered list's ETag is
-   *  derived from it, so a client compares it with nothing but a previous hint's. The first hint a
-   *  stream gets, shortly after it connects, carries the current version even when nothing moved. */
+  /** An opaque hint token: the account's Open-list counter sums and the clock part of the list (runners'
+   *  id, name, status and liveness, share links, foreign running turns, the clock thresholds), which
+   *  leaves out runner heartbeats. It is NOT the Open list's ETag version. A client compares it with
+   *  nothing but a previous hint's. The first hint a stream gets, shortly after it connects, carries
+   *  the current token even when nothing moved. */
   version: string;
 }
 
@@ -263,7 +299,7 @@ export interface ControlSessionSummary {
   /** The sessions waiting on a reply from this one, oldest first. Same `[]` convention. */
   owesReplyTo?: SessionRequestPeer[];
   lastTurnAt: string | null;
-  /** Where the row sits in the session list (session.listed_at, migration 1260): moved only when the session changes
+  /** Where the row sits in the session list (session.listed_at, migration 1434): moved only when the session changes
    *  for its owner — created, a person's message, a turn ending on them, ended or completed — never by streamed
    *  activity, which moves lastTurnAt. Clients sort by this. Absent from an older control plane. */
   listedAt?: string;
@@ -371,6 +407,11 @@ export interface ControlBackgroundTask {
   name: string;
   status: string;
   exitCode?: number;
+  /** The launching call's id, which names the process across its reports. Absent when the runner sent
+   *  none, and from an older control plane. */
+  toolUseId?: string;
+  /** A runner-hosted job's kind (`job`, `watch`, `service`, `subagent`); absent for an engine's own shell. */
+  kind?: string;
 }
 
 /** `data` for `task.changed`.
@@ -383,6 +424,14 @@ export interface ControlTaskChanged {
   taskId?: string;
   taskIds: string[];
   resync: boolean;
+  /** The sessions that created the rows `taskIds` names (`task.creatorSessionId`), each once; a row created by no
+   *  session adds none. Sent only with a bounded change (`resync: false`), and absent from an older server: a client
+   *  scoping a session's "Tasks created here" read by it reads that row again on any change that does not carry it. */
+  creatorSessionIds?: string[];
+  /** The projects the rows `taskIds` names are in (`task.projectId`), each once; a row in no project adds none. Sent
+   *  and absent exactly as `creatorSessionIds` is: a client scoping a project's reads by it reads them again on any
+   *  change that does not carry it. */
+  rowProjectIds?: string[];
 }
 
 /** `data` for `agent.changed`. As with `task.changed`, the client refetches its agent list. Some

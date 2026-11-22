@@ -120,6 +120,23 @@ export const MANAGED_RUNNER_CAPACITY_UNAVAILABLE = 'MANAGED_RUNNER_CAPACITY_UNAV
 /** 409 to an explicit sleep: the runner has work in flight or queued, and sleep never interrupts work. */
 export const MANAGED_RUNNER_BUSY = 'MANAGED_RUNNER_BUSY';
 
+/** 409 to an Update Now: the runner already runs the current image (its status has no `update`). */
+export const MANAGED_RUNNER_CURRENT = 'MANAGED_RUNNER_CURRENT';
+
+/** The body of POST /api/managed-runner/update-now (docs/managed-runner-update-now-design.md). */
+export interface ManagedRunnerUpdateNowRequest {
+  /** Stop the running turns to update now. Absent or false: a busy runner is refused 409 MANAGED_RUNNER_BUSY. */
+  interruptTurns?: boolean;
+}
+
+/** A turn running on the managed runner, as a busy Update Now's 409 lists it. */
+export interface ManagedRunnerBusyTurn {
+  sessionId: string;
+  title: string;
+  /** ISO 8601, or null when the session never recorded a start. */
+  startedAt: string | null;
+}
+
 /** What the owner asked of the managed runner. */
 export type ManagedRunnerDesiredState = 'RUNNING' | 'SLEEPING' | 'DELETED';
 
@@ -201,7 +218,30 @@ export interface ManagedRunnerStatus {
    * predates it, which queued nothing before READY: read `initialProvider` then.
    */
   firstSessionProvider?: string | null;
+  /** The runner runs an older build than the current image's. Absent when it runs the current one, when it is
+   *  not running (asleep, failed, being provisioned), when the server cannot tell, and from an older server. */
+  update?: ManagedRunnerUpdate;
   actions: ManagedRunnerActions;
+}
+
+/** One build of the managed runner image: the source commit it was built from, and when, if known. */
+export interface ManagedRunnerBuild {
+  sha: string;
+  builtAt?: string;
+}
+
+/**
+ * The managed runner's container was made from an older image than the one it would be made from now
+ * (docs/managed-runner-update-now-design.md). `available`: READY on the older build. `updating`: the owner's
+ * Update Now, or an image roll, is on its way to the next container, made from the current one.
+ */
+export interface ManagedRunnerUpdate {
+  running: ManagedRunnerBuild;
+  current: ManagedRunnerBuild;
+  phase: 'available' | 'updating';
+  /** `updating` on a busy runner whose backend cannot stop it (Kubernetes): the owner's Update Now waits for the
+   *  runner to be idle and interrupts nothing. Absent otherwise. */
+  waitsForIdle?: true;
 }
 
 /** The body of every managed runner write. */

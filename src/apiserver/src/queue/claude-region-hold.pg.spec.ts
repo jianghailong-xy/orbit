@@ -334,7 +334,7 @@ test('the region check holds Anthropic-bound Claude sessions, refuses them at cr
       assert.equal(error.message, 'Stop the session first.');
       return true;
     });
-    await db.session.update({ where: { id: busy }, data: { status: RunStatus.CANCELLED } });
+    await db.session.update({ where: { id: busy }, data: { status: RunStatus.CANCELLED, finishedAt: new Date()} });
 
     const moves = await sessions.moveTargets(from.ownerId, id);
     assert.equal(moves.reason, null, 'the Move panel offers it');
@@ -539,7 +539,7 @@ test('the region check holds Anthropic-bound Claude sessions, refuses them at cr
     });
     // The run is picked from the owner's whole pool on this runner (every provider × engine × model), not from a
     // per-Agent engine list: Claude and Codex are both signed-in subscriptions here, and Claude is first by order.
-    await db.workspace.update({ where: { id: m.workspaceId }, data: { modelRouting: true } });
+    // The Agent has no switch of its own (owner, 2026-11-20): the account's, on unless written false, routes it.
     const taskId = randomUUID();
     await db.task.create({
       data: {

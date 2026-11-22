@@ -13,7 +13,7 @@ import {
 import { api } from '../api';
 import { streamPoll } from '../lib/listBudget';
 import { DEFAULT_MAIN_BRANCH, mainBranchName } from '../lib/projectStart';
-import { projectIntegrationQuery, projectReadyToRunQuery } from '../lib/queries';
+import { projectReadyToRunQuery } from '../lib/queries';
 import { LandingJobsSheet } from './LandingJobsSheet';
 import { ProjectLandingCard } from './ProjectLandingCard';
 import { ProjectTaskLink } from './ProjectTaskLink';
@@ -21,6 +21,7 @@ import { Alert } from './ui/Alert';
 import { Button } from './ui/Button';
 import { Spinner } from './ui/Spinner';
 import './ui/Typography.css';
+import { useProjectIntegration } from '../lib/pollOwner';
 
 /**
  * Where a project's work stands, and — when none of it is moving — why (the header card of the
@@ -404,7 +405,20 @@ export const LANDING_LIVENESS_WORDS = {
   TAKEN_OVER: 'Taken over',
   FIRST_STARTED: 'first started',
   USUALLY: 'usually',
+  /** The state word of a claimed job waiting for its runner's local lock: it has not started its
+   *  work, so it has no output to be quiet about and is not fetching. */
+  WAITING: 'waiting',
 };
+
+/**
+ * The server's sentence about a claimed job waiting for its runner's local lock, naming the job
+ * that holds it — or null for any other job. A SILENT runner is a different fact (the runner, not
+ * the lock) and keeps its own words.
+ */
+function localLockWait(job: Pick<LandingJobFacts, 'state' | 'liveness' | 'blockingReason'>): string | null {
+  if (job.state !== 'RUNNING' || job.liveness === 'SILENT' || job.liveness === 'LEASE_EXPIRED') return null;
+  return job.blockingReason?.code === 'WAITING_LOCAL_LOCK' ? job.blockingReason.summary : null;
+}
 
 /**
  * "round 2 of 3" for a task's landing, "round 1" for a merge check or a merge into main (§7.2 V6):
@@ -556,6 +570,7 @@ interface LandingJobFacts {
   outputMovedAt?: string | null;
   typicalMs?: number | null;
   liveness?: string | null;
+  blockingReason?: { code: string; summary: string } | null;
 }
 
 /**
@@ -597,7 +612,12 @@ function landingLiveness(
   // says the liveness there — "checking · output 1s ago" (v4 04 and 07). The claim, round and the
   // usual duration follow it and are read in full on the wider rows.
   const clauses: string[] = [];
-  if (word === 'LIVE') {
+  // A job waiting for its runner's local lock has not started: what holds it leads the line, and
+  // the step's clock is the wait's. Its output was never going to move.
+  const lockWait = localLockWait(job);
+  if (lockWait !== null) {
+    clauses.push(lockWait);
+  } else if (word === 'LIVE') {
     if (Number.isFinite(outputMoved)) {
       clauses.push(`${lowerFirst(LANDING_LIVENESS_WORDS.OUTPUT)} ${Math.max(0, Math.round((now - outputMoved) / 1000))}s ago`);
     }
@@ -663,7 +683,8 @@ function liveLine(
     timedOut: false,
     state: unavailable ? 'Update unavailable'
       : silent ? LANDING_NO_REPORT
-        : running ? (job.phase ? jobPhases(main)[job.phase] ?? 'running' : 'running') : 'queued',
+        : running && localLockWait(job) !== null ? LANDING_LIVENESS_WORDS.WAITING
+          : running ? (job.phase ? jobPhases(main)[job.phase] ?? 'running' : 'running') : 'queued',
     // An instant this clock cannot read is no elapsed time rather than `NaN` on the page: the row
     // stays up and counts from zero, which is the one thing it can still say truthfully.
     clock: liveness?.clock ?? landingClock(Number.isFinite(startedAt) ? elapsedAt - startedAt : 0),
@@ -875,6 +896,8 @@ export function landingCard(
   now: number,
   observation: { updatedAt?: number; failed?: boolean } = {},
 ): LandingCard | null {
+  // A project whose line has not started draws no Landing card (revision 42 §12.16, ruling D2).
+  if (view.line === null) return null;
   const line = landingLine(view, now, observation);
   if (!line) return null;
   const jobs = landingJobLines(view, now, observation).map((job) => ({
@@ -1323,7 +1346,7 @@ export function ProjectPanoramaHeader({
   // — one query key, so the card mounting this is not a second request. It is read here rather than
   // handed in because the row is drawn inside this card, and a card that only knew there was a line
   // (the `integrationLine` prop) could not say what the line is doing.
-  const integration = useQuery({ ...projectIntegrationQuery(projectId), enabled: Boolean(projectId) });
+  const integration = useProjectIntegration(projectId);
   const ready = useQuery({ ...projectReadyToRunQuery(projectId), enabled: Boolean(projectId) });
   const inFlight = integration.data?.inFlight ?? null;
   // The clock counts in SECONDS while something is landing, rather than stepping with the 30s poll

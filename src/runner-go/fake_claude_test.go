@@ -133,8 +133,8 @@ func TestMain(m *testing.M) {
 // a `!` shell inherits too, and which passes over the login the CLI tests save.
 var callingSessionEnv = []string{
 	"ORBIT_SESSION_ID", "ORBIT_AGENT_ID", "ORBIT_TASK_ID", envSpawnDepth, envMCPOrchestration,
-	envOrchestrationToken, envMCPPermissionPrompt, envWatches, envWiki, envScheduleRun, envScheduledCheckOnly, envBgSocket, envBgToken, envBgJobID,
-	envRunnerChild,
+	envOrchestrationToken, envMCPPermissionPrompt, envWatches, envWiki, envWorkflows, envScheduleRun, envScheduledCheckOnly, envBgSocket,
+	envBgToken, envBgJobID, envRunnerChild,
 }
 
 // suiteSessionClearedEnv marks a process tree the calling session was already cleared from. A test

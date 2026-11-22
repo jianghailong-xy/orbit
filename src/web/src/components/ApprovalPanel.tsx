@@ -78,6 +78,8 @@ export const decliningPrefix = (toolName: string | null | undefined): string =>
           ? 'Leaving the check as it is: '
           : toolName === 'orbit_runner_delete' || toolName === 'orbit_agent_delete'
             ? 'Keeping it: '
+            : toolName === 'orbit_browser_clear_logins'
+              ? 'Keeping the saved logins: '
             : toolName === 'orbit_agent_update'
               ? 'Leaving it as it is: '
               : 'Not creating: ';
@@ -663,9 +665,10 @@ export function rememberRulesFor(a: ApprovalInfo): PermissionRule[] {
   // Nor a delete, for the same reason: the server deletes only on a card a person answered, so a
   // standing yes would answer nothing — and each delete is a different runner or workspace anyway.
   // Nor a workspace write, which the server takes on the same terms, and each one writes other values.
+  // Nor clearing the browser's saved logins (browser_clear_logins): the server clears only on a card a person answered.
   if (isTaskCreate(a) || isProjectCreate(a) || isBlockerResolve(a) || isProviderWrite(a)
     || isSkipMergeCheck(a) || isMergeCheckChange(a) || isRunnerDelete(a) || isWorkspaceDelete(a)
-    || isWorkspaceCreate(a) || isWorkspaceUpdate(a)) {
+    || isWorkspaceCreate(a) || isWorkspaceUpdate(a) || a.toolName === 'orbit_browser_clear_logins') {
     return [];
   }
   if (a.toolName === 'Bash') {

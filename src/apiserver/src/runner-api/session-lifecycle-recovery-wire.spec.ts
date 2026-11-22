@@ -87,7 +87,7 @@ const prisma: Record<string, unknown> = {
       // offline (no heartbeat for a day).
       if (include && where.id === TARGET) {
         return {
-          id: TARGET, ownerId: RUNNER.ownerId, sessionKind: null, status: 'SUCCEEDED', endReason: null,
+          id: TARGET, ownerId: RUNNER.ownerId, sessionKind: null, status: 'SUCCEEDED', finishedAt: new Date(), endReason: null,
           wikiChatSpaceId: null, taskId: null, startsTaskWork: false, provider: 'claude', engine: null,
           numTurns: 1, runtimeSessionId: randomUUID(), startedAt: new Date(Date.now() - 86_400_000),
           cancelRequestedAt: null, deletedAt: null, completedAt: null, archivedAt: null,
@@ -218,6 +218,7 @@ const DISPOSITION_OF_CODE: Record<string, string> = {
   WORKSPACE_NAME_NOT_FOUND: 'AUTOMATIC',
   ENGINE_SIGNED_OUT: 'HUMAN',
   MANAGED_RUNNER_FAILED: 'HUMAN',
+  RUNNER_DISK_BELOW_FLOOR: 'HUMAN',
   SESSION_TRASHED: 'HUMAN',
   SESSION_ENDING: 'WAIT',
   SESSION_NOT_TERMINAL: 'WAIT',

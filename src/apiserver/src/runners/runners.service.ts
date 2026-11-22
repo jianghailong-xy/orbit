@@ -81,10 +81,7 @@ import {
   claudeAccountSwapWaitingOf,
 } from './claude-account-swap';
 import { openCodeKeyRows, runsOnOpenCode } from '../providers/custom-provider';
-
-/** The statuses an abandoned checkout can belong to: a session that has stopped running for good.
- *  A parked one can be dirty between turns and is not abandoned, so it is not listed. */
-const FINISHED_SESSION_STATUSES = [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED];
+import { releasedFilter } from '../common/session-release';
 
 // Cap device-enrollment userCode lookups per user, so an authenticated insider
 // cannot brute-force another user's pending enrollment code online.
@@ -606,7 +603,9 @@ export class RunnersService {
     const runner = await this.prisma.runner.findFirst({ where: { id, ownerId }, select: { id: true } });
     if (!runner) throw new NotFoundException('runner not found');
     const rows = await this.prisma.abandonedCheckout.findMany({
-      where: { runnerId: id, ownerId, session: { status: { in: FINISHED_SESSION_STATUSES } } },
+      // An abandoned checkout belongs to a session that has stopped running for good: released. A parked one can be
+      // dirty between turns and is not abandoned, so it is not listed.
+      where: { runnerId: id, ownerId, session: releasedFilter() },
       orderBy: { observedAt: 'asc' },
       select: {
         sessionId: true,
@@ -906,14 +905,14 @@ export class RunnersService {
     engine: LoginEngine,
     account: string,
   ): Promise<RunnerClaudeAccountSwapState> {
-    if (engine !== 'claude') throw new BadRequestException('Only a Claude Code account can be made the Default');
-    if (account === 'default') throw new BadRequestException('This account is already the Default');
-    if (!ACCOUNT_ID_PATTERN.test(account ?? '')) throw new BadRequestException('Unknown account');
     const runner = await this.prisma.runner.findFirst({
       where: { id, ownerId },
       select: { engines: true, capabilities: true, capabilitiesReportedAt: true, claudeAccountSwapStatus: true },
     });
     if (!runner) throw new NotFoundException('runner not found');
+    if (engine !== 'claude') throw new BadRequestException('Only a Claude Code account can be made the Default');
+    if (account === 'default') throw new BadRequestException('This account is already the Default');
+    if (!ACCOUNT_ID_PATTERN.test(account ?? '')) throw new BadRequestException('Unknown account');
     const capabilities = runner.capabilitiesReportedAt ? (runner.capabilities ?? []) : [];
     if (!capabilities.includes(CLAUDE_ACCOUNT_SWAP_V1) || !capabilities.includes(CLAUDE_ACCOUNT_MOVE_V1)) {
       throw new BadRequestException(CLAUDE_ACCOUNT_SWAP_TOO_OLD);

@@ -269,6 +269,32 @@ class StartProjectTest {
         }
     }
 
+    @Test fun aRequestWithoutALineOmitsTheLineAndItsSettingsFromBothStartDoors() {
+        val raw = requestRow("item-1").replace("\"line\":\"PROJECT_BRANCH\",", "")
+        val row = j(raw)
+        val request = StartProjectCopy.request(row)!!
+        assertNull(StartProjectCopy.request(j(raw.replace("\"settings\":{", "\"settings\":{\"line\":null,")))!!.settings.line)
+        val view = j("""{"repository":"acme/app","upstreamRef":"refs/heads/trunk","deliveryMode":"AGENT_PUSH"}""")
+        val draft = StartProjectCopy.Draft.of(request.settings.copy(upstreamRef = "refs/heads/other", landingCheckCommand = "make fast",
+            landingCheckTimeoutSeconds = 600), view)
+        assertNull(draft.line)
+        assertNull(draft.upstream)
+        assertNull(draft.deliveryMode)
+        assertTrue(draft.complete)
+        val expected = j("""{"criteriaDigest":"$seal","requestId":"item-1","automatic":true,"maxConcurrentTasks":3,
+            "mergeCheckCommand":null,"mergeCheckTimeoutSeconds":null}""")
+        assertEquals(expected, StartProjectCopy.body(request, draft, "item-1"))
+        assertEquals(expected, StartProjectCopy.body(request, draft.copy(upstream = "trunk"), "item-1"))
+        val card = InteractionCard("start:item-1", CardFamily.START, StartProjectCopy.title, row, "s1", project, "item-1", seal,
+            actions = listOf(CardVerb.START))
+        val edited = ProjectStartSettings(null, true, 3, null, request.settings.projectBranchName,
+            upstreamRef = "refs/heads/trunk", deliveryMode = "PLATFORM", landingCheckCommand = "make fast", landingCheckTimeoutSeconds = 600)
+        for (input in listOf(CardInput(), CardInput(settings = edited))) {
+            val sent = CardRequests.build(card, CardVerb.START, input)
+            assertEquals(expected, j(sent.body!!.decodeToString()))
+        }
+    }
+
     @Test fun theDraftIsCompleteOnlyInsideTheDoorsLimits() {
         val draft = StartProjectCopy.Draft.of(request().settings)
         assertTrue(draft.complete)

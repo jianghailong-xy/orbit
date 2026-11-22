@@ -26,12 +26,31 @@ import { answerStillWaiting } from '../conditions/condition-still-waiting';
 import { CONDITION_STILL_WAITING_KIND } from '@orbit/shared';
 import { endUndeliveredGrants, enqueueResolutions } from './owner-request-endings';
 import { OwnerSecretsService, type OwnerSecretGrantView } from './owner-secrets.service';
+import { settingOwnerOnlyBody, settingsChangeTitle } from '@orbit/shared';
+import { normalizeDefaultModels } from '../providers/engine-provider';
+import { applySettingsChanges } from './settings-apply';
 import {
+  SettingsProposalInvalid,
+  sameSettingsChanges,
+  settingsChangeDeclinedMessage,
+  settingsChangeEntries,
+  validateSettingsChanges,
+  wideningKeys,
+  type SettingsChangePayload,
+} from './settings-change';
+import {
+  BROWSER_SIGN_IN_KIND,
   OWNER_REQUEST_EXPIRED,
   OWNER_REQUEST_NOT_ASKER,
   OWNER_REQUEST_NOT_PENDING,
   OwnerRequestNotFileable,
+  SETTINGS_ALREADY_SET,
+  SETTINGS_CHANGE,
+  SETTINGS_CHANGE_DECLINED,
+  SETTINGS_OWNER_CHANNEL_ONLY,
   WIKI_CREATE_DAILY_RUN_LIMIT,
+  browserSignInSite,
+  browserSignInTitle,
   WIKI_CREATE_DECLINED,
   WIKI_CREATE_LOOKBACK_DAYS,
   WIKI_CREATE_NO_REPOSITORY,
@@ -43,6 +62,9 @@ import {
   type OwnerRequestOption,
   type OwnerRequestState,
 } from './owner-request';
+
+/** The longest reason a BROWSER_SIGN_IN may carry: the card quotes it whole. */
+const MAX_BROWSER_SIGN_IN_REASON = 1_000;
 
 /** How often the expiry sweep runs. A deadline is honoured to the minute. */
 const EXPIRY_TICK_MS = 60_000;
@@ -84,6 +106,11 @@ const VIEW = {
   // CONDITION_* items (migration 1030, conditions/condition-attention.ts): the condition a can't-read card or the
   // 30-day question is about, which a client reads to name its schedule or task.
   conditionId: true,
+  // SETTINGS_CHANGE (migration 1273): `{ changes: [{ key, from, to, tier }] }`, which the card draws.
+  payload: true,
+  // BROWSER_SIGN_IN (migration 1393): the site the agent named and the Orbit Cloud runner whose browser it is.
+  browserSite: true,
+  browserRunnerId: true,
   expiresAt: true,
   clientRequestId: true,
   askedBySessionId: true,
@@ -122,7 +149,16 @@ export type OwnerRequestView = Prisma.OwnerRequestGetPayload<{ select: typeof VI
   secretGrant?: OwnerSecretGrantView | null;
   /** SECRET: what ends the key (§6.1) — its task (TASK_ENDED) or, for a session with no task, the session. */
   secretScope?: 'TASK' | 'SESSION';
+  /** BROWSER_SIGN_IN: the asking session's title, which the card names ("From session …"); null when it has none. */
+  askedBySessionTitle?: string | null;
 };
+
+/** What browser_request_sign_in files (POST /runner/browser/sign-in-requests). */
+export interface BrowserSignInFiling {
+  site?: string;
+  reason?: string;
+  clientRequestId?: string;
+}
 
 /**
  * Owner requests: filed by any session of the account, answered by the owner (migration 0503).
@@ -282,6 +318,116 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * A session proposes a change to the owner's own Settings (docs/settings-from-conversation-design.md §5.1), filed as
+   * a SETTINGS_CHANGE card the owner approves or declines. Nothing here writes a preference.
+   *
+   *   1. every key is in the tier table and every value passes the PATCH's rules (400), `defaultModels` normalised;
+   *   2. each key's value in force is recorded beside its new value, and a change to what is already in force is
+   *      dropped: with nothing left, 409 SETTINGS_ALREADY_SET;
+   *   3. any change that widens agent reach refuses the whole proposal, 403 SETTING_OWNER_ONLY (§6);
+   *   4. a change this session's card was declined for is refused, 409 SETTINGS_CHANGE_DECLINED;
+   *   5. this session's previous PENDING card is WITHDRAWN in the transaction that files the new one, so the owner never
+   *      answers a stale card (`owner_request_settings_change_pending_key` holds a session to one). The session is not
+   *      woken for it: it is told here, in `withdrawnRequestIds`;
+   *   6. the card is filed with the server's title, "Change N setting(s)?", and `{ changes }` as its payload.
+   */
+  async proposeSettings(
+    ownerId: string,
+    askingSessionId: string,
+    proposal: { changes: Record<string, unknown>; why: string },
+  ): Promise<OwnerRequestView & { created: true; withdrawnRequestIds: string[] }> {
+    const why = proposal.why?.trim();
+    if (!why) throw new BadRequestException('why is required: say what the person asked for');
+    let proposed: Awaited<ReturnType<typeof validateSettingsChanges>>;
+    try {
+      proposed = await validateSettingsChanges(proposal.changes ?? {});
+    } catch (error) {
+      if (error instanceof SettingsProposalInvalid) throw new BadRequestException(error.message);
+      throw error;
+    }
+    const session = await this.prisma.session.findFirst({
+      where: { id: askingSessionId, ownerId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!session) throw new NotFoundException('the asking session is not one of this account’s');
+    if (proposed.defaultModels !== undefined) {
+      proposed.defaultModels = await normalizeDefaultModels(this.prisma, ownerId, proposed.defaultModels as Record<string, string>);
+    }
+    const user = await this.prisma.user.findUnique({ where: { id: ownerId }, select: { preferences: true } });
+    const changes = settingsChangeEntries((user?.preferences ?? {}) as Record<string, unknown>, proposed);
+    if (changes.length === 0) {
+      throw new ConflictException({
+        code: SETTINGS_ALREADY_SET,
+        message: 'Every setting proposed already has that value; nothing was filed.',
+      });
+    }
+    const widening = wideningKeys(changes);
+    if (widening.length > 0) throw new ForbiddenException(settingOwnerOnlyBody(widening));
+    const declined = await this.prisma.ownerRequest.findMany({
+      where: { ownerId, askedBySessionId: askingSessionId, kind: SETTINGS_CHANGE, state: 'DECLINED' },
+      orderBy: { resolvedAt: 'desc' },
+      select: { id: true, payload: true, resolvedAt: true, resolutionNote: true },
+    });
+    const refused = declined.find((request) => sameSettingsChanges(request.payload, changes));
+    if (refused) {
+      throw new ConflictException({
+        code: SETTINGS_CHANGE_DECLINED,
+        message: settingsChangeDeclinedMessage(refused.resolvedAt!, refused.resolutionNote),
+        requestId: refused.id,
+        declinedAt: refused.resolvedAt!.toISOString(),
+        reason: refused.resolutionNote,
+      });
+    }
+
+    const payload: SettingsChangePayload = { changes };
+    // Two filings of one session at once: the second's insert waits on the pending key and fails once the first
+    // commits. Filed again, it withdraws the first, as filing after it would have.
+    const fileOnce = () => withTransactionRetry(this.prisma, async (tx) => {
+      const now = new Date();
+      const withdrawn = await tx.ownerRequest.updateManyAndReturn({
+        where: { ownerId, askedBySessionId: askingSessionId, kind: SETTINGS_CHANGE, state: 'PENDING' },
+        data: {
+          state: 'WITHDRAWN',
+          resolvedAt: now,
+          resolvedBySessionId: askingSessionId,
+          resolutionNote: 'Replaced by a newer settings proposal from the same session.',
+        },
+        select: { id: true },
+      });
+      const created = await tx.ownerRequest.create({
+        data: {
+          ownerId,
+          askedBySessionId: askingSessionId,
+          kind: SETTINGS_CHANGE,
+          state: 'PENDING',
+          title: settingsChangeTitle(changes.length),
+          why,
+          payload: payload as unknown as Prisma.InputJsonValue,
+        },
+        select: VIEW,
+      });
+      return { created, withdrawn: withdrawn.map((row) => row.id) };
+    }, loggedRetry(this.logger, 'ownerRequests.proposeSettings'));
+    let filed: Awaited<ReturnType<typeof fileOnce>>;
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        filed = await fileOnce();
+        break;
+      } catch (error) {
+        const pendingTaken = error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
+        if (!pendingTaken || attempt >= 3) throw error;
+      }
+    }
+    const { created, withdrawn } = filed;
+    void this.push?.notifyOwnerRequest(created.id);
+    this.realtime?.publishSessionUpdated(created.askedBySessionId);
+    void translationLanguages(this.prisma, ownerId)
+      .then((langs) => { if (langs) this.queueTranslation(ownerId, created, langs); })
+      .catch((error: Error) => this.logger.warn(`translating request ${created.id} failed to queue: ${error.message}`));
+    return { ...created, created: true, withdrawnRequestIds: withdrawn };
+  }
+
+  /**
    * What a WIKI_CREATE is for, or why it may not be filed (design §3.6): the asking session's workspace's repository,
    * which has no wiki in use and was never declined one. Asked before anything is written.
    */
@@ -314,6 +460,63 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
     return { repoUrlNorm, workspaceId: workspace.id, title: wikiCreateTitle(repoUrlNorm) };
   }
 
+  /**
+   * browser_request_sign_in (board docs/mocks/runner-browser/03-agent-tools.html ①): the asking session, on the account's
+   * Orbit Cloud runner `runnerId` (the caller checked both), asks the owner to sign in to `site` in that runner's
+   * browser. A BROWSER_SIGN_IN card: Orbit writes its title from the site, the agent's reason is its `why`, and it is
+   * told to the owner like every other card (push, web, Mac). Only the site is stored of the browser: no page, cookie or
+   * login state. Idempotent on (asking session, clientRequestId), as `file` is.
+   */
+  async fileBrowserSignIn(
+    ownerId: string,
+    askingSessionId: string,
+    runnerId: string,
+    filing: BrowserSignInFiling,
+  ): Promise<OwnerRequestView & { created: boolean }> {
+    const site = browserSignInSite(filing.site);
+    if (!site) throw new BadRequestException('site is the host to sign in to, such as github.com');
+    const why = filing.reason?.trim();
+    if (!why) throw new BadRequestException('reason is required: say what the sign-in is for, so the owner can decide');
+    if (why.length > MAX_BROWSER_SIGN_IN_REASON) {
+      throw new BadRequestException(`reason is at most ${MAX_BROWSER_SIGN_IN_REASON} characters`);
+    }
+    const clientRequestId = filing.clientRequestId?.trim() || null;
+    const [created] = await this.prisma.ownerRequest.createManyAndReturn({
+      data: [{
+        ownerId,
+        askedBySessionId: askingSessionId,
+        kind: BROWSER_SIGN_IN_KIND,
+        state: 'PENDING',
+        title: browserSignInTitle(site),
+        why,
+        browserSite: site,
+        browserRunnerId: runnerId,
+        clientRequestId,
+      }],
+      skipDuplicates: true,
+      select: VIEW,
+    });
+    if (created) {
+      void this.push?.notifyOwnerRequest(created.id);
+      this.realtime?.publishSessionUpdated(created.askedBySessionId);
+      void translationLanguages(this.prisma, ownerId)
+        .then((langs) => { if (langs) this.queueTranslation(ownerId, created, langs); })
+        .catch((error: Error) => this.logger.warn(`translating request ${created.id} failed to queue: ${error.message}`));
+      const [view] = await this.withSessionTitles(ownerId, [created]);
+      return { ...view, created: true };
+    }
+    return this.filedBefore(ownerId, askingSessionId, clientRequestId ?? undefined);
+  }
+
+  /** Each BROWSER_SIGN_IN request with its asking session's title, which its card names. */
+  private async withSessionTitles(ownerId: string, requests: OwnerRequestView[]): Promise<OwnerRequestView[]> {
+    const askers = [...new Set(requests.filter((r) => r.kind === BROWSER_SIGN_IN_KIND).map((r) => r.askedBySessionId))];
+    if (askers.length === 0) return requests;
+    const sessions = await this.prisma.session.findMany({ where: { id: { in: askers }, ownerId }, select: { id: true, title: true } });
+    const titleOf = new Map(sessions.map((s) => [s.id, s.title]));
+    return requests.map((r) => (r.kind === BROWSER_SIGN_IN_KIND ? { ...r, askedBySessionTitle: titleOf.get(r.askedBySessionId) ?? null } : r));
+  }
+
   /** The owner's requests in one list (`open` unless named), newest first. */
   async list(ownerId: string, filter: string | undefined): Promise<{ requests: OwnerRequestView[] }> {
     const key = filter ?? 'open';
@@ -330,7 +533,7 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
     });
     await this.translateUntranslated(ownerId, requests).catch((error: Error) =>
       this.logger.warn(`queueing request translations failed: ${error.message}`));
-    return { requests: await this.withGrants(ownerId, requests) };
+    return { requests: await this.withSessionTitles(ownerId, await this.withGrants(ownerId, requests)) };
   }
 
   /**
@@ -386,7 +589,7 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
     if (request.kind === 'WIKI_CREATE' && request.state === 'PENDING' && (await this.settleMadeWikis(ownerId)).includes(id)) {
       request = (await this.prisma.ownerRequest.findFirst({ where: { id, ownerId }, select: VIEW }))!;
     }
-    const [view] = await this.withGrants(ownerId, [request]);
+    const [view] = await this.withSessionTitles(ownerId, await this.withGrants(ownerId, [request]));
     return view;
   }
 
@@ -440,6 +643,9 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
     }
     if (request.kind === 'WIKI_CREATE') {
       throw new BadRequestException('a WIKI_CREATE request is done when its repository has a wiki: create it with POST /owner-requests/:id/create-wiki');
+    }
+    if (request.kind === SETTINGS_CHANGE) {
+      throw new BadRequestException('a SETTINGS_CHANGE request is done when the owner saves its changes, which writes them; it is not marked done by hand');
     }
     this.refuseAnsweredElsewhere(request.kind);
     const text = given.text?.trim();
@@ -540,6 +746,42 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
       if (now.state === 'DONE') return now;
       throw error;
     }
+  }
+
+  /**
+   * The owner's Save changes on a SETTINGS_CHANGE card (docs/settings-from-conversation-design.md §5.2), in the
+   * transaction that settles the card DONE: the account's preferences re-read under the user row's lock; any key whose
+   * value in force is no longer the card's `from` answers 409 SETTINGS_STALE and the whole transaction rolls back, so
+   * nothing is written and the card stays PENDING; otherwise each `to` is merged as the owner's PATCH merges it, and each
+   * key written is marked `changedBy[key] = { sessionId, requestId, at, from }` (§5.3). The ending reaches the asking
+   * session as every owner request's does (`settle`). The owner's own login only: a request carrying an acting session
+   * is refused SETTINGS_OWNER_CHANNEL_ONLY before anything is read, and a personal access token never reaches this door
+   * (@PatForbidden('OWNER_INTERACTIVE')).
+   */
+  async applySettings(
+    ownerId: string,
+    id: string,
+    actingSessionId: string | null,
+    client: OwnerRequestClient | null = null,
+  ): Promise<OwnerRequestView> {
+    if (actingSessionId !== null) {
+      throw new ForbiddenException({
+        code: SETTINGS_OWNER_CHANNEL_ONLY,
+        message: 'a settings change is saved by the account owner, signed in, with no acting session: the owner presses Save changes on the card.',
+      });
+    }
+    const request = await this.get(ownerId, id);
+    if (request.kind !== SETTINGS_CHANGE) throw new BadRequestException('only a SETTINGS_CHANGE request applies settings');
+    if (request.state !== 'PENDING') {
+      throw new ConflictException({
+        code: OWNER_REQUEST_NOT_PENDING,
+        state: request.state,
+        message: `this request is already ${request.state}; an ended request is final and nothing was written`,
+      });
+    }
+    const { changes } = request.payload as unknown as SettingsChangePayload;
+    return this.settle(ownerId, id, 'DONE', { resolvedByUserId: ownerId, resolvedClient: client }, (tx, now) =>
+      applySettingsChanges(tx, { ownerId, requestId: id, askedBySessionId: request.askedBySessionId, changes }, now));
   }
 
   /**
@@ -659,9 +901,12 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
       if (written.count === 1) {
         if (effect) await effect(tx, now);
         // A scheduled task's item was written by the schedule, and a condition's by the condition, not asked by a
-        // session: nobody is waiting to hear.
+        // session: nobody is waiting to hear. A BROWSER_SIGN_IN's asker is waiting in the call that filed it
+        // (browser_request_sign_in reads the answer and returns it), so a turn saying the same would be a second answer.
         const kind = await tx.ownerRequest.findUnique({ where: { id }, select: { kind: true } });
-        if (!kind || !(isScheduleItemKind(kind.kind) || isConditionItemKind(kind.kind))) await enqueueResolutions(tx, [id]);
+        if (!kind || !(isScheduleItemKind(kind.kind) || isConditionItemKind(kind.kind) || kind.kind === BROWSER_SIGN_IN_KIND)) {
+          await enqueueResolutions(tx, [id]);
+        }
         await endUndeliveredGrants(tx, [id], to === 'WITHDRAWN' ? 'WITHDRAWN' : 'REVOKED');
       }
       return written;

@@ -43,7 +43,11 @@ import { CoordinatorWakeService } from './coordinator-wake.service';
 import { CriterionReadyProducer } from './criterion-ready.producer';
 import { CriterionUnlandedProducer } from './criterion-unlanded.producer';
 import { ProjectOpenItemEscalationService } from './open-item-escalation.service';
-import { INTEGRATION_JOB_CLAIM, PROMOTION_AUTOMATIC_LAND } from './project-integration-job';
+import {
+  INTEGRATION_JOB_CLAIM,
+  PROMOTION_AUTOMATIC_LAND,
+  settleDeliveredIdentityAfterFinish,
+} from './project-integration-job';
 import { configureProjectIntegration } from './project-integration-line';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { ProjectPromotionService } from './project-promotion.service';
@@ -363,7 +367,6 @@ async function doneCodeTask(stack: Stack, w: World, label: string): Promise<{ ta
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       startedAt: new Date(),
-      finishedAt: new Date(Date.now() - 60_000),
       branch: `orbit/${label}-${randomUUID().slice(0, 6)}`,
       isolationStatus: 'worktree',
       baseSha: 'b'.repeat(40),
@@ -405,6 +408,14 @@ async function doneCodeTask(stack: Stack, w: World, label: string): Promise<{ ta
   });
   const task = await db.task.findUniqueOrThrow({ where: { id: declared.id }, select: { status: true } });
   assert.equal(task.status, TaskStatus.DONE, 'the acceptance command agreed');
+  await db.$transaction(async (tx) => {
+    const finished = await tx.session.update({
+      where: { id: sessionId },
+      data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(Date.now() - 60_000)},
+      select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
+    });
+    await settleDeliveredIdentityAfterFinish(tx, finished);
+  });
   return { taskId: declared.id, sessionId };
 }
 
@@ -821,7 +832,7 @@ test('escalated, coordinator reaped and its runner back (2026-11-15): Ask again 
       assert.ok(session.cancelRequestedAt);
       await stack.db.session.update({
         where: { id: w.coordinatorSessionId },
-        data: { status: RunStatus.AWAITING_INPUT, cancelRequestedAt: null, finishedAt: null },
+        data: { status: RunStatus.AWAITING_INPUT, cancelRequestedAt: null, finishedAt: null},
       });
       await stack.openItems.deliverOwedTo(w.coordinatorSessionId);
       const delivery = await stack.db.projectOpenItemDelivery.findFirst({
@@ -865,7 +876,7 @@ test('escalated, coordinator that truly cannot receive — ended with no revival
       });
       await stack.db.session.update({
         where: { id: w.coordinatorSessionId },
-        data: { status: RunStatus.CANCELLED, endReason: 'COMPLETED', completedAt: new Date(), cancelRequestedAt: null },
+        data: { status: RunStatus.CANCELLED, finishedAt: new Date(), endReason: 'COMPLETED', completedAt: new Date(), cancelRequestedAt: null },
       });
       await expectUnreachable('ended without revival', 'COORDINATOR_UNAVAILABLE');
 

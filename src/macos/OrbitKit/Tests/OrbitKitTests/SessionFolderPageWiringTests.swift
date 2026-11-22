@@ -218,24 +218,38 @@ final class SessionFolderPageWiringTests: XCTestCase {
         XCTAssertTrue(page.contains("SessionFolderGrouping.sessions(inputs.sessions, inFolder: inputs.folderID ?? \"\","))
     }
 
-    /// The page's rows are the workspace list's rows: the same `AgentSessionRow` wrapped the same
-    /// two ways, offering the same actions — so a swipe or a long press there does what it does
-    /// outside (§3.3).
+    /// The page's rows are the workspace list's rows: the one entry builder draws both, and the
+    /// shared shell wraps both kinds, offering the same actions — so a swipe or a long press there
+    /// does what it does outside (§3.3).
     func testThePagesRowsAreTheListsRows() throws {
         let agents = code(try appSource("Views/AgentsView.swift"))
-        let listRow = try slice(agents, from: "@ViewBuilder private func sessionRow(_ s: Session", to: "\n    }")
-        let pageRow = try slice(code(try appSource("Views/SessionFolderPage.swift")),
-                                from: "@ViewBuilder private func sessionRow(_ s: Session", to: "\n    }")
-        for part in ["AgentSessionRow(session: s, deleted:",
-                     "app.openSessionRow(s)",
-                     "row.sessionRowActions(s, scope:",
-                     "onTag: { taggingSession = s }",
-                     "onShare: { sharingSession = s }",
-                     "onMove: { movingSession = s }",
-                     ".tag(s.id)"] {
-            XCTAssertTrue(listRow.contains(part), "the list's row draws `\(part)`")
-            XCTAssertTrue(pageRow.contains(part), "and so does the page's")
+        let page = code(try appSource("Views/SessionFolderPage.swift"))
+        for part in ["SessionListEntryRow(",
+                     "view: view, agentID: agent.id",
+                     "onTag: { taggingSession = $0 }",
+                     "onShare: { sharingSession = $0 }",
+                     "onMove: { movingSession = $0 }"] {
+            XCTAssertTrue(agents.contains(part), "the list's rows carry `\(part)`")
         }
+        for part in ["SessionListEntryRow(",
+                     "view: address.view, agentID: address.agentID",
+                     "onTag: { taggingSession = $0 }",
+                     "onShare: { sharingSession = $0 }",
+                     "onMove: { movingSession = $0 }"] {
+            XCTAssertTrue(page.contains(part), "and so do the page's")
+        }
+        // What the builder draws a plain row through does not drift either.
+        let session = code(try appSource("Views/SessionRowActions.swift"))
+        for part in ["AgentSessionRow(session: session, deleted: isTrash, projectMark: projectMark)",
+                     "SessionListRow(",
+                     "onOpen: onOpen",
+                     "leading: leadingActions, trailing: trailingActions",
+                     "menu: { menu }"] {
+            XCTAssertTrue(session.contains(part), "the shared session row draws `\(part)`")
+        }
+        let shell = code(try appSource("Views/SessionListRow.swift"))
+        XCTAssertTrue(shell.contains("app.openSessionRow(subject)"), "the compact row presses through the model")
+        XCTAssertTrue(shell.contains(".tag(subject.id)"), "and the three-column row is tag-driven")
     }
 
     /// The draft a folder's ✎ opens carries the folder, all the way into the create request: frame →

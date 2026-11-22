@@ -33,6 +33,50 @@ export function delegateRunsSignature(events: readonly RunEvent[]): string {
   return seqs.join(',');
 }
 
+interface SubagentFlight {
+  /** True until the request has gone out: callers in the same tick join it. */
+  starting: boolean;
+  promise: Promise<SubagentRunView[]>;
+  /** The one read issued when this one ends, for every caller that asked while it was in flight. */
+  trailing: Promise<SubagentRunView[]> | null;
+}
+
+const flights = new Map<string, SubagentFlight>();
+
+function beginRead(sessionId: string): Promise<SubagentRunView[]> {
+  const flight: SubagentFlight = {
+    starting: true,
+    trailing: null,
+    promise: Promise.resolve().then(() => {
+      flight.starting = false;
+      return getSessionSubagents(sessionId);
+    }),
+  };
+  const done = () => {
+    if (!flight.trailing && flights.get(sessionId) === flight) flights.delete(sessionId);
+  };
+  flight.promise.then(done, done);
+  flights.set(sessionId, flight);
+  return flight.promise;
+}
+
+/**
+ * The one owner of `GET /sessions/:id/subagents`: the delegate view, the workflow view and the page's own read all
+ * go through it, with at most one request in flight per session. Callers in the tick that starts a read join it
+ * (the request goes out after they have). A caller that asks while it is in flight joins one trailing read, issued
+ * when the first ends, so nobody gets an answer older than its own change and a burst is two requests at most.
+ */
+export function readSessionSubagents(sessionId: string): Promise<SubagentRunView[]> {
+  const flight = flights.get(sessionId);
+  if (!flight) return beginRead(sessionId);
+  if (flight.starting) return flight.promise;
+  flight.trailing ??= flight.promise.then(
+    () => beginRead(sessionId),
+    () => beginRead(sessionId),
+  );
+  return flight.trailing;
+}
+
 /** The session's SubAgent runs by delegate call, re-read whenever one starts or ends in the transcript. */
 export function useSubagentRuns(sessionId: string, events: readonly RunEvent[]): ReadonlyMap<string, SubagentRunView> {
   const signature = delegateRunsSignature(events);
@@ -43,7 +87,7 @@ export function useSubagentRuns(sessionId: string, events: readonly RunEvent[]):
   useEffect(() => {
     if (!signature) return;
     let closed = false;
-    getSessionSubagents(sessionId)
+    readSessionSubagents(sessionId)
       .then((rows) => {
         if (!closed) setState({ sessionId, runs: new Map(rows.map((row) => [row.toolUseId, row])) });
       })
@@ -191,9 +235,10 @@ export function delegateRunId(content: unknown): string | null {
   }
 }
 
-/** Whether a run that has ended did not finish: failed, interrupted or stopped (OrbitKit's `outcomeIsFailure`). */
+/** Whether a run that has ended did not finish: failed or interrupted. A stopped run was stopped on purpose, so it is
+ *  grey and no failure (docs/mocks/subagent-card-and-end-line D1). */
 export const subagentRunFailed = (run: SubagentRunView): boolean =>
-  run.status === 'FAILED' || run.status === 'INTERRUPTED' || run.status === 'STOPPED';
+  run.status === 'FAILED' || run.status === 'INTERRUPTED';
 
 /** How long a run took, once it has ended (`50s`, `4m 12s`); null while it runs. */
 export function subagentDuration(run: SubagentRunView): string | null {
@@ -245,8 +290,6 @@ export interface SubagentSessionSummary {
   rows: SubagentRunView[];
   /** The words after "Agents" (see `subagentSessionSummary`). */
   band: string;
-  /** How many ended without finishing, in every state: red at the band's right edge, before the spinner while one runs. */
-  failed: number;
   /** The models the runs took, most runs first. */
   models: AgentModelCount[];
   /** Every place the runs ran, most runs first; the session's own machine is `name: null`. */
@@ -323,7 +366,6 @@ export function subagentSessionSummary(
     running,
     rows,
     band,
-    failed: all.filter(subagentRunFailed).length,
     models: byCount([...models.values()]),
     machines: byCount([...machines.values()]),
     elsewhere: all.some((run) => !!run.workspaceName),

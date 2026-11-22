@@ -14,6 +14,7 @@ import {
 } from '@prisma/client';
 import { Client } from 'pg';
 
+import { isReleasedStatus } from '../common/session-release';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
@@ -206,12 +207,14 @@ async function world(
     },
   });
   await establishProjectContractForPgTest(db, ownerId, projectId, label);
+  const status = shape.status ?? RunStatus.AWAITING_INPUT;
   await db.session.create({
     data: {
       id: coordinatorSessionId, ownerId, creatorId: ownerId, workspaceId: landingWorkspaceId,
       assignedRunnerId: shape.offlineRunner ? offlineRunnerId : runnerId,
       title: `coordinator: ${label}`, prompt: `coordinator: ${label}`, provider: 'claude',
-      status: shape.status ?? RunStatus.AWAITING_INPUT,
+      status,
+      ...(isReleasedStatus(status) ? { finishedAt: new Date()} : {}),
       startedAt: shape.startedAt === undefined ? new Date() : shape.startedAt,
       completedAt: shape.completedAt ?? null,
       numTurns: shape.numTurns ?? 1,

@@ -487,11 +487,11 @@ class ManagementDeviceTest {
                 signIn(server); settings()
                 await("2 active")
                 // Smart model selection is on Sessions' page (docs/mocks/ios-settings-order).
-                click(hasText("Sessions") and hasClickAction()); await("Smart model selection")
+                click(hasText("Sessions") and hasClickAction()); await("Route by tier")
                 capture("a13d-settings-sessions")
-                click(hasText("Smart model selection") and isToggleable())
+                click(hasText("Route by tier") and isToggleable())
                 compose.waitUntil(10_000) { modelRouting == true }
-                compose.waitUntil(10_000) { runCatching { compose.onNode(hasText("Smart model selection") and isToggleable()).assertIsOn() }.isSuccess }
+                compose.waitUntil(10_000) { runCatching { compose.onNode(hasText("Route by tier") and isToggleable()).assertIsOn() }.isSuccess }
                 capture("a13d-smart-selection-on")
                 back(); await("Appearance")
                 compose.onAllNodesWithText("Access tokens").onFirst().performScrollTo()
@@ -1279,7 +1279,7 @@ class ManagementDeviceTest {
           {"engine":"codex","installed":true,"version":"codex-cli 0.158.0","auth":"yes"},{"engine":"kimi","installed":false}],
         "planUsage":{"claude":{"fiveHour":{"utilization":42,"resetsAt":"${now.plusSeconds(7200)}"},"sevenDay":{"utilization":91,"resetsAt":"${now.plusSeconds(3 * 86400)}"}}},"install":null}"""
     private fun workspace() = """{"id":"$workspaceId","name":"$workspaceName","runnerId":"$runnerId","enabled":true,"workDir":"/home/ci/fixture","lastProvider":"claude",
-        "effort":"","modelRouting":false,"env":{"NODE_ENV":"test"},"workDirFreeBytes":"5368709120","workDirTotalBytes":"107374182400",
+        "effort":"","env":{"NODE_ENV":"test"},"workDirFreeBytes":"5368709120","workDirTotalBytes":"107374182400",
         "repoHealth":{"root":"/home/ci/fixture","state":"rebase","branch":"feature/x"},"position":0,"createdAt":"2026-09-01T10:00:00Z"}"""
     private fun session() = """{"id":"$sessionId","title":"Fixture session","status":"SUCCEEDED","lifecycleState":"OPEN","workspaceId":"$workspaceId","agentId":"$workspaceId",
         "createdAt":"${now.minusSeconds(600)}","lastTurnAt":"${now.minusSeconds(300)}","pendingApprovals":0}"""

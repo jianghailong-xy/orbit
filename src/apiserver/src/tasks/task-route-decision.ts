@@ -1,12 +1,16 @@
-import { Prisma, RunStatus, TaskEvidenceDecisionValue, TaskVerdict } from '@prisma/client';
+import { Prisma, TaskEvidenceDecisionValue, TaskVerdict } from '@prisma/client';
+import { RELEASE_FAILURE_SELECT, releaseWasFailure } from '../common/session-release';
 import {
   AgentProvider,
+  accountCapWindows,
+  cursorUsageRead,
   isEngine,
   USAGE_LIMIT_ERROR_MARKERS,
   runnerCatalogRow,
   quotaExpiresAt,
   quotaNearLimit,
   spentPlanUsage,
+  withEnginePlanUsage,
   type AccountEngine,
   type PlanUsage,
   type PlanUsageSnapshot,
@@ -14,6 +18,7 @@ import {
   type RunnerModelCatalog,
 } from '@orbit/shared';
 import { runnerAccountPausedUntil } from '../common/account-pause';
+import { sanitizeRunnerEngines } from '../common/runner-engines';
 import { modelRoutingEnabled, optimizeForOf } from '../common/model-routing-switch';
 import { resolvePermissionMode } from '../common/permission-mode';
 import { firstRuntimeCatalogModel, sanitizeRuntimeDefaultModels } from '../common/runtime-model';
@@ -71,8 +76,8 @@ export function taskRouteReads(prisma: PrismaService, ownerId: string, now: Date
     workspace: (id: string) => once(`workspace:${id}`, () => prisma.workspace.findFirst({
       where: { id, ownerId },
       select: {
-        runnerId: true, effort: true, modelRouting: true, modelRoutingProviders: true,
-        env: true, codexAccount: true, claudeAccount: true, kimiAccount: true,
+        runnerId: true, effort: true,
+        env: true, codexAccount: true, claudeAccount: true, kimiAccount: true, antigravityAccount: true, cursorAccount: true,
       },
     })),
     /** What an unpinned run of this task starts on: its project's coordinator, else its workspace's
@@ -249,9 +254,21 @@ function windowName(window: PlanUsageWindow | undefined, slot: string): string {
  * When an account's quota goes to waste and whether it is nearly spent, as account selection weighs them
  * (quotaExpiresAt, quotaNearLimit in planUsage.ts): what the SubAgent router spends first (§4.2).
  */
-export function quotaTiming(snapshot: PlanUsageSnapshot | null | undefined, now: Date): { expiresAt: number | null; nearLimit: boolean } {
-  const at = quotaExpiresAt(snapshot, now);
-  return { expiresAt: Number.isFinite(at) ? at : null, nearLimit: quotaNearLimit(snapshot, now) };
+export function quotaTiming(
+  snapshot: PlanUsageSnapshot | null | undefined,
+  now: Date,
+): { expiresAt: number | null; nearLimit: boolean; opusUtilization: number | null } {
+  // A model family's own window (Opus or Sonnet weekly) caps that family, not the account: it moves the family's
+  // rows (opusUtilization), never the account's place.
+  const account = snapshot ? { ...snapshot, sevenDayOpus: undefined, sevenDaySonnet: undefined } : snapshot;
+  const at = quotaExpiresAt(account, now);
+  const opus = snapshot?.sevenDayOpus;
+  const live = opus && !(Date.parse(opus.resetsAt ?? '') <= now.getTime());
+  return {
+    expiresAt: Number.isFinite(at) ? at : null,
+    nearLimit: quotaNearLimit(account, now),
+    opusUtilization: live ? opus.utilization : null,
+  };
 }
 
 /**
@@ -268,6 +285,8 @@ export function fullestWindow(snapshot: PlanUsageSnapshot | null | undefined, no
       [snapshot.monthCode, 'monthly'],
       [snapshot.primary, windowName(snapshot.primary, 'primary')],
       [snapshot.secondary, windowName(snapshot.secondary, 'secondary')],
+      // Antigravity's shared buckets and a Cursor account's usage limit (accountCapWindows).
+      ...accountCapWindows(snapshot),
     ]
     : [];
   let quota: ModelRoutingEngineState['quota'] = null;
@@ -299,6 +318,8 @@ export function engineState(
     codexAccount: agent.codexAccount,
     claudeAccount: agent.claudeAccount,
     kimiAccount: agent.kimiAccount,
+    antigravityAccount: agent.antigravityAccount,
+    cursorAccount: agent.cursorAccount,
     ...(automatic ? { [ACCOUNT_CHOICE[engine]]: automatic } : {}),
   };
   const signedOut = signedOutEngineRefusal({
@@ -310,11 +331,16 @@ export function engineState(
     nowMs: now.getTime(),
   }) !== null;
   const account = runAccount(engine, agent.env, accounts, runner, now);
-  const snapshot = account === null ? undefined : spentPlanUsage(runner.planUsage as PlanUsage | null, engine, account);
+  // Antigravity's reading travels with its engine health, not in planUsage: folded in as every quota reader does.
+  const usage = withEnginePlanUsage(runner.planUsage as PlanUsage | null, sanitizeRunnerEngines(runner.engines));
+  const snapshot = account === null ? undefined : spentPlanUsage(usage, engine, account);
   const quota = fullestWindow(snapshot, now);
   // No reading at all, or one without a window fullestWindow reads (a runner that fetched nothing for it).
+  // Antigravity reads as read once it reports any bucket (one of a model's own is a reading too); Cursor once it
+  // reports its included usage.
   const quotaUnread = !snapshot
-    || ![snapshot.fiveHour, snapshot.sevenDay, snapshot.month, snapshot.monthCode, snapshot.primary, snapshot.secondary].some(Boolean);
+    || (![snapshot.fiveHour, snapshot.sevenDay, snapshot.month, snapshot.monthCode, snapshot.primary, snapshot.secondary].some(Boolean)
+      && !(snapshot.buckets?.length) && !cursorUsageRead(snapshot));
   const regionBlocked = engine === AgentProvider.CLAUDE && blockedRunnerRegion(runner, now) !== null;
   // Only the SubAgent router reads it (routeSubagent); chooseEngine does not.
   const paused = runnerAccountPausedUntil(runner.accountPauses, engine, account, now) !== null;
@@ -374,7 +400,7 @@ async function readRunHistory(
     where: { ownerId, taskId, startsTaskWork: true },
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     select: {
-      id: true, createdAt: true, status: true, error: true,
+      id: true, createdAt: true, ...RELEASE_FAILURE_SELECT, error: true,
       engine: true, provider: true, providerBuiltin: true, ownerId: true, model: true, effort: true,
     },
   });
@@ -395,19 +421,21 @@ async function readRunHistory(
   });
   const levels = new Map(decisions.map((row) => [row.sessionId, row.level]));
   return runs.map((run, index): ModelRoutingRun => {
+    // The run failed: released by a failure (common/session-release.ts).
+    const failed = releaseWasFailure(run);
     const next = runs[index + 1]?.createdAt;
     const judged = (at: Date) => at >= run.createdAt && (!next || at < next);
     return {
       ordinal: index + 1,
       status: run.status,
-      quotaFailure: run.status === RunStatus.FAILED && quotaFailure(run.error),
-      capacityFailure: run.status === RunStatus.FAILED && capacityFailure(run.error),
+      quotaFailure: failed && quotaFailure(run.error),
+      capacityFailure: failed && capacityFailure(run.error),
       level: MODEL_ROUTING_LEVELS.find((level) => level === levels.get(run.id)) ?? null,
       model: run.model,
       effort: run.effort,
       runtime: engines.get(run.id) ?? undefined,
       // The run's own end first, then what was said about its work afterwards.
-      outcome: run.status === RunStatus.FAILED
+      outcome: failed
         ? (readExecutableAcceptanceOutcome(run.error) ? 'ACCEPTANCE_FAILED' : 'FAILED')
         : failedVerdicts.some((row) => judged(row.updatedAt)) ? 'VERIFICATION_FAILED'
           : sendBacks.some((row) => judged(row.decidedAt)) ? 'SENT_BACK'
@@ -434,14 +462,12 @@ export interface TaskRouteSubject {
  * Route one fresh run: read the router's inputs, call it, and return the decision with the
  * baseline and features it is recorded with (§7.3).
  *
- * `applied` when the Agent has smart selection on (`workspace.modelRouting`) and a tier was decided:
- * the run is then created on the routed provider, model and effort (§7.4). Otherwise it is the
- * shadow — the run is dispatched exactly as it was before routing existed, and the decision records
- * what routing would have picked.
+ * `applied` whenever a tier was decided: the run is then created on the routed provider, model and
+ * effort (§7.4). There is no per-Agent switch any more (owner, 2026-11-20; `workspace.modelRouting`
+ * is no longer read): the account's switch alone decides.
  *
  * Null when the account has smart model selection off (common/model-routing-switch.ts): routing
- * does not exist then, so there is no decision to record, shadow or not, and the run is dispatched
- * as before routing whatever the Agent's own switch says.
+ * does not exist then, so there is no decision to record, and the run is dispatched as before routing.
  */
 export async function planTaskRunRoute(
   reads: TaskRouteReads,
@@ -516,9 +542,9 @@ export async function planTaskRunRoute(
     : null;
   return {
     policyVersion: decision.policyVersion,
-    // Only a decided tier is applied: one that kept the baseline (a model pin, no tier table, no
-    // suggestion, no catalogue) changes nothing whether the switch is on or not.
-    applied: agent?.modelRouting === true && decision.level !== null,
+    // Only a decided tier is applied: one that kept the baseline (a model pin, no suggestion, no
+    // provider that can take it) changes nothing.
+    applied: decision.level !== null,
     level: decision.level,
     engine: decision.engine,
     provider: decision.provider,
@@ -554,7 +580,6 @@ export async function planTaskRunRoute(
         : null,
       escalatedFrom,
       opusWeeklyUtilization: env.planUsage?.claude?.sevenDayOpus?.utilization ?? null,
-      modelRouting: agent?.modelRouting === true,
       verifiedRunEngine: engines.verifiedRunEngine ?? null,
     },
     reasons: decision.reasons,

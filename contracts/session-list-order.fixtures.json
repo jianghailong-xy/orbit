@@ -1,5 +1,5 @@
 {
-  "description": "The session list's sections and their order, which the web, Apple and Android clients each test against. Server: session.listed_at (migration 1260, src/apiserver/src/sessions/session-listed-at.ts).",
+  "description": "The session list's sections and their order, which the web, Apple and Android clients each test against. Server: session.listed_at (migration 1434, src/apiserver/src/sessions/session-listed-at.ts).",
   "rule": [
     "Input: the Open list's rows. A row with completedAt or deletedAt set is not in it (the Completed view orders by completedAt; Trash is its own view).",
     "Each row goes to the FIRST section that takes it, in this order: Pinned, Needs you, Working, then one date section.",

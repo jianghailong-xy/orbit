@@ -1,5 +1,5 @@
-import { Controller, Get, HttpCode, Param, Post, UseGuards } from '@nestjs/common';
-import type { CoordinatorHandoffView, CoordinatorPendingWait } from '@orbit/shared';
+import { Body, Controller, Get, HttpCode, Param, Post, UseGuards } from '@nestjs/common';
+import type { CoordinatorHandoffRequest, CoordinatorHandoffView, CoordinatorPendingWait } from '@orbit/shared';
 
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatScope } from '../auth/pat-scope.decorator';
@@ -32,20 +32,29 @@ export class CoordinatorHandoffController {
     return this.projects.coordinatorPendingWaits(user.userId, id);
   }
 
-  /** Hand over: the current coordinator writes its note (after a running turn), then the successor opens. */
+  /** Hand over: the current coordinator writes its note (after a running turn), then the successor opens,
+   *  on what the body's `successor` names, else on the current coordinator's model. */
   @PatScope('projects:write', { workspaceConfinable: false })
   @Post(':id/coordinator/handoff')
   @HttpCode(200)
-  start(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string): Promise<CoordinatorHandoffView> {
-    return this.handoffs.start(user.userId, id);
+  start(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() body: CoordinatorHandoffRequest | undefined,
+  ): Promise<CoordinatorHandoffView> {
+    return this.handoffs.start(user.userId, id, body);
   }
 
   /** Skip the note / Hand over without a note: the replacement now, with no note. */
   @PatScope('projects:write', { workspaceConfinable: false })
   @Post(':id/coordinator/handoff/skip')
   @HttpCode(200)
-  skip(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string): Promise<CoordinatorHandoffView> {
-    return this.handoffs.skip(user.userId, id);
+  skip(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() body: CoordinatorHandoffRequest | undefined,
+  ): Promise<CoordinatorHandoffView> {
+    return this.handoffs.skip(user.userId, id, body);
   }
 
   /** Cancel handover / Keep this coordinator: nothing changes. */
@@ -60,7 +69,11 @@ export class CoordinatorHandoffController {
   @PatScope('projects:write', { workspaceConfinable: false })
   @Post(':id/coordinator/handoff/retry')
   @HttpCode(200)
-  retry(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string): Promise<CoordinatorHandoffView> {
-    return this.handoffs.retry(user.userId, id);
+  retry(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() body: CoordinatorHandoffRequest | undefined,
+  ): Promise<CoordinatorHandoffView> {
+    return this.handoffs.retry(user.userId, id, body);
   }
 }

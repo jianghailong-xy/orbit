@@ -6,15 +6,15 @@
  */
 
 /** The newest predicate grammar this build serves. */
-export const WATCH_PREDICATE_VERSION = 3;
+export const WATCH_PREDICATE_VERSION = 4;
 
 /**
  * Every grammar this build serves; any other version is refused, never guessed at. Version 2 is
  * version 1 plus the two progress leaves, the `params` a leaf takes and the `AT_LEAST` quorum; version 3
- * is version 2 plus `SESSION_JOB_NO_OUTPUT_FOR`. A predicate is decided under the version it was stored
- * with, so a version-1 watch never meets a term it did not ask for.
+ * is version 2 plus `SESSION_JOB_NO_OUTPUT_FOR`; version 4 is version 3 plus `SESSION_QUIESCENT`. A predicate
+ * is decided under the version it was stored with, so a version-1 watch never meets a term it did not ask for.
  */
-export const WATCH_PREDICATE_VERSIONS: readonly number[] = [1, 2, 3];
+export const WATCH_PREDICATE_VERSIONS: readonly number[] = [1, 2, 3, 4];
 
 /** Every leaf, and the only target kind each one can be evaluated against. */
 export const WATCH_LEAVES = {
@@ -28,6 +28,7 @@ export const WATCH_LEAVES = {
   TASK_PROGRESS_AT_LEAST: 'TASK',
   TASK_NO_PROGRESS_FOR: 'TASK',
   SESSION_JOB_NO_OUTPUT_FOR: 'SESSION',
+  SESSION_QUIESCENT: 'SESSION',
 } as const;
 
 export type WatchLeaf = keyof typeof WATCH_LEAVES;
@@ -44,6 +45,7 @@ export const WATCH_LEAF_SINCE_VERSION: Readonly<Record<WatchLeaf, number>> = {
   TASK_PROGRESS_AT_LEAST: 2,
   TASK_NO_PROGRESS_FOR: 2,
   SESSION_JOB_NO_OUTPUT_FOR: 3,
+  SESSION_QUIESCENT: 4,
 };
 
 /** What a target may name. Only `SESSION` and `TASK` are watchable; the other two are refused as live sets. */
@@ -211,6 +213,10 @@ export interface WatchTargetObservation {
       pendingApproval: boolean;
       /** The session's jobs in flight, recorded only when the predicate names `SESSION_JOB_NO_OUTPUT_FOR`. */
       jobs?: WatchObservedJob[];
+      /** Recorded only when the predicate names `SESSION_QUIESCENT`: something was running for the session. */
+      executing?: boolean;
+      /** Recorded only when the predicate names `SESSION_QUIESCENT`: a watch, wake-up or retry would give it a turn. */
+      wakeArmed?: boolean;
     };
 }
 

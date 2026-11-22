@@ -8,7 +8,7 @@
 [`mocks/model-routing-ios.png`](./mocks/model-routing-ios.png)（iOS / macOS）。界面文案以同目录的 `.html` 源文件为准。
 
 > **用词**：本文的 **Agent** 指线上叫 Agent 的 `workspace` 行（契约 §2 Legacy agent alias），不是契约 §3.1 的 `agent` 表。
-> 这个功能在界面上叫 **Smart model selection**，在代码和契约里叫 **Model Routing（路由）**；**档位**指 S / M / L / XL。
+> 这个功能在界面上叫 **Route by tier**（2026-11-22 前叫 Smart model selection，在 设置 → Providers → Model routing），在代码和契约里叫 **Model Routing（路由）**；**档位**指 S / M / L / XL。
 
 > **Phase 2 design amendment (2026-11-08, pending owner confirmation):** §3.5 and §10.3 define auto-hint and Optimize For for project `34tXXUHZEcGeWeB0hp5YU`. They supersede the phase-1 missing-hint rules in §0, §1 and §3.2 only when the new policy is enabled. Other sections describe the phase-1 baseline. This amendment changes documentation only.
 
@@ -267,7 +267,11 @@ Changing an owner's mode selection or enabled flag selects existing policy behav
 > (`level: null`). The Opus-weekly step-down (§5) and the Codex `reasoningLevels` effort clamp went with the
 > old pick. `modelRoutingProviders` is still stored but no longer read. The account switch is now on unless
 > turned off. With it off, SubAgents are not routed either: a named model is used, anything else runs on
-> the parent's model. The text below describes the P5 design as it was.
+> the parent's model. The per-Agent switch (`workspace.modelRouting`) and the per-Agent engine list are gone
+> too: the Agent settings page no longer shows them, and the server still accepts and returns both columns
+> but never reads them. While the account switch is on, every task run on every Agent is routed and the
+> decision is applied whenever it set a tier; there is no shadow mode any more. The text below describes the
+> P5 design as it was.
 
 契约 §7.4 R1–R4 定边界，这里定做法：
 
@@ -325,8 +329,8 @@ P5 实现的口径（`model-routing.ts` 的 `chooseEngine`，读取在 `task-rou
 
 | 列 | 类型 | 说明 |
 |---|---|---|
-| `model_routing`（`modelRouting`） | boolean，默认 false | Smart model selection 开关：true = 生效，false = 影子模式 |
-| `model_routing_providers`（`modelRoutingProviders`） | text[]，默认空数组 | owner 显式授权的其他引擎（P5）；空 = 只在本 Agent 的引擎内选档 |
+| `model_routing`（`modelRouting`） | boolean，默认 false | Former per-Agent switch (true = applied, false = shadow). No longer read since 2026-11-20: the account switch alone decides, and every routed run is applied |
+| `model_routing_providers`（`modelRoutingProviders`） | text[]，默认空数组 | Former per-Agent list of other engines (P5). No longer read since 2026-11-20 (§6) |
 
 两列都**只能通过用户 API 改**（`workspaces/dto.ts` + `workspaces.service.ts`），不进
 `runner-api/runner-agents.controller.ts` 的 `ORCHESTRATOR_WORKSPACE_CREATE_FIELDS` / sanitize：这是影响花费和引擎的开关，
@@ -343,7 +347,7 @@ agent 不能给自己打开（契约 §8.2）。
 | `task_id` | uuid，task 删除时级联 | |
 | `request_token` | text | 这次 run request 的 token：单次派发是租约上的 request token，批量是该项的 `TASK_RUN_TRIGGER.batch(press, task)` |
 | `session_id` | uuid，可空，**无外键** | plan 给出的会话 id。写决策时会话还不存在（与 `desired_session_id` 不带外键同理）；派发随后被拒的，它永远不会存在 |
-| `applied` | boolean | 是否用于派发：`modelRouting` 打开且定出了档位 |
+| `applied` | boolean | 是否用于派发：since 2026-11-20, whenever a tier was decided (the account switch is on, or there is no decision at all) |
 | `policy_version` | int | 档位表与规则的版本，第一版 1 |
 | `level` | text，**可空**，CHECK 只允许 S / M / L / XL | 定出的档位；不路由时为空 |
 | `provider` | text | 选出的引擎；不路由时 = 基线 |
@@ -485,9 +489,9 @@ Run Now、`task_start` / `orbit task start`、依赖解锁、自动重跑、定�
 
 | 位置 | 改动 | 效果图 |
 |---|---|---|
-| Agent 设置页 | Worktree isolation 下面加 Smart model selection for tasks 开关（默认关，只有用户 API 能改）；P5 再加 Engines it may use，默认只勾本 Agent 的引擎 | Web §1 · iOS ③ |
-| 任务详情 · Details | 多一行 Suggested（No suggestion / S / M / L / XL，每档显示对应模型、effort 和一句说明），理由用灰字显示在下面；Assignee 开了智能选择时，Model 的占位文字是 ✦ Smart selection；在这里选定一个模型就是 pin，优先于建议 | Web §2 · iOS ① |
-| 任务详情 · Runs | 每行副标题加"模型 · effort · 档位"，档位标签 ✦ M，升档时 ✦ L ↑；点开看 Why（决策里的 `reasons` 加页脚）；Agent 没开启时多一行紫色影子提示 Smart selection would have picked … | Web §3 · iOS ①② |
+| Agent 设置页 | Removed 2026-11-20: no Smart model selection for tasks switch and no Engines it may use list; the Model line follows the account switch (Settings → General) alone | Web §1 · iOS ③ |
+| 任务详情 · Details | 多一行 Suggested（No suggestion / S / M / L / XL，每档显示对应模型、effort 和一句说明），理由用灰字显示在下面；账号开了智能选择时（since 2026-11-20 the account switch alone），Model 的占位文字是 ✦ Smart selection；在这里选定一个模型就是 pin，优先于建议 | Web §2 · iOS ① |
+| 任务详情 · Runs | 每行副标题加"模型 · effort · 档位"，档位标签 ✦ M，升档时 ✦ L ↑；点开看 Why（决策里的 `reasons` 加页脚）；Agent 没开启时多一行紫色影子提示 Smart selection would have picked …（no longer drawn for new runs since 2026-11-20: every routed run is applied） | Web §3 · iOS ①② |
 | 任务会话输入框 | 路由选出的任务会话，模型标签加 ✦ 和浅蓝底；下拉顶部说明为什么是它；在这里换模型只影响这一次运行，想固定去任务上 pin | Web §4 · iOS ④ |
 
 - 自己开的会话、没开启智能选择的任务会话，标签与今天完全一样。
@@ -540,6 +544,11 @@ model 一律取**实际运行**的（会话上首次 claim 之后的值）：生
 不因 `since` / `agentId` 截断而重新编号；第一次运行没有决策的任务只计运行级指标。
 验证 FAIL 用 verifier 的当前 `verdict` 和 `updated_at`，SEND_BACK 用 `decided_at`，归到判定时最近创建的工作运行；
 同一工作运行的多个失败信号只计一次。任务当前状态与完成判据从 task 读取，不把 SUCCEEDED 会话当作 DONE 任务。
+
+**Model tiers 的 Quality 列**（`docs/subagent-design.md` §7.1）也读这套一次通过口径，但不经过本报告接口：
+`taskFirstPassByModel` 按首次运行的 provider × engine × model 分组，只算近 90 天内首次运行的 DONE 任务，分母是完成数；
+额度和满载失败的运行（`limitFailure`，与上表 `averageFailureCount` 排除的是同一批）整条不计，既不算失败也不算一次运行。
+它只用于显示，路由不读。
 
 ### 10.2 开启节奏
 

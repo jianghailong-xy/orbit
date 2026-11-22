@@ -208,8 +208,16 @@ struct SectionSidebar: View {
             // "Waiting on you", raised as a sheet over whatever is selected.
             OwnerRequestInboxEntry()
 
-            Section(AppSection.agents.title, isExpanded: $workspacesExpanded) {
+            Section(isExpanded: $workspacesExpanded) {
                 workspaceRows(shortcutIndex: commandHeld ? shortcutIndex : [:])
+            } header: {
+                // New workspace on any machine (docs/mocks/new-workspace-form/02-apple-entry, owner A): the + at the
+                // header's trailing edge, a menu of machines or the one machine's page.
+                HStack(spacing: 6) {
+                    Text(AppSection.agents.title)
+                    Spacer(minLength: 6)
+                    NewWorkspaceButton(machines: model.agents?.newWorkspaceMachines ?? []) { model.openNewWorkspace($0) }
+                }
             }
 
             // A group, not a row: an account with no open project draws no Projects group at all.

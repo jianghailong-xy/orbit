@@ -12,6 +12,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.runtime.saveable.SaveableStateHolder
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -241,16 +243,19 @@ fun SessionCards(cards: SessionCardsModel, open: (String) -> Unit, discuss: ((St
                 // The waiting card a project row opened onto shows its top, not its foot: a span from its top nearly the list's height.
                 if (asked == CardFocus.WAITING && viewport > 0) requester.bringIntoView(Rect(0f, 0f, 1f, viewport * 0.9f))
                 else requester.bringIntoView()
+                // Spent, and then held where it was brought to: the reader re-applies it as the conversation moves around it.
+                withFrameNanos { }
+                CardFocus.hold(session.id, card.key, asked == CardFocus.WAITING)
                 CardFocus.spend(session.id)
             }
-            Box(Modifier.bringIntoViewRequester(requester)) {
+            Box(Modifier.bringIntoViewRequester(requester).onGloballyPositioned { CardFocus.report(session.id, card.key, it.positionInRoot().y) }.then(if (CoordinatorQueue.isSent(card)) Modifier else Modifier.conversationCard())) {
                 val preview = CardPreviews.preview(card)
                 val fresh = cards.fresh(session, card)
                 val result = results[card.key]?.takeIf { it.binding == card.binding } ?: CardActionState()
                 val submit = { verb: CardVerb, input: CardInput -> cards.submit(card, verb, input) }
                 when {
-                    // A08-13: a question that has ended is the record it became, replayed in its review.
-                    card.family == CardFamily.QUESTION_RECORD -> QuestionRecordCard(card) { cards.open(card.key) }
+                    // A08-13: a question that has ended is the record it became, unfolded in place (board card-ui-polish ③).
+                    card.family == CardFamily.QUESTION_RECORD -> QuestionRecordCard(card, open = open)
                     // A11-9: the merge into main is one line where it happened; its card is on the project's sessions page, and the line
                     // opens the same review (iOS `PromotionEventLine`, 6b4bef713) — the conversation's way into a review, as a preview is.
                     card.family == CardFamily.PROMOTION -> PromotionEventLine(card.source.takeUnless { card.status == CardPreviews.stale },
@@ -278,7 +283,7 @@ fun SessionCards(cards: SessionCardsModel, open: (String) -> Unit, discuss: ((St
             if (focus != null && CardFocus.matches(focus, key)) LaunchedEffect(focus, key) {
                 requester.bringIntoView(); doneReview = true; CardFocus.spend(session.id)
             }
-            Box(Modifier.bringIntoViewRequester(requester)) {
+            Box(Modifier.bringIntoViewRequester(requester).conversationCard()) {
                 CoordinatorDoneCard(app, cards.handle, session.id, coordinated, detail, session.snapshot?.standing.orEmpty(), session.fresh, open,
                     reviewing = doneReview, review = { doneReview = it })
             }

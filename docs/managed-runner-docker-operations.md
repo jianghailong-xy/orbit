@@ -1,7 +1,7 @@
 # Managed runners on Docker: backup, restore and failure handling
 
 This runbook is for a deployment whose managed runners run on its own Docker: a new deployment that
-`scripts/install-server.sh` installed, or one an administrator switched on with `--enable-managed-runners`
+`scripts/install-server.sh --managed-runners` installed, or one an administrator switched on with `--enable-managed-runners`
 ([Self-hosting](self-hosting.md#managed-runners)). Every account has a runner of its own: a container
 `mr-<runner uuid>` and a data volume `mr-data-<runner uuid>` on this host's disk. The volume holds the account's
 checkouts, sessions, uploads and engine sign-ins, and nothing else keeps a copy of it.
@@ -720,7 +720,7 @@ traffic to private ranges (`DOCKER-USER`). Keep host services bound to loopback 
 
 ## The managed runners' firewall
 
-A new deployment firewalls its managed runners' network on this host (`managed-runner-firewall`,
+A new deployment with managed runners firewalls their network on this host (`managed-runner-firewall`,
 [deploy/managed-runner/firewall](../deploy/managed-runner/firewall/README.md)): from that network a runner reaches the
 gateway's published port at the network's gateway address, DNS, and public addresses. Every other port of this host,
 on any of its addresses, and every private, shared, link-local and reserved address behind it is refused, the cloud

@@ -11,6 +11,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -44,6 +45,8 @@ internal class RealtimeRest(private val api: OrbitApi, private val background: C
     private class OpenBase(val handle: SessionHandle, val cursor: String, val rows: List<JsonObject>)
     /** The store's directory loop is the only reader of the Open list, so one read at a time writes this. */
     @Volatile private var openBase: OpenBase? = null
+    /** The store's loop and a notification reconcile ([RealtimeStore.readOpen]) both read the Open list; one at a time moves the cursor. */
+    private val openLock = kotlinx.coroutines.sync.Mutex()
 
     /**
      * The Open list as `GET sessions?view=open&since=<cursor>` (docs/list-freshness-design.md §3, OrbitKit `OpenListReader`): the delta
@@ -52,7 +55,7 @@ internal class RealtimeRest(private val api: OrbitApi, private val background: C
      * A delta that does not fit its base is answered by reading the whole list again, with a fresh cursor. Rows equal to [held]'s
      * are held's, as [objects] keeps them.
      */
-    private suspend fun open(handle: SessionHandle, held: List<JsonObject>?): List<JsonObject> {
+    internal suspend fun open(handle: SessionHandle, held: List<JsonObject>?): List<JsonObject> = openLock.withLock {
         repeat(2) {
             val base = openBase?.takeIf { it.handle === handle }
             val body = api.request(handle, ApiRequest(listOf("sessions"),
@@ -66,7 +69,7 @@ internal class RealtimeRest(private val api: OrbitApi, private val background: C
                 is OpenListRead.Delta -> base?.let { withContext(background) { read.applied(it.rows) } }
                     ?.also { openBase = OpenBase(handle, read.cursor, it) }
             }
-            if (rows != null) return rows
+            if (rows != null) return@withLock rows
             openBase = null
         }
         throw ProtocolException()

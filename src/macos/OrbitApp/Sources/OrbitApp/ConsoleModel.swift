@@ -194,6 +194,11 @@ final class ConsoleModel {
     private(set) var sessionForkSource: String?
     private(set) var antigravityInstalling = false
     private(set) var runnerInstall: RunnerInstallState?
+    /// Fix with an agent's state on this session's machine, for the transcript's missing-bubblewrap
+    /// warning (`RunnerAgentFixLogic.sandboxState`). Nil from an older server, which draws no action.
+    private(set) var runnerAgentFix: RunnerAgentFix?
+    /// A sandbox Fix with an agent press is on its way; its button holds until the runner is read again.
+    private(set) var sandboxFixStarting = false
 
     var canInstallAntigravity: Bool {
         runnerID != nil && runnerOnline == true && runnerAntigravity?.supported == true
@@ -268,7 +273,7 @@ final class ConsoleModel {
         let askedAt = asked.requestedAt ?? ISO8601DateFormatter().string(from: Date())
         let started = Date()
         while !Task.isCancelled, Date().timeIntervalSince(started) < ClaudeRegion.checkWait {
-            try? await Task.sleep(for: .seconds(ClaudeRegion.checkPollInterval))
+            await VisibilityGate.app.pause(ClaudeRegion.checkPollInterval)   // not while hidden (§4 R3)
             await refreshRunner()
             if ClaudeRegion.checkAnswered(checkedAt: runnerRegion?.checkedAt, askedAt: askedAt) { return }
         }
@@ -396,6 +401,24 @@ final class ConsoleModel {
         guard let runnerID, let runners = try? await api.runners() else { return }
         if let runner = runners.first(where: { $0.id == runnerID }) { adoptRunnerSnapshot(runner) }
         else { clearRunnerSnapshot() }
+    }
+
+    /// Fix with an agent under the transcript's missing-bubblewrap warning
+    /// (docs/mocks/codex-sandbox-fix-with-agent): one press starts a session on this machine to install
+    /// it, then the runner is read again so the row turns into the fixing line. A refusal (a 409's own
+    /// sentence) is the status line, as on the machine page.
+    func fixSandbox() async {
+        guard let runnerID, !sandboxFixStarting else { return }
+        sandboxFixStarting = true
+        defer { sandboxFixStarting = false }
+        let target = RunnerAgentFixTarget(kind: .sandboxMissing, engine: RunnerAgentFixLogic.SANDBOX_FIX_ENGINE)
+        do {
+            _ = try await api.fixRunnerAttention(runnerID, kind: .sandboxMissing,
+                                                 body: RunnerAgentFixLogic.request(target, latestVersion: nil))
+        } catch {
+            statusMessage = "\(RunnerPageCopy.AGENT_FIX_FAILED) — \(APIClient.failureReason(error))"
+        }
+        await refreshRunner()
     }
     /// A provider switch made while this session was ENDED. There is nothing to PATCH then, so it
     /// rides along with the resume that revives it — the route Model/Mode/Effort already take.
@@ -570,6 +593,11 @@ final class ConsoleModel {
     /// When that detail was read: a clone frame heard before it is older news than its cloneState.
     private(set) var madeWorkspaceReadAt: Date?
     var madeWorkspaceID: String? { madeWorkspace?.id }
+    /// The workspace the session runs in, as its detail read it, when that is a GitHub clone: what the waiting card
+    /// of a session held by the clone names (`QueuedClone.card`). Any session of the workspace, not only the one that
+    /// made it.
+    private(set) var cloneWorkspace: SessionAgentRef?
+    private(set) var cloneWorkspaceReadAt: Date?
     /// The line this conversation opens with, when it made its workspace (board rule 8).
     var createdWorkspaceLine: CreatedWorkspaceLine? {
         guard let madeWorkspace, let name = madeWorkspace.name, let runnerName else { return nil }
@@ -581,6 +609,7 @@ final class ConsoleModel {
 
     /// Read the detail again for the workspace this conversation made: its clone moved, or was retried.
     func refreshMadeWorkspace() async {
+        if owedWhileHidden("made-workspace", { await $0.refreshMadeWorkspace() }) { return }
         await refreshServerStatus()
     }
 
@@ -1122,6 +1151,10 @@ final class ConsoleModel {
     /// transcript's SubAgent block draws its tier, model, duration and Why from. Re-read when one
     /// starts or ends (`SubagentRuns.signature`); empty for a session that never delegated.
     private(set) var subagentRuns: [String: SubagentRunView] = [:]
+    /// The session's Orbit workflows by `mcp__orbit__workflow` call (GET /sessions/:id/workflows), re-read
+    /// with the runs whenever a workflow, or one of its calls, moves (`WorkflowRuns.signature`); its calls'
+    /// runs are in `subagentRuns`, under `<workflow call>#<callIndex>`.
+    private(set) var workflowRuns: [String: WorkflowRunView] = [:]
     private var subagentRunsSignature = ""
     /// Settings › Translation (3A) after the answer: the owner-language text of the session's question
     /// cards, by the call's tool_use id, so an answered question's record shows what its card showed.
@@ -1185,6 +1218,22 @@ final class ConsoleModel {
     }
     /// Sink for a session outcome — the app's toast host, injected by `ConsoleRegistry`.
     @ObservationIgnored var onToast: (ToastRequest) -> Void = { _ in }
+    /// The runners this console just read (`refreshRunner`): the app's runner snapshot too, so the
+    /// tick's own read of the same list counts from it. Injected by `ConsoleRegistry`.
+    @ObservationIgnored var onRunnersRead: ([Runner]) -> Void = { _ in }
+
+    /// While the app cannot be seen this conversation reads nothing (docs/list-freshness-design.md
+    /// §4 R3), whatever asks — its stream's events and reconnects, the app's list, its own minute
+    /// loops. A read asked for meanwhile is owed under `name`, one read however often it is asked,
+    /// and made once when the app is shown again (`VisibilityGate.read`). True when it was owed.
+    private func owedWhileHidden(_ name: String, _ read: @escaping (ConsoleModel) async -> Void) -> Bool {
+        guard !VisibilityGate.app.isVisible else { return false }
+        VisibilityGate.app.read("console.\(sessionID).\(name)") { [weak self] in
+            guard let self else { return }
+            Task { await read(self) }
+        }
+        return true
+    }
     /// Local `/status` results belong in the conversation, not the error/info banner above the
     /// composer. Keep a short in-memory tail, matching the web client; these are intentionally not
     /// persisted because no corresponding runner event exists.
@@ -1552,6 +1601,10 @@ final class ConsoleModel {
             }
             catchUpPending = false
             catchUpAfterFailure = false
+            // The catch-up ran out of budget under a reader who had scrolled up: their window was
+            // kept with its bottom open (`replaceWindow`), so the stream stays closed until they page
+            // down to the latest or jump to it.
+            if detached { continue }
             // No page seeded the window (every tail attempt failed): the connect below is cursor-less
             // and its capped replay can start mid-conversation, so its first event sets the older edge.
             if reducer.state.maxSeq == 0 { reducer.expectReplayToSetOlderEdge() }
@@ -1614,12 +1667,13 @@ final class ConsoleModel {
             // refresh the status from REST before reconnecting.
             if outcome == .ended || outcome == .cancelled { publishStateNow() }
             if outcome == .ended { await refreshServerStatus() }
-            // Ordered by the server: this window is not a viable place to resume from. Throw it
-            // away and re-seed exactly as a cold open does, so the next connect resumes from the
-            // fresh page's max seq. A seed that fails leaves the reducer empty, which makes the
+            // Ordered by the server: this window is not a viable place to resume from. At the tail,
+            // throw it away and re-seed exactly as a cold open does, so the next connect resumes from
+            // the fresh page's max seq. A seed that fails leaves the reducer empty, which makes the
             // reconnect cursor-less — and a cursor-less replay is server-capped, so the fallback
-            // is still a bounded catch-up rather than the full history.
-            if outcome == .resync { await reseedFromTailPage() }
+            // is still a bounded catch-up rather than the full history. Under a reader who scrolled
+            // up the window is kept and the stream stays closed (`replaceWindow`).
+            if outcome == .resync { await replaceWindow() }
             catchUpAfterFailure = (outcome == .failed)   // the next iteration may need to close a gap
             switch reconnectPolicy.next(after: outcome) {
             case .stop:
@@ -1631,7 +1685,7 @@ final class ConsoleModel {
     }
 
     /// Fold the newest page of persisted events into an empty window — the tail-first seed, used
-    /// both on a cold open and when a `resync` clears the window (see `reseedFromTailPage`).
+    /// both on a cold open and when a `resync` clears the window (see `replaceWindow`).
     ///
     /// Retries a few times before giving up. A transient failure here (common on mobile) used to
     /// fall straight through to the SSE loop with `sinceSeq: 0`, replaying the WHOLE transcript
@@ -1670,8 +1724,9 @@ final class ConsoleModel {
     ///
     /// The budget mirrors the server's own policy: it answers a gap wider than `SSE_GAP_CAP` (1000)
     /// with `resync` rather than replaying it (`catchUpPages` × `olderPage` = the same 1000), so
-    /// past that budget the window is re-seeded from a tail page instead. The reader is at the tail
-    /// either way, and the middle of a gap nobody saw carries nothing the tail page doesn't.
+    /// past that budget the window is replaced as a `resync` would replace it (`replaceWindow`): from
+    /// a tail page for a reader at the tail, for whom the middle of a gap nobody saw carries nothing
+    /// the tail page doesn't, and kept with its bottom open under a reader who scrolled up.
     ///
     /// A failed page is not retried here: the stream attempt right after this IS the retry, with
     /// everything that landed already folded in (that is the whole point — the next attempt resumes
@@ -1697,21 +1752,31 @@ final class ConsoleModel {
             guard let next = page.after else { return }   // this page reached the newest event
             cursor = next
         }
-        // Still short of the tail after the whole budget: re-seed, as the server's `resync` would
-        // have. The window is replaced wholesale, so the dropped middle leaves no hole.
-        await reseedFromTailPage()
+        // Still short of the tail after the whole budget: replace the window, as the server's
+        // `resync` would have. Re-seeded, it is replaced wholesale, so the dropped middle leaves no
+        // hole; kept, its bottom is the gap.
+        await replaceWindow()
     }
 
-    /// Act on the server's `resync`: drop the loaded window and rebuild it from a tail page.
+    /// Act on the server's `resync` (or a catch-up out of budget), the reducer's `replaceWindow`.
     ///
-    /// The cleared state is deliberately NOT published on its own — a seed usually lands in a few
+    /// A reader following the tail has the loaded window dropped and rebuilt from a tail page. The
+    /// cleared state is deliberately NOT published on its own — a seed usually lands in a few
     /// hundred milliseconds, and painting an empty transcript in between would flash the screen
     /// blank on what the user experiences as a plain reconnect. The stale rows stay up until the
     /// fresh page replaces them (or, if every attempt fails, until the capped cursor-less replay
     /// on the next connect does).
-    private func reseedFromTailPage() async {
+    ///
+    /// A reader who has scrolled up (`readingHistory`) keeps the window: a fresh page under them
+    /// moved what they were reading. It becomes a window opened at a record, its bottom a gap at its
+    /// last seq (`newerCursor`) and the stream held off (`run()`), so scrolling down pages forward
+    /// (`loadNewer`) and the jump-to-latest control takes a tail page (`jumpToLatest`).
+    private func replaceWindow() async {
         guard !sessionID.isEmpty else { return }
-        reducer.resetForResync()
+        if let gap = reducer.replaceWindow(readerAtTail: !readingHistory) {
+            newerCursor = gap
+            return
+        }
         await seedTailPage()
     }
 
@@ -1786,18 +1851,30 @@ final class ConsoleModel {
     /// `useSubagentRuns`). The signature makes this a no-op on the many publishes that move nothing
     /// about a SubAgent; a failed read is not retried until the transcript moves again.
     private func refreshSubagentRunsIfNeeded() {
-        let signature = SubagentRuns.signature(items: state.items, background: state.background)
+        let delegates = SubagentRuns.signature(items: state.items, background: state.background)
+        let workflows = WorkflowRuns.signature(items: state.items, nested: state.subagentItems,
+                                               background: state.background)
+        let signature = delegates + "|" + workflows
         guard signature != subagentRunsSignature else { return }
         subagentRunsSignature = signature
-        guard !signature.isEmpty else {
+        guard !delegates.isEmpty || !workflows.isEmpty else {
             subagentRuns = [:]
+            workflowRuns = [:]
             return
         }
         subagentRunsFetch?.cancel()
         subagentRunsFetch = Task { [weak self] in
-            guard let self, let rows = try? await self.api.sessionSubagents(sessionID: self.sessionID) else { return }
+            guard let self else { return }
+            let sessionID = self.sessionID
+            async let runs = self.api.sessionSubagents(sessionID: sessionID)
+            async let flows: [WorkflowRunView]? = workflows.isEmpty ? [] : try? await self.api.sessionWorkflows(sessionID: sessionID)
+            guard let rows = try? await runs else { return }
+            let workflowRows = await flows
             guard !Task.isCancelled else { return }
             self.subagentRuns = Dictionary(rows.map { ($0.toolUseId, $0) }, uniquingKeysWith: { _, last in last })
+            if let workflowRows {
+                self.workflowRuns = Dictionary(workflowRows.map { ($0.toolUseId, $0) }, uniquingKeysWith: { _, last in last })
+            }
         }
     }
 
@@ -1858,7 +1935,8 @@ final class ConsoleModel {
     private var prependAnchorID: String?
 
     /// True while the reader has scrolled up off the live tail — fed by `TranscriptView`'s
-    /// `atBottom`. It gates the window cap, and only that.
+    /// `atBottom`. It gates the window cap, and whether a window the stream cannot resume is swapped
+    /// for a tail page or kept under the reader (`replaceWindow`).
     private var readingHistory = false
 
     /// Tell the console whether the reader is up in the history rather than pinned at the live tail.
@@ -2039,13 +2117,55 @@ final class ConsoleModel {
                                       tick: scrollTick)
     }
 
-    /// The `delegate` call a SubAgent run was started from, by the run its result names — what a
-    /// SubAgent's finished line links back to — or nil where the loaded transcript holds none.
-    func delegateCard(forRun runId: String) -> String? {
-        for case .toolCall(let card) in reducer.state.items where card.name == SubagentBlock.toolName {
-            if SubagentFinishedText.delegateRunId(card.result) == runId { return card.id }
+    /// Scroll the transcript to a bg_run job's card, from the Background list (R1): the call whose receipt
+    /// names the job. Whether there is one to scroll to; a job whose call the loaded window no longer holds
+    /// keeps its row's own accordion.
+    @discardableResult
+    func revealJob(_ jobID: String) -> Bool {
+        guard let cardID = BgJobCard.card(forJob: jobID, in: reducer.state.items) else { return false }
+        revealAgent(cardID)
+        return true
+    }
+
+    /// The owner's stop of one running bg_run job (R3): its end arrives as the job's terminal report.
+    func stopJob(_ jobID: String) async throws {
+        try await api.stopBackgroundJob(sessionID: sessionID, jobID: jobID)
+    }
+
+    /// What a bg_run job's card reads, by job id (`JobCardView`): the Background list's rows, the wake
+    /// turns loaded and those still queued, and the two routes it asks.
+    func jobCardHost(place: String?) -> JobCardHost {
+        var procs: [String: BackgroundProc] = [:]
+        for proc in state.background where proc.kind == "job" { procs[proc.id] = proc }
+        var dontSend: [String: @MainActor () -> Void] = [:]
+        for bubble in state.queued where !bubble.steer {
+            // A steer is on its way into the running turn and cannot be withdrawn: only a queued wake has a Don't send.
+            for jobID in BgJobCard.queuedWake(bubble)?.jobIds ?? [] {
+                dontSend[jobID] = { [weak self] in Task { await self?.cancelQueued(bubble) } }
+            }
         }
-        return nil
+        let api = self.api
+        let sessionID = self.sessionID
+        return JobCardHost(procs: procs, wakes: BgJobCard.wakes(state.items), dontSend: dontSend,
+                           live: isLive, place: place,
+                           tail: { try await api.backgroundJobTail(sessionID: sessionID, jobID: $0) },
+                           stop: { try await api.stopBackgroundJob(sessionID: sessionID, jobID: $0) })
+    }
+
+    /// Each SubAgent end turn loaded, by run id: its card draws the end and keeps the block the agent read
+    /// (`SubagentCardEnd.wakes`), so the turn itself draws nothing.
+    var subagentWakes: [String: SubagentCardEnd.WakeSeen] { SubagentCardEnd.wakes(state.items) }
+
+    /// Each SubAgent end turn still on the queue, by run id: its card says the agent has not read it yet,
+    /// and its `Don't send` takes the turn off the queue, as the queue's own Cancel did.
+    var subagentQueuedWakes: SubagentQueuedWakes {
+        var out: [String: @MainActor () -> Void] = [:]
+        for bubble in state.queued {
+            for runId in SubagentCardEnd.queuedWake(bubble)?.runIds ?? [] {
+                out[runId] = { [weak self] in Task { await self?.cancelQueued(bubble) } }
+            }
+        }
+        return SubagentQueuedWakes(dontSend: out)
     }
 
     /// The transcript scrolled to the record's row: mark it for a moment, and consume the request so a
@@ -2303,6 +2423,7 @@ final class ConsoleModel {
         runnerAntigravity = runner.antigravity
         runnerVersion = runner.version
         runnerInstall = runner.install
+        runnerAgentFix = runner.agentFix
         runnerCapabilities = runner.capabilities
         runnerRunsAsRoot = runner.runsAsRoot
     }
@@ -2319,6 +2440,7 @@ final class ConsoleModel {
         runnerAntigravity = nil
         runnerVersion = nil
         runnerInstall = nil
+        runnerAgentFix = nil
         runnerCapabilities = nil
         runnerRunsAsRoot = nil
     }
@@ -2347,10 +2469,12 @@ final class ConsoleModel {
     /// admission closed, as `loadContext`'s does.
     private func refreshRunner() async {
         guard let runnerID else { return }
+        if owedWhileHidden("runner", { await $0.refreshRunner() }) { return }
         guard let rows = try? await api.runners() else {
             clearCodexResetAdmission()
             return
         }
+        onRunnersRead(rows)
         fleetKnowsCursor = rows.contains(where: CursorRuntime.runnerKnows)
         let runner = rows.first(where: { $0.id == runnerID })
         if let runner { adoptRunnerSnapshot(runner) } else { clearRunnerSnapshot() }
@@ -2495,7 +2619,9 @@ final class ConsoleModel {
     /// asks no owner confirmation. Asked on a reconnect and on the minute, which is all that moves here
     /// when the stream never dropped.
     private func loadContextIfUnread() async {
-        if !contextLoaded { await loadContext() }
+        guard !contextLoaded else { return }
+        if owedWhileHidden("context", { await $0.loadContextIfUnread() }) { return }
+        await loadContext()
     }
 
     /// List seeds and the later detail read resolve the same settings. A model-less session keeps
@@ -2537,6 +2663,10 @@ final class ConsoleModel {
         guard let session, session.id == sessionID else { return }
         conversationCreatedAt = session.createdAt
         // A list row carries no flag, so only the detail moves this; it never goes back to false.
+        if let agent = session.agent, agent.cloneState != nil {
+            cloneWorkspace = agent
+            cloneWorkspaceReadAt = Date()
+        }
         if session.createdWorkspace == true {
             madeWorkspace = session.agent
             madeWorkspaceReadAt = Date()
@@ -3060,11 +3190,8 @@ final class ConsoleModel {
     /// `+` menu → Shell: prefix the draft with `!` so send() routes the rest as a raw shell command
     /// run on the runner, bypassing claude. The user types the command after. Mirrors web's insertShell.
     func insertShell() {
-        if executesDsh { statusMessage = Self.dshShellRefusal; return }
         if !composerText.hasPrefix("!") { composerText = "!" + composerText }
     }
-
-    static let dshShellRefusal = "DeepSeek Harness sessions don't run ! shell commands — ask the agent to run it instead."
 
     /// `authoritative` is the session's live control-plane run status
     /// (`app.session(id:)?.effectiveRunStatus`), read
@@ -3108,12 +3235,6 @@ final class ConsoleModel {
         // A leading `!` runs the remainder as a raw shell command on the runner, bypassing claude
         // (mirrors the web composer). A bare `!` with nothing after it is a no-op.
         let (text, shell) = ComposerLogic.parseShell(overrideText ?? composerText)
-        // DeepSeek Harness has no shell bridge (the runner settles such a turn as a refusal), so the
-        // command stays in the composer rather than going out to fail (web parity).
-        if shell, executesDsh {
-            statusMessage = Self.dshShellRefusal
-            return
-        }
         // Empty text still sends when something is staged to carry the message (see
         // `canSendAttachmentsAlone`) — but never as a shell turn: a bare `!` is a no-op that only
         // clears itself, and attachments mean nothing to a raw command (web ignores them there too).
@@ -3708,10 +3829,6 @@ final class ConsoleModel {
             return
         }
         let (text, shell) = ComposerLogic.parseShell(composerText)
-        if shell, executesDsh {
-            statusMessage = Self.dshShellRefusal
-            return
-        }
         guard !text.isEmpty || (!shell && canSendAttachmentsAlone) else {
             if shell { composerText = "" }
             return
@@ -3938,7 +4055,7 @@ final class ConsoleModel {
                 }
             }
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 2_500_000_000)
+                await VisibilityGate.app.pause(2.5)   // not while the app cannot be seen (§4 R3)
                 guard let self, !Task.isCancelled else { return }
                 do {
                     let operation = try await self.api.codexRateLimitResetOperation(
@@ -3991,8 +4108,9 @@ final class ConsoleModel {
 
     /// One of the handoff's presses. What it changed reaches this conversation as `session.updated`
     /// (every transition publishes it), so the answer is read only for a refusal.
-    func coordinatorHandoff(projectID: String, _ action: CoordinatorHandoffAction) async {
-        do { _ = try await api.coordinatorHandoff(projectID, action) }
+    func coordinatorHandoff(projectID: String, _ action: CoordinatorHandoffAction,
+                            successor: CoordinatorHandoffSuccessor? = nil) async {
+        do { _ = try await api.coordinatorHandoff(projectID, action, successor: successor) }
         catch { statusMessage = CoordinatorHandoffCopy.refusal(APIClient.failureReason(error)) }
     }
 
@@ -4130,6 +4248,30 @@ final class ConsoleModel {
             }
         } catch {
             showTransientStatus("This message is already being processed and can't be withdrawn")
+        }
+    }
+
+    /// Messages under the held tag whose Cancel is out, by turn id: a second press waits for the first.
+    private var cancellingHeld: Set<String> = []
+
+    /// The held tag's Cancel (`Queued · runner full · Cancel`, web parity: `cancelHeldTurn`): withdraw
+    /// a message the server accepted but no runner has taken, through the queued Cancel's DELETE —
+    /// the session goes back to awaiting input. Unlike that Cancel nothing leaves the screen until
+    /// the server answers; then the bubble goes and its words come back under any draft. Refused,
+    /// a runner has it, and it stays. Attachments aren't rehydrated, as with Cancel.
+    func cancelHeld(_ bubble: UserBubble) async {
+        guard let turnId = bubble.turnId, !cancellingHeld.contains(turnId) else { return }
+        cancellingHeld.insert(turnId)
+        defer { cancellingHeld.remove(turnId) }
+        let api = self.api
+        let sessionID = self.sessionID
+        switch await HeldCancel.press(bubble, withdraw: { try await api.withdrawTurn(sessionID: sessionID, turnId: $0) }) {
+        case .withdrawn(let words):
+            reducer.removeAcceptedTurn(turnId: turnId)
+            publishStateNow()
+            composerText = HeldCancel.composer(composerText, restoring: words)
+        case .refused:
+            showTransientStatus(HeldCancel.refused)
         }
     }
 
@@ -4887,6 +5029,7 @@ final class ConsoleModel {
     /// iOS-specific gap — a suspended socket misses everything), when a card scrolls into view, and
     /// after any press. What it may never do is remove a card.
     func refreshRulerQuestions(force: Bool = false) async {
+        if owedWhileHidden("ruler", { await $0.refreshRulerQuestions(force: true) }) { return }
         // The evidence cards first, and in every conversation (`refreshEvidenceDecisions`): every
         // door that asks for the ruler's reads — reconnect, a card appearing, a press — asks for them.
         await refreshEvidenceDecisions(force: force)
@@ -5358,7 +5501,9 @@ final class ConsoleModel {
     /// Runs when the session's context loads, with the evidence reads (reconnect, a row's waiting count moving),
     /// and after every press on one of them.
     func refreshScheduleCards(force: Bool = false) async {
-        guard !isDraft, !loadingScheduleCards else { return }
+        guard !isDraft else { return }
+        if owedWhileHidden("schedule-cards", { await $0.refreshScheduleCards(force: true) }) { return }
+        guard !loadingScheduleCards else { return }
         if !force, Date().timeIntervalSince(lastScheduleRead) < Self.rulerReadThrottle { return }
         lastScheduleRead = Date()
         loadingScheduleCards = true
@@ -5725,7 +5870,9 @@ final class ConsoleModel {
     /// is a card saying it could not check — and a card that vanished mid-read is indistinguishable,
     /// to the person reading it, from a render that broke.
     func refreshOwnerConfirmation(force: Bool = false) async {
-        guard !isDraft, let taskID, !loadingOwnerConfirmation else { return }
+        guard !isDraft, taskID != nil else { return }
+        if owedWhileHidden("owner-confirmation", { await $0.refreshOwnerConfirmation(force: true) }) { return }
+        guard let taskID, !loadingOwnerConfirmation else { return }
         if !force, Date().timeIntervalSince(lastOwnerRead) < Self.rulerReadThrottle { return }
         loadingOwnerConfirmation = true
         defer { loadingOwnerConfirmation = false }
@@ -5866,6 +6013,7 @@ final class ConsoleModel {
     /// event, and there may not be one.
     func refreshEvidenceDecisions(force: Bool = false) async {
         guard !isDraft else { return }
+        if owedWhileHidden("evidence", { await $0.refreshEvidenceDecisions(force: true) }) { return }
         // The schedule cards ride every door this read does: a card is asked or a change made while the reader
         // is elsewhere, and only reading again finds it.
         Task { [weak self] in await self?.refreshScheduleCards() }
@@ -6155,12 +6303,12 @@ final class ConsoleModel {
         Task { await refreshRulerQuestions(force: true) }
     }
 
-    /// Until when this conversation, opened from a project row whose line says it is waiting on you,
-    /// still lands on its waiting card (`focusWaitingCard`). The reader's own scroll or send ends it
-    /// sooner (`readerTookOver`); the ceiling only keeps a card read much later from moving a reader
-    /// who has been reading a while. Long enough for a slow first read: 15 s was not, on a cold
-    /// simulator.
-    private var pendingWaitingCardUntil: Date?
+    /// When this conversation was opened from a project row whose line says it is waiting on you, to
+    /// land on its waiting card (`focusWaitingCard`). The request lapses after
+    /// `TranscriptLanding.waitingRequestLifetime` with no such card drawn (web parity: 10 s), so a card
+    /// that appears later cannot move a reader who has moved on. The reader's own scroll or send ends
+    /// it sooner (`readerTookOver`).
+    private var pendingWaitingCardAt: Date?
     /// The waiting card's row, for the transcript to open at its top. Its own request, apart from
     /// `scrollRequest` (the bar's, which centres the card and opens its review) and `recordRequest`
     /// (a link's, which marks the row): this one only places the reader at the card's header.
@@ -6171,20 +6319,23 @@ final class ConsoleModel {
     /// than the screen would otherwise show its buttons with its title above the fold. Spent by the
     /// first publish or read that has the card; the reads run as the console opens.
     func focusWaitingCard() {
-        pendingWaitingCardUntil = Date().addingTimeInterval(60)
+        pendingWaitingCardAt = Date()
         followPendingWaitingCard()
         Task { await refreshRulerQuestions(force: true) }
     }
 
     private func followPendingWaitingCard() {
-        guard let until = pendingWaitingCardUntil else { return }
-        guard Date() < until else { pendingWaitingCardUntil = nil; return }
+        guard let asked = pendingWaitingCardAt else { return }
+        guard TranscriptLanding.waitingRequestStands(askedAt: asked, now: Date()) else {
+            pendingWaitingCardAt = nil
+            return
+        }
         let rows = TranscriptRows.build(state: state, statusCards: localStatusCards, canPageOlder: false,
                                         showWorkingIndicator: false, decisionCards: decisionCards,
                                         conversationCreatedAt: conversationCreatedAt)
         guard let rowID = SessionProjectSheet.waitingCardRowID(rows: rows, openCards: openBelowRows)
         else { return }
-        pendingWaitingCardUntil = nil
+        pendingWaitingCardAt = nil
         scrollTick += 1
         cardRequest = ScrollRequest(rowID: rowID, tick: scrollTick)
     }
@@ -6198,7 +6349,7 @@ final class ConsoleModel {
     /// The reader moved the list or sent something before the card was reached: the conversation is
     /// theirs now, and a card read after this does not move them.
     func readerTookOver() {
-        pendingWaitingCardUntil = nil
+        pendingWaitingCardAt = nil
         cardRequest = nil
     }
 
@@ -6526,6 +6677,21 @@ final class ConsoleModel {
         requestScroll(to: card.id)
     }
 
+    /// Scroll to an exception item's own card in this conversation, where the read still draws one —
+    /// the delivery card's `Go to the item card ↑` (board card-ui-polish ②). False when the
+    /// conversation holds no card for the item, which is what the delivery card then says.
+    @discardableResult
+    func revealOpenItemCard(_ itemID: String) -> Bool {
+        guard let card = decisionCards.first(where: {
+            switch $0.kind {
+            case .escalatedItem(let id), .fusePause(let id): return id == itemID
+            default: return false
+            }
+        }) else { return false }
+        requestScroll(to: card.id)
+        return true
+    }
+
     /// Lift the pause (§6.3 F-T4, mock 6 ①) — the owner's alone, and the one press that starts a
     /// stopped conversation again. The episode the card was drawn from rides along, so a press
     /// made after the pause was lifted is refused by the door rather than resuming the next one.
@@ -6663,6 +6829,7 @@ final class ConsoleModel {
     /// we likewise never received. The `knownBefore` snapshot is captured before the await so a live
     /// nudge that folds in during the fetch isn't mistaken for a stale card and dropped.
     private func refreshApprovals() async {
+        if owedWhileHidden("approvals", { await $0.refreshApprovals() }) { return }
         let knownBefore = Set(reducer.state.pendingApprovals.map(\.id))
         guard let infos = try? await api.approvals(sessionID: sessionID) else { return }
         reducer.reconcileApprovals(infos.map {
@@ -6682,6 +6849,7 @@ final class ConsoleModel {
     /// untagged local POST still in flight survives a snapshot that raced just ahead of its commit.
     private var queuedTurnsFetchGeneration = 0
     private func refreshQueuedTurns() async {
+        if owedWhileHidden("queued-turns", { await $0.refreshQueuedTurns() }) { return }
         queuedTurnsFetchGeneration &+= 1
         let generation = queuedTurnsFetchGeneration
         let knownBefore = reducer.state.listedTurnIDs
@@ -6707,6 +6875,7 @@ final class ConsoleModel {
     /// always longer than that, while an end-of-turn reconnect is seconds. `force` bypasses the throttle
     /// for a cold-open seed (nothing cached yet). Failures don't stamp the clock, so they re-fetch freely.
     private func refreshBackground(force: Bool = false) async {
+        if owedWhileHidden("background", { await $0.refreshBackground(force: force) }) { return }
         let now = Date()
         if !force, let last = lastBackgroundFetch, now.timeIntervalSince(last) < 30 { return }
         guard let dtos = try? await api.backgroundShells(sessionID: sessionID) else { return }

@@ -15,6 +15,10 @@ import { formatSpan, sameResourceId } from './watches';
 
 export type OwnerRequestKind =
   | 'DECISION' | 'SECRET' | 'MANUAL_STEP' | 'CONFIRM' | 'WIKI_CREATE'
+  // A change to the owner's own Settings, proposed by a session (docs/settings-from-conversation-design.md §5.1).
+  | 'SETTINGS_CHANGE'
+  // An agent on the Orbit Cloud runner asking the owner to sign in to a site in its browser (browser_request_sign_in).
+  | 'BROWSER_SIGN_IN'
   // A scheduled task's items, which no session can file (apiserver schedules/schedule-attention.ts).
   | 'SCHEDULE_FAILED' | 'SCHEDULE_HELD' | 'SCHEDULE_APPROVAL' | 'SCHEDULE_WIDEN'
   // A condition's items (apiserver conditions/condition-attention.ts): it cannot be read, or a task's condition has
@@ -85,6 +89,10 @@ export interface OwnerRequest {
   /** WIKI_CREATE: the repository the wiki is asked for, and the asking session's workspace it would read it from. */
   repoUrlNorm?: string | null;
   workspaceId?: string | null;
+  /** BROWSER_SIGN_IN: the site to sign in to, the Orbit Cloud runner whose browser it is, and the asking session's title. */
+  browserSite?: string | null;
+  browserRunnerId?: string | null;
+  askedBySessionTitle?: string | null;
   /** SCHEDULE_*: the schedule, run, approval card and change request the item is about. */
   scheduleId?: string | null;
   scheduleRunId?: string | null;
@@ -92,6 +100,8 @@ export interface OwnerRequest {
   scheduleChangeRequestId?: string | null;
   /** CONDITION_*: the condition the item is about, which names its schedule or task. */
   conditionId?: string | null;
+  /** SETTINGS_CHANGE: `{ changes: [{ key, from, to, tier }] }`, which the card draws (lib/settingsChange). */
+  payload?: unknown;
   expiresAt: string | null;
   askedBySessionId: string;
   projectId: string | null;
@@ -116,6 +126,8 @@ export const KIND_TAGS: Readonly<Record<OwnerRequestKind, string>> = {
   MANUAL_STEP: 'STEPS',
   CONFIRM: 'CONFIRM',
   WIKI_CREATE: 'WIKI',
+  SETTINGS_CHANGE: 'SETTINGS',
+  BROWSER_SIGN_IN: 'SIGN IN',
   SCHEDULE_FAILED: SCHEDULE_COPY.waiting.kinds.schedule,
   SCHEDULE_HELD: SCHEDULE_COPY.waiting.kinds.schedule,
   SCHEDULE_APPROVAL: SCHEDULE_COPY.waiting.kinds.run,
@@ -123,6 +135,17 @@ export const KIND_TAGS: Readonly<Record<OwnerRequestKind, string>> = {
   CONDITION_UNKNOWN: CONDITION_COPY.waitingKind,
   CONDITION_STILL_WAITING: CONDITION_COPY.waitingKind,
 };
+
+/** The BROWSER_SIGN_IN card's words (Orbit Cloud browser board). Signed in is answered from the browser tab, not the card. */
+export const BROWSER_SIGN_IN_COPY = {
+  eyebrow: 'Sign in needed · Orbit Cloud browser',
+  fromSession: (title: string) => `From session ${title}`,
+  note: 'You sign in yourself; Orbit never sees your password. The login stays on this runner, and every agent on it can use it.',
+  openBrowser: 'Open browser',
+  notNow: 'Not now',
+  signedIn: (site: string) => `Signed in to ${site}`,
+  action: 'Sign in',
+} as const;
 
 const DEVICES: Readonly<Record<string, string>> = {
   web: 'Web',

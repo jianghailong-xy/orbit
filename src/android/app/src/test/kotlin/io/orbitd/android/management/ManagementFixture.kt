@@ -57,6 +57,8 @@ object ManagementFixture {
     @Volatile var task = "{}"
     /** GET tasks/:id/evidence for [TASK]: its evidence versions, oldest first. */
     @Volatile var evidence = "[]"
+    /** GET projects/P1: the task's project, as the page reads it for an exempt task's settingChanges. */
+    @Volatile var project = "{}"
     @Volatile var workspaceName = "Alpha"
     @Volatile var runnerAlias = "Old alias"
     @Volatile var runnerCapacity = 2
@@ -159,7 +161,7 @@ object ManagementFixture {
         deviceStatus = "PENDING"; deviceConflict = false; deviceLastSeen = null; deviceGate = null
         drop = CompletableDeferred(); opened = 0
         queries.clear(); modelRouting = null; optimizeFor = null; recaps = null; accessTokens = emptyList(); accessTokensFail = false; terminals = emptyList(); providerCatalog = "[]"; providersMine = "[]"
-        balances.clear(); balanceGates.clear(); task = "{}"; evidence = "[]"
+        balances.clear(); balanceGates.clear(); task = "{}"; evidence = "[]"; project = "{}"
         keyCheckAnswer = """{"ok":true,"keyCheck":"VALID","message":"Cursor accepted this key.","recorded":true,"keyCheckState":"VALID","keyCheckedAt":null}"""
         onKeyCheck = {}
         subagentTiers = """{"providers":[]}"""; subagentBlocked = null; workspaceExtra = ""; bodies.clear()
@@ -201,7 +203,7 @@ object ManagementFixture {
     private fun user() = """{"id":"$ME","email":"a13@example.test","name":"Fixture","role":"MEMBER","avatarUpdatedAt":null,
         "preferences":{"theme":"$theme","defaultPermissionMode":"auto","enableOrchestration":true${modelRouting?.let { ",\"modelRouting\":$it" }.orEmpty()}${optimizeFor?.let { ",\"optimizeFor\":\"$it\"" }.orEmpty()}${recaps?.let { ",\"recaps\":$it" }.orEmpty()}${subagentBlocked?.let { ",\"subagentBlockedProviders\":" + JsonArray(it.map(::JsonPrimitive)) }.orEmpty()}}}"""
     private fun workspace() = """{"id":"$WORKSPACE","name":"$workspaceName","runnerId":"$RUNNER","enabled":true,"workDir":"/srv/alpha",
-        "lastProvider":"claude","effort":"","modelRouting":false,"env":{},"position":0,"createdAt":"2026-09-01T00:00:00Z"$workspaceExtra}"""
+        "lastProvider":"claude","effort":"","env":{},"position":0,"createdAt":"2026-09-01T00:00:00Z"$workspaceExtra}"""
     private fun runners() = runnerOrder.filter { (it == RUNNER || secondRunner) && it !in removedRunners }.joinToString(",", "[", "]") {
         when (it) {
             RUNNER -> runner()
@@ -279,6 +281,7 @@ object ManagementFixture {
             "providers/subagent-tiers" -> ok(subagentTiers)
             "tasks/$TASK" -> ok(task)
             "tasks/$TASK/evidence" -> ok(evidence)
+            "projects/P1" -> ok(project)
             "users/me/avatar" -> fail(404, "no avatar")
             "workspaces" -> ok("[${workspace()}]")
             "workspaces/$WORKSPACE" -> { if (api.method == HttpMethod.PATCH) workspaceName = body()["name"]!!.jsonPrimitive.content; ok(workspace()) }

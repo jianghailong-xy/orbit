@@ -54,7 +54,7 @@ final class TaskDetailWiringTests: XCTestCase {
 
     private static let pageOrder = [
         "header(task)", "banners(task)", "actions(task)", "verifierSection(task)", "nowSection(task, run)",
-        "evidenceSection(task, latest)", "landingSection(landing)", "acceptanceSection(task)", "briefSection(task)",
+        "evidenceSection(task, latest)", "landingSection(landing, exemption: exemption, task: task)", "acceptanceSection(task)", "briefSection(task)",
         "planSection(task)", "runsWithSection(task)", "inputsSection(task,", "attributionSection(task)",
         "followedBySection(task)", "activitySection(task)",
     ]
@@ -211,7 +211,7 @@ final class TaskDetailWiringTests: XCTestCase {
         XCTAssertTrue(details.contains("TaskDetailLogic.modelHintNote(task)"), "the coordinator's reason under the card")
         let model = try section(view, from: "private func modelPicker(_ task: TaskItem) -> some View {",
                                 to: "private func listPicker(")
-        XCTAssertTrue(model.contains("assigneeAgent(task)?.modelRouting == true"))
+        XCTAssertFalse(model.contains("modelRouting"), "no per-Agent flag: the account's switch alone decides")
         XCTAssertTrue(model.contains("TaskDetailCopy.smartSelectionPlaceholder : \"Provider default\""))
     }
 
@@ -239,17 +239,13 @@ final class TaskDetailWiringTests: XCTestCase {
         XCTAssertTrue(why.contains("Text(why.title).font(.headline)"), "a Mac sheet draws no navigation title")
     }
 
-    func testTheAgentFormHasTheSwitchAndTheComposerItsMark() throws {
+    func testTheAgentFormHasNoSwitchAndTheComposerItsMark() throws {
         let agents = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/AgentsView.swift")
         let form = try section(agents, from: "struct AgentFormContent: View {", to: "private func prefill()")
-        XCTAssertTrue(form.contains("Section(\"Task runs\") {"))
-        XCTAssertTrue(form.contains("Toggle(isOn: $modelRouting) {"))
-        XCTAssertTrue(form.contains("Text(TaskDetailCopy.smartSelectionSwitch)"))
-        XCTAssertTrue(form.contains("Text(TaskDetailCopy.smartSelectionSwitchDetail)"))
+        XCTAssertFalse(form.contains("Section(\"Task runs\")"), "the account's switch alone decides")
+        XCTAssertFalse(form.contains("modelRouting"))
         let save = try section(agents, from: "private func prefill()", to: "Task { await agents.save(agent.id, req) }")
-        XCTAssertTrue(save.contains("modelRouting = agent.modelRouting ?? false"))
-        XCTAssertTrue(save.contains("|| modelRouting != (agent.modelRouting ?? false)"), "a moved switch is a change")
-        XCTAssertTrue(save.contains("modelRouting: modelRouting != (agent.modelRouting ?? false) ? modelRouting : nil"))
+        XCTAssertFalse(save.contains("modelRouting"), "the form never sends the old per-Agent switch")
 
         let composer = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/ComposerView.swift")
         let menu = try section(composer, from: "private var modelMenu: some View {", to: "private var modelDisplayName")
@@ -297,8 +293,8 @@ final class TaskDetailWiringTests: XCTestCase {
                       "no coordinator's reason")
         let model = try section(view, from: "private func modelPicker(_ task: TaskItem) -> some View {",
                                 to: "private func listPicker(")
-        XCTAssertTrue(model.contains("let unpinned = smartSelection && assigneeAgent(task)?.modelRouting == true"),
-                      "no ✦ Smart selection placeholder")
+        XCTAssertTrue(model.contains("let unpinned = smartSelection\n"),
+                      "no ✦ Smart selection placeholder, and no per-Agent flag behind it")
         let runs = try section(view, from: "private func runEntry(_ session: SessionRef, _ task: TaskItem) -> some View {",
                                to: "private func runTime(")
         XCTAssertFalse(runs.contains("TaskDetailLogic.runRoute(session)"), "every route read goes through the switch")
@@ -309,12 +305,6 @@ final class TaskDetailWiringTests: XCTestCase {
         let route = try section(composer, from: "private var smartRoute: TaskRunRoute? {", to: "private var modelDisplayName")
         XCTAssertTrue(route.contains("smartSelection: app.user?.preferences?.smartModelSelection ?? false)"),
                       "no ✦ chip and no menu header")
-
-        let agents = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/AgentsView.swift")
-        let form = try section(agents, from: "struct AgentFormContent: View {", to: "private func prefill()")
-        let gate = try positions(["if app.user?.preferences?.smartModelSelection ?? false {", "Section(\"Task runs\") {"],
-                                 in: form)
-        XCTAssertEqual(gate, gate.sorted(), "no Task runs group")
     }
 
     func testTheNewBlocksReadAndWriteThroughTheModel() throws {

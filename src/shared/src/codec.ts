@@ -77,6 +77,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'codebaseId',
   // `project_criterion_confirmation.check_task_id` — the task an Agent check of a criterion ran as (0545).
   'checkTaskId',
+  // `owner_request_secret.saved_secret_id` (1400): the saved secret "Use saved" made a grant from, the id the owner's
+  // card already sends in a submit body. An address, not a fence.
+  'savedSecretId',
   'id',
   'ownerId',
   'userId',
@@ -169,6 +172,14 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'coordinatorSessionId',
   // The coordinator conversation that last wrote a project's non-code mark (migration 0535): an address.
   'nonCodeSetBySessionId',
+  // The coordinator conversation that last wrote a project's landing check with no card (migration 1310): an address.
+  'landingCheckSetBySessionId',
+  // The coordinator conversation that exempted a task from its project's landing check (migration 1350): an address.
+  'landingCheckExemptBySessionId',
+  // The coordinator conversation that wrote a recorded landing-check change (migration 1390): an address.
+  'writtenBySessionId',
+  // The change an owner's revert put back (migration 1390): the id the history lists it under.
+  'revertsChangeId',
   'workspaceId',
   // The workspaces a personal access token is confined to (migration 0383): addresses its owner
   // picks when issuing it and reads back in the token list — never a fence.
@@ -187,6 +198,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'runnerId',
   'assignedRunnerId',
   'targetRunnerId',
+  // A BROWSER_SIGN_IN owner request's Orbit Cloud runner (migration 1393): the card's Open browser
+  // opens /runners/:id/browser with it, so it is an address the client hands back.
+  'browserRunnerId',
   'taskId',
   // A concrete repair task's exception item (migration 0379), an address the task/open-item
   // readers hand back to the task or project routes.
@@ -493,6 +507,12 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // response bodies, so they follow the same rule (see the `@IsPublicId({ each: true })` DTOs).
   'tagIds',
   'taskIds',
+  // `task.changed`'s `creatorSessionIds` and `rowProjectIds`, and `schedule_cards.changed`'s `cardSessionIds`
+  // (control-plane stream): the sessions that created the changed tasks and the projects they are in, and the sessions
+  // whose schedule cards moved.
+  'creatorSessionIds',
+  'rowProjectIds',
+  'cardSessionIds',
   // `owner_request.blocks_task_ids` (0503): the tasks an owner request blocks — task addresses like `taskIds`.
   'blocksTaskIds',
   'dependsOnTaskIds',

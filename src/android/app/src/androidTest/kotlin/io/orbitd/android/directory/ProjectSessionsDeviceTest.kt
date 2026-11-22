@@ -80,7 +80,7 @@ class ProjectSessionsDeviceTest {
                 capture("01-list-project-row")
                 compose.onNode(hasRowMenu("Options for Launch")).openRowMenu()
                 await { exists(hasText("Open Session") and hasAnyAncestor(isDialog())) }
-                assertEquals(listOf("Open Session", "Sessions", "Open Project", "Pin", "Move…", "Close"), dialogButtons())
+                assertEquals(listOf("Open Session", "Sessions", "Open Project", "Pause", "Pin", "Move…", "Close"), dialogButtons())
                 capture("02-project-row-menu")
                 compose.onNode(hasText("Close") and hasAnyAncestor(isDialog())).performClick(); settle()
 

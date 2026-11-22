@@ -1,6 +1,10 @@
 import { readSessionCoordinatorHandoffs } from '../projects/coordinator-handoff';
-import type { HelpAskMarker, SubagentRunView } from '@orbit/shared';
+import type { BackgroundJobStopResponse, BackgroundJobTailResponse, HelpAskMarker, SubagentRunView, WorkflowRunView } from '@orbit/shared';
+import { BG_JOB_STOPPED_BY_OWNER, BG_JOB_TAIL_MAX_BYTES, BG_OUTPUT_TAIL_V1, BG_OWNER_STOP_V1 } from '@orbit/shared';
+import { RunnerHints } from '../realtime/runner-hints';
+import { boundTailLines } from './background-job-tail';
 import { modelLabels, subagentRunView } from '../runner-api/subagent-run';
+import { WORKFLOW_RUN_VIEW_SELECT, workflowRunView } from '../runner-api/workflow-run';
 import { checkedWorkSubdir } from './work-subdir';
 import { visibleQuestions, questionsWithCoordinator } from './run-question';
 import { isRunNotifyTurn, runNotifyContent } from './run-notify';
@@ -12,6 +16,7 @@ import {
 import {
   BadRequestException,
   ConflictException,
+  GatewayTimeoutException,
   ForbiddenException,
   HttpException,
   HttpStatus,
@@ -22,6 +27,7 @@ import {
   Optional,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import {
   type ConversationTurn,
   Prisma,
@@ -36,6 +42,12 @@ import { checkOnlyCommandRules, checkOnlyRuleRefusal, runAccessLevel, SCHEDULE_C
 import { settleUnrunWakeTurns } from '../runner-api/wake-turn-withdraw';
 import { linkNotFound } from '../share-links/share-link';
 import { freshRunningBgJobs } from './background-job-activity';
+import {
+  bgJobsStalled,
+  movingBgJobs,
+  SESSION_EXECUTING_EXCEPT_BG_JOB_WHERE,
+  SESSION_RUNNING_BG_JOB_WHERE,
+} from '../common/session-working';
 import { readSessionActivities, sessionActivitySql } from './task-work-carrier';
 import { CLEARED_RUNNING_WORK, KEEP_BACKGROUND_WORK_END_CONTENT } from './running-work';
 import { resolveLegacyArtifactPath, runEventPayloadMentions } from './legacy-artifact-path';
@@ -50,7 +62,9 @@ import {
   STEER_WITHDRAW_POLL_MS,
   STEER_WITHDRAW_WAIT_MS,
 } from './steer-withdraw';
-import { readSessionProjectMembership, sessionInProjectSql, sessionProjectMembershipSql } from './session-project-membership';
+import {
+  projectsMembershipCandidatesSql, readSessionProjectMembership, sessionInProjectSql, sessionProjectMembershipSql,
+} from './session-project-membership';
 import {
   externalSenderColumns,
   externalSenderOf,
@@ -68,6 +82,7 @@ import {
   isSessionReplyTurn,
   queuedRepliesContent,
   readOpenRequestPeers,
+  type OpenRequestPeers,
   settleUnrunSessionRequests,
 } from './session-request';
 import { readTurnCards, type TurnCards } from './turn-cards';
@@ -158,8 +173,7 @@ import { GithubConnectionService } from '../github/github-connection.service';
 import { githubRepoUrl } from '../github/github-workspace.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PREPARED_STATEMENT } from '../prisma/prisma-client';
-import { RUNNER_DISK_BELOW_FLOOR, sessionDiskHoldSql } from '../common/runner-disk-gate';
-import { workspaceCloneHoldSql, workspaceCloneReasonSql } from '../common/workspace-clone-gate';
+import { diskBelowFloor } from '../common/runner-disk-gate';
 import {
   reprojectAfterSettledChecks,
   settleChecksOfEndedRun,
@@ -178,7 +192,6 @@ import {
   type TaskRunEffectFence,
 } from '../tasks/task-run-receipt';
 import { readTaskRouteSummaries } from '../tasks/task-route-decision';
-import { TASK_OCCUPYING } from '../tasks/reclaim-stalled-task';
 import {
   accountDefaultPermissionMode,
   DEFAULT_PERMISSION_MODE,
@@ -203,6 +216,7 @@ import {
   treeCeiling,
 } from '../common/session-tree-sql';
 import { queuedRunnerUpdateOf } from '../common/runner-self-update';
+import { queuedReasonSql } from './queued-reason-sql';
 import { QueueService } from '../queue/queue.service';
 import { mergeDispatchGate } from '../projects/task-checkpoint.service';
 import {
@@ -226,7 +240,7 @@ import { readWikiChatContext, sameWikiChatContext, wikiContextOutsideChat } from
 import { branchName } from '../projects/project-criterion-landing';
 import { settleDeliveredIdentityAfterFinish } from '../projects/project-integration-job';
 import { INTEGRATION_ITEM_KINDS, openItemOwed, openItemVisible } from '../projects/project-open-item';
-import { readSourceLanding } from '../projects/landing-session';
+import { landingContainerStatus, readSourceLanding } from '../projects/landing-session';
 import { readLandingIntegrationLog, type IntegrationLogSelectors } from '../projects/project-integration-log';
 import {
   MATCHED_BY_CONTENT,
@@ -301,6 +315,17 @@ import {
   UNSETTLED_SESSION_STATUSES,
   statusAfterTurnEnqueued,
 } from '../common/session-scheduling';
+import {
+  HELD_SESSION_STATUSES,
+  heldFilter,
+  isHeld,
+  isHeldPastClaim,
+  isReleased,
+  releaseFinishedTheWork,
+  RELEASE_WORK_SELECT,
+  releaseWasFailure,
+  releaseWasFailureFilter,
+} from '../common/session-release';
 import { GENERATING_SESSION_FILTER, isSessionGenerating } from '../common/session-generating';
 import {
   countLiveApprovals,
@@ -339,7 +364,6 @@ import {
   pendingWorktreeOperationMayBeExecuting,
   mergeFencesTurn,
   retireSessionInboxGeneration,
-  worktreeOperationFenceSql,
 } from '../common/session-inbox-fence';
 import {
   TaskCompletionPolicyValue,
@@ -362,7 +386,7 @@ import {
 } from './engine-signin-preflight';
 import {
   managedRunnerFailedRefusal, managedRunnerStartingNote, mergePendingNext, nextTurnStartingRefusal,
-  resumeBlockedRefusal, sessionRecoveryBody, sessionRefusal,
+  resumeBlockedRefusal, sessionRecoveryBody, sessionRefusal, spawnDiskBelowFloorRefusal, spawnRunnerOfflineRefusal,
 } from './session-recovery';
 import { claudeRegionCreateRefusal, isClaudeRegionError, regionCredentialOf } from '../runners/runner-region';
 import { assertManagedFirstSessionRuntime, managedFirstSessionKey } from '../managed-runners/managed-runner-supply';
@@ -412,8 +436,8 @@ import {
 } from './current-work-delivery';
 import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
 import { returnQueuedTurns } from '../projects/project-open-item';
-import { OpenListDeltaStore } from './open-list-delta';
-import { openListEtag, readOpenListVersion } from './open-list-version';
+import { type OpenListBase, OpenListDeltaStore } from './open-list-delta';
+import { type OpenListVersionParts, openListEtag, readOpenListVersion, readOpenListVersionParts } from './open-list-version';
 import {
   SESSION_KIND_CONVERSATION,
   SESSION_KIND_LANDING,
@@ -440,7 +464,6 @@ import {
   RUNNER_BEATS,
   runnerIsOnline,
   runnerLastBeatSql,
-  runnerOfflineSql,
   withRunnerLastBeat,
 } from '../runners/runner-presence';
 
@@ -465,6 +488,117 @@ const MAX_ARM_AHEAD_MS = 8 * 24 * 60 * 60 * 1000;
 
 /** How long a finished Open-list build answers the reads of its version (`sharedOpenList`). */
 const OPEN_LIST_BUILD_KEEP_MS = 5_000;
+
+/** What `listOverlay` reads a row's overlay from: the row's own columns, as the row query or the probe reads them. */
+type ListOverlayInput = {
+  id: string;
+  status: RunStatus;
+  engineTurnActive: boolean | null;
+  taskId: string | null;
+  runningBgShells: string[];
+  runningSubagentCount: number;
+};
+
+/** One project's answer in `SessionsService.projectPlacement`. */
+export type ProjectPlacement = {
+  projectId: string;
+  coordinator: Awaited<ReturnType<SessionsService['listRowsByIds']>>[number] | null;
+  waiting: Awaited<ReturnType<SessionsService['listRowsByIds']>>[number][];
+  sessionCount: number;
+};
+
+/** The part of a list row `listOverlay` reads, keyed in the order the row carries them. */
+type ListOverlay = {
+  questionWithCoordinator: { count: number; since: string; dueAt: string } | null;
+  pendingApprovals: number;
+  waitingKind: ReturnType<typeof sessionWaitingKind>;
+  confirmationUnderReview: (Awaited<ReturnType<typeof readConfirmationsUnderReview>> extends Map<string, infer V> ? V : never) | null;
+  ownerItems: ReturnType<typeof ownerItemsForRow>;
+  awaitingReplyFrom: OpenRequestPeers['awaitingReplyFrom'];
+  owesReplyTo: OpenRequestPeers['owesReplyTo'];
+};
+
+/**
+ * The version sources (`open_list_epoch`, open-list-version.ts) whose writes a `since=` read finds row
+ * by row instead of building the whole list (`SessionsService.openListProbe`):
+ *
+ * - read by the row query, and each covered by the probe's mark of the rows that read it: `session`
+ *   (the row's own columns; a queued row, whose gate counts other sessions, is rebuilt on every read),
+ *   `conversation_turn` (the turn in flight, on a PENDING or RUNNING row), `task` (the title and the
+ *   project of the task, context task and root's tasks a row names), `project` and `coordinator_wake`
+ *   (the project a row's membership resolves to, and its title and status), `workspace` (the name,
+ *   model and effort a row shows; its clone and disk columns gate only a queued row) and `watch`
+ *   (whether a row waits on one);
+ * - not read by the row query of a conversation at all, only by `listOverlay`, which such a read
+ *   reads for every row and compares row by row.
+ *
+ * Every other source — a session's tags and scheduled wake-ups, and any source added after this list
+ * — sends the read to a whole build, which is what every read did before.
+ */
+const OPEN_LIST_ROW_SOURCES: ReadonlySet<string> = new Set([
+  'session', 'conversation_turn', 'task', 'project', 'coordinator_wake', 'workspace', 'watch',
+]);
+const OPEN_LIST_OVERLAY_SOURCES: ReadonlySet<string> = new Set([
+  'approval', 'session_request', 'owner_decision',
+  'confirmation_request', 'confirmation_claim', 'confirmation_review', 'confirmation_review_record',
+  'completion_evidence', 'evidence_decision', 'criteria_decision', 'criteria_authorship',
+  'ratified_intent', 'ratified_commit', 'standard_set_confirmation', 'criterion_definition', 'task_status_count',
+  // A LANDING row's summary reads these, and so does every coordinator conversation in the flat list:
+  // project_open_item (OPEN owner items), promotion and integration_job (an item's owed state), codebase
+  // (a merge approval's main branch) and merge_receipt (a LANDING_UNOBSERVED item, via taskLandingSql).
+  // None of them leaves the hint token (docs/list-freshness-scope-hints.md §5.4, D1 withdrawn).
+  'promotion', 'integration_job', 'project_open_item', 'merge_receipt', 'codebase',
+]);
+
+/** Whether every source that moved between two reads of the counters is one a `since=` read finds row by row. */
+export function openListMovesAreRowLocal(before: Record<string, string>, after: Record<string, string>): boolean {
+  for (const source of new Set([...Object.keys(before), ...Object.keys(after)])) {
+    if (before[source] === after[source]) continue;
+    if (!OPEN_LIST_ROW_SOURCES.has(source) && !OPEN_LIST_OVERLAY_SOURCES.has(source)) return false;
+  }
+  return true;
+}
+
+/** One row of the probe: the overlay's inputs, its mark, and whether it is rebuilt whatever the mark says. */
+type OpenListProbeRow = ListOverlayInput & { token: string; always: boolean; coordinator: boolean };
+
+/**
+ * The sources whose writes can move a row's overlay only through that row itself (whose token then
+ * moves too) — every other source a `since=` read accepts sends it to read the overlay of every row.
+ */
+const OPEN_LIST_ROW_ONLY_SOURCES: ReadonlySet<string> = new Set(['session', 'conversation_turn', 'workspace', 'watch']);
+
+/** The overlay of a row nothing is waiting on, which a row keeps while nothing it reads moves. */
+let emptyOverlayHash: string | undefined;
+function emptyOverlayMark(): string {
+  emptyOverlayHash ??= shortHash({
+    questionWithCoordinator: null,
+    pendingApprovals: 0,
+    waitingKind: sessionWaitingKind(0, undefined),
+    confirmationUnderReview: null,
+    ownerItems: ownerItemsForRow(undefined),
+    awaitingReplyFrom: [],
+    owesReplyTo: [],
+  } satisfies ListOverlay);
+  return emptyOverlayHash;
+}
+
+/** The overlay fields of a built row, as `listOverlay` answers them for the row. */
+function overlayOf(row: ListOverlay): ListOverlay {
+  return {
+    questionWithCoordinator: row.questionWithCoordinator,
+    pendingApprovals: row.pendingApprovals,
+    waitingKind: row.waitingKind,
+    confirmationUnderReview: row.confirmationUnderReview,
+    ownerItems: row.ownerItems,
+    awaitingReplyFrom: row.awaitingReplyFrom,
+    owesReplyTo: row.owesReplyTo,
+  };
+}
+
+function shortHash(value: unknown): string {
+  return createHash('sha256').update(JSON.stringify(value)).digest('base64url').slice(0, 22);
+}
 
 // A lease this close to expiry is not a usable CURRENT_WORK target: capability resolution and the
 // insert still have to commit before the runner can poll. The final check uses PostgreSQL's clock.
@@ -1012,6 +1146,19 @@ export class SessionsService {
      * workspace is refused as GitHub not being connected.
      */
     @Optional() private readonly githubConnections?: GithubConnectionService,
+    /**
+     * Finds the completion doors (projects/completion-input-router.service.ts) when a finish has to
+     * re-derive project facts (§12.15 P-M1). Resolved lazily, and the router imported at the call: a
+     * value import here closes a file cycle through the judgment service that leaves `SessionsService`
+     * undefined at its decoration. Absent in the specs that build this service by hand.
+     */
+    @Optional() private readonly moduleRef?: ModuleRef,
+    /**
+     * The runner link's NATS connection (realtime/runner-hints.ts), which asks a session's runner for the newest lines
+     * of a bg_run job (readBackgroundJobTail). Absent in the specs that build this service by hand, where that read
+     * answers RUNNER_LINK_UNAVAILABLE.
+     */
+    @Optional() private readonly runnerHints?: RunnerHints,
   ) {
     this.files = files ?? new FilesService(prisma);
   }
@@ -2817,6 +2964,25 @@ export class SessionsService {
     if (targetRunnerId && targetManaged.managed && !targetManaged.comingBack) {
       throw managedRunnerFailedRefusal(targetRunnerId, { type: 'WORKSPACE', id: workspaceId! }, targetManaged);
     }
+    // The same for a runner that is offline (a managed one coming up is waited for, above) or below its Keep Free
+    // (runner-disk-gate.ts): the claim would hold the child, and the agent that asked would wait on it with nothing to
+    // say why. Refused, with the reason. A workspace not named is the parent's own.
+    const spawnWorkspaceId = workspaceId ?? parent.workspaceId;
+    const spawnTarget = await this.prisma.workspace.findFirst({
+      where: { id: spawnWorkspaceId, ownerId },
+      select: {
+        workDirFreeBytes: true,
+        runner: { select: { id: true, name: true, displayName: true, status: true, minFreeDiskMb: true, ...RUNNER_BEATS } },
+      },
+    });
+    if (spawnTarget?.runner) {
+      if (!targetManaged.managed && !runnerIsOnline(spawnTarget.runner)) {
+        throw spawnRunnerOfflineRefusal(spawnTarget.runner, spawnWorkspaceId);
+      }
+      if (diskBelowFloor(spawnTarget.workDirFreeBytes, spawnTarget.runner.minFreeDiskMb)) {
+        throw spawnDiskBelowFloorRefusal(spawnTarget.runner, spawnWorkspaceId);
+      }
+    }
     const narrowedTo = await this.assertChildModeOrNarrow(ownerId, parent, dto, workspaceId, parentAnchor);
     // A root joins its own tree the first time it spawns; before that it belongs to no tree
     // and must not be counted against one. Nothing else writes this column on the parent, so
@@ -2991,6 +3157,18 @@ export class SessionsService {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Refuse, with create()'s own refusal, a start that create() would refuse: for a door that has to know
+   * before it does something it cannot take back (a coordinator handoff completes the outgoing coordinator
+   * before its successor is created).
+   */
+  async assertStartResolves(
+    ownerId: string,
+    target: { engine?: string | null; provider?: string | null; model?: string | null; workspaceId?: string | null },
+  ): Promise<void> {
+    await this.startResolution(ownerId, target);
   }
 
   /**
@@ -3827,12 +4005,15 @@ export class SessionsService {
    * (queued + dispatched); `running` is deliberately narrower and matches the Session list's blue
    * spinner: a dispatched turn, a self-driven engine turn, or a parked parent with a sub-agent
    * still working. Keeping both prevents queued-only workspaces from falsely looking as though the
-   * model is already running. `jobs` is neither: sessions with a background job in flight AND still
-   * producing output (`runningBgJobs` narrowed by `runningBgJobActivity`) — a `bg_run` that has gone
-   * quiet is a process, not work in progress, and the rail should not draw it as the latter. The
-   * rail draws this as its own quieter mark: real work the workspace can be doing with nobody
-   * generating in it, and the one thing `running` deliberately does not cover.
-   * `needsYou` is returned separately, and a session it counts is in neither `running` nor `jobs`:
+   * model is already running. `jobs` and `stalledJobs` are neither: sessions with a background job
+   * in flight, which is executing however quiet the job is (common/session-working.ts), split by the
+   * one flag beside it — `stalledJobs` when every job has produced nothing for a while
+   * (`bgJobsStalled`), `jobs` otherwise. The rail draws `jobs` as its own quieter mark: real work the
+   * workspace can be doing with nobody generating in it, and the one thing `running` deliberately
+   * does not cover; a stalled job is still counted, as `stalledJobs`, so a surface can say "no output
+   * for a while" rather than either hiding the work or vouching for a job that may be hung.
+   * `needsYou` is returned separately, and a session it counts is in none of `running`, `jobs` or
+   * `stalledJobs`:
    * the Session list draws that row with the waiting glyph, not the spinner or the breathing
    * terminal, and the expanded sidebar shows its activity dot beside the count — where a turn
    * blocked on you would otherwise light the dot for work that is not moving.
@@ -3860,16 +4041,8 @@ export class SessionsService {
       // Rows rather than a `groupBy`, so a session that needs you can be taken back out by id.
       // These are the sessions in flight right now — a handful even for a busy account.
       this.prisma.session.findMany({
-        where: {
-          ...open,
-          OR: [
-            { status: RunStatus.RUNNING },
-            {
-              status: RunStatus.AWAITING_INPUT,
-              OR: [{ engineTurnActive: true }, { runningSubagents: { isEmpty: false } }],
-            },
-          ],
-        },
+        // Executing, background jobs aside (they are the third tally): common/session-working.ts.
+        where: { ...open, ...SESSION_EXECUTING_EXCEPT_BG_JOB_WHERE },
         select: { id: true, workspaceId: true },
       }),
       // The third tally, and the only one that is neither "the model is generating" nor "somebody
@@ -3878,14 +4051,14 @@ export class SessionsService {
       // quieter mark than the working dot, because it answers the question the rail was silent
       // about: a workspace can be doing real work with nobody generating in it.
       //
-      // A job only counts while it is still MOVING (freshRunningBgJobs): a `bg_run` whose process is
-      // up but has produced nothing for BG_JOB_ACTIVITY_STALE_AFTER_MS is a hang, and a marker that
-      // breathes for a hang is a marker that means nothing. That verdict is a fact about `now`, so
-      // it can't be a WHERE clause and it isn't a stored answer — hence rows, not a groupBy. The
-      // candidate set is the sessions with any job in flight at all, which is a handful even for a
-      // busy account, and the rule applied here is the same one the session payload counts with.
+      // Every job counts as executing; whether its session's jobs have all gone quiet
+      // (bgJobsStalled) only decides which of `jobs` and `stalledJobs` it lands in. That verdict is a
+      // fact about `now`, so it can't be a WHERE clause and it isn't a stored answer — hence rows,
+      // not a groupBy. The candidate set is the sessions with any job in flight at all, which is a
+      // handful even for a busy account, and the rule applied here is the same one the session
+      // payload and the task carrier read.
       this.prisma.session.findMany({
-        where: { ...open, runningBgJobs: { isEmpty: false } },
+        where: { ...open, ...SESSION_RUNNING_BG_JOB_WHERE },
         select: { id: true, workspaceId: true, runningBgJobs: true, runningBgJobActivity: true },
       }),
       // Only the blocked rows come back (a handful at most), so this stays a lookup, not a scan
@@ -3937,12 +4110,12 @@ export class SessionsService {
           });
     const counts = new Map<
       string,
-      { workspaceId: string; active: number; running: number; jobs: number; needsYou: number }
+      { workspaceId: string; active: number; running: number; jobs: number; stalledJobs: number; needsYou: number }
     >();
     const row = (workspaceId: string) => {
       const existing = counts.get(workspaceId);
       if (existing) return existing;
-      const fresh = { workspaceId, active: 0, running: 0, jobs: 0, needsYou: 0 };
+      const fresh = { workspaceId, active: 0, running: 0, jobs: 0, stalledJobs: 0, needsYou: 0 };
       counts.set(workspaceId, fresh);
       return fresh;
     };
@@ -4002,14 +4175,16 @@ export class SessionsService {
       if (!session.workspaceId || needsYou.has(session.id)) continue;
       row(session.workspaceId).running += 1;
     }
-    // One session is one row of this tally however many jobs it has in flight, as it has always
-    // been. What changed with the freshness rule is that a session whose jobs have ALL gone quiet
-    // is not one of them: the rail should stop showing work where nothing is moving. `undefined`
-    // for a job nobody has reported progress on is not quiet — see BgJobActivity.
+    // One session is one row of these tallies however many jobs it has in flight, as it has always
+    // been. A session whose jobs have ALL gone quiet is still executing and is counted, as
+    // `stalledJobs`, so the rail's breathing mark stops where nothing is moving without the work
+    // disappearing. `undefined` for a job nobody has reported progress on is not quiet — see
+    // BgJobActivity.
+    const nowMs = Date.now();
     for (const session of jobs) {
       if (!session.workspaceId || needsYou.has(session.id)) continue;
-      if (freshRunningBgJobs(session.runningBgJobs, session.runningBgJobActivity).length === 0) continue;
-      row(session.workspaceId).jobs += 1;
+      if (bgJobsStalled(session, nowMs)) row(session.workspaceId).stalledJobs += 1;
+      else row(session.workspaceId).jobs += 1;
     }
     return [...counts.values()];
   }
@@ -4049,7 +4224,8 @@ export class SessionsService {
     return structuredClone((await entry.rows) as T);
   }
 
-  async list(
+  /** The query `list` reads for these filters: the view it resolved to, and the row query's parts. */
+  private listShape(
     ownerId: string,
     filters: {
       runnerId?: string;
@@ -4066,9 +4242,6 @@ export class SessionsService {
       /** A workspace's Scheduled runs folder: its scheduled runs' sessions alone, which every other read leaves out. */
       scheduled?: boolean;
     },
-    /** The Open list's data version the caller read for this list (`openListVersion`). Given, a flat
-     *  Open read is shared with every other read of the same version and filters (`sharedOpenList`). */
-    version?: string,
   ) {
     // Open = neither completed nor deleted; Completed = completed but not deleted;
     // Trash = deleted, regardless of completion state. Legacy view names remain aliases.
@@ -4134,7 +4307,7 @@ export class SessionsService {
     // Completed orders by when the session was completed
     // (completed_at, newest first) — not by last activity — and deliberately ignores
     // pinning, which is an Open-list affordance. Every other view floats pinned
-    // sessions to the top and orders by `listed_at` (migration 1260, session-listed-at.ts): the
+    // sessions to the top and orders by `listed_at` (migration 1434, session-listed-at.ts): the
     // clock that moves only when the session changes for its owner, not with every event.
     // The clients sort on the same key, read as created_at where an older server left it NULL.
     // With `limit` that is not cosmetic: a differently ordered page would cut exactly
@@ -4144,7 +4317,7 @@ export class SessionsService {
         ? Prisma.sql`COALESCE(s.completed_at, s.archived_at) DESC NULLS LAST, s.created_at DESC`
         : Prisma.sql`(s.pinned_at IS NOT NULL) DESC, COALESCE(s.listed_at, s.created_at) DESC, s.created_at DESC`;
     // An Ask (migration 0850) is in no session list: it is listed under /help → Your questions (help/help-ask.ts).
-    const build = () => this.listRows(ownerId, {
+    return { view, query: {
       scope: Prisma.sql`AND s.help_ask IS NULL ${runnerFilter} ${workspaceFilter} ${confinedFilter} ${tagFilter} ${projectFilter}`,
       // A scheduled task's run is listed only in its workspace's Scheduled runs folder (`scheduled`), never among
       // a workspace's own sessions (docs/scheduled-tasks-design.md §7.4): every other view, folder and project read,
@@ -4152,19 +4325,87 @@ export class SessionsService {
       visibility: view === 'system'
         ? visibility
         : filters.scheduled
-          ? Prisma.sql`(${visibility}) AND s.run_source = 'SCHEDULE'`
+          // Not a try that ended before its first turn reached the engine (board scheduled-run-not-started, owner's
+          // C1): it did nothing to read, and the run it tried for is reached from the schedule's history and from
+          // the card on the session that started it. A try still waiting for a slot is listed.
+          ? Prisma.sql`(${visibility}) AND s.run_source = 'SCHEDULE'
+              AND NOT (
+                s.finished_at IS NOT NULL
+                AND s.num_turns = 0
+                AND NOT EXISTS (
+                  SELECT 1 FROM conversation_turn ct
+                   WHERE ct.session_id = s.id
+                     -- openingTurnKey(s.id): the run's first turn.
+                     AND ct.client_turn_id = 'initial-' || s.id::text
+                     AND ct.delivered_at IS NOT NULL
+                )
+              )`
           : Prisma.sql`(${visibility}) AND s.run_source <> 'SCHEDULE'`,
       orderBy,
       pageLimit,
-    });
-    if (version === undefined || view !== 'open' || filters.projectId !== undefined || filters.scheduled) return build();
+    } };
+  }
+
+  async list(
+    ownerId: string,
+    filters: {
+      runnerId?: string;
+      workspaceId?: string;
+      tagId?: string;
+      projectId?: string;
+      /** Return the project's LANDING sessions too (contract §2.9 LS6). Only the `projectId`
+       *  read honours it; every flat list stays conversations. */
+      includeLanding?: boolean;
+      /** The workspaces a token confined to them may see (`workspaceConfinement`). */
+      confinedTo?: readonly string[];
+      view?: 'open' | 'completed' | 'trash' | 'active' | 'archived' | 'deleted' | 'system';
+      limit?: number;
+      /** A workspace's Scheduled runs folder: its scheduled runs' sessions alone, which every other read leaves out. */
+      scheduled?: boolean;
+    },
+    /** The Open list's data version the caller read for this list (`openListVersion`). Given, a flat
+     *  Open read is shared with every other read of the same version and filters (`sharedOpenList`). */
+    version?: string,
+  ) {
+    const { view, query } = this.listShape(ownerId, filters);
+    if (version === undefined || view !== 'open' || filters.projectId !== undefined || filters.scheduled) {
+      return this.listRows(ownerId, query);
+    }
+    const limit = typeof filters.limit === 'number' && Number.isFinite(filters.limit) && filters.limit > 0
+      ? Math.floor(filters.limit)
+      : null;
+    return (await this.sharedOpenBuild(ownerId, filters, version, limit, query)).rows;
+  }
+
+  /**
+   * One build of the flat Open list at `version`, shared by every read of it (`sharedOpenList`), the
+   * plain read's and a `since=` read's alike. A whole list (no `limit`, which is what every `since=`
+   * read asks for) is probed first (`openListProbe`), so the snapshot a `since=` read keeps of it can
+   * carry each row's mark; the probe is read before the rows, so a mark can only lag its row.
+   */
+  private sharedOpenBuild(
+    ownerId: string,
+    filters: { runnerId?: string; workspaceId?: string; tagId?: string; confinedTo?: readonly string[] },
+    version: string,
+    limit: number | null,
+    query: { scope: Prisma.Sql; visibility: Prisma.Sql; orderBy: Prisma.Sql; pageLimit: Prisma.Sql },
+  ) {
     return this.sharedOpenList(JSON.stringify([
       ownerId, version, filters.runnerId ?? null, filters.workspaceId ?? null, filters.tagId ?? null,
-      filters.confinedTo ?? null,
-      typeof filters.limit === 'number' && Number.isFinite(filters.limit) && filters.limit > 0
-        ? Math.floor(filters.limit)
-        : null,
-    ]), build);
+      filters.confinedTo ?? null, limit,
+    ]), async () => {
+      const probe = limit === null ? (await this.openListProbe(ownerId, query)).rows : undefined;
+      const rows = await this.listRows(ownerId, query);
+      const marks = new Map<string, string>();
+      if (probe) {
+        const tokens = new Map(probe.map((row) => [row.id, row.token]));
+        for (const row of rows) {
+          const token = tokens.get(row.id);
+          if (token !== undefined) marks.set(row.id, `${token}/${shortHash(overlayOf(row))}`);
+        }
+      }
+      return { rows, marks };
+    });
   }
 
   /**
@@ -4200,9 +4441,11 @@ export class SessionsService {
     // it equals the ETag the plain read sends for them. A project read reads no version and is built
     // every time, as its plain read is: its rows are a few, and the LANDING rows of the
     // landing-aware one are not sources of the version.
-    const dataVersion = filters.projectId === undefined ? await this.openListVersion(ownerId) : undefined;
-    const version = dataVersion !== undefined
-      ? openListEtag(dataVersion, {
+    const parts = filters.projectId === undefined
+      ? await readOpenListVersionParts(this.prisma, ownerId, Date.now())
+      : undefined;
+    const version = parts !== undefined
+      ? openListEtag(parts.version, {
           runnerId: filters.runnerId,
           workspaceId: filters.workspaceId,
           tagId: filters.tagId,
@@ -4214,17 +4457,41 @@ export class SessionsService {
     if (since && version !== undefined && this.openListDelta.unchanged(ownerId, scope, since, version)) {
       return { full: false as const, upserts: [], removedIds: [], cursor: since };
     }
-    const rows = await this.list(ownerId, { ...filters, view: 'open' }, dataVersion);
     // A runner's heartbeat restamps every row it hosts every 30 seconds; with a few runners that
     // alone would resend most of the list on most polls. The clients that read this delta draw
     // nothing from the raw timestamp — what it decides (the queue gate, capabilities) are fields of
     // their own and still count — so it is left out of what counts as a change, and a row sent
     // here may carry an older heartbeat than the plain list would.
-    const delta = this.openListDelta.answer(
-      ownerId, scope, rows, since,
-      (row) => row.assignedRunner ? { ...row, assignedRunner: { ...row.assignedRunner, lastHeartbeatAt: null } } : row,
-      version,
-    );
+    const fingerprint = (row: Awaited<ReturnType<SessionsService['listRows']>>[number]) =>
+      row.assignedRunner ? { ...row, assignedRunner: { ...row.assignedRunner, lastHeartbeatAt: null } } : row;
+    let delta;
+    if (parts === undefined) {
+      // A project read: built every time, as its plain read is.
+      const rows = await this.list(ownerId, { ...filters, view: 'open' });
+      delta = this.openListDelta.answer(ownerId, scope, rows, since, fingerprint);
+    } else {
+      const { query } = this.listShape(ownerId, { ...filters, view: 'open' });
+      const base = since ? this.openListDelta.base(ownerId, scope, since) : undefined;
+      // The cursor's snapshot stands, but the account moved: when everything that moved is a source
+      // found row by row, and nothing the probe cannot see moved, only the rows whose mark moved are
+      // built (`openListFromBase`). Shared like a whole build, by every device on this cursor.
+      if (base?.marks && base.marks.steady === parts.steady && openListMovesAreRowLocal(base.marks.epochs, parts.epochs)) {
+        delta = await this.sharedOpenList(
+          JSON.stringify(['since', ownerId, version, scope, since]),
+          () => this.openListFromBase(ownerId, scope, since!, base, query, parts, version, fingerprint),
+        );
+      } else {
+        // A whole build, marked so that the next read can build only what moves: the same build
+        // every read of this list at this version shares, the plain one's included.
+        const built = await this.sharedOpenBuild(ownerId, filters, parts.version, null, query);
+        // No overlay inputs: a shared build cannot say which deadlines its overlay was read after,
+        // so the first read from its cursor reads every row's overlay again.
+        delta = this.openListDelta.answer(
+          ownerId, scope, built.rows, since, fingerprint, version,
+          { epochs: parts.epochs, steady: parts.steady, overlayInputs: '', rows: built.marks },
+        );
+      }
+    }
     if (delta.full) return delta;
     // Rows have their `id` rewritten to the public spelling on the way out; bare id lists are not
     // walked by that pass, so they are spelled here to match.
@@ -4233,6 +4500,225 @@ export class SessionsService {
       removedIds: delta.removedIds.map(uuidToBase62),
       ...(delta.order ? { order: delta.order.map(uuidToBase62) } : {}),
     };
+  }
+
+  /**
+   * A `since=` read answered against its cursor's snapshot by building only the rows that moved.
+   *
+   * The probe reads every row of the list, but only what a row's mark is made of (its own row
+   * version and the few values it reads from other tables), and `listOverlay` reads each row's
+   * waiting cards and decisions by session id. A row is built when its mark differs from the one
+   * the snapshot holds, when it is new to the list, or when it is queued (a queued row's gate counts
+   * other sessions and runners, which no mark of its own can see). Every other row keeps the hash the
+   * snapshot holds: nothing it reads has moved since that snapshot's marks were read, and those were
+   * read before its rows were built, so they can only lag the rows, never cover a write they miss.
+   * With nothing moved in this list, nothing is built and the answer is an empty delta.
+   */
+  private async openListFromBase(
+    ownerId: string,
+    scope: string,
+    since: string,
+    base: OpenListBase,
+    query: { scope: Prisma.Sql; visibility: Prisma.Sql; orderBy: Prisma.Sql; pageLimit: Prisma.Sql },
+    parts: OpenListVersionParts,
+    version: string | undefined,
+    fingerprint: (row: Awaited<ReturnType<SessionsService['listRows']>>[number]) => unknown,
+  ) {
+    const { rows: probe, questions } = await this.openListProbe(ownerId, query);
+    const held = base.marks!;
+    const tokenOf = (mark: string | undefined) => mark?.slice(0, mark.indexOf('/'));
+    const overlayPartOf = (mark: string | undefined) => mark?.slice(mark.indexOf('/') + 1);
+    const moved = new Set(probe
+      .filter((row) => row.always || !base.hashes.has(row.id) || tokenOf(held.rows.get(row.id)) !== row.token)
+      .map((row) => row.id));
+    // A row's overlay is read again when something it reads may have moved: every row's, when any
+    // source but a row's own moved, a deadline passed, or a question held with a coordinator moved
+    // (`questions`: what decides whether it is held reads that coordinator's row and turn); otherwise
+    // only the rows that moved, the rows something was already waiting on, and the coordinators',
+    // whose decisions come from project tables. A row nothing waited on gains a card or a decision
+    // only through a write of one of those sources, or of its own row.
+    const overlayInputs = shortHash([parts.deadlinesPassed, questions]);
+    const everyOverlay = held.overlayInputs !== overlayInputs || Object.keys({ ...held.epochs, ...parts.epochs })
+      .some((source) => held.epochs[source] !== parts.epochs[source] && !OPEN_LIST_ROW_ONLY_SOURCES.has(source));
+    const empty = emptyOverlayMark();
+    const reread = everyOverlay
+      ? probe
+      : probe.filter((row) => moved.has(row.id) || row.coordinator || overlayPartOf(held.rows.get(row.id)) !== empty);
+    const overlay = reread.length === 0 ? new Map<string, ListOverlay>() : await this.listOverlay(ownerId, reread);
+    const marks = new Map(probe.map((row) => [
+      row.id,
+      `${row.token}/${overlay.has(row.id) ? shortHash(overlay.get(row.id)) : overlayPartOf(held.rows.get(row.id))}`,
+    ]));
+    for (const row of probe) {
+      if (!moved.has(row.id) && held.rows.get(row.id) !== marks.get(row.id)) moved.add(row.id);
+    }
+    const rebuilt = moved.size === 0 ? [] : await this.listRows(ownerId, {
+      ...query,
+      scope: Prisma.sql`${query.scope} AND s.id = ANY(${[...moved]}::uuid[])`,
+      pageLimit: Prisma.empty,
+    }, overlay);
+    // A row that moved and left the list between the probe and its build is gone: it is not listed.
+    const built = new Set(rebuilt.map((row) => row.id));
+    const left = new Set([...moved].filter((id) => !built.has(id)));
+    const order = probe.map((row) => row.id).filter((id) => !left.has(id));
+    return this.openListDelta.answerFrom(
+      ownerId, scope, since, base, order, rebuilt, fingerprint, version,
+      { epochs: parts.epochs, steady: parts.steady, overlayInputs, rows: marks },
+    );
+  }
+
+  /**
+   * Every row of a list, read for what a `since=` read decides from without building it: the inputs
+   * of `listOverlay`, and a token that moves whenever anything the row query reads for the row moves
+   * (see OPEN_LIST_ROW_SOURCES). The token is the row's own version (ctid and xmin, which every write
+   * of the row moves, a raw one included), the values it reads from its task, its context task and
+   * its root, the turn in flight, the SubAgent title and how many of its jobs are fresh; and, from
+   * a few reads over the account, the project each of its membership candidates names (title and
+   * status), its workspace's name, model and effort, and whether it waits on a watch, is shared or
+   * has a guest. A row whose token names something those reads did not return — or that is queued,
+   * or whose root is a landing — is built on every read (`always`).
+   */
+  private async openListProbe(
+    ownerId: string,
+    query: { scope: Prisma.Sql; visibility: Prisma.Sql; orderBy: Prisma.Sql },
+  ): Promise<{ rows: OpenListProbeRow[]; questions: string }> {
+    const o = Prisma.sql`${ownerId}::uuid`;
+    type Probed = ListOverlayInput & {
+      own: string;
+      workspaceId: string | null;
+      runningBgJobs: string[];
+      runningBgJobActivity: Prisma.JsonValue;
+      taskTitle: string | null;
+      taskProjectId: string | null;
+      contextProjectId: string | null;
+      rootId: string | null;
+      rootKind: string | null;
+      rootTaskProjectId: string | null;
+      rootContextProjectId: string | null;
+      turnAt: Date | null;
+      subagentTitle: string | null;
+    };
+    const rows = await this.prisma.$queryRaw<Probed[]>(Prisma.sql`${Prisma.raw(PREPARED_STATEMENT)}
+      SELECT
+        s.id, s.status,
+        s.engine_turn_active AS "engineTurnActive",
+        s.task_id AS "taskId",
+        s.running_bg_shells AS "runningBgShells",
+        cardinality(s.running_subagents)::int AS "runningSubagentCount",
+        s.running_bg_jobs AS "runningBgJobs",
+        s.running_bg_job_activity AS "runningBgJobActivity",
+        s.workspace_id AS "workspaceId",
+        s.ctid::text || ':' || s.xmin::text AS own,
+        t.title AS "taskTitle",
+        t.project_id AS "taskProjectId",
+        ctx.project_id AS "contextProjectId",
+        root.id AS "rootId",
+        root.kind::text AS "rootKind",
+        rt.project_id AS "rootTaskProjectId",
+        rctx.project_id AS "rootContextProjectId",
+        CASE WHEN s.status IN ('RUNNING', 'PENDING') THEN (
+          SELECT max(ct.delivered_at) FROM conversation_turn ct
+           WHERE ct.session_id = s.id AND ct.answered_at IS NULL
+        ) END AS "turnAt",
+        CASE WHEN cardinality(s.running_subagents) > 0 THEN (
+          SELECT NULLIF(btrim(tc.input->>'description'), '')
+            FROM tool_call tc
+           WHERE tc.session_id = s.id
+             AND tc.tool_use_id = s.running_subagents[cardinality(s.running_subagents)]
+           ORDER BY tc.started_at DESC NULLS LAST
+           LIMIT 1
+        ) END AS "subagentTitle"
+      FROM session s
+      LEFT JOIN task t ON t.id = s.task_id
+      LEFT JOIN task ctx ON ctx.id = s.context_task_id
+      LEFT JOIN session root ON root.id = s.root_session_id AND root.id <> s.id
+      LEFT JOIN task rt ON rt.id = root.task_id
+      LEFT JOIN task rctx ON rctx.id = root.context_task_id
+      WHERE s.owner_id = ${o}
+        ${query.scope}
+        AND (${query.visibility})
+      ORDER BY ${query.orderBy}
+    `);
+    const [account] = await this.prisma.$queryRaw<Array<{
+      projects: Array<[string, string, string, string | null]> | null;
+      wakes: Array<[string, string]> | null;
+      workspaces: Array<[string, string, string | null, string | null]> | null;
+      watching: string[] | null;
+      shared: string[] | null;
+      guests: string[] | null;
+      questions: unknown;
+    }>>(Prisma.sql`${Prisma.raw(PREPARED_STATEMENT)}
+      SELECT
+        (SELECT json_agg(json_build_array(p.id, p.title, p.status, p.coordinator_session_id))
+           FROM project p WHERE p.owner_id = ${o}) AS projects,
+        (SELECT json_agg(json_build_array(w.session_id, w.project_id))
+           FROM project_coordinator_wake w JOIN project p ON p.id = w.project_id
+          WHERE p.owner_id = ${o} AND w.status = 'SESSION_OPENED' AND w.session_id IS NOT NULL) AS wakes,
+        (SELECT json_agg(json_build_array(a.id, a.name, a.model, a.effort))
+           FROM workspace a WHERE a.owner_id = ${o}) AS workspaces,
+        (SELECT json_agg(DISTINCT x.observer_session_id)
+           FROM watch x
+          WHERE x.owner_id = ${o} AND x.state = 'ACTIVE' AND x.action = 'RESUME_SESSION'
+            AND x.observer_session_id IS NOT NULL) AS watching,
+        (SELECT json_agg(DISTINCT sl.session_id)
+           FROM share_link sl
+          WHERE sl.owner_id = ${o} AND sl.session_id IS NOT NULL AND sl.revoked_at IS NULL
+            AND (sl.expires_at IS NULL OR sl.expires_at > now())) AS shared,
+        (SELECT json_agg(DISTINCT sg.session_id)
+           FROM session_guest sg WHERE sg.owner_id = ${o} AND sg.removed_at IS NULL) AS guests,
+        -- What decides whether a pending question is held with its coordinator (questionHolds): the
+        -- request, the recipient's row and the turn it was delivered in. Only an OPEN request can be
+        -- held; one leaving OPEN is a session_request write, after which every overlay is read again.
+        -- (Every index of session_request is partial on OPEN, which keeps this a scan of the few open.)
+        (SELECT json_agg(json_build_array(r.id, r.reply_by, a.status, c.ctid::text || ':' || c.xmin::text,
+                                          ct.status, ct.delivered_at) ORDER BY r.id)
+           FROM session_request r
+           LEFT JOIN approval a ON a.id = r.approval_id
+           LEFT JOIN session c ON c.id = r.to_session_id
+           LEFT JOIN conversation_turn ct ON ct.id = r.turn_id
+          WHERE r.state = 'OPEN' AND r.kind = 'RUN_QUESTION' AND r.owner_id = ${o}) AS questions
+    `);
+    const projects = new Map((account.projects ?? []).map(([id, title, status]) => [id, [title, status]]));
+    const coordinatorOf = new Map((account.projects ?? []).flatMap(([id, , , session]) => session ? [[session, id] as const] : []));
+    const wakeOf = new Map((account.wakes ?? []).map(([session, project]) => [session, project]));
+    const workspaces = new Map((account.workspaces ?? []).map(([id, name, model, effort]) => [id, [name, model, effort]]));
+    const watching = new Set(account.watching ?? []);
+    const shared = new Set(account.shared ?? []);
+    const guests = new Set(account.guests ?? []);
+    const nowMs = Date.now();
+    return { questions: shortHash(account.questions ?? null), rows: rows.map((row) => {
+      let unknown = false;
+      const project = (id: string | null | undefined) => {
+        if (id == null) return null;
+        const found = projects.get(id);
+        if (!found) unknown = true;
+        return [id, found];
+      };
+      const workspace = row.workspaceId == null ? null : workspaces.get(row.workspaceId);
+      if (row.workspaceId != null && !workspace) unknown = true;
+      const token = shortHash([
+        row.own, row.taskTitle, row.turnAt, row.subagentTitle,
+        freshRunningBgJobs(row.runningBgJobs, row.runningBgJobActivity, nowMs).length,
+        workspace,
+        // Every project a membership candidate of the row or its root can name.
+        project(row.taskProjectId), project(row.contextProjectId),
+        project(coordinatorOf.get(row.id)), project(wakeOf.get(row.id)),
+        row.rootId, project(row.rootTaskProjectId), project(row.rootContextProjectId),
+        project(row.rootId ? coordinatorOf.get(row.rootId) : null), project(row.rootId ? wakeOf.get(row.rootId) : null),
+        watching.has(row.id), shared.has(row.id), guests.has(row.id),
+      ]);
+      return {
+        id: row.id,
+        status: row.status,
+        engineTurnActive: row.engineTurnActive,
+        taskId: row.taskId,
+        runningBgShells: row.runningBgShells,
+        runningSubagentCount: row.runningSubagentCount,
+        token,
+        always: unknown || row.status === 'PENDING' || row.rootKind === 'LANDING',
+        coordinator: coordinatorOf.has(row.id),
+      };
+    }) };
   }
 
   /**
@@ -4254,6 +4740,87 @@ export class SessionsService {
   }
 
   /**
+   * Where each of these projects' rows goes in a workspace list, read for all of them at once
+   * (`GET /sessions/project-placement`): each project's coordinator, Open or Completed, which decides
+   * whether the project is a row in that workspace or its members are rows of their own (owner
+   * 2026-11-07); the project's sessions in `view` that are waiting on the owner, in any workspace,
+   * which the row's line names; and how many sessions in `view` the project has, its coordinator
+   * counted, for the row's tooltip.
+   *
+   * The workspace list used to ask `GET /sessions?projectId=` for each project it showed, and again in
+   * Completed for a coordinator the Open read did not find: some sixty reads for thirty projects on
+   * every page load (2026-11-21). This is a fixed number of statements however many projects it names:
+   * the projects, their members' overlay inputs, the overlay, and the rows of the coordinators and the
+   * waiting members alone. A project's whole member list is still the per-project read's.
+   *
+   * Only `ownerId`'s projects are answered; an id that names none is left out of the answer.
+   */
+  async projectPlacement(
+    ownerId: string,
+    opts: { projectIds: readonly string[]; view: 'open' | 'completed'; confinedTo?: readonly string[] },
+  ): Promise<ProjectPlacement[]> {
+    const requested = [...new Set(opts.projectIds)];
+    if (requested.length === 0) return [];
+    const projects = await this.prisma.$queryRaw<Array<{ id: string; coordinatorSessionId: string | null }>>(Prisma.sql`
+      SELECT p.id, p.coordinator_session_id AS "coordinatorSessionId"
+        FROM project p
+       WHERE p.owner_id = ${ownerId}::uuid AND p.id = ANY(${requested}::uuid[])
+    `);
+    if (projects.length === 0) return [];
+    const ids = projects.map((project) => project.id);
+    // The view's own rules, as the per-project read applies them: its lifecycle, conversations only, no
+    // Ask, no scheduled run, and a confined token's workspaces.
+    const { query } = this.listShape(ownerId, { view: opts.view, confinedTo: opts.confinedTo });
+    const members = await this.prisma.$queryRaw<Array<ListOverlayInput & { projectId: string }>>(Prisma.sql`
+      SELECT s.id, s.status,
+             s.engine_turn_active AS "engineTurnActive",
+             s.task_id AS "taskId",
+             s.running_bg_shells AS "runningBgShells",
+             cardinality(s.running_subagents)::int AS "runningSubagentCount",
+             m.membership ->> 'projectId' AS "projectId"
+        FROM session s
+        CROSS JOIN LATERAL (SELECT ${sessionProjectMembershipSql('s')} AS membership) m
+       WHERE s.owner_id = ${ownerId}::uuid
+         ${query.scope}
+         AND (${query.visibility})
+         AND s.id = ANY(ARRAY(${projectsMembershipCandidatesSql(ids)}))
+         AND (m.membership ->> 'projectId')::uuid = ANY(${ids}::uuid[])
+    `);
+    const overlay = members.length === 0 ? new Map<string, ListOverlay>() : await this.listOverlay(ownerId, members);
+    const waiting = members.filter((member) => (overlay.get(member.id)?.pendingApprovals ?? 0) > 0);
+    const coordinatorIds = projects.flatMap((project) => project.coordinatorSessionId ? [project.coordinatorSessionId] : []);
+    const confined = opts.confinedTo
+      ? Prisma.sql`AND s.workspace_id = ANY(${[...opts.confinedTo]}::uuid[])`
+      : Prisma.empty;
+    const shown = [...new Set([...coordinatorIds, ...waiting.map((member) => member.id)])];
+    // A coordinator in either lifecycle, never one in Trash: what the per-project Open and Completed reads
+    // found between them.
+    const rows = shown.length === 0 ? [] : await this.listRows(ownerId, {
+      scope: Prisma.sql`AND s.help_ask IS NULL ${confined} AND s.id = ANY(${shown}::uuid[])`,
+      visibility: Prisma.sql`s.deleted_at IS NULL AND s.kind = 'CONVERSATION'`,
+      orderBy: Prisma.sql`s.id`,
+      pageLimit: Prisma.empty,
+    }, overlay);
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const byProject = new Map(projects.map((project) => [project.id, project]));
+    return requested.flatMap((projectId) => {
+      const project = byProject.get(projectId);
+      if (!project) return [];
+      const found = project.coordinatorSessionId ? byId.get(project.coordinatorSessionId) : undefined;
+      // The coordinator as its own rows say it: one that coordinates another project first is that one's.
+      const coordinator = found?.projectMembership?.role === 'COORDINATOR'
+        && found.projectMembership.projectId === projectId ? found : null;
+      const own = members.filter((member) => member.projectId === projectId);
+      return [{
+        projectId,
+        coordinator,
+        waiting: waiting.flatMap((member) => member.projectId === projectId && byId.has(member.id) ? [byId.get(member.id)!] : []),
+        sessionCount: new Set([...own.map((member) => member.id), ...(coordinator ? [coordinator.id] : [])]).size,
+      }];
+    });
+  }
+
+  /**
    * The row query and its mapping, shared by `list` and `listRowsByIds`.
    *
    * Every table read here, or by a reader called from here, must also be a source of
@@ -4268,6 +4835,8 @@ export class SessionsService {
       orderBy: Prisma.Sql;
       pageLimit: Prisma.Sql;
     },
+    /** These rows' `listOverlay`, when the caller already read it. */
+    overlay?: ReadonlyMap<string, ListOverlay>,
   ) {
     // Raw query so the (potentially multi-KB) last-reply preview is truncated in SQL —
     // only ~200 chars per row ever leave the DB. It also omits big unused columns like
@@ -4351,6 +4920,8 @@ export class SessionsService {
       projectMembership: SessionProjectMembership | null;
       /** The subject summary of a LANDING row; null on every conversation. */
       landing: SessionLandingSummary | null;
+      /** The release column, read by the capabilities and not sent on the row. */
+      finishedAt: Date | null;
       cancelRequestedAt: Date | null;
       runtimeSessionId: string | null;
       retryAt: Date | null;
@@ -4376,7 +4947,7 @@ export class SessionsService {
         s.kind            AS "sessionKind",
         s.created_at      AS "createdAt",
         s.last_turn_at    AS "lastTurnAt",
-        -- The list's order key (migration 1260): moved only when the session changes for its owner. NULL only on a row
+        -- The list's order key (migration 1434): moved only when the session changes for its owner. NULL only on a row
         -- an older server inserted mid-deploy, which is read as its creation.
         COALESCE(s.listed_at, s.created_at) AS "listedAt",
         -- When the turn now in flight was handed to the runner. last_turn_at cannot answer this:
@@ -4398,6 +4969,7 @@ export class SessionsService {
         s.cost_usd        AS "costUsd",
         s.error,
         s.end_reason      AS "endReason",
+        s.finished_at     AS "finishedAt",
         s.cancel_requested_at AS "cancelRequestedAt",
         s.runtime_session_id AS "runtimeSessionId",
         -- When the auto-retry will re-send the message that a self-healing failure killed, or
@@ -4472,11 +5044,11 @@ export class SessionsService {
         -- sessions/abandoned-approvals.ts), which a cardinality cannot answer. A client that wants
         -- the processes asks the count.
         s.running_bg_shells AS "runningBgShells",
-        -- The subset of the above that is work in flight (a job/watch, never a service), minus the
-        -- ones that have gone quiet: what the clients draw as the pulsing terminal glyph, and what
-        -- the workspace rail reads as background activity. See Session.runningBgJobs and
-        -- freshRunningBgJobs (background-job-activity.ts) — the count is derived in the mapper,
-        -- from these two columns, because the threshold applies to the read.
+        -- The subset of the above that is work in flight (a job/watch, never a service): executing
+        -- however quiet. The mapper derives from these two columns the ones still moving (what the
+        -- clients draw as the pulsing terminal glyph) and the stalled flag beside them —
+        -- movingBgJobs and bgJobsStalled (common/session-working.ts) — because the threshold
+        -- applies to the read.
         s.running_bg_jobs AS "runningBgJobs",
         s.running_bg_job_activity AS "runningBgJobActivity",
         cardinality(s.running_subagents)::int AS "runningSubagentCount",
@@ -4596,45 +5168,7 @@ export class SessionsService {
       LEFT JOIN LATERAL (
         SELECT reason, active, "limit", held FROM (
           SELECT
-            CASE
-              -- First, because it subsumes every gate below: a runner that is not polling will
-              -- not claim this row whatever the counts say, and "waiting for a slot" on an idle
-              -- machine is the least useful thing the UI could tell someone. Same rule
-              -- deriveSessionCapabilities resumes on, so one runner cannot read online here and
-              -- offline there.
-              WHEN r.id IS NULL OR ${runnerOfflineSql('r')}
-                THEN 'runner_offline'
-              -- A GitHub workspace whose clone is not READY (docs/github-workspace-design.md §6): the claim's own gate,
-              -- named before capacity, because a slot coming free would not start this session.
-              WHEN ${workspaceCloneHoldSql(Prisma.sql`s.workspace_id`)}
-                THEN ${workspaceCloneReasonSql(Prisma.sql`s.workspace_id`)}
-              -- Keep Free (runner-disk-gate.ts): the claim's own gate on a session that has never run. Before capacity,
-              -- because a slot coming free would not start it; it lifts when the runner reports space above its floor.
-              WHEN ${sessionDiskHoldSql('s')}
-                THEN ${RUNNER_DISK_BELOW_FLOOR}::text
-              -- Second, for the offline gate's reason: a runner draining for a self-update claims
-              -- nothing whatever its counts say (runner drainForUpdate), so naming a capacity gate
-              -- here would send the reader to the wrong cause. Ends only when the update does.
-              WHEN r.heartbeat_draining IS TRUE
-                THEN 'runner_updating'
-              -- Turns plus the sessions its background jobs hold a slot for: what the runner itself
-              -- admits against (runnerBackgroundHeldSessions). Turns alone read 10 of 16 on a machine
-              -- whose other 6 slots were held by bg_run jobs, and this row said nothing at all.
-              WHEN ${runnerActiveTurns(Prisma.sql`s.assigned_runner_id`)}
-                   + ${runnerBackgroundHeldSessions(Prisma.sql`s.assigned_runner_id`)} >= r.max_concurrent
-                THEN 'runner_at_capacity'
-              WHEN s.root_session_id IS NOT NULL
-                   AND ${treeActiveTurns('s')} >= ${treeCeiling(Prisma.sql`s.assigned_runner_id`)}
-                THEN 'tree_at_capacity'
-              WHEN s.batch_id IS NOT NULL
-                   AND ${batchActiveTurns('s')} >= s.batch_max_concurrent
-                THEN 'batch_at_capacity'
-              -- Last, so a row that was already explained by capacity keeps that explanation.
-              -- This one holds for seconds while a merge/commit finishes on the checkout, and
-              -- it is the claim's own fence, not a second copy of it.
-              WHEN ${worktreeOperationFenceSql('s')}
-                THEN 'worktree_op_pending'
-            END AS reason,
+            ${queuedReasonSql()} AS reason,
             ${runnerActiveTurns(Prisma.sql`s.assigned_runner_id`)} AS runner_active,
             ${runnerBackgroundHeldSessions(Prisma.sql`s.assigned_runner_id`)} AS runner_held,
             r.max_concurrent AS runner_limit,
@@ -4692,6 +5226,7 @@ export class SessionsService {
         costUsd: r.costUsd,
         error: r.error,
         endReason: r.endReason,
+        finishedAt: r.finishedAt,
         cancelRequestedAt: r.cancelRequestedAt,
         runtimeSessionId: r.runtimeSessionId,
         retryAt: r.retryAt,
@@ -4731,7 +5266,10 @@ export class SessionsService {
         hasGuests: r.hasGuests === true,
         tags: r.tags,
         runningBgCount: r.runningBgCount,
-        runningBgJobCount: freshRunningBgJobs(r.runningBgJobs, r.runningBgJobActivity).length,
+        // The moving jobs, which the glyph breathes for; a session whose jobs have all gone quiet is
+        // still executing (`activity` says BACKGROUND_JOB) and says so with the flag beside it.
+        runningBgJobCount: movingBgJobs(r).length,
+        runningBgJobsStalled: bgJobsStalled(r),
         runningSubagentCount: r.runningSubagentCount,
         runningSubagentTitle: r.runningSubagentTitle,
         engineTurnActive: r.engineTurnActive,
@@ -4773,6 +5311,22 @@ export class SessionsService {
         queuedRunnerUpdate: queuedRunnerUpdateOf(r),
       }),
     );
+    // What each row says about who is waiting on whom (`listOverlay`): given by a caller that already
+    // read it for these rows (`listOpenSince`), read here otherwise.
+    const given = overlay ?? new Map<string, ListOverlay>();
+    const missing = rows.filter((r) => !given.has(r.id));
+    const read = missing.length === 0 ? new Map<string, ListOverlay>() : await this.listOverlay(ownerId, missing);
+    // The release column was read for the capabilities; the row does not carry it.
+    return sessions.map(({ finishedAt: _released, ...s }) => ({ ...s, ...(given.get(s.id) ?? read.get(s.id)!) }));
+  }
+
+  /**
+   * The part of each list row that is not read from the row query: the approval cards and owner
+   * decisions waiting on it, the confirmation under review, and who it waits on for a reply. Every
+   * one of them is read by session id, so `listOpenSince` reads them for a whole list while building
+   * only the rows that moved, and compares them row by row.
+   */
+  private async listOverlay(ownerId: string, inputs: ListOverlayInput[]): Promise<Map<string, ListOverlay>> {
     // A turn blocked on a permission prompt keeps the session generating, so the list can't tell
     // "running" from "waiting for approval" without this count. A conversation can be holding a
     // card in two ways, and it has to be one of them to have one: its turn is live — a generating
@@ -4788,11 +5342,10 @@ export class SessionsService {
     // a shell up — a handful even on a busy account — so this stays a lookup. The turn half counts
     // every PENDING card of a generating session except a job's, which only its live job holds open,
     // and the door re-reads the facts.
-    const generating = new Set(sessions.filter(isSessionGenerating).map((s) => s.id));
-    // Off the raw rows, not the mapped ones: the shell ids are read here and deliberately not
-    // shipped to the client, so they do not survive into the payload above.
+    const generating = new Set(inputs.filter(isSessionGenerating).map((s) => s.id));
+    // The shell ids are read here and deliberately not shipped to the client.
     const shells = new Map(
-      rows.filter((r) => r.runningBgShells.length > 0).map((r) => [r.id, r.runningBgShells]),
+      inputs.filter((r) => r.runningBgShells.length > 0).map((r) => [r.id, r.runningBgShells]),
     );
     const candidates = [...new Set([...generating, ...shells.keys()])];
     const asked = candidates.length === 0
@@ -4804,7 +5357,7 @@ export class SessionsService {
     // The third class: the cards of a SubAgent still running, which its child engine reads whatever the
     // parent's turn is doing (docs/subagent-design.md §5.3). Its candidates are the sessions not generating
     // with a SubAgent in flight (`runningSubagentCount`), a handful at most.
-    const withSubagents = rows.filter((r) => !generating.has(r.id) && r.runningSubagentCount > 0).map((r) => r.id);
+    const withSubagents = inputs.filter((r) => !generating.has(r.id) && r.runningSubagentCount > 0).map((r) => r.id);
     const subagentCards = withSubagents.length === 0
       ? []
       : await liveSubagentCards(this.prisma, { sessionId: { in: withSubagents } });
@@ -4815,7 +5368,7 @@ export class SessionsService {
         .filter((card) => !asked.some((a) => a.id === card.id))
         .map((card) => ({ ...card, backgroundJobId: null })),
     ];
-    const heldQuestions = await questionsWithCoordinator(this.prisma, sessions.filter(s => s.taskId).map(s => s.id));
+    const heldQuestions = await questionsWithCoordinator(this.prisma, inputs.filter(s => s.taskId).map(s => s.id));
     const byId = new Map<string, number>();
     for (const card of await visibleQuestions(this.prisma, cards)) {
       // A job's card is read by its job, not the turn: it counts while the job is up, as the card
@@ -4833,22 +5386,21 @@ export class SessionsService {
     // A row whose only question is an owner confirmation also says which, so it can read "Waiting
     // for your confirmation" rather than "Waiting for approval" (`sessionWaitingKind`).
     const decisions = await readOwnerDecisionsBySession(this.prisma, ownerId, {
-      sessionIds: sessions.map((s) => s.id),
+      sessionIds: inputs.map((s) => s.id),
     });
     // Who is waiting on whose reply (session-request.ts, contract §6): on each row, the sessions it
     // asked and still waits on, and the sessions waiting on it.
-    const requests = await readOpenRequestPeers(this.prisma, ownerId, sessions.map((s) => s.id));
+    const requests = await readOpenRequestPeers(this.prisma, ownerId, inputs.map((s) => s.id));
     // The confirmation still with its reviewer, which the row says instead of counting it
     // (docs/owner-confirmation-review-contract.md §5 N3).
     const underReview = await readConfirmationsUnderReview(this.prisma, ownerId, {
-      sessionIds: sessions.map((s) => s.id),
+      sessionIds: inputs.map((s) => s.id),
     });
-    return sessions.map((s) => {
+    return new Map(inputs.map((s) => {
       const approvals = byId.get(s.id) ?? 0;
       const waiting = decisions.get(s.id);
       const peers = requests.get(s.id);
-      return {
-        ...s,
+      return [s.id, {
         questionWithCoordinator: heldQuestions.get(s.id) ?? null,
         pendingApprovals: approvals + (waiting?.count ?? 0),
         waitingKind: sessionWaitingKind(approvals, waiting),
@@ -4860,8 +5412,8 @@ export class SessionsService {
         ownerItems: ownerItemsForRow(waiting),
         awaitingReplyFrom: peers?.awaitingReplyFrom ?? [],
         owesReplyTo: peers?.owesReplyTo ?? [],
-      };
-    });
+      }];
+    }));
   }
 
   /**
@@ -5028,6 +5580,8 @@ export class SessionsService {
       // OpenAI's own id of the ChatGPT account a login-pool session runs on (migration 0324): no response
       // names an account but by its email and masked form (providers/codex-login.ts).
       poolCodexAccountId: _poolCodexAccountId,
+      // The runner-clock stamp that orders a beat's executing sets against event batches (runner-executing-sets.ts).
+      executingEventAt: _executingEventAt,
       // Read, never spread: answered as one `lastUserFrom`, the shape the list row and the summary carry.
       lastUserFromSessionId,
       lastUserFromTitle,
@@ -5125,10 +5679,13 @@ export class SessionsService {
       // client that only needs to draw the glyph should not have to count them itself. The list
       // endpoint answers with the count and never the ids, so this is the one spelling both read.
       //
-      // Counted, not `runningBgJobs.length`: a job that has produced nothing for longer than the
-      // threshold is still a process (it stays in `runningBgShells`, and in the tray) but is no
-      // longer work in flight, which is the question this number answers.
-      runningBgJobCount: freshRunningBgJobs(session.runningBgJobs, runningBgJobActivity).length,
+      // Counted, not `runningBgJobs.length`: the jobs still moving, which is what the glyph breathes
+      // for. A job that has produced nothing for longer than the threshold is still executing — the
+      // session's `activity` and its task's run say so — and `runningBgJobsStalled` is the flag beside
+      // it when every job has gone quiet (common/session-working.ts, the same rule the task's
+      // `runStalled` and the rail's `stalledJobs` read).
+      runningBgJobCount: movingBgJobs({ runningBgJobs: session.runningBgJobs, runningBgJobActivity }).length,
+      runningBgJobsStalled: bgJobsStalled({ runningBgJobs: session.runningBgJobs, runningBgJobActivity }),
       projectId: coordinatorForProject?.id ?? null,
       projectTitle: coordinatorForProject?.title ?? null,
       projectIntegrationRef: integrationRef ? branchName(integrationRef) : null,
@@ -5158,13 +5715,8 @@ export class SessionsService {
    * while the subject is open, SUCCEEDED / CANCELLED once it settled.
    */
   private static landingOnlyDetail(id: string, landing: SessionLandingView<Date>): any {
-    const settledAs = landing.settledAs;
-    const status = landing.settledAt
-      ? (settledAs === 'LANDED' || settledAs === 'ALREADY_LANDED' || settledAs === 'NOTHING_TO_LAND'
-          || settledAs === 'MERGED'
-          ? RunStatus.SUCCEEDED
-          : RunStatus.CANCELLED)
-      : RunStatus.AWAITING_INPUT;
+    // The status the container's writer would write (projects/landing-session.ts): one rule, not a copy of it.
+    const status = landingContainerStatus(landing);
     return {
       id,
       title: null,
@@ -5226,7 +5778,8 @@ export class SessionsService {
     if (latest && (latest.status === RunStatus.PENDING || latest.status === RunStatus.RUNNING)) {
       return withSessionState(latest);
     }
-    if (latest && latest.status !== RunStatus.FAILED) {
+    // A repair that was not released by a failure (common/session-release.ts).
+    if (latest && !releaseWasFailure(latest)) {
       const continued = await this.continueMergeRepair(ownerId, latest, mergeRecoveryContinuePrompt(recovery, preparePR));
       if (continued) return withSessionState(continued);
     }
@@ -5262,12 +5815,12 @@ export class SessionsService {
   private async continueMergeRepair(ownerId: string, repair: Session, content: string): Promise<Session | null> {
     const message = { clientTurnId: randomUUID(), content, kind: 'message' as const };
     try {
-      if (SessionsService.TERMINAL.includes(repair.status)) {
+      if (isReleased(repair)) {
         await this.resume(ownerId, repair.id, message);
       } else {
         await this.createTurn(ownerId, repair.id, { ...message, intent: 'NEXT_TURN' }, {
           coalesce: async (tx, session) =>
-            session.status === RunStatus.AWAITING_INPUT || session.status === RunStatus.INTERRUPTED
+            isHeld(session) && !UNSETTLED_SESSION_STATUSES.includes(session.status)
               ? null
               : tx.conversationTurn.findFirst({ where: { sessionId: session.id }, orderBy: { seq: 'desc' } }),
         });
@@ -5395,7 +5948,8 @@ export class SessionsService {
           taskId: target.taskId,
           OR: [
             { status: RunStatus.AWAITING_INPUT, cancelRequestedAt: null },
-            { status: RunStatus.FAILED },
+            // Released by a failure (common/session-release.ts).
+            releaseWasFailureFilter(),
           ],
         },
         // Armed for a LATER instant, so any claim the sweep had in flight is over: the session waits
@@ -5892,15 +6446,6 @@ export class SessionsService {
     };
   }
 
-  // A background shell with no terminal signal is still "running" only while the session is live;
-  // once it's settled the shell can't still be running, so it reads as "unknown" (see
-  // classifyShellStatus). Mirrors the web tray's liveness (WorkspaceView `TERMINAL`).
-  private static readonly TERMINAL_STATUSES: RunStatus[] = [
-    RunStatus.SUCCEEDED,
-    RunStatus.FAILED,
-    RunStatus.CANCELLED,
-  ];
-
   /**
    * The authoritative, complete list of background shells the session ever launched — every
    * Bash(run_in_background), and the workspace's own background sub-agents and workflows (an async
@@ -5933,15 +6478,48 @@ export class SessionsService {
     return rows.map((row) => subagentRunView(row, labels));
   }
 
+  /**
+   * A session's Orbit workflows, oldest first (`GET /sessions/:id/workflows`): what its SubAgent runs that are
+   * workflow calls belong to. A running one's counts and spend are its calls' so far (workflowRunView).
+   */
+  async listWorkflowRuns(userId: string, id: string): Promise<WorkflowRunView[]> {
+    const session = await this.prisma.session.findFirst({ where: { id, ownerId: userId }, select: { id: true } });
+    if (!session) throw new NotFoundException('session not found');
+    const rows = await this.prisma.subagentWorkflowRun.findMany({
+      where: { sessionId: id },
+      orderBy: { createdAt: 'asc' },
+      select: WORKFLOW_RUN_VIEW_SELECT,
+    });
+    const running = rows.filter((row) => row.status === 'RUNNING').map((row) => row.id);
+    const calls = running.length === 0 ? [] : await this.prisma.subagentRun.findMany({
+      where: { sessionId: id, workflowRunId: { in: running } },
+      select: { workflowRunId: true, status: true, costUsd: true },
+    });
+    return rows.map((row) => workflowRunView(row, calls.filter((call) => call.workflowRunId === row.id)));
+  }
+
   async getBackgroundShells(userId: string, id: string): Promise<BgShell[]> {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId: userId },
-      select: { id: true, status: true },
+      select: { id: true, finishedAt: true, assignedRunner: { select: { capabilities: true } } },
     });
     if (!session) throw new NotFoundException('session not found');
-    const rows = await this.selectBackgroundEvents(id);
-    const sessionLive = !SessionsService.TERMINAL_STATUSES.includes(session.status);
-    return deriveBackgroundShells(
+    return this.deriveSessionBackground(session);
+  }
+
+  /**
+   * The background list of a session already read, each running `job` marked `stoppable` when the session's runner
+   * carries out the owner's stop (BG_OWNER_STOP_V1), so a client can hide the control where it would be refused.
+   */
+  private async deriveSessionBackground(session: {
+    id: string; finishedAt: Date | null; assignedRunner: { capabilities: string[] } | null;
+  }): Promise<BgShell[]> {
+    const rows = await this.selectBackgroundEvents(session.id);
+    // A background shell with no terminal signal is still "running" only while the session is live;
+    // once it's settled the shell can't still be running, so it reads as "unknown" (see
+    // classifyShellStatus). Mirrors the web tray's liveness (WorkspaceView `TERMINAL`).
+    const sessionLive = isHeld(session);
+    const shells = deriveBackgroundShells(
       rows.map((e) => ({
         seq: e.seq,
         type: e.type,
@@ -5950,6 +6528,138 @@ export class SessionsService {
       })),
       { sessionLive },
     );
+    const runnerStops = session.assignedRunner?.capabilities.includes(BG_OWNER_STOP_V1) === true;
+    for (const shell of shells) {
+      if (shell.kind === 'job') shell.stoppable = runnerStops && shell.status === 'running';
+    }
+    return shells;
+  }
+
+  /**
+   * The owner's stop of one running bg_run job (POST /sessions/:id/background/jobs/:jobId/stop). The stop is kept on
+   * the session (bgJobStopRequests) and every full heartbeat answer to its runner lists it while the job runs
+   * (stopBackgroundJobs, runner-api/background-job-stops.ts); the runner kills the job as bg_kill does, under the
+   * reason BG_JOB_STOPPED_BY_OWNER, and the job's terminal report, its row here and its wake carry that reason.
+   *
+   * 404 for another owner's session and for a job id the session never ran; 409 BACKGROUND_JOB_ENDED for a job that
+   * has ended any other way, and 409 RUNNER_CANNOT_STOP_JOB when the session's runner predates the stop (it would
+   * drop the listing unread). A repeat is idempotent: `stopping` while the job runs, `killed` once it ended stopped.
+   */
+  async stopBackgroundJob(ownerId: string, id: string, jobId: string): Promise<BackgroundJobStopResponse> {
+    const session = await this.prisma.session.findFirst({
+      where: { id, ownerId },
+      select: {
+        id: true, status: true, finishedAt: true, sessionKind: true, assignedRunnerId: true,
+        assignedRunner: { select: { capabilities: true } },
+      },
+    });
+    if (!session) throw new NotFoundException('session not found');
+    // Stopping a job is an engine door (§2.9 LS6): the platform's landing container runs no bg_run job.
+    assertEngineSessionRow(session);
+    const job = (await this.deriveSessionBackground(session)).find((shell) => shell.kind === 'job' && shell.shellId === jobId);
+    if (!job) {
+      throw new NotFoundException({ code: 'BACKGROUND_JOB_NOT_FOUND', message: `This session has no background job ${jobId}.` });
+    }
+    if (job.status !== 'running') {
+      if (job.status === 'killed' && job.reason === BG_JOB_STOPPED_BY_OWNER) return { jobId, status: 'killed' };
+      throw new ConflictException({
+        code: 'BACKGROUND_JOB_ENDED',
+        message: `Background job ${jobId} has already ended (${job.status}); there is nothing to stop.`,
+        jobStatus: job.status,
+      });
+    }
+    if (!job.stoppable || !session.assignedRunnerId) {
+      throw new ConflictException({
+        code: 'RUNNER_CANNOT_STOP_JOB',
+        message: `The runner hosting this session is too old to stop a background job from the app: it does not declare ${BG_OWNER_STOP_V1}. Update the runner, or ask the agent to stop the job with bg_kill.`,
+      });
+    }
+    // Added once, and pruned of jobs that are no longer running, so the list stays as short as what is in flight.
+    await this.prisma.$executeRaw`
+      UPDATE "session"
+         SET "bg_job_stop_requests" = ARRAY(
+               SELECT r FROM unnest("bg_job_stop_requests") AS r WHERE r = ANY("running_bg_jobs") AND r <> ${jobId}
+             ) || ARRAY[${jobId}]::text[]
+       WHERE "id" = ${session.id}::uuid
+    `;
+    this.realtime.notifyRunnerWake(session.assignedRunnerId);
+    return { jobId, status: 'stopping' };
+  }
+
+  /**
+   * The newest lines of one bg_run job's output (GET /sessions/:id/background/jobs/:jobId/tail), read just now by the
+   * runner hosting the session from the job's output file and carried back over the runner link: a NATS request on
+   * the runner's subject that the link gateway relays as a BackgroundJobTailRequest (RunnerHints.backgroundJobTail).
+   * At most `lines` (≤ BG_JOB_TAIL_MAX_LINES) lines and BG_JOB_TAIL_MAX_BYTES, without colour codes (boundTailLines).
+   *
+   * 404 for another owner's session and for a job id the session never ran. Then, before the runner is asked:
+   * 409 RUNNER_CANNOT_READ_JOB_OUTPUT when its runner does not declare BG_OUTPUT_TAIL_V1, 503 RUNNER_OFFLINE when it
+   * is not online, 503 RUNNER_LINK_UNAVAILABLE when this server has no link to ask over. From the asking: 503
+   * RUNNER_OFFLINE when no gateway holds a connection of it, 504 RUNNER_DID_NOT_ANSWER when no answer came in time, and
+   * 404 BACKGROUND_JOB_OUTPUT_GONE when the runner no longer hosts the job (its session ended there): the client then
+   * shows the end of the output the job's wake carried.
+   */
+  async readBackgroundJobTail(ownerId: string, id: string, jobId: string, lines: number): Promise<BackgroundJobTailResponse> {
+    const session = await this.prisma.session.findFirst({
+      where: { id, ownerId },
+      select: {
+        id: true, status: true, finishedAt: true, assignedRunnerId: true,
+        assignedRunner: { select: { capabilities: true, status: true, ...RUNNER_BEATS } },
+      },
+    });
+    if (!session) throw new NotFoundException('session not found');
+    const job = (await this.deriveSessionBackground(session)).find((shell) => shell.kind === 'job' && shell.shellId === jobId);
+    if (!job) {
+      throw new NotFoundException({ code: 'BACKGROUND_JOB_NOT_FOUND', message: `This session has no background job ${jobId}.` });
+    }
+    const gone = () => new NotFoundException({
+      code: 'BACKGROUND_JOB_OUTPUT_GONE',
+      message: `The runner no longer holds the output of background job ${jobId}; the end of it is in the job's wake.`,
+    });
+    const offline = () => new ServiceUnavailableException({
+      code: 'RUNNER_OFFLINE',
+      message: `The runner hosting this session is offline, so the output of background job ${jobId} cannot be read now.`,
+    });
+    const runner = session.assignedRunner;
+    if (!session.assignedRunnerId || !runner) throw gone();
+    if (!runner.capabilities.includes(BG_OUTPUT_TAIL_V1)) {
+      throw new ConflictException({
+        code: 'RUNNER_CANNOT_READ_JOB_OUTPUT',
+        message: `The runner hosting this session is too old to show a background job's output in the app: it does not declare ${BG_OUTPUT_TAIL_V1}. Update the runner; the end of the output arrives with the job's wake.`,
+      });
+    }
+    if (!runnerIsOnline(runner)) throw offline();
+    const answer = await this.runnerHints?.backgroundJobTail(session.assignedRunnerId, session.id, jobId, lines, BG_JOB_TAIL_MAX_BYTES);
+    if (answer === undefined || answer === 'unavailable') {
+      throw new ServiceUnavailableException({
+        code: 'RUNNER_LINK_UNAVAILABLE',
+        message: 'This server cannot reach runners over the runner link right now, so a background job\'s output cannot be read.',
+      });
+    }
+    if (answer === null || answer.outcome === 'TIMEOUT') {
+      throw new GatewayTimeoutException({
+        code: 'RUNNER_DID_NOT_ANSWER',
+        message: `The runner hosting this session did not answer in time with the output of background job ${jobId}.`,
+      });
+    }
+    if (answer.outcome === 'NO_CONNECTION') throw offline();
+    if (answer.outcome === 'UNSUPPORTED') {
+      throw new ConflictException({
+        code: 'RUNNER_CANNOT_READ_JOB_OUTPUT',
+        message: `The runner hosting this session is connected without ${BG_OUTPUT_TAIL_V1}, so it cannot show a background job's output in the app. Update the runner.`,
+      });
+    }
+    if (answer.outcome !== 'OK') throw gone();
+    const bounded = boundTailLines(answer.text, lines);
+    return {
+      jobId,
+      status: answer.status,
+      exitCode: answer.exitCode,
+      lines: bounded.lines,
+      truncated: answer.truncated || bounded.cut,
+      outputBytes: answer.outputBytes,
+      readAt: new Date().toISOString(),
+    };
   }
 
   /**
@@ -6325,12 +7035,12 @@ export class SessionsService {
   async requestDiffRefresh(ownerId: string, id: string): Promise<void> {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
-      select: { id: true, status: true, sessionKind: true },
+      select: { id: true, status: true, finishedAt: true, sessionKind: true },
     });
     if (!session) throw new NotFoundException('session not found');
     // It queues a diff turn for the runner: an engine door like any other (§2.9 LS6).
     assertEngineSessionRow(session);
-    if (!SessionsService.LIVE.includes(session.status)) return;
+    if (!isHeldPastClaim(session)) return;
     const pending = await this.prisma.conversationTurn.findFirst({
       where: { sessionId: id, kind: 'diff', status: 'PENDING' },
       select: { id: true },
@@ -6368,20 +7078,8 @@ export class SessionsService {
   // needs a short prefix of the (potentially multi-KB) denormalized preview text.
   private static readonly PREVIEW_LEN = 200;
 
-  static readonly LIVE: RunStatus[] = [
-    RunStatus.RUNNING,
-    RunStatus.AWAITING_INPUT,
-    RunStatus.INTERRUPTED,
-  ];
-
-  // Not live: resume() revives these (and complete/delete/config treat them as
-  // already-ended). CANCELLED covers both a hard stop and a graceful, still-resumable end
-  // (idle recycle / user end) — `endReason` is what tells those apart for display.
-  static readonly TERMINAL: RunStatus[] = [
-    RunStatus.SUCCEEDED,
-    RunStatus.FAILED,
-    RunStatus.CANCELLED,
-  ];
+  // Held by a runner past its claim (common/session-release.ts).
+  static readonly LIVE: RunStatus[] = HELD_SESSION_STATUSES.filter((status) => status !== RunStatus.PENDING);
 
   private static resumeBlocked(
     reason: SessionResumeBlockedReason,
@@ -6412,15 +7110,15 @@ export class SessionsService {
   }
 
   /** Whether an engine runs for the session now: the test getLive refuses with "the session has ended". */
-  private static engineLive(session: { status: RunStatus; cancelRequestedAt: Date | null }): boolean {
-    return SessionsService.LIVE.includes(session.status) && !session.cancelRequestedAt;
+  private static engineLive(session: { status: RunStatus; finishedAt: Date | null; cancelRequestedAt: Date | null }): boolean {
+    return isHeldPastClaim(session) && !session.cancelRequestedAt;
   }
 
   /** Load an owner's session and assert it's still live (not ended/cancelled). */
   private async getLive(ownerId: string, id: string) {
     const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
     if (!session) throw new NotFoundException('session not found');
-    if (!SessionsService.LIVE.includes(session.status) || session.cancelRequestedAt) {
+    if (!isHeldPastClaim(session) || session.cancelRequestedAt) {
       throw new ConflictException('the session has ended');
     }
     return session;
@@ -6442,7 +7140,7 @@ export class SessionsService {
     if (session.deletedAt) {
       throw SessionNotSendable.trashed(session.id);
     }
-    if (SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) {
+    if (isReleased(session) || session.cancelRequestedAt) {
       throw SessionNotSendable.ended(session.id);
     }
     return session;
@@ -6735,7 +7433,7 @@ export class SessionsService {
       /** Which client sent it (migration 0595), as `senderClientColumns` writes it. */
       senderClient?: string;
       senderClientDetail?: string | null;
-      /** A person sent it (migration 1260): its end, waiting for input, moves the session's `listedAt`. */
+      /** A person sent it (migration 1434): its end, waiting for input, moves the session's `listedAt`. */
       byPerson?: boolean;
       /** A wiki chat's page and selection (migration 0476), which delivery reads. */
       wikiContext?: Prisma.InputJsonValue;
@@ -7032,7 +7730,7 @@ export class SessionsService {
       translated?: { content: string; from: TranslationLanguage };
       /**
        * A person sent this turn — the owner at one of their own doors, a guest, a Feishu sender — so the session moves
-       * to the top of the session list (`session.listed_at`, migration 1260). An option of this call and never a field
+       * to the top of the session list (`session.listed_at`, migration 1434). An option of this call and never a field
        * of `dto`; every platform delivery (wake-ups, notifications, task briefs, re-sends) and every session-to-session
        * door leaves it unset, which is what keeps a session busy with those where its owner left it.
        */
@@ -7163,7 +7861,7 @@ export class SessionsService {
       if (session.deletedAt) {
         throw SessionNotSendable.trashed(session.id);
       }
-      if (SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) {
+      if (isReleased(session) || session.cancelRequestedAt) {
         throw SessionNotSendable.ended(session.id);
       }
       // Settings › Translation: written HELD, routed and woken only once translated (releaseHeldTurn).
@@ -7633,7 +8331,7 @@ export class SessionsService {
         where: { id: turnId, sessionId, status: HELD_TURN_STATUS, translationState: { in: [...from] } },
       });
       if (!turn) return null;
-      if (session.deletedAt || SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) {
+      if (session.deletedAt || isReleased(session) || session.cancelRequestedAt) {
         return { ended: true as const };
       }
       const steerTarget = turn.sendIntent == null && turn.clientTurnId !== SessionsService.initialTurnClientId(sessionId)
@@ -7862,7 +8560,7 @@ export class SessionsService {
       }
       // A committed follow-up is returned above even if the Session later ended or was filed in
       // Trash. Only a new operation is judged against the lifecycle it is trying to mutate.
-      if (!SessionsService.LIVE.includes(session.status) || session.cancelRequestedAt) {
+      if (!isHeldPastClaim(session) || session.cancelRequestedAt) {
         // A plain 409, not SessionNotSendable: the callers that re-home a message on that class
         // never reach the interrupt, and this keeps it that way.
         throw sessionRefusal('SESSION_ENDED', 'the session has ended', {
@@ -8391,7 +9089,7 @@ export class SessionsService {
         FOR UPDATE`;
       if (locked.length === 0) throw new NotFoundException('session not found');
       const session = await tx.session.findUniqueOrThrow({ where: { id } });
-      if (SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) {
+      if (isReleased(session) || session.cancelRequestedAt) {
         throw new ConflictException('the session has ended');
       }
       // A Watch wake is withdrawn like any queued message, and then no runner will take it: its delivery
@@ -8591,7 +9289,7 @@ export class SessionsService {
       if (session.deletedAt) {
         throw SessionNotSendable.trashed(session.id);
       }
-      if (SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) {
+      if (isReleased(session) || session.cancelRequestedAt) {
         throw SessionNotSendable.ended(session.id);
       }
       const turn = await tx.conversationTurn.findFirst({
@@ -9051,8 +9749,8 @@ export class SessionsService {
 
   /** {@link mergeToMain}'s "wait for the current turn to finish": the session is open and not parked
    *  idle, or it is being ended. */
-  private static mergeWaitsForTurn(session: { status: RunStatus; cancelRequestedAt: Date | null }): boolean {
-    return !SessionsService.TERMINAL.includes(session.status) &&
+  private static mergeWaitsForTurn(session: { status: RunStatus; finishedAt: Date | null; cancelRequestedAt: Date | null }): boolean {
+    return !isReleased(session) &&
       (session.status !== RunStatus.AWAITING_INPUT || !!session.cancelRequestedAt);
   }
 
@@ -9064,8 +9762,9 @@ export class SessionsService {
    *
    * - nothing owed → nothing is written;
    * - the turn that ended did not succeed (`turnSucceeded` false: it failed or was stopped), or the
-   *   session ended FAILED or CANCELLED → the request is dropped: the turn that asked did not finish, so
-   *   its work is not merged on its word;
+   *   session was released for anything but its work finishing (a failure, a stop, an engine that exited by
+   *   itself; releaseFinishedTheWork) → the request is dropped: the turn that asked did not finish, so its
+   *   work is not merged on its word;
    * - another turn already running (a queued follow-up started) → nothing is written, and that turn's
    *   end asks again;
    * - a merge already in flight, or the work already in the target → the request is answered by it, and
@@ -9086,7 +9785,7 @@ export class SessionsService {
       const session = await tx.session.findUniqueOrThrow({
         where: { id },
         select: {
-          ownerId: true, status: true, cancelRequestedAt: true, mergeStatus: true,
+          ownerId: true, status: true, ...RELEASE_WORK_SELECT, cancelRequestedAt: true, mergeStatus: true,
           mergeAfterTurnAt: true, mergeAfterTurnTarget: true,
         },
       });
@@ -9096,7 +9795,9 @@ export class SessionsService {
         await tx.session.update({ where: { id }, data });
         wrote = true;
       };
-      if (!turnSucceeded || session.status === RunStatus.FAILED || session.status === RunStatus.CANCELLED) {
+      // Released for anything but its work finishing (decision D5, design §12.3: the end reason and the kind, never the
+      // terminal status): a failure, a stop, or an engine that exited by itself.
+      if (!turnSucceeded || (isReleased(session) && !releaseFinishedTheWork(session))) {
         await clear();
         return 'DROPPED' as const;
       }
@@ -9164,7 +9865,7 @@ export class SessionsService {
       const session = await tx.session.findUniqueOrThrow({
         where: { id },
         select: {
-          ownerId: true, status: true, cancelRequestedAt: true, assignedRunnerId: true, mergeStatus: true,
+          ownerId: true, status: true, finishedAt: true, cancelRequestedAt: true, assignedRunnerId: true, mergeStatus: true,
           commitStatus: true, mergeRecovery: true, mergeRepairTurnEndedAt: true,
         },
       });
@@ -9396,7 +10097,7 @@ export class SessionsService {
         discard ? 'session has no worktree checkout to discard' : 'session has no worktree to commit',
       );
     }
-    const ended = !SessionsService.LIVE.includes(session.status);
+    const ended = !isHeldPastClaim(session);
     if (discard && !ended) {
       throw new ConflictException(
         'the session is still running — end it before discarding its checkout',
@@ -9474,7 +10175,7 @@ export class SessionsService {
       const current = await this.prisma.session.findFirst({ where: { id, ownerId } });
       const stillCommittable =
         current != null &&
-        (SessionsService.LIVE.includes(current.status)
+        (isHeldPastClaim(current)
           ? current.status === RunStatus.AWAITING_INPUT &&
             !current.cancelRequestedAt &&
             current.runningSubagents.length === 0
@@ -9578,6 +10279,25 @@ export class SessionsService {
   }
 
   /**
+   * Close the red merge failure strip (the ✕ on it): clear a settled 'conflict' or 'error' so the bar
+   * goes back to Merge, or to "✓ In main" when the branch landed another way. Nothing in git changes —
+   * the failed merge already left both tips where they were. One statement predicated on the failure
+   * still being there and no merge recovery open, so a merge queued or settled since, or a recovery
+   * (which has its own panel), is never the one cleared. Closing it again is a no-op.
+   */
+  async dismissMergeFailure(ownerId: string, id: string) {
+    const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
+    if (!session) throw new NotFoundException('session not found');
+    assertEngineSessionRow(session);
+    const { count } = await this.prisma.session.updateMany({
+      where: { id, ownerId, mergeStatus: { in: ['conflict', 'error'] }, mergeRecovery: { equals: Prisma.AnyNull } },
+      data: { mergeStatus: null, mergeError: null, mergeOperationId: null, mergeOperationOwner: null },
+    });
+    if (count > 0) this.realtime.publishSessionUpdated(id);
+    return { ok: true, dismissed: count > 0 };
+  }
+
+  /**
    * Stop a session and settle it to CANCELLED — unlike {@link end}, which reaches the same
    * status under 'ended' and so still reads as dormant/resumable. A PENDING session is
    * finalized in place (while any prior warm runtime is cancelled); other open states receive
@@ -9596,7 +10316,7 @@ export class SessionsService {
   ): Promise<boolean> {
     const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
     if (!session) throw new NotFoundException('session not found');
-    if (SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) return false;
+    if (isReleased(session) || session.cancelRequestedAt) return false;
     return this.endOpen(ownerId, id, reason);
   }
 
@@ -9637,7 +10357,23 @@ export class SessionsService {
       loggedRetry(this.logger, 'sessions.transitionEnd'),
     );
     await reprojectAfterSettledChecks(this.prisma, ended.checksSettled, this.logger);
+    if (ended.settledProjectId) await this.routeSettledFacts(ended.settledProjectId);
     return ended;
+  }
+
+  /**
+   * §12.15 P-M1: re-derive a project's facts after a finish that decided a DONE task's landing. The router
+   * is found by `ModuleRef` and imported at the call (see the constructor); a context without one has
+   * nothing to deliver, and the next delivery derives the same facts.
+   */
+  async routeSettledFacts(projectId: string): Promise<void> {
+    if (!this.moduleRef) return;
+    try {
+      const { CompletionInputRouter } = await import('../projects/completion-input-router.service.js');
+      await this.moduleRef.get(CompletionInputRouter, { strict: false }).routeSettledWork([projectId]);
+    } catch (e) {
+      this.logger.warn(`project facts after a settled finish not re-derived: ${e instanceof Error ? e.message : e}`);
+    }
   }
 
   /**
@@ -9664,6 +10400,8 @@ export class SessionsService {
     projectBound: boolean;
     /** The Agent checks this end settled, for their projects' DONE after the commit. */
     checksSettled?: SettledCriterionCheck[];
+    /** The project of a DONE task whose route this end decided (§12.15 P-M1); its facts are re-derived after the commit. */
+    settledProjectId?: string;
   }> {
     const locked = await tx.$queryRaw<Array<{ id: string }>>`
       SELECT id FROM "session"
@@ -9708,6 +10446,9 @@ export class SessionsService {
       /** @deprecated Rolling-version compatibility mirror. */
       archivedAt?: Date;
       deletedAt?: Date;
+      /** A completed or trashed session is out of the auto-retry sweep for good: its arm could never fire. */
+      retryAt?: null;
+      retryClaimedAt?: null;
     } = {};
     let finalCompletedAt = session.completedAt ?? session.archivedAt;
     let finalDeletedAt = session.deletedAt;
@@ -9715,10 +10456,14 @@ export class SessionsService {
       lifecycleData.completedAt = now;
       // Keep old replicas and clients coherent during the compatibility window.
       lifecycleData.archivedAt = now;
+      lifecycleData.retryAt = null;
+      lifecycleData.retryClaimedAt = null;
       finalCompletedAt = now;
     }
     if (lifecycle === 'deletedAt' && session.deletedAt == null) {
       lifecycleData.deletedAt = now;
+      lifecycleData.retryAt = null;
+      lifecycleData.retryClaimedAt = null;
       finalDeletedAt = now;
     }
     const lifecycleState = deriveSessionLifecycleState({
@@ -9729,7 +10474,7 @@ export class SessionsService {
       completedAt: finalCompletedAt,
       deletedAt: finalDeletedAt,
     });
-    if (SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) {
+    if (isReleased(session) || session.cancelRequestedAt) {
       if (Object.keys(lifecycleData).length > 0 || requireNoProjectBinding) {
         await tx.session.update({
           where: { id: sessionId },
@@ -9768,6 +10513,7 @@ export class SessionsService {
     // finalize after it) closes them RECIPIENT_ENDED, which wins over UNDELIVERED (session-request.ts).
     await settleUnrunSessionRequests(tx, sessionId, { code: 'SESSION_ENDED', closesRequests: false, retryArmed: false });
     // An Agent check this run was, ended before its verdict (projects/criterion-check-ended.ts).
+    let settledProjectId: string | undefined;
     const checksSettled = await settleChecksOfEndedRun(
       tx,
       { sessionId, taskId: session.taskId },
@@ -9792,7 +10538,11 @@ export class SessionsService {
       });
       // A session that ends before it ran is still a finish of the task's work, and may be the one
       // a DONE task's identity was waiting for (§10.5 O-L4 3).
-      await settleDeliveredIdentityAfterFinish(tx, session);
+      const settlement = await settleDeliveredIdentityAfterFinish(tx, session);
+      if (settlement === 'FROZEN' || settlement === 'IDENTITY_UNKNOWN') {
+        settledProjectId = (await tx.task.findUnique({ where: { id: session.taskId! }, select: { projectId: true } }))
+          ?.projectId ?? undefined;
+      }
       await retireSessionInboxGeneration(tx, sessionId);
       // A wakeup filed onto a `bg-wake:` turn still queued goes with the drain below, unrun: dropped with
       // the session it was to wake, and taken out of its loop's runs (runner-api/wake-turn-withdraw.ts).
@@ -9837,6 +10587,7 @@ export class SessionsService {
       endReason: reason,
       projectBound: false,
       checksSettled,
+      settledProjectId,
     };
   }
 
@@ -10339,8 +11090,9 @@ export class SessionsService {
    * Nothing here stops a run that nobody asked to stop, and nothing here moves a running session
    * onto another provider.
    *
-   * `session_task_execution_claim_idx` makes "one live Session per task" a property of the database,
-   * and a revive writes a LIVE status — so a task whose run has already been re-dispatched (Run Now,
+   * The execution claim index (`session_task_execution_claim_idx_finished_at`, migration 1426, beside
+   * 0130's `session_task_execution_claim_idx` until release B) makes "one live Session per task" a
+   * property of the database, and a revive writes a LIVE status — so a task whose run has already been re-dispatched (Run Now,
    * a sweep, the auto-run the task list reconciles) refuses the revive at that index. The refusal is
    * correct; what used to happen with it was not. The raw `P2002` reached the API as a 500 with a
    * PostgreSQL sentence in it, in front of somebody who pressed "Retry now" on a failed run of a
@@ -10351,9 +11103,9 @@ export class SessionsService {
    * Nothing of the revive was written (the flip is the last thing the transaction does), so this
    * read is of the world the refusal is about.
    *
-   * The predicate is the index's own (`TASK_OCCUPYING` is its four statuses, character for
-   * character) rather than "the newest" or "the live one": a reader narrower than the index it
-   * explains answers "nothing holds the claim" for rows that do.
+   * The predicate is the index's own (`task_id`, not in the Trash, `finished_at IS NULL`) rather than
+   * "the newest" or "the live one": a reader narrower than the index it explains answers "nothing
+   * holds the claim" for rows that do.
    */
   private async routeOntoTheHeldClaim(
     ownerId: string,
@@ -10368,7 +11120,7 @@ export class SessionsService {
       // cannot be in the index — and it is what keeps the sentence from naming the caller's own
       // session if that ever stops being true.
       const holder = await this.prisma.session.findFirst({
-        where: { taskId, deletedAt: null, status: { in: TASK_OCCUPYING }, NOT: { id } },
+        where: { taskId, deletedAt: null, ...heldFilter(), NOT: { id } },
         select: {
           id: true,
           status: true,
@@ -10584,7 +11336,7 @@ export class SessionsService {
     //     what the run is for, and it is judged;
     //   a terminal revival — judged categorically, whoever asks: nothing on the row separates a
     //     person reviving it from the auto-retry sweep doing so.
-    const continuesSalvage = SessionsService.LIVE.includes(session.status)
+    const continuesSalvage = isHeldPastClaim(session)
       && !session.startsTaskWork
       && !opts?.startsTaskWork;
     if (session.taskId && !continuesSalvage) {
@@ -10632,7 +11384,7 @@ export class SessionsService {
     // that for ended sessions (mergeStatus: null); mirror it here, since createTurn doesn't.
     // Only a *settled* outcome is stale. createTurn performs that cleanup under
     // its Session row lock so it cannot erase an operation queued after this fast read.
-    if (SessionsService.LIVE.includes(session.status) && !session.cancelRequestedAt) {
+    if (isHeldPastClaim(session) && !session.cancelRequestedAt) {
       const live = await this.createTurn(ownerId, id, dto, {
         clearSettledWorktreeState: true,
         // Carried through: a live paused run being handed the task's prompt is the task's work,
@@ -10862,7 +11614,7 @@ export class SessionsService {
           );
         }
       }
-      if (!SessionsService.TERMINAL.includes(current.status)) {
+      if (!isReleased(current)) {
         if (existing) return { turn: existing, wasCompleted: false, wasRevived: false };
         throw SessionsService.resumeBlocked('NOT_TERMINAL', id);
       }
@@ -11002,6 +11754,7 @@ export class SessionsService {
           inboxLeaseOwner: newTerminalResumeHandoffOwner(),
           cancelRequestedAt: null,
           endReason: null,
+          // Held again (design §4.2).
           finishedAt: null,
           error: null,
           result: null,
@@ -11062,7 +11815,7 @@ export class SessionsService {
       };
     }, loggedRetry(this.logger, 'sessions.resume'))
       // The one duplicate key this UPDATE can reach — another live Session already holds this task's
-      // execution claim (0130) — answered as the refusal it is instead of as the 500 a bare P2002
+      // execution claim (1426, and 0130's index beside it until release B) — answered as the refusal it is instead of as the 500 a bare P2002
       // becomes. Caught outside the transaction, because naming the holder means reading, and the
       // transaction that raised this cannot answer a read. Any other duplicate is somebody else's
       // fact and goes on being thrown as it is.
@@ -11159,7 +11912,7 @@ export class SessionsService {
     // it keep going — refusing a message here would leave a salvage somebody can reply to once and
     // never again. The same carve-out `resume` makes, spelled the same way.
     const continuesSalvage =
-      SessionsService.LIVE.includes(session.status) && !session.startsTaskWork;
+      isHeldPastClaim(session) && !session.startsTaskWork;
     if (session.taskId && !continuesSalvage) {
       const refusal = await this.taskWorkRefusalFor(
         this.prisma, session.taskId, false, session.startsTaskWork,
@@ -11514,7 +12267,7 @@ export class SessionsService {
           owner: { select: { preferences: true } },
         },
       });
-      if (SessionsService.TERMINAL.includes(session.status)) {
+      if (isReleased(session)) {
         throw new ConflictException('the session has ended');
       }
       const next = await this.resolveProviderSwitch(tx, session, {
@@ -11772,6 +12525,7 @@ export class SessionsService {
         where: { id },
         select: {
           status: true,
+          finishedAt: true,
           engine: true,
           provider: true,
           providerBuiltin: true,
@@ -11865,7 +12619,7 @@ export class SessionsService {
           "this session's runner cannot move a conversation to another account yet — it updates itself when no turn is running",
         );
       }
-      const live = !SessionsService.TERMINAL.includes(session.status) && session.status !== RunStatus.PENDING;
+      const live = isHeldPastClaim(session);
       await tx.session.update({
         where: { id },
         data: {
@@ -11916,6 +12670,7 @@ export class SessionsService {
           where: { id },
           select: {
             status: true,
+            finishedAt: true,
             engine: true,
             provider: true,
             providerBuiltin: true,
@@ -11971,7 +12726,7 @@ export class SessionsService {
           },
         });
         // An ended or unclaimed session just stores it, for the claim that runs it next.
-        if (SessionsService.TERMINAL.includes(session.status) || session.status === RunStatus.PENDING) return 'leaving' as const;
+        if (!isHeldPastClaim(session)) return 'leaving' as const;
         await this.insertTurnLocked(tx, id, {
           kind: 'reload',
           content: JSON.stringify({ provider: engine }),
@@ -12464,6 +13219,11 @@ export class SessionsService {
     status: true,
     // A region sentence says the session waits on its machine's region (session-move.ts regionHeld).
     error: true,
+    // The release column: only an ended session moves (session-move.ts); with the status, the end reason and the last
+    // turn's outcome, whether a retry is armed on a failure (common/session-release.ts).
+    finishedAt: true,
+    endReason: true,
+    lastTurnOutcome: true,
     deletedAt: true,
     completedAt: true,
     importSourceCwd: true,
@@ -12529,7 +13289,7 @@ export class SessionsService {
     if (!session) return null;
     // Only an open session can still be asking or have work queued; on an ended one these are
     // leftovers that nothing will act on.
-    const open = !SessionsService.TERMINAL.includes(session.status);
+    const open = isHeld(session);
     const liveApprovals = open ? await countLiveApprovals(db, session) : 0;
     const queuedTurns = open
       ? await db.conversationTurn.count({
@@ -12683,7 +13443,10 @@ export class SessionsService {
         throw new BadRequestException('session must be in Trash before it can be permanently deleted');
       }
       await tx.session.delete({ where: { id: session.id } });
-    }, loggedRetry(this.logger, 'sessions.purge'));
+      // That one delete cascades through the session's run_event and tool_call rows — thousands of
+      // wide, TOASTed rows in the two largest tables. It took 1.2s idle and 7–36s on a loaded
+      // production database (2026-11-20), so Prisma's 5s default expired it into a 500 every time.
+    }, loggedRetry(this.logger, 'sessions.purge', { transaction: { timeout: 60_000, maxWait: 10_000 } }));
     this.realtime.publishViewerRevoked({ sessionId: id });
     return { ok: true };
   }

@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { SESSION_MERGE_BESIDE_TURN_V1 } from '@orbit/shared';
+import { sessionReleasedSql } from './session-release';
 
 // Runner process owners and inbox generations are UUID v4. A terminal revive
 // uses a fresh UUID carrying the v5 tag as an out-of-band handoff marker. The
@@ -127,7 +128,7 @@ export async function retireSessionInboxGeneration(
     SET "retired_at" = COALESCE(generation."retired_at", now())
     FROM "session" AS session
     WHERE session.id = ${sessionId}::uuid
-      AND session.status IN ('SUCCEEDED', 'FAILED', 'CANCELLED')
+      AND ${sessionReleasedSql('session')}
       AND generation."session_id" = session.id
       AND generation.generation = session."inbox_lease_generation"
   `;

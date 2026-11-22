@@ -11,7 +11,7 @@ package io.orbitd.android.core.cards
  *       Result:
  *         <the result, four spaces in>          — or —   (no result)
  *       … the next run …
- *       <two sentences for the agent>
+ *       <the sentences for the agent>
  *     </orbit-subagent-finished>
  *
  * A wording this does not recognise parses as nothing at all rather than half a line: the note then stays the entry it has always been.
@@ -39,7 +39,7 @@ data class SubagentFinished(
     val rest: String,
 ) {
     companion object {
-        // The web reader's patterns (OrbitKit `SubagentFinishedText` pins the same ones; SubagentFinishedCopyParityTest holds both).
+        // The web reader's patterns (OrbitKit `SubagentFinishedText` pins the same ones; SubagentFinishedCopyParityTest holds them).
         internal const val blockPattern = "<orbit-subagent-finished>\\n([\\s\\S]*?)\\n</orbit-subagent-finished>"
         /** `SubAgent <description> (run <id>) finished: <STATUS>` — the description may hold brackets of its own. */
         internal const val headPattern = "^ {2}SubAgent (.+) \\(run (\\S+)\\) finished: (DONE|FAILED|STOPPED|INTERRUPTED)$"
@@ -115,49 +115,4 @@ data class SubagentFinished(
             return runs
         }
     }
-}
-
-/**
- * What a SubAgent's finished wake reads as on screen (docs/mocks/subagent-finished-line; web `SubagentFinishedCard.tsx`): one line in
- * the agent's stream in the grammar a background job's news uses ([BackgroundWakeCard]) — the purple ✦ of the SubAgent card, how it
- * ended, a status chip — with three lines of what it handed back under it, and a Details fold. Every word is the web's.
- */
-object SubagentFinishedCard {
-    const val mark = "✦"
-    const val finished = "SubAgent finished"
-    const val didNotFinish = "SubAgent did not finish"
-    const val details = "Details"
-    const val showFullResult = "Show full result"
-    const val showLess = "Show less"
-    const val noResult = "No result"
-    const val run = "Run"
-    const val itsCard = "↑ Its SubAgent card"
-    const val uncommitted = "Changes left in the working tree, uncommitted"
-    const val queuedBy = "Queued by a SubAgent, not typed by you"
-    const val rawSummary = "What the agent read"
-    const val undelivered = "The session has not confirmed it received this."
-    /** How many lines of a lone run's result show before Show full result. */
-    const val resultLines = 3
-
-    /** What happened, at a glance: one run's end, or how many ended. */
-    fun title(wake: SubagentFinished): String {
-        if (wake.runs.size > 1) return "${wake.runs.size} SubAgents finished"
-        return if (wake.runs[0].ok) finished else didNotFinish
-    }
-
-    /** The word chip the line closes on: the one run's end, or how many of several did not finish. */
-    fun status(wake: SubagentFinished): String {
-        if (wake.runs.size == 1) return wake.runs[0].status.lowercase()
-        val failed = wake.runs.count { !it.ok }
-        return if (failed > 0) "$failed of ${wake.runs.size} failed" else "done"
-    }
-
-    /** The line turns red only for a lone run that did not finish; several runs mark each row instead. */
-    fun failed(wake: SubagentFinished) = wake.runs.size == 1 && !wake.runs[0].ok
-
-    /** What the line names after its title: the lone run's description. */
-    fun name(wake: SubagentFinished): String? = wake.runs.singleOrNull()?.description
-
-    /** One of several runs' one line: the first line of its result, else why it ended, else that there was none. */
-    fun rowLine(run: SubagentFinishedRun): String = run.result.split("\n").firstOrNull { it.isNotBlank() } ?: run.reason ?: noResult
 }

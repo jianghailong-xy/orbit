@@ -207,7 +207,10 @@ struct RunnersListView: View {
             RunnerRow(runner: r, workspaces: model.runners?.agents(forRunner: r.id) ?? [],
                       latestVersion: model.runners?.latestVersion,
                       managed: ManagedRunnerLogic.row(runnerID: r.id, status: model.managedRunner?.status),
-                      isManaged: isManaged, disclosure: rowNavigation == .push)
+                      isManaged: isManaged,
+                      updateAvailable: ManagedRunnerLogic.row(runnerID: r.id, status: model.managedRunner?.status) != nil
+                          && ManagedRunnerUpdateLogic.showsDot(model.managedRunner?.status),
+                      disclosure: rowNavigation == .push)
             if separates { Divider() }
         }
         switch rowNavigation {
@@ -443,6 +446,8 @@ struct RunnerRow: View {
     /// and with the feature off.
     var managed: ManagedRunnerRow? = nil
     var isManaged = false
+    /// A newer build is available for the managed runner (`ManagedRunnerUpdateLogic.showsDot`).
+    var updateAvailable = false
     /// Whether the row draws the disclosure a pushing row needs; a selection row has none.
     var disclosure = false
     var now = Date()
@@ -473,6 +478,14 @@ struct RunnerRow: View {
                         Text(RunnerPageFormat.displayName(runner))
                             .fontWeight(isManaged ? .semibold : nil)
                             .lineLimit(1)
+                        if updateAvailable {
+                            // An older build is running: the machine row's update dot.
+                            Circle()
+                                .fill(Color.accentColor)
+                                .frame(width: 7, height: 7)
+                                .accessibilityLabel(RunnerPageCopy.MANAGED_UPDATE_ROW_TITLE)
+                                .accessibilityIdentifier("runner-update-dot")
+                        }
                         Spacer(minLength: 8)
                         if let managed {
                             Text(managed.label)
@@ -667,7 +680,9 @@ struct RunnerDetailContent: View {
             }
             // A managed runner that has not reported yet has no release, readings or engines to show:
             // no Update card, and one quiet line where Resources and Engines would be.
-            if !managedWaiting, let card = RunnerPageFormat.updateCard(runner, now: now) {
+            if managed != nil, let managedRunner = model.managedRunner {
+                ManagedRunnerUpdateSection(managedRunner: managedRunner, onNotice: show)
+            } else if !managedWaiting, let card = RunnerPageFormat.updateCard(runner, now: now) {
                 updateSection(card)
             }
             if !items.isEmpty {
@@ -1093,6 +1108,17 @@ struct RunnerDetailContent: View {
                 }
                 .runnerRowButtonStyle()
             }
+            // One more workspace on this machine (docs/mocks/new-workspace-form/02-apple-entry, owner A). With none yet,
+            // Start a session above is the way to its first.
+            if !workspaces.isEmpty {
+                Button { newWorkspace() } label: {
+                    Label(NewWorkspaceCopy.NEW_WORKSPACE, systemImage: "plus.circle")
+                        .foregroundStyle(Color.accentColor)
+                        .contentShape(Rectangle())
+                }
+                .runnerRowButtonStyle()
+                .accessibilityIdentifier("machine-new-workspace")
+            }
         } header: {
             RunnerSectionHeader(RunnerPageCopy.RUNNER_WORKSPACES,
                                 trailing: workspaces.isEmpty ? nil : "\(workspaces.count)")
@@ -1428,6 +1454,11 @@ struct RunnerDetailContent: View {
     private func openWorkspace(_ id: String) {
         model.settingsPresented = false
         model.openAgent(id)
+    }
+
+    /// New workspace on this machine: its new session page with the setup card, after the Settings sheet comes down.
+    private func newWorkspace() {
+        model.openNewWorkspace(runner.id)
     }
 
     /// Start a session: this machine's new session page, after the Settings sheet comes down.

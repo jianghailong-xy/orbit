@@ -987,6 +987,19 @@ func codexStderrIsStateInitFailure(line string) bool {
 // repeats through a session, and the turns themselves still complete.
 func codexStderrDiagnostic(line string) (map[string]interface{}, bool) {
 	lower := strings.ToLower(line)
+	// Codex's sandbox setup logs this at ERROR and then runs with its bundled copy, so the turn
+	// still works: a degraded sandbox, not a failed run. Matched on Codex's own sentence, not the
+	// URL or the word "bubblewrap", so another sandbox line keeps its existing treatment.
+	if strings.Contains(lower, "could not find bubblewrap on path") {
+		return map[string]interface{}{
+			"component":   "sandbox",
+			"phase":       "startup",
+			"severity":    "WARN",
+			"impact":      "degraded",
+			"recoverable": true,
+			"code":        "bubblewrap_missing",
+		}, true
+	}
 	tokenInvalidated := strings.Contains(lower, "token_invalidated") || strings.Contains(lower, "token has been invalidated")
 	if strings.Contains(lower, "codex_models_manager") &&
 		strings.Contains(lower, "failed to refresh available models") {
@@ -1287,6 +1300,8 @@ func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, stat
 	// process and dies with it — deliberately, since terminateSessionProcessTree
 	// walks the ppid table precisely to catch escapees. Stage 4 verdict.
 	cmd.Env = append(cmd.Env, bgJobEnvPairs(job.SessionID)...)
+	// On the Orbit Cloud runner with the browser on, a tool the agent runs opens its pages there (browser_opener.go).
+	cmd.Env = browserOpenerEnv(cmd.Env, job.BrowserEnabled)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		cancel()

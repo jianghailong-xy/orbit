@@ -4,6 +4,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
 import io.orbitd.android.core.net.ApiResponse
+import io.orbitd.android.translation.TranslationCopy
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -38,7 +39,7 @@ class AcceptedHeadShellTest : ComposerShellTest() {
         assertTrue("the active view, which lists the head", ComposerShell.calls.contains("GET sessions/${ComposerShell.SESSION}/turns?view=active"))
         // The person's turn, where its echo will land: after the history, as the transcript draws one.
         assertTrue(has(hasText("Write the release notes") and hasAnyAncestor(drawn)))
-        assertTrue(has(hasText("You") and hasAnyAncestor(drawn)))
+        assertTrue("the person's bubble", has(hasTestTag("user-bubble") and hasAnyAncestor(drawn), unmerged = true))
         assertFalse("the runner has it: nothing withdraws it", has(hasText("Cancel")))
         assertFalse(shows("Queued"))
         val order = compose.onNodeWithTag("transcript-list").fetchSemanticsNode().children.map { it.config.getOrNull(SemanticsProperties.TestTag) }
@@ -53,6 +54,31 @@ class AcceptedHeadShellTest : ComposerShellTest() {
     }
 
     private fun turnReads() = ComposerShell.calls.count { it.startsWith("GET sessions/${ComposerShell.SESSION}/turns") }
+
+    @Test fun translationFinishesBeforeTheRunnerHasRoomToEchoTheHead() {
+        before()
+        ComposerShell.session = ComposerShell.fields("""{"status":"PENDING","runStatus":"PENDING","runState":"QUEUED",
+            "queuedReason":"runner_at_capacity"}""")
+        ComposerShell.answers["GET users/me"] = { ApiResponse(200, """{"id":"u1","email":"owner@a07c.test","name":"Owner",
+            "preferences":{"translationEnabled":true,"translationLanguage":"fr"},"translationAvailable":true}""".encodeToByteArray()) }
+        val original = "Rédige les notes de version"
+        listing("""[{"turnId":"$headId","kind":"message","placement":"queued","content":"$original","attachments":[],
+            "translation":{"state":"TRANSLATING","from":"fr","original":"$original"}}]""")
+        signIn(); openSession()
+        val held = hasTestTag("queued:$headId")
+        val chip = hasText(TranslationCopy.TRANSLATING)
+        await { has(chip and hasAnyAncestor(held), unmerged = true) }
+
+        val reads = turnReads()
+        listing("""[${head.dropLast(1)},"translation":{"state":"DONE","from":"fr","original":"$original"}}]""")
+        ComposerShell.push("""{"type":"queued_turns_changed","seq":0,"payload":{}}""")
+        val inHead = hasAnyAncestor(drawn)
+        await { has(hasText(TranslationCopy.SHOW_ORIGINAL) and inHead, unmerged = true) }
+        assertTrue(turnReads() > reads)
+        assertTrue(has(hasText(original) and inHead, unmerged = true))
+        assertFalse(has(chip, unmerged = true))
+        assertFalse(has(held))
+    }
 
     @Test fun theHeadGoesWithItsOwnTurnsEnd() {
         before(); listing("[$head]")

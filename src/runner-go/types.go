@@ -63,6 +63,14 @@ type HeartbeatRequest struct {
 	// runs, yet the runner takes no work in their place. The control plane counts them as running.
 	// Omitted when there are none; an older runner never sends it, and is counted by turns alone.
 	BackgroundJobSessionIDs []string `json:"backgroundJobSessionIds,omitempty"`
+	// Executing states, for each session this process supervises, what is executing in it now, whole
+	// (session_executing.go): the control plane replaces its inferred sets with it. An older control
+	// plane ignores the member. Omitted when no session run has installed its probe.
+	Executing []SessionExecuting `json:"executing,omitempty"`
+	// ExecutingAt is when Executing was composed, in Unix milliseconds on this machine's clock, the clock every
+	// event's TS is read on: the control plane does not let a beat replace the sets of a session whose event batch
+	// moved them at or after this instant (apiserver runners/runner-executing-sets.ts). Omitted with Executing.
+	ExecutingAt int64 `json:"executingAt,omitempty"`
 	// ExpiredCommitErrors: see CommitErrorExpiry. Omitted when there are none.
 	ExpiredCommitErrors []CommitErrorExpiry `json:"expiredCommitErrors,omitempty"`
 	// Draining marks a process that keeps heartbeating (so the reaper spares its
@@ -527,6 +535,10 @@ type HeartbeatResponse struct {
 	// over once and cleared, like CheckSelfUpdate; sent only to a runner that declares browser-clear/v1. The answer is
 	// the browser report's profileClearedAt on the beats that follow.
 	ClearBrowserProfile bool `json:"clearBrowserProfile,omitempty"`
+	// A session's browser_open: start the browser if it is not running and open URL in it, unless another session
+	// than SessionID holds the lease (browser_open.go, handleBrowserOpen). Handed over once and cleared, like
+	// ClearBrowserProfile; sent only to a runner that declares browser-open/v1.
+	OpenBrowser *BrowserOpenCommand `json:"openBrowser,omitempty"`
 	// The control plane takes a claim scoped to named sessions (GET /runner/sessions/claim?drainScope=):
 	// a pool draining for an update claims only for sessions whose engine is running a turn here
 	// (drainClaimScope). False/absent on older control planes, which would ignore the scope, so the
@@ -601,6 +613,10 @@ type HeartbeatResponse struct {
 	// there are none, and from older control planes.
 	RemoteSubagentRuns []string `json:"remoteSubagentRuns,omitempty"`
 	StopSubagentRunIDs []string `json:"stopSubagentRunIds,omitempty"`
+	// The bg_run jobs the session's owner asked to stop from the app (background_owner_stop.go), listed
+	// on every answer while the job still runs here. Sent only to a runner that declares bg-owner-stop/v1;
+	// absent when there are none, and from older control planes.
+	StopBackgroundJobs []BgJobStopCommand `json:"stopBackgroundJobs,omitempty"`
 	// The snapshots this runner's open forked tasks start from (docs/task-fork-from-session-design.md
 	// §2.6): the keep-alive refs whose snapshot is not listed are this runner's to delete (forkRefGC). A
 	// POINTER because only a present list states anything: absent (an older control plane, a quiet link
@@ -731,9 +747,14 @@ type IntegrationJobCommand struct {
 	// (§3.3 M-T11). It is authorized onto UpstreamShaChecked and nowhere else: if the upstream has
 	// moved, the job merges nothing, checks nothing and reports READY, and the owner is asked
 	// (M-T12). Only sent to a process that declared promotionAutomaticLandCapabilityV1.
-	Automatic       bool                   `json:"automatic,omitempty"`
-	Checks          []IntegrationCheckSpec `json:"checks"`
-	CancelRequested bool                   `json:"cancelRequested"`
+	Automatic bool                   `json:"automatic,omitempty"`
+	Checks    []IntegrationCheckSpec `json:"checks"`
+	// LandingCheckExemptReason is set on a LAND_TASK whose task the coordinator or the owner exempted
+	// from the project's landing check (contract §12.15 P-C2). The control plane has already left the
+	// landing check out of Checks, so a runner that ignores this field still runs exactly the task's
+	// acceptance; this one also records the skip and its reason in the result.
+	LandingCheckExemptReason string `json:"landingCheckExemptReason,omitempty"`
+	CancelRequested          bool   `json:"cancelRequested"`
 	// Earlier landings on this job's serial key whose push outcome the control plane could not know
 	// (ERROR / PUSH_OUTCOME_UNKNOWN) and that have no receipt yet (J12). After its fetch the runner
 	// asks git whether each one's tested commit is already an ancestor of the target, and reports
@@ -821,17 +842,19 @@ type IntegrationCheckSpec struct {
 // IntegrationCheckResult is what one check came to. ExitCode is nil when the command never
 // produced one — it could not start, or its budget killed it.
 type IntegrationCheckResult struct {
-	TreeSha          string   `json:"treeSha,omitempty"`
-	Scope            string   `json:"scope,omitempty"`
-	Skipped          string   `json:"skipped,omitempty"`
-	Files            []string `json:"files,omitempty"`
-	Name             string   `json:"name"`
-	Command          string   `json:"command"`
-	ExpectedExitCode int      `json:"expectedExitCode"`
-	ExitCode         *int     `json:"exitCode"`
-	TimedOut         bool     `json:"timedOut"`
-	DurationMs       int64    `json:"durationMs"`
-	OutputTail       string   `json:"outputTail"`
+	TreeSha string   `json:"treeSha,omitempty"`
+	Scope   string   `json:"scope,omitempty"`
+	Skipped string   `json:"skipped,omitempty"`
+	Files   []string `json:"files,omitempty"`
+	// Reason is why a TASK_EXEMPT landing check was not run (§12.15 P-C2).
+	Reason           string `json:"reason,omitempty"`
+	Name             string `json:"name"`
+	Command          string `json:"command"`
+	ExpectedExitCode int    `json:"expectedExitCode"`
+	ExitCode         *int   `json:"exitCode"`
+	TimedOut         bool   `json:"timedOut"`
+	DurationMs       int64  `json:"durationMs"`
+	OutputTail       string `json:"outputTail"`
 }
 
 // IntegrationJobProgressRequest renews the lease and says which step the job reached.
@@ -1573,6 +1596,14 @@ type ClaimedSession struct {
 	// ORBIT_WIKI=off, which leaves the wiki tools out of the MCP server and the wiki commands out of
 	// `orbit capabilities` (wiki_tools.go). Absent means on.
 	WikiDisabled bool `json:"wikiDisabled,omitempty"`
+	// BrowserEnabled is set while the Orbit Cloud browser is switched on on the server (its
+	// ORBIT_MANAGED_RUNNER_BROWSER_ENABLED with managed runners on); injected as ORBIT_BROWSER=on, which is what puts the
+	// browser tools in the MCP server and `orbit browser` in the CLI (browser_tools.go). Absent means off: absent tools.
+	BrowserEnabled bool `json:"browserEnabled,omitempty"`
+	// WorkflowsDisabled is set when the session's Agent may not start a workflow: its Workflows switch is off, or its
+	// SubAgents are. Injected as ORBIT_WORKFLOWS=off, which leaves the workflow tool out of `orbit mcp`
+	// (subagent_workflow.go); delegate is not affected. Absent means on.
+	WorkflowsDisabled bool `json:"workflowsDisabled,omitempty"`
 	// ScheduleRun is set for the session of a scheduled task's run (Session.scheduleRunId); injected as
 	// ORBIT_SCHEDULE_RUN=1, which lists schedule_run_report in its `orbit mcp` (schedule_tools.go).
 	ScheduleRun bool `json:"scheduleRun,omitempty"`
@@ -1830,6 +1861,10 @@ type ReclaimSession struct {
 	// may have moved since the session was first claimed.
 	WatchesDisabled bool `json:"watchesDisabled,omitempty"`
 	WikiDisabled    bool `json:"wikiDisabled,omitempty"`
+	// BrowserEnabled, cf. ClaimedSession.BrowserEnabled, said on reclaim for the same reason.
+	BrowserEnabled bool `json:"browserEnabled,omitempty"`
+	// WorkflowsDisabled, cf. ClaimedSession: the Agent's switch may have moved since the session was first claimed.
+	WorkflowsDisabled bool `json:"workflowsDisabled,omitempty"`
 	// ScheduleRun, cf. ClaimedSession.ScheduleRun.
 	ScheduleRun bool `json:"scheduleRun,omitempty"`
 	// OrchestrationToken is freshly persisted for the reclaimed runtime, cf. ClaimedSession.

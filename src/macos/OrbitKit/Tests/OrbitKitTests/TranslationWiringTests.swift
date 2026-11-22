@@ -103,7 +103,8 @@ final class TranslationWiringTests: XCTestCase {
         XCTAssertTrue(composer.contains("unavailableUntil: SessionTranslation.temporarilyUnavailableUntil(app.user),"))
         XCTAssertTrue(tag.contains("TimelineView(.explicit([until])) { context in"))
         let appModel = try source(app + "AppModel.swift")
-        XCTAssertTrue(appModel.contains("case .account:\n            Task { @MainActor [weak self] in\n                if let self, let me = try? await self.api?.me() { self.assignIfChanged(\\.user, me) }"))
+        XCTAssertTrue(appModel.contains("case .account:\n            whenSeen(\"account\") { app in\n                Task { @MainActor [weak app] in\n"
+                                        + "                    if let app, let me = try? await app.api?.me() { app.assignIfChanged(\\.user, me) }"))
         // A refused card answer draws the reason its 422 gave.
         XCTAssertTrue(cards.contains("if let refusedFoot = console.answersRefusedUntranslated[row.itemId] {"))
         XCTAssertTrue(tag.contains("TranslationFootView(parts: held.foot) { action in"))

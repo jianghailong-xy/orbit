@@ -339,7 +339,6 @@ describe('ProjectsPage', () => {
       [
         'import {',
         '  projectCoordinatorStatusQuery,',
-        '  projectIntegrationQuery,',
         '  projectsPath,',
         '  projectsQueryKey,',
         '  runnersQuery,',
@@ -347,6 +346,9 @@ describe('ProjectsPage', () => {
         "} from '../lib/queries';",
       ].join('\n'),
     );
+    // The integration line is read through the hook every part of a page shares, so one of them polls it
+    // (lib/pollOwner); the hook reads projectIntegrationQuery, whose one call is held below.
+    expect(source).toContain("import { useProjectIntegration } from '../lib/pollOwner';");
 
     // The page's SEVENTH and EIGHTH endpoints — the coordinator card's read, and the integration
     // line's. Their `api(...)` calls live in lib/queries.ts, so the scan above cannot see them and

@@ -130,6 +130,9 @@ type liveSession struct {
 	// (subagent.go), nil where no job service is at stake. Lock-free on the service's side, like
 	// monitorProbe, because it is called under p.mu.
 	subagentProbe func() bool
+	// executingProbe is this run's "what is executing in it" (session_executing.go), nil until the run has its
+	// tailer and adopted jobs. Unlike the two above it is never called under p.mu (executingEntries).
+	executingProbe func(resident bool) executingSnapshot
 }
 
 // heartbeatSupervisorSnapshot binds a heartbeat response to the exact local
@@ -1328,6 +1331,12 @@ func (p *sessionPool) activatePrepared(job *ClaimedSession, prepare func()) (*li
 		job.IsolationStatus = s.job.IsolationStatus
 		job.CheckoutCreation = s.job.CheckoutCreation
 		job.SourceRefusal = s.job.SourceRefusal
+		// The session's live mode, too: the job service started for this run (startSessionBgJobService) keeps the
+		// first claim's job and reads the mode from this holder, for its Plan gate and for what a read-only Kimi
+		// SubAgent's shell calls follow. A mode the owner chose while the engine was cold arrives only in this
+		// claim, so it is published here; left alone, the holder would go on saying the mode the run began in.
+		job.liveMode = s.job.liveMode
+		job.notePermissionMode(job.Agent.PermissionMode)
 	}
 	s.job = job
 	var cancels []context.CancelFunc

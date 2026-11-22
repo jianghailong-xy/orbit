@@ -80,6 +80,7 @@ Usage:
   orbit watch <command>             Wait on Orbit tasks and sessions without polling
   orbit wiki <command>              Read the Orbit wiki and propose to it
   orbit file <command>              Keep files in Orbit instead of in the repository
+  orbit subagent <command>          Rate a SubAgent run this session started
   orbit secret exec NAME -- CMD     Run CMD with a secret the owner delivered to this runner
   orbit notify --message TEXT       Alert this account's devices with a line you write
   orbit token <command>             Mint/list/revoke credentials for headless processes
@@ -239,6 +240,8 @@ running it when the machine is idle. Disable the periodic check with ORBIT_NO_EN
 	"watch":     watchHelp,
 	"wiki":      wikiHelp,
 	"file":      fileHelp,
+	"subagent":  subagentHelp,
+	"settings":  settingsHelp,
 	"token":     tokenHelp,
 	"login":     loginHelp,
 	"logout":    logoutHelp,
@@ -325,12 +328,16 @@ var leafHelpFamilies = map[string]bool{
 	"watch":     true,
 	"wiki":      true,
 	"file":      true,
+	"subagent":  true,
+	"settings":  true,
 	"session":   true,
 	"provider":  true,
 	// `agent` has had per-action help since it shipped and has never been able to print it —
 	// same omission, found while checking that provider's was reachable.
 	"agent":  true,
 	"runner": true,
+	// Only routed while the browser switch is on (browser_tools.go); off, `orbit browser --help` is an unknown command.
+	"browser": true,
 }
 
 func ownsLeafHelp(cmd string) bool { return leafHelpFamilies[cmd] }
@@ -356,6 +363,10 @@ func main() {
 	if len(os.Args) > 1 && os.Args[1] == browserMCPCommand {
 		cmdBrowserMCP()
 		return
+	}
+	// BROWSER's and xdg-open's command for an engine on the Orbit Cloud runner (browser_opener.go).
+	if len(os.Args) > 1 && os.Args[1] == browserOpenerCommand {
+		os.Exit(runBrowserOpener(os.Args[2:], os.Stdout, os.Stderr))
 	}
 	// The credential helper every network git command is given (network_git.go). git runs it, and it
 	// answers git and does nothing else.
@@ -463,6 +474,10 @@ func runOrbitCLI(args []string, in io.Reader, out, errW io.Writer) error {
 		return runCLICommand("orbit wiki", args, true, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdWikiCLI(args[1:], in, out) })
 	case "file":
 		return runCLICommand("orbit file", args, true, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdFileCLI(args[1:], out) })
+	case "subagent":
+		return runCLICommand("orbit subagent", args, true, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdSubagentCLI(args[1:], out) })
+	case "settings":
+		return runCLICommand("orbit settings", args, true, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdSettingsCLI(args[1:], out) })
 	case "token":
 		return runCLICommand("orbit token", args, false, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdTokenCLI(args[1:], out) })
 	case "login":
@@ -509,6 +524,12 @@ func runOrbitCLI(args []string, in io.Reader, out, errW io.Writer) error {
 		cmdHook(args[1:])
 	case "version", "--version", "-v":
 		fmt.Fprintln(out, version)
+	case "browser":
+		// Off means absent (browser_tools.go): with the browser switch off this is an unknown command like any other.
+		if !browserToolsEnabledFromEnv() {
+			return fmt.Errorf("unknown command: %s\n\n%s", cmd, usage)
+		}
+		return runCLICommand("orbit browser", args, true, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdBrowserCLI(args[1:], out) })
 	default:
 		return fmt.Errorf("unknown command: %s\n\n%s", cmd, usage)
 	}
@@ -536,12 +557,16 @@ func cmdRegister(flags map[string]string, bools map[string]bool) {
 		fmt.Fprintf(os.Stderr, "orbit register: cannot keep the runner's config in %s: %v\nNothing was registered. If an earlier sudo left it to root: sudo chown -R %s %s\n", machineHome(), err, who, machineHome())
 		os.Exit(1)
 	}
-	// One runner per machine. Re-registering re-issues its credential, so confirm
-	// before clobbering the config.
+	// One runner per OS user (the config is in this user's ~/.orbit). Re-registering
+	// re-issues its credential, so confirm before clobbering the config.
 	if existing := loadConfig(); existing != nil && !bools["force"] {
+		osUser := "Linux user"
+		if runtime.GOOS == "darwin" {
+			osUser = "macOS user"
+		}
 		ok := confirm(fmt.Sprintf(
-			"This machine is already registered as %q (%s).\nRegister again (re-issues its credential)? [Y/n] ",
-			existing.Name, existing.ServerURL), true)
+			"This %s is already registered as %q (%s).\nRegister again (re-issues its credential)? [Y/n] ",
+			osUser, existing.Name, existing.ServerURL), true)
 		if !ok {
 			fmt.Println("aborted — pass --force to re-register without confirming")
 			os.Exit(0)

@@ -83,9 +83,10 @@ export interface WrittenRange {
 export function eventsToPersist(
   events: StoredEvent[],
   written: WrittenRange | null,
+  rewrite?: ReadonlySet<number>,
 ): StoredEvent[] {
   if (!written) return events;
-  return events.filter((e) => e.seq < written.min || e.seq > written.max);
+  return events.filter((e) => e.seq < written.min || e.seq > written.max || rewrite?.has(e.seq));
 }
 
 /** The seq range spanned by `events`, or null when there are none. */
@@ -173,6 +174,9 @@ let dbPromise: Promise<IDBDatabase | null> | null = null;
 const written = new Map<string, WrittenRange>();
 /** Snapshots waiting for the next idle flush, newest wins. */
 const pending = new Map<string, TranscriptSnapshot>();
+/** Seqs inside the written range whose event changed since it was written — a translation folded
+ *  into a reply — so the next flush rewrites them; the range alone would skip them for good. */
+const dirty = new Map<string, Set<number>>();
 let flushHandle: ReturnType<typeof setTimeout> | null = null;
 
 /**
@@ -189,6 +193,7 @@ export function setTranscriptUser(raw: string | null): void {
   // The previous user's derived state must not survive into this one's session.
   written.clear();
   pending.clear();
+  dirty.clear();
   const previous = dbPromise;
   dbPromise = null;
   // Close the handle rather than just dropping it: a leaked connection would block any later
@@ -324,9 +329,15 @@ export async function loadTranscript(id: string): Promise<TranscriptSnapshot | n
  * opening a transaction per token. Losing the last few events to a closed tab costs nothing — the
  * stream resumes from the highest stored seq and replays them.
  */
-export function saveTranscript(id: string, snapshot: TranscriptSnapshot): void {
+export function saveTranscript(id: string, snapshot: TranscriptSnapshot, rewrite: readonly number[] = []): void {
   if (!userId || !idb()) return;
-  pending.set(storageKey(id), snapshot);
+  const key = storageKey(id);
+  pending.set(key, snapshot);
+  if (rewrite.length) {
+    const seqs = dirty.get(key) ?? new Set<number>();
+    for (const seq of rewrite) seqs.add(seq);
+    dirty.set(key, seqs);
+  }
   scheduleFlush();
 }
 
@@ -353,6 +364,10 @@ async function flush(): Promise<void> {
   if (pending.size === 0) return;
   const batch = [...pending.entries()];
   pending.clear();
+  // Taken with the batch it belongs to: a translation folded while this flush awaits the database
+  // marks the next snapshot, not this one.
+  const rewrites = new Map(dirty);
+  dirty.clear();
   try {
     const db = await openDb();
     if (!db || !userId) return;
@@ -374,7 +389,7 @@ async function flush(): Promise<void> {
       }
       // `put`, not `add`: two tabs streaming the same session write the same (session, seq) rows,
       // and rewriting one identically is the correct outcome.
-      for (const e of eventsToPersist(snapshot.events, written.get(sessionId) ?? null)) {
+      for (const e of eventsToPersist(snapshot.events, written.get(sessionId) ?? null, rewrites.get(sessionId))) {
         events.put({ ...e, userId: uid, sessionId });
       }
       const range = rangeOf(snapshot.events);
@@ -427,6 +442,7 @@ async function evict(db: IDBDatabase, uid: string): Promise<void> {
 export function clearTranscriptStore(): void {
   written.clear();
   pending.clear();
+  dirty.clear();
   const factory = idb();
   const previous = dbPromise;
   dbPromise = null;

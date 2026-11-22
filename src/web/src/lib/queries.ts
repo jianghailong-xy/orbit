@@ -37,6 +37,7 @@ import type { ProviderModelRow } from './providerAdmin';
 import type { ProjectDependencyGraphResponse } from './projectDependencyGraph';
 import type { SidebarProject } from './projectAttention';
 import type { AccountSecret, OwnerRequest, OwnerRequestListFilter } from './ownerRequests';
+import type { SettingChangedBy } from './settingsChange';
 import type { ProjectFilter } from '../components/ProjectsToolbar';
 import type { CoordinatorStatus } from '../components/ProjectCoordinatorCard';
 import type { PendingDecisionQueue } from '../components/DecisionRail';
@@ -84,9 +85,9 @@ import {
   type LabelSummary,
   type TaskCounts,
 } from './taskPages';
-import { mergeWatches } from './watches';
 import { integrationInFlight, pollWhileInFlight, streamPoll, streamStaleTime } from './listBudget';
 import { readOpenList, type OpenListAnswer } from './openListDelta';
+import type { SessionReach, SessionReachDeclaration, TaskReachDeclaration } from './sessionReach';
 
 export type { ConfiguredProvider };
 
@@ -258,6 +259,9 @@ export interface Me {
   /** The server holds a DeepSeek key and can optimize a draft (Settings › General › Prompt optimizer).
    *  Absent from a server that predates it, which reads as unable. */
   promptOptimizerAvailable?: boolean;
+  /** Each setting last changed from a conversation's card, by preference key (docs/settings-from-conversation-design.md
+   *  §5.3). Absent from a server that predates it. */
+  changedBy?: Record<string, SettingChangedBy>;
 }
 
 /** The signed-in user — backs the account page and the nav footer's avatar + name. */
@@ -423,7 +427,9 @@ export const sessionsQuery = (
 ) => {
   const runnerId = opts.runnerId ?? null;
   const workspaceId = opts.workspaceId ?? null;
-  const view = opts.view ?? null;
+  // No view is the Open list, the server's default, read as the Open list always is: so this reader never sends a
+  // bare `GET /sessions`, which no client should poll (task 350wwd0BfOJPegSAOYpPY).
+  const view = opts.view ?? 'open';
   const tagId = opts.tagId ?? null;
   const limit = opts.limit ?? null;
   const scheduled = opts.scheduled === true;
@@ -432,7 +438,12 @@ export const sessionsQuery = (
     queryKey: (scheduled
       ? ['sessions', runnerId, workspaceId, view, tagId, limit, 'scheduled']
       : ['sessions', runnerId, workspaceId, view, tagId, limit]) as readonly unknown[],
-    meta: { entities: ['session', 'workspace', 'tag', 'folder', 'project'] },
+    // A session's event reads this list again only when the session is in its workspace or in it (lib/sessionReach);
+    // the Scheduled runs folder, which the server builds whole on every read, only when the event can move it.
+    meta: {
+      entities: ['session', 'workspace', 'tag', 'folder', 'project'],
+      sessionReach: (scheduled ? { scheduledRuns: workspaceId } : { workspace: workspaceId }) satisfies SessionReach,
+    },
     queryFn: () => fetchSessions(runnerId, workspaceId, view, tagId, limit, scheduled),
     // The stream marks a list stale the moment an event touches it, so while it is live what was
     // just read is still good to show: the console mounting on the list the splash read moments ago
@@ -505,6 +516,39 @@ export const projectSessionsQuery = (opts: {
     staleTime: 15_000,
   });
 
+/** One project's answer in `GET /sessions/project-placement`: what a workspace list places its row with. */
+export interface ProjectPlacement {
+  projectId: string;
+  /** Open or Completed, wherever it runs; null for a project with none (or one in Trash). */
+  coordinator: SessionListItem | null;
+  /** The project's sessions in the list's view that are waiting on the owner, in any workspace. */
+  waiting: SessionListItem[];
+  /** How many sessions the project has in the list's view, in any workspace, its coordinator counted. */
+  sessionCount: number;
+}
+
+/**
+ * Where a workspace list's project rows go, for every project it shows, in one read
+ * (useSessionProjectData). It used to be one or two `projectSessionsQuery` reads a project, which the
+ * server builds every time: some sixty requests for thirty projects on a page load (2026-11-21). The
+ * key holds the projects sorted, so the same list reads the same query whatever order it shows them in.
+ *
+ * Its stream reads are its own (useControlPlane schedulePlacement): an event about a session of one of
+ * its projects, or about one of the projects, reads it once a coalescing window. The answer carries an
+ * ETag, so the safety read is answered 304 when nothing moved.
+ */
+export const projectPlacementQuery = (opts: { view: 'open' | 'completed'; projectIds: readonly string[] }) => {
+  const ids = [...new Set(opts.projectIds)].sort().join(',');
+  return queryOptions({
+    queryKey: ['project-placement', opts.view, ids] as const,
+    meta: { entities: ['session', 'workspace', 'project'] },
+    queryFn: async () => (await api<{ projects: ProjectPlacement[] }>(
+      `/sessions/project-placement?${new URLSearchParams({ view: opts.view, projectIds: ids })}`,
+    )).projects,
+    staleTime: streamStaleTime,
+  });
+};
+
 /** One workspace's Open-session tallies, as returned by `GET /sessions/counts`. */
 export interface WorkspaceSessionCounts {
   workspaceId: string;
@@ -530,7 +574,10 @@ export interface WorkspaceSessionCounts {
 export const workspaceSessionCountsQuery = () =>
   queryOptions({
     queryKey: ['session-counts'] as const,
-    meta: { entities: ['session', 'workspace'] },
+    // Not `session`: a session event moves a tally only when it changes what the tallies count, which the
+    // stream decides from what each session last said (useControlPlane, tallyShare). `workspace` reaches it on a
+    // workspace edit and on the read that aligns a reconnect.
+    meta: { entities: ['workspace'] },
     queryFn: () => api<WorkspaceSessionCounts[]>('/sessions/counts'),
   });
 
@@ -600,6 +647,12 @@ export const sessionFoldersQuery = () =>
  * One session's detail — resolves the runner/workspace behind a `/sessions/:id` deep link.
  * Shares its key with the row in the list query so the two dedupe. Disabled when there
  * is no id; call sites tighten `enabled` further as needed.
+ *
+ * One read serves the page: the session page (WorkspaceView) owns its poll, and every other part
+ * that draws the detail — the splash, the side panel, the console, the settings drawer — reads the
+ * same entry with no interval of its own. The stream marks it stale on every `session.*` event
+ * about it (useControlPlane refetchSessionDetail), so while the stream is live a part mounted on
+ * what was just read draws that rather than reading it again (`streamStaleTime`).
  */
 export const sessionQuery = (id: string | null | undefined) =>
   queryOptions({
@@ -607,6 +660,7 @@ export const sessionQuery = (id: string | null | undefined) =>
     meta: { entities: ['session'] },
     queryFn: () => getSession(id!),
     enabled: id != null,
+    staleTime: streamStaleTime,
   });
 
 /**
@@ -619,7 +673,14 @@ export const sessionQuery = (id: string | null | undefined) =>
 export const sessionRequestQuery = (requestId: string) =>
   queryOptions({
     queryKey: ['sessions', 'request', requestId] as const,
-    meta: { entities: ['session'] },
+    // The two sessions it is between are the ones whose events can move it (lib/sessionReach).
+    meta: {
+      entities: ['session'],
+      sessionReach: ((data: unknown) => {
+        const view = data as { fromSessionId?: string; toSessionId?: string } | undefined;
+        return { sessions: [view?.fromSessionId ?? '', view?.toSessionId ?? ''].filter(Boolean) };
+      }) satisfies SessionReachDeclaration,
+    },
     queryFn: () => getSessionRequest(requestId),
     // A run's question can still move after its request closes: passed to the owner, it waits for
     // their answer (OrbitTurnCards `RunQuestionTurnCard`).
@@ -690,8 +751,8 @@ export const activeTasksQuery = (listId?: string, projectId?: string) =>
     queryKey: ['tasks', 'active', listId ?? null, ...(projectId ? [{ projectId }] : [])] as const,
     // Every row here is on the strip BECAUSE a session is running or queued on it, and a run
     // starting or ending writes no task row — only `session.*`. `task` alone would leave the strip
-    // showing work that has already finished.
-    meta: { entities: ['task', 'session'] },
+    // showing work that has already finished. A task run's events read it, no other session's (lib/sessionReach).
+    meta: { entities: ['task', 'session'], sessionReach: { taskRuns: projectId ?? null } satisfies SessionReach },
     queryFn: () => api<ActiveTasks>(activeTasksPath(listId, projectId)),
     // `task.*` events refresh it; this is the safety read (listBudget).
     refetchInterval: streamPoll(5_000),
@@ -723,27 +784,40 @@ export const taskCountsQuery = (
     ] as const,
     // `running` and `queued` are counted from open sessions, not from task columns: a run that
     // starts or ends moves these two numbers without writing a task row, so `task` alone would
-    // leave the Running tab and the progress bar counting a run that is over.
-    meta: { entities: ['task', 'session'] },
+    // leave the Running tab and the progress bar counting a run that is over. A task run's events read it, no other
+    // session's (lib/sessionReach).
+    meta: { entities: ['task', 'session'], sessionReach: { taskRuns: projectId ?? null } satisfies SessionReach },
     queryFn: () => api<TaskCounts>(taskCountsPath(listId, labels, creatorSessionId, projectId)),
     staleTime: 10_000,
   });
 
+/** The tasks a created-tasks read holds: each row's own, and the one of this session's it took over. */
+const createdTaskIds = (data: unknown): string[] =>
+  ((data as SessionCreatedTasks | undefined)?.items ?? []).flatMap((row) => [row.id, row.replaces?.id ?? ''].filter(Boolean));
+
 /**
  * The tasks a session's agent created, as the "Tasks created here" row above its composer draws
- * them. Under `['tasks']`, so the refresh `useControlPlane` runs on every `task.*` event reaches it
- * with no entry of its own. Polled while a row is running or queued besides: a queued task starting
- * is a session event, not a `task.changed`, and nothing else would redraw its pill.
+ * them. The session page (WorkspaceView) reads it and hands it to the strip, so one observer reads
+ * it. Read on the events that can move it, and otherwise only on the list budget's safety read:
+ * - a `task.changed` whose rows this session created, or that names a row it holds (`taskReach`,
+ *   lib/sessionReach), or that cannot say which (a resync, a server that names no creators);
+ * - this session's own `session.*` events, and those of a session running one of its rows: the rows
+ *   carry `running` / `queued`, which come from the sessions carrying the tasks (`sessionReach`).
+ * While a row is running or queued it is polled besides, at the safety read's minute while the
+ * stream is live: a run's start is an event, but one lost on its way would leave the pill wrong.
  */
 export const sessionCreatedTasksQuery = (sessionId: string) =>
   queryOptions({
     queryKey: ['tasks', 'created-by-session', sessionId] as const,
-    // The rows carry `running` / `queued`, which come from the sessions carrying the tasks — the
-    // poll below is the safety read of exactly that fact, so the declaration names its source.
-    meta: { entities: ['task', 'session'] },
+    meta: {
+      entities: ['task', 'session'],
+      sessionReach: ((data: unknown) => ({ session: sessionId, tasks: createdTaskIds(data) })) satisfies SessionReachDeclaration,
+      taskReach: ((data: unknown) => ({ creatorSession: sessionId, tasks: createdTaskIds(data) })) satisfies TaskReachDeclaration,
+    },
     queryFn: () => api<SessionCreatedTasks>(`/sessions/${sessionId}/created-tasks`),
+    staleTime: streamStaleTime,
     refetchInterval: (q) =>
-      q.state.data?.items.some((row) => row.running || row.queued) ? 15_000 : false,
+      q.state.data?.items.some((row) => row.running || row.queued) ? streamPoll(15_000)(q) : false,
   });
 
 /**
@@ -795,16 +869,28 @@ export const openProjectsQuery = () =>
   });
 
 /**
- * The owner requests in one state, newest first, at most 200. No realtime event announces one, so
- * this polls like the coordinator's questions do; a press re-reads it at once.
+ * The owner requests in one state, newest first, at most 200. The open list is read when the server says a request
+ * changed (`owner_requests.changed`, docs/realtime-control-plane-stream.md §4.9) and on the safety read; a press
+ * re-reads it at once.
  */
 export const ownerRequestsQuery = (filter: OwnerRequestListFilter) =>
-  queryOptions({
-    queryKey: ['owner-requests', filter] as const,
-    meta: { entities: ['session'] },
-    queryFn: () => api<{ requests: OwnerRequest[] }>(`/owner-requests?state=${filter}`),
-    refetchInterval: streamPoll(20_000),
-  });
+  filter === 'open'
+    ? queryOptions({
+        queryKey: ['owner-requests', filter] as readonly ['owner-requests', OwnerRequestListFilter],
+        // `ownerRequest` is named only by `owner_requests.changed`: filing, answering or expiring a request used to be
+        // read off any session event, and 96% of those reads answered 304 (2026-11-21).
+        meta: { entities: ['ownerRequest'] },
+        queryFn: () => api<{ requests: OwnerRequest[] }>(`/owner-requests?state=${filter}`),
+        refetchInterval: streamPoll(20_000),
+      })
+    : queryOptions({
+        queryKey: ['owner-requests', filter] as readonly ['owner-requests', OwnerRequestListFilter],
+        // The other states are the whole history (`all` was 52 kB on 2026-11-20): no event reads them; a request
+        // arriving in or leaving the open list does (useControlPlane, followOpenRequests).
+        meta: { entities: ['session'], sessionReach: 'none' satisfies SessionReach },
+        queryFn: () => api<{ requests: OwnerRequest[] }>(`/owner-requests?state=${filter}`),
+        refetchInterval: streamPoll(20_000),
+      });
 
 /** The owner's saved account secrets, by label: what "Use saved" offers on a secret request. */
 export const accountSecretsQuery = () =>
@@ -1192,10 +1278,16 @@ export const projectIntegrationQuery = (projectId: string) =>
     meta: { entities: ['project', 'task', 'session'] },
     queryFn: () =>
       api<ProjectIntegrationView>(`/projects/${encodeURIComponent(projectId)}/integration`),
-    // A landing or a merge in flight announces nothing on the stream (LANDING sessions publish no
-    // event), so the line keeps its cadence while one is; otherwise it follows the stream.
-    refetchInterval: pollWhileInFlight(30_000, (query) => integrationInFlight(query.state.data)),
+    // One read serves the page: no interval here. The part of the page that owns the poll is the
+    // first to mount (lib/pollOwner useProjectIntegration, PROJECT_INTEGRATION_POLL); every other
+    // part reads this entry, and one mounted on what was just read draws it rather than asking again.
+    staleTime: streamStaleTime,
   });
+
+/** The integration line's poll, held by one part of a page (lib/pollOwner): a landing or a merge
+ *  in flight announces nothing on the stream (LANDING sessions publish no event), so the line keeps
+ *  its cadence while one is; otherwise it follows the stream. */
+export const PROJECT_INTEGRATION_POLL = pollWhileInFlight(30_000, (query) => integrationInFlight(query.state.data));
 
 /** The selectors one page of a landing's check output is read by (contract §2.2 J-T4, §2.9 LS2). */
 export interface LandingLogSelectors {
@@ -1232,33 +1324,28 @@ export const landingLogQuery = (sessionId: string, selectors: LandingLogSelector
   });
 
 /**
- * The owner's watches, newest first, as one list. `GET /watches` answers with the 100 newest of any
- * state, so a long history would push a live watch out of it, and a failure nobody has seen yet with
- * it: the two live states are read on their own beside it, and so are the watches that need attention
- * (`?needsAttention=true`, contract `attention`) — at most 100 each, as the Mac app reads them — and
- * each watch is kept once. The Following page, every watch card and the Following / Followed by
- * relations on sessions and tasks are all drawn from this one read, so a watch reads the same
+ * The owner's watches, newest first, as one list, in one request. `GET /watches` alone answers with
+ * the 100 newest of any state, so a long history would push a live watch, or a failure nobody has
+ * seen yet, out of it; `?following=true` answers with those 100 and then every ACTIVE, PAUSED and
+ * needs-attention watch (contract `attention`) they did not hold — at most 100 each — every watch
+ * once (docs/watch-contract.md §3). The Following page, every watch card and the Following / Followed
+ * by relations on sessions and tasks are all drawn from this one read, so a watch reads the same
  * wherever it is shown. The control-plane
  * stream nudges it on the session, approval and task events that can move a watch, and on the
  * server's own `watch.changed` for the four changes none of those accompany — a delivery, a
  * deadline, a dead letter, an agent making or releasing one (useControlPlane, docs/watch-contract.md
  * §8.1). The slow poll stays: that event is an accelerant, dropped without a word when a replica
  * restarts or a socket goes quiet, and a watch may not be read a minute late because one was lost.
+ * While the stream is live what is cached stays good for that minute, so a component that mounts
+ * on a fresh list reads nothing.
  */
 export const watchesQuery = () =>
   queryOptions({
     queryKey: ['watches'] as const,
     meta: { entities: ['watch', 'session', 'task'] },
-    queryFn: async () =>
-      mergeWatches(
-        await Promise.all([
-          api<WatchView[]>('/watches'),
-          api<WatchView[]>('/watches?state=ACTIVE'),
-          api<WatchView[]>('/watches?state=PAUSED'),
-          api<WatchView[]>('/watches?needsAttention=true'),
-        ]),
-      ),
-    refetchInterval: 60_000,
+    queryFn: () => api<WatchView[]>('/watches?following=true'),
+    refetchInterval: streamPoll(),
+    staleTime: streamStaleTime,
   });
 
 /**

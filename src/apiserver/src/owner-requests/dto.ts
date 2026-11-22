@@ -7,6 +7,7 @@ import {
   IsIn,
   IsISO8601,
   IsInt,
+  IsObject,
   IsOptional,
   IsString,
   Max,
@@ -106,6 +107,15 @@ export class SubmitOwnerSecretDto {
 }
 
 /** Replacing a saved secret's value (`PUT /account-secrets/:id`). */
+/** The owner's Add on the Secrets page (`POST /account-secrets`): a label and a value, never echoed back. */
+export class CreateAccountSecretDto {
+  @IsString({ message: 'label must be a string' }) @MaxLength(100, { message: 'label is 1 to 100 characters' })
+  label!: string;
+
+  @IsString({ message: 'value must be a string' }) @MaxLength(16_384, { message: 'the key may be at most 16384 characters' })
+  value!: string;
+}
+
 export class ReplaceAccountSecretDto {
   @IsString({ message: 'value must be a string' }) @MaxLength(16_384, { message: 'the key may be at most 16384 characters' })
   value!: string;
@@ -121,4 +131,15 @@ export class SecretGrantAckDto {
 /** The runner's word that its copy is gone (`POST /runner/secret-grants/:id/removed`). */
 export class SecretGrantRemovedDto {
   @IsOptional() @IsString() @MaxLength(500) note?: string;
+}
+
+/**
+ * A session proposing a change to the owner's Settings (`POST /runner/settings-proposals`,
+ * docs/settings-from-conversation-design.md §5.1). `changes` maps preference keys to their new values; its keys and
+ * values are checked against the tier table and `UpdatePreferencesDto` by `validateSettingsChanges`, not here, so a
+ * key that is not a setting is refused by name rather than stripped.
+ */
+export class ProposeSettingsDto {
+  @IsObject() changes!: Record<string, unknown>;
+  @IsString() @MinLength(1) @MaxLength(MAX_OWNER_REQUEST_WHY) why!: string;
 }

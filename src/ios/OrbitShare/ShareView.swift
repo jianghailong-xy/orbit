@@ -74,6 +74,9 @@ struct ShareView: View {
                     }
                 }
         }
+        .onChange(of: model.phase) { _, phase in
+            if phase == .opened { onDone() }
+        }
     }
 
     private var isDone: Bool {
@@ -83,7 +86,7 @@ struct ShareView: View {
 
     @ViewBuilder private var content: some View {
         switch model.phase {
-        case .loading:
+        case .loading, .opened:
             ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
         case .done(let title, let notified):
             DoneView(title: title, notified: notified, onDone: onDone)
@@ -234,8 +237,8 @@ private struct NewSessionRow: View {
         let selected = model.destination == .newSession(workspace)
         HStack {
             Button { model.chooseWorkspace(workspace) } label: {
+                // No "+": the row is a destination like the Recent rows below, not an action.
                 HStack {
-                    Image(systemName: "plus").foregroundStyle(Color.accentColor)
                     Text(ShareCopy.newSession).foregroundStyle(.primary)
                     Spacer(minLength: 8)
                 }
@@ -249,7 +252,8 @@ private struct NewSessionRow: View {
                         Button(w.name) { model.chooseWorkspace(w) }
                     }
                 } label: {
-                    Label(workspace.name, systemImage: "chevron.right")
+                    // Up-down chevrons: this opens a menu in place, it does not push a page.
+                    Label(workspace.name, systemImage: "chevron.up.chevron.down")
                         .labelStyle(TrailingIconLabelStyle())
                         .font(.footnote).foregroundStyle(.secondary)
                 }

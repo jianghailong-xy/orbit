@@ -26,6 +26,8 @@ var cliParityParamAlias = map[string]string{
 	// Singular at a terminal, like --depends-on above: one flag carries one label and repeats,
 	// which is also what makes a label containing a comma expressible.
 	"labels": "--label",
+	// settings_propose's changes map is one --set KEY=VALUE per setting.
+	"changes": "--set",
 	// session_create's worktree only ever turns isolation off, so at a terminal it is the switch
 	// that says so.
 	"worktree": "--no-worktree",
@@ -72,7 +74,7 @@ func TestCLICapabilitiesCoverEveryMCPToolAndParameter(t *testing.T) {
 	// One direction only: every MCP tool needs a command, and a command needs no tool. The person's
 	// own commands (userCLICapabilities: login, logout, whoami, api) have none — MCP runs only inside
 	// sessions, where the CLI never acts as the person (docs/personal-access-token-design.md §7.4).
-	for _, list := range [][]cliCapabilitySpec{baseCLICapabilities, providerCLICapabilities, projectCLICapabilities, notifyCLICapabilities, mergeReceiptCLICapabilities, sessionCLICapabilities, agentCLICapabilities, runnerCLICapabilities, watchCLICapabilities, wikiCLICapabilities, wikiImportCLICapabilities, fileCLICapabilities, userCLICapabilities, guideCLICapabilities} {
+	for _, list := range [][]cliCapabilitySpec{baseCLICapabilities, providerCLICapabilities, projectCLICapabilities, notifyCLICapabilities, mergeReceiptCLICapabilities, sessionCLICapabilities, agentCLICapabilities, runnerCLICapabilities, watchCLICapabilities, wikiCLICapabilities, wikiImportCLICapabilities, fileCLICapabilities, subagentCLICapabilities, settingsCLICapabilities, browserCLICapabilities, userCLICapabilities, guideCLICapabilities} {
 		for _, spec := range list {
 			specs[spec.Tool] = spec
 		}

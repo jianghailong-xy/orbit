@@ -244,7 +244,7 @@ async function doneTask(stack: Stack, w: World, title: string, tip: string, opti
   await stack.db.session.create({
     data: {
       id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, taskId, workspaceId: w.workspaceId,
-      assignedRunnerId: w.runnerId, title, prompt: title, provider: 'claude', status: RunStatus.SUCCEEDED,
+      assignedRunnerId: w.runnerId, title, prompt: title, provider: 'claude', status: RunStatus.SUCCEEDED, 
       dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true, isolationStatus: 'worktree',
       branch, branchSha: tip, baseSha: sha('b'), numTurns: 1, startedAt: minutesAgo(30), createdAt: minutesAgo(30),
       finishedAt: minutesAgo(2), runtimeSessionId: randomUUID(),

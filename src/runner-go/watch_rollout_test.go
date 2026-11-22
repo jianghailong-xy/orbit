@@ -223,13 +223,13 @@ func TestInstructionsLeaveTheWaitParagraphOutWithWatchesOff(t *testing.T) {
 	// Every provider that renders the instructions carries the claim's flag through to them.
 	job := &ClaimedSession{TaskID: "t1", WatchesDisabled: true}
 	rendered := map[string]string{
-		"claude":           strings.Join(appendClaudeAgentInstructionArgs(nil, AgentExecConfig{}, exe, false, job.insideRecordedWork(), job.watchesOn()), "\n"),
+		"claude":           strings.Join(appendClaudeAgentInstructionArgs(nil, AgentExecConfig{}, exe, false, job.insideRecordedWork(), job.watchesOn(), false), "\n"),
 		"codex items":      fmt.Sprint(codexInjectedAgentItems(AgentExecConfig{}, exe, job.insideRecordedWork(), job.watchesOn())),
 		"codex context":    fmt.Sprint(codexAgentAdditionalContext(AgentExecConfig{}, exe, 1, job.insideRecordedWork(), job.watchesOn())),
 		"codex legacy":     codexLegacyAgentContext(AgentExecConfig{}, exe, job.insideRecordedWork(), job.watchesOn()),
 		"kimi":             kimiPromptText(AgentExecConfig{}, exe, "hello", job.insideRecordedWork(), job.watchesOn()),
 		"opencode":         openCodeOrbitCLIInstructions(exe, job.insideRecordedWork(), job.watchesOn(), true),
-		"claude, Watch on": strings.Join(appendClaudeAgentInstructionArgs(nil, AgentExecConfig{}, exe, false, true, true), "\n"),
+		"claude, Watch on": strings.Join(appendClaudeAgentInstructionArgs(nil, AgentExecConfig{}, exe, false, true, true, false), "\n"),
 	}
 	for provider, text := range rendered {
 		wantParagraph := provider == "claude, Watch on"

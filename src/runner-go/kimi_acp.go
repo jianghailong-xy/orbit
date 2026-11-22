@@ -614,6 +614,8 @@ func startKimiACP(ctx context.Context, t *Transport, job *ClaimedSession, execDi
 		"ORBIT_ALLOW_ORCHESTRATION="+orchestrationEnv(job.AllowOrchestration),
 		envWatches+"="+watchesEnv(job.WatchesDisabled),
 		envWiki+"="+wikiEnv(job.WikiDisabled),
+		envBrowser+"="+browserEnv(job.BrowserEnabled),
+		envWorkflows+"="+workflowsEnv(job.WorkflowsDisabled),
 		envScheduleRun+"="+scheduleRunEnv(job.ScheduleRun),
 		envMCPPermissionPrompt+"=0",
 		envSpawnDepth+"="+strconv.Itoa(job.SpawnDepth),
@@ -642,6 +644,8 @@ func startKimiACP(ctx context.Context, t *Transport, job *ClaimedSession, execDi
 	// The session's private Kimi home (see kimi_home.go), so runner-owned
 	// configuration never lands in the user's own ~/.kimi-code.
 	cmd.Env = envWithValue(cmd.Env, "KIMI_CODE_HOME", kimiHome)
+	// On the Orbit Cloud runner with the browser on, a tool the agent runs opens its pages there (browser_opener.go).
+	cmd.Env = browserOpenerEnv(cmd.Env, job.BrowserEnabled)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		cancel()
@@ -2431,6 +2435,7 @@ func kimiAutomaticPermissionOption(job *ClaimedSession, toolName string, input i
 		orbitCLIAllowedTools(
 			orbitCLIPermissionExecutable(orbitCLIExecutable()),
 			job.AllowOrchestration && strings.TrimSpace(job.OrchestrationToken) != "",
+			job.BrowserEnabled,
 		)...)
 	for _, rule := range allowed {
 		if kimiToolMatchesRule(rule, toolName, input) {

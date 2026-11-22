@@ -92,6 +92,8 @@ private class TaskDetailData {
     /** Every runner of the account: whether Cursor CLI is offered as a pin at all (ProviderEngines.androidShowsEngine). */
     var runners by mutableStateOf<List<JsonObject>>(emptyList())
     var providers by mutableStateOf<List<JsonObject>>(emptyList())
+    /** The project's recorded landing-check changes, read while the task is exempt: who exempted it, and when (§12.15 P-R1). */
+    var settingChanges by mutableStateOf<List<io.orbitd.android.projects.ProjectSettingChanges.Change>?>(null)
     var busy by mutableStateOf(false)
     /** A refusal of what an open sheet sent, said on the sheet: the page's banner is behind it. */
     var sheetError by mutableStateOf<String?>(null)
@@ -187,6 +189,14 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
     val landingEvery = if (busyRun) null else TaskLandingLogic.refetchInterval(TaskIntegrationView.of(data.task))
     LaunchedEffect(handle, id, landingEvery) { while (landingEvery != null) { delay(landingEvery); load() } }
     LaunchedEffect(data.notice) { if (data.notice != null) { delay(3000); data.notice = null } }
+    // Who exempted the task and when is the project's record: read while the task is exempt, again when the task changes.
+    val exemptIn = data.task?.takeIf { it.flag("landingCheckExempt") == true }?.text("projectId")
+    LaunchedEffect(handle, exemptIn, data.task?.text("updatedAt")) {
+        if (exemptIn == null) return@LaunchedEffect
+        val projects = io.orbitd.android.projects.ProjectApi(app.session, handle)
+        try { data.settingChanges = io.orbitd.android.projects.ProjectSettingChanges.of(projects.document(exemptIn)) }
+        catch (cancel: CancellationException) { throw cancel } catch (_: Exception) {}
+    }
 
     /** A write belongs to the app, not to this page (iOS's model-owned Task): leaving does not cancel it,
      * so a Run's resends and a comment still go out. A sheet that sent it closes only once it is taken, and its
@@ -354,8 +364,19 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
             TaskDetailLogic.liveRun(task)?.let { live -> item(key = "now") { NowSection(task, live, data, open) } }
             data.evidence.lastOrNull()?.let { latest -> item(key = "evidence") { EvidenceSection(task, latest) } }
             // Where the task's work stands after DONE (§2.7a): the newest landing attempt and why it waits or where it stopped.
-            TaskLandingLogic.status(TaskIntegrationView.of(task))?.let { landing ->
-                item(key = "landing") { LandingSection(landing, open) }
+            // A task exempt from its project's landing check says so in the same section, landed or not (board
+            // docs/mocks/landing-measured ④, ruling D5).
+            val landing = TaskLandingLogic.status(TaskIntegrationView.of(task))
+            val exemption = io.orbitd.android.projects.TaskLandingExemption.of(task)
+            if (landing != null || exemption != null) item(key = "landing") {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (landing != null) LandingSection(landing, open) else TaskSectionHeader(TaskLandingCopy.landingSection)
+                    exemption?.let {
+                        if (landing != null) HorizontalDivider()
+                        io.orbitd.android.projects.TaskExemptionRow(it, io.orbitd.android.projects.ProjectSettingChanges.latestExemption(data.settingChanges, id),
+                            java.time.Instant.now(), enabled) { patch(buildJsonObject { put("landingCheckExempt", false) }) }
+                    }
+                }
             }
             // What "done" means for this task, and who decides it. Before the brief: it is the contract the run and its reader are
             // both held to. Unset, the command pair is not drawn: its "a person decides" contradicted a task judged by evidence.
@@ -671,7 +692,7 @@ private class RunPins(val task: JsonObject, val data: TaskDetailData, assignee: 
     val runProvider = pinnedProvider ?: pinnedEngine?.let { engine -> if (engine == ProviderEngines.DSH) firstDeepSeekKey?.id ?: engine else engine }
         ?: assigneeProvider
     val models = catalog?.models(runEngine, runProvider).orEmpty()
-    val unpinned = if (smartSelection && assignee?.flag("modelRouting") == true) TaskDetailCopy.smartSelectionPlaceholder else TaskDetailCopy.providerDefault
+    val unpinned = if (smartSelection) TaskDetailCopy.smartSelectionPlaceholder else TaskDetailCopy.providerDefault
     val modelValue = task.text("model")?.let { m -> models.firstOrNull { it.text("value") == m }?.text("label") ?: m } ?: unpinned
 }
 

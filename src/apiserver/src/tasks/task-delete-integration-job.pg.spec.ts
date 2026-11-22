@@ -130,7 +130,7 @@ async function landedTask(
   const session = await db.session.create({
     data: {
       ownerId: w.ownerId, creatorId: w.ownerId, title, prompt: 'p',
-      taskId, startsTaskWork: true, status: RunStatus.SUCCEEDED,
+      taskId, startsTaskWork: true, status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
     },
   });
   return { taskId, sessionId: session.id };

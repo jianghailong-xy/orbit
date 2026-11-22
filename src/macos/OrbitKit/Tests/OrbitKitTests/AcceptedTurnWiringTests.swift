@@ -79,14 +79,15 @@ final class AcceptedTurnWiringTests: XCTestCase {
     func testTheHeadIsDrawnByTheTranscriptsOwnRowWithNoCancel() throws {
         let console = try source(Self.consolePath)
         let item = statements(try section(console, from: "case .item(let item):", to: "case .steps(let items):"))
+        // The call continues on the next line with `openSession:` (60963ce4f5-era Fix with an agent link).
         XCTAssertEqual(item.dropFirst().first,
-                       "TranscriptItemView(item: item, fullPayload: console.fullPayload, console: console)",
+                       "TranscriptItemView(item: item, fullPayload: console.fullPayload, console: console,",
                        "an item row is no longer drawn by the transcript's item view")
 
         let user = statements(try section(console, from: "struct TranscriptItemView: View {",
                                           to: "case .assistant(let b):"))
         let row = user.filter { $0.contains("UserTurnRow(") }
-        XCTAssertEqual(row, ["UserTurnRow(bubble: b, steer: steerControls(b), putBack: putBack(b))"],
+        XCTAssertEqual(row, ["UserTurnRow(bubble: b, steer: steerControls(b), putBack: putBack(b), revealItemCard: { console?.revealOpenItemCard($0) ?? false })"],
                        "the transcript's user row is handed queued controls, so the accepted head would offer a Cancel")
     }
 }

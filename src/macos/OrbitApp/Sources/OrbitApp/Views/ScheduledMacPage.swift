@@ -208,6 +208,10 @@ struct ScheduledMacPage: View {
                     .font(.orbitLabel)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                    // The planned end on its own line, so the 400 pt column never cuts it off.
+                    if let end = row.end {
+                        Text(end).font(.orbitLabel).foregroundStyle(.secondary).accessibilityIdentifier("schedule-row-end")
+                    }
                 }
             }
             .padding(.vertical, 7).padding(.horizontal, 8)
