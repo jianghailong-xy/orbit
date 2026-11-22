@@ -655,7 +655,9 @@ Until 2026-11-20 these names said `orbit-managed`; they now say `orbit-cloud`. W
 - The hosted runners' image is now `<registry>/orbit-cloud-runner`. The first release after the rename builds and pushes
   it there; the earlier `<registry>/orbit-managed-runner` digests stay in the registry for a rollback.
 - The namespace is whatever the profile's `kubernetes.namespace` says. A namespace cannot be renamed: moving the runners
-  out of `orbit-managed` is [Move the runners to another namespace](#move-the-runners-to-another-namespace).
+  out of `orbit-managed` is [Move the runners to another namespace](#move-the-runners-to-another-namespace). Production
+  moved its 7 runners to `orbit-cloud` that way on 2026-11-22, with management off for about 6 minutes, and then
+  deleted `orbit-managed` and its guard `orbit-managed-runner-pods`.
 
 ## Move the runners to another namespace
 
