@@ -274,7 +274,7 @@ GET /api/events?hints=list_changed
 
 - 信封 `{ type: 'sessions.list_changed', sessionId: '', agentId: null, ts, data: { version } }`,用户级(`sessionId` 为空串)。
 - 含义是"该账户的 Open 列表**可能**读出来不一样了",不是变更本身。客户端收到后发一次条件增量读 `GET /sessions?view=open&since=<cursor>`;版本没变时服务端回空 delta、不构建。**正确性只来自那次读**,提示丢了只是晚一点,由客户端的慢兜底读补上。
-- `data.version` 是发送时该账户的 Open 列表数据版本(`readOpenListVersion`),即未带过滤条件的 Open 列表 ETag `W/"ol1-<version>"` 的不透明部分。带过滤条件的 ETag 由它派生,不相等;客户端只拿它和上一条提示比较。
+- `data.version` 是**不透明令牌**,不是 Open 列表的数据版本,也不是 `W/"ol1-…"` ETag 的一部分。它由账户的计数器总和与时钟部分(各 runner 的 id、名称、状态与是否在线,runner 当前持有后台任务的会话,分享链接,外部运行中的回合,以及各时钟阈值的计数)合成,**不含 runner 心跳**。客户端只拿它和同一连接上一条提示比较,不做任何其他用途。
 - **新连接先收到一条**:每条声明了提示的流在订阅后的第一个 tick(约 1 s 内)收到一条带当前版本的提示,不管有没有变化。客户端连接前后各自会读一次列表(先后顺序不定),这第一条提示就是重连读要对齐的版本(见 [list-freshness-design.md](./list-freshness-design.md) R4);连接与读之间提交的写不会被吞进"基线"里。
 - 之后,**"上次告知的版本"按流记录,不按账户**:某条流只在版本与它上次收到的不同时才收到下一条,每条流**每秒至多一条**。同一账户后连上的流不会继承别的流已经收到的版本。
 

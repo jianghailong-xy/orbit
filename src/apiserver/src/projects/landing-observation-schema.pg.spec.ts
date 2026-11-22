@@ -751,31 +751,23 @@ test('0453 §10.4 §10.9 on the schema before it, over rows of every table it al
         await sql.query(readFileSync(path.join(MIGRATIONS, '1130_rare_predicate_indexes', 'migration.sql'), 'utf8'));
         // 1270 adds `task_owner_updated_idx`; its other index is on `session_merge_receipt`, already present before 0453.
         await sql.query(readFileSync(path.join(MIGRATIONS, '1270_receipt_source_sha_task_updated_idx', 'migration.sql'), 'utf8'));
+        // Revision 42 part two (§12.15): 1310 adds the codebase's `landing_check_none` and who set the landing
+        // check (P-C1, over 0508's columns), 1350 the task's landing-check exemption (P-C2), and 1390 the owner's
+        // revert mark on that exemption beside its own `project_setting_change` table (P-R1), whose keys reach
+        // only `project` and itself. Self-contained and without BEGIN/COMMIT, so each is replayed as it ships.
+        await sql.query(readFileSync(path.join(MIGRATIONS, '1310_project_landing_check_set_by', 'migration.sql'), 'utf8'));
+        await sql.query(readFileSync(path.join(MIGRATIONS, '1350_task_landing_check_exempt', 'migration.sql'), 'utf8'));
+        await sql.query(readFileSync(path.join(MIGRATIONS, '1390_project_setting_change', 'migration.sql'), 'utf8'));
         // 1060 adds `task.start_when_condition_id` with its unique index, its foreign key to `condition` and
         // `task_run_at_or_start_when_chk`. The key needs 1030's `condition` table, which needs `schedule` and more,
         // so 1060 cannot be replayed here alone: its four objects, by name, are left out of the empty side instead.
         // 1070 adds `project_open_item.translation`; it is left out the same way, by name.
         const from1060 = new Set(['start_when_condition_id', 'task_start_when_condition_id_key',
           'task_start_when_condition_id_fkey', 'task_run_at_or_start_when_chk']);
-        // 1310, 1350 and 1390 land after the frontier this test replays: they extend `project_codebase` and
-        // `task` with who set a landing check and the explicit "run none" / exempt values, columns and CHECKs
-        // that are not replayed here and are left out of the empty side by name, as 1060's and 1070's are.
-        const afterFrontier: Record<string, ReadonlySet<string>> = {
-          project_codebase: new Set([
-            'landing_check_none', 'landing_check_set_by', 'landing_check_set_by_session_id', 'landing_check_set_at',
-            'project_codebase_landing_check_none_chk', 'project_codebase_landing_check_set_by_chk',
-          ]),
-          task: new Set([
-            'landing_check_exempt', 'landing_check_exempt_reason', 'landing_check_exempt_by_session_id',
-            'landing_check_exempt_owner_set_at', 'task_landing_check_exempt_reason_chk',
-            'task_landing_check_exempt_by_chk',
-          ]),
-        };
         const empty = await shape(caseClient);
         const before1060 = Object.fromEntries(Object.entries(empty).map(([kind, rows]) =>
           [kind, rows.filter((row) => !(row.table === 'task' && from1060.has(row.name))
-            && !(row.table === 'project_open_item' && row.name === 'translation')
-            && !afterFrontier[row.table as string]?.has(row.name as string))]));
+            && !(row.table === 'project_open_item' && row.name === 'translation'))]));
         assert.deepEqual(await shape(sql), before1060,
           'the tables 0453 alters differ between a database migrated over data and one migrated from empty');
       } finally {

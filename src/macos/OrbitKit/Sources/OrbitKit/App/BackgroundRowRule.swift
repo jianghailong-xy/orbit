@@ -9,8 +9,9 @@ import Foundation
 /// user's next message or the agent's next turn, whichever comes first, a wake's turn included
 /// (D1, revised 2026-11-21; an item that ended mid-turn stays until the next turn starts); the visible label is "Background",
 /// the screen reader keeps "Background processes" (D2); several running rotate their names, newest
-/// started first, 3000 ms each with a 300 ms change (E1); a shown failure is pinned (E2); nothing
-/// running names the last one to end, the most recent failure first (E3).
+/// started first, 3000 ms each with a 300 ms change (E1); a failure is neither counted nor pinned, as
+/// the owner can do nothing about it (E2, revised 2026-11-21); nothing running names the last one to
+/// end, failed or not (E3).
 public enum BackgroundRowRule {
     /// The row's visible label.
     public static let label = "Background"
@@ -56,7 +57,7 @@ public enum BackgroundRowRule {
     }
 
     public struct CountPart: Equatable, Sendable {
-        /// `running` or `failed`; a `failed` part is drawn in the error colour.
+        /// `running`.
         public var kind: String
         public var text: String
     }
@@ -66,8 +67,6 @@ public enum BackgroundRowRule {
         case one(Item)
         /// The running items' names in turn, newest started first, looping.
         case rotate([Item], perNameMs: Int, changeMs: Int)
-        /// The most recently failed item, held instead of rotating.
-        case pinned(Item)
     }
 
     /// A shown row. A hidden one is `nil` from `row`.
@@ -123,13 +122,10 @@ public enum BackgroundRowRule {
                 (time(b.endedAt) ?? .distantPast) > (time(a.endedAt) ?? .distantPast) ? b : a
             }
         }
-        let failed = ended.filter { $0.status == "failed" }
 
         let name: Name
         if shown.count == 1 {
             name = .one(item(shown[0]))
-        } else if !failed.isEmpty {
-            name = .pinned(item(lastEnded(failed)))
         } else if running.count >= 2 {
             name = .rotate(running.sorted { $0.startedSeq > $1.startedSeq }.map(item),
                            perNameMs: rotatePerNameMs, changeMs: rotateChangeMs)
@@ -139,15 +135,15 @@ public enum BackgroundRowRule {
             name = .one(item(lastEnded(ended)))
         }
 
+        // How many run; no failed count (E2).
         var parts: [CountPart] = []
-        if shown.count > 1 {
-            if !running.isEmpty { parts.append(CountPart(kind: "running", text: "\(running.count) running")) }
-            if !failed.isEmpty { parts.append(CountPart(kind: "failed", text: "\(failed.count) failed")) }
+        if shown.count > 1, !running.isEmpty {
+            parts.append(CountPart(kind: "running", text: "\(running.count) running"))
         }
         let countLine = parts.isEmpty ? nil : parts.map(\.text).joined(separator: " · ")
         let spoken: String
         switch name {
-        case .one(let i), .pinned(let i): spoken = countLine ?? i.name
+        case .one(let i): spoken = countLine ?? i.name
         case .rotate(let items, _, _): spoken = countLine ?? items[0].name
         }
         return Row(label: label, name: name, countParts: parts, countLine: countLine,

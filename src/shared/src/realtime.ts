@@ -12,6 +12,7 @@ import type { SessionCapabilities } from './dto';
 import type { ConfirmationUnderReview } from './owner-confirmation-review';
 import type { SessionOwnerItem, SessionWaitingKind } from './project-progress';
 import type { ExternalMessageFrom, OrbitMessageFrom, SessionMessageFrom } from './session-message';
+import type { SessionPhase, SessionTurnOutcome, SessionWaitingOn } from './session-phase';
 import type { SessionRequestPeer } from './session-request';
 import type { SessionSourceRefusalDetail, SourceRefusalCode, SourceState } from './source';
 
@@ -149,10 +150,11 @@ export const CONTROL_HINT_OWNER_REQUESTS = 'owner_requests';
 
 /** `data` for `sessions.list_changed`. */
 export interface ControlListChanged {
-  /** The account's Open-list data version as it stood when the hint was sent: the opaque part of the
-   *  ETag the unfiltered Open list is served with (`W/"ol1-<version>"`). A filtered list's ETag is
-   *  derived from it, so a client compares it with nothing but a previous hint's. The first hint a
-   *  stream gets, shortly after it connects, carries the current version even when nothing moved. */
+  /** An opaque hint token: the account's Open-list counter sums and the clock part of the list (runners'
+   *  id, name, status and liveness, share links, foreign running turns, the clock thresholds), which
+   *  leaves out runner heartbeats. It is NOT the Open list's ETag version. A client compares it with
+   *  nothing but a previous hint's. The first hint a stream gets, shortly after it connects, carries
+   *  the current token even when nothing moved. */
   version: string;
 }
 
@@ -190,6 +192,12 @@ export interface ControlSessionSummary {
   lifecycleState: SessionLifecycleState;
   /** @deprecated Compatibility representation; use `lifecycleState`. */
   filingState: SessionFilingState;
+  /** The three-state field and the facts beside it (session-phase.ts, contracts/session-state.contract.json).
+   *  Absent from an older control plane. */
+  phase?: SessionPhase;
+  released?: boolean;
+  lastTurnOutcome?: SessionTurnOutcome | null;
+  waitingOn?: SessionWaitingOn | null;
   /** Server-derived actions; optional for rolling-version compatibility. */
   capabilities?: SessionCapabilities;
   /** The engine the session runs on for good — the CLI on the runner (`claude`, `codex`, `kimi`,
@@ -355,6 +363,12 @@ export interface ControlSessionEnded {
   /** @deprecated Compatibility representation; use `lifecycleState`. */
   filingState: SessionFilingState;
   endReason: SessionEndReason | null;
+  /** The three-state field and the facts beside it (session-phase.ts, contracts/session-state.contract.json).
+   *  Absent from an older control plane. */
+  phase?: SessionPhase;
+  released?: boolean;
+  lastTurnOutcome?: SessionTurnOutcome | null;
+  waitingOn?: SessionWaitingOn | null;
 }
 
 /** `data` for `session.error`. `recoverable=true` marks a mid-turn (non-fatal) error — e.g. a

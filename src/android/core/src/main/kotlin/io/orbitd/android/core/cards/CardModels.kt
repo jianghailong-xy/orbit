@@ -37,7 +37,8 @@ data class CriteriaDecision(val commitToken: String, val decision: String, val b
 data class OwnerAnswer(val key: String, val option: Int? = null, val text: String? = null)
 /** `upstreamRef` is the project's main branch as a full `refs/heads/…` ref: the owner's choice on a press, a suggestion on a
  * coordinator's request, and absent when the card offered none (the project keeps the one it stands on). `deliveryMode` is how the
- * work reaches it (§10.5 O-L1), the owner's choice on a press and absent when the card offered none. */
+ * work reaches it (§10.5 O-L1), the owner's choice on a press and absent when the card offered none. `line` is absent from a
+ * request that names none (contract §12.15 P-M2): the line is decided when the first task with commits is done. */
 @Serializable
 data class ProjectStartSettings(val line: String? = null, val automatic: Boolean, val maxConcurrentTasks: Int,
     val mergeCheckCommand: String?, val projectBranchName: String? = null, val upstreamRef: String? = null,

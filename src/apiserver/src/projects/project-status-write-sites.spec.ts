@@ -65,8 +65,24 @@ const SRC = path.resolve(__dirname, '../../src');
  * `done_by = 'OWNER'`, under a compare-and-set on the criteria seal, and it is refused whole by
  * the same `refuseProjectStatusWrite` when an acting session is on the request. A fourth entry
  * still has to be explained before it is added.
+ *
+ * THE FOURTH ENTRY, AND THE DECISION THAT PUT IT THERE
+ * ====================================================
+ * `projects/landing-regression-repair.ts#storeDoneOverOpen` is the start-time repair of what
+ * §12.15 P-M1's first reading wrote on 2026-11-20 (task 350u8yS3VY8ASG25fpRLX). That reading only
+ * ever took DONE away, so its repair only gives DONE back. The first version called
+ * `refreshProjectDone`, the projection itself, which writes both directions by design; the
+ * production dry run showed it would have stored OPEN over four projects DONE by derivation since
+ * September and October, whose projection reads not done for reasons of their own. The project
+ * coordinator then ruled that the repair never takes a project out of DONE, as a hard property of
+ * the repair. So it is a statement of its own, whose direction is in its text: it matches only a
+ * row whose status is OPEN, and it writes only DONE, with the projection's own record
+ * (`derivedDoneRecord`, recorded DERIVED), and only when the projection's own decision over that
+ * row (`readDerivedProjectStatusWrite`) is to store DONE. It takes no `status` from any caller and
+ * runs only at the server's start, so no request can reach it. A fifth entry still has to be
+ * explained before it is added.
  */
-const FROZEN_WRITE_SITES: readonly string[] = ['projects/project-acceptance.service.ts#recordProjectDone', 'projects/project-done-derived.ts#storeDerivedProjectStatus', 'projects/projects.service.ts#update'];
+const FROZEN_WRITE_SITES: readonly string[] = ['projects/landing-regression-repair.ts#storeDoneOverOpen', 'projects/project-acceptance.service.ts#recordProjectDone', 'projects/project-done-derived.ts#storeDerivedProjectStatus', 'projects/projects.service.ts#update'];
 
 /** The Prisma model writes whose input can carry a `status`. Reads are absent on purpose. */
 const PRISMA_PROJECT_WRITE =

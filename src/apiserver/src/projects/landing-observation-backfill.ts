@@ -4,7 +4,7 @@ import { Client } from 'pg';
 import { lockOwnerTaskGraph, orderedIds } from '../common/lock-order';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import type { PrismaService } from '../prisma/prisma.service';
-import { queueLandingObservation, type ObservationQueued } from './landing-observation';
+import { queueLandingObservationIfPending, type ObservationQueued } from './landing-observation';
 import { isCodeTaskSql, lineStartedSql, taskLandingSql } from './project-criterion-landing';
 import { settleDeliveredIdentity, type DeliveredIdentitySettlement } from './project-integration-job';
 
@@ -17,8 +17,9 @@ import { settleDeliveredIdentity, type DeliveredIdentitySettlement } from './pro
  * task (`isCodeTask`) not known to be on the line (§1.4 `NOT_KNOWN`) whose identity was never frozen:
  * freezes that identity from the rows as they stand (O-L4, `settleDeliveredIdentity`) — only for work
  * that has stopped moving and names its commit; work still moving is frozen by its own finish, and an
- * identity nobody can name stays unfrozen, as it would at a DONE — then queues ONE `OBSERVE_LANDING`
- * for the project (`trigger: DEPLOY`), or folds into the one already queued. The observation does the
+ * identity nobody can name stays unfrozen, as it would at a DONE — then, when a task of the project
+ * waits to be observed (a frozen commit past its base, `hasPendingObservation`), queues ONE
+ * `OBSERVE_LANDING` for the project (`trigger: DEPLOY`), or folds into the one already queued. The observation does the
  * rest: what it sees gets its receipt (O-R1), whose M-T13 retires the BLOCKED candidates and whose
  * commit lets J10 start what waited; on a PLATFORM project's main, this round's O-R3 is one
  * `LANDED_WITHOUT_CONFIRMATION` for the project (`UL:backfill:<projectId>`, `answersDeployRound`).
@@ -28,10 +29,20 @@ import { settleDeliveredIdentity, type DeliveredIdentitySettlement } from './pro
  * candidate still waiting for its check), and the observation. Nothing it cannot read from committed
  * rows is guessed.
  *
+ * A FROZEN EMPTY IDENTITY IS THE WHOLE ANSWER. Since revision 42 (§12.15 P-M3) a task that ran a branch
+ * is code work whatever its labels say, so a codeless task finished before then is a candidate here. Its
+ * frozen identity is what lets every reader measure it: an identity with no commit past its base, whose
+ * work sessions hold nothing of their own, reads as nothing to land (`deliveredNothingOfItsOwn`) — LANDED
+ * in its criterion, released for its dependents, no route queued. Left unfrozen it would read as work
+ * the line never answered for, and the first re-derivation of its project would take a settled DONE
+ * away. So the pass freezes it, and stops there: no observation is queued for it, because none would
+ * look at it, and an observation's result is a post-commit edge that re-derives the project and routes
+ * its criteria to the coordinator (2026-11-20, a settled project flipped to OPEN that way).
+ *
  * WHY IT IS SAFE TO RUN ON EVERY START. Every write is conditioned on the state it changes: an identity
  * is frozen only while `delivered_at` is NULL (a compare-and-set), and an observation is queued only for
- * a project this run froze something in — so a second run over the same rows freezes nothing and queues
- * nothing, and a run after an older replica wrote a DONE meanwhile freezes just that one. One project is
+ * a project this run froze something in that has a task waiting to be observed — so a second run over
+ * the same rows freezes nothing and queues nothing, and a run after an older replica wrote a DONE meanwhile freezes just that one. One project is
  * one transaction, so a run that died half-way leaves each project either done or untouched, and the
  * next start finishes it. One run at a time across replicas: a session-level advisory lock on a
  * connection of its own (`LANDING_OBSERVATION_BACKFILL_LOCK`), held for the whole run, so a second
@@ -59,7 +70,7 @@ export interface LandingBackfillProject {
    *  that stopped qualifying between the read and its lock. */
   left: Array<{ taskId: string; settlement: DeliveredIdentitySettlement }>;
   /** The observation queued for the project (`queued: false` when it folded into the one queued),
-   *  or null when this run froze nothing there. */
+   *  or null when this run froze nothing there, or nothing it froze waits to be observed. */
   observation: ObservationQueued | null;
 }
 
@@ -178,8 +189,12 @@ export async function backfillProject(
     if (settlement === 'FROZEN') frozen.push(taskId);
     else left.push({ taskId, settlement });
   }
+  // Only when a task of the project now waits to be observed (`landingPendingObservationSql`): an
+  // identity frozen with no commit past its base has nothing on the line to look for (§12.15 P-M1), and
+  // an observation queued anyway is a job whose result's post-commit edge re-derives the project
+  // and wakes its coordinator about work that was settled before the deploy (2026-11-20).
   const observation = frozen.length > 0
-    ? await queueLandingObservation(tx, { ownerId: input.ownerId, projectId: input.projectId, trigger: 'DEPLOY' })
+    ? await queueLandingObservationIfPending(tx, { ownerId: input.ownerId, projectId: input.projectId, trigger: 'DEPLOY' })
     : null;
   return { projectId: input.projectId, frozen, left, observation };
 }

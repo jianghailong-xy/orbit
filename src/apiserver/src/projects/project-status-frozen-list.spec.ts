@@ -85,18 +85,32 @@ const CENSUS = 'projects/project-status-write-sites.spec.ts';
  * and somebody having to write down which decision the new entry came from. A fourth entry needs
  * the same, and re-baselining without that paragraph is the failure this file exists to make
  * visible.
+ *
+ * THE FOURTH ENTRY
+ * ================
+ * `projects/landing-regression-repair.ts#storeDoneOverOpen`, 2026-11-20, task 350u8yS3VY8ASG25fpRLX.
+ * On that day §12.15 P-M1's first reading took settled projects out of DONE in production. The
+ * start-time repair of it first called the projection itself, which writes both directions, and
+ * the production dry run showed that call would have stored OPEN over four projects DONE by
+ * derivation whose projection reads not done for reasons of their own. The project coordinator
+ * ruled that the repair may only return a project to DONE and never take one out of it, as a hard
+ * property. This entry is that property written as one statement: it matches only an OPEN row and
+ * writes only DONE recorded DERIVED, with the projection's own record, when the projection's own
+ * decision is DONE. It takes `status` from nobody, runs only at the server's start, and what a
+ * session may ASK for is still refused. A fifth entry needs the same paragraph.
  */
 const BASELINE_DECLARATION =
-  "const FROZEN_WRITE_SITES: readonly string[] = ['projects/project-acceptance.service.ts#recordProjectDone', 'projects/project-done-derived.ts#storeDerivedProjectStatus', 'projects/projects.service.ts#update'];";
+  "const FROZEN_WRITE_SITES: readonly string[] = ['projects/landing-regression-repair.ts#storeDoneOverOpen', 'projects/project-acceptance.service.ts#recordProjectDone', 'projects/project-done-derived.ts#storeDerivedProjectStatus', 'projects/projects.service.ts#update'];";
 
 /**
  * The revisions the copy above was taken from, so the checks a reviewer runs are written down:
- * the one-entry declaration at the first, the entry added by the projection at the second, and the
- * owner's door at the third.
+ * the one-entry declaration at the first, the entry added by the projection at the second, the
+ * owner's door at the third, and the landing repair's DONE over OPEN at the fourth.
  */
 const BASELINE_REVISION = '59f674e2';
 const PROJECTION_REVISION = 'the 2026-09-08 project-done-derived unit';
 const OWNER_DONE_REVISION = 'the 2026-10-01 owner-done door (migration 0345)';
+const LANDING_REPAIR_REVISION = 'the 2026-11-20 landing repair (task 350u8yS3VY8ASG25fpRLX)';
 
 /**
  * The whole `FROZEN_WRITE_SITES` statement in a source, or `null` when it declares none.
@@ -126,7 +140,7 @@ test('(a) the frozen write-site list is what it was before this work started', (
     BASELINE_DECLARATION,
     `${CENSUS}'s frozen list differs from the one written down here (the owner endpoint at `
     + `${BASELINE_REVISION}, the projection from ${PROJECTION_REVISION}, the owner's door from `
-    + `${OWNER_DONE_REVISION}); a project that added a `
+    + `${OWNER_DONE_REVISION}, the DONE over OPEN from ${LANDING_REPAIR_REVISION}); a project that added a `
     + 'way to write project.status and appended it here would read exactly like this',
   );
 
@@ -135,6 +149,7 @@ test('(a) the frozen write-site list is what it was before this work started', (
   const entries = entriesOf(declared);
   assert.ok(entries.length > 0, 'the frozen baseline is empty');
   assert.deepEqual(entries, [
+    'projects/landing-regression-repair.ts#storeDoneOverOpen',
     'projects/project-acceptance.service.ts#recordProjectDone',
     'projects/project-done-derived.ts#storeDerivedProjectStatus',
     'projects/projects.service.ts#update',

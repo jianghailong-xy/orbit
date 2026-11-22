@@ -48,7 +48,6 @@ import io.orbitd.android.composer.ProviderEngines
 import io.orbitd.android.management.LocalSmartSelection
 import io.orbitd.android.management.RunnerPage
 import io.orbitd.android.navigation.*
-import io.orbitd.android.projects.ProjectSettingChange
 import io.orbitd.android.projects.TaskDependencyGraphView
 import io.orbitd.android.taskprojects.*
 import io.orbitd.android.text.*
@@ -59,7 +58,6 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.*
-import java.time.Instant
 import java.util.UUID
 
 /** Everything the page read for one task. A re-read replaces it in place; a failed one keeps it. */
@@ -94,8 +92,8 @@ private class TaskDetailData {
     /** Every runner of the account: whether Cursor CLI is offered as a pin at all (ProviderEngines.androidShowsEngine). */
     var runners by mutableStateOf<List<JsonObject>>(emptyList())
     var providers by mutableStateOf<List<JsonObject>>(emptyList())
-    /** The project's `settingChanges`, read only while the task is exempt: who marked the exemption and when. */
-    var settingChanges by mutableStateOf<List<ProjectSettingChange>>(emptyList())
+    /** The project's recorded landing-check changes, read while the task is exempt: who exempted it, and when (§12.15 P-R1). */
+    var settingChanges by mutableStateOf<List<io.orbitd.android.projects.ProjectSettingChanges.Change>?>(null)
     var busy by mutableStateOf(false)
     /** A refusal of what an open sheet sent, said on the sheet: the page's banner is behind it. */
     var sheetError by mutableStateOf<String?>(null)
@@ -155,9 +153,6 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
                 val runners = rows("runners")
                 val pools = rows("providers", "pools")
                 val sharedPools = rows("providers", "shared-pools")
-                // Who marked an exempt task, and when: the project's own change records (the web reads them off the project too).
-                val projectId = task.text("projectId")?.takeIf { TaskLandingExemption.of(task) != null }
-                val project = async { projectId?.let { runCatching { api.read(listOf("projects", it)) as? JsonObject }.getOrNull() } }
                 data.owner = owner.await()
                 attribution.await().onSuccess { data.attribution = it; data.attributionFailed = false }.onFailure { if (data.attribution == null) data.attributionFailed = true }
                 graph.await()?.let { data.graph = it }
@@ -166,7 +161,6 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
                 lists.await()?.let { data.lists = it }
                 share.await()?.let { data.share = it }
                 runner.await()?.let { data.runner = it }
-                if (projectId == null) data.settingChanges = emptyList() else project.await()?.let { data.settingChanges = ProjectSettingChange.read(it) }
                 runners.await()?.let { data.runners = it }
                 providers.await()?.let { keys ->
                     data.providers = (keys + pools.await().orEmpty().map { ProviderEngines.poolRow(it, ProviderEngines.CLAUDE) } +
@@ -195,6 +189,14 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
     val landingEvery = if (busyRun) null else TaskLandingLogic.refetchInterval(TaskIntegrationView.of(data.task))
     LaunchedEffect(handle, id, landingEvery) { while (landingEvery != null) { delay(landingEvery); load() } }
     LaunchedEffect(data.notice) { if (data.notice != null) { delay(3000); data.notice = null } }
+    // Who exempted the task and when is the project's record: read while the task is exempt, again when the task changes.
+    val exemptIn = data.task?.takeIf { it.flag("landingCheckExempt") == true }?.text("projectId")
+    LaunchedEffect(handle, exemptIn, data.task?.text("updatedAt")) {
+        if (exemptIn == null) return@LaunchedEffect
+        val projects = io.orbitd.android.projects.ProjectApi(app.session, handle)
+        try { data.settingChanges = io.orbitd.android.projects.ProjectSettingChanges.of(projects.document(exemptIn)) }
+        catch (cancel: CancellationException) { throw cancel } catch (_: Exception) {}
+    }
 
     /** A write belongs to the app, not to this page (iOS's model-owned Task): leaving does not cancel it,
      * so a Run's resends and a comment still go out. A sheet that sent it closes only once it is taken, and its
@@ -362,13 +364,18 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
             TaskDetailLogic.liveRun(task)?.let { live -> item(key = "now") { NowSection(task, live, data, open) } }
             data.evidence.lastOrNull()?.let { latest -> item(key = "evidence") { EvidenceSection(task, latest) } }
             // Where the task's work stands after DONE (§2.7a): the newest landing attempt and why it waits or where it stopped.
-            // An exempt task has the section for its exemption even before it has a landing (D5).
+            // A task exempt from its project's landing check says so in the same section, landed or not (board
+            // docs/mocks/landing-measured ④, ruling D5).
             val landing = TaskLandingLogic.status(TaskIntegrationView.of(task))
-            val exemption = TaskLandingExemption.of(task)
+            val exemption = io.orbitd.android.projects.TaskLandingExemption.of(task)
             if (landing != null || exemption != null) item(key = "landing") {
-                LandingSection(landing, open) {
-                    exemption?.let { TaskLandingExemptView(it, TaskLandingExemption.marked(data.settingChanges, task.text("id")), Instant.now(), enabled) {
-                        patch(TaskLandingExemption.removeRequest) } }
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (landing != null) LandingSection(landing, open) else TaskSectionHeader(TaskLandingCopy.landingSection)
+                    exemption?.let {
+                        if (landing != null) HorizontalDivider()
+                        io.orbitd.android.projects.TaskExemptionRow(it, io.orbitd.android.projects.ProjectSettingChanges.latestExemption(data.settingChanges, id),
+                            java.time.Instant.now(), enabled) { patch(buildJsonObject { put("landingCheckExempt", false) }) }
+                    }
                 }
             }
             // What "done" means for this task, and who decides it. Before the brief: it is the contract the run and its reader are
@@ -597,45 +604,37 @@ private fun ActionRow(row: TaskActionRow, canStart: Boolean, enabled: Boolean, t
 }
 
 /** The task's Landing section (§2.7a, web `LandTaskStatus`): the badge, the generation, the step it
- * is on or stopped at, a silent runner's report, the reason and the receipt, the six facts — then a task's
- * landing-check exemption ([exempt], D5) and the one way into its landing session. The landing itself is
- * read-only: no retry, merge or release door lives here; the exemption's Remove is the owner's own flag. */
+ * is on or stopped at, a silent runner's report, the reason and the receipt, the six facts — then
+ * the one way into its landing session. Read-only: no retry, merge or release door lives here. */
 @Composable
-private fun LandingSection(status: TaskLandingStatus?, open: (OrbitRoute) -> Unit, exempt: @Composable () -> Unit = {}) {
-    TaskSectionHeader(TaskLandingCopy.landingSection, status?.generation?.let { "${TaskLandingCopy.generation} $it" })
+private fun LandingSection(status: TaskLandingStatus, open: (OrbitRoute) -> Unit) {
+    TaskSectionHeader(TaskLandingCopy.landingSection, status.generation?.let { "${TaskLandingCopy.generation} $it" })
     Column(Modifier.fillMaxWidth().testTag("task-landing"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        if (status != null) LandTaskLines(status)
-        exempt()
-        status?.let(TaskLandingLogic::route)?.let { route ->
-            TextButton(onClick = { open(route) }, modifier = Modifier.testTag("task-landing-open")) { Text("${TaskLandingCopy.openLanding} ›") }
-        }
-    }
-}
-
-/** The newest LAND_TASK's own lines: the badge and step, a silent runner's report, the reason, the receipt and the six facts. */
-@Composable
-private fun LandTaskLines(status: TaskLandingStatus) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        status.badge?.let { badge ->
-            val ink = landingInk(badge.tone)
-            Text(badge.label, Modifier.testTag("task-landing-badge").background(ink.copy(alpha = 0.14f), RoundedCornerShape(50))
-                .padding(horizontal = 8.dp, vertical = 2.dp), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = ink)
-        }
-        status.step?.let { Text(it, Modifier.testTag("task-landing-step"), style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2) }
-    }
-    status.noReport?.let { Text(it, Modifier.testTag("task-landing-no-report"), style = MaterialTheme.typography.labelMedium,
-        fontWeight = FontWeight.SemiBold, color = LocalOrbitColors.current.needsYou) }
-    status.reason?.let { Text(it, Modifier.testTag("task-landing-reason"), style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant) }
-    status.receipt?.let { Text(it, Modifier.testTag("task-landing-receipt"), style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant) }
-    if (status.facts.isNotEmpty()) Column(Modifier.testTag("task-landing-facts"), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        status.facts.forEach { fact ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(fact.label, Modifier.width(92.dp), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(fact.value, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            status.badge?.let { badge ->
+                val ink = landingInk(badge.tone)
+                Text(badge.label, Modifier.testTag("task-landing-badge").background(ink.copy(alpha = 0.14f), RoundedCornerShape(50))
+                    .padding(horizontal = 8.dp, vertical = 2.dp), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = ink)
             }
+            status.step?.let { Text(it, Modifier.testTag("task-landing-step"), style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2) }
+        }
+        status.noReport?.let { Text(it, Modifier.testTag("task-landing-no-report"), style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold, color = LocalOrbitColors.current.needsYou) }
+        status.reason?.let { Text(it, Modifier.testTag("task-landing-reason"), style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        status.receipt?.let { Text(it, Modifier.testTag("task-landing-receipt"), style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        if (status.facts.isNotEmpty()) Column(Modifier.testTag("task-landing-facts"), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            status.facts.forEach { fact ->
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(fact.label, Modifier.width(92.dp), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(fact.value, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+        TaskLandingLogic.route(status)?.let { route ->
+            TextButton(onClick = { open(route) }, modifier = Modifier.testTag("task-landing-open")) { Text("${TaskLandingCopy.openLanding} ›") }
         }
     }
 }

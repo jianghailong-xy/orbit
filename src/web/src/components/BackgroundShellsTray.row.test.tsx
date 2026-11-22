@@ -151,8 +151,6 @@ describe('the folded row, by background-row.fixture.json', () => {
       expect(one('.bg-tray-count')).toBeNull();
     } else {
       expect(one('.bg-tray-count')?.textContent).toBe(want.countLine);
-      const failed = want.countParts.find((p) => p.kind === 'failed');
-      expect(one('.bg-tray-count .ct-failed')?.textContent ?? null).toBe(failed?.text ?? null);
     }
 
     // As the Agents row: the name, then past the spacer the count, the mark, the arrow at the edge.
@@ -364,9 +362,9 @@ describe('the opened list', () => {
       shell({ shellId: 'bgj_7aa', kind: 'job', command: 'swift test', description: '', startedSeq: 30, status: 'failed', endedAt: '2026-11-16T02:45:00.000Z' }),
     ];
     render(list, SINCE, true);
-    // Folded: the failure is pinned; the done one ended before the last message and is not counted.
-    expect(one('.bg-tray-name')?.textContent).toBe('swift test');
-    expect(one('.bg-tray-count')?.textContent).toBe('1 running · 1 failed');
+    // Folded: the running one is named, the failure not counted; the done one ended before the last message.
+    expect(one('.bg-tray-name')?.textContent).toBe('web suite');
+    expect(one('.bg-tray-count')?.textContent).toBe('1 running');
 
     toggle();
     const rows = all('.bg-shell');
@@ -382,8 +380,8 @@ describe('the opened list', () => {
   });
 });
 
-// Ruling R1 (2026-11-21): the row stays as it is, and from the board's D1 only two things: a failed job counts in
-// red, and a job's row in the opened list goes to its Job card. R3: a running job's row can stop it.
+// Ruling R1 (2026-11-21): a job's row in the opened list goes to its Job card. R3: a running job's row can stop it.
+// A failed job is no longer counted (E2, revised 2026-11-21): the person can do nothing about it.
 describe('a bg_run job in the opened list', () => {
   const JOBS = [
     shell({ shellId: 'bgj_run', kind: 'job', command: 'npm test -w @orbit/web', description: 'web suite', startedSeq: 20, status: 'running', endedAt: null, stoppable: true }),
@@ -391,11 +389,10 @@ describe('a bg_run job in the opened list', () => {
   ];
   const rowOf = (id: string) => all('.bg-shell').find((r) => r.querySelector('.bg-shell-id')?.textContent === id)!;
 
-  it('counts a failed job in red', () => {
+  it('does not count a failed job', () => {
     render(JOBS, SINCE, true);
-    expect(one('.bg-tray-count')?.textContent).toBe('1 running · 1 failed');
-    expect(one('.bg-tray-count .ct-failed')?.textContent).toBe('1 failed');
-    expect(css).toMatch(/\.ct-failed\s*\{[^}]*color:\s*var\(--error/);
+    expect(one('.bg-tray-count')?.textContent).toBe('1 running');
+    expect(one('.bg-tray-count .ct-failed')).toBeNull();
   });
 
   it('scrolls to its Job card when tapped, and folds the list', () => {

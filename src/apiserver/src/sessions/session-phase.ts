@@ -1,0 +1,195 @@
+import { Prisma, RunStatus } from '@prisma/client';
+import {
+  SESSION_TURN_OUTCOMES,
+  type SessionPhase,
+  type SessionPhaseFields,
+  type SessionTurnOutcome,
+  type SessionWaitingOn,
+} from '@orbit/shared';
+
+import { isReleased } from '../common/session-release';
+import {
+  isSessionExecuting,
+  PENDING_WAKEUP,
+  RESUME_WATCH,
+  sessionWillWake,
+  type SessionWorkingRow,
+} from '../common/session-working';
+import { readOwnerDecisionsBySession } from '../projects/owner-decision-signal';
+import { DISPATCH_PAUSED } from '../queue/dispatch-pause';
+import { isHoldNotice } from '../queue/hold-notice';
+import { runnerOfflineSql } from '../runners/runner-presence';
+import { countLiveApprovals } from './abandoned-approvals';
+
+/**
+ * The three-state field and the facts beside it (docs/session-three-state-design.md §4, §11.5; plan step 5.1),
+ * decided here and nowhere else. Every session payload kind — list row, detail, `session.created` /
+ * `session.updated` / `session.ended`, link preview, guest row and the shared header — reads them through
+ * `readSessionPhaseFields`, so the same session answers the same on all of them. contracts/session-state.contract.json
+ * lists them per kind; the legacy fields beside them are untouched (session-state-legacy-fields.spec.ts).
+ */
+
+/** The row columns the four fields read. Absent execution and wake facts read as "not there", as for an old row. */
+export interface SessionPhaseRow extends SessionWorkingRow {
+  /** The release column (common/session-release.ts). */
+  finishedAt: Date | string | null;
+  lastTurnOutcome?: string | null;
+  error?: string | null;
+}
+
+/** What holds a queued turn outside the row: the dispatch pause, and the runner it is assigned to. */
+export interface SessionHoldFacts {
+  /** The administrator's dispatch pause is on (queue/dispatch-pause.ts): no runner is handed new work. */
+  dispatchPaused: boolean;
+  /** Its runner will not claim it whatever the counts say: none assigned, offline, or draining for a self-update.
+   *  The first two gates of the list row's `queuedReason` (`runner_offline`, `runner_updating`). */
+  runnerUnavailable: boolean;
+}
+
+export const NO_HOLD: SessionHoldFacts = { dispatchPaused: false, runnerUnavailable: false };
+
+/**
+ * `phase`: RUNNING while anything executes for the session (`isSessionExecuting`: a dispatched turn, the engine's own
+ * turn, a sub-agent or a background job), PENDING while a turn is queued and nothing executes, IDLE otherwise. A
+ * released session is always IDLE (design §4.2's invariant).
+ */
+export function deriveSessionPhase(row: SessionPhaseRow): SessionPhase {
+  if (isReleased(row)) return 'IDLE';
+  if (isSessionExecuting({ ...row, status: row.status as RunStatus })) return 'RUNNING';
+  return row.status === RunStatus.PENDING ? 'PENDING' : 'IDLE';
+}
+
+/**
+ * A queued session held with a hold notice (queue/hold-notice.ts: the sentences the claim clears, with their writers
+ * listed there): a paused account, an unavailable or engine-incompatible provider, a runner that needs an upgrade, the
+ * Claude region check, dsh not ready. Any other `error` on a PENDING row is a leftover the claim keeps, not a hold.
+ * Clients never rebuild this from `error`: they read `waitingOn: 'HOLD'`.
+ */
+export function sessionHasHoldNotice(row: { status: string; error?: string | null }): boolean {
+  return row.status === RunStatus.PENDING && isHoldNotice(row.error);
+}
+
+/** A queued turn that something nobody asked for keeps from starting. */
+export function sessionIsHeld(row: SessionPhaseRow, hold: SessionHoldFacts): boolean {
+  return row.status === RunStatus.PENDING
+    && (hold.dispatchPaused || hold.runnerUnavailable || sessionHasHoldNotice(row));
+}
+
+/**
+ * `waitingOn`, in this order (the coordinator's ruling of 2026-11-22, task 5.1):
+ *   1. PERSON — somebody owes the session an answer it asked for: `pendingApprovals` (live approval cards plus owner
+ *      decisions, the count the list row and `session.updated` carry) is above zero. In any phase;
+ *   2. a RUNNING session owes nothing else: null;
+ *   3. HOLD — a PENDING one held (`sessionIsHeld`);
+ *   4. WAKE — an IDLE one something will wake (`sessionWillWake`: a RESUME_SESSION watch, a scheduled wake-up, an armed
+ *      retry). A released FAILED session with a retry armed is WAKE; a PENDING one is waiting on its claim, not a wake;
+ *   5. null — nothing. A parked conversation that asked for nothing, and a released one with no retry armed.
+ * Not wake sources here, so null when they are all an IDLE session has: an open session request it sent, and a
+ * question it asked the owner as coordinator (`ask_owner`) — both answered as a turn, but neither is one of
+ * `sessionWillWake`'s facts.
+ */
+export function deriveSessionWaitingOn(
+  row: SessionPhaseRow,
+  hold: SessionHoldFacts,
+  pendingApprovals: number,
+): SessionWaitingOn | null {
+  if (pendingApprovals > 0) return 'PERSON';
+  const phase = deriveSessionPhase(row);
+  if (phase === 'RUNNING') return null;
+  if (phase === 'PENDING') return sessionIsHeld(row, hold) ? 'HOLD' : null;
+  return sessionWillWake({ ...row, status: row.status as RunStatus }) ? 'WAKE' : null;
+}
+
+function turnOutcomeOf(value: string | null | undefined): SessionTurnOutcome | null {
+  return (SESSION_TURN_OUTCOMES as readonly string[]).includes(value ?? '') ? (value as SessionTurnOutcome) : null;
+}
+
+/** The four fields from a row and what holds it. */
+export function sessionPhaseFields(
+  row: SessionPhaseRow,
+  hold: SessionHoldFacts,
+  pendingApprovals: number,
+): SessionPhaseFields {
+  return {
+    phase: deriveSessionPhase(row),
+    released: isReleased(row),
+    lastTurnOutcome: turnOutcomeOf(row.lastTurnOutcome),
+    waitingOn: deriveSessionWaitingOn(row, hold, pendingApprovals),
+  };
+}
+
+interface FactsRow {
+  id: string;
+  ownerId: string;
+  taskId: string | null;
+  status: RunStatus;
+  finishedAt: Date | null;
+  lastTurnOutcome: string | null;
+  error: string | null;
+  engineTurnActive: boolean;
+  runningSubagents: string[];
+  runningBgJobs: string[];
+  runningBgShells: string[];
+  retryAt: Date | null;
+  hasResumeWatch: boolean;
+  hasPendingWakeup: boolean;
+  runnerUnavailable: boolean;
+  dispatchPaused: boolean;
+}
+
+type Db = Prisma.TransactionClient;
+
+/**
+ * The four fields for the sessions `ids`, by id; a session that is not there is absent. One statement reads the row,
+ * its wake facts, its runner and the dispatch pause. `pendingApprovals` is the count the caller already has (the list
+ * row, the realtime summary, the link preview); a session it does not name is counted here, the way
+ * `session.updated` counts it (`countLiveApprovals` plus the owner decisions on it).
+ */
+export async function readSessionPhaseFields(
+  db: Db,
+  ids: readonly string[],
+  pendingApprovals?: ReadonlyMap<string, number>,
+): Promise<Map<string, SessionPhaseFields>> {
+  if (ids.length === 0) return new Map();
+  const rows = await db.$queryRaw<FactsRow[]>(Prisma.sql`
+    SELECT s."id" AS "id", s."owner_id"::text AS "ownerId", s."task_id" AS "taskId", s."status" AS "status",
+           s."finished_at" AS "finishedAt", s."last_turn_outcome" AS "lastTurnOutcome", s."error" AS "error",
+           s."engine_turn_active" AS "engineTurnActive", s."running_subagents" AS "runningSubagents",
+           s."running_bg_jobs" AS "runningBgJobs", s."running_bg_shells" AS "runningBgShells", s."retry_at" AS "retryAt",
+           (${Prisma.raw(RESUME_WATCH.sql('s'))}) AS "hasResumeWatch",
+           (${Prisma.raw(PENDING_WAKEUP.sql('s'))}) AS "hasPendingWakeup",
+           (r."id" IS NULL OR ${runnerOfflineSql('r')} OR r."heartbeat_draining" IS TRUE) AS "runnerUnavailable",
+           ${DISPATCH_PAUSED} AS "dispatchPaused"
+      FROM "session" s
+      LEFT JOIN "runner" r ON r."id" = s."assigned_runner_id"
+     WHERE s."id" IN (${Prisma.join(ids.map((id) => Prisma.sql`${id}::uuid`))})`);
+  const counted = new Map(pendingApprovals ?? []);
+  const uncounted = rows.filter((row) => !counted.has(row.id));
+  for (const [ownerId, owned] of groupBy(uncounted, (row) => row.ownerId)) {
+    const decisions = await readOwnerDecisionsBySession(db, ownerId, { sessionIds: owned.map((row) => row.id) });
+    for (const row of owned) {
+      counted.set(row.id, (await countLiveApprovals(db, row)) + (decisions.get(row.id)?.count ?? 0));
+    }
+  }
+  return new Map(rows.map((row) => [row.id, sessionPhaseFields(
+    row,
+    { dispatchPaused: row.dispatchPaused === true, runnerUnavailable: row.runnerUnavailable === true },
+    counted.get(row.id) ?? 0,
+  )]));
+}
+
+/** `readSessionPhaseFields` for one session; null when it is not there. */
+export async function readOneSessionPhaseFields(
+  db: Db,
+  id: string,
+  pendingApprovals?: number,
+): Promise<SessionPhaseFields | null> {
+  const given = pendingApprovals === undefined ? undefined : new Map([[id, pendingApprovals]]);
+  return (await readSessionPhaseFields(db, [id], given)).get(id) ?? null;
+}
+
+function groupBy<T>(items: readonly T[], key: (item: T) => string): Map<string, T[]> {
+  const groups = new Map<string, T[]>();
+  for (const item of items) groups.set(key(item), [...(groups.get(key(item)) ?? []), item]);
+  return groups;
+}

@@ -1,0 +1,76 @@
+{
+  "name": "orbit.session-state",
+  "contractVersion": 1,
+  "doc": "docs/session-three-state-design.md",
+  "notes": [
+    "Plan step 5.1 (docs/session-three-state-plan.md section 8): every session payload kind carries the four fields below beside the legacy ones, which are sent unchanged.",
+    "The server decides each field in one place, src/apiserver/src/sessions/session-phase.ts. A client never rebuilds one from the legacy fields, from error or from the columns around them.",
+    "The value lists can grow. A client that reads one must read a value it does not know as absent. An older control plane omits all four."
+  ],
+  "fields": {
+    "phase": {
+      "type": "enum",
+      "nullable": false,
+      "values": ["PENDING", "RUNNING", "IDLE"],
+      "sharedConstant": "SESSION_PHASES",
+      "decidedBy": "deriveSessionPhase",
+      "meaning": {
+        "RUNNING": "something executes for the session: a dispatched turn, the engine's own turn, a sub-agent or a background job",
+        "PENDING": "a turn is queued and nothing executes",
+        "IDLE": "neither; a released session is always IDLE"
+      }
+    },
+    "released": {
+      "type": "boolean",
+      "nullable": false,
+      "decidedBy": "isReleased",
+      "meaning": "no runner holds the session (session.finished_at is set); the next message must be claimed again"
+    },
+    "lastTurnOutcome": {
+      "type": "enum",
+      "nullable": true,
+      "values": ["ANSWERED", "FAILED", "INTERRUPTED", "CANCELLED"],
+      "sharedConstant": "SESSION_TURN_OUTCOMES",
+      "decidedBy": "session.last_turn_outcome",
+      "meaning": "how the last turn ended; null before any turn recorded one"
+    },
+    "waitingOn": {
+      "type": "enum",
+      "nullable": true,
+      "values": ["PERSON", "HOLD", "WAKE"],
+      "sharedConstant": "SESSION_WAITING_ON",
+      "decidedBy": "deriveSessionWaitingOn",
+      "order": [
+        "PERSON when pendingApprovals is above zero (live approval cards plus owner decisions), in any phase",
+        "null when phase is RUNNING",
+        "HOLD when phase is PENDING and the dispatch pause is on, its runner is unassigned, offline or updating, or the row carries a hold notice (src/apiserver/src/queue/hold-notice.ts)",
+        "WAKE when phase is IDLE and a RESUME_SESSION watch, a PENDING scheduled wake-up or an armed retry will give it a turn",
+        "null otherwise: a parked conversation that asked for nothing, a released session with no retry armed, and an IDLE session waiting only on a session request it sent or an ask_owner question"
+      ],
+      "ruledBy": "the coordinator, 2026-11-22 (task 5.1)"
+    }
+  },
+  "legacyFields": ["status", "runStatus", "runState", "sessionState", "filingState"],
+  "payloads": {
+    "listRow": { "route": "GET /sessions", "sharedType": null, "fields": ["phase", "released", "lastTurnOutcome", "waitingOn"] },
+    "detail": { "route": "GET /sessions/:id", "sharedType": null, "fields": ["phase", "released", "lastTurnOutcome", "waitingOn"] },
+    "sessionSummary": { "event": "session.created, session.updated", "sharedType": "ControlSessionSummary", "fields": ["phase", "released", "lastTurnOutcome", "waitingOn"] },
+    "sessionEnded": { "event": "session.ended", "sharedType": "ControlSessionEnded", "fields": ["phase", "released", "lastTurnOutcome", "waitingOn"] },
+    "linkPreview": { "route": "POST /link-previews", "sharedType": "LinkPreviewSession", "fields": ["phase", "released", "lastTurnOutcome", "waitingOn"] },
+    "guestRow": { "route": "GET /guest-sessions", "sharedType": "GuestSessionSummary", "fields": ["phase", "released", "lastTurnOutcome", "waitingOn"] },
+    "sharedHead": { "route": "GET /shared/:token, the guest page root", "sharedType": null, "fields": ["phase", "released", "lastTurnOutcome", "waitingOn"] }
+  },
+  "vectors": [
+    { "id": "PENDING", "given": { "status": "PENDING" }, "expect": { "phase": "PENDING", "released": false, "lastTurnOutcome": null, "waitingOn": null } },
+    { "id": "RUNNING", "given": { "status": "RUNNING" }, "expect": { "phase": "RUNNING", "released": false, "lastTurnOutcome": null, "waitingOn": null } },
+    { "id": "AWAITING_INPUT", "given": { "status": "AWAITING_INPUT", "lastTurnOutcome": "ANSWERED" }, "expect": { "phase": "IDLE", "released": false, "lastTurnOutcome": "ANSWERED", "waitingOn": null } },
+    { "id": "INTERRUPTED", "given": { "status": "INTERRUPTED", "lastTurnOutcome": "INTERRUPTED" }, "expect": { "phase": "IDLE", "released": false, "lastTurnOutcome": "INTERRUPTED", "waitingOn": null } },
+    { "id": "SUCCEEDED", "given": { "status": "SUCCEEDED", "endReason": "task_done", "lastTurnOutcome": "ANSWERED" }, "expect": { "phase": "IDLE", "released": true, "lastTurnOutcome": "ANSWERED", "waitingOn": null } },
+    { "id": "FAILED", "given": { "status": "FAILED", "lastTurnOutcome": "FAILED" }, "expect": { "phase": "IDLE", "released": true, "lastTurnOutcome": "FAILED", "waitingOn": null } },
+    { "id": "CANCELLED", "given": { "status": "CANCELLED", "endReason": "ended", "lastTurnOutcome": "ANSWERED" }, "expect": { "phase": "IDLE", "released": true, "lastTurnOutcome": "ANSWERED", "waitingOn": null } },
+    { "id": "job running", "given": { "status": "AWAITING_INPUT", "runningBgJobs": ["bgj_fixture"], "lastTurnOutcome": "ANSWERED" }, "expect": { "phase": "RUNNING", "released": false, "lastTurnOutcome": "ANSWERED", "waitingOn": null } },
+    { "id": "waiting on an approval", "given": { "status": "RUNNING", "pendingApprovals": 1 }, "expect": { "phase": "RUNNING", "released": false, "lastTurnOutcome": null, "waitingOn": "PERSON" } },
+    { "id": "watch armed", "given": { "status": "AWAITING_INPUT", "resumeWatch": true, "lastTurnOutcome": "ANSWERED" }, "expect": { "phase": "IDLE", "released": false, "lastTurnOutcome": "ANSWERED", "waitingOn": "WAKE" } },
+    { "id": "paused account", "given": { "status": "PENDING", "error": "Account paused until 2099-01-01T00:00:00.000Z", "lastTurnOutcome": "ANSWERED" }, "expect": { "phase": "PENDING", "released": false, "lastTurnOutcome": "ANSWERED", "waitingOn": "HOLD" } }
+  ]
+}

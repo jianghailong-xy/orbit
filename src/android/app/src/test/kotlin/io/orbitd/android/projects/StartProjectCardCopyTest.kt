@@ -70,12 +70,12 @@ class StartProjectCardCopyTest {
 
     @Test fun theNoLineRequestUsesTheWebsCopyAndRules() {
         val words = File(root, "src/web/src/lib/projectStart.ts").readText()
-        assertTrue(words.contains("export const START_NO_LINE = '${StartProjectCopy.noLine}';"))
-        assertTrue(words.contains("return automatic ? '${RunSettings.automaticOnNoLine}' : '${RunSettings.automaticOffNoLine}';"))
+        assertTrue(words.contains("export const START_NO_LINE = '${LandingMeasuredCopy.landsWhenATaskCommits}';"))
+        assertTrue(words.contains("return automatic ? '${RunSettings.automaticSays(true, null, true)}' : '${RunSettings.automaticSays(false, null, true)}';"))
         assertTrue(words.contains("if (line === null) {"))
         assertTrue(words.contains("input.line === null ? [] : input.line === 'MAIN'"))
-        assertEquals(RunSettings.automaticOnNoLine, RunSettings.automaticSays(true, null, true, "trunk"))
-        assertEquals(RunSettings.automaticOffNoLine, RunSettings.automaticSays(false, null, true, "trunk"))
+        assertEquals(RunSettings.automaticSays(true, null, true), RunSettings.automaticSays(true, null, true, "trunk"))
+        assertEquals(RunSettings.automaticSays(false, null, true), RunSettings.automaticSays(false, null, true, "trunk"))
         for (automatic in listOf(true, false)) {
             assertTrue(StartProjectCopy.comesToYou(automatic, null, emptyList(), 0, 7200, "trunk").none { it.text.contains("trunk") })
         }
@@ -159,7 +159,10 @@ class StartProjectCardCopyTest {
         assertEquals("The coordinator asked · a project branch · Automatic on · at most $n at a time", StartProjectCopy.requestSummary(suggestion))
         assertEquals("The coordinator asked · directly into main · Automatic off · at most 1 at a time",
             StartProjectCopy.requestSummary(Json.parseToJsonElement("""{"line":"MAIN","automatic":false,"maxConcurrentTasks":1}""").jsonObject))
-        listOf("rowAsked,", "RunSettings.lineInSentence(settings.line", "\"\\(RunSettings.automatic) \\(settings.automatic ? \"on\" : \"off\")\",",
+        // A request that names no line names none: the start card's one sentence (StartProject.landsWhenCommits), not "a project branch".
+        assertEquals("The coordinator asked · Lands on the project’s branch when a task commits · Automatic on · at most $n at a time",
+            StartProjectCopy.requestSummary(Json.parseToJsonElement("""{"automatic":true,"maxConcurrentTasks":$count}""").jsonObject))
+        listOf("rowAsked,", "settings.line.map { RunSettings.lineInSentence(\$0, main: main) } ?? StartProject.landsWhenCommits,", "\"\\(RunSettings.automatic) \\(settings.automatic ? \"on\" : \"off\")\",",
             "\"at most \\(settings.maxConcurrentTasks) at a time\",", "].joined(separator: \" · \")",
         ).forEach { assertTrue("ProjectRunSettings.swift no longer says $it", page.contains(it)) }
         assertEquals("Tasks land on: decided when you start", RunSettings.undecidedLine(null))

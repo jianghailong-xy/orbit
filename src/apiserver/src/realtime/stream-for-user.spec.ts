@@ -11,6 +11,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
 import { RealtimeService } from './realtime.service';
 import { noSessionRequests } from '../test-support/prisma-transaction-double';
+import { isSessionPhaseFactsQuery, sessionPhaseFactsAnswer } from '../test-support/session-phase-facts';
 
 const delay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
@@ -74,7 +75,10 @@ function fakePrisma(
 ): PrismaService {
   return {
     $executeRawUnsafe: async () => 0,
-    $queryRaw: async ({ values }: { values: unknown[] }) => {
+    $queryRaw: async (query: { values: unknown[] }) => {
+      // phase, released, lastTurnOutcome, waitingOn (sessions/session-phase.ts), from these rows.
+      if (isSessionPhaseFactsQuery(query)) return sessionPhaseFactsAnswer(query, rows);
+      const { values } = query;
       const row = rows[values[0] as string];
       return [{ projectMembership: row?.coordinatorForProject ? {
         projectId: row.coordinatorForProject.id,
@@ -405,7 +409,9 @@ test('publishSessionCreated surfaces as session.created with the full summary', 
 });
 
 test('publishSessionLifecycleChanged preserves run outcome and exposes Completed canonically', async () => {
-  const svc = svcWith({ sessA: rowA }, 0);
+  // The row as the end left it, released: the event's four new fields are read from it (sessions/session-phase.ts).
+  const ended = { ...rowA, status: RunStatus.CANCELLED, finishedAt: new Date('2026-06-27T00:00:00.000Z') };
+  const svc = svcWith({ sessA: ended }, 0);
   const got: ControlEvent[] = [];
   const sub = svc.streamForUser('userA').subscribe((e) => got.push(e));
 
@@ -428,11 +434,17 @@ test('publishSessionLifecycleChanged preserves run outcome and exposes Completed
     lifecycleState: 'COMPLETED',
     filingState: 'ARCHIVED',
     endReason: 'completed',
+    phase: 'IDLE',
+    released: true,
+    lastTurnOutcome: null,
+    waitingOn: null,
   });
 });
 
 test('completing an already-ended session preserves its actual runState', async () => {
-  const svc = svcWith({ sessA: rowA }, 0);
+  // The row as the end left it, released: the event's four new fields are read from it (sessions/session-phase.ts).
+  const ended = { ...rowA, status: RunStatus.CANCELLED, finishedAt: new Date('2026-06-27T00:00:00.000Z') };
+  const svc = svcWith({ sessA: ended }, 0);
   const got: ControlEvent[] = [];
   const sub = svc.streamForUser('userA').subscribe((e) => got.push(e));
 
@@ -453,6 +465,10 @@ test('completing an already-ended session preserves its actual runState', async 
     lifecycleState: 'COMPLETED',
     filingState: 'ARCHIVED',
     endReason: 'ended',
+    phase: 'IDLE',
+    released: true,
+    lastTurnOutcome: null,
+    waitingOn: null,
   });
 });
 

@@ -605,9 +605,22 @@ Renaming `AWAITING_INPUT` to `IDLE` fixes none of this, and makes the first kind
   executing; `IDLE` otherwise.
 - **The scheduler reads turns.** A runner slot is held by a dispatched turn. The claim and
   slot counts read that fact and nothing wider, so a background job never blocks dispatch.
-- **Why idle, as its own fact.** An idle session is waiting on a person, waiting to be woken
-  (watch, timer, retry), or on hold (pause, runner offline). A `RUNNING` one may be waiting on
-  a person too. That is one more field, `waitingOn`, and it replaces the overlays.
+- **Why idle, as its own fact.** A session may be waiting on a person (an approval card or an owner
+  decision it asked for), waiting to be woken (watch, timer, retry), or on hold (a queued turn kept
+  from starting by the dispatch pause, its runner offline or updating, or a hold notice such as a
+  paused account). A `RUNNING` one may be waiting on a person too. An idle session that asked for
+  nothing waits on nothing. That is one more field, `waitingOn`, and it replaces the overlays.
+
+  > **Corrected 2026-11-22 (the coordinator's ruling, plan step 5.1).** This read "An idle session
+  > is waiting on a person, waiting to be woken, or on hold", which made every parked conversation
+  > wait on a person. `PERSON` means somebody owes the session an answer it asked for, in any phase.
+  > A parked conversation asked for nothing: its next message is owed by nobody, so `waitingOn` is
+  > null. As built (`src/apiserver/src/sessions/session-phase.ts`), in this order: `PERSON` when an
+  > answer is owed; null for a `RUNNING` session otherwise; `HOLD` for a held `PENDING` one; `WAKE`
+  > for an `IDLE` one a watch, wake-up or armed retry will wake; null otherwise. That covers a released
+  > session with no retry armed, and an `IDLE` session waiting only on a session request it sent or an
+  > `ask_owner` question, because neither is a wake fact of `sessionWillWake`. Waiting on a sub-agent
+  > or a background job is `RUNNING`.
 - **The background sets must become exact first.** They are inferred today: an id goes in
   when a launch is seen and out when an end is reported, and the ten-minute freshness rule
   exists because that drifts. A state that people and agents rely on cannot rest on them

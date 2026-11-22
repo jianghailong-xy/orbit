@@ -9,7 +9,10 @@ import {
   openTaskLanding,
   type OpenedLanding,
 } from './landing-session';
-import { WORK_REPORTED_WHERE, taskLandingSql, workOnProjectRepository } from './project-criterion-landing';
+import {
+  WORK_OF_ITS_OWN_SELECT, deliveredNothingOfItsOwnSql, sessionHoldsWorkOfItsOwn, taskLandingSql,
+  workOnProjectRepository,
+} from './project-criterion-landing';
 import { isCodeTask, startOnFirstIntegration } from './project-integration-line';
 import {
   appendIntegrationJobEvent,
@@ -1514,7 +1517,9 @@ export async function settleDeliveredIdentity(
       SELECT (${Prisma.raw(taskLandingSql('landed_task'))}) AS "landing"
         FROM "task" landed_task
        WHERE landed_task."id" = ${taskId}::uuid`);
-    if (landing?.landing === 'NOT_KNOWN') {
+    // Not for work that measured nothing of its own without a nameable identity (§12.15 P-M1): there is
+    // nothing for anybody to look for on the line.
+    if (landing?.landing === 'NOT_KNOWN' && !(await measuresNothingOfItsOwn(tx, taskId))) {
       await recordLandingUnobserved(tx, {
         taskId,
         reason: 'IDENTITY_UNKNOWN',
@@ -1609,10 +1614,11 @@ export type EnqueueOutcome =
        *   own is not known yet (§12.15 P-M1): the finish that freezes its identity decides the route
        *   (`settleDeliveredIdentity`, O-L4 3). Nothing queued, no line started.
        * NOTHING_TO_LAND — the frozen identity has no commit past its base and no work session of the
-       *   task reported work (§12.15 P-M1): nothing queued, no line started; its dependents are
-       *   dispatched on this DONE.
-       * WORK_ELSEWHERE — the same empty branch, but a session reported work: `LANDING_UNOBSERVED`
-       *   (WORK_ELSEWHERE) was opened instead of a route (§10.5 O-L7).
+       *   task holds work of its own (§12.15 P-M1, `sessionHoldsWorkOfItsOwn`): nothing queued, no line
+       *   started; its dependents are dispatched on this DONE.
+       * WORK_ELSEWHERE — the same empty branch, but a session holds work of its own (a branch past its
+       *   base, or a checkout left dirty): `LANDING_UNOBSERVED` (WORK_ELSEWHERE) was opened instead of
+       *   a route (§10.5 O-L7).
        */
       reason: 'NOT_A_CODE_TASK' | 'ALREADY_QUEUED' | 'INTEGRATION_REPOSITORY_UNKNOWN' | 'AGENT_PUSH'
         | 'WORK_MOVING' | 'NOTHING_TO_LAND' | 'WORK_ELSEWHERE';
@@ -1912,18 +1918,35 @@ async function deliveredRoute(
     if (reading.kind === 'WORK_MOVING') return 'WORK_MOVING';
     if (reading.kind === 'KNOWN') identity = reading.identity;
   }
-  if (!identity) return 'QUEUE';
+  // An identity nobody can name still measures nothing when every work session reported an empty diff
+  // and holds nothing of its own (`unnamedIdentityMeasuresNothing`); otherwise it goes the way it always
+  // went, and the runner's J-S2 answers for the branch.
+  if (!identity) return (await measuresNothingOfItsOwn(tx, taskId)) ? 'NOTHING_TO_LAND' : 'QUEUE';
   return emptyBranchRoute(tx, { taskId, projectId: task.projectId, identity });
 }
 
 /**
+ * §12.15 P-M1 asked of one task's committed rows, in the spelling every set reader uses
+ * (`deliveredNothingOfItsOwnSql`): the same answer the dependency predicate and the fold read.
+ */
+async function measuresNothingOfItsOwn(tx: Prisma.TransactionClient, taskId: string): Promise<boolean> {
+  const [row] = await tx.$queryRaw<Array<{ nothing: boolean }>>(Prisma.sql`
+    SELECT ${Prisma.raw(deliveredNothingOfItsOwnSql('t'))} AS "nothing"
+      FROM "task" t
+     WHERE t."id" = ${taskId}::uuid`);
+  return row?.nothing === true;
+}
+
+/**
  * §10.5 O-L7's empty-branch rule, applied where the identity is frozen rather than on the runner's
- * answer (§12.15 P-M1). A branch with a commit of its own is QUEUE. An empty one with no work session
- * that reported work is NOTHING_TO_LAND, and nothing is written: the readers take the same two facts
- * (`deliveredNothingOfItsOwn`). One where a session did report work has its work somewhere else, and
- * opens `LANDING_UNOBSERVED` (WORK_ELSEWHERE) on the project's line — when it has one. In a project
- * with no line that item has nothing to name, so the route goes on as before: the line starts and the
- * runner's NOTHING_TO_LAND, which writes no receipt for such a task, says so on the task (J8).
+ * answer (§12.15 P-M1). A branch with a commit of its own is QUEUE. An empty one whose task has no
+ * work session holding work of its own is NOTHING_TO_LAND, and nothing is written: the readers take the
+ * same two facts (`deliveredNothingOfItsOwn`). One where a session does — a branch of its own past its
+ * base, or a checkout left with changes no commit carries (`sessionHoldsWorkOfItsOwn`) — has its work
+ * somewhere it was not delivered from, and opens `LANDING_UNOBSERVED` (WORK_ELSEWHERE) on the project's
+ * line — when it has one. In a project with no line that item has nothing to name, so the route goes on
+ * as before: the line starts and the runner's NOTHING_TO_LAND, which writes no receipt for such a task,
+ * says so on the task (J8).
  */
 async function emptyBranchRoute(
   tx: Prisma.TransactionClient,
@@ -1931,13 +1954,13 @@ async function emptyBranchRoute(
 ): Promise<'QUEUE' | 'NOTHING_TO_LAND' | 'WORK_ELSEWHERE'> {
   const { identity } = input;
   if (identity.sha !== identity.baseSha) return 'QUEUE';
-  // Asked only of an empty branch, by the task's own session index: did any of its work sessions report
-  // work (J8's question, `WORK_REPORTED_WHERE`)?
-  const reported = await tx.session.findFirst({
-    where: { taskId: input.taskId, ...WORK_REPORTED_WHERE },
-    select: { id: true },
+  // Asked only of an empty branch, by the task's own session index: does any of its work sessions hold
+  // work of its own? The same predicate the readers ask (`deliveredNothingOfItsOwn`), over the same rows.
+  const work = await tx.session.findMany({
+    where: { taskId: input.taskId, startsTaskWork: true, deletedAt: null },
+    select: WORK_OF_ITS_OWN_SELECT,
   });
-  if (!reported) return 'NOTHING_TO_LAND';
+  if (!work.some(sessionHoldsWorkOfItsOwn)) return 'NOTHING_TO_LAND';
   const line = await tx.projectCodebase.findFirst({
     where: { projectId: input.projectId, slot: 'primary', integrationStartedAt: { not: null } },
     select: { id: true },

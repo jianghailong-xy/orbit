@@ -94,7 +94,9 @@ const OLD_FIELDS = [
 const LINK_FIELDS = ['kind', 'include', 'sharedAt'];
 // Activity was added by the parked-session activity projection. The guest red line also requires
 // public roots and polling to carry waitingOnOwner as a boolean, never approval contents.
-const STATE_FIELDS = ['waitingOnOwner'];
+// phase, released, lastTurnOutcome and waitingOn (plan step 5.1, sessions/session-phase.ts) are the shared
+// header's as every session payload's: words about the state the root already shows, never what is asked.
+const STATE_FIELDS = ['waitingOnOwner', 'phase', 'released', 'lastTurnOutcome', 'waitingOn'];
 
 type Json = Record<string, any>;
 type Answer = { status: number; headers: IncomingHttpHeaders; body: Buffer; json: Json };
