@@ -2,6 +2,8 @@ package io.orbitd.android.management
 
 import io.orbitd.android.composer.CursorRuntime
 import io.orbitd.android.composer.ManagedRunnerIdentity
+import io.orbitd.android.composer.ManagedRunnerRunningBuild
+import io.orbitd.android.composer.ManagedRunnerUpdateLogic
 import io.orbitd.android.composer.ProviderEngines
 import io.orbitd.android.core.cards.ClaudeRegion
 import io.orbitd.android.core.cards.ClaudeRegionCopy
@@ -80,7 +82,7 @@ internal object RunnerCopy {
     /** A managed runner's version when it reports none that is a release (its image is `managed-<sha>`). */
     const val MANAGED_RUNNER_KEPT_UP_TO_DATE = "Kept up to date by Orbit"
     /** About's Version note on a managed runner: Orbit rolls its image, so it neither updates itself nor needs to. */
-    const val MANAGED_RUNNER_UPDATED_BY_ORBIT = "Orbit updates this machine for you."
+    const val MANAGED_RUNNER_UPDATED_BY_ORBIT = "Orbit moves it to each new build."
     const val SEP = " · "
     const val NO_PROVIDER_KEY = "no provider key found"
     fun offlineLastSeen(whenText: String) = "Offline · last seen $whenText"
@@ -1173,11 +1175,16 @@ internal object RunnerPage {
     /** Whether a version is a release number, not a managed image's `managed-<sha>` or a `dev` build. */
     fun isReleaseVersion(version: String?): Boolean = version != null && Regex("^[vV]?[0-9]").containsMatchIn(version.trim())
 
+    /** The build a managed runner runs, `Build 95884b1 · Nov 16`; only when it has none to name does Orbit say it keeps it up to date. */
+    private fun managedBuildLine(version: String?): String =
+        ManagedRunnerRunningBuild.build?.let { ManagedRunnerUpdateLogic.runningBuild(version, it) }?.let { ManagedRunnerUpdateLogic.buildLine(it) }
+            ?: RunnerCopy.MANAGED_RUNNER_KEPT_UP_TO_DATE
+
     /** A version beside a runner's name: `v<version>`. A managed runner shows its release when it reports one, and otherwise says
      * Orbit keeps it up to date — never its image hash (web runnerVersionLine). */
     fun versionLine(version: String?, managed: Boolean = false): String? {
         val v = version?.trim()?.takeIf { it.isNotEmpty() }
-        if (managed) return if (isReleaseVersion(v)) RunnerCopy.versionTag(v!!) else RunnerCopy.MANAGED_RUNNER_KEPT_UP_TO_DATE
+        if (managed) return if (isReleaseVersion(v)) RunnerCopy.versionTag(v!!) else managedBuildLine(v)
         return v?.let(RunnerCopy::versionTag)
     }
 
@@ -1695,7 +1702,7 @@ internal object RunnerPage {
     fun versionValue(runner: JsonObject, latest: String?, managed: Boolean = false): String? {
         // Orbit rolls the managed runner's image: its release and that Orbit updates it, or that Orbit keeps it up to date.
         if (managed) return runner.str("version")?.trim()?.takeIf(::isReleaseVersion)?.let { it + RunnerCopy.SEP + RunnerCopy.MANAGED_RUNNER_UPDATED_BY_ORBIT }
-            ?: RunnerCopy.MANAGED_RUNNER_KEPT_UP_TO_DATE
+            ?: managedBuildLine(runner.str("version"))
         val version = runner.str("version")?.trim()?.takeIf { it.isNotEmpty() } ?: return null
         val newest = latest?.trim()?.takeIf { it.isNotEmpty() } ?: return version
         if (compareRunnerVersions(version, newest) >= 0) return version + RunnerCopy.SEP + "Latest"

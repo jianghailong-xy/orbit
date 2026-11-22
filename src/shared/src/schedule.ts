@@ -38,7 +38,7 @@ export type ScheduleRunState = (typeof SCHEDULE_RUN_STATES)[number];
 
 /** §7.2, plus OVER_BUDGET, which S2d adds for a MISSED run. */
 export const SCHEDULE_FAILURE_REASONS = [
-  'RUNNER_UNAVAILABLE', 'QUOTA', 'ENGINE_CRASHED_BEFORE_START', 'REPORTED_FAILED', 'NO_REPORT', 'ENGINE_CRASHED',
+  'RUNNER_UNAVAILABLE', 'RUNNER_FULL', 'QUOTA', 'ENGINE_CRASHED_BEFORE_START', 'REPORTED_FAILED', 'NO_REPORT', 'ENGINE_CRASHED',
   'APPROVAL_TIMEOUT', 'RUN_LIMIT', 'CANCELLED_BY_OWNER', 'OVER_BUDGET', 'LANDING_FAILED',
 ] as const;
 export type ScheduleFailureReason = (typeof SCHEDULE_FAILURE_REASONS)[number];
@@ -194,6 +194,7 @@ export const SCHEDULE_COPY = {
   /** Why a run failed, as a clause ("The last run ended without a report"); a run's own reasonText wins. */
   failureReasons: {
     RUNNER_UNAVAILABLE: 'found no runner online',
+    RUNNER_FULL: 'waited for a full runner until its window closed',
     QUOTA: "hit the engine's usage limit",
     ENGINE_CRASHED_BEFORE_START: 'stopped before its engine started',
     REPORTED_FAILED: 'reported a failure',

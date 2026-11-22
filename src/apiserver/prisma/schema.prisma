@@ -1701,6 +1701,25 @@ model ManagedRunner {
   /// keeps the runner wanted (desiredState RUNNING), and once it has stopped the runner wakes at once as the next
   /// generation, made from that image. Null for a drain to sleep, and once the roll ends or is called off.
   imageRollTo         String?                     @map("image_roll_to")
+  /// READY on a previous image: when the manager first found the instance made from an image other than the one it
+  /// makes instances from now, with that image's source commit (`org.opencontainers.image.revision`) as
+  /// `currentImageSha`. Both null while the instance is current or the backend cannot name the current build; the
+  /// owner's status reads them (`update`) without asking the backend.
+  imageOutdatedSince  DateTime?                   @map("image_outdated_since") @db.Timestamptz(3)
+  currentImageSha     String?                     @map("current_image_sha")
+  /// The owner's Update Now (managed-runner.service.ts updateNow): when it was asked for, and by whom (the owner's
+  /// user id). Kept as the record of the last request. It is in progress while `updateCompletedAt` is null or older:
+  /// the manager rolls the READY instance onto the current image once it is idle, or stops it at once for a request
+  /// that may interrupt its turns (`updateInterruptTurns`), and records `updateCompletedAt` when the next generation is
+  /// READY. Demand never calls it off.
+  updateRequestedAt   DateTime?                   @map("update_requested_at") @db.Timestamptz(3)
+  updateRequestedBy   String?                     @map("update_requested_by")
+  updateCompletedAt   DateTime?                   @map("update_completed_at") @db.Timestamptz(3)
+  /// Whether that request, made while the runner was busy, may interrupt its running turns (`interruptTurns: true`):
+  /// the manager then asks the backend to stop the instance (`stopInstance`, Docker) instead of waiting for it to be
+  /// idle, and its host's report of the exit is the stop proof the next generation waits for. On a backend that cannot
+  /// stop an instance (Kubernetes) the request waits for idle all the same. False for a request on an idle runner.
+  updateInterruptTurns Boolean                    @default(false) @map("update_interrupt_turns")
   initialProvider    String?                      @map("initial_provider")
   resourceProfileId  String?                      @map("resource_profile_id")
   /// The one resource operation in flight: which (`CREATE_PVC`, `CREATE_SECRET`, `CREATE_POD`,
@@ -10370,6 +10389,9 @@ model ScheduleRun {
   /// The level the run started with (§6.2, migration 0860): what its session is held to, whatever the schedule
   /// says later. NULL until the run starts.
   accessLevel      ScheduleAccessLevel? @map("access_level")
+  /// The last time the watch pass found the run's session, not yet delivered, held by a full runner, run or batch
+  /// (§7.2, migration 1430): such a run waits for a slot, and the 10-minute undelivered limit counts from here.
+  capacityHeldAt   DateTime?          @map("capacity_held_at") @db.Timestamptz(3)
   createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
   sessions         Session[]
 

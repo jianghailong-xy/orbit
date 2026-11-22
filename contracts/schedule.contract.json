@@ -51,6 +51,7 @@
     ],
     "failureReasons": [
       "RUNNER_UNAVAILABLE",
+      "RUNNER_FULL",
       "QUOTA",
       "ENGINE_CRASHED_BEFORE_START",
       "REPORTED_FAILED",
@@ -285,6 +286,7 @@
     },
     "failureReasons": {
       "RUNNER_UNAVAILABLE": "found no runner online",
+      "RUNNER_FULL": "waited for a full runner until its window closed",
       "QUOTA": "hit the engine's usage limit",
       "ENGINE_CRASHED_BEFORE_START": "stopped before its engine started",
       "REPORTED_FAILED": "reported a failure",
