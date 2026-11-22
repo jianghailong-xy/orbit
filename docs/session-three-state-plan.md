@@ -178,7 +178,8 @@ release carries none.
 
   The old finalize reads the hold as `FAILED_TURN` too, so a runner that mixes the two protocols still ends failed.
 - **Backstop.** If no release follows a failed turn, the reaper's cancel-grace sweep releases the session FAILED and
-  keeps `last_turn_outcome` FAILED, so the row reads as a failure and an armed retry fires. With no retry armed,
+  keeps `last_turn_outcome` FAILED and the session's error (the failure's own words, since step 6.2), so the row reads
+  as a failure and an armed retry fires. With no retry armed,
   the sweep sets the task FAILED with the run-failure comment.
 - **Commit or checkpoint.** The runner chooses from what it knows itself: a failure it reported gets the permanent
   commit, and a stop it was told to make gets the undoable checkpoint.
@@ -188,6 +189,26 @@ release carries none.
   - An older server meeting a held row (deploy skew of the apiserver itself): its finalize reads the cancel and
     settles CANCELLED. `releaseWasFailure` still reads the row as a failure through `last_turn_outcome`, and the
     status bridge does not.
+
+Step 6.2 as built (2026-11-22, the coordinator's choice A).
+
+- **How a runner learns the server offers it.** The apiserver's switch `ORBIT_SESSION_RELEASE_V1=on` is off by default.
+  While it is on, every heartbeat answer carries `sessionReleaseV1: true`, the full answer and the link's quiet answer
+  alike. A runner declares the protocol only while its latest successful heartbeat answer says so. It declares on
+  nothing before its first answer, and it stops at the first answer without the word. The operator turns the switch on
+  once every replica serves the protocol, and off before rolling back past that release (`docs/configuration.md`,
+  `docs/self-hosting.md` "The runner protocol switch").
+- **Where it is declared.** In the body, as `releaseProtocol: 'session-release/v1'`, because the runner link carries no
+  request header. It goes only on a failed turn's report that ends the run, and on the release. A turn reported
+  SUCCEEDED can still fail its session at the server (an acceptance mismatch, a swallowed delivery), and its RUNNING
+  answer could not be told from a permit handed to a follow-up. Those stay on the old path.
+- **A hold ends by the release alone.** It is sent again past a replica without the route, for a window longer than the
+  cancel grace, and never as the old finalize, which a replica without the protocol would read as a stop. A failed
+  turn's report whose answer never came is ended the same way, with `cutOffTurnOutcome: 'FAILED'`.
+- **Commit or checkpoint** follows the runner's own status: a failed turn it reported keeps FAILED (the permanent
+  commit), even though the hold's teardown cancel ends its context. A stop it was told to make gets the checkpoint.
+- **Proof.** Go: `session_release_test.go`. The walk: `scripts/acceptance/session-release/`, one server with an old
+  and a new runner, the switch on and off.
 
 ## 10. Risks
 
