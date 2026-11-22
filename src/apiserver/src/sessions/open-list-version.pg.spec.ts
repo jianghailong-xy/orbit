@@ -660,7 +660,7 @@ test('a write to each LANDING-only source leaves every flat Open-list row as it 
       data: {
         projectId: project.id, ownerId: f.ownerId, codebaseId, kind: 'LAND_TASK', serialKey: `olv-d1-${project.id}`,
         targetRef: 'refs/heads/main', upstreamRef: 'refs/heads/main', sourceRef: 'refs/heads/olv-d1',
-        idempotencyKey: `olv-d1-${project.id}`,
+        idempotencyKey: `olv-d1-${project.id}`, taskId: task.id,
       },
     })],
     ['an integration open item', () => db.projectOpenItem.create({
@@ -673,7 +673,7 @@ test('a write to each LANDING-only source leaves every flat Open-list row as it 
     ['a merge receipt', () => db.sessionMergeReceipt.create({
       data: {
         ownerId: f.ownerId, sessionId: f.sessionId, result: 'MERGED', sourceBranch: 'olv-d1', sourceSha: 'a'.repeat(40),
-        targetBranch: 'main', recordedBy: 'olv', idempotencyKey: `olv-d1-${f.sessionId}`,
+        targetBranch: 'main', recordedBy: 'USER', idempotencyKey: `olv-d1-${f.sessionId}`,
       },
     })],
   ];
