@@ -1469,7 +1469,7 @@ export class SessionsService {
     // request clones from GitHub starts with it on (createInNewWorkspace), and so does its first session.
     let enableWorktree = !!newWorkspace?.clone;
     // The owner's account-level permission default, materialized onto the session below when the
-    // caller picked none (MCP spawns, task runs — the web/native composers always send one).
+    // caller picked none. Task runs, coordinator judgments and the web/native composers name one.
     // The claim resolves session ?? account ?? auto anyway, so this doesn't change what the
     // runner spawns with; it stops a NULL column from *reading* as one particular mode in every
     // client's Mode pill — a stale pill that the next resume writes back, silently changing a
@@ -3103,13 +3103,12 @@ export class SessionsService {
   }
 
   /**
-   * Refuse a session opening a session at the account's default when that default is wider than the
-   * session may start. For a door with no mode to name (`task_start`, `task_update`, a coordinator's
-   * rotation), so `next` is a person's way forward. A caller that is not a session of this owner has
+   * Refuse a session opening another session in a wider mode. Task starts name Auto and a
+   * coordinator rotation can inherit the account's default. A caller that is not a session of this owner has
    * nothing to compare: an owner's own door passes none, and the header it came from attributes, it
    * does not authorize.
    */
-  async assertMayStartAtAccountDefault(
+  async assertMayStartInMode(
     ownerId: string,
     actingSessionId: string | undefined,
     target: {
@@ -3117,6 +3116,7 @@ export class SessionsService {
       provider?: string | null;
       model?: string | null;
       workspaceId?: string | null;
+      permissionMode?: PermissionMode;
       /** The start's anchor, as create() is handed it (start-anchor.ts). */
       anchor?: () => Promise<AnchorSeed | null>;
     },
@@ -3132,7 +3132,7 @@ export class SessionsService {
     const starter = { mode: runningPermissionMode(acting, acting.owner), engine: acting.engine };
     if (!modeLimitsWhatItStarts(starter.mode)) return;
     const engine = await this.engineOfStart(ownerId, target);
-    const mode = modeOfNoneNamed(acting.owner, engine);
+    const mode = target.permissionMode ?? modeOfNoneNamed(acting.owner, engine);
     if (isWiderThanStarter(starter, mode, engine)) throw widerModeRefusal(starter.mode, mode, engine, next);
   }
 
@@ -7672,6 +7672,7 @@ export class SessionsService {
       kind: 'reload',
       content: JSON.stringify({ provider: engine }),
       clientTurnId: randomUUID(),
+      senderClient: 'orbit',
     });
     return {
       [ACCOUNT_CHOICE[engine]]: move.to,
@@ -12249,7 +12250,7 @@ export class SessionsService {
     id: string,
     dto: SessionConfigDto,
     credential?: AuthCredential,
-    by: { origin: ConfigChangeOrigin; senderClient?: TurnSenderClient } = { origin: 'OWNER' },
+    by: { origin: ConfigChangeOrigin; senderClient?: TurnSenderClient; senderSessionId?: string } = { origin: 'OWNER' },
   ) {
     // Model, permission mode, effort, provider and account are all engine-path settings (§2.9 LS6).
     await this.assertEngineSession(ownerId, id);
@@ -12479,6 +12480,21 @@ export class SessionsService {
           // Against what the engine runs in now: the intent no longer says that.
           normalizedPermissionMode !== (session.actualPermissionMode ?? session.permissionMode) ||
           effortMoved);
+      // A session header is attribution only. Keep it only if it names this owner's session.
+      const senderSession = by.senderSessionId && UUID_SHAPE.test(by.senderSessionId)
+        ? await tx.session.findFirst({
+            where: { id: by.senderSessionId, ownerId, deletedAt: null },
+            select: { id: true },
+          })
+        : null;
+      const sender = {
+        senderClient: by.origin === 'ORBIT' ? 'orbit'
+          : credential?.kind === 'PAT' ? 'pat'
+          : senderSession ? 'session'
+          : 'unknown',
+        ...senderClientColumns(by.senderClient),
+        senderSessionId: senderSession?.id,
+      };
       // Both are enqueued under this same row lock, so their payload is exactly the config
       // committed above. Order matters when both go: the re-spawn re-applies every flag anyway,
       // so putting it last keeps the control frame from being work that is immediately redone.
@@ -12499,7 +12515,7 @@ export class SessionsService {
           }),
           // Who asked, for the actual-mode change its acknowledgement records (configTurnKey).
           clientTurnId: configTurnKey(by.origin),
-          ...senderClientColumns(by.senderClient),
+          ...sender,
         });
       }
       // `effort: undefined` is omitted by JSON.stringify when it did not change.
@@ -12523,7 +12539,7 @@ export class SessionsService {
           }),
           // Who asked, as on setconfig: its delivery records the mode it re-spawns the engine in.
           clientTurnId: configTurnKey(by.origin),
-          ...senderClientColumns(by.senderClient),
+          ...sender,
         });
       }
       return true;
@@ -12548,7 +12564,7 @@ export class SessionsService {
    * at once, if it was waiting out the old account's reset. The next engine start says so in the
    * transcript.
    */
-  async switchAccount(ownerId: string, id: string, account: unknown) {
+  async switchAccount(ownerId: string, id: string, account: unknown, senderClient?: TurnSenderClient) {
     // Switching the runner account a session runs on is an engine door (§2.9 LS6).
     await this.assertEngineSession(ownerId, id);
     if (typeof account !== 'string' || (account !== AUTOMATIC_ACCOUNT && !ACCOUNT_ID_PATTERN.test(account))) {
@@ -12674,6 +12690,8 @@ export class SessionsService {
         kind: 'reload',
         content: JSON.stringify({ provider: engine }),
         clientTurnId: randomUUID(),
+        senderClient: 'unknown',
+        ...senderClientColumns(senderClient),
       });
       return true;
     }, loggedRetry(this.logger, 'sessions.switchAccount'));
@@ -12770,6 +12788,7 @@ export class SessionsService {
           kind: 'reload',
           content: JSON.stringify({ provider: engine }),
           clientTurnId: randomUUID(),
+          senderClient: 'orbit',
         });
         return 'reloaded' as const;
       }, loggedRetry(this.logger, 'sessions.moveOffRemovedAccount'));
@@ -12795,6 +12814,7 @@ export class SessionsService {
         kind: 'reload',
         content: JSON.stringify({ provider: AgentProvider.CLAUDE }),
         clientTurnId: randomUUID(),
+        senderClient: 'orbit',
       });
     }, formerDefaultEmail), loggedRetry(this.logger, 'sessions.applyClaudeAccountSwap'));
     for (const id of applied?.release ?? []) this.realtime.notifyInbox(id);
@@ -12864,7 +12884,7 @@ export class SessionsService {
    * An ended engine is refused 409 ENGINE_NOT_RUNNING: there is nothing to reload, and the claim that
    * starts the next one builds it with the env as it is then.
    */
-  async restart(ownerId: string, id: string): Promise<SessionRestartResponse> {
+  async restart(ownerId: string, id: string, senderClient?: TurnSenderClient): Promise<SessionRestartResponse> {
     const { afterTurn, queued } = await withTransactionRetry(this.prisma, async (tx) => {
       // Serialized with the settings PATCH and other restarts, so two restarts cannot both queue one.
       const locked = await tx.$queryRaw<Array<{ id: string }>>`
@@ -12899,6 +12919,8 @@ export class SessionsService {
         kind: 'reload',
         content: RESTART_RELOAD_CONTENT,
         clientTurnId: randomUUID(),
+        senderClient: 'unknown',
+        ...senderClientColumns(senderClient),
       });
       return { afterTurn: inFlight != null, queued: true };
     }, loggedRetry(this.logger, 'sessions.restart'));

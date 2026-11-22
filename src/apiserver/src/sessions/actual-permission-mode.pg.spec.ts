@@ -45,6 +45,7 @@ import { QueueService } from '../queue/queue.service';
 import type { RealtimeService } from '../realtime/realtime.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { sessionLease } from '../test-support/dequeue-under-lease';
+import { TasksService } from '../tasks/tasks.service';
 import { SessionsService } from './sessions.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -119,6 +120,7 @@ test('the stored mode, the mode running, and the ceiling on PostgreSQL', { skip,
         id: runnerId,
         ownerId,
         name: `${label}-runner`,
+        maxConcurrent: 4,
         tokenHash: `hash-${runnerId}`,
         status: RunnerStatus.ONLINE,
         capabilities: [],
@@ -262,8 +264,47 @@ test('the stored mode, the mode running, and the ceiling on PostgreSQL', { skip,
     assert.equal(after.permissionMode, PermissionMode.AUTO);
     assert.equal(after.actualPermissionMode, PermissionMode.DEFAULT);
     assert.deepEqual((await changes(id)).slice(1), [
-      { fromMode: PermissionMode.AUTO, toMode: PermissionMode.DEFAULT, cause: 'ORBIT_CHANGE', client: null },
+      { fromMode: PermissionMode.AUTO, toMode: PermissionMode.DEFAULT, cause: 'ORBIT_CHANGE', client: 'orbit' },
     ]);
+  });
+
+  await t.test('Run Now and due runAt store and claim Auto while a composer keeps its pick', async () => {
+    const w = await world('start-modes', PermissionMode.DEFAULT);
+    const tasks = new TasksService(prisma, sessions, quiet);
+    const taskFields = {
+      assigneeId: w.workspaceId,
+      engine: AgentProvider.CLAUDE,
+      model: WITH_AUTO,
+      autoRunWhenReady: false,
+      completionCriterion: 'EXECUTABLE' as const,
+      acceptanceCommand: 'true',
+      acceptanceExpectedExitCode: 0,
+    };
+    const hand = await tasks.create(w.ownerId, { ...taskFields, title: 'Start by hand' });
+    const manual = await tasks.execute(w.ownerId, hand.id);
+    assert.ok(manual.sessionId);
+    assert.equal((await row(manual.sessionId)).permissionMode, PermissionMode.AUTO, 'Run Now stored Auto');
+    const first = await queue.claimSessionForRunner({ id: w.runnerId });
+    assert.equal(first?.sessionId, manual.sessionId);
+    assert.equal(first.agent.permissionMode, PermissionMode.AUTO, 'Run Now claim carries Auto');
+
+    const due = await tasks.create(w.ownerId, { ...taskFields, title: 'Start when due' });
+    await db.task.update({ where: { id: due.id }, data: { runAt: new Date(Date.now() - 1000) } });
+    await (tasks as unknown as { dispatchDueScheduledTasks(): Promise<void> }).dispatchDueScheduledTasks();
+    const scheduled = await db.session.findFirstOrThrow({ where: { taskId: due.id } });
+    assert.equal(scheduled.permissionMode, PermissionMode.AUTO, 'the due task stored Auto');
+    const second = await queue.claimSessionForRunner({ id: w.runnerId });
+    assert.equal(second?.sessionId, scheduled.id);
+    assert.equal(second.agent.permissionMode, PermissionMode.AUTO, 'the due task claim carries Auto');
+
+    const composer = await sessions.create(w.ownerId, {
+      workspaceId: w.workspaceId, engine: AgentProvider.CLAUDE, model: WITH_AUTO,
+      prompt: 'Draft a plan', permissionMode: PermissionMode.PLAN,
+    });
+    assert.equal((await row(composer.id)).permissionMode, PermissionMode.PLAN);
+    const third = await queue.claimSessionForRunner({ id: w.runnerId });
+    assert.equal(third?.sessionId, composer.id);
+    assert.equal(third.agent.permissionMode, PermissionMode.PLAN, 'the composer claim carries the selected Plan');
   });
 
   await t.test('(2)(3) the actual mode follows the engine, and each change names its cause', async () => {
@@ -356,7 +397,7 @@ test('the stored mode, the mode running, and the ceiling on PostgreSQL', { skip,
     await say(w, settledLow, init('claude', PermissionMode.DEFAULT));
     assert.equal((await row(settledLow)).permissionMode, PermissionMode.AUTO);
     await assert.rejects(
-      sessions.assertMayStartAtAccountDefault(w.ownerId, settledLow, { engine: AgentProvider.CLAUDE, workspaceId: w.workspaceId }, NEXT),
+      sessions.assertMayStartInMode(w.ownerId, settledLow, { engine: AgentProvider.CLAUDE, workspaceId: w.workspaceId }, NEXT),
       refusedWith(PERMISSION_MODE_WIDER_THAN_SESSION),
       'a session running Default may not start one in Auto, whatever its stored mode says',
     );
@@ -369,7 +410,7 @@ test('the stored mode, the mode running, and the ceiling on PostgreSQL', { skip,
 
     // Corrected to Auto, the same session may.
     await say(w, settledLow, { subtype: PERMISSION_MODE_CORRECTED_EVENT_SUBTYPE, mode: PermissionMode.AUTO });
-    await sessions.assertMayStartAtAccountDefault(w.ownerId, settledLow, { engine: AgentProvider.CLAUDE, workspaceId: w.workspaceId }, NEXT);
+    await sessions.assertMayStartInMode(w.ownerId, settledLow, { engine: AgentProvider.CLAUDE, workspaceId: w.workspaceId }, NEXT);
     assert.deepEqual(await sessions.assertMayReach(w.ownerId, settledLow, wider, 'end'), { narrower: false });
 
     // Stored Default, running Auto (the intent narrower than what runs): judged by what runs. On a runner of its own,
@@ -378,22 +419,22 @@ test('the stored mode, the mode running, and the ceiling on PostgreSQL', { skip,
     const { id: runsAuto } = await claimed(w2, { permissionMode: PermissionMode.DEFAULT });
     assert.equal((await row(runsAuto)).actualPermissionMode, PermissionMode.DEFAULT, 'claimed in its stored Default');
     await assert.rejects(
-      sessions.assertMayStartAtAccountDefault(w2.ownerId, runsAuto, { engine: AgentProvider.CLAUDE, workspaceId: w2.workspaceId }, NEXT),
+      sessions.assertMayStartInMode(w2.ownerId, runsAuto, { engine: AgentProvider.CLAUDE, workspaceId: w2.workspaceId }, NEXT),
       refusedWith(PERMISSION_MODE_WIDER_THAN_SESSION),
       'running Default, it may not',
     );
     await say(w2, runsAuto, init('claude', PermissionMode.AUTO));
-    await sessions.assertMayStartAtAccountDefault(w2.ownerId, runsAuto, { engine: AgentProvider.CLAUDE, workspaceId: w2.workspaceId }, NEXT);
+    await sessions.assertMayStartInMode(w2.ownerId, runsAuto, { engine: AgentProvider.CLAUDE, workspaceId: w2.workspaceId }, NEXT);
 
     // No actual mode recorded (claimed before migration 1437): the stored mode decides, as before R3.
     const unrecorded = await pending(w, { permissionMode: PermissionMode.DEFAULT, status: RunStatus.AWAITING_INPUT });
     assert.equal((await row(unrecorded)).actualPermissionMode, null);
     await assert.rejects(
-      sessions.assertMayStartAtAccountDefault(w.ownerId, unrecorded, { engine: AgentProvider.CLAUDE, workspaceId: w.workspaceId }, NEXT),
+      sessions.assertMayStartInMode(w.ownerId, unrecorded, { engine: AgentProvider.CLAUDE, workspaceId: w.workspaceId }, NEXT),
       refusedWith(PERMISSION_MODE_WIDER_THAN_SESSION),
       'the fallback is the stored mode',
     );
     const unrecordedAuto = await pending(w, { permissionMode: PermissionMode.AUTO, status: RunStatus.AWAITING_INPUT });
-    await sessions.assertMayStartAtAccountDefault(w.ownerId, unrecordedAuto, { engine: AgentProvider.CLAUDE, workspaceId: w.workspaceId }, NEXT);
+    await sessions.assertMayStartInMode(w.ownerId, unrecordedAuto, { engine: AgentProvider.CLAUDE, workspaceId: w.workspaceId }, NEXT);
   });
 });

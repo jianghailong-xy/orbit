@@ -117,7 +117,7 @@ function serviceFor(row: ProjectRow | null) {
   const service = new TasksService(
     prisma,
     // What a session may start is session-mode-ceiling.pg.spec.ts's question, not this one's.
-    { assertMayStartAtAccountDefault: async () => undefined } as never,
+    { assertMayStartInMode: async () => undefined } as never,
     {} as never,
   );
   const stub = service as unknown as Record<string, unknown>;

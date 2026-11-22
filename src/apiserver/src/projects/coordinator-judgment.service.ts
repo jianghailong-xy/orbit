@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { ANCHOR_ROLE, previousCoordinatorAnchor } from '../workspaces/start-anchor';
 import { SessionDispatchOrigin, SessionRunSource } from '@prisma/client';
+import { PermissionMode } from '@orbit/shared';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionsService } from '../sessions/sessions.service';
@@ -237,6 +238,7 @@ export class CoordinatorJudgmentService {
           workspaceId: project.coordinatorWorkspaceId,
           title: judgmentSessionTitle(project.title),
           prompt: buildJudgmentOpening(fact, project.title),
+          permissionMode: PermissionMode.AUTO,
         },
         {
           // §1. The only two columns that say this conversation was opened by a fact and not by a

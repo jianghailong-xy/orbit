@@ -2,6 +2,7 @@ import { Prisma, TaskEvidenceDecisionValue, TaskVerdict } from '@prisma/client';
 import { RELEASE_FAILURE_SELECT, releaseWasFailure } from '../common/session-release';
 import {
   AgentProvider,
+  PermissionMode,
   accountCapWindows,
   cursorUsageRead,
   isEngine,
@@ -20,7 +21,6 @@ import {
 import { runnerAccountPausedUntil } from '../common/account-pause';
 import { sanitizeRunnerEngines } from '../common/runner-engines';
 import { modelRoutingEnabled, optimizeForOf } from '../common/model-routing-switch';
-import { resolvePermissionMode } from '../common/permission-mode';
 import { firstRuntimeCatalogModel, sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import { normalizeEffortForProvider } from '../common/runtime-provider';
 import type { PrismaService } from '../prisma/prisma.service';
@@ -233,8 +233,7 @@ async function routeEnvironment(
     runtimeDefaultModels: sanitizeRuntimeDefaultModels(runner?.runtimeDefaultModels),
     planUsage: (runner?.planUsage ?? null) as PlanUsage | null,
     owner,
-    // What a task run gets: it names no mode, so the account's default, else the floor.
-    permissionMode: resolvePermissionMode(null, owner),
+    permissionMode: PermissionMode.AUTO,
   };
 }
 

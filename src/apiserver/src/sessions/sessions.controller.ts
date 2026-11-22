@@ -622,11 +622,13 @@ export class SessionsController {
     @Body() dto: SessionConfigDto,
     @Headers('x-orbit-client') client?: string,
     @Headers('x-orbit-device') device?: string,
+    @Headers('x-orbit-session-id') senderSessionId?: string,
   ) {
     // The owner's pick, and the app it came from (turn-sender-client.ts), which the mode change it causes names.
     return this.sessions.updateConfig(user.userId, id, dto, user.credential, {
       origin: 'OWNER',
       senderClient: senderClientOfRequest(user.credential, client, device),
+      senderSessionId,
     });
   }
 
@@ -647,8 +649,13 @@ export class SessionsController {
   @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
   @Post(':id/restart')
   @HttpCode(202)
-  restart(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
-    return this.sessions.restart(user.userId, id);
+  restart(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Headers('x-orbit-client') client?: string,
+    @Headers('x-orbit-device') device?: string,
+  ) {
+    return this.sessions.restart(user.userId, id, senderClientOfRequest(user.credential, client, device));
   }
 
   /** Which of its runner's Codex or Claude accounts the session runs on — see switchAccount. */
@@ -658,8 +665,10 @@ export class SessionsController {
     @CurrentUser() user: AuthUser,
     @Param('id', PublicIdPipe) id: string,
     @Body() dto: SessionAccountDto,
+    @Headers('x-orbit-client') client?: string,
+    @Headers('x-orbit-device') device?: string,
   ) {
-    return this.sessions.switchAccount(user.userId, id, dto?.account);
+    return this.sessions.switchAccount(user.userId, id, dto?.account, senderClientOfRequest(user.credential, client, device));
   }
 
   /** Rename a session's display title. Works on any session (live or ended) and never

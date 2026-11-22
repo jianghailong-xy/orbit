@@ -9986,6 +9986,7 @@ export class RunnerApiController {
             kind: 'reload',
             content: JSON.stringify({ provider: AgentProvider.CLAUDE }),
             clientTurnId: `account-switch:${randomUUID()}`,
+            senderClient: 'orbit',
             status: 'PENDING',
           },
         });
