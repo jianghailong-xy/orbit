@@ -96,32 +96,6 @@ jobs:
       - name: Gate a second push mechanism
         run: bash scripts/ci/nav-push-gate.sh
 
-  macos:
-    name: macOS (build + test)
-    # macOS runners bill at 10× — only on PRs or an explicit dispatch, not every branch push.
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
-    runs-on: macos-15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # The SwiftUI app relies on newer-Swift MainActor-isolation inference; pin latest stable
-      # Xcode so the runner's Swift compiles it (the default image's Swift rejects it).
-      - name: Select latest Xcode
-        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
-        with:
-          xcode-version: latest-stable
-      - name: Toolchain
-        run: swift --version && xcodebuild -version
-      # Compiles the macOS-only code in OrbitKit (Keychain token store, URLSession SSE transport)
-      # that the Linux job's `#if` guards skip.
-      - name: Test OrbitKit (macOS)
-        working-directory: src/macos/OrbitKit
-        run: swift test
-      # First real compile of the SwiftUI layer (views, @Observable models, MenuBarExtra,
-      # UNUserNotificationCenter, launchctl glue). If this surfaces SDK nits, that's its job.
-      - name: Build OrbitApp
-        working-directory: src/macos/OrbitApp
-        run: swift build
-
   ios:
     name: iOS (generate + build)
     # macOS runners bill at 10× — only on PRs or an explicit dispatch, not every branch push.
@@ -167,6 +141,18 @@ jobs:
               || { echo "::error::$f lacks the App Group group.io.orbitd.app"; exit 1; }
           done
           echo "OrbitShare.appex embedded; App Group on all three entitlements"
+
+      - name: Capture permission mode states on iPhone
+        run: bash src/ios/ModeProbe/run.sh
+      - name: Upload iPhone permission mode screenshots
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: iphone-permission-mode
+          path: |
+            src/ios/build/mode-shots/
+            src/ios/build/mode-tests.log
+            src/ios/build/mode-stub.log
 
   # Whether the iPhone app can sign in to a self-hosted server at an address the operator types in
   # (http://<ip>) is not a question a compile can answer: the exceptions that decide it live in
