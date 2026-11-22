@@ -31,7 +31,6 @@ import {
   groupWatches,
   isLiveWatch,
   lastChangedAt,
-  mergeWatches,
   parseWatchWake,
   pauseWatch,
   predicateFor,

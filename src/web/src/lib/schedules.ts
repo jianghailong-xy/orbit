@@ -110,10 +110,18 @@ export const scheduleRequestQuery = (id: string) =>
     queryFn: () => api<ScheduleCard>(`/schedule-requests/${encodeURIComponent(id)}`),
   });
 
+/**
+ * What one session put up (§9.2): its cards, its change records, and the run it serves. Read on the events that can
+ * move it and otherwise only on the safety read: `schedule_cards.changed` naming the session (a card put up or
+ * decided, a change recorded or undone, a schedule its cards name edited), and, for a scheduled run's session while its
+ * run is open, that session's own `session.*` events, which move the run (useControlPlane). Its approvals, background
+ * jobs and every other session event say nothing of its cards. The session page reads it once
+ * (ScheduleCards `useSessionScheduleCards`) for everything it draws.
+ */
 export const sessionScheduleCardsQuery = (sessionId: string) =>
   queryOptions({
     queryKey: ['schedules', 'session', sessionId] as const,
-    meta: { entities: ['session'], sessionReach: { session: sessionId } satisfies SessionReach },
+    meta: { entities: ['scheduleCard'], scheduleCardsOf: sessionId },
     queryFn: () => api<SessionScheduleCardsResponse>(`/sessions/${encodeURIComponent(sessionId)}/schedule-cards`),
     refetchInterval: streamPoll(20_000),
   });

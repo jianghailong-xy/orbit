@@ -112,6 +112,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { FilesService } from '../files/files.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { endIdleWorkOfDoneTask } from '../realtime/parked-session-end';
 import { ConditionsService, type ConditionFiring } from '../conditions/conditions.service';
 import {
   START_WHEN_VIEW_SELECT,
@@ -3441,6 +3442,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         where: { id: { in: uniqueIds.slice(offset, offset + TASK_ID_QUERY_CHUNK) }, ownerId },
         select: {
           id: true,
+          status: true,
           projectId: true,
           project: {
             select: {
@@ -3461,7 +3463,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             where: { startsTaskWork: true, deletedAt: null },
             orderBy: { createdAt: 'desc' },
             select: {
-              isolationStatus: true, branch: true, finishedAt: true, changedFiles: true,
+              id: true, isolationStatus: true, branch: true, worktreeBranch: true, finishedAt: true,
+              changedFiles: true, branchSha: true, baseSha: true, worktreeDirty: true,
               workspace: { select: { repoUrl: true } },
             },
           },
@@ -3483,6 +3486,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             ? { isolationStatus: work.isolationStatus, branch: work.branch, repoUrl: work.workspace?.repoUrl }
             : null,
           receipts: row.mergeReceipts ?? [],
+          status: row.status,
+          mergeReceipts: row.mergeReceipts,
           deliveredSha: row.deliveredSha,
           deliveredBaseSha: row.deliveredBaseSha,
           sessions: row.sessions,
@@ -11300,6 +11305,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * task knowing it did, and it answers there, where it writes.
    */
   async dispatchDependentsAfterCompletion(ownerId: string, doneTaskId: string): Promise<void> {
+    // §12.15 P-M1: a DONE over an open work session decides its landing, and releases its
+    // dependents, at that session's finish — which the DONE requests here, rather than leaving it
+    // to the reaper's next sweep. Every DONE door comes through this edge after its commit. The
+    // finish arrives through the runner's finalize (`dispatchDependentsOfSettledWork`).
+    await this.requestEndOfIdleWork(ownerId, doneTaskId);
     let undecided: string[] = [];
     try {
       undecided = await this.dispatchDependentsOf(ownerId, doneTaskId);
@@ -11347,6 +11357,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Ask for the end of a DONE task's idle work sessions now (`endIdleWorkOfDoneTask`): what the DONE
+   * edge above does, and what a work session's park does when its task became DONE during the turn.
+   * Best effort; anything it leaves, the reaper ends.
+   */
+  async requestEndOfIdleWork(ownerId: string, taskId: string): Promise<void> {
+    await endIdleWorkOfDoneTask(this.prisma, this.realtime, this.logger, { ownerId, taskId }).catch((error) =>
+      this.logger.warn(`the end of task ${taskId}'s idle work was not requested: ${
+        error instanceof Error ? error.message : error}`));
+  }
+
+  /**
    * §12.15 P-M1: the finish that froze a DONE task's identity decided the route its DONE had left to
    * it, and a task that delivered nothing of its own releases its dependents on that finish (J10's
    * second edge, moved from the DONE to where the fact became known).
@@ -11355,7 +11376,20 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // The whole DONE edge, again: its facts were read while the landing was still undecided — the
     // settled project held as work still landing (`landingDeferred`) — and are re-derived now that it
     // is decided. Each step reads committed rows, so the parts the DONE already delivered answer
-    // nothing the second time.
+    // nothing the second time. The promotion candidate that landing held back first (M-F1), so the
+    // settled facts read the check it may queue as work in flight.
+    // A failure is logged: the finish is committed, and the next landing asks the same.
+    if (this.completionInputs) {
+      try {
+        const task = await this.prisma.task.findFirst({
+          where: { id: doneTaskId, ownerId }, select: { projectId: true },
+        });
+        await this.completionInputs.considerPromotionAfterSettledWork([task?.projectId]);
+      } catch (e) {
+        this.logger.error(`promotion candidate not considered after task ${doneTaskId}'s work settled: ${
+          e instanceof Error ? e.message : e}`);
+      }
+    }
     await this.dispatchDependentsAfterCompletion(ownerId, doneTaskId);
   }
 

@@ -193,7 +193,7 @@ const codexBehind = () =>
     },
   });
 const ready = (over: Partial<RunnerAgentFix> = {}): RunnerAgentFix => ({
-  workspaceId: 'ws1', workspaceName: 'orbit-dev', engine: 'claude', engineName: 'Claude Code', blocked: null, fixing: [], ...over,
+  workspaceId: 'ws1', workspaceName: 'orbit-dev', engine: 'claude', engineName: 'Claude Code', blocked: null, fixing: [], handled: [], ...over,
 });
 const signedOutLine = "An agent can't run here: orbit-dev uses Claude Code, which is signed out on this machine.";
 

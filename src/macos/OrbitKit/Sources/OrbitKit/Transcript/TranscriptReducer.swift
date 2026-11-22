@@ -458,7 +458,8 @@ public struct TranscriptReducer: Sendable, Codable {
     /// for older clients, so malformed or unknown diagnostics deliberately return nil and retain the
     /// old error path. An event stored before the runner sent the metadata is read through
     /// `EngineStderr.legacyRecoverableDiagnostic`, as on web.
-    private func recoverableDiagnostic(_ ev: RunEvent) -> (label: String, message: String, key: String)? {
+    private func recoverableDiagnostic(_ ev: RunEvent) -> (label: String, message: String, key: String,
+                                                          component: String?, code: String?)? {
         guard let rawMessage = str(ev, "stderr") else { return nil }
         let message = EngineStderr.clean(rawMessage)
         guard !message.isEmpty else { return nil }
@@ -483,17 +484,20 @@ public struct TranscriptReducer: Sendable, Codable {
             return nil
         }
         let phase = string("phase").map { $0 == "startup" ? "Startup" : $0 }
-        let label = [phase, string("component"), string("code")].compactMap { $0 }.joined(separator: " · ")
+        let component = string("component")
+        let code = string("code")
+        let label = [phase, component, code].compactMap { $0 }.joined(separator: " · ")
         let key = EngineStderr.diagnosticFoldKey(
-            component: string("component"), phase: string("phase"), severity: string("severity"),
-            impact: string("impact"), recoverable: recoverable, code: string("code"),
+            component: component, phase: string("phase"), severity: string("severity"),
+            impact: string("impact"), recoverable: recoverable, code: code,
             message: string("message") ?? message)
-        return (label: label, message: message, key: key)
+        return (label: label, message: message, key: key, component: component, code: code)
     }
 
     /// A recoverable diagnostic's `.diagnostic` row. A repeat bumps the first row's count instead of
     /// taking a row of its own, as a repeated stderr line does (web parity: `structuredDiagnostic`).
-    private mutating func appendDiagnostic(_ diagnostic: (label: String, message: String, key: String)) {
+    private mutating func appendDiagnostic(_ diagnostic: (label: String, message: String, key: String,
+                                                         component: String?, code: String?)) {
         if let id = diagnosticSeen[diagnostic.key],
            let i = state.items.firstIndex(where: { $0.id == id }),
            case .diagnostic(var row) = state.items[i] {
@@ -505,7 +509,9 @@ public struct TranscriptReducer: Sendable, Codable {
         diagnosticSeen[diagnostic.key] = id
         state.items.append(.diagnostic(DiagnosticNotice(id: id, label: diagnostic.label,
                                                         text: EngineStderr.logText(diagnostic.message),
-                                                        message: diagnostic.message)))
+                                                        message: diagnostic.message,
+                                                        component: diagnostic.component,
+                                                        code: diagnostic.code)))
     }
 
     /// Drop the loaded transcript window so a tail page can re-seed it from scratch — the reducer
@@ -2508,6 +2514,12 @@ private enum EngineStderr {
             ]
             if let phase { diagnostic["phase"] = .string(phase) }
             return diagnostic
+        }
+        // Codex's sandbox setup asks for the system bubblewrap and falls back to its bundled copy
+        // (docs/mocks/codex-sandbox-fix-with-agent). A current runner sends this structured; events
+        // stored before it did are recognized here so the warning and its action survive.
+        if lower.contains("could not find bubblewrap on path") {
+            return degraded("sandbox", "bubblewrap_missing", phase: "startup")
         }
         if lower.contains("codex_models_manager") && lower.contains("failed to refresh available models") {
             if lower.contains("401") && tokenInvalidated {

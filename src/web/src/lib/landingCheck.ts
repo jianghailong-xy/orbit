@@ -105,3 +105,19 @@ export const TASK_EXEMPT_COPY = {
   STILL_RUNS: 'Still runs',
 } as const;
 export const exemptCheckReason = (reason: string): string => `Exempt: ${reason}`;
+
+/** What a refused Revert says (the revert door's 409 codes), in a sentence instead of a generic error. */
+export function revertFailureLine(code: string | undefined): string {
+  switch (code) {
+    case 'SETTING_CHANGE_NOT_CURRENT':
+      return 'This field has changed since, so putting back the old value would undo a later change. Nothing was written.';
+    case 'SETTING_CHANGE_NOT_REVERTIBLE':
+      return 'Only a change the coordinator made without a card can be reverted. This one is yours or was approved on a card. Nothing was written.';
+    case 'SETTING_CHANGE_ALREADY_REVERTED':
+      return 'This change was already reverted. Nothing was written.';
+    case 'SETTING_CHANGE_TASK_GONE':
+      return 'The task this change is about is no longer in this project, so there is nothing to put back. Nothing was written.';
+    default:
+      return 'The revert did not go through. Nothing was written.';
+  }
+}

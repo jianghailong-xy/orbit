@@ -101,6 +101,12 @@ const HUNDRED_ENDED: WatchView[] = Array.from({ length: 100 }, (_, i) => matched
  */
 function serve(watches: () => WatchView[]) {
   vi.mocked(api).mockImplementation((async (path: string) => {
+    if (path === '/watches?following=true') {
+      const all = watches();
+      const newest = all.slice(0, 100);
+      const rest = [...all.filter((w) => w.state === 'ACTIVE'), ...all.filter((w) => w.state === 'PAUSED'), ...all.filter((w) => watchProblem(w))];
+      return [...new Map([...newest, ...rest].map((w) => [w.id, w])).values()];
+    }
     if (path === '/watches') return watches().slice(0, 100);
     if (path === '/watches?needsAttention=true') return watches().filter((w) => watchProblem(w)).slice(0, 100);
     const state = /^\/watches\?state=([A-Z]+)$/.exec(path);

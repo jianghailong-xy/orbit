@@ -242,8 +242,9 @@ describe('the change line (board 2/2 ② ③ ⑤)', () => {
 });
 
 function RunSession({ sessionId }: { sessionId: string }) {
-  const of = cards.useScheduleRunOfSession(sessionId);
-  const inserts = cards.useSessionScheduleInserts(null, [], of);
+  const read = cards.useSessionScheduleCards(sessionId);
+  const of = cards.useScheduleRunOfSession(sessionId, read);
+  const inserts = cards.useSessionScheduleInserts(null, undefined, [], of);
   if (!of) return null;
   return (
     <>
@@ -319,7 +320,8 @@ describe('a run’s session (board 2/2 ⑤ ⑥)', () => {
 describe('a conversation’s scheduled-task inserts', () => {
   function Inserts({ sessionId }: { sessionId: string }) {
     const events = [{ seq: 1, ts: '2025-11-14T04:00:00.000Z' }, { seq: 2, ts: '2025-11-14T04:22:00.000Z' }];
-    const inserts = cards.useSessionScheduleInserts(sessionId, events, null);
+    const read = cards.useSessionScheduleCards(sessionId);
+    const inserts = cards.useSessionScheduleInserts(sessionId, read, events, null);
     return <>{inserts.map((insert) => <div key={insert.key} data-anchor={String(insert.anchor)}>{insert.element}</div>)}</>;
   }
 

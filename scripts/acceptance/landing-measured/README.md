@@ -12,12 +12,16 @@ Contract: `docs/project-integration-line-contract.md` §12.15 (P-M1, P-M2, P-C1,
   `env -i` in a private mount namespace that hides `/root`; its PATH holds no engine but `fake-claude`.
 - **Not real:** the agent. `fake-claude` speaks Claude Code's stream-json without a model. A task run follows its
   description: `E2E-DO: commit` commits a work file; `E2E-RUN <key>: <command>` runs the command, writes its output to
-  `$LM_DIR/ops-out/<key>.out` and commits nothing (the turn fails if the worktree moved). A coordinator turn
+  `$LM_DIR/ops-out/<key>.out` and commits nothing (the turn fails if the worktree moved); `E2E-DETACH <key>: <ref>` runs
+  `git checkout --detach <ref>` and commits nothing, as a verification run told to check out its project's line does
+  (the turn fails if HEAD did not move or the worktree is not clean). A coordinator turn
   `E2E-MCP <id> <tool> <json>` calls the tool through the session's own `orbit mcp`, so every coordinator write goes
   through the real MCP door.
-- **Project A** (`a-ops.mjs`): six operations tasks in three layers in a repository workspace, a start request with no
-  line. Checks: done, zero `project_integration_job` rows, no `project_codebase` row, every dependent started on its
-  prerequisites' DONE.
+- **Project A** (`a-ops.mjs`): seven operations tasks in three layers in a repository workspace, a start request with no
+  line. One of them, D1, checks out a commit pushed to origin as the project line (`git checkout --detach`) and commits
+  nothing, so its run reports the diff from its base to that commit as `changed_files` while its own branch stays at its
+  base (2026-11-20's regression). Checks: done, zero `project_integration_job` rows, no `project_codebase` row, every
+  dependent started on its prerequisites' DONE.
 - **Project B** (`b-mixed.mjs`): a PROJECT_BRANCH line with a merge check, Automatic. The coordinator sets the landing
   check (`project_update`) and exempts M2 (`task_update`) without a card. Checks: LAND_TASK only for M1, M2, M4; M2's
   LANDING_CHECK skipped `TASK_EXEMPT` while its TASK_ACCEPTANCE ran; M1/M4 ran the landing check; two

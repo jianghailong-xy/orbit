@@ -101,6 +101,8 @@ final class SessionProjectCopyParityTests: XCTestCase {
         "coordinatorSection", "pageSubtitleLoading", "startReview", "startNotAsked", "startHint",
         "progress", "progressHint", "markHint", "waitingSession", "pageSubtitle", "pageProgress", "startAsked",
         "pageNotStarted", "startSuggestion",
+        "pause", "resume", "pausedAtLimit", "pausedRuns", "pausedAgo", "pausedTitle", "pausedStill", "undo",
+        "resumedTitle", "resumedLimitNote", "refusedTitle", "refusedReason",
     ]
     /// The web's words OrbitKit's table does not carry: the project page's status line before any count,
     /// and its empty and failed states.

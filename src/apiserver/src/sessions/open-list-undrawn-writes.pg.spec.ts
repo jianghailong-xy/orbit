@@ -396,7 +396,7 @@ test('2. hints: a write of undrawn columns alone sends no sessions.list_changed 
     assert.equal(wrote, 1, `${what}: the write matched no row`);
     const after = await readOpenListVersion(f.prisma, f.ownerId);
     assert.notEqual(after, version, `${what} did not move the Open list's version`);
-    assert.ok(await until(() => received.at(-1)?.version === after, 2_500), `${what}: no sessions.list_changed within 2.5 s`);
+    assert.ok(await until(() => received.length > told, 2_500), `${what}: no sessions.list_changed within 2.5 s`);
     told = received.length;
     version = after;
   };

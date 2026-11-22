@@ -220,6 +220,20 @@ func TestDshPermissionBridge(t *testing.T) {
 		}
 		b.wait()
 	})
+	t.Run("auto-allows-an-edit-in-the-uploads-directory-without-a-card", func(t *testing.T) {
+		uploads := t.TempDir()
+		p, b := newDshBridgeProbe(auto)
+		p.calls["call-upload"] = dshPermissionAsk{TurnID: "t1", ToolCallID: "call-upload", Name: "write", Input: map[string]interface{}{
+			"file_path": filepath.Join(uploads, "a.txt"), "sandbox_permissions": "danger-full-access", "justification": "bench"}}
+		b.workspace, b.uploads = "/w", uploads
+		b.begin()
+		b.request("perm-1", dshPermissionParams("call-upload"))
+		replies := p.waitReplies(t, 1)
+		events := p.events.snapshot()
+		if outcomeOf(replies[0]) != dshAllowOnce || len(p.asked) != 0 || len(events) != 1 || events[0].payload["subtype"] != "permission_auto_allowed" {
+			t.Fatalf("an edit in the uploads directory must be allowed once, visibly, without a card: %+v %+v", replies, events)
+		}
+	})
 	t.Run("default-never-allows-an-escalation-itself", func(t *testing.T) {
 		p, b := newDshBridgeProbe(ask)
 		p.calls["call-commit"] = commit
@@ -728,4 +742,51 @@ func dshRealToolGateScenario(t *testing.T, mode string) {
 	}
 	h.end()
 	h.evidence(t.Name(), map[string]interface{}{"mode": mode, "posted": sent, "cards": wantCards, "ordinaryRanUnasked": true})
+}
+
+// TestDshAutoUploadsEdit: Auto lets dsh's own write and edit tools escalate into the session's uploads directory
+// without a card, as a Claude Code session writes there (--add-dir); anywhere else, a link out of it, a call that
+// asks for no escalation and every other tool still go to a person.
+func TestDshAutoUploadsEdit(t *testing.T) {
+	work, uploads, outside := t.TempDir(), t.TempDir(), t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(uploads, "out")); err != nil {
+		t.Fatal(err)
+	}
+	ask := func(name, path string, escalated bool) dshPermissionAsk {
+		input := map[string]interface{}{"file_path": path}
+		if escalated {
+			input["sandbox_permissions"], input["justification"] = "danger-full-access", "bench"
+		}
+		return dshPermissionAsk{Name: name, Input: input}
+	}
+	for _, tc := range []struct {
+		name string
+		ask  dshPermissionAsk
+		want bool
+	}{
+		{"write in uploads", ask("write", filepath.Join(uploads, "bench", "_check.py"), true), true},
+		{"edit in uploads", ask("edit", filepath.Join(uploads, "a.txt"), true), true},
+		{"relative path leaving the workspace", ask("write", filepath.Join("..", filepath.Base(uploads), "a.txt"), true), filepath.Dir(work) == filepath.Dir(uploads)},
+		{"outside", ask("write", filepath.Join(outside, "a.txt"), true), false},
+		{"link out of uploads", ask("write", filepath.Join(uploads, "out", "a.txt"), true), false},
+		{"dot-dot out of uploads", ask("write", filepath.Join(uploads, "..", filepath.Base(outside), "a.txt"), true), false},
+		{"not escalated", ask("write", filepath.Join(uploads, "a.txt"), false), false},
+		{"other tool", ask("bash", filepath.Join(uploads, "a.txt"), true), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := dshAutoUploadsEdit(tc.ask, work, uploads); got != tc.want {
+				t.Fatalf("dshAutoUploadsEdit = %v, want %v", got, tc.want)
+			}
+		})
+	}
+	if dshAutoUploadsEdit(ask("write", filepath.Join(uploads, "a.txt"), true), work, "") {
+		t.Fatal("without an uploads directory nothing is allowed")
+	}
+	// A routine command may write the uploads directory too, once it is named as a root (paths outside the temp
+	// areas, which are roots already).
+	cp := dshPermissionAsk{Name: "bash", Input: map[string]interface{}{"command": "cp a.txt /srv/uploads/s1/a.txt",
+		"sandbox_permissions": "danger-full-access", "justification": "bench"}}
+	if dshAutoRoutineEscalation(cp, "/w") || !dshAutoRoutineEscalation(cp, "/w", "/srv/uploads/s1") {
+		t.Fatal("a command writing the uploads directory is routine only with that directory as a root")
+	}
 }

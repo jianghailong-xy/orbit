@@ -1139,6 +1139,9 @@ private struct TaskDetailContent: View {
     @State private var editingAcceptance = false
     @State private var following = false
     @State private var importingInput = false
+    /// The project's record of this task's exemption from the landing check: who marked it and when
+    /// (board 04 b); nil until read.
+    @State private var exemptionMarked: ProjectSettingChange?
     @State private var inputToRemove: TaskInput?
     @State private var prerequisiteToRemove: TaskDependencyListRow?
     /// The reader's Graph/List choice; nil follows the component (`TaskDetailLogic.prefersGraph`).
@@ -1441,7 +1444,8 @@ private struct TaskDetailContent: View {
                 hasLiveRun: TaskDetailLogic.liveRun(task) != nil,
                 hasEvidence: tasks.evidence.last != nil,
                 hasLanding: TaskLandingLogic.status(task.integration,
-                                                    taskStatus: task.status.rawValue) != nil,
+                                                    taskStatus: task.status.rawValue) != nil
+                    || task.landingCheckExempt == true,
                 hasDependencies: TaskDetailLogic.hasDependencies(task),
                 hasInputs: !(task.attachments ?? []).isEmpty,
                 hasAttribution: tasks.attribution.map {
@@ -1478,8 +1482,10 @@ private struct TaskDetailContent: View {
         case .evidence:
             if let latest = tasks.evidence.last { evidenceSection(task, latest) }
         case .landing:
-            if let landing = TaskLandingLogic.status(task.integration, taskStatus: task.status.rawValue) {
-                landingSection(landing)
+            let landing = TaskLandingLogic.status(task.integration, taskStatus: task.status.rawValue)
+            let exemption = TaskLandingCheckExemption.of(task, marked: exemptionMarked)
+            if landing != nil || exemption != nil {
+                landingSection(landing, exemption: exemption, task: task)
             }
         case .acceptance:
             acceptanceSection(task)
@@ -1596,8 +1602,10 @@ private struct TaskDetailContent: View {
     /// The task's Landing section, in the web's `LandTaskStatus` words: the badge, the generation,
     /// the step it is on or stopped at, the reason, and the six facts — then the one way into the
     /// segment's landing session.
-    private func landingSection(_ status: TaskLandingStatus) -> some View {
+    private func landingSection(_ landing: TaskLandingStatus?, exemption: TaskLandingCheckExemption?,
+                                task: TaskItem) -> some View {
         Section(TaskLandingCopy.landingSection) {
+            if let status = landing {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
                     if let badge = status.badge {
@@ -1651,6 +1659,18 @@ private struct TaskDetailContent: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            // Board 04 b (D5): exempt from the project's landing check, why, who and when, and the
+            // owner's Remove exemption.
+            if let exemption {
+                TaskExemptionRow(exemption: exemption, busy: tasks.mutatingTaskIDs.contains(task.id)) {
+                    Task { await tasks.removeLandingCheckExemption(task.id) }
+                }
+            }
+        }
+        .task(id: "\(task.id):\(task.landingCheckExempt == true):\(task.landingCheckExemptReason ?? ""):\(task.landingCheckExemptBySessionId ?? ""):\(task.landingCheckExemptOwnerSetAt ?? "")") {
+            guard task.landingCheckExempt == true, let projectID = task.projectId else { exemptionMarked = nil; return }
+            exemptionMarked = await tasks.exemptionMarked(projectID: projectID, taskID: task.id)
         }
     }
 

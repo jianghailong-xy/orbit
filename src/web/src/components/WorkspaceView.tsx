@@ -156,7 +156,6 @@ import {
   runnersQuery,
   pendingCriteriaDecisionsQuery,
   pendingDecisionsQuery,
-  projectIntegrationQuery,
   projectMergedPromotionsQuery,
   projectOpenItemsQuery,
   projectPromotionQuery,
@@ -324,6 +323,7 @@ import {
   cancelQueuedTurn,
   steerQueuedTurn,
   adoptSessionBranch,
+  dismissMergeFailure,
   commitSession,
   createMergeRepairSession,
   createInteractiveSession,
@@ -362,6 +362,8 @@ import {
   retryReplyTranslation,
 } from '../api';
 import { DshRepairCard } from './Transcript';
+import { useAgentFix } from './AgentFix';
+import { sandboxFixTarget } from '../lib/agentFix';
 import type { TranslationActionResponse } from '@orbit/shared';
 import { useApprovalDecisions } from '../lib/approvalDecisions';
 import {
@@ -385,7 +387,7 @@ import {
 } from './RunNeverStartedCard';
 import { claudeRegionHeld, claudeRegionHeldWords, useClaudeRegionCheckAgain } from '../lib/claudeRegion';
 import { approvalRememberOffered, DSH_RUNNER_CAPABILITY, dshRepair } from '../lib/dshRuntime';
-import { AntigravityRepairCard, antigravityRepair, AttachmentImage, QueuedFootCtx, type AuthErrorHelp, type AutoRetryHelp, type CursorQuotaHelp, QueuedUserTurn, type SteerWithdrawHandle, type TurnAttachmentRef, type TurnImage, type UnreadSteer, unreadSteersOf } from './Transcript';
+import { AntigravityRepairCard, antigravityRepair, AttachmentImage, QueuedFootCtx, type AuthErrorHelp, type AutoRetryHelp, type CursorQuotaHelp, QueuedUserTurn, type SandboxFixHelp, type SteerWithdrawHandle, type TurnAttachmentRef, type TurnImage, type UnreadSteer, unreadSteersOf } from './Transcript';
 import { PendingTray, type PendingTrayRow } from './PendingTray';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { ApprovalPanel, DECLINE_PLACEHOLDER, decliningPrefix } from './ApprovalPanel';
@@ -408,7 +410,7 @@ import {
 } from './CriteriaDecisionCard';
 import { AnsweredQuestionCard, CoordinatorQuestions, closedQuestionRows, coordinatorQuestions } from './CoordinatorQuestionCard';
 import { useSessionOwnerRequestInserts } from './OwnerRequestCard';
-import { useScheduleRunOfSession, useSessionScheduleInserts } from './ScheduleCards';
+import { useScheduleRunOfSession, useSessionScheduleCards, useSessionScheduleInserts } from './ScheduleCards';
 import {
   OWNER_REQUEST_CHAT_PLACEHOLDER,
   OWNER_REQUEST_CHAT_PREFIX,
@@ -569,7 +571,8 @@ import {
   CLONE_RETRY_FAILED,
   composerPlaceholderFor,
 } from '../lib/machineSetupCopy';
-import { githubRepositoryOf, hearClone, retryClone } from '../lib/workspaceClone';
+import { cloneHeardOf, githubRepositoryOf, hearClone, retryClone, useCloneHeardVersion } from '../lib/workspaceClone';
+import { CloneWaitNotice, useCloneWait } from './CloneWaitNotice';
 import { bindingPlanUsageRow, currentPlanUsageRows, modelPlanUsage } from '../lib/planUsage';
 import { useToast } from '../lib/toast';
 import { showToast } from '../lib/toastStore';
@@ -647,6 +650,7 @@ import {
   runnerUpdatingTag,
   runnerUpdatingTitle,
   runnerUpdatingWaited,
+  cloneRowLabel,
   queuedLabel,
   queuedNoticeVisible,
   queuedTitle,
@@ -680,6 +684,7 @@ import {
   type OptimizedInsert,
   type PromptOptimizerTarget,
 } from './PromptOptimizer';
+import { useProjectIntegration } from '../lib/pollOwner';
 
 // The queue's types live with the stream that keeps the queue (lib/useSessionStream); the modules
 // and tests that import them from here still can.
@@ -1076,6 +1081,15 @@ const JUMP_TO_START_PAGES = 30;
 // same). The follow a content update triggers lands just after the rows grew, and the gap read in
 // between — the normal state while a reply streams — must not flash the button.
 const STRANDED_AFTER_MS = 400;
+// How long a card the transcript was opened at is held in place with nothing moving it (see
+// landingRef): long enough for the rest of the first page, the receipts read beside it, translations
+// and images to land above it, short enough that a reader who never touches the scroller is not held
+// against a conversation that keeps changing.
+const LANDING_QUIET_MS = 5000;
+// How long a project row's request to open at a waiting card stands with no such card drawn: one
+// answered elsewhere before the open is never drawn, and a request left standing fired on whatever
+// waiting card appeared later, moving a reader by then reading something else.
+const WAITING_REVEAL_EXPIRES_MS = 10_000;
 // What the sticky bar calls a turn the person typed — the only turn it ever names. A turn the control
 // plane opened (a card carrying `data-orbit-round`) is nobody's question: the owner ruled on
 // 2026-11-14 that machine messages never appear on the bar, so over one the bar is hidden.
@@ -1084,12 +1098,15 @@ const STICKY_LABEL = 'Your question';
  *  question, a request Orbit's owner door asked, a coordinator's question not yet answered, an open
  *  item. Answered and snoozed forms carry none of these. On a phone a coordinator's question is its
  *  `ReviewCard` preview, the form itself in the dialog the preview opens: the preview is the one
- *  in the transcript, under the card's `question-<itemId>` id. */
+ *  in the transcript, under the card's `question-<itemId>` id. An answered question's record is a
+ *  `review-card` under `question-record-<itemId>`, drawn inside the transcript above the open one,
+ *  so it is excluded by name: matching it sent the row to the oldest record loaded. */
 export const WAITING_CARD_SELECTOR =
-  '[data-waiting-card], .owner-request-card, .coordinator-question:not(.answered-question), .review-card[id^="question-"], [data-open-item]';
+  '[data-waiting-card], .owner-request-card, .coordinator-question:not(.answered-question), .review-card[id^="question-"]:not(.answered-question-inline), [data-open-item]';
 /** How far below the scroller's top edge a revealed waiting card's top comes to rest: clear of the
- *  floating "Jump to the beginning" pill when the transcript has one (`.chat-older-top`). */
-export const waitingCardGap = (olderPill: boolean): number => (olderPill ? 48 : 12);
+ *  floating "Jump to the beginning" pill (`.chat-older-top`), which any transcript scrolled off both
+ *  its top and its tail offers — as a revealed card's is, unless it clamps at the top. */
+export const WAITING_CARD_GAP = 48;
 
 // Shell-style composer history, kept per-session in localStorage so the Up/Down arrows
 // recall only this session's recently sent prompts (never another session's). Stored
@@ -1410,6 +1427,9 @@ export const sessionLine = (
       return { text: CAPACITY_HELD_LINE, tone: 'queued', hint: capacityHeldHint(s, machine, Date.now()) };
     // A runner draining for its update is the one queue word in the warning colour (board 2 ①): it
     // can last hours, and only the owner can shorten it.
+    // Held by its clone, the row says git's percentage once this tab has heard one (board clone-progress-wait-card ④).
+    const cloned = !held && s.queuedReason === 'WORKSPACE_CLONING' ? cloneHeardOf(s.workspace?.id) : null;
+    if (cloned?.state === 'CLONING' && cloned.progress !== null) return { text: cloneRowLabel(cloned.progress), tone: 'queued' };
     return { text: held ?? queuedLabel(s), tone: !held && isRunnerUpdating(s) ? 'warning' : 'queued' };
   }
   // Parked (AWAITING_INPUT) but still doing background work — a sub-workspace and/or background
@@ -1598,7 +1618,7 @@ function SessionProjectStartRow({ start, projectId }: { start: StartPageRow; pro
   const settings = asked?.startRequest?.settings ?? null;
   // The integration read the landing line beside it holds (one query key): what the suggestion's
   // Directly into names is the main branch the start card opens with.
-  const integration = useQuery(projectIntegrationQuery(projectId));
+  const integration = useProjectIntegration(projectId);
   const standing = integration.data && typeof integration.data === 'object' ? integration.data : null;
   return (
     <div className="session-project-start">
@@ -1644,7 +1664,7 @@ function SessionProjectStartRow({ start, projectId }: { start: StartPageRow; pro
  *  (`ProjectMergeStrip`). Its own component, so the second hand redraws this card and not the
  *  console around it. */
 function SessionProjectLanding({ projectId, onOpen }: { projectId: string; onOpen: () => void }) {
-  const integration = useQuery(projectIntegrationQuery(projectId));
+  const integration = useProjectIntegration(projectId);
   const view = integration.data && typeof integration.data === 'object' ? integration.data : null;
   const live = view?.inFlight != null && !isMergeJob(view.inFlight);
   const listed = view?.inFlightJobs !== undefined;
@@ -2771,6 +2791,9 @@ export function WorkspaceView({
   // setAtBottom is: it decides whether the top of the transcript offers the way back to the first
   // message.
   const [hasMoreOlder, setHasMoreOlder] = useState(false);
+  // Whether the scroller has left its top: with the whole session loaded, the way back is still
+  // offered to a reader scrolled up into it, and only the top itself has nothing to go back to.
+  const [offTop, setOffTop] = useState(false);
   // Set while "Jump to the beginning" is walking the pages back, so each page it asks for is
   // stamped as one that wants the top (see prependAnchorRef).
   const jumpingToStartRef = useRef(false);
@@ -2910,11 +2933,55 @@ export function WorkspaceView({
   // When the reader last had their own hand on the scroller (wheel, finger, scrollbar, arrow key).
   // The browser reports no scroll phase, so this is the evidence that a falling scrollTop is theirs.
   const readerInputAtRef = useRef(0);
+  // The card the transcript was opened at — a waiting card, a card a chat was about, a linked record —
+  // and where in the view it belongs. Placing it once was not enough: the rest of the first page, the
+  // receipts read beside it, translations and images all land after it and push it out of view, with
+  // nothing to bring it back (the tail pin only ever follows the bottom). So it is held: every
+  // content change, row resize and image load puts it back (keepLanding), until the reader takes the
+  // scroller, jumps to the bottom or opens another session, or nothing has moved it for
+  // LANDING_QUIET_MS. While it is held the transcript is not pinned to its tail.
+  const landingRef = useRef<{
+    card: HTMLElement;
+    /** How far the card is from where it belongs: what scrollTop has to move by. */
+    delta: (view: DOMRect, card: DOMRect, root: HTMLElement) => number;
+    timer: number;
+  } | null>(null);
+  const releaseLanding = useCallback((): void => {
+    if (landingRef.current) window.clearTimeout(landingRef.current.timer);
+    landingRef.current = null;
+  }, []);
+  const holdLanding = useCallback((card: HTMLElement, delta: (view: DOMRect, card: DOMRect, root: HTMLElement) => number): void => {
+    releaseLanding();
+    landingRef.current = { card, delta, timer: window.setTimeout(releaseLanding, LANDING_QUIET_MS) };
+  }, [releaseLanding]);
+  /** Put the held card back where it belongs; true while one is held. */
+  const keepLanding = useCallback((): boolean => {
+    const landing = landingRef.current;
+    const root = scrollRef.current;
+    if (!landing || !root) return false;
+    if (!landing.card.isConnected) {
+      releaseLanding();
+      return false;
+    }
+    const delta = landing.delta(root.getBoundingClientRect(), landing.card.getBoundingClientRect(), root);
+    if (Math.abs(delta) < 1) return true;
+    const before = root.scrollTop;
+    root.scrollTop += delta;
+    // Only a correction that moved the view restarts the quiet wait: a card the scroller cannot bring
+    // any closer (one near the end of the conversation) would otherwise be held for as long as
+    // anything below it changes.
+    if (root.scrollTop !== before) {
+      window.clearTimeout(landing.timer);
+      landing.timer = window.setTimeout(releaseLanding, LANDING_QUIET_MS);
+    }
+    return true;
+  }, [releaseLanding]);
   // Snap back to the live tail; the scroll events it fires re-pin atBottomRef via measure().
   const scrollToBottom = useCallback(() => {
+    releaseLanding();
     reviewPositionHeldRef.current = false;
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
-  }, []);
+  }, [releaseLanding]);
   // Called on send: re-pin to the live tail so a message fired while scrolled up snaps back to the
   // bottom (and stays pinned as the reply streams) instead of stranding the user in history. The
   // scroll goes to the current tail now for instant feedback; setting atBottomRef ensures the
@@ -3544,7 +3611,7 @@ export function WorkspaceView({
   // day's counts, over the project's landing sessions and its merges into main.
   // No Landings row while the project's line has not started (revision 42 §12.16, ruling D2): the
   // integration read says so with `line: null`; an unanswered read draws as it always did.
-  const pageIntegrationQ = useQuery({ ...projectIntegrationQuery(openProjectId ?? ''), enabled: !!openProjectId });
+  const pageIntegrationQ = useProjectIntegration(openProjectId ?? '');
   const pageLineNotStarted = pageIntegrationQ.data != null && typeof pageIntegrationQ.data === 'object'
     && pageIntegrationQ.data.line === null;
   const landingsSummary = useMemo(
@@ -3584,6 +3651,8 @@ export function WorkspaceView({
   useEffect(() => {
     if (resolvedWorkspaceId && !listProjectId) rememberListFolder(resolvedWorkspaceId, folderParam);
   }, [resolvedWorkspaceId, listProjectId, folderParam]);
+  // A clone frame moves a held row's percentage (sessionLine), which the listing below has to redraw for.
+  const cloneHeardVersion = useCloneHeardVersion();
   // The list split into its folder rows and the sessions in no folder — the ones the Pinned and
   // time sections below are made of. A folder's page lists the sessions filed in it instead.
   const folderListing = useMemo(
@@ -3603,7 +3672,7 @@ export function WorkspaceView({
     }),
     [openFolder, visibleSessions, workspaceFolders, projectsQ.data, projectData.coordinators, projectData.contentSessions,
       projectData.sessionCounts, effectiveView, listByTag, runner.online, runnerShownName, watchingBySession, selectedSession, recapsEnabled,
-      resolvedWorkspaceId],
+      resolvedWorkspaceId, cloneHeardVersion],
   );
   // A project's entry is in the list only where its coordinator runs (owner 2026-11-07), so it stands
   // for the coordinator; one with no coordinator is passed over, as a folder row is.
@@ -3768,10 +3837,7 @@ export function WorkspaceView({
   const titleBarPageShown = !!titleBarProjectId && (isMobile ? sheetProjectId === titleBarProjectId
     : titleBarProjectId === columnProjectId && projectColumnOpen);
   const titleBarReadsLine = !!titleBarProjectId && !selectedTrashed && !titleBarPageShown;
-  const titleBarIntegrationQ = useQuery({
-    ...projectIntegrationQuery(titleBarProjectId ?? ''),
-    enabled: titleBarReadsLine,
-  });
+  const titleBarIntegrationQ = useProjectIntegration(titleBarProjectId ?? '', titleBarReadsLine);
   const titleBarPromotionQ = useQuery({
     ...projectPromotionQuery(titleBarProjectId ?? ''),
     enabled: titleBarReadsLine,
@@ -4489,6 +4555,11 @@ export function WorkspaceView({
     typeof runner.activeSessions === 'number' ? runner.activeSessions : slotUsage.active;
   // The gate comes from the selected session's own row: only the server can tell whether the
   // runner, this run, or the batch is what is holding it.
+  // Held by its GitHub workspace's clone: the waiting card says what is cloning and how far (board clone-progress-wait-card ②).
+  const cloneWait = useCloneWait(
+    (selectedSession ?? selected)?.queuedReason === 'WORKSPACE_CLONING' ? selectedId : null,
+    detailForSelected?.workspace,
+  );
   const slotWaitDescription = pendingSlotDescription(
     activeSlots,
     runner.maxConcurrent,
@@ -4630,6 +4701,7 @@ export function WorkspaceView({
         };
       }
     },
+    readerAtTail: () => atBottomRef.current,
   });
   const {
     events,
@@ -4734,7 +4806,7 @@ export function WorkspaceView({
     // Pin to the bottom while at (or near) it; un-pin only when the READER scrolls up. Both the
     // reasoning behind that and the clients' copy of the rule live in tailPinning.ts.
     const sample = sampleTail(el);
-    atBottomRef.current = !reviewPositionHeldRef.current && pinnedToTail(
+    atBottomRef.current = !reviewPositionHeldRef.current && !landingRef.current && pinnedToTail(
       atBottomRef.current,
       lastSampleRef.current,
       sample,
@@ -4759,6 +4831,7 @@ export function WorkspaceView({
     }
     setAtBottom(atBottomRef.current); // React bails out when unchanged, so no per-scroll re-render
     setHasMoreOlder(hasOlderNow()); // same bail-out; drives the way back to the start
+    setOffTop(top > 0);
     // Near the top with older history still on the server → pull in the next page.
     if (top < LOAD_OLDER_AT) loadOlder();
     const topY = el.getBoundingClientRect().top;
@@ -4817,6 +4890,7 @@ export function WorkspaceView({
   // is traded for the tail (the stream's backToLatest), and the record leaves the URL — a reload now
   // opens at the latest message, which is where the reader went.
   const backToLatest = useCallback(() => {
+    releaseLanding();
     reviewPositionHeldRef.current = false;
     atBottomRef.current = true;
     setAtBottom(true);
@@ -4829,7 +4903,7 @@ export function WorkspaceView({
       },
       { replace: true },
     );
-  }, [setSearchParams, streamBackToLatest]);
+  }, [setSearchParams, streamBackToLatest, releaseLanding]);
   // The event each of those rows is drawn from (`queuedTurnEvent`): the one its echo will be. Only
   // the rows the tray does not hold (`inPendingTray`): what Orbit queued, and a message whose
   // delivery settled undelivered, which is part of the conversation's record.
@@ -4940,6 +5014,7 @@ export function WorkspaceView({
     });
     atBottomRef.current = true; // a freshly opened/switched session starts pinned to the latest
     reviewPositionHeldRef.current = false;
+    releaseLanding(); // a card held in place belongs to the session it was opened at
     lastSampleRef.current = TAIL_SAMPLE_ZERO;
     setAtBottom(true); // hide the jump-to-bottom button until the new session reports otherwise
     window.clearTimeout(strandTimerRef.current); // nor is it stranded off a tail not yet drawn
@@ -4951,7 +5026,7 @@ export function WorkspaceView({
     setHasMoreOlder(false); // measure() re-reads it once this session's window is established
     pendingRecordRef.current = null;
     setWaitingReveal((pending) => (pending === selectedId ? pending : null));
-  }, [selectedId, landingSession]);
+  }, [selectedId, landingSession, releaseLanding]);
 
   // Tail-first prepend: after loadOlder grows older content above the viewport, restore the
   // scroll position so what the user was reading stays put instead of jumping down. Runs before
@@ -4997,18 +5072,18 @@ export function WorkspaceView({
     const row = elementForSeq(root, pending.seq);
     if (!row) return;
     pendingRecordRef.current = null;
-    const view = root.getBoundingClientRect();
-    const box = row.getBoundingClientRect();
-    root.scrollTop += recordScrollDelta(
-      { top: view.top, height: root.clientHeight },
+    // Held where it lands (landingRef): the rows still arriving around it must not carry it off.
+    holdLanding(row, (view, box, scroller) => recordScrollDelta(
+      { top: view.top, height: scroller.clientHeight },
       { top: box.top, height: box.height },
-    );
+    ));
+    keepLanding();
     // Restarted, not just added, so a second link to the same row marks it again.
     row.classList.remove('record-flash');
     void row.offsetWidth;
     row.classList.add('record-flash');
     window.setTimeout(() => row.classList.remove('record-flash'), RECORD_FLASH_MS);
-  }, [transcriptEvents, recordTick, selectedId]);
+  }, [transcriptEvents, recordTick, selectedId, holdLanding, keepLanding]);
 
   // Track at-bottom + which prompt to surface as the user scrolls.
   useEffect(() => {
@@ -5021,6 +5096,7 @@ export function WorkspaceView({
     // one that falls because they dragged up, and the transcript stops following the live reply
     // (tailPinning.ts). `pointerdown` is what catches a scrollbar drag, which fires none of the rest.
     const onReaderInput = (): void => {
+      releaseLanding(); // the reader has taken the scroller: the card they were opened at is theirs to leave
       reviewPositionHeldRef.current = false;
       readerInputAtRef.current = performance.now();
     };
@@ -5039,6 +5115,7 @@ export function WorkspaceView({
     // loads in async, shrinking the scroll area after the fact. Re-pin to the tail on any such
     // resize while the user is still at the bottom.
     const ro = new ResizeObserver(() => {
+      if (keepLanding()) return;
       if (atBottomRef.current) el.scrollTo({ top: el.scrollHeight });
     });
     ro.observe(el);
@@ -5047,7 +5124,11 @@ export function WorkspaceView({
     // re-measuring. Its rows are watched for that, to measure only: whether to follow stays the
     // content-change effect's call, and following here would pull an opened card out from under the
     // reader.
-    const rows = new ResizeObserver(() => measure());
+    // A row that grew above a held card (a translation, an opened fold) moved it: put it back first.
+    const rows = new ResizeObserver(() => {
+      keepLanding();
+      measure();
+    });
     for (const row of el.children) rows.observe(row);
     const rowsAddedOrGone = new MutationObserver((records) => {
       for (const record of records) {
@@ -5060,6 +5141,7 @@ export function WorkspaceView({
     // the tail without an events change. `load` doesn't bubble but fires in the capture phase,
     // so one listener on the scroller catches every image and re-pins.
     const onLoad = (e: Event): void => {
+      if (keepLanding()) return;
       if (atBottomRef.current && e.target instanceof HTMLImageElement)
         el.scrollTo({ top: el.scrollHeight });
     };
@@ -5073,7 +5155,7 @@ export function WorkspaceView({
       rows.disconnect();
       rowsAddedOrGone.disconnect();
     };
-  }, [selectedId, measure]);
+  }, [selectedId, measure, keepLanding, releaseLanding]);
 
   /**
    * Which approvals in hand are still questions somebody can answer.
@@ -5646,8 +5728,10 @@ export function WorkspaceView({
   // A scheduled task's run: its schedule and run (crumb, strip, report), and the cards and change lines a session put
   // up, each where it happened (docs/mocks/scheduled-tasks/web/02-board.png).
   const isScheduleRun = detailForSelected?.runSource === 'SCHEDULE';
-  const scheduleRun = useScheduleRunOfSession(isScheduleRun && !selectedTrashed ? selectedId : null);
-  const scheduleInserts = useSessionScheduleInserts(selectedTrashed ? null : selectedId, transcriptEvents, scheduleRun);
+  // One read of the conversation's schedule cards serves the cards, the change records and a run's strip and report.
+  const scheduleCards = useSessionScheduleCards(selectedTrashed ? null : selectedId);
+  const scheduleRun = useScheduleRunOfSession(isScheduleRun && !selectedTrashed ? selectedId : null, scheduleCards);
+  const scheduleInserts = useSessionScheduleInserts(selectedTrashed ? null : selectedId, scheduleCards, transcriptEvents, scheduleRun);
 
   // Cross-project requests into the project this conversation coordinates, one decision card per
   // batch, drawn where the batch was first asked (board docs/mocks/handoff-in-chat). The batches
@@ -5785,8 +5869,10 @@ export function WorkspaceView({
     setAtBottom(false);
     if ('itemId' in about) revealOpenItemCard(about.itemId, document, 'auto');
     else card.scrollIntoView?.({ block: 'center' });
+    // Centred, as it was revealed, and held there while the rest of the conversation lands.
+    holdLanding(card, (view, box, scroller) => box.top - view.top - (scroller.clientHeight - box.height) / 2);
     setChatReveal(null);
-  }, [chatReveal, currentPromotion.data, openItems.data, seeding, selectedId, transcriptEvents]);
+  }, [chatReveal, currentPromotion.data, openItems.data, seeding, selectedId, transcriptEvents, holdLanding]);
   // The waiting card a project row opened this session for: its header and title brought to the top
   // of the transcript, below the pinned bar, with the tail pin let go first as above. A card not drawn
   // yet (its read still on the way) leaves the request standing for the next render.
@@ -5800,8 +5886,20 @@ export function WorkspaceView({
     setWaitingReveal(null);
     atBottomRef.current = false;
     setAtBottom(false);
-    root.scrollTop += card.getBoundingClientRect().top - view.top - waitingCardGap(hasMoreOlder);
-  }, [waitingReveal, selectedId, seeding, eventsSessionId, transcriptEvents, transcriptInserts, approvals, hasMoreOlder]);
+    holdLanding(card, (view, box) => box.top - view.top - WAITING_CARD_GAP);
+    keepLanding();
+  }, [waitingReveal, selectedId, seeding, eventsSessionId, transcriptEvents, transcriptInserts, approvals, holdLanding, keepLanding]);
+  // A request to open at a waiting card that never found one lapses rather than standing.
+  useEffect(() => {
+    if (!waitingReveal) return;
+    const lapse = window.setTimeout(() => setWaitingReveal(null), WAITING_REVEAL_EXPIRES_MS);
+    return () => window.clearTimeout(lapse);
+  }, [waitingReveal]);
+  // Content that lands while a card is held — the rest of the first page, a receipt, a page of older
+  // events — is put back before the browser paints, so the card does not visibly jump and return.
+  useLayoutEffect(() => {
+    keepLanding();
+  }, [transcriptEvents, transcriptInserts, approvals, keepLanding]);
   // The start card's "View tasks": the tasks this conversation filed are the strip above the
   // composer, so it is opened there rather than navigating away from the card being read. The same
   // read the strip is drawn from says whether there is one; without it the card links to the
@@ -7162,6 +7260,32 @@ export function WorkspaceView({
         detail: e.message,
         tone: 'error',
       }),
+  });
+  // Close a failed merge's strip (its ✕). Cleared in the cache at once so the strip goes as it is
+  // pressed; the server clears the stored failure, and a refusal puts the strip back.
+  const dismissMergeMut = useMutation({
+    mutationFn: (session: SessionToastTarget) => dismissMergeFailure(session.id),
+    onMutate: (session) => {
+      const previousDetail = qc.getQueryData<any>(['session', session.id]);
+      qc.setQueryData<any>(['session', session.id], (old: any) =>
+        old ? { ...old, mergeStatus: null, mergeError: null } : old,
+      );
+      return { previousDetail };
+    },
+    onError: (e: Error, session, context) => {
+      if (context?.previousDetail !== undefined) qc.setQueryData(['session', session.id], context.previousDetail);
+      message.sessionNotice({
+        sessionId: session.id,
+        sessionTitle: session.title,
+        event: 'dismiss-merge-failure-error',
+        headline: "Couldn't dismiss the merge failure",
+        detail: e.message,
+        tone: 'error',
+      });
+    },
+    onSettled: (_data, _error, session) => {
+      void qc.invalidateQueries({ queryKey: ['session', session.id], exact: true });
+    },
   });
   // Change a LIVE session's model / mode / effort / fast mode / provider, mid-turn included.
   // Optimistically patch the cached session so the pill updates instantly; server-side the runner
@@ -9189,6 +9313,18 @@ export function WorkspaceView({
       navigate,
     ],
   );
+  // The transcript's missing-bubblewrap warning (docs/mocks/codex-sandbox-fix-with-agent): the same
+  // one-press door as the machine page's Fix with an agent, drawn under the row that caught it.
+  const sandboxFix = useAgentFix(runner.id);
+  const sandboxFixHelp: SandboxFixHelp = useMemo(
+    () => ({
+      fix: runner.agentFix,
+      start: () => sandboxFix.mutate(sandboxFixTarget()),
+      starting: sandboxFix.isPending,
+    }),
+    // `mutate` is referentially stable; `sandboxFix` itself is not, so depend on what moves.
+    [runner.agentFix, sandboxFix.mutate, sandboxFix.isPending],
+  );
   // A failed clone's Retry, from the never-started card (the conversation's first line has its own).
   const retryCloneNow = useMutation({
     mutationFn: (workspaceId: string) => retryClone(workspaceId),
@@ -11019,8 +11155,10 @@ export function WorkspaceView({
                   before the page it triggers lands and re-anchors the view a page below it. Offered
                   only once the reader has left the live tail, the mirror of the jump-to-bottom
                   button: at the tail nobody is looking for the beginning, and the pill floats over
-                  the transcript, so there it is only something covering a message. */}
-              {(loadingOlder || (hasMoreOlder && !atBottom)) && (
+                  the transcript, so there it is only something covering a message. With nothing
+                  older left on the server it still scrolls to the top: the reader scrolled up into
+                  a fully loaded session wants the same way back. */}
+              {(loadingOlder || (!atBottom && (hasMoreOlder || offTop))) && (
                 <div className="chat-older-top">
                   {loadingOlder ? (
                     <span className="chat-older-pill">Loading earlier messages…</span>
@@ -11064,10 +11202,14 @@ export function WorkspaceView({
                       actions={isRunnerStopping(runnerUpdatingGate) ? undefined : <div className="runner-update-actions"><RunnerUpdateLaterMenu runnerId={runner.id} />{runnerTakesUpdateNow(runner) && <RunnerUpdateNowButton runner={runner} machine={runnerShownName} />}</div>}
                     />
                   ) : (
-                    <>
-                      <div className="chat-queued-title">{queuedTitle(selectedSession ?? selected)}</div>
-                      <div className="chat-queued-desc">{slotWaitDescription}</div>
-                    </>
+                    cloneWait ? (
+                      <CloneWaitNotice clone={cloneWait} machine={runnerShownName} spinner={false} />
+                    ) : (
+                      <>
+                        <div className="chat-queued-title">{queuedTitle(selectedSession ?? selected)}</div>
+                        <div className="chat-queued-desc">{slotWaitDescription}</div>
+                      </>
+                    )
                   )}
                 </div>
               )}
@@ -11110,6 +11252,7 @@ export function WorkspaceView({
                 inserts={transcriptInserts}
                 authErrorHelp={authErrorHelp}
                 autoRetryHelp={autoRetryHelp}
+                sandboxFixHelp={sandboxFixHelp}
                 restoreUndelivered={restoreUndelivered}
                 steerWithdrawal={steerWithdrawal}
                 linkStateWord={orbitLinkStateWord}
@@ -11289,7 +11432,11 @@ export function WorkspaceView({
                 !queuedFoot &&
                 !tailHeld &&
                 transcriptEvents.length > 0 && (
-                dshQueueRepair ? <DshRepairCard repair={dshQueueRepair} help={authErrorHelp} /> : antigravityQueueRepair ? <AntigravityRepairCard repair={antigravityQueueRepair} help={authErrorHelp} /> : <div className="chat-note chat-slot-wait">
+                dshQueueRepair ? <DshRepairCard repair={dshQueueRepair} help={authErrorHelp} /> : antigravityQueueRepair ? <AntigravityRepairCard repair={antigravityQueueRepair} help={authErrorHelp} /> : cloneWait ? (
+                  <div className="chat-note chat-slot-wait chat-clone-wait">
+                    <CloneWaitNotice clone={cloneWait} machine={runnerShownName} />
+                  </div>
+                ) : <div className="chat-note chat-slot-wait">
                   <span>{queuedTitle(selectedSession ?? selected)}</span>
                   <span>{slotWaitDescription}</span>
                 </div>
@@ -11555,7 +11702,7 @@ export function WorkspaceView({
         {/* The tasks this session's agent created, beside the branch below: the conversation's two
             kinds of output next to each other. Hidden until it has created one. */}
         {selectedId && !selectedTrashed && (
-          <SessionCreatedTasksStrip sessionId={selectedId} openRequest={createdTasksOpenRequest} />
+          <SessionCreatedTasksStrip sessionId={selectedId} tasks={createdTasks.data} openRequest={createdTasksOpenRequest} />
         )}
         {/* The Orbit Cloud runner's browser, while it runs: opens the live view (docs/runner-browser-design.md §5). */}
         {selectedId && !selectedTrashed && (
@@ -11640,6 +11787,15 @@ export function WorkspaceView({
             selectedId && detailForSelected?.branch
               ? () =>
                   commitMut.mutate({
+                    id: selectedId,
+                    title: selectedSession?.title ?? 'Untitled session',
+                  })
+              : undefined
+          }
+          onDismissMergeFailure={
+            selectedId
+              ? () =>
+                  dismissMergeMut.mutate({
                     id: selectedId,
                     title: selectedSession?.title ?? 'Untitled session',
                   })

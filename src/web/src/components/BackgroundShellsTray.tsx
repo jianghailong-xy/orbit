@@ -196,16 +196,7 @@ export function lastUserMessageAt(events: RunEvent[]): string | null {
 }
 
 function CountLine({ parts }: { parts: BackgroundRowCountPart[] }) {
-  return (
-    <span className="bg-tray-count">
-      {parts.map((part, i) => (
-        <span key={part.kind}>
-          {i > 0 && ' · '}
-          {part.kind === 'failed' ? <span className="ct-failed">{part.text}</span> : part.text}
-        </span>
-      ))}
-    </span>
-  );
+  return <span className="bg-tray-count">{parts.map((part) => part.text).join(' · ')}</span>;
 }
 
 const reducedMotion = (): boolean =>

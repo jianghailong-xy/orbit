@@ -169,9 +169,19 @@ func lsRemoteRef(repoRoot, remote, ref string) error {
 // observation writes none, and J1 serialises it apart from every branch's slot (`#observe:`, §10.4),
 // so it is keyed apart here too: it never waits behind a landing's hour of checks for a lock that
 // guards nothing it does.
+//
+// A promotion's check writes none either: it merges in a scratch worktree of its own and answers
+// READY before M-S4, never pushing and never moving a local ref. J1 gives it a slot of its own
+// (`#check:<project>`), so it is keyed apart here by the branch it checks. Keyed by the target, as
+// it was until 2026-11-19, one project's hung check held main's lock on this machine for its whole
+// time limit, and every other project's check and landing into main sat claimed and idle behind
+// it. Every job that does write the target (LAND_TASK, LAND_PROMOTION) keeps the target's key.
 func integrationLockRef(cmd IntegrationJobCommand) string {
-	if cmd.Kind == "OBSERVE_LANDING" {
+	switch cmd.Kind {
+	case "OBSERVE_LANDING":
 		return "#observe:" + cmd.TargetRef
+	case "CHECK_PROMOTION":
+		return "#check:" + cmd.SourceRef
 	}
 	return cmd.TargetRef
 }

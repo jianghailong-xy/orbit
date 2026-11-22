@@ -187,6 +187,11 @@ export const ENGINE_SESSION_GUARD_SITES: Readonly<Record<string, EngineSessionGu
     snippet: "assertEngineSessionRow(session);\n      if (session.isolationStatus !== 'worktree') {",
     note: 'POST /adopt-branch',
   },
+  'SessionsService.dismissMergeFailure': {
+    file: 'sessions/sessions.service.ts',
+    snippet: "assertEngineSessionRow(session);\n    const { count } =",
+    note: 'POST /merge-failure/dismiss',
+  },
   'SessionsService.decideApproval': {
     file: 'sessions/sessions.service.ts',
     snippet: '// Answering a tool-permission card is an engine door (§2.9 LS6).',
@@ -351,6 +356,7 @@ export const ENGINE_SESSION_DOORS: Readonly<Record<string, string>> = {
   'POST /sessions/:id/commit': 'SessionsService.commitWorktree',
   'POST /sessions/:id/checkout/discard': 'SessionsService.discardCheckout',
   'POST /sessions/:id/adopt-branch': 'SessionsService.adoptWorktreeBranch',
+  'POST /sessions/:id/merge-failure/dismiss': 'SessionsService.dismissMergeFailure',
   'POST /sessions/:id/retry-message': 'AutoRetryService.resendRetryMessage',
   'POST /sessions/:id/auto-retry': 'SessionsService.armAutoRetry',
   'DELETE /sessions/:id/auto-retry': 'SessionsService.cancelAutoRetry',

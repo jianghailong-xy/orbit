@@ -551,9 +551,10 @@ test('a project’s main branch is chosen by its owner, remembered per account a
         startsTaskWork: true,
         isolationStatus: 'worktree',
         branch: `orbit/first-integration-${f.publicId}`,
-        // The DONE of finished work: a work session still moving reads WORK_MOVING at the enqueue
-        // door, so the identity a landing is frozen from has to be settled here.
-        finishedAt: new Date(),
+        // Finished, as /finalize writes SUCCEEDED, with a tip of its own past its base: settled work with
+        // commits to land. Since §12.15 P-M1 a run with no finish is work still moving, and queues nothing.
+        baseSha: 'a'.repeat(40), branchSha: 'b'.repeat(40), worktreeBranch: `orbit/first-integration-${f.publicId}`,
+        worktreeDirty: false, changedFiles: ['src/first.ts'], finishedAt: new Date(),
       },
     });
     await prisma.task.update({ where: { id: created.id }, data: { status: TaskStatus.DONE } });

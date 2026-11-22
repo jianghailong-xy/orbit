@@ -276,9 +276,10 @@ struct AgentGroupView: View {
 
 /// The composer band's line for the session's Agents (docs/mocks/agents-band-models): what the running one
 /// is doing and where, or with none running where the work went — the machines first, then each model with
-/// how many runs took it — and, in every state, how many failed at its right edge. No cost, and no check
-/// when all succeeded. Always one line: what does not fit gives way in order (the title, the models after
-/// the first, then the words, then the models), the machines and the failures last. It opens their list
+/// how many runs took it. No cost, and no failure count: the owner can do nothing about a failed run (the
+/// agent that started it was told), and its row in the sheet keeps its red mark. Always one line: what does
+/// not fit gives way in order (the title, the models after the first, then the words, then the models), the
+/// machines last. It opens their list
 /// (`AgentsSheet`). Absent until the session has started one.
 struct AgentsBandRow: View {
     @Environment(AppModel.self) private var app
@@ -295,25 +296,16 @@ struct AgentsBandRow: View {
                     // One line, as the Background row's label: never broken into "Ag / ent / s".
                     Text("Agents").font(.orbitLabel.weight(.semibold)).lineLimit(1).fixedSize()
                     if summary.running > 0 {
-                        // The title keeps a readable stub; when the model's name would leave it less,
-                        // the chip gives way to the agent's mark alone (board ④).
-                        Text(summary.band).font(.orbitMeta).foregroundStyle(.secondary).lineLimit(1)
-                            .frame(minWidth: 80, alignment: .leading)
-                        AgentsBandCurrent(summary: summary).layoutPriority(1)
-                        Spacer(minLength: 4)
+                        AgentsBandRunning(summary: summary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     } else {
                         Text(summary.band).font(.orbitMeta).monospacedDigit().foregroundStyle(.secondary)
                             .fixedSize()
                         if summary.spread { AgentsBandSpread(summary: summary) }
                         Spacer(minLength: 4)
                     }
-                    // Failures in every state, the title giving way first: before the spinner while one runs.
-                    if summary.failed > 0 {
-                        Label("\(summary.failed) failed", systemImage: "xmark.circle.fill")
-                            .font(.orbitMeta.weight(.semibold)).foregroundStyle(.red)
-                            .labelStyle(.titleAndIcon).fixedSize().layoutPriority(2)
-                    }
-                    if summary.running > 0 { ProgressView().controlSize(.mini) }
+                    // The app's one running mark, as the Background row draws it (`BackgroundRowMarkView`).
+                    if summary.running > 0 { SpinnerGlyph(color: .accentColor) }
                     Image(systemName: "chevron.right")
                         .font(.orbitMeta.weight(.semibold)).foregroundStyle(.secondary)
                 }
@@ -334,20 +326,38 @@ struct AgentsBandRow: View {
     }
 }
 
+/// The running Agent's title, then where it runs (board ④): the whole title and the model's name when
+/// both fit; else the title is cut first, down to a readable stub, and the name stays; else the name
+/// gives way to the mark, beside the whole title or after a cut one. A cut title fills the line up to
+/// the chip, so no gap sits before the failures.
+private struct AgentsBandRunning: View {
+    let summary: SubagentSessionSummary
+
+    var body: some View {
+        let title = Text(summary.band).font(.orbitMeta).foregroundStyle(.secondary).lineLimit(1)
+        // Measured at its stub (idealWidth), laid out over all the room the chip leaves.
+        let cut = title.frame(minWidth: 80, idealWidth: 80, maxWidth: .infinity, alignment: .leading)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) { title.fixedSize(); AgentsBandCurrent(summary: summary, named: true) }
+            HStack(spacing: 8) { cut; AgentsBandCurrent(summary: summary, named: true) }
+            HStack(spacing: 8) { title.fixedSize(); AgentsBandCurrent(summary: summary, named: false) }
+            HStack(spacing: 8) { cut; AgentsBandCurrent(summary: summary, named: false) }
+        }
+    }
+}
+
 /// Where the running Agent runs: its machine when it went to another one, else its model when that is
-/// not the session's own — the chip with its name, or its mark alone when the name does not fit.
+/// not the session's own — the chip with its name, or its mark alone (`named` false).
 private struct AgentsBandCurrent: View {
     let summary: SubagentSessionSummary
+    let named: Bool
 
     var body: some View {
         if let run = summary.current {
             if let place = run.workspaceName, !place.isEmpty {
                 AgentFact(symbol: "desktopcomputer", text: place).lineLimit(1).fixedSize()
             } else if !summary.currentIsOwnModel, let label = SubagentSessionSummary.modelLabel(run) {
-                ViewThatFits(in: .horizontal) {
-                    AgentBandChip(engine: run.engine, label: label)
-                    AgentBandChip(engine: run.engine, label: nil)
-                }
+                AgentBandChip(engine: run.engine, label: named ? label : nil).fixedSize()
             }
         }
     }
@@ -455,7 +465,7 @@ struct AgentsSheet: View {
         return Button { reveal(run.toolUseId) } label: {
             HStack(alignment: .top, spacing: 10) {
                 Group {
-                    if block.running { ToolStatusGlyph(status: .running) } else { SubagentEndGlyph(status: run.status) }
+                    if block.running { SpinnerGlyph(color: .accentColor) } else { SubagentEndGlyph(status: run.status) }
                 }
                 .frame(width: 18)
                 VStack(alignment: .leading, spacing: 4) {

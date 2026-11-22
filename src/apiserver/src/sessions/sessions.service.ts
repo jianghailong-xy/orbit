@@ -552,7 +552,10 @@ const OPEN_LIST_OVERLAY_SOURCES: ReadonlySet<string> = new Set([
   'confirmation_request', 'confirmation_claim', 'confirmation_review', 'confirmation_review_record',
   'completion_evidence', 'evidence_decision', 'criteria_decision', 'criteria_authorship',
   'ratified_intent', 'ratified_commit', 'standard_set_confirmation', 'criterion_definition', 'task_status_count',
-  // Read only by a LANDING row's summary, and a LANDING row is in no flat list.
+  // A LANDING row's summary reads these, and so does every coordinator conversation in the flat list:
+  // project_open_item (OPEN owner items), promotion and integration_job (an item's owed state), codebase
+  // (a merge approval's main branch) and merge_receipt (a LANDING_UNOBSERVED item, via taskLandingSql).
+  // None of them leaves the hint token (docs/list-freshness-scope-hints.md §5.4, D1 withdrawn).
   'promotion', 'integration_job', 'project_open_item', 'merge_receipt', 'codebase',
 ]);
 
@@ -10300,6 +10303,25 @@ export class SessionsService {
   }
 
   /**
+   * Close the red merge failure strip (the ✕ on it): clear a settled 'conflict' or 'error' so the bar
+   * goes back to Merge, or to "✓ In main" when the branch landed another way. Nothing in git changes —
+   * the failed merge already left both tips where they were. One statement predicated on the failure
+   * still being there and no merge recovery open, so a merge queued or settled since, or a recovery
+   * (which has its own panel), is never the one cleared. Closing it again is a no-op.
+   */
+  async dismissMergeFailure(ownerId: string, id: string) {
+    const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
+    if (!session) throw new NotFoundException('session not found');
+    assertEngineSessionRow(session);
+    const { count } = await this.prisma.session.updateMany({
+      where: { id, ownerId, mergeStatus: { in: ['conflict', 'error'] }, mergeRecovery: { equals: Prisma.AnyNull } },
+      data: { mergeStatus: null, mergeError: null, mergeOperationId: null, mergeOperationOwner: null },
+    });
+    if (count > 0) this.realtime.publishSessionUpdated(id);
+    return { ok: true, dismissed: count > 0 };
+  }
+
+  /**
    * Stop a session and settle it to CANCELLED — unlike {@link end}, which reaches the same
    * status under 'ended' and so still reads as dormant/resumable. A PENDING session is
    * finalized in place (while any prior warm runtime is cancelled); other open states receive
@@ -10448,6 +10470,9 @@ export class SessionsService {
       /** @deprecated Rolling-version compatibility mirror. */
       archivedAt?: Date;
       deletedAt?: Date;
+      /** A completed or trashed session is out of the auto-retry sweep for good: its arm could never fire. */
+      retryAt?: null;
+      retryClaimedAt?: null;
     } = {};
     let finalCompletedAt = session.completedAt ?? session.archivedAt;
     let finalDeletedAt = session.deletedAt;
@@ -10455,10 +10480,14 @@ export class SessionsService {
       lifecycleData.completedAt = now;
       // Keep old replicas and clients coherent during the compatibility window.
       lifecycleData.archivedAt = now;
+      lifecycleData.retryAt = null;
+      lifecycleData.retryClaimedAt = null;
       finalCompletedAt = now;
     }
     if (lifecycle === 'deletedAt' && session.deletedAt == null) {
       lifecycleData.deletedAt = now;
+      lifecycleData.retryAt = null;
+      lifecycleData.retryClaimedAt = null;
       finalDeletedAt = now;
     }
     const lifecycleState = deriveSessionLifecycleState({
