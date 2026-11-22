@@ -12,6 +12,7 @@ import androidx.compose.foundation.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.edit
 import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
@@ -421,8 +422,17 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     // it, until the reader takes the scroller, goes to the tail, or nothing has changed for HOLD_QUIET_MS.
     val heldCard = CardFocus.held(route.id!!)
     LaunchedEffect(heldCard?.key, state.window.events, cardsSize, state.session?.let(cards::shown)?.size) {
-        if (heldCard == null) return@LaunchedEffect
-        CardFocus.reapply(route.id!!)
+        val held = heldCard ?: return@LaunchedEffect
+        if (!CardFocus.reapply(route.id!!)) return@LaunchedEffect
+        // Once the change has been laid out: how far the card stands from where it was brought to, and back by that much.
+        withFrameNanos { }; withFrameNanos { }
+        val delta = (CardFocus.position(route.id!!, held.key) ?: return@LaunchedEffect) - held.top
+        if (kotlin.math.abs(delta) >= 1f && CardFocus.held(route.id!!)?.key == held.key) {
+            positioning = true
+            list.scrollBy(delta)
+            positioning = false
+            CardFocus.moved(route.id!!)
+        }
     }
     LaunchedEffect(recordHeld, state.window.events, rowsStart[0], cardsSize) {
         val (seq, offset) = recordHeld ?: return@LaunchedEffect
@@ -431,9 +441,11 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         val target = anchorRow(currentRows, seq)
         if (target != null && !positioning) {
             positioning = true
+            val before = list.firstVisibleItemIndex to list.firstVisibleItemScrollOffset
             list.scrollToItem(rowsStart[0] + currentRows.indexOf(target), offset)
             positioning = false
-            recordAt[0] = CardFocus.now()
+            // Only a put-back that moved the view restarts the quiet (web `keepLanding`).
+            if (before != (list.firstVisibleItemIndex to list.firstVisibleItemScrollOffset)) recordAt[0] = CardFocus.now()
         }
     }
     LaunchedEffect(follow) { if (follow) { CardFocus.release(route.id!!); recordHeld = null } }

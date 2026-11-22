@@ -110,43 +110,65 @@ class WaitingCardHoldShellTest {
         await { shows("LATE-DECISION") }
     }
 
-    /** Records and receipts land ahead of the opened card in the cards item: it stays in view. */
-    @Test fun theOpenedCardStaysInViewWhileACardIsAddedAheadOfIt() {
-        serve(approval("a-quota", 9, "Retry the quota read", tall))
+    private val quota get() = approval("a-quota", 9, "Retry the quota read", tall)
+    private fun ahead(n: Int) = approval("a-ahead-$n", 30L + n, "AHEAD-DECISION-$n")
+    /** A question answered since the card was opened: its record is drawn first in the cards item, ahead of the waiting card. */
+    private val record get() = """[{"itemId":"q1","question":{"question":"Ship the rollout?","options":[{"label":"Yes"},{"label":"Not yet"}],"recommendedOption":0},
+        "askedAt":"${ago(2)}","resolution":"ANSWERED","resolvedBy":"USER","resolvedAt":"${Instant.now()}",
+        "answer":{"option":1,"text":null},"delivery":null,"withdrawReason":null}]"""
+
+    /** The card the open brought in, placed at the top, and its top. */
+    private fun openedOnTheCard(): Float {
+        serve(quota)
         openMember()
         await { shows(headLine) }
         settle()
         val placed = title()!!
         assertTrue("opened on the card: $placed", inList(placed))
-        serve(approval("a-earlier", 30, "EARLIER-DECISION"), approval("a-quota", 9, "Retry the quota read", tall))
+        return placed.top
+    }
+    private fun topNow() = title()!!.top
+
+    /** A question record lands ahead of the opened card in the cards item: it stays where it was brought to. */
+    @Test fun theOpenedCardStaysInViewWhileAQuestionRecordIsAddedAheadOfIt() {
+        ProjectShell.waitingReadsProject = true
+        val placed = openedOnTheCard()
+        ProjectShell.closedQuestions = record
         arrive()
-        assertTrue("the earlier card landed", shows("EARLIER-DECISION"))
-        assertEquals("the card is held where it was brought to while one landed ahead of it", placed.top, title()!!.top, 1f)
+        assertTrue("the record landed: ${order()}", compose.onAllNodesWithTag("item:q1", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
+        assertEquals("the card is held where it was brought to while the record landed ahead of it", placed, topNow(), 1f)
     }
 
+    @Test fun theOpenedCardStaysInViewWhileACardIsAddedAheadOfIt() {
+        val placed = openedOnTheCard()
+        serve(ahead(1), quota)
+        arrive()
+        assertTrue("the earlier card landed", shows("AHEAD-DECISION-1"))
+        assertEquals("the card is held where it was brought to while one landed ahead of it", placed, topNow(), 1f)
+    }
+
+    /** Held first (content that lands ahead is put back), then the reader touches the list: the next one is not put back. */
     @Test fun theHoldReleasesWhenTheReaderTakesTheScroller() {
-        serve(approval("a-quota", 9, "Retry the quota read", tall))
-        openMember()
-        await { shows(headLine) }
-        settle()
-        readHistory()
-        val before = bounds(stepRow())
-        serve(approval("a-earlier", 30, "EARLIER-DECISION"), approval("a-quota", 9, "Retry the quota read", tall))
-        arrive()
-        assertEquals("the reader's place was not taken back", before, bounds(stepRow()))
+        val placed = openedOnTheCard()
+        serve(ahead(1), quota); arrive()
+        assertEquals("held before the touch", placed, topNow(), 1f)
+        readAlittle()
+        val touched = topNow()
+        serve(ahead(1), ahead(2), quota); arrive()
+        assertTrue("the second card landed", shows("AHEAD-DECISION-2"))
+        assertTrue("after the touch nothing put the card back: $touched, now ${topNow()}", topNow() > touched + 20f)
     }
 
+    /** Held first, then five quiet seconds after it last moved: the next landing ahead of it is not put back. */
     @Test fun theHoldReleasesAfterFiveSecondsWithNothingMovingIt() {
-        serve(approval("a-quota", 9, "Retry the quota read", tall))
-        openMember()
-        await { shows(headLine) }
-        settle()
-        val placed = title()!!
+        val placed = openedOnTheCard()
+        wall += 1_000
+        serve(ahead(1), quota); arrive()
+        assertEquals("held inside the window", placed, topNow(), 1f)
         wall += 6_000
-        serve(approval("a-earlier", 30, "EARLIER-DECISION"), approval("a-quota", 9, "Retry the quota read", tall))
-        arrive()
-        assertTrue("the earlier card landed", shows("EARLIER-DECISION"))
-        assertTrue("nothing put the card back after the quiet: $placed, now ${title()} ${order()}", title() == null || title()!!.top > placed.top + 20f)
+        serve(ahead(1), ahead(2), quota); arrive()
+        assertTrue("the second card landed", shows("AHEAD-DECISION-2"))
+        assertTrue("after the quiet nothing put the card back: $placed, now ${topNow()}", topNow() > placed + 20f)
     }
 
     private fun order() = compose.onAllNodes(SemanticsMatcher("an approval card") { n ->

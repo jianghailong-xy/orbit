@@ -39,17 +39,29 @@ object CardFocus {
      * `LANDING_QUIET_MS`): long enough for the rest of the first page, receipts and translations to land above it. */
     const val HOLD_QUIET_MS = 5_000L
 
-    /** The card a conversation was opened at, held where it was brought to. [tick] counts the re-applications asked for, [at] is when
-     * it was last brought in (or the conversation last moved around it). */
-    data class Held(val key: String, val waiting: Boolean, val tick: Int = 0, val at: Long = 0)
+    /** The card a conversation was opened at, held where it was brought to: [top] is where it stood in the window then, [at] when it
+     * was last put there (or brought in). */
+    data class Held(val key: String, val waiting: Boolean, val top: Float, val at: Long)
     private val held = mutableStateMapOf<String, Held>()
-    fun hold(sessionId: String, cardKey: String, waiting: Boolean) { held[session(sessionId)] = Held(cardKey, waiting, at = now()) }
+    /** Where each drawn card stands in the window, as the last layout said (not state: nothing redraws for it). */
+    private val standing = HashMap<String, Float>()
+    fun report(sessionId: String, cardKey: String, top: Float) { standing[session(sessionId) + "/" + cardKey] = top }
+    fun position(sessionId: String, cardKey: String): Float? = standing[session(sessionId) + "/" + cardKey]
+    fun hold(sessionId: String, cardKey: String, waiting: Boolean) {
+        held[session(sessionId)] = Held(cardKey, waiting, position(sessionId, cardKey) ?: return, now())
+    }
     fun held(sessionId: String): Held? = held[session(sessionId)]
-    /** The conversation changed around the held card: ask it to put itself back — unless nothing has moved it for [HOLD_QUIET_MS], which lets it go. */
-    fun reapply(sessionId: String) {
+    /** The conversation changed around the held card. False when nothing has moved it for [HOLD_QUIET_MS], which lets it go. A card
+     * already in place leaves the quiet running: only [moved] restarts it (web `keepLanding`). */
+    fun reapply(sessionId: String): Boolean {
+        val current = held[session(sessionId)] ?: return false
+        if (now() - current.at < HOLD_QUIET_MS) return true
+        release(sessionId); return false
+    }
+    /** A put-back moved the card: the quiet starts again. */
+    fun moved(sessionId: String) {
         val id = session(sessionId)
-        val current = held[id] ?: return
-        held[id] = if (now() - current.at >= HOLD_QUIET_MS) return release(sessionId) else current.copy(tick = current.tick + 1, at = now())
+        held[id]?.let { held[id] = it.copy(at = now()) }
     }
     /** The reader took the scroller, jumped to the tail, or left. */
     fun release(sessionId: String) { held.remove(session(sessionId)) }
