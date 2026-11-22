@@ -330,6 +330,44 @@ test('listed_at moves only when the session changes for its owner', {
     await moved(id, at, 'completion');
   });
 
+  await t.test('landing a merge moves it; a merge that fails does not', async () => {
+    // The merge queue lives in the real RealtimeService, so these two doors are built over it.
+    const merging = new SessionsService(prisma, queue, summaries);
+    const mergeApi = new RunnerApiController(
+      prisma, queue, summaries, silent(), {} as never,
+      { expand: async (_owner: string, content?: string) => content } as never,
+      { appendFor: async (_tx: unknown, _id: string, content?: string) => content } as never,
+    );
+    const branch = async (title: string) => {
+      const id = await parked(title);
+      await db.session.update({
+        where: { id },
+        data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), branch: `orbit/${randomUUID()}`, isolationStatus: 'worktree' },
+      });
+      await sql.query(`UPDATE "session" SET "listed_at" = now() - interval '1 hour' WHERE "id" = $1::uuid`, [id]);
+      return id;
+    };
+    const mergeOnce = async (id: string, status: 'merged' | 'error') => {
+      await merging.mergeToMain(ownerId, id, 'main');
+      const lease = randomUUID();
+      const [operation] = await summaries.drainMergeRequests(runnerId, lease);
+      assert.ok(operation, 'the runner was handed no merge');
+      await mergeApi.mergeResult(runner, id, {
+        status, operationId: operation.operationId, leaseOwner: lease, sourceSha: 'a'.repeat(40), targetBranch: 'main',
+        ...(status === 'merged' ? { targetShaBefore: 'f'.repeat(40), mergedSha: '4'.repeat(40) } : { message: 'conflict' }),
+      } as never);
+    };
+    const failing = await branch('merge fails');
+    let at = await clocks(failing);
+    await mergeOnce(failing, 'error');
+    await stayed(failing, at, 'a merge that failed');
+    const landing = await branch('lands');
+    at = await clocks(landing);
+    await mergeOnce(landing, 'merged');
+    assert.equal((await db.session.findUniqueOrThrow({ where: { id: landing }, select: { branchMerged: true } })).branchMerged, true);
+    await moved(landing, at, 'a landed merge');
+  });
+
   await t.test('the list carries listedAt and is ordered by it, not by lastTurnAt; so does session.updated', async () => {
     // Older listing but the freshest activity, against a newer listing whose activity is an hour old.
     const busy = await parked('busy on CI');

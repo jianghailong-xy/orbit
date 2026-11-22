@@ -10,6 +10,7 @@ import { openingTurnKey } from './orbit-authored-turn';
  *    with `listed`, which also marks the turn `by_person`);
  *  - a turn ends on the owner: a person's turn answered with nothing queued behind it (`answeredPerson`, at
  *    turn-complete), a permission card or question raised (runner `approvals`), an owner request filed;
+ *  - it lands a merge (runner `merge-result`, merged);
  *  - it ends or is completed (the `session_listed_at_settle` trigger on status / completed_at).
  *
  * Streamed events, tool calls, background-job output, wake-up and notification turns, queue claims and runner

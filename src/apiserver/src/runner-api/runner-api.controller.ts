@@ -11077,6 +11077,8 @@ export class RunnerApiController {
             ? {
                 branchMerged: true,
                 mergedSourceSha: dto.sourceSha ?? null,
+                // Landing is the session changing for its owner: its row moves (session.listed_at, session-listed-at.ts).
+                listedAt: new Date(),
               }
             : {}),
           // On a successful merge, advance the recorded fork point to the merge tip.
