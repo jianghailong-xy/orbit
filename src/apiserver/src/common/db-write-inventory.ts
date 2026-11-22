@@ -102,6 +102,15 @@ export interface TransactionUnit {
  * `providers.service.ts#pausePoolMember`.
  */
 export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
+  {
+    at: 'users/users.controller.ts#updatePreferences', shape: 'TX_RETRIED',
+    locks: 'The authenticated user row FOR NO KEY UPDATE, then its preference UPDATE. A changed default permission mode appends one activity row, which has no foreign key or trigger.',
+    identity: 'The user id and validated preference patch. An unchanged default permission mode needs no audit row.',
+    isolation: '', attempts: 4,
+    replay: 'Merge into the preferences re-read under the user lock. Rollback discards the preference write and its audit row together.',
+    effects: 'The account response is assembled after commit.',
+    answer: 'Typed 503 after retry exhaustion. Neither write commits.',
+  },
   // Fix with an agent (runners/attention-fix.ts): one warning's claim before its session is created.
   {
     at: 'runners/runner-attention-fix.service.ts#fix', shape: 'TX_RETRIED',
@@ -3127,7 +3136,8 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   { at: 'realtime/parked-session-end.ts#claimParkedSessionEnd', under: 'reaper.endParked and parkedSessionEnd.endIdleWorkOfDoneTask, each its own unit: the conditional UPDATE of the session row (rank 30) that is the claim, then one conversation_turn INSERT (rank 60) for the end turn, so a seq conflict rolls both back' },
   { at: 'sessions/actual-permission-mode.ts#recordActualPermissionMode', under: "runnerApi.events (ingestSteps, under the session row it locked), runnerApi.turnComplete (a setconfig acknowledgement, under lockSessionLeaseOwner) and runnerApi's inbox delivery of a reload (under the session row dequeueTurn locked); and as one autocommit statement from the claim (queue.buildSession) and the reclaim (runnerApi.reclaim), where it is its own transaction. One statement: a CTE takes the session row (rank 30) FOR UPDATE, moves actual_permission_mode and actual_permission_mode_at only when the mode differs, and inserts one session_permission_mode_change row (session FOR KEY SHARE through its foreign key) only then, so a replay of the same mode writes nothing (migration 1437). No trigger is declared over either column." },
   { at: 'conditions/condition-still-waiting.ts#fileStillWaitingItem', under: 'conditions.askStillWaiting: under the condition row FOR UPDATE it holds, one owner_request INSERT ON CONFLICT (asked_by_session_id, client_request_id) DO NOTHING' },
-  { at: 'owner-requests/settings-apply.ts#applySettingsChanges', under: "ownerRequests.settle, as its effect for applySettings (docs/settings-from-conversation-design.md §5.2): after the card's CAS to DONE, the owner's user row read FOR NO KEY UPDATE, then one UPDATE of its preferences; a stale from throws 409 SETTINGS_STALE and the settle rolls back whole" },
+  { at: 'owner-requests/settings-apply.ts#applySettingsChanges', under: "ownerRequests.settle, as its effect for applySettings: after the card's CAS to DONE, the owner's user row read FOR NO KEY UPDATE, one preference UPDATE and the default permission mode audit insert if changed. A stale value throws 409 SETTINGS_STALE and rolls back the whole settle." },
+  { at: 'users/preferences-merge.ts#recordDefaultPermissionModeChange', under: 'The preference PATCH and settings-card settlement: the user row is locked by the caller. If the stored default permission mode changed, one INSERT to activity, which has no foreign key or trigger.' },
   { at: 'conditions/condition-still-waiting.ts#answerStillWaiting', under: 'ownerRequests.settle, as its effect: after the item CAS to DONE, one conditional UPDATE of its condition (keep_waiting_since for Keep waiting, ENDED for Stop)' },
   { at: 'tasks/tasks.service.ts#onStartWhenFired', under: 'conditions.applySamples, as its fire hook (ConditionsService.write): under the condition row FOR UPDATE it holds, task_dispatch_epoch_advance on the task the condition starts — FOR NO KEY UPDATE and one UPDATE of its task_dispatch_epoch row' },
   { at: 'tasks/task-start-when.ts#writeStartWhen', under: 'tasks.create and tasks.createMany, after the task INSERT: createCondition, one condition_sample INSERT (the baseline), the UPDATE of that condition row, its condition_event INSERTs, and one UPDATE of the task row just inserted setting start_when_condition_id' },
@@ -4060,7 +4070,6 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "users/admin.controller.ts#setRole", class: "ONE_ROW_BY_KEY", statements: 1 },
   { at: "users/users.controller.ts#removeAvatar", class: "ONE_ROW_BY_KEY", statements: 1, note: "Removing one's profile photo (migration 0335): one DELETE by user_avatar's primary key, the caller's own user id — at most one row, and none when there was no photo, which is the same answer." },
   { at: "users/users.controller.ts#setAvatar", class: "ONE_ROW_BY_KEY", statements: 1, note: "Setting one's profile photo (migration 0335): one upsert keyed by user_avatar's primary key, the caller's own user id, so a second photo takes the row over rather than writing another. Its foreign key to user(id) takes FOR KEY SHARE on the caller's user row, which only an admin deleting that account would conflict with; nothing else is locked." },
-  { at: "users/users.controller.ts#updatePreferences", class: "ONE_ROW_BY_KEY", statements: 1 },
   { at: "users/users.controller.ts#updateProfile", class: "ONE_ROW_BY_KEY", statements: 1 },
   // Admin → Email (docs/welcome-email-design.md §3.1, migration 0516), and an administrator's Send welcome email (§3.5).
   { at: "email/email-settings.service.ts#update", class: "ONE_ROW_BY_KEY", statements: 1, note: "An administrator's save of the email setting: one INSERT … ON CONFLICT (id) DO UPDATE of the one `email_settings` row (id 1), keyed by its primary key. The table has no foreign key and no trigger, so the statement takes that row and nothing else. Two saves racing both land, the later one whole." },

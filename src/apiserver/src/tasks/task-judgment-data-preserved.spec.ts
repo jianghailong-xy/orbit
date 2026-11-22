@@ -3299,7 +3299,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1437 (renumbered from 1317 to sit after main's migrations) adds two nullable columns on session,
       // actual_permission_mode and actual_permission_mode_at, and a new append-only table session_permission_mode_change
       // (cascades with its session); no row is written, and no preserved relation, trigger, function or DONE fence changes.
-      '1437_session_actual_permission_mode'],
+      '1437_session_actual_permission_mode',
+      // 1461 adds a partial index on activity. No preserved relation or row is changed.
+      '1461_default_permission_mode_audit'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
