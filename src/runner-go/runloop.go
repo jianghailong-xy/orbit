@@ -1555,7 +1555,13 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// the control plane returns on each heartbeat — so editing a runner's max-concurrent
 	// in the UI takes effect within one heartbeat, no restart. The local config value is
 	// only the initial seed; the DB value is authoritative once the first heartbeat lands.
-	pool := newSessionPool(cfg.MaxConcurrent)
+	startupConcurrency := cfg.MaxConcurrent
+	if currentManagedInstance() != nil {
+		// Startup reclaim can start a turn before the first heartbeat supplies the
+		// mapping's cap. Until then, admit at most one turn.
+		startupConcurrency = 1
+	}
+	pool := newSessionPool(startupConcurrency)
 	// A managed instance claims nothing, and starts no reclaimed RUNNING session, while its container has less than one
 	// more turn's memory left (memory_reserve.go). Nil anywhere else: it admits.
 	turnMemory := newTurnMemoryGate(currentManagedInstance() != nil)
