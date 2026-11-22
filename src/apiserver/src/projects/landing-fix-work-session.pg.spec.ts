@@ -1,0 +1,588 @@
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import { test } from 'node:test';
+
+import {
+  Prisma,
+  PrismaClient,
+  RunStatus,
+  RunnerStatus,
+  SessionDispatchOrigin,
+  TaskStatus,
+} from '@prisma/client';
+import type { IntegrationJobCommand } from '@orbit/shared';
+import { Client } from 'pg';
+
+import { seedPromotionRequest } from '../test-support/promotion-request';
+import { prismaClientFor } from '../prisma/prisma-client';
+import type { PrismaService } from '../prisma/prisma.service';
+import type { PushService } from '../push/push.service';
+import type { QueueService } from '../queue/queue.service';
+import type { RealtimeService } from '../realtime/realtime.service';
+import { applyIntegrationJobResult, dispatchIntegrationJobs } from '../runner-api/integration-job-relay';
+import { SessionsService } from '../sessions/sessions.service';
+import { TaskOwnerConfirmationService } from '../tasks/task-owner-confirmation.service';
+import { TasksService } from '../tasks/tasks.service';
+import {
+  assertCoordinatorPgUrlIsIsolated,
+  verifyCoordinatorPgIdentity,
+} from './coordinator-pg-test-safety';
+import { canonicalRepoUrl } from './project-integration-line';
+import { queueLandingRetry } from './project-integration-job';
+import { ProjectOpenItemService } from './project-open-item.service';
+import { ProjectPromotionService } from './project-promotion.service';
+
+/**
+ * A landing failure goes first to the task's own work session (`docs/project-integration-line-contract.md`
+ * §12.3, §12.4, W4, W5, W9, W-T1, W-T6; revision 42 part one, ruling R1).
+ *
+ *   bash scripts/run-pg-spec.sh src/apiserver/src/projects/landing-fix-work-session.pg.spec.ts
+ *
+ * Every job below is queued by the product (the owner's Confirm writes DONE, which queues the landing or
+ * the MAIN line's candidate check), claimed off a runner's heartbeat and answered through the J-T7 result
+ * transaction (`applyIntegrationJobResult`); then the item is delivered the way the result route delivers
+ * it after the commit (`deliverForItems`), and once more by the coordinator's backstop (`deliverOwed`).
+ * The new columns are read with SQL, so this file compiles against a tree without them and fails there on
+ * its assertions.
+ *
+ *  W-T1 — handed to the work session: `work_session_id` and `work_session_offered_at` written, no
+ *  `escalate_at`, no delivery to the coordinator. One case per handed-off result: a task landing's
+ *  CONFLICT in REBASE, MERGE and MAIN_SYNC, its CHECK_FAILED, and the CONFLICT and CHECK_FAILED of a MAIN
+ *  line's TASK_BRANCH candidate (its check, and its landing). A work session still open is handed it too.
+ *  W9: `open_item_resolve` and `integration_retry` refuse it with 409 OPEN_ITEM_WITH_WORK_SESSION.
+ *
+ *  W-T6 — to the coordinator exactly as before (delivered, escalation time set, no work-session columns):
+ *  one case per W4 condition negated (a session in Trash, one whose cancel was requested, one a person
+ *  ended, a task whose newest work session is another, a task no longer DONE, and a segment whose work
+ *  session already asked for two generations), and one per result that is not handed off (BASELINE_RED,
+ *  CHECK_TIMED_OUT, ERROR, a PROJECT_BRANCH promotion's failure).
+ *
+ *  R1 — a CONFLICT retry row, with the work session as its requester, inserts under the widened
+ *  `project_integration_job_retry_failure_class_chk`.
+ *
+ * Not destructive: every case owns freshly generated ids and reads only its own rows.
+ */
+const URL = process.env.COORDINATOR_PG_URL;
+const skip = !URL;
+
+const CAPABILITIES = ['integration-job/v1', 'integration-observe/v1'];
+const sha = (nibble: string) => nibble.repeat(40);
+const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000);
+const UPSTREAM = sha('9');
+
+let safety: Promise<void> | undefined;
+function verifyDisposableDatabase(): Promise<void> {
+  if (safety) return safety;
+  safety = (async () => {
+    assertCoordinatorPgUrlIsIsolated(URL);
+    const client = new Client({ connectionString: URL, connectionTimeoutMillis: 2_000 });
+    await client.connect();
+    try {
+      await verifyCoordinatorPgIdentity(client);
+    } finally {
+      await client.end();
+    }
+  })();
+  return safety;
+}
+
+interface Stack {
+  db: PrismaClient;
+  prisma: PrismaService;
+  confirmations: TaskOwnerConfirmationService;
+  openItems: ProjectOpenItemService;
+  promotions: ProjectPromotionService;
+}
+
+async function connect(): Promise<Stack> {
+  await verifyDisposableDatabase();
+  const db = prismaClientFor(URL!);
+  const prisma = db as unknown as PrismaService;
+  const realtime = new Proxy({}, { get: () => () => undefined }) as unknown as RealtimeService;
+  const queue = { notifySessionQueued: () => undefined } as unknown as QueueService;
+  const sessions = new SessionsService(prisma, queue, realtime);
+  const push = new Proxy({}, { get: () => () => Promise.resolve() }) as unknown as PushService;
+  const openItems = new ProjectOpenItemService(prisma, sessions, push);
+  const tasks = new TasksService(prisma, sessions, realtime, undefined, undefined, undefined, openItems);
+  return {
+    db,
+    prisma,
+    confirmations: new TaskOwnerConfirmationService(prisma, sessions, tasks, realtime),
+    openItems,
+    promotions: new ProjectPromotionService(prisma),
+  };
+}
+
+type Line = 'PROJECT_BRANCH' | 'MAIN';
+
+interface World {
+  ownerId: string;
+  runnerId: string;
+  workspaceId: string;
+  projectId: string;
+  coordinatorSessionId: string;
+}
+
+/** One owner, the runner the work runs on, a live coordinator conversation, and a project on `line`. */
+async function world(stack: Stack, label: string, line: Line): Promise<World> {
+  const db = stack.db;
+  const ownerId = randomUUID();
+  const runnerId = randomUUID();
+  const workspaceId = randomUUID();
+  const projectId = randomUUID();
+  const coordinatorSessionId = randomUUID();
+  const repoUrl = `https://git.invalid/orbit/${label}-${projectId.slice(0, 8)}.git`;
+  await db.user.create({
+    data: { id: ownerId, email: `${label}-${ownerId}@landing-fix.invalid`, name: label, passwordHash: 'x' },
+  });
+  await db.runner.create({
+    data: {
+      id: runnerId, ownerId, name: `${label}-runner`, tokenHash: `hash-${runnerId}`, status: RunnerStatus.ONLINE,
+      capabilities: CAPABILITIES, maxConcurrent: 4, capabilitiesReportedAt: new Date(), lastHeartbeatAt: new Date(),
+      heartbeatLeaseOwner: randomUUID(),
+    },
+  });
+  await db.workspace.create({
+    data: { id: workspaceId, ownerId, runnerId, name: `${label}-workspace`, enabled: true, repoUrl, workDir: `/srv/${label}` },
+  });
+  await db.session.create({
+    data: {
+      id: coordinatorSessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
+      title: `coordinator: ${label}`, prompt: `coordinator: ${label}`, provider: 'claude',
+      status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false,
+      titleManagedByProject: true, numTurns: 1, startedAt: new Date(), runtimeSessionId: `runtime-${coordinatorSessionId}`,
+    },
+  });
+  await db.project.create({
+    data: {
+      id: projectId, ownerId, title: `${label} project`, goal: 'a landing failure goes to the work that caused it',
+      coordinatorEnabled: true, coordinatorWorkspaceId: workspaceId, coordinatorSessionId,
+    },
+  });
+  await db.projectRuntime.upsert({ where: { projectId }, create: { projectId }, update: {} });
+  await db.projectCodebase.create({
+    data: {
+      ownerId, projectId, canonicalRepoUrl: canonicalRepoUrl(repoUrl)!, upstreamRef: 'refs/heads/main',
+      integrationRef: line === 'PROJECT_BRANCH' ? `refs/heads/project/${projectId}` : 'refs/heads/main',
+      refAuthority: 'REMOTE', remoteName: 'origin', integrationRefSource: 'EXPLICIT', deliveryMode: 'PLATFORM',
+      integrationStartedAt: new Date(),
+    },
+  });
+  return { ownerId, runnerId, workspaceId, projectId, coordinatorSessionId };
+}
+
+interface Finished {
+  taskId: string;
+  sessionId: string;
+}
+
+/**
+ * A code task whose work session finished on its branch and ended because the task was done
+ * (`end_reason = 'task_done'`), written DONE by the owner's Confirm — the DONE that queues its landing
+ * (PROJECT_BRANCH) or its candidate's check (MAIN).
+ */
+async function finishedTask(stack: Stack, w: World, label: string): Promise<Finished> {
+  const { id: taskId } = await stack.db.task.create({
+    data: {
+      ownerId: w.ownerId, creatorType: 'USER', creatorId: w.ownerId, title: label, projectId: w.projectId,
+      assigneeId: w.workspaceId, status: TaskStatus.IN_PROGRESS, completionCriterion: 'OWNER_CONFIRMED',
+    },
+    select: { id: true },
+  });
+  const sessionId = randomUUID();
+  await stack.db.session.create({
+    data: {
+      id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, taskId, workspaceId: w.workspaceId,
+      assignedRunnerId: w.runnerId, title: `work ${label}`, prompt: 'work', provider: 'claude',
+      status: RunStatus.SUCCEEDED, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+      isolationStatus: 'worktree', branch: `orbit/${label}`, branchSha: sha('a'), baseSha: sha('b'), numTurns: 1,
+      startedAt: minutesAgo(30), createdAt: minutesAgo(30), runtimeSessionId: randomUUID(),
+      changedFiles: [{ path: 'src/a.ts', status: 'M', additions: 1, deletions: 0 }] as Prisma.InputJsonValue,
+      finishedAt: minutesAgo(2), endReason: 'task_done',
+    },
+  });
+  const receipt = await stack.confirmations.decide(
+    w.ownerId, taskId, { door: 'USER', userId: w.ownerId }, { decision: 'CONFIRM' } as never,
+  );
+  assert.equal(receipt.completed, true, 'CONTROL: the confirmation wrote DONE');
+  return { taskId, sessionId };
+}
+
+/** The command one beat of the runner hands out for this task's (or this project's) job of `kind`. */
+async function claim(stack: Stack, w: World, kind: string): Promise<IntegrationJobCommand> {
+  const handed = await dispatchIntegrationJobs(stack.prisma, {
+    runnerId: w.runnerId, leaseOwner: randomUUID(), draining: false, capabilities: CAPABILITIES,
+  });
+  const command = handed.find((candidate) => candidate.kind === kind);
+  assert.ok(command, `CONTROL: the runner was handed a ${kind} — it got ${JSON.stringify(handed.map((c) => c.kind))}`);
+  return command;
+}
+
+/** The runner's result, through the J-T7 transaction, then delivered as the result route delivers it. */
+async function report(stack: Stack, w: World, command: IntegrationJobCommand, body: object): Promise<string> {
+  const applied = await applyIntegrationJobResult(stack.prisma, {
+    jobId: command.jobId, runnerId: w.runnerId, ownerId: w.ownerId,
+    body: { claimGeneration: command.claimGeneration, leaseOwner: command.leaseOwner, ...body } as never,
+  });
+  assert.equal(applied.answer.accepted, true, 'CONTROL: the result was taken');
+  if (applied.after) await stack.openItems.deliverForItems(applied.after.openItemIds);
+  // And the backstop a coordinator's turn end runs (X-D4 3): nothing else may hand it over either.
+  await stack.openItems.deliverOwed(w.projectId);
+  return command.jobId;
+}
+
+interface ItemRow {
+  id: string;
+  kind: string;
+  state: string;
+  assignee: string;
+  escalate_at: Date | null;
+  work_session_id: string | null;
+  work_session_offered_at: Date | null;
+  work_session_returned_at: Date | null;
+  work_session_return_reason: string | null;
+  deliveries: number;
+}
+
+/** The one item the job opened, with its work-session columns and its deliveries to the coordinator. */
+async function itemOf(stack: Stack, w: World, jobId: string): Promise<ItemRow> {
+  const rows = await stack.db.$queryRaw<ItemRow[]>(Prisma.sql`
+    SELECT i."id", i."kind", i."state", i."assignee", i."escalate_at",
+           to_jsonb(i)->>'work_session_id' AS "work_session_id",
+           (to_jsonb(i)->>'work_session_offered_at')::timestamptz AS "work_session_offered_at",
+           (to_jsonb(i)->>'work_session_returned_at')::timestamptz AS "work_session_returned_at",
+           to_jsonb(i)->>'work_session_return_reason' AS "work_session_return_reason",
+           (SELECT count(*)::int FROM "project_open_item_delivery" d
+             WHERE d."item_id" = i."id" AND d."purpose" = 'ITEM'
+               AND d."session_id" = ${w.coordinatorSessionId}::uuid) AS "deliveries"
+      FROM "project_open_item" i
+     WHERE i."integration_job_id" = ${jobId}::uuid
+       AND i."kind" IN ('INTEGRATION_CONFLICT', 'INTEGRATION_CHECK_FAILED', 'INTEGRATION_ERROR')`);
+  assert.equal(rows.length, 1, `the job opened ${rows.length} failure items`);
+  return rows[0]!;
+}
+
+/** W-T1: in the work session's hands — and nobody else's. */
+function assertHandedToWorkSession(item: ItemRow, sessionId: string, what: string): void {
+  assert.equal(item.state, 'OPEN', `${what}: the item is open`);
+  assert.equal(item.work_session_id, sessionId, `${what}: the item was not handed to the task's work session`);
+  assert.ok(item.work_session_offered_at, `${what}: no offered time`);
+  assert.equal(item.work_session_returned_at, null);
+  assert.equal(item.work_session_return_reason, null);
+  assert.equal(item.escalate_at, null, `${what}: an item the work session holds has no escalation time`);
+  assert.equal(item.deliveries, 0, `${what}: the item was delivered to the coordinator`);
+  assert.equal(item.assignee, 'COORDINATOR', `${what}: the assignee is unchanged (§12.4)`);
+}
+
+/** W-T6: today's path, unchanged. */
+function assertCoordinatorsAsToday(item: ItemRow, what: string): void {
+  assert.equal(item.state, 'OPEN', `${what}: the item is open`);
+  assert.equal(item.work_session_id, null, `${what}: the item was handed to a work session`);
+  assert.equal(item.work_session_offered_at, null);
+  assert.equal(item.assignee, 'COORDINATOR');
+  assert.ok(item.escalate_at, `${what}: the coordinator's item has no escalation time`);
+  assert.equal(item.deliveries, 1, `${what}: the item was not delivered to the coordinator`);
+}
+
+const conflict = (phase: 'REBASE' | 'MERGE' | 'MAIN_SYNC') => ({
+  state: 'CONFLICT', phase, sourceSha: sha('a'), targetShaBefore: sha('c'), upstreamSha: UPSTREAM,
+  conflicts: ['src/a.ts'],
+});
+
+const redCheck = (overrides: Record<string, unknown> = {}) => ({
+  state: 'CHECK_FAILED', phase: 'CHECK', sourceSha: sha('a'), targetShaBefore: sha('c'), upstreamSha: UPSTREAM,
+  testedSha: sha('d'), testedTreeSha: sha('e'),
+  checks: [{
+    name: 'LANDING_CHECK', command: 'npm test', expectedExitCode: 0, exitCode: 1, timedOut: false,
+    durationMs: 1_000, outputTail: 'not ok 1 - the work broke it',
+  }],
+  ...overrides,
+});
+
+/** A task landing on a project branch, claimed and answered with `body`. */
+async function landing(stack: Stack, label: string, body: object,
+  before?: (w: World, t: Finished) => Promise<void>) {
+  const w = await world(stack, label, 'PROJECT_BRANCH');
+  const t = await finishedTask(stack, w, label);
+  const command = await claim(stack, w, 'LAND_TASK');
+  if (before) await before(w, t);
+  const jobId = await report(stack, w, command, body);
+  return { w, t, jobId, item: await itemOf(stack, w, jobId) };
+}
+
+// ─── W-T1: the results that are handed off ────────────────────────────────────────────────────────
+
+for (const phase of ['REBASE', 'MERGE', 'MAIN_SYNC'] as const) {
+  test(`W-T1: a task landing's CONFLICT in ${phase} opens its item in the work session's hands`, { skip }, async () => {
+    const stack = await connect();
+    try {
+      const { t, item } = await landing(stack, `conflict-${phase.toLowerCase()}`, conflict(phase));
+      assert.equal(item.kind, 'INTEGRATION_CONFLICT');
+      assertHandedToWorkSession(item, t.sessionId, `CONFLICT ${phase}`);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+}
+
+test('W-T1: a task landing\'s CHECK_FAILED of its own making is handed off, and W9 refuses resolve and retry',
+  { skip }, async () => {
+    const stack = await connect();
+    try {
+      const { w, t, item } = await landing(stack, 'check-failed', redCheck());
+      assert.equal(item.kind, 'INTEGRATION_CHECK_FAILED');
+      assertHandedToWorkSession(item, t.sessionId, 'CHECK_FAILED');
+
+      // W9: the coordinator's two doors refuse it while the work session holds it, and so do the owner's.
+      const refusal = async (attempt: Promise<unknown>): Promise<unknown> => {
+        try {
+          await attempt;
+        } catch (error) {
+          return (error as { getResponse?: () => unknown }).getResponse?.();
+        }
+        return 'accepted';
+      };
+      const byCoordinator = { kind: 'SESSION', sessionId: w.coordinatorSessionId } as const;
+      for (const [door, attempt] of [
+        ['open_item_resolve', () => stack.openItems.resolveOpenItem(w.ownerId, w.projectId, item.id, { note: 'done by hand' }, byCoordinator)],
+        ['the owner\'s resolve', () => stack.openItems.resolveOpenItem(w.ownerId, w.projectId, item.id, { note: 'done by hand' }, { kind: 'OWNER' })],
+        ['integration_retry', () => stack.openItems.retryIntegration(w.ownerId, w.projectId, t.taskId, { reason: 'try again' }, w.coordinatorSessionId)],
+        ['the owner\'s retry', () => stack.openItems.retryIntegrationAsOwner(w.ownerId, w.projectId, t.taskId, { reason: 'try again' })],
+      ] as const) {
+        const answer = await refusal(attempt());
+        assert.equal((answer as { code?: string })?.code, 'OPEN_ITEM_WITH_WORK_SESSION',
+          `${door} was not refused OPEN_ITEM_WITH_WORK_SESSION: ${JSON.stringify(answer)}`);
+        assert.match((answer as { message: string }).message, /work session/);
+      }
+      assert.equal((await stack.db.projectOpenItem.findUniqueOrThrow({ where: { id: item.id } })).state, 'OPEN',
+        'the refused doors wrote nothing');
+      assert.equal(await stack.db.projectIntegrationJob.count({ where: { taskId: t.taskId } }), 1, 'no rerun was queued');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('W-T1: a work session that is still open is handed the failure too (W4 condition 2)', { skip }, async () => {
+  const stack = await connect();
+  try {
+    const { t, item } = await landing(stack, 'open-session', conflict('MERGE'), async (_w, t) => {
+      // Revived and live when the result comes in: open, not ended.
+      await stack.db.session.update({
+        where: { id: t.sessionId },
+        data: { status: RunStatus.AWAITING_INPUT, finishedAt: null, endReason: null },
+      });
+    });
+    assertHandedToWorkSession(item, t.sessionId, 'an open work session');
+  } finally {
+    await stack.db.$disconnect();
+  }
+});
+
+/** A MAIN line's TASK_BRANCH candidate check, claimed and answered with `body`. */
+async function candidateCheck(stack: Stack, label: string, body: object) {
+  const w = await world(stack, label, 'MAIN');
+  const t = await finishedTask(stack, w, label);
+  const command = await claim(stack, w, 'CHECK_PROMOTION');
+  assert.equal(command.promotionSourceKind, 'TASK_BRANCH', 'CONTROL: the candidate is the task branch');
+  const jobId = await report(stack, w, command, body);
+  return { w, t, jobId, item: await itemOf(stack, w, jobId) };
+}
+
+test('W-T1: a MAIN line\'s TASK_BRANCH candidate check that conflicts is handed to the task\'s work session',
+  { skip }, async () => {
+    const stack = await connect();
+    try {
+      const { t, item } = await candidateCheck(stack, 'main-conflict', conflict('MERGE'));
+      assert.equal(item.kind, 'INTEGRATION_CONFLICT');
+      assertHandedToWorkSession(item, t.sessionId, 'MAIN-line candidate CONFLICT');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('W-T1: a MAIN line\'s TASK_BRANCH candidate check that goes red is handed to the task\'s work session',
+  { skip }, async () => {
+    const stack = await connect();
+    try {
+      const { w, t, item } = await candidateCheck(stack, 'main-red', redCheck());
+      assert.equal(item.kind, 'INTEGRATION_CHECK_FAILED');
+      assertHandedToWorkSession(item, t.sessionId, 'MAIN-line candidate CHECK_FAILED');
+      // W9 for a candidate: the coordinator's re-check refuses it too.
+      const promotion = await stack.db.projectPromotion.findFirstOrThrow({ where: { taskId: t.taskId } });
+      await assert.rejects(
+        stack.openItems.retryPromotionCheck(w.ownerId, w.projectId, promotion.id, { reason: 'try again' }, w.coordinatorSessionId),
+        (error: { getResponse?: () => { code?: string } }) => error.getResponse?.()?.code === 'OPEN_ITEM_WITH_WORK_SESSION',
+      );
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('W-T1: a MAIN line\'s TASK_BRANCH candidate whose landing conflicts is handed to the task\'s work session',
+  { skip }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'main-land', 'MAIN');
+      const t = await finishedTask(stack, w, 'main-land');
+      const check = await claim(stack, w, 'CHECK_PROMOTION');
+      await report(stack, w, check, {
+        state: 'READY', phase: 'CHECK', sourceSha: sha('a'), upstreamSha: UPSTREAM, targetShaBefore: UPSTREAM,
+        testedSha: sha('7'), testedTreeSha: sha('6'), aheadOfUpstream: 1, filesChanged: 1, checks: [], conflicts: [],
+      });
+      const promotion = await stack.db.projectPromotion.findFirstOrThrow({ where: { taskId: t.taskId } });
+      await stack.promotions.confirm({ userId: w.ownerId }, w.projectId, promotion.id, sha('a'));
+      const land = await claim(stack, w, 'LAND_PROMOTION');
+      const jobId = await report(stack, w, land, conflict('MERGE'));
+      assertHandedToWorkSession(await itemOf(stack, w, jobId), t.sessionId, 'MAIN-line candidate landing CONFLICT');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+// ─── W-T6: one W4 condition negated at a time ────────────────────────────────────────────────────
+
+const negated: Array<[string, (stack: Stack, w: World, t: Finished) => Promise<void>]> = [
+  ['1: the work session is in Trash', async (stack, _w, t) => {
+    await stack.db.session.update({ where: { id: t.sessionId }, data: { deletedAt: new Date() } });
+  }],
+  ['1: the work session\'s cancel was requested', async (stack, _w, t) => {
+    await stack.db.session.update({ where: { id: t.sessionId }, data: { cancelRequestedAt: new Date() } });
+  }],
+  ['2: a person ended the work session', async (stack, _w, t) => {
+    await stack.db.session.update({ where: { id: t.sessionId }, data: { endReason: 'ended', status: RunStatus.CANCELLED } });
+  }],
+  ['3: the task\'s newest work session is another one', async (stack, w, t) => {
+    await stack.db.session.create({
+      data: {
+        id: randomUUID(), ownerId: w.ownerId, creatorId: w.ownerId, taskId: t.taskId, workspaceId: w.workspaceId,
+        assignedRunnerId: w.runnerId, title: 'a later run', prompt: 'work', provider: 'claude',
+        status: RunStatus.SUCCEEDED, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+        isolationStatus: 'worktree', branch: 'orbit/a-later-run', branchSha: sha('f'), baseSha: sha('b'), numTurns: 1,
+        startedAt: new Date(), createdAt: new Date(), runtimeSessionId: randomUUID(), finishedAt: new Date(),
+        endReason: 'task_done',
+      },
+    });
+  }],
+  ['3: the task is no longer DONE', async (stack, _w, t) => {
+    await stack.db.$executeRaw(Prisma.sql`UPDATE "task" SET "status" = 'IN_PROGRESS' WHERE "id" = ${t.taskId}::uuid`);
+  }],
+];
+
+for (const [condition, negate] of negated) {
+  test(`W-T6: W4 condition ${condition} — the item goes to the coordinator as today`, { skip }, async () => {
+    const stack = await connect();
+    try {
+      const { item } = await landing(stack, `negated-${randomUUID().slice(0, 8)}`, conflict('REBASE'),
+        (w, t) => negate(stack, w, t));
+      assertCoordinatorsAsToday(item, `condition ${condition}`);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+}
+
+test('W-T6: W4 condition 4 — after two generations asked for by the work session, the next failure is the coordinator\'s; '
+  + 'R1: a CONFLICT retry row inserts', { skip }, async () => {
+  const stack = await connect();
+  try {
+    const { w, t, jobId: first, item: firstItem } = await landing(stack, 'rounds', conflict('MERGE'));
+    assertHandedToWorkSession(firstItem, t.sessionId, 'the first failure');
+
+    // One round: the work session's next generation, recorded as a retry of the CONFLICT one (R1).
+    const rerun = async (ofJobId: string): Promise<string> => {
+      const queued = await stack.db.$transaction((tx) => queueLandingRetry(tx, {
+        ownerId: w.ownerId, projectId: w.projectId, taskId: t.taskId,
+        retry: {
+          ofJobId, failureClass: 'CONFLICT' as never, reason: 'Fixed by the task\'s own session',
+          requestedBySessionId: t.sessionId,
+        },
+      }));
+      assert.ok(queued, 'CONTROL: the next generation was queued');
+      const row = await stack.db.projectIntegrationJob.findUniqueOrThrow({
+        where: { id: queued.jobId },
+        select: { retryFailureClass: true, retryRequestedBySessionId: true, retryOfJobId: true },
+      });
+      assert.deepEqual(row, { retryFailureClass: 'CONFLICT', retryRequestedBySessionId: t.sessionId, retryOfJobId: ofJobId },
+        'R1: the CONFLICT retry row carries its class and the work session as requester');
+      const command = await claim(stack, w, 'LAND_TASK');
+      assert.equal(command.jobId, queued.jobId);
+      return report(stack, w, command, conflict('MERGE'));
+    };
+
+    const second = await rerun(first);
+    assertHandedToWorkSession(await itemOf(stack, w, second), t.sessionId, 'round 1 of 2 failed again');
+    const third = await rerun(second);
+    assertCoordinatorsAsToday(await itemOf(stack, w, third), 'round 2 of 2 failed: the rounds are used');
+  } finally {
+    await stack.db.$disconnect();
+  }
+});
+
+// ─── W-T6: the results that are not handed off ───────────────────────────────────────────────────
+
+test('W-T6: a BASELINE_RED landing goes to the coordinator as today', { skip }, async () => {
+  const stack = await connect();
+  try {
+    const check = redCheck().checks[0]!;
+    const { item } = await landing(stack, 'baseline-red', redCheck({
+      baselineRed: true,
+      mainSyncSha: sha('b'),
+      checks: [check, { ...check, scope: 'BASELINE', treeSha: sha('8') }],
+    }));
+    assert.equal(item.kind, 'INTEGRATION_CHECK_FAILED');
+    assertCoordinatorsAsToday(item, 'BASELINE_RED');
+  } finally {
+    await stack.db.$disconnect();
+  }
+});
+
+test('W-T6: a CHECK_TIMED_OUT landing goes to the coordinator as today', { skip }, async () => {
+  const stack = await connect();
+  try {
+    const { item } = await landing(stack, 'timed-out', redCheck({
+      checks: [{ ...redCheck().checks[0]!, exitCode: null, timedOut: true }],
+    }));
+    assertCoordinatorsAsToday(item, 'CHECK_TIMED_OUT');
+  } finally {
+    await stack.db.$disconnect();
+  }
+});
+
+test('W-T6: an ERROR landing goes to the coordinator as today', { skip }, async () => {
+  const stack = await connect();
+  try {
+    const { item } = await landing(stack, 'error', {
+      state: 'ERROR', phase: 'PUSH', sourceSha: sha('a'), targetShaBefore: sha('c'),
+      errorCode: 'PUSH_REJECTED', errorDetail: { reason: 'the remote refused a non-fast-forward push' },
+    });
+    assert.equal(item.kind, 'INTEGRATION_ERROR');
+    assertCoordinatorsAsToday(item, 'ERROR');
+  } finally {
+    await stack.db.$disconnect();
+  }
+});
+
+test('W-T6: a PROJECT_BRANCH promotion\'s conflict goes to the coordinator as today', { skip }, async () => {
+  const stack = await connect();
+  try {
+    const w = await world(stack, 'project-branch-promotion', 'PROJECT_BRANCH');
+    await finishedTask(stack, w, 'project-branch-promotion');
+    const land = await claim(stack, w, 'LAND_TASK');
+    await report(stack, w, land, {
+      state: 'LANDED', phase: 'VERIFY', sourceSha: sha('a'), targetShaBefore: UPSTREAM, upstreamSha: UPSTREAM,
+      testedSha: sha('c'), testedTreeSha: sha('e'), landedSha: sha('c'), landedTreeSha: sha('e'), aheadOfUpstream: 1,
+    });
+    await seedPromotionRequest(stack.prisma, w.projectId);
+    assert.ok(await stack.promotions.considerCandidate(w.projectId), 'CONTROL: the landing made a candidate');
+    const check = await claim(stack, w, 'CHECK_PROMOTION');
+    assert.equal(check.promotionSourceKind, 'PROJECT_BRANCH');
+    const jobId = await report(stack, w, check, conflict('MERGE'));
+    assertCoordinatorsAsToday(await itemOf(stack, w, jobId), 'PROJECT_BRANCH promotion CONFLICT');
+  } finally {
+    await stack.db.$disconnect();
+  }
+});
+
+test('the landing-fix PostgreSQL target is explicitly disposable', { skip }, () => {
+  assert.doesNotThrow(() => assertCoordinatorPgUrlIsIsolated(URL));
+});
