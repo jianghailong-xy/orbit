@@ -5,7 +5,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatScope } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { untilStopping } from '../common/graceful-stop';
-import { declaresListChanged, declaresOwnerRequests } from '../realtime/open-list-hints';
+import { declaresListChanged, declaresOwnerRequests, declaresScheduleCards } from '../realtime/open-list-hints';
 import { RealtimeService } from '../realtime/realtime.service';
 
 /** ~20s keepalive (decision Q5): its job is to let the CLIENT's byte watchdog detect a half-dead
@@ -33,14 +33,18 @@ export class EventsController {
   events(
     @CurrentUser() user: AuthUser,
     // The hints this client understands, comma-separated (docs/realtime-control-plane-stream.md
-    // §4.8). `list_changed` and `owner_requests` exist; a stream that does not name it never receives
-    // `sessions.list_changed`, because every shipped client re-reads everything on a type it does
+    // §4.8). `list_changed`, `owner_requests` and `schedule_cards` exist; a stream that does not name
+    // one never receives its event, because every shipped client re-reads everything on a type it does
     // not know.
     @Query('hints') hints?: string | string[],
   ): Observable<MessageEvent> {
     // Ends as this apiserver stops, so the client opens it again on another (common/graceful-stop.ts).
     return merge(
-      this.realtime.streamForUser(user.userId, { listChanged: declaresListChanged(hints), ownerRequests: declaresOwnerRequests(hints) }).pipe(map((e) => ({ data: e }) as MessageEvent)),
+      this.realtime.streamForUser(user.userId, {
+        listChanged: declaresListChanged(hints),
+        ownerRequests: declaresOwnerRequests(hints),
+        scheduleCards: declaresScheduleCards(hints),
+      }).pipe(map((e) => ({ data: e }) as MessageEvent)),
       interval(KEEPALIVE_MS).pipe(map(() => ({ data: { type: 'ping' } }) as MessageEvent)),
     ).pipe(untilStopping());
   }

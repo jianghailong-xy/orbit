@@ -1,17 +1,17 @@
--- Before deploy 3: what migrations 1433 (turn outcome backfill), 1434 (the triggers lose the status bridge) and 1435
+-- Before deploy 3: what migrations 1441 (turn outcome backfill), 1442 (the triggers lose the status bridge) and 1443
 -- (DROP COLUMN release_cause) will meet on this database (docs/session-three-state-design.md §12.6, removal steps R6 to
 -- R8; each migration's header says why). Run it while deploy 2 serves, after every deploy-1 server has gone.
 --
 -- One read-only SELECT. It takes no lock beyond what any read takes and writes nothing. It names release_cause, so it
--- runs only before 1435; after the deploy, run scripts/session-release-cause-drop-postcheck.sql instead.
+-- runs only before 1443; after the deploy, run scripts/session-release-cause-drop-postcheck.sql instead.
 --
 --   psql "$DATABASE_URL" -X -f scripts/session-release-cause-drop-precheck.sql
 --
--- <bridged> below is the row 1433 writes last_turn_outcome = 'FAILED' on: released, status FAILED, no end reason, no
+-- <bridged> below is the row 1441 writes last_turn_outcome = 'FAILED' on: released, status FAILED, no end reason, no
 -- FAILED turn outcome, not in Trash. Deploy 2 reads these as failures only through the status bridge.
 --
 -- Expected, and what a different answer means:
---   bridged_rows                    any number: the rows the bridge carries today. 1433 writes FAILED on each; the
+--   bridged_rows                    any number: the rows the bridge carries today. 1441 writes FAILED on each; the
 --                                   postcheck's bridged_rows is 0 after it.
 --   bridged_by_cause                the same rows by the cause deploy 1 wrote, as JSON: the hand-over shapes are
 --                                   runner_lost (H2), setup_failed (H4), engine_failed (H6); older rows say what wrote
@@ -22,19 +22,19 @@
 --                                   deploy 3 would read the next such row as a stop; stop and report it.
 --   bridged_without_failed_turn     bridged rows none of whose turns has outcome FAILED: as many as bridged_rows, or a
 --                                   few fewer. The turn outcome a session copies is its latest turn's, so a row whose
---                                   failed turn was followed by another can differ; either way 1433 writes the session.
---   carrying_turns                  the turns 1433 writes outcome FAILED on (§12.1's rule: the work turn IN_FLIGHT, else
+--                                   failed turn was followed by another can differ; either way 1441 writes the session.
+--   carrying_turns                  the turns 1441 writes outcome FAILED on (§12.1's rule: the work turn IN_FLIGHT, else
 --                                   the oldest PENDING one, with no outcome yet): a handful, from refused sources (H4).
 --   residual_a2_rows                0 (0 on 2026-11-21 and 2026-11-22). Released, not FAILED, no end reason, a FAILED
---                                   copy kept: 1433 writes CANCELLED on each, so they read as stops.
+--                                   copy kept: 1441 writes CANCELLED on each, so they read as stops.
 --   stale_copy_rows                 any number. Released, not FAILED, an end reason, last_turn_outcome FAILED (N2: a
 --                                   turn failed while its session was being ended): an end was asked, so a stop with or
---                                   without the bridge, and 1433 does not write them; listed so nothing is assumed.
---   trashed_unbridged               any number: FAILED, released, no end reason, no FAILED turn outcome, in Trash. 1433
+--                                   without the bridge, and 1441 does not write them; listed so nothing is assumed.
+--   trashed_unbridged               any number: FAILED, released, no end reason, no FAILED turn outcome, in Trash. 1441
 --                                   writes none of them; after deploy 3 they read as stops. failed_imports is how many of
 --                                   them are failed transcript imports (W5).
 --   failed_imports                  any number, at most trashed_unbridged.
---   requests_closed_by_backfill     0. OPEN session requests to a bridged row with no retry armed: 1433's write fires
+--   requests_closed_by_backfill     0. OPEN session requests to a bridged row with no retry armed: 1441's write fires
 --                                   session_request_recipient_ended, which closes them RECIPIENT_ENDED (as the release
 --                                   should have). Not 0: name them before the deploy.
 --   replies_due_by_backfill         0. Held replies whose asker is a bridged row that session_request_asker_stopped
@@ -47,7 +47,7 @@
 --                                   value alone (latest_cause_release says when).
 --   latest_cause_release            the newest finished_at of a row with a release_cause: before 04:09:45 on 2026-11-22.
 --   other_dependents                0. pg_depend rows on session.release_cause other than session_release_cause_chk's:
---                                   1435 refuses to drop anything if this is not 0.
+--                                   1443 refuses to drop anything if this is not 0.
 --   release_cause_chk_valid         true.
 WITH bridged AS (
   SELECT s."id", s."release_cause", s."finished_at", s."retry_at"

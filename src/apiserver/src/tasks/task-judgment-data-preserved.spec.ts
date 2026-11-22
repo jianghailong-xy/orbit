@@ -3292,14 +3292,19 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // or replaces none of the preserved triggers or functions. No INSERT, UPDATE or DELETE runs at apply time.
       // Written as 1423 and then 1427 on the project line, it was renumbered after main took 1427.
       '1428_open_list_workspace_probes',
-      // 1433 to 1435, deploy 3 of design §12.6 (removal steps R6 to R8; written as 1428, 1429 and 1431, renumbered after
-      // main took 1428). 1433 writes session.last_turn_outcome (FAILED on a release the status alone records as a failure,
-      // CANCELLED on the residual A2 shape) and conversation_turn.outcome and error on the carrying turn; 1434 re-creates 1425's three ended-triggers without the status bridge; 1435 drops
+      // 1429 adds six nullable rating columns, a check on rating_score and an (owner_id, created_at) index on
+      // subagent_run; no row is written, and no preserved relation, trigger, function or DONE fence changes.
+      // Written as 1420 on its task branch, it was renumbered after main took 1420 to 1428.
+      '1429_subagent_run_rating',
+      // 1441 to 1443, deploy 3 of design §12.6 (removal steps R6 to R8; written as 1428, 1429 and 1431, then 1433 to 1435,
+      // renumbered above what main and the other lines took). 1441 writes session.last_turn_outcome (FAILED on a release
+      // the status alone records as a failure, CANCELLED on the residual A2 shape) and conversation_turn.outcome and error
+      // on the carrying turn; 1442 re-creates 1425's three ended-triggers without the status bridge; 1443 drops
       // session_release_cause_chk and session.release_cause after checking pg_depend. Session and conversation_turn are
       // not preserved relations: no preserved relation is read, written or dropped, and the DONE fence is unchanged.
-      '1433_session_turn_outcome_backfill',
-      '1434_ended_triggers_drop_status_bridge',
-      '1435_session_release_cause_drop'],
+      '1441_session_turn_outcome_backfill',
+      '1442_ended_triggers_drop_status_bridge',
+      '1443_session_release_cause_drop'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

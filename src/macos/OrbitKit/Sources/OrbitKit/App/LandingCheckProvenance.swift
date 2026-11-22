@@ -411,30 +411,44 @@ public enum CoordinatorChanges {
 /// A task exempt from its project's landing check, as its Landing section draws it (D5).
 public struct TaskLandingCheckExemption: Equatable, Sendable {
     public let reason: String
-    /// `coordinator` or `you`.
+    /// `coordinator`, `card` or `you`, as `ProvenanceBadge` draws it.
     public let originKind: String
     public let originLabel: String
     /// "marked 20m ago"; nil when no time is known.
     public let when: String?
 
-    /// Nil for a task that is not exempt, and from a server that does not say. `markedAt` is the
-    /// time the project's change record keeps for the coordinator's mark, where the page has it.
-    public static func of(_ task: TaskItem, markedAt: String? = nil, now: Date = Date()) -> TaskLandingCheckExemption? {
+    /// Nil for a task that is not exempt, and from a server that does not say. `marked` is the
+    /// project's record of the exemption (`marked(taskID:changes:)`), where the page has read it: who
+    /// and when are the record's, as web's `TaskLandingExempt` reads them. With no record, the
+    /// task's own fields say: a coordinator's mark names its session, the owner's its time.
+    public static func of(_ task: TaskItem, marked: ProjectSettingChange? = nil,
+                          now: Date = Date()) -> TaskLandingCheckExemption? {
         guard task.landingCheckExempt == true else { return nil }
-        let byCoordinator = task.landingCheckExemptBySessionId != nil
-        let at = byCoordinator ? markedAt : (task.landingCheckExemptOwnerSetAt ?? markedAt)
+        let kind: String
+        let at: String?
+        if let marked {
+            kind = marked.origin == "COORDINATOR" ? "coordinator" : marked.origin == "CARD" ? "card" : "you"
+            at = marked.createdAt
+        } else {
+            kind = task.landingCheckExemptBySessionId != nil ? "coordinator" : "you"
+            at = kind == "you" ? task.landingCheckExemptOwnerSetAt : nil
+        }
+        let label = kind == "coordinator" ? LandingProvenanceCopy.coordinator
+            : kind == "card" ? LandingProvenanceCopy.card : LandingProvenanceCopy.you
         return TaskLandingCheckExemption(
             reason: task.landingCheckExemptReason ?? "",
-            originKind: byCoordinator ? "coordinator" : "you",
-            originLabel: byCoordinator ? LandingProvenanceCopy.coordinator : LandingProvenanceCopy.you,
+            originKind: kind,
+            originLabel: label,
             when: at.flatMap { RelativeTime.ago($0, now: now) }.map(LandingProvenanceCopy.markedAgo))
     }
 
-    /// When the coordinator marked it: the newest change record that exempted this task.
-    public static func markedAt(taskID: String, changes: [ProjectSettingChange]) -> String? {
+    /// Who marked it and when: the newest record (the list is newest first) of this task's
+    /// exemption that set it and that no revert put back.
+    public static func marked(taskID: String, changes: [ProjectSettingChange]) -> ProjectSettingChange? {
         changes.first {
             $0.field == "TASK_LANDING_CHECK_EXEMPT" && $0.taskId == taskID && $0.newValue.exempt == true
-        }?.createdAt
+                && $0.revertedAt == nil
+        }
     }
 
     /// The owner's Remove exemption.
@@ -462,6 +476,42 @@ public enum LandingCheckSkip {
     public static func taskExempt(_ step: LandingStep) -> IntegrationTimelineEntry? {
         guard step.key == "check:LANDING_CHECK" else { return nil }
         return step.entries.map(\.entry).last { $0.data?["skipped"]?.stringValue == "TASK_EXEMPT" }
+    }
+
+    /// Whether a finished check's line opens the tail it ended on, inline: a check that did not pass,
+    /// unless it never ran because its task is exempt (web's `TimelineLine`) — there is no output to read.
+    public static func showsInlineOutput(_ entry: IntegrationTimelineEntry) -> Bool {
+        entry.kind == "CHECK_FINISHED" && entry.check != nil && !entry.checkPassed && exemptLine(entry) == nil
+    }
+}
+
+/// How one step of a landing's check list reads (web's `StepStatus`): its mark and, when skipped,
+/// "Landing check · Skipped" with "Exempt: <reason>".
+public enum LandingStepStatus: Equatable, Sendable {
+    case ok, failed, running, pending, skipped
+
+    /// In web's order: a line that stopped short fails the step, even beside a skip; then a task's
+    /// exempt landing check is skipped; then the last step runs or waits while its attempt does.
+    public static func of(_ step: LandingStep, kind: String, isLast: Bool, live: Bool,
+                          queued: Bool) -> LandingStepStatus {
+        if LandingSteps.failed(step, kind: kind) { return .failed }
+        if LandingCheckSkip.taskExempt(step) != nil { return .skipped }
+        if isLast && live { return .running }
+        if isLast && queued { return .pending }
+        return .ok
+    }
+
+    /// The step's name: "Landing check · Skipped" for a skip, else its own.
+    public static func name(_ step: LandingStep, _ status: LandingStepStatus) -> String {
+        status == .skipped ? "\(step.name) · \(LandingProvenanceCopy.skipped)" : step.name
+    }
+
+    /// The step's summary: "Exempt: <reason>" for a skip, else its summary line's words.
+    public static func summary(_ step: LandingStep, _ status: LandingStepStatus) -> String {
+        if status == .skipped, let line = LandingCheckSkip.taskExempt(step).flatMap(LandingCheckSkip.exemptLine) {
+            return line
+        }
+        return LandingCheckCopy.timelineText(step.summary)
     }
 }
 

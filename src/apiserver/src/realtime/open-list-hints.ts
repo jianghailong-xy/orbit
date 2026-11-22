@@ -169,3 +169,7 @@ export function declaresListChanged(hints: string | string[] | undefined): boole
 export function declaresOwnerRequests(hints: string | string[] | undefined): boolean {
   return declares(hints, 'owner_requests');
 }
+/** Whether a `GET /api/events?hints=` value declares `schedule_cards`. */
+export function declaresScheduleCards(hints: string | string[] | undefined): boolean {
+  return declares(hints, 'schedule_cards');
+}

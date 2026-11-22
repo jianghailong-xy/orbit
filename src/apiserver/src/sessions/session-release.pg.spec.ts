@@ -23,7 +23,7 @@
  *  (11) removed on 2026-11-21 with migrations 1405 to 1407 (design §12 decision D9, removal step R1): the session
  *       keeps no failure fact, so nothing holds a cause to the status any more
  *  (12) migrations 1421 to 1425 (plan step 4.4; 1425 restated on the turn outcome and the end reason by removal step
- *       R4) and 1434 (removal step R7: the ended-triggers without the status bridge), re-applied by the real `prisma
+ *       R4) and 1442 (removal step R7: the ended-triggers without the status bridge), re-applied by the real `prisma
  *       migrate deploy` on a database that holds rows: they write none; the three ended-triggers fire on every release
  *       shape of design §12.2 where their old status clauses did, but for the named differences, and each WHEN clause
  *       is the release module's failure question; then a write of the release
@@ -420,10 +420,10 @@ test('every release writes the release column and its cause, and the revive clea
       }
     }
     // Both backfills of this project, by prisma, on a database holding every row the cases above wrote. 1262 writes
-    // release_cause, which 1435 (deploy 3) dropped, so 1261 runs again first to give the column back as 1262 met it,
-    // and 1435 drops it again after, leaving the database as every migration leaves it.
+    // release_cause, which 1443 (deploy 3) dropped, so 1261 runs again first to give the column back as 1262 met it,
+    // and 1443 drops it again after, leaving the database as every migration leaves it.
     await deployAgain(sql, url, ['1202_turn_outcome_backfill', '1261_session_release_cause', '1262_session_release_backfill']);
-    await deployAgain(sql, url, ['1435_session_release_cause_drop']);
+    await deployAgain(sql, url, ['1443_session_release_cause_drop']);
 
     for (const m of made) {
       const row = await released(sql, m.id);
@@ -541,7 +541,7 @@ test('every release writes the release column and its cause, and the revive clea
  * way, and a trigger whose column list named only `status` would not fire at all.
  *
  * First, with session_release_fact_chk on, the three ended-triggers 1425 installs (restated on the turn outcome and the
- * end reason by removal step R4, design §12.3) and 1434 re-creates without the status bridge (R7) are driven through every release shape of design §12.2, each written as
+ * end reason by removal step R4, design §12.3) and 1442 re-creates without the status bridge (R7) are driven through every release shape of design §12.2, each written as
  * its writer writes it, with and without a retry armed, and each fires where its old status clause would have but for
  * the differences design §12.3 and §12.6 name; each WHEN clause is read back from the migration and held to the release
  * module's failure question, releaseWasFailureSql('NEW'). Then session_release_fact_chk is dropped, in this disposable database, because it refuses
@@ -610,7 +610,7 @@ test('(12) the release fact alone fires every guard and ended-trigger (plan step
     `SELECT "reviewer_ended_at" FROM "task_owner_confirmation_review" WHERE "id" = $1::uuid`, [reviewId],
   )).rows[0] as { reviewer_ended_at: Date | null }).reviewer_ended_at instanceof Date;
 
-  await t.test('1421-1425 and 1434 apply by the real prisma migrate deploy on a database holding rows', async () => {
+  await t.test('1421-1425 and 1442 apply by the real prisma migrate deploy on a database holding rows', async () => {
     // Rows of every shape the guards and triggers read, written before the five files run again: held work on a
     // task in a project, a confirmation review, an open request, and released rows of each kind.
     const w = await world(db, 'g-deploy');
@@ -631,11 +631,11 @@ test('(12) the release fact alone fires every guard and ended-trigger (plan step
         WHERE id = ANY($1::uuid[]) ORDER BY id`, [[held, parked, failed, done, ended]])).rows;
     const before = await rows();
 
-    // 1434 after 1425, as an installation applies them: it is what the ended-triggers are once deploy 3 has run.
+    // 1442 after 1425, as an installation applies them: it is what the ended-triggers are once deploy 3 has run.
     const six = [
       '1421_supersession_capacity_guards_read_release', '1422_admission_aggregate_guards_read_release',
       '1423_project_move_guard_reads_release', '1424_acquisition_revive_reads_release', '1425_ended_triggers_read_release',
-      '1434_ended_triggers_drop_status_bridge',
+      '1442_ended_triggers_drop_status_bridge',
     ];
     await deployAgain(sql, url, six);
 
@@ -656,7 +656,7 @@ test('(12) the release fact alone fires every guard and ended-trigger (plan step
       const columns = /UPDATE OF (.*?) ON public\.session/.exec(def)?.[1] ?? '';
       assert.match(columns, /\bfinished_at\b/, `${tgname}: finished_at is in its column list (${columns})`);
       if (ENDED.includes(tgname)) {
-        // R4: the ended-triggers read the turn outcome, list it, and name no cause. R7 (1434): the status bridge
+        // R4: the ended-triggers read the turn outcome, list it, and name no cause. R7 (1442): the status bridge
         // went, so they name no terminal status either; their one 'FAILED' is the turn outcome's ('FAILED'::text).
         assert.match(columns, /\blast_turn_outcome\b/, `${tgname}: last_turn_outcome is in its column list (${columns})`);
       }
@@ -700,7 +700,7 @@ test('(12) the release fact alone fires every guard and ended-trigger (plan step
     const oldAsker = (o: Row, n: Row) => oldRecipient(o, n) || parkedAsker(o, n);
     const oldReviewer = (_o: Row, n: Row) => filed(n) || ['SUCCEEDED', 'CANCELLED'].includes(n.status)
       || (['FAILED', 'INTERRUPTED'].includes(n.status) && ended(n));
-    // The clauses 1434 states: released, and not by a failure (the release module's question), or no retry armed.
+    // The clauses 1442 states: released, and not by a failure (the release module's question), or no retry armed.
     const failed = (n: Row) => releaseWasFailure({
       finishedAt: n.finished_at, endReason: n.end_reason, lastTurnOutcome: n.last_turn_outcome, status: n.status,
     });
@@ -797,8 +797,8 @@ test('(12) the release fact alone fires every guard and ended-trigger (plan step
     // failed turn's copy kept through a release that is no failure reads as a failure, so the three wait where the old
     // clauses, reading SUCCEEDED or CANCELLED, fired. The bridged rows (R7): a release FAILED with no end reason and no
     // FAILED turn outcome is no failure without the bridge, so recipient_ended and asker_stopped no longer wait for a
-    // retry armed on it, and reviewer_ended fires as for any stop. Of those shapes, migration 1433 gave every stored
-    // row outside Trash the FAILED turn outcome before 1434 ran (common/session-release-backfill.pg.spec.ts); written
+    // retry armed on it, and reviewer_ended fires as for any stop. Of those shapes, migration 1441 gave every stored
+    // row outside Trash the FAILED turn outcome before 1442 ran (common/session-release-backfill.pg.spec.ts); written
     // after deploy 3 they come only from the import (W5, released into Trash, where the deleted_at branch fires
     // anyway), from no writer (W7 with no reason) or from a deploy-1 server, of which none remains (H2, H4, H6).
     const named = [
@@ -821,16 +821,16 @@ test('(12) the release fact alone fires every guard and ended-trigger (plan step
   });
 
   await t.test('each ended-trigger asks the release module\'s failure question, whole', async () => {
-    // 1434's three WHEN clauses each carry releaseWasFailureSql('NEW'), character for character: released, no end
-    // reason, the turn outcome. And 1434 is 1425 with the status bridge taken out of each, and nothing else changed.
+    // 1442's three WHEN clauses each carry releaseWasFailureSql('NEW'), character for character: released, no end
+    // reason, the turn outcome. And 1442 is 1425 with the status bridge taken out of each, and nothing else changed.
     const codeOf = (name: string) => readFileSync(join(__dirname, '..', '..', 'prisma', 'migrations', name,
       'migration.sql'), 'utf8').split('\n').filter((line) => !line.trimStart().startsWith('--')).join('\n');
-    const code = codeOf('1434_ended_triggers_drop_status_bridge');
+    const code = codeOf('1442_ended_triggers_drop_status_bridge');
     const bridged = ` AND (NEW."last_turn_outcome" IS NOT DISTINCT FROM 'FAILED' OR NEW."status" = 'FAILED'))`;
     const deploy2 = codeOf('1425_ended_triggers_read_release');
     assert.equal(deploy2.split(bridged).length - 1, 3, '1425 carries the bridge in each of its three clauses');
     assert.equal(deploy2.split(bridged).join(` AND NEW."last_turn_outcome" IS NOT DISTINCT FROM 'FAILED')`), code,
-      '1434 is 1425 without the bridge');
+      '1442 is 1425 without the bridge');
     const fragment = releaseWasFailureSql('NEW').sql;
     const blocks = code.split('CREATE OR REPLACE TRIGGER').slice(1);
     assert.equal(blocks.length, 3);

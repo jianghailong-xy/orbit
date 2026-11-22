@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider, type QueryKey } from '@tanstack/react
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ControlPlaneProvider } from './useControlPlane';
 import { watchQuery, watchesQuery } from './queries';
+import { streamReport } from './listBudget';
 
 /**
  * The watches read rides the control-plane stream as a refetch nudge, never as data.
@@ -213,7 +214,13 @@ describe('the watches read rides the control-plane stream', () => {
     // restarting or a socket going quiet drops it without a word, and the read may not go a minute
     // stale for that. Asserted here because this is the file that would otherwise make the poll look
     // redundant.
-    expect(watchesQuery().refetchInterval).toBe(60_000);
+    streamReport.opened();
+    try {
+      const interval = watchesQuery().refetchInterval as (query: { queryHash: string }) => number;
+      expect(interval({ queryHash: 'watches' })).toBe(60_000);
+    } finally {
+      streamReport.stopped();
+    }
   });
 
   it('library events leave the watches alone', async () => {

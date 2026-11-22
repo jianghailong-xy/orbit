@@ -236,6 +236,13 @@ release 掉了（§13.3）。客户端仍然显示它，写成「唤醒已撤回
 同一读法），所以 `WAKE_WITHDRAWN` 这类不需要处理的死信不会占掉名额。客户端把这一路与最新 100 条、
 `?state=ACTIVE`、`?state=PAUSED` 合并，每个 Watch 只留一份。
 
+这四次读取合成一次：`GET /api/watches?following=true` 一次返回上面的并集——最新 100 条（任意状态），
+再加上其中没有的 ACTIVE、PAUSED 和要人处理的 Watch（各最多 100 条），每个 Watch 只出现一次，
+先是最新 100 条，其后依次是 ACTIVE、PAUSED、要人处理的。`following` 只接受 `true`，其他值，
+或与 `?state=`、`?needsAttention=` 同用，一律 400。它和其他读法一样带 ETag，条件请求未变时回 304。
+Web 的 Following 页、Watch 卡片和会话/任务上的关系都读这一条（每次刷新一个请求）；原来的三种读法
+（无参数、`?state=`、`?needsAttention=true`）保持原样，Mac 和 Android 仍用它们。
+
 ---
 
 ## 4. 目标集合：创建时快照

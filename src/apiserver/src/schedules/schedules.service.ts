@@ -463,7 +463,8 @@ export class SchedulesService {
      * A WHEN schedule's condition is handed to its runner on the heartbeat's full reconcile; marking the runner changed
      * after a commit that creates, changes, pauses or ends one brings that reconcile at once (link-heartbeat.ts).
      */
-    @Optional() @Inject(RealtimeService) private readonly realtime?: Pick<RealtimeService, 'markRunnerChanged'>,
+    @Optional() @Inject(RealtimeService) private readonly realtime?: Pick<RealtimeService, 'markRunnerChanged'>
+      & Partial<Pick<RealtimeService, 'publishScheduleCardsChanged'>>,
     /**
      * An ACTIVE WHEN schedule's condition is demand for its workspace's Orbit Cloud runner (docs/condition-triggers-design.md
      * §4.2): a create, a resume or a change that leaves it ACTIVE asks a sleeping one to wake. The hook does nothing with
@@ -497,6 +498,48 @@ export class SchedulesService {
     } catch (error) {
       this.logger.warn(`runner of schedule ${schedule.id} not marked: ${error instanceof Error ? error.message : String(error)}`);
     }
+  }
+
+  /**
+   * After a commit that moved what some sessions' schedule cards read (`GET /sessions/:id/schedule-cards`), tell the
+   * owner's clients which (`schedule_cards.changed`): the sessions named, and every session whose cards or change
+   * records name `scheduleId`, which draw its title, rule and state. Best effort: a read that fails leaves them to the
+   * cards' safety read.
+   */
+  private async announceCards(
+    ownerId: string,
+    scheduleId: string | null | undefined,
+    sessionIds: ReadonlyArray<string | null | undefined>,
+  ): Promise<void> {
+    if (!this.realtime?.publishScheduleCardsChanged) return;
+    try {
+      const [asked, recorded] = scheduleId
+        ? await Promise.all([
+            this.prisma.scheduleChangeRequest.findMany({
+              where: { ownerId, scheduleId, askedBySessionId: { not: null } },
+              select: { askedBySessionId: true },
+              distinct: ['askedBySessionId'],
+            }),
+            this.prisma.scheduleRevision.findMany({
+              where: { scheduleId, sessionId: { not: null } },
+              select: { sessionId: true },
+              distinct: ['sessionId'],
+            }),
+          ])
+        : [[], []];
+      this.realtime.publishScheduleCardsChanged(ownerId, [
+        ...sessionIds,
+        ...asked.map((row) => row.askedBySessionId),
+        ...recorded.map((row) => row.sessionId),
+      ]);
+    } catch (error) {
+      this.logger.warn(`schedule cards of ${scheduleId ?? 'a new card'} not announced: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /** The session an actor writes as, if any. */
+  private static sessionOf(actor: ScheduleActor): string | null {
+    return actor.kind === 'SESSION' ? actor.sessionId : null;
   }
 
   // -------------------------------------------------------------------------------------------------------------
@@ -554,6 +597,8 @@ export class SchedulesService {
       loggedRetry(this.logger, 'schedules.create'),
     );
     if (result.outcome === 'CREATED') await this.markConditionRunner(result.schedule);
+    if (result.outcome === 'CREATED') await this.announceCards(actor.ownerId, result.schedule.id, [SchedulesService.sessionOf(actor)]);
+    if (result.outcome === 'PENDING') await this.announceCards(actor.ownerId, null, [result.request.askedBySessionId]);
     return result;
   }
 
@@ -591,6 +636,9 @@ export class SchedulesService {
     );
     await this.alert(alerts);
     if (result.outcome === 'APPLIED') await this.markConditionRunner(result.schedule);
+    if (result.outcome !== 'UNCHANGED') {
+      await this.announceCards(actor.ownerId, scheduleId, [SchedulesService.sessionOf(actor)]);
+    }
     return intentKept ? { ...result, intentKept } : result;
   }
 
@@ -762,6 +810,7 @@ export class SchedulesService {
       loggedRetry(this.logger, 'schedules.decide'),
     );
     if (answer.outcome === 'ALLOWED') await this.markConditionRunner(answer.schedule);
+    await this.announceCards(actor.ownerId, answer.schedule?.id ?? answer.request.scheduleId, [answer.request.askedBySessionId]);
     return answer;
   }
 
@@ -781,6 +830,7 @@ export class SchedulesService {
       loggedRetry(this.logger, 'schedules.pause'),
     );
     await this.markConditionRunner(paused);
+    await this.announceCards(actor.ownerId, paused.id, [SchedulesService.sessionOf(actor)]);
     return paused;
   }
 
@@ -819,6 +869,7 @@ export class SchedulesService {
       loggedRetry(this.logger, 'schedules.resume'),
     );
     await this.markConditionRunner(resumedSchedule);
+    await this.announceCards(actor.ownerId, resumedSchedule.id, [SchedulesService.sessionOf(actor)]);
     return resumedSchedule;
   }
 
@@ -839,6 +890,7 @@ export class SchedulesService {
       loggedRetry(this.logger, 'schedules.end'),
     );
     await this.markConditionRunner(schedule);
+    await this.announceCards(actor.ownerId, schedule.id, [SchedulesService.sessionOf(actor)]);
     // §8.3: a run ending its own schedule is news, once (an ENDED schedule cannot be ended again); a person's own
     // end is not, they did it.
     if (byRun) {
@@ -864,6 +916,7 @@ export class SchedulesService {
       loggedRetry(this.logger, 'schedules.remove'),
     );
     await this.markConditionRunner(removed);
+    await this.announceCards(actor.ownerId, removed.id, [SchedulesService.sessionOf(actor)]);
     return removed;
   }
 
@@ -928,6 +981,9 @@ export class SchedulesService {
     );
     await this.alert(alerts);
     if (result.outcome === 'APPLIED') await this.markConditionRunner(result.schedule);
+    if (result.outcome !== 'UNCHANGED') {
+      await this.announceCards(actor.ownerId, scheduleId, [SchedulesService.sessionOf(actor)]);
+    }
     return result;
   }
 

@@ -47,7 +47,7 @@
  * finished" off the release cause onto the release module's two questions (releaseWasFailure / releaseFinishedTheWork,
  * each a predicate, a Prisma filter and an SQL fragment), which read the turn outcome and the end reason. Their one
  * terminal value was the status bridge, counted in a section of its own, (f) FAILURE_STATUS_BRIDGE, until removal step
- * R7 (deploy 3, after migration 1433 backfilled the turn outcome) deleted the arm and the section with it.
+ * R7 (deploy 3, after migration 1441 backfilled the turn outcome) deleted the arm and the section with it.
  *
  * Plan step 4.8 split this list by kind. Only (a) and (b) decide from a terminal value, beside named transitions that
  * end with later steps, (c) and (d); (e) names none. A file may sit in more than one section; its allowance is

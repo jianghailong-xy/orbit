@@ -38,7 +38,7 @@ acquisition and claim guards' `PENDING` to `RUNNING` (activity, `SAME`); the end
 read `release_cause` against the failure causes until removal step R4 (design §12.6) restated the three
 clauses, in 1425 itself (not deployed), on the release module's failure question
 (`releaseWasFailureSql('NEW')`: `finished_at`, `end_reason`, `last_turn_outcome`, and the status bridge
-until R7, whose migration 1434 re-creates them without it in deploy 3), with `last_turn_outcome` added to their
+until R7, whose migration 1442 re-creates them without it in deploy 3), with `last_turn_outcome` added to their
 column lists. The unique index is step 4.5's.
 
 Plan step 4.5, release A (migration 1426) built `session_task_execution_claim_idx_finished_at` on
@@ -278,7 +278,7 @@ path is the index (`sessions/task-work-carrier.ts` `sessionCarriesTaskSql`, the 
 | `web/src/components/WatchRelations.tsx` | 278-280, 282-285 | R | SHOW, TURN | MOVE | Pill colour for a watched session by run state, including SUCCEEDED done, FAILED failed, ENDED and INTERRUPTED cancelled. |
 | `web/src/components/WikiChatPanel.tsx` | 78, 1129, 1147, 1151-1152, 1247-1248, 1270, 1430, 1490 | R | ACT, REL, TURN, RETRY | MOVE | Wiki chat: live gates send; terminal feeds stream idle and the ended state unless retry pending; RUNNING offers steer; FAILED marks the failed turn. |
 | `web/src/components/WikiSources.tsx` | 4, 115 | R | SHOW | SAME | Passes WorkspaceView statusLabel to link cards as the state word. |
-| `web/src/components/WorkspaceView.tsx` | 557-559, 563, 565-570, 611, 615, 1141, 1166, 1174, 1176, 1343, 1345, 1383, 1394, 1396, 1404, 1433, 1437, 1792, 1798, 1801, 1809-1810, 1814-1815, 1822, 1839, 1850-1851, 1853, 1878, 1885, 1902, 1919, 1959, 1964, 1983, 1992, 2761, 3118-3119, 3173, 3308, 3357, 3366, 3369, 3372, 4249, 4420, 4440, 4468, 4536, 4542, 4809, 4811, 5022, 5221, 5938, 5942, 6430, 6516, 6551, 6624, 7183, 7191, 7425, 7449, 7476, 7564, 7568, 8095, 8142, 8220-8221, 8293-8294, 8673, 9528, 9556, 9771-9772, 9816, 11180 | R | ACT, TURN, REL, RETRY, LIFE, SHOW | MOVE | The console: row line, glyph, header word, send/resume/new-session choice, ended banner, stop button, slot count, polling and export read run state and capabilities. |
+| `web/src/components/WorkspaceView.tsx` | 557-559, 563, 565-570, 611, 615, 1141, 1166, 1174, 1176, 1343, 1345, 1383, 1394, 1396, 1404, 1441, 1437, 1792, 1798, 1801, 1809-1810, 1814-1815, 1822, 1839, 1850-1851, 1853, 1878, 1885, 1902, 1919, 1959, 1964, 1983, 1992, 2761, 3118-3119, 3173, 3308, 3357, 3366, 3369, 3372, 4249, 4420, 4440, 4468, 4536, 4542, 4809, 4811, 5022, 5221, 5938, 5942, 6430, 6516, 6551, 6624, 7183, 7191, 7425, 7449, 7476, 7564, 7568, 8095, 8142, 8220-8221, 8293-8294, 8673, 9528, 9556, 9771-9772, 9816, 11180 | R | ACT, TURN, REL, RETRY, LIFE, SHOW | MOVE | The console: row line, glyph, header word, send/resume/new-session choice, ended banner, stop button, slot count, polling and export read run state and capabilities. |
 | `web/src/components/help/HelpAsk.tsx` | 42, 372, 374, 378-379, 391 | R | ACT, REL | MOVE | Help chat: polls while live, passes runStatus and runTerminal to the stream, treats PENDING as working. |
 | `web/src/components/settings/WorkspaceSettingsPage.tsx` | 385 | R | ACT | SAME | Worktree rows: busy when runState, runStatus or status equals RUNNING. |
 | `web/src/index.css` | 3089, 15782, 15786, 15789, 15792 | R | SHOW | RENAME | CSS classes named after state values: .tdp-dot.RUNNING, .SUCCEEDED, .FAILED, .AWAITING_INPUT; a comment on the awaiting pill. |

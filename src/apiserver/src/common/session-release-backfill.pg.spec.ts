@@ -1,6 +1,6 @@
 /**
- * DEPLOY 3 ON A DATABASE AT DEPLOY 2'S STATE: 1433 BACKFILLS THE TURN OUTCOME, 1434 DROPS THE TRIGGERS' STATUS BRIDGE,
- * 1435 DROPS release_cause, AND NO STORED ROW CHANGES ITS ANSWER BUT THE TWO NAMED ONES.
+ * DEPLOY 3 ON A DATABASE AT DEPLOY 2'S STATE: 1441 BACKFILLS THE TURN OUTCOME, 1442 DROPS THE TRIGGERS' STATUS BRIDGE,
+ * 1443 DROPS release_cause, AND NO STORED ROW CHANGES ITS ANSWER BUT THE TWO NAMED ONES.
  *
  * docs/session-three-state-design.md §12.6, removal steps R6, R7 and R8 (decision D9). Against PostgreSQL, through the
  * real `prisma migrate deploy`:
@@ -14,7 +14,7 @@
  *       non-work turn ahead of the work turn, a failed import with a message queued during it (in Trash), open
  *       requests to bridged rows with and without a retry armed; the production pre-check
  *       (scripts/session-release-cause-drop-precheck.sql) is run on it and answers what it should
- *   (3) 1433, 1434 and 1435 are applied by prisma: every row's last_turn_outcome is what the fixture's `backfilled`
+ *   (3) 1441, 1442 and 1443 are applied by prisma: every row's last_turn_outcome is what the fixture's `backfilled`
  *       says, the carrying turn and no other got FAILED and the session's error, the failure question (without the
  *       bridge) answers as deploy 2's reading (with it) did before on every row but W5 and A2, the column and its CHECK
  *       are gone, no trigger names a terminal status, and the post-check (scripts/session-release-cause-drop-postcheck.sql)
@@ -51,7 +51,7 @@ const DEPLOY_2_STATE = [
   '1425_ended_triggers_read_release',
 ];
 const DEPLOY_3 = [
-  '1433_session_turn_outcome_backfill', '1434_ended_triggers_drop_status_bridge', '1435_session_release_cause_drop',
+  '1441_session_turn_outcome_backfill', '1442_ended_triggers_drop_status_bridge', '1443_session_release_cause_drop',
 ];
 
 /** Deploy 2's failure question, as 1425 and the release module spelled it: with the status bridge. */
@@ -110,7 +110,7 @@ interface Row {
   label: string;
   shape: ReleaseShape;
   turns: Turn[];
-  /** The index in `turns` of the turn 1433 writes, or null for none. */
+  /** The index in `turns` of the turn 1441 writes, or null for none. */
   carrying: number | null;
   error?: string;
   retryArmed?: boolean;
@@ -125,14 +125,14 @@ function rowsOf(): Row[] {
     label: shape.name, shape, turns: shape.lastTurnOutcome ? [answered(shape.lastTurnOutcome)] : [], carrying: null,
   }));
   const set = (label: string, patch: Partial<Row>) => Object.assign(rows.find((row) => row.label === label)!, patch);
-  // H2: a deploy-1 reaper's drain answered every turn with no outcome: no turn for 1433 to write.
+  // H2: a deploy-1 reaper's drain answered every turn with no outcome: no turn for 1441 to write.
   set('H2', { turns: [answered(), answered(null)], error: 'runner offline', openRequest: true });
   // H4: a deploy-1 refused source leaves the dispatched turn PENDING, behind an `end` turn that is no work turn.
   set('H4', { turns: [answered(), { kind: 'end', status: 'PENDING', outcome: null },
     { kind: 'message', status: 'PENDING', outcome: null }], carrying: 2, error: 'SOURCE_REFUSED: no such ref' });
   // H6: a deploy-1 finalize, the engine failed with nothing but an old turn behind it.
   set('H6', { turns: [answered(null)], error: 'engine crashed' });
-  // W5: a failed import with a message queued during it, in Trash: 1433 writes neither the session nor the turn.
+  // W5: a failed import with a message queued during it, in Trash: 1441 writes neither the session nor the turn.
   set('W5', { turns: [{ kind: 'message', status: 'PENDING', outcome: null }], error: 'transcript holds no conversation' });
   rows.push(
     // A lost runner whose turn is still IN_FLIGHT, with an older work turn PENDING: the IN_FLIGHT one carries it.
@@ -146,7 +146,7 @@ function rowsOf(): Row[] {
   return rows;
 }
 
-test('deploy 3 on a populated database at deploy 2\'s state: 1433, 1434 and 1435 by the real prisma migrate deploy', {
+test('deploy 3 on a populated database at deploy 2\'s state: 1441, 1442 and 1443 by the real prisma migrate deploy', {
   skip, concurrency: 1, timeout: 600_000,
 }, async (t) => {
   const url = URL!;
@@ -280,7 +280,7 @@ test('deploy 3 on a populated database at deploy 2\'s state: 1433, 1434 and 1435
     assert.equal(pre.release_cause_chk_valid, true);
   });
 
-  await t.test('(3) 1433, 1434, 1435: the backfill, the failure question without the bridge, the column gone', async () => {
+  await t.test('(3) 1441, 1442, 1443: the backfill, the failure question without the bridge, the column gone', async () => {
     const turnsBefore = (await sql.query(
       `SELECT "id", "status", "outcome", "error" FROM "conversation_turn" WHERE "session_id" = ANY($1::uuid[])`,
       [[...sessionIds.values()]])).rows as Array<{ id: string; status: string; outcome: string | null; error: string | null }>;
@@ -333,15 +333,15 @@ test('deploy 3 on a populated database at deploy 2\'s state: 1433, 1434 and 1435
     assert.equal(await columnExists(), 0, 'release_cause is gone');
 
     // What main's 1428_open_list_workspace_probes replaced, open_list_bump_owner(), is called by no UPDATE trigger of the
-    // two tables 1433 writes; their Open-list UPDATE triggers are statement-level, so each UPDATE fired one once, not per
-    // row. (conversation_turn_evidence_review_deadline, per row, is AFTER INSERT only: 1433 inserts nothing.)
+    // two tables 1441 writes; their Open-list UPDATE triggers are statement-level, so each UPDATE fired one once, not per
+    // row. (conversation_turn_evidence_review_deadline, per row, is AFTER INSERT only: 1441 inserts nothing.)
     const openList = (await sql.query(
       `SELECT c.relname AS tbl, t.tgname, p.proname, (t.tgtype & 1) = 1 AS per_row
          FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_proc p ON p.oid = t.tgfoid
         WHERE NOT t.tgisinternal AND c.relname IN ('session', 'conversation_turn') AND p.proname LIKE 'open_list%'
           AND (t.tgtype & 16) <> 0
         ORDER BY 1, 2`)).rows as Array<{ tbl: string; tgname: string; proname: string; per_row: boolean }>;
-    console.log(`# open-list UPDATE triggers on the tables 1433 writes: ${JSON.stringify(openList)}`);
+    console.log(`# open-list UPDATE triggers on the tables 1441 writes: ${JSON.stringify(openList)}`);
     assert.ok(openList.some((r) => r.tbl === 'session') && openList.some((r) => r.tbl === 'conversation_turn'));
     for (const r of openList) {
       assert.notEqual(r.proname, 'open_list_bump_owner', `${r.tbl}.${r.tgname}: not the function main's 1428 replaced`);

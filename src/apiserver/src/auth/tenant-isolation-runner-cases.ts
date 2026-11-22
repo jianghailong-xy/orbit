@@ -807,6 +807,11 @@ export const RUNNER_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
     'the session must be one of the runner\'s owner that this runner hosts, else 404 as for an id that names nothing '
     + '(runner-api/runner-subagents.controller.ts:137), and the run is matched by (id, that session) only '
     + '(runner-api/runner-subagents.controller.ts:303); subagent-fallback.pg.spec.ts sends another account\'s session and run',
+  'POST /runner/sessions/:id/subagents/:runId/rating':
+    'the session must be one of the runner\'s owner that this runner hosts, else 404 as for an id that names nothing '
+    + '(runner-api/runner-subagents.controller.ts:213), and the run is matched by (id, that session) only, '
+    + 'on the read and on the write (runner-api/subagent-rating.ts:52, runner-api/subagent-rating.ts:60); subagent-rating.pg.spec.ts sends '
+    + 'another session of the same runner and another account\'s runner, and finds the rating unchanged',
   'POST /runner/subagent-runs/:runId/claim':
     'the run is read by id and refused 404 unless it is a remote run of the runner\'s own account, 403 '
     + 'SUBAGENT_RUN_NOT_TARGET unless this runner is its target_runner_id (runner-api/subagent-remote.ts:403); '
@@ -1663,6 +1668,25 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
   'POST /runner/sessions/:id/approvals body backgroundJobId':
     'the id the machine gave one of its own processes, stored on the approval of the session the path names '
     + '(runner-api.controller.ts:3900)',
+  // A remote SubAgent's runner keeping files under the parent session it does not host (5bc9c25f00): the run it names is
+  // looked up only among the RUNNING runs of the session the path names that belong to the calling runner's account
+  // and were handed to that runner, and the session is then read under the same account (sessionOfRemoteSubagent,
+  // runner-api/subagent-remote.ts:659). Another account's run, or another account's session, is the same 403 as
+  // naming no run. files/file-tools.pg.spec.ts (11) sends a run of another session, a runner it was not handed to and
+  // an ended run.
+  'POST /runner/sessions/:id/files query subagentRunId':
+    'a SubAgent run looked up only among the calling account\'s RUNNING runs of the session the path names that were '
+    + 'handed to this runner (runner-api/subagent-remote.ts:659); any other id, another account\'s run included, is '
+    + 'the 403 of naming none; files/file-tools.pg.spec.ts (11)',
+  'PUT /runner/sessions/:id/files/:fileId/pin query subagentRunId':
+    'the same lookup as the upload\'s subagentRunId (runner-api/subagent-remote.ts:659), then the file is read within '
+    + 'that session; files/file-tools.pg.spec.ts (11)',
+  'DELETE /runner/sessions/:id/files/:fileId/pin query subagentRunId':
+    'the same lookup as the upload\'s subagentRunId (runner-api/subagent-remote.ts:659), then the file is read within '
+    + 'that session; files/file-tools.pg.spec.ts (11)',
+  'POST /runner/sessions/:id/file-bundles query subagentRunId':
+    'the same lookup as the upload\'s subagentRunId (runner-api/subagent-remote.ts:659); the bundle\'s files are read '
+    + 'within that session; files/file-tools.pg.spec.ts (11)',
   'POST /runner/sessions/:id/approvals body subagentRunId':
     'a SubAgent run, looked up only among the runs of the session the path names, whose ownership the door checked '
     + 'first; any other id, another account\'s run included, is 404 (runner-api.controller.ts:5509); '

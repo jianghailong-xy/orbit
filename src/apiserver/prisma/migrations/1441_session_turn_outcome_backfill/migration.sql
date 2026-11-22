@@ -1,5 +1,5 @@
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
--- 1433: the turn outcome of every failure the status alone records (docs/session-three-state-design.md §12.6,
+-- 1441: the turn outcome of every failure the status alone records (docs/session-three-state-design.md §12.6,
 -- removal step R6, decision D9; project 3508bDBDE5xPH43TYuiqP). Deploy 3.
 --
 -- WHY
@@ -9,7 +9,7 @@
 -- because the writers of deploy 1 and earlier (the reaper, the runner's finalize, the refused source, the import)
 -- record a failure in the status alone: their rows say FAILED and carry no FAILED turn outcome (the hand-over shapes
 -- H2, H4, H6 of common/session-release-shapes.fixture.ts, and every such row released before deploy 2). Removal step
--- R7 drops the bridge (1434 and the release module); this file first writes, for each of those rows, the turn
+-- R7 drops the bridge (1442 and the release module); this file first writes, for each of those rows, the turn
 -- outcome the bridge was answering with, so that no stored row changes its answer.
 --
 -- WHAT IT WRITES
@@ -67,7 +67,7 @@
 -- WHICH RELEASE IT MAY SHIP IN
 -- ----------------------------
 -- Deploy 3 only, once deploy 2 is live on every server: a deploy-1 server would go on releasing failures without a
--- turn outcome after this file ran. 1434 (the bridge leaves the triggers) and the release module without the bridge
+-- turn outcome after this file ran. 1442 (the bridge leaves the triggers) and the release module without the bridge
 -- ride the same deploy, after it.
 --
 -- LOCKS, SIZE
@@ -80,9 +80,10 @@
 --
 -- NUMBERING, RE-RUNNABILITY
 -- -------------------------
--- 1433: the next free number above 1432 (main, project/*, pushed orbit/* and probe/* scanned 2026-11-22: 1427 three
--- times, 1428 on main, 1432 on probe/claim-index-release-b-1432). Written as 1428, renumbered after main took 1428.
--- Not a multiple of 10. Can run twice: a second run finds no row of either shape.
+-- 1441: the next free number above everything on main, project/*, pushed orbit/* and probe/* (scanned 2026-11-22:
+-- 1429 on main, 1430 and 1432 on other lines, 1438 and 1439 on project/350KNz584mV4UTJVP26oS; 1440 is a multiple of
+-- 10). Written as 1428, then 1433, renumbered each time another line took the numbers below it.
+-- Can run twice: a second run finds no row of either shape.
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
 
 DO $$

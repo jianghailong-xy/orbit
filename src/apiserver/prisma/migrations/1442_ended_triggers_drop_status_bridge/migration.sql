@@ -1,6 +1,6 @@
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
--- 1434: the three "ended" triggers lose the status bridge (docs/session-three-state-design.md §12.6, removal step
--- R7, decision D9; project 3508bDBDE5xPH43TYuiqP). Deploy 3, after 1433.
+-- 1442: the three "ended" triggers lose the status bridge (docs/session-three-state-design.md §12.6, removal step
+-- R7, decision D9; project 3508bDBDE5xPH43TYuiqP). Deploy 3, after 1441.
 --
 -- WHAT IT CHANGES
 -- ---------------
@@ -23,7 +23,7 @@
 --
 -- WHERE THE ANSWER IS THE OLD ONE
 -- -------------------------------
--- The bridge answered yes only for a row released FAILED with no end reason and no FAILED turn outcome. 1433, in the
+-- The bridge answered yes only for a row released FAILED with no end reason and no FAILED turn outcome. 1441, in the
 -- same deploy and before this file, wrote last_turn_outcome = 'FAILED' on every such row that is not in Trash, so
 -- for every stored row outside Trash each clause answers what it answered before. A trashed row fires both before
 -- and after through its deleted_at branch, so the arm never decided for one. Rows written later: every writer of
@@ -33,8 +33,8 @@
 --
 -- WHICH RELEASE IT MAY SHIP IN
 -- ----------------------------
--- Deploy 3, with 1433 before it and the release module without the bridge. Rolling the code back to deploy 2 after
--- it is safe: deploy 2's readers still carry the arm, which reads nothing this file or 1433 changed.
+-- Deploy 3, with 1441 before it and the release module without the bridge. Rolling the code back to deploy 2 after
+-- it is safe: deploy 2's readers still carry the arm, which reads nothing this file or 1441 changed.
 --
 -- LOCKS
 -- -----
@@ -45,8 +45,8 @@
 --
 -- NUMBERING, RE-RUNNABILITY
 -- -------------------------
--- 1434: after 1433 (main, project/*, pushed orbit/* and probe/* scanned 2026-11-22; written as 1429). Not a
--- multiple of 10. Can run twice:
+-- 1442: after 1441 (main, project/*, pushed orbit/* and probe/* scanned 2026-11-22; written as 1429, then 1434).
+-- Not a multiple of 10. Can run twice:
 -- CREATE OR REPLACE TRIGGER.
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
 

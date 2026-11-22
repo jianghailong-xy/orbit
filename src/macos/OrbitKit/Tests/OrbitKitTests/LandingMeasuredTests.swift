@@ -184,7 +184,10 @@ final class LandingMeasuredTests: XCTestCase {
          "landingCheckExemptReason":"Only moves cron entries; the landing check needs a database this task cannot reach.",
          "landingCheckExemptBySessionId":"s1","landingCheckExemptOwnerSetAt":null}
         """)
-        let exemption = try XCTUnwrap(TaskLandingCheckExemption.of(task, markedAt: "2026-11-20T11:40:00.000Z", now: now))
+        let record = ProjectSettingChange(id: "c2", taskId: "t1", field: "TASK_LANDING_CHECK_EXEMPT", origin: "COORDINATOR",
+                                          oldValue: SettingChangeValue(exempt: false), newValue: SettingChangeValue(exempt: true),
+                                          createdAt: "2026-11-20T11:40:00.000Z")
+        let exemption = try XCTUnwrap(TaskLandingCheckExemption.of(task, marked: record, now: now))
         XCTAssertEqual(exemption.originLabel, "Coordinator")
         XCTAssertEqual(exemption.when, "marked 20m ago")
         XCTAssertTrue(exemption.reason.hasPrefix("Only moves cron entries"))

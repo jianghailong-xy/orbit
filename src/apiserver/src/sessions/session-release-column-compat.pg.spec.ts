@@ -1,9 +1,9 @@
 /**
  * THE COLUMN `release_cause` AND ITS CHECK ARE GONE AFTER DEPLOY 3, AND THE SERVER OF DEPLOY 2 STILL RUNS WITHOUT THEM.
  *
- * Design §12.6, removal steps R5 and R8: the field left the Prisma model in deploy 2 (R5), and migration 1435 drops the
+ * Design §12.6, removal steps R5 and R8: the field left the Prisma model in deploy 2 (R5), and migration 1443 drops the
  * column and `session_release_cause_chk` in deploy 3 (R8), the last migration of the removal. Dropping a column is
- * irreversible, so a rollback past 1435 has to be a rollback to deploy 2's code, which never reads or writes the
+ * irreversible, so a rollback past 1443 has to be a rollback to deploy 2's code, which never reads or writes the
  * column. This is the only spec that names the column; it shows, on a database every migration has been applied to:
  *
  *   (1) information_schema lists no session.release_cause, and pg_constraint no constraint naming it
@@ -11,7 +11,7 @@
  *       finalize, the reaper, the end of a queued session, the failed import, the revive (deploy 2 and deploy 3 run the
  *       same writers; deploy 3 changed only how the failure question reads)
  *   (3) a server of deploy 2 boots on the database deploy 3 left: its `prisma migrate deploy`, over deploy 2's
- *       migrations (this tree's without 1433, 1434 and 1435), finds nothing to apply and exits 0
+ *       migrations (this tree's without 1441, 1442 and 1443), finds nothing to apply and exits 0
  *   (4) no trigger, function, index or view names the column
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/sessions/session-release-column-compat.pg.spec.ts
@@ -137,7 +137,7 @@ async function session(db: PrismaClient, w: World, data: Record<string, unknown>
 
 /** Deploy 3's migrations, which deploy 2 does not have. */
 const DEPLOY_3_MIGRATIONS = [
-  '1433_session_turn_outcome_backfill', '1434_ended_triggers_drop_status_bridge', '1435_session_release_cause_drop',
+  '1441_session_turn_outcome_backfill', '1442_ended_triggers_drop_status_bridge', '1443_session_release_cause_drop',
 ];
 
 test('release_cause and session_release_cause_chk are gone; the writers, and deploy 2\'s boot, run without them', {

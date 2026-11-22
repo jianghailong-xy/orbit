@@ -1,5 +1,5 @@
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
--- 1435: session.release_cause and its CHECK go (docs/session-three-state-design.md §12.6, removal step R8, decision
+-- 1443: session.release_cause and its CHECK go (docs/session-three-state-design.md §12.6, removal step R8, decision
 -- D9; project 3508bDBDE5xPH43TYuiqP). Deploy 3, the last migration of the removal.
 --
 -- WHAT IT CHANGES
@@ -11,7 +11,7 @@
 --
 -- WHAT DEPENDS ON THE COLUMN
 -- --------------------------
--- On a database migrated to 1434, pg_depend lists exactly the CHECK on session.release_cause (two rows: the
+-- On a database migrated to 1442, pg_depend lists exactly the CHECK on session.release_cause (two rows: the
 -- constraint's own reference and its automatic one): 1401's second clause and 1406 were removed before they were
 -- deployed (removal step R1), and the three ended-triggers stopped reading the column in 1425 (R4). No function
 -- body, trigger, index or view names it (sessions/session-release-column-compat.pg.spec.ts). The DO block below
@@ -40,8 +40,8 @@
 --
 -- NUMBERING, RE-RUNNABILITY
 -- -------------------------
--- 1435: after 1434 (main, project/*, pushed orbit/* and probe/* scanned 2026-11-22; written as 1431), the last of
--- deploy 3 and of the removal. Can run
+-- 1443: after 1442 (main, project/*, pushed orbit/* and probe/* scanned 2026-11-22; written as 1431, then 1435), the
+-- last of deploy 3 and of the removal. Can run
 -- twice: IF EXISTS on both, and the dependency check reads nothing once the column is gone.
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
 

@@ -59,8 +59,16 @@ current coordinator is not completed. The handoff keeps the pick (migration 1411
 `successor` on `coordinatorHandoff` and on every `CoordinatorHandoffView`, so the failure state can show
 what was picked.
 
-The usual path when the current model is broken: **Hand over** revives the coordinator for its note, the note
-turn fails, and the failure offers **Hand over without a note** with the model picker.
+When the current model is broken, **Hand over** revives the coordinator for its note, and the note turn never
+reaches the engine (it is never delivered: the model cannot even start). This conversation will not write a note
+however often it is asked, so:
+
+- with a successor picked, the handover goes on **without a note**, on that successor, by itself;
+- with none, the handoff is `FAILED` with `COORDINATOR_CANT_RUN` ("The handoff note wasn't written: the model of
+  this coordinator could not start. Pick another model and hand over without a note."), and the failure's picker
+  and **Hand over without a note** are the way out.
+
+A note turn the engine did take and then failed is the ordinary `TURN_FAILED`, where **Try again** may help.
 
 ## Endpoints
 
@@ -91,7 +99,7 @@ the outgoing session, and for the successor once there is one.
 |---|---|
 | `state` | `WRITING` · `HANDING_OVER` · `FAILED` · `COMPLETED` (a cancelled handoff shows as `null`) |
 | `startedAt` | when the current note turn was asked for; the "Writing the handoff note 0:24" timer counts from it |
-| `failureCode` | `TURN_FAILED` · `TURN_STOPPED` · `TIMED_OUT` · `EMPTY_NOTE` · `REPLACE_FAILED`, or null |
+| `failureCode` | `TURN_FAILED` · `TURN_STOPPED` · `TIMED_OUT` · `EMPTY_NOTE` · `REPLACE_FAILED` · `COORDINATOR_CANT_RUN`, or null |
 | `failureReason` | the whole sentence, e.g. "The handoff note wasn't written: the turn failed." |
 | `handedOverToSessionId` | the successor once `COMPLETED` ("Handed over to a new coordinator. Open it") |
 | `successor` | `{ engine, provider, model }` the owner named for the successor, or null (it keeps this coordinator's) |
