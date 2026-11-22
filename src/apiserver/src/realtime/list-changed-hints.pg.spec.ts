@@ -159,6 +159,32 @@ test('a/e: a bare SQL write reaches a declared stream as sessions.list_changed w
   assert.equal(hintsIn(undeclared.received).length, 0, 'an undeclared stream received sessions.list_changed');
 });
 
+test('D1: a write to a LANDING-only source sends no hint, a write to a drawn source still does', { skip }, async (t) => {
+  const f = await fixture(t);
+  const declared = open(f, t, 'list_changed');
+  assert.ok(await until(() => hintsIn(declared.received).length === 1, 2_000), 'a new stream was not told the current version');
+  const project = await f.db.project.create({ data: { ownerId: f.ownerId, title: 'd1 project' } });
+  await sleep(1_500);
+  const before = await f.db.$queryRawUnsafe<Array<{ epoch: string }>>(
+    `SELECT COALESCE(sum(epoch),0)::text AS epoch FROM open_list_epoch WHERE owner_id = $1::uuid AND split_part(source,'#',1) = 'codebase'`, f.ownerId);
+  // A project_codebase insert bumps the 'codebase' counter (one of the five).
+  await f.db.projectCodebase.create({
+    data: {
+      ownerId: f.ownerId, projectId: project.id, canonicalRepoUrl: `https://github.com/example/d1-${project.id}`,
+      upstreamRef: 'refs/heads/main', integrationRef: 'refs/heads/main', refAuthority: 'REMOTE',
+    },
+  });
+  const after = await f.db.$queryRawUnsafe<Array<{ epoch: string }>>(
+    `SELECT COALESCE(sum(epoch),0)::text AS epoch FROM open_list_epoch WHERE owner_id = $1::uuid AND split_part(source,'#',1) = 'codebase'`, f.ownerId);
+  assert.notEqual(after[0].epoch, before[0].epoch, 'the write did not move the codebase counter (the case proves nothing)');
+  const told = hintsIn(declared.received).length;
+  await sleep(2_500);
+  assert.equal(hintsIn(declared.received).length, told, 'a write to a LANDING-only source sent a hint');
+
+  await f.db.$executeRawUnsafe(`UPDATE session SET title = 'drawn' WHERE id = $1::uuid`, f.sessionId);
+  assert.ok(await until(() => hintsIn(declared.received).length === told + 1, 2_000), 'a drawn write sent no hint');
+});
+
 test('i: a write before a new stream\'s first tick is not lost in a baseline', { skip }, async (t) => {
   const f = await fixture(t);
   const declared = open(f, t, 'list_changed');

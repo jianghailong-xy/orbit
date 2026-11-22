@@ -11,6 +11,13 @@ export const LIST_CHANGED_COUNTER_EVERY_MS = 1_000;
 /** How often the whole version is read for every watched account, for what moves with the clock alone. */
 export const LIST_CHANGED_CLOCK_EVERY_MS = 15_000;
 
+/**
+ * Counter sources only a LANDING row's summary reads, and a LANDING row is in no flat list
+ * (sessions.service.ts, OPEN_LIST_OVERLAY_SOURCES; docs/list-freshness-scope-hints.md §5.4 D1).
+ * A write to one moves the counters and the list version, but sends no hint.
+ */
+const LANDING_ONLY_SOURCES = ['promotion', 'integration_job', 'project_open_item', 'merge_receipt', 'codebase'];
+
 /** One stream that declared `hints=list_changed`, and the version it was last told. */
 interface Stream {
   send: (event: ControlEvent) => void;
@@ -120,6 +127,7 @@ export class OpenListHints {
         SELECT owner_id::text AS owner_id, sum(epoch)::text AS total
           FROM open_list_epoch
          WHERE owner_id = ANY(${ids}::uuid[])
+           AND split_part(source, '#', 1) <> ALL(${LANDING_ONLY_SOURCES}::text[])
          GROUP BY owner_id`);
       const sums = new Map(rows.map((row) => [row.owner_id, row.total]));
       const now = Date.now();
