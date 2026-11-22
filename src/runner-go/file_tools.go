@@ -535,6 +535,11 @@ func uploadPath(t *Transport, tool fileToolContext, path, taskID, label, as stri
 // reaches that directory and file_upload does not.
 func newFileUploadScope(sessionID string) localFileScope {
 	dirs := artifactRequestRoots(sessionID)
+	// A remote SubAgent runs in a worktree of its own under Orbit's directory (addRemoteSubagentTree), which is its
+	// checkout as a session's worktree is the session's. On any other machine nothing stands there.
+	if runID := strings.TrimSpace(os.Getenv(envSubagentRunID)); validatePathSegmentID(runID) == nil {
+		dirs = append(dirs, filepath.Join(remoteSubagentDir(runID), "tree"))
+	}
 	cwd, err := os.Getwd()
 	if err != nil || hasOwnWorktree(sessionID) || !usableAsARoot(cwd) {
 		return newLocalFileScope(dirs)

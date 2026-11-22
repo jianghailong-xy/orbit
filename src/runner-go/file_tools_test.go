@@ -40,15 +40,15 @@ type fakeFile struct {
 // with a UUID id and a public id beside it, and the others speaking public ids. A route it is told not to have answers
 // what Nest answers for a route it does not have.
 type fakeFileServer struct {
-	t      *testing.T
-	mu     sync.Mutex
-	files  map[string]*fakeFile
-	next   int
-	calls  []string
+	t     *testing.T
+	mu    sync.Mutex
+	files map[string]*fakeFile
+	next  int
+	calls []string
 	// queries is each call's query string, beside calls.
 	queries []string
 	fields  []map[string]string
-	bundle map[string]interface{}
+	bundle  map[string]interface{}
 	// refuse is what the server says of a file it finds a credential in, by the file's name.
 	refuse map[string]string
 	// Names of file parts as busboy would read them: the raw Content-Disposition.
@@ -410,6 +410,31 @@ func TestFileUploadFromASubAgentNamesItsRun(t *testing.T) {
 		if query != "subagentRunId=run-1" {
 			t.Errorf("%s came with query %q, want the run named", api.calls[i], query)
 		}
+	}
+}
+
+// A remote SubAgent's checkout is a worktree under Orbit's own directory (addRemoteSubagentTree): it may upload from
+// that one, and from no other run's.
+func TestFileUploadFromARemoteSubAgentReadsItsOwnWorktree(t *testing.T) {
+	api := newFakeFileServer(t)
+	s := api.mcp(t)
+	tree := filepath.Join(remoteSubagentDir("run-1"), "tree")
+	shot := writeTestFile(t, filepath.Join(tree, "shots", "ios.png"), "png")
+	other := writeTestFile(t, filepath.Join(remoteSubagentDir("run-2"), "tree", "ios.png"), "png")
+	chdirForTest(t, tree)
+
+	if text := fileToolText(t, s, "file_upload", map[string]interface{}{"path": shot}, true); !strings.Contains(text, localFileInOrbitsDirectory) {
+		t.Fatalf("with no SubAgent run, the upload answered %s; want it refused as Orbit's own directory", text)
+	}
+	t.Setenv(envSubagentRunID, "run-1")
+	if got := fileResult(t, s, "file_upload", map[string]interface{}{"path": shot}); got.Name != "ios.png" {
+		t.Fatalf("the upload from the run's own worktree = %+v", got)
+	}
+	if text := fileToolText(t, s, "file_upload", map[string]interface{}{"path": other}, true); !strings.Contains(text, localFileInOrbitsDirectory) {
+		t.Fatalf("another run's worktree answered %s; want it refused", text)
+	}
+	if len(api.calls) != 1 {
+		t.Fatalf("calls = %v, want the one upload", api.calls)
 	}
 }
 
