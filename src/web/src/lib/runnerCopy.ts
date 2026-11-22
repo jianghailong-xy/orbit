@@ -582,6 +582,10 @@ export function agentFixSignInAbove(engine: string): string {
 export function agentFixSignInBelow(engine: string): string {
   return ` Sign in to ${engine} below to use this.`;
 }
+/** The same, after a signed-out reason in a transcript, which has no engine list of its own. */
+export function agentFixSignInOnMachinePage(engine: string): string {
+  return ` Sign in to ${engine} on the machine page to use this.`;
+}
 export const AGENT_FIX_FAILED = 'Couldn’t start the agent';
 
 /** The card's second action, beside Update Engines Now; `engine` is the CLI's own name. */

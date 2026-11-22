@@ -425,9 +425,11 @@ final class RunnerPageCopyParityTests: XCTestCase {
         ("attentionDismissUntilNextRelease",
          RunnerPageCopy.attentionDismissUntilNextRelease(engine: "${engine}")),
         ("agentFixFixing", RunnerPageCopy.agentFixFixing(workspace: "${workspace}")),
+        ("agentFixFixed", RunnerPageCopy.agentFixFixed(workspace: "${workspace}")),
         ("agentFixStartsIn", RunnerPageCopy.agentFixStartsIn(workspace: "${workspace}", engine: "${engine}")),
         ("agentFixSignInAbove", RunnerPageCopy.agentFixSignInAbove(engine: "${engine}")),
         ("agentFixSignInBelow", RunnerPageCopy.agentFixSignInBelow(engine: "${engine}")),
+        ("agentFixSignInOnMachinePage", RunnerPageCopy.agentFixSignInOnMachinePage(engine: "${engine}")),
     ]
 
     // MARK: the words
