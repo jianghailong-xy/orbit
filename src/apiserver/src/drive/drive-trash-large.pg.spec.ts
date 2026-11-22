@@ -1,5 +1,6 @@
 /**
- * A folder of 100,000 entries to Trash, back, and deleted for good (§1.4, §3.3, §3.5), over a real
+ * A folder of 100,000 entries to Trash, back, and deleted for good (docs/orbit-files-drive-technical-design.md
+ * §1.4, §3.3, §3.5), over a real
  * PostgreSQL that `scripts/run-pg-spec.sh` migrates from empty, through the owner's routes on the real controller:
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/drive/drive-trash-large.pg.spec.ts
@@ -14,7 +15,8 @@
  *       group, or by the drive's timer (finishStoppedTrash), each lifting the group's mark.
  *   (4–5) Delete for good and Empty Trash remove a tree of the same size, including its versions and chunks, with each
  *       transaction bounded and PostgreSQL's own DELETE triggers counting the rows it actually removed.
- *   (6) a bound after a committed deletion batch leaves the group available for the same request to finish.
+ *   (6) a bound after a committed deletion batch leaves the group available for the same request to finish;
+ *   (7) groups affected by a nested deletion are removed or recounted, and Empty Trash removes standalone versions.
  *
  * Found by the 5 GiB walk: one recursive statement marked the whole subtree and was cancelled at 10 s. Not destructive:
  * every row belongs to users this run creates.
@@ -61,7 +63,7 @@ interface SeenTransaction {
   accountLock?: boolean;
 }
 
-test('Orbit Files drive: a folder of 100,000 entries to Trash in one group and back, every transaction bounded', {
+test('Orbit Files drive: bounded Trash operations on folders of 100,000 entries', {
   skip: !URL, concurrency: 1, timeout: 1_200_000,
 }, async (t) => {
   const url = URL!;
@@ -457,5 +459,42 @@ test('Orbit Files drive: a folder of 100,000 entries to Trash in one group and b
     const again = await call(account, 'DELETE', route);
     assert.equal(again.status, 200, await again.clone().text());
     assert.deepEqual(await purgeCounts(account), { entries: 0, versions: 0, chunks: 0, groups: 0 });
+  });
+
+  await t.test('(7) purging a folder tidies nested groups and Empty Trash removes standalone replaced versions', async () => {
+    const account = await accountOf('purge-mixed');
+    const folder = await drive.createFolder(account, { name: 'nested-older-trash' });
+    const inner = await drive.createFile(account, { parentId: folder.id, name: 'inside.txt' });
+    const outside = await drive.createFile(account, { name: 'outside.txt' });
+    const live = await drive.createFile(account, { name: 'live.txt' });
+    const overwrite = (id: string, baseVersionId: string) => drive.commit(account, {
+      commitId: randomUUID(), entryId: id, mode: 'OVERWRITE', baseVersionId, chunks: [], writer: { kind: 'OWNER' },
+    });
+    const replacedInside = await overwrite(inner.id, inner.currentVersionId!);
+    const replacedLive = await overwrite(live.id, live.currentVersionId!);
+    assert.ok(replacedInside.trashGroupId && replacedLive.trashGroupId);
+    const burst = { burstKey: randomUUID() };
+    const older = await drive.moveToTrash(account, inner.id, burst);
+    assert.deepEqual(await drive.moveToTrash(account, outside.id, burst), older);
+    const addedLater = await drive.moveToTrash(account, folder.id);
+
+    const reply = await call(account, 'DELETE', `/trash/groups/${addedLater.trashGroupId}`);
+    assert.equal(reply.status, 200, await reply.clone().text());
+    const groups = await db.driveTrashGroup.findMany({ where: { ownerId: account }, select: { id: true, itemCount: true } });
+    assert.deepEqual(new Map(groups.map(({ id, itemCount }) => [id, itemCount])), new Map([
+      [older.trashGroupId, 1], [replacedLive.trashGroupId, 1],
+    ]));
+    assert.equal(await db.driveEntry.count({ where: { ownerId: account, id: outside.id, trashGroupId: older.trashGroupId } }), 1);
+
+    const replacedAgain = await overwrite(live.id, replacedLive.versionId);
+    const versionDeleted = await call(account, 'DELETE', `/trash/groups/${replacedLive.trashGroupId}`);
+    assert.equal(versionDeleted.status, 200, await versionDeleted.clone().text());
+    assert.equal(await db.driveTrashGroup.count({ where: { id: replacedLive.trashGroupId } }), 0);
+    assert.equal(await db.driveVersion.count({ where: { id: live.currentVersionId! } }), 0);
+
+    const emptied = await call(account, 'DELETE', '/trash');
+    assert.equal(emptied.status, 200, await emptied.clone().text());
+    assert.deepEqual(await purgeCounts(account), { entries: 1, versions: 1, chunks: 0, groups: 0 });
+    assert.equal(await db.driveVersion.count({ where: { ownerId: account, id: replacedAgain.versionId, entryId: live.id } }), 1);
   });
 });
