@@ -109,8 +109,24 @@ targets:
 
 # Explicit shared scheme so `xcodebuild -scheme Orbit` resolves the SwiftPM dependencies
 # (OrbitKit + swift-markdown) reliably — `-target` can miss package resolution.
+  ModeProbe:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - ModeProbe/ModeProbeTests.swift
+    dependencies:
+      - target: Orbit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.orbitd.modeprobe
+        GENERATE_INFOPLIST_FILE: YES
+
 schemes:
   Orbit:
     build:
       targets:
         Orbit: all
+        ModeProbe: [test]
+    test:
+      targets:
+        - ModeProbe
