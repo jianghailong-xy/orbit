@@ -173,3 +173,7 @@ export function declaresOwnerRequests(hints: string | string[] | undefined): boo
 export function declaresDriveChanged(hints: string | string[] | undefined): boolean {
   return declares(hints, 'drive_changed');
 }
+/** Whether a `GET /api/events?hints=` value declares `schedule_cards`. */
+export function declaresScheduleCards(hints: string | string[] | undefined): boolean {
+  return declares(hints, 'schedule_cards');
+}

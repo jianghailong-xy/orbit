@@ -1139,9 +1139,9 @@ private struct TaskDetailContent: View {
     @State private var editingAcceptance = false
     @State private var following = false
     @State private var importingInput = false
-    /// When the coordinator marked this task exempt from the landing check, off the project's change
-    /// record (board 04 b); nil until read, and for a mark the owner made.
-    @State private var exemptionMarkedAt: String?
+    /// The project's record of this task's exemption from the landing check: who marked it and when
+    /// (board 04 b); nil until read.
+    @State private var exemptionMarked: ProjectSettingChange?
     @State private var inputToRemove: TaskInput?
     @State private var prerequisiteToRemove: TaskDependencyListRow?
     /// The reader's Graph/List choice; nil follows the component (`TaskDetailLogic.prefersGraph`).
@@ -1483,7 +1483,7 @@ private struct TaskDetailContent: View {
             if let latest = tasks.evidence.last { evidenceSection(task, latest) }
         case .landing:
             let landing = TaskLandingLogic.status(task.integration, taskStatus: task.status.rawValue)
-            let exemption = TaskLandingCheckExemption.of(task, markedAt: exemptionMarkedAt)
+            let exemption = TaskLandingCheckExemption.of(task, marked: exemptionMarked)
             if landing != nil || exemption != nil {
                 landingSection(landing, exemption: exemption, task: task)
             }
@@ -1668,10 +1668,9 @@ private struct TaskDetailContent: View {
                 }
             }
         }
-        .task(id: "\(task.id):\(task.landingCheckExemptBySessionId ?? "")") {
-            guard task.landingCheckExempt == true, task.landingCheckExemptBySessionId != nil,
-                  let projectID = task.projectId else { exemptionMarkedAt = nil; return }
-            exemptionMarkedAt = await tasks.exemptionMarkedAt(projectID: projectID, taskID: task.id)
+        .task(id: "\(task.id):\(task.landingCheckExempt == true):\(task.landingCheckExemptReason ?? ""):\(task.landingCheckExemptBySessionId ?? ""):\(task.landingCheckExemptOwnerSetAt ?? "")") {
+            guard task.landingCheckExempt == true, let projectID = task.projectId else { exemptionMarked = nil; return }
+            exemptionMarked = await tasks.exemptionMarked(projectID: projectID, taskID: task.id)
         }
     }
 

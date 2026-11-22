@@ -8,7 +8,7 @@
 [`mocks/model-routing-ios.png`](./mocks/model-routing-ios.png)（iOS / macOS）。界面文案以同目录的 `.html` 源文件为准。
 
 > **用词**：本文的 **Agent** 指线上叫 Agent 的 `workspace` 行（契约 §2 Legacy agent alias），不是契约 §3.1 的 `agent` 表。
-> 这个功能在界面上叫 **Smart model selection**，在代码和契约里叫 **Model Routing（路由）**；**档位**指 S / M / L / XL。
+> 这个功能在界面上叫 **Route by tier**（2026-11-22 前叫 Smart model selection，在 设置 → Providers → Model routing），在代码和契约里叫 **Model Routing（路由）**；**档位**指 S / M / L / XL。
 
 > **Phase 2 design amendment (2026-11-08, pending owner confirmation):** §3.5 and §10.3 define auto-hint and Optimize For for project `34tXXUHZEcGeWeB0hp5YU`. They supersede the phase-1 missing-hint rules in §0, §1 and §3.2 only when the new policy is enabled. Other sections describe the phase-1 baseline. This amendment changes documentation only.
 
@@ -544,6 +544,11 @@ model 一律取**实际运行**的（会话上首次 claim 之后的值）：生
 不因 `since` / `agentId` 截断而重新编号；第一次运行没有决策的任务只计运行级指标。
 验证 FAIL 用 verifier 的当前 `verdict` 和 `updated_at`，SEND_BACK 用 `decided_at`，归到判定时最近创建的工作运行；
 同一工作运行的多个失败信号只计一次。任务当前状态与完成判据从 task 读取，不把 SUCCEEDED 会话当作 DONE 任务。
+
+**Model tiers 的 Quality 列**（`docs/subagent-design.md` §7.1）也读这套一次通过口径，但不经过本报告接口：
+`taskFirstPassByModel` 按首次运行的 provider × engine × model 分组，只算近 90 天内首次运行的 DONE 任务，分母是完成数；
+额度和满载失败的运行（`limitFailure`，与上表 `averageFailureCount` 排除的是同一批）整条不计，既不算失败也不算一次运行。
+它只用于显示，路由不读。
 
 ### 10.2 开启节奏
 

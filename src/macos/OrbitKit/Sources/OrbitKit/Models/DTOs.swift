@@ -349,6 +349,9 @@ public struct RunnerAgentFix: Codable, Equatable, Sendable {
     public let engineName: String?
     public let blocked: Blocked?
     public let fixing: [RunnerAgentFixing]?
+    /// The latest session each warning was handed to once it was over: a transcript's history row
+    /// shows what was done with it instead of offering a second agent.
+    public let handled: [RunnerAgentFixHandled]?
 
     /// `code` is `offline`, `noWorkspace` or `engineSignedOut`.
     public struct Blocked: Codable, Equatable, Sendable {
@@ -362,13 +365,34 @@ public struct RunnerAgentFix: Codable, Equatable, Sendable {
     }
 
     public init(workspaceId: String?, workspaceName: String?, engine: String?, engineName: String?,
-                blocked: Blocked?, fixing: [RunnerAgentFixing]?) {
+                blocked: Blocked?, fixing: [RunnerAgentFixing]?, handled: [RunnerAgentFixHandled]? = nil) {
         self.workspaceId = workspaceId
         self.workspaceName = workspaceName
         self.engine = engine
         self.engineName = engineName
         self.blocked = blocked
         self.fixing = fixing
+        self.handled = handled
+    }
+}
+
+/// An agent a warning was handed to once its session is over (@orbit/shared `RunnerAgentFixHandled`):
+/// `kind` is a `RunnerAttentionFixKind`'s raw value, `status` how that session ended.
+public struct RunnerAgentFixHandled: Codable, Equatable, Sendable {
+    public let kind: String
+    public let engine: String?
+    public let sessionId: String
+    public let workspaceId: String
+    public let workspaceName: String
+    public let status: String
+
+    public init(kind: String, engine: String?, sessionId: String, workspaceId: String, workspaceName: String, status: String) {
+        self.kind = kind
+        self.engine = engine
+        self.sessionId = sessionId
+        self.workspaceId = workspaceId
+        self.workspaceName = workspaceName
+        self.status = status
     }
 }
 
@@ -398,10 +422,12 @@ public enum RunnerAttentionFixKind: String, Codable, Equatable, Sendable {
     case installFailed
     /// An Update Engines Now report with a failed line: the machine's, whichever engines failed.
     case engineUpdateFailed
+    /// The engine's own prerequisite a session's transcript caught: Codex without bubblewrap on PATH.
+    case sandboxMissing
 }
 
-/// POST /runners/:id/attention/:kind/fix body: `engine` for `engineNotUpdating` and `installFailed`,
-/// `latest` (the newest runner release the client knows of) for `cannotSelfUpdate`. Nil fields are left out.
+/// POST /runners/:id/attention/:kind/fix body: `engine` for `engineNotUpdating`, `installFailed` and
+/// `sandboxMissing`, `latest` (the newest runner release the client knows of) for `cannotSelfUpdate`. Nil fields are left out.
 public struct RunnerAttentionFixRequest: Codable, Equatable, Sendable {
     public let engine: String?
     public let latest: String?

@@ -71,6 +71,8 @@ export function controlTypeFor(t: RunEventType): ControlEventType | null {
       return ControlEventType.TRANSLATION_STATUS_CHANGED;
     case RunEventType.DRIVE_CHANGED:
       return ControlEventType.DRIVE_CHANGED;
+    case RunEventType.SCHEDULE_CARDS_CHANGED:
+      return ControlEventType.SCHEDULE_CARDS_CHANGED;
     default:
       return null;
   }
@@ -95,7 +97,8 @@ export function isUserScopedType(t: ControlEventType): boolean {
     t === ControlEventType.WIKI_CHANGED ||
     t === ControlEventType.TERMINALS_CHANGED ||
     t === ControlEventType.TRANSLATION_STATUS_CHANGED ||
-    t === ControlEventType.DRIVE_CHANGED
+    t === ControlEventType.DRIVE_CHANGED ||
+    t === ControlEventType.SCHEDULE_CARDS_CHANGED
   );
 }
 

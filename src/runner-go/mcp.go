@@ -484,6 +484,12 @@ func (s *mcpServer) runTool(name string, args map[string]interface{}) map[string
 		return s.handOffOwnerWait(name, args)
 	}
 	switch name {
+	case "subagent_rate":
+		raw, err := runSubagentRate(s.t, s.sessionID, args)
+		if err != nil {
+			return toolResult("subagent_rate: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
 	case "task_list":
 		limit, err := getBoundedOptionalNumber(args, "limit", maxTaskListLimit)
 		if err != nil {

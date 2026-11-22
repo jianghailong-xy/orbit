@@ -320,6 +320,8 @@ internal class EngineReading(events: List<RunEvent>) {
         stderrRows.forEach { row -> rows[row.event.seq] = row.event.row("error") { put("text", row.message) } }
         diagnosticRows.forEach { d -> rows[d.event.seq] = d.event.row("diagnostic") {
             put("label", d.diagnostic.label); put("text", d.diagnostic.line); put("repeats", d.repeats)
+            // The one diagnostic the transcript acts on (Codex's missing bubblewrap) is known by these.
+            d.diagnostic.component?.let { put("component", it) }; d.diagnostic.code?.let { put("code", it) }
         } }
         failures.forEach { f -> toolFailures[f.toolId] = RunEvent("tool_result", f.seq, buildJsonObject {
             put("toolUseId", f.toolId); put("content", f.message); put("isError", true)

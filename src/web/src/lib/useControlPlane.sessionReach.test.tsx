@@ -262,7 +262,9 @@ describe('a session event reads only the views that can show that session', () =
     await sessionEvent('session.updated', 'S9', 'B');
     await advance(1_000);
 
-    expect(reads()).toEqual(['completedB', 'otherCreatedTasks', 'otherDetail', 'otherScheduleCards']);
+    // Not its schedule cards: an ordinary session's cards move on `schedule_cards.changed`, never on its session
+    // events (useControlPlane.readOwners.test.tsx, task 351uKarlHnsbndjGV4n7i).
+    expect(reads()).toEqual(['completedB', 'otherCreatedTasks', 'otherDetail']);
   });
 
   it('a task run\'s events read the task page once a window, its own project\'s and not another\'s', async () => {
@@ -436,7 +438,8 @@ describe('a session event reads only the views that can show that session', () =
     visibility = 'visible';
     await act(async () => document.dispatchEvent(new Event('visibilitychange')));
     await advance(1_000);
-    expect(reads()).toEqual(['completedA', 'completedB', 'otherCreatedTasks', 'otherDetail', 'otherScheduleCards']);
+    // Its schedule cards are not among them, as above.
+    expect(reads()).toEqual(['completedA', 'completedB', 'otherCreatedTasks', 'otherDetail']);
   });
 
   it('an event type the client does not map reads nothing', async () => {

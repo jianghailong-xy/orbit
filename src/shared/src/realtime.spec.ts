@@ -21,6 +21,7 @@ describe('control-plane protocol', () => {
       RunEventType.TERMINALS_CHANGED,
       RunEventType.TRANSLATION_STATUS_CHANGED,
       RunEventType.DRIVE_CHANGED,
+      RunEventType.SCHEDULE_CARDS_CHANGED,
     ]) {
       expect(isLifecycleType(t)).toBe(true);
     }

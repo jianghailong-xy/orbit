@@ -159,11 +159,16 @@ internal object RunnerCopy {
     const val FIX_WITH_AGENT = "Fix with an agent"
     /** The line in the button's place while the session a press started is open; "Open session" follows it as a link. */
     fun agentFixing(workspace: String) = "An agent is fixing this in $workspace · "
+    /** A transcript's history row, after the agent it was handed to finished; "Open session" follows it as a link. */
+    fun agentFixFixed(workspace: String) = "Fixed by an agent in $workspace · "
     const val OPEN_SESSION = "Open session"
     /** Under the Install failed panel's button, while a press can start a session. */
     fun agentFixStarts(workspace: String, engine: String) = "Starts a session in $workspace on this machine, with $engine."
     /** Appended to a signed-out reason on the Install failed panel, whose engine rows sit above it. */
     fun agentFixSignIn(engine: String) = " Sign in to $engine above to use this."
+    /** Appended to a signed-out reason in a transcript, which has no engine list of its own. */
+    fun agentFixSignInOnMachinePage(engine: String) = " Sign in to $engine on the machine page to use this."
+    const val FIX_FAILED = "Couldn't start the agent"
     const val WORKTREES = "Worktrees"
     fun workspaceRunning(count: Int) = "$count running"
     const val ABOUT_NAME = "Name"
@@ -547,10 +552,23 @@ internal data class AttentionItem(val kind: String, val tone: String, val short:
  * the machine's most recently used workspace, on that workspace's engine — or why it can't ([blockedCode] offline, noWorkspace,
  * engineSignedOut, with the server's own [blockedMessage]), and the warnings an agent is fixing now. */
 internal data class AgentFix(val workspaceId: String?, val workspaceName: String?, val engine: String?, val engineName: String?,
-    val blockedCode: String?, val blockedMessage: String?, val fixing: List<AgentFixing>)
+    val blockedCode: String?, val blockedMessage: String?, val fixing: List<AgentFixing>, val handled: List<AgentFixHandled> = emptyList())
 
 /** An open session a press started, on one warning: [engine] for engineNotUpdating and installFailed, null for cannotSelfUpdate. */
 internal data class AgentFixing(val kind: String, val engine: String?, val sessionId: String, val workspaceId: String, val workspaceName: String)
+
+/** The latest agent a warning was handed to once its session is over: a transcript's history row shows what was done with it. */
+internal data class AgentFixHandled(val kind: String, val engine: String?, val sessionId: String, val workspaceId: String,
+    val workspaceName: String, val status: String)
+
+/** What the transcript's missing-bubblewrap warning draws (web `sandboxFixView`): the button and where its session runs, the reason none
+ * can start, the agent at work, or the one that already finished with that row — a transcript is history, so it offers no second agent. */
+internal sealed interface SandboxFixView {
+    data class Ready(val line: String?) : SandboxFixView
+    data class Blocked(val line: String) : SandboxFixView
+    data class Fixing(val fixing: AgentFixing) : SandboxFixView
+    data class Handled(val sessionId: String, val workspaceName: String) : SandboxFixView
+}
 
 /** What one warning draws for Fix with an agent: the session at work on it ([fixing], in the button's place), or the button — disabled
  * while [enabled] is false — with the grey [line] under it, if any. */
@@ -752,7 +770,27 @@ internal object RunnerPage {
             fix.list("fixing").mapNotNull { entry ->
                 AgentFixing(entry.str("kind") ?: return@mapNotNull null, entry.str("engine"), entry.str("sessionId") ?: return@mapNotNull null,
                     entry.str("workspaceId").orEmpty(), entry.str("workspaceName").orEmpty())
+            },
+            fix.list("handled").mapNotNull { entry ->
+                AgentFixHandled(entry.str("kind") ?: return@mapNotNull null, entry.str("engine"), entry.str("sessionId") ?: return@mapNotNull null,
+                    entry.str("workspaceId").orEmpty(), entry.str("workspaceName").orEmpty(), entry.str("status").orEmpty())
             })
+    }
+
+    /** The transcript's missing-bubblewrap warning (docs/mocks/codex-sandbox-fix-with-agent): nil from an older server, which sends no
+     * `agentFix`. The handled line comes before the button, so a history row already handed to an agent offers no second one. */
+    fun sandboxFixView(runner: JsonObject?): SandboxFixView? {
+        val fix = runner?.let(::agentFixOf) ?: return null
+        agentFixing(fix, "sandboxMissing", "codex")?.let { return SandboxFixView.Fixing(it) }
+        fix.handled.firstOrNull { it.kind == "sandboxMissing" && it.engine == "codex" }?.let {
+            return SandboxFixView.Handled(it.sessionId, it.workspaceName)
+        }
+        fix.blockedCode?.let { code ->
+            val signIn = if (code == "engineSignedOut") RunnerCopy.agentFixSignInOnMachinePage(fix.engineName ?: engineName(fix.engine.orEmpty())) else ""
+            return SandboxFixView.Blocked(fix.blockedMessage.orEmpty() + signIn)
+        }
+        val starts = fix.workspaceName?.let { RunnerCopy.agentFixStarts(it, fix.engineName ?: engineName(fix.engine.orEmpty())) }
+        return SandboxFixView.Ready(starts)
     }
 
     /** The open session at work on this warning: the same kind and, but for the machine's own (cannotSelfUpdate, engineUpdateFailed),

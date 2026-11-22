@@ -18,20 +18,26 @@ public struct ProviderModelTier: Codable, Equatable, Sendable, Identifiable {
     public let outputPricePerMTok: Double?
     /// Set on a built-in engine's older family model: the newest model of its family, which routing uses instead.
     public let supersededBy: String?
+    /// How well this model completed work, for display only (docs/subagent-design.md §7.1). Absent on an older
+    /// server: read as no runs.
+    public let quality: ModelQuality
 
     public var id: String { model }
 
     public init(model: String, levels: [String], source: String? = nil, editable: Bool = false,
-                outputPricePerMTok: Double? = nil, supersededBy: String? = nil) {
+                outputPricePerMTok: Double? = nil, supersededBy: String? = nil, quality: ModelQuality = .none) {
         self.model = model
         self.levels = levels
         self.source = source
         self.editable = editable
         self.outputPricePerMTok = outputPricePerMTok
         self.supersededBy = supersededBy
+        self.quality = quality
     }
 
-    private enum CodingKeys: String, CodingKey { case model, levels, source, editable, outputPricePerMTok, supersededBy }
+    private enum CodingKeys: String, CodingKey {
+        case model, levels, source, editable, outputPricePerMTok, supersededBy, quality
+    }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -41,7 +47,82 @@ public struct ProviderModelTier: Codable, Equatable, Sendable, Identifiable {
         editable = try c.decodeIfPresent(Bool.self, forKey: .editable) ?? false
         outputPricePerMTok = try c.decodeIfPresent(Double.self, forKey: .outputPricePerMTok)
         supersededBy = try c.decodeIfPresent(String.self, forKey: .supersededBy)
+        quality = (try? c.decodeIfPresent(ModelQuality.self, forKey: .quality)) ?? .none
     }
+}
+
+/// Who rated a model's SubAgent runs: a parent session's own model, and how many ratings it gave (shared ModelQualityRater).
+public struct ModelQualityRater: Codable, Equatable, Sendable {
+    public let engine: String?
+    public let provider: String
+    public let model: String?
+    /// The model's name as the owner's tables give it; nil when the parent named no model.
+    public let label: String?
+    public let count: Int
+
+    public init(engine: String? = nil, provider: String, model: String? = nil, label: String? = nil, count: Int) {
+        self.engine = engine
+        self.provider = provider
+        self.model = model
+        self.label = label
+        self.count = count
+    }
+}
+
+/// SubAgent runs on a model in the last 90 days and the parents' ratings of them; no average below 5 ratings.
+public struct ModelSubagentQuality: Codable, Equatable, Sendable {
+    public let averageRating: Double?
+    public let ratedCount: Int
+    public let runCount: Int
+    public let raters: [ModelQualityRater]
+
+    public init(averageRating: Double? = nil, ratedCount: Int = 0, runCount: Int = 0, raters: [ModelQualityRater] = []) {
+        self.averageRating = averageRating
+        self.ratedCount = ratedCount
+        self.runCount = runCount
+        self.raters = raters
+    }
+}
+
+/// Done tasks first run on a model in the last 90 days and how many passed first time; no rate below 10.
+public struct ModelTaskQuality: Codable, Equatable, Sendable {
+    public let firstPassRate: Double?
+    public let firstPassTaskCount: Int
+    public let completedTaskCount: Int
+
+    public init(firstPassRate: Double? = nil, firstPassTaskCount: Int = 0, completedTaskCount: Int = 0) {
+        self.firstPassRate = firstPassRate
+        self.firstPassTaskCount = firstPassTaskCount
+        self.completedTaskCount = completedTaskCount
+    }
+}
+
+/// A model's Quality (shared ModelQuality): shown beside its tier, never read by routing.
+public struct ModelQuality: Codable, Equatable, Sendable {
+    public let subagent: ModelSubagentQuality
+    public let tasks: ModelTaskQuality
+
+    public init(subagent: ModelSubagentQuality = .init(), tasks: ModelTaskQuality = .init()) {
+        self.subagent = subagent
+        self.tasks = tasks
+    }
+
+    public static let none = ModelQuality()
+}
+
+/// One line of the Quality cell: its figure, or why there is none (muted).
+public struct QualityLine: Equatable, Sendable {
+    public let text: String
+    public let muted: Bool
+}
+
+/// The Quality cell (board docs/mocks/model-quality/01-board.png, owner's A1·B1·C1): a SubAgents line and a Tasks line,
+/// or "No runs yet" alone when the model has neither; `raters` is the SubAgents line's tooltip.
+public struct QualityLines: Equatable, Sendable {
+    public let empty: Bool
+    public let subagents: QualityLine
+    public let raters: String?
+    public let tasks: QualityLine
 }
 
 /// One provider as the SubAgents settings and the Tier column list it, in the owner's provider order.
@@ -140,6 +221,15 @@ public enum SubagentSettings {
     /// The tag after a tier the owner set (board 2026-11-20).
     public static let yours = "Yours"
     public static let tierSaveFailed = "Couldn't save the tier"
+    public static let columnQuality = "Quality"
+    public static let qualitySubagents = "SubAgents"
+    public static let qualityTasks = "Tasks"
+    public static let notEnoughRatings = "Not enough ratings"
+    public static let notEnoughTasks = "Not enough tasks"
+    public static let noRunsYet = "No runs yet"
+    public static let qualityFooter = "Quality is shown, not used for routing. SubAgents: the parent session's 1–5 rating "
+        + "of each result, last 90 days, recent ratings weighed more. Tasks: share of done tasks that passed on their "
+        + "first run; runs that hit a usage limit or a model at capacity are left out."
 
     /// The tiers a model can be given, lowest first.
     public static let tiers = ["S", "M", "L", "XL"]
@@ -227,4 +317,23 @@ public enum SubagentSettings {
 
     /// Whether the Tier cell carries the Yours tag: a tier the owner set.
     public static func showsYours(_ model: ProviderModelTier) -> Bool { model.source == "owner" }
+
+    /// A model's Quality cell, as web's qualityLines reads it: "4.2 · 18 rated of 40" and "82% first pass · 34 tasks",
+    /// each "Not enough …" below its minimum, and "Rated by Opus 5.5 (18)" for the tooltip where there is an average.
+    public static func qualityLines(_ quality: ModelQuality) -> QualityLines {
+        let subagent = quality.subagent
+        let tasks = quality.tasks
+        let raters = subagent.raters.map { "\($0.label ?? $0.provider) (\($0.count))" }.joined(separator: " · ")
+        let subagents: QualityLine = subagent.averageRating.map {
+            QualityLine(text: String(format: "%.1f", $0) + " · \(subagent.ratedCount) rated of \(subagent.runCount)", muted: false)
+        } ?? QualityLine(text: notEnoughRatings, muted: true)
+        let taskLine: QualityLine = tasks.firstPassRate.map {
+            QualityLine(text: "\(Int(($0 * 100).rounded()))% first pass · \(tasks.completedTaskCount) tasks", muted: false)
+        } ?? QualityLine(text: notEnoughTasks, muted: true)
+        return QualityLines(
+            empty: subagent.runCount == 0 && tasks.completedTaskCount == 0,
+            subagents: subagents,
+            raters: subagent.averageRating != nil && !raters.isEmpty ? "Rated by " + raters : nil,
+            tasks: taskLine)
+    }
 }

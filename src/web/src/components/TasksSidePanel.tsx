@@ -16,6 +16,7 @@ import {
   MenuUnfoldOutlined,
   MoonOutlined,
   MoreOutlined,
+  OrderedListOutlined,
   PlusOutlined,
   QuestionCircleOutlined,
   SettingOutlined,
@@ -111,6 +112,8 @@ import { Menu, type MenuItem } from './ui/Menu';
 import { useMoveWikiToTrash } from './WikiTrashDialog';
 import { Tooltip } from './ui/Tooltip';
 import { HELP_PATH, useHelpDrawer } from '../lib/helpDrawer';
+import { OPTIMIZE_LABELS } from '../lib/settingsChange';
+import { MODEL_ROUTING_PAGE } from '../pages/settings/settingsIndex';
 
 const IS_MAC_PLATFORM =
   typeof navigator !== 'undefined' &&
@@ -1388,6 +1391,24 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                   ),
                   onSelect: () => navigate('/settings/machines/new'),
                 },
+            // Model routing, one step from anywhere: its end column says how routing runs now, Off or the Optimize For
+            // it routes by (absent means on, and Balance).
+            {
+              key: 'model-routing',
+              icon: <OrderedListOutlined />,
+              textValue: MODEL_ROUTING_PAGE.label,
+              label: (
+                <span className="tp-account-appearance-label">
+                  <span>{MODEL_ROUTING_PAGE.label}</span>
+                  <span className="tp-account-current-theme">
+                    {me.data?.preferences?.modelRouting === false
+                      ? 'Off'
+                      : OPTIMIZE_LABELS[me.data?.preferences?.optimizeFor ?? 'balance']}
+                  </span>
+                </span>
+              ),
+              onSelect: () => navigate(MODEL_ROUTING_PAGE.path),
+            },
             {
               key: 'settings',
               icon: <SettingOutlined />,

@@ -304,7 +304,8 @@ struct AgentsBandRow: View {
                         if summary.spread { AgentsBandSpread(summary: summary) }
                         Spacer(minLength: 4)
                     }
-                    if summary.running > 0 { ProgressView().controlSize(.mini) }
+                    // The app's one running mark, as the Background row draws it (`BackgroundRowMarkView`).
+                    if summary.running > 0 { SpinnerGlyph(color: .accentColor) }
                     Image(systemName: "chevron.right")
                         .font(.orbitMeta.weight(.semibold)).foregroundStyle(.secondary)
                 }
@@ -464,7 +465,7 @@ struct AgentsSheet: View {
         return Button { reveal(run.toolUseId) } label: {
             HStack(alignment: .top, spacing: 10) {
                 Group {
-                    if block.running { ToolStatusGlyph(status: .running) } else { SubagentEndGlyph(status: run.status) }
+                    if block.running { SpinnerGlyph(color: .accentColor) } else { SubagentEndGlyph(status: run.status) }
                 }
                 .frame(width: 18)
                 VStack(alignment: .leading, spacing: 4) {

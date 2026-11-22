@@ -21,6 +21,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import { get as httpGet } from 'node:http';
 import path from 'node:path';
 import { after, test } from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -1501,4 +1502,77 @@ test('the read of what needs attention is capped, and what it keeps is the newes
     rows.slice(0, limit).map((row) => row.id),
     `the ${limit} newest of them, and the oldest left out`,
   );
+});
+
+test('GET /watches?following=true answers the union a Following page draws: the newest 100, and every live or needing-attention watch older than them, each once', { skip, timeout: 300_000 }, async () => {
+  const h = await boot();
+  const owner = await account(h, 'following');
+  const stranger = await account(h, 'following-stranger');
+  const open = await task(h, owner.id, 'OPEN');
+  const aged = async (id: string, minutes: number): Promise<void> => {
+    await h.sql.query(`UPDATE "watch" SET "created_at" = now() - $2::int * interval '1 minute' WHERE "id" = $1`, [toUuid(id), minutes]);
+  };
+
+  // Older than everything below: a live watch, a paused one and a revoked one, each past the newest 100.
+  const live = await create(h, owner, watchBody(tasks([open])), 'a watch still watching');
+  await aged(live.id, 500);
+  const paused = await create(h, owner, watchBody(tasks([open])), 'a watch paused');
+  expectStatus(await call(h, owner.bearer, 'POST', `/watches/${paused.id}/pause`), 200, 'pause');
+  await aged(paused.id, 501);
+  const revoked = await create(h, owner, watchBody(tasks([open])), 'a watch that lost access');
+  await h.sql.query(`UPDATE "watch" SET "state" = 'REVOKED', "next_evaluate_at" = NULL WHERE "id" = $1`, [toUuid(revoked.id)]);
+  await aged(revoked.id, 502);
+  // Newest of all and live, so it is in the newest 100 and in the ACTIVE read: it must still appear once.
+  const fresh = await create(h, owner, watchBody(tasks([open])), 'a newer live watch');
+
+  await h.sql.query(
+    `INSERT INTO "watch"("id","owner_id","observer_type","predicate","mode","action","state","expires_at","next_evaluate_at","created_at")
+     SELECT gen_random_uuid(), $1, 'USER', '{"kind":"ALL","over":"ALL_TARGETS","leaf":"TASK_TERMINAL"}'::jsonb,
+            'ONE_SHOT', 'NOTIFY_USER', 'CANCELLED', now() + interval '1 day', NULL, now() - interval '1 minute' - n * interval '1 second'
+       FROM generate_series(1, $2::int) n`,
+    [owner.id, 105],
+  );
+  await create(h, stranger, watchBody(tasks([await task(h, stranger.id, 'OPEN')])), "a stranger's watch");
+
+  const newest = await call(h, owner.bearer, 'GET', '/watches');
+  expectStatus(newest, 200, 'the newest watches');
+  assert.equal(newest.body.length, 100, 'the old shape still answers the newest 100');
+  const inNewest = new Set(newest.body.map((w: { id: string }) => w.id));
+  for (const id of [live.id, paused.id, revoked.id]) assert.equal(inNewest.has(id), false, `${id} is past the newest 100`);
+  assert.equal(inNewest.has(fresh.id), true);
+  const active = await call(h, owner.bearer, 'GET', '/watches?state=ACTIVE');
+  assert.deepEqual(active.body.map((w: { id: string }) => w.id), [fresh.id, live.id], 'the old state read is unchanged');
+
+  const answered = await call(h, owner.bearer, 'GET', '/watches?following=true');
+  expectStatus(answered, 200, 'the union read');
+  const ids: string[] = answered.body.map((w: { id: string }) => w.id);
+  assert.equal(new Set(ids).size, ids.length, 'each watch appears once');
+  assert.deepEqual(ids.slice(0, 100), newest.body.map((w: { id: string }) => w.id), 'the newest 100 come first, as the old read answers them');
+  assert.deepEqual(ids.slice(100), [live.id, paused.id, revoked.id], 'then the live and needing-attention watches the newest did not hold');
+  for (const id of [fresh.id, live.id, paused.id, revoked.id]) {
+    const row = answered.body.find((w: { id: string }) => w.id === id);
+    assert.equal(row.targets.length, 1, `${id} carries its target, as the other reads carry it`);
+    assert.equal(row.targets[0].title, newest.body.find((w: { id: string }) => w.id === id)?.targets[0].title ?? row.targets[0].title);
+  }
+
+  // Conditional answer: the same list is a 304 to the validator it came with, and a changed watch is a 200 again.
+  // As the browser's HTTP cache revalidates: If-None-Match alone. (Node's fetch adds `Cache-Control: no-cache` to a
+  // conditional request, which Express's own freshness check refuses, as the Open list's comment says.)
+  const conditional = (etag: string) => new Promise<{ status: number; etag: string | undefined }>((resolve, reject) => {
+    httpGet(`${h.base}/api/watches?following=true`, { headers: { authorization: `Bearer ${owner.bearer}`, 'if-none-match': etag } }, (res) => {
+      res.resume();
+      res.on('end', () => resolve({ status: res.statusCode ?? 0, etag: res.headers.etag }));
+    }).on('error', reject);
+  });
+  const validated = await fetch(`${h.base}/api/watches?following=true`, { headers: { authorization: `Bearer ${owner.bearer}` } });
+  const etag = validated.headers.get('etag');
+  assert.ok(etag, 'the union read carries an ETag');
+  assert.equal((await conditional(etag)).status, 304, 'nothing changed, so the read is answered 304');
+  expectStatus(await call(h, owner.bearer, 'POST', `/watches/${live.id}/pause`), 200, 'pause the live watch');
+  const changed = await conditional(etag);
+  assert.equal(changed.status, 200, 'a watch changed, so the read is answered 200 again');
+  assert.notEqual(changed.etag, etag);
+
+  expectStatus(await call(h, owner.bearer, 'GET', '/watches?following=false'), 400, 'following=false');
+  expectStatus(await call(h, owner.bearer, 'GET', '/watches?following=true&state=ACTIVE'), 400, 'following with a state');
 });

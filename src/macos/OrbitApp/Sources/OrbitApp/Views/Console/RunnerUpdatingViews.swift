@@ -195,3 +195,43 @@ struct RunnerUpdatingTagView: View {
         .presentationCompactAdaptation(.popover)
     }
 }
+
+/// The waiting card of a session held by its GitHub workspace's clone (web `CloneWaitNotice`, board
+/// docs/mocks/clone-progress-wait-card ②): what is cloning, git's percentage once the stream has relayed one, and
+/// where. `compact` is the one under a transcript; the full-height one stands alone on an empty conversation. Neither
+/// has a waiting animation of its own, so the spinner shows while there is no percentage.
+struct CloneWaitCardView: View {
+    let card: QueuedClone.Card
+    let machine: String?
+    var compact = false
+
+    var body: some View {
+        VStack(spacing: compact ? 4 : 10) {
+            HStack(spacing: 6) {
+                if card.progress == nil { ProgressView().controlSize(.small) }
+                Text(card.title).font(compact ? .subheadline.weight(.semibold) : .headline)
+            }
+            if let progress = card.progress {
+                HStack(spacing: 8) {
+                    Capsule().fill(.quaternary).frame(width: 160, height: 4)
+                        .overlay(alignment: .leading) {
+                            Capsule().fill(Color.accentColor).frame(width: 160 * CGFloat(progress) / 100, height: 4)
+                        }
+                        .accessibilityElement()
+                        .accessibilityLabel(card.title)
+                        .accessibilityValue("\(progress)%")
+                    Text(verbatim: "\(progress)%").font(.footnote).monospacedDigit().foregroundStyle(.secondary)
+                }
+            }
+            Text(QueuedClone.sentence(machine: machine))
+                .font(compact ? .footnote : .callout)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding(.horizontal, compact ? 16 : 32)
+        .padding(.vertical, compact ? 10 : 0)
+        .frame(maxWidth: compact ? .infinity : 420)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier(compact ? "clone-wait-compact" : "clone-wait")
+    }
+}

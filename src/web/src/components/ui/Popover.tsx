@@ -25,6 +25,10 @@ export interface PopoverProps extends FloatingProps {
   nativeButton?: boolean;
 }
 
+/** Focus goes back to the trigger only when the keyboard (or code) closed the popover. A press outside it leaves
+ *  focus where the press put it: handed back to the trigger, Safari draws its focus ring on it, and the ring stays. */
+const keyboardCloseOnly = (closeType: string) => closeType === 'keyboard' || closeType === '';
+
 export function Popover({ trigger, title, children, openOnHover = false, disabled, initialFocus, pointAtCenter = false, arrow = true,
   collisionPadding = 8, nativeButton = true, side = 'top', align = 'center', popupClassName, popupStyle, returnFocus, ...state }: PopoverProps) {
   const layer = useFloating(state);
@@ -36,7 +40,7 @@ export function Popover({ trigger, title, children, openOnHover = false, disable
     <BasePopover.Trigger ref={anchor} render={trigger} disabled={disabled} openOnHover={openOnHover} delay={100} closeDelay={100} nativeButton={nativeButton} />
     <BasePopover.Portal container={layer.container()}>
       <BasePopover.Positioner ref={positionerRef} side={side} align={align} {...offsets} collisionPadding={pointAt ? 0 : collisionPadding} positionMethod={layer.positionMethod} className="orbit-floating-positioner" style={{ zIndex: layer.zIndex }}>
-        <BasePopover.Popup ref={popup} initialFocus={initialFocus ?? popup} finalFocus={returnFocus}
+        <BasePopover.Popup ref={popup} initialFocus={initialFocus ?? popup} finalFocus={returnFocus ?? keyboardCloseOnly}
           className={`orbit-popover${popupClassName ? ` ${popupClassName}` : ''}`} style={popupStyle}>
           {arrow && <BasePopover.Arrow className="orbit-floating-arrow" style={calloutArrowStyle} />}
           {title != null && <BasePopover.Title className="orbit-popover-title">{title}</BasePopover.Title>}

@@ -184,10 +184,10 @@ describe('the SETTINGS_CHANGE card', () => {
     });
     await mount(<OwnerRequestCard request={request} now={NOW} />);
     const rows = [...host.querySelectorAll('.settings-change-row')];
-    expect(words(rows[0])).toBe('Smart model selection On → Off Applies to new sessions only.');
+    expect(words(rows[0])).toBe('Route by tier On → Off Applies to new sessions only.');
     expect(words(rows[1])).toBe('Theme System → Dark');
     expect([...host.querySelectorAll('.settings-change-path')].map(words)).toEqual([
-      'Settings › General › New sessions',
+      'Settings › Model routing',
       'Settings › Appearance',
     ]);
   });

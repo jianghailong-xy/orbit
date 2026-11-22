@@ -12,7 +12,7 @@ import { HelpDrawerProvider } from './lib/helpDrawer';
 import { AdminLayout } from './components/settings/AdminLayout';
 import { SettingsLayout } from './components/settings';
 import { SettingsWorkspacePage } from './components/settings/WorkspaceSettingsPage';
-import { SettingsKeysPage, SettingsPoolsPage, SettingsProvidersHome, SettingsTiersPage } from './components/settings/SettingsProviderPages';
+import { SettingsKeysPage, SettingsPoolsPage, SettingsProvidersHome } from './components/settings/SettingsProviderPages';
 import { MachineSettingsPage } from './components/settings/MachineSettingsPage';
 import { ManagedRunnerSetupPage } from './components/settings/ManagedRunnerSetupPage';
 import { useRememberOutsideSettings } from './lib/settingsReturn';
@@ -26,7 +26,7 @@ import { GeneralSettingsPage } from './pages/settings/GeneralPage';
 import { NotificationsSettingsPage } from './pages/settings/NotificationsPage';
 import { AppearanceSettingsPage } from './pages/settings/AppearancePage';
 import { StorageSettingsPage } from './pages/files/StoragePage';
-import { RoutingReportPage } from './pages/settings/RoutingReportPage';
+import { ModelRoutingPage } from './pages/settings/ModelRoutingPage';
 import { StorageFilesPage } from './pages/files/StorageFilesPage';
 import { AdminUsersPage } from './pages/AdminUsersPage';
 import { AdminSignInPage } from './pages/AdminSignInPage';
@@ -103,6 +103,13 @@ function ProvidersRedirect() {
   const rest = pathname.replace(/^\/(admin\/)?providers\/?/, '');
   const to = rest === '' || /^(new|pools)(\/|$)/.test(rest) ? rest : `keys/${rest}`;
   return <Navigate to={{ pathname: `/settings/providers${to ? `/${to}` : ''}`, search }} replace />;
+}
+
+// An address a page left, landing where it went with the query it carried (a link to the Routing report's
+// Workflows view for 7 days opens Model routing on the same view and period).
+function KeepQueryRedirect({ to }: { to: string }) {
+  const { search } = useLocation();
+  return <Navigate to={{ pathname: to, search }} replace />;
 }
 
 // /settings/machines/:id, drawn afresh for each machine so nothing typed on one carries to the next.
@@ -328,8 +335,8 @@ export function App() {
             <Route path="secrets" element={<SecretsPage />} />
             {/* The terminals this account has approved: list, revoke (docs/terminal-session-design.md). */}
             <Route path="terminals" element={<TerminalsPage />} />
-            {/* How routed SubAgents and Orbit workflows went (board docs/mocks/subagent-workflow/08-report.html). */}
-            <Route path="routing-report" element={<RoutingReportPage />} />
+            {/* The Routing report's old address: it is on Providers → Model routing now, its view and filters kept. */}
+            <Route path="routing-report" element={<KeepQueryRedirect to="/settings/providers/routing" />} />
             {/* The account's own Feishu or Lark app (docs/feishu-bot-design.md §4.1, §4.2). */}
             <Route path="integrations/feishu" element={<FeishuIntegrationPage />} />
             {/* Connecting a Feishu group, opened from the bot's card with its one-time ticket (docs/feishu-bot-design.md §8.1). */}
@@ -349,7 +356,9 @@ export function App() {
             <Route path="providers/keys/:id" element={<ProviderConnectPage />} />
             <Route path="providers/pools" element={<SettingsPoolsPage />} />
             <Route path="providers/pools/:id" element={<ProviderPoolPage />} />
-            <Route path="providers/tiers" element={<SettingsTiersPage />} />
+            {/* Every model's tier beside how its runs went; Model tiers' old address leads here. */}
+            <Route path="providers/routing" element={<ModelRoutingPage />} />
+            <Route path="providers/tiers" element={<KeepQueryRedirect to="/settings/providers/routing" />} />
             <Route path="providers/:vendor" element={<SettingsKeysPage />} />
             <Route path="workspaces/:id" element={<SettingsWorkspacePage />} />
           </Route>

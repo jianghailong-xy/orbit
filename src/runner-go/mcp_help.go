@@ -21,6 +21,7 @@ var mcpHelpObjects = []struct {
 	{objectTaskList, "task lists"},
 	{objectProject, "projects"},
 	{objectSession, "sessions"},
+	{objectSubagent, "SubAgents"},
 	{objectAgent, "agents"},
 	{objectRunner, "runners"},
 	{objectProvider, "providers"},

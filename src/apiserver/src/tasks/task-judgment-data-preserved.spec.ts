@@ -3306,6 +3306,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // or replaces none of the preserved triggers or functions. No INSERT, UPDATE or DELETE runs at apply time.
       // Written as 1423 and then 1427 on the project line, it was renumbered after main took 1427.
       '1428_open_list_workspace_probes',
+      // 1429 adds six nullable rating columns, a check on rating_score and an (owner_id, created_at) index on
+      // subagent_run; no row is written, and no preserved relation, trigger, function or DONE fence changes.
+      // Written as 1420 on its task branch, it was renumbered after main took 1420 to 1428.
+      '1429_subagent_run_rating',
       // 1438 creates drive_removed_entry (Orbit Files drive: the file a replacing rename removed, §3.2) and its index; no
       // existing row is written, and no preserved relation, trigger, function or DONE fence changes. Numbered past every
       // migration on main and the project and task branches (1437 the highest) when it was written.

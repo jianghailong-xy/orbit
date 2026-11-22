@@ -21,6 +21,7 @@ import {
   NormalizedRunEvent,
   RunEventType,
   RunStatus,
+  SCHEDULE_CARDS_CHANGED_MAX_SESSIONS,
   SessionEndReason,
   SessionFilingState,
   SessionLifecycleState,
@@ -230,6 +231,14 @@ function taskChangedData(
   };
 }
 
+/** `data` for `schedule_cards.changed`: the sessions, or a resync when there were too many to name. */
+function scheduleCardsChangedData(payload: Record<string, unknown>): Record<string, unknown> {
+  const cardSessionIds = Array.isArray(payload.cardSessionIds)
+    ? payload.cardSessionIds.filter((id): id is string => typeof id === 'string' && id.length > 0)
+    : [];
+  return { cardSessionIds, resync: payload.resync === true || cardSessionIds.length === 0 };
+}
+
 /** Reconstruct lifecycle fields for the legacy session.ended wire event. */
 function endedSessionStates(
   status: RunStatus | string,
@@ -382,6 +391,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   private readonly hub = new Subject<HubMessage>();
   /** Per hub message, what its control event says, read once for every stream (eventData). */
   private readonly eventDataReads = new WeakMap<HubMessage, Promise<Record<string, unknown> | null>>();
+  /** Per hub message, an owner's `task.changed` as it is sent, its creator sessions read once (withCreatorSessions). */
+  private readonly ownerTaskChangeReads = new WeakMap<HubMessage, Promise<Record<string, unknown>>>();
   /** `sessions.list_changed` for the streams that declared it (open-list-hints.ts). */
   private readonly listHints: OpenListHints;
   private readonly ownerRequestHints: OwnerRequestHints;
@@ -1443,6 +1454,25 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  /**
+   * What these sessions' schedule cards (`GET /sessions/:id/schedule-cards`) read may have moved: a card one of them put
+   * up, a change it recorded, or a schedule its cards and records name. User-scoped, keyed by the owner like the
+   * libraries; the payload names the sessions and nothing else, at most SCHEDULE_CARDS_CHANGED_MAX_SESSIONS of them, a
+   * wider change being a `resync`. Only a stream that declared `hints=schedule_cards` is sent it (streamForUser). An
+   * accelerant: the cards keep their safety read, so a dropped one costs latency. Published after the write commits.
+   */
+  publishScheduleCardsChanged(ownerId: string, sessionIds: ReadonlyArray<string | null | undefined>): void {
+    const ids = [...new Set(sessionIds.filter((id): id is string => typeof id === 'string' && id.length > 0))];
+    if (ids.length === 0) return;
+    const resync = ids.length > SCHEDULE_CARDS_CHANGED_MAX_SESSIONS;
+    this.publish(`${RealtimeService.USER_SCOPE}${ownerId}`, {
+      seq: 0,
+      type: RunEventType.SCHEDULE_CARDS_CHANGED,
+      ts: new Date().toISOString(),
+      payload: { cardSessionIds: resync ? [] : ids, resync },
+    });
+  }
+
   /** Same, but for a deployment-wide change every user sees — today only the shared (admin-owned)
    *  model providers. Reaches every connected stream; keep it to genuinely global, low-rate edits. */
   publishForAllUsers(type: RunEventType, id: string): void {
@@ -1463,11 +1493,16 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   // never enter (the sync controlTypeFor() filter drops them before owner resolution).
   // See docs/realtime-control-plane-stream.md.
 
-  streamForUser(userId: string, options: { listChanged?: boolean; ownerRequests?: boolean; driveChanged?: boolean } = {}): Observable<ControlEvent> {
+  streamForUser(
+    userId: string,
+    options: { listChanged?: boolean; ownerRequests?: boolean; driveChanged?: boolean; scheduleCards?: boolean } = {},
+  ): Observable<ControlEvent> {
     const events$ = this.hub.asObservable().pipe(
       filter((m) => controlTypeFor(m.event.type) !== null),
       // `drive.changed` only for a stream that declared it (`?hints=drive_changed`), for the same reason.
       filter((m) => options.driveChanged === true || m.event.type !== RunEventType.DRIVE_CHANGED),
+      // `schedule_cards.changed` only for a stream that declared it (`?hints=schedule_cards`), like the hints below.
+      filter((m) => options.scheduleCards === true || m.event.type !== RunEventType.SCHEDULE_CARDS_CHANGED),
       mergeMap((m) => this.toControlEvent(userId, m)),
       filter((e): e is ControlEvent => e !== null),
     );
@@ -1506,11 +1541,14 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       }
       const owner = sessionId.slice(RealtimeService.USER_SCOPE.length);
       if (owner !== userId && owner !== RealtimeService.USER_SCOPE_ALL) return null;
+      const taskChange = type === ControlEventType.TASK_CHANGED ? this.ownerTaskChange(message, owner) : null;
       const data =
-        type === ControlEventType.TASK_CHANGED
-          ? taskChangedData(ev.payload)
+        taskChange
+          ? taskChange instanceof Promise ? await taskChange : taskChange
           : type === ControlEventType.DRIVE_CHANGED
             ? { seq: String(ev.payload.seq ?? '') }
+            : type === ControlEventType.SCHEDULE_CARDS_CHANGED
+              ? scheduleCardsChangedData(ev.payload)
           : type === ControlEventType.AGENT_CHANGED
             ? {
                 agentId: String(ev.payload.id ?? ''),
@@ -1551,6 +1589,48 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
    * it was sent when each read its own. Keyed weakly by the message, so it lives as long as the
    * message does and no longer.
    */
+  /**
+   * An owner-keyed `task.changed` as every stream of the owner is sent it: a bounded one with its creators, read once
+   * per hub message and copied per stream. One that reads nothing is answered at once, in the order it was published,
+   * as before; one that reads may be overtaken by a later event, as a session's events already are.
+   */
+  private ownerTaskChange(message: HubMessage, ownerId: string): Record<string, unknown> | Promise<Record<string, unknown>> {
+    const change = taskChangedData(message.event.payload);
+    if (change.resync || change.taskIds.length === 0) return change;
+    let read = this.ownerTaskChangeReads.get(message);
+    if (!read) {
+      read = this.withCreatorSessions(change, ownerId);
+      this.ownerTaskChangeReads.set(message, read);
+    }
+    return read.then((shared) => structuredClone(shared));
+  }
+
+  /**
+   * A bounded `task.changed` with the sessions that created its rows (`creatorSessionIds`) and the projects they are in
+   * (`rowProjectIds`), so a client can tell which session's "Tasks created here" and which project's integration line
+   * it can move. Left as it was — the client then reads every such read — for a resync, when a row it names is not
+   * found (deleted, or not this owner's), or when the read fails.
+   */
+  private async withCreatorSessions(
+    change: ControlTaskChanged & Record<string, unknown>,
+    ownerId: string,
+  ): Promise<ControlTaskChanged & Record<string, unknown>> {
+    if (change.resync || change.taskIds.length === 0) return change;
+    try {
+      const rows = await this.prisma.task.findMany({
+        where: { id: { in: change.taskIds }, ownerId },
+        select: { creatorSessionId: true, projectId: true },
+      });
+      if (rows.length !== change.taskIds.length) return change;
+      const creators = rows.map((row) => row.creatorSessionId).filter((id): id is string => !!id);
+      const projects = rows.map((row) => row.projectId).filter((id): id is string => !!id);
+      return { ...change, creatorSessionIds: [...new Set(creators)], rowProjectIds: [...new Set(projects)] };
+    } catch (error) {
+      this.log.warn(`task.changed creators not read: ${(error as Error).message}`);
+      return change;
+    }
+  }
+
   private eventData(
     message: HubMessage,
     type: ControlEventType,
@@ -1626,9 +1706,10 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       case ControlEventType.BACKGROUND_TASK:
         return backgroundPayloadOf(ev.payload) as unknown as Record<string, unknown>;
       case ControlEventType.TASK_CHANGED:
-        // No DB augmentation: bounded writers already name every changed row, while ambiguous
-        // writers set `resync`. The normalizer also keeps old `{taskId}` events compatible.
-        return taskChangedData(ev.payload);
+        // Bounded writers already name every changed row, while ambiguous writers set `resync`. The
+        // normalizer also keeps old `{taskId}` events compatible; a bounded change also says who
+        // created its rows (withCreatorSessions).
+        return this.withCreatorSessions(taskChangedData(ev.payload), ownerId);
       case ControlEventType.AGENT_CHANGED:
         // Same: a nudge to refetch the owner's workspace list. The id here is the CHANGED workspace —
         // the envelope's `agentId` stays the calling session's workspace.

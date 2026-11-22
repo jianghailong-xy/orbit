@@ -34,7 +34,7 @@ import { describe, expect, it } from 'vitest';
  *   sessions.list_changed → session, `agent.changed` / `workspace.*` → workspace (an `agent.changed`
  *   that says only `repoHealth` → checkout: the workspace's checkout as its runner last saw it),
  *   `tag.*` → tag, `folder.*` → folder, `provider.*` → provider, `project.*` → project, `watch.*` →
- *   watch, `wiki.*` → wiki, `terminals.changed` → terminal, `owner_requests.changed` → ownerRequest. A site names every entity whose change
+ *   watch, `wiki.*` → wiki, `terminals.changed` → terminal, `owner_requests.changed` → ownerRequest, `schedule_cards.changed` → scheduleCard. A site names every entity whose change
  *   would make what it feeds wrong; one site may name several. The declaration says what the view
  *   derives from, not how often it is read: the consumer is free to keep its own cost exclusions
  *   (an expensive worktree diff is still session-derived even though the console refreshes it on
@@ -50,7 +50,7 @@ import { describe, expect, it } from 'vitest';
 const WEB_SRC = fileURLToPath(new URL('./', import.meta.url));
 
 /** The control-plane entities, as `entitiesFor` (lib/useControlPlane.tsx) names its events. */
-const ENTITIES = new Set(['task', 'session', 'project', 'workspace', 'checkout', 'tag', 'folder', 'provider', 'watch', 'wiki', 'terminal', 'ownerRequest', 'drive']);
+const ENTITIES = new Set(['task', 'session', 'project', 'workspace', 'checkout', 'tag', 'folder', 'provider', 'watch', 'wiki', 'terminal', 'ownerRequest', 'drive', 'scheduleCard']);
 
 /**
  * Sites that derive from no control-plane entity, with the reason. Frozen: every key must name a
