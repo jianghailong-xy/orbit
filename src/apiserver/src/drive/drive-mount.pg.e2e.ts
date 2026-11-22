@@ -366,6 +366,11 @@ test('Orbit Files drive: the mount daemon passes the shell-operation list (§5.9
     assert.equal(reply.status, 200);
     return reply.body;
   };
+  const versionContent = async (versionId: string) => {
+    const reply = await rawApi('GET', `/drive/versions/${versionId}/content`);
+    assert.equal(reply.status, 200, `content of version ${versionId}`);
+    return reply.body;
+  };
   /** A folder made on the Files page: no mount has listed it, so none holds a listing the SQL seeding would bypass. */
   const ownerFolder = async (name: string) => {
     const made = await api('POST', '/drive/folders', { name });
@@ -784,15 +789,19 @@ ms.sort(); print('%.1f %.1f' % (ms[100], ms[190]))"`), 'latency');
     const before = await trash();
     const newId = (await mustEntry('/new.txt')).id;
     const oldId = (await mustEntry('/b.txt')).id;
-    ok(await sh(a, 'mv $F/new.txt $F/b.txt'), 'mv onto');
-    assert.equal((await content('/b.txt')).toString(), 'new\n');
+    const oldVersion = (await versions(oldId)).find((v) => v.current)!.id;
+    ok(await sh(a, 'mv $F/new.txt $F/b.txt && cat $F/b.txt'), 'mv onto');
+    assert.equal((await content('/b.txt')).toString(), 'new\n', "b.txt's current version has new.txt's content");
+    assert.equal((await mustEntry('/b.txt')).id, oldId, 'b.txt keeps its entry id');
     assert.equal(await resolveEntry('/new.txt'), null, 'new.txt is gone');
     const added = await newGroups(before);
     assert.equal(added.length, 1);
-    assert.deepEqual(added[0].items.map((i) => i.name), ['b.txt'], 'the replaced b.txt is in Trash, restorable whole');
-    assert.equal((await mustEntry('/b.txt')).id, newId);
-    assert.ok(!added.some((g) => g.items.some((i) => i.name === 'new.txt')), 'new.txt is not in Trash');
-    d.push(`exit 0; b.txt holds new.txt's content; new.txt gone, not in Trash. As the name layer implements a replacing rename (6081497926): b.txt is new.txt's entry ${newId.slice(0, 6)}…, and the old b.txt (${oldId.slice(0, 6)}…) is in Trash whole as an entry, not as a version — §3.2's text says the target keeps its id`);
+    assert.equal(added[0].kind, 'VERSION', 'the previous b.txt is in Trash as a version');
+    assert.equal(added[0].version?.id, oldVersion);
+    assert.equal(added[0].version?.entry.id, oldId);
+    assert.equal((await versionContent(oldVersion)).toString(), 'old\n');
+    assert.ok(!added.some((g) => g.items.some((i) => i.id === newId || i.name === 'new.txt')), 'new.txt is not in Trash');
+    d.push(`exit 0; b.txt keeps its entry (${oldId.slice(0, 6)}…) and holds new.txt's content; its previous content is in Trash as one VERSION group; new.txt gone, not in Trash (§3.2)`);
   });
 
   await row('16', 'rename of an open file', async (d) => {
@@ -838,24 +847,45 @@ ms.sort(); print('%.1f %.1f' % (ms[100], ms[190]))"`), 'latency');
   await row('20', 'editor saves: vim with its defaults, python os.replace, sed -i', async (d) => {
     ok(await sh(a, 'printf "line x\\n" > $F/v20.txt; printf "line x\\n" > $F/p20.txt; printf "line x\\n" > $F/s20.txt'), 'setup');
     const ids = { v: (await mustEntry('/v20.txt')).id, p: (await mustEntry('/p20.txt')).id, s: (await mustEntry('/s20.txt')).id };
+    /** The VERSION group a save added for entry `id`, holding `previous`. */
+    const versionOf = async (groups: Group[], id: string, previous: string) => {
+      const g = groups.filter((x) => x.kind === 'VERSION' && x.version?.entry.id === id);
+      assert.equal(g.length, 1, `one version of ${id} in Trash`);
+      assert.equal((await versionContent(g[0].version!.id)).toString(), previous);
+    };
+    // (a) vim's default save renames v20.txt to v20.txt~ (a move to a free name), writes a new v20.txt and removes the
+    // backup: no rename onto a file, so §3.2 does not apply and v20.txt is a new entry (§5.9 row 20 (a)).
     const beforeVim = await trash();
     ok(await sh(a, 'vim --not-a-term -u DEFAULTS -i NONE -c "s/x/y/" -c wq $F/v20.txt </dev/null >/dev/null 2>&1'), 'vim');
     assert.equal((await content('/v20.txt')).toString(), 'line y\n');
     const vimGroups = await newGroups(beforeVim);
     const vimNow = (await mustEntry('/v20.txt')).id;
+    assert.notEqual(vimNow, ids.v, 'a new entry, as §5.9 row 20 (a) says');
+    const backup = vimGroups.flatMap((g) => g.items).find((i) => i.name === 'v20.txt~');
+    assert.ok(backup, 'the previous content is in Trash as v20.txt~');
+    assert.equal(backup.id, ids.v, 'the old entry, moved to the backup name');
+    assert.equal((await trashedContent(backup.id)).toString(), 'line x\n');
     const vimItems = vimGroups.flatMap((g) => g.items.map((i) => i.name)).sort();
-    d.push(`(a) vim: content line y, exit 0; v20.txt ${vimNow === ids.v ? 'kept its entry' : 'is a new entry'}; Trash gained ${vimGroups.length} group(s): ${vimItems.join(', ') || 'none'}${vimGroups.some((g) => g.kind === 'VERSION') ? ' + a version' : ''}`);
+    d.push(`(a) vim: content line y, exit 0; v20.txt is a new entry; Trash gained ${vimGroups.length} group(s): ${vimItems.join(', ')}`);
+    // (b) python writing p20.tmp then os.replace onto p20.txt (§3.2).
     const beforePy = await trash();
     ok(await sh(a, `python3 -c "import os; open('$F/p20.tmp','w').write('line y\\\\n'); os.replace('$F/p20.tmp','$F/p20.txt')"`), 'os.replace');
     assert.equal((await content('/p20.txt')).toString(), 'line y\n');
+    assert.equal((await mustEntry('/p20.txt')).id, ids.p, 'p20.txt keeps its entry id');
+    assert.equal(await resolveEntry('/p20.tmp'), null);
     const pyGroups = await newGroups(beforePy);
-    assert.ok(pyGroups.some((g) => g.items.some((i) => i.id === ids.p)), 'the previous p20.txt is in Trash');
-    d.push('(b) os.replace: content line y, exit 0; the previous p20.txt is in Trash whole (an entry: the replacing rename keeps the source\'s id, 6081497926)');
+    await versionOf(pyGroups, ids.p, 'line x\n');
+    assert.ok(!pyGroups.some((g) => g.items.some((i) => i.name === 'p20.tmp')), 'p20.tmp is not in Trash');
+    d.push('(b) os.replace: content line y, exit 0; p20.txt keeps its entry id; the previous content is a version in Trash; p20.tmp gone, not in Trash');
+    // (c) sed -i writes a temporary file beside s20.txt and renames it onto s20.txt (§3.2).
     const beforeSed = await trash();
     ok(await sh(a, 'sed -i s/x/y/ $F/s20.txt'), 'sed -i');
     assert.equal((await content('/s20.txt')).toString(), 'line y\n');
-    assert.ok((await newGroups(beforeSed)).some((g) => g.items.some((i) => i.id === ids.s)), 'the previous s20.txt is in Trash');
-    d.push('(c) sed -i: content line y, exit 0; the previous s20.txt is in Trash whole, as (b)');
+    assert.equal((await mustEntry('/s20.txt')).id, ids.s, 's20.txt keeps its entry id');
+    const sedGroups = await newGroups(beforeSed);
+    await versionOf(sedGroups, ids.s, 'line x\n');
+    assert.deepEqual(sedGroups.filter((g) => g.kind !== 'VERSION'), [], "sed's temporary file is not in Trash");
+    d.push('(c) sed -i: content line y, exit 0; s20.txt keeps its entry id; the previous content is a version in Trash; no temporary file in Trash');
   });
 
   await row('21', ': > $F/a.txt and truncate -s 0 $F/a.txt', async (d) => {
