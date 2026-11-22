@@ -411,6 +411,7 @@ export const TERMINAL_REFUSED_ROUTES: readonly string[] = [
   'POST /sessions/:id/events/:seq/translation/retry',
   'POST /sessions/:id/guests',
   'POST /sessions/:id/merge',
+  'POST /sessions/:id/merge-failure/dismiss',
   'POST /sessions/:id/merge-receipts',
   'POST /sessions/:id/merge-repair',
   'POST /sessions/:id/move',

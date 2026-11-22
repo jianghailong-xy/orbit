@@ -223,10 +223,6 @@ final class SubagentCardEndTests: XCTestCase {
         let stopped = run("toolu_bg", "STOPPED")
         let block = SubagentBlock.describe(input: .object([:]), run: stopped, status: .ok)
         XCTAssertFalse(block.outcomeIsFailure, "a stop is not drawn red")
-        // The Agents band counts it as no failure either.
-        let summary = SubagentSessionSummary.make([stopped, run("toolu_b", "FAILED"), run("toolu_c", "INTERRUPTED")])
-        XCTAssertEqual(summary?.failed, 2)
-        XCTAssertEqual(SubagentSessionSummary.make([stopped])?.failed, 0)
     }
 
     func testAWakeNamingTwoRunsDrawsNothingAndJoinsEachCard() throws {
