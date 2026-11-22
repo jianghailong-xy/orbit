@@ -83,3 +83,64 @@ export async function sessionHeldByCapacity(
   const reason = rows[0]?.reason ?? null;
   return reason !== null && CAPACITY_QUEUED_REASONS.has(reason);
 }
+
+/** A session a full runner, run or batch holds: the gate, its numbers, and when the session went PENDING. */
+export interface SessionCapacityGate {
+  reason: string;
+  active: number | null;
+  limit: number | null;
+  /** Of active, the slots background jobs hold; beside runner_at_capacity only. */
+  heldByJobs: number | null;
+  since: Date;
+}
+
+/**
+ * `sessionHeldByCapacity` with the numbers the session list names beside the gate (SessionsService list, its
+ * `queuedActive`, `queuedLimit`, `queuedHeldByJobs`), for one session: what a scheduled run's session page says
+ * while it waits for a slot. Null when no capacity gate holds it.
+ */
+export async function sessionCapacityGate(
+  db: { $queryRaw<T = unknown>(query: Prisma.Sql): Prisma.PrismaPromise<T> },
+  sessionId: string,
+): Promise<SessionCapacityGate | null> {
+  const rows = await db.$queryRaw<Array<{
+    reason: string | null;
+    runnerActive: number | bigint | null;
+    runnerHeld: number | bigint | null;
+    runnerLimit: number | null;
+    treeActive: number | bigint | null;
+    treeLimit: number | bigint | null;
+    batchActive: number | bigint | null;
+    batchLimit: number | null;
+    since: Date;
+  }>>(Prisma.sql`
+    SELECT ${queuedReasonSql()} AS reason,
+           ${runnerActiveTurns(Prisma.sql`s.assigned_runner_id`)} AS "runnerActive",
+           ${runnerBackgroundHeldSessions(Prisma.sql`s.assigned_runner_id`)} AS "runnerHeld",
+           r.max_concurrent AS "runnerLimit",
+           ${treeActiveTurns('s')} AS "treeActive",
+           ${treeCeiling(Prisma.sql`s.assigned_runner_id`)} AS "treeLimit",
+           ${batchActiveTurns('s')} AS "batchActive",
+           s.batch_max_concurrent AS "batchLimit",
+           COALESCE(s.last_turn_at, s.created_at) AS since
+      FROM "session" s
+      LEFT JOIN runner r ON r.id = s.assigned_runner_id
+     WHERE s.id = ${sessionId}::uuid
+       AND s.status = 'PENDING'
+       AND s.cancel_requested_at IS NULL`);
+  const row = rows[0];
+  if (!row?.reason || !CAPACITY_QUEUED_REASONS.has(row.reason)) return null;
+  const n = (v: number | bigint | null) => (v == null ? null : Number(v));
+  const [active, limit] = row.reason === 'runner_at_capacity'
+    ? [(n(row.runnerActive) ?? 0) + (n(row.runnerHeld) ?? 0), n(row.runnerLimit)]
+    : row.reason === 'tree_at_capacity'
+      ? [n(row.treeActive), n(row.treeLimit)]
+      : [n(row.batchActive), n(row.batchLimit)];
+  return {
+    reason: row.reason,
+    active,
+    limit,
+    heldByJobs: row.reason === 'runner_at_capacity' ? n(row.runnerHeld) : null,
+    since: row.since,
+  };
+}

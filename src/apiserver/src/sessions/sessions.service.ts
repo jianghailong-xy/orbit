@@ -4320,7 +4320,21 @@ export class SessionsService {
       visibility: view === 'system'
         ? visibility
         : filters.scheduled
-          ? Prisma.sql`(${visibility}) AND s.run_source = 'SCHEDULE'`
+          // Not a try that ended before its first turn reached the engine (board scheduled-run-not-started, owner's
+          // C1): it did nothing to read, and the run it tried for is reached from the schedule's history and from
+          // the card on the session that started it. A try still waiting for a slot is listed.
+          ? Prisma.sql`(${visibility}) AND s.run_source = 'SCHEDULE'
+              AND NOT (
+                s.finished_at IS NOT NULL
+                AND s.num_turns = 0
+                AND NOT EXISTS (
+                  SELECT 1 FROM conversation_turn ct
+                   WHERE ct.session_id = s.id
+                     -- openingTurnKey(s.id): the run's first turn.
+                     AND ct.client_turn_id = 'initial-' || s.id::text
+                     AND ct.delivered_at IS NOT NULL
+                )
+              )`
           : Prisma.sql`(${visibility}) AND s.run_source <> 'SCHEDULE'`,
       orderBy,
       pageLimit,
