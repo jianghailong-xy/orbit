@@ -777,7 +777,7 @@ test('Update Now of a busy Orbit Cloud runner, on real Docker', { skip: !CONFIG 
       assert.equal(root[2], '/home/orbit', 'the earlier home\'s path is a link to today\'s');
       assert.equal(readme, 'a project', 'the workspace\'s files at its stored path');
       assert.deepEqual(signIns, SIGN_INS, 'the engines\' sign-ins');
-      assert.deepEqual({ runnerId: config.runnerId, workDir: config.workDir }, { runnerId: next.runnerId, workDir: '/home/orbit/orbit-repos' }, 'the runner\'s own config, moved and rewritten');
+      assert.deepEqual({ runnerId: config.runnerId, workDir: config.workDir }, { runnerId: next.runnerId, workDir: '/home/orbit' }, 'the runner\'s own config, moved and rewritten');
       assert.ok(moved, 'the transcript is in the folder Claude Code reads for the workspace');
       assert.equal(moved!.sha256, transcript!.sha256, 'the same transcript, byte for byte, as far as the old generation wrote it');
       assert.ok(!logs.includes('leaves the first as it is'), 'no second home to choose between');
