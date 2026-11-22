@@ -5733,7 +5733,16 @@ export function WorkspaceView({
   // One read of the conversation's schedule cards serves the cards, the change records and a run's strip and report.
   const scheduleCards = useSessionScheduleCards(selectedTrashed ? null : selectedId);
   const scheduleRun = useScheduleRunOfSession(isScheduleRun && !selectedTrashed ? selectedId : null, scheduleCards);
-  const scheduleInserts = useSessionScheduleInserts(selectedTrashed ? null : selectedId, scheduleCards, transcriptEvents, scheduleRun);
+  const scheduleInserts = useSessionScheduleInserts(
+    selectedTrashed ? null : selectedId,
+    scheduleCards,
+    transcriptEvents,
+    scheduleRun,
+    { runner: runnerShownName, engine: ENGINE_CLI_NAMES[selectedEngine] },
+  );
+  // A run that did not get under way in this session (board scheduled-run-not-started ②③④, owner's B1): its card
+  // says what happened to the run and holds the doors, in place of the composer and the notes about this session.
+  const scheduleRunCard = Boolean(scheduleRun?.card);
 
   // Cross-project requests into the project this conversation coordinates, one decision card per
   // batch, drawn where the batch was first asked (board docs/mocks/handoff-in-chat). The batches
@@ -11186,10 +11195,10 @@ export function WorkspaceView({
                   take, and suppresses them: the same empty transcript cannot be both a start that
                   is on its way and a start that was refused. Under a transcript that already has
                   content it stands where their one-line forms do, below the last turn. */}
-              {selected && !selectedTrashed && neverStarted && transcriptEvents.length === 0 && (
+              {selected && !selectedTrashed && !scheduleRunCard && neverStarted && transcriptEvents.length === 0 && (
                 <RunNeverStartedCard never={neverStarted} actions={neverStartedActions} />
               )}
-              {placeholder === 'queued' && showQueuedNotice && !neverStarted && (
+              {placeholder === 'queued' && showQueuedNotice && !neverStarted && !scheduleRunCard && (
                 dshQueueRepair ? <DshRepairCard repair={dshQueueRepair} help={authErrorHelp} /> : antigravityQueueRepair ? <AntigravityRepairCard repair={antigravityQueueRepair} help={authErrorHelp} /> : <div className="chat-queued-state">
                   <div className="chat-queued-dots" aria-hidden="true">
                     <span />
@@ -11215,7 +11224,7 @@ export function WorkspaceView({
                   )}
                 </div>
               )}
-              {placeholder === 'starting' && showStartingNotice && !neverStarted && (
+              {placeholder === 'starting' && showStartingNotice && !neverStarted && !scheduleRunCard && (
                 <div className="chat-queued-state">
                   <div className="chat-queued-dots" aria-hidden="true">
                     <span />
@@ -11423,11 +11432,12 @@ export function WorkspaceView({
               {/* A conversation that has talked, whose next message waits on something only the
                   reader or the machine can change (P9 §8.1): the card, in place of the queued
                   note, which would read as an ordinary wait for a slot. */}
-              {selected && !selectedTrashed && neverStarted && transcriptEvents.length > 0 && (
+              {selected && !selectedTrashed && !scheduleRunCard && neverStarted && transcriptEvents.length > 0 && (
                 <RunNeverStartedCard never={neverStarted} actions={neverStartedActions} />
               )}
               {selected &&
                 !selectedTrashed &&
+                !scheduleRunCard &&
                 showQueuedNotice &&
                 !neverStarted &&
                 // The foot row of the waiting message says it instead (board 2 ⑤).
@@ -11448,6 +11458,7 @@ export function WorkspaceView({
                   shared with the pane above rather than left to that coincidence. */}
               {selected &&
                 !selectedTrashed &&
+                !scheduleRunCard &&
                 showStartingNotice &&
                 !neverStarted &&
                 transcriptEvents.length > 0 && (
@@ -11573,6 +11584,7 @@ export function WorkspaceView({
               )}
               {selected &&
                 !selectedTrashed &&
+                !scheduleRunCard &&
                 isSessionTerminal(selectedSession ?? selected) && (
                 <div className="chat-note">
                   {sessionEndedBanner(
@@ -11666,7 +11678,7 @@ export function WorkspaceView({
         </div>
 
       {/* A machine with no workspace has nothing to send to: its setup card makes the workspace. */}
-      {!bareMachine && <div className="workspace-composer">
+      {!bareMachine && !(scheduleRunCard && !selectedTrashed) && <div className="workspace-composer">
         {/* The reader's messages nothing has read yet: the conversation's next lines, so the band's
             first member, right under the conversation and above the parking strip below
             (docs/mocks/pending-tray-above-parking, decided 2026-10-28). */}
