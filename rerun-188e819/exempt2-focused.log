@@ -1,0 +1,521 @@
+Fetching https://github.com/swiftlang/swift-cmark.git from cache
+Fetching https://github.com/apple/swift-markdown from cache
+Fetched https://github.com/swiftlang/swift-cmark.git from cache (0.70s)
+Fetched https://github.com/apple/swift-markdown from cache (0.70s)
+Computing version for https://github.com/apple/swift-markdown
+Computed https://github.com/apple/swift-markdown at 0.9.0 (1.71s)
+Computing version for https://github.com/swiftlang/swift-cmark.git
+Computed https://github.com/swiftlang/swift-cmark.git at 0.9.0 (1.02s)
+Creating working copy for https://github.com/swiftlang/swift-cmark.git
+Working copy of https://github.com/swiftlang/swift-cmark.git resolved at 0.9.0
+Creating working copy for https://github.com/apple/swift-markdown
+Working copy of https://github.com/apple/swift-markdown resolved at 0.9.0
+Building for debugging...
+[Computing dependencies]
+[Planning 25 / 217]
+[Planning deferred tasks]
+[40 / 145]
+[48 / 146] cmark-gfm-extensions
+[61 / 158] cmark-gfm
+[85 / 160]
+[101 / 160] cmark-gfm
+[115 / 160] cmark-gfm
+[125 / 160] cmark-gfm-extensions
+[134 / 206]
+[136 / 206]
+[143 / 206]
+[148 / 206]
+[150 / 206]
+[154 / 206]
+[156 / 206]
+[159 / 206]
+[162 / 206]
+[164 / 206]
+[165 / 206]
+[174 / 206] Markdown
+[181 / 207] Markdown
+[191 / 252]
+[199 / 252]
+[204 / 252]
+[206 / 252]
+[209 / 252]
+[211 / 252]
+[212 / 252]
+[213 / 252]
+[221 / 252] OrbitKit
+[222 / 252] OrbitKit
+/private/tmp/exempt-188e819/src/macos/OrbitKit/Sources/OrbitKit/App/LandingSessionPage.swift:157:5: [1;33mwarning: [1;39m'public' modifier is redundant for static method declared in a public extension[0;0m
+[0;36m155 |[0;0m     /// §2.7a's cadence for a landing page: a RUNNING attempt four seconds, a queued one (or a
+[0;36m156 |[0;0m     /// stopped one waiting for its next attempt) fifteen, and nothing once the subject has settled.
+[0;36m157 |[0;0m     public static func refetchInterval(_ landing: SessionLandingView?) -> TimeInterval? {
+    [0;36m|[0;0m     `- [1;33mwarning: [1;39m'public' modifier is redundant for static method declared in a public extension[0;0m
+[0;36m158 |[0;0m         guard let landing, landing.settledAt == nil else { return nil }
+[0;36m159 |[0;0m         return landing.currentAttempt?.state == "RUNNING" ? 4 : 15
+
+/private/tmp/exempt-188e819/src/macos/OrbitKit/Sources/OrbitKit/App/LandingSessionPage.swift:163:5: [1;33mwarning: [1;39m'public' modifier is redundant for static method declared in a public extension[0;0m
+[0;36m161 |[0;0m 
+[0;36m162 |[0;0m     /// Whether this device has lost the server: its last read failed, or is more than 90 s old.
+[0;36m163 |[0;0m     public static func readUnavailable(now: Date, updatedAt: Date?, failed: Bool) -> Bool {
+    [0;36m|[0;0m     `- [1;33mwarning: [1;39m'public' modifier is redundant for static method declared in a public extension[0;0m
+[0;36m164 |[0;0m         let stale = updatedAt.map { now.timeIntervalSince($0) > 90 } ?? false
+[0;36m165 |[0;0m         return failed || stale
+
+/private/tmp/exempt-188e819/src/macos/OrbitKit/Sources/OrbitKit/App/LandingSessionPage.swift:169:5: [1;33mwarning: [1;39m'public' modifier is redundant for static method declared in a public extension[0;0m
+[0;36m167 |[0;0m 
+[0;36m168 |[0;0m     /// The page title: the session row's own (server-managed) title, or the one the view can spell.
+[0;36m169 |[0;0m     public static func headerTitle(_ landing: SessionLandingView?, rowTitle: String?,
+    [0;36m|[0;0m     `- [1;33mwarning: [1;39m'public' modifier is redundant for static method declared in a public extension[0;0m
+[0;36m170 |[0;0m                                    taskTitle: String? = nil) -> String {
+[0;36m171 |[0;0m         if let rowTitle, !rowTitle.isEmpty { return rowTitle }
+
+/private/tmp/exempt-188e819/src/macos/OrbitKit/Sources/OrbitKit/App/LandingSessionPage.swift:184:5: [1;33mwarning: [1;39m'public' modifier is redundant for static method declared in a public extension[0;0m
+[0;36m182 |[0;0m 
+[0;36m183 |[0;0m     /// `17m 41s`, `1h 05m` — the check's own duration, as the timeline's sentences spell one.
+[0;36m184 |[0;0m     public static func duration(ms: Int?) -> String {
+    [0;36m|[0;0m     `- [1;33mwarning: [1;39m'public' modifier is redundant for static method declared in a public extension[0;0m
+[0;36m185 |[0;0m         let total = max(0, Int(((Double(ms ?? 0)) / 1_000).rounded()))
+[0;36m186 |[0;0m         let hours = total / 3_600
+
+/private/tmp/exempt-188e819/src/macos/OrbitKit/Sources/OrbitKit/App/LandingSessionPage.swift:196:5: [1;33mwarning: [1;39m'public' modifier is redundant for static method declared in a public extension[0;0m
+[0;36m194 |[0;0m 
+[0;36m195 |[0;0m     /// `Merge check` / `Task acceptance`, the names the check rows use.
+[0;36m196 |[0;0m     public static func checkLabel(_ name: String?) -> String {
+    [0;36m|[0;0m     `- [1;33mwarning: [1;39m'public' modifier is redundant for static method declared in a public extension[0;0m
+[0;36m197 |[0;0m         name == "LANDING_CHECK" ? LandingCheckCopy.label : name == "MERGE_CHECK" ? LandingPageCopy.mergeCheck : LandingPageCopy.taskAcceptance
+[0;36m198 |[0;0m     }
+
+/private/tmp/exempt-188e819/src/macos/OrbitKit/Sources/OrbitKit/App/LandingSessionPage.swift:201:5: [1;33mwarning: [1;39m'public' modifier is redundant for static method declared in a public extension[0;0m
+[0;36m199 |[0;0m 
+[0;36m200 |[0;0m     /// The attempt's section of the timeline, when the view carries one.
+[0;36m201 |[0;0m     public static func section(of landing: SessionLandingView, jobId: String) -> IntegrationTimelineSection? {
+    [0;36m|[0;0m     `- [1;33mwarning: [1;39m'public' modifier is redundant for static method declared in a public extension[0;0m
+[0;36m202 |[0;0m         landing.timeline?.sections.first { $0.jobId == jobId }
+[0;36m203 |[0;0m     }
+
+/private/tmp/exempt-188e819/src/macos/OrbitKit/Sources/OrbitKit/App/LandingSessionPage.swift:208:5: [1;33mwarning: [1;39m'public' modifier is redundant for static method declared in a public extension[0;0m
+[0;36m206 |[0;0m     /// carries the current claim's start only, so the timeline's own first claim line is the fact —
+[0;36m207 |[0;0m     /// and it is the same fact the head says as `first started 17:03`.
+[0;36m208 |[0;0m     public static func firstStartedAt(_ landing: SessionLandingView, jobId: String) -> String? {
+    [0;36m|[0;0m     `- [1;33mwarning: [1;39m'public' modifier is redundant for static method declared in a public extension[0;0m
+[0;36m209 |[0;0m         guard let section = section(of: landing, jobId: jobId) else { return nil }
+[0;36m210 |[0;0m         return section.entries
+
+/private/tmp/exempt-188e819/src/macos/OrbitKit/Sources/OrbitKit/App/LandingSessionPage.swift:226:5: [1;33mwarning: [1;39m'public' modifier is redundant for static method declared in a public extension[0;0m
+[0;36m224 |[0;0m 
+[0;36m225 |[0;0m     /// Whether a stop or cancel has been ASKED for and the runner has not answered yet (J-T8/M-T10).
+[0;36m226 |[0;0m     public static func cancelling(_ landing: SessionLandingView) -> Bool {
+    [0;36m|[0;0m     `- [1;33mwarning: [1;39m'public' modifier is redundant for static method declared in a public extension[0;0m
+[0;36m227 |[0;0m         guard let attempt = landing.currentAttempt, attempt.state == "RUNNING" else { return false }
+[0;36m228 |[0;0m         let entries = section(of: landing, jobId: attempt.jobId)?.entries ?? []
+
+/private/tmp/exempt-188e819/src/macos/OrbitKit/Sources/OrbitKit/App/LandingSessionPage.swift:663:5: [1;33mwarning: [1;39m'public' modifier is redundant for static method declared in a public extension[0;0m
+[0;36m661 |[0;0m     /// merge older than landing sessions has only the record, and a round past the read's 20 records
+[0;36m662 |[0;0m     /// only its landing view. Web: `landingMergeReceipt`.
+[0;36m663 |[0;0m     public static func mergeReceipt(promotion: ProjectPromotionView?,
+    [0;36m|[0;0m     `- [1;33mwarning: [1;39m'public' modifier is redundant for static method declared in a public extension[0;0m
+[0;36m664 |[0;0m                                     landing: SessionLandingView?) -> LandingMergeReceipt {
+[0;36m665 |[0;0m         let main = RunSettings.mainBranchName(promotion?.upstreamRef)
+
+/private/tmp/exempt-188e819/src/macos/OrbitKit/Sources/OrbitKit/App/ListReads.swift:60:41: [1;33mwarning: [1;39m'weak' ownership of capture 'self' differs from implicitly-captured strong reference in outer scope[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/implicit-strong-capture\ImplicitStrongCapture]8;;\]
+[0;36m57 |[0;0m             guard !Task.isCancelled else { return }
+[0;36m58 |[0;0m             if let last = self.lastReadAt, last >= asked { return }
+[0;36m59 |[0;0m             self.gate.read(self.key) {
+   [0;36m|[0;0m                                      |- [1;39mnote: [1;39m'self' implicitly strongly captured here[0;0m
+   [0;36m|[0;0m                                      `- [1;39mnote: [1;39madd 'self' as a capture list item to silence[0;0m
+[0;36m60 |[0;0m                 Task { @MainActor [weak self] in
+   [0;36m|[0;0m                                         |- [1;33mwarning: [1;39m'weak' ownership of capture 'self' differs from implicitly-captured strong reference in outer scope[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/implicit-strong-capture\ImplicitStrongCapture]8;;\]
+   [0;36m|[0;0m                                         `- [1;39mnote: [1;39mexplicitly assign the capture list item to silence[0;0m
+[0;36m61 |[0;0m                     // Owed and made on the way back: a read that started since the ask answers it too.
+[0;36m62 |[0;0m                     if let last = self?.lastReadAt, last >= asked { return }
+
+[#ImplicitStrongCapture]: <https://docs.swift.org/compiler/documentation/diagnostics/implicit-strong-capture>
+[223 / 252] OrbitKit
+[225 / 252] OrbitKit
+/private/tmp/exempt-188e819/src/macos/OrbitKit/Sources/OrbitKit/App/LandingSessionPage.swift:157:5: [1;33mwarning: [1;39m'public' modifier is redundant for static method declared in a public extension[0;0m
+[0;36m155 |[0;0m     /// §2.7a's cadence for a landing page: a RUNNING attempt four seconds, a queued one (or a
+[0;36m156 |[0;0m     /// stopped one waiting for its next attempt) fifteen, and nothing once the subject has settled.
+[0;36m157 |[0;0m     public static func refetchInterval(_ landing: SessionLandingView?) -> TimeInterval? {
+    [0;36m|[0;0m     `- [1;33mwarning: [1;39m'public' modifier is redundant for static method declared in a public extension[0;0m
+[0;36m158 |[0;0m         guard let landing, landing.settledAt == nil else { return nil }
+[0;36m159 |[0;0m         return landing.currentAttempt?.state == "RUNNING" ? 4 : 15
+
+/private/tmp/exempt-188e819/src/macos/OrbitKit/Sources/OrbitKit/App/LandingSessionPage.swift:163:5: [1;33mwarning: [1;39m'public' modifier is redundant for static method declared in a public extension[0;0m
+[0;36m161 |[0;0m 
+[0;36m162 |[0;0m     /// Whether this device has lost the server: its last read failed, or is more than 90 s old.
+[0;36m163 |[0;0m     public static func readUnavailable(now: Date, updatedAt: Date?, failed: Bool) -> Bool {
+    [0;36m|[0;0m     `- [1;33mwarning: [1;39m'public' modifier is redundant for static method declared in a public extension[0;0m
+[0;36m164 |[0;0m         let stale = updatedAt.map { now.timeIntervalSince($0) > 90 } ?? false
+[0;36m165 |[0;0m         return failed || stale
+
+/private/tmp/exempt-188e819/src/macos/OrbitKit/Sources/OrbitKit/App/LandingSessionPage.swift:169:5: [1;33mwarning: [1;39m'public' modifier is redundant for static method declared in a public extension[0;0m
+[0;36m167 |[0;0m 
+[0;36m168 |[0;0m     /// The page title: the session row's own (server-managed) title, or the one the view can spell.
+[0;36m169 |[0;0m     public static func headerTitle(_ landing: SessionLandingView?, rowTitle: String?,
+    [0;36m|[0;0m     `- [1;33mwarning: [1;39m'public' modifier is redundant for static method declared in a public extension[0;0m
+[0;36m170 |[0;0m                                    taskTitle: String? = nil) -> String {
+[0;36m171 |[0;0m         if let rowTitle, !rowTitle.isEmpty { return rowTitle }
+
+/private/tmp/exempt-188e819/src/macos/OrbitKit/Sources/OrbitKit/App/LandingSessionPage.swift:184:5: [1;33mwarning: [1;39m'public' modifier is redundant for static method declared in a public extension[0;0m
+[0;36m182 |[0;0m 
+[0;36m183 |[0;0m     /// `17m 41s`, `1h 05m` — the check's own duration, as the timeline's sentences spell one.
+[0;36m184 |[0;0m     public static func duration(ms: Int?) -> String {
+    [0;36m|[0;0m     `- [1;33mwarning: [1;39m'public' modifier is redundant for static method declared in a public extension[0;0m
+[0;36m185 |[0;0m         let total = max(0, Int(((Double(ms ?? 0)) / 1_000).rounded()))
+[0;36m186 |[0;0m         let hours = total / 3_600
+
+/private/tmp/exempt-188e819/src/macos/OrbitKit/Sources/OrbitKit/App/LandingSessionPage.swift:196:5: [1;33mwarning: [1;39m'public' modifier is redundant for static method declared in a public extension[0;0m
+[0;36m194 |[0;0m 
+[0;36m195 |[0;0m     /// `Merge check` / `Task acceptance`, the names the check rows use.
+[0;36m196 |[0;0m     public static func checkLabel(_ name: String?) -> String {
+    [0;36m|[0;0m     `- [1;33mwarning: [1;39m'public' modifier is redundant for static method declared in a public extension[0;0m
+[0;36m197 |[0;0m         name == "LANDING_CHECK" ? LandingCheckCopy.label : name == "MERGE_CHECK" ? LandingPageCopy.mergeCheck : LandingPageCopy.taskAcceptance
+[0;36m198 |[0;0m     }
+
+/private/tmp/exempt-188e819/src/macos/OrbitKit/Sources/OrbitKit/App/LandingSessionPage.swift:201:5: [1;33mwarning: [1;39m'public' modifier is redundant for static method declared in a public extension[0;0m
+[0;36m199 |[0;0m 
+[0;36m200 |[0;0m     /// The attempt's section of the timeline, when the view carries one.
+[0;36m201 |[0;0m     public static func section(of landing: SessionLandingView, jobId: String) -> IntegrationTimelineSection? {
+    [0;36m|[0;0m     `- [1;33mwarning: [1;39m'public' modifier is redundant for static method declared in a public extension[0;0m
+[0;36m202 |[0;0m         landing.timeline?.sections.first { $0.jobId == jobId }
+[0;36m203 |[0;0m     }
+
+/private/tmp/exempt-188e819/src/macos/OrbitKit/Sources/OrbitKit/App/LandingSessionPage.swift:208:5: [1;33mwarning: [1;39m'public' modifier is redundant for static method declared in a public extension[0;0m
+[0;36m206 |[0;0m     /// carries the current claim's start only, so the timeline's own first claim line is the fact —
+[0;36m207 |[0;0m     /// and it is the same fact the head says as `first started 17:03`.
+[0;36m208 |[0;0m     public static func firstStartedAt(_ landing: SessionLandingView, jobId: String) -> String? {
+    [0;36m|[0;0m     `- [1;33mwarning: [1;39m'public' modifier is redundant for static method declared in a public extension[0;0m
+[0;36m209 |[0;0m         guard let section = section(of: landing, jobId: jobId) else { return nil }
+[0;36m210 |[0;0m         return section.entries
+
+/private/tmp/exempt-188e819/src/macos/OrbitKit/Sources/OrbitKit/App/LandingSessionPage.swift:226:5: [1;33mwarning: [1;39m'public' modifier is redundant for static method declared in a public extension[0;0m
+[0;36m224 |[0;0m 
+[0;36m225 |[0;0m     /// Whether a stop or cancel has been ASKED for and the runner has not answered yet (J-T8/M-T10).
+[0;36m226 |[0;0m     public static func cancelling(_ landing: SessionLandingView) -> Bool {
+    [0;36m|[0;0m     `- [1;33mwarning: [1;39m'public' modifier is redundant for static method declared in a public extension[0;0m
+[0;36m227 |[0;0m         guard let attempt = landing.currentAttempt, attempt.state == "RUNNING" else { return false }
+[0;36m228 |[0;0m         let entries = section(of: landing, jobId: attempt.jobId)?.entries ?? []
+
+/private/tmp/exempt-188e819/src/macos/OrbitKit/Sources/OrbitKit/App/LandingSessionPage.swift:663:5: [1;33mwarning: [1;39m'public' modifier is redundant for static method declared in a public extension[0;0m
+[0;36m661 |[0;0m     /// merge older than landing sessions has only the record, and a round past the read's 20 records
+[0;36m662 |[0;0m     /// only its landing view. Web: `landingMergeReceipt`.
+[0;36m663 |[0;0m     public static func mergeReceipt(promotion: ProjectPromotionView?,
+    [0;36m|[0;0m     `- [1;33mwarning: [1;39m'public' modifier is redundant for static method declared in a public extension[0;0m
+[0;36m664 |[0;0m                                     landing: SessionLandingView?) -> LandingMergeReceipt {
+[0;36m665 |[0;0m         let main = RunSettings.mainBranchName(promotion?.upstreamRef)
+
+/private/tmp/exempt-188e819/src/macos/OrbitKit/Sources/OrbitKit/App/OwnerRequests.swift:441:17: [1;33mwarning: [1;39mstored property 'defaults' of 'Sendable'-conforming struct 'OwnerRequestSnoozes' has non-Sendable type 'UserDefaults'; this is an error in the Swift 6 language mode[0;0m
+[0;36m439 |[0;0m public struct OwnerRequestSnoozes: Sendable {
+[0;36m440 |[0;0m     public static let defaultsKey = "orbit.ownerRequestSnoozes"
+[0;36m441 |[0;0m     private let defaults: UserDefaults
+    [0;36m|[0;0m                 `- [1;33mwarning: [1;39mstored property 'defaults' of 'Sendable'-conforming struct 'OwnerRequestSnoozes' has non-Sendable type 'UserDefaults'; this is an error in the Swift 6 language mode[0;0m
+[0;36m442 |[0;0m 
+[0;36m443 |[0;0m     public init(defaults: UserDefaults = .standard) { self.defaults = defaults }
+
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk/System/Library/Frameworks/Foundation.framework/Headers/NSUserDefaults.h:144:12: [1;39mnote: [1;39mclass 'UserDefaults' does not conform to the 'Sendable' protocol[0;0m
+[0;36m142 |[0;0m /// - An app can modify settings for one of its app extensions.
+[0;36m143 |[0;0m /// - An app can modify settings for an app group to which it belongs.
+[0;36m144 |[0;0m @interface NSUserDefaults : NSObject {
+    [0;36m|[0;0m            `- [1;39mnote: [1;39mclass 'UserDefaults' does not conform to the 'Sendable' protocol[0;0m
+[0;36m145 |[0;0m @private
+[0;36m146 |[0;0m     id _kvo_;
+[226 / 252] OrbitKit
+[227 / 252] OrbitKit
+[229 / 252] OrbitKit
+[234 / 252] OrbitKit
+[236 / 252]
+[236 / 252] OrbitKit
+/private/tmp/exempt-188e819/src/macos/OrbitKit/Sources/OrbitKit/App/OwnerConfirmation.swift:885:19: [1;33mwarning: [1;39mimmutable value 'report' was never used; consider replacing with '_' or removing it[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/no-usage\NoUsage]8;;\]
+ [0;36m883 |[0;0m     /// (`whatTheRunReported`).
+ [0;36m884 |[0;0m     public static func reportHeading(_ report: OwnerConfirmationReport?, time: String?) -> String {
+ [0;36m885 |[0;0m         guard let report, let time else { return whatTheRunReported }
+     [0;36m|[0;0m                   `- [1;33mwarning: [1;39mimmutable value 'report' was never used; consider replacing with '_' or removing it[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/no-usage\NoUsage]8;;\]
+ [0;36m886 |[0;0m         return "\(whatTheRunReported) · \(time)"
+ [0;36m887 |[0;0m     }
+
+/private/tmp/exempt-188e819/src/macos/OrbitKit/Sources/OrbitKit/App/OwnerItemCards.swift:1974:45: [1;33mwarning: [1;39mleft side of nil coalescing operator '??' has non-optional type 'String?', so the right side is never used[0;0m
+[0;36m1972 |[0;0m     public static func leaseSilentMinutes(_ row: ProjectOpenItemRow) -> Int? {
+[0;36m1973 |[0;0m         guard let reported = row.lease?.lastReportAt.flatMap(RelativeTime.parse),
+[0;36m1974 |[0;0m               let opened = ([4;39mrow.escalatedAt[0;0m ?? row.waitingSince).flatMap(RelativeTime.parse)
+     [0;36m|[0;0m                                             `- [1;33mwarning: [1;39mleft side of nil coalescing operator '??' has non-optional type 'String?', so the right side is never used[0;0m
+[0;36m1975 |[0;0m         else { return nil }
+[0;36m1976 |[0;0m         return max(1, Int((opened.timeIntervalSince(reported) / 60).rounded(.down)))
+
+/private/tmp/exempt-188e819/src/macos/OrbitKit/Sources/OrbitKit/App/OwnerRequests.swift:441:17: [1;33mwarning: [1;39mstored property 'defaults' of 'Sendable'-conforming struct 'OwnerRequestSnoozes' has non-Sendable type 'UserDefaults'; this is an error in the Swift 6 language mode[0;0m
+[0;36m439 |[0;0m public struct OwnerRequestSnoozes: Sendable {
+[0;36m440 |[0;0m     public static let defaultsKey = "orbit.ownerRequestSnoozes"
+[0;36m441 |[0;0m     private let defaults: UserDefaults
+    [0;36m|[0;0m                 `- [1;33mwarning: [1;39mstored property 'defaults' of 'Sendable'-conforming struct 'OwnerRequestSnoozes' has non-Sendable type 'UserDefaults'; this is an error in the Swift 6 language mode[0;0m
+[0;36m442 |[0;0m 
+[0;36m443 |[0;0m     public init(defaults: UserDefaults = .standard) { self.defaults = defaults }
+
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk/System/Library/Frameworks/Foundation.framework/Headers/NSUserDefaults.h:144:12: [1;39mnote: [1;39mclass 'UserDefaults' does not conform to the 'Sendable' protocol[0;0m
+[0;36m142 |[0;0m /// - An app can modify settings for one of its app extensions.
+[0;36m143 |[0;0m /// - An app can modify settings for an app group to which it belongs.
+[0;36m144 |[0;0m @interface NSUserDefaults : NSObject {
+    [0;36m|[0;0m            `- [1;39mnote: [1;39mclass 'UserDefaults' does not conform to the 'Sendable' protocol[0;0m
+[0;36m145 |[0;0m @private
+[0;36m146 |[0;0m     id _kvo_;
+
+[#NoUsage]: <https://docs.swift.org/compiler/documentation/diagnostics/no-usage>
+/private/tmp/exempt-188e819/src/macos/OrbitKit/Sources/OrbitKit/Realtime/EventStream.swift:59:98: [1;33mwarning: [1;39mconverting non-Sendable function value to '@Sendable (SSEEvent) -> RunEvent?' may introduce data races[0;0m
+ [0;36m57 |[0;0m 
+ [0;36m58 |[0;0m     public func events(sessionID: String, sinceSeq: Int) -> AsyncThrowingStream<RunEvent, Error> {
+ [0;36m59 |[0;0m         frames(path: "api/sessions/\(sessionID)/events", sinceSeq: sinceSeq, decode: SSEDecoding.runEvent(from:))
+    [0;36m|[0;0m                                                                                                  `- [1;33mwarning: [1;39mconverting non-Sendable function value to '@Sendable (SSEEvent) -> RunEvent?' may introduce data races[0;0m
+ [0;36m60 |[0;0m     }
+ [0;36m61 |[0;0m 
+
+/private/tmp/exempt-188e819/src/macos/OrbitKit/Sources/OrbitKit/Realtime/EventStream.swift:129:109: [1;33mwarning: [1;39mconverting non-Sendable function value to '@Sendable (SSEEvent) -> GuestStreamFrame?' may introduce data races[0;0m
+[0;36m127 |[0;0m     /// watchdog as the owner's, on the guest's own route.
+[0;36m128 |[0;0m     public func guestFrames(sessionID: String, sinceSeq: Int) -> AsyncThrowingStream<GuestStreamFrame, Error> {
+[0;36m129 |[0;0m         frames(path: "api/guest-sessions/\(sessionID)/stream", sinceSeq: sinceSeq, decode: GuestStreamFrame.decode)
+    [0;36m|[0;0m                                                                                                             `- [1;33mwarning: [1;39mconverting non-Sendable function value to '@Sendable (SSEEvent) -> GuestStreamFrame?' may introduce data races[0;0m
+[0;36m130 |[0;0m     }
+[0;36m131 |[0;0m }
+[237 / 252] OrbitKit
+[238 / 252] OrbitKit
+[240 / 252] OrbitKitTests-product
+[242 / 253] OrbitKitTests-product
+[244 / 280]
+[246 / 280]
+[247 / 280]
+[255 / 280] OrbitKitTests-product
+[256 / 280] OrbitKitTests-product
+[258 / 280] OrbitKitTests-product
+[260 / 280] OrbitKitTests-product
+/private/tmp/exempt-188e819/src/macos/OrbitKit/Tests/OrbitKitTests/PromotionPlacementTests.swift:199:13: [1;33mwarning: [1;39minitialization of immutable value 'items' was never used; consider replacing with assignment to '_' or removing it[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/no-usage\NoUsage]8;;\]
+[0;36m197 |[0;0m                            sha: "1f2e3d4c5b6a798807162534435261708f9e0a1b",
+[0;36m198 |[0;0m                            source: "refs/heads/project/34ODoUKJ")
+[0;36m199 |[0;0m         let items = transcript()
+    [0;36m|[0;0m             `- [1;33mwarning: [1;39minitialization of immutable value 'items' was never used; consider replacing with assignment to '_' or removing it[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/no-usage\NoUsage]8;;\]
+[0;36m200 |[0;0m         let receipts = PromotionCards.receipts(merged: [second, first])
+[0;36m201 |[0;0m         XCTAssertEqual(receipts.count, 2)
+
+[#NoUsage]: <https://docs.swift.org/compiler/documentation/diagnostics/no-usage>
+[265 / 280] OrbitKitTests-product
+/private/tmp/exempt-188e819/src/macos/OrbitKit/Tests/OrbitKitTests/ProjectDoneCopyParityTests.swift:386:14: [1;33mwarning: [1;39mimmutable value 'reason' was never used; consider replacing with '_' or removing it[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/no-usage\NoUsage]8;;\]
+[0;36m384 |[0;0m             (nil, "default: return `\(Self.onMainBranch(ProjectDone.landingReasonLabel(nil)))`;"),
+[0;36m385 |[0;0m         ]
+[0;36m386 |[0;0m         for (reason, line) in rows {
+    [0;36m|[0;0m              `- [1;33mwarning: [1;39mimmutable value 'reason' was never used; consider replacing with '_' or removing it[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/no-usage\NoUsage]8;;\]
+[0;36m387 |[0;0m             XCTAssertTrue(web.contains(line), "landingReasonLabel no longer says \(line)")
+[0;36m388 |[0;0m         }
+
+[#NoUsage]: <https://docs.swift.org/compiler/documentation/diagnostics/no-usage>
+[267 / 280] OrbitKitTests-product
+[269 / 280] OrbitKitTests-product
+/private/tmp/exempt-188e819/src/macos/OrbitKit/Tests/OrbitKitTests/LandingSessionPageTests.swift:175:13: [1;33mwarning: [1;39mvariable 'queued' was never mutated; consider changing to 'let' constant[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/variable-never-mutated\VariableNeverMutated]8;;\]
+[0;36m173 |[0;0m     func testThePollingCadenceIsFourSecondsRunningFifteenQueuedAndNothingSettled() {
+[0;36m174 |[0;0m         XCTAssertEqual(LandingPageCopy.refetchInterval(landing()), 4)
+[0;36m175 |[0;0m         var queued = attempt { $0.state = "QUEUED"; $0.phase = nil; $0.claim = 0 }
+    [0;36m|[0;0m             `- [1;33mwarning: [1;39mvariable 'queued' was never mutated; consider changing to 'let' constant[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/variable-never-mutated\VariableNeverMutated]8;;\]
+[0;36m176 |[0;0m         var idle = landing()
+[0;36m177 |[0;0m         idle = SessionLandingView(sessionId: idle.sessionId, projectId: idle.projectId,
+
+[#VariableNeverMutated]: <https://docs.swift.org/compiler/documentation/diagnostics/variable-never-mutated>
+[270 / 280] OrbitKitTests-product
+[271 / 280] OrbitKitTests-product
+[272 / 280] OrbitKitTests-product
+/private/tmp/exempt-188e819/src/macos/OrbitKit/Tests/OrbitKitTests/SessionPreviewImagesTests.swift:119:60: [1;33mwarning: [1;39mbackward matching of the unlabeled trailing closure is deprecated; label the argument with 'toolImages' to suppress this warning[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/trailing-closure-matching\TrailingClosureMatching]8;;\]
+[0;36m117 |[0;0m         XCTAssertEqual(SessionPreviewImages.collect([clipped]), [])
+[0;36m118 |[0;0m 
+[0;36m119 |[0;0m         let refs = SessionPreviewImages.collect([clipped]) { card in
+    [0;36m|[0;0m                                                            `- [1;33mwarning: [1;39mbackward matching of the unlabeled trailing closure is deprecated; label the argument with 'toolImages' to suppress this warning[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/trailing-closure-matching\TrailingClosureMatching]8;;\]
+[0;36m120 |[0;0m             card.id == "toolu_9" ? [self.png] : card.resultImages
+[0;36m121 |[0;0m         }
+
+OrbitKit.SessionPreviewImages.collect:2:20: [1;39mnote: [1;39m'collect(_:isAttachmentImage:toolImages:)' declared here[0;0m
+[0;36m1 |[0;0m enum SessionPreviewImages {
+[0;36m2 |[0;0m public static func collect(_ items: [OrbitKit.TranscriptItem], isAttachmentImage: (String) -> Bool = { _ in false }, toolImages: (OrbitKit.ToolCard) -> [Data] = { $0.resultImages }) -> [OrbitKit.PreviewImageRef]}
+  [0;36m|[0;0m                    `- [1;39mnote: [1;39m'collect(_:isAttachmentImage:toolImages:)' declared here[0;0m
+[0;36m3 |[0;0m 
+
+/private/tmp/exempt-188e819/src/macos/OrbitKit/Tests/OrbitKitTests/SessionProjectCodableTests.swift:159:22: [1;33mwarning: [1;39mexpression implicitly coerced from 'SessionProjectMembership??' to 'Any?'[0;0m
+[0;36m157 |[0;0m 
+[0;36m158 |[0;0m     func testSummaryDistinguishesAbsentNullAndMembership() throws {
+[0;36m159 |[0;0m         XCTAssertNil([4;39mtry summary("").projectMembership[0;0m)
+    [0;36m|[0;0m                      |               |- [1;39mnote: [1;39mprovide a default value to avoid this warning[0;0m
+    [0;36m|[0;0m                      |               |- [1;39mnote: [1;39mforce-unwrap the value to avoid this warning[0;0m
+    [0;36m|[0;0m                      |               `- [1;39mnote: [1;39mexplicitly cast to 'Any?' with 'as Any?' to silence this warning[0;0m
+    [0;36m|[0;0m                      `- [1;33mwarning: [1;39mexpression implicitly coerced from 'SessionProjectMembership??' to 'Any?'[0;0m
+[0;36m160 |[0;0m         switch try summary(#","projectMembership":null"#).projectMembership {
+[0;36m161 |[0;0m         case .some(.none): break
+
+[#TrailingClosureMatching]: <https://docs.swift.org/compiler/documentation/diagnostics/trailing-closure-matching>
+[273 / 280] OrbitKitTests-product
+[274 / 280] OrbitKitTests-product
+/private/tmp/exempt-188e819/src/macos/OrbitKit/Tests/OrbitKitTests/OwnerConfirmationPlacementTests.swift:234:13: [1;33mwarning: [1;39minitialization of immutable value 'items' was never used; consider replacing with assignment to '_' or removing it[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/no-usage\NoUsage]8;;\]
+[0;36m232 |[0;0m     /// whatever the clock says — the same filter the question card is under (`receiptsIn`).
+[0;36m233 |[0;0m     func testAReceiptForAnotherSessionsRunIsNotDrawnHere() {
+[0;36m234 |[0;0m         let items = [question("i1"), thought("i2"), report("i3")]
+    [0;36m|[0;0m             `- [1;33mwarning: [1;39minitialization of immutable value 'items' was never used; consider replacing with assignment to '_' or removing it[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/no-usage\NoUsage]8;;\]
+[0;36m235 |[0;0m         XCTAssertEqual(
+[0;36m236 |[0;0m             OwnerConfirmations.receipts(read([decision("d1", at: "2026-09-16T11:17:05.000Z",
+
+[#NoUsage]: <https://docs.swift.org/compiler/documentation/diagnostics/no-usage>
+[276 / 280] OrbitKitTests-product
+[277 / 280] OrbitKitTests-product
+[278 / 280] OrbitKitTests-product
+Build complete! (160.26 sec)
+Test Suite 'Selected tests' started at 2026-11-22 16:21:24.164.
+Test Suite 'OrbitKitTests.xctest' started at 2026-11-22 16:21:24.164.
+Test Suite 'LandingCheckTests' started at 2026-11-22 16:21:24.164.
+Test Case '-[OrbitKitTests.LandingCheckTests testBaselineCardReadsTheMeasuredTreeAndHeldTasks]' started.
+Test Case '-[OrbitKitTests.LandingCheckTests testBaselineCardReadsTheMeasuredTreeAndHeldTasks]' passed (0.003 seconds).
+Test Case '-[OrbitKitTests.LandingCheckTests testConfirmationSnapshotPreservesOmittedFieldsAndNullInherits]' started.
+Test Case '-[OrbitKitTests.LandingCheckTests testConfirmationSnapshotPreservesOmittedFieldsAndNullInherits]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.LandingCheckTests testEscalatedBaselineItemKeepsTheBaselineCardNotWhoFixes]' started.
+Test Case '-[OrbitKitTests.LandingCheckTests testEscalatedBaselineItemKeepsTheBaselineCardNotWhoFixes]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.LandingCheckTests testEveryWebCopyKeyHasAnExactNativeCounterpart]' started.
+Test Case '-[OrbitKitTests.LandingCheckTests testEveryWebCopyKeyHasAnExactNativeCounterpart]' passed (0.006 seconds).
+Test Case '-[OrbitKitTests.LandingCheckTests testScopeRecoveryNeverAssignsNewestResultsToAnotherAttemptClaimOrRound]' started.
+Test Case '-[OrbitKitTests.LandingCheckTests testScopeRecoveryNeverAssignsNewestResultsToAnotherAttemptClaimOrRound]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.LandingCheckTests testSettingsDecodeAndWriteExactCommandAndIndependentNulls]' started.
+Test Case '-[OrbitKitTests.LandingCheckTests testSettingsDecodeAndWriteExactCommandAndIndependentNulls]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.LandingCheckTests testThreeLandingVerdictsAndBothAttributionsHaveSeparateRows]' started.
+Test Case '-[OrbitKitTests.LandingCheckTests testThreeLandingVerdictsAndBothAttributionsHaveSeparateRows]' passed (0.001 seconds).
+Test Suite 'LandingCheckTests' passed at 2026-11-22 16:21:24.175.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.010 (0.011) seconds
+Test Suite 'LandingMeasuredTests' started at 2026-11-22 16:21:24.175.
+Test Case '-[OrbitKitTests.LandingMeasuredTests testALineThisBuildDoesNotKnowIsStillNotSettings]' started.
+Test Case '-[OrbitKitTests.LandingMeasuredTests testALineThisBuildDoesNotKnowIsStillNotSettings]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.LandingMeasuredTests testAnExemptTaskDecodesItsMark]' started.
+Test Case '-[OrbitKitTests.LandingMeasuredTests testAnExemptTaskDecodesItsMark]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.LandingMeasuredTests testAnOlderServerStillDecodes]' started.
+Test Case '-[OrbitKitTests.LandingMeasuredTests testAnOlderServerStillDecodes]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.LandingMeasuredTests testANoLineRequestIsCompleteAndNamesNoMergeEitherWay]' started.
+Test Case '-[OrbitKitTests.LandingMeasuredTests testANoLineRequestIsCompleteAndNamesNoMergeEitherWay]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.LandingMeasuredTests testANoLineRequestNamesNoBranch]' started.
+Test Case '-[OrbitKitTests.LandingMeasuredTests testANoLineRequestNamesNoBranch]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.LandingMeasuredTests testARequestThatNamesALineStillSendsIt]' started.
+Test Case '-[OrbitKitTests.LandingMeasuredTests testARequestThatNamesALineStillSendsIt]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.LandingMeasuredTests testAStartRequestWithNoLineDecodes]' started.
+Test Case '-[OrbitKitTests.LandingMeasuredTests testAStartRequestWithNoLineDecodes]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.LandingMeasuredTests testATaskExemptLandingCheckIsSkippedNotFailed]' started.
+Test Case '-[OrbitKitTests.LandingMeasuredTests testATaskExemptLandingCheckIsSkippedNotFailed]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.LandingMeasuredTests testNoCheckIsAValue]' started.
+Test Case '-[OrbitKitTests.LandingMeasuredTests testNoCheckIsAValue]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.LandingMeasuredTests testTheChangeListReadsAsTheBoard]' started.
+Test Case '-[OrbitKitTests.LandingMeasuredTests testTheChangeListReadsAsTheBoard]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.LandingMeasuredTests testTheDraftOfANoLineRequestDrawsTheOneSentenceAndThePressSendsNoLine]' started.
+Test Case '-[OrbitKitTests.LandingMeasuredTests testTheDraftOfANoLineRequestDrawsTheOneSentenceAndThePressSendsNoLine]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.LandingMeasuredTests testTheFourWritersReadAsTheBoardsFourBadges]' started.
+Test Case '-[OrbitKitTests.LandingMeasuredTests testTheFourWritersReadAsTheBoardsFourBadges]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.LandingMeasuredTests testTheLandingCheckReadsItsProvenance]' started.
+Test Case '-[OrbitKitTests.LandingMeasuredTests testTheLandingCheckReadsItsProvenance]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.LandingMeasuredTests testTheOwnersExemptionAndTheRemoveBody]' started.
+Test Case '-[OrbitKitTests.LandingMeasuredTests testTheOwnersExemptionAndTheRemoveBody]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.LandingMeasuredTests testTheOwnersWritesForEachValue]' started.
+Test Case '-[OrbitKitTests.LandingMeasuredTests testTheOwnersWritesForEachValue]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.LandingMeasuredTests testTheRevertConfirmationSaysWhatGoesBack]' started.
+Test Case '-[OrbitKitTests.LandingMeasuredTests testTheRevertConfirmationSaysWhatGoesBack]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.LandingMeasuredTests testTheStartedRecordWithNoLineDecodesAndTheCardCarriesItsSettings]' started.
+Test Case '-[OrbitKitTests.LandingMeasuredTests testTheStartedRecordWithNoLineDecodesAndTheCardCarriesItsSettings]' passed (0.000 seconds).
+Test Suite 'LandingMeasuredTests' passed at 2026-11-22 16:21:24.182.
+	 Executed 17 tests, with 0 failures (0 unexpected) in 0.006 (0.007) seconds
+Test Suite 'LandingStepsTests' started at 2026-11-22 16:21:24.182.
+Test Case '-[OrbitKitTests.LandingStepsTests testAFailedChecksResultStaysInItsCheck]' started.
+Test Case '-[OrbitKitTests.LandingStepsTests testAFailedChecksResultStaysInItsCheck]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.LandingStepsTests testALandedTasksFifteenLinesAreFiveSteps]' started.
+Test Case '-[OrbitKitTests.LandingStepsTests testALandedTasksFifteenLinesAreFiveSteps]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.LandingStepsTests testAMergeRoundsLastStepIsMergeAndACheckRoundsIsResult]' started.
+Test Case '-[OrbitKitTests.LandingStepsTests testAMergeRoundsLastStepIsMergeAndACheckRoundsIsResult]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.LandingStepsTests testChecksDuration]' started.
+Test Case '-[OrbitKitTests.LandingStepsTests testChecksDuration]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.LandingStepsTests testTaskAcceptanceAndTheMergeCheckEachHaveAStep]' started.
+Test Case '-[OrbitKitTests.LandingStepsTests testTaskAcceptanceAndTheMergeCheckEachHaveAStep]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.LandingStepsTests testTheWordsAreTheWebs]' started.
+Test Case '-[OrbitKitTests.LandingStepsTests testTheWordsAreTheWebs]' passed (0.005 seconds).
+Test Suite 'LandingStepsTests' passed at 2026-11-22 16:21:24.188.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.006 (0.006) seconds
+Test Suite 'LandingViewsWiringTests' started at 2026-11-22 16:21:24.188.
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testAFailedChecksInlineOutputIsReadByAViewThatIsAlwaysThere]' started.
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testAFailedChecksInlineOutputIsReadByAViewThatIsAlwaysThere]' passed (0.003 seconds).
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testALoneMergeJobsCardSaysNoTaskLandingSentence]' started.
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testALoneMergeJobsCardSaysNoTaskLandingSentence]' passed (0.002 seconds).
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testCheckOutputRendersLogTextWithoutApplyingTimelineCopy]' started.
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testCheckOutputRendersLogTextWithoutApplyingTimelineCopy]' passed (0.002 seconds).
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testEachReRunDoorSendsItsOwnReason]' started.
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testEachReRunDoorSendsItsOwnReason]' passed (0.016 seconds).
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testTheConsoleDrawsALandingSessionAsItsProjectsWindowFocusedOnIt]' started.
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testTheConsoleDrawsALandingSessionAsItsProjectsWindowFocusedOnIt]' passed (0.018 seconds).
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testTheLandingCardAndTheJobsListAndTheMergeRowCarryTheirEntries]' started.
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testTheLandingCardAndTheJobsListAndTheMergeRowCarryTheirEntries]' passed (0.040 seconds).
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testTheLandingReadsAreWired]' started.
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testTheLandingReadsAreWired]' passed (0.041 seconds).
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testTheLandingsRowAnswersAcrossItsWholeRow]' started.
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testTheLandingsRowAnswersAcrossItsWholeRow]' passed (0.005 seconds).
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testTheSourceSessionCarriesItsLandingLabel]' started.
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testTheSourceSessionCarriesItsLandingLabel]' passed (0.009 seconds).
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testTheStatusCardDrawsAbandonAsTheLightSecondaryDoor]' started.
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testTheStatusCardDrawsAbandonAsTheLightSecondaryDoor]' passed (0.002 seconds).
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testTheStatusCardsHeadWearsTheRedCrossForAnAttemptThatStoppedOnAFailure]' started.
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testTheStatusCardsHeadWearsTheRedCrossForAnAttemptThatStoppedOnAFailure]' passed (0.003 seconds).
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testTheTaskPageDrawsItsLandingSection]' started.
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testTheTaskPageDrawsItsLandingSection]' passed (0.013 seconds).
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testTheTimelinesMarksReadTheLinesFields]' started.
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testTheTimelinesMarksReadTheLinesFields]' passed (0.005 seconds).
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testTheWindowOpensOnItsLandingOrAtItsBottomAndOnlyItsCardsPoll]' started.
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testTheWindowOpensOnItsLandingOrAtItsBottomAndOnlyItsCardsPoll]' passed (0.006 seconds).
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testTheWindowReadsAsAChat]' started.
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testTheWindowReadsAsAChat]' passed (0.016 seconds).
+Test Suite 'LandingViewsWiringTests' passed at 2026-11-22 16:21:24.368.
+	 Executed 15 tests, with 0 failures (0 unexpected) in 0.179 (0.180) seconds
+Test Suite 'TaskDetailWiringTests' started at 2026-11-22 16:21:24.368.
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testARoutedRunSaysWhatItRanOnAndOpensItsWhy]' started.
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testARoutedRunSaysWhatItRanOnAndOpensItsWhy]' passed (0.005 seconds).
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testAtMostTwoPressesAndMarkDoneLivesInTheMenu]' started.
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testAtMostTwoPressesAndMarkDoneLivesInTheMenu]' passed (0.005 seconds).
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testEveryHeadingIsTheBrowsersWord]' started.
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testEveryHeadingIsTheBrowsersWord]' passed (0.024 seconds).
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testLongTextFoldsFromItsLengthAndTheSheetsSaveExplicitly]' started.
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testLongTextFoldsFromItsLengthAndTheSheetsSaveExplicitly]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testRunsWithIsOneLineAndItsSheetHoldsTheFormRows]' started.
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testRunsWithIsOneLineAndItsSheetHoldsTheFormRows]' passed (0.013 seconds).
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testSuggestedReadsTheServersTiersAndWritesThroughTheModel]' started.
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testSuggestedReadsTheServersTiersAndWritesThroughTheModel]' passed (0.007 seconds).
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testTheAccountSwitchGatesEverySmartSelectionEntry]' started.
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testTheAccountSwitchGatesEverySmartSelectionEntry]' passed (0.011 seconds).
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testTheAgentFormHasNoSwitchAndTheComposerItsMark]' started.
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testTheAgentFormHasNoSwitchAndTheComposerItsMark]' passed (0.011 seconds).
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testTheBarShowsTheTitleOnlyOnceItHasScrolledAway]' started.
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testTheBarShowsTheTitleOnlyOnceItHasScrolledAway]' passed (0.003 seconds).
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testTheLineUnderTheRunSaysWhyItCannotStartOrThatNothingElseWill]' started.
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testTheLineUnderTheRunSaysWhyItCannotStartOrThatNothingElseWill]' passed (0.002 seconds).
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testTheNewBlocksReadAndWriteThroughTheModel]' started.
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testTheNewBlocksReadAndWriteThroughTheModel]' passed (0.028 seconds).
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testThePageDrawsTheWebPanelsBlocksInItsOrder]' started.
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testThePageDrawsTheWebPanelsBlocksInItsOrder]' passed (0.005 seconds).
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testTheRunLedBlocksReadTheTasksOwnFacts]' started.
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testTheRunLedBlocksReadTheTasksOwnFacts]' passed (0.016 seconds).
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testTheWebPanelStillDrawsTheBlocksInThisOrder]' started.
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testTheWebPanelStillDrawsTheBlocksInThisOrder]' passed (0.009 seconds).
+Test Suite 'TaskDetailWiringTests' passed at 2026-11-22 16:21:24.510.
+	 Executed 14 tests, with 0 failures (0 unexpected) in 0.141 (0.142) seconds
+Test Suite 'TaskLandingExemptTests' started at 2026-11-22 16:21:24.510.
+Test Case '-[OrbitKitTests.TaskLandingExemptTests testASkippedCheckFetchesNoInlineOutput]' started.
+Test Case '-[OrbitKitTests.TaskLandingExemptTests testASkippedCheckFetchesNoInlineOutput]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.TaskLandingExemptTests testASkipWithNoReasonStillSaysExempt]' started.
+Test Case '-[OrbitKitTests.TaskLandingExemptTests testASkipWithNoReasonStillSaysExempt]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.TaskLandingExemptTests testAStopInTheStepStillFailsIt]' started.
+Test Case '-[OrbitKitTests.TaskLandingExemptTests testAStopInTheStepStillFailsIt]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.TaskLandingExemptTests testATaskExemptLandingCheckReadsSkippedWithItsReason]' started.
+Test Case '-[OrbitKitTests.TaskLandingExemptTests testATaskExemptLandingCheckReadsSkippedWithItsReason]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.TaskLandingExemptTests testOnlyTheTasksExemptionIsSkipped]' started.
+Test Case '-[OrbitKitTests.TaskLandingExemptTests testOnlyTheTasksExemptionIsSkipped]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.TaskLandingExemptTests testRemoveExemptionPatchesTheFlagOff]' started.
+Test Case '-[OrbitKitTests.TaskLandingExemptTests testRemoveExemptionPatchesTheFlagOff]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.TaskLandingExemptTests testTheMarkIsTheNewestUnrevertedRecordThatSetIt]' started.
+Test Case '-[OrbitKitTests.TaskLandingExemptTests testTheMarkIsTheNewestUnrevertedRecordThatSetIt]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.TaskLandingExemptTests testTheOriginBadgeIsTheRecordsOrigin]' started.
+Test Case '-[OrbitKitTests.TaskLandingExemptTests testTheOriginBadgeIsTheRecordsOrigin]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.TaskLandingExemptTests testTheTaskReadDecodesAllFourExemptionFields]' started.
+Test Case '-[OrbitKitTests.TaskLandingExemptTests testTheTaskReadDecodesAllFourExemptionFields]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.TaskLandingExemptTests testWithNoRecordTheTasksOwnFieldsSay]' started.
+Test Case '-[OrbitKitTests.TaskLandingExemptTests testWithNoRecordTheTasksOwnFieldsSay]' passed (0.000 seconds).
+Test Suite 'TaskLandingExemptTests' passed at 2026-11-22 16:21:24.512.
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'OrbitKitTests.xctest' passed at 2026-11-22 16:21:24.512.
+	 Executed 69 tests, with 0 failures (0 unexpected) in 0.344 (0.348) seconds
+Test Suite 'Selected tests' passed at 2026-11-22 16:21:24.512.
+	 Executed 69 tests, with 0 failures (0 unexpected) in 0.344 (0.349) seconds
