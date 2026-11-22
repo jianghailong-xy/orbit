@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -22,8 +21,8 @@ import (
 //   - when a session ends and nothing else is running here — no turn, no engine, no background job — what is
 //     left of the work that ran (sweepManagedTmpWhenIdle).
 //
-// Only where /tmp is a directory of the volume home is on, and not home itself: a runner whose /tmp is a tmpfs
-// or an emptyDir (an earlier template), or any self-managed machine, is never swept.
+// Only where /tmp is the volume's own directory for it, home/.orbit-tmp: a runner whose /tmp is a tmpfs or an
+// emptyDir (an earlier template), or any self-managed machine, is never swept.
 
 // managedTmpDir is the temporary directory a managed runner's template mounts.
 const managedTmpDir = "/tmp"
@@ -112,10 +111,10 @@ func newestModification(path string, info fs.FileInfo) time.Time {
 	return newest
 }
 
-// managedTmpSweepable says whether this process may sweep tmp: a managed runner whose tmp is a directory of
-// the volume home is on, and not home itself.
+// managedTmpSweepable says whether this process may sweep tmp: a managed runner whose tmp is its data volume's
+// own temporary directory.
 func managedTmpSweepable(tmp, home string) bool {
-	return currentManagedInstance() != nil && dirOnVolumeOf(tmp, home)
+	return currentManagedInstance() != nil && isVolumeTmpDir(tmp, home)
 }
 
 // sweepManagedTmpAtStart empties a managed runner's /tmp as the daemon starts (sweepTmpAtStart).
@@ -162,14 +161,19 @@ func sweepTmpWhenIdle(pool *sessionPool, dir string, now time.Time) {
 	}
 }
 
-// dirOnVolumeOf says whether dir is on the same filesystem as home and is not home itself.
-func dirOnVolumeOf(dir, home string) bool {
-	if dir == "" || home == "" {
+// managedTmpSubdir is the data volume's directory the template mounts at /tmp: home/.orbit-tmp.
+const managedTmpSubdir = ".orbit-tmp"
+
+// isVolumeTmpDir says whether tmp is home/.orbit-tmp itself: that directory is a real one, not a link, and tmp
+// is the same directory. A link put in its place (pointing at the runner's state, say) is not swept through.
+func isVolumeTmpDir(tmp, home string) bool {
+	if tmp == "" || home == "" {
 		return false
 	}
-	var d, h syscall.Stat_t
-	if syscall.Stat(dir, &d) != nil || syscall.Stat(home, &h) != nil {
+	own, err := os.Lstat(filepath.Join(home, managedTmpSubdir))
+	if err != nil || !own.IsDir() {
 		return false
 	}
-	return d.Dev == h.Dev && d.Ino != h.Ino
+	mounted, err := os.Stat(tmp)
+	return err == nil && os.SameFile(own, mounted)
 }
