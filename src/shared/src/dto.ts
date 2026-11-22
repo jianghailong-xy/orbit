@@ -3247,8 +3247,12 @@ export interface ProviderModelTier {
   supersededBy?: string;
   /** USD per million output tokens, when known (models.dev); null for a subscription or an unpriced key. */
   outputPricePerMTok: number | null;
-  /** How well this model completed work, for display only: routing never reads it (docs/subagent-design.md §7.1). */
+  /** How well this model completed work, for display only: routing never reads it (docs/subagent-design.md §7.1).
+   *  Pooled over every row of the same `identity`, on any provider or engine. */
   quality: ModelQuality;
+  /** Which model this is on any provider or engine (apiserver model-identity.ts): rows with one `key` are one
+   *  model, `name` its vendor name (null when none is known). Display only. */
+  identity?: { key: string; name: string | null };
 }
 
 /** How far back the Model tiers quality reads, in days. */

@@ -10626,3 +10626,17 @@ model HelpFeedback {
   @@index([kind, itemId])
   @@map("help_feedback")
 }
+
+/// Which model ids name the same model (migration 1432), for Settings → Model routing: a row's name and pooled
+/// Quality. Keyed by modelRuleKey (model-identity.ts); what its rules cannot settle DeepSeek decides once.
+/// Not an owner's row: an id means the same on every account. Display only: routing never reads it.
+model ModelIdentity {
+  ruleKey      String   @id @map("rule_key")
+  /// The rule key of the model this one is; its own when it is no other's.
+  canonicalKey String   @map("canonical_key")
+  /// The model's vendor name (`Claude Sonnet 5.5`); null when none was given.
+  name         String?
+  decidedAt    DateTime @default(now()) @map("decided_at") @db.Timestamptz(3)
+
+  @@map("model_identity")
+}
