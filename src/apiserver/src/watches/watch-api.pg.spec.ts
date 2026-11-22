@@ -21,6 +21,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import { get as httpGet } from 'node:http';
 import path from 'node:path';
 import { after, test } from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -1555,8 +1556,13 @@ test('GET /watches?following=true answers the union a Following page draws: the 
   }
 
   // Conditional answer: the same list is a 304 to the validator it came with, and a changed watch is a 200 again.
-  const conditional = (etag: string) => fetch(`${h.base}/api/watches?following=true`, {
-    headers: { authorization: `Bearer ${owner.bearer}`, 'if-none-match': etag },
+  // As the browser's HTTP cache revalidates: If-None-Match alone. (Node's fetch adds `Cache-Control: no-cache` to a
+  // conditional request, which Express's own freshness check refuses, as the Open list's comment says.)
+  const conditional = (etag: string) => new Promise<{ status: number; etag: string | undefined }>((resolve, reject) => {
+    httpGet(`${h.base}/api/watches?following=true`, { headers: { authorization: `Bearer ${owner.bearer}`, 'if-none-match': etag } }, (res) => {
+      res.resume();
+      res.on('end', () => resolve({ status: res.statusCode ?? 0, etag: res.headers.etag }));
+    }).on('error', reject);
   });
   const validated = await fetch(`${h.base}/api/watches?following=true`, { headers: { authorization: `Bearer ${owner.bearer}` } });
   const etag = validated.headers.get('etag');
@@ -1565,7 +1571,7 @@ test('GET /watches?following=true answers the union a Following page draws: the 
   expectStatus(await call(h, owner.bearer, 'POST', `/watches/${live.id}/pause`), 200, 'pause the live watch');
   const changed = await conditional(etag);
   assert.equal(changed.status, 200, 'a watch changed, so the read is answered 200 again');
-  assert.notEqual(changed.headers.get('etag'), etag);
+  assert.notEqual(changed.etag, etag);
 
   expectStatus(await call(h, owner.bearer, 'GET', '/watches?following=false'), 400, 'following=false');
   expectStatus(await call(h, owner.bearer, 'GET', '/watches?following=true&state=ACTIVE'), 400, 'following with a state');
