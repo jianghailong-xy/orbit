@@ -207,7 +207,7 @@ final class StartProjectWiringTests: XCTestCase {
                           + "names the main branch on the card (`StartSettingsDraft.automaticSays`)")
         XCTAssertTrue(start.contains("escalationSeconds: escalationSeconds, main: draft.main,"),
                       "and so does what still comes to the owner")
-        XCTAssertTrue(start.contains("deliveryMode: draft.agentPushes ? .agentPush : .platform)"),
+        XCTAssertTrue(start.contains("deliveryMode: draft.agentPushes ? .agentPush : .platform,"),
                       "which has no merge into main in it while the agent pushes (§10.5 O-L2)")
         // Delivery (§10.5 O-L1, A-Q21): a row only where the read offers the choice, the agent's way
         // only on a main line, and a line moved off main takes the delivery back to Orbit's.

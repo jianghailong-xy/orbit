@@ -69,6 +69,7 @@ import {
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { ModuleRef } from '@nestjs/core';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -189,6 +190,18 @@ function connect(url: string): Stack {
     [CoordinatorEvidenceQueueService, new CoordinatorEvidenceQueueService(prisma, producer)],
     [PushService, push],
   ]);
+  // The module graph, as the router finds what it may not import (`considerPromotionAfterSettledWork`):
+  // it resolves from these same collaborators, and a type none of them is fails naming it, so a router
+  // that asks for more than this file provides says so here too. No case below finishes settled work.
+  provided.set(ModuleRef, {
+    get(type: { name?: string }) {
+      assert.ok(
+        provided.has(type),
+        `the module graph was asked for ${type?.name ?? String(type)}, which this spec does not provide`,
+      );
+      return provided.get(type);
+    },
+  });
   return {
     db,
     evidence: new TaskCompletionEvidenceService(
@@ -418,11 +431,15 @@ test('no owner-only question writes a coordinator turn; an Automatic project’s
   assertCoordinatorPgUrlIsIsolated(url);
   const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
   await sql.connect();
+  // Ended whatever happens next: a wiring that throws below would otherwise leave this client open,
+  // and the file would hang on it instead of failing with the assertion that names what is missing.
+  t.after(async () => {
+    await sql.end().catch(() => undefined);
+  });
   await verifyCoordinatorPgIdentity(sql);
   const stack = connect(url);
   t.after(async () => {
     await stack.db.$disconnect().catch(() => undefined);
-    await sql.end().catch(() => undefined);
   });
   const { db } = stack;
   const f = await fixture(stack, 'decision-facts');

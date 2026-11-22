@@ -146,36 +146,33 @@ internal fun StartProjectCard(
                     RunSettings.delivery(draft.line, draft.deliveryMode)), tag)
             }
             HorizontalDivider()
-            if (draft.line == null) {
-                Text(StartProjectCopy.noLine, Modifier.fillMaxWidth().padding(12.dp).testTag("$tag-no-line"),
-                    style = MaterialTheme.typography.labelMedium, color = muted)
-            } else {
-                LineRow(draft, request, projectId, editable, tag, onDraft)
-                // How the work reaches main, under the line it only means something for: a card whose read does not say offers no
-                // choice, and no row.
-                if (draft.deliveryMode != null) {
-                    HorizontalDivider()
-                    DeliveryRow(draft, editable, tag, onDraft)
-                }
-                // A project with no repository has no branch to name, and no row.
-                if (draft.upstream != null) {
-                    HorizontalDivider()
-                    MainBranchRow(draft, branches, lastChoice, editable, tag, onDraft)
-                }
+            // A request that names no line (§12.15 P-M2, rulings D1 and D8): one line in place of the line, its delivery, its main
+            // branch and the landing check — no control to choose a line — and the merge check kept.
+            if (draft.line == null) NoLineRow(tag) else LineRow(draft, request, projectId, editable, tag, onDraft)
+            // How the work reaches main, under the line it only means something for: a card whose read does not say offers no
+            // choice, and no row.
+            if (draft.line != null && draft.deliveryMode != null) {
                 HorizontalDivider()
-                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(LandingCheckCopy.label)
-                    if (draft.line == "MAIN") Text(LandingCheckCopy.main) else {
-                        OutlinedTextField(draft.landingCheckCommand, { onDraft(draft.copy(landingCheckCommand = it)) },
-                            enabled = editable, placeholder = { Text(LandingCheckCopy.commandPlaceholder) }, label = { Text(LandingCheckCopy.command) })
-                        Text(LandingCheckCopy.hint, style = MaterialTheme.typography.labelMedium)
-                        if (draft.landingCheckCommand.isBlank()) Text(LandingCheckCopy.inheritedCommand(draft.mergeCheckCommand.takeIf { it.isNotBlank() }))
-                        OutlinedTextField(draft.landingCheckTimeoutSeconds?.toString().orEmpty(),
-                            { if (it.isEmpty() || (it.toIntOrNull() ?: 0) > 0) onDraft(draft.copy(landingCheckTimeoutSeconds = it.toIntOrNull())) },
-                            enabled = editable, placeholder = { Text(LandingCheckCopy.timeoutPlaceholder) }, label = { Text(LandingCheckCopy.timeout) })
-                        Text(LandingCheckCopy.timeoutHint, style = MaterialTheme.typography.labelMedium)
-                        if (draft.landingCheckTimeoutSeconds == null) Text(LandingCheckCopy.inheritedTimeout(draft.mergeCheckTimeoutSeconds))
-                    }
+                DeliveryRow(draft, editable, tag, onDraft)
+            }
+            // A project with no repository has no branch to name, and no row.
+            if (draft.upstream != null) {
+                HorizontalDivider()
+                MainBranchRow(draft, branches, lastChoice, editable, tag, onDraft)
+            }
+            if (draft.line != null) HorizontalDivider()
+            if (draft.line != null) Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(LandingCheckCopy.label)
+                if (draft.line == "MAIN") Text(LandingCheckCopy.main) else {
+                    OutlinedTextField(draft.landingCheckCommand, { onDraft(draft.copy(landingCheckCommand = it)) },
+                        enabled = editable, placeholder = { Text(LandingCheckCopy.commandPlaceholder) }, label = { Text(LandingCheckCopy.command) })
+                    Text(LandingCheckCopy.hint, style = MaterialTheme.typography.labelMedium)
+                    if (draft.landingCheckCommand.isBlank()) Text(LandingCheckCopy.inheritedCommand(draft.mergeCheckCommand.takeIf { it.isNotBlank() }))
+                    OutlinedTextField(draft.landingCheckTimeoutSeconds?.toString().orEmpty(),
+                        { if (it.isEmpty() || (it.toIntOrNull() ?: 0) > 0) onDraft(draft.copy(landingCheckTimeoutSeconds = it.toIntOrNull())) },
+                        enabled = editable, placeholder = { Text(LandingCheckCopy.timeoutPlaceholder) }, label = { Text(LandingCheckCopy.timeout) })
+                    Text(LandingCheckCopy.timeoutHint, style = MaterialTheme.typography.labelMedium)
+                    if (draft.landingCheckTimeoutSeconds == null) Text(LandingCheckCopy.inheritedTimeout(draft.mergeCheckTimeoutSeconds))
                 }
             }
             HorizontalDivider()
@@ -330,6 +327,11 @@ private fun ComesToYou(items: List<StartProjectCopy.ComesToYouItem>, tag: String
         } }
     }
 }
+
+/** How it runs on a request with no line: the one sentence, on the tint the board gives it, and nothing to press. */
+@Composable
+private fun NoLineRow(tag: String) = Text(LandingMeasuredCopy.landsWhenATaskCommits, Modifier.fillMaxWidth()
+    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.07f)).padding(horizontal = 12.dp, vertical = 12.dp).testTag("$tag-no-line"))
 
 /** Where finished tasks land, picked from the platform's menu: each option with what choosing it means, the branch's own
  * name under its option, and the chosen one ticked. */

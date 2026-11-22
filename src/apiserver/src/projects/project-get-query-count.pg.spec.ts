@@ -133,9 +133,11 @@ const sha = (nibble: string) => nibble.repeat(40);
  *      two partial indexes and joined to the criterion and both projects (`criterion-move-record.ts`);
  *   1  the owner rulings still live, added 2026-11-17 with `rulings` (coordinator handoff v2 §2): one
  *      `findMany` by project and owner, bounded by `PROJECT_RULINGS_READ_MAX` (`project-ruling.ts`);
- *   1  the coordinator's cardless setting changes, added 2026-11-20 with `settingChanges` (P-R1,
- *      migration 1390): the owner's record of what the coordinator changed without a card, one
- *      `findMany` by project, newest first, bounded by that project's ledger rows.
+ *   1  the coordinator's cardless landing-check changes, added 2026-11-20 with `settingChanges`
+ *      (§12.15 P-R1, board D7): the owner reads what the coordinator changed without a card and
+ *      reverts it from the project page, so the detail read carries them. One `findMany` by project
+ *      and owner, bounded by `SETTING_CHANGES_READ_MAX`; the binding and the named tasks are read
+ *      only when a row needs them, and neither fixture here has a row (`project-setting-change.ts`).
  *
  * Measured, not asserted from the code: the derivations are each written as ONE `findMany` (two,
  * for the lane below), and Prisma resolves a nested `select` with one statement per relation
