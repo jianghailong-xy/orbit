@@ -144,10 +144,11 @@ final class StartProjectCardCopyParityTests: XCTestCase {
 
     /// A request with no line (rulings D1, D8): one sentence in place of the line, main branch,
     /// delivery and landing check rows, sentences that name no branch, and a press that sends no line.
+    /// (Held by main's second port of revision 42 part two; kept on this side's names.)
     func testARequestWithNoLineIsDrawnAndSentAsTheWebDoes() throws {
         let web = try flat(Self.words)
-        assertDeclares(web, "START_NO_LINE", StartProject.noLine)
-        XCTAssertTrue(web.contains("return automatic ? '\(RunSettings.automaticOnNoLine)' : '\(RunSettings.automaticOffNoLine)';"),
+        assertDeclares(web, "START_NO_LINE", StartProject.landsWhenCommits)
+        XCTAssertTrue(web.contains("return automatic ? '\(RunSettings.automaticSaysNoLine(automatic: true))' : '\(RunSettings.automaticSaysNoLine(automatic: false))';"),
                       "the web no longer says the no-line Automatic sentences this end says")
         XCTAssertTrue(web.contains("if (line === null) {"), "the web no longer words a request with no line on its own")
         XCTAssertTrue(web.contains("input.line === null ? [] : input.line === 'MAIN'"),

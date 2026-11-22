@@ -33,7 +33,6 @@ class BackgroundRowParityTest {
         val n = e["name"]!!.jsonObject
         val name = when (n["mode"].text()) {
             "one" -> BackgroundRow.Name.One(item(n["item"]!!.jsonObject))
-            "pinned" -> BackgroundRow.Name.Pinned(item(n["item"]!!.jsonObject))
             "rotate" -> BackgroundRow.Name.Rotate(n["items"]!!.jsonArray.map { item(it.jsonObject) }, n["perNameMs"]!!.jsonPrimitive.int,
                 n["changeMs"]!!.jsonPrimitive.int)
             else -> error("unknown mode ${n["mode"]}")

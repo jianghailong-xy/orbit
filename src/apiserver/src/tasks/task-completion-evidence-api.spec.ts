@@ -157,8 +157,5 @@ test('the pending queue refuses to answer without the session it would be read f
   assert.deepEqual(calls, [[OWNER, SESSION]]);
   // Not optional, and not defaulted to "whoever is signed in": every row says whether THIS session
   // may answer it, so a queue read for nobody could only report questions it could not place.
-  assert.throws(
-    () => controller.pending({ userId: OWNER, email: 'n10@invalid.test' }, undefined),
-    BadRequestException,
-  );
+  await assert.rejects(controller.pending({ userId: OWNER, email: 'n10@invalid.test' }, undefined), BadRequestException);
 });

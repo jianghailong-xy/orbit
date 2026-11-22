@@ -85,8 +85,8 @@ test('a COMMIT citation looks for another task\'s receipt by its sha, answering 
       });
       await sql.query(
         `INSERT INTO "session"("id", "title", "prompt", "owner_id", "creator_id", "workspace_id", "dispatch_origin",
-                               "status", "created_at", "updated_at")
-         SELECT gen_random_uuid(), 'merged ' || i, 'p', $1::uuid, $1::uuid, $2::uuid, 'USER', 'SUCCEEDED',
+                               "status", "finished_at", "created_at", "updated_at")
+         SELECT gen_random_uuid(), 'merged ' || i, 'p', $1::uuid, $1::uuid, $2::uuid, 'USER', 'SUCCEEDED', now(),
                 timestamp '2026-09-01' + make_interval(mins => i), timestamp '2026-09-01' + make_interval(mins => i)
            FROM generate_series(1, $3::int) AS i`,
         [ownerId, workspaceId, RECEIPTS],

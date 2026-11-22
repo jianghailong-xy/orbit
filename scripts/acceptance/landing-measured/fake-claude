@@ -27,6 +27,10 @@ or in messages they send):
   E2E-RUN <key>: <shell command>    (task runs only) run the command in the worktree, operations-style, and commit
                         NOTHING: its stdout and stderr go to $LM_SCRATCH/<key>.out, outside the repository, and
                         the turn fails if the worktree is not clean afterwards. Several lines run in order.
+  E2E-DETACH <key>: <ref>    (task runs only) `git fetch origin`, then `git checkout --detach <ref>` in the worktree, as
+                        a verification run told to check out its project's line does, and commit NOTHING: a report
+                        goes to $LM_SCRATCH/<key>.out, and the turn fails if HEAD did not move or the worktree is not
+                        clean afterwards. The runner then reports changed_files as the diff from the base to <ref>.
   E2E-UPSTREAM: <remote>/<branch>    where push-* go when the brief does not say (a PLATFORM brief says "Do not push")
   E2E-MCP <id> <tool> <json-arguments>   (any session) call one orbit MCP tool through `orbit mcp` -- the server
                         the runner put in --mcp-config, run with this session's own environment -- after a
@@ -201,7 +205,42 @@ def ops_work(prompt):
         return f'lm42 fake engine: {"; ".join(said)}; FAILED: {e}', True
 
 
+def detach_work(prompt):
+    """E2E-DETACH lines: check out another commit detached and commit nothing (the 2026-11-20 verification run)."""
+    runs = re.findall(r'^E2E-DETACH\s+([A-Za-z0-9_.-]+):\s*(\S+)\s*$', prompt, re.M)
+    scratch = os.environ.get('LM_SCRATCH') or tempfile.gettempdir()
+    os.makedirs(scratch, exist_ok=True)
+    head_before = must('rev-parse', 'HEAD')
+    rec = {'runs': [], 'headBefore': head_before, 'branchBefore': must('rev-parse', '--abbrev-ref', 'HEAD')}
+    said = []
+    try:
+        for key, ref in runs:
+            must('fetch', '--quiet', 'origin')
+            must('checkout', '--quiet', '--detach', ref)
+            head = must('rev-parse', 'HEAD')
+            path = os.path.join(scratch, f'{key}.out')
+            with open(path, 'w') as f:
+                f.write(f'$ git checkout --detach {ref}\nHEAD {head}\nexit 0\n')
+            rec['runs'].append({'key': key, 'ref': ref, 'head': head, 'out': path})
+            said.append(f'checked out {ref} detached at {head[:10]}')
+        status = must('status', '--porcelain')
+        head_after = must('rev-parse', 'HEAD')
+        rec.update(headAfter=head_after, worktreeStatus=status, branchAfter=must('rev-parse', '--abbrev-ref', 'HEAD'))
+        if status:
+            raise RuntimeError(f'the worktree is not clean: {status!r}')
+        if head_after == head_before:
+            raise RuntimeError(f'HEAD did not move from {head_before[:10]}: nothing was checked out')
+        said.append('committed nothing; the worktree is clean')
+        log('detach-work', ok=True, **rec)
+        return 'lm42 fake engine: ' + '; '.join(said) + '. No model was called.', False
+    except Exception as e:  # noqa: BLE001 - report, and fail the turn
+        log('detach-work', ok=False, error=str(e), **rec)
+        return f'lm42 fake engine: {"; ".join(said)}; FAILED: {e}', True
+
+
 def task_work(prompt):
+    if re.search(r'^E2E-DETACH\s', prompt, re.M) and not re.search(r'^E2E-DO:', prompt, re.M):
+        return detach_work(prompt)
     if re.search(r'^E2E-RUN\s', prompt, re.M) and not re.search(r'^E2E-DO:', prompt, re.M):
         return ops_work(prompt)
     actions = []

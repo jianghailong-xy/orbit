@@ -232,7 +232,8 @@ export function startReadiness(
   // has none to write. Refused here so the coordinator hears it before the owner's card is filed.
   const checkNamed = mergeCheck !== null || settings.mergeCheckTimeoutSeconds != null
     || settings.landingCheckCommand != null || settings.landingCheckTimeoutSeconds != null;
-  // No line named (P-M2): nothing about the line or the checks is written, so no repository is needed.
+  // No line named (P-M2): nothing about the line or the landing check is written, and the merge
+  // check waits in the start's own record until the line starts (D8), so no repository is needed.
   const needsRepository = settings.line !== undefined
     && (settings.line === 'PROJECT_BRANCH' || checkNamed || settings.upstreamRef);
   if (!plan.repository && needsRepository) {

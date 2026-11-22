@@ -3779,18 +3779,27 @@ struct StartProjectCard: View {
     @ViewBuilder
     private func howItRunsSection(editable: Bool) -> some View {
         StartSectionHead(title: StartProject.howItRuns)
+        if draft.linePending {
+            // A request that named no line (P-M2, board D1, D8): one sentence where the line, its
+            // main branch, its delivery and its landing check were, and the merge check kept.
+            StartPanel {
+                automaticRow(editable: editable)
+                Divider()
+                Text(StartProject.landsWhenCommits)
+                    .font(.orbitProse)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .startRow()
+                    .background(Color.accentColor.opacity(0.08))
+                    .accessibilityIdentifier("start-lands-when-commits")
+                Divider()
+                mergeCheckRow(editable: editable)
+                Divider()
+                atMostRow(editable: editable)
+            }
+        } else {
         StartPanel {
             automaticRow(editable: editable)
             Divider()
-            // A request with no line (ruling D1) draws one sentence in place of the line, delivery,
-            // main branch and landing check: the line is decided when the first task commits.
-            if draft.line == nil {
-                Text(StartProject.noLine)
-                    .font(.orbitLabel).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .startRow()
-                Divider()
-            } else {
             lineRow(editable: editable)
             // How the work reaches main (§10.5 O-L1, A-Q21), directly under the line it depends on
             // (owner decision 2026-11-10). A read that does not say — a server that predates it —
@@ -3826,10 +3835,10 @@ struct StartProjectCard: View {
                     }
                 }
             }.startRow()
-            }
             mergeCheckRow(editable: editable)
             Divider()
             atMostRow(editable: editable)
+        }
         }
         Text(StartProject.howItRunsNote(asked: asked, suggestedOff: asked && !request.settings.automatic))
             .font(.orbitLabel).foregroundStyle(.secondary)
@@ -3879,7 +3888,8 @@ struct StartProjectCard: View {
                                             ownerConfirmed: plan.ownerConfirmed,
                                             evidenceJudged: plan.evidenceJudged,
                                             escalationSeconds: escalationSeconds, main: draft.main,
-                                            deliveryMode: draft.agentPushes ? .agentPush : .platform)
+                                            deliveryMode: draft.agentPushes ? .agentPush : .platform,
+                                            linePending: draft.linePending)
         return VStack(alignment: .leading, spacing: 5) {
             Text(StartProject.comesToYou)
                 .font(.orbitMeta.weight(.semibold)).foregroundStyle(Color.blue)

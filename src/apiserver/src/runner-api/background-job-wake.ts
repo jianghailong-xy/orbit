@@ -1,11 +1,5 @@
 import { BackgroundJobWake, ConversationTurn, Prisma } from '@prisma/client';
-import {
-  BG_JOB_STOPPED_BY_OWNER,
-  deriveSessionLifecycleState,
-  deriveSessionRunState,
-  SessionLifecycleState,
-  SessionRunState,
-} from '@orbit/shared';
+import { BG_JOB_STOPPED_BY_OWNER } from '@orbit/shared';
 import { IsIn, IsInt, IsOptional, IsString, Matches, MaxLength, Min, ValidateIf } from 'class-validator';
 import { stripNul } from './strip-nul';
 
@@ -178,21 +172,11 @@ export async function jobExitFiled(
 
 /**
  * Whether a session has ended in any of the ways a turn filed now would undo. `createTurn` refuses
- * the Trash, the terminal statuses and a requested cancel on its own; it does not refuse a session
+ * the Trash, a released session and a requested cancel on its own; it does not refuse a session
  * completed while parked, nor an interrupted one whose end was recorded — and a wake must not
- * bring either back.
+ * bring either back. The rule is common/session-release.ts `sessionHasEnded`.
  */
-export function sessionHasEnded(session: {
-  status: string;
-  endReason: string | null;
-  completedAt: Date | null;
-  archivedAt: Date | null;
-  deletedAt: Date | null;
-}): boolean {
-  if (deriveSessionLifecycleState(session) !== SessionLifecycleState.OPEN) return true;
-  const run = deriveSessionRunState(session);
-  return run === SessionRunState.ENDED || run === SessionRunState.SUCCEEDED || run === SessionRunState.FAILED;
-}
+export { sessionHasEnded } from '../common/session-release';
 
 /**
  * The session's wake turn nobody has been handed yet on this route, if there is one: a queued

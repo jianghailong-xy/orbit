@@ -30,8 +30,9 @@ import org.robolectric.annotation.GraphicsMode
 
 /**
  * A landing check not run because its task is exempt (D5), in a landing's check list, as the web's `ProjectLandingsWindow.test.tsx`
- * holds it: `Landing check · Skipped` with `Exempt: <reason>`, never as failed; Task acceptance beside it still passed; opened, its
- * line wears the skipped arrow and no inline output is read for it. Frames light and dark under
+ * holds it: `Landing check · Skipped` with `Exempt: <reason>` on its own line, never as failed, and no status word beside a name that
+ * already says how it stands (this project's row, board docs/mocks/landing-measured ④); Task acceptance beside it still passed;
+ * opened, its line wears the skipped arrow and no inline output is read for it. Ported from main's second Android port (33b4952524). Frames light and dark under
  * `src/android/build/evidence/task-landing-exempt-android/`.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -104,7 +105,7 @@ class LandingCheckSkippedViewTest {
             compose.onNodeWithTag("landing:step:check:LANDING_CHECK").assertExists()
             compose.onNode(hasTestTag("landing:step-name") and inStep("check:LANDING_CHECK"), useUnmergedTree = true).assertTextEquals("Landing check · Skipped")
             compose.onNode(hasTestTag("landing:step-summary") and inStep("check:LANDING_CHECK"), useUnmergedTree = true).assertTextEquals("Exempt: $reason")
-            compose.onNode(hasTestTag("landing:step-status") and inStep("check:LANDING_CHECK"), useUnmergedTree = true).assertTextEquals("→")
+            compose.onNode(hasTestTag("landing:step-status") and inStep("check:LANDING_CHECK"), useUnmergedTree = true).assertDoesNotExist()
             compose.onAllNodesWithText("Failed", useUnmergedTree = true).assertCountEquals(0)
             // Task acceptance beside it still passed.
             compose.onNode(hasTestTag("landing:step-status") and inStep("check:TASK_ACCEPTANCE"), useUnmergedTree = true).assertTextEquals("Complete")

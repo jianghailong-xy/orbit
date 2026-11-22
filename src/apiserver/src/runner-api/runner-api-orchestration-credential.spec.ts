@@ -160,7 +160,7 @@ test('reclaim enables orchestration only when every live guard matches', async (
       session('deleted-session', true, { deletedAt: new Date() }),
       session('foreign-owner-session', true, { ownerId: 'owner-2' }),
       session('other-runner-session', true, { assignedRunnerId: 'runner-2' }),
-      session('finished-session', true, { status: RunStatus.SUCCEEDED }),
+      session('finished-session', true, { status: RunStatus.SUCCEEDED, finishedAt: new Date() }),
       session('deleted-workspace-session', true, {}, { deletedAt: new Date() }),
     ],
   });

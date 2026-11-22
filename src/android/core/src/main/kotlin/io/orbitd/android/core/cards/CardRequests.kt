@@ -61,6 +61,7 @@ object CardRequests {
                 val body = buildJsonObject {
                     put("criteriaDigest", requireNotNull(original.text("criteriaDigest")))
                     put("requestId", card.objectId)
+                    // A request with no line (§12.15 P-M2) is answered with none: the line is decided when the first task commits.
                     settings.line?.let { put("line", it) }
                     put("automatic", settings.automatic); put("maxConcurrentTasks", settings.maxConcurrentTasks)
                     put("mergeCheckCommand", settings.mergeCheckCommand?.trim()?.takeIf { it.isNotBlank() }?.let(::JsonPrimitive) ?: JsonNull)

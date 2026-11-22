@@ -61,6 +61,7 @@ import { pathToFileURL } from 'node:url';
 
 import { BadRequestException } from '@nestjs/common';
 import { Prisma, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { isReleasedStatus } from '../common/session-release';
 import { AgentProvider } from '@orbit/shared';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
@@ -221,6 +222,7 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
   /** A session that has run a turn and is parked between turns, unless `data` says otherwise. */
   async function session(m: Machine, data: Partial<Prisma.SessionUncheckedCreateInput> = {}): Promise<string> {
     const id = randomUUID();
+    const fixtureStatus = data.status ?? RunStatus.AWAITING_INPUT;
     await db.session.create({
       data: {
         id,
@@ -240,6 +242,9 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
         numTurns: 1,
         runtimeSessionId: randomUUID(),
         ...data,
+        ...(isReleasedStatus(fixtureStatus) ? {
+          finishedAt: data.finishedAt ?? new Date(),
+        } : {}),
       },
     });
     await db.conversationTurn.create({
@@ -362,7 +367,7 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
         WHERE "session_id" = $1::uuid AND "kind" = 'message' AND "status" IN ('PENDING', 'IN_FLIGHT')`,
       [sessionId],
     );
-    await sql.query(`UPDATE "session" SET "status" = 'AWAITING_INPUT' WHERE "id" = $1::uuid`, [sessionId]);
+    await sql.query(`UPDATE "session" SET "status" = 'AWAITING_INPUT', "finished_at" = NULL WHERE "id" = $1::uuid`, [sessionId]);
   }
   /** A turn failed the session, as turn-complete records it: FAILED, its runner slot reclaimed. */
   async function failSession(sessionId: string, retryAt: Date | null = null): Promise<void> {
@@ -713,7 +718,7 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
 
     // The retry brought the session back: the wakeup is delivered.
     await sql.query(
-      `UPDATE "session" SET "status" = 'AWAITING_INPUT', "retry_at" = NULL, "cancel_requested_at" = NULL WHERE "id" = $1::uuid`,
+      `UPDATE "session" SET "status" = 'AWAITING_INPUT', "retry_at" = NULL, "cancel_requested_at" = NULL, "finished_at" = NULL WHERE "id" = $1::uuid`,
       [armed],
     );
     assert.deepEqual(await drainOnly(armed), ['DELIVERED']);

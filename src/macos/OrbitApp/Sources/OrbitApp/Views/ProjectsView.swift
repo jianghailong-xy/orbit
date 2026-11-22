@@ -566,16 +566,21 @@ struct ProjectDetailView: View {
                             withAnimation { proxy.scrollTo(ProjectDone.nonCodeAnchor, anchor: .center) }
                         }
                     })
+                case .coordinatorChanges:
+                    CoordinatorChangesPage(
+                        projectTitle: document.title,
+                        changes: store.document?.settingChanges ?? [],
+                        taskTitles: Dictionary(store.tasks.map { ($0.id, $0.title) }, uniquingKeysWith: { first, _ in first }),
+                        revert: { changeID in try await store.revertSettingChange(changeID) },
+                        openTask: { taskID in
+                            pageSheet = nil
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { openTask(taskID) }
+                        })
                 case .landingCheck:
                     if let view = store.integration {
                         MergeCheckEditor(store: store, view: view,
                                          automatic: store.document?.coordinatorEnabled ?? false, landing: true)
                     }
-                case .landingChanges:
-                    LandingChangesSheet(store: store, openTask: { taskID in
-                        pageSheet = nil
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { openTask(taskID) }
-                    })
                 case .mergeCheck:
                     if let view = store.integration {
                         MergeCheckEditor(store: store, view: view,
@@ -1165,7 +1170,7 @@ struct ProjectDetailView: View {
     /// read, and its Retry goes through the page's store, which reads the landing again.
     @ViewBuilder
     private func landingRow(_ store: ProjectDetailModel) -> some View {
-        if let integration = store.integration, integration.inFlight != nil {
+        if let integration = store.integration, integration.inFlight != nil, !ProjectPage.noLineYet(integration) {
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 // The Work overview draws every job in flight, a merge job included: the merge
                 // card lives on the project's sessions page, which this page does not have, and
@@ -1436,7 +1441,6 @@ struct ProjectDetailView: View {
         if RunSettings.shown(started: document.started) {
             Section {
                 if let view = store.integration {
-                    runSettingsSummary(store, view, document: document)
                     // First, because it decides whether the landing settings under it mean anything.
                     deliversSetting(store, view, document: document)
                     if document.nonCode {
@@ -1455,22 +1459,22 @@ struct ProjectDetailView: View {
                                 Text(LandingCheckCopy.label)
                                 Text(LandingCheckCopy.main).font(.orbitLabel).foregroundStyle(.secondary)
                             } else {
-                                Button { pageSheet = .landingCheck } label: {
-                                    landingCheckSummary(view, now: now)
-                                }.buttonStyle(.plain).disabled(store.busy)
+                                // Board 03 b, c (D3, D4, D9): the three values, the command, who
+                                // set it and when.
+                                LandingCheckSettingRow(
+                                    view: view, busy: store.busy,
+                                    onEditCommand: { pageSheet = .landingCheck },
+                                    onChoose: { mode in
+                                        Task { notice = await store.updateIntegration(LandingCheckSetting.write(mode)) }
+                                    })
                             }
                         }
-                        // The coordinator's changes (D6), under the landing check: hidden while the
-                        // server lists none, since there is nothing to open.
-                        if let changes = document.settingChanges, !changes.isEmpty {
-                            Button { pageSheet = .landingChanges } label: {
-                                HStack(spacing: 8) {
-                                    Text(LandingChangesCopy.title).foregroundStyle(.primary)
-                                    Spacer(minLength: 8)
-                                    Text("\(LandingChangesCopy.rowLabel(changes.count)) ›").foregroundStyle(.secondary)
-                                }
-                                .contentShape(Rectangle())
-                            }.buttonStyle(.plain)
+                        // Board 03 b (D6): the coordinator's changes, one row into their page —
+                        // from a server that keeps them.
+                        if view.line == .projectBranch, let changes = document.settingChanges {
+                            CoordinatorChangesEntryRow(count: CoordinatorChanges.count(changes)) {
+                                pageSheet = .coordinatorChanges
+                            }
                         }
                         mergeCheckSetting(store, view, document: document)
                     }
@@ -1488,56 +1492,6 @@ struct ProjectDetailView: View {
                 sectionHeader(StartProject.howItRuns, detail: RunSettings.appliesFromNextTask)
             }
         }
-    }
-
-    /// How it runs opens with web's one-line summary (`project-run-settings-summary`): "Automatic On"
-    /// over the line, its branch and how many tasks run at once.
-    private func runSettingsSummary(_ store: ProjectDetailModel, _ view: ProjectIntegrationView,
-                                    document: ProjectDocument) -> some View {
-        let summary = RunSettings.summary(view, projectID: document.id,
-                                          automatic: document.coordinatorEnabled ?? false,
-                                          maxConcurrentTasks: store.pendingConcurrency ?? document.maxConcurrentTasks,
-                                          nonCode: document.nonCode)
-        return HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Circle().fill(Color.accentColor).frame(width: 8, height: 8)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(summary.title).font(.orbitSubtext.weight(.semibold))
-                if !summary.line.isEmpty {
-                    Text(summary.line)
-                        .font(.orbitLabel)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-        }
-        .padding(.vertical, 2)
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("project-run-settings-summary")
-    }
-
-    /// The landing check folded to its value — the merge check it uses, the command, or No check —
-    /// with who set it and when (D3), its timeout while there is a check, and what it does.
-    private func landingCheckSummary(_ view: ProjectIntegrationView, now: Date) -> some View {
-        let mode = LandingCheckMode.of(view)
-        return VStack(alignment: .leading, spacing: 4) {
-            Text(LandingCheckCopy.label)
-            switch mode {
-            case .command:
-                Text(view.landingCheck?.command ?? view.landingCheckCommand ?? "").font(.orbitMono)
-            case .mergeCheck:
-                Text(LandingCheckCopy.inheritedCommand(view.mergeCheckCommand)).font(.orbitMono)
-            case .noCheck:
-                (Text(LandingModeCopy.noneHead).bold() + Text(" \(LandingModeCopy.noneBody)")).font(.orbitLabel)
-            }
-            if let origin = LandingCheckOriginCopy.line(view.landingCheck, now: now) {
-                Text(origin).font(.orbitLabel).foregroundStyle(.secondary)
-            }
-            if mode != .noCheck {
-                Text(view.landingCheckTimeoutSeconds.map { "\($0) seconds" }
-                     ?? LandingCheckCopy.inheritedTimeout(view.mergeCheckTimeoutSeconds)).font(.orbitLabel)
-                Text(LandingCheckCopy.hint).font(.orbitLabel).foregroundStyle(.secondary)
-            }
-        }.frame(maxWidth: .infinity, alignment: .leading)
     }
 
     /// Delivers (board 01 A–C): Code or Not code, each with what choosing it means, and — on a marked
@@ -2796,14 +2750,14 @@ private enum ProjectPageSheet: String, Identifiable {
     /// How it runs' merge check, where a command has room.
     case mergeCheck
     case landingCheck
-    /// The coordinator's changes to the landing check (D6), with Revert.
-    case landingChanges
     /// How it runs' main branch: the branches to pick from, and a name typed.
     case mainBranch
     /// The jobs the Work overview's landing row counts, from a press on that row.
     case landingJobs
     /// Change workspace: where the project is coordinated from.
     case coordinatorChange
+    /// Coordinator's changes (board 05): the coordinator's landing-check writes, and Revert.
+    case coordinatorChanges
 
     var id: String { rawValue }
 }
@@ -3033,8 +2987,6 @@ private struct MergeCheckEditor: View {
     @State private var command: String
     @State private var timeout: String
     @State private var refused: String?
-    /// The landing check's value, as the segmented control has it (D4).
-    @State private var mode: LandingCheckMode
 
     init(store: ProjectDetailModel, view: ProjectIntegrationView, automatic: Bool, landing: Bool = false) {
         self.store = store
@@ -3043,7 +2995,6 @@ private struct MergeCheckEditor: View {
         self.landing = landing
         _timeout = State(initialValue: view.landingCheckTimeoutSeconds.map(String.init) ?? "")
         _command = State(initialValue: (landing ? view.landingCheckCommand : view.mergeCheckCommand) ?? "")
-        _mode = State(initialValue: LandingCheckMode.of(view))
     }
 
     var body: some View {
@@ -3053,54 +3004,22 @@ private struct MergeCheckEditor: View {
         NavigationStack {
             Form {
                 Section {
+                    TextField(landing ? LandingCheckCopy.commandPlaceholder : RunSettings.mergeCheckPlaceholder, text: $command, axis: .vertical)
+                        .font(.orbitMono)
+                        .autocorrectionDisabled()
+                        #if os(iOS)
+                        .textInputAutocapitalization(.never)
+                        #endif
                     if landing {
-                        Picker(LandingCheckCopy.label, selection: $mode) {
-                            ForEach(LandingCheckMode.allCases, id: \.self) { Text($0.label).tag($0) }
-                        }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
-                    }
-                    if !landing || mode == .command {
-                        TextField(landing ? LandingCheckCopy.commandPlaceholder : RunSettings.mergeCheckPlaceholder, text: $command, axis: .vertical)
-                            .font(.orbitMono)
-                            .autocorrectionDisabled()
-                            #if os(iOS)
-                            .textInputAutocapitalization(.never)
-                            #endif
-                    }
-                    if landing {
-                        if let origin = LandingCheckOriginCopy.line(view.landingCheck) {
-                            Text(origin).font(.orbitLabel).foregroundStyle(.secondary)
-                        }
-                        switch mode {
-                        case .mergeCheck:
-                            Text(LandingCheckCopy.inheritedCommand(view.mergeCheckCommand)).font(.orbitLabel)
-                        case .command:
-                            EmptyView()
-                        case .noCheck:
-                            (Text(LandingModeCopy.noneHead).bold() + Text(" \(LandingModeCopy.noneBody)")).font(.orbitLabel)
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(LandingModeCopy.whoCanSet).font(.orbitLabel.weight(.semibold))
-                                ForEach(LandingCheckOriginCopy.notes) { entry in
-                                    (Text(LandingCheckOriginCopy.badge(entry.by)).bold() + Text(" \(entry.note)"))
-                                        .font(.orbitLabel).foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                        if mode != .noCheck {
-                            TextField(LandingCheckCopy.timeoutPlaceholder, text: $timeout)
-                                .accessibilityLabel(LandingCheckCopy.timeout)
-                            Text(LandingCheckCopy.timeoutHint).font(.orbitLabel)
-                            if timeout.isEmpty { Text(LandingCheckCopy.inheritedTimeout(view.mergeCheckTimeoutSeconds)).font(.orbitLabel) }
-                        }
+                        TextField(LandingCheckCopy.timeoutPlaceholder, text: $timeout)
+                            .accessibilityLabel(LandingCheckCopy.timeout)
+                        Text(LandingCheckCopy.timeoutHint).font(.orbitLabel)
+                        if timeout.isEmpty { Text(LandingCheckCopy.inheritedTimeout(view.mergeCheckTimeoutSeconds)).font(.orbitLabel) }
+                        if command.isEmpty { Text(LandingCheckCopy.inheritedCommand(view.mergeCheckCommand)).font(.orbitLabel) }
                     }
                 } footer: {
                     VStack(alignment: .leading, spacing: 4) {
-                        if landing {
-                            if mode == .command { Text("\(LandingCheckCopy.hint) \(LandingModeCopy.commandNote)") }
-                        } else {
-                            Text(RunSettings.mergeCheckHint(view, main: main))
-                        }
+                        Text(landing ? LandingCheckCopy.hint : RunSettings.mergeCheckHint(view, main: main))
                         if missing && !landing {
                             Text("⚠ \(RunSettings.noMergeCheckWarning(main))").foregroundStyle(Color.orange)
                         }
@@ -3120,8 +3039,7 @@ private struct MergeCheckEditor: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(RunSettings.save) { save() }
-                        .disabled(store.busy || write == nil
-                                  || (landing && mode != .noCheck && !timeout.isEmpty && (Int(timeout) ?? 0) < 1))
+                        .disabled(store.busy || write == nil || (landing && !timeout.isEmpty && (Int(timeout) ?? 0) < 1))
                 }
             }
         }
@@ -3132,7 +3050,7 @@ private struct MergeCheckEditor: View {
     }
 
     private var write: UpdateProjectIntegrationRequest? {
-        landing ? RunSettings.landingCheckWrite(view, mode: mode, command: command, timeout: Int(timeout))
+        landing ? RunSettings.landingCheckWrite(view, command: command, timeout: Int(timeout))
             : RunSettings.mergeCheckWrite(view, to: command)
     }
 
