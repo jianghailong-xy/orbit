@@ -61,7 +61,10 @@ export type CoordinatorHandoffFailureCode =
   | 'TURN_STOPPED'
   | 'TIMED_OUT'
   | 'EMPTY_NOTE'
-  | 'REPLACE_FAILED';
+  | 'REPLACE_FAILED'
+  /** The note turn never reached the engine: this coordinator's own model could not start. Only when no
+   *  successor was picked; with one, the handover goes on without a note. */
+  | 'COORDINATOR_CANT_RUN';
 
 /** The end of "The handoff note wasn't written: …", per code. */
 export const COORDINATOR_HANDOFF_FAILURE_REASONS: Readonly<Record<CoordinatorHandoffFailureCode, string>> = {
@@ -70,6 +73,7 @@ export const COORDINATOR_HANDOFF_FAILURE_REASONS: Readonly<Record<CoordinatorHan
   TIMED_OUT: 'the turn timed out.',
   EMPTY_NOTE: 'the reply was empty.',
   REPLACE_FAILED: 'the new coordinator could not be opened.',
+  COORDINATOR_CANT_RUN: 'the model of this coordinator could not start. Pick another model and hand over without a note.',
 };
 
 /**

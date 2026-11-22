@@ -256,6 +256,8 @@ owner 什么都没设时 Claude / Codex / Kimi 的行与以前逐字节相同；
 | `changed_files` | text[] |
 | `cost_usd`、`usage` | 子进程自己的用量 |
 | `created_at`、`ended_at` | |
+| `rating_score`、`rating_note`、`rated_at` | 父会话对结果的评分 1–5 与一句理由（`subagent_rate`，§7.1，migration 1429）；再评一次即替换 |
+| `rater_engine`、`rater_provider`、`rater_model` | 评分时父会话自己的引擎、provider 和模型 |
 
 花费：SubAgent 结束时 `cost_usd` 同时加到父会话的 `cost_usd`，所以今天读会话花费的预算和上限（`attempt-budget-meter`）
 自动把它算进去。今天的 `session_create` 子会话不汇总，这里不改它。
@@ -287,7 +289,7 @@ owner 什么都没设时 Claude / Codex / Kimi 的行与以前逐字节相同；
 
 ## 7. 设置与界面
 
-- **设置 → General → New sessions**：Optimize For（Cost / Balance / Intelligence），账号级，紧跟 Smart model selection
+- **设置 → General → New sessions**（2026-11-22 起在 Providers → Model routing）：Optimize For（Cost / Balance / Intelligence），账号级，紧跟 Smart model selection
   （owner，2026-11-19，board `docs/mocks/routing-mode-account`）。
 - **Agent 设置 → SubAgents**：开关、Providers（默认全部，点进去屏蔽）、
   Running at once。
@@ -302,6 +304,38 @@ owner 什么都没设时 Claude / Codex / Kimi 的行与以前逐字节相同；
   一次运行算在 Orbit **选的**档位和模型下（同任务报告「算在首次决策」的口径），换了候选记一次 Moved on；`agentId` 是父会话的
   Agent；workflow 的调用就是 SubAgent 运行，两个视图数同一批 `subagent_run` 行，所以 workflow 的调用合计恒等于 SubAgents 里的
   workflow 调用数。任务的路由报告以后作为第三个视图 Tasks 放进同一页。
+- **合并为 Model routing**（owner，2026-11-22）：Model tiers 与 Routing report 合成 **设置 → Providers → Model routing**
+  （`/settings/providers/routing`；旧地址 `/settings/providers/tiers`、`/settings/routing-report` 带着查询参数跳过来）。
+  页首是 Route by tier（原名 Smart model selection，同日改名）与 Optimize For（从 General 搬来），下面每个模型一行：档位（可改）、价格、Ran at（按档位分的
+  运行条，跑在当前没设的档位上的部分标出来）、Runs / Done / Cost，点开看分档明细；按名字调用和未路由的另起两段，没档位也没运行的
+  模型折叠。Workflows 视图不变。原生客户端仍在 General 里画这两个开关，待跟进。
+
+### 7.1 完成质量（只显示，不参与路由）
+
+owner（2026-11-21）：Model tiers 表每个模型一行多一列 **Quality**，同一格里放两个来源；**只显示，`routeSubagent` 和
+`routeTaskRun` 都不读它**（`model-quality.spec.ts` 守着这一点）。效果图 `docs/mocks/model-quality/01-board.png`。
+
+- **父模型给 SubAgent 打分**：MCP 工具 `subagent_rate`（CLI `orbit subagent rate RUN_ID --score N [--note TEXT]`），
+  参数 `runId`、`score` 1–5、可选 `note`（≤ 500 字符）。分数按父会话拿结果做了什么来定：1 = 丢掉或自己重做，3 = 改过才能用，
+  5 = 原样用上。只有发起这次运行的会话能评（`POST /runner/sessions/:id/subagents/:runId/rating`，run 按 (id, 该会话) 匹配，
+  别的会话读作不存在）；还在跑的运行拒绝 `SUBAGENT_RUN_RUNNING`；一次运行一条评分，再评即替换；SubAgent 自己拿不到这个工具。
+  写进 `subagent_run` 的评分列，连同评分时父会话自己的 engine / provider / model（§6.1）。
+  `<orbit-subagent-finished>` 块和前台 `delegate` 的返回各多一句，请父会话用过结果后打分；可选，没有任何东西等它。
+- **任务运行的首次通过**：沿用路由报告的口径（`task-model-routing-report.service.ts` 的 `taskFirstPassByModel`）：
+  已完成（DONE）的任务按其第一次运行的 provider × engine × model 计，只跑了一次、没有 FAILED、没有验证 FAIL、没有被退回即算首次通过。
+  因用量上限或模型满载失败的运行（`limitFailure`）**整条不算**：既不算失败，也不算一次运行，与路由的处理一致。
+- **汇总**（`GET /providers/subagent-tiers` 每个模型的 `quality`，`runner-api/model-quality.ts`）：近 90 天。
+  SubAgent：结束了的运行数、被评的数、按评分时间衰减的加权平均（半衰期 30 天），不足 5 条评分不给平均（显示 Not enough ratings），
+  另附评分者的模型及各自条数。任务：完成数、首次通过数、通过率，不足 10 个完成任务不给通过率（Not enough tasks）。
+  一次 SubAgent 运行算在交出结果的模型下：最后一次 attempt 的，影子行算父会话的引擎和它实际跑的模型，否则是决策选的。
+  一行模型把其 provider 各引擎的数加在一起。
+- **界面**（owner 在效果图上选 A1 · B1 · C1，2026-11-21）：Quality 一格两行，各带灰色小字来源——
+  `SubAgents  4.4 · 23 rated of 41`、`Tasks  86% first pass · 52 tasks`；不到门槛的一行灰色写 `Not enough ratings` /
+  `Not enough tasks`，两样都没有的模型只写一行 `No runs yet`；有平均分时，SubAgents 那行的提示写评分者
+  `Rated by Opus 5.5 (15) · Sonnet 5.5 (8)`（web 和 Mac 悬停，iPhone 和 Android 点一下）。表下多一句说明：只显示、不参与路由，
+  以及两个数各自的口径。Web 和 Mac 是 Tier 后面的一列；iPhone 和 Android 把两行放在模型名下面。
+  各端共用同一套文字规则：web `qualityLines`（`lib/subagentTiers.ts`）、Apple `SubagentSettings.qualityLines`、Android
+  `Subagents.qualityLines`。
 
 ## 8. 分期
 

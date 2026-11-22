@@ -146,6 +146,24 @@ final class LandingMeasuredShotTests: ProbeCase {
         picture(app, "04a-task-exemption-removed")
     }
 
+    /// An exempt task with no landing yet still has its Landing section, for the exemption alone; who
+    /// marked it is the project's record (c4, approved on a card 7 minutes ago).
+    func test4cAnExemptTaskWithNoLandingYet() throws {
+        let app = launch("task:T2", until: "Restart the staging services", "04c")
+        let row = identified(app, "task-landing-exemption")
+        bring(app, row, between: 140, and: 700, "04c-row")
+        guard row.exists else { return XCTFail("04c: no exemption row") }
+        expect(app, "Exempt", "04c")
+        expect(app, "Restarts services only; nothing the landing check builds changes.", "04c")
+        XCTAssertTrue(identified(app, "provenance-card").waitForExistence(timeout: 20), "04c: no Approved on a card badge")
+        expect(app, "Approved on a card", "04c")
+        XCTAssertTrue(appears(app, "marked 7m ago", timeout: 5) || appears(app, "marked 8m ago", timeout: 5),
+                      "04c: no \"marked 7m ago\" time")
+        expect(app, "Remove exemption", "04c")
+        expectNo(app, "Landed", "04c")
+        picture(app, "04c-task-exempt-no-landing")
+    }
+
     func test4bTheLandingReadsTheCheckSkipped() throws {
         let app = launch("landing:L1", until: "Task acceptance", "04b")
         expect(app, "Landing check · Skipped", "04b")
@@ -158,6 +176,10 @@ final class LandingMeasuredShotTests: ProbeCase {
         press(skipped)
         settle(1.5)
         expect(app, "Landing check skipped · this task is exempt", "04b-open")
+        settle(2)
+        // The skipped check never ran: its open line reads no output inline (web's TimelineLine).
+        let logReads = requestsLog().split(separator: "\n").filter { $0.contains("/landing/log") && $0.contains("check=2") }
+        XCTAssertTrue(logReads.isEmpty, "04b: the skipped check read its output inline: \(logReads)")
         picture(app, "04b-landing-skipped-open")
     }
 

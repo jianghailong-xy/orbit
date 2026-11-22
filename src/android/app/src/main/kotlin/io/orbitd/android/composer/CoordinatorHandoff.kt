@@ -93,6 +93,7 @@ internal object CoordinatorHandoffCopy {
         "TIMED_OUT" to "the turn timed out.",
         "EMPTY_NOTE" to "the reply was empty.",
         "REPLACE_FAILED" to "the new coordinator could not be opened.",
+        "COORDINATOR_CANT_RUN" to "the model of this coordinator could not start. Pick another model and hand over without a note.",
     )
     fun failureSentence(code: String?) = "The handoff note wasn't written: ${FAILURE_REASONS[code] ?: FAILURE_REASONS.getValue("TURN_FAILED")}"
     /** The first line of the platform turn that asks for the note (`COORDINATOR_HANDOFF_PROMPT_HEAD`): Orbit's, never drawn. */

@@ -21,7 +21,10 @@ describe('the Personal pages, each at /settings/<slug>', () => {
     ['shared-links', '<SharedLinksPage />'],
     ['access-tokens', '<AccessTokensPage />'],
     ['secrets', '<SecretsPage />'],
-    ['routing-report', '<RoutingReportPage />'],
+    ['providers/routing', '<ModelRoutingPage />'],
+    // Old addresses of what Model routing holds, their query kept.
+    ['routing-report', '<KeepQueryRedirect to="/settings/providers/routing" />'],
+    ['providers/tiers', '<KeepQueryRedirect to="/settings/providers/routing" />'],
     ['integrations/feishu', '<FeishuIntegrationPage />'],
     ['integrations/feishu/connect-group', '<FeishuConnectGroupPage />'],
     ['integrations/github', '<GithubIntegrationPage />'],

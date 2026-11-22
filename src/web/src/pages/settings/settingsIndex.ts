@@ -15,9 +15,13 @@ export const PERSONAL_PAGES = [
   { path: '/settings/access-tokens', label: 'Access tokens' },
   { path: '/settings/secrets', label: 'Secrets' },
   { path: '/settings/terminals', label: 'Terminals' },
-  // Board docs/mocks/subagent-workflow/08-report.html: the routing report, last of Personal.
-  { path: '/settings/routing-report', label: 'Routing report' },
 ] as const;
+
+/**
+ * Providers → Model routing: each model's tier beside how its runs went, and the account's routing switches (Route
+ * by tier, Optimize For). It holds what Model tiers and the Routing report were.
+ */
+export const MODEL_ROUTING_PAGE = { path: '/settings/providers/routing', label: 'Model routing' } as const;
 
 /** The Integrations group of Settings: each connected service's page, its nav label and address. */
 export const INTEGRATION_PAGES = [

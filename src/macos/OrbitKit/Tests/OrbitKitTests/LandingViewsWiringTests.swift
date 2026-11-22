@@ -334,7 +334,9 @@ final class LandingViewsWiringTests: XCTestCase {
     /// READY is a pass, a merge to main's is not).
     func testTheTimelinesMarksReadTheLinesFields() throws {
         let page = code(try appSource("Views/LandingSessionPageView.swift"))
-        XCTAssertTrue(page.contains("} else if entry.kind == \"CHECK_FINISHED\", let check = entry.check, !entry.checkPassed {"))
+        // The inline output's rule reads `checkPassed` and the exempt task's skip
+        // (`LandingCheckSkip.showsInlineOutput`, held in TaskLandingExemptTests).
+        XCTAssertTrue(page.contains("} else if LandingCheckSkip.showsInlineOutput(entry), let check = entry.check {"))
         XCTAssertTrue(page.contains("let mark = glyph(entry, jobKind: section.kind, entries: entries, index: index)"),
                       "a line's mark is read with its section's job kind")
         XCTAssertTrue(page.contains("return entry.succeeded(in: jobKind) ? Mark(glyph: \"✓\", color: .green) : Mark(glyph: \"✗\", color: .red)"))

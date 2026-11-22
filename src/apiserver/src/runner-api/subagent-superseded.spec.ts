@@ -1,13 +1,19 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import type { ProviderModelTier, RunnerModelInfo } from '@orbit/shared';
+import type { ModelQuality, ProviderModelTier, RunnerModelInfo } from '@orbit/shared';
 
 import { subagentEngineRows } from '../tasks/model-routing';
 import { markSuperseded } from './subagent-route';
 
 const info = (...values: string[]): RunnerModelInfo[] =>
   values.map((value) => ({ value, label: value, reasoningLevels: ['low', 'medium', 'high', 'xhigh', 'max'] }));
+
+/** No runs: the quality every row here carries, which supersededBy does not read. */
+const NO_QUALITY: ModelQuality = {
+  subagent: { averageRating: null, ratedCount: 0, runCount: 0, raters: [] },
+  tasks: { firstPassRate: null, firstPassTaskCount: 0, completedTaskCount: 0 },
+};
 
 const CURSOR = info('claude-opus-5-5', 'claude-opus-5', 'claude-opus-4-8', 'grok-4.7', 'gemini-4-neon', 'gemini-4-argon', 'default');
 
@@ -18,12 +24,12 @@ function view(catalog: RunnerModelInfo[], owned: Record<string, 'S' | 'M' | 'L' 
   });
   const models = new Map<string, ProviderModelTier>();
   for (const row of rows) {
-    const seen = models.get(row.model) ?? { model: row.model, levels: [], source: null, editable: true, outputPricePerMTok: null };
+    const seen = models.get(row.model) ?? { model: row.model, levels: [], source: null, editable: true, outputPricePerMTok: null, quality: NO_QUALITY };
     if (row.level && !seen.levels.includes(row.level)) seen.levels.push(row.level);
     models.set(row.model, seen);
   }
   for (const entry of catalog) if (!models.has(entry.value)) {
-    models.set(entry.value, { model: entry.value, levels: [], source: null, editable: true, outputPricePerMTok: null });
+    models.set(entry.value, { model: entry.value, levels: [], source: null, editable: true, outputPricePerMTok: null, quality: NO_QUALITY });
   }
   return [...models.values()];
 }

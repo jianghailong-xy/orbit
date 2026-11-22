@@ -45,7 +45,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `public` | 37 |
 | `user` | 494 |
 | `admin` | 31 |
-| `runner` | 207 |
+| `runner` | 208 |
 | `channel` | 1 |
 | `link gateway` | 3 |
 | **Total** | **773** |
@@ -762,6 +762,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `PATCH` | `/api/runner/sessions/:id/subagents/:runId` | body `SubagentRunUpdateDto`; path `id`, `runId` | `RunnerSubagentsController.updateSubagentRun` |
 | `GET` | `/api/runner/sessions/:id/subagents/:runId/events` | path `id`, `runId`; query `after` | `RunnerSubagentsController.readRelayedSubagentEvents` |
 | `POST` | `/api/runner/sessions/:id/subagents/:runId/fallback` | body `SubagentFallbackDto`; path `id`, `runId` | `RunnerSubagentsController.nextSubagentCandidate` |
+| `POST` | `/api/runner/sessions/:id/subagents/:runId/rating` | body `SubagentRatingDto`; path `id`, `runId` | `RunnerSubagentsController.rateSubagentRun` |
 | `POST` | `/api/runner/sessions/:id/subagents/:runId/stop` | path `id`, `runId` | `RunnerSubagentsController.stopRemoteSubagentRun` |
 | `POST` | `/api/runner/sessions/:id/takeover-leases` | body `Object`; path `id` | `RunnerApiController.takeoverLeases` |
 | `POST` | `/api/runner/sessions/:id/turn-complete` | body `Object`; path `id` | `RunnerApiController.turnComplete` |
