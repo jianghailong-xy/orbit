@@ -115,7 +115,7 @@ internal fun RunnerUpdatingFoot(gate: QueuedGate, machine: String?, modifier: Mo
 /**
  * The waiting card of a session held by its workspace's clone (web `CloneWaitNotice`, board docs/mocks/clone-progress-wait-card ②):
  * what is cloning, git's percentage once it has said one, and where. [clone] is null for a failed clone, which says its two plain
- * sentences. [compact] is the card under a transcript, left-aligned; the full-height card is centred.
+ * sentences. [compact] is the card under a transcript: the same centred card, with a spinner while no percentage is heard.
  */
 @Composable
 internal fun CloneWaitNotice(clone: QueuedClone.Wait?, failed: Boolean, machine: String?, compact: Boolean, modifier: Modifier = Modifier) {
@@ -125,14 +125,15 @@ internal fun CloneWaitNotice(clone: QueuedClone.Wait?, failed: Boolean, machine:
         failed -> QueuedClone.FAILED_TITLE
         else -> QueuedClone.TITLE
     }
-    val align = if (compact) Alignment.Start else Alignment.CenterHorizontally
+    // Both cards are centred, as web and iOS draw them.
+    val align = Alignment.CenterHorizontally
     val pad = if (compact) Modifier.padding(horizontal = 16.dp, vertical = 14.dp) else Modifier.padding(horizontal = 24.dp, vertical = 32.dp)
     Column(modifier.fillMaxWidth().then(pad).testTag("clone-wait"), horizontalAlignment = align, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             // The full-height card's own dots already say it is waiting; the compact one has none, so it spins until a percentage is heard.
-            if (compact && clone != null && clone.progress == null) CircularProgressIndicator(Modifier.size(14.dp).testTag("clone-wait:spinner"), strokeWidth = 1.5.dp)
+            if (compact && clone != null && clone.progress == null) CircularProgressIndicator(Modifier.size(20.dp).testTag("clone-wait:spinner"), strokeWidth = 2.dp)
             Text(title, Modifier.testTag("clone-wait:title"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold,
-                textAlign = if (compact) TextAlign.Start else TextAlign.Center)
+                textAlign = TextAlign.Center)
         }
         clone?.progress?.let { progress ->
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -150,6 +151,6 @@ internal fun CloneWaitNotice(clone: QueuedClone.Wait?, failed: Boolean, machine:
                 else -> QueuedClone.STARTS
             },
             Modifier.testTag("clone-wait:description"), style = MaterialTheme.typography.bodyMedium, color = secondary,
-            textAlign = if (compact) TextAlign.Start else TextAlign.Center)
+            textAlign = TextAlign.Center)
     }
 }
