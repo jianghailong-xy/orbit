@@ -1399,13 +1399,13 @@ describe('engine stderr', () => {
       <Transcript
         events={[
           stderrEvent(1, codexLine('2026-08-12T15:31:40.112363Z', MISSING_OUTPUT)),
-          stderrEvent(2, codexLine('2026-08-12T15:32:38.753979Z', 'Codex could not find bubblewrap on PATH')),
+          stderrEvent(2, codexLine('2026-08-12T15:32:38.753979Z', 'Another failure, seen once')),
         ]}
       />,
     );
 
     expect(html.split('chat-error"').length - 1).toBe(2);
-    expect(html).toContain('bubblewrap');
+    expect(html).toContain('Another failure, seen once');
     expect(html).not.toContain('chat-error-repeat');
   });
 
@@ -1516,6 +1516,7 @@ describe('engine stderr', () => {
     const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost' });
     vi.stubGlobal('window', dom.window);
     vi.stubGlobal('document', dom.window.document);
+    vi.stubGlobal('HTMLElement', dom.window.HTMLElement);
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
     const root = createRoot(dom.window.document.getElementById('root')!);
     const start = vi.fn();
