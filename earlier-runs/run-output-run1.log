@@ -1,0 +1,101 @@
+==> iPhone 5DC6920A-2A6D-45BA-84E4-EAAD1A637CD6
+==> light
+==> stub ready on 127.0.0.1:8765 (pid 12551, after 2s)
+Test Case '-[LandingMeasuredProbeUITests.LandingMeasuredShotTests test1TheStartCardForARequestWithNoLine]' started.
+Test Case '-[LandingMeasuredProbeUITests.LandingMeasuredShotTests test1TheStartCardForARequestWithNoLine]' passed (35.327 seconds).
+Test Case '-[LandingMeasuredProbeUITests.LandingMeasuredShotTests test2AStartedProjectWithNoLineDrawsNoLanding]' started.
+Test Case '-[LandingMeasuredProbeUITests.LandingMeasuredShotTests test2AStartedProjectWithNoLineDrawsNoLanding]' passed (12.065 seconds).
+Test Case '-[LandingMeasuredProbeUITests.LandingMeasuredShotTests test3TheLandingCheckWithWhoSetItAndNoCheck]' started.
+Test Case '-[LandingMeasuredProbeUITests.LandingMeasuredShotTests test3TheLandingCheckWithWhoSetItAndNoCheck]' passed (57.081 seconds).
+Test Case '-[LandingMeasuredProbeUITests.LandingMeasuredShotTests test4aTheExemptionOnTheTaskPage]' started.
+Test Case '-[LandingMeasuredProbeUITests.LandingMeasuredShotTests test4aTheExemptionOnTheTaskPage]' passed (26.732 seconds).
+Test Case '-[LandingMeasuredProbeUITests.LandingMeasuredShotTests test4bTheLandingReadsTheCheckSkipped]' started.
+Test Case '-[LandingMeasuredProbeUITests.LandingMeasuredShotTests test4bTheLandingReadsTheCheckSkipped]' passed (24.346 seconds).
+Test Case '-[LandingMeasuredProbeUITests.LandingMeasuredShotTests test4cAnExemptTaskWithNoLandingYet]' started.
+Test Case '-[LandingMeasuredProbeUITests.LandingMeasuredShotTests test4cAnExemptTaskWithNoLandingYet]' passed (23.946 seconds).
+Test Case '-[LandingMeasuredProbeUITests.LandingMeasuredShotTests test5TheCoordinatorsChangesAndTheOwnersRevert]' started.
+Test Case '-[LandingMeasuredProbeUITests.LandingMeasuredShotTests test5TheCoordinatorsChangesAndTheOwnersRevert]' passed (58.342 seconds).
+	 Executed 7 tests, with 0 failures (0 unexpected) in 237.840 (237.864) seconds
+	 Executed 7 tests, with 0 failures (0 unexpected) in 237.840 (237.866) seconds
+	 Executed 7 tests, with 0 failures (0 unexpected) in 237.840 (237.868) seconds
+ xcrun: error: unable to find utility "simctl", not a developer tool or in PATH
+** TEST SUCCEEDED **
+==> dark
+==> stub ready on 127.0.0.1:8765 (pid 19473, after 2s)
+Test Case '-[LandingMeasuredProbeUITests.LandingMeasuredShotTests test1TheStartCardForARequestWithNoLine]' started.
+Test Case '-[LandingMeasuredProbeUITests.LandingMeasuredShotTests test1TheStartCardForARequestWithNoLine]' passed (37.158 seconds).
+Test Case '-[LandingMeasuredProbeUITests.LandingMeasuredShotTests test2AStartedProjectWithNoLineDrawsNoLanding]' started.
+Test Case '-[LandingMeasuredProbeUITests.LandingMeasuredShotTests test2AStartedProjectWithNoLineDrawsNoLanding]' passed (16.990 seconds).
+Test Case '-[LandingMeasuredProbeUITests.LandingMeasuredShotTests test3TheLandingCheckWithWhoSetItAndNoCheck]' started.
+Test Case '-[LandingMeasuredProbeUITests.LandingMeasuredShotTests test3TheLandingCheckWithWhoSetItAndNoCheck]' passed (66.728 seconds).
+Test Case '-[LandingMeasuredProbeUITests.LandingMeasuredShotTests test4aTheExemptionOnTheTaskPage]' started.
+/tmp/exempt-8724c53/.lm-probe/UITests/LandingMeasuredShotTests.swift:143: error: -[LandingMeasuredProbeUITests.LandingMeasuredShotTests test4aTheExemptionOnTheTaskPage] : XCTAssertTrue failed - Remove exemption wrote []
+/tmp/exempt-8724c53/.lm-probe/UITests/LandingMeasuredShotTests.swift:144: error: -[LandingMeasuredProbeUITests.LandingMeasuredShotTests test4aTheExemptionOnTheTaskPage] : XCTAssertTrue failed - the exemption is still drawn after Remove exemption
+Test Case '-[LandingMeasuredProbeUITests.LandingMeasuredShotTests test4aTheExemptionOnTheTaskPage]' failed (42.647 seconds).
+Test Case '-[LandingMeasuredProbeUITests.LandingMeasuredShotTests test4bTheLandingReadsTheCheckSkipped]' started.
+Test Case '-[LandingMeasuredProbeUITests.LandingMeasuredShotTests test4bTheLandingReadsTheCheckSkipped]' passed (26.728 seconds).
+Test Case '-[LandingMeasuredProbeUITests.LandingMeasuredShotTests test4cAnExemptTaskWithNoLandingYet]' started.
+Test Case '-[LandingMeasuredProbeUITests.LandingMeasuredShotTests test4cAnExemptTaskWithNoLandingYet]' passed (25.481 seconds).
+Test Case '-[LandingMeasuredProbeUITests.LandingMeasuredShotTests test5TheCoordinatorsChangesAndTheOwnersRevert]' started.
+Test Case '-[LandingMeasuredProbeUITests.LandingMeasuredShotTests test5TheCoordinatorsChangesAndTheOwnersRevert]' passed (56.715 seconds).
+	 Executed 7 tests, with 2 failures (0 unexpected) in 272.447 (272.462) seconds
+	 Executed 7 tests, with 2 failures (0 unexpected) in 272.447 (272.465) seconds
+	 Executed 7 tests, with 2 failures (0 unexpected) in 272.447 (272.470) seconds
+ xcrun: error: unable to find utility "simctl", not a developer tool or in PATH
+** TEST FAILED **
+/tmp/exempt-8724c53/.lm-probe/shots/dark:
+total 8760
+drwxr-xr-x@ 25 long  wheel     800 Nov 22 15:57 .
+drwxr-xr-x@  5 long  wheel     160 Nov 22 15:57 ..
+-rw-r--r--   1 long  wheel  681649 Nov 22 15:53 01-start-card-dark.png
+-rw-r--r--   1 long  wheel  172596 Nov 22 15:53 02-project-no-line-dark.png
+-rw-r--r--   1 long  wheel  363333 Nov 22 15:54 03b-landing-check-coordinator-dark.png
+-rw-r--r--   1 long  wheel  412041 Nov 22 15:54 03c-no-check-dark.png
+-rw-r--r--   1 long  wheel  327384 Nov 22 15:55 04a-task-exempt-dark.png
+-rw-r--r--   1 long  wheel  327384 Nov 22 15:55 04a-task-exemption-removed-dark.png
+-rw-r--r--   1 long  wheel  272097 Nov 22 15:55 04b-landing-skipped-dark.png
+-rw-r--r--   1 long  wheel  306615 Nov 22 15:55 04b-landing-skipped-open-dark.png
+-rw-r--r--   1 long  wheel  338394 Nov 22 15:56 04c-task-exempt-no-landing-dark.png
+-rw-r--r--   1 long  wheel  318876 Nov 22 15:57 05b-changes-dark.png
+-rw-r--r--   1 long  wheel  464232 Nov 22 15:57 05c-revert-confirm-dark.png
+-rw-r--r--   1 long  wheel  318428 Nov 22 15:57 05d-reverted-dark.png
+-rw-r--r--@  1 long  wheel     659 Nov 22 15:53 LandingMeasuredShotTeststest1TheStartCardForARequestWithNoLine-notes.txt
+-rw-r--r--@  1 long  wheel     141 Nov 22 15:53 LandingMeasuredShotTeststest2AStartedProjectWithNoLineDrawsNoLanding-notes.txt
+-rw-r--r--@  1 long  wheel     600 Nov 22 15:54 LandingMeasuredShotTeststest3TheLandingCheckWithWhoSetItAndNoCheck-notes.txt
+-rw-r--r--@  1 long  wheel     243 Nov 22 15:55 LandingMeasuredShotTeststest4aTheExemptionOnTheTaskPage-notes.txt
+-rw-r--r--@  1 long  wheel     282 Nov 22 15:55 LandingMeasuredShotTeststest4bTheLandingReadsTheCheckSkipped-notes.txt
+-rw-r--r--@  1 long  wheel     254 Nov 22 15:56 LandingMeasuredShotTeststest4cAnExemptTaskWithNoLandingYet-notes.txt
+-rw-r--r--@  1 long  wheel     414 Nov 22 15:57 LandingMeasuredShotTeststest5TheCoordinatorsChangesAndTheOwnersRevert-notes.txt
+-rw-r--r--@  1 long  wheel   54360 Nov 22 15:57 requests.log
+-rw-r--r--@  1 long  wheel      33 Nov 22 15:52 requests.log.out
+-rw-r--r--@  1 long  wheel   10329 Nov 22 15:57 writes.txt
+-rw-r--r--@  1 long  wheel   59708 Nov 22 15:57 xcodebuild-dark.log
+
+/tmp/exempt-8724c53/.lm-probe/shots/light:
+total 10976
+drwxr-xr-x@ 25 long  wheel     800 Nov 22 15:52 .
+drwxr-xr-x@  5 long  wheel     160 Nov 22 15:57 ..
+-rw-r--r--   1 long  wheel  547063 Nov 22 15:49 01-start-card-light.png
+-rw-r--r--   1 long  wheel  191273 Nov 22 15:49 02-project-no-line-light.png
+-rw-r--r--   1 long  wheel  389350 Nov 22 15:50 03b-landing-check-coordinator-light.png
+-rw-r--r--   1 long  wheel  433139 Nov 22 15:50 03c-no-check-light.png
+-rw-r--r--   1 long  wheel  486379 Nov 22 15:50 04a-task-exempt-light.png
+-rw-r--r--   1 long  wheel  475872 Nov 22 15:50 04a-task-exemption-removed-light.png
+-rw-r--r--   1 long  wheel  295333 Nov 22 15:51 04b-landing-skipped-light.png
+-rw-r--r--   1 long  wheel  329666 Nov 22 15:51 04b-landing-skipped-open-light.png
+-rw-r--r--   1 long  wheel  444420 Nov 22 15:51 04c-task-exempt-no-landing-light.png
+-rw-r--r--   1 long  wheel  306271 Nov 22 15:52 05b-changes-light.png
+-rw-r--r--   1 long  wheel  487220 Nov 22 15:52 05c-revert-confirm-light.png
+-rw-r--r--   1 long  wheel  312274 Nov 22 15:52 05d-reverted-light.png
+-rw-r--r--@  1 long  wheel     646 Nov 22 15:49 LandingMeasuredShotTeststest1TheStartCardForARequestWithNoLine-notes.txt
+-rw-r--r--@  1 long  wheel     141 Nov 22 15:49 LandingMeasuredShotTeststest2AStartedProjectWithNoLineDrawsNoLanding-notes.txt
+-rw-r--r--@  1 long  wheel     600 Nov 22 15:50 LandingMeasuredShotTeststest3TheLandingCheckWithWhoSetItAndNoCheck-notes.txt
+-rw-r--r--@  1 long  wheel     304 Nov 22 15:50 LandingMeasuredShotTeststest4aTheExemptionOnTheTaskPage-notes.txt
+-rw-r--r--@  1 long  wheel     282 Nov 22 15:51 LandingMeasuredShotTeststest4bTheLandingReadsTheCheckSkipped-notes.txt
+-rw-r--r--@  1 long  wheel     254 Nov 22 15:51 LandingMeasuredShotTeststest4cAnExemptTaskWithNoLandingYet-notes.txt
+-rw-r--r--@  1 long  wheel     428 Nov 22 15:52 LandingMeasuredShotTeststest5TheCoordinatorsChangesAndTheOwnersRevert-notes.txt
+-rw-r--r--@  1 long  wheel   55520 Nov 22 15:52 requests.log
+-rw-r--r--@  1 long  wheel      33 Nov 22 15:45 requests.log.out
+-rw-r--r--@  1 long  wheel   10926 Nov 22 15:52 writes.txt
+-rw-r--r--@  1 long  wheel  793043 Nov 22 15:52 xcodebuild-light.log
+run.sh: line 62: 19473 Terminated: 15          python3 -u stub.py 8765 "$1" > "$1.out" 2>&1

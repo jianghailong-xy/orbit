@@ -1,0 +1,6 @@
+04c-row: in view after 0 move(s) at (32.0, 407.0, 338.0, 119.33331298828125)
+04c: shows "Exempt"
+04c: shows "Restarts services only; nothing the landing check builds changes."
+04c: shows "Approved on a card"
+04c: shows "Remove exemption"
+04c: no "Landed"

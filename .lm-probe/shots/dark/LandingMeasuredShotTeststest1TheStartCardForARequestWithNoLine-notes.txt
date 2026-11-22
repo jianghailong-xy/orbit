@@ -1,0 +1,9 @@
+01-preview: in view after 0 move(s) at (0.0, 275.0, 402.0, 130.0)
+01-card: shows "Lands on the project’s branch when a task commits"
+01-lands: in view after 2 move(s) at (16.0, 489.0, 370.0, 62.33333333333326)
+01-card: shows "Merge check"
+01-card: shows "At most"
+01-card: no "Tasks land on"
+01-card: no "Main branch"
+01-card: no "Leave blank to use merge check"
+start bodies: ["16:08:46 BODY /api/projects/P5/start {\"automatic\": true, \"criteriaDigest\": \"5d1a09c3be427777777777777777777777777777777777777777777777777777\", \"maxConcurrentTasks\": 3, \"mergeCheckCommand\": null, \"mergeCheckTimeoutSeconds\": null, \"requestId\": \"I5\"}"]

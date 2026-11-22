@@ -1,0 +1,261 @@
+Building for debugging...
+[Computing dependencies]
+[40 / 145]
+[49 / 146] Markdown
+[64 / 160] cmark-gfm
+[83 / 160]
+[92 / 160] CAtomic
+[115 / 160] cmark-gfm
+[129 / 161] cmark-gfm-extensions
+[134 / 161] cmark-gfm
+[134 / 161]
+[137 / 161] OrbitKit
+[146 / 161] OrbitKitTests-product
+[147 / 161] OrbitKit
+[151 / 162] OrbitKit-product
+[151 / 162] OrbitKitTests-product
+[159 / 184] OrbitKitTests-product
+[161 / 184] OrbitKitTests-product/private/tmp/exempt-8724c53/src/macos/OrbitKit/Tests/OrbitKitTests/LandingSessionPageTests.swift:175:13: [1;33mwarning: [1;39mvariable 'queued' was never mutated; consider changing to 'let' constant[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/variable-never-mutated\VariableNeverMutated]8;;\]
+[0;36m173 |[0;0m     func testThePollingCadenceIsFourSecondsRunningFifteenQueuedAndNothingSettled() {
+[0;36m174 |[0;0m         XCTAssertEqual(LandingPageCopy.refetchInterval(landing()), 4)
+[0;36m175 |[0;0m         var queued = attempt { $0.state = "QUEUED"; $0.phase = nil; $0.claim = 0 }
+    [0;36m|[0;0m             `- [1;33mwarning: [1;39mvariable 'queued' was never mutated; consider changing to 'let' constant[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/variable-never-mutated\VariableNeverMutated]8;;\]
+[0;36m176 |[0;0m         var idle = landing()
+[0;36m177 |[0;0m         idle = SessionLandingView(sessionId: idle.sessionId, projectId: idle.projectId,
+
+[#VariableNeverMutated]: <https://docs.swift.org/compiler/documentation/diagnostics/variable-never-mutated>
+
+[162 / 184] OrbitKitTests-product
+[163 / 184] OrbitKitTests-product
+[164 / 184] OrbitKitTests-product
+[165 / 184] OrbitKitTests-product
+[167 / 184] OrbitKitTests-product
+/private/tmp/exempt-8724c53/src/macos/OrbitKit/Tests/OrbitKitTests/OwnerConfirmationPlacementTests.swift:234:13: [1;33mwarning: [1;39minitialization of immutable value 'items' was never used; consider replacing with assignment to '_' or removing it[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/no-usage\NoUsage]8;;\]
+[0;36m232 |[0;0m     /// whatever the clock says — the same filter the question card is under (`receiptsIn`).
+[0;36m233 |[0;0m     func testAReceiptForAnotherSessionsRunIsNotDrawnHere() {
+[0;36m234 |[0;0m         let items = [question("i1"), thought("i2"), report("i3")]
+    [0;36m|[0;0m             `- [1;33mwarning: [1;39minitialization of immutable value 'items' was never used; consider replacing with assignment to '_' or removing it[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/no-usage\NoUsage]8;;\]
+[0;36m235 |[0;0m         XCTAssertEqual(
+[0;36m236 |[0;0m             OwnerConfirmations.receipts(read([decision("d1", at: "2026-09-16T11:17:05.000Z",
+
+[#NoUsage]: <https://docs.swift.org/compiler/documentation/diagnostics/no-usage>
+[169 / 184] OrbitKitTests-product
+[172 / 184] OrbitKitTests-product
+[173 / 184] OrbitKitTests-product
+[177 / 184] OrbitKitTests-product
+/private/tmp/exempt-8724c53/src/macos/OrbitKit/Tests/OrbitKitTests/PromotionPlacementTests.swift:199:13: [1;33mwarning: [1;39minitialization of immutable value 'items' was never used; consider replacing with assignment to '_' or removing it[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/no-usage\NoUsage]8;;\]
+[0;36m197 |[0;0m                            sha: "1f2e3d4c5b6a798807162534435261708f9e0a1b",
+[0;36m198 |[0;0m                            source: "refs/heads/project/34ODoUKJ")
+[0;36m199 |[0;0m         let items = transcript()
+    [0;36m|[0;0m             `- [1;33mwarning: [1;39minitialization of immutable value 'items' was never used; consider replacing with assignment to '_' or removing it[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/no-usage\NoUsage]8;;\]
+[0;36m200 |[0;0m         let receipts = PromotionCards.receipts(merged: [second, first])
+[0;36m201 |[0;0m         XCTAssertEqual(receipts.count, 2)
+
+[#NoUsage]: <https://docs.swift.org/compiler/documentation/diagnostics/no-usage>
+[178 / 184] AllIncludingTests
+[178 / 184] OrbitKitTests-product
+/private/tmp/exempt-8724c53/src/macos/OrbitKit/Tests/OrbitKitTests/ProjectDoneCopyParityTests.swift:386:14: [1;33mwarning: [1;39mimmutable value 'reason' was never used; consider replacing with '_' or removing it[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/no-usage\NoUsage]8;;\]
+[0;36m384 |[0;0m             (nil, "default: return `\(Self.onMainBranch(ProjectDone.landingReasonLabel(nil)))`;"),
+[0;36m385 |[0;0m         ]
+[0;36m386 |[0;0m         for (reason, line) in rows {
+    [0;36m|[0;0m              `- [1;33mwarning: [1;39mimmutable value 'reason' was never used; consider replacing with '_' or removing it[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/no-usage\NoUsage]8;;\]
+[0;36m387 |[0;0m             XCTAssertTrue(web.contains(line), "landingReasonLabel no longer says \(line)")
+[0;36m388 |[0;0m         }
+
+[#NoUsage]: <https://docs.swift.org/compiler/documentation/diagnostics/no-usage>
+/private/tmp/exempt-8724c53/src/macos/OrbitKit/Tests/OrbitKitTests/SessionPreviewImagesTests.swift:119:60: [1;33mwarning: [1;39mbackward matching of the unlabeled trailing closure is deprecated; label the argument with 'toolImages' to suppress this warning[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/trailing-closure-matching\TrailingClosureMatching]8;;\]
+[0;36m117 |[0;0m         XCTAssertEqual(SessionPreviewImages.collect([clipped]), [])
+[0;36m118 |[0;0m 
+[0;36m119 |[0;0m         let refs = SessionPreviewImages.collect([clipped]) { card in
+    [0;36m|[0;0m                                                            `- [1;33mwarning: [1;39mbackward matching of the unlabeled trailing closure is deprecated; label the argument with 'toolImages' to suppress this warning[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/trailing-closure-matching\TrailingClosureMatching]8;;\]
+[0;36m120 |[0;0m             card.id == "toolu_9" ? [self.png] : card.resultImages
+[0;36m121 |[0;0m         }
+
+OrbitKit.SessionPreviewImages.collect:2:20: [1;39mnote: [1;39m'collect(_:isAttachmentImage:toolImages:)' declared here[0;0m
+[0;36m1 |[0;0m enum SessionPreviewImages {
+[0;36m2 |[0;0m public static func collect(_ items: [OrbitKit.TranscriptItem], isAttachmentImage: (String) -> Bool = { _ in false }, toolImages: (OrbitKit.ToolCard) -> [Data] = { $0.resultImages }) -> [OrbitKit.PreviewImageRef]}
+  [0;36m|[0;0m                    `- [1;39mnote: [1;39m'collect(_:isAttachmentImage:toolImages:)' declared here[0;0m
+[0;36m3 |[0;0m 
+
+/private/tmp/exempt-8724c53/src/macos/OrbitKit/Tests/OrbitKitTests/SessionProjectCodableTests.swift:159:22: [1;33mwarning: [1;39mexpression implicitly coerced from 'SessionProjectMembership??' to 'Any?'[0;0m
+[0;36m157 |[0;0m 
+[0;36m158 |[0;0m     func testSummaryDistinguishesAbsentNullAndMembership() throws {
+[0;36m159 |[0;0m         XCTAssertNil([4;39mtry summary("").projectMembership[0;0m)
+    [0;36m|[0;0m                      |               |- [1;39mnote: [1;39mprovide a default value to avoid this warning[0;0m
+    [0;36m|[0;0m                      |               |- [1;39mnote: [1;39mforce-unwrap the value to avoid this warning[0;0m
+    [0;36m|[0;0m                      |               `- [1;39mnote: [1;39mexplicitly cast to 'Any?' with 'as Any?' to silence this warning[0;0m
+    [0;36m|[0;0m                      `- [1;33mwarning: [1;39mexpression implicitly coerced from 'SessionProjectMembership??' to 'Any?'[0;0m
+[0;36m160 |[0;0m         switch try summary(#","projectMembership":null"#).projectMembership {
+[0;36m161 |[0;0m         case .some(.none): break
+
+[#TrailingClosureMatching]: <https://docs.swift.org/compiler/documentation/diagnostics/trailing-closure-matching>
+[179 / 184] OrbitKitTests-product
+[180 / 184] OrbitKitTests-product
+[181 / 184] OrbitKitTests-product
+[182 / 184] OrbitKitTests-product
+Build complete! (59.12 sec)
+Test Suite 'Selected tests' started at 2026-11-22 15:34:58.318.
+Test Suite 'OrbitKitTests.xctest' started at 2026-11-22 15:34:58.319.
+Test Suite 'LandingCheckTests' started at 2026-11-22 15:34:58.319.
+Test Case '-[OrbitKitTests.LandingCheckTests testBaselineCardReadsTheMeasuredTreeAndHeldTasks]' started.
+Test Case '-[OrbitKitTests.LandingCheckTests testBaselineCardReadsTheMeasuredTreeAndHeldTasks]' passed (0.005 seconds).
+Test Case '-[OrbitKitTests.LandingCheckTests testConfirmationSnapshotPreservesOmittedFieldsAndNullInherits]' started.
+Test Case '-[OrbitKitTests.LandingCheckTests testConfirmationSnapshotPreservesOmittedFieldsAndNullInherits]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.LandingCheckTests testEscalatedBaselineItemKeepsTheBaselineCardNotWhoFixes]' started.
+Test Case '-[OrbitKitTests.LandingCheckTests testEscalatedBaselineItemKeepsTheBaselineCardNotWhoFixes]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.LandingCheckTests testEveryWebCopyKeyHasAnExactNativeCounterpart]' started.
+Test Case '-[OrbitKitTests.LandingCheckTests testEveryWebCopyKeyHasAnExactNativeCounterpart]' passed (0.006 seconds).
+Test Case '-[OrbitKitTests.LandingCheckTests testScopeRecoveryNeverAssignsNewestResultsToAnotherAttemptClaimOrRound]' started.
+Test Case '-[OrbitKitTests.LandingCheckTests testScopeRecoveryNeverAssignsNewestResultsToAnotherAttemptClaimOrRound]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.LandingCheckTests testSettingsDecodeAndWriteExactCommandAndIndependentNulls]' started.
+Test Case '-[OrbitKitTests.LandingCheckTests testSettingsDecodeAndWriteExactCommandAndIndependentNulls]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.LandingCheckTests testThreeLandingVerdictsAndBothAttributionsHaveSeparateRows]' started.
+Test Case '-[OrbitKitTests.LandingCheckTests testThreeLandingVerdictsAndBothAttributionsHaveSeparateRows]' passed (0.001 seconds).
+Test Suite 'LandingCheckTests' passed at 2026-11-22 15:34:58.336.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.016 (0.017) seconds
+Test Suite 'LandingMeasuredTests' started at 2026-11-22 15:34:58.337.
+Test Case '-[OrbitKitTests.LandingMeasuredTests testALineThisBuildDoesNotKnowIsStillNotSettings]' started.
+Test Case '-[OrbitKitTests.LandingMeasuredTests testALineThisBuildDoesNotKnowIsStillNotSettings]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.LandingMeasuredTests testAnExemptTaskDecodesItsMark]' started.
+Test Case '-[OrbitKitTests.LandingMeasuredTests testAnExemptTaskDecodesItsMark]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.LandingMeasuredTests testAnOlderServerStillDecodes]' started.
+Test Case '-[OrbitKitTests.LandingMeasuredTests testAnOlderServerStillDecodes]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.LandingMeasuredTests testANoLineRequestIsCompleteAndNamesNoMergeEitherWay]' started.
+Test Case '-[OrbitKitTests.LandingMeasuredTests testANoLineRequestIsCompleteAndNamesNoMergeEitherWay]' passed (0.002 seconds).
+Test Case '-[OrbitKitTests.LandingMeasuredTests testANoLineRequestNamesNoBranch]' started.
+Test Case '-[OrbitKitTests.LandingMeasuredTests testANoLineRequestNamesNoBranch]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.LandingMeasuredTests testARequestThatNamesALineStillSendsIt]' started.
+Test Case '-[OrbitKitTests.LandingMeasuredTests testARequestThatNamesALineStillSendsIt]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.LandingMeasuredTests testAStartRequestWithNoLineDecodes]' started.
+Test Case '-[OrbitKitTests.LandingMeasuredTests testAStartRequestWithNoLineDecodes]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.LandingMeasuredTests testATaskExemptLandingCheckIsSkippedNotFailed]' started.
+Test Case '-[OrbitKitTests.LandingMeasuredTests testATaskExemptLandingCheckIsSkippedNotFailed]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.LandingMeasuredTests testNoCheckIsAValue]' started.
+Test Case '-[OrbitKitTests.LandingMeasuredTests testNoCheckIsAValue]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.LandingMeasuredTests testTheChangeListReadsAsTheBoard]' started.
+Test Case '-[OrbitKitTests.LandingMeasuredTests testTheChangeListReadsAsTheBoard]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.LandingMeasuredTests testTheDraftOfANoLineRequestDrawsTheOneSentenceAndThePressSendsNoLine]' started.
+Test Case '-[OrbitKitTests.LandingMeasuredTests testTheDraftOfANoLineRequestDrawsTheOneSentenceAndThePressSendsNoLine]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.LandingMeasuredTests testTheFourWritersReadAsTheBoardsFourBadges]' started.
+Test Case '-[OrbitKitTests.LandingMeasuredTests testTheFourWritersReadAsTheBoardsFourBadges]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.LandingMeasuredTests testTheLandingCheckReadsItsProvenance]' started.
+Test Case '-[OrbitKitTests.LandingMeasuredTests testTheLandingCheckReadsItsProvenance]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.LandingMeasuredTests testTheOwnersExemptionAndTheRemoveBody]' started.
+Test Case '-[OrbitKitTests.LandingMeasuredTests testTheOwnersExemptionAndTheRemoveBody]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.LandingMeasuredTests testTheOwnersWritesForEachValue]' started.
+Test Case '-[OrbitKitTests.LandingMeasuredTests testTheOwnersWritesForEachValue]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.LandingMeasuredTests testTheRevertConfirmationSaysWhatGoesBack]' started.
+Test Case '-[OrbitKitTests.LandingMeasuredTests testTheRevertConfirmationSaysWhatGoesBack]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.LandingMeasuredTests testTheStartedRecordWithNoLineDecodesAndTheCardCarriesItsSettings]' started.
+Test Case '-[OrbitKitTests.LandingMeasuredTests testTheStartedRecordWithNoLineDecodesAndTheCardCarriesItsSettings]' passed (0.001 seconds).
+Test Suite 'LandingMeasuredTests' passed at 2026-11-22 15:34:58.350.
+	 Executed 17 tests, with 0 failures (0 unexpected) in 0.011 (0.013) seconds
+Test Suite 'LandingStepsTests' started at 2026-11-22 15:34:58.350.
+Test Case '-[OrbitKitTests.LandingStepsTests testAFailedChecksResultStaysInItsCheck]' started.
+Test Case '-[OrbitKitTests.LandingStepsTests testAFailedChecksResultStaysInItsCheck]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.LandingStepsTests testALandedTasksFifteenLinesAreFiveSteps]' started.
+Test Case '-[OrbitKitTests.LandingStepsTests testALandedTasksFifteenLinesAreFiveSteps]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.LandingStepsTests testAMergeRoundsLastStepIsMergeAndACheckRoundsIsResult]' started.
+Test Case '-[OrbitKitTests.LandingStepsTests testAMergeRoundsLastStepIsMergeAndACheckRoundsIsResult]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.LandingStepsTests testChecksDuration]' started.
+Test Case '-[OrbitKitTests.LandingStepsTests testChecksDuration]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.LandingStepsTests testTaskAcceptanceAndTheMergeCheckEachHaveAStep]' started.
+Test Case '-[OrbitKitTests.LandingStepsTests testTaskAcceptanceAndTheMergeCheckEachHaveAStep]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.LandingStepsTests testTheWordsAreTheWebs]' started.
+Test Case '-[OrbitKitTests.LandingStepsTests testTheWordsAreTheWebs]' passed (0.008 seconds).
+Test Suite 'LandingStepsTests' passed at 2026-11-22 15:34:58.361.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.010 (0.011) seconds
+Test Suite 'LandingViewsWiringTests' started at 2026-11-22 15:34:58.361.
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testAFailedChecksInlineOutputIsReadByAViewThatIsAlwaysThere]' started.
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testAFailedChecksInlineOutputIsReadByAViewThatIsAlwaysThere]' passed (0.005 seconds).
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testALoneMergeJobsCardSaysNoTaskLandingSentence]' started.
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testALoneMergeJobsCardSaysNoTaskLandingSentence]' passed (0.003 seconds).
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testCheckOutputRendersLogTextWithoutApplyingTimelineCopy]' started.
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testCheckOutputRendersLogTextWithoutApplyingTimelineCopy]' passed (0.004 seconds).
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testEachReRunDoorSendsItsOwnReason]' started.
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testEachReRunDoorSendsItsOwnReason]' passed (0.027 seconds).
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testTheConsoleDrawsALandingSessionAsItsProjectsWindowFocusedOnIt]' started.
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testTheConsoleDrawsALandingSessionAsItsProjectsWindowFocusedOnIt]' passed (0.030 seconds).
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testTheLandingCardAndTheJobsListAndTheMergeRowCarryTheirEntries]' started.
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testTheLandingCardAndTheJobsListAndTheMergeRowCarryTheirEntries]' passed (0.056 seconds).
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testTheLandingReadsAreWired]' started.
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testTheLandingReadsAreWired]' passed (0.058 seconds).
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testTheLandingsRowAnswersAcrossItsWholeRow]' started.
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testTheLandingsRowAnswersAcrossItsWholeRow]' passed (0.007 seconds).
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testTheSourceSessionCarriesItsLandingLabel]' started.
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testTheSourceSessionCarriesItsLandingLabel]' passed (0.012 seconds).
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testTheStatusCardDrawsAbandonAsTheLightSecondaryDoor]' started.
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testTheStatusCardDrawsAbandonAsTheLightSecondaryDoor]' passed (0.002 seconds).
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testTheStatusCardsHeadWearsTheRedCrossForAnAttemptThatStoppedOnAFailure]' started.
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testTheStatusCardsHeadWearsTheRedCrossForAnAttemptThatStoppedOnAFailure]' passed (0.003 seconds).
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testTheTaskPageDrawsItsLandingSection]' started.
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testTheTaskPageDrawsItsLandingSection]' passed (0.023 seconds).
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testTheTimelinesMarksReadTheLinesFields]' started.
+/private/tmp/exempt-8724c53/src/macos/OrbitKit/Tests/OrbitKitTests/LandingViewsWiringTests.swift:337: error: -[OrbitKitTests.LandingViewsWiringTests testTheTimelinesMarksReadTheLinesFields] : XCTAssertTrue failed
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testTheTimelinesMarksReadTheLinesFields]' failed (2.466 seconds).
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testTheWindowOpensOnItsLandingOrAtItsBottomAndOnlyItsCardsPoll]' started.
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testTheWindowOpensOnItsLandingOrAtItsBottomAndOnlyItsCardsPoll]' passed (0.008 seconds).
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testTheWindowReadsAsAChat]' started.
+Test Case '-[OrbitKitTests.LandingViewsWiringTests testTheWindowReadsAsAChat]' passed (0.018 seconds).
+Test Suite 'LandingViewsWiringTests' failed at 2026-11-22 15:35:01.084.
+	 Executed 15 tests, with 1 failure (0 unexpected) in 2.721 (2.723) seconds
+Test Suite 'TaskDetailWiringTests' started at 2026-11-22 15:35:01.084.
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testARoutedRunSaysWhatItRanOnAndOpensItsWhy]' started.
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testARoutedRunSaysWhatItRanOnAndOpensItsWhy]' passed (0.007 seconds).
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testAtMostTwoPressesAndMarkDoneLivesInTheMenu]' started.
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testAtMostTwoPressesAndMarkDoneLivesInTheMenu]' passed (0.006 seconds).
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testEveryHeadingIsTheBrowsersWord]' started.
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testEveryHeadingIsTheBrowsersWord]' passed (0.027 seconds).
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testLongTextFoldsFromItsLengthAndTheSheetsSaveExplicitly]' started.
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testLongTextFoldsFromItsLengthAndTheSheetsSaveExplicitly]' passed (0.002 seconds).
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testRunsWithIsOneLineAndItsSheetHoldsTheFormRows]' started.
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testRunsWithIsOneLineAndItsSheetHoldsTheFormRows]' passed (0.015 seconds).
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testSuggestedReadsTheServersTiersAndWritesThroughTheModel]' started.
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testSuggestedReadsTheServersTiersAndWritesThroughTheModel]' passed (0.008 seconds).
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testTheAccountSwitchGatesEverySmartSelectionEntry]' started.
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testTheAccountSwitchGatesEverySmartSelectionEntry]' passed (0.013 seconds).
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testTheAgentFormHasNoSwitchAndTheComposerItsMark]' started.
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testTheAgentFormHasNoSwitchAndTheComposerItsMark]' passed (0.012 seconds).
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testTheBarShowsTheTitleOnlyOnceItHasScrolledAway]' started.
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testTheBarShowsTheTitleOnlyOnceItHasScrolledAway]' passed (0.004 seconds).
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testTheLineUnderTheRunSaysWhyItCannotStartOrThatNothingElseWill]' started.
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testTheLineUnderTheRunSaysWhyItCannotStartOrThatNothingElseWill]' passed (0.002 seconds).
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testTheNewBlocksReadAndWriteThroughTheModel]' started.
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testTheNewBlocksReadAndWriteThroughTheModel]' passed (0.031 seconds).
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testThePageDrawsTheWebPanelsBlocksInItsOrder]' started.
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testThePageDrawsTheWebPanelsBlocksInItsOrder]' passed (0.006 seconds).
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testTheRunLedBlocksReadTheTasksOwnFacts]' started.
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testTheRunLedBlocksReadTheTasksOwnFacts]' passed (0.018 seconds).
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testTheWebPanelStillDrawsTheBlocksInThisOrder]' started.
+Test Case '-[OrbitKitTests.TaskDetailWiringTests testTheWebPanelStillDrawsTheBlocksInThisOrder]' passed (0.009 seconds).
+Test Suite 'TaskDetailWiringTests' passed at 2026-11-22 15:35:01.245.
+	 Executed 14 tests, with 0 failures (0 unexpected) in 0.161 (0.162) seconds
+Test Suite 'TaskLandingExemptTests' started at 2026-11-22 15:35:01.245.
+Test Case '-[OrbitKitTests.TaskLandingExemptTests testASkippedCheckFetchesNoInlineOutput]' started.
+Test Case '-[OrbitKitTests.TaskLandingExemptTests testASkippedCheckFetchesNoInlineOutput]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.TaskLandingExemptTests testASkipWithNoReasonStillSaysExempt]' started.
+Test Case '-[OrbitKitTests.TaskLandingExemptTests testASkipWithNoReasonStillSaysExempt]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.TaskLandingExemptTests testAStopInTheStepStillFailsIt]' started.
+Test Case '-[OrbitKitTests.TaskLandingExemptTests testAStopInTheStepStillFailsIt]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.TaskLandingExemptTests testATaskExemptLandingCheckReadsSkippedWithItsReason]' started.
+Test Case '-[OrbitKitTests.TaskLandingExemptTests testATaskExemptLandingCheckReadsSkippedWithItsReason]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.TaskLandingExemptTests testOnlyTheTasksExemptionIsSkipped]' started.
+Test Case '-[OrbitKitTests.TaskLandingExemptTests testOnlyTheTasksExemptionIsSkipped]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.TaskLandingExemptTests testRemoveExemptionPatchesTheFlagOff]' started.
+Test Case '-[OrbitKitTests.TaskLandingExemptTests testRemoveExemptionPatchesTheFlagOff]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.TaskLandingExemptTests testTheMarkIsTheNewestUnrevertedRecordThatSetIt]' started.
+Test Case '-[OrbitKitTests.TaskLandingExemptTests testTheMarkIsTheNewestUnrevertedRecordThatSetIt]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.TaskLandingExemptTests testTheOriginBadgeIsTheRecordsOrigin]' started.
+Test Case '-[OrbitKitTests.TaskLandingExemptTests testTheOriginBadgeIsTheRecordsOrigin]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.TaskLandingExemptTests testTheTaskReadDecodesAllFourExemptionFields]' started.
+Test Case '-[OrbitKitTests.TaskLandingExemptTests testTheTaskReadDecodesAllFourExemptionFields]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.TaskLandingExemptTests testWithNoRecordTheTasksOwnFieldsSay]' started.
+Test Case '-[OrbitKitTests.TaskLandingExemptTests testWithNoRecordTheTasksOwnFieldsSay]' passed (0.000 seconds).
+Test Suite 'TaskLandingExemptTests' passed at 2026-11-22 15:35:01.249.
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.003 (0.003) seconds
+Test Suite 'OrbitKitTests.xctest' failed at 2026-11-22 15:35:01.249.
+	 Executed 69 tests, with 1 failure (0 unexpected) in 2.923 (2.930) seconds
+Test Suite 'Selected tests' failed at 2026-11-22 15:35:01.249.
+	 Executed 69 tests, with 1 failure (0 unexpected) in 2.923 (2.930) seconds
+Note: Some test targets reported failures:
+  - OrbitKitTests (XCTest)

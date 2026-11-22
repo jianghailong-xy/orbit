@@ -1,0 +1,6 @@
+04a-row: in view after 0 move(s) at (32.0, 516.0, 338.0, 119.33331298828125)
+04a: shows "Exempt"
+04a: shows "Only moves cron entries; the landing check needs a database"
+04a: shows "marked 20m ago"
+04a: shows "Remove exemption"
+task bodies: ["16:06:54 BODY /api/tasks/T1 {\"landingCheckExempt\": false}"]

@@ -1,0 +1,4 @@
+02-page: shows "Delete unused staging buckets"
+02-page: shows "Two tasks running"
+02-page: no "Waiting for a runner"
+02-page: no "Landing ·"

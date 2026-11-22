@@ -1,0 +1,701 @@
+Command line invocation:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild test -project LandingMeasuredProbe.xcodeproj -scheme LandingMeasuredProbe -destination id=5DC6920A-2A6D-45BA-84E4-EAAD1A637CD6 -derivedDataPath .dd-ios -resultBundlePath results/light.xcresult CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=-
+
+Build settings from command line:
+    CODE_SIGN_IDENTITY = -
+    CODE_SIGNING_ALLOWED = YES
+
+Resolve Package Graph
+
+
+Resolved source packages:
+  OrbitKit: /tmp/exempt-8724c53/src/macos/OrbitKit
+  swift-markdown: https://github.com/apple/swift-markdown @ 0.9.0
+  cmark-gfm: https://github.com/swiftlang/swift-cmark.git @ 0.9.0
+
+Writing result bundle at path:
+	/private/tmp/exempt-8724c53/.lm-probe/results/light.xcresult
+
+note: Using codesigning identity override: -
+ComputePackagePrebuildTargetDependencyGraph
+
+Prepare packages
+
+CreateBuildRequest
+
+SendProjectDescription
+
+CreateBuildOperation
+
+ComputeTargetDependencyGraph
+note: Building targets in dependency order
+note: Target dependency graph (11 targets)
+    Target 'LandingMeasuredProbeUITests' in project 'LandingMeasuredProbe'
+        ➜ Explicit dependency on target 'LandingMeasuredProbe' in project 'LandingMeasuredProbe'
+    Target 'LandingMeasuredProbe' in project 'LandingMeasuredProbe'
+        ➜ Explicit dependency on target 'OrbitKit-product' in project 'OrbitKit'
+    Target 'OrbitKit-product' in project 'OrbitKit'
+        ➜ Explicit dependency on target 'OrbitKit' in project 'OrbitKit'
+        ➜ Explicit dependency on target 'Markdown-product' in project 'swift-markdown'
+    Target 'OrbitKit' in project 'OrbitKit'
+        ➜ Explicit dependency on target 'Markdown-product' in project 'swift-markdown'
+    Target 'Markdown-product' in project 'swift-markdown'
+        ➜ Explicit dependency on target 'Markdown' in project 'swift-markdown'
+        ➜ Explicit dependency on target 'CAtomic' in project 'swift-markdown'
+        ➜ Explicit dependency on target 'cmark-gfm-product' in project 'cmark-gfm'
+        ➜ Explicit dependency on target 'cmark-gfm-extensions-product' in project 'cmark-gfm'
+    Target 'Markdown' in project 'swift-markdown'
+        ➜ Explicit dependency on target 'CAtomic' in project 'swift-markdown'
+        ➜ Explicit dependency on target 'cmark-gfm-product' in project 'cmark-gfm'
+        ➜ Explicit dependency on target 'cmark-gfm-extensions-product' in project 'cmark-gfm'
+    Target 'cmark-gfm-extensions-product' in project 'cmark-gfm'
+        ➜ Explicit dependency on target 'cmark-gfm-extensions' in project 'cmark-gfm'
+        ➜ Explicit dependency on target 'cmark-gfm' in project 'cmark-gfm'
+    Target 'cmark-gfm-extensions' in project 'cmark-gfm'
+        ➜ Explicit dependency on target 'cmark-gfm' in project 'cmark-gfm'
+    Target 'cmark-gfm-product' in project 'cmark-gfm'
+        ➜ Explicit dependency on target 'cmark-gfm' in project 'cmark-gfm'
+    Target 'cmark-gfm' in project 'cmark-gfm' (no dependencies)
+    Target 'CAtomic' in project 'swift-markdown' (no dependencies)
+
+GatherProvisioningInputs
+
+CreateBuildDescription
+
+ClangStatCache /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.0.sdk /tmp/exempt-8724c53/.lm-probe/.dd-ios/SDKStatCaches.noindex/iphonesimulator27.0-24A430-8dc58220667be655e1bcc261a7455254.sdkstatcache
+    cd /tmp/exempt-8724c53/.lm-probe/LandingMeasuredProbe.xcodeproj
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.0.sdk -o /tmp/exempt-8724c53/.lm-probe/.dd-ios/SDKStatCaches.noindex/iphonesimulator27.0-24A430-8dc58220667be655e1bcc261a7455254.sdkstatcache
+
+ProcessInfoPlistFile /tmp/exempt-8724c53/.lm-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingMeasuredProbe.app/Info.plist /tmp/exempt-8724c53/.lm-probe/Info.plist (in target 'LandingMeasuredProbe' from project 'LandingMeasuredProbe')
+    cd /tmp/exempt-8724c53/.lm-probe
+    builtin-infoPlistUtility /tmp/exempt-8724c53/.lm-probe/Info.plist -producttype com.apple.product-type.application -genpkginfo /tmp/exempt-8724c53/.lm-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingMeasuredProbe.app/PkgInfo -expandbuildsettings -format binary -platform iphonesimulator -additionalcontentfile /tmp/exempt-8724c53/.lm-probe/.dd-ios/Build/Intermediates.noindex/LandingMeasuredProbe.build/Debug-iphonesimulator/LandingMeasuredProbe.build/assetcatalog_generated_info.plist -o /tmp/exempt-8724c53/.lm-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingMeasuredProbe.app/Info.plist
+
+CopySwiftLibs /tmp/exempt-8724c53/.lm-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingMeasuredProbe.app (in target 'LandingMeasuredProbe' from project 'LandingMeasuredProbe')
+    cd /tmp/exempt-8724c53/.lm-probe
+    builtin-swiftStdLibTool --copy --verbose --sign - --scan-executable /tmp/exempt-8724c53/.lm-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingMeasuredProbe.app/LandingMeasuredProbe.debug.dylib --scan-folder /tmp/exempt-8724c53/.lm-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingMeasuredProbe.app/Frameworks --scan-folder /tmp/exempt-8724c53/.lm-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingMeasuredProbe.app/PlugIns --scan-folder /tmp/exempt-8724c53/.lm-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingMeasuredProbe.app/SystemExtensions --scan-folder /tmp/exempt-8724c53/.lm-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingMeasuredProbe.app/Extensions --platform iphonesimulator --toolchain /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /tmp/exempt-8724c53/.lm-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingMeasuredProbe.app/Frameworks --strip-bitcode --strip-bitcode-tool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /tmp/exempt-8724c53/.lm-probe/.dd-ios/Build/Intermediates.noindex/LandingMeasuredProbe.build/Debug-iphonesimulator/LandingMeasuredProbe.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os
+
+ProcessInfoPlistFile /tmp/exempt-8724c53/.lm-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingMeasuredProbeUITests-Runner.app/PlugIns/LandingMeasuredProbeUITests.xctest/Info.plist /tmp/exempt-8724c53/.lm-probe/.dd-ios/Build/Intermediates.noindex/LandingMeasuredProbe.build/Debug-iphonesimulator/LandingMeasuredProbeUITests.build/empty-LandingMeasuredProbeUITests.plist (in target 'LandingMeasuredProbeUITests' from project 'LandingMeasuredProbe')
+    cd /tmp/exempt-8724c53/.lm-probe
+    builtin-infoPlistUtility /tmp/exempt-8724c53/.lm-probe/.dd-ios/Build/Intermediates.noindex/LandingMeasuredProbe.build/Debug-iphonesimulator/LandingMeasuredProbeUITests.build/empty-LandingMeasuredProbeUITests.plist -producttype com.apple.product-type.bundle.ui-testing -expandbuildsettings -format binary -platform iphonesimulator -additionalcontentfile /tmp/exempt-8724c53/.lm-probe/.dd-ios/Build/Intermediates.noindex/LandingMeasuredProbe.build/Debug-iphonesimulator/LandingMeasuredProbeUITests.build/ProductTypeInfoPlistAdditions.plist -o /tmp/exempt-8724c53/.lm-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingMeasuredProbeUITests-Runner.app/PlugIns/LandingMeasuredProbeUITests.xctest/Info.plist
+
+CopySwiftLibs /tmp/exempt-8724c53/.lm-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingMeasuredProbeUITests-Runner.app/PlugIns/LandingMeasuredProbeUITests.xctest (in target 'LandingMeasuredProbeUITests' from project 'LandingMeasuredProbe')
+    cd /tmp/exempt-8724c53/.lm-probe
+    builtin-swiftStdLibTool --copy --verbose --sign - --scan-executable /tmp/exempt-8724c53/.lm-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingMeasuredProbeUITests-Runner.app/PlugIns/LandingMeasuredProbeUITests.xctest/LandingMeasuredProbeUITests --scan-folder /tmp/exempt-8724c53/.lm-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingMeasuredProbeUITests-Runner.app/PlugIns/LandingMeasuredProbeUITests.xctest/Frameworks --scan-folder /tmp/exempt-8724c53/.lm-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingMeasuredProbeUITests-Runner.app/PlugIns/LandingMeasuredProbeUITests.xctest/PlugIns --scan-folder /tmp/exempt-8724c53/.lm-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingMeasuredProbeUITests-Runner.app/PlugIns/LandingMeasuredProbeUITests.xctest/SystemExtensions --scan-folder /tmp/exempt-8724c53/.lm-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingMeasuredProbeUITests-Runner.app/PlugIns/LandingMeasuredProbeUITests.xctest/Extensions --platform iphonesimulator --toolchain /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /tmp/exempt-8724c53/.lm-probe/.dd-ios/Build/Products/Debug-iphonesimulator/LandingMeasuredProbeUITests-Runner.app/PlugIns/LandingMeasuredProbeUITests.xctest/Frameworks --strip-bitcode --scan-executable /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib --strip-bitcode-tool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /tmp/exempt-8724c53/.lm-probe/.dd-ios/Build/Intermediates.noindex/LandingMeasuredProbe.build/Debug-iphonesimulator/LandingMeasuredProbeUITests.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os
+
+PruneExplicitPrecompiledModules /tmp/exempt-8724c53/.lm-probe/.dd-ios/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules
+
+PruneExplicitPrecompiledModules /tmp/exempt-8724c53/.lm-probe/.dd-ios/SDKExplicitPrecompiledModules
+
+PruneExplicitPrecompiledModules /tmp/exempt-8724c53/.lm-probe/.dd-ios/Build/Intermediates.noindex/ExplicitPrecompiledModules
+
+2026-11-22 16:05:13.724237+0800 LandingMeasuredProbeUITests-Runner[41599:15155934] [Default] Running tests...
+    t =      nans Interface orientation changed to Portrait
+Test Suite 'All tests' started at 2026-11-22 16:05:15.404.
+Test Suite 'LandingMeasuredProbeUITests.xctest' started at 2026-11-22 16:05:15.406.
+Test Suite 'LandingMeasuredShotTests' started at 2026-11-22 16:05:15.406.
+Test Case '-[LandingMeasuredProbeUITests.LandingMeasuredShotTests test1TheStartCardForARequestWithNoLine]' started.
+    t =     0.00s Start Test at 2026-11-22 16:05:15.407
+    t =     0.09s Set Up
+objc[41599]: Class UIAccessibilityLoaderWebShared is implemented in both /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebCore.axbundle/WebCore (0x1088f8310) and /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebKit.axbundle/WebKit (0x108a44398). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+    t =     0.18s Open io.orbitd.landingmeasuredprobe
+    t =     0.18s     Launch io.orbitd.landingmeasuredprobe
+2026-11-22 16:05:15.922 xcodebuild[41532:15155328] [MT] IDELaunchParametersSnapshot: debugger version lookup failed for path '<nil>': noURL
+2026-11-22 16:05:15.923 xcodebuild[41532:15155328] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     1.59s         Setting up automation session
+    t =     2.67s         Wait for io.orbitd.landingmeasuredprobe to idle
+<unknown>:0: warning: -[LandingMeasuredProbeUITests.LandingMeasuredShotTests test1TheStartCardForARequestWithNoLine] : Adding 'UIKitToolbar' as a subview of UIHostingController.view is not supported and may result in a broken view hierarchy. Add your view above UIHostingController.view in a common superview or insert it into your SwiftUI content in a UIViewRepresentable instead.
+    t =     5.02s Checking existence of `Any (First Match)`
+    t =     5.72s Checking existence of `Any (First Match)`
+    t =     6.70s Checking existence of `Any (First Match)`
+    t =     8.85s Waiting 20.0s for Button (First Match) to exist
+    t =     9.90s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =     9.90s         Checking existence of `Button (First Match)`
+    t =    10.03s Checking existence of `Button (First Match)`
+    t =    10.13s Find the Button (First Match)
+    t =    10.24s Find the Window (First Match)
+    t =    10.25s Tap "Start this project?, Rotate staging credentials · 3 criteria · 6 tasks, View details & act" Button
+    t =    10.25s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    10.25s     Find the "Start this project?, Rotate staging credentials · 3 criteria · 6 tasks, View details & act" Button
+    t =    10.35s     Check for interrupting elements affecting "Start this project?, Rotate staging credentials · 3 criteria · 6 tasks, View details & act" Button
+    t =    10.43s     Synthesize event
+    t =    10.73s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    13.00s Checking existence of `Any (First Match)`
+    t =    13.17s Checking existence of `"start-lands-when-commits" Any`
+    t =    13.43s Find the "start-lands-when-commits" Any
+    t =    13.68s Find the Window (First Match)
+    t =    13.69s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    13.69s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    13.69s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    13.70s     Check for interrupting elements affecting Window
+    t =    13.78s     Synthesize event
+    t =    13.79s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    13.79s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    13.80s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    13.81s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    13.82s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    15.28s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    16.47s Checking existence of `"start-lands-when-commits" StaticText`
+    t =    16.77s Find the "start-lands-when-commits" StaticText
+    t =    17.04s Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    17.05s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    17.05s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    17.06s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    17.06s     Check for interrupting elements affecting Window
+    t =    17.15s     Synthesize event
+    t =    17.15s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    17.16s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    17.17s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    17.18s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    17.19s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    18.64s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    19.69s Checking existence of `"start-lands-when-commits" StaticText`
+    t =    19.96s Find the "start-lands-when-commits" StaticText
+    t =    20.21s Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    20.22s Checking existence of `Any (First Match)`
+    t =    20.35s Checking existence of `Any (First Match)`
+    t =    20.47s Checking existence of `Any (First Match)`
+    t =    20.63s Checking existence of `Any (First Match)`
+    t =    20.80s Checking existence of `Any (First Match)`
+    t =    21.11s Added attachment named '01-start-card-light'
+    t =    21.11s Waiting 10.0s for Button (First Match) to exist
+    t =    22.17s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =    22.18s         Checking existence of `Button (First Match)`
+    t =    22.29s Tap Button (First Match)
+    t =    22.29s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    22.29s     Find the Button (First Match)
+    t =    22.40s     Check for interrupting elements affecting "Start the project" Button
+    t =    22.48s     Synthesize event
+    t =    22.77s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    25.81s Tear Down
+    t =    25.82s     Added attachment named 'LandingMeasuredShotTeststest1TheStartCardForARequestWithNoLine-notes.txt'
+Test Case '-[LandingMeasuredProbeUITests.LandingMeasuredShotTests test1TheStartCardForARequestWithNoLine]' passed (26.181 seconds).
+Test Case '-[LandingMeasuredProbeUITests.LandingMeasuredShotTests test2AStartedProjectWithNoLineDrawsNoLanding]' started.
+    t =     0.00s Start Test at 2026-11-22 16:05:41.591
+    t =     0.06s Set Up
+    t =     0.06s Open io.orbitd.landingmeasuredprobe
+    t =     0.06s     Launch io.orbitd.landingmeasuredprobe
+    t =     0.06s         Terminate io.orbitd.landingmeasuredprobe:41609
+2026-11-22 16:05:42.756 xcodebuild[41532:15155328] [MT] IDELaunchParametersSnapshot: debugger version lookup failed for path '<nil>': noURL
+2026-11-22 16:05:42.757 xcodebuild[41532:15155328] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     1.59s         Setting up automation session
+    t =     3.32s         Wait for io.orbitd.landingmeasuredprobe to idle
+<unknown>:0: warning: -[LandingMeasuredProbeUITests.LandingMeasuredShotTests test2AStartedProjectWithNoLineDrawsNoLanding] : Adding 'UIKitToolbar' as a subview of UIHostingController.view is not supported and may result in a broken view hierarchy. Add your view above UIHostingController.view in a common superview or insert it into your SwiftUI content in a UIViewRepresentable instead.
+    t =     6.10s Checking existence of `Any (First Match)`
+    t =     8.34s Checking existence of `Any (First Match)`
+    t =     8.44s Checking existence of `Any (First Match)`
+    t =    10.54s Checking existence of `"landings-row" Any`
+    t =    10.76s Checking existence of `Any (First Match)`
+    t =    10.86s Checking existence of `Any (First Match)`
+    t =    11.06s Added attachment named '02-project-no-line-light'
+    t =    11.06s Tear Down
+    t =    11.06s     Added attachment named 'LandingMeasuredShotTeststest2AStartedProjectWithNoLineDrawsNoLanding-notes.txt'
+Test Case '-[LandingMeasuredProbeUITests.LandingMeasuredShotTests test2AStartedProjectWithNoLineDrawsNoLanding]' passed (11.307 seconds).
+Test Case '-[LandingMeasuredProbeUITests.LandingMeasuredShotTests test3TheLandingCheckWithWhoSetItAndNoCheck]' started.
+    t =     0.00s Start Test at 2026-11-22 16:05:52.899
+    t =     0.03s Set Up
+    t =     0.04s Open io.orbitd.landingmeasuredprobe
+    t =     0.04s     Launch io.orbitd.landingmeasuredprobe
+    t =     0.04s         Terminate io.orbitd.landingmeasuredprobe:43293
+2026-11-22 16:05:53.947 xcodebuild[41532:15155328] [MT] IDELaunchParametersSnapshot: debugger version lookup failed for path '<nil>': noURL
+2026-11-22 16:05:53.947 xcodebuild[41532:15155328] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     1.47s         Setting up automation session
+    t =     2.39s         Wait for io.orbitd.landingmeasuredprobe to idle
+<unknown>:0: warning: -[LandingMeasuredProbeUITests.LandingMeasuredShotTests test3TheLandingCheckWithWhoSetItAndNoCheck] : Adding 'UIKitToolbar' as a subview of UIHostingController.view is not supported and may result in a broken view hierarchy. Add your view above UIHostingController.view in a common superview or insert it into your SwiftUI content in a UIViewRepresentable instead.
+    t =     4.15s Checking existence of `Any (First Match)`
+    t =     6.44s Checking existence of `"landing-check-mode" Any`
+    t =     6.70s Find the Window (First Match)
+    t =     6.72s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =     6.72s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =     7.34s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =     7.36s     Check for interrupting elements affecting Window
+    t =     7.45s     Synthesize event
+    t =     7.45s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =     7.46s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =     7.47s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =     7.49s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =     7.60s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =     9.08s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =     9.90s Checking existence of `"landing-check-mode" Any`
+    t =    10.20s Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    10.21s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    10.21s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    10.21s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    10.21s     Check for interrupting elements affecting Window
+    t =    10.26s     Synthesize event
+    t =    10.26s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    10.27s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    10.28s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    10.29s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    10.30s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    11.75s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    12.59s Checking existence of `"landing-check-mode" Any`
+    t =    12.88s Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    12.89s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    12.89s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    12.89s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    12.90s     Check for interrupting elements affecting Window
+    t =    12.95s     Synthesize event
+    t =    12.95s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    12.96s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    12.96s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    12.97s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    12.98s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    14.44s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    15.25s Checking existence of `"landing-check-mode" Any`
+    t =    15.55s Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    15.56s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    15.56s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    15.56s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    15.57s     Check for interrupting elements affecting Window
+    t =    15.62s     Synthesize event
+    t =    15.62s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    15.63s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    15.64s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    15.65s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    15.66s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    17.11s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    17.93s Checking existence of `"landing-check-mode" Any`
+    t =    18.21s Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    18.22s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    18.22s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    18.22s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    18.23s     Check for interrupting elements affecting Window
+    t =    18.28s     Synthesize event
+    t =    18.29s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    18.29s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    18.30s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    18.31s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    18.32s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    19.77s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    20.98s Checking existence of `"landing-check-mode" Any`
+    t =    21.30s Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    21.31s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    21.31s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    21.31s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    21.32s     Check for interrupting elements affecting Window
+    t =    21.38s     Synthesize event
+    t =    21.38s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    21.39s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    21.39s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    21.40s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    21.41s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    22.88s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    24.09s Checking existence of `"landing-check-mode" Any`
+    t =    24.37s Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    24.38s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    24.38s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    24.38s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    24.39s     Check for interrupting elements affecting Window
+    t =    24.44s     Synthesize event
+    t =    24.44s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    24.45s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    24.46s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    24.46s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    24.47s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    25.93s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    26.74s Checking existence of `"landing-check-mode" Any`
+    t =    27.00s Find the "landing-check-mode" Any
+    t =    27.24s Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    27.24s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    27.24s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    27.25s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    27.25s     Check for interrupting elements affecting Window
+    t =    27.30s     Synthesize event
+    t =    27.31s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    27.31s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    27.32s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    27.33s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    27.34s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    28.80s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    29.62s Checking existence of `"landing-check-mode" SegmentedControl`
+    t =    29.84s Find the "landing-check-mode" SegmentedControl
+    t =    30.07s Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    30.08s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    30.08s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    30.08s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    30.09s     Check for interrupting elements affecting Window
+    t =    30.14s     Synthesize event
+    t =    30.14s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    30.15s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    30.16s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    30.17s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    30.18s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    31.63s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    32.44s Checking existence of `"landing-check-mode" SegmentedControl`
+    t =    32.67s Find the "landing-check-mode" SegmentedControl
+    t =    32.89s Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    32.90s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    32.90s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    32.90s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    32.91s     Check for interrupting elements affecting Window
+    t =    32.96s     Synthesize event
+    t =    32.96s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    32.97s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    32.97s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    32.98s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    32.99s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    34.45s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    35.51s Checking existence of `"landing-check-mode" SegmentedControl`
+    t =    35.76s Find the "landing-check-mode" SegmentedControl
+    t =    35.98s Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    35.99s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    35.99s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    35.99s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    36.00s     Check for interrupting elements affecting Window
+    t =    36.07s     Synthesize event
+    t =    36.07s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    36.08s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    36.09s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    36.09s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    36.10s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    37.57s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    38.72s Checking existence of `"landing-check-mode" SegmentedControl`
+    t =    38.98s Find the "landing-check-mode" SegmentedControl
+    t =    39.22s Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    39.23s Checking existence of `Any (First Match)`
+    t =    39.34s Checking existence of `Any (First Match)`
+    t =    39.46s Checking existence of `"provenance-coordinator" Any`
+    t =    39.69s Checking existence of `Any (First Match)`
+    t =    39.88s Checking existence of `Any (First Match)`
+    t =    40.20s Added attachment named '03b-landing-check-coordinator-light'
+    t =    40.20s Waiting 10.0s for "No check" Button to exist
+    t =    41.24s     Checking `Expect predicate `existsNoRetry == 1` for object "No check" Button`
+    t =    41.25s         Checking existence of `"No check" Button`
+    t =    41.42s Tap "No check" Button
+    t =    41.42s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    41.42s     Find the "No check" Button
+    t =    41.48s     Check for interrupting elements affecting "No check" Button
+    t =    41.54s     Synthesize event
+    t =    41.84s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    46.12s Checking existence of `Any (First Match)`
+    t =    46.25s Waiting 10.0s for "provenance-you" Any to exist
+    t =    47.31s     Checking `Expect predicate `existsNoRetry == 1` for object "provenance-you" Any`
+    t =    47.31s         Checking existence of `"provenance-you" Any`
+    t =    47.55s Checking existence of `"landing-check-who-can-set" Any`
+    t =    47.77s Find the "landing-check-who-can-set" Any
+    t =    48.00s Find the Window (First Match)
+    t =    48.00s Checking existence of `"landing-check-who-can-set" Other`
+    t =    48.22s Checking existence of `Any (First Match)`
+    t =    48.34s Checking existence of `"who-can-set-start" Any`
+    t =    48.62s Checking existence of `"landing-check-mode" Any`
+    t =    48.88s Find the "landing-check-mode" Any
+    t =    49.08s Find the Window (First Match)
+    t =    49.19s Added attachment named '03c-no-check-light'
+    t =    49.19s Tear Down
+    t =    49.19s     Added attachment named 'LandingMeasuredShotTeststest3TheLandingCheckWithWhoSetItAndNoCheck-notes.txt'
+Test Case '-[LandingMeasuredProbeUITests.LandingMeasuredShotTests test3TheLandingCheckWithWhoSetItAndNoCheck]' passed (49.595 seconds).
+Test Case '-[LandingMeasuredProbeUITests.LandingMeasuredShotTests test4aTheExemptionOnTheTaskPage]' started.
+    t =     0.00s Start Test at 2026-11-22 16:06:42.497
+    t =     0.07s Set Up
+    t =     0.08s Open io.orbitd.landingmeasuredprobe
+    t =     0.08s     Launch io.orbitd.landingmeasuredprobe
+    t =     0.08s         Terminate io.orbitd.landingmeasuredprobe:44112
+2026-11-22 16:06:43.662 xcodebuild[41532:15155328] [MT] IDELaunchParametersSnapshot: debugger version lookup failed for path '<nil>': noURL
+2026-11-22 16:06:43.663 xcodebuild[41532:15155328] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     1.59s         Setting up automation session
+    t =     3.58s         Wait for io.orbitd.landingmeasuredprobe to idle
+<unknown>:0: warning: -[LandingMeasuredProbeUITests.LandingMeasuredShotTests test4aTheExemptionOnTheTaskPage] : Adding 'UIKitToolbar' as a subview of UIHostingController.view is not supported and may result in a broken view hierarchy. Add your view above UIHostingController.view in a common superview or insert it into your SwiftUI content in a UIViewRepresentable instead.
+    t =     6.37s Checking existence of `Any (First Match)`
+    t =     7.20s Checking existence of `Any (First Match)`
+    t =     9.39s Checking existence of `"task-landing-exemption" Any`
+    t =     9.62s Find the "task-landing-exemption" Any
+    t =     9.84s Find the Window (First Match)
+    t =     9.84s Checking existence of `Any (First Match)`
+    t =     9.95s Checking existence of `Any (First Match)`
+    t =    10.07s Checking existence of `Any (First Match)`
+    t =    10.18s Checking existence of `"provenance-coordinator" Any`
+    t =    10.41s Checking existence of `Any (First Match)`
+    t =    11.03s Checking existence of `Any (First Match)`
+    t =    11.28s Added attachment named '04a-task-exempt-light'
+    t =    11.28s Checking existence of `"remove-exemption" Any`
+    t =    11.52s Tap "remove-exemption" Any
+    t =    11.52s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    11.52s     Find the "remove-exemption" Any
+    t =    11.75s     Check for interrupting elements affecting "remove-exemption" Button
+    t =    11.82s     Synthesize event
+    t =    12.11s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    15.14s Checking existence of `"task-landing-exemption" Any`
+    t =    15.53s Added attachment named '04a-task-exemption-removed-light'
+    t =    15.54s Tear Down
+    t =    15.54s     Added attachment named 'LandingMeasuredShotTeststest4aTheExemptionOnTheTaskPage-notes.txt'
+Test Case '-[LandingMeasuredProbeUITests.LandingMeasuredShotTests test4aTheExemptionOnTheTaskPage]' passed (15.771 seconds).
+Test Case '-[LandingMeasuredProbeUITests.LandingMeasuredShotTests test4bTheLandingReadsTheCheckSkipped]' started.
+    t =     0.00s Start Test at 2026-11-22 16:06:58.269
+    t =     0.03s Set Up
+    t =     0.04s Open io.orbitd.landingmeasuredprobe
+    t =     0.04s     Launch io.orbitd.landingmeasuredprobe
+    t =     0.04s         Terminate io.orbitd.landingmeasuredprobe:44466
+2026-11-22 16:06:59.366 xcodebuild[41532:15155328] [MT] IDELaunchParametersSnapshot: debugger version lookup failed for path '<nil>': noURL
+2026-11-22 16:06:59.366 xcodebuild[41532:15155328] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     1.52s         Setting up automation session
+    t =     3.11s         Wait for io.orbitd.landingmeasuredprobe to idle
+<unknown>:0: warning: -[LandingMeasuredProbeUITests.LandingMeasuredShotTests test4bTheLandingReadsTheCheckSkipped] : Adding 'UIKitToolbar' as a subview of UIHostingController.view is not supported and may result in a broken view hierarchy. Add your view above UIHostingController.view in a common superview or insert it into your SwiftUI content in a UIViewRepresentable instead.
+    t =     6.06s Checking existence of `Any (First Match)`
+    t =     7.36s Checking existence of `Any (First Match)`
+    t =     9.47s Checking existence of `Any (First Match)`
+    t =     9.57s Checking existence of `Any (First Match)`
+    t =     9.67s Checking existence of `Any (First Match)`
+    t =     9.75s Checking existence of `Any (First Match)`
+    t =     9.83s Checking existence of `Any (First Match)`
+    t =     9.91s Find the Any (First Match)
+    t =    10.00s Find the Window (First Match)
+    t =    10.11s Added attachment named '04b-landing-skipped-light'
+    t =    10.12s Tap "Landing check · Skipped, Exempt: Only moves cron entries; the landing check needs a database this task cannot reach." Button
+    t =    10.12s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    10.12s     Find the "Landing check · Skipped, Exempt: Only moves cron entries; the landing check needs a database this task cannot reach." Button
+    t =    10.21s     Check for interrupting elements affecting "Landing check · Skipped, Exempt: Only moves cron entries; the landing check needs a database this task cannot reach." Button
+    t =    10.29s     Synthesize event
+    t =    10.59s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    12.11s Checking existence of `Any (First Match)`
+    t =    14.32s Added attachment named '04b-landing-skipped-open-light'
+    t =    14.32s Tear Down
+    t =    14.32s     Added attachment named 'LandingMeasuredShotTeststest4bTheLandingReadsTheCheckSkipped-notes.txt'
+Test Case '-[LandingMeasuredProbeUITests.LandingMeasuredShotTests test4bTheLandingReadsTheCheckSkipped]' passed (14.545 seconds).
+Test Case '-[LandingMeasuredProbeUITests.LandingMeasuredShotTests test4cAnExemptTaskWithNoLandingYet]' started.
+    t =     0.00s Start Test at 2026-11-22 16:07:12.815
+    t =     0.04s Set Up
+    t =     0.05s Open io.orbitd.landingmeasuredprobe
+    t =     0.05s     Launch io.orbitd.landingmeasuredprobe
+    t =     0.05s         Terminate io.orbitd.landingmeasuredprobe:44591
+2026-11-22 16:07:13.922 xcodebuild[41532:15155328] [MT] IDELaunchParametersSnapshot: debugger version lookup failed for path '<nil>': noURL
+2026-11-22 16:07:13.922 xcodebuild[41532:15155328] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     1.74s         Setting up automation session
+    t =     2.58s         Wait for io.orbitd.landingmeasuredprobe to idle
+<unknown>:0: warning: -[LandingMeasuredProbeUITests.LandingMeasuredShotTests test4cAnExemptTaskWithNoLandingYet] : Adding 'UIKitToolbar' as a subview of UIHostingController.view is not supported and may result in a broken view hierarchy. Add your view above UIHostingController.view in a common superview or insert it into your SwiftUI content in a UIViewRepresentable instead.
+    t =     4.24s Checking existence of `Any (First Match)`
+    t =     4.89s Checking existence of `Any (First Match)`
+    t =     7.24s Checking existence of `"task-landing-exemption" Any`
+    t =     7.49s Find the "task-landing-exemption" Any
+    t =     7.70s Find the Window (First Match)
+    t =     7.71s Checking existence of `"task-landing-exemption" Other`
+    t =     7.96s Checking existence of `Any (First Match)`
+    t =     8.06s Checking existence of `Any (First Match)`
+    t =     8.17s Waiting 20.0s for "provenance-card" Any to exist
+    t =     9.22s     Checking `Expect predicate `existsNoRetry == 1` for object "provenance-card" Any`
+    t =     9.23s         Checking existence of `"provenance-card" Any`
+    t =     9.44s Checking existence of `Any (First Match)`
+    t =     9.54s Checking existence of `Any (First Match)`
+    t =     9.64s Checking existence of `Any (First Match)`
+    t =     9.77s Checking existence of `Any (First Match)`
+    t =    10.03s Added attachment named '04c-task-exempt-no-landing-light'
+    t =    10.03s Tear Down
+    t =    10.03s     Added attachment named 'LandingMeasuredShotTeststest4cAnExemptTaskWithNoLandingYet-notes.txt'
+Test Case '-[LandingMeasuredProbeUITests.LandingMeasuredShotTests test4cAnExemptTaskWithNoLandingYet]' passed (10.262 seconds).
+Test Case '-[LandingMeasuredProbeUITests.LandingMeasuredShotTests test5TheCoordinatorsChangesAndTheOwnersRevert]' started.
+    t =     0.00s Start Test at 2026-11-22 16:07:23.077
+    t =     0.04s Set Up
+    t =     0.05s Open io.orbitd.landingmeasuredprobe
+    t =     0.05s     Launch io.orbitd.landingmeasuredprobe
+    t =     0.05s         Terminate io.orbitd.landingmeasuredprobe:44670
+2026-11-22 16:07:24.169 xcodebuild[41532:15155328] [MT] IDELaunchParametersSnapshot: debugger version lookup failed for path '<nil>': noURL
+2026-11-22 16:07:24.169 xcodebuild[41532:15155328] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     1.50s         Setting up automation session
+    t =     2.27s         Wait for io.orbitd.landingmeasuredprobe to idle
+<unknown>:0: warning: -[LandingMeasuredProbeUITests.LandingMeasuredShotTests test5TheCoordinatorsChangesAndTheOwnersRevert] : Adding 'UIKitToolbar' as a subview of UIHostingController.view is not supported and may result in a broken view hierarchy. Add your view above UIHostingController.view in a common superview or insert it into your SwiftUI content in a UIViewRepresentable instead.
+    t =     3.98s Checking existence of `Any (First Match)`
+    t =     6.11s Checking existence of `"coordinator-changes-entry" Any`
+    t =     6.39s Find the Window (First Match)
+    t =     6.40s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =     6.40s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =     7.02s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =     7.04s     Check for interrupting elements affecting Window
+    t =     7.14s     Synthesize event
+    t =     7.14s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =     7.15s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =     7.16s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =     7.16s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =     7.17s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =     8.64s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =     9.44s Checking existence of `"coordinator-changes-entry" Any`
+    t =     9.74s Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =     9.76s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =     9.76s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =     9.76s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =     9.77s     Check for interrupting elements affecting Window
+    t =     9.84s     Synthesize event
+    t =     9.84s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =     9.85s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =     9.87s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =     9.88s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =     9.89s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    11.35s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    12.17s Checking existence of `"coordinator-changes-entry" Any`
+    t =    12.47s Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    12.47s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    12.47s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    12.48s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    12.48s     Check for interrupting elements affecting Window
+    t =    12.53s     Synthesize event
+    t =    12.53s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    12.54s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    12.55s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    12.56s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    12.57s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    14.03s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    14.85s Checking existence of `"coordinator-changes-entry" Any`
+    t =    15.12s Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    15.13s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    15.13s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    15.13s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    15.14s     Check for interrupting elements affecting Window
+    t =    15.19s     Synthesize event
+    t =    15.19s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    15.20s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    15.21s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    15.22s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    15.23s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    16.69s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    17.51s Checking existence of `"coordinator-changes-entry" Any`
+    t =    17.82s Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    17.83s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    17.83s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    17.83s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    17.83s     Check for interrupting elements affecting Window
+    t =    17.89s     Synthesize event
+    t =    17.89s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    17.90s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    17.91s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    17.92s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    17.93s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    19.39s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    20.55s Checking existence of `"coordinator-changes-entry" Any`
+    t =    20.87s Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    20.88s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    20.88s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    20.88s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    20.89s     Check for interrupting elements affecting Window
+    t =    20.94s     Synthesize event
+    t =    20.94s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    20.95s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    20.96s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    20.97s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    20.98s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    22.44s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    23.59s Checking existence of `"coordinator-changes-entry" Any`
+    t =    23.88s Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    23.89s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    23.89s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    23.89s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    23.89s     Check for interrupting elements affecting Window
+    t =    23.95s     Synthesize event
+    t =    23.95s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    23.95s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    23.96s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    23.97s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    23.98s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    25.43s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    26.25s Checking existence of `"coordinator-changes-entry" Any`
+    t =    26.57s Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    26.58s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    26.58s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    26.58s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    26.58s     Check for interrupting elements affecting Window
+    t =    26.64s     Synthesize event
+    t =    26.64s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    26.65s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    26.66s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    26.66s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    26.67s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    28.12s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    29.30s Checking existence of `"coordinator-changes-entry" Any`
+    t =    29.59s Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    29.60s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    29.60s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    29.60s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    29.61s     Check for interrupting elements affecting Window
+    t =    29.66s     Synthesize event
+    t =    29.66s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    29.67s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    29.68s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    29.69s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    29.69s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    31.15s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    31.97s Checking existence of `"coordinator-changes-entry" Any`
+    t =    32.22s Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    32.23s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    32.23s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    32.23s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    32.24s     Check for interrupting elements affecting Window
+    t =    32.29s     Synthesize event
+    t =    32.29s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    32.30s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    32.31s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    32.31s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    32.32s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    33.79s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    34.79s Checking existence of `"coordinator-changes-entry" Any`
+    t =    35.01s Find the "coordinator-changes-entry" Any
+    t =    35.23s Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    35.24s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    35.24s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    35.24s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    35.25s     Check for interrupting elements affecting Window
+    t =    35.31s     Synthesize event
+    t =    35.31s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    35.32s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    35.32s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    35.33s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    35.34s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    36.80s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    37.80s Checking existence of `"coordinator-changes-entry" Button`
+    t =    38.03s Find the "coordinator-changes-entry" Button
+    t =    38.27s Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    38.28s Checking existence of `"coordinator-changes-entry" Button`
+    t =    38.60s Tap "coordinator-changes-entry" Button
+    t =    38.60s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    38.61s     Find the "coordinator-changes-entry" Button
+    t =    38.87s     Check for interrupting elements affecting "coordinator-changes-entry" Button
+    t =    38.96s     Synthesize event
+    t =    39.27s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    39.46s Checking existence of `Any (First Match)`
+    t =    39.69s Checking existence of `Any (First Match)`
+    t =    39.88s Checking existence of `Any (First Match)`
+    t =    40.05s Waiting 10.0s for "open-task-c2" Any to exist
+    t =    41.10s     Checking `Expect predicate `existsNoRetry == 1` for object "open-task-c2" Any`
+    t =    41.11s         Checking existence of `"open-task-c2" Any`
+    t =    41.47s Checking existence of `Any (First Match)`
+    t =    41.79s Added attachment named '05b-changes-light'
+    t =    41.79s Waiting 10.0s for "revert-c1" Any to exist
+    t =    42.83s     Checking `Expect predicate `existsNoRetry == 1` for object "revert-c1" Any`
+    t =    42.83s         Checking existence of `"revert-c1" Any`
+    t =    43.16s Tap "revert-c1" Any
+    t =    43.16s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    43.16s     Find the "revert-c1" Any
+    t =    43.47s     Check for interrupting elements affecting "revert-c1" Button
+    t =    43.58s     Synthesize event
+    t =    43.88s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    44.24s Checking existence of `Any (First Match)`
+    t =    44.31s Checking existence of `Any (First Match)`
+    t =    45.54s Added attachment named '05c-revert-confirm-light'
+    t =    45.54s Checking existence of `"revert-confirm" Any`
+    t =    45.65s Tap "revert-confirm" Any
+    t =    45.65s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    45.65s     Find the "revert-confirm" Any
+    t =    45.76s     Check for interrupting elements affecting "revert-confirm" Button
+    t =    45.85s     Synthesize event
+    t =    46.13s     Wait for io.orbitd.landingmeasuredprobe to idle
+    t =    49.63s Checking existence of `Any (First Match)`
+    t =    49.83s Checking existence of `"revert-c1" Any`
+    t =    50.32s Added attachment named '05d-reverted-light'
+    t =    50.33s Tear Down
+    t =    50.33s     Added attachment named 'LandingMeasuredShotTeststest5TheCoordinatorsChangesAndTheOwnersRevert-notes.txt'
+Test Case '-[LandingMeasuredProbeUITests.LandingMeasuredShotTests test5TheCoordinatorsChangesAndTheOwnersRevert]' passed (50.688 seconds).
+Test Suite 'LandingMeasuredShotTests' passed at 2026-11-22 16:08:13.765.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 178.349 (178.359) seconds
+Test Suite 'LandingMeasuredProbeUITests.xctest' passed at 2026-11-22 16:08:13.766.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 178.349 (178.360) seconds
+Test Suite 'All tests' passed at 2026-11-22 16:08:13.766.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 178.349 (178.363) seconds
+2026-11-22 16:08:14.464 xcodebuild[41532:15155641]  IDETestOperationsObserverDebug: Failure collecting diagnostics from simulator: Process exited with error 72:
+ xcrun: error: unable to find utility "simctl", not a developer tool or in PATH
+
+2026-11-22 16:08:14.485 xcodebuild[41532:15155328] [MT] IDETestOperationsObserverDebug: 183.531 elapsed -- Testing started completed.
+2026-11-22 16:08:14.485 xcodebuild[41532:15155328] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-11-22 16:08:14.485 xcodebuild[41532:15155328] [MT] IDETestOperationsObserverDebug: 183.531 sec, +183.531 sec -- end
+
+Test session results, code coverage, and logs:
+	/tmp/exempt-8724c53/.lm-probe/results/light.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started

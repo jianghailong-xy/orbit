@@ -1,0 +1,9 @@
+03-mode: in view after 11 move(s) at (32.0, 293.3333333333333, 338.0, 31.0)
+03b: shows "npm run check:landing"
+03b: shows "Changes the coordinator makes are listed under Coordinator’s changes."
+03b: shows "3 changes"
+integration bodies: ["16:06:34 BODY /api/projects/P2/integration {\"landingCheck\": \"NONE\"}"]
+03c: shows "Tasks land with only their own acceptance."
+03c-who: in view after 0 move(s) at (32.0, 430.0, 337.33331298828125, 177.66668701171875)
+03c: shows "No card, while the merge check exists."
+03c-mode: in view after 0 move(s) at (32.0, 293.3333333333333, 338.0, 31.0)

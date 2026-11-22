@@ -1,0 +1,8 @@
+05-entry: in view after 11 move(s) at (16.0, 622.6666666666667, 370.0, 67.99999999999989)
+05b: shows "What the coordinator changed on its own"
+05b: shows "This project only changes infrastructure"
+05b: shows "Check exempt · Move cron jobs…"
+05b: shows "Your change · nothing to revert"
+05c: shows "Revert this change?"
+05c: shows "The coordinator can no longer change this field without a card."
+05d: shows "Reverted by you"

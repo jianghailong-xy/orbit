@@ -1,0 +1,6 @@
+04b: shows "Landing check · Skipped"
+04b: shows "Exempt: Only moves cron entries"
+04b: shows "Merge check before main"
+04b: shows "Still runs"
+04b-step: in view after 0 move(s) at (49.0, 359.6666666666667, 329.0, 20.0)
+04b-open: shows "Landing check skipped · this task is exempt"
