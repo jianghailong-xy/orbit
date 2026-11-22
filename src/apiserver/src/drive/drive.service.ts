@@ -1383,7 +1383,7 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
         SELECT DISTINCT v."trash_group_id" FROM "drive_version" v JOIN "sub" ON v."entry_id" = "sub"."id" WHERE v."trash_group_id" IS NOT NULL`;
       await tx.driveEntry.deleteMany({ where: { ownerId, trashGroupId: groupId, trashTop: true } });
       await deleteEmptyGroups(tx, ownerId, [groupId, ...touched.map((t) => t.group_id)]);
-    }, loggedRetry(this.logger, 'drive.deleteGroup', { transaction: TRANSACTION }));
+    }, loggedRetry(this.logger, 'drive.deleteGroup', { transaction: TRANSACTION })).catch(limitHit);
     return { deleted: true };
   }
 
@@ -1409,7 +1409,7 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
       await tx.driveEntry.deleteMany({ where: { ownerId, trashTop: true, trashedAt: { not: null } } });
       await tx.driveVersion.deleteMany({ where: { ownerId, replacedAt: { not: null }, trashGroupId: { not: null } } });
       await tx.driveTrashGroup.deleteMany({ where: { ownerId, entries: { none: {} }, versions: { none: {} } } });
-    }, loggedRetry(this.logger, 'drive.emptyTrash', { transaction: TRANSACTION }));
+    }, loggedRetry(this.logger, 'drive.emptyTrash', { transaction: TRANSACTION })).catch(limitHit);
     return { deleted: true };
   }
 }
