@@ -213,9 +213,13 @@ struct CloneWaitCardView: View {
             }
             if let progress = card.progress {
                 HStack(spacing: 8) {
-                    ProgressView(value: Double(progress), total: 100)
-                        .frame(width: 160)
+                    Capsule().fill(.quaternary).frame(width: 160, height: 4)
+                        .overlay(alignment: .leading) {
+                            Capsule().fill(Color.accentColor).frame(width: 160 * CGFloat(progress) / 100, height: 4)
+                        }
+                        .accessibilityElement()
                         .accessibilityLabel(card.title)
+                        .accessibilityValue("\(progress)%")
                     Text(verbatim: "\(progress)%").font(.footnote).monospacedDigit().foregroundStyle(.secondary)
                 }
             }

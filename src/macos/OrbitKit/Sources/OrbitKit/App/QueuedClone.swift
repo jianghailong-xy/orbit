@@ -52,6 +52,11 @@ public enum QueuedClone {
         public let state: CloneState
         public let progress: Int?
         public let repository: String
+        public init(state: CloneState, progress: Int?, repository: String) {
+            self.state = state
+            self.progress = progress
+            self.repository = repository
+        }
         public var title: String { QueuedClone.title(state: state, repository: repository) }
     }
 
