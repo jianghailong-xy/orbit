@@ -40,7 +40,7 @@ const PAGE_MAX = 1000;
 const PAGE_DEFAULT = 200;
 const FEED_PAGE = 1000;
 const TRANSACTION = { timeout: 20_000, maxWait: 5_000 };
-/** How many entries one transaction of a folder's trash or of a restore moves at most (§1.4, §3.5). */
+/** How many entries a Trash batch moves, restores or permanently deletes at most (§1.4, §3.3, §3.5). */
 export const DRIVE_TRASH_BATCH = 1000;
 /** How many top-level items whose folder is not live one restore transaction makes a place for (liveDestination). */
 const ORPHAN_BATCH = 100;
@@ -143,8 +143,8 @@ const nameTaken = (name: string) => refusal(HttpStatus.CONFLICT, DRIVE_NAME_TAKE
 
 /**
  * A drive transaction cut off by a bound of §1.4 (a statement past 10 s, the transaction past 20 s), or turned away by the
- * database, answered 503 DRIVE_LIMIT_HIT rather than a bare 500. What committed before it stays, and a folder's trash or
- * a restore sent again carries on from there.
+ * database, answered 503 DRIVE_LIMIT_HIT rather than a bare 500. What committed before it stays, and a Trash request
+ * sent again carries on from there.
  */
 function limitHit(error: unknown): never {
   if (!(error instanceof HttpException) && classifyTransactionFault(error).family === 'RESOURCE') {
@@ -1360,31 +1360,24 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
 
   /** Delete a Trash group for good: its entries (and everything under them) or its version. Their chunk rows go with them. */
   async deleteGroup(ownerId: string, groupId: string): Promise<{ deleted: true }> {
-    await withTransactionRetry(this.prisma, async (tx) => {
-      await bound(tx);
-      await lockAccount(tx, ownerId);
-      const found = await tx.$queryRaw<Array<{ id: string; kind: string }>>`
-        SELECT "id", "kind" FROM "drive_trash_group" WHERE "id" = ${groupId}::uuid AND "owner_id" = ${ownerId}::uuid FOR UPDATE`;
-      if (!found.length) throw refusal(HttpStatus.NOT_FOUND, DRIVE_TRASH_GROUP_NOT_FOUND, 'No such group in Trash.');
-      if (found[0].kind === 'VERSION') {
-        await tx.driveVersion.deleteMany({ where: { ownerId, trashGroupId: groupId } });
-        await deleteEmptyGroups(tx, ownerId, [groupId]);
-        return;
-      }
-      // Other groups lose what sat under these entries (earlier deletes inside a folder deleted later): they are tidied too.
-      const touched = await tx.$queryRaw<Array<{ group_id: string }>>`
-        WITH RECURSIVE "sub" AS (
-          SELECT "id" FROM "drive_entry" WHERE "owner_id" = ${ownerId}::uuid AND "trash_group_id" = ${groupId}::uuid AND "trash_top"
-          UNION ALL
-          SELECT e."id" FROM "drive_entry" e JOIN "sub" ON e."parent_id" = "sub"."id" WHERE e."owner_id" = ${ownerId}::uuid
-        )
-        SELECT DISTINCT e."trash_group_id" AS "group_id" FROM "drive_entry" e JOIN "sub" ON e."id" = "sub"."id" WHERE e."trash_group_id" IS NOT NULL
-        UNION
-        SELECT DISTINCT v."trash_group_id" FROM "drive_version" v JOIN "sub" ON v."entry_id" = "sub"."id" WHERE v."trash_group_id" IS NOT NULL`;
-      await tx.driveEntry.deleteMany({ where: { ownerId, trashGroupId: groupId, trashTop: true } });
-      await deleteEmptyGroups(tx, ownerId, [groupId, ...touched.map((t) => t.group_id)]);
-    }, loggedRetry(this.logger, 'drive.deleteGroup', { transaction: TRANSACTION })).catch(limitHit);
-    return { deleted: true };
+    for (let first = true; ; first = false) {
+      const more = await withTransactionRetry(this.prisma, async (tx) => {
+        await bound(tx);
+        await lockAccount(tx, ownerId);
+        const [group] = await tx.$queryRaw<Array<{ kind: string }>>`
+          SELECT "kind" FROM "drive_trash_group" WHERE "id" = ${groupId}::uuid AND "owner_id" = ${ownerId}::uuid FOR UPDATE`;
+        if (!group) {
+          if (first) throw refusal(HttpStatus.NOT_FOUND, DRIVE_TRASH_GROUP_NOT_FOUND, 'No such group in Trash.');
+          return false;
+        }
+        const picked = group.kind === 'VERSION'
+          ? await deleteTrashVersions(tx, ownerId, groupId)
+          : await deleteTrashLeaves(tx, ownerId, groupId);
+        if (!picked) await deleteEmptyGroups(tx, ownerId, [groupId]);
+        return picked && (await tx.driveTrashGroup.count({ where: { id: groupId, ownerId } })) > 0;
+      }, loggedRetry(this.logger, 'drive.deleteGroup', { transaction: TRANSACTION })).catch(limitHit);
+      if (!more) return { deleted: true };
+    }
   }
 
   /** Delete one replaced version for good. The current version is not in Trash and is refused. */
@@ -1403,14 +1396,19 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
 
   /** Empty Trash: every trashed entry and every replaced version of the account, for good, and every group. */
   async emptyTrash(ownerId: string): Promise<{ deleted: true }> {
-    await withTransactionRetry(this.prisma, async (tx) => {
-      await bound(tx);
-      await lockAccount(tx, ownerId);
-      await tx.driveEntry.deleteMany({ where: { ownerId, trashTop: true, trashedAt: { not: null } } });
-      await tx.driveVersion.deleteMany({ where: { ownerId, replacedAt: { not: null }, trashGroupId: { not: null } } });
-      await tx.driveTrashGroup.deleteMany({ where: { ownerId, entries: { none: {} }, versions: { none: {} } } });
-    }, loggedRetry(this.logger, 'drive.emptyTrash', { transaction: TRANSACTION })).catch(limitHit);
-    return { deleted: true };
+    for (;;) {
+      const more = await withTransactionRetry(this.prisma, async (tx) => {
+        await bound(tx);
+        await lockAccount(tx, ownerId);
+        if (await deleteTrashLeaves(tx, ownerId)) return true;
+        if (await deleteTrashVersions(tx, ownerId)) return true;
+        const empty = await tx.driveTrashGroup.deleteMany({
+          where: { ownerId, entries: { none: {} }, versions: { none: {} } }, limit: DRIVE_TRASH_BATCH,
+        });
+        return empty.count > 0;
+      }, loggedRetry(this.logger, 'drive.emptyTrash', { transaction: TRANSACTION })).catch(limitHit);
+      if (!more) return { deleted: true };
+    }
   }
 }
 
@@ -1710,6 +1708,58 @@ async function deleteEmptyGroups(tx: Tx, ownerId: string, ids: string[]): Promis
           FROM "drive_trash_group" g2 WHERE g2."owner_id" = ${ownerId}::uuid AND g2."id" = ANY(${unique}::uuid[])
       ) c
      WHERE g."id" = c."id"`;
+}
+
+/** Delete one batch of leaves. Seed from the group's entries (or all Trash), then include descendants in other groups
+ * and descendants a stopped marking has yet to reach. UNION deduplicates descendants that are themselves seeds. Check
+ * for children as the walk yields rows so the batch limit can stop it early. */
+async function deleteTrashLeaves(tx: Tx, ownerId: string, groupId?: string): Promise<boolean> {
+  const scope = groupId ? Prisma.sql`e."trash_group_id" = ${groupId}::uuid` : Prisma.sql`e."trash_group_id" IS NOT NULL`;
+  const picked = await tx.$queryRaw<Array<{ id: string; still_here: boolean }>>`
+    WITH RECURSIVE "sub" AS (
+      SELECT e."id", e."parent_id" FROM "drive_entry" e WHERE e."owner_id" = ${ownerId}::uuid AND ${scope}
+      UNION
+      SELECT e."id", e."parent_id" FROM "sub" JOIN "drive_entry" e ON e."parent_id" = "sub"."id"
+       WHERE e."owner_id" = ${ownerId}::uuid
+    ), "leaves" AS (
+      SELECT s."id", s."parent_id" FROM "sub" s
+       WHERE (SELECT 1 FROM "drive_entry" c WHERE c."parent_id" = s."id" LIMIT 1) IS NULL
+       LIMIT ${DRIVE_TRASH_BATCH}
+    )
+    SELECT e."id", e."parent_id" = l."parent_id" AS "still_here"
+      FROM "leaves" l JOIN "drive_entry" e ON e."id" = l."id"
+     ORDER BY e."kind" DESC, e."id" FOR UPDATE OF e`;
+  const ids = picked.filter((e) => e.still_here).map((e) => e.id);
+  if (!ids.length) return picked.length > 0;
+
+  // Take a fresh snapshot with the rows locked. A child may have been added while waiting for a folder lock during
+  // stopped marking. The row locks also keep a mount commit from changing the versions we are about to cascade.
+  const touched = await tx.$queryRaw<Array<{ group_id: string }>>`
+    WITH "deleted" AS (
+      DELETE FROM "drive_entry" e WHERE e."owner_id" = ${ownerId}::uuid AND e."id" = ANY(${ids}::uuid[])
+        AND NOT EXISTS (SELECT 1 FROM "drive_entry" c WHERE c."parent_id" = e."id")
+      RETURNING e."id", e."trash_group_id"
+    )
+    SELECT "trash_group_id" AS "group_id" FROM "deleted" WHERE "trash_group_id" IS NOT NULL
+    UNION
+    SELECT v."trash_group_id" FROM "drive_version" v JOIN "deleted" d ON d."id" = v."entry_id"
+     WHERE v."owner_id" = ${ownerId}::uuid AND v."trash_group_id" IS NOT NULL`;
+  await deleteEmptyGroups(tx, ownerId, touched.map((row) => row.group_id));
+  return true;
+}
+
+/** Delete one batch of replaced versions and tidy their Trash groups. */
+async function deleteTrashVersions(tx: Tx, ownerId: string, groupId?: string): Promise<boolean> {
+  const scope = groupId ? Prisma.sql`"trash_group_id" = ${groupId}::uuid` : Prisma.sql`"trash_group_id" IS NOT NULL`;
+  const deleted = await tx.$queryRaw<Array<{ trash_group_id: string }>>`
+    DELETE FROM "drive_version" WHERE "owner_id" = ${ownerId}::uuid AND "replaced_at" IS NOT NULL AND ${scope}
+      AND "id" IN (
+        SELECT "id" FROM "drive_version" WHERE "owner_id" = ${ownerId}::uuid AND "replaced_at" IS NOT NULL AND ${scope}
+        LIMIT ${DRIVE_TRASH_BATCH} FOR UPDATE
+      )
+    RETURNING "trash_group_id"`;
+  await deleteEmptyGroups(tx, ownerId, deleted.map((row) => row.trash_group_id));
+  return deleted.length > 0;
 }
 
 /** An entry a folder's trash marked, as its UPDATE answers it. */

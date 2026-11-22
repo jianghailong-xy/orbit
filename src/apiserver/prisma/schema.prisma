@@ -2697,6 +2697,7 @@ model ShareLink {
   updatedAt     DateTime  @default(now()) @map("updated_at") @db.Timestamptz(3)
 
   @@index([ownerId])
+  @@index([driveEntryId], map: "share_link_drive_entry_idx")
   @@map("share_link")
 }
 
@@ -3741,6 +3742,7 @@ model DriveEntry {
   @@unique([id, ownerId], map: "drive_entry_id_owner_id_key")
   @@index([ownerId, trashGroupId], map: "drive_entry_trash_group_idx")
   @@index([parentId], map: "drive_entry_parent_idx")
+  @@index([currentVersionId], map: "drive_entry_current_version_idx")
   @@map("drive_entry")
 }
 
@@ -3786,6 +3788,7 @@ model DriveCommit {
 
   @@id([ownerId, commitId], map: "drive_commit_pkey")
   @@index([createdAt], map: "drive_commit_created_at_idx")
+  @@index([entryId], map: "drive_commit_entry_idx")
   @@map("drive_commit")
 }
 

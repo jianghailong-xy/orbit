@@ -3332,7 +3332,12 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1439 creates the partial trigram index drive_entry_name_trgm on drive_entry(name) for drive search, IF NOT EXISTS,
       // and the pg_trgm extension if it is missing; no row is written, and no preserved relation, trigger, function or
       // DONE fence changes. Written as 1427 on the project line, it was renumbered after main took 1427.
-      '1439_drive_entry_name_trgm'],
+      '1439_drive_entry_name_trgm',
+      // 1440 adds the drive Trash marking flag and its partial index; it changes no preserved relation or fence.
+      '1440_drive_trash_group_marking',
+      // 1448 indexes drive and share-link foreign keys for bounded permanent deletion. It writes no existing rows
+      // and changes no preserved relation, trigger, function or DONE fence.
+      '1448_drive_purge_fk_indexes'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

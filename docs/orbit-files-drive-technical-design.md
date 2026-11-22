@@ -179,8 +179,8 @@ Two writes must never leave a live entry under a trashed folder, or a folder ins
   transaction hides the folder and answers its group; what one transaction cannot hold is marked into the same group by
   the next ones, each under the owner lock, so a folder of 100,000 entries stays inside the bounds below. Until the
   last batch the group carries `marking`; a group left marking (its process gone, a bound hit) is finished by
-  deleting the folder again, or by the drive's own timer. A restore or delete-for-good meanwhile ends the marking:
-  what was not marked yet never left its place.
+  deleting the folder again, or by the drive's own timer. A restore leaves unmarked entries in place. Delete for good
+  includes them among the folder's descendants (§3.3).
 - **A folder move** checks, under the owner lock, that the destination is not the folder itself or inside it (walking the
   destination's ancestors), answering `409 DRIVE_MOVE_INTO_ITSELF` / `EINVAL`. With the owner lock no two moves can
   interleave to form a cycle.
@@ -323,8 +323,12 @@ Versions are kept until the owner deletes them for good (D2, D17; limits are the
 - An entry in Trash cannot be reached by any path, by the mount, by drive tools, or by a share link (§9). Agents cannot
   see Trash (D11): the door has no Trash route. A mount handle already open on it can still commit (§3.1).
 - Move to Trash asks nothing; the web's undo is a restore of the group the response named (board choice b).
-- Delete for good (a group, or a version) and Empty Trash delete rows, in batches, after the owner confirms (board
-  choice b). §2.4 says what happens to the bytes.
+- After the owner confirms (board choice b), Delete for good of a group and Empty Trash remove up to 1,000 leaf entries
+  per transaction under the account's lock (§1.4). A folder is eligible once all its children are gone, including children
+  from older groups or whose marking into Trash is incomplete. The database removes each leaf's versions and chunk
+  references with it. Replaced versions in Trash can also be deleted on their own, or up to 1,000 per transaction when
+  emptying Trash. Each batch removes groups it emptied and updates the counts of other affected groups. A request retried
+  after `503 DRIVE_LIMIT_HIT` continues from what is still in Trash. §2.4 says what happens to the bytes.
 
 ### 3.4 Grouping what one `rm -rf` removed
 

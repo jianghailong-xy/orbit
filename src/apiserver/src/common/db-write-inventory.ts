@@ -3216,12 +3216,12 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   },
   {
     at: 'drive/drive.service.ts#deleteGroup', shape: 'TX_RETRIED',
-    locks: "SET LOCAL statement_timeout; the per-account drive folder lock (pg_advisory_xact_lock(4001327, hashtext(owner id)) — the per-account drive folder lock (docs/orbit-files-drive-technical-design.md §1.4), a key rather than a row, which only drive folder operations take); the group FOR UPDATE; a read of the other groups below its items; then for a DELETE group one drive_entry DELETE of its top-level items, whose cascades take everything below them, their versions, chunk rows, commit answers and stagings; for a VERSION group one drive_version DELETE; then deleteEmptyGroups. Each drive_version_chunk row deleted lets go of its file_blob row's FOR KEY SHARE. No trigger.",
-    identity: 'The group: a re-run after a commit finds it gone and is answered 404.',
+    locks: 'Each batch sets SET LOCAL statement_timeout, takes the per-account drive folder lock (pg_advisory_xact_lock(4001327, hashtext(owner id)), §1.4) and reads the group FOR UPDATE. A DELETE group runs deleteTrashLeaves and a VERSION group runs deleteTrashVersions. Both tidy affected groups in the same transaction, then check whether the requested group is still present. No application trigger.',
+    identity: 'The group: a re-run picks up what is left. A new request after completion is answered 404.',
     isolation: '', attempts: 4,
-    replay: 'Every attempt re-reads and re-locks what it decides on inside the closure; ids are made in the attempt, so a rolled-back attempt leaves nothing.',
+    replay: 'Every attempt re-reads and re-locks the group and picks its next batch. A rolled-back attempt leaves earlier batches committed.',
     effects: 'None: the retention sweep later finds the bytes nothing holds.',
-    answer: 'Typed 503 after retry exhaustion, with nothing written; the caller sends the request again.',
+    answer: 'Typed 503 on a bound or after retry exhaustion. The caller sends the request again to remove the remainder.',
   },
   {
     at: 'drive/drive.service.ts#deleteVersion', shape: 'TX_RETRIED',
@@ -3234,12 +3234,12 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   },
   {
     at: 'drive/drive.service.ts#emptyTrash', shape: 'TX_RETRIED',
-    locks: 'SET LOCAL statement_timeout; the per-account drive folder lock (pg_advisory_xact_lock(4001327, hashtext(owner id)) — the per-account drive folder lock (docs/orbit-files-drive-technical-design.md §1.4), a key rather than a row, which only drive folder operations take); one drive_entry DELETE of every top-level item in Trash (cascading below them), one drive_version DELETE of every replaced version in Trash, and one drive_trash_group DELETE of the groups left empty. No trigger.',
+    locks: 'Each batch sets SET LOCAL statement_timeout and takes the per-account drive folder lock (pg_advisory_xact_lock(4001327, hashtext(owner id)), §1.4). It runs deleteTrashLeaves or deleteTrashVersions, or deletes up to DRIVE_TRASH_BATCH empty group rows once the entries and versions are gone. No application trigger.',
     identity: 'The account: a re-run finds Trash empty and deletes nothing.',
     isolation: '', attempts: 4,
-    replay: 'Every attempt re-reads and re-locks what it decides on inside the closure; ids are made in the attempt, so a rolled-back attempt leaves nothing.',
+    replay: 'Every attempt picks a batch from the remaining Trash. A rolled-back attempt leaves earlier batches committed.',
     effects: 'None.',
-    answer: 'Typed 503 after retry exhaustion, with nothing written; the caller sends the request again.',
+    answer: 'Typed 503 on a bound or after retry exhaustion. The caller sends the request again to remove the remainder.',
   },
   {
     at: 'drive/drive.service.ts#setMtime', shape: 'TX_RETRIED',
@@ -3709,7 +3709,9 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   { at: 'drive/drive.service.ts#markUnder', under: 'drive.moveToTrash and drive.finishTrash, under the per-account lock: reads of the live children of folders of the group, then UPDATEs marking them into it, the folders among them before the files' },
   { at: 'drive/drive.service.ts#restoreUnder', under: 'drive.restoreGroup and drive.restoreItem, under the per-account lock and the group FOR UPDATE: reads of the group entries in a live folder, one UPDATE of those that keep their names, and freeName and one UPDATE per name clash' },
   { at: 'drive/drive.service.ts#liveDestination', under: 'drive.restoreGroup and drive.restoreItem, under the per-account lock: folders FOR SHARE and one drive_entry INSERT per missing folder' },
-  { at: 'drive/drive.service.ts#deleteEmptyGroups', under: 'drive.restoreVersion, drive.restoreGroup, drive.restoreItem, drive.deleteGroup, drive.deleteVersion: a drive_trash_group DELETE of the named groups nothing is in, and an UPDATE of the counts of the rest' },
+  { at: 'drive/drive.service.ts#deleteTrashLeaves', under: 'drive.deleteGroup and drive.emptyTrash, under the per-account lock: select and lock up to DRIVE_TRASH_BATCH leaf entries in scope, folders first. Recheck for children on a fresh snapshot, then delete the leaves, cascading their versions, chunk rows, commit answers, stagings and share links. Read affected entry and version group ids from the deletion snapshot and call deleteEmptyGroups.' },
+  { at: 'drive/drive.service.ts#deleteTrashVersions', under: 'drive.deleteGroup and drive.emptyTrash, under the per-account lock: select and lock up to DRIVE_TRASH_BATCH replaced versions in scope and delete them, cascading their chunk rows and share links, then call deleteEmptyGroups.' },
+  { at: 'drive/drive.service.ts#deleteEmptyGroups', under: 'drive.restoreVersion, drive.restoreGroup, drive.restoreItem, drive.deleteGroup, drive.deleteVersion, deleteTrashLeaves and deleteTrashVersions: a drive_trash_group DELETE of the named groups nothing is in, and an UPDATE of the counts of the rest' },
 ];
 
 /** The recurring shapes an autocommit write takes. */
