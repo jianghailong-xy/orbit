@@ -228,6 +228,90 @@ func TestAnOpenFileFollowsItsEntry(t *testing.T) {
 	}
 }
 
+// A rename onto a file (§3.2): the target keeps its entry id and gets the source's content as a version; the source is
+// gone, and the name answers the new content at once, through the inode the kernel moved there.
+func TestARenameOntoAFileKeepsTheTarget(t *testing.T) {
+	f, mnt, _ := mountFake(t, Options{})
+	b := filepath.Join(mnt, "b.txt")
+	if err := os.WriteFile(b, []byte("old\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	idOf := func(p string) string {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		if e := f.at(p); e != nil {
+			return e.id
+		}
+		return ""
+	}
+	before := idOf("/b.txt")
+	for i, save := range []string{"new\n", "newer\n"} {
+		tmp := filepath.Join(mnt, "new.txt")
+		if err := os.WriteFile(tmp, []byte(save), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Rename(tmp, b); err != nil {
+			t.Fatal(err)
+		}
+		if got, err := os.ReadFile(b); err != nil || string(got) != save {
+			t.Fatalf("save %d: b.txt reads %q, %v", i, got, err)
+		}
+		if _, err := os.Stat(tmp); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("save %d: new.txt %v", i, err)
+		}
+		if id := idOf("/b.txt"); id != before {
+			t.Fatalf("save %d: b.txt is %s, was %s", i, id, before)
+		}
+		if data, versions := f.content("/b.txt"); string(data) != save || versions != i+2 {
+			t.Fatalf("save %d: %q, %d versions", i, data, versions)
+		}
+	}
+	// A source still open for writing: b.txt gets what it held at the rename, and its close lands in Trash under its name.
+	fh, err := os.Create(filepath.Join(mnt, "a.tmp"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = fh.WriteString("x\n")
+	if err := os.Rename(filepath.Join(mnt, "a.tmp"), b); err != nil {
+		t.Fatal(err)
+	}
+	_, _ = fh.WriteString("y\n")
+	if err := fh.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if data, _ := f.content("/b.txt"); len(data) != 0 || idOf("/b.txt") != before {
+		t.Fatalf("b.txt %q, %s", data, idOf("/b.txt"))
+	}
+	f.mu.Lock()
+	var landed *fakeEntry
+	for _, e := range f.entries {
+		if e.name == "a.tmp" {
+			landed = e
+		}
+	}
+	var got []byte
+	if landed != nil {
+		for _, c := range f.versions[landed.version].chunks {
+			got = append(got, f.blobs[c.SHA256]...)
+		}
+	}
+	f.mu.Unlock()
+	if landed == nil || !landed.trashed || string(got) != "x\ny\n" {
+		t.Fatalf("a.tmp in Trash: %+v, %q", landed, got)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		got, err := os.ReadFile(b)
+		if err == nil && len(got) == 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("b.txt reads %q, %v", got, err)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
 func TestAnAppendIsBuiltAgainAfterAnotherRunners(t *testing.T) {
 	f, mnt, _ := mountFake(t, Options{})
 	p := filepath.Join(mnt, "log")
