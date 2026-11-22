@@ -12,7 +12,6 @@ import { accountPoolList, poolAccessQuery, sharedPoolsQuery } from '../../lib/sh
 import { useToast } from '../../lib/toast';
 import { AccountPools, NewPoolModal, PoolHint } from '../AccountPools';
 import { KeyImpact } from '../KeyImpact';
-import { ModelTiers } from '../ModelTiers';
 import { ProviderTile, vendorName, vendorOf } from '../ProviderGallery';
 import { ProviderKeyRows } from '../ProviderKeyCards';
 import { Button } from '../ui/Button';
@@ -39,11 +38,6 @@ function Loading() {
       <Spinner />
     </div>
   );
-}
-
-/** /settings/providers/tiers: the tier SubAgents are routed by, per model, on its own page (owner, 2026-11-21). */
-export function SettingsTiersPage() {
-  return <ModelTiers />;
 }
 
 /** /settings/providers: every key (SettingsKeysPage), or with no key at all, connecting one. */

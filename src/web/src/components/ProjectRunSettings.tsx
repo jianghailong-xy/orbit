@@ -79,7 +79,7 @@ import {
   nonCodeProvenance,
   nonCodeReasonLine,
 } from '../lib/projectDone';
-import { projectIntegrationQuery, projectPromotionQuery } from '../lib/queries';
+import { projectPromotionQuery } from '../lib/queries';
 import { ago } from '../lib/watches';
 import { MainBranchSelect } from './MainBranchSelect';
 import { START_MAX_CONCURRENT_TASKS } from './StartProjectCard';
@@ -94,6 +94,7 @@ import { ProjectChangesRow } from './ProjectLandingChanges';
 import { Select } from './ui/Select';
 import { Spinner } from './ui/Spinner';
 import { Switch } from './ui/Switch';
+import { useProjectIntegration } from '../lib/pollOwner';
 
 /**
  * "How it runs" — every setting the start card set, in one block on the project page once the
@@ -345,7 +346,7 @@ export function ProjectRunSettings({
 }): JSX.Element {
   const qc = useQueryClient();
   // The same read the integration row above makes, by the same key: one request for both.
-  const integration = useQuery({ ...projectIntegrationQuery(projectId), enabled: Boolean(projectId) });
+  const integration = useProjectIntegration(projectId);
   const view = integration.data ?? null;
   // The merge on offer, read only where the Delivery row is drawn: switching to the agent's way while
   // one is live asks first (owner decision 2026-11-10). Same key as the card's own read.

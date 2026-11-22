@@ -129,10 +129,10 @@ class A13dStackDeviceTest {
         val routingBefore = read("users/me").jsonObject["preferences"]?.jsonObject?.get("modelRouting")
         ok("smart model selection starts on on the server ($routingBefore)", routingBefore == null || routingBefore == JsonPrimitive(true))
         // The switch is on Sessions' page (docs/mocks/ios-settings-order).
-        click(hasText("Sessions") and hasClickAction()); await("Smart model selection")
-        click(hasText("Smart model selection") and isToggleable())
+        click(hasText("Sessions") and hasClickAction()); await("Route by tier")
+        click(hasText("Route by tier") and isToggleable())
         eventually("preferences.modelRouting is false") { read("users/me").jsonObject["preferences"]!!.jsonObject["modelRouting"] == JsonPrimitive(false) }
-        click(hasText("Smart model selection") and isToggleable())
+        click(hasText("Route by tier") and isToggleable())
         eventually("preferences.modelRouting is true again") { read("users/me").jsonObject["preferences"]!!.jsonObject["modelRouting"] == JsonPrimitive(true) }
         capture("stack-smart-selection-on")
         back(); await("Appearance")

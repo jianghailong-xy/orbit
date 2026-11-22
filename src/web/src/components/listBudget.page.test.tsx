@@ -249,7 +249,7 @@ describe('W4: with the stream live and nothing happening, each list is read once
       ['the sidebar projects', (path) => path === '/projects/sidebar'],
       ['the Tasks page', (path) => path.startsWith('/tasks/page')],
       ['the coordinator card', (path) => path === `/projects/${PROJECT_ID}/open-items`],
-      ['the watches', (path) => path === '/watches'],
+      ['the watches', (path) => path === '/watches?following=true'],
     ];
     for (const [what, match] of lists) expect(reads(match), `${what} were never read`).toBeGreaterThan(0);
 

@@ -198,6 +198,12 @@ test('the one-live-run-per-task index, release A (migration 1426)', {
   const me = await owner(sql, 'claim-index');
 
   await t.test('(1) 1426 by prisma migrate deploy on a populated database: both indexes, valid', async () => {
+    // The template is migrated to the head, where 1432 (release B) has dropped 0130's index. Back to deploy 1's
+    // state, 0130's index alone, so that 1426 runs again beside it as it did in production; 1432 stays recorded.
+    if (!(await claimIndexes(sql)).some((i) => i.name === OLD_INDEX)) {
+      await sql.query(`DROP INDEX "${NEW_INDEX}"`);
+      await sql.query(OLD_DEF);
+    }
     // Rows before the migration runs again: three released runs per task, and a live one on every other task.
     const ids = await tasks(sql, me, 40);
     for (const [i, taskId] of ids.entries()) {

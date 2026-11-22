@@ -43,6 +43,19 @@ class EngineRowsTest {
         assertEquals(listOf(DiagnosticRead("Startup · model_catalog · token_invalidated", line)), transcriptRows(listOf(stderr(1, line))).map(::diagnostic))
     }
 
+    /** Codex's sandbox setup asks for the system bubblewrap and falls back to its bundled copy (docs/mocks/codex-sandbox-fix-with-agent):
+     * a degraded sandbox diagnostic, with the component and code the row's Fix with an agent reads. */
+    @Test fun missingBubblewrapBecomesASandboxDiagnosticRow() {
+        val line = "2026-08-14T14:31:13.780609Z ERROR codex_app_server: Codex could not find bubblewrap on PATH. " +
+            "Install bubblewrap with your OS package manager. See the sandbox prerequisites: " +
+            "https://developers.openai.com/codex/concepts/sandboxing#prerequisites. Codex will use the bundled bubblewrap in the meantime."
+        val row = transcriptRows(listOf(stderr(1, line))).single().event
+        assertEquals("diagnostic", row.type)
+        assertEquals("Startup · sandbox · bubblewrap_missing", row.fields.string("label"))
+        assertEquals("sandbox", row.fields.string("component"))
+        assertEquals("bubblewrap_missing", row.fields.string("code"))
+    }
+
     @Test fun unknownStructuredStderrKeepsTheErrorPath() {
         val rows = transcriptRows(listOf(stderr(1, "engine failed to start",
             """"diagnostic":{"component":"engine","severity":"ERROR","impact":"fatal","recoverable":false}""")))

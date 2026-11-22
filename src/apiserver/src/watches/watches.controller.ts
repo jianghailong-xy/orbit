@@ -21,14 +21,23 @@ export class WatchesController {
   /**
    * The caller's watches, newest first; `?state=ACTIVE` narrows the list to one state. `?needsAttention=true`
    * answers instead with the watches that need attention (contract `attention`) — an end nobody was told about,
-   * or a delivery that failed — however many watches were made after them.
+   * or a delivery that failed — however many watches were made after them. `?following=true` answers with the
+   * union a Following page needs: the newest 100 of any state plus every ACTIVE, PAUSED and needs-attention
+   * watch (at most 100 each), each watch once.
    */
   @Get()
   list(
     @CurrentUser() user: AuthUser,
     @Query('state') state?: string,
     @Query('needsAttention') needsAttention?: string,
+    @Query('following') following?: string,
   ) {
+    if (following !== undefined) {
+      if (following !== 'true' || state !== undefined || needsAttention !== undefined) {
+        throw new BadRequestException('following is true, alone: it is the union of the other reads');
+      }
+      return this.watches.listFollowing(user.userId);
+    }
     if (needsAttention === undefined) return this.watches.list(user.userId, state);
     if (needsAttention !== 'true') {
       throw new BadRequestException('needsAttention is true or left out: there is no read of the watches nobody has to look at');

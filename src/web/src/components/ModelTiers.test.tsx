@@ -1,13 +1,14 @@
 // @vitest-environment jsdom
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { ModelQuality, SubagentTiersResponse } from '@orbit/shared';
-import { ModelTiers } from './ModelTiers';
+import { subagentTiersQuery } from '../lib/subagentTiers';
+import { ModelTierCell, QualityCell } from './ModelTiers';
 
 /**
- * The Providers page's Tier column (docs/subagent-design.md §7; board 2026-11-20, file 350aNOQs4SEwHBvVKj4A7):
+ * Model routing's Tier and Quality cells (docs/subagent-design.md §7; board 2026-11-20, file 350aNOQs4SEwHBvVKj4A7):
  * every model of a built-in engine's catalogue is listed and the owner's to tier through
  * PATCH /providers/builtin/:engine/model-tier; Clear is offered only on a tier the owner set; such a tier carries
  * a "Yours" tag. A key's model keeps its own door.
@@ -62,6 +63,25 @@ const TIERS: SubagentTiersResponse = {
   ],
 };
 
+/** Every model of the tier list with its tier and quality cells, as Model routing's rows hold them. */
+function Cells() {
+  const tiers = useQuery(subagentTiersQuery());
+  return (
+    <table className="model-tiers">
+      <tbody>
+        {(tiers.data?.providers ?? []).flatMap((provider) =>
+          provider.models.map((model) => (
+            <tr key={`${provider.slug}:${model.model}`}>
+              <td className="model-tiers-model">{model.model}</td>
+              <td><ModelTierCell provider={provider} model={model} /></td>
+              <td className="model-tiers-quality"><QualityCell model={model} /></td>
+            </tr>
+          )))}
+      </tbody>
+    </table>
+  );
+}
+
 let root: Root | null = null;
 let host: HTMLDivElement | null = null;
 
@@ -88,7 +108,7 @@ async function mount() {
   host = document.createElement('div');
   document.body.appendChild(host);
   root = createRoot(host);
-  await act(async () => root!.render(<QueryClientProvider client={qc}><ModelTiers /></QueryClientProvider>));
+  await act(async () => root!.render(<QueryClientProvider client={qc}><Cells /></QueryClientProvider>));
   await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
   return { writes };
 }
@@ -114,7 +134,7 @@ async function choose(label: string) {
   await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
 }
 
-describe('ModelTiers', () => {
+describe('ModelTierCell and QualityCell', () => {
   it("lists a built-in engine's whole catalogue, each model a tier button, with Yours on the owner's tiers", async () => {
     await mount();
     for (const model of ['claude-opus-5-6', 'grok-4.7', 'kimi-k3']) {
@@ -156,17 +176,14 @@ describe('ModelTiers', () => {
     expect(writes).toEqual([{ path: '/providers/builtin/cursor/model-tier', body: { model: 'grok-4.7', tier: null } }]);
   });
 
-  it('shows a Quality column: two figures, why one is missing, and No runs yet', async () => {
+  it('shows Quality as two figures, why one is missing, and No runs yet', async () => {
     await mount();
-    expect([...document.querySelectorAll('.model-tiers thead th')].map((th) => th.textContent))
-      .toEqual(['Provider', 'Model', 'Tier', 'Quality', 'Price / M out']);
     const quality = (model: string) => [...rowOf(model).querySelectorAll('.model-tiers-quality .model-tiers-quality-line')]
       .map((line) => line.textContent);
     expect(quality('claude-opus-5-6')).toEqual(['SubAgents4.4 · 23 rated of 41', 'Tasks86% first pass · 52 tasks']);
     expect(quality('grok-4.7')).toEqual(['SubAgentsNot enough ratings', 'TasksNot enough tasks']);
     expect(rowOf('grok-4.7').querySelectorAll('.model-tiers-quality .model-tiers-muted')).toHaveLength(2);
     expect(rowOf('kimi-k3').querySelector('.model-tiers-quality')?.textContent).toBe('No runs yet');
-    expect(document.querySelector('#tiers')?.textContent).toContain('Quality is shown, not used for routing.');
   });
 
   it('says who rated in a tooltip on the SubAgents line, only where there is an average', async () => {

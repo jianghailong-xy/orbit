@@ -104,6 +104,7 @@ import { Menu, type MenuItem } from './ui/Menu';
 import { Button } from './ui/Button';
 import { Dialog } from './ui/Dialog';
 import { Spinner } from './ui/Spinner';
+import { useProjectIntegration } from '../lib/pollOwner';
 
 /** How long a landing the window was opened on stays outlined (board 03 f). */
 const FOCUS_OUTLINE_MS = 1_500;
@@ -197,7 +198,7 @@ export function ProjectLandingsWindow({
   const landings = useMemo(() => landingsWindow(rows, merges, { now: new Date() }), [rows, merges]);
 
   const cards = landings.now;
-  const integrationQ = useQuery({ ...projectIntegrationQuery(projectId), enabled: cards.length > 0 });
+  const integrationQ = useProjectIntegration(projectId, cards.length > 0);
   const promotionQ = useQuery({
     ...projectPromotionQuery(projectId),
     enabled: cards.some((card) => card.subject === 'PROMOTION'),

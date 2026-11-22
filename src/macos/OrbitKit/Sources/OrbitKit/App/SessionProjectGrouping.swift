@@ -294,9 +294,11 @@ public enum SessionProjectGrouping {
                     selectedLine = SessionLine(text: SessionProjectCopy.pausedAtLimit(observed: observed, limit: limit),
                                                tone: .warning, pauseGlyph: true)
                 case .owner(let since):
+                    let running = summary?.buckets.running ?? 0
                     selectedLine = SessionLine(
-                        text: SessionProjectCopy.paused(runsFinishing: summary?.buckets.running ?? 0,
-                                                        ago: ProjectAttention.elapsedLabel(since, now: now)),
+                        text: running > 0
+                            ? SessionProjectCopy.pausedRuns(running)
+                            : SessionProjectCopy.pausedAgo(ProjectAttention.elapsedLabel(since, now: now)),
                         tone: .preview, pauseGlyph: true)
                 }
                 target = coordinator.map { .session($0.id) } ?? .project(projectID)

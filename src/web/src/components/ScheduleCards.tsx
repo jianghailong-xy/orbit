@@ -27,6 +27,7 @@ import {
   type ScheduleEnvelopeLines,
   type ScheduleRule,
   type ScheduleRunView,
+  type SessionScheduleCardsResponse,
   type ScheduleView,
   type ScheduleWhenLines,
 } from '@orbit/shared';
@@ -356,12 +357,24 @@ export interface ScheduleRunOfSession {
 }
 
 /**
- * The schedule and run a run's session belongs to, read from the session alone: its schedule-cards answer names the
- * run it serves however old (`run`), and the run names its schedule. Nothing else is searched.
+ * A conversation's schedule cards (`GET /sessions/:id/schedule-cards`), read once for the page: the session page reads
+ * them here and hands the answer to the hooks below, so one observer reads them however many things they draw.
  */
-export function useScheduleRunOfSession(sessionId: string | null | undefined): ScheduleRunOfSession | null {
+export function useSessionScheduleCards(sessionId: string | null | undefined): SessionScheduleCardsResponse | undefined {
   const cards = useQuery({ ...sessionScheduleCardsQuery(sessionId ?? ''), enabled: Boolean(sessionId) });
-  const run = sessionId ? cards.data?.run ?? null : null;
+  return sessionId ? cards.data : undefined;
+}
+
+/**
+ * The schedule and run a run's session belongs to, read from the session alone: its schedule-cards answer
+ * (`useSessionScheduleCards`) names the run it serves however old (`run`), and the run names its schedule. Nothing else
+ * is searched.
+ */
+export function useScheduleRunOfSession(
+  sessionId: string | null | undefined,
+  cards: SessionScheduleCardsResponse | undefined,
+): ScheduleRunOfSession | null {
+  const run = sessionId ? cards?.run ?? null : null;
   const detail = useQuery({ ...scheduleDetailQuery(run?.scheduleId ?? ''), enabled: Boolean(run) });
   if (!run || !detail.data) return null;
   return { schedule: detail.data.schedule, run, detail: detail.data };
@@ -472,10 +485,10 @@ export function ScheduleRunReport({ of }: { of: ScheduleRunOfSession }): JSX.Ele
  */
 export function useSessionScheduleInserts(
   sessionId: string | null | undefined,
+  cards: SessionScheduleCardsResponse | undefined,
   events: ReadonlyArray<{ seq: number; ts?: string }>,
   run: ScheduleRunOfSession | null,
 ): TranscriptInsert[] {
-  const cards = useQuery({ ...sessionScheduleCardsQuery(sessionId ?? ''), enabled: Boolean(sessionId) });
   return useMemo(() => {
     if (!sessionId) return [];
     const inserts: TranscriptInsert[] = [];
@@ -491,10 +504,10 @@ export function useSessionScheduleInserts(
     }
     // Cards and change lines in the order they happened, so two after the same event read as they were made.
     const said = [
-      ...(cards.data?.cards ?? []).map((card) => ({
+      ...(cards?.cards ?? []).map((card) => ({
         at: card.createdAt, key: `schedule-card:${card.id}`, element: <ScheduleCardView card={card} />,
       })),
-      ...(cards.data?.records ?? []).map((record) => ({
+      ...(cards?.records ?? []).map((record) => ({
         at: record.createdAt,
         key: `schedule-record:${record.scheduleId}:${record.revision}`,
         element: <ScheduleRecordLine record={record} />,
@@ -506,5 +519,5 @@ export function useSessionScheduleInserts(
       inserts.push({ anchor, moment: item.at, key: item.key, element: item.element });
     }
     return inserts;
-  }, [sessionId, events, cards.data, run]);
+  }, [sessionId, events, cards, run]);
 }
