@@ -3318,6 +3318,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // row is written, and no trigger, function or DONE fence changes.
       // Written as 1430 on the project line, it was renumbered after main took 1430.
       '1431_managed_runner_update_interrupt',
+      // 1432 creates model_identity (which model ids name one model, for display); 1433 seeds it with INSERTs. Neither
+      // touches a preserved relation, and no trigger, function or DONE fence changes.
+      '1432_model_identity',
+      '1433_model_identity_seed',
       // 1434 adds session.listed_at (backfilled from last_turn_at/created_at, then defaulted) and conversation_turn.by_person,
       // and a BEFORE UPDATE trigger on session (status, completed_at) that writes listed_at alone. session is not a
       // preserved relation, none of the six preserved triggers/functions is named or replaced, and no DONE fence changes.
