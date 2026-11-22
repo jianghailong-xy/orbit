@@ -43,6 +43,7 @@ import {
   scheduleRunMode,
 } from './schedule-access';
 import type { ScheduleAlert } from './schedule-attention';
+import { ScheduleReadsService } from './schedule-reads.service';
 import { SessionsScheduleRunPort } from './schedule-run-sessions';
 import {
   SCHEDULE_APPROVAL_TIMEOUT_MS,
@@ -65,6 +66,8 @@ let clockNow = new Date('2026-11-14T08:00:00Z');
 const clock = () => clockNow;
 let schedules: SchedulesService;
 let runs: ScheduleRunsService;
+let reads: ScheduleReadsService;
+let sessionsService: SessionsService;
 let calls: Array<{ op: 'interrupt' | 'complete' | 'end'; sessionId: string }> = [];
 let opened: OpenRunSession[] = [];
 let pushed: ScheduleAlert[] = [];
@@ -92,7 +95,7 @@ before(async () => {
   // The real create door, as the production port uses it; the runner and realtime sides are not under test.
   // Every runner and realtime side effect is a no-op: what is under test is the rows.
   const quiet = new Proxy({}, { get: () => () => undefined });
-  const sessionsService = new SessionsService(db as never, quiet as never, quiet as never);
+  sessionsService = new SessionsService(db as never, quiet as never, quiet as never);
   const real = new SessionsScheduleRunPort(sessionsService);
   const port: ScheduleRunSessionPort = {
     land: (owner, sessionId) => real.land(owner, sessionId),
@@ -117,6 +120,7 @@ before(async () => {
   };
   schedules = new SchedulesService(db as unknown as PrismaService, clock);
   runs = new ScheduleRunsService(db as unknown as PrismaService, port, clock, { notify: async (alert) => void pushed.push(alert) });
+  reads = new ScheduleReadsService(db as unknown as PrismaService);
 });
 
 after(async () => {
@@ -1577,4 +1581,130 @@ test('LAND: a pending landing keeps prior failures and Waiting on you until a co
   assert.equal((await runOf(second.id)).landingStatus, 'NO_COMMITS');
   assert.equal((await scheduleOf(run.scheduleId)).consecutiveFailures, 0);
   assert.equal((await db.ownerRequest.findUniqueOrThrow({ where: { id: prior.id } })).state, 'WITHDRAWN');
+});
+
+// =============================================================================================================
+// A run's session page (board docs/mocks/scheduled-run-not-started ②③④, owner's B1 and C1)
+// =============================================================================================================
+
+/** The workspace's Scheduled runs folder (`GET /sessions?scheduled=1`), Open and Completed. */
+async function scheduledFolder(w: World): Promise<string[]> {
+  const [open, completed] = await Promise.all([
+    sessionsService.list(w.ownerId, { view: 'open', workspaceId: w.workspaceId, scheduled: true }),
+    sessionsService.list(w.ownerId, { view: 'completed', workspaceId: w.workspaceId, scheduled: true }),
+  ]);
+  return [...open, ...completed].map((r) => r.id);
+}
+
+test('② a run that never reached its engine: each try\'s session reads every try, when it gave up and the next run; no try is listed, the last opens from the run history', { skip }, async () => {
+  reset();
+  at('2026-11-14T00:00:00Z');
+  const w = await world('didnt-run');
+  const s = await created(w);
+  at('2026-11-14T02:00:00Z');
+  await fireAndStart(s.id);
+  const [run] = await runsOf(s.id);
+  const first = (await runOf(run.id)).sessionId!;
+  await db.session.update({ where: { id: first }, data: { status: 'FAILED', finishedAt: clockNow, error: 'spawn failed' } });
+  assert.equal(await runs.reconcileRun(run.id), 'RETRY');
+  advance(MINUTE);
+  assert.deepEqual((await runs.startDue(25, s.id)).map((r) => r.outcome), ['STARTED']);
+  const second = (await runOf(run.id)).sessionId!;
+  // The second try is claimed, and its engine stops before the turn reaches it; the next wait would pass the window.
+  at('2026-11-15T01:58:00Z');
+  await db.session.update({ where: { id: second }, data: { status: 'FAILED', finishedAt: clockNow, startedAt: clockNow, error: 'spawn failed' } });
+  assert.equal(await runs.reconcileRun(run.id), 'MISSED');
+  const missed = await runOf(run.id);
+  // A try started when its session was opened (the create door's own clock, not this spec's).
+  const opened = async (id: string) => (await db.session.findUniqueOrThrow({ where: { id } })).createdAt.toISOString();
+  const [firstAt, secondAt] = [await opened(first), await opened(second)];
+
+  for (const [n, sessionId] of [[1, first], [2, second]] as const) {
+    const cards = await reads.sessionCards(w.ownerId, sessionId);
+    assert.equal(cards.run?.state, 'MISSED');
+    assert.equal(cards.run?.failureReason, 'ENGINE_CRASHED_BEFORE_START');
+    assert.equal(cards.run?.sessionId, second, 'the run names its last try');
+    assert.deepEqual(cards.runStatus, {
+      tries: [
+        { sessionId: first, startedAt: firstAt, claimed: false, reachedEngine: false },
+        { sessionId: second, startedAt: secondAt, claimed: true, reachedEngine: false },
+      ],
+      thisTry: n,
+      gaveUpAt: missed.endedAt!.toISOString(),
+      notBeforeAt: null,
+      nextDueAt: (await scheduleOf(s.id)).nextDueAt!.toISOString(),
+      queue: null,
+    });
+  }
+
+  // C1: neither try is in the Scheduled runs folder; the run's history names the last, which opens by id.
+  const folder = await scheduledFolder(w);
+  assert.ok(!folder.includes(first) && !folder.includes(second), 'a try that never reached its engine is not listed');
+  const history = await runs.history(w.ownerId, s.id);
+  assert.equal(history.find((h) => h.id === run.id)?.session?.id, second);
+  assert.equal((await sessionsService.getForOrchestration(w.ownerId, second))?.id, second, 'it opens by id');
+});
+
+test('③ a run waiting on a full runner: its session reads the gate, how long it has waited from, and the deadline it gives up at; it is listed while it waits', { skip }, async () => {
+  reset();
+  at('2026-11-14T00:00:00Z');
+  const w = await world('queued-full');
+  await occupy(w);
+  const s = await created(w);
+  at('2026-11-14T02:00:00Z');
+  const run = await runOf((await fireAndStart(s.id)).started[0].runId);
+  const sessionId = run.sessionId!;
+  at('2026-11-14T03:12:00Z');
+  assert.equal(await runs.reconcileRun(run.id), 'UNCHANGED');
+  const cards = await reads.sessionCards(w.ownerId, sessionId);
+  assert.equal(cards.run?.state, 'RUNNING');
+  assert.equal(cards.runStatus?.thisTry, 1);
+  assert.equal(cards.runStatus?.gaveUpAt, null);
+  assert.deepEqual(cards.runStatus?.queue, {
+    queuedReason: 'runner_at_capacity',
+    queuedActive: 1,
+    queuedLimit: 1,
+    queuedHeldByJobs: 0,
+    since: (await db.session.findUniqueOrThrow({ where: { id: sessionId } })).createdAt.toISOString(),
+    // A DAILY slot's catch-up window is one day.
+    deadline: '2026-11-15T02:00:00.000Z',
+  });
+  assert.ok((await scheduledFolder(w)).includes(sessionId), 'a try still waiting for a slot is listed');
+
+  // A slot frees: nothing holds it, so there is no gate to show.
+  await db.runner.update({ where: { id: w.runnerId }, data: { maxConcurrent: 2 } });
+  assert.equal((await reads.sessionCards(w.ownerId, sessionId)).runStatus?.queue, null);
+});
+
+test('④ an earlier try whose run went on in another session reads that it did, and only the try that ran is listed', { skip }, async () => {
+  reset();
+  at('2026-11-14T00:00:00Z');
+  const w = await world('started-later');
+  const s = await created(w);
+  at('2026-11-14T02:00:00Z');
+  await fireAndStart(s.id);
+  const [run] = await runsOf(s.id);
+  const first = (await runOf(run.id)).sessionId!;
+  await db.session.update({ where: { id: first }, data: { status: 'FAILED', finishedAt: clockNow, error: 'spawn failed' } });
+  assert.equal(await runs.reconcileRun(run.id), 'RETRY');
+  const queued = await reads.sessionCards(w.ownerId, first);
+  assert.equal(queued.runStatus?.notBeforeAt, '2026-11-14T02:01:00.000Z', 'the next try');
+  advance(MINUTE);
+  await runs.startDue(25, s.id);
+  const second = (await runOf(run.id)).sessionId!;
+  await delivered(second, clockNow);
+
+  const cards = await reads.sessionCards(w.ownerId, first);
+  assert.equal(cards.run?.sessionId, second);
+  assert.equal(cards.runStatus?.thisTry, 1);
+  assert.deepEqual(cards.runStatus?.tries.map((t) => [t.sessionId, t.reachedEngine]), [[first, false], [second, true]]);
+  assert.equal(cards.runStatus?.gaveUpAt, null);
+  assert.equal(cards.runStatus?.notBeforeAt, null);
+  const folder = await scheduledFolder(w);
+  assert.ok(!folder.includes(first), 'the try that never reached its engine is not listed');
+  assert.ok(folder.includes(second), 'the try that ran is');
+  // The run's session itself ends with a result, still listed: what it did is there to read.
+  await runs.report(w.ownerId, second, { outcome: 'CHANGED', key: 'k', summary: 'New.' });
+  await db.session.update({ where: { id: second }, data: { status: 'FAILED', finishedAt: clockNow } });
+  assert.ok((await scheduledFolder(w)).includes(second));
 });

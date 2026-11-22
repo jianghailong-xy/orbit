@@ -275,7 +275,10 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
     // A reply is the page's own text (iOS `AssistantBubbleView`): no heading, copied by selecting it, or by TalkBack's Copy message.
     val plainReply = event.type == "assistant" && !detailOnly && cards.isEmpty() && repair == null
     // A person's bubble and a plain reply sit on the list's own 16dp margin, as iOS's 16pt; other rows keep their 10dp inset.
-    Column(Modifier.fillMaxWidth().background(bg).padding(horizontal = if (userBubble || plainReply) 0.dp else 10.dp, vertical = 10.dp).testTag(row.key)
+    // Nor do they, or a stretch of reasoning, add any above or below: the list's 12dp between rows is iOS's 6 + 6 (`rowInsets`).
+    val bare = !highlighted && (userBubble || plainReply || event.type == "thinking")
+    Column(Modifier.fillMaxWidth().background(bg).padding(horizontal = if (userBubble || plainReply) 0.dp else 10.dp,
+        vertical = if (bare) 0.dp else 10.dp).testTag(row.key)
         .then(if (plainReply) Modifier.semantics { customActions = listOf(CustomAccessibilityAction("Copy message") { loadFull(copy = true); true }) }
             else Modifier), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (answerLine != null) { cards.forEach { TranscriptCardView(it, open, shown) }; return@Column }

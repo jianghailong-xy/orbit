@@ -3190,6 +3190,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // preserved relation, and no trigger, function or DONE fence changes.
       '1201_turn_outcome',
       '1202_turn_outcome_backfill',
+      // 1210 adds nullable managed_runner.image_outdated_since and current_image_sha (no default); `managed_runner`
+      // is none of the preserved relations, no row is written, and no trigger, function or DONE fence changes.
+      '1210_managed_runner_image_outdated',
       // 1213 adds a nullable session.branch_commits (JSONB, no default); no row is written, and no preserved
       // relation, trigger, function or DONE fence changes.
       '1213_session_branch_commits',
@@ -3225,6 +3228,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // stored row passes and a partial unique index; no row is written, and no preserved relation, trigger, function
       // or DONE fence changes.
       '1273_owner_request_settings_change',
+      // 1290 adds nullable managed_runner.update_requested_at, update_requested_by and update_completed_at (no
+      // default); `managed_runner` is none of the preserved relations, no row is written, and no trigger, function or
+      // DONE fence changes.
+      '1290_managed_runner_update_now',
       // 1304 adds two nullable columns on schedule, max_runs (with a CHECK that NULL passes) and planned_end_told_at,
       // marks every ENDED schedule told (an UPDATE of schedule rows only), and adds two partial indexes; schedule and
       // schedule_run are not preserved relations, and no trigger, function or DONE fence changes.
@@ -3299,6 +3306,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1430 adds one nullable column, capacity_held_at, to schedule_run; no row is written, and no preserved
       // relation, trigger, function or DONE fence changes.
       '1430_schedule_run_capacity_held_at',
+      // 1431 adds managed_runner.update_interrupt_turns, BOOLEAN NOT NULL with a constant default (catalog-only, no
+      // rewrite), for an owner's Update Now of a busy runner; `managed_runner` is none of the preserved relations, no
+      // row is written, and no trigger, function or DONE fence changes.
+      // Written as 1430 on the project line, it was renumbered after main took 1430.
+      '1431_managed_runner_update_interrupt',
       // 1432 drops 0130's claim index session_task_execution_claim_idx CONCURRENTLY (plan step 4.5, release B); 1426's
       // index goes on enforcing one live run per task. Session is not a preserved relation, and no function, trigger,
       // type, constraint or DONE fence changes. No INSERT, UPDATE or DELETE.
