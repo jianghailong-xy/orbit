@@ -2374,6 +2374,12 @@ public final class APIClient: @unchecked Sendable {
         _ = try await postRaw("sessions/\(sessionID)/adopt-branch", body: Optional<Empty>.none)
     }
 
+    /// Close a failed merge's strip: the server clears the stored conflict or error, so every client's
+    /// bar shows Merge (or "In main") again. Nothing in git changes.
+    public func dismissMergeFailure(sessionID: String) async throws {
+        _ = try await postRaw("sessions/\(sessionID)/merge-failure/dismiss", body: Optional<Empty>.none)
+    }
+
     // MARK: link previews
 
     /// The cards for every Orbit link a conversation shows, in one request

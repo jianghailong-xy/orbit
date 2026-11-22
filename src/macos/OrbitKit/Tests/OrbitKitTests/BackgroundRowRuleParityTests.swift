@@ -43,7 +43,6 @@ final class BackgroundRowRuleParityTests: XCTestCase {
         let name: [String: Any]
         switch row.name {
         case .one(let i): name = ["mode": "one", "item": item(i)]
-        case .pinned(let i): name = ["mode": "pinned", "item": item(i)]
         case .rotate(let items, let per, let change):
             name = ["mode": "rotate", "items": items.map(item), "perNameMs": per, "changeMs": change]
         }

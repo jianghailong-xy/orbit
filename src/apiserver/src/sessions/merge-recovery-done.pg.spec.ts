@@ -322,7 +322,7 @@ async function doneCodeTask(s: Stack, w: ProjectWorld, label: string): Promise<{
       id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, taskId: declared.id, workspaceId: w.workspaceId,
       assignedRunnerId: w.runnerId, title, prompt: title, provider: 'claude', status: RunStatus.RUNNING,
       dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true, startedAt: new Date(),
-      finishedAt: new Date(Date.now() - 60_000), branch: `orbit/${label}-${sessionId.slice(0, 8)}`,
+      branch: `orbit/${label}-${sessionId.slice(0, 8)}`,
       worktreeBranch: `orbit/${label}-${sessionId.slice(0, 8)}`, worktreeDirty: false, isolationStatus: 'worktree',
       baseSha: '0'.repeat(40),
     },

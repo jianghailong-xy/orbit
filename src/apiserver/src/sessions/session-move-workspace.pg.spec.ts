@@ -552,7 +552,7 @@ test('moving a session to another workspace: the panel, the move, its refusals a
   });
 
   await t.test('(6) the session itself: every §5.2 rule refuses with its reason; a child moves', async () => {
-    const LIVE = { endReason: null, finishedAt: null };
+    const LIVE = { endReason: null, finishedAt: null};
     const taskId = randomUUID();
     await db.task.create({
       data: {

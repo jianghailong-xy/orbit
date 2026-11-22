@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { RunStatus } from '@prisma/client';
+import { isReleasedStatus } from '../common/session-release';
 import { SessionsService } from './sessions.service';
 import { reloadCarriesEnv, RESTART_RELOAD_CONTENT } from './session-settings';
 
@@ -26,6 +27,8 @@ function sessionRow(over: Partial<Row> = {}): Row {
     deletedAt: null,
     sessionKind: 'CONVERSATION',
     env: { FOO: 'bar' },
+    // A terminal row carries its release column (session_release_fact_chk).
+    ...(isReleasedStatus(String(over.status ?? RunStatus.AWAITING_INPUT)) ? { finishedAt: new Date() } : {}),
     ...over,
   };
 }

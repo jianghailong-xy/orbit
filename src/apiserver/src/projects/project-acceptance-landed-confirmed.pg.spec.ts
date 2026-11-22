@@ -326,8 +326,8 @@ async function settle(db: PrismaClient, taskId: string) {
   assert.equal(written, 1, 'the EXECUTABLE task must reach DONE through the DONE fence');
 }
 
-/** The session whose branch a merge is about — a session OF the task, ended, on this workspace. */
-async function mergeSession(stack: Stack, f: Fixture, taskId: string, label: string) {
+/** Finished work whose branch is still waiting for a receipt. */
+async function mergeSession(stack: Stack, f: Fixture, taskId: string, label: string, sourceSha: string) {
   const sessionId = randomUUID();
   await stack.db.session.create({
     data: {
@@ -340,9 +340,13 @@ async function mergeSession(stack: Stack, f: Fixture, taskId: string, label: str
       title: `${label}-merge`,
       prompt: `${label}-merge`,
       provider: 'claude',
-      status: RunStatus.SUCCEEDED,
+      status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
       dispatchOrigin: SessionDispatchOrigin.USER,
+      startsTaskWork: true,
+      isolationStatus: 'worktree',
       branch: `orbit/${label}`,
+      branchSha: sourceSha,
+      baseSha: '0'.repeat(40),
     },
   });
   return sessionId;
@@ -368,7 +372,8 @@ async function ranOnABranch(stack: Stack, f: Fixture, taskId: string, label: str
 
 /** A landing that is already on file before the walk reaches the receipt under test. */
 async function recordLanding(stack: Stack, f: Fixture, taskId: string, label: string) {
-  const sessionId = await mergeSession(stack, f, taskId, label);
+  const sourceSha = 'a'.repeat(40);
+  const sessionId = await mergeSession(stack, f, taskId, label, sourceSha);
   await stack.db.sessionMergeReceipt.create({
     data: {
       ownerId: f.ownerId,
@@ -377,7 +382,7 @@ async function recordLanding(stack: Stack, f: Fixture, taskId: string, label: st
       projectId: f.projectId,
       result: 'MERGED',
       sourceBranch: `orbit/${label}`,
-      sourceSha: 'a'.repeat(40),
+      sourceSha,
       targetBranch: 'main',
       targetShaBefore: 'b'.repeat(40),
       targetShaAfter: 'c'.repeat(40),
@@ -388,15 +393,14 @@ async function recordLanding(stack: Stack, f: Fixture, taskId: string, label: st
 }
 
 /** The last landing, through `record` — the method the agent door calls, and nothing else. */
-async function recordLandingThroughTheDoor(stack: Stack, f: Fixture, taskId: string, label: string) {
-  const sessionId = await mergeSession(stack, f, taskId, label);
+async function recordLandingThroughTheDoor(stack: Stack, f: Fixture, sessionId: string, label: string, sourceSha: string) {
   const recorded = await stack.receipts.record(
     f.ownerId,
     sessionId,
     {
       result: 'MERGED',
       sourceBranch: `orbit/${label}`,
-      sourceSha: 'd'.repeat(40),
+      sourceSha,
       targetBranch: 'main',
       targetShaBefore: 'e'.repeat(40),
       targetShaAfter: 'f'.repeat(40),
@@ -436,6 +440,8 @@ async function walkToTheLastReceipt(
   await afterFiling?.();
   await ranOnABranch(stack, f, suiteWork, 'suite');
   await recordLanding(stack, f, routingWork, 'routing');
+  const suiteSha = 'd'.repeat(40);
+  const suiteSession = await mergeSession(stack, f, suiteWork, 'suite', suiteSha);
   await settle(stack.db, routingWork);
   await settle(stack.db, suiteWork);
 
@@ -465,7 +471,7 @@ async function walkToTheLastReceipt(
   assert.equal(await storedStatus(stack.db, f), ProjectStatus.OPEN,
     'the column must not say DONE before the last receipt, or nothing after it is evidence');
 
-  await recordLandingThroughTheDoor(stack, f, suiteWork, 'suite');
+  await recordLandingThroughTheDoor(stack, f, suiteSession, 'suite', suiteSha);
 
   const said = (await coordinatorMessages(stack.db, f)).slice(told.length);
   assert.equal(said.length, 1, 'the last receipt did not put exactly one message on the conversation');

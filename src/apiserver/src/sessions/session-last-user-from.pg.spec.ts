@@ -38,6 +38,7 @@ import {
   SessionDispatchOrigin,
   SessionRunSource,
 } from '@prisma/client';
+import { isReleasedStatus } from '../common/session-release';
 import { ControlEventType, type ControlEvent, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 import { filter, firstValueFrom, timeout } from 'rxjs';
@@ -170,6 +171,7 @@ test('a session row names the session that sent the message it previews', {
   /** A session on this runner, parked between turns — the shape a live orchestrating caller has. */
   async function session(title: string, data: Partial<Prisma.SessionUncheckedCreateInput> = {}): Promise<string> {
     const id = randomUUID();
+    const fixtureStatus = data.status ?? RunStatus.AWAITING_INPUT;
     await prisma.session.create({
       data: {
         id, ownerId, creatorId: ownerId, workspaceId: workerWorkspaceId, assignedRunnerId: runnerId,
@@ -177,6 +179,9 @@ test('a session row names the session that sent the message it previews', {
         numTurns: 1, startedAt: new Date(), runtimeSessionId: `runtime-${id}`,
         dispatchOrigin: SessionDispatchOrigin.USER, runSource: SessionRunSource.MANUAL,
         ...data,
+        ...(isReleasedStatus(fixtureStatus) ? {
+          finishedAt: data.finishedAt ?? new Date(),
+        } : {}),
       },
     });
     return id;

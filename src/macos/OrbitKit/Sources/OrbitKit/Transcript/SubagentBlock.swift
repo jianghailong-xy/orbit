@@ -321,9 +321,6 @@ public struct SubagentSessionSummary: Equatable, Sendable {
     public let capsule: String
     /// The runs, the running ones first, then the rest newest first.
     public let rows: [SubagentRunView]
-    /// How many ended without finishing — failed or interrupted, never stopped — in every state: red at
-    /// the band's right edge, before the spinner while one runs.
-    public let failed: Int
     /// The models the runs took, most runs first.
     public let models: [ModelCount]
     /// Every place the runs ran, most runs first; the session's own machine is `name: nil`.
@@ -366,7 +363,7 @@ public struct SubagentSessionSummary: Equatable, Sendable {
         return running > 1 ? "\(running) running · \(newest)" : newest
     }
 
-    /// What VoiceOver says for the band: "Agents: 12, 4 machines, Opus 5.5 9 runs, 1 failed".
+    /// What VoiceOver says for the band: "Agents: 12, 4 machines, Opus 5.5 9 runs".
     public var spoken: String {
         var parts = ["Agents: \(band)"]
         if running > 0 {
@@ -377,7 +374,6 @@ public struct SubagentSessionSummary: Equatable, Sendable {
                 parts += models.map { "\($0.label) \($0.count == 1 ? "1 run" : "\($0.count) runs")" }
             }
         }
-        if failed > 0 { parts.append("\(failed) failed") }
         return parts.joined(separator: ", ")
     }
 
@@ -430,12 +426,9 @@ public struct SubagentSessionSummary: Equatable, Sendable {
             }
         }
         let own = { (run: SubagentRunView) in ownModel(run, parentEngine: parentEngine, parentModel: parentModel) }
-        let failed = rows.filter {
-            SubagentBlock.describe(input: .object([:]), run: $0, status: .ok).outcomeIsFailure
-        }.count
         let current = rows.first(where: \.isRunning)
         return SubagentSessionSummary(
-            count: runs.count, running: running, capsule: "\(runs.count)", rows: rows, failed: failed,
+            count: runs.count, running: running, capsule: "\(runs.count)", rows: rows,
             models: stableByCount(models), machines: stableByCount(machines),
             elsewhere: runs.contains { nonEmpty($0.workspaceName) != nil },
             spread: runs.contains { nonEmpty($0.workspaceName) != nil || !own($0) },

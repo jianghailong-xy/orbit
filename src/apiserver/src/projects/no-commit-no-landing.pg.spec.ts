@@ -256,7 +256,7 @@ async function workSession(stack: Stack, w: World, taskId: string, s: Work): Pro
       changedFiles: s.changedFiles === null ? Prisma.DbNull : (s.changedFiles ?? []) as Prisma.InputJsonValue,
       ...(s.worktreeDirty !== undefined ? { worktreeDirty: s.worktreeDirty } : {}),
       numTurns: 1, startedAt: minutesAgo(s.createdMinutesAgo ?? 30), createdAt: minutesAgo(s.createdMinutesAgo ?? 30),
-      ...(finished ? { finishedAt: minutesAgo(s.finishedMinutesAgo!) } : {}),
+      ...(finished ? { finishedAt: minutesAgo(s.finishedMinutesAgo!)} : {}),
     },
   });
   return id;
@@ -599,8 +599,10 @@ test('(9) the reaper\'s forced finish runs the same route: an empty branch queue
       const w = await world(stack, 'reaper', 'NONE');
       const forceFinalize = (sessionId: string, taskId: string) => (stack.reaper as unknown as {
         forceFinalize(sessionId: string, runnerId: string | null, taskId: string | null, reason: string,
-          opts: { status?: RunStatus }): Promise<void>;
-      }).forceFinalize(sessionId, w.runnerId, taskId, 'runner lost', { status: RunStatus.CANCELLED });
+          opts: { status: typeof RunStatus.CANCELLED }): Promise<void>;
+      }).forceFinalize(sessionId, w.runnerId, taskId, 'runner lost', {
+        status: RunStatus.CANCELLED, 
+      });
 
       const empty = await task(stack, w, 'reaped-empty');
       const emptyLive = await workSession(stack, w, empty, { branch: 'orbit/reaped-empty', branchSha: sha('e'), baseSha: sha('e') });

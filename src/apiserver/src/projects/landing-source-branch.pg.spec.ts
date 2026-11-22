@@ -76,7 +76,7 @@ const sha = (nibble: string) => nibble.repeat(40);
 interface Finish {
   changedFiles?: unknown[];
   baseSha?: string;
-  status?: RunStatus;
+  status?: typeof RunStatus.SUCCEEDED | typeof RunStatus.FAILED;
 }
 
 /** The diff summary a session that delivered something reports. */

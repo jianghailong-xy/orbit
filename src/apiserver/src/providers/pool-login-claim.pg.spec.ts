@@ -163,7 +163,7 @@ suite("a login pool's sessions: which ChatGPT account each runs on, and when the
     (await sessions.create(who.id, { prompt: 'hello', title: pool.label, workspaceId: who.workspaceId, provider: pool.slug })).id;
   /** The runner asking for work — which has to be `sessionId` — leaving it RUNNING or parked, as a turn would. */
   async function claim(who: Person, sessionId: string, park = true): Promise<ClaimedSession> {
-    await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.PENDING, cancelRequestedAt: null } });
+    await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.PENDING, cancelRequestedAt: null, finishedAt: null} });
     const claimed = await queue.claimSessionForRunner({ id: who.runnerId });
     assert.ok(claimed, 'the runner was offered no session');
     assert.equal(claimed.sessionId, sessionId);
