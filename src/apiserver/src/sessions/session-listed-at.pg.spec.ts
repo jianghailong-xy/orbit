@@ -187,7 +187,7 @@ test('listed_at moves only when the session changes for its owner', {
     await api.activateLeases(runner, id, { leaseGeneration: generation, leaseOwner } as never);
     const handed = await inbox.dequeueTurn(id, runnerId, generation, false, []);
     assert.ok(handed, 'the inbox handed nothing out');
-    return { leaseOwner, turnId: handed.turnId, afterClaim };
+    return { leaseOwner, generation, turnId: handed.turnId, afterClaim };
   }
 
   function events(id: string, leaseOwner: string, turnId: string | null, list: Array<[RunEventType, Record<string, unknown>]>) {
@@ -267,6 +267,17 @@ test('listed_at moves only when the session changes for its owner', {
     at = await stayed(id, at, 'a session-to-session send', true);
     await sessions.createTurn(ownerId, id, { clientTurnId: `${WATCH_TURN_KEY_PREFIX}${randomUUID()}:1`, content: '', intent: 'NEXT_TURN' });
     at = await stayed(id, at, 'a watch\'s wake', true);
+    // Both turns run and end; neither was a person's, so neither end moves it either.
+    const first = await claimAndTake(id);
+    at = await stayed(id, { ...first.afterClaim, listed: at.listed }, 'the claim');
+    await complete(id, first.leaseOwner, first.turnId);
+    at = await stayed(id, at, 'the session-to-session turn ending', true);
+    // The slot passes straight to the queued wake: the same process is handed it, with no claim between.
+    const next = await inbox.dequeueTurn(id, runnerId, first.generation, false, []);
+    assert.ok(next, 'the watch\'s turn was not handed out');
+    await complete(id, first.leaseOwner, next.turnId);
+    at = await stayed(id, at, 'the watch\'s turn ending', true);
+    assert.equal(await status(id), RunStatus.AWAITING_INPUT);
   });
 
   await t.test('a background job\'s wake, its claim and its end leave it where it was', async () => {
