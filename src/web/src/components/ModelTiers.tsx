@@ -32,9 +32,10 @@ export function ModelTierCell({ provider, model }: { provider: ProviderTierRow; 
 
 /**
  * A model's Quality cell: how well it completed work, for display only (docs/subagent-design.md §7.1, board
- * docs/mocks/model-quality/01-board.png).
+ * docs/mocks/model-quality/01-board.png). The figures are the model's on every provider listing it; `pooledWith`
+ * names the others, under the figures.
  */
-export function QualityCell({ model }: { model: ProviderModelTier }) {
+export function QualityCell({ model, pooledWith = [] }: { model: ProviderModelTier; pooledWith?: readonly string[] }) {
   const lines = qualityLines(model.quality);
   if (lines.empty) return <span className="model-tiers-muted">No runs yet</span>;
   const subagents = (
@@ -51,6 +52,7 @@ export function QualityCell({ model }: { model: ProviderModelTier }) {
         <span className="model-tiers-quality-source">Tasks</span>
         <span className={lines.tasks.muted ? 'model-tiers-muted' : undefined}>{lines.tasks.text}</span>
       </div>
+      {pooledWith.length > 0 && <div className="model-tiers-muted model-tiers-pooled">Pooled with {pooledWith.join(', ')}</div>}
     </>
   );
 }
