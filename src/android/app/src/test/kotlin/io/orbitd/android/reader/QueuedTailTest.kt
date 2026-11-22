@@ -271,7 +271,7 @@ class QueuedTailTest {
         assertNull("a message a runner has echoed", cancellableHeldTurn(listed, listOf(echo)))
         assertNull("a message only queued is the tail's, with its own Cancel",
             cancellableHeldTurn(rows("""[{"turnId":"t3","kind":"message","placement":"queued","content":"x","attachments":[]}]"""), emptyList()))
-        val translated = rows("[${accepted("t2", ""","translation":{"state":"DONE","from":"zh","original":"任务 6 为什么还在排队？"}""")}]")
+        val translated = rows("[${accepted("t2", ""","translation":{"state":"DONE","from":"zh-Hans","original":"任务 6 为什么还在排队？"}""")}]")
         assertEquals("任务 6 为什么还在排队？", cancellableHeldTurn(translated, emptyList())?.words)
     }
 }
