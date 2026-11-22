@@ -11,6 +11,7 @@ import {
 
 import { generateToken, sha256 } from '../common/crypto.util';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
+import { issueDriveMountCredential, revokeDriveMountCredentials } from '../drive/drive-mount-credential';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { ManagedKubeClient } from './kube-client';
 import { KubernetesBackend } from './kubernetes-backend';
@@ -753,6 +754,8 @@ export class ManagedRunnerManager {
       const adopted = await this.adoptCredential(issued.mapping, issued.credential);
       if (adopted) return { next: adopted };
     }
+    const drive = await this.ensureDriveMount(issued.mapping);
+    if (drive) return drive;
     return {
       next: await this.commit(issued.mapping, {
         managementState: 'STARTING',
@@ -1155,6 +1158,8 @@ export class ManagedRunnerManager {
         });
         if (count === 0) throw new Superseded();
         await tx.runner.update({ where: { id: mapping.runnerId }, data: { tokenHash: sha256(generateToken(32)) } });
+        // The drive's mount credential of this generation goes with its runner credential (§8.2).
+        await revokeDriveMountCredentials(tx, mapping.runnerId, mapping.generation + 1);
         if (held && compute) await releaseCapacity(tx, held.pool, compute, null);
       },
       loggedRetry(this.log, 'managedRunners.fallAsleep'),
@@ -1474,6 +1479,8 @@ export class ManagedRunnerManager {
         });
         if (count === 0) throw new Superseded();
         await tx.runner.update({ where: { id: mapping.runnerId }, data: { tokenHash: sha256(generateToken(32)) } });
+        // The drive's mount credential of this generation goes with its runner credential (§8.2).
+        await revokeDriveMountCredentials(tx, mapping.runnerId, mapping.generation + 1);
       },
       loggedRetry(this.log, 'managedRunners.fence'),
     );
@@ -1515,6 +1522,8 @@ export class ManagedRunnerManager {
         });
         if (count === 0) throw new Superseded();
         await tx.runner.update({ where: { id: mapping.runnerId }, data: { tokenHash: sha256(generateToken(32)) } });
+        // The drive's mount credential of this generation goes with its runner credential (§8.2).
+        await revokeDriveMountCredentials(tx, mapping.runnerId, mapping.generation + 1);
       },
       loggedRetry(this.log, 'managedRunners.advanceGeneration'),
     );
@@ -1736,6 +1745,8 @@ export class ManagedRunnerManager {
           });
           if (count === 0) throw new Superseded();
           if (retired) await tx.runner.update({ where: { id: mapping.runnerId }, data: { tokenHash: sha256(generateToken(32)) } });
+          // The drive's mount credential of the retired generation goes with its runner credential (§8.2).
+          if (retired) await revokeDriveMountCredentials(tx, mapping.runnerId, mapping.generation + 1);
           if (held && compute) await releaseCapacity(tx, held.pool, compute, null);
           await tx.activity.create({
             data: {
@@ -1871,6 +1882,38 @@ export class ManagedRunnerManager {
     const problem = this.backend.credentialProblem(credential, current);
     if (problem) throw new ManagedRunnerConflict('SECRET_CONFLICT', problem);
     return { mapping: current, credential };
+  }
+
+  /**
+   * The Orbit Files drive's mount credential of the mapping's generation, delivered for the mounter before any
+   * instance of the generation is created (docs/orbit-files-drive-technical-design.md §4.3, §6.1): the CSI plugin reads
+   * it when the kubelet publishes the drive. An older generation's is removed first. Issuing revokes every live mount
+   * credential of the runner, this generation's included, so one that was issued and never delivered (a crash, a
+   * failed create) holds nothing. Null once it is in place, or where runners receive no drive.
+   */
+  private async ensureDriveMount(mapping: ManagedRunner): Promise<Step | null> {
+    const drive = this.backend.driveMount;
+    if (!drive) return null;
+    const mine = (found: ManagedCredential) => found.ownerId === mapping.ownerId && found.runnerId === mapping.runnerId;
+    const current = (found: ManagedCredential) => mine(found) && found.generation === mapping.generation && !!found.token && !found.removing;
+    const found = await drive.read(mapping);
+    if (found && current(found)) return null;
+    if (found && !mine(found)) {
+      throw new ManagedRunnerConflict('DRIVE_SECRET_CONFLICT', `${drive.name} names another owner or runner`);
+    }
+    if (found) {
+      if (found.removing) return this.waitWithin(mapping);
+      await drive.remove(mapping, found);
+    }
+    await revokeDriveMountCredentials(this.prisma, mapping.runnerId, mapping.generation + 1);
+    const { token } = await issueDriveMountCredential(this.prisma, { ownerId: mapping.ownerId, runnerId: mapping.runnerId, generation: mapping.generation });
+    const delivered = await drive.deliver(mapping, token);
+    if (!mine(delivered)) throw new ManagedRunnerConflict('DRIVE_SECRET_CONFLICT', `${drive.name} names another owner or runner`);
+    if (current(delivered) && delivered.token === token) return null;
+    // Another one under the name (an older one not gone yet, or one whose credential the issue above revoked):
+    // removed, and this generation's delivered on a later pass.
+    if (!delivered.removing) await drive.remove(mapping, delivered);
+    return this.waitWithin(mapping);
   }
 
   /** An instance under the fixed name that is not this generation's is a conflict for an operator.
