@@ -131,22 +131,27 @@ func TestSweepTmpWhenIdleWaitsWhileAnythingRuns(t *testing.T) {
 	}
 }
 
-// Only a directory of home's own volume, and never home itself, is a managed runner's /tmp to sweep.
-func TestDirOnVolumeOf(t *testing.T) {
+// Only home/.orbit-tmp itself, a real directory, is a managed runner's /tmp to sweep: not home, not another
+// directory, and not whatever a link put in its place points at.
+func TestIsVolumeTmpDir(t *testing.T) {
 	home := t.TempDir()
-	tmp := filepath.Join(home, ".orbit-tmp")
+	tmp := filepath.Join(home, managedTmpSubdir)
+	if isVolumeTmpDir(tmp, home) {
+		t.Error("a temporary directory that is not there reads as the volume's")
+	}
 	must(t, os.Mkdir(tmp, 0o1777))
-	if !dirOnVolumeOf(tmp, home) {
-		t.Error("a directory of home's volume reads as elsewhere")
+	if !isVolumeTmpDir(tmp, home) {
+		t.Error("home/.orbit-tmp does not read as the volume's temporary directory")
 	}
-	if dirOnVolumeOf(home, home) {
-		t.Error("home itself reads as its own temporary directory")
+	if isVolumeTmpDir(home, home) || isVolumeTmpDir(t.TempDir(), home) {
+		t.Error("another directory reads as the volume's temporary directory")
 	}
-	if dirOnVolumeOf("/proc", home) {
-		t.Error("another filesystem reads as home's volume")
-	}
-	if dirOnVolumeOf(filepath.Join(home, "missing"), home) {
-		t.Error("a directory that is not there reads as home's volume")
+	state := filepath.Join(home, ".orbit")
+	must(t, os.Mkdir(state, 0o700))
+	must(t, os.Remove(tmp))
+	must(t, os.Symlink(".orbit", tmp))
+	if isVolumeTmpDir(state, home) {
+		t.Error("the runner's state, behind a link in the temporary directory's place, reads as sweepable")
 	}
 }
 
