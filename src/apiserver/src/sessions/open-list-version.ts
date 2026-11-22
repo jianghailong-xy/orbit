@@ -70,6 +70,14 @@ export interface OpenListVersionParts {
   version: string;
   epochs: Record<string, string>;
   steady: string;
+  /**
+   * What the realtime hint poller compares besides the counter sums (docs/list-freshness-scope-hints.md
+   * §5.0): the version's non-counter inputs with the runner rows and their presence rows left out, and
+   * each runner's `steady` and the background-job holders of its presence row (the queued explanation
+   * reads them) in their place. A heartbeat or a runner column outside `steady` moves the
+   * version and not this.
+   */
+  hintClock: string;
   /** How many of the account's decision deadlines have passed (the version's own count of them). */
   deadlinesPassed: number;
 }
@@ -118,6 +126,11 @@ export async function readOpenListVersionParts(
       (SELECT count(*)::text || '/' || COALESCE(sum(hashtextextended(v, 0)), 0)::text FROM runners) AS runner,
       -- Those runners' presence rows, which a heartbeat rewrites without touching the runner's own.
       ${rowsOf('x', Prisma.sql`FROM runner_presence x WHERE x.runner_id IN (SELECT id FROM runners)`)} AS runner_presence,
+      -- The sessions each runner's last beat says hold a slot through a background job: what the queued
+      -- explanation reads from presence (runnerBackgroundHeldSessions). Only the hint token carries it, never the version.
+      (SELECT string_agg(p.runner_id::text || ':' || COALESCE((SELECT string_agg(h::text, ',' ORDER BY h)
+                                                                  FROM unnest(p.background_job_session_ids) h), ''), ';' ORDER BY p.runner_id)
+         FROM runner_presence p WHERE cardinality(p.background_job_session_ids) > 0 AND p.runner_id IN (SELECT id FROM runners)) AS bg_holders,
       -- Small enough to keep reading whole: every share link the account owns.
       ${ownedBy('share_link')} AS share_link,
       -- The thresholds the list decides on Postgres' clock. Each only flips one way as time passes.
@@ -157,7 +170,7 @@ export async function readOpenListVersionParts(
       ) d) AS deadlines
   `);
 
-  const { bg_jobs, runner_clock, deadlines, ...rows } = row;
+  const { bg_jobs, runner_clock, deadlines, bg_holders, ...rows } = row;
   // Same predicates as the readers, on the same instant-or-earlier: each count only moves one way.
   const deadlinesPassed = ((deadlines ?? []) as Array<number | null>)
     .filter((at) => at != null && at <= nowMs).length;
@@ -182,7 +195,14 @@ export async function readOpenListVersionParts(
     .update(JSON.stringify(runners.map(({ id, name, status, online }) => [id, name, status, online])))
     .digest('base64url')
     .slice(0, 27);
-  return { version, epochs, steady, deadlinesPassed };
+  const hintClock = createHash('sha256')
+    .update(JSON.stringify([
+      steady, bg_holders ?? null, rows.foreign_running, rows.share_link, rows.runners_offline_sql, rows.fenced, rows.share_links_live,
+      deadlinesPassed, freshJobs, runnersOnline,
+    ]))
+    .digest('base64url')
+    .slice(0, 27);
+  return { version, epochs, steady, hintClock, deadlinesPassed };
 }
 
 /**
@@ -214,6 +234,21 @@ export const OPEN_LIST_UNDRAWN_TURN_COLUMNS = [
   'lease_deadline_at', 'lease_generation',
   'display_prompt', 'translation_state', 'translation_lang', 'translation_failure_reason', 'translation_http_status',
   'wiki_context', 'coordinator_context_key',
+] as const;
+
+/**
+ * The `workspace` columns a runner heartbeat's directory and disk probe writes, none of which an Open
+ * list draws (migration 1427_open_list_workspace_probes, `open_list_bump_owner`): the row reads a
+ * workspace's id, name, model and effort, and the queued gates its clone_state and, against the
+ * floor of a never-started PENDING session's runner, its free bytes. So an UPDATE that changes only
+ * these moves no counter, except a free-bytes change that flips that disk gate's verdict
+ * (common/runner-disk-gate.ts `sessionDiskHoldSql`), which the function bumps on by itself
+ * (`open-list-workspace-probes.pg.spec.ts`). A column the list starts to read must leave this list
+ * and that function.
+ */
+export const OPEN_LIST_UNDRAWN_WORKSPACE_COLUMNS = [
+  'work_dir_exists', 'work_dir_is_git', 'work_dir_probed_at', 'work_dir_free_bytes', 'work_dir_total_bytes',
+  'repo_url',
 ] as const;
 
 /** The views the version answers for: Open, and its legacy alias. */

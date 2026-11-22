@@ -97,5 +97,9 @@
 - **P2**（依赖 P1 的服务端项）：服务端 `sessions.list_changed` 提示 + 按版本共享构建 + 事件摘要每事件只算一次（S2）；随后 Apple 撤掉 4 s 地板（A1），Web 与 Android 改用 `since=` 增量读 + 提示驱动。
 - **P3**：其它列表端点的条件读（S3）；收窄版本（S4：把心跳时间戳移出列表行，不可见列不计数）；若度量显示运行中会话的预览更新仍是读的大头，再让事件携带预览字段。
 - **P4（since= 只构建变动的行，任务 350QmELfyepZLNtXEsWQz）**：版本是整个账户的，忙碌时几乎每秒都变，所以 P2 之后的 `since=` 读仍几乎每次整表构建（生产 2026-11-19：一个 workspace 列约 550 行，每次只变 1–3 行）。游标快照现在还保存版本的各部分（每个源的计数、runner 的名称/状态/在线、已过的期限）和每行一个标记；版本变了而变动的源都能逐行判断时，先做一次轻量探测（每行自身的 ctid/xmin、它读的任务与根会话的值、在途轮次，以及几张账户级小表），只构建标记变了的行和排队行。行的附加部分（审批卡、待决事项、回复对象、评审）只在它自己的源、期限或协调者挂起的问题变化时才逐行全读，否则只读变动行、已有内容的行和协调者行。标签、定时唤醒或新加的源变化时仍整表构建。写路径不变，没有迁移。
+- **P5 (design only, 2026-11-22; task 351lKeumGIjTw8S8IoUzt)**: hints per scope, so that an Open list reads only when its own scope may have moved. The design is in [list-freshness-scope-hints.md](./list-freshness-scope-hints.md).
+  - Measured, most empty reads come from heartbeat writes that no list draws: the workspace rows' directory probes, and the presence rows the clock tick hashes.
+  - So it recommends, first, a hint token without heartbeats and an end to hints from landing-only sources.
+  - It fully specifies per-workspace counter keys with `hints=list_scopes`, but builds them only if a re-measure after those fixes still shows hints from outside the list's own workspace.
 
 每一步都用同一组生产数据度量：`pg_stat_statements` 区间增量（列表构建与版本探测的调用数和总耗时），以及网关日志中 `/api/sessions` 按客户端类型、按 200/304/空 delta 的请求数。
