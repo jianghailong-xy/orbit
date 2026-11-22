@@ -1,0 +1,199 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Codex sandbox warning — Fix with an agent</title><style>
+:root{--bg-base:#fff;--bg-subtle:#fafbfc;--bg-sunken:#f4f5f7;--border:#dee0e3;--border-subtle:#eceef1;--text-1:#1f2329;--text-2:#646a73;--text-3:#8f959e;--text-4:#a8acb3;--brand:#3370ff;--brand-tint:#eaf1ff;--brand-border:#bcd3ff;--error:#cf3b35;--error-bg:#fdeceb;--error-border:#ffccc7;--warning:#c2710c;--warning-solid:#fa8c16;--warning-bg:#fff4e6;--warning-border:#ffd591;--success:#1a7f37;--success-bg:#e8f6ec}
+*{box-sizing:border-box}body{margin:0;background:#f2f3f5;font-family:Inter,"Noto Sans SC",-apple-system,"Segoe UI",sans-serif;color:var(--text-1);width:1400px;padding:36px 40px 44px}
+h1{font-size:26px;margin:0 0 6px}.sub{color:var(--text-2);font-size:14px;margin-bottom:26px;line-height:1.7;max-width:1180px}
+.sub code,.dec code,.f code{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12px;background:#fff;border:1px solid var(--border-subtle);border-radius:4px;padding:0 3px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:26px}
+.f{background:#fff;border-radius:14px;padding:18px 20px 22px;box-shadow:0 1px 3px rgba(0,0,0,.06);min-width:0}
+.fh{font-size:16px;font-weight:600;margin-bottom:4px}.fh b{display:inline-block;width:24px;height:24px;border-radius:12px;background:var(--text-1);color:#fff;text-align:center;line-height:24px;font-size:13px;margin-right:8px}
+.fc{font-size:13px;color:var(--text-2);margin-bottom:14px;line-height:1.65}
+.chat{width:660px;max-width:100%;margin:0 auto;padding:2px 0 6px;font-size:13px}
+.bub{max-width:78%;margin:0 0 14px auto;background:var(--brand-tint);border-radius:14px 14px 4px 14px;padding:9px 13px;line-height:1.55}
+.step{display:flex;gap:8px;align-items:baseline;color:var(--text-2);font-size:12.5px;margin:0 0 14px}
+.step .dot{color:var(--success)}
+.reply{margin:0 0 14px;line-height:1.6;color:var(--text-1)}
+.turn{border-top:1px solid var(--border-subtle);margin:2px 0 12px;padding-top:10px;font-size:11.5px;color:var(--text-4)}
+/* the transcript rows, as index.css draws them */
+.chat-error{color:var(--error);font-size:13px;line-height:1.5;margin:6px 0;display:flex;gap:6px;align-items:baseline;overflow-wrap:anywhere}
+.chat-error .m{flex:none}
+.chat-error[data-level] .t{color:var(--text-2)}
+.chat-error[data-level="WARN"] .m{color:var(--warning)}
+.chat-notice{color:var(--warning);font-size:13px;line-height:1.5;margin:6px 0}
+.chat-diagnostic{display:flex;gap:6px;align-items:baseline;overflow-wrap:anywhere}
+.chat-diagnostic .m{flex:none;color:var(--warning)}
+.chat-diagnostic .label{flex:none;color:var(--text-3);font-size:11px;font-variant-numeric:tabular-nums}
+.chat-diagnostic .t{min-width:0;color:var(--text-2)}
+.chat-diagnostic .t a{color:inherit;text-decoration:underline}
+.repeat{margin-left:6px;font-size:12px;font-variant-numeric:tabular-nums;opacity:.7;color:var(--text-3);white-space:nowrap}
+/* the new action area */
+.fixbox{margin:10px 0 14px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg-subtle)}
+.acts{display:flex;align-items:center;gap:14px}
+.btn{font:inherit;font-size:12.5px;border:1px solid var(--border);background:#fff;border-radius:7px;padding:5px 12px;color:var(--text-1);white-space:nowrap}
+.btn.pri{background:var(--brand);border-color:var(--brand);color:#fff}
+.btn:disabled{color:var(--text-4);background:#f5f6f7;border-color:var(--border-subtle)}
+.why{margin-top:6px;font-size:11.5px;color:var(--text-3);line-height:1.55}
+.fixing{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text-2)}
+.spin{width:12px;height:12px;border-radius:6px;border:2px solid var(--brand-border);border-top-color:var(--brand);display:inline-block}
+.link{color:var(--brand);font-size:12px;text-decoration:none}
+.new{outline:2px dashed #f5a623;outline-offset:4px;border-radius:8px}
+.today{outline:2px dashed #b9bec6;outline-offset:4px;border-radius:8px}
+.note{margin-top:12px;font-size:12px;color:#8a5a00;background:#fff8e6;border-radius:8px;padding:8px 10px;line-height:1.6}
+.done{font-size:12.5px;color:var(--text-2);line-height:1.55}
+.dec{margin-top:26px;background:#fff;border-radius:14px;padding:18px 22px}
+.dec h2{font-size:17px;margin:0 0 12px}
+.d{display:grid;grid-template-columns:230px 1fr 1fr;gap:14px;padding:10px 0;border-top:1px solid var(--border-subtle);font-size:13px;line-height:1.65}
+.d:first-of-type{border-top:0}.opt{padding:8px 10px;border-radius:8px;background:#f7f8fa}.opt.rec{background:var(--brand-tint);box-shadow:inset 0 0 0 1px var(--brand-border)}
+.opt b{display:block;margin-bottom:2px}.tag{font-size:11px;color:var(--brand);font-weight:600}
+.msg{margin-top:10px;border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:var(--bg-subtle)}
+.msg .who{font-size:11.5px;color:var(--text-3);margin-bottom:4px}.msg .t{font-size:12.5px;line-height:1.6}
+.phone{width:360px;margin:0 auto;border:10px solid #1f2329;border-radius:34px;background:var(--bg-base);padding:16px 12px 18px;box-shadow:0 6px 18px rgba(0,0,0,.12)}
+.phone .chat{width:100%}
+.phone .btn.pri{width:100%;text-align:center}
+@media (max-width:900px){body{width:auto}.grid{grid-template-columns:1fr}.chat{width:100%}}
+</style></head><body>
+<h1>会话里的 Codex sandbox 警告 · 让 Agent 去修</h1>
+<div class="sub">
+位置：会话记录（transcript）里 Codex 自己写到 stderr 的那一行——你截图里的 <i>Codex could not find bubblewrap on PATH…</i>。今天它是一条红色错误行，
+读起来像这一回合失败了。新做法：runner 认出这一行属于 <b>sandbox · bubblewrap_missing</b>，按可恢复的诊断画成琥珀色 warning 行（Codex 会先用自带的 bubblewrap，
+回合并没有失败），并在条目下方给一个 <b>Fix with an agent</b>。规则照搬已批的那套：按一下，就在<b>这台机器上</b>用<b>最近用过的 workspace</b> 及其默认设置起一个会话，
+不弹窗、不让选。四个客户端同一套。黄色虚线框是新增的部分，灰色虚线框是今天的样子。界面文字为英文，说明为中文。
+</div>
+<div class="grid">
+
+<!-- 1 today -->
+<div class="f"><div class="fh"><b>1</b>今天：红色错误行，没有下一步</div>
+<div class="fc">Codex 每起一次 app-server 就记一遍，长会话里会重复很多次。它其实是 <span style="color:var(--warning)">ERROR</span> 级别的日志，不是回合失败，但今天按错误画。</div>
+<div class="chat">
+ <div class="bub">The login test is flaky on the shared pool. Can you make it deterministic?</div>
+ <div class="step"><span class="dot">✓</span><span>Ran <b>go test ./…</b> · 11.4s</span></div>
+ <div class="today">
+  <div class="chat-error"><span class="m">✖</span><span class="t">Codex could not find bubblewrap on PATH. Install bubblewrap with your OS package manager. See the sandbox prerequisites: <a href="#">https://developers.openai.com/codex/concepts/sandboxing#prerequisites</a>. Codex will use the bundled bubblewrap in the meantime.</span></div>
+ </div>
+ <div class="turn">下一回合…</div>
+ <div class="reply">I found the flake: the test shares one temp directory across parallel packages. Moving it under <code>t.TempDir()</code>.</div>
+</div>
+<div class="note">你截图里就是这样：一条红色错误行夹在正常回合之间，没有按钮，也没有说明它要不要紧。</div>
+</div>
+
+<!-- 2 caught + ready -->
+<div class="f"><div class="fh"><b>2</b>抓到了、能修：琥珀色 warning + 条目下方的按钮</div>
+<div class="fc">runner 把这一行转成结构化的诊断，四个客户端都按已有的诊断行画：琥珀色的 ⚠、暗色的 <span style="font-family:monospace">sandbox · bubblewrap_missing</span> 标签，重复的行折叠成 <span class="repeat">×4</span>。动作放在条目下方单独一行，不挤进句子里。</div>
+<div class="chat">
+ <div class="bub">The login test is flaky on the shared pool. Can you make it deterministic?</div>
+ <div class="step"><span class="dot">✓</span><span>Ran <b>go test ./…</b> · 11.4s</span></div>
+ <div class="new">
+  <div class="chat-notice chat-diagnostic">
+   <span class="m">⚠</span><span class="label">sandbox · bubblewrap_missing</span>
+   <span class="t">Codex could not find bubblewrap on PATH. Install bubblewrap with your OS package manager. See the sandbox prerequisites: <a href="#">https://developers.openai.com/codex/concepts/sandboxing#prerequisites</a>. Codex will use the bundled bubblewrap in the meantime.<span class="repeat">×4</span></span>
+  </div>
+  <div class="fixbox">
+   <div class="acts"><button class="btn pri">Fix with an agent</button></div>
+   <div class="why">Starts a session in orbit-develop on this machine, with Codex.</div>
+  </div>
+ </div>
+ <div class="turn">下一回合…</div>
+ <div class="reply">I found the flake: the test shares one temp directory across parallel packages. Moving it under <code>t.TempDir()</code>.</div>
+</div>
+</div>
+
+<!-- 3 fixing -->
+<div class="f"><div class="fh"><b>3</b>修理中：按钮换成会话链接</div>
+<div class="fc">会话开着时，同一台机器的同一个警告不能再起第二个 Agent。按下后不换页：这一行告诉你在哪个 workspace、点 <i>Open session</i> 去看。</div>
+<div class="chat">
+ <div class="step"><span class="dot">✓</span><span>Ran <b>go test ./…</b> · 11.4s</span></div>
+ <div class="new">
+  <div class="chat-notice chat-diagnostic">
+   <span class="m">⚠</span><span class="label">sandbox · bubblewrap_missing</span>
+   <span class="t">Codex could not find bubblewrap on PATH. Install bubblewrap with your OS package manager. See the sandbox prerequisites: <a href="#">https://developers.openai.com/codex/concepts/sandboxing#prerequisites</a>. Codex will use the bundled bubblewrap in the meantime.<span class="repeat">×4</span></span>
+  </div>
+  <div class="fixbox">
+   <div class="fixing"><span class="spin"></span>An agent is fixing this in orbit-develop · <a class="link" href="#">Open session</a></div>
+  </div>
+ </div>
+ <div class="turn">下一回合…</div>
+</div>
+</div>
+
+<!-- 4 blocked -->
+<div class="f"><div class="fh"><b>4</b>修不了：置灰并写明原因</div>
+<div class="fc">沿用同一套原因和措辞：机器离线、这台机器上还没有 workspace、或那个 workspace 的引擎在这台机器上已退出登录。按钮置灰，原因写在下面；不会当场新建 workspace，也不会悄悄换引擎。</div>
+<div class="chat">
+ <div class="step"><span class="dot">✓</span><span>Ran <b>go test ./…</b> · 11.4s</span></div>
+ <div class="new">
+  <div class="chat-notice chat-diagnostic">
+   <span class="m">⚠</span><span class="label">sandbox · bubblewrap_missing</span>
+   <span class="t">Codex could not find bubblewrap on PATH. Install bubblewrap with your OS package manager. See the sandbox prerequisites: <a href="#">https://developers.openai.com/codex/concepts/sandboxing#prerequisites</a>. Codex will use the bundled bubblewrap in the meantime.<span class="repeat">×4</span></span>
+  </div>
+  <div class="fixbox">
+   <div class="acts"><button class="btn" disabled>Fix with an agent</button></div>
+   <div class="why">An agent can't run here: orbit-develop uses Claude Code, which is signed out on this machine. Sign in to Claude Code on the machine page to use this.</div>
+  </div>
+ </div>
+</div>
+</div>
+
+<!-- 5 settled -->
+<div class="f"><div class="fh"><b>5</b>修好了：这一条变成历史，不再给按钮</div>
+<div class="fc">修复会话结束后，这一行留着（它确实发生过），但不再提供第二次 Agent；换成一句安静的结果行，仍然可以点进当时的会话。之后 Codex 不再报这一行，也就没有新的行；如果它又报了，会是一条带新按钮的新行。</div>
+<div class="chat">
+ <div class="step"><span class="dot">✓</span><span>Ran <b>go test ./…</b> · 11.4s</span></div>
+ <div class="chat-notice chat-diagnostic">
+  <span class="m">⚠</span><span class="label">sandbox · bubblewrap_missing</span>
+  <span class="t">Codex could not find bubblewrap on PATH. Install bubblewrap with your OS package manager. See the sandbox prerequisites: <a href="#">https://developers.openai.com/codex/concepts/sandboxing#prerequisites</a>. Codex will use the bundled bubblewrap in the meantime.<span class="repeat">×4</span></span>
+ </div>
+ <div class="done" style="margin:8px 0 14px">Fixed by an agent in orbit-develop · <a class="link" href="#">Open session</a></div>
+ <div class="turn">之后的回合不再出现这一行</div>
+ <div class="reply">Bubblewrap is on PATH now, so Codex's sandbox is back to the system copy.</div>
+</div>
+<div class="msg"><div class="who">修复会话的首条消息（由这一行的信息拼成）· 标题 “Fix: Codex can't find bubblewrap on vmi3753066”</div>
+<div class="t">Codex on this machine (vmi3753066, Linux) reports that it could not find bubblewrap on PATH, so it is using its bundled copy. If <code>bwrap --version</code> already works, tell me and stop. Otherwise install bubblewrap with this machine's package manager (for example <code>apt-get install -y bubblewrap</code> on Debian/Ubuntu, <code>dnf install -y bubblewrap</code> on Fedora, <code>apk add bubblewrap</code> on Alpine) and confirm <code>bwrap --version</code> works. Ask me before installing system packages or changing system files. When you are done, tell me what <code>bwrap --version</code> reports; Codex uses it the next time it starts.</div></div>
+</div>
+
+<!-- 6 phone -->
+<div class="f"><div class="fh"><b>6</b>手机：同样的条目，按钮占满一行</div>
+<div class="fc">iOS / Android 的 transcript 共用同一套行。窄屏时标签和句子照常换行，按钮放到整行宽，原因行在按钮下面——和机器页 Fix with an agent 的移动端一致。</div>
+<div class="phone">
+ <div class="chat">
+  <div class="bub" style="font-size:13px">The login test is flaky on the shared pool. Can you make it deterministic?</div>
+  <div class="step"><span class="dot">✓</span><span>Ran <b>go test ./…</b> · 11.4s</span></div>
+  <div class="new">
+   <div class="chat-notice chat-diagnostic" style="font-size:12.5px">
+    <span class="m">⚠</span><span class="label">sandbox · bubblewrap_missing</span>
+    <span class="t">Codex could not find bubblewrap on PATH. Install bubblewrap with your OS package manager. See the sandbox prerequisites: <a href="#">developers.openai.com/codex/…</a>. Codex will use the bundled bubblewrap in the meantime.<span class="repeat">×4</span></span>
+   </div>
+   <div class="fixbox">
+    <button class="btn pri">Fix with an agent</button>
+    <div class="why">Starts a session in orbit-develop on this machine, with Codex.</div>
+   </div>
+  </div>
+ </div>
+</div>
+<div class="note">手机上按钮整行宽，和安装失败 / 引擎更新失败两处的 Fix with an agent 一样；不是行内小按钮。</div>
+</div>
+
+</div>
+
+<div class="dec"><h2>需要你定的 3 件事（蓝框为推荐）</h2>
+<div class="d"><div><b>1. 按钮放在哪</b></div>
+ <div class="opt rec"><span class="tag">推荐</span><b>A. 条目下方单独一行</b>这句诊断有两句正文加一个链接，按钮挤在句末会截断正文；放在下方也是机器页那两处已有的位置。</div>
+ <div class="opt"><b>B. 行内，句子末尾</b>更紧凑，一屏里占的高度小；窄屏上按钮会掉到下一行，读起来像句子的结尾。</div></div>
+<div class="d"><div><b>2. 修复会话结束后，这条历史怎么画</b><br><span style="color:var(--text-3);font-size:12px">（会话记录是历史，不会像机器页的红框那样自己消失）</span></div>
+ <div class="opt rec"><span class="tag">推荐</span><b>A. 留住链接，不再给按钮</b>显示 “Fixed by an agent in X · Open session”。这一条已经处理过；下一次 Codex 再报会是新的一行、带新的按钮。服务端在 runner 上记“最近一次修复会话”，关掉也还读得到。</div>
+ <div class="opt"><b>B. 按钮一直留着</b>实现最简单（只看“现在有没有 Agent 在修”）；但对一条已修好的旧警告再按，会再起一个 Agent 去检查。</div></div>
+<div class="d"><div><b>3. 这条提醒的语气</b></div>
+ <div class="opt rec"><span class="tag">推荐</span><b>A. 琥珀色 WARN</b>Codex 明说会用自带的 bubblewrap，回合没有失败；把它画成可恢复的诊断，和模型目录、MCP 那些非致命诊断一致。</div>
+ <div class="opt"><b>B. 保持红色 ERROR</b>像截图一样更醒目；但会继续把一条非致命日志读成回合失败，而且会让人以为要马上处理。</div></div>
+</div>
+
+<div class="dec"><h2>落地（四端同一套，按代价排）</h2>
+<div style="font-size:13px;line-height:1.9">
+1. <code>runner-go</code>：<code>codexStderrDiagnostic</code> 认出这一行 → <code>component: "sandbox"</code>、<code>code: "bubblewrap_missing"</code>、<code>severity: "WARN"</code>、<code>impact: "degraded"</code>、<code>recoverable: true</code>；exec 和 app-server 两条路径共用。Go 测试覆盖结构化诊断与原始 stderr 并存。<br>
+2. <code>shared</code>：<code>RunnerAttentionFixKind</code> 加 <code>sandboxMissing</code>（带引擎 <code>codex</code>）；<code>RunnerAgentFix</code> 增一个“已开始的修复会话”列表（关掉也保留），供会话里的历史行用。<br>
+3. <code>apiserver</code>：<code>attention-fix.ts</code> 的首条消息（先检查 <code>bwrap</code> 是否已在，再按发行版装）、key 校验、<code>agentFixesOf</code> 的已处理列表；pg spec 覆盖起会话、去重、离线 / 已退出登录 / 无 workspace 被拒。<br>
+4. <code>web</code>：<code>Transcript.tsx</code> 的诊断行加操作区，<code>WorkspaceView</code> 提供 press 与 runner 的 agentFix 状态；单测覆盖 5 个状态（今天、能修、修理中、修不了、修好）。<br>
+5. <code>OrbitKit / OrbitApp</code>：<code>EngineStderr</code> 的 legacy 识别、<code>DiagnosticNotice</code> 带上 component/code、<code>DiagnosticNoticeRow</code> 加按钮与状态行；测试。<br>
+6. <code>Android</code>：<code>EngineStderr</code>、<code>TranscriptRows</code>、行 UI、<code>SessionConsole</code> 的 press；测试。<br>
+7. 文案全部英文（<code>copyLanguage.test</code>）；四端的行文案与状态在同一组测试里对齐。
+</div></div>
+</body></html>
+

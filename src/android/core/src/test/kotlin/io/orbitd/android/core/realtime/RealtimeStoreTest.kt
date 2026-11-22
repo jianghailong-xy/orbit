@@ -169,6 +169,30 @@ class RealtimeStoreTest {
         assertEquals("null", store.state.value.session!!.snapshot!!.standing["ownerConfirmation"].toString())
     }
 
+    /** One AuthSession's reading-access step that never resumes holds up no other AuthSession's store. In the app's Robolectric tests
+     * such a step is a resume the main looper's reset dropped as its test ended: while one lock served the process, every later test's
+     * store waited on it before the open conversation's snapshot, stream and transcript, for the rest of the JVM. */
+    @Test fun aReadingAccessStepThatNeverResumesHoldsUpNoOtherSessionsStore() = runTest {
+        val never = CompletableDeferred<Unit>()
+        val stalled = AuthSession(HttpTransport { ApiResponse(200, "{}".encodeToByteArray()) },
+            MemoryCredentials().apply { value = StoredSession(serverA.value, tokens()) },
+            MemoryInstances().apply { value = serverA.value }, object : SessionDataStore {
+                override suspend fun read(account: AccountKey, kind: DataKind, key: String): ByteArray? { never.await(); return null }
+                override suspend fun write(account: AccountKey, kind: DataKind, key: String, bytes: ByteArray) = Unit
+                override suspend fun clearAll() = Unit
+            }, "test", dispatcher = StandardTestDispatcher(testScheduler))
+        stalled.restore()
+        val handle = (stalled.state.value as AuthState.SignedIn).handle
+        val step = backgroundScope.launch { ReadingCache(stalled, handle, "s1").permission() }
+        runCurrent()
+        assertTrue(step.isActive)
+        val rig = Rig(this)
+        val (_, store) = rig.start()
+        assertNotNull("the open conversation never reached its snapshot", store.state.value.session?.snapshot)
+        assertTrue(rig.reads.any { it.api.path == listOf("sessions", "s1", "approvals") })
+        assertTrue(rig.reads.any { it.api.path.takeLast(2) == listOf("events", "page") })
+    }
+
     /** A07-14 (iOS 0588fe262): the snapshot reads the turns in their active view, which lists the head a runner has taken beside the
      * queue — the bare view leaves it out — and every read of it does, a re-read included. */
     @Test fun theTurnsAreReadInTheirActiveView() = runTest {

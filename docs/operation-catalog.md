@@ -1,7 +1,7 @@
 # Orbit operation catalogue v1.9.0
 
 > Generated from `src/runner-go/operation_catalog.go` — do not edit by hand.
-> Content hash: `0d19cc4813e8f212b237b73b387b43c4ed95768e7ac9d8f6a7317d879e67690f`.
+> Content hash: `b19ef77750262ad9616948e07ce755270738c6e5e353e230296caae11361cba6`.
 
 Every operation an Orbit agent can call is declared once in the operation catalogue. This table is that catalogue rendered for a person: `orbit capabilities --json` and the MCP `tools/list` payload are its two machine surfaces, and the leaf `--help` texts are held to it by tests. `MCP` and `CLI` say how each surface reaches the operation — `always`, an `orchestration` grant, an engine `permission_prompt` bridge, `session`-only, `headless`-only, or a `watch_switch`/`wiki_switch` — and `absent` when that surface deliberately has no door. Gates that must hold together are joined with `+` (for example `orchestration+watch_switch`). `Idempotency` is `read` (safe to repeat), `caller_key` (retry with the same key), `server_key` (a redelivered turn deduplicates) or `none` (re-read before retrying). `Plan` is what a session in Plan mode gets: the call `runs`, is `refused` with what to do instead, or its `own_gate` decides; the per-engine matrix is docs/permission-matrix.md.
 
@@ -37,6 +37,10 @@ Every operation an Orbit agent can call is declared once in the operation catalo
 | `bg_list` | background_job | low | no | none | no | read | runs | always | absent | See this session's background jobs. |
 | `bg_output` | background_job | low | no | none | no | read | runs | always | absent | Read a background job's output. |
 | `bg_run` | background_job | high | yes | none | no | none | own_gate | always | absent | Run a command in the background on this runner. |
+| `browser_clear_logins` | browser | high | yes | card (`orbit_browser_clear_logins`) | yes | none | refused | browser_switch | session+browser_switch — `orbit browser clear-logins` | Stop the account's Orbit Cloud browser and delete its saved logins, after the owner confirms. |
+| `browser_open` | browser | low | no | none | no | read | runs | browser_switch | session+browser_switch — `orbit browser open` | Start the account's Orbit Cloud browser and get its tab's address, optionally opening a page in it. |
+| `browser_request_sign_in` | browser | low | no | none | no | read | runs | browser_switch | session+browser_switch — `orbit browser request-sign-in` | Ask the account owner to sign in to a site in the Orbit Cloud runner's browser, and wait for their answer. |
+| `browser_status` | browser | low | no | none | no | read | runs | browser_switch | session+browser_switch — `orbit browser status` | Read the state of the account's Orbit Cloud browser. |
 | `condition_get` | schedule | low | no | none | no | read | runs | always | absent | Read a task's or a schedule's condition: its state, newest samples and events. |
 | `criterion_check_report` | project | high | yes | none | no | none | refused | always | absent | Report the Agent check this session is running. |
 | `criterion_check_start` | project | high | yes | none | no | none | refused | always | absent | Start a criterion check as the project's coordinator. |
