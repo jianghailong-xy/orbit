@@ -18,7 +18,9 @@ import { buildWorld, connect, FIXTURE_CASES, PAYLOAD_KINDS, readPayloads } from 
  * `runState`, `sessionState` and `filingState` — each one the kind carries, and which ones it carries — are compared
  * with session-payloads-legacy.golden.json. That table was written by this same spec and fixture at the commit its
  * `base` names, before step 5.1 changed anything (SESSION_PAYLOADS_LEGACY_WRITE=<path>). Never regenerate it to make
- * this pass: a difference is a changed wire value, which an already-shipped client reads.
+ * this pass: a difference is a changed wire value, which an already-shipped client reads. A case added to the fixture
+ * later gets its rows the same way, by running this spec and the new fixture at `base` (plan phase 5's settled
+ * landing: that run's other 77 rows were the table's, unchanged, and its 7 new ones were appended).
  */
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
