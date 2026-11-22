@@ -50,7 +50,11 @@ EOF
 fi
 
 echo "Downloading Orbit for ${os}-${arch}..."
-if ! curl -fsSL "$url" -o "$tmp.gz"; then
+# On a terminal, curl's progress meter shows size, percent, speed and time left; without one (CI,
+# image build) it stays silent, so a log is not filled with meter lines. -S keeps the error.
+progress="-s"
+[ -t 2 ] && progress=""
+if ! curl -fSL $progress "$url" -o "$tmp.gz"; then
   echo "orbit: download failed ($url)" >&2
   exit 1
 fi
