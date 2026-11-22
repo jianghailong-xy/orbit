@@ -249,7 +249,7 @@ func prepareDshAgentConfigAt(input DshLaunchInput, agent *DshAgentOverlay, execu
 	env = append(env, "DSH_HOME="+home, "DSH_AGENTS_HOME="+filepath.Join(home, "agents"), "DSH_PERMISSION_MODE="+input.FileMode,
 		"DSH_TELEMETRY_DISABLED=1", "ORBIT_DSH_API_KEY="+input.APIKey)
 	return DshLaunchSpec{Executable: executable, Args: args,
-		Env: env, Cwd: cwd, DshHome: home, Version: dshSupportedVersion, ConfigHash: owner.ConfigHash}, nil
+		Env: env, Cwd: cwd, DshHome: home, Version: dshSupportedVersion, ConfigHash: owner.ConfigHash, orbitSessionID: input.OrbitSessionID}, nil
 }
 
 const dshAgentPatchFile = "orbit-agent.patch.json"

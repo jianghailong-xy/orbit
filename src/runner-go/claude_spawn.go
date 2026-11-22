@@ -283,7 +283,7 @@ func spawnClaude(ctx context.Context, job *ClaimedSession, execDir string, args 
 	if sp.stderr, err = cmd.StderrPipe(); err != nil {
 		return nil, err
 	}
-	if err := startSessionProcess(cmd); err != nil {
+	if err := startSessionEngine(cmd, job.SessionID); err != nil {
 		return nil, err
 	}
 	return sp, nil

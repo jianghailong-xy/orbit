@@ -495,6 +495,7 @@ func (b *bgTailer) launchJob(p *bgPreparedJob) (bgJobStatus, error) {
 		f.Close()
 		return bgJobStatus{}, err
 	}
+	trackMemoryRoots(spec.SessionID, true, cmd.Process.Pid)
 	b.mu.Lock()
 	job.pid = cmd.Process.Pid
 	job.startedAt = time.Now()

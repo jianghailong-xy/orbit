@@ -67,12 +67,14 @@ func startInSessionScope(cmd *exec.Cmd) (*sessionScope, error) {
 		_ = control.Close()
 		return nil, err
 	}
-	if err := awaitSessionScopeStart(control, path); err != nil {
+	enginePID, err := awaitSessionScopeStart(control, path)
+	if err != nil {
 		_ = terminateSessionProcessTree(cmd)
 		_ = cmd.Wait()
 		_ = control.Close()
 		return nil, err
 	}
+	trackMemoryRoots(envValue(cmd.Env, "ORBIT_SESSION_ID"), false, cmd.Process.Pid, enginePID)
 	return &sessionScope{control: control}, nil
 }
 
@@ -83,27 +85,29 @@ func (s *sessionScope) close() {
 	}
 }
 
-// awaitSessionScopeStart reads the keeper's one report: "ok", or "error <errno> <message>" for a process
-// it could not start, which comes back as the error exec reports for one.
-func awaitSessionScopeStart(control *os.File, path string) error {
+// awaitSessionScopeStart reads the keeper's one report: "ok <pid>", or "error <errno> <message>"
+// for a process it could not start, which comes back as the error exec reports for one.
+func awaitSessionScopeStart(control *os.File, path string) (int, error) {
 	_ = control.SetReadDeadline(time.Now().Add(sessionScopeStartTimeout))
 	line, err := bufio.NewReader(control).ReadString('\n')
 	_ = control.SetReadDeadline(time.Time{})
 	if err != nil {
-		return fmt.Errorf("the session's process scope did not report starting %s: %w", path, err)
+		return 0, fmt.Errorf("the session's process scope did not report starting %s: %w", path, err)
 	}
 	report := strings.TrimSuffix(line, "\n")
-	if report == "ok" {
-		return nil
+	if reportedPID, ok := strings.CutPrefix(report, "ok "); ok {
+		if pid, err := strconv.Atoi(reportedPID); err == nil && pid > 0 {
+			return pid, nil
+		}
 	}
 	if rest, ok := strings.CutPrefix(report, "error "); ok {
 		code, message, _ := strings.Cut(rest, " ")
 		if errno, err := strconv.Atoi(code); err == nil && errno > 0 {
-			return &fs.PathError{Op: "fork/exec", Path: path, Err: syscall.Errno(errno)}
+			return 0, &fs.PathError{Op: "fork/exec", Path: path, Err: syscall.Errno(errno)}
 		}
-		return errors.New(message)
+		return 0, errors.New(message)
 	}
-	return fmt.Errorf("the session's process scope reported %q", report)
+	return 0, fmt.Errorf("the session's process scope reported %q", report)
 }
 
 type sessionScopeExit struct {
@@ -140,7 +144,7 @@ func runSessionScope(args []string) int {
 		fmt.Fprintf(control, "error %d %s\n", int(errno), strings.ReplaceAll(err.Error(), "\n", " "))
 		return 1
 	}
-	fmt.Fprintln(control, "ok")
+	fmt.Fprintln(control, "ok", process.Pid)
 	// The process holds the session's standard streams from here on, so each of them ends with it.
 	if null, err := os.OpenFile(os.DevNull, os.O_RDWR, 0); err == nil {
 		for _, std := range []int{0, 1, 2} {

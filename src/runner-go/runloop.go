@@ -1601,6 +1601,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 
 	loopCtx, stopLoop := context.WithCancelCause(context.Background())
 	loopCancel := func() { stopLoop(nil) }
+	defer startMemoryWatchdog(loopCtx, currentManagedInstance() != nil)()
 	// The other half of what a finished session's checkout can hold: one that still has
 	// uncommitted work is never reclaimed, so the control plane is told which ones those are
 	// (abandoned_checkout.go). Its own goroutine and its own clock — it reads every checkout,

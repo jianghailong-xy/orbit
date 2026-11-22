@@ -1329,7 +1329,7 @@ func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, stat
 		orbitMCP:        exe != "",
 		consentScope:    consentScope,
 	}
-	if err := startSessionProcess(cmd); err != nil {
+	if err := startSessionEngine(cmd, job.SessionID); err != nil {
 		cancel()
 		return nil, err
 	}
