@@ -136,6 +136,7 @@ COPY --from=downloads /opt/agy/ /opt/agy/
 COPY --from=downloads /opt/orbit-engines/ /opt/orbit-engines/
 COPY --from=dsh /opt/orbit-engines/engines/ /opt/orbit-engines/engines/
 COPY --chmod=0644 deploy/managed-runner/image/pins.json /usr/local/share/orbit/pins.json
+COPY --chmod=0644 deploy/managed-runner/image/orbit-browser-opener.sh /etc/profile.d/orbit-browser-opener.sh
 ENV PATH="/usr/local/go/bin:${PATH}" \
     HOME=/home/orbit \
     ORBIT_HOME=/home/orbit/.orbit \
@@ -164,6 +165,10 @@ RUN ln -s /opt/codex/bin/codex /usr/local/bin/codex \
  && chmod 0755 /usr/local/share/orbit \
  && git config --system user.name 'Orbit Runner' \
  && git config --system user.email runner@orbit.invalid
+# An image before a944a7f362 kept home at /var/lib/orbit/home. The entrypoint moves such a volume's home to /home/orbit
+# (move_earlier_home); this link keeps the paths that home recorded inside itself (git worktree links, the runner's
+# session state) resolving there.
+RUN install -d -o root -g root -m 0755 /var/lib/orbit && ln -s /home/orbit /var/lib/orbit/home
 # What changes with every source commit comes after the slow steps above, so a new commit reuses
 # them and rebuilds only the runner binary, the entrypoint and the version record. A build argument
 # reaches every RUN after its ARG, so the source SHA must not be declared any earlier.

@@ -275,6 +275,16 @@ export function catchUpWindowMs(rule: ScheduleRule, timezone: string, slot: Date
   return next ? next.getTime() - slot.getTime() : 7 * 24 * HOUR;
 }
 
+/** The last instant a run's slot may still start: its plannedAt plus one period of its rule (§5.2). */
+export function scheduleRunDeadline(schedule: Pick<Schedule, 'rule' | 'timezone'>, run: Pick<ScheduleRun, 'plannedAt'>): number {
+  try {
+    return run.plannedAt.getTime() + catchUpWindowMs(parseRule(schedule.rule), schedule.timezone, run.plannedAt);
+  } catch {
+    // A rule that no longer reads is what can make a start throw on every pass: a day, as for ONCE.
+    return run.plannedAt.getTime() + SCHEDULE_ONCE_CATCH_UP_MS;
+  }
+}
+
 @Injectable()
 export class ScheduleRunsService {
   private readonly logger = new Logger(ScheduleRunsService.name);
@@ -1253,14 +1263,8 @@ export class ScheduleRunsService {
     return 'RETRY';
   }
 
-  /** The last instant a run's slot may still start: its plannedAt plus one period of its rule (§5.2). */
   private deadline(schedule: Pick<Schedule, 'rule' | 'timezone'>, run: Pick<ScheduleRun, 'plannedAt'>): number {
-    try {
-      return run.plannedAt.getTime() + catchUpWindowMs(parseRule(schedule.rule), schedule.timezone, run.plannedAt);
-    } catch {
-      // A rule that no longer reads is what can make a start throw on every pass: a day, as for ONCE.
-      return run.plannedAt.getTime() + SCHEDULE_ONCE_CATCH_UP_MS;
-    }
+    return scheduleRunDeadline(schedule, run);
   }
 
   /**

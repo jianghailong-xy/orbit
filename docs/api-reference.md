@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 37 |
-| `user` | 494 |
+| `user` | 495 |
 | `admin` | 31 |
-| `runner` | 208 |
+| `runner` | 212 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **774** |
+| **Total** | **778** |
 
 ## Public routes
 
@@ -177,6 +177,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/managed-runner/ensure` | body `ManagedRunnerWriteDto` | `ManagedRunnerController.ensure` |
 | `POST` | `/api/managed-runner/retry` | body `ManagedRunnerWriteDto` | `ManagedRunnerController.retry` |
 | `POST` | `/api/managed-runner/sleep` | body `ManagedRunnerWriteDto` | `ManagedRunnerController.sleep` |
+| `POST` | `/api/managed-runner/update-now` | body `ManagedRunnerUpdateNowDto` | `ManagedRunnerController.updateNow` |
 | `POST` | `/api/managed-runner/wake` | body `ManagedRunnerWriteDto` | `ManagedRunnerController.wake` |
 | `GET` | `/api/metrics` | — | `MetricsController.read` |
 | `GET` | `/api/outcomes/inbox` | query `limit` | `OutcomeSurfacesController.inbox` |
@@ -636,6 +637,10 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/runner/agents` | — | `RunnerAgentsController.listWorkspaces` |
 | `POST` | `/api/runner/agents` | body `Object` | `RunnerAgentsController.createWorkspace` |
 | `PATCH` | `/api/runner/agents/:id` | body `Object`; path `id` | `RunnerAgentsController.updateWorkspace` |
+| `GET` | `/api/runner/browser` | — | `RunnerBrowserController.status` |
+| `POST` | `/api/runner/browser/clear` | body `Object` | `RunnerBrowserController.clear` |
+| `POST` | `/api/runner/browser/open` | body `Object` | `RunnerBrowserController.open` |
+| `POST` | `/api/runner/browser/sign-in-requests` | body `BrowserSignInRequestDto` | `RunnerBrowserController.requestSignIn` |
 | `POST` | `/api/runner/claude-account-swap-result` | body `Object` | `RunnerApiController.claudeAccountSwapResult` |
 | `POST` | `/api/runner/claude-history-result` | body `Object` | `RunnerApiController.claudeHistoryResult` |
 | `POST` | `/api/runner/codex-account-remove-result` | body `Object` | `RunnerApiController.codexAccountRemoveResult` |
