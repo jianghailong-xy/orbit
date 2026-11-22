@@ -1,4 +1,12 @@
-import type { SessionActivity } from '@orbit/shared';
+import {
+  SESSION_PHASES,
+  SESSION_TURN_OUTCOMES,
+  SESSION_WAITING_ON,
+  type SessionActivity,
+  type SessionPhase,
+  type SessionTurnOutcome,
+  type SessionWaitingOn,
+} from '@orbit/shared';
 
 /**
  * A session has two independent product dimensions:
@@ -69,7 +77,43 @@ export interface SessionStateSource {
   /** What the session is doing beyond its status (SessionActivity, decided by the server). See
    *  sessionActivityOf. Absent from an older control plane. */
   activity?: string | null;
+  /** The three-state field and the facts beside it (contracts/session-state.contract.json), decided by the
+   *  server. Absent from an older control plane; see sessionPhaseOf, sessionReleasedOf. */
+  phase?: string | null;
+  released?: boolean | null;
+  lastTurnOutcome?: string | null;
+  waitingOn?: string | null;
 }
+
+const SESSION_PHASE_SET: ReadonlySet<string> = new Set(SESSION_PHASES);
+const SESSION_WAITING_ON_SET: ReadonlySet<string> = new Set(SESSION_WAITING_ON);
+const SESSION_TURN_OUTCOME_SET: ReadonlySet<string> = new Set(SESSION_TURN_OUTCOMES);
+const knownValue = <T extends string>(value: unknown, allowed: ReadonlySet<string>): T | null =>
+  typeof value === 'string' && allowed.has(value) ? (value as T) : null;
+
+/** What the session is doing (`phase`: PENDING, RUNNING, IDLE), or null from an older control plane. A value
+ *  this client does not know reads as absent (the contract's lists can grow). RUNNING covers work outside a
+ *  turn: a background job, a sub-agent, the engine's own turn. */
+export const sessionPhaseOf = (session: SessionStateSource): SessionPhase | null =>
+  knownValue<SessionPhase>(session.phase, SESSION_PHASE_SET);
+
+/** Who or what the session waits on (`waitingOn`: PERSON, HOLD, WAKE), or null: nothing, or an older
+ *  control plane (tell the two apart with sessionPhaseOf). */
+export const sessionWaitingOnOf = (session: SessionStateSource): SessionWaitingOn | null =>
+  knownValue<SessionWaitingOn>(session.waitingOn, SESSION_WAITING_ON_SET);
+
+/** How the last turn ended (`lastTurnOutcome`), or null before any turn recorded one or from an older server. */
+export const sessionLastTurnOutcomeOf = (session: SessionStateSource): SessionTurnOutcome | null =>
+  knownValue<SessionTurnOutcome>(session.lastTurnOutcome, SESSION_TURN_OUTCOME_SET);
+
+/**
+ * Whether no runner holds the session, so the next message has to revive it (`released`, decided by the
+ * server from the release column). A control plane too old to send it is read off the legacy fields exactly
+ * as before: a run state that is not live. The server's field always wins when present; it is never rebuilt
+ * from `status`.
+ */
+export const sessionReleasedOf = (session: SessionStateSource): boolean =>
+  typeof session.released === 'boolean' ? session.released : !legacySessionLive(session);
 
 /**
  * Whether this run's SOURCE was refused — the run never became one.
@@ -312,16 +356,33 @@ export const sessionRetryPending = (session: SessionStateSource, now = Date.now(
 export const sessionIsStarting = (session: SessionStateSource): boolean =>
   sessionRunStateOf(session) === 'RUNNING' && session.engineStartedAt === null;
 
-/** States that can accept another turn without reviving/recreating the session. */
-export const isSessionLive = (session: SessionStateSource): boolean =>
-  ['QUEUED', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'].includes(sessionRunStateOf(session));
+/** The legacy reading of "held": the run states that accept another turn without a revive. Only for a
+ *  payload without `released` (sessionReleasedOf). */
+function legacySessionLive(session: SessionStateSource): boolean {
+  return ['QUEUED', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'].includes(sessionRunStateOf(session));
+}
 
-export const isSessionTerminal = (session: SessionStateSource): boolean => !isSessionLive(session);
+/** Whether the session can accept another turn without reviving or recreating it: a runner still holds it.
+ *  The send-versus-resume choice, the wait after End and the polling stops all read this. */
+export const isSessionLive = (session: SessionStateSource): boolean => !sessionReleasedOf(session);
 
-/** Whether the engine is producing output for this session now: a dispatched turn, or one it started
- *  for itself while parked (activity TURN). */
-export const isSessionWorking = (session: SessionStateSource): boolean =>
-  isSessionBusy(session) || sessionActivityOf(session) === 'TURN';
+export const isSessionTerminal = (session: SessionStateSource): boolean => sessionReleasedOf(session);
+
+/** Whether something is executing or queued for this session now. With `phase`, anything but IDLE: a turn, the
+ *  engine's own turn, a sub-agent or a background job (decision D8). From an older control plane: a dispatched
+ *  turn, or one the engine started for itself while parked (activity TURN). */
+export const isSessionWorking = (session: SessionStateSource): boolean => {
+  const phase = sessionPhaseOf(session);
+  if (phase) return phase !== 'IDLE';
+  return isSessionBusy(session) || sessionActivityOf(session) === 'TURN';
+};
+
+/** Whether a turn is queued and nothing executes yet (`phase` PENDING); from an older control plane, the raw
+ *  status PENDING. */
+export const isSessionQueued = (session: SessionStateSource): boolean => {
+  const phase = sessionPhaseOf(session);
+  return phase ? phase === 'PENDING' : sessionRunStatusOf(session) === 'PENDING';
+};
 
 /** Task execution is busy only while waiting for a runner or actively generating. */
 export const isSessionBusy = (session: SessionStateSource): boolean =>

@@ -116,7 +116,8 @@ export const CLIENT_WIRE: Readonly<Record<string, number>> = {
   // SESSION_RUN_STATES and SESSION_STATES, the two vocabularies, and one held-idle set of derived run states.
   'src/web/src/lib/sessionState.ts': 3,
   // RELEASED_STATUSES: the session counts' tally class of a row, read off its legacy `status` (main e513174734, merged
-  // into the project with plan step 6.1). The tally rows carry no release column yet; plan step 5.2 moves it.
+  // into the project with plan step 6.1). Plan step 5.2 reads the rows' `released` first; the set is left as the
+  // reading of a row from a control plane that predates it, which has nothing else to tell a release by.
   'src/web/src/lib/useControlPlane.tsx': 1,
 };
 
