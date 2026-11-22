@@ -7,6 +7,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import io.orbitd.android.cards.CardFocus
 import io.orbitd.android.core.auth.AuthState
 import java.io.File
 import java.time.Instant
@@ -17,6 +18,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import kotlinx.serialization.json.*
 import org.junit.Assert.*
+import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -56,7 +58,12 @@ class ProjectRowWaitingShellTest {
     private val headLine = "echo HEAD-OF-THE-WAITING-CARD"
     private val footLine = "echo FOOT-OF-THE-WAITING-CARD"
 
+    /** The wall clock a project row's request to open at the waiting card lapses by (10 s), held still: on a loaded machine the
+     * reader can be drawn more than ten real seconds after the click, and then opens at the tail as a lapsed request should. */
+    @After fun realClock() { CardFocus.now = { System.currentTimeMillis() } }
+
     @Before fun start() {
+        CardFocus.now = { 1_000_000L }
         ProjectShell.reset()
         ProjectShell.waitingEvents = buildJsonArray {
             (1..24).forEach { n ->
