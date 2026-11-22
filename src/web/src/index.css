@@ -9937,6 +9937,9 @@ button.chat-jump-start:hover {
   min-width: 34px;
   text-align: left;
 }
+.chat-queued-desc.chat-clone-desc {
+  max-width: 480px;
+}
 .chat-queued-desc b {
   color: var(--text-2);
   font-weight: 600;

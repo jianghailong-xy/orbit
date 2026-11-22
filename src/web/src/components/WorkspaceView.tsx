@@ -11204,7 +11204,7 @@ export function WorkspaceView({
                     />
                   ) : (
                     cloneWait ? (
-                      <CloneWaitNotice clone={cloneWait} machine={runnerShownName} />
+                      <CloneWaitNotice clone={cloneWait} machine={runnerShownName} spinner={false} />
                     ) : (
                       <>
                         <div className="chat-queued-title">{queuedTitle(selectedSession ?? selected)}</div>

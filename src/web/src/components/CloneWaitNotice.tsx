@@ -35,15 +35,18 @@ export function useCloneWait(sessionId: string | null | undefined, workspace: Cl
 export function CloneWaitNotice({
   clone,
   machine,
+  spinner = true,
 }: {
   clone: NonNullable<ReturnType<typeof useCloneWait>>;
   machine: string;
+  /** Off where the card's own dots already say it is waiting. */
+  spinner?: boolean;
 }) {
   const title = cloneWaitTitle(clone.state, clone.repository);
   return (
     <>
       <div className="chat-queued-title">
-        {clone.progress === null && <><LoadingOutlined className="msc-clone-spin" aria-hidden="true" />{' '}</>}
+        {spinner && clone.progress === null && <><LoadingOutlined className="msc-clone-spin" aria-hidden="true" />{' '}</>}
         {title}
       </div>
       {clone.progress !== null && (
@@ -61,7 +64,7 @@ export function CloneWaitNotice({
           <span className="msc-clone-pct">{`${clone.progress}%`}</span>
         </div>
       )}
-      <div className="chat-queued-desc">
+      <div className="chat-queued-desc chat-clone-desc">
         On <b>{machine}</b>. {CLONE_WAIT_STARTS}
       </div>
     </>
