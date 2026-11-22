@@ -108,7 +108,10 @@ import { escalatesAt } from './open-item-escalation.service';
 import { COORDINATOR_PAUSE_SELECT, conversationIsPaused } from './coordinator-evidence-queue';
 import { canonicalJson } from './canonical-json';
 import { mainBranchOf, taskLandingSql } from './project-criterion-landing';
+import { landingFixMessage, landingFixTurnId, readLandingFixFacts } from './landing-fix-turn';
+import { platformTurnRevives } from '../sessions/platform-turn-revival';
 import {
+  DELIVERED_IDENTITY_CLEARED,
   LandingRetryFailureClass,
   SkippedMergeCheckRecord,
   endTimedOutLanding,
@@ -620,6 +623,16 @@ const CLOSED_QUESTIONS_SHOWN = 50;
 /** The item stopped being owed to the coordinator while its turn was being written. */
 class OpenItemNoLongerOwed extends Error {}
 
+/** The item left the work session's hands, or its task left DONE, while the landing-fix turn was being
+ *  written: nothing is delivered, and whatever moved it decides what happens next. */
+class LandingFixNoLongerOwed extends Error {}
+
+/** The work session ended some other way than with its task's DONE (§12.5 W6, R3): it is not revived. */
+class LandingFixSessionEnded extends Error {}
+
+/** Why an item leaves its work session's hands (§12.4 `work_session_return_reason`). */
+export type LandingFixReturnReason = 'NO_NEW_COMMIT' | 'TURN_FAILED' | 'SESSION_ENDED' | 'ROUNDS_EXHAUSTED' | 'TASK_MOVED_ON';
+
 /** The open-item kinds whose card is translated for the owner (Settings › Translation), and which of the payload's
  *  fields are the agent's words (sessions/card-translation.ts). */
 const TRANSLATED_ITEM_FIELDS: Readonly<Partial<Record<string, CardFields>>> = {
@@ -832,15 +845,160 @@ export class ProjectOpenItemService {
   }
 
   /**
-   * THE SEAM FOR W6 (§12.5, revision 42): deliver the `landing-fix:v1:<jobId>` turn to the work
-   * session an item was handed to. Reached after the hand-off's J-T7 transaction has committed,
-   * through every delivery entry point (`deliverForItems` from the result route, `deliverOwed` as the
-   * backstop), in place of the coordinator's delivery. The turn itself — its content, the revival of a
-   * `task_done` session, and clearing the task's delivered identity in the transaction that writes the
-   * turn (R2) — is task 350mtSLp7QV140aRvZRwL's; until it lands, the item waits in the session's hands.
+   * W6 (§12.5, revision 42, ruling R3): deliver the `landing-fix:v1:<jobId>` turn to the work session an
+   * item was handed to. Reached after the hand-off's J-T7 transaction has committed, through every
+   * delivery entry point (`deliverForItems` from the result route, `deliverOwed` as the backstop, and the
+   * session's own finish, `offerLandingFixesTo`), in place of the coordinator's delivery.
+   *
+   * The turn is the carrier G6 names: `createTurn` with NEXT_TURN for a session that is still open, and
+   * for one that ended because its task was done, the resume path `session_send`'s `resumeIfEnded` takes
+   * (`SessionsService.resume`), which revives it first — `createTurn` refuses an ended session before its
+   * hook runs. That is G6's one exception (`platformTurnRevives`): a session that ended any other way is
+   * not revived, and the item is handed back with SESSION_ENDED (W7, `returnLandingFix`).
+   *
+   * In the transaction that writes the turn (`acceptLandingFix`), R2: the task's delivered identity is
+   * cleared the way `task_reopen` clears it, so the finish of this session freezes it again from the work
+   * as it then stands (§10.5 O-L4 3). The task stays DONE: no epoch, no attempt generation, no evidence,
+   * no acceptance. The turn runs outside the project's task budget, which counts only tasks that are not
+   * DONE; and it is the work session's, so none of the coordinator's spend (§6.1) moves for it.
+   *
+   * Once: the turn row under its key is the receipt, so a delivery that finds it writes nothing — a
+   * session the turn revived, that ended again when its turn did, is not revived a second time.
    */
   async offerLandingFix(itemId: string): Promise<void> {
+    const item = await this.prisma.projectOpenItem.findUnique({
+      where: { id: itemId },
+      select: {
+        id: true, state: true, ownerId: true, taskId: true, title: true, payload: true,
+        integrationJobId: true, workSessionId: true, workSessionOfferedAt: true, workSessionReturnedAt: true,
+      },
+    });
+    if (!item || item.state !== 'OPEN' || !inWorkSessionHands(item)) return;
+    if (!item.workSessionId || !item.integrationJobId || !item.taskId) return;
+    const sessionId = item.workSessionId;
+    const taskId = item.taskId;
+    const clientTurnId = landingFixTurnId(item.integrationJobId);
+    const delivered = await this.prisma.conversationTurn.findUnique({
+      where: { sessionId_clientTurnId: { sessionId, clientTurnId } },
+      select: { id: true },
+    });
+    if (delivered) return;
+    const facts = await readLandingFixFacts(this.prisma, {
+      integrationJobId: item.integrationJobId, title: item.title, payload: item.payload,
+    });
+    if (!facts) return;
+    const content = landingFixMessage(facts);
+
+    const session = await this.prisma.session.findUnique({
+      where: { id: sessionId },
+      select: { finishedAt: true, endReason: true, deletedAt: true, cancelRequestedAt: true },
+    });
+    if (!session) {
+      await this.returnLandingFix(item.id, 'SESSION_ENDED');
+      return;
+    }
+    // Ending because its task is done (parked-session-end.ts): its finish is a moment away, and the
+    // finish delivers this (`offerLandingFixesTo`), reviving it then.
+    if (this.endingForItsDone(session)) return;
+    const ended = session.finishedAt !== null || session.cancelRequestedAt !== null || session.deletedAt !== null;
+    if (ended && !platformTurnRevives(clientTurnId, session)) {
+      await this.returnLandingFix(item.id, 'SESSION_ENDED');
+      return;
+    }
+    const turn = { clientTurnId, content, intent: 'NEXT_TURN' as const };
+    const participateSendTransaction = (tx: Prisma.TransactionClient) =>
+      this.acceptLandingFix(tx, { itemId: item.id, sessionId, taskId, clientTurnId });
+    try {
+      if (session.finishedAt !== null) {
+        await this.sessions.resume(item.ownerId, sessionId, turn, { participateSendTransaction });
+      } else {
+        await this.sessions.createTurn(item.ownerId, sessionId, turn, { participateSendTransaction });
+      }
+    } catch (error) {
+      if (error instanceof LandingFixNoLongerOwed) return;
+      if (error instanceof LandingFixSessionEnded || error instanceof SessionNotSendable
+        || error instanceof NotFoundException) {
+        // Read again: a session caught on its way to its DONE's end is revived at its finish instead.
+        const now = await this.prisma.session.findUnique({
+          where: { id: sessionId },
+          select: { finishedAt: true, endReason: true, deletedAt: true, cancelRequestedAt: true },
+        });
+        if (now && this.endingForItsDone(now)) return;
+        await this.returnLandingFix(item.id, 'SESSION_ENDED');
+        return;
+      }
+      if (error instanceof ConflictException) {
+        // A row being written right now, or a key already holding other words: the backstop delivers again.
+        this.logger.warn(`landing fix ${clientTurnId} was not delivered to ${sessionId}: ${error.message}`);
+        return;
+      }
+      throw error;
+    }
+  }
+
+  /** Every item in this work session's hands, offered again: its finish is where an end in progress is over. */
+  async offerLandingFixesTo(sessionId: string): Promise<void> {
+    await this.guarded('offerLandingFixesTo', async () => {
+      const items = await this.prisma.projectOpenItem.findMany({
+        where: { state: 'OPEN', workSessionId: sessionId, workSessionOfferedAt: { not: null }, workSessionReturnedAt: null },
+        select: { id: true },
+        orderBy: { id: 'asc' },
+      });
+      for (const item of items) await this.offerLandingFix(item.id);
+    });
+  }
+
+  private endingForItsDone(session: { finishedAt: Date | null; endReason: string | null; cancelRequestedAt: Date | null; deletedAt: Date | null }): boolean {
+    return session.finishedAt === null && session.cancelRequestedAt !== null && session.deletedAt === null
+      && session.endReason === 'task_done';
+  }
+
+  /**
+   * The landing-fix turn's own write, inside `createTurn`'s (or `resume`'s) transaction, under the session
+   * lock it holds and before the turn row: the item still in this session's hands and its task still DONE,
+   * the session not ended some other way (R3: `resume` would revive those too), and R2 — the task's
+   * delivered identity cleared, as `task_reopen` clears it, in the transaction the turn is written in. A
+   * refusal rolls the revive and the turn back with it.
+   */
+  private async acceptLandingFix(
+    tx: Prisma.TransactionClient,
+    input: { itemId: string; sessionId: string; taskId: string; clientTurnId: string },
+  ): Promise<void> {
+    const session = await tx.session.findUniqueOrThrow({
+      where: { id: input.sessionId },
+      select: { finishedAt: true, endReason: true, deletedAt: true, cancelRequestedAt: true },
+    });
+    if (session.deletedAt !== null) throw new LandingFixSessionEnded();
+    if (session.finishedAt !== null && !platformTurnRevives(input.clientTurnId, session)) {
+      throw new LandingFixSessionEnded();
+    }
+    // The task row (rank 50) before the item (rank 60), after the session this transaction holds (rank 30).
+    const cleared = await tx.task.updateMany({
+      where: { id: input.taskId, status: 'DONE' },
+      data: DELIVERED_IDENTITY_CLEARED,
+    });
+    if (cleared.count === 0) throw new LandingFixNoLongerOwed();
+    const [held] = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT "id" FROM "project_open_item"
+       WHERE "id" = ${input.itemId}::uuid
+         AND "state" = 'OPEN'
+         AND "work_session_id" = ${input.sessionId}::uuid
+         AND "work_session_offered_at" IS NOT NULL
+         AND "work_session_returned_at" IS NULL
+       FOR NO KEY UPDATE`);
+    if (!held) throw new LandingFixNoLongerOwed();
+  }
+
+  /**
+   * THE SEAM FOR W7's hand-backs (§12.5, task 350mtSNTuKUVNMbsj7Srd): the item leaves its work session's
+   * hands for the coordinator — `work_session_returned_at` and the reason written, delivered by X-D4 from
+   * then on, `escalate_at` counted from then, and an identity W6 cleared frozen again by P-M1's finish
+   * route. W6 reaches it with SESSION_ENDED, for a session that is gone or ended some other way than with
+   * its task's DONE; until that task lands, the item waits in the session's hands.
+   */
+  async returnLandingFix(itemId: string, reason: LandingFixReturnReason): Promise<void> {
     void itemId;
+    void reason;
   }
 
   /**

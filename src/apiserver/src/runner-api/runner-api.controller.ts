@@ -10496,6 +10496,9 @@ export class RunnerApiController {
       if (!outcome.taskReclaimed) this.realtime.publishTaskChanged(sessionId, outcome.taskId);
       await this.tasks?.deliverDispatchRefusalAfterCommit(outcome.taskId);
     }
+    // §12.5 W6: a failed landing handed to this work session while it was on its way to its DONE's end
+    // is delivered now that the end is over — the landing-fix turn revives it. Nothing for any other.
+    if ('taskId' in outcome && outcome.taskId) await this.openItems?.offerLandingFixesTo(sessionId);
     if ('currentWorkTerminalized' in outcome && (outcome.currentWorkTerminalized ?? 0) > 0) {
       this.realtime.publishQueuedTurnsChanged(sessionId);
     }

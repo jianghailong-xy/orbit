@@ -2929,6 +2929,9 @@ export async function applyIntegrationJobResult(
         heldByOwner: await ownerHoldOnHandledItems(tx, job.id),
         workSessionId,
         payload: {
+          // Revision 42 (§12.5 W6): the title the landing-fix turn names the work by, as it was when the
+          // work failed to land — a task can be renamed, and the turn's words are a replay's to compare.
+          ...(workSessionId ? { taskTitle: task?.title ?? candidateTask?.title ?? null } : {}),
           ...(body.baselineRed === true ? {
             baseline: {
               upstreamSha: body.upstreamSha!, targetSha: body.targetShaBefore!,
