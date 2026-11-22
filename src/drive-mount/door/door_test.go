@@ -178,8 +178,8 @@ func TestOneSlowAnswerOnItsOwnIsNotOffline(t *testing.T) {
 	}))
 	defer srv.Close()
 	c := New(Config{BaseURL: srv.URL, Token: "t", MetaTimeout: meta})
-	var changes []bool
-	c.Health().OnChange(func(online bool, _ time.Time) { changes = append(changes, online) })
+	var changes atomic.Int32 // the probe's goroutine may report them
+	c.Health().OnChange(func(bool, time.Time) { changes.Add(1) })
 	if _, err := c.StatID(context.Background(), "x"); err != nil {
 		t.Fatalf("a slow stat is sent once more on a server that answers: %v", err)
 	}
@@ -191,8 +191,8 @@ func TestOneSlowAnswerOnItsOwnIsNotOffline(t *testing.T) {
 			t.Fatalf("request %d after the slow one: %v", i, err)
 		}
 	}
-	if c.Health().Offline() || len(changes) != 0 {
-		t.Fatalf("offline %v, health changes %v: a slow answer is not an unreachable server", c.Health().Offline(), changes)
+	if c.Health().Offline() || changes.Load() != 0 {
+		t.Fatalf("offline %v, health changes %d: a slow answer is not an unreachable server", c.Health().Offline(), changes.Load())
 	}
 }
 
