@@ -356,7 +356,7 @@ test('an owner\'s Update Now moves an idle Orbit Cloud runner onto the current i
     assert.deepEqual({ revision: after.revision, at: after.updateRequestedAt, rollTo: after.imageRollTo }, { revision: mapping.revision, at: null, rollTo: null });
 
     // Idle by the records, but its own fresh report still counts a job: busy, with the report's count.
-    await db.session.updateMany({ where: { id: { in: [turn.id, waiting.id] } }, data: { status: 'SUCCEEDED', runningBgShells: [] } });
+    await db.session.updateMany({ where: { id: { in: [turn.id, waiting.id] } }, data: { status: 'SUCCEEDED', finishedAt: new Date(), runningBgShells: [] } });
     w.advance(1_000);
     await w.heartbeat(mapping.runnerId, { backgroundJobs: 1 });
     const reported = await refusal(w.service.updateNow(ownerId));
