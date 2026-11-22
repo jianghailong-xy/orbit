@@ -306,7 +306,7 @@ final class SettingsStackWiringTests: XCTestCase {
             "ModelRouting.sections(model.agents?.subagentTiers?.providers ?? [], report?.subagents ?? [])",
             ".task(id: period) { await loadReport() }",
             "RunnerSectionHeader(ModelRouting.routedByTier)", "RunnerSectionHeader(ModelRouting.calledByName)",
-            "RunnerSectionHeader(ModelRouting.notRouted)", "ModelRouting.noTierNoRuns(sections.idle.count, open: showsIdle)",
+            "RunnerSectionHeader(ModelRouting.notRouted)", "ModelRouting.noTierNoRuns(rows.idle.count, open: showsIdle)",
         ] {
             XCTAssertTrue(page.contains(line), "the Model routing page lost \(line)")
         }

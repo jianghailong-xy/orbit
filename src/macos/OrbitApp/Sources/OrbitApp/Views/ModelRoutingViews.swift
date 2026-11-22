@@ -122,22 +122,22 @@ struct ModelRoutingPage: View {
             if !loaded { feet }
         }
         if loaded, let agents {
-            let sections = sections
-            let drawn = drawnSections(sections)
+            let rows = self.sections
+            let drawn = drawnSections(rows)
             ForEach(drawn, id: \.self) { part in
                 Section {
                     switch part {
                     case .tiered:
-                        ForEach(sections.tiered) { ModelRoutingRow(agents: agents, row: $0, kind: .tiers) }
+                        ForEach(rows.tiered) { ModelRoutingRow(agents: agents, row: $0, kind: .tiers) }
                     case .named:
-                        ForEach(sections.named) { ModelRoutingRow(agents: agents, row: $0, kind: .named) }
+                        ForEach(rows.named) { ModelRoutingRow(agents: agents, row: $0, kind: .named) }
                     case .notRouted:
-                        ForEach(sections.notRouted) { ModelRoutingRow(agents: agents, row: $0, kind: .notRouted) }
+                        ForEach(rows.notRouted) { ModelRoutingRow(agents: agents, row: $0, kind: .notRouted) }
                     case .idle:
                         Button {
                             showsIdle.toggle()
                         } label: {
-                            Text(ModelRouting.noTierNoRuns(sections.idle.count, open: showsIdle))
+                            Text(ModelRouting.noTierNoRuns(rows.idle.count, open: showsIdle))
                                 .foregroundStyle(Color.secondary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .contentShape(Rectangle())
@@ -145,7 +145,7 @@ struct ModelRoutingPage: View {
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("modelRouting.idle")
                         if showsIdle {
-                            ForEach(sections.idle) { ModelRoutingRow(agents: agents, row: $0, kind: .tiers) }
+                            ForEach(rows.idle) { ModelRoutingRow(agents: agents, row: $0, kind: .tiers) }
                         }
                     }
                 } header: {
