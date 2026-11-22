@@ -1191,7 +1191,7 @@ internal fun RunPress(label: String, enabled: Boolean, tag: String, description:
 }
 
 private fun LazyListScope.criteriaSection(doc: JsonObject, openTask: (String) -> Unit, actions: CriteriaActions?, now: Instant) {
-    val criteria = doc.objects("acceptanceCriteriaItems").sortedBy { it.number("ordinal") ?: 0 }
+    val criteria = ProjectPage.withLandingReasons(doc.objects("acceptanceCriteriaItems"), doc.obj("derivedDone")).sortedBy { it.number("ordinal") ?: 0 }
     item(key = "criteria-head") { SectionHead("Acceptance criteria") }
     val movedOut = doc.objects("criteriaMovedOut")
     if (criteria.isEmpty()) { item(key = "criteria-empty") { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
