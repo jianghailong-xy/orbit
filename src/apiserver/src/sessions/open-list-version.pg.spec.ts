@@ -672,7 +672,7 @@ test('a write to each LANDING-only source leaves every flat Open-list row as it 
     })],
     ['a merge receipt', () => db.sessionMergeReceipt.create({
       data: {
-        ownerId: f.ownerId, sessionId: f.sessionId, result: 'MERGED', sourceBranch: 'olv-d1', sourceSha: 'a'.repeat(40),
+        ownerId: f.ownerId, sessionId: f.sessionId, result: 'ERROR', sourceBranch: 'olv-d1', sourceSha: 'a'.repeat(40),
         targetBranch: 'main', recordedBy: 'USER', idempotencyKey: `olv-d1-${f.sessionId}`,
       },
     })],
