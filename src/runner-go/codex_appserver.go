@@ -96,7 +96,9 @@ type codexAppServer struct {
 	orbitExecutable string
 	// resetNotePending says the conversation was compacted or resumed since the last turn/start: the next one leads
 	// with orbitContextResetNote (context_reset_note.go).
-	resetNotePending    atomic.Bool
+	resetNotePending atomic.Bool
+	// cloudSandboxNoted says this process has told the transcript that Codex's sandbox is off on Orbit Cloud.
+	cloudSandboxNoted   atomic.Bool
 	instructionMode     codexInstructionMode
 	instructionMu       sync.Mutex
 	contextGeneration   uint64
@@ -1273,6 +1275,8 @@ func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, stat
 	if err != nil {
 		exe = ""
 	}
+	// Probed once per process, on the first launch, and only on an Orbit Cloud runner.
+	job.codexCloudSandboxUnavailable = codexCloudSandboxUnavailable()
 	args := codexAppServerCommandArgs(job, stateDir, exe)
 	cmd := exec.CommandContext(procCtx, "codex", args...)
 	configureSessionProcessTree(cmd)
@@ -1351,7 +1355,7 @@ func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, stat
 				continue
 			}
 			payload := map[string]interface{}{"stderr": line + "\n"}
-			if diagnostic, ok := codexStderrDiagnostic(line); ok {
+			if diagnostic, ok := codexStderrDiagnosticFor(job, line); ok {
 				payload["diagnostic"] = diagnostic
 			}
 			emit(evSystem, payload)
@@ -1413,6 +1417,9 @@ func (a *codexAppServer) startTurn(ctx context.Context, threadID string, job *Cl
 		return a.injectAgentContext(ctx, threadID, job.instructionAgent(), job.insideRecordedWork(), job.watchesOn())
 	})
 	prompt = a.turnPrompt(prompt, job.insideRecordedWork())
+	if codexCloudSandboxOff(job, codexPermissionMode(job)) && a.cloudSandboxNoted.CompareAndSwap(false, true) && a.emit != nil {
+		a.emit(evSystem, codexCloudSandboxNoticePayload())
+	}
 	result, err := a.request(ctx, "turn/start", codexTurnParams(
 		threadID, job, execDir, upDir, orbitTurnID, prompt, imagePaths,
 		codexTurnContextOptions{
@@ -1730,7 +1737,7 @@ func codexThreadParams(job *ClaimedSession, execDir, upDir string) map[string]in
 	params := map[string]interface{}{
 		"cwd":                   execDir,
 		"approvalPolicy":        codexApprovalPolicy(codexPermissionMode(job)),
-		"sandbox":               codexSandboxMode(codexPermissionMode(job)),
+		"sandbox":               codexThreadSandboxMode(job, codexPermissionMode(job)),
 		"runtimeWorkspaceRoots": codexRuntimeWorkspaceRoots(codexPermissionMode(job), job, execDir, upDir),
 		// The thread's own source: a user's turn, as the CLI reports one, not Orbit's "orbit" — the
 		// backend sees `thread_source: user` in the turn metadata.
