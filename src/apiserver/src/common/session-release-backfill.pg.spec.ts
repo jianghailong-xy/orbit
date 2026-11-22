@@ -332,14 +332,16 @@ test('deploy 3 on a populated database at deploy 2\'s state: 1433, 1434 and 1435
 
     assert.equal(await columnExists(), 0, 'release_cause is gone');
 
-    // What main's 1428_open_list_workspace_probes replaced, open_list_bump_owner(), is called by no trigger of the two
-    // tables 1433 writes; their Open-list triggers are statement-level, so each UPDATE fired one once, not per row.
+    // What main's 1428_open_list_workspace_probes replaced, open_list_bump_owner(), is called by no UPDATE trigger of the
+    // two tables 1433 writes; their Open-list UPDATE triggers are statement-level, so each UPDATE fired one once, not per
+    // row. (conversation_turn_evidence_review_deadline, per row, is AFTER INSERT only: 1433 inserts nothing.)
     const openList = (await sql.query(
       `SELECT c.relname AS tbl, t.tgname, p.proname, (t.tgtype & 1) = 1 AS per_row
          FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_proc p ON p.oid = t.tgfoid
         WHERE NOT t.tgisinternal AND c.relname IN ('session', 'conversation_turn') AND p.proname LIKE 'open_list%'
+          AND (t.tgtype & 16) <> 0
         ORDER BY 1, 2`)).rows as Array<{ tbl: string; tgname: string; proname: string; per_row: boolean }>;
-    console.log(`# open-list triggers on the tables 1433 writes: ${JSON.stringify(openList)}`);
+    console.log(`# open-list UPDATE triggers on the tables 1433 writes: ${JSON.stringify(openList)}`);
     assert.ok(openList.some((r) => r.tbl === 'session') && openList.some((r) => r.tbl === 'conversation_turn'));
     for (const r of openList) {
       assert.notEqual(r.proname, 'open_list_bump_owner', `${r.tbl}.${r.tgname}: not the function main's 1428 replaced`);
