@@ -545,12 +545,16 @@ func cmdRegister(flags map[string]string, bools map[string]bool) {
 		fmt.Fprintf(os.Stderr, "orbit register: cannot keep the runner's config in %s: %v\nNothing was registered. If an earlier sudo left it to root: sudo chown -R %s %s\n", machineHome(), err, who, machineHome())
 		os.Exit(1)
 	}
-	// One runner per machine. Re-registering re-issues its credential, so confirm
-	// before clobbering the config.
+	// One runner per OS user (the config is in this user's ~/.orbit). Re-registering
+	// re-issues its credential, so confirm before clobbering the config.
 	if existing := loadConfig(); existing != nil && !bools["force"] {
+		osUser := "Linux user"
+		if runtime.GOOS == "darwin" {
+			osUser = "macOS user"
+		}
 		ok := confirm(fmt.Sprintf(
-			"This machine is already registered as %q (%s).\nRegister again (re-issues its credential)? [Y/n] ",
-			existing.Name, existing.ServerURL), true)
+			"This %s is already registered as %q (%s).\nRegister again (re-issues its credential)? [Y/n] ",
+			osUser, existing.Name, existing.ServerURL), true)
 		if !ok {
 			fmt.Println("aborted — pass --force to re-register without confirming")
 			os.Exit(0)

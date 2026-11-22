@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ConflictException } from '@nestjs/common';
 import { RunStatus } from '@prisma/client';
+import { isReleasedStatus } from '../common/session-release';
 import { encryptSecret } from '../providers/provider-crypto';
 import {
   DSH_NOT_INSTALLED_ERROR,
@@ -60,6 +61,8 @@ function fixture(options: {
     id, ownerId, provider: options.provider ?? 'dsh', providerBuiltin: options.providerBuiltin ?? true,
     model: null, permissionMode: 'default', usesRuntimeDefaultModel: true, runtimeSessionId, numTurns: 3,
     startedAt: new Date(), status: options.status ?? RunStatus.CANCELLED,
+    // A terminal row carries its release column (session_release_fact_chk).
+    ...(isReleasedStatus(options.status ?? RunStatus.CANCELLED) ? { finishedAt: new Date() } : {}),
     assignedRunnerId: runner.id, assignedRunner: runner, owner: { preferences: {} },
     workspace: null, cancelRequestedAt: null, completedAt: null, archivedAt: null,
     deletedAt: null, mergeStatus: null, commitStatus: null,

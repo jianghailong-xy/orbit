@@ -6,6 +6,7 @@ import { type INestApplication, Module } from '@nestjs/common';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { type PrismaClient, Prisma, ProjectStatus } from '@prisma/client';
+import { isReleasedStatus } from '../common/session-release';
 import { ControlEventType, type SessionProjectMembership, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 import { filter, firstValueFrom, timeout } from 'rxjs';
@@ -145,10 +146,14 @@ async function world(label: string): Promise<World> {
 }
 
 async function session(w: World, fields: Partial<Prisma.SessionUncheckedCreateInput> = {}): Promise<string> {
+  const fixtureStatus = fields.status ?? 'AWAITING_INPUT';
   const row = await w.h.db.session.create({
     data: {
       ownerId: w.ownerId, creatorId: w.ownerId, title: 'membership session', prompt: 'p',
       status: 'AWAITING_INPUT', dispatchOrigin: 'USER', ...fields,
+      ...(isReleasedStatus(fixtureStatus) ? {
+        finishedAt: fields.finishedAt ?? new Date(),
+      } : {}),
     },
   });
   return row.id;

@@ -91,6 +91,7 @@ function terminalRow(startsTaskWork: boolean): Record<string, unknown> {
     ownerId: 'owner-1',
     taskId: TASK,
     status: RunStatus.FAILED,
+    finishedAt: new Date(),
     startsTaskWork,
     assignedRunner: null,
   };

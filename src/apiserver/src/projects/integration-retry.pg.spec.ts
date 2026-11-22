@@ -366,8 +366,8 @@ async function doneTask(
     const finished = await tx.session.update({
       where: { id: sessionId },
       data: worktree
-        ? { finishedAt: new Date(), worktreeBranch: branch, worktreeDirty: false }
-        : { finishedAt: new Date() },
+        ? { status: RunStatus.SUCCEEDED, finishedAt: new Date(), worktreeBranch: branch, worktreeDirty: false }
+        : { status: RunStatus.SUCCEEDED, finishedAt: new Date() },
       select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
     });
     await settleDeliveredIdentityAfterFinish(tx, finished);
@@ -875,7 +875,7 @@ test('the rerun lands the branch the task\'s work ended on, not the one the fail
           title: 'the second run',
           prompt: 'the second run',
           provider: 'claude',
-          status: RunStatus.SUCCEEDED,
+          status: RunStatus.SUCCEEDED, 
           dispatchOrigin: SessionDispatchOrigin.USER,
           startsTaskWork: true,
           startedAt: new Date(),
@@ -1280,7 +1280,7 @@ test('escalated: a failure that went to the owner on the clock is theirs, and th
       const [item] = await itemsOf(stack.db, task.taskId);
       await receiveOpenItem(stack.db, item!.id);
       // A taken item only escalates after its coordinator can no longer carry it.
-      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED } });
+      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED, finishedAt: new Date()} });
       await stack.db.$executeRaw(
         Prisma.sql`UPDATE "project_open_item" SET "escalate_at" = now() - interval '1 minute'
                     WHERE "id" = ${item!.id}::uuid`,

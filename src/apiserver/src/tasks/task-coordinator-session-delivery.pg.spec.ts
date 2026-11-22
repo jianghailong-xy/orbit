@@ -268,6 +268,7 @@ async function fixture(
         prompt: `协调：${label}`,
         provider: 'claude',
         status: wanted === 'PARKED' ? RunStatus.AWAITING_INPUT : RunStatus.SUCCEEDED,
+        ...(wanted === 'PARKED' ? {} : { finishedAt: new Date()}),
         dispatchOrigin: SessionDispatchOrigin.USER,
         titleManagedByProject: true,
         ...(wanted === 'ENDED' ? { completedAt: new Date() } : {}),
@@ -424,6 +425,10 @@ async function settleByAcceptance(stack: Stack, f: Fixture, taskId: string, labe
     shellExitCode: shell.status!,
     shellOutput: `${shell.stdout}${shell.stderr}`,
   });
+  await stack.db.session.update({
+    where: { id: sessionId },
+    data: { status: RunStatus.SUCCEEDED, finishedAt: new Date()},
+  });
 
   assert.equal(
     (await stack.db.task.findUniqueOrThrow({ where: { id: taskId } })).status,
@@ -490,7 +495,7 @@ async function coordinatorReadsIt(db: PrismaClient, f: Fixture) {
   });
   await db.session.update({
     where: { id: f.coordinatorSessionId! },
-    data: { status: RunStatus.AWAITING_INPUT },
+    data: { status: RunStatus.AWAITING_INPUT, finishedAt: null},
   });
 }
 

@@ -133,6 +133,9 @@ the 1280×800 screen to about 37%, too small to act in, and paste never reached 
   viewer WebSocket. The apiserver passes it on only while that viewer said it is in control, at most 64 KiB, one at a
   time, as a `StreamPaste` link frame (capability `link-stream-paste-v1`); the runner inserts it with
   `Input.insertText` into the page that has focus, without the session lease (P3 = B), and answers `StreamPasted`.
+  When a page is shown but none has the window's focus, Chrome's own UI (the address bar) has it, which DevTools
+  cannot reach: the runner puts the text on the display's X clipboard (`xclip`, UTF-8), presses Ctrl+V (`xdotool`)
+  and empties the clipboard a second later.
   A refusal ("Click a text field in the browser first", too long, no answer) shows in the bar. The text is never
   logged or stored anywhere on the way: it is often a password.
 - **Copy back**, best effort: noVNC's `clipboard` event (x11vnc's cut text from the remote CLIPBOARD) is written with

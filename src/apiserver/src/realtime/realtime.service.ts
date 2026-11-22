@@ -1712,6 +1712,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         completedAt: true,
         archivedAt: true,
         deletedAt: true,
+        // The release column the capabilities below read (common/session-release.ts).
+        finishedAt: true,
         cancelRequestedAt: true,
         startedAt: true,
         numTurns: true,

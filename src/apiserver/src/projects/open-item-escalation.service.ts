@@ -18,7 +18,7 @@ import {
   openItemDeliveredAt,
   openItemCoordinatorCanTake,
 } from './project-open-item';
-import { PROJECT_LIVE_SESSION_STATUS_SQL } from './live-session-status';
+import { sessionHeldSql } from '../common/session-release';
 import {
   EVIDENCE_UNDECIDED_KIND,
   evidenceUndecidedEnding,
@@ -221,7 +221,7 @@ export function escalatesAt(alias: string): Prisma.Sql {
            AND work."completed_at" IS NULL
            AND work."archived_at" IS NULL
            AND work."cancel_requested_at" IS NULL
-           AND work."status" IN (${Prisma.raw(PROJECT_LIVE_SESSION_STATUS_SQL)})
+           AND ${sessionHeldSql('work')}
            AND (work."status" <> 'INTERRUPTED' OR work."end_reason" IS NULL)
       )
       OR EXISTS (
@@ -251,7 +251,7 @@ export function escalatesAt(alias: string): Prisma.Sql {
          AND coordinator."completed_at" IS NULL
          AND coordinator."archived_at" IS NULL
          AND coordinator."cancel_requested_at" IS NULL
-         AND coordinator."status" IN (${Prisma.raw(PROJECT_LIVE_SESSION_STATUS_SQL)})
+         AND ${sessionHeldSql('coordinator')}
          AND (coordinator."status" <> 'INTERRUPTED' OR coordinator."end_reason" IS NULL)
          AND starts_with(taken."client_turn_id", ${OPEN_ITEM_TURN_PREFIX_SQL} || ${item}."id"::text || ':')
          AND taken."kind" = 'message'

@@ -302,12 +302,14 @@ async function openSession(
       prompt: `session ${id}`,
       provider: 'claude',
       status: options.status ?? RunStatus.AWAITING_INPUT,
+      ...(options.status === RunStatus.SUCCEEDED || options.status === RunStatus.FAILED
+        ? { finishedAt: new Date()}
+        : options.status === RunStatus.CANCELLED ? { finishedAt: new Date()} : {}),
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: options.startsTaskWork ?? false,
       ...(options.isolationStatus ? { isolationStatus: options.isolationStatus } : {}),
       ...(options.branch ? { branch: options.branch } : {}),
       ...(options.changedFiles ? { changedFiles: options.changedFiles } : {}),
-      ...(options.status === RunStatus.SUCCEEDED ? { finishedAt: new Date() } : {}),
     },
   });
   return id;

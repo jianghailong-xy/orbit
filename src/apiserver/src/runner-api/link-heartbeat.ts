@@ -1,10 +1,10 @@
 import { hash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import type { PlanUsage, RunnerHeartbeatRequest, RunnerHeartbeatResponse, RunnerResources } from '@orbit/shared';
-import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
 import { sanitizeRunnerRepoHealth } from '../common/runner-repo-health';
 import { sanitizeRunnerSelfUpdate } from '../common/runner-self-update';
 import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
+import { sessionHeldSql } from '../common/session-release';
 import { PREPARED_STATEMENT } from '../prisma/prisma-client';
 import type { PrismaService } from '../prisma/prisma.service';
 import { sanitizePlanUsageAccounts } from '../providers/plan-usage-accounts';
@@ -450,8 +450,6 @@ export interface LinkBeatRow extends RunnerLinkHintColumns {
   planUsage: unknown;
 }
 
-const OPEN_STATUSES_SQL = Prisma.raw(OPEN_SESSION_STATUSES.map((status) => `'${status}'`).join(', '));
-
 /**
  * The beat, in one statement. Admits the caller exactly as RunnerAuthGuard does for a link call — the runner exists,
  * its credential is still the one the token was minted with (the fingerprint migration 0443's trigger computes), its
@@ -519,7 +517,7 @@ export async function readLinkBeat(prisma: Pick<PrismaService, '$queryRaw'>, inp
            (SELECT count(*)::int FROM "session" s
              WHERE s."id" = ANY(${input.supervisedSessionIds}::uuid[])
                AND s."assigned_runner_id" = c."id"
-               AND s."status" IN (${OPEN_STATUSES_SQL})
+               AND ${sessionHeldSql('s')}
                AND s."kind" = 'CONVERSATION'
                AND s."inbox_lease_owner" = ${input.processId}::uuid) AS "leasesHeld",
            ${readPlanUsage} AS "planUsageRead",
@@ -812,7 +810,7 @@ function worktreeSnapshotsSql(runnerId: string, leaseOwner: string | null, sessi
              "branchSha" text, "branchShaGiven" boolean, "branchShaRaw" text, "branchMergedGiven" boolean, "branchMerged" boolean)
      WHERE s."id" = v."sessionId"
        AND s."assigned_runner_id" = ${runnerId}::uuid
-       AND s."status" IN (${OPEN_STATUSES_SQL})
+       AND ${sessionHeldSql('s')}
        AND s."kind" = 'CONVERSATION'
        ${leaseOwner ? Prisma.sql`AND s."inbox_lease_owner" = ${leaseOwner}::uuid` : Prisma.empty}
        AND ${after}

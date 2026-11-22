@@ -315,7 +315,7 @@ async function workSession(stack: Stack, w: World, taskId: string, branch: strin
       title: `ran ${branch}`,
       prompt: 'do the work',
       provider: 'claude',
-      status: RunStatus.SUCCEEDED,
+      status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       startedAt: new Date(),
@@ -992,7 +992,7 @@ test('(6) the backstop writes the ending the task’s own edge would have writte
           title: 'the attempt that failed',
           prompt: 'do the work',
           provider: 'claude',
-          status: RunStatus.FAILED,
+          status: RunStatus.FAILED, 
           dispatchOrigin: SessionDispatchOrigin.USER,
           startsTaskWork: true,
           startedAt: new Date(Date.now() - 180_000),
@@ -1008,7 +1008,7 @@ test('(6) the backstop writes the ending the task’s own edge would have writte
       });
       await stack.db.session.update({
         where: { id: resumedFailure.id },
-        data: { status: RunStatus.PENDING, finishedAt: null },
+        data: { status: RunStatus.PENDING, finishedAt: null},
       });
       await stack.db.conversationTurn.create({
         data: {

@@ -836,7 +836,7 @@ test('the owner starts a project in one write, once', {
           title: 'a session that ran',
           prompt: 'run it',
           provider: 'claude',
-          status: RunStatus.SUCCEEDED,
+          status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
           dispatchOrigin: SessionDispatchOrigin.USER,
           startsTaskWork,
           createdAt,

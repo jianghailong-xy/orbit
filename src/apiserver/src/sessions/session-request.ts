@@ -14,7 +14,7 @@ import {
 import { attribute, type RequestForBlock } from './session-message';
 import { readRunQuestionCard, RUN_QUESTION_PREFIX } from './run-question';
 import { SESSION_REPLY_TURN_KEY_PREFIX } from './watch-turn-key';
-import { RELEASED_SESSION_STATUSES } from '../common/session-release';
+import { isReleased, releaseWasFailure, type ReleaseFailureFacts } from '../common/session-release';
 
 /**
  * One Orbit session asking another for a reply, and the one outcome every such request comes to
@@ -875,8 +875,9 @@ async function lostDelivery(
   const recorded = new Set(records.flatMap((record) => (record.turnId ? [record.turnId] : [])));
   if (!taken || taken.kind !== 'message' || recorded.has(taken.id)) return null;
   if (taken.status !== 'ANSWERED') {
-    const session = await db.session.findUnique({ where: { id: sessionId }, select: { status: true } });
-    if (!session || !RUN_ENDED.includes(session.status)) return null;
+    // The run is over: a reap or a finalize released it before draining its turns.
+    const session = await db.session.findUnique({ where: { id: sessionId }, select: { finishedAt: true } });
+    if (!session || !isReleased(session)) return null;
   }
   // Looked for under the turn itself, not in the window of records.
   const reached = await db.runEvent.findFirst({
@@ -897,9 +898,6 @@ async function lostDelivery(
   });
   return after ? null : taken.id;
 }
-
-/** A run that is over: what a reap or a finalize writes before it drains the run's turns. */
-const RUN_ENDED: string[] = [...RELEASED_SESSION_STATUSES];
 
 /**
  * Of these failed turns, the ones the auto-retry will find again: a turn the records it reads are about
@@ -1037,8 +1035,7 @@ export const RETRY_CLAIM_WINDOW_MS = 10 * 60_000;
  * outcome as well: told twice, and once wrongly.
  */
 export function awaitsAutoRetry(
-  session: {
-    status: string;
+  session: ReleaseFailureFacts & {
     retryAt: Date | null;
     retryClaimedAt: Date | null;
     cancelRequestedAt: Date | null;
@@ -1049,7 +1046,8 @@ export function awaitsAutoRetry(
   now: Date = new Date(),
 ): boolean {
   if (session.deletedAt || session.completedAt || session.archivedAt) return false;
-  const parked = session.status === 'FAILED'
+  // Parked: released by a failure (common/session-release.ts), or idle.
+  const parked = releaseWasFailure(session)
     || (session.status === 'AWAITING_INPUT' && session.cancelRequestedAt == null);
   if (!parked) return false;
   if (session.retryAt != null) return true;

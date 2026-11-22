@@ -716,6 +716,7 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   // Another account's session is not B's to throw work away from, whatever B knows of it.
   'POST /sessions/:id/checkout/discard': { request: (of) => ({ params: { id: of.sessionId } }) },
   'POST /sessions/:id/adopt-branch': { request: (of) => ({ params: { id: of.sessionId } }) },
+  'POST /sessions/:id/merge-failure/dismiss': { request: (of) => ({ params: { id: of.sessionId } }) },
   'GET /sessions/:id/retry-message': { request: (of) => ({ params: { id: of.sessionId } }) },
   'POST /sessions/:id/retry-message': { request: (of) => ({ params: { id: of.sessionId }, body: {} }) },
   'POST /sessions/:id/auto-retry': {
