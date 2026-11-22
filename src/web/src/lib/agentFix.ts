@@ -1,6 +1,6 @@
 import type { ReportedEngine, RunnerAgentFix, RunnerAttentionFixKind, RunnerAttentionFixRequest } from '@orbit/shared';
 import type { AttentionItem } from './runnerAttention';
-import { agentFixSignInAbove, agentFixSignInBelow, agentFixStartsIn } from './runnerCopy';
+import { agentFixSignInAbove, agentFixSignInBelow, agentFixSignInOnMachinePage, agentFixStartsIn } from './runnerCopy';
 
 /**
  * Fix with an agent (POST /runners/:id/attention/:kind/fix): which warnings offer it, and what to draw.
@@ -78,7 +78,7 @@ export function sandboxFixView(fix: RunnerAgentFix | null | undefined): SandboxF
   if (handled) return { state: 'handled', workspaceName: handled.workspaceName, sessionId: handled.sessionId };
   if (fix.blocked) {
     const signIn = fix.blocked.code === 'engineSignedOut' && fix.engineName
-      ? ` Sign in to ${fix.engineName} on the machine page to use this.`
+      ? agentFixSignInOnMachinePage(fix.engineName)
       : '';
     return { state: 'blocked', line: fix.blocked.message + signIn };
   }

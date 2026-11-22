@@ -28,7 +28,6 @@ import { acceptanceConfirmationKey, acceptanceConfirmationQuery } from '../lib/a
 import { markStatus, type ProjectDependencyGraphResponse } from '../lib/projectDependencyGraph';
 import {
   projectDependencyGraphQuery,
-  projectIntegrationQuery,
   projectOpenItemsQuery,
 } from '../lib/queries';
 import {
@@ -124,6 +123,7 @@ import { Spinner } from './ui/Spinner';
 import { Switch } from './ui/Switch';
 import { Textarea } from './ui/Textarea';
 import { streamPoll } from '../lib/listBudget';
+import { useProjectIntegration } from '../lib/pollOwner';
 
 /**
  * "Start this project?" — the one card on which the account owner starts a project: the criteria
@@ -926,10 +926,7 @@ export function SessionStartProjectCard({
   // repository, and the branches the Main branch menu offers. The card waits for the read: a card
   // drawn before it answered would open on a main branch the answer then moves. One that fails
   // offers no main branch, and the start keeps the one the project stands on.
-  const integrationRead = useQuery({
-    ...projectIntegrationQuery(project),
-    enabled: enabled && started === false,
-  });
+  const integrationRead = useProjectIntegration(project, enabled && started === false);
   const integration = integrationRead.isError ? null : (integrationRead.data ?? null);
   const draft = shown && request && !integrationRead.isLoading
     ? (edited?.itemId === shown.itemId ? edited.draft : startDraftOf(request.settings, integration))
@@ -1129,7 +1126,7 @@ function OwnerStartProjectCard({
     meta: { entities: ['project', 'task'] },
     queryFn: () => api<StartProjectDocument>(`/projects/${encodeURIComponent(projectId)}`),
   });
-  const integrationRead = useQuery(projectIntegrationQuery(projectId));
+  const integrationRead = useProjectIntegration(projectId);
   const graphRead = useQuery(projectDependencyGraphQuery(projectId));
   const standing = standingRead.isError ? null : (standingRead.data ?? null);
   const document = documentRead.isError ? null : (documentRead.data ?? null);

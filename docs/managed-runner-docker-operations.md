@@ -472,8 +472,9 @@ HPC host with a 512 MiB limit: the allocating process was killed at the limit (`
   `… with exit code 137, out of memory; starting generation …` and starts the runner again on the same volume. Until
   it is up, its owner reads "The runner ran out of memory and stopped, so it is being started again on the same data
   volume." If it keeps running out, `lifecycle.maxAttempts` stops in a row (5 by default), it fails with
-  `POD_OUT_OF_MEMORY` ("The runner kept running out of memory …"), and its owner presses Retry once runners have more
-  memory (below).
+  `POD_OUT_OF_MEMORY` ("The runner kept running out of memory …"). It is then tried again by itself while work is
+  waiting for it, 15 minutes later, then after a doubling delay up to 6 hours. Its owner can press Retry to start it
+  at once, and runners can be given more memory (below).
 
 Docker keeps a container's OOM mark once any process in it was killed for memory. The manager says "out of memory"
 only for a runner that itself ended killed (exit 137), so a container whose session process was killed earlier and

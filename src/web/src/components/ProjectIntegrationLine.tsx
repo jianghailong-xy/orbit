@@ -12,8 +12,9 @@ import {
   runLineInSentence,
   startMainBranch,
 } from '../lib/projectStart';
-import { projectIntegrationQuery, projectOpenItemsQuery } from '../lib/queries';
+import { projectOpenItemsQuery } from '../lib/queries';
 import { ago } from '../lib/watches';
+import { useProjectIntegration } from '../lib/pollOwner';
 
 /**
  * Where this project's finished work goes, in one line under its title
@@ -92,10 +93,7 @@ export function ProjectIntegrationLine({
    *  when that read does not say. */
   started?: boolean | null;
 }) {
-  const integration = useQuery({
-    ...projectIntegrationQuery(projectId),
-    enabled: Boolean(projectId),
-  });
+  const integration = useProjectIntegration(projectId);
   const items = useQuery({
     ...projectOpenItemsQuery(projectId),
     enabled: Boolean(projectId) && started === false,

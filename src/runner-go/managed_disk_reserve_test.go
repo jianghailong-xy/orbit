@@ -109,35 +109,70 @@ func TestWatchDataVolumeReserveSetsTheHold(t *testing.T) {
 	}
 }
 
-// A reclaimed turn waits while the hold is on and starts once it lifts; a session that ends stops the wait.
-func TestWaitForAdmissionHoldsAReclaimedTurn(t *testing.T) {
+// The two reserves compose on the reclaim line: a reclaimed RUNNING session starts only once a slot is free, memory
+// has room for one more turn, and the data volume is above its free-space reserve. Either reserve refusing holds it;
+// lifting one leaves it held by the other; lifting both lets it start.
+func TestReclaimPermitWaitsForBothReserves(t *testing.T) {
+	var m memoryReading
+	m.bytes.Store(turnMemoryReserveBytes)
+	gate := m.gate()
 	pool := newSessionPool(2)
-	pool.setAdmissionHold("free space on the data volume is low")
-	done := make(chan struct{})
-	go func() {
-		waitForAdmission(context.Background(), context.Background(), pool, "reclaimed", 5*time.Millisecond)
-		close(done)
-	}()
-	select {
-	case <-done:
-		t.Fatal("the reclaimed turn started under the hold")
-	case <-time.After(50 * time.Millisecond):
+	waiting := func() chan struct{} {
+		done := make(chan struct{})
+		go func() { pool.waitReclaimPermit(context.Background(), gate); close(done) }()
+		return done
 	}
-	pool.setAdmissionHold("")
-	select {
-	case <-done:
-	case <-time.After(5 * time.Second):
-		t.Fatal("the reclaimed turn did not start once the hold lifted")
+	held := func(done chan struct{}, what string) {
+		t.Helper()
+		select {
+		case <-done:
+			t.Fatalf("a reclaimed start went ahead %s", what)
+		case <-time.After(60 * time.Millisecond):
+		}
+	}
+	started := func(done chan struct{}, what string) {
+		t.Helper()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("a reclaimed start was still held %s", what)
+		}
 	}
 
+	started(waiting(), "with a free slot, memory and disk")
+
 	pool.setAdmissionHold("free space on the data volume is low")
-	ended, end := context.WithCancel(context.Background())
-	end()
-	waitForAdmission(ended, context.Background(), pool, "ended", time.Hour)
+	done := waiting()
+	held(done, "below the free-space reserve, with memory to spare")
+	m.bytes.Store(turnMemoryReserveBytes - 1)
+	pool.setAdmissionHold("")
+	held(done, "once the disk came back, with memory still below the turn reserve")
+	pool.setAdmissionHold("free space on the data volume is low")
+	m.bytes.Store(turnMemoryReserveBytes)
+	held(done, "once memory came back, with the disk below its reserve again")
+	pool.setAdmissionHold("")
+	started(done, "once both reserves admit")
 }
 
-// The wiring in runLoop: a managed runner's reserve is watched before the reclaim, and a reclaimed turn waits
-// for it before its session runs.
+// A claim is refused while either reserve refuses: the claim loop reads the memory gate, then the pool's capacity,
+// which is none under the free-space hold.
+func TestClaimsWaitForBothReserves(t *testing.T) {
+	body := runLoopSource(t)
+	memory := strings.Index(body, "if !turnMemory.admits() {")
+	capacity := strings.Index(body, "if pool.admissionIdleCapacity() <= 0 {")
+	claim := strings.Index(body, "t.claimSession(loopCtx, &claims, scope...)")
+	if memory < 0 || capacity < memory || claim < capacity {
+		t.Fatal("the claim loop does not read the memory reserve and then the pool's capacity before it claims")
+	}
+	pool := newSessionPool(2)
+	pool.setAdmissionHold("free space on the data volume is low")
+	if pool.admissionIdleCapacity() != 0 {
+		t.Fatal("under the free-space hold the pool still offers capacity, so a claim would go ahead")
+	}
+}
+
+// The wiring in runLoop: a managed runner's reserve is watched before the reclaim, and every reclaimed RUNNING
+// start goes through the permit line that the hold stops.
 func TestRunLoopHoldsWorkBelowTheReserve(t *testing.T) {
 	body := runLoopSource(t)
 	watch := strings.Index(body, "watchDataVolumeReserve(loopCtx, pool,")
@@ -145,10 +180,10 @@ func TestRunLoopHoldsWorkBelowTheReserve(t *testing.T) {
 	if watch < 0 || reclaim < watch {
 		t.Fatal("the reserve is not watched before the reclaim and the first claim")
 	}
-	wait := strings.Index(body, "waitForAdmission(jobCtx, loopCtx, pool, j.SessionID, dataVolumeCheckInterval)")
-	run := strings.Index(body, "runInteractiveSession(t, j, jobCtx")
-	if wait < 0 || run < wait || !strings.Contains(body[wait-120:wait], "activeAtRegister && j.Reclaimed") {
-		t.Fatal("a reclaimed turn does not wait for the reserve before its session runs")
+	// Every reclaim's RUNNING starts take the one permit line, which the free-space hold stops (waitReclaimPermit).
+	if !strings.Contains(body, "startupStarts.admit = func() { pool.waitReclaimPermit(loopCtx, turnMemory) }") ||
+		!strings.Contains(body, "pool.waitReclaimPermit(loopCtx, turnMemory)\n\t\t}\n\t}") {
+		t.Fatal("a reclaim starts RUNNING sessions without the permit line the free-space hold stops")
 	}
 	if !strings.Contains(body, "if pool.admissionIdleCapacity() <= 0 {") {
 		t.Fatal("the claim loop no longer reads the pool's capacity before claiming")

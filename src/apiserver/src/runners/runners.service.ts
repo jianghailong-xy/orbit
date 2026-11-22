@@ -3,6 +3,7 @@ import {
   ConflictException,
   HttpException,
   HttpStatus,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
@@ -65,6 +66,8 @@ import { ENGINE_LABELS } from '../sessions/engine-signin-preflight';
 import { ACCOUNT_ID_PATTERN, CreateEnrollmentTokenDto, StartLoginDto, UpdateRunnerDto } from './dto';
 import { accountPauseUntil } from '../common/account-pause';
 import { refuseManagedRunnerDeletion, refuseManagedRunnerRotation } from '../managed-runners/managed-runner-delete';
+import { clampManagedConcurrency, managedConcurrencyCeiling, managedConcurrencyClampNotice } from '../managed-runners/managed-runner-concurrency';
+import { MANAGED_RUNNER_RUNTIME, type ManagedRunnerRuntime } from '../managed-runners/managed-runner-runtime';
 import { RUNNER_BEATS, runnerIsOnline, runnerLastBeatAt } from './runner-presence';
 import { runningSessionCounts } from './runner-background-holders';
 import { runnerResourcesAnswerOf } from './runner-resources';
@@ -104,6 +107,9 @@ export class RunnersService {
     // Optional, and last, for the specs that build this service on a bare Prisma: without it a
     // sign-in still reaches the runner, on its next heartbeat instead of at once.
     @Optional() private readonly realtime?: RealtimeService,
+    // The managed runner runtime, for the profile a managed runner's concurrency ceiling is read from
+    // (managed-runner-concurrency.ts). Absent, as on a server with the switch off, no ceiling is applied.
+    @Optional() @Inject(MANAGED_RUNNER_RUNTIME) private readonly managedRuntime?: ManagedRunnerRuntime | null,
   ) {}
 
   private readonly deviceLookups = new Map<string, number[]>();
@@ -566,9 +572,17 @@ export class RunnersService {
       data.displayName = trimmed.length ? trimmed : null;
     }
     // The queue gates live sessions on this per claim, so a change takes effect
-    // next cycle without restarting the runner.
+    // next cycle without restarting the runner. A managed runner's is at most what its memory allows
+    // (managed-runner-concurrency.ts), and the answer tells the owner when what they set was lowered.
+    let notice: string | undefined;
     if (dto.maxConcurrent !== undefined) {
       data.maxConcurrent = dto.maxConcurrent;
+      const ceiling = managedConcurrencyCeiling(this.managedRuntime);
+      if (ceiling && dto.maxConcurrent > ceiling.ceiling
+        && (await this.prisma.managedRunner.findUnique({ where: { runnerId: id }, select: { id: true } }))) {
+        data.maxConcurrent = clampManagedConcurrency(dto.maxConcurrent, ceiling);
+        notice = managedConcurrencyClampNotice(dto.maxConcurrent, ceiling);
+      }
     }
     // Read by the auto-run sweep against each workspace's own measured filesystem; null clears
     // the floor. Also effective next sweep — nothing to restart.
@@ -576,7 +590,7 @@ export class RunnersService {
       data.minFreeDiskMb = dto.minFreeDiskMb;
     }
     // Never echo back tokenHash.
-    return this.prisma.runner.update({
+    const updated = await this.prisma.runner.update({
       where: { id },
       data,
       select: {
@@ -587,6 +601,7 @@ export class RunnersService {
         minFreeDiskMb: true,
       },
     });
+    return notice ? { ...updated, notice } : updated;
   }
 
   /**

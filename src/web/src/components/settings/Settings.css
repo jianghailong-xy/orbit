@@ -229,6 +229,12 @@
 .settings-dot--attention {
   background: var(--warning-solid);
 }
+.settings-dot--update {
+  background: var(--accent, #2563eb);
+}
+.settings-nav-meta--update {
+  color: var(--accent, #2563eb);
+}
 .settings-dot--offline {
   background: var(--dot-idle);
 }

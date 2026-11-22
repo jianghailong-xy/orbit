@@ -580,6 +580,8 @@ import { turnOutcomeOf } from './turn-outcome';
 import { carryingTurnOf, recordCarryingTurnOutcome } from '../common/carrying-turn';
 import { authorizeManagedRunnerInstance, type ManagedRunnerInstance } from '../managed-runners/managed-runner-instance';
 import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/managed-runner-gate';
+import { clampManagedConcurrency, managedConcurrencyCeiling } from '../managed-runners/managed-runner-concurrency';
+import { MANAGED_RUNNER_RUNTIME, type ManagedRunnerRuntime } from '../managed-runners/managed-runner-runtime';
 import {
   managedRunnerHeartbeat,
   sanitizeManagedWorkload,
@@ -587,6 +589,7 @@ import {
   type ManagedHeartbeatAnswer,
 } from '../managed-runners/managed-runner-sleep';
 import { readManagedRunnerStorage, type ManagedRunnerStorage } from '../managed-runners/managed-runner-storage';
+import { markUpdateNowCuts } from '../managed-runners/managed-runner-update-cut';
 import {
   RUNNER_OFFLINE_AFTER_MS,
   RunnerPresenceService,
@@ -1759,6 +1762,11 @@ export class RunnerApiController {
     @Optional() private readonly coordinatorHandoffs?: CoordinatorHandoffService,
     @Optional() private readonly conditions?: ConditionsService,
     @Optional() private readonly coordinatorFacts?: CoordinatorFactQueueService,
+    /**
+     * The managed runner runtime, for the profile a managed runner's concurrency ceiling is read from
+     * (managed-runners/managed-runner-concurrency.ts). `@Optional()` like the rest: without it no ceiling is applied.
+     */
+    @Optional() @Inject(MANAGED_RUNNER_RUNTIME) private readonly managedRuntime?: ManagedRunnerRuntime | null,
   ) {
     this.files = files ?? new FilesService(prisma);
   }
@@ -2910,12 +2918,17 @@ export class RunnerApiController {
     // syncs its self-gate to a UI/API change without needing a restart. The free-space floor
     // rides along for the same reason: the runner reclaims its own session checkouts under disk
     // pressure, and that has to be the floor the owner set here, not a second number. A managed
-    // runner's floor is the owner's too when set; otherwise its storage answer's default.
+    // runner's floor is the owner's too when set; otherwise its storage answer's default. A managed runner's
+    // max-concurrent is at most what its memory allows (managed-runners/managed-runner-concurrency.ts), whatever the
+    // row says: a row stored before the ceiling, or above it, is not what its daemon runs. Only while the switch is on,
+    // as for its storage.
     const answer: RunnerHeartbeatResponse & { linkHints?: RunnerLinkHints } = {
       cancelSessionIds,
       ...(keepWorkSessionIds.length > 0 ? { keepWorkSessionIds } : {}),
       leaseLostSessionIds: ownershipLostSessionIds,
-      maxConcurrent: updated.maxConcurrent,
+      maxConcurrent: managedSleepOn
+        ? clampManagedConcurrency(updated.maxConcurrent, managedConcurrencyCeiling(this.managedRuntime))
+        : updated.maxConcurrent,
       minFreeDiskMb: managedStorage ? managedStorage.minFreeDiskMb : updated.minFreeDiskMb,
       mergeRequests,
       commitRequests,
@@ -9332,6 +9345,11 @@ export class RunnerApiController {
           sessionData.poolSwitchNotice = null;
         }
       }
+      // A cut its runner's own stop marked (interrupt runner_restart) while the owner's Update Now of its Orbit Cloud
+      // container was stopping it is the update's, and is stored as the update's (managed-runner-update-cut.ts): the
+      // next generation is handed the turn back as the update's continuation. A plain read of the mapping, only for a
+      // batch holding such a cut.
+      await markUpdateNowCuts(tx, runner.id, durable, new Date());
       if (durable.length > 0) {
         // The one place a run_event is ever written, and the reason the per-token progress pings
         // stop costing 868 MB/day: `isNoiseSystemEvent` decides here whether a row is worth

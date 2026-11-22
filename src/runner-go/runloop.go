@@ -1556,6 +1556,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// in the UI takes effect within one heartbeat, no restart. The local config value is
 	// only the initial seed; the DB value is authoritative once the first heartbeat lands.
 	pool := newSessionPool(cfg.MaxConcurrent)
+	// A managed instance claims nothing, and starts no reclaimed RUNNING session, while its container has less than one
+	// more turn's memory left (memory_reserve.go). Nil anywhere else: it admits.
+	turnMemory := newTurnMemoryGate(currentManagedInstance() != nil)
 	// Before this image does anything else — spawns a probe, reclaims a session, sweeps a checkout. A
 	// job the image before handed on as it re-executed is still this process's child, and until the
 	// pool holds it again the sweep takes its checkout for one nobody is using.
@@ -1976,7 +1979,20 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	resets := newCodexResetRelay(resetCtx, t, resetConsumer.execute, &heartbeatOps)
 	// A managed instance's side of idle sleep (managed_sleep.go); unused by a self-managed runner.
 	sleeper := newManagedSleep()
-	managedWorkload := func() ManagedWorkload { return managedWorkloadCounts(pool, &heartbeatOps, login, install) }
+	// A managed instance shares the duplicate files on its own volume while it is idle (managed_dedupe.go).
+	var dedupe *homeDedupe
+	if currentManagedInstance() != nil {
+		if home, err := os.UserHomeDir(); err == nil {
+			dedupe = newHomeDedupe(home)
+		}
+	}
+	defer dedupe.stop()
+	// What the workload report says: a dedupe pass is one of its operations, so the runner is not put to sleep under it.
+	managedWorkload := func() ManagedWorkload {
+		counts := managedWorkloadCounts(pool, &heartbeatOps, login, install)
+		counts.Operations += dedupe.inFlight()
+		return counts
+	}
 	// Closed once a managed instance's first heartbeat has been taken, or given up on
 	// (managedStartupBeat); its claims wait for it.
 	startupBeatDone := make(chan struct{})
@@ -2022,6 +2038,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			sent := time.Now()
 			var workload *ManagedWorkload
 			if currentManagedInstance() != nil {
+				// The pass itself left out: whether anything else is at work. One is not started for a stop already
+				// under way, nor once a sleep request has been accepted.
+				dedupe.tick(managedWorkloadCounts(pool, &heartbeatOps, login, install).idle() && !draining && !sleeper.hasAccepted())
 				report := sleeper.report(managedWorkload())
 				workload = &report
 			}
@@ -2809,10 +2828,6 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			// secrets: until then the scrubber does not know them (secretStore.waitReady). Bounded, so a control
 			// plane that does not answer holds nothing up for long.
 			secrets.waitReady(loopCtx, secretStartupWait)
-			// A reclaimed turn starts only above the data volume's free-space reserve (managed_disk_reserve.go).
-			if activeAtRegister && j.Reclaimed {
-				waitForAdmission(jobCtx, loopCtx, pool, j.SessionID, dataVolumeCheckInterval)
-			}
 			runInteractiveSession(t, j, jobCtx, loopCtx, dir, codexUsage.mergeCodexRateLimits, pool, live)
 		}(job, execDir, s, initiallyActive)
 	}
@@ -2824,6 +2839,14 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// Retried with backoff: on a joint restart the apiserver is often still down when
 	// we come up, and a single failed attempt would orphan every resumable session for
 	// the rest of this process — their queued turns then sit PENDING forever.
+	// A RUNNING session a reclaim after the startup one hands back (the deferred retry, the late claim check, a failed
+	// claim's reconciliation) takes its turn permit as the startup reclaim's do: once a slot and the memory reserve are
+	// free (sessionPool.waitReclaimPermit). Those reclaims start their sessions one after another, so one at a time.
+	admitReclaimed := func(pending reclaimedStart) {
+		if pending.initiallyActive {
+			pool.waitReclaimPermit(loopCtx, turnMemory)
+		}
+	}
 	reclaimed := false
 	// When a reclaim sets conflicted sessions aside, retry at this time so they do
 	// not stay unsupervised; zero means nothing is waiting.
@@ -2885,6 +2908,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		// prepared locally first as the single takeover above prepares one.
 		startupStarts.batchSize = t.takeoverBatchSize
 		startupStarts.takeoverMany = batchIdleTakeover(loopCtx, t, prepareTakeover)
+		// A RUNNING session takes its turn permit as a claim does, one at a time: a free slot, and the memory reserve.
+		startupStarts.admit = func() { pool.waitReclaimPermit(loopCtx, turnMemory) }
 		startupStarts.onStarted = func(id string) { reclaimDeferred.started(id, beatNow) }
 		startupStarts.run(reclaimStartWorkers, func() {
 			idleHanded, idleTook := startupStarts.idlePhase()
@@ -3003,6 +3028,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			}
 			for _, pending := range recovered {
 				logln(fmt.Sprintf("reclaiming session %s — %s", pending.job.SessionID, pending.job.Title))
+				admitReclaimed(pending)
 				startSession(pending.job, pending.initiallyActive)
 				pending.endTakeover()
 			}
@@ -3034,6 +3060,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			}
 			for _, pending := range recovered {
 				logln(fmt.Sprintf("reclaiming session %s — %s (late claim check)", pending.job.SessionID, pending.job.Title))
+				admitReclaimed(pending)
 				startSession(pending.job, pending.initiallyActive)
 				pending.endTakeover()
 			}
@@ -3059,6 +3086,15 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		//
 		// Draining for an update, the pool admits nothing, with one exception (drainClaimScope): a session
 		// whose engine is running a turn here and whose queued message moved its row to PENDING.
+		//
+		// And no claim while memory has no room for one more turn (turnMemoryReserveBytes): the session waits queued.
+		if !turnMemory.admits() {
+			select {
+			case <-loopCtx.Done():
+			case <-time.After(500 * time.Millisecond):
+			}
+			continue
+		}
 		var scope []string
 		if pool.admissionIdleCapacity() <= 0 {
 			if scope = drainClaimScope(pool, drainScopedClaims.Load()); len(scope) == 0 {
@@ -3109,6 +3145,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				}
 				for _, pending := range recovered {
 					logln(fmt.Sprintf("recovering ambiguously claimed session %s — %s", pending.job.SessionID, pending.job.Title))
+					admitReclaimed(pending)
 					startSession(pending.job, pending.initiallyActive)
 					pending.endTakeover()
 				}
@@ -3195,6 +3232,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				reclaimRetryAt = time.Now().Add(reclaimRetryInterval)
 			}
 			for _, pending := range recovered {
+				admitReclaimed(pending)
 				startSession(pending.job, pending.initiallyActive)
 				pending.endTakeover()
 			}

@@ -773,8 +773,14 @@ test('over the weekly budget: schedule_run_now from a session and a PAT\'s run a
   const now = Date.now();
   for (let i = 1; i <= 7; i++) {
     const at = new Date(now - i * 60 * 60_000);
+    // Delivered: only a run whose first turn reached its engine counts toward the budget (§4).
+    const runId = randomUUID();
     await db.scheduleRun.create({
-      data: { scheduleId: s.id, scheduleRevision: 1, plannedAt: at, trigger: 'SCHEDULED', state: 'NO_CHANGE', startedAt: at, endedAt: at },
+      data: { id: runId, scheduleId: s.id, scheduleRevision: 1, plannedAt: at, trigger: 'SCHEDULED', state: 'NO_CHANGE', startedAt: at, endedAt: at },
+    });
+    const sessionId = await makeSession(w.ownerId, w.workspaceId, PermissionMode.PLAN, null, { scheduleRunId: runId });
+    await db.conversationTurn.create({
+      data: { sessionId, seq: 1, clientTurnId: `initial-${sessionId}`, content: 'x', status: 'IN_FLIGHT', deliveredAt: at },
     });
   }
   // A slot the start found over budget, as the run list reads it.

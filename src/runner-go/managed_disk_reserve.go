@@ -12,8 +12,10 @@ import (
 // checkout, the shared caches, and /tmp, which is a directory of the same volume (managed_tmp.go). When it
 // fills, the program writing gets ENOSPC and nothing is evicted, but the daemon still has to write its own
 // state — session spools, config, the credential it renews. So below a reserve the daemon takes no new work:
-// the pool offers no capacity (admissionOccupancy, which the claim loop and the heartbeat both read) and a
-// reclaimed session's turn waits to start (waitForAdmission). Sessions already running carry on; what they
+// the pool offers no capacity (admissionOccupancy, which the claim loop and the heartbeat both read) and no
+// reclaimed RUNNING session starts (sessionPool.waitReclaimPermit, the one-at-a-time line every reclaim's
+// starts go through). The memory reserve (memory_reserve.go) gates the same two paths; either one refusing
+// holds the work, and each says so in the log in its own words. Sessions already running carry on; what they
 // write past the end gets ENOSPC, like any other writer.
 //
 // Free space is read as the worktree sweep reads it (checkoutStorage.judge): statfs of the volume, held to a
@@ -85,29 +87,4 @@ func watchDataVolumeReserve(ctx context.Context, pool *sessionPool, measure func
 			}
 		}
 	}()
-}
-
-// waitForAdmission holds a reclaimed session's turn while the pool's admission hold is on, saying once why,
-// and returns when it lifts, the session ends or the runner shuts down.
-func waitForAdmission(sessionCtx, shutdown context.Context, pool *sessionPool, sessionID string, poll time.Duration) {
-	reason := pool.admissionHoldReason()
-	if reason == "" {
-		return
-	}
-	logln("session", sessionID, "— reclaimed turn held:", reason)
-	ticker := time.NewTicker(poll)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-sessionCtx.Done():
-			return
-		case <-shutdown.Done():
-			return
-		case <-ticker.C:
-			if pool.admissionHoldReason() == "" {
-				logln("session", sessionID, "— reclaimed turn starting: free space is back above the reserve")
-				return
-			}
-		}
-	}
 }

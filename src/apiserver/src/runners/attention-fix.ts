@@ -17,7 +17,7 @@ import { runnerOs } from '../common/runner-platform';
 import { signedOutEngineRefusal, type EnginePreflightRunner } from '../sessions/engine-signin-preflight';
 import { lastProviderByWorkspace, DEFAULT_AGENT_PROVIDER } from '../workspaces/workspace-provider';
 import { runnerIsOnline } from './runner-presence';
-import { heldFilter } from '../common/session-release';
+import { heldFilter, isReleased } from '../common/session-release';
 
 /**
  * Fix with an agent (docs/mocks/install-failed-fix-with-agent, and the board on task 34x9udvOf5AQdLYqYE9N4):
@@ -257,6 +257,7 @@ async function fixesOf(
       status: true,
       completedAt: true,
       archivedAt: true,
+      finishedAt: true,
       workspace: { select: { name: true } },
     },
   });
@@ -270,7 +271,7 @@ async function fixesOf(
       const list = fixing.get(runnerId) ?? [];
       list.push({ ...parsed, ...place });
       fixing.set(runnerId, list);
-    } else if ((OVER_STATUSES as readonly string[]).includes(session.status)) {
+    } else if (isReleased(session)) {
       const list = handled.get(runnerId) ?? [];
       list.push({ ...parsed, ...place, status: String(session.status) as RunnerAgentFixHandled['status'] });
       handled.set(runnerId, list);
@@ -279,9 +280,10 @@ async function fixesOf(
   return { fixing, handled };
 }
 
-/** The same answer as `OPEN_FIX_SESSION`, for a row already read. */
-function fixSessionIsOpen(session: { status: string; completedAt: Date | null; archivedAt: Date | null }): boolean {
-  return !session.completedAt && !session.archivedAt && !(OVER_STATUSES as readonly string[]).includes(session.status);
+/** The same answer as `OPEN_FIX_SESSION` (its release column, not its status, says whether it is over), for a row already
+ *  read. */
+function fixSessionIsOpen(session: { completedAt: Date | null; archivedAt: Date | null; finishedAt: Date | null }): boolean {
+  return !session.completedAt && !session.archivedAt && !isReleased(session);
 }
 
 /** Whether a stored entry still holds its warning: its session is open, or its create is still in flight. */

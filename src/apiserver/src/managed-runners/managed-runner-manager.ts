@@ -4,7 +4,6 @@ import { Logger } from '@nestjs/common';
 import { Prisma, type ManagedRunner } from '@prisma/client';
 import {
   MANAGED_RUNNER_CAPACITY_UNAVAILABLE,
-  MANAGED_RUNNER_SLEEP_CAPABILITY,
   MODEL_UNAVAILABLE,
   type ManagedRunnerReason,
 } from '@orbit/shared';
@@ -43,7 +42,8 @@ import {
 import { ownerAccountDisabled } from './managed-runner-eligibility';
 import { stopProofFor, type ManagedRunnerPredecessor, type ManagedRunnerStopProof } from './managed-runner-fencing';
 import type { ManagedRunnerProfile } from './managed-runner-profile';
-import { readStoredWorkload, workloadIdle, type StoredManagedWorkload } from './managed-runner-sleep';
+import { freshInstanceReport, workloadIdle, type StoredManagedWorkload } from './managed-runner-sleep';
+import { ownerUpdateDrain, ownerUpdatePending } from './managed-runner-status';
 import { readVolumeMeasurement, type VolumeMeasurement } from './managed-runner-storage';
 import { managedKeySupply, managedRuntimeSupply, type ManagedSupplyRunner } from './managed-runner-supply';
 import {
@@ -57,7 +57,7 @@ import {
   type SwitchedVolume,
   type VolumeSwitchCheck,
 } from './managed-runner-volume-switch';
-import { managedRunnerWork, recordManagedDemand, sleepingRunnersWithDemand } from './managed-runner-work';
+import { managedRunnerWaitingWork, managedRunnerWork, recordManagedDemand, sleepingRunnersWithDemand } from './managed-runner-work';
 import { RUNNER_BEATS, RUNNER_SILENT_AFTER_MS, runnerLastBeatAt } from '../runners/runner-presence';
 
 /**
@@ -126,8 +126,10 @@ import { RUNNER_BEATS, RUNNER_SILENT_AFTER_MS, runnerLastBeatAt } from '../runne
  *   - An instance that stops unasked with its host's report of the stop — a crash, its memory limit,
  *     its host or Docker restarting — is started again by itself: the next generation on the same
  *     volume and runner, through the same gate, within `maxAttempts` and the backoff (`terminated`).
- *     A crash loop still ends FAILED. Every such stop is logged; running out of memory has reasons
- *     of its own for the owner.
+ *     A crash loop still ends FAILED, and is then tried again by itself on a slow, growing backoff
+ *     (15 min up to 6 h) while work is waiting for it, through the same gate (`fail`, `crashRetried`);
+ *     a cause that needs an operator stays FAILED. Every such stop is logged; running out of memory
+ *     has reasons of its own for the owner.
  *   - The owner is told it is restarting (POD_RESTARTING, POD_RESTARTING_OUT_OF_MEMORY) until it is
  *     READY. A wait on the way — its predecessor's volume detaching, a volume held, the environment's
  *     cap, a transient error — is said while it lasts and carries that reason, which comes back once
@@ -144,7 +146,7 @@ import { RUNNER_BEATS, RUNNER_SILENT_AFTER_MS, runnerLastBeatAt } from '../runne
  *     reports every stop (`stopSilentPrevious`, Docker); the host's report of that stop starts the next
  *     generation from the current image, as after a crash. Silence alone, on the current image, still
  *     authorizes nothing.
- *   - On a backend that moves instances onto its current image (`rollImage`, Kubernetes), a READY instance
+ *   - On a backend that moves instances onto its current image (`rollImage`, Kubernetes and Docker), a READY instance
  *     of a previous image is drained as for sleep once it is idle, and woken at once as the next generation
  *     on the current image (`rollPreviousImage`): an upgrade's new runner image reaches every runner
  *     without cutting short anything in flight.
@@ -223,7 +225,10 @@ class CapacityRefused extends Error {}
 /** The client-safe sentence for each cause. Raw infrastructure errors stay in the server log. */
 const REASONS: Record<string, { message: string; retryable: boolean }> = {
   TRANSIENT: { message: 'A transient infrastructure error interrupted provisioning; it is retried automatically.', retryable: true },
-  RETRY_EXHAUSTED: { message: 'Provisioning kept failing on transient infrastructure errors and stopped. It can be retried.', retryable: true },
+  RETRY_EXHAUSTED: {
+    message: 'Provisioning kept failing on transient infrastructure errors and stopped. It is tried again by itself later while work is waiting for it, and a retry tries it now.',
+    retryable: true,
+  },
   STARTUP_TIMEOUT: { message: 'The runner did not report in before its startup deadline. It can be retried.', retryable: true },
   [MODEL_UNAVAILABLE]: {
     message: 'The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from the Machines & models page; it waits for one and becomes ready by itself.',
@@ -237,9 +242,12 @@ const REASONS: Record<string, { message: string; retryable: boolean }> = {
     message: 'The runner ran out of memory and stopped, so it is being started again on the same data volume. Messages sent meanwhile wait for it.',
     retryable: true,
   },
-  POD_TERMINATED: { message: 'The runner instance stopped too often to be started again automatically. A retry starts it again and keeps the data volume.', retryable: true },
+  POD_TERMINATED: {
+    message: 'The runner instance stopped too often to be started again at once. It is started again by itself later while work is waiting for it, and a retry starts it now; the data volume is kept.',
+    retryable: true,
+  },
   POD_OUT_OF_MEMORY: {
-    message: 'The runner kept running out of memory, so it is not started again automatically. A retry starts it again and keeps the data volume; if it keeps happening, an operator can give runners more memory.',
+    message: 'The runner kept running out of memory, so it is not started again at once. It is started again by itself later while work is waiting for it, and a retry starts it now; the data volume is kept. If it keeps happening, an operator can give runners more memory.',
     retryable: true,
   },
   KUBERNETES_FORBIDDEN: { message: 'The cluster refused the manager. An operator has to check its permissions; then it can be retried.', retryable: true },
@@ -325,6 +333,24 @@ const REASONS: Record<string, { message: string; retryable: boolean }> = {
  */
 const ROOM_WAITS: ReadonlySet<string> = new Set(['CONTAINER_LIMIT', 'KUBERNETES_QUOTA_EXCEEDED', 'FIREWALL_NOT_ENFORCED']);
 
+/**
+ * The slow tier (`fail`, `crashRetried`): a retryable failure, once the fast attempts are spent, is tried again by
+ * itself after 15 minutes, then 30, 1 h, 2 h, 4 h and at most 6 h, while work is waiting for the runner.
+ */
+const SLOW_RETRY_BASE_MS = 15 * 60_000;
+const SLOW_RETRY_MAX_MS = 6 * 3_600_000;
+
+/** The slow tier's wait before its try `slow` (0 the first). */
+export function slowRetryDelayMs(slow: number): number {
+  return Math.min(SLOW_RETRY_MAX_MS, SLOW_RETRY_BASE_MS * 2 ** Math.max(0, slow));
+}
+
+/**
+ * A runner that ran this long after its last restart without stopping starts its attempt count again at its next
+ * stop (`ranSinceRestart`), as one that stayed READY for twice the longest backoff does (`stoodUp`).
+ */
+export const ATTEMPT_RESET_MS = 3_600_000;
+
 /** A reason an automatic restart stands under (`terminated`). */
 function restartingReason(reason: unknown): boolean {
   const code = (reason as { code?: unknown } | null | undefined)?.code;
@@ -408,7 +434,7 @@ export class ManagedRunnerManager {
    * once its retry time comes or the pool has moved since it was refused (oldest waiter first, so a
    * release is offered in the order the waits began), a drain, a wake — then the READY runners whose
    * instance and idleness each pass looks at, and last the FAILED ones whose recorded volume is
-   * missing, to see whether it is back (`volumeBack`).
+   * missing, to see whether it is back (`volumeBack`), or whose slow retry is due (`crashRetried`).
    */
   async dueMappings(limit: number): Promise<string[]> {
     const now = this.now();
@@ -463,7 +489,8 @@ export class ManagedRunnerManager {
       select: { id: true },
     });
     // A missing volume is looked for again; a failure for want of a login is taken up again (`loginWaitResumed`),
-    // and so is a startup timeout whose instance has reported in since (`startupResumed`).
+    // and so is a startup timeout whose instance has reported in since (`startupResumed`), and a retryable failure
+    // whose slow retry is due (`crashRetried`, which tries it only while work is waiting).
     const missing = await this.prisma.managedRunner.findMany({
       where: {
         ...scope,
@@ -472,6 +499,7 @@ export class ManagedRunnerManager {
           { lastError: { path: ['code'], equals: 'PVC_MISSING' } },
           { desiredState: 'RUNNING', lastError: { path: ['code'], equals: MODEL_UNAVAILABLE } },
           { desiredState: 'RUNNING', lastError: { path: ['code'], equals: 'STARTUP_TIMEOUT' } },
+          { desiredState: 'RUNNING', nextAttemptAt: { lte: now }, lastError: { path: ['retryable'], equals: true }, owner: { disabledAt: null } },
         ],
       },
       orderBy: { updatedAt: 'asc' },
@@ -538,12 +566,13 @@ export class ManagedRunnerManager {
           if (mapping.desiredState !== 'RUNNING') return { done: 'IDLE' };
           if (!this.capacityDue(mapping, await this.capacityPool())) return { done: 'WAITING_CAPACITY' };
           break;
-        // A failure waits for a retry; only a missing volume is looked for again meanwhile.
-        // A runner a previous version failed for want of a login waits for one now: it is taken up again
-        // as a retry would (`loginWaitResumed`).
+        // A failure waits for a retry, or for its slow retry (`crashRetried`); only a missing volume is looked for
+        // again meanwhile. A runner a previous version failed for want of a login waits for one now: it is taken up
+        // again as a retry would (`loginWaitResumed`).
         case 'FAILED': {
           const code = (mapping.lastError as { code?: unknown } | null)?.code;
           if ((code === MODEL_UNAVAILABLE || code === 'STARTUP_TIMEOUT') && mapping.desiredState === 'RUNNING') break;
+          if (this.slowRetryDue(mapping)) break;
           if (code !== 'PVC_MISSING') return { done: mapping.desiredState === 'RUNNING' ? 'FAILED' : 'IDLE' };
           break;
         }
@@ -580,7 +609,8 @@ export class ManagedRunnerManager {
         case 'SLEEPING':
           return await this.sleeping(mapping);
         case 'FAILED':
-          return (await this.loginWaitResumed(mapping)) ?? (await this.startupResumed(mapping)) ?? (await this.volumeBack(mapping));
+          return (await this.loginWaitResumed(mapping)) ?? (await this.startupResumed(mapping)) ?? (await this.crashRetried(mapping))
+            ?? ((mapping.lastError as { code?: unknown } | null)?.code === 'PVC_MISSING' ? await this.volumeBack(mapping) : { done: 'FAILED' });
         default:
           return await this.ready(mapping);
       }
@@ -829,6 +859,8 @@ export class ManagedRunnerManager {
       startupDeadlineAt: null,
       lastError: Prisma.DbNull,
       initialProvider,
+      // The next generation READY ends the owner's Update Now.
+      ...(ownerUpdatePending(mapping) ? { updateCompletedAt: this.now() } : {}),
     });
     return { done: 'READY' };
   }
@@ -844,17 +876,38 @@ export class ManagedRunnerManager {
     }
     this.checkInstance(mapping, instance);
     if (instance.terminated) return this.terminated(mapping, instance);
+    await this.recordImageOutdated(mapping, instance);
     // A stale heartbeat makes READY unusable (the status says so); it is not proof the instance died,
     // and on its own it authorizes nothing. Of a previous image, on a link-only server, it is asked to stop.
     return (await this.stopSilentPrevious(mapping, instance))
+      ?? (await this.ownerUpdate(mapping, instance))
       ?? (await this.rollPreviousImage(mapping, instance))
       ?? (await this.beginDrain(mapping))
       ?? { done: 'READY' };
   }
 
   /**
+   * What the owner's status says of the image (`update`): a READY instance made from a previous image, with the
+   * source commit the image it would be made from now was built from, is recorded as outdated since this pass first
+   * found it so (`imageOutdatedSince`, `currentImageSha`); anything else — current, or a backend that cannot name
+   * the current build — clears both. Written only when that changes, under this replica's lease, as a predicate
+   * write of its own columns that leaves `revision` alone: the status reads it, nothing decides on it.
+   */
+  private async recordImageOutdated(mapping: ManagedRunner, instance: ManagedInstance): Promise<void> {
+    const sha = instance.previousImage ? (instance.currentImageRevision ?? null) : null;
+    if (sha === mapping.currentImageSha && (sha === null) === (mapping.imageOutdatedSince === null)) return;
+    await this.prisma.managedRunner.updateMany({
+      where: { id: mapping.id, leaseHolder: this.holder },
+      data: {
+        currentImageSha: sha,
+        imageOutdatedSince: sha === null ? null : (mapping.imageOutdatedSince ?? this.now()),
+      },
+    });
+  }
+
+  /**
    * A READY instance made from a previous image (`previousImage`) on a backend that moves such instances onto the
-   * image it makes them from now (`rollImage`, Kubernetes): once it is idle — by its own fresh report and by the
+   * image it makes them from now (`rollImage`, Kubernetes and Docker): once it is idle — by its own fresh report and by the
    * records, as for sleep, but without waiting out the idle interval — it drains exactly as for sleep, marked as a
    * roll (`imageRollTo`). Demand calls the roll off like any drain, and the next idle pass tries again. Once the
    * instance has stopped and the mapping falls asleep, the mark wakes it at once: the next generation is made from
@@ -863,6 +916,68 @@ export class ManagedRunnerManager {
   private async rollPreviousImage(mapping: ManagedRunner, instance: ManagedInstance): Promise<Step | null> {
     const image = this.backend.rollImage;
     if (!image || !instance.previousImage || !instance.running || mapping.desiredState !== 'RUNNING') return null;
+    return this.rollWhenIdle(mapping, image, `idle on a previous image (${instance.previousImage})`);
+  }
+
+  /**
+   * The owner's Update Now (ManagedRunnerService.updateNow), in progress on a READY instance. An instance found already
+   * on the current image ends the request (`updateCompletedAt`). Otherwise, null when it stays:
+   *
+   *   - Asked of a busy runner with the owner's word that its turns may be interrupted (`updateInterruptTurns`), on a
+   *     backend whose host reports every stop it makes (`stopInstance`, Docker): the instance is asked to stop
+   *     (`stopForOwnerUpdate`), and its host's report of the exit is read as for any stop (`terminated`).
+   *   - Otherwise — an idle runner's request, or a busy one's on a backend that cannot stop it (Kubernetes) — the same
+   *     roll as `rollPreviousImage`, on any backend: once the instance is idle, by its own fresh report and by the
+   *     records, it drains marked as a roll and wakes at once as the next generation, made from the image the backend
+   *     makes instances from now, on the same volume and runner. Nothing in flight is cut short: while busy it stays
+   *     READY and the next pass asks again. The mark names the backend's roll image, or where it has none the current
+   *     build's commit. Demand does not call that drain off (`drainAbort`).
+   */
+  private async ownerUpdate(mapping: ManagedRunner, instance: ManagedInstance): Promise<Step | null> {
+    if (!ownerUpdatePending(mapping)) return null;
+    if (!instance.previousImage) {
+      // A predicate write of its own column under this replica's lease, as recordImageOutdated's: nothing decides on it.
+      await this.prisma.managedRunner.updateMany({
+        where: { id: mapping.id, leaseHolder: this.holder, updateRequestedAt: mapping.updateRequestedAt },
+        data: { updateCompletedAt: this.now() },
+      });
+      return null;
+    }
+    if (!instance.running || mapping.desiredState !== 'RUNNING') return null;
+    if (mapping.updateInterruptTurns && this.backend.stopInstance) return this.stopForOwnerUpdate(mapping, instance);
+    const image = this.backend.rollImage ?? mapping.currentImageSha ?? instance.currentImageRevision ?? instance.previousImage;
+    return this.rollWhenIdle(
+      mapping,
+      image,
+      `its owner asked to update it (${mapping.updateRequestedAt!.toISOString()}), idle on a previous image (${instance.previousImage})`,
+    );
+  }
+
+  /**
+   * The owner's Update Now of a busy runner, with their word that its turns may be interrupted, on a backend whose host
+   * reports every stop it makes: the READY instance is asked to stop (`stopInstance`), as `stopSilentPrevious` asks.
+   * Docker sends SIGTERM with the profile's stop grace, and the runner's ordinary shutdown stops its turns, which stay
+   * resumable; that works on every runner image. Asking is no proof: the mapping stays READY, nothing is created, and
+   * every pass asks again until its host reports the exit. That report is the stop proof (`terminated`): recorded, the
+   * container removed by UID, its volume released, and only then the next generation made from the image the backend
+   * makes instances from now, on the same volume and runner. Demand changes none of it.
+   */
+  private async stopForOwnerUpdate(mapping: ManagedRunner, instance: ManagedInstance): Promise<Step> {
+    this.log.warn(
+      `managed runner ${mapping.id}: its owner asked to update it now (${mapping.updateRequestedAt!.toISOString()}), interrupting its turns; `
+        + `asking its ${this.backend.terms.instance} ${instance.uid} of generation ${mapping.generation}, made from a previous image `
+        + `(${instance.previousImage}), to stop`,
+    );
+    await this.backend.stopInstance!(mapping);
+    return { done: 'READY' };
+  }
+
+  /**
+   * The roll's drain, for `rollPreviousImage` and `ownerUpdate`: once the instance is idle — by its own fresh report
+   * and by the records, as for sleep, but without waiting out the idle interval — it drains exactly as for sleep,
+   * marked `imageRollTo`. Null while it is not idle.
+   */
+  private async rollWhenIdle(mapping: ManagedRunner, image: string, why: string): Promise<Step | null> {
     const now = this.now();
     const report = await this.instanceReport(mapping, now);
     if (!report || !workloadIdle(report) || report.draining) return null;
@@ -890,10 +1005,7 @@ export class ManagedRunnerManager {
       },
     });
     if (count === 0) throw new Superseded();
-    this.log.warn(
-      `managed runner ${mapping.id}: idle on a previous image (${instance.previousImage}); draining generation ${mapping.generation} `
-        + `to wake it on ${image}`,
-    );
+    this.log.warn(`managed runner ${mapping.id}: ${why}; draining generation ${mapping.generation} to wake it on ${image}`);
     return { next: await this.reread(mapping.id) };
   }
 
@@ -936,14 +1048,7 @@ export class ManagedRunnerManager {
       where: { id: mapping.runnerId },
       select: { capabilities: true, ...RUNNER_BEATS, managedWorkload: true },
     });
-    if (!runner?.capabilities.includes(MANAGED_RUNNER_SLEEP_CAPABILITY)) return null;
-    const freshMs = this.profile.lifecycle.heartbeatFreshSeconds * 1000;
-    const beat = runnerLastBeatAt(runner);
-    if (!beat || now.getTime() - beat.getTime() > freshMs) return null;
-    const report = readStoredWorkload(runner.managedWorkload);
-    if (!report || report.generation !== mapping.generation || report.podUid !== mapping.podUid) return null;
-    const received = Date.parse(report.receivedAt);
-    return now.getTime() - received <= freshMs ? report : null;
+    return freshInstanceReport(runner, runnerLastBeatAt(runner), mapping, now, this.profile.lifecycle.heartbeatFreshSeconds * 1000);
   }
 
   /**
@@ -1071,10 +1176,15 @@ export class ManagedRunnerManager {
     await this.backend.stopInstance(mapping);
   }
 
-  /** Why an unaccepted drain is called off now, or null to keep waiting for the instance. */
+  /**
+   * Why an unaccepted drain is called off now, or null to keep waiting for the instance. The owner's Update Now
+   * (`ownerUpdateDrain`) is not called off by demand, nor by work waiting in the records: what came meanwhile waits for
+   * the next generation, which wakes at once. Its instance still has to report idle, as every drain's does.
+   */
   private async drainAbort(mapping: ManagedRunner, now: Date): Promise<DrainAbort | null> {
-    if (mapping.desiredState === 'RUNNING' || mapping.demandRevision !== mapping.drainDemandRevision) return 'DEMAND';
-    if ((await managedRunnerWork(this.prisma, mapping.runnerId)).length > 0) return 'WORK';
+    const owners = ownerUpdateDrain(mapping);
+    if (!owners && (mapping.desiredState === 'RUNNING' || mapping.demandRevision !== mapping.drainDemandRevision)) return 'DEMAND';
+    if (!owners && (await managedRunnerWork(this.prisma, mapping.runnerId)).length > 0) return 'WORK';
     const report = await this.instanceReport(mapping, now);
     if (!report) return 'TELEMETRY_MISSING';
     if (!workloadIdle(report)) return 'RUNNER_BUSY';
@@ -1285,12 +1395,20 @@ export class ManagedRunnerManager {
    *     attempt the single-writer gate removes that instance by UID, waits for its volume to be
    *     released and starts the next generation on the same volume and runner. Each stop spends an
    *     attempt, as a failed try on the way up does, unless the runner had stayed READY for twice the
-   *     longest backoff (`stoodUp`); the stop that spends the last one leaves it FAILED, retryable,
-   *     so a crash loop ends there. Compute stays reserved throughout, as for a retry.
+   *     longest backoff (`stoodUp`) or had run ATTEMPT_RESET_MS since its last restart (`ranSinceRestart`);
+   *     the stop that spends the last one leaves it FAILED, retryable, with its slow retry scheduled
+   *     (`fail`), so a crash loop slows down there instead of stopping. Compute stays reserved
+   *     throughout, as for a retry.
    *   - asked to sleep by its owner, it goes to sleep: the drain's end (`draining`) releases it.
    *
    * Every such stop is logged with its exit code and whether it ran out of memory, and the owner's
    * reason says which, while it restarts and once it has failed.
+   *
+   * The stop the owner's Update Now asked for (`stopForOwnerUpdate`: their request may interrupt turns, and it is in
+   * progress, and the instance is the READY one of a previous image) is no failure: wanted running, it goes back to
+   * REQUESTED at once with the proof recorded and no attempt spent, no backoff and no restart reason (the status says
+   * `updating`), and the same gate makes the next generation from the current image. A stop of that next generation,
+   * made from the current image, is counted as any other.
    */
   private async terminated(mapping: ManagedRunner, instance: ManagedInstance): Promise<Step> {
     if (!instance.stopConfirmed) {
@@ -1309,10 +1427,24 @@ export class ManagedRunnerManager {
         next: await this.commit(mapping, { ...recorded, managementState: 'DRAINING', imageRollTo: null, stateEnteredAt: now, drainDemandRevision: mapping.demandRevision, lastError: Prisma.DbNull }),
       };
     }
+    if (mapping.managementState === 'READY' && instance.previousImage && ownerUpdatePending(mapping) && mapping.updateInterruptTurns) {
+      this.log.warn(`${stopped}; stopped for its owner's Update Now, so generation ${mapping.generation + 1} is started on the same volume from the current image`);
+      return {
+        next: await this.commit(mapping, {
+          ...recorded,
+          managementState: 'REQUESTED',
+          stateEnteredAt: now,
+          attempt: 0,
+          nextAttemptAt: null,
+          startupDeadlineAt: null,
+          lastError: Prisma.DbNull,
+        }),
+      };
+    }
     const { maxAttempts } = this.profile.lifecycle;
-    const attempt = (this.stoodUp(mapping) ? 0 : mapping.attempt) + 1;
+    const attempt = (this.stoodUp(mapping) || this.ranSinceRestart(mapping) ? 0 : mapping.attempt) + 1;
     if (attempt >= maxAttempts) {
-      this.log.warn(`${stopped}; FAILED: attempt ${attempt} of ${maxAttempts} in a row`);
+      this.log.warn(`${stopped}; FAILED: attempt ${attempt} of ${maxAttempts} in a row; tried again in ${Math.round(slowRetryDelayMs(attempt - maxAttempts) / 60_000)} min while work is waiting`);
       return this.fail(mapping, outOfMemory ? 'POD_OUT_OF_MEMORY' : 'POD_TERMINATED', detail, { ...recorded, attempt });
     }
     const delayMs = this.backoffDelay(attempt);
@@ -1336,6 +1468,19 @@ export class ManagedRunnerManager {
   private stoodUp(mapping: ManagedRunner): boolean {
     return mapping.managementState === 'READY'
       && this.now().getTime() - mapping.stateEnteredAt.getTime() >= 2 * this.profile.lifecycle.backoffMaxSeconds * 1000;
+  }
+
+  /**
+   * No stop for ATTEMPT_RESET_MS since its last restart: what it took to get there no longer counts against its next
+   * stop, in whatever state that stop finds it. The restart is when the single-writer gate retired the generation
+   * before it (`advance`: the recorded proof's `retiredAt`), so a slow retry's own wait, hours long, is not counted
+   * as running and the slow tier's delays still grow. A first generation, never restarted, has none.
+   */
+  private ranSinceRestart(mapping: ManagedRunner): boolean {
+    const retiredAt = (mapping.fencingReceipt as { retiredAt?: unknown } | null)?.retiredAt;
+    if (typeof retiredAt !== 'string') return false;
+    const at = Date.parse(retiredAt);
+    return Number.isFinite(at) && this.now().getTime() - at >= ATTEMPT_RESET_MS;
   }
 
   /**
@@ -2115,13 +2260,14 @@ export class ManagedRunnerManager {
    * the generation can heartbeat at all — the runner door refuses any other (`managed-runner-instance.ts`) — so a
    * fresh beat after the failure is that one. It goes back to STARTING on the same instance, as an owner's retry
    * would wait on it again; `starting` then checks the instance and its report as on any start. Its compute was kept
-   * (a recorded instance keeps it). Still silent, it stays FAILED for a retry. Null for any other failure.
+   * (a recorded instance keeps it). Still silent, it waits for a retry or its slow retry (`crashRetried`): null, as
+   * for any other failure.
    */
   private async startupResumed(mapping: ManagedRunner): Promise<Step | null> {
     if ((mapping.lastError as { code?: unknown } | null)?.code !== 'STARTUP_TIMEOUT' || mapping.desiredState !== 'RUNNING') return null;
     // Strictly after the failure: a beat from before it, however close, is the silence the deadline judged.
     const since = new Date(mapping.stateEnteredAt.getTime() + 1);
-    if (!mapping.podUid || !(await this.reportSince(mapping, since))) return { done: 'FAILED' };
+    if (!mapping.podUid || !(await this.reportSince(mapping, since))) return null;
     this.log.warn(`managed runner ${mapping.id}: FAILED STARTUP_TIMEOUT, and its ${this.backend.terms.instance} ${mapping.podUid} of generation ${mapping.generation} has reported in since; starting it again`);
     return {
       next: await this.commit(mapping, {
@@ -2134,15 +2280,65 @@ export class ManagedRunnerManager {
     };
   }
 
+  /**
+   * FAILED with `code`. A cause that needs an operator (not retryable) waits for one, with no next try. A retryable
+   * one — a crash loop (POD_TERMINATED, POD_OUT_OF_MEMORY), transient errors (RETRY_EXHAUSTED), a startup timeout,
+   * anything an owner's retry may cure — has spent its fast attempts and gets its slow retry: `attempt` is at least
+   * `maxAttempts` (a failure that spent none of its own spends one here once it is past them), and the next try is
+   * slowRetryDelayMs(attempt - maxAttempts) away, so each consecutive failure waits longer, up to 6 h. Nothing is
+   * tried before then, nor at all while no work is waiting (`crashRetried`).
+   */
   private async fail(mapping: ManagedRunner, code: string, detail: string, also: Prisma.ManagedRunnerUpdateManyMutationInput = {}): Promise<Step> {
+    const reason = managedRunnerReason(code);
+    const now = this.now();
+    const { maxAttempts } = this.profile.lifecycle;
+    const spent = typeof also.attempt === 'number' ? also.attempt : (mapping.attempt >= maxAttempts ? mapping.attempt + 1 : maxAttempts);
+    const attempt = Math.max(spent, maxAttempts);
     await this.commitReleasingCompute(mapping, {
       ...also,
+      ...(reason.retryable ? { attempt } : {}),
       managementState: 'FAILED',
-      stateEnteredAt: this.now(),
-      nextAttemptAt: null,
-      lastError: { ...managedRunnerReason(code), detail },
+      stateEnteredAt: now,
+      nextAttemptAt: reason.retryable ? new Date(now.getTime() + slowRetryDelayMs(attempt - maxAttempts)) : null,
+      lastError: { ...reason, detail },
     });
     return { done: 'FAILED' };
+  }
+
+  /** A retryable failure whose slow retry (`fail`) is due, wanted running. */
+  private slowRetryDue(mapping: ManagedRunner): boolean {
+    return mapping.managementState === 'FAILED' && mapping.desiredState === 'RUNNING'
+      && (mapping.lastError as { retryable?: unknown } | null)?.retryable === true
+      && mapping.nextAttemptAt !== null && mapping.nextAttemptAt <= this.now();
+  }
+
+  /**
+   * FAILED, retryable, its slow retry due, and work waiting for the runner (what wakes a sleeping one,
+   * managed-runner-work.ts): taken up again as an owner's retry takes it — back to REQUESTED with the same mapping,
+   * volume and runner and the stopped instance still recorded, so `requested` replaces it only through the
+   * single-writer gate — except that the attempt count stands, and the next failure waits longer. With no work
+   * waiting it stays FAILED and due, and the first pass after work arrives takes it up. A disabled owner's is not.
+   * Null when no slow retry is due.
+   */
+  private async crashRetried(mapping: ManagedRunner): Promise<Step | null> {
+    if (!this.slowRetryDue(mapping)) return null;
+    if (await ownerAccountDisabled(this.prisma, mapping.ownerId)) return { done: 'FAILED' };
+    const work = await managedRunnerWaitingWork(this.prisma, mapping.runnerId);
+    if (work.length === 0) return { done: 'FAILED' };
+    const code = (mapping.lastError as { code?: unknown }).code;
+    this.log.warn(
+      `managed runner ${mapping.id}: FAILED ${String(code)}, its slow retry due and work waiting (${work.join(', ')}); `
+        + `trying it again after ${mapping.attempt} attempts in a row`,
+    );
+    return {
+      next: await this.commit(mapping, {
+        managementState: 'REQUESTED',
+        stateEnteredAt: this.now(),
+        nextAttemptAt: null,
+        startupDeadlineAt: null,
+        lastError: Prisma.DbNull,
+      }),
+    };
   }
 
   /**
@@ -2204,20 +2400,11 @@ export class ManagedRunnerManager {
     return { done: 'BACKOFF' };
   }
 
-  /** A transient failure spends one attempt; the last one leaves the mapping FAILED, retryable. */
+  /** A transient failure spends one attempt; the last one leaves the mapping FAILED, retryable, its slow retry scheduled. */
   private async backoff(mapping: ManagedRunner, error: unknown): Promise<Step> {
     const attempt = mapping.attempt + 1;
     this.log.warn(`managed runner ${mapping.id}: transient failure ${attempt}/${this.profile.lifecycle.maxAttempts}: ${(error as Error).message}`);
-    if (attempt >= this.profile.lifecycle.maxAttempts) {
-      await this.commitReleasingCompute(mapping, {
-        attempt,
-        managementState: 'FAILED',
-        stateEnteredAt: this.now(),
-        nextAttemptAt: null,
-        lastError: { ...managedRunnerReason('RETRY_EXHAUSTED'), detail: `after ${attempt} attempts` },
-      });
-      return { done: 'FAILED' };
-    }
+    if (attempt >= this.profile.lifecycle.maxAttempts) return this.fail(mapping, 'RETRY_EXHAUSTED', `after ${attempt} attempts`, { attempt });
     await this.commit(mapping, {
       attempt,
       nextAttemptAt: new Date(this.now().getTime() + this.backoffDelay(attempt)),

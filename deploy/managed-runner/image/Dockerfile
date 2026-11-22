@@ -115,7 +115,7 @@ RUN mkdir -p /etc/ssl/certs \
       > /etc/apt/sources.list \
  && apt-get -o Acquire::https::CAInfo=/etc/ssl/certs/ca-certificates.crt update \
  && apt-get -o Acquire::https::CAInfo=/etc/ssl/certs/ca-certificates.crt install --no-install-recommends -y \
-      bash ca-certificates curl git openssh-client ripgrep sqlite3 python3 procps tini \
+      bash ca-certificates curl duperemove git openssh-client ripgrep sqlite3 python3 procps tini \
  && apt-get install --no-install-recommends -y \
       chromium=154.0.8037.57-1~deb13u1 chromium-common=154.0.8037.57-1~deb13u1 \
       xvfb=2:21.1.16-1.3+deb13u4 x11vnc=0.9.17-1 \
@@ -164,6 +164,10 @@ RUN ln -s /opt/codex/bin/codex /usr/local/bin/codex \
  && chmod 0755 /usr/local/share/orbit \
  && git config --system user.name 'Orbit Runner' \
  && git config --system user.email runner@orbit.invalid
+# An image before a944a7f362 kept home at /var/lib/orbit/home. The entrypoint moves such a volume's home to /home/orbit
+# (move_earlier_home); this link keeps the paths that home recorded inside itself (git worktree links, the runner's
+# session state) resolving there.
+RUN install -d -o root -g root -m 0755 /var/lib/orbit && ln -s /home/orbit /var/lib/orbit/home
 # What changes with every source commit comes after the slow steps above, so a new commit reuses
 # them and rebuilds only the runner binary, the entrypoint and the version record. A build argument
 # reaches every RUN after its ARG, so the source SHA must not be declared any earlier.
@@ -209,6 +213,8 @@ actual = {
     'ripgrep': version('rg', '--version'),
     'sqlite': version('sqlite3', '--version'),
     'tini': version('/usr/bin/tini', '--version'),
+    # The runner shares duplicate files on its volume with it while idle (src/runner-go/managed_dedupe.go).
+    'duperemove': package('duperemove', '/usr/bin/duperemove'),
     'opencode': version('opencode', '--version'),
     'kimi': version('kimi', '--version'),
     'agy': version('agy', '--version'),

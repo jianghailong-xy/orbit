@@ -36,7 +36,10 @@ describe('a workspace’s session list', () => {
 
 describe('a conversation', () => {
   it('draws its scheduled-task cards and change lines where they happened', () => {
-    expect(SOURCE).toContain('const scheduleInserts = useSessionScheduleInserts(selectedTrashed ? null : selectedId, transcriptEvents, scheduleRun);');
+    expect(SOURCE).toContain('const scheduleCards = useSessionScheduleCards(selectedTrashed ? null : selectedId);');
+    expect(SOURCE).toMatch(
+      /const scheduleInserts = useSessionScheduleInserts\(\n\s+selectedTrashed \? null : selectedId,\n\s+scheduleCards,\n\s+transcriptEvents,\n\s+scheduleRun,/,
+    );
     expect(SOURCE).toMatch(/\[\.\.\.decisionReceipts, \.\.\.questionRecords, \.\.\.ownerRequestCards, \.\.\.scheduleInserts,/);
   });
 
@@ -49,7 +52,7 @@ describe('a conversation', () => {
 describe('a run’s session (board 2/2 ⑤ ⑥)', () => {
   it('is known by the detail’s runSource and finds its run from the session alone', () => {
     expect(SOURCE).toContain("const isScheduleRun = detailForSelected?.runSource === 'SCHEDULE';");
-    expect(SOURCE).toContain('useScheduleRunOfSession(isScheduleRun && !selectedTrashed ? selectedId : null)');
+    expect(SOURCE).toContain('useScheduleRunOfSession(isScheduleRun && !selectedTrashed ? selectedId : null, scheduleCards)');
     expect(SOURCE).not.toContain("searchParams.get('schedule')");
   });
 
