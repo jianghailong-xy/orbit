@@ -51,6 +51,25 @@ path is the index (`sessions/task-work-carrier.ts` `sessionCarriesTaskSql`, the 
 `apiserver/src/sessions/session-claim-index.pg.spec.ts`; the production pre-check is
 `../scripts/session-claim-index-precheck.sql`.
 
+Plan step 4.5, release B (migration 1428) drops 0130's `session_task_execution_claim_idx` CONCURRENTLY, and
+1426's index is the claim from then on. No product code changes with it. The sites that still name the old
+index are below, with what each does after the drop:
+- `tasks/task-supersession.ts` `LEGACY_EXECUTION_CLAIM_INDEX` and `namesExecutionClaimIndex`. The classifiers
+  of `isExecutionClaimConflict` (`sessions/sessions.service.ts` resume) and `isTaskRunClaimConflict`
+  (`tasks/tasks.service.ts`) match either name by substring. The new name begins with the old one, so they
+  match it as before. The old name is never reported again.
+- Comments only, describing the claim by the old name:
+  - `projects/live-session-status.ts`, `sessions/sessions.service.ts`, `tasks/tasks.service.ts`;
+  - web `lib/taskRunHandoff.ts`, macOS `App/TaskRunHandoff.swift`.
+- Specs: some match a refusal by substring, which the new name still meets (`tasks/project-budget-idle-session`,
+  `tasks/task-run-winner-recovery`). Others build the old index's error shape for a unit classifier
+  (`sessions/resume-lost-execution-claim`, `tasks/task-run-winner-recovery.spec`).
+- `../scripts/session-claim-index-precheck.sql`, the pre-check for deploy 2, reads the old index by
+  `::regclass` and errors once it is gone. Its successor is `../scripts/session-claim-index-drop-precheck.sql`.
+- Release A's spec puts 0130's index back before it re-runs 1426.
+
+The rehearsal before and after the drop is `apiserver/src/sessions/session-claim-index-release-b.pg.spec.ts`.
+
 | Object defined in | Lines | R/W | Facts | After | What it does with the status |
 |---|---|---|---|---|---|
 | `apiserver/prisma/migrations/0035_add_parked_run_status/migration.sql` | 7 | R | WIRE | RENAME | Enum type run_status: PENDING, RUNNING, SUCCEEDED, FAILED, CANCELLED, AWAITING_INPUT, INTERRUPTED, PARKED (dead label). Only session.status uses it; default PENDING. Labels cannot be dropped. |
