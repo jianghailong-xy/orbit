@@ -29364,6 +29364,11 @@ button.agent-progress-agent:hover {
 .model-tiers-rated {
   cursor: help;
 }
+/* Under the figures: the other providers listing the same model, whose runs the figures include. */
+.model-tiers-pooled {
+  font-size: 11px;
+  line-height: 17px;
+}
 
 /* Settings → Routing report (docs/subagent-design.md §7, board docs/mocks/subagent-workflow/08-report.html). */
 .routing-report-filters {

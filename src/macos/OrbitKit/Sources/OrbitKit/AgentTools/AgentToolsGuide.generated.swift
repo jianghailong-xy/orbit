@@ -796,6 +796,16 @@ let agentToolsGuideJSON = #"""
       ]
     },
     {
+      "id": "browser",
+      "label": "Orbit Cloud browser",
+      "tools": [
+        "browser_clear_logins",
+        "browser_open",
+        "browser_request_sign_in",
+        "browser_status"
+      ]
+    },
+    {
       "id": "providers",
       "label": "Providers",
       "tools": [

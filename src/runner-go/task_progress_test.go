@@ -354,7 +354,7 @@ func TestTaskProgressAgentTextSaysWhatProgressIs(t *testing.T) {
 			t.Fatalf("the progress paragraph must stay ASCII for codex's context value; byte %d is %q", i, paragraph[i])
 		}
 	}
-	if allowed := strings.Join(orbitCLIAllowedTools(exe, false), "\n"); !strings.Contains(allowed, "Bash("+exe+" task progress *)") {
+	if allowed := strings.Join(orbitCLIAllowedTools(exe, false, false), "\n"); !strings.Contains(allowed, "Bash("+exe+" task progress *)") {
 		t.Error("orbit task progress is not pre-approved for the sessions its instructions send to it")
 	}
 }

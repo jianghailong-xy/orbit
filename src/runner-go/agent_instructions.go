@@ -383,7 +383,7 @@ func withOrbitCLIInstructions(configured, executable string, insideRecordedWork,
 // chosen when the process starts could not follow a mode that changes under it — Claude Code entering Plan by
 // itself, or leaving it once a plan is approved — while a refused write that went to a card first would only put a
 // question in front of the owner that has one answer.
-func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
+func orbitCLIAllowedTools(executable string, allowOrchestration, allowBrowser bool) []string {
 	if executable == "" {
 		return nil
 	}
@@ -405,6 +405,14 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 			if cli.orchestration && !allowOrchestration {
 				continue
 			}
+			// Off means absent (browser_tools.go): a session spawned with the browser off is pre-approved nothing of it.
+			if cli.browser && !allowBrowser {
+				continue
+			}
+			// browser_request_sign_in is the Orbit Cloud runner's sessions' only (browser_tools.go).
+			if cli.tool == browserRequestSignInTool && !onOrbitCloudRunner() {
+				continue
+			}
 			rules = append(rules, "Bash("+command+" "+cli.words+" *)")
 		}
 	}
@@ -416,6 +424,9 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 type orbitCLICommand struct {
 	words         string
 	orchestration bool
+	// browser: one of the Orbit Cloud browser's commands, which exist only while its switch is on.
+	browser bool
+	tool    string
 }
 
 // orbitCLICommands is every command the catalogue offers an agent's session, in catalogue order: each CLI command
@@ -434,6 +445,8 @@ var orbitCLICommands = sync.OnceValue(func() []orbitCLICommand {
 		commands = append(commands, orbitCLICommand{
 			words:         strings.Join(op.CLI.Argv[1:], " "),
 			orchestration: strings.HasPrefix(op.availability().CLI, "orchestration"),
+			browser:       op.Object == objectBrowser,
+			tool:          op.Tool,
 		})
 	}
 	return commands
@@ -524,6 +537,7 @@ func appendClaudeAgentInstructionArgs(
 	allowOrchestration bool,
 	insideRecordedWork bool,
 	watches bool,
+	browser bool,
 ) []string {
 	// The raw absolute path remains safe for direct exec/MCP configuration. Only
 	// inject and auto-allow the CLI when it is also unambiguous in Claude's
@@ -539,7 +553,7 @@ func appendClaudeAgentInstructionArgs(
 	// A scheduled CHECK_ONLY run does not get the CLI: it reads Orbit through the tools the claim allows, and its
 	// deny list names this executable (schedule_check_only.go).
 	if !agent.ScheduledCheckOnly {
-		allowed = appendUnique(allowed, orbitCLIAllowedTools(executable, allowOrchestration)...)
+		allowed = appendUnique(allowed, orbitCLIAllowedTools(executable, allowOrchestration, browser)...)
 	}
 	if len(allowed) > 0 {
 		args = append(args, "--allowedTools", strings.Join(allowed, ","))

@@ -107,6 +107,7 @@ export const CHECK_ONLY_CLAUDE_ALLOWED_TOOLS: readonly string[] = [
   'mcp__orbit__wiki_get',
   'mcp__orbit__file_fetch',
   'mcp__orbit__file_list',
+  'mcp__orbit__browser_status',
   'mcp__orbit__guide',
   'WebFetch',
   'WebSearch',
@@ -120,10 +121,11 @@ export const CHECK_ONLY_CLAUDE_ALLOWED_TOOLS: readonly string[] = [
  */
 export const CHECK_ONLY_CLAUDE_DENIED_ORBIT_TOOLS: readonly string[] = [
   'mcp__orbit__agent_create', 'mcp__orbit__agent_delete', 'mcp__orbit__agent_list', 'mcp__orbit__agent_update',
+  'mcp__orbit__browser_clear_logins',
   'mcp__orbit__ask_owner', 'mcp__orbit__bg_kill', 'mcp__orbit__bg_list', 'mcp__orbit__bg_output',
   'mcp__orbit__drive_delete', 'mcp__orbit__drive_get', 'mcp__orbit__drive_list', 'mcp__orbit__drive_move',
   'mcp__orbit__drive_put',
-  'mcp__orbit__bg_run', 'mcp__orbit__criterion_check_report', 'mcp__orbit__criterion_check_start',
+  'mcp__orbit__bg_run', 'mcp__orbit__browser_open', 'mcp__orbit__criterion_check_report', 'mcp__orbit__criterion_check_start',
   'mcp__orbit__criterion_confirm', 'mcp__orbit__criterion_confirmation_withdraw', 'mcp__orbit__file_pin',
   'mcp__orbit__file_upload', 'mcp__orbit__integration_abandon', 'mcp__orbit__integration_observe',
   'mcp__orbit__integration_request_promotion', 'mcp__orbit__integration_retry',
@@ -158,6 +160,8 @@ export const CHECK_ONLY_CLAUDE_DENIED_ORBIT_TOOLS: readonly string[] = [
   'mcp__orbit__delegate',
   // Served beside it (runner-go subagent_workflow.go): it starts SubAgents from a script, work outside this check.
   'mcp__orbit__workflow',
+  // Puts a sign-in card in front of the owner and waits for it (runner-go browser_tools.go): not a check's to ask.
+  'mcp__orbit__browser_request_sign_in',
 ];
 
 /**
