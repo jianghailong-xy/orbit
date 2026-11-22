@@ -56,6 +56,7 @@ function mapping(change: Partial<ManagedRunner> = {}): ManagedRunner {
     updateRequestedAt: null,
     updateRequestedBy: null,
     updateCompletedAt: null,
+    updateInterruptTurns: false,
     initialProvider: 'claude',
     resourceProfileId: 'p',
     resourceOperationId: null,

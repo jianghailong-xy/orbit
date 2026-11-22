@@ -46,6 +46,7 @@ function mapping(change: Partial<ManagedRunner> = {}): ManagedRunner {
     updateRequestedAt: null,
     updateRequestedBy: null,
     updateCompletedAt: null,
+    updateInterruptTurns: false,
     initialProvider: null,
     resourceProfileId: 'p',
     resourceOperationId: null,
@@ -271,4 +272,25 @@ test('update: the owner\'s Update Now reads updating until the next generation i
   const done = { ...asked, updateCompletedAt: new Date(NOW.getTime() + 1) };
   assert.equal(status(done)?.phase, 'available');
   assert.equal(status(done, 'managed-a800ca3973'), undefined);
+});
+
+test('update: a busy runner\'s Update Now waits for idle where the backend cannot stop it, and says so', () => {
+  const asked = { imageOutdatedSince: NOW, currentImageSha: 'a800ca3973', updateRequestedAt: NOW, updateRequestedBy: 'owner', updateInterruptTurns: true };
+  const status = (change: Partial<ManagedRunner>, stopsInstances?: boolean) =>
+    managedRunnerStatus({
+      enabled: true, available: true, mapping: mapping(change), runner: { ...beat(1000), version: 'managed-95884b154f' },
+      now: NOW, heartbeatFreshMs: FRESH, stopsInstances,
+    }).update;
+  // Kubernetes: READY, it waits for the runner to be idle.
+  assert.deepEqual(status(asked, false), { running: { sha: '95884b154f' }, current: { sha: 'a800ca3973' }, phase: 'updating', waitsForIdle: true });
+  // Draining or on its way up, it no longer waits.
+  for (const managementState of ['DRAINING', 'SLEEPING', 'REQUESTED', 'STARTING'] as const) {
+    assert.equal(status({ ...asked, managementState, imageRollTo: 'registry.invalid/next' }, false)?.waitsForIdle, undefined, managementState);
+  }
+  // Docker stops it; an idle runner's request never waited; a server that cannot tell says nothing.
+  assert.equal(status(asked, true)?.waitsForIdle, undefined);
+  assert.equal(status({ ...asked, updateInterruptTurns: false }, false)?.waitsForIdle, undefined);
+  assert.equal(status(asked)?.waitsForIdle, undefined);
+  // Not in progress: nothing to wait for.
+  assert.equal(status({ ...asked, updateCompletedAt: new Date(NOW.getTime() + 1) }, false)?.waitsForIdle, undefined);
 });

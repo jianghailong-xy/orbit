@@ -19,7 +19,8 @@ export class ManagedRunnerWriteDto implements ManagedRunnerWriteRequest {
 
 /**
  * The owner's Update Now (POST /api/managed-runner/update-now). It names no runner: the mapping is the caller's own.
- * `interruptTurns` is the busy path's; this server refuses a busy runner whatever it says.
+ * `interruptTurns: true` is the owner's word that a busy runner's running turns may be interrupted; without it a busy
+ * runner is refused 409 MANAGED_RUNNER_BUSY.
  */
 export class ManagedRunnerUpdateNowDto implements ManagedRunnerUpdateNowRequest {
   @IsOptional()

@@ -33,6 +33,9 @@ export interface ManagedRunnerStatusInput {
   firstSessionKey?: { slug: string; engine: ManagedEngine } | null;
   now: Date;
   heartbeatFreshMs: number;
+  /** Whether the backend the mapping runs on can stop its instance (`stopInstance`: Docker), so that the owner's Update
+   *  Now of a busy runner interrupts its turns rather than waiting for idle. Absent: unknown, and nothing is said. */
+  stopsInstances?: boolean;
 }
 
 export function managedRunnerUnavailableReason(): ManagedRunnerReason {
@@ -63,16 +66,27 @@ export function ownerUpdatePending(mapping: Pick<ManagedRunner, 'updateRequested
   return !!asked && (!mapping.updateCompletedAt || mapping.updateCompletedAt.getTime() < asked.getTime());
 }
 
+/**
+ * A drain that is the owner's Update Now: an image roll (`imageRollTo`) while their request is in progress, which only
+ * ManagedRunnerManager.ownerUpdate begins (the request is taken from READY alone, and ownerUpdate runs before an
+ * automatic roll). Demand does not call it off: what comes meanwhile waits for the next generation, which wakes at once.
+ * An automatic roll is still called off by demand.
+ */
+export function ownerUpdateDrain(mapping: Pick<ManagedRunner, 'imageRollTo' | 'updateRequestedAt' | 'updateCompletedAt'>): boolean {
+  return mapping.imageRollTo !== null && ownerUpdatePending(mapping);
+}
+
 /** The states an owner's Update Now passes through on its way to the next generation's READY. */
 const UPDATING_STATES: ReadonlySet<ManagedRunner['managementState']> = new Set(['READY', 'DRAINING', 'SLEEPING', 'REQUESTED', 'WAITING_CAPACITY', 'PROVISIONING', 'STARTING']);
 
 /**
  * `update`: the manager found the READY instance made from an older image than the current one, whose build it
  * recorded (`currentImageSha`), and the runner reports the build it runs, another one. While an image roll drains
- * it, or the owner's Update Now is on its way to the next generation, `updating`. Nothing when it is current, not
- * running, or either build is unknown.
+ * it, or the owner's Update Now is on its way to the next generation, `updating` — and `waitsForIdle` while a busy
+ * runner's Update Now is still READY on a backend that cannot stop it (`stopsInstances` false). Nothing when it is
+ * current, not running, or either build is unknown.
  */
-function managedRunnerUpdate(mapping: ManagedRunner, version: string | null | undefined): ManagedRunnerUpdate | undefined {
+function managedRunnerUpdate(mapping: ManagedRunner, version: string | null | undefined, stopsInstances?: boolean): ManagedRunnerUpdate | undefined {
   const phase = ownerUpdatePending(mapping) && UPDATING_STATES.has(mapping.managementState) ? 'updating'
     : mapping.managementState === 'READY' ? 'available'
     : mapping.managementState === 'DRAINING' && mapping.imageRollTo ? 'updating' : null;
@@ -81,7 +95,8 @@ function managedRunnerUpdate(mapping: ManagedRunner, version: string | null | un
   if (!phase || !mapping.imageOutdatedSince || !current || !running) return undefined;
   // One side may be abbreviated: the same commit is no update, whatever the record says of the image.
   if (current.startsWith(running) || running.startsWith(current)) return undefined;
-  return { running: { sha: running }, current: { sha: current }, phase };
+  const waitsForIdle = phase === 'updating' && mapping.managementState === 'READY' && mapping.updateInterruptTurns && stopsInstances === false;
+  return { running: { sha: running }, current: { sha: current }, phase, ...(waitsForIdle ? { waitsForIdle: true as const } : {}) };
 }
 
 /**
@@ -122,7 +137,7 @@ export function managedRunnerStatus(input: ManagedRunnerStatusInput): ManagedRun
   const reason = storedReason(mapping.lastError);
   const beat = runnerLastBeatAt(runner);
   const fresh = !!beat && now.getTime() - beat.getTime() <= input.heartbeatFreshMs;
-  const update = disabled ? undefined : managedRunnerUpdate(mapping, runner?.version);
+  const update = disabled ? undefined : managedRunnerUpdate(mapping, runner?.version, input.stopsInstances);
   return {
     contractVersion: MANAGED_RUNNER_CONTRACT_VERSION,
     enabled,

@@ -18,7 +18,17 @@
  *       that is not READY (409 MANAGED_RUNNER_TRANSITION_REFUSED), and another account (404: it reaches its own
  *       mapping or none) — nothing written;
  *   (3) busy — a turn running, background jobs, or no fresh report — refused 409 MANAGED_RUNNER_BUSY, listing the
- *       running turns (session, title, start) and the background-job count; nothing written, and it stays READY.
+ *       running turns (session, title, start) and the background-job count; nothing written, and it stays READY;
+ *   (4) busy, with `interruptTurns: true`: the request and an activity row naming the sessions whose turns it
+ *       interrupts are recorded together; the manager asks the backend to stop the container (`stopInstance`) and
+ *       creates nothing while the container is in its stop grace, however many passes, and demand meanwhile changes
+ *       nothing; Docker's report of the exit is the stop proof, and only then is the next generation made from the
+ *       current image, on the same volume and runner, with no attempt spent; a crash of that next generation before it
+ *       is READY is counted as any crash (4b);
+ *   (5) idle, then demand before the drain is accepted: the owner's Update Now is not called off — the instance
+ *       accepts on its own idle report and wakes on the current image — while an automatic roll still is;
+ *   (6) on Kubernetes, whose backend cannot stop an instance: a busy runner's Update Now with `interruptTurns` is
+ *       recorded, waits for idle and says so (`update.waitsForIdle`), stops nothing, and rolls once idle.
  *
  * Not destructive: every row belongs to a user this run creates, and each world has a pool of its own.
  */
@@ -39,12 +49,18 @@ import {
 } from '../projects/coordinator-pg-test-safety';
 import { testDockerRunnerProfile } from '../test-support/docker-runner-profile.fixture';
 import { FakeDockerChannel } from '../test-support/fake-docker-channel';
+import { installManagedRunnerAdmission } from '../test-support/managed-runner-admission.fixture';
+import { managedRunnerWorld } from '../test-support/managed-runner-world';
 import { DockerBackend } from './docker-backend';
+import type { Pod } from './kube-client';
 import { ManagedRunnerManager, type ReconcileOutcome } from './managed-runner-manager';
+import type { ManagedRunnerProfile } from './managed-runner-profile';
+import { managedPodName } from './managed-runner-resources';
 import type { ManagedRunnerRuntime } from './managed-runner-runtime';
 import { managedRunnerHeartbeat, storedWorkloadFor } from './managed-runner-sleep';
+import { recordManagedDemand } from './managed-runner-work';
 import { ManagedRunnerWorker } from './managed-runner-worker';
-import { ManagedRunnerService } from './managed-runner.service';
+import { MANAGED_RUNNER_UPDATE_NOW_ACTIVITY, ManagedRunnerService } from './managed-runner.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const quiet = { warn: () => undefined, error: () => undefined, log: () => undefined };
@@ -175,11 +191,11 @@ test('an owner\'s Update Now moves an idle Orbit Cloud runner onto the current i
     };
   }
 
-  /** A session of the owner's on the runner, in `status`, as a turn queued or run there leaves one. */
-  async function session(m: ManagedRunner, status: string, title: string, bgShells: string[] = []): Promise<{ id: string; startedAt: Date }> {
+  /** A session of the owner's on the runner, in `status`, as a turn queued or run there leaves one, started `agoMs` ago. */
+  async function session(m: ManagedRunner, status: string, title: string, bgShells: string[] = [], agoMs = 60_000): Promise<{ id: string; startedAt: Date }> {
     const workspace = await db.workspace.create({ data: { ownerId: m.ownerId, runnerId: m.runnerId, targetRunnerId: m.runnerId, name: 'Project', workDir: '/tmp/project' } });
     const id = randomUUID();
-    const startedAt = new Date(Date.now() - 60_000);
+    const startedAt = new Date(Date.now() - agoMs);
     await sql.query(
       `INSERT INTO "session" ("id", "owner_id", "creator_id", "workspace_id", "assigned_runner_id", "title", "prompt", "provider",
                               "status", "num_turns", "runtime_session_id", "started_at", "updated_at", "running_bg_shells")
@@ -359,5 +375,283 @@ test('an owner\'s Update Now moves an idle Orbit Cloud runner onto the current i
     assert.deepEqual([stale.status, stale.body.code], [409, 'MANAGED_RUNNER_BUSY']);
     after = await w.mappingOf(ownerId);
     assert.deepEqual({ state: after.managementState, at: after.updateRequestedAt }, { state: 'READY', at: null });
+  });
+
+  await t.test('(4) busy, with interruptTurns: recorded with the sessions it interrupts, stopped through the backend, and made again only after Docker reports the exit', async () => {
+    const w = world();
+    const { ownerId, mapping } = await w.outdatedRunner('interrupt', { activeTurns: 2, backgroundJobs: 1 });
+    const first = await session(mapping, 'RUNNING', 'Fix the login redirect', ['bgj_1'], 120_000);
+    const second = await session(mapping, 'RUNNING', 'Write the release notes', [], 60_000);
+    const name = `mr-${mapping.runnerId}`;
+    // The channel takes the stop in, and the container goes on running in its stop grace until Docker reports it exited.
+    w.channel.stopsAtOnce = false;
+
+    w.advance(1_000);
+    await w.heartbeat(mapping.runnerId, { activeTurns: 2, backgroundJobs: 1 });
+    // Without the owner's word it is refused, as in (3), and nothing is recorded.
+    const refused = await refusal(w.service.updateNow(ownerId));
+    assert.deepEqual([refused.status, refused.body.code], [409, 'MANAGED_RUNNER_BUSY']);
+    assert.equal(await db.activity.count({ where: { actorId: ownerId, type: MANAGED_RUNNER_UPDATE_NOW_ACTIVITY } }), 0);
+
+    // With it: recorded, with the activity naming the sessions whose turns it interrupts.
+    const before = Date.now();
+    const answered = await w.service.updateNow(ownerId, true);
+    assert.deepEqual(answered.update, { running: { sha: OLD_SHA }, current: { sha: NEW_SHA }, phase: 'updating' }, 'updating, and not waiting for idle: Docker can stop it');
+    const asked = await w.mappingOf(ownerId);
+    assert.deepEqual(
+      { state: asked.managementState, by: asked.updateRequestedBy, interrupts: asked.updateInterruptTurns, completed: asked.updateCompletedAt, revision: asked.revision },
+      { state: 'READY', by: ownerId, interrupts: true, completed: null, revision: mapping.revision + 1 },
+    );
+    assert.ok(asked.updateRequestedAt && asked.updateRequestedAt.getTime() >= before);
+    const activities = await db.activity.findMany({ where: { actorId: ownerId, type: MANAGED_RUNNER_UPDATE_NOW_ACTIVITY } });
+    assert.equal(activities.length, 1, 'one activity row for the request');
+    assert.deepEqual(activities[0].payload, {
+      mappingId: mapping.id,
+      runnerId: mapping.runnerId,
+      interruptTurns: true,
+      waitsForIdle: false,
+      running: OLD_SHA,
+      current: NEW_SHA,
+      sessionIds: [first.id, second.id],
+      backgroundJobs: 1,
+    }, 'the interrupted sessions, oldest turn first, and the jobs a new container ends');
+    assert.equal(activities[0].credentialKind, 'LOGIN');
+    // Asked again meanwhile: answered as it stands, with no second record.
+    assert.equal((await w.service.updateNow(ownerId, true)).update?.phase, 'updating');
+    assert.equal(await db.activity.count({ where: { actorId: ownerId, type: MANAGED_RUNNER_UPDATE_NOW_ACTIVITY } }), 1);
+
+    // The next pass asks the backend to stop the container, by its UID, and stays READY: asking proves nothing.
+    assert.equal(await w.manager.reconcile(mapping.id), 'READY');
+    assert.deepEqual(w.channel.stopRequests, [{ name, uid: mapping.podUid }], 'stopInstance, for the recorded container');
+
+    // Demand while it stops — a message queued for the runner, and the demand hook's write — changes nothing, and no
+    // pass creates anything while the container is in its grace, still running.
+    const queued = await session(mapping, 'PENDING', 'a message sent meanwhile');
+    await recordManagedDemand(prisma, mapping.runnerId, w.now());
+    for (let pass = 0; pass < 3; pass += 1) {
+      w.advance(5_000);
+      await w.heartbeat(mapping.runnerId, { activeTurns: 2, backgroundJobs: 1 });
+      assert.equal(await w.manager.reconcile(mapping.id), 'READY', `pass ${pass} while it stops`);
+      assert.equal((await w.service.status(ownerId)).update?.phase, 'updating');
+    }
+    const stopping = await w.mappingOf(ownerId);
+    assert.deepEqual(
+      { state: stopping.managementState, generation: stopping.generation, podUid: stopping.podUid, attempt: stopping.attempt, interrupts: stopping.updateInterruptTurns, completed: stopping.updateCompletedAt },
+      { state: 'READY', generation: mapping.generation, podUid: mapping.podUid, attempt: 0, interrupts: true, completed: null },
+      'demand did not call it off, and nothing advanced',
+    );
+    assert.ok(stopping.demandRevision > mapping.demandRevision, 'the demand was recorded');
+    assert.equal(w.channel.count('createContainer'), 1, 'no container is created before Docker reports the old one stopped');
+    assert.equal(w.channel.containers.get(name)?.uid, mapping.podUid, 'the one container is still the old one');
+    assert.ok(w.channel.stopRequests.length >= 2 && w.channel.stopRequests.every((r) => r.uid === mapping.podUid), 'asked again on each pass, always that container');
+
+    // Docker's report of the exit (SIGTERM's 143) is the stop proof: only now is the next generation made — from the
+    // current image, on the same volume and runner, and with no attempt spent: the owner asked for this stop.
+    w.channel.exit(mapping.runnerId, 143);
+    w.runnerBuild = NEW_SHA;
+    const outcomes = await w.drive(ownerId, async (m) => {
+      const update = (await w.service.status(ownerId)).update;
+      assert.ok(!update || update.phase === 'updating', `${m.managementState}: ${JSON.stringify(update)}`);
+      assert.equal(m.attempt, 0, `${m.managementState}: no attempt spent`);
+      assert.equal((m.lastError as { code?: string } | null)?.code ?? null, null, `${m.managementState}: no restart reason`);
+    });
+    assert.equal(outcomes.at(-1), 'READY', outcomes.join(' → '));
+    assert.ok(!outcomes.includes('BACKOFF') && !outcomes.includes('FENCING'), outcomes.join(' → '));
+    const awake = await w.mappingOf(ownerId);
+    const proof = awake.fencingReceipt as { kind: string; predecessor: { podUid: string; generation: number }; observation: { containers: Array<{ exitCode?: number }> } };
+    assert.deepEqual(
+      [proof.kind, proof.predecessor.podUid, proof.predecessor.generation, proof.observation.containers[0].exitCode],
+      ['OBSERVED_STOP', mapping.podUid, mapping.generation, 143],
+      'Docker\'s report of the old container\'s exit is the stop proof',
+    );
+    const next = w.channel.containers.get(name)!;
+    assert.equal(next.request.image, NEXT, 'the next container is made from the current image');
+    assert.deepEqual(
+      { generation: awake.generation, runnerId: awake.runnerId, pvcUid: awake.pvcUid, pvcName: awake.pvcName, volumeUid: next.volumeUid, runnerOfContainer: next.runnerId },
+      { generation: mapping.generation + 1, runnerId: mapping.runnerId, pvcUid: mapping.pvcUid, pvcName: mapping.pvcName, volumeUid: mapping.pvcUid, runnerOfContainer: mapping.runnerId },
+      'the next generation, on the same volume and runner',
+    );
+    assert.notEqual(awake.podUid, mapping.podUid);
+    assert.equal(w.channel.count('createContainer'), 2, 'one container created, after the report');
+    assert.equal(w.channel.count('ensureVolume'), 1, 'the volume was never created again');
+    assert.deepEqual(
+      { state: awake.managementState, desired: awake.desiredState, rollTo: awake.imageRollTo, attempt: awake.attempt },
+      { state: 'READY', desired: 'RUNNING', rollTo: null, attempt: 0 },
+    );
+    assert.ok(awake.updateCompletedAt && awake.updateCompletedAt >= awake.updateRequestedAt!, 'the next generation READY ends the update');
+    // The sessions are the runner's to stop and resume: the server changed none of them.
+    const sessions = await db.session.findMany({ where: { id: { in: [first.id, second.id, queued.id] } }, select: { id: true, status: true } });
+    assert.deepEqual(
+      Object.fromEntries(sessions.map((s) => [s.id, s.status])),
+      { [first.id]: 'RUNNING', [second.id]: 'RUNNING', [queued.id]: 'PENDING' },
+    );
+  });
+
+  await t.test('(4b) busy, with interruptTurns: a crash of the next generation before it is READY is counted as any crash', async () => {
+    const w = world();
+    const { ownerId, mapping } = await w.outdatedRunner('next-crash', { activeTurns: 1 });
+    await session(mapping, 'RUNNING', 'A long build');
+    w.advance(1_000);
+    await w.heartbeat(mapping.runnerId, { activeTurns: 1 });
+    await w.service.updateNow(ownerId, true);
+    assert.equal(await w.manager.reconcile(mapping.id), 'READY');
+    assert.equal(w.channel.stopRequests.length, 1, 'asked to stop');
+    // The old container's stop is the owner's: no attempt. The new one starts, and crashes before it reports in (the
+    // clock moved past the old one's last beat, so nothing has reported since it started).
+    w.advance(5_000);
+    let starting = await w.mappingOf(ownerId);
+    for (let i = 0; i < 6 && !(starting.managementState === 'STARTING' && starting.podUid); i += 1) {
+      await w.manager.reconcile(mapping.id);
+      starting = await w.mappingOf(ownerId);
+    }
+    assert.deepEqual({ state: starting.managementState, generation: starting.generation, attempt: starting.attempt }, { state: 'STARTING', generation: mapping.generation + 1, attempt: 0 });
+    assert.equal(w.channel.containers.get(`mr-${mapping.runnerId}`)!.request.image, NEXT);
+    w.channel.exit(mapping.runnerId, 1);
+    assert.equal(await w.manager.reconcile(mapping.id), 'BACKOFF', 'a crash of the new generation backs off');
+    const crashed = await w.mappingOf(ownerId);
+    assert.deepEqual(
+      { state: crashed.managementState, attempt: crashed.attempt, code: (crashed.lastError as { code?: string } | null)?.code, completed: crashed.updateCompletedAt },
+      { state: 'REQUESTED', attempt: 1, code: 'POD_RESTARTING', completed: null },
+      'an attempt spent and the restart said, as for any crash',
+    );
+    assert.ok(crashed.nextAttemptAt && crashed.nextAttemptAt > w.now(), 'with its backoff');
+    // Started again, it reports in: READY on the current image, which ends the update.
+    w.runnerBuild = NEW_SHA;
+    const outcomes = await w.drive(ownerId);
+    assert.equal(outcomes.at(-1), 'READY', outcomes.join(' → '));
+    const awake = await w.mappingOf(ownerId);
+    assert.deepEqual({ generation: awake.generation, pvcUid: awake.pvcUid }, { generation: mapping.generation + 2, pvcUid: mapping.pvcUid });
+    assert.ok(awake.updateCompletedAt && awake.updateCompletedAt >= awake.updateRequestedAt!);
+  });
+
+  await t.test('(5) idle, then demand before the drain is accepted: the owner\'s Update Now goes on, an automatic roll is called off', async () => {
+    const w = world();
+    const { ownerId, mapping } = await w.outdatedRunner('idle-demand');
+    w.advance(1_000);
+    await w.heartbeat(mapping.runnerId);
+    await w.service.updateNow(ownerId);
+    assert.equal(await w.manager.reconcile(mapping.id), 'DRAINING');
+    const draining = await w.mappingOf(ownerId);
+    assert.equal(draining.updateInterruptTurns, false, 'an idle runner\'s request interrupts nothing');
+
+    // Demand before the instance accepts: a message queued for the runner, and the demand hook's write.
+    const queued = await session(draining, 'PENDING', 'a message sent meanwhile');
+    await recordManagedDemand(prisma, mapping.runnerId, w.now());
+    w.advance(1_000);
+    await w.heartbeat(mapping.runnerId);
+    assert.equal(await w.manager.reconcile(mapping.id), 'DRAINING', 'not called off by demand, nor by the work it queued');
+    const demanded = await w.mappingOf(ownerId);
+    assert.deepEqual(
+      { state: demanded.managementState, rollTo: demanded.imageRollTo, stopRequestedAt: demanded.stopRequestedAt, acked: demanded.stopAcknowledgedAt },
+      { state: 'DRAINING', rollTo: NEXT, stopRequestedAt: draining.stopRequestedAt, acked: null },
+    );
+    assert.ok(demanded.demandRevision > demanded.drainDemandRevision!, 'demand came after the drain began');
+
+    // The instance, idle by its own account, accepts all the same, and exits.
+    const instance = { mappingId: draining.id, generation: draining.generation, podUid: draining.podUid! };
+    const answer = await managedRunnerHeartbeat(prisma, instance, { ...IDLE, sleepReady: draining.stopRequestedAt!.toISOString() }, w.now());
+    assert.deepEqual(answer.sleep, { requestedAt: draining.stopRequestedAt!.toISOString(), confirmed: true });
+    w.channel.exit(mapping.runnerId, 0);
+    w.runnerBuild = NEW_SHA;
+    const outcomes = await w.drive(ownerId);
+    assert.equal(outcomes.at(-1), 'READY', outcomes.join(' → '));
+    const awake = await w.mappingOf(ownerId);
+    assert.equal(w.channel.containers.get(`mr-${mapping.runnerId}`)!.request.image, NEXT, 'the current image');
+    assert.deepEqual(
+      { generation: awake.generation, runnerId: awake.runnerId, pvcUid: awake.pvcUid, desired: awake.desiredState },
+      { generation: mapping.generation + 1, runnerId: mapping.runnerId, pvcUid: mapping.pvcUid, desired: 'RUNNING' },
+    );
+    assert.ok(awake.updateCompletedAt && awake.updateCompletedAt >= awake.updateRequestedAt!);
+    assert.deepEqual(w.channel.stopRequests, [], 'nothing was stopped by force');
+    assert.equal((await db.session.findUniqueOrThrow({ where: { id: queued.id } })).status, 'PENDING', 'the message waits for the next generation');
+
+    // An automatic roll — the same drain, nobody having asked — is still called off by demand.
+    const v = world();
+    const auto = await v.outdatedRunner('auto-roll');
+    v.advance(1_000);
+    await v.heartbeat(auto.mapping.runnerId);
+    assert.equal(await v.manager.reconcile(auto.mapping.id), 'DRAINING', 'idle on a previous image, it rolls by itself');
+    const rolling = await v.mappingOf(auto.ownerId);
+    assert.deepEqual({ rollTo: rolling.imageRollTo, asked: rolling.updateRequestedAt }, { rollTo: NEXT, asked: null });
+    await recordManagedDemand(prisma, auto.mapping.runnerId, v.now());
+    v.advance(1_000);
+    await v.heartbeat(auto.mapping.runnerId);
+    assert.equal(await v.manager.reconcile(auto.mapping.id), 'READY', 'demand calls the automatic roll off');
+    const calledOff = await v.mappingOf(auto.ownerId);
+    assert.deepEqual({ state: calledOff.managementState, rollTo: calledOff.imageRollTo, generation: calledOff.generation }, { state: 'READY', rollTo: null, generation: auto.mapping.generation });
+  });
+
+  await t.test('(6) on Kubernetes, which cannot stop an instance: a busy runner\'s Update Now waits for idle, says so, and rolls once idle', async () => {
+    const k = managedRunnerWorld(db);
+    const { ownerId, mapping } = await k.readyRunner('k8s-update');
+    // The upgrade: the profile names a new image built from NEW_SHA; the Pod keeps the one it was made from.
+    const profile: ManagedRunnerProfile = { ...k.profile, runner: { ...k.profile.runner, image: `registry.invalid/orbit-cloud-runner@${NEXT}`, imageRevision: NEW_SHA } };
+    installManagedRunnerAdmission(k.cluster, prisma, profile);
+    const manager = new ManagedRunnerManager(prisma, k.cluster.client(), profile, {
+      holder: `k8s-update-${randomUUID().slice(0, 8)}`, now: k.now, random: () => 0.5, log: quiet, ownLocationOnly: true,
+    });
+    const service = new ManagedRunnerService(prisma, ON, { available: true, profile, manager, worker: new ManagedRunnerWorker(manager, 60_000, quiet) });
+    assert.equal(manager.backend.stopInstance, undefined, 'Kubernetes has no stopInstance');
+    const pod = () => k.cluster.object<Pod>('pods', managedPodName(mapping.runnerId));
+    const podUid = pod()!.metadata.uid;
+    await db.runner.update({ where: { id: mapping.runnerId }, data: { version: `managed-${OLD_SHA}` } });
+    const turn = await session(mapping, 'RUNNING', 'A long refactor');
+
+    k.advance(30_000);
+    await k.heartbeat(mapping.runnerId, { activeTurns: 1 });
+    assert.equal(await manager.reconcile(mapping.id), 'READY', 'busy on a previous image, it is not rolled');
+    assert.equal((await service.status(ownerId)).update?.phase, 'available');
+
+    const answered = await service.updateNow(ownerId, true);
+    assert.deepEqual(
+      answered.update,
+      { running: { sha: OLD_SHA }, current: { sha: NEW_SHA }, phase: 'updating', waitsForIdle: true },
+      'recorded, and it says it waits for the runner to be idle',
+    );
+    const [activity] = await db.activity.findMany({ where: { actorId: ownerId, type: MANAGED_RUNNER_UPDATE_NOW_ACTIVITY } });
+    assert.deepEqual(
+      activity.payload,
+      { mappingId: mapping.id, runnerId: mapping.runnerId, interruptTurns: true, waitsForIdle: true, running: OLD_SHA, current: NEW_SHA, sessionIds: [turn.id], backgroundJobs: 0 },
+    );
+
+    // Busy: every pass leaves it READY, the Pod untouched.
+    for (let pass = 0; pass < 3; pass += 1) {
+      k.advance(5_000);
+      await k.heartbeat(mapping.runnerId, { activeTurns: 1 });
+      assert.equal(await manager.reconcile(mapping.id), 'READY');
+      assert.equal((await service.status(ownerId)).update?.waitsForIdle, true);
+    }
+    assert.deepEqual({ uid: pod()!.metadata.uid, deleting: pod()!.metadata.deletionTimestamp ?? null }, { uid: podUid, deleting: null }, 'nothing stopped or deleted the Pod');
+
+    // Idle: it drains as a roll, the instance accepts and exits, and it wakes on the new image.
+    await db.session.update({ where: { id: turn.id }, data: { status: 'AWAITING_INPUT' } });
+    k.advance(5_000);
+    await k.heartbeat(mapping.runnerId);
+    assert.equal(await manager.reconcile(mapping.id), 'DRAINING');
+    const draining = await k.mappingOf(ownerId);
+    assert.equal(draining.imageRollTo, profile.runner.image);
+    const status = await service.status(ownerId);
+    assert.deepEqual({ phase: status.update?.phase, waits: status.update?.waitsForIdle }, { phase: 'updating', waits: undefined }, 'no longer waiting once it drains');
+    const answer = await managedRunnerHeartbeat(prisma, { mappingId: draining.id, generation: draining.generation, podUid: draining.podUid! }, { ...IDLE, sleepReady: draining.stopRequestedAt!.toISOString() }, k.now());
+    assert.equal(answer.sleep?.confirmed, true);
+    k.cluster.stopPod(managedPodName(mapping.runnerId));
+    const outcomes: ReconcileOutcome[] = [];
+    for (let i = 0; i < 40 && outcomes.at(-1) !== 'READY' && outcomes.at(-1) !== 'FAILED'; i += 1) {
+      outcomes.push(await manager.reconcile(mapping.id));
+      const after = await k.mappingOf(ownerId);
+      if (after.podUid && after.managementState === 'STARTING') {
+        k.advance(1_000);
+        await k.heartbeat(after.runnerId);
+      }
+      if (after.nextAttemptAt && after.nextAttemptAt > k.now()) k.advance(after.nextAttemptAt.getTime() - k.now().getTime() + 1);
+    }
+    assert.equal(outcomes.at(-1), 'READY', outcomes.join(' → '));
+    const awake = await k.mappingOf(ownerId);
+    assert.deepEqual(
+      { generation: awake.generation, runnerId: awake.runnerId, pvcUid: awake.pvcUid },
+      { generation: mapping.generation + 1, runnerId: mapping.runnerId, pvcUid: mapping.pvcUid },
+    );
+    assert.notEqual(pod()!.metadata.uid, podUid, 'a new Pod');
+    assert.ok(awake.updateCompletedAt && awake.updateCompletedAt >= awake.updateRequestedAt!);
   });
 });

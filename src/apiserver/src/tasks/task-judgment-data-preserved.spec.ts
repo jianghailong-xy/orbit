@@ -3262,7 +3262,16 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1411 (renumbered from a second 1410) adds three nullable columns on coordinator_handoff (what a handoff's
       // successor runs on); no row is written, and coordinator_handoff is not a preserved relation — no trigger,
       // function or DONE fence changes.
-      '1411_coordinator_handoff_successor'],
+      '1411_coordinator_handoff_successor',
+      // 1420 replaces open_list_bump_session and open_list_bump_via_session (CREATE OR REPLACE, names, arguments and
+      // triggers unchanged) so that an UPDATE of `session` or `conversation_turn` changing only columns no Open list
+      // draws bumps no owner; no DDL, and no row is written. Neither function is one of the six preserved
+      // triggers/functions, and no `task`, `project` or `project_acceptance_*` object nor the DONE fence is named.
+      '1420_open_list_undrawn_writes',
+      // 1430 adds managed_runner.update_interrupt_turns, BOOLEAN NOT NULL with a constant default (catalog-only, no
+      // rewrite), for an owner's Update Now of a busy runner; `managed_runner` is none of the preserved relations, no
+      // row is written, and no trigger, function or DONE fence changes.
+      '1430_managed_runner_update_interrupt'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
