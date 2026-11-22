@@ -422,7 +422,7 @@ async function strandWork(db: PrismaClient, f: Fixture): Promise<string> {
       title: 'the attempt that failed',
       prompt: 'the attempt that failed',
       provider: 'claude',
-      status: RunStatus.FAILED,
+      status: RunStatus.FAILED, finishedAt: new Date(), 
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
     },

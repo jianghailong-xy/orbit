@@ -9,6 +9,7 @@ import {
   TaskStatus,
 } from '@prisma/client';
 import { Client } from 'pg';
+import { isReleasedStatus } from '../common/session-release';
 import { PrismaService } from '../prisma/prisma.service';
 import { prismaClientFor } from '../prisma/prisma-client';
 import type { SessionsService } from '../sessions/sessions.service';
@@ -121,6 +122,7 @@ async function session(
       title: `run of ${taskId}`,
       prompt: 'do the thing',
       status,
+      ...(isReleasedStatus(status) ? { finishedAt: new Date()} : {}),
       dispatchOrigin: SessionDispatchOrigin.USER,
     },
   });

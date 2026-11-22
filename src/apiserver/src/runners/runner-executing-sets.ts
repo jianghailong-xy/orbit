@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client';
-import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
+import { sessionHeldSql } from '../common/session-release';
 import type { PrismaService } from '../prisma/prisma.service';
 import { BACKGROUND_JOB_SESSIONS_MAX } from './runner-background-holders';
 
@@ -102,8 +102,6 @@ export function sanitizeExecuting(value: unknown): ExecutingEntry[] | null {
   return [...bySession.values()].sort((a, b) => (a.sessionId < b.sessionId ? -1 : a.sessionId > b.sessionId ? 1 : 0));
 }
 
-const OPEN_STATUSES_SQL = Prisma.raw(OPEN_SESSION_STATUSES.map((status) => `'${status}'`).join(', '));
-
 /** The stated set as a text[]. */
 function stated(member: string): Prisma.Sql {
   return Prisma.sql`ARRAY(SELECT jsonb_array_elements_text(v.${Prisma.raw(`"${member}"`)}))`;
@@ -170,7 +168,7 @@ export async function replaceExecutingSets(
              "jobsGiven" boolean, "jobs" jsonb, "shellsGiven" boolean, "shells" jsonb)
      WHERE s."id" = v."sessionId"
        AND s."assigned_runner_id" = ${input.runnerId}::uuid
-       AND s."status" IN (${OPEN_STATUSES_SQL})
+       AND ${sessionHeldSql('s')}
        AND s."kind" = 'CONVERSATION'
        AND s."inbox_lease_owner" = ${input.leaseOwner}::uuid
        AND ${olderThanTheBeat(input.statedAt)}

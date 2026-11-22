@@ -17,8 +17,9 @@ import type { BgShell } from './background';
 //       a turn was running stays until the next turn starts.
 //   D2  the visible label is "Background"; the screen reader keeps "Background processes".
 //   E1  several running: rotate the names, newest started first, 3000 ms each, 300 ms change.
-//   E2  while a failed process is shown, the most recently failed one is pinned.
-//   E3  nothing running: the last one to end is shown, the most recent failure first.
+//   E2  (revised 2026-11-21) a failure is neither counted nor pinned: the person can do nothing
+//       about it (the agent was told). It keeps its cross wherever it is named and in the list.
+//   E3  (revised 2026-11-21) nothing running: the last one to end is shown, failed or not.
 
 /** The row's visible label. */
 export const BACKGROUND_ROW_LABEL = 'Background';
@@ -52,8 +53,8 @@ export interface BackgroundRowItem {
 }
 
 export interface BackgroundRowCountPart {
-  kind: 'running' | 'failed';
-  /** "N running" / "N failed"; a `failed` part is drawn in the error colour (.ct-failed). */
+  kind: 'running';
+  /** "N running". */
   text: string;
 }
 
@@ -61,9 +62,7 @@ export type BackgroundRowName =
   /** One named item, still. */
   | { mode: 'one'; item: BackgroundRowItem }
   /** The running items' names in turn, newest started first, looping. */
-  | { mode: 'rotate'; items: BackgroundRowItem[]; perNameMs: number; changeMs: number }
-  /** The most recently failed item, held instead of rotating. */
-  | { mode: 'pinned'; item: BackgroundRowItem };
+  | { mode: 'rotate'; items: BackgroundRowItem[]; perNameMs: number; changeMs: number };
 
 export type BackgroundRow =
   | { hidden: true }
@@ -131,13 +130,10 @@ export function backgroundRow(
   });
   const lastEnded = (xs: BackgroundRowInput[]) =>
     xs.reduce((a, b) => (time(b.endedAt) > time(a.endedAt) ? b : a));
-  const failed = ended.filter((s) => s.status === 'failed');
 
   let name: BackgroundRowName;
   if (shown.length === 1) {
     name = { mode: 'one', item: toItem(shown[0]) };
-  } else if (failed.length > 0) {
-    name = { mode: 'pinned', item: toItem(lastEnded(failed)) };
   } else if (running.length >= 2) {
     name = {
       mode: 'rotate',
@@ -151,12 +147,9 @@ export function backgroundRow(
     name = { mode: 'one', item: toItem(lastEnded(ended)) };
   }
 
-  // The Tasks card's parts (createdTasksCountLine), without its "done/total done".
+  // How many run; no failed count (E2).
   const countParts: BackgroundRowCountPart[] = [];
-  if (shown.length > 1) {
-    if (running.length > 0) countParts.push({ kind: 'running', text: `${running.length} running` });
-    if (failed.length > 0) countParts.push({ kind: 'failed', text: `${failed.length} failed` });
-  }
+  if (shown.length > 1 && running.length > 0) countParts.push({ kind: 'running', text: `${running.length} running` });
   const countLine = countParts.length > 0 ? countParts.map((p) => p.text).join(' · ') : null;
   const spoken = countLine ?? (name.mode === 'rotate' ? name.items[0].name : name.item.name);
 

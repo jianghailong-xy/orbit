@@ -125,6 +125,9 @@ async function sessionOn(
       title: 'shared pool doors',
       prompt: 'hello',
       status,
+      ...(['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(status)
+        ? { finishedAt: new Date()}
+        : {}),
       ownerId: owner.id,
       creatorId: owner.id,
       workspaceId,

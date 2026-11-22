@@ -22,6 +22,7 @@ import { computeDependencyState, dependencySatisfied, statusPrerequisites } from
 /** A run that ended the way a worker finishing its task ends one. */
 const SETTLED_RUN: VerificationRunFact = {
   runStatus: RunStatus.SUCCEEDED,
+  finishedAt: '2026-08-22T10:00:00.000Z',
   endReason: 'task_done',
   deletedAt: null,
   completionAt: '2026-08-22T10:00:00.000Z',

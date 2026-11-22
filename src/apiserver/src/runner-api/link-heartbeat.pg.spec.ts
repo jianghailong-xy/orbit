@@ -157,6 +157,9 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
         id, ownerId, creatorId: ownerId, title: 'a session', prompt: 'work', provider: 'claude', status, workspaceId,
         dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false, assignedRunnerId: runnerId, numTurns: 1,
         inboxLeaseOwner: process_, branch: `orbit/${id.slice(0, 8)}`, ...extra,
+        ...(status === RunStatus.SUCCEEDED || status === RunStatus.FAILED
+          ? { finishedAt: new Date()}
+          : status === RunStatus.CANCELLED ? { finishedAt: new Date()} : {}),
       },
     });
     return id;
@@ -531,7 +534,7 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
       });
       const work = await prisma.session.create({
         data: {
-          ownerId, creatorId: ownerId, title: 'the work', prompt: 'p', taskId, startsTaskWork: true, status: RunStatus.SUCCEEDED,
+          ownerId, creatorId: ownerId, title: 'the work', prompt: 'p', taskId, startsTaskWork: true, status: RunStatus.SUCCEEDED, 
           workspaceId, assignedRunnerId: runnerId, finishedAt: new Date(),
         },
       });
@@ -840,7 +843,7 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
     assert.equal(queued.statements.length, 1, queued.statements.join('\n---\n'));
     assert.equal(drainPushes.length, 0, 'the web\'s update indicator says it; nothing is pushed (docs/mocks/runner-update-indicator)');
 
-    await prisma.session.update({ where: { id: waiting }, data: { status: RunStatus.CANCELLED } });
+    await prisma.session.update({ where: { id: waiting }, data: { status: RunStatus.CANCELLED, finishedAt: new Date()} });
     for (let i = 0; i < 4 && isFull((await beat()).answer); i += 1);
     await settle();
   });
@@ -966,7 +969,7 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
       CAPABILITIES, 'claude,codex', 'linux',
     );
     assert.deepEqual(without(await sets(lost)), { jobs: [], shells: [], subagents: [], activity: {}, turn: false });
-    for (const id of [lost, elsewhere, otherProcess]) await prisma.session.update({ where: { id }, data: { status: RunStatus.CANCELLED } });
+    for (const id of [lost, elsewhere, otherProcess]) await prisma.session.update({ where: { id }, data: { status: RunStatus.CANCELLED, finishedAt: new Date()} });
     for (let i = 0; i < 4 && isFull((await beat()).answer); i += 1);
     await settle();
   });
@@ -1011,7 +1014,7 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
     await report(job('running'), composed + 5_000);
     await beat({ executing: [nothing] });
     assert.deepEqual(await sets(s), { jobs: [], shells: [] }, 'without executingAt the beat replaces');
-    await prisma.session.update({ where: { id: s }, data: { status: RunStatus.CANCELLED } });
+    await prisma.session.update({ where: { id: s }, data: { status: RunStatus.CANCELLED, finishedAt: new Date()} });
     await settle();
   });
 

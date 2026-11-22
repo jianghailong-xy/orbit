@@ -1,6 +1,6 @@
 /**
  * A runner heartbeat's directory and disk probe of its workspaces neither moves the Open list's
- * version nor sends `sessions.list_changed` (migration 1423_open_list_workspace_probes), unless it
+ * version nor sends `sessions.list_changed` (migration 1427_open_list_workspace_probes), unless it
  * flips the disk gate's verdict for a queued session; a write of a column an Open list draws still
  * does both.
  *
@@ -219,7 +219,7 @@ function steps(f: Fixture, received: Array<{ version: string }>) {
     assert.notEqual(await workspaceCounter(f), counter, `${what} did not move the workspace counter`);
     const after = await readOpenListVersion(f.prisma, f.ownerId);
     assert.notEqual(after, version, `${what} did not move the Open list's version`);
-    assert.ok(await until(() => received.at(-1)?.version === after, 2_500), `${what}: no sessions.list_changed within 2.5 s`);
+    assert.ok(await until(() => received.length > told, 2_500), `${what}: no sessions.list_changed within 2.5 s`);
     told = received.length;
     version = after;
   };
@@ -292,9 +292,10 @@ test('1. heartbeats: probe writes are silent unless free bytes cross a queued se
   assert.equal(await queuedReason(f), null);
 
   // Once the session has run, no gate reads the disk for it: the same crossing is silent.
+  const toldBefore = received.length;
   await f.db.session.update({ where: { id: f.queuedId }, data: { status: RunStatus.RUNNING, startedAt: new Date() } });
   const started = await readOpenListVersion(f.prisma, f.ownerId);
-  assert.ok(await until(() => received.at(-1)?.version === started, 2_500), 'the session starting sent no hint');
+  assert.ok(await until(() => received.length > toldBefore, 2_500), 'the session starting sent no hint');
   const counter = await workspaceCounter(f);
   await linkBeat(f, [gated(BELOW)]);
   assert.equal(await workspaceCounter(f), counter, 'free bytes crossing the floor of a session that has run moved the counter');

@@ -761,6 +761,14 @@ export class SessionsController {
     return this.sessions.adoptWorktreeBranch(user.userId, id);
   }
 
+  /** Close a failed merge's strip: clear the stored conflict or error so the bar shows Merge (or
+   *  "✓ In main") again. Changes nothing in git; the next failed merge shows a new strip. */
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
+  @Post(':id/merge-failure/dismiss')
+  dismissMergeFailure(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.sessions.dismissMergeFailure(user.userId, id);
+  }
+
   // A session's public link — `GET | PUT | POST | DELETE /sessions/:id/share` — is served by
   // ShareLinksController, beside the task's and the project's.
 

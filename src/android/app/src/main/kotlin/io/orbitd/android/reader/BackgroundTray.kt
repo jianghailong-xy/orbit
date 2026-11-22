@@ -148,7 +148,6 @@ internal fun BackgroundTray(procs: List<JsonObject>, clearedAt: String?, session
     }
     val item = when (val name = row.name) {
         is BackgroundRow.Name.One -> name.item
-        is BackgroundRow.Name.Pinned -> name.item
         is BackgroundRow.Name.Rotate -> name.items[turn % name.items.size]
     }
     val shape = RoundedCornerShape(8.dp)
@@ -221,7 +220,7 @@ private fun FoldedRow(row: BackgroundRow.Row, item: BackgroundRow.Item, open: ()
         if (row.countParts.isNotEmpty()) Text(buildAnnotatedString {
             row.countParts.forEachIndexed { i, part ->
                 if (i > 0) withStyle(SpanStyle(color = secondary)) { append(" · ") }
-                withStyle(SpanStyle(color = if (part.kind == "failed") MaterialTheme.colorScheme.error else secondary)) { append(part.text) }
+                withStyle(SpanStyle(color = secondary)) { append(part.text) }
             }
         }, style = MaterialTheme.typography.labelSmall, maxLines = 1)
         Mark(item.mark)

@@ -1,6 +1,7 @@
 import { Prisma, RunStatus } from '@prisma/client';
 
 import { freshRunningBgJobs } from '../sessions/background-job-activity';
+import { sessionHeldIndexedSql } from './session-release';
 import { OPEN_SESSION_STATUSES } from './session-scheduling';
 
 /**
@@ -132,8 +133,10 @@ export const ARMED_RETRY: SessionFact<Pick<SessionWakeRow, 'retryAt'>> = {
 const OUTSIDE_TURN_FACTS = [ENGINE_TURN, RUNNING_SUBAGENT, RUNNING_BG_JOB] as const;
 const WAKE_FACTS = [RESUME_WATCH, PENDING_WAKEUP, ARMED_RETRY] as const;
 
-const openStatusSql = (s: string): string =>
-  `${s}."status" IN (${OPEN_SESSION_STATUSES.map((status) => `'${status}'::"run_status"`).join(', ')})`;
+// Raw SQL reads the release column (plan step 4.3), with the held statuses beside it for the readers whose access path
+// is `session_assigned_runner_id_status_idx` (managed runner sleep); the predicate and the Prisma filters above still
+// read the open statuses, which session_release_fact_chk holds to the same rows.
+const openSql = (s: string): string => sessionHeldIndexedSql(s).sql;
 
 /**
  * Something is executing for the session: a dispatched turn, or — on a session that has not ended —
@@ -181,7 +184,7 @@ export function sessionExecutingSql(session: string): string {
  */
 export function sessionExecutingOutsideTurnSql(session: string, alsoCounting: readonly string[] = []): string {
   const facts = [...OUTSIDE_TURN_FACTS.map((fact) => fact.sql(session)), ...alsoCounting];
-  return `(${openStatusSql(session)}
+  return `(${openSql(session)}
       AND (${facts.join(' OR ')}))`;
 }
 
