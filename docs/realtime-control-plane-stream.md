@@ -283,8 +283,6 @@ GET /api/events?hints=list_changed
 1. 每 1 s 用一条语句(`owner_id = ANY($owners)`)读 `open_list_epoch` 的计数和(0484/0487 的计数器覆盖 Open 列表全部源表的写)。某账户的和变了,就算一次版本,变了就发。裸 SQL 写、别的副本的写、不发事件的写都会被覆盖。
 2. 每 15 s 对这些账户都算一次完整版本,覆盖只随时钟翻转的阈值(runner 离线、后台任务变安静、评审窗口、升级期限、分享链接过期)。
 
-**Counter sources left out of the token (docs/list-freshness-scope-hints.md §5.4 D1).** The 1 s counter sum leaves out `promotion`, `integration_job`, `project_open_item`, `merge_receipt` and `codebase`: only a LANDING row's summary reads them, and a LANDING row is in no flat list, so a write to them sends no `sessions.list_changed` (the list version still moves; `open-list-version.pg.spec.ts` pins that no flat or project-scoped row reads them). **Known bound:** `project_open_item` DONE_REQUEST rows also feed the clock part's `deadlines` (the escalation window), so a done-request write reaches clients at the next 15 s clock read, not within a second. That is inside the 20 s bound for clock thresholds and only touches coordinator escalation.
-
 实现在 `src/apiserver/src/realtime/open-list-hints.ts`;只读、不写、不加锁。同一时刻只有一条 tick 链:tick 进行中到来的新流,由这次 tick 结束后排下一次。多副本下每个进程只管连在自己身上的流。
 
 **同版本只构建一次。** 一次变化会同时提示该账户的所有设备。`SessionsService.list` / `listOpenSince` 对同一 `(owner, 过滤条件(含 confinedTo 与 limit), version)` 的并发读共享一次构建:在途的读等同一个 promise,构建完成后约 5 s 内的同版本读直接用它(每个读拿一份拷贝)。
