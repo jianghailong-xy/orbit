@@ -20,7 +20,6 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import {
   ApiOutlined,
-  BarChartOutlined,
   GithubOutlined,
   BellOutlined,
   BlockOutlined,
@@ -59,7 +58,7 @@ import {
 import { settingsReturnPath } from '../../lib/settingsReturn';
 import { useToast } from '../../lib/toast';
 import { useMediaQuery } from '../../lib/useMediaQuery';
-import { INTEGRATION_PAGES, PERSONAL_PAGES } from '../../pages/settings/settingsIndex';
+import { INTEGRATION_PAGES, MODEL_ROUTING_PAGE, PERSONAL_PAGES } from '../../pages/settings/settingsIndex';
 import { ControlPlaneProvider } from '../../lib/useControlPlane';
 import { ImpersonationBanner } from '../ImpersonationBanner';
 import { HelpDrawer } from '../HelpDrawer';
@@ -80,7 +79,6 @@ const PERSONAL_ICONS: Record<(typeof PERSONAL_PAGES)[number]['path'], ReactNode>
   '/settings/access-tokens': <KeyOutlined />,
   '/settings/secrets': <LockOutlined />,
   '/settings/terminals': <CodeOutlined />,
-  '/settings/routing-report': <BarChartOutlined />,
 };
 
 /** Integrations' rows' icons, one per connected service. */
@@ -239,7 +237,7 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
   const nowMs = Date.now();
   // The keys page is every key, or one vendor's (/settings/providers/:vendor); not a key's own pages.
   const { pathname } = useLocation();
-  const keysPage = /^\/settings\/providers(\/(?!(new|keys|pools|tiers)(\/|$))[^/]+)?\/?$/.test(pathname);
+  const keysPage = /^\/settings\/providers(\/(?!(new|keys|pools|routing)(\/|$))[^/]+)?\/?$/.test(pathname);
 
   const stateOf = (runner: Runner): MachineState => {
     if (runnerIsOffline(runner, nowMs)) return 'offline';
@@ -331,7 +329,7 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
             <>
               <NavRow to="/settings/providers/new" icon={<PlusOutlined />} label="Connect a provider" />
               {/* The built-in engines have model tiers with no key at all. */}
-              <NavRow to="/settings/providers/tiers" icon={<OrderedListOutlined />} label="Model tiers" />
+              <NavRow to={MODEL_ROUTING_PAGE.path} icon={<OrderedListOutlined />} label={MODEL_ROUTING_PAGE.label} />
             </>
           ) : (
             <>
@@ -350,8 +348,9 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
                 label="Account pools"
                 trailing={poolCount > 0 ? <span className="settings-nav-meta">{poolCount}</span> : undefined}
               />
-              {/* Its own row (owner, 2026-11-21): the tier every model routes SubAgents at, keys' and built-in engines'. */}
-              <NavRow to="/settings/providers/tiers" icon={<OrderedListOutlined />} label="Model tiers" />
+              {/* Every model's tier, keys' and built-in engines', beside how its runs went: Model tiers and the
+                  Routing report on one page. */}
+              <NavRow to={MODEL_ROUTING_PAGE.path} icon={<OrderedListOutlined />} label={MODEL_ROUTING_PAGE.label} />
             </>
           )}
         </NavGroup>

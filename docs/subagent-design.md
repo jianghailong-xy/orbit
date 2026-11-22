@@ -289,7 +289,7 @@ owner 什么都没设时 Claude / Codex / Kimi 的行与以前逐字节相同；
 
 ## 7. 设置与界面
 
-- **设置 → General → New sessions**：Optimize For（Cost / Balance / Intelligence），账号级，紧跟 Smart model selection
+- **设置 → General → New sessions**（2026-11-22 起在 Providers → Model routing）：Optimize For（Cost / Balance / Intelligence），账号级，紧跟 Smart model selection
   （owner，2026-11-19，board `docs/mocks/routing-mode-account`）。
 - **Agent 设置 → SubAgents**：开关、Providers（默认全部，点进去屏蔽）、
   Running at once。
@@ -304,6 +304,11 @@ owner 什么都没设时 Claude / Codex / Kimi 的行与以前逐字节相同；
   一次运行算在 Orbit **选的**档位和模型下（同任务报告「算在首次决策」的口径），换了候选记一次 Moved on；`agentId` 是父会话的
   Agent；workflow 的调用就是 SubAgent 运行，两个视图数同一批 `subagent_run` 行，所以 workflow 的调用合计恒等于 SubAgents 里的
   workflow 调用数。任务的路由报告以后作为第三个视图 Tasks 放进同一页。
+- **合并为 Model routing**（owner，2026-11-22）：Model tiers 与 Routing report 合成 **设置 → Providers → Model routing**
+  （`/settings/providers/routing`；旧地址 `/settings/providers/tiers`、`/settings/routing-report` 带着查询参数跳过来）。
+  页首是 Smart model selection 与 Optimize For（从 General 搬来），下面每个模型一行：档位（可改）、价格、Ran at（按档位分的
+  运行条，跑在当前没设的档位上的部分标出来）、Runs / Done / Cost，点开看分档明细；按名字调用和未路由的另起两段，没档位也没运行的
+  模型折叠。Workflows 视图不变。原生客户端仍在 General 里画这两个开关，待跟进。
 
 ### 7.1 完成质量（只显示，不参与路由）
 
