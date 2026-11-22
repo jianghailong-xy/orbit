@@ -1,8 +1,8 @@
 import { ORBIT_WORKFLOW_TOOL, type SubagentRunView, type WorkflowRunView } from '@orbit/shared';
 import { createContext, useEffect, useState } from 'react';
-import { getSessionSubagents, getSessionWorkflows } from '../api';
+import { getSessionWorkflows } from '../api';
 import type { RunEvent } from '../components/Transcript';
-import { DELEGATE_TOOL } from './subagentRuns';
+import { DELEGATE_TOOL, readSessionSubagents } from './subagentRuns';
 
 /**
  * Orbit workflows in the transcript (docs/subagent-workflow-design.md §3.3): what a `mcp__orbit__workflow` block
@@ -67,7 +67,7 @@ export function useWorkflowRuns(sessionId: string, events: readonly RunEvent[]):
   useEffect(() => {
     if (!signature) return;
     let closed = false;
-    Promise.all([getSessionWorkflows(sessionId), getSessionSubagents(sessionId)])
+    Promise.all([getSessionWorkflows(sessionId), readSessionSubagents(sessionId)])
       .then(([workflows, runs]) => {
         if (closed) return;
         setState({

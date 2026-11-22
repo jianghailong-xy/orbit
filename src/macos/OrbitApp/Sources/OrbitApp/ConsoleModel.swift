@@ -194,6 +194,11 @@ final class ConsoleModel {
     private(set) var sessionForkSource: String?
     private(set) var antigravityInstalling = false
     private(set) var runnerInstall: RunnerInstallState?
+    /// Fix with an agent's state on this session's machine, for the transcript's missing-bubblewrap
+    /// warning (`RunnerAgentFixLogic.sandboxState`). Nil from an older server, which draws no action.
+    private(set) var runnerAgentFix: RunnerAgentFix?
+    /// A sandbox Fix with an agent press is on its way; its button holds until the runner is read again.
+    private(set) var sandboxFixStarting = false
 
     var canInstallAntigravity: Bool {
         runnerID != nil && runnerOnline == true && runnerAntigravity?.supported == true
@@ -397,6 +402,24 @@ final class ConsoleModel {
         if let runner = runners.first(where: { $0.id == runnerID }) { adoptRunnerSnapshot(runner) }
         else { clearRunnerSnapshot() }
     }
+
+    /// Fix with an agent under the transcript's missing-bubblewrap warning
+    /// (docs/mocks/codex-sandbox-fix-with-agent): one press starts a session on this machine to install
+    /// it, then the runner is read again so the row turns into the fixing line. A refusal (a 409's own
+    /// sentence) is the status line, as on the machine page.
+    func fixSandbox() async {
+        guard let runnerID, !sandboxFixStarting else { return }
+        sandboxFixStarting = true
+        defer { sandboxFixStarting = false }
+        let target = RunnerAgentFixTarget(kind: .sandboxMissing, engine: RunnerAgentFixLogic.SANDBOX_FIX_ENGINE)
+        do {
+            _ = try await api.fixRunnerAttention(runnerID, kind: .sandboxMissing,
+                                                 body: RunnerAgentFixLogic.request(target, latestVersion: nil))
+        } catch {
+            statusMessage = "\(RunnerPageCopy.AGENT_FIX_FAILED) — \(APIClient.failureReason(error))"
+        }
+        await refreshRunner()
+    }
     /// A provider switch made while this session was ENDED. There is nothing to PATCH then, so it
     /// rides along with the resume that revives it — the route Model/Mode/Effort already take.
     /// Nil unless the user picked one here: the session's own provider must never be re-asserted
@@ -570,6 +593,11 @@ final class ConsoleModel {
     /// When that detail was read: a clone frame heard before it is older news than its cloneState.
     private(set) var madeWorkspaceReadAt: Date?
     var madeWorkspaceID: String? { madeWorkspace?.id }
+    /// The workspace the session runs in, as its detail read it, when that is a GitHub clone: what the waiting card
+    /// of a session held by the clone names (`QueuedClone.card`). Any session of the workspace, not only the one that
+    /// made it.
+    private(set) var cloneWorkspace: SessionAgentRef?
+    private(set) var cloneWorkspaceReadAt: Date?
     /// The line this conversation opens with, when it made its workspace (board rule 8).
     var createdWorkspaceLine: CreatedWorkspaceLine? {
         guard let madeWorkspace, let name = madeWorkspace.name, let runnerName else { return nil }
@@ -2378,6 +2406,7 @@ final class ConsoleModel {
         runnerAntigravity = runner.antigravity
         runnerVersion = runner.version
         runnerInstall = runner.install
+        runnerAgentFix = runner.agentFix
         runnerCapabilities = runner.capabilities
         runnerRunsAsRoot = runner.runsAsRoot
     }
@@ -2394,6 +2423,7 @@ final class ConsoleModel {
         runnerAntigravity = nil
         runnerVersion = nil
         runnerInstall = nil
+        runnerAgentFix = nil
         runnerCapabilities = nil
         runnerRunsAsRoot = nil
     }
@@ -2616,6 +2646,10 @@ final class ConsoleModel {
         guard let session, session.id == sessionID else { return }
         conversationCreatedAt = session.createdAt
         // A list row carries no flag, so only the detail moves this; it never goes back to false.
+        if let agent = session.agent, agent.cloneState != nil {
+            cloneWorkspace = agent
+            cloneWorkspaceReadAt = Date()
+        }
         if session.createdWorkspace == true {
             madeWorkspace = session.agent
             madeWorkspaceReadAt = Date()

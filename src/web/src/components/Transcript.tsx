@@ -90,6 +90,10 @@ import { BatchGraph } from './BatchGraph';
 import { buildBatchGraph, describeShape, type BatchTaskInput } from '../lib/batchGraph';
 import { RunnerSignIn } from './RunnerSignIn';
 import { AppLink } from './AppLink';
+import { Button } from './ui/Button';
+import { sandboxFixView } from '../lib/agentFix';
+import { AGENT_FIX_BUTTON, AGENT_FIX_OPEN_SESSION, agentFixFixed, agentFixFixing } from '../lib/runnerCopy';
+import type { RunnerAgentFix } from '@orbit/shared';
 import { SameOriginLink } from './SameOriginLink';
 import { TaskRunHandoffNotice } from './TaskRunHandoffNotice';
 import { MainCheckoutCard, MainCheckoutResultRow } from './MainCheckout';
@@ -328,6 +332,53 @@ export interface AuthErrorHelp {
   onUseApiKey?: () => void;
 }
 export const AuthErrorCtx = createContext<AuthErrorHelp | null>(null);
+
+/**
+ * Fix with an agent for the missing-bubblewrap warning a transcript caught
+ * (docs/mocks/codex-sandbox-fix-with-agent): this machine's agent-fix state and the press.
+ * WorkspaceView supplies it; the shared page, the standalone export and a wiki chat leave it null,
+ * where the row is history with no action.
+ */
+export interface SandboxFixHelp {
+  fix: RunnerAgentFix | null | undefined;
+  /** One press; the runners are re-read, which is what turns the row into its fixing line. */
+  start: () => void;
+  /** A press is on its way, so the button holds. */
+  starting: boolean;
+}
+export const SandboxFixCtx = createContext<SandboxFixHelp | null>(null);
+
+/** The action under the sandbox warning: the agent at work, the one that finished, or the button. */
+function SandboxFixAction({ seq }: { seq: number }) {
+  const help = useContext(SandboxFixCtx);
+  if (!help) return null;
+  const view = sandboxFixView(help.fix);
+  if (!view) return null;
+  if (view.state === 'fixing' || view.state === 'handled') {
+    return (
+      <div className={`chat-sandbox-fix ${view.state}`} data-seq={seq}>
+        <div className="chat-sandbox-fix-line">
+          {view.state === 'fixing' && <span className="agent-fix-dot" aria-hidden />}
+          {view.state === 'fixing' ? agentFixFixing(view.workspaceName) : agentFixFixed(view.workspaceName)}
+          <AppLink to={`/sessions/${encodeURIComponent(view.sessionId)}`}>{AGENT_FIX_OPEN_SESSION}</AppLink>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className={`chat-sandbox-fix ${view.state}`} data-seq={seq}>
+      <Button
+        size="small"
+        disabled={view.state === 'blocked' || help.starting}
+        loading={help.starting}
+        onClick={help.start}
+      >
+        {AGENT_FIX_BUTTON}
+      </Button>
+      {view.line ? <div className="chat-sandbox-fix-line">{view.line}</div> : null}
+    </div>
+  );
+}
 
 export type AntigravityRepair = 'needsKey' | 'updateRunner' | 'notInstalled';
 
@@ -814,6 +865,20 @@ function parseRunDiagnostic(raw: unknown, fallbackMessage: string): RunDiagnosti
  * sessions from changing meaning when the UI is upgraded. */
 function legacyRecoverableDiagnostic(line: string): RunDiagnostic | undefined {
   const lower = line.toLowerCase();
+  // Codex's sandbox setup asks for the system bubblewrap and falls back to its bundled copy
+  // (docs/mocks/codex-sandbox-fix-with-agent). A current runner sends this structured; events
+  // stored before it did are recognized here so the warning and its action survive.
+  if (lower.includes('could not find bubblewrap on path')) {
+    return {
+      message: line,
+      component: 'sandbox',
+      phase: 'startup',
+      severity: 'WARN',
+      impact: 'degraded',
+      recoverable: true,
+      code: 'bubblewrap_missing',
+    };
+  }
   const tokenInvalidated = lower.includes('token_invalidated') || lower.includes('token has been invalidated');
   if (lower.includes('codex_models_manager') && lower.includes('failed to refresh available models')) {
     if (lower.includes('401') && tokenInvalidated) {
@@ -2799,7 +2864,7 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
         .filter(Boolean)
         .join(' · ');
       const className = warning ? 'chat-notice chat-diagnostic' : 'chat-error chat-diagnostic';
-      return (
+      const row = (
         <div
           className={className}
           data-diagnostic="true"
@@ -2817,6 +2882,17 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
           )}
         </div>
       );
+      // The sandbox warning offers the agent that installs what Codex wants
+      // (docs/mocks/codex-sandbox-fix-with-agent); every other diagnostic stays a plain row.
+      if (node.component === 'sandbox' && node.code === 'bubblewrap_missing') {
+        return (
+          <>
+            {row}
+            <SandboxFixAction seq={node.seq} />
+          </>
+        );
+      }
+      return row;
     }
     case 'error': {
       const dsh = authHelp?.runtime === 'dsh' ? dshRepair(node.message) : null;

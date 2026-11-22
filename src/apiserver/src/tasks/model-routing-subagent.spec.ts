@@ -114,7 +114,7 @@ test('smart model selection off: no tier is routed, a named model still is', () 
     assert.equal(off.level, null);
     assert.deepEqual([off.provider, off.engine, off.model, off.effort], ['claude', 'claude', OPUS, 'high']);
     assert.deepEqual(off.fallbacks, []);
-    assert.deepEqual(off.reasons, [`Smart model selection is off: runs on the parent's ${OPUS}`]);
+    assert.deepEqual(off.reasons, [`Route by tier is off: runs on the parent's ${OPUS}`]);
   }
   // A model the caller or the definition names is not a tier: it is used as named.
   const named = route(input({ caller: { model: GPT }, smartSelection: false }));

@@ -15,6 +15,7 @@ import {
   AutoRetryCtx,
   EventFullCtx,
   LiveToolOutputsCtx,
+  SandboxFixCtx,
   SessionNavCtx,
   SteerWithdrawCtx,
   StreamingDraftsCtx,
@@ -50,6 +51,7 @@ export function SessionConversation({
   inserts,
   authErrorHelp,
   autoRetryHelp,
+  sandboxFixHelp = null,
   restoreUndelivered,
   steerWithdrawal,
   linkStateWord,
@@ -71,6 +73,8 @@ export function SessionConversation({
   inserts: readonly TranscriptInsert[];
   authErrorHelp: ContextType<typeof AuthErrorCtx>;
   autoRetryHelp: ContextType<typeof AutoRetryCtx>;
+  /** Fix with an agent under a caught sandbox warning (`SandboxFixCtx`); null where there is no machine. */
+  sandboxFixHelp?: ContextType<typeof SandboxFixCtx>;
   restoreUndelivered: ContextType<typeof UndeliveredCtx>;
   steerWithdrawal: ContextType<typeof SteerWithdrawCtx>;
   /** The word a link card says for the session it links to. Pass a module-level function: it
@@ -124,14 +128,16 @@ export function SessionConversation({
                       <OrbitLinkCardsProvider stateWord={linkStateWord} refreshKey={linkRefreshKey}>
                         <AnsweredQuestionsCtx.Provider value={answeredQuestions}>
                           <WikiDraftCardCtx.Provider value={wikiChat}>
-                            <Transcript
-                              events={stream.transcriptEvents}
-                              live={live}
-                              turnImages={turnImages}
-                              artifactSessionId={sessionId}
-                              streamingAfterSeq={stream.streamingAfterSeq}
-                              inserts={inserts}
-                            />
+                            <SandboxFixCtx.Provider value={sandboxFixHelp}>
+                              <Transcript
+                                events={stream.transcriptEvents}
+                                live={live}
+                                turnImages={turnImages}
+                                artifactSessionId={sessionId}
+                                streamingAfterSeq={stream.streamingAfterSeq}
+                                inserts={inserts}
+                              />
+                            </SandboxFixCtx.Provider>
                           </WikiDraftCardCtx.Provider>
                         </AnsweredQuestionsCtx.Provider>
                       </OrbitLinkCardsProvider>

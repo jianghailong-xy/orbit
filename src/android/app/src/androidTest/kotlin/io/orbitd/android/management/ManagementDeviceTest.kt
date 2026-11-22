@@ -487,11 +487,11 @@ class ManagementDeviceTest {
                 signIn(server); settings()
                 await("2 active")
                 // Smart model selection is on Sessions' page (docs/mocks/ios-settings-order).
-                click(hasText("Sessions") and hasClickAction()); await("Smart model selection")
+                click(hasText("Sessions") and hasClickAction()); await("Route by tier")
                 capture("a13d-settings-sessions")
-                click(hasText("Smart model selection") and isToggleable())
+                click(hasText("Route by tier") and isToggleable())
                 compose.waitUntil(10_000) { modelRouting == true }
-                compose.waitUntil(10_000) { runCatching { compose.onNode(hasText("Smart model selection") and isToggleable()).assertIsOn() }.isSuccess }
+                compose.waitUntil(10_000) { runCatching { compose.onNode(hasText("Route by tier") and isToggleable()).assertIsOn() }.isSuccess }
                 capture("a13d-smart-selection-on")
                 back(); await("Appearance")
                 compose.onAllNodesWithText("Access tokens").onFirst().performScrollTo()

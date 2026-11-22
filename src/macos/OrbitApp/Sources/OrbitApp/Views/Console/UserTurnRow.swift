@@ -196,7 +196,8 @@ struct UserTurnRow: View {
                     }
                 }
                 SessionReplyCardsView(replies: replies, ts: b.ts,
-                                      undelivered: undelivered, onCancelQueued: cancel)
+                                      undelivered: undelivered, onCancelQueued: cancel,
+                                      revealed: revealedItemID == b.id)
                 .orbitCardWidth()
             }
         } else if let line = RunnerUpdateNow.resumeLine(b.text) {

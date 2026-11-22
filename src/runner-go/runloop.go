@@ -1967,7 +1967,20 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	resets := newCodexResetRelay(resetCtx, t, resetConsumer.execute, &heartbeatOps)
 	// A managed instance's side of idle sleep (managed_sleep.go); unused by a self-managed runner.
 	sleeper := newManagedSleep()
-	managedWorkload := func() ManagedWorkload { return managedWorkloadCounts(pool, &heartbeatOps, login, install) }
+	// A managed instance shares the duplicate files on its own volume while it is idle (managed_dedupe.go).
+	var dedupe *homeDedupe
+	if currentManagedInstance() != nil {
+		if home, err := os.UserHomeDir(); err == nil {
+			dedupe = newHomeDedupe(home)
+		}
+	}
+	defer dedupe.stop()
+	// What the workload report says: a dedupe pass is one of its operations, so the runner is not put to sleep under it.
+	managedWorkload := func() ManagedWorkload {
+		counts := managedWorkloadCounts(pool, &heartbeatOps, login, install)
+		counts.Operations += dedupe.inFlight()
+		return counts
+	}
 	// Closed once a managed instance's first heartbeat has been taken, or given up on
 	// (managedStartupBeat); its claims wait for it.
 	startupBeatDone := make(chan struct{})
@@ -2013,6 +2026,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			sent := time.Now()
 			var workload *ManagedWorkload
 			if currentManagedInstance() != nil {
+				// The pass itself left out: whether anything else is at work. One is not started for a stop already
+				// under way, nor once a sleep request has been accepted.
+				dedupe.tick(managedWorkloadCounts(pool, &heartbeatOps, login, install).idle() && !draining && !sleeper.hasAccepted())
 				report := sleeper.report(managedWorkload())
 				workload = &report
 			}

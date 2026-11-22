@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SubagentRunView, WorkflowRunView } from '@orbit/shared';
 import type { RunEvent } from '../components/Transcript';
+import { useSubagentRuns } from './subagentRuns';
 import { useWorkflowRuns, workflowRunsSignature, type WorkflowRuns } from './workflowRuns';
 
 /**
@@ -175,5 +176,38 @@ describe('a session\'s workflows on the web', () => {
     const all = Object.values(life);
     expect(workflowRunsSignature(all)).toBe('1,2,3,4,7,8,9,10,11');
     expect(workflowRunsSignature([life.call0, life.call0Started]), 'a delegate call nested under no workflow is not a workflow call').toBe('');
+  });
+
+  it('read /subagents once when a delegate signature and a workflow signature move together, and neither view misses it', async () => {
+    let delegateSeen: ReturnType<typeof useSubagentRuns> = new Map();
+    function Both({ events }: { events: readonly RunEvent[] }) {
+      delegateSeen = useSubagentRuns('s1', events);
+      seen = useWorkflowRuns('s1', events);
+      return null;
+    }
+    const both = async (events: readonly RunEvent[]) => {
+      await act(async () => {
+        root.render(<Both events={events} />);
+        for (let i = 0; i < 5; i++) await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+    };
+    const delegate = ev(20, 'tool_use', { id: 'toolu_d', name: 'mcp__orbit__delegate', input: { prompt: 'x' } });
+    server.workflows = [workflow({})];
+    server.runs = [run(0, {}), { ...run(0, {}), toolUseId: 'toolu_d', workflowRunId: null, callIndex: null, label: null, phase: null }];
+    await both([delegate, life.opened]);
+    expect(reads.filter((url) => url.endsWith('/subagents'))).toHaveLength(1);
+    expect(delegateSeen.get('toolu_d')?.status).toBe('RUNNING');
+    expect(seen.workflows.get(WF)?.status).toBe('RUNNING');
+
+    // The delegate ends and a workflow call is made on one update: one more read, both views move.
+    reads.length = 0;
+    server.runs = [run(0, {}), { ...run(0, {}), toolUseId: 'toolu_d', workflowRunId: null, callIndex: null, label: null, phase: null, status: 'DONE' }];
+    server.workflows = [workflow({ callsDone: 1 })];
+    const delegateEnded = ev(21, 'tool_result', { toolUseId: 'toolu_d', content: [{ type: 'text', text: '{}' }] });
+    await both([delegate, life.opened, delegateEnded, life.call0]);
+    expect(reads.filter((url) => url.endsWith('/subagents'))).toHaveLength(1);
+    expect(delegateSeen.get('toolu_d')?.status).toBe('DONE');
+    expect(seen.workflows.get(WF)).toMatchObject({ callsDone: 1 });
+    expect(seen.calls.get(`${WF}#0`)?.status).toBe('RUNNING');
   });
 });

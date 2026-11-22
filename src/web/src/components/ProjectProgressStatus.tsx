@@ -36,7 +36,6 @@ import { abandonJob } from '../lib/projectMerge';
 import {
   projectCoordinatorStatusQuery,
   projectDetailsQuery,
-  projectIntegrationQuery,
   projectOpenItemsQuery,
   projectPromotionQuery,
   workspacesQuery,
@@ -67,6 +66,7 @@ import { Button } from './ui/Button';
 import { signInHref } from './TaskSignInHold';
 import { Dialog } from './ui/Dialog';
 import { Textarea } from './ui/Textarea';
+import { useProjectIntegration } from '../lib/pollOwner';
 
 /**
  * What a project still owes somebody, and what its coordinator has left to spend
@@ -3313,7 +3313,7 @@ export function ProjectOpenItems({
     : undefined;
   // The integration read the page's integration row holds (one query key): the project's main
   // branch, which a rerun of a merge check names, and the one the start card opens with.
-  const integration = useQuery({ ...projectIntegrationQuery(projectId ?? ''), enabled: Boolean(projectId) });
+  const integration = useProjectIntegration(projectId ?? '');
   const standing = integration.data ?? null;
   const main = mainBranchName(standing?.upstreamRef);
   // The pause is drawn as a card above the groups and counted in neither: it is not something

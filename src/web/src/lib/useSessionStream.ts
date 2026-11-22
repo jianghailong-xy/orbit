@@ -1,5 +1,5 @@
 import type { SessionTurnPlacement, TurnTranslation } from '@orbit/shared';
-import { useQueryClient } from '@tanstack/react-query';
+import { queryOptions, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   type ActiveSessionTurn,
@@ -32,6 +32,7 @@ import {
 import type { BgShell } from './backgroundShells';
 import { deriveBackgroundShells, mergeBackgroundShells } from './backgroundShells';
 import { memoizeEventFull } from './eventFull';
+import { streamStaleTime } from './listBudget';
 import {
   EMPTY_LIVE_TASK_PROGRESS,
   reduceLiveTaskProgress,
@@ -53,6 +54,7 @@ import { firstPaintSlice } from './transcriptPaint';
 import { loadTranscript, saveTranscript } from './transcriptStore';
 import { foldTranslationEvent } from './translation';
 import { turnPlacementOf } from './turnPlacement';
+import { useControlPlaneLive } from './useControlPlane';
 
 export interface RunEvent {
   seq: number;
@@ -136,10 +138,25 @@ const SLOW_RECONNECT_MS = 60_000;
 // noticed at all: nothing arrives, nothing errors, and no reconnect is ever attempted.
 const WATCHDOG_SILENCE_MS = 45_000;
 const WATCHDOG_TICK_MS = 15_000;
-// How long a cached /background scan stays fresh. `/background` scans the session's whole
-// tool-event history, so re-opening a session (or scrubbing the list) within this window paints
-// the cached shells instead of re-running that scan — see bgCacheRef.
-const BG_TTL_MS = 30_000;
+// How long the session's first read of its pending approvals waits for the stream to open, which is
+// what reads them (refreshApprovals). A healthy stream opens well inside it; one that hangs while
+// connecting — no open, no error, until the watchdog above gives up on it — would otherwise leave a
+// card awaiting a decision off the page for most of a minute.
+const APPROVALS_OPEN_GRACE_MS = 3_000;
+
+/**
+ * A session's whole background-shell inventory (`/background`), which scans its whole tool-event
+ * history. Read once per open of the session, with the stream-aware staleTime (listBudget): a return
+ * to the session within the safety minute paints what is held instead of scanning again. Its own root,
+ * not under `['session', id]`, so the many writes that invalidate a session's reads do not re-run the
+ * scan; what moves it while the session is open is in the transcript stream, which patches it
+ * (useSessionStream).
+ */
+export const sessionBackgroundQuery = (sessionId: string) =>
+  queryOptions({
+    queryKey: ['session-background', sessionId] as const,
+    queryFn: () => getBackgroundShells(sessionId),
+  });
 
 interface TranscriptCacheEntry {
   events: RunEvent[];
@@ -219,6 +236,11 @@ export function useSessionStream({
 }: SessionStreamOptions) {
   const qc = useQueryClient();
   const message = useToast();
+  // Whether the control-plane stream is live, for the SSE handler: while it is, that stream reads the
+  // session's detail on the event its turn end publishes, and a turn_end here leaves the detail to it.
+  const controlPlaneLive = useControlPlaneLive();
+  const controlPlaneLiveRef = useRef(controlPlaneLive);
+  controlPlaneLiveRef.current = controlPlaneLive;
   // Latest session, readable from async callbacks (loadOlder) to bail if the user has switched
   // sessions since the request was issued — so a late page never lands in the wrong transcript.
   const selectedIdRef = useRef(selectedId);
@@ -275,9 +297,6 @@ export function useSessionStream({
   // workspace's Read polls). The loaded event window only holds recent launches, so the tray merges
   // this complete set with its live-derived overlay — see BackgroundShellsTray.
   const [serverBgShells, setServerBgShells] = useState<BgShell[]>([]);
-  // Per-session cache of the server /background scan. The tray is cleared to [] on every switch, so
-  // the throttle in the SSE effect repopulates from here (not just skips) when it's still fresh.
-  const bgCacheRef = useRef<Map<string, { at: number; shells: BgShell[] }>>(new Map());
   const seen = useRef<Set<number>>(new Set());
   // Per-session transcript cache (mount-scoped): switching seeds events from here for
   // an instant paint (its newest page, reopenWindow) and reads only what is newer than the
@@ -424,14 +443,33 @@ export function useSessionStream({
       : EMPTY_LIVE_TASK_PROGRESS;
   // Which of the workspace's Agent/Workflow calls are still at work — the tray's own list, read the
   // same way, so a card's spinner and its tray row always agree.
+  const liveBgShells = useMemo(() => deriveBackgroundShells(events, { sessionLive: live }), [events, live]);
   const runningTasks = useMemo(() => {
     const running = new Set<string>();
-    const shells = mergeBackgroundShells(serverBgShells, deriveBackgroundShells(events, { sessionLive: live }));
+    const shells = mergeBackgroundShells(serverBgShells, liveBgShells);
     for (const s of shells) {
       if ((s.kind === 'agent' || s.kind === 'workflow') && s.status === 'running') running.add(s.toolUseId);
     }
     return running;
-  }, [events, live, serverBgShells]);
+  }, [liveBgShells, serverBgShells]);
+  // A job's end comes down the transcript stream, and the held inventory is updated from it: a return to
+  // the session within its staleTime, whose window may no longer reach that end, still draws the job ended.
+  // Kept at the read's own age, so the safety read is not put off by what the stream said.
+  useEffect(() => {
+    if (!selectedId || eventsSessionId !== selectedId) return;
+    const key = sessionBackgroundQuery(selectedId).queryKey;
+    const held = qc.getQueryData<BgShell[]>(key);
+    if (!held) return;
+    const ended = new Map(liveBgShells.filter((s) => s.status !== 'running').map((s) => [s.shellId, s]));
+    let moved = false;
+    const next = held.map((s) => {
+      const end = s.status === 'running' ? ended.get(s.shellId) : undefined;
+      if (!end) return s;
+      moved = true;
+      return mergeBackgroundShells([s], [end])[0];
+    });
+    if (moved) qc.setQueryData(key, next, { updatedAt: qc.getQueryState(key)?.dataUpdatedAt ?? 0 });
+  }, [qc, selectedId, eventsSessionId, liveBgShells]);
   const taskActivity = useMemo<TaskActivity>(
     () => ({ live: scopedLiveTaskProgress, running: runningTasks }),
     [scopedLiveTaskProgress, runningTasks],
@@ -584,9 +622,18 @@ export function useSessionStream({
     // on screen, still pressable, until the session is opened again.
     // The frames that arrive while the read is in flight are newer than its snapshot, so they win
     // over it: a card resolved meanwhile stays gone, one raised meanwhile stays shown.
+    //
+    // This is also the session's first read of its cards: a startup read beside it asked the same
+    // question 150 ms before the stream opened, and got the same answer. Where no stream opens to ask
+    // it — a hidden tab, a window opened at a record, a stream that fails before it opens — the startup
+    // block and dropStream ask it once instead (`approvalsAsked`), and so does a stream that has not
+    // opened within APPROVALS_OPEN_GRACE_MS (`approvalsGrace`).
     let approvalsGeneration = 0;
+    let approvalsAsked = false;
+    let approvalsGrace: ReturnType<typeof setTimeout> | undefined;
     let approvalsLive: { raised: Map<string, ApprovalInfo>; resolved: Set<string> } | null = null;
     const refreshApprovals = (): void => {
+      approvalsAsked = true;
       const generation = ++approvalsGeneration;
       const live = { raised: new Map<string, ApprovalInfo>(), resolved: new Set<string>() };
       approvalsLive = live;
@@ -713,6 +760,7 @@ export function useSessionStream({
     const stop = (): void => {
       closed = true;
       if (retry) clearTimeout(retry);
+      clearTimeout(approvalsGrace);
       if (paintRest) clearTimeout(paintRest);
       es?.close();
       // Scrubbing the list fires one tail page per session passed through (they're no longer
@@ -827,6 +875,11 @@ export function useSessionStream({
       es = new EventSource(sessionEventsUrl(selectedId, lastSeq));
       // Once the stream is subscribed, so nothing resolved after the read can slip between the two.
       es.onopen = () => refreshApprovals();
+      if (!approvalsAsked && approvalsGrace === undefined) {
+        approvalsGrace = setTimeout(() => {
+          if (!closed && !approvalsAsked) refreshApprovals();
+        }, APPROVALS_OPEN_GRACE_MS);
+      }
       es.onmessage = (e) => {
         lastMsgAt = Date.now();
         fails = 0; // a message means the stream is healthy
@@ -1025,26 +1078,51 @@ export function useSessionStream({
           setAcceptedUserTurns((current) =>
             clearAcceptedUserTurnsForTurn(current, selectedId, ev.turnId),
           );
-          // The terminal boundary is persisted and replayable; use it to refresh the active
-          // snapshot too, so an accepted placeholder also clears when an older runner omitted the
-          // turn id or a queued successor moved into the executable head at the same boundary.
-          refreshQueued();
+          // The active snapshot can move at this boundary only through what this tab holds of it:
+          // a queued successor becomes the executable head (the server announces no queue change for
+          // an ordinary turn end), or an accepted placeholder this turn_end did not clear by its id
+          // (an older runner omitted it). With neither, the read would answer what is on screen.
+          // Every other change to the queue comes as queued_turns_changed.
+          const endedTurnId = ev.turnId;
+          if (
+            queuedRef.current.some((turn) => turn.placement === 'queued') ||
+            acceptedUserTurnsRef.current.some(
+              (turn) =>
+                turn.sessionId === selectedId &&
+                (!endedTurnId || turn.turnId !== endedTurnId) &&
+                !acceptedUserTurnLanded(turn, selectedId, accRef.current),
+            )
+          ) {
+            refreshQueued();
+          }
           // Refresh the worktree status bar: the runner reports this turn's diff +
           // isolation on /turn-complete. Delay a touch so that POST (which persists
-          // changed_files) lands before we refetch the detail, rather than racing the
-          // turn_end event broadcast.
-          setTimeout(() => qc.invalidateQueries({ queryKey: ['session', selectedId] }), 400);
+          // changed_files) lands before we refetch the diff, rather than racing the
+          // turn_end event broadcast. The detail itself is read by the control-plane stream's
+          // coalesced refresh, on the session.updated that same POST publishes once it has
+          // committed — reading it here too was a second read of the same detail a second
+          // apart. Only with no live control-plane stream to read it is it read here.
+          setTimeout(() => {
+            void qc.invalidateQueries({
+              predicate: ({ queryKey }) =>
+                queryKey[0] === 'session' &&
+                queryKey[1] === selectedId &&
+                (queryKey.length > 2 || !controlPlaneLiveRef.current),
+            });
+          }, 400);
         }
         else if (ev.type === 'user') {
           setIdle(false);
           // The runner just picked up this turn — it's now in the transcript, so drop
-          // it from the local queue (no-op if it wasn't ours / already cleared). Re-fetch too:
-          // an older queue request may have snapshotted this row just before the lease and could
-          // otherwise arrive afterwards and resurrect it; the generation fence drops that reply.
+          // it from the local queue (no-op if it wasn't ours / already cleared). No read: what the
+          // echo changes in the active snapshot is this row, and the server announces that itself
+          // (queued_turns_changed for an acknowledged steer, published before the echo), whose newer
+          // read the generation fence lets win over any older one still in flight. An accepted head
+          // an older read returns is dropped against the echo already in the window
+          // (acceptedUserTurnLanded).
           if (ev.turnId) {
             setQueued((q) => q.filter((x) => x.turnId !== ev.turnId));
           }
-          refreshQueued();
         }
       };
       es.onerror = () => dropStream();
@@ -1056,6 +1134,8 @@ export function useSessionStream({
       es?.close();
       es = null;
       if (closed || paused) return;
+      // A stream that failed before it ever opened has not read the cards (refreshApprovals).
+      if (!approvalsAsked) refreshApprovals();
       // A background tab waits for `onVisibility` instead of counting down retries nobody reads.
       if (document.visibilityState === 'hidden') return;
       // A connection that died without moving the cursor forward left us exactly where we
@@ -1313,33 +1393,24 @@ export function useSessionStream({
     // open (and tear down) a connection — nor re-fetch approvals/queued turns — for each
     // session skipped past. The cached transcript above is already on screen meanwhile.
     const start = setTimeout(() => {
-      // Pending approvals aren't in the event stream (separate table) — fetch them so
-      // a refresh/deep-link shows any request already awaiting a decision.
-      listApprovals(selectedId)
-        .then(setApprovals)
-        .catch(() => undefined);
-      // Same for queued messages: a still-PENDING turn emits no event until the runner
+      // Pending approvals aren't in the event stream (separate table): the stream's opening reads
+      // them (refreshApprovals), so a refresh/deep-link shows any request already awaiting a decision.
+      // Queued messages likewise: a still-PENDING turn emits no event until the runner
       // picks it up, so switching away and back (or a refresh/deep-link) would lose the
       // visible queue — restore it from the DB, the source of truth.
       refreshQueued();
       // The complete background-shell list (all launches, output recovered from Read polls) —
       // the loaded event window only holds the most recent launches, so without this the tray
-      // under-counts a long session. Merged with the live-derived overlay in the tray. Throttled
-      // per session (BG_TTL_MS): this scans the session's whole history, so a re-open within the
-      // window paints the cached shells instead of re-running it. A failed fetch isn't cached, so
-      // it retries next open.
+      // under-counts a long session. Merged with the live-derived overlay in the tray. Held per
+      // session (sessionBackgroundQuery) for the stream-aware staleTime: this scans the session's
+      // whole history, so a re-open within it paints the held shells instead of re-running it. A
+      // failed fetch holds nothing, so it retries next open.
       const loadBackgroundShells = (): void => {
-        const bgCached = bgCacheRef.current.get(selectedId);
-        if (bgCached && Date.now() - bgCached.at < BG_TTL_MS) {
-          setServerBgShells(bgCached.shells);
-          return;
-        }
-        getBackgroundShells(selectedId)
+        qc.fetchQuery({ ...sessionBackgroundQuery(selectedId), staleTime: streamStaleTime() })
           .then((shells) => {
-            bgCacheRef.current.set(selectedId, { at: Date.now(), shells });
-            // Still cache it above (it belongs to `selectedId`, whenever it lands), but only the
-            // open session may paint: this now runs after the transcript, so a slow scan can
-            // easily outlive the switch away — and `serverBgShells` is one slot, not per-session.
+            // Held for `selectedId` whenever it lands, but only the open session may paint: this
+            // runs after the transcript, so a slow scan can easily outlive the switch away — and
+            // `serverBgShells` is one slot, not per-session.
             if (!closed) setServerBgShells(shells);
           })
           .catch(() => undefined);
@@ -1354,6 +1425,9 @@ export function useSessionStream({
         // A window opened at a record waits for the reader to reach the tail (joinLiveRef).
         // The reader may have joined already while this startup was debounced.
         if (newerCursorRef.current === null && !es) connect();
+        // No stream is opening to read the cards (a window opened at a record, a hidden tab): read
+        // them here, once.
+        if (!es && !approvalsAsked) refreshApprovals();
         // Last, deliberately: the tray it feeds sits below the fold and nothing else waits on it,
         // whereas the scan behind it is the most expensive read on this path. Issuing it here
         // rather than alongside the seed keeps it from competing for the connection — and, on the
