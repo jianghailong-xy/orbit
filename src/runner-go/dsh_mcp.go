@@ -118,6 +118,9 @@ func orbitMCPDeclaredEnv(job *ClaimedSession, callTimeout time.Duration) []map[s
 	if runID := strings.TrimSpace(job.Agent.Env[envSubagentRunID]); runID != "" {
 		pairs = append(pairs, envSubagentRunID+"="+runID)
 	}
+	if mode := strings.TrimSpace(job.Agent.Env[envSubagentRemoteMode]); mode != "" {
+		pairs = append(pairs, envSubagentRemoteMode+"="+mode)
+	}
 	// A managed runner's instance, which `orbit mcp` sends with the runner credential.
 	pairs = append(pairs, managedInstanceEnv()...)
 	env := make([]map[string]string, 0, len(pairs))

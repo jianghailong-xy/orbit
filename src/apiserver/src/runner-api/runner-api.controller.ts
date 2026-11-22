@@ -281,7 +281,7 @@ import {
 } from '../sessions/current-work-delivery';
 import { fileSubagentWake, fileWorkflowWake, interruptOrphanedSubagentRuns, interruptOrphanedWorkflowRuns } from './subagent-wake';
 import { orbitWorkflowLaunchReceipt, workflowClaimFields } from './workflow-run';
-import { remoteSubagentHeartbeat } from './subagent-remote';
+import { remoteSubagentHeartbeat, sessionOfRemoteSubagent } from './subagent-remote';
 import { backgroundJobStopsFor } from './background-job-stops';
 import { CLEARED_RUNNING_WORK } from '../sessions/running-work';
 import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
@@ -5616,7 +5616,8 @@ export class RunnerApiController {
    * A file an agent keeps with `file_upload` (docs/orbit-files-design.md §2.3). A route of its own rather than fields on
    * the one above: an older server takes those fields, ignores them and answers 200, while this path answers it 404,
    * which the runner reports. It streams and cleans up exactly as the one above does, and FilesService.uploadFile says
-   * what `taskId` may be.
+   * what `taskId` may be. A remote SubAgent keeps its file under its parent's session by naming its run
+   * (sessionOfRemoteSubagent, docs/subagent-design.md §10.2).
    */
   @UseGuards(RunnerAuthGuard)
   @StaysOnHttps()
@@ -5630,8 +5631,11 @@ export class RunnerApiController {
     @Param('id', PublicIdPipe) sessionId: string,
     @UploadedFileParam() file: FileUpload | undefined,
     @Body() dto: UploadFileDto,
+    @Query('subagentRunId', PublicIdPipe) subagentRunId?: string,
   ): Promise<FileView> {
-    const session = await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
+    const ownerId = (runner as { ownerId?: string }).ownerId;
+    const session = (await sessionOfRemoteSubagent(this.prisma, { id: runner.id, ownerId }, sessionId, subagentRunId))
+      ?? (await this.assertSessionOwnership(sessionId, runner.id, ownerId));
     assertValidUpload(file);
     return this.files.uploadFile(file as FileUpload, session, dto);
   }
@@ -8517,6 +8521,17 @@ export class RunnerApiController {
       ));
       // A task that is done answers whatever exception was open about it (contract §4.2).
       await this.openItems?.resolveByFact([finalized.taskId]);
+    } else if (
+      'taskCompleted' in finalized
+      && finalized.applied
+      && finalized.status === RunStatus.AWAITING_INPUT
+      && finalized.taskOwnerId
+      && finalized.taskId
+    ) {
+      // §12.15 P-M1: a DONE written by another door while this work session was still in its turn
+      // (an evidence CONFIRM, the owner's Confirm done) could not end it then; its park asks now.
+      // Nothing for a task that is not DONE or a session with more to do (`endIdleWorkOfDoneTask`).
+      await this.tasks?.requestEndOfIdleWork(finalized.taskOwnerId, finalized.taskId);
     }
     // The exception half of that same edge. `taskCompleted` is true only for a DERIVED DONE, so
     // three real endings reach nothing above: an acceptance code that disagreed and derived FAILED,

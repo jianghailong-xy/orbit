@@ -140,12 +140,10 @@ final class ProjectMainBranchCopyParityTests: XCTestCase {
             assertSays(web, part, in: Self.words)
         }
         let card = try flat(Self.card)
-        // Offered only where the read says the project has a repository, and the request names a line …
+        // Offered only where the request names a line and the read says the project has a
+        // repository (a request with no line has no main branch row, P-M2) …
         assertSays(card, "upstream: settings.line && standing?.repository ? startMainBranch(settings.upstreamRef, standing) : null,",
                    in: Self.card)
-        XCTAssertNil(StartSettingsDraft(ProjectStartSettings(line: nil, automatic: true, maxConcurrentTasks: 1),
-                                        standing: ProjectIntegrationView(upstreamRef: "main", repository: "acme/app")).upstream,
-                     "a request with no line offers no main branch")
         // … sent as a full ref whenever the card offered one …
         assertSays(card, "...(draft.upstream ? { upstreamRef: mainBranchRef(draft.upstream) } : {}),", in: Self.card)
         // … and the owner's own Start… keeps the branch the project stands on.

@@ -343,7 +343,14 @@ async function crossTheLimit(
   return { crossing, limit, nextSeq: firstSeq + limit + 1 };
 }
 
-/** One more finished task serving the criterion: a new serving set, so a new fact about it. */
+/**
+ * One more finished task serving the criterion: a new serving set, so a new fact about it.
+ *
+ * Its work ran on a worktree branch whose tip is past its base (commits of its own), reported changes
+ * and finished, and no receipt puts it on a branch: it has commits still to land, which is the merge
+ * the CRITERION_UNLANDED fact says is owed.
+ * (A DONE task that never ran a branch delivered no commit and has nothing to land, §12.15 P-M3.)
+ */
 async function finishServingWork(db: PrismaClient, f: Fixture, n: number): Promise<string> {
   const taskId = randomUUID();
   await db.task.create({
@@ -362,27 +369,15 @@ async function finishServingWork(db: PrismaClient, f: Fixture, n: number): Promi
       autoRunWhenReady: false,
     },
   });
-  // The work's session, on its own branch with a commit reported: revision 42 (§12.15 P-M3) reads
-  // landing from the delivered commit, so a DONE task that ran no branch and reported nothing has
-  // nothing to land, and its criterion would read LANDED with no CRITERION_UNLANDED fact.
   await db.session.create({
     data: {
-      id: randomUUID(),
-      ownerId: f.ownerId,
-      creatorId: f.ownerId,
-      taskId,
-      workspaceId: f.workspaceId,
-      assignedRunnerId: f.runnerId,
-      title: `serving work ${n}`,
-      prompt: `serving work ${n}`,
-      provider: 'claude',
-      status: RunStatus.SUCCEEDED,
-      dispatchOrigin: SessionDispatchOrigin.USER,
-      startsTaskWork: true,
-      isolationStatus: 'worktree',
-      branch: `orbit/serving-${n}-${taskId.slice(0, 8)}`,
-      changedFiles: ['src/work.ts'],
-      finishedAt: new Date(),
+      id: randomUUID(), ownerId: f.ownerId, creatorId: f.ownerId, taskId, workspaceId: f.workspaceId,
+      assignedRunnerId: f.runnerId, title: `serving work ${n}`, prompt: `serving work ${n}`, provider: 'claude',
+      status: RunStatus.SUCCEEDED, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+      isolationStatus: 'worktree', branch: `orbit/serving-work-${n}-${taskId}`, changedFiles: ['src/work.ts'],
+      // Its own branch tip is past the commit it forked from: commits of its own, not a checkout.
+      baseSha: 'b'.repeat(40), branchSha: 'c'.repeat(40), worktreeBranch: `orbit/serving-work-${n}-${taskId}`,
+      worktreeDirty: false, finishedAt: new Date(),
     },
   });
   return taskId;

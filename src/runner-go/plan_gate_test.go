@@ -238,6 +238,17 @@ func TestSessionPermissionModeIsTheRunnersLiveMode(t *testing.T) {
 	if _, known, err := sessionPermissionMode(); !known || err != errNoSessionSocket {
 		t.Fatalf("a session process the runner started, with no socket: %v, %v; want the mode unreadable", known, err)
 	}
+	// A remote SubAgent: its machine hosts no socket for the parent session, so the mode it was claimed in stands.
+	t.Setenv(envSubagentRemoteMode, "plan")
+	if _, known, err := sessionPermissionMode(); !known || err != errNoSessionSocket {
+		t.Fatalf("a remote mode with no SubAgent run: %v, %v; want the mode unreadable", known, err)
+	}
+	t.Setenv(envSubagentRunID, "run-1")
+	if mode, known, err := sessionPermissionMode(); mode != "plan" || !known || err != nil {
+		t.Fatalf("a remote SubAgent claimed in plan: %q, %v, %v; want plan", mode, known, err)
+	}
+	t.Setenv(envSubagentRemoteMode, "")
+	t.Setenv(envSubagentRunID, "")
 	t.Setenv(envBgJobID, "bgj_somejob")
 	if _, known, err := sessionPermissionMode(); known || err != nil {
 		t.Fatalf("a runner-hosted job: %v, %v; want no session process to gate", known, err)

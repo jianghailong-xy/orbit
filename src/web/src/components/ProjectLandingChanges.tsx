@@ -2,9 +2,9 @@ import { useState, type JSX, type ReactNode } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import type { ProjectLandingCheckValue, ProjectSettingChangeView, ProjectTaskExemptValue } from '@orbit/shared';
-import { api } from '../api';
+import { ApiError, api } from '../api';
 import { encodeId } from '../lib/idCodec';
-import { CHANGES_COPY, LANDING_CHECK_ORIGIN_COPY, changesRowLabel, revertedLine } from '../lib/landingCheck';
+import { CHANGES_COPY, LANDING_CHECK_ORIGIN_COPY, changesRowLabel, revertFailureLine, revertedLine } from '../lib/landingCheck';
 import { ago } from '../lib/watches';
 import { Button } from './ui/Button';
 import { useConfirm } from './ui/ConfirmDialog';
@@ -58,7 +58,7 @@ function ChangeRow({ change, projectId, now, onRevert }: {
       <div className="project-change-action">
         {change.revertible ? (
           <Button danger size="small" onClick={() => onRevert(change)}>{CHANGES_COPY.REVERT}</Button>
-        ) : change.origin !== 'COORDINATOR' && !change.revertsChangeId ? (
+        ) : change.origin !== 'COORDINATOR' ? (
           <span className="project-change-note">{CHANGES_COPY.YOUR_CHANGE_NOTHING}</span>
         ) : null}
       </div>
@@ -92,7 +92,13 @@ export function CoordinatorChanges({ projectId, changes }: { projectId: string; 
       confirmText: CHANGES_COPY.REVERT,
       cancelText: CHANGES_COPY.CANCEL,
       danger: true,
-      onConfirm: () => revert.mutateAsync(change),
+      onConfirm: async () => {
+        try {
+          await revert.mutateAsync(change);
+        } catch (error) {
+          setFailure(revertFailureLine(error instanceof ApiError ? error.code : undefined));
+        }
+      },
     });
   };
   const now = Date.now();
