@@ -415,6 +415,27 @@ test('W6: a conflict\'s landing-fix turn names the phase, the commit and the fil
   }
 });
 
+test('W6: a MAIN line\'s task-branch candidate that conflicts reaches the task\'s session the same way',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'main-line', 'MAIN');
+      const t = await finishedTask(stack, w, 'main-line');
+      const command = await claimJob(stack, w, 'CHECK_PROMOTION');
+      assert.equal(command.promotionSourceKind, 'TASK_BRANCH', 'CONTROL: the candidate is the task branch');
+      const itemId = await fail(stack, w, command, conflict('MERGE'));
+      await deliver(stack, w, itemId);
+      const [turn, ...more] = await turnOf(stack, t.sessionId, command.jobId);
+      assert.ok(turn, 'the MAIN line\'s failure was not handed to the task\'s session');
+      assert.deepEqual(more, []);
+      assert.ok(turn.content!.startsWith(`Orbit could not land your work for "${t.title}" on main.\n`), turn.content!);
+      assert.ok(turn.content!.includes('\n1. Merge main into your branch and resolve what conflicts.\n'), turn.content!);
+      assert.deepEqual(await identityOf(stack, t.taskId), { status: TaskStatus.DONE, ...CLEARED });
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
 // ─── Revived, handed, refused ─────────────────────────────────────────────────────────────────────
 
 test('W6: a session that ended because its task was done is revived, and R2 clears the identity with the turn',

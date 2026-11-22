@@ -874,9 +874,8 @@ export class ProjectOpenItemService {
       },
     });
     if (!item || item.state !== 'OPEN' || !inWorkSessionHands(item)) return;
-    if (!item.workSessionId || !item.integrationJobId || !item.taskId) return;
+    if (!item.workSessionId || !item.integrationJobId) return;
     const sessionId = item.workSessionId;
-    const taskId = item.taskId;
     const clientTurnId = landingFixTurnId(item.integrationJobId);
     const delivered = await this.prisma.conversationTurn.findUnique({
       where: { sessionId_clientTurnId: { sessionId, clientTurnId } },
@@ -889,14 +888,18 @@ export class ProjectOpenItemService {
     if (!facts) return;
     const content = landingFixMessage(facts);
 
+    // The task is the work session's (W4 held it to the job's), which a MAIN line's candidate item names
+    // only through its candidate.
     const session = await this.prisma.session.findUnique({
       where: { id: sessionId },
-      select: { finishedAt: true, endReason: true, deletedAt: true, cancelRequestedAt: true },
+      select: { taskId: true, finishedAt: true, endReason: true, deletedAt: true, cancelRequestedAt: true },
     });
     if (!session) {
       await this.returnLandingFix(item.id, 'SESSION_ENDED');
       return;
     }
+    if (!session.taskId || (item.taskId !== null && item.taskId !== session.taskId)) return;
+    const taskId = session.taskId;
     // Ending because its task is done (parked-session-end.ts): its finish is a moment away, and the
     // finish delivers this (`offerLandingFixesTo`), reviving it then.
     if (this.endingForItsDone(session)) return;
