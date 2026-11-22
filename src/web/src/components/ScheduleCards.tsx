@@ -1,8 +1,9 @@
-import { useMemo, useState, type JSX, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type JSX, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
   SCHEDULE_COPY,
+  SCHEDULE_RUN_STATUS_COPY,
   scheduleChangeLineText,
   scheduleCostsParts,
   scheduleCreateNotice,
@@ -15,8 +16,13 @@ import {
   scheduleKeepLabel,
   scheduleReportedText,
   scheduleRunLine,
+  scheduleDidntRunText,
+  scheduleQueuedFullText,
+  scheduleRunNotStartedStripText,
+  scheduleRunStatusKind,
   scheduleRunStripText,
   scheduleRunsInText,
+  scheduleStartedOnText,
   type ScheduleCard,
   type ScheduleChangeRecord,
   type ScheduleCreateCard,
@@ -26,6 +32,8 @@ import {
   type ScheduleEnvelopeCard,
   type ScheduleEnvelopeLines,
   type ScheduleRule,
+  type ScheduleRunSessionStatus,
+  type ScheduleRunStatusKind,
   type ScheduleRunView,
   type SessionScheduleCardsResponse,
   type ScheduleView,
@@ -34,11 +42,13 @@ import {
 import { api, ApiError } from '../api';
 import { decisionReceiptAnchor } from '../lib/decisionReceipt';
 import { CONDITION_COPY, conditionQuery, firingOfRun, readingText } from '../lib/conditions';
+import { capacityHeldRunText, capacityHeldTag, capacityHeldWaited } from '../lib/queuedCapacity';
 import {
   scheduleClock,
   scheduleDetailQuery,
   scheduleRecordUndoable,
   schedulePath,
+  scheduleRunSessionPath,
   sessionScheduleCardsQuery,
   undoScheduleRecord,
   viewerTimezone,
@@ -354,6 +364,10 @@ export interface ScheduleRunOfSession {
   schedule: ScheduleView;
   run: ScheduleRunView;
   detail: ScheduleDetailResponse | undefined;
+  /** Where the run stands for this session (its tries, its queue); null from a server before it. */
+  status?: ScheduleRunSessionStatus | null;
+  /** The card this session shows in place of the run's report and the composer, if any (board scheduled-run-not-started). */
+  card?: ScheduleRunStatusKind | null;
 }
 
 /**
@@ -377,7 +391,8 @@ export function useScheduleRunOfSession(
   const run = sessionId ? cards?.run ?? null : null;
   const detail = useQuery({ ...scheduleDetailQuery(run?.scheduleId ?? ''), enabled: Boolean(run) });
   if (!run || !detail.data) return null;
-  return { schedule: detail.data.schedule, run, detail: detail.data };
+  const status = cards?.runStatus ?? null;
+  return { schedule: detail.data.schedule, run, detail: detail.data, status, card: scheduleRunStatusKind(run, status) };
 }
 
 /**
@@ -432,9 +447,132 @@ export function ScheduleRunStrip({ of }: { of: ScheduleRunOfSession }): JSX.Elem
   return (
     <div className="sched-strip" data-schedule-strip="">
       <CalendarIcon />
-      <span>{scheduleRunStripText(of.run, of.schedule.accessLevel, viewerTimezone())}</span>
+      <span>
+        {of.card
+          ? scheduleRunNotStartedStripText(of.run, of.schedule.accessLevel, viewerTimezone())
+          : scheduleRunStripText(of.run, of.schedule.accessLevel, viewerTimezone())}
+      </span>
     </div>
   );
+}
+
+const RS = SCHEDULE_RUN_STATUS_COPY;
+
+/** A clock that moves twice a minute, for the run card's waits counted in minutes. */
+function useMinuteNow(): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  return now;
+}
+
+/** What the run card names that the run does not: the machine and the engine of this session. */
+export interface ScheduleRunStatusNames {
+  runner: string;
+  engine: string;
+}
+
+/**
+ * A run's session where the run did not get under way (board docs/mocks/scheduled-run-not-started ②③④, owner's B1):
+ * in place of the run's report and the composer, what happened to the run and the doors that act on it.
+ *
+ *   * ② Didn't run: why, each try's time, when it gave up and the next run; Run now and Open schedule.
+ *   * ③ Queued · runner full: the queue's own sentence, how long it has waited and when it gives up; Cancel run and
+ *     Open schedule.
+ *   * ④ Started on try N: why this try stopped; Open the run, to the session the run went on in.
+ */
+export function ScheduleRunStatusCard({ of, names }: { of: ScheduleRunOfSession; names: ScheduleRunStatusNames }): JSX.Element | null {
+  const qc = useQueryClient();
+  const navigate = useNavigate();
+  const now = useMinuteNow();
+  const { run, status, card } = of;
+  const invalidate = () => void qc.invalidateQueries({ queryKey: ['schedules'] });
+  const runNow = useMutation({
+    mutationFn: () => api<{ run: ScheduleRunView }>(`/schedules/${encodeURIComponent(run.scheduleId)}/run`, { method: 'POST' }),
+    onSuccess: (answer) => {
+      const path = scheduleRunSessionPath(answer.run);
+      if (path) navigate(path);
+    },
+    onSettled: invalidate,
+  });
+  const cancel = useMutation({
+    mutationFn: () => api(`/schedule-runs/${encodeURIComponent(run.id)}/stop`, { method: 'POST' }),
+    onSettled: invalidate,
+  });
+  if (!status || !card) return null;
+  const timezone = viewerTimezone();
+  const openSchedule = (
+    <Button className="sched-run-door" onClick={() => navigate(schedulePath(run.scheduleId))}>{RS.actions.openSchedule}</Button>
+  );
+  const error = scheduleErrorText(runNow.error) ?? scheduleErrorText(cancel.error);
+  const errorLine = error ? <div className="sched-run-error" role="alert">{error}</div> : null;
+
+  if (card === 'DIDNT_RUN') {
+    const text = scheduleDidntRunText({ run, status, runner: names.runner, now: new Date(now), timezone });
+    return (
+      <div className="sched-run-card" data-schedule-run-card="DIDNT_RUN">
+        <div className="sched-run-title"><span className="sched-run-dot" data-tone="muted" />{text.title}</div>
+        <p className="sched-run-body">{text.reason}</p>
+        <div className="sched-run-chips">
+          {text.tries.map((time, i) => <span key={`${i}:${time}`} className="sched-run-chip">{time}</span>)}
+        </div>
+        {text.gaveUp ? <div className="sched-run-meta">{text.gaveUp}</div> : null}
+        {text.next ? <div className="sched-run-meta">{text.next}</div> : null}
+        <div className="sched-run-doors">
+          <Button className="sched-run-door" variant="primary" disabled={runNow.isPending} onClick={() => runNow.mutate()}>
+            {RS.actions.runNow}
+          </Button>
+          {openSchedule}
+        </div>
+        {errorLine}
+      </div>
+    );
+  }
+
+  if (card === 'QUEUED_FULL' && status.queue) {
+    const gate = { ...status.queue, lastTurnAt: status.queue.since };
+    const text = scheduleQueuedFullText({
+      tag: capacityHeldTag(gate),
+      waited: capacityHeldWaited(gate, now),
+      deadline: status.queue.deadline,
+      now: new Date(now),
+      timezone,
+    });
+    return (
+      <div className="sched-run-card" data-schedule-run-card="QUEUED_FULL">
+        <div className="sched-run-title"><span className="sched-run-dot" data-tone="waiting" />{text.title}</div>
+        <p className="sched-run-body">{capacityHeldRunText(gate, names.runner)}</p>
+        <div className="sched-run-meta">{text.waited}</div>
+        <div className="sched-run-doors">
+          <Button className="sched-run-door" disabled={cancel.isPending} onClick={() => cancel.mutate()}>
+            {RS.actions.cancelRun}
+          </Button>
+          {openSchedule}
+        </div>
+        {errorLine}
+      </div>
+    );
+  }
+
+  if (card === 'STARTED_ON') {
+    const text = scheduleStartedOnText({ run, status, engine: names.engine, runner: names.runner, timezone });
+    const path = scheduleRunSessionPath(run);
+    if (!text || !path) return null;
+    return (
+      <div className="sched-run-card" data-schedule-run-card="STARTED_ON">
+        <div className="sched-run-title"><span className="sched-run-dot" data-tone="started" />{text.title}</div>
+        <p className="sched-run-body">{text.body}</p>
+        <div className="sched-run-doors">
+          <Button className="sched-run-door is-wide" variant="primary" onClick={() => navigate(path)}>
+            {RS.actions.openRun}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+  return null;
 }
 
 interface RunLink {
@@ -488,17 +626,27 @@ export function useSessionScheduleInserts(
   cards: SessionScheduleCardsResponse | undefined,
   events: ReadonlyArray<{ seq: number; ts?: string }>,
   run: ScheduleRunOfSession | null,
+  names: ScheduleRunStatusNames = { runner: '', engine: '' },
 ): TranscriptInsert[] {
+  const { runner, engine } = names;
   return useMemo(() => {
     if (!sessionId) return [];
     const inserts: TranscriptInsert[] = [];
     // A run's strip leads, and its report comes before the change lines after the same event (board 2/2 ⑤).
     if (run) {
       inserts.push({ anchor: 'head', moment: '', key: 'schedule-run-strip', element: <ScheduleRunStrip of={run} /> });
+      // A run that did not get under way here says what happened to it under the strip, and has no report of its own
+      // (board scheduled-run-not-started ②③④).
+      if (run.card) {
+        inserts.push({
+          anchor: 'head', moment: '', key: `schedule-run-card:${run.run.id}`,
+          element: <ScheduleRunStatusCard of={run} names={{ runner, engine }} />,
+        });
+      }
       const last = events.reduce<number | null>((max, e) => (max === null || e.seq > max ? e.seq : max), null);
       const at = run.run.endedAt ? decisionReceiptAnchor(events, run.run.endedAt) : null;
       const anchor = at === null || at === 'head' ? last : at;
-      if (anchor !== null && ENDED_STATES.includes(run.run.state)) {
+      if (!run.card && anchor !== null && ENDED_STATES.includes(run.run.state)) {
         inserts.push({ anchor, moment: run.run.endedAt ?? '', key: `schedule-run-report:${run.run.id}`, element: <ScheduleRunReport of={run} /> });
       }
     }
@@ -519,5 +667,5 @@ export function useSessionScheduleInserts(
       inserts.push({ anchor, moment: item.at, key: item.key, element: item.element });
     }
     return inserts;
-  }, [sessionId, events, cards, run]);
+  }, [sessionId, events, cards, run, runner, engine]);
 }
