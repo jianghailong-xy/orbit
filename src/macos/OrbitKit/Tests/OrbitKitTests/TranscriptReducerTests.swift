@@ -2193,6 +2193,26 @@ final class TranscriptReducerTests: XCTestCase {
             label: "mcp", text: "model refresh 401 request id: req_first", message: "model refresh 401 request id: req_first")])
     }
 
+    /// Codex's sandbox setup asks for the system bubblewrap and falls back to its bundled copy
+    /// (docs/mocks/codex-sandbox-fix-with-agent): a degraded sandbox diagnostic, with the code the
+    /// transcript's row acts on.
+    func testMissingBubblewrapIsADegradedSandboxDiagnostic() {
+        let line = "2026-08-14T14:31:13.780609Z ERROR codex_app_server: Codex could not find bubblewrap on PATH. "
+            + "Install bubblewrap with your OS package manager. See the sandbox prerequisites: "
+            + "https://developers.openai.com/codex/concepts/sandboxing#prerequisites. "
+            + "Codex will use the bundled bubblewrap in the meantime."
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .system, payload: .object(["stderr": .string(line)])))
+
+        guard case .diagnostic(let notice)? = r.state.items.first else {
+            return XCTFail("the missing-bubblewrap line was not a diagnostic: \(r.state.items)")
+        }
+        XCTAssertTrue(notice.isSandboxMissing)
+        XCTAssertEqual(notice.component, "sandbox")
+        XCTAssertEqual(notice.code, "bubblewrap_missing")
+        XCTAssertEqual(notice.label, "Startup · sandbox · bubblewrap_missing")
+    }
+
     func testUnrelatedErrorStderrStaysAnErrorRow() {
         // A timeout logged by anything but the catalog refresh can be the turn's own failure.
         let line = "2026-10-28T15:13:07.112233Z ERROR codex_core::codex: stream error: request timed out"

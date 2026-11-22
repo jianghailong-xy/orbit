@@ -1,5 +1,5 @@
 import { useEffect, useState, type JSX } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { RightOutlined } from '@ant-design/icons';
 import type { ProjectIntegrationView } from '@orbit/shared';
 import { api } from '../api';
@@ -18,6 +18,7 @@ import { ProjectTaskLink } from './ProjectTaskLink';
 import { Button } from './ui/Button';
 import { Dialog } from './ui/Dialog';
 import { Drawer } from './ui/Drawer';
+import { useProjectIntegration } from '../lib/pollOwner';
 
 /**
  * Every integration job in flight, one row each (docs/mocks/landing-jobs-sheet): what the landing
@@ -42,7 +43,7 @@ export function LandingJobsSheet({
 }): JSX.Element {
   const narrow = useIsMobile();
   // The read every entry point already holds: one query key, so opening the list is no request.
-  const integration = useQuery(projectIntegrationQuery(projectId));
+  const integration = useProjectIntegration(projectId);
   // The clocks count in seconds while the list is open, as the row's own do.
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {

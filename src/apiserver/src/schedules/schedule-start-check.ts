@@ -137,7 +137,7 @@ export function scheduleBudgetWindowStart(plannedAt: Date, timezone: string): Da
 
 /**
  * Whether a slot planned at `plannedAt` is over the envelope's runs per week (§4): the runs that actually started (a
- * session was opened) whose own planned slot lies in the 7 days before it, of every trigger, against
+ * session was opened) and were delivered to their engine or are still live (SCHEDULE_RUN_COUNTS_TOWARD_BUDGET), whose own planned slot lies in the 7 days before it, of every trigger, against
  * `envelopeRunsPerWeek`. Windowed on planned slots, not start times, so a start's latency (the worker's pass, a runner
  * back after an outage) never moves a run into or out of the window: the slots of a rule inside its envelope are never
  * closer than the envelope allows, and a rule moved to "a few minutes from now" still gives each run its own slot. A
@@ -153,11 +153,25 @@ export async function scheduleBudgetStarts(db: Db, schedule: Schedule, plannedAt
   return db.scheduleRun.count({
     where: {
       scheduleId: schedule.id,
-      ...SCHEDULE_RUN_STARTED,
+      ...SCHEDULE_RUN_COUNTS_TOWARD_BUDGET,
       plannedAt: { gt: scheduleBudgetWindowStart(plannedAt, schedule.timezone) },
     },
   });
 }
+
+/**
+ * A run that costs budget (§4): it started (a session was opened) and either still holds its place (QUEUED, RUNNING
+ * or AWAITING_APPROVAL with a start, so two quick starts cannot overshoot) or its first turn reached the engine
+ * (`delivered_at`). A run that ended without ever being delivered (MISSED, CANCELLED or FAILED with
+ * RUNNER_UNAVAILABLE, QUOTA or ENGINE_CRASHED_BEFORE_START) did nothing and counts 0.
+ */
+export const SCHEDULE_RUN_COUNTS_TOWARD_BUDGET = {
+  startedAt: { not: null },
+  OR: [
+    { state: { in: ['QUEUED', 'RUNNING', 'AWAITING_APPROVAL'] } },
+    { sessions: { some: { turns: { some: { deliveredAt: { not: null } } } } } },
+  ],
+} as const satisfies Prisma.ScheduleRunWhereInput;
 
 /**
  * A run that started, as the budget counts starts: a session was opened for it, and a retry of a start that never
@@ -174,8 +188,8 @@ export function scheduleRunsStarted(db: Db, scheduleId: string): Promise<number>
 }
 
 /**
- * The SCHEDULE_OVER_BUDGET refusal of a Run now that is not the owner's own press (§8.4): the runs actually started in
- * the window, then the number the owner allowed.
+ * The SCHEDULE_OVER_BUDGET refusal of a Run now that is not the owner's own press (§8.4): the runs that count toward the
+ * budget in the window (SCHEDULE_RUN_COUNTS_TOWARD_BUDGET, the count scheduleOverBudget reads), then the number the owner allowed.
  */
 export function scheduleOverBudgetMessage(started: number, allowed: number): string {
   return `This schedule has started ${started} ${started === 1 ? 'run' : 'runs'} in the past 7 days; ` +

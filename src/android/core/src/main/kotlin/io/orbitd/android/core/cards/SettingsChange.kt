@@ -59,7 +59,7 @@ object SettingsFromConversation {
         row("recaps", "Session recaps", GENERAL_PAGE, "General", "New sessions"),
         row("promptSuggestions", "Suggested replies", GENERAL_PAGE, "General", "New sessions"),
         row("promptOptimizer", "Prompt optimizer", GENERAL_PAGE, "General", "New sessions"),
-        row("modelRouting", "Smart model selection", GENERAL_PAGE, "General", "New sessions"),
+        row("modelRouting", "Route by tier", GENERAL_PAGE, "General", "New sessions"),
         row("optimizeFor", "Optimize For", GENERAL_PAGE, "General", "New sessions"),
         row("defaultPermissionMode", "Default permission mode", GENERAL_PAGE, "General", "New sessions"),
         row("enableOrchestration", "Let sessions orchestrate", GENERAL_PAGE, "General", "Orchestration"),

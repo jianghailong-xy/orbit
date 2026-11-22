@@ -121,6 +121,7 @@ object ScheduleCopy {
     )
     val failureReasons: Map<String, String> = mapOf(
         "RUNNER_UNAVAILABLE" to "found no runner online",
+        "RUNNER_FULL" to "waited for a full runner until its window closed",
         "QUOTA" to "hit the engine's usage limit",
         "ENGINE_CRASHED_BEFORE_START" to "stopped before its engine started",
         "REPORTED_FAILED" to "reported a failure",
@@ -464,6 +465,7 @@ object ScheduleCopy {
         "runStates.HELD" to runStates.getValue("HELD"),
         "runStates.CANCELLED" to runStates.getValue("CANCELLED"),
         "failureReasons.RUNNER_UNAVAILABLE" to failureReasons.getValue("RUNNER_UNAVAILABLE"),
+        "failureReasons.RUNNER_FULL" to failureReasons.getValue("RUNNER_FULL"),
         "failureReasons.QUOTA" to failureReasons.getValue("QUOTA"),
         "failureReasons.ENGINE_CRASHED_BEFORE_START" to failureReasons.getValue("ENGINE_CRASHED_BEFORE_START"),
         "failureReasons.REPORTED_FAILED" to failureReasons.getValue("REPORTED_FAILED"),

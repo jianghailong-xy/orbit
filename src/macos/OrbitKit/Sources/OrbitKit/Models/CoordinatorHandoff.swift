@@ -28,6 +28,9 @@ public enum CoordinatorHandoffFailureCode: String, Codable, Equatable, Sendable,
     /// The replacement threw: the outgoing coordinator is already completed, so Try again and Keep
     /// this coordinator cannot work — only Hand over without a note can.
     case replaceFailed = "REPLACE_FAILED"
+    /// The note turn never reached the engine: this coordinator's own model could not start, and no successor
+    /// was picked (with one, the server hands over without a note by itself).
+    case coordinatorCantRun = "COORDINATOR_CANT_RUN"
 }
 
 /// What kind of pending work a `CoordinatorPendingWait` is (`CoordinatorPendingWaitKind`).
