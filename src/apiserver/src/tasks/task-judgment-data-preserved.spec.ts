@@ -3296,6 +3296,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // subagent_run; no row is written, and no preserved relation, trigger, function or DONE fence changes.
       // Written as 1420 on its task branch, it was renumbered after main took 1420 to 1428.
       '1429_subagent_run_rating',
+      // 1430 adds one nullable column, capacity_held_at, to schedule_run; no row is written, and no preserved
+      // relation, trigger, function or DONE fence changes.
+      '1430_schedule_run_capacity_held_at',
       // 1441 to 1443, deploy 3 of design §12.6 (removal steps R6 to R8; written as 1428, 1429 and 1431, then 1433 to 1435,
       // renumbered above what main and the other lines took). 1441 writes session.last_turn_outcome (FAILED on a release
       // the status alone records as a failure, CANCELLED on the residual A2 shape) and conversation_turn.outcome and error

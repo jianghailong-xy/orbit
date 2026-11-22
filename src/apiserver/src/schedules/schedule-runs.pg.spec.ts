@@ -11,6 +11,8 @@
  *     scheduled-run block — opened through the real SessionsService.create;
  *   * §7.1 / §7.2: the report's four rules; NO_REPORT, RUN_LIMIT, APPROVAL_TIMEOUT; retries only for a run whose first
  *     turn has no delivered_at; consecutive failures counted and the schedule never paused;
+ *   * §7.2: a session a full runner holds waits for its slot until the catch-up deadline (RUNNER_FULL past it);
+ *     one held by anything else keeps the 10-minute RUNNER_UNAVAILABLE rule;
  *   * §8.4: Run now and Stop this run.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/schedules/schedule-runs.pg.spec.ts
@@ -22,7 +24,7 @@ import { randomUUID } from 'node:crypto';
 import { after, before, test } from 'node:test';
 
 import { BadRequestException } from '@nestjs/common';
-import { PermissionMode } from '@orbit/shared';
+import { PermissionMode, SCHEDULE_COPY } from '@orbit/shared';
 import { Prisma, PrismaClient, RunnerStatus, SessionDispatchOrigin, SessionRunSource } from '@prisma/client';
 import { Client } from 'pg';
 
@@ -33,6 +35,7 @@ import {
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
 import { SessionsService } from '../sessions/sessions.service';
+import { queuedReasonSql } from '../sessions/queued-reason-sql';
 import {
   OPEN_PR_DISALLOWED_TOOLS,
   scheduleRunAgentFields,
@@ -1047,6 +1050,172 @@ test('§7.2 A2: a process that died after retiring but before re-queueing, or a 
   const live = await liveSessionsOf(run.id);
   assert.equal(live.length, 1);
   assert.equal(live[0].id, (await runOf(run.id)).sessionId);
+});
+
+/** One turn running on the world's runner, which has one slot (the runner default): the runner is full. */
+async function occupy(w: World): Promise<string> {
+  const id = randomUUID();
+  await db.session.create({
+    data: {
+      id, ownerId: w.ownerId, creatorId: w.ownerId, workspaceId: w.workspaceId, assignedRunnerId: w.runnerId,
+      title: 'another turn', prompt: 'p', provider: 'claude', engine: 'claude', providerBuiltin: true,
+      dispatchOrigin: SessionDispatchOrigin.USER, status: 'RUNNING',
+      startedAt: clockNow, runtimeSessionId: randomUUID(), numTurns: 1,
+    },
+  });
+  return id;
+}
+
+/** The queued reason the session list shows for this session: the gate the run is judged by. */
+async function listedReason(w: World, sessionId: string): Promise<string | null> {
+  const rows = await db.$queryRaw<Array<{ reason: string | null }>>(Prisma.sql`
+    SELECT ${queuedReasonSql()} AS reason FROM "session" s LEFT JOIN runner r ON r.id = s.assigned_runner_id
+     WHERE s.id = ${sessionId}::uuid AND s.owner_id = ${w.ownerId}::uuid`);
+  return rows[0]?.reason ?? null;
+}
+
+test('§7.2 a full runner is not a missing one: past 10 minutes the run keeps its one session and attempt, and goes on once a slot frees', { skip }, async () => {
+  reset();
+  at('2026-11-14T00:00:00Z');
+  const w = await world('runner-full');
+  await occupy(w);
+  const s = await created(w);
+  at('2026-11-14T02:00:00Z');
+  const run = await runOf((await fireAndStart(s.id)).started[0].runId);
+  const first = run.sessionId!;
+  assert.equal((await db.session.findUniqueOrThrow({ where: { id: first } })).status, 'PENDING');
+  assert.equal(await listedReason(w, first), 'runner_at_capacity', 'the list says Queued · runner full');
+  for (const waited of [10 * MINUTE, 11 * MINUTE, HOUR, 7 * HOUR]) {
+    at(new Date(Date.parse('2026-11-14T02:00:00Z') + waited).toISOString());
+    assert.equal(await runs.reconcileRun(run.id), 'UNCHANGED', `still waiting for a slot after ${waited / MINUTE} min`);
+    const waiting = await runOf(run.id);
+    assert.equal(waiting.state, 'RUNNING');
+    assert.equal(waiting.sessionId, first, 'the same session');
+    assert.equal(waiting.attempt, 1, 'no new attempt');
+    assert.equal(waiting.capacityHeldAt?.getTime(), clockNow.getTime(), 'seen held at this pass');
+  }
+  assert.deepEqual(calls, [], 'nothing retired or interrupted');
+  assert.deepEqual((await liveSessionsOf(run.id)).map((x) => x.id), [first]);
+  assert.equal(opened.length, 1, 'one session opened in all');
+
+  // A slot frees. Seven hours after the start, the 10-minute limit counts from the last pass that saw it held.
+  await db.runner.update({ where: { id: w.runnerId }, data: { maxConcurrent: 2 } });
+  assert.equal(await listedReason(w, first), null, 'nothing holds it now');
+  advance(10 * MINUTE - 1);
+  assert.equal(await runs.reconcileRun(run.id), 'UNCHANGED', 'a slot that has just freed gets its 10 minutes to be claimed');
+  // The runner claims it and the engine takes the first turn: the run goes on as any other.
+  await delivered(first, clockNow);
+  advance(MINUTE);
+  assert.equal(await runs.reconcileRun(run.id), 'UNCHANGED');
+  await runs.report(w.ownerId, first, { outcome: 'NO_CHANGE', summary: 'Nothing new.' });
+  const ended = await runOf(run.id);
+  assert.equal(ended.state, 'NO_CHANGE');
+  assert.equal(ended.sessionId, first);
+  assert.equal(ended.attempt, 1);
+  assert.equal(ended.failureReason, null);
+  assert.equal(ended.plannedAt.toISOString(), '2026-11-14T02:00:00.000Z');
+});
+
+test('§7.2 a run still waiting for a full runner past its catch-up deadline is MISSED (RUNNER_FULL), not "found no runner online", and its session is ended', { skip }, async () => {
+  reset();
+  at('2026-11-14T00:00:00Z');
+  const w = await world('runner-full-deadline');
+  await occupy(w);
+  const s = await created(w);
+  at('2026-11-14T02:00:00Z');
+  const run = await runOf((await fireAndStart(s.id)).started[0].runId);
+  const sessionId = run.sessionId!;
+  // A DAILY slot's catch-up window is one day: 02:00Z the next day is the deadline.
+  at('2026-11-15T02:00:00Z');
+  assert.equal(await runs.reconcileRun(run.id), 'UNCHANGED', 'at the deadline it may still start');
+  assert.deepEqual(calls, []);
+  at('2026-11-15T02:00:00.001Z');
+  assert.equal(await runs.reconcileRun(run.id), 'MISSED');
+  const missed = await runOf(run.id);
+  assert.equal(missed.state, 'MISSED');
+  assert.equal(missed.failureReason, 'RUNNER_FULL');
+  assert.notEqual(missed.failureReason, 'RUNNER_UNAVAILABLE');
+  assert.equal(missed.attempt, 1, 'one attempt, one session, the whole time');
+  assert.notEqual(SCHEDULE_COPY.failureReasons.RUNNER_FULL, SCHEDULE_COPY.failureReasons.RUNNER_UNAVAILABLE);
+  assert.match(SCHEDULE_COPY.failureReasons.RUNNER_FULL, /full runner/);
+  assert.deepEqual(calls, [{ op: 'end', sessionId }], 'its session is retired');
+  assert.equal((await db.session.findUniqueOrThrow({ where: { id: sessionId } })).status, 'CANCELLED', 'ended: no claim takes it');
+  assert.equal((await liveSessionsOf(run.id)).length, 0);
+  assert.equal((await scheduleOf(s.id)).consecutiveFailures, 0, 'a slot not run is not a failure');
+});
+
+test('§7.2 a session not held by capacity keeps the 10-minute RUNNER_UNAVAILABLE rule and its retry: a runner draining for an update, full or not, and a freed slot nobody claims', { skip }, async () => {
+  reset();
+  at('2026-11-14T00:00:00Z');
+  const w = await world('draining-full');
+  await occupy(w);
+  await db.runner.update({ where: { id: w.runnerId }, data: { heartbeatDraining: true } });
+  const s = await created(w);
+  at('2026-11-14T02:00:00Z');
+  const run = await runOf((await fireAndStart(s.id)).started[0].runId);
+  const first = run.sessionId!;
+  assert.equal(await listedReason(w, first), 'runner_updating', 'full, but the update is what holds it');
+  advance(10 * MINUTE - 1);
+  assert.equal(await runs.reconcileRun(run.id), 'UNCHANGED');
+  assert.equal((await runOf(run.id)).capacityHeldAt, null);
+  advance(1);
+  assert.equal(await runs.reconcileRun(run.id), 'RETRY');
+  const retried = await runOf(run.id);
+  assert.equal(retried.state, 'QUEUED');
+  assert.equal(retried.attempt, 2);
+  assert.equal(retried.failureReason, 'RUNNER_UNAVAILABLE');
+  assert.equal(retried.notBeforeAt!.getTime(), clockNow.getTime() + MINUTE);
+  assert.equal((await db.session.findUniqueOrThrow({ where: { id: first } })).status, 'CANCELLED');
+
+  // Held by a full runner for half an hour, then the slot frees and nobody claims the session: 10 minutes after
+  // the last pass that saw it held, it is RUNNER_UNAVAILABLE and retried like any other.
+  at('2026-11-14T00:00:00Z');
+  const w2 = await world('freed-unclaimed');
+  await occupy(w2);
+  const s2 = await created(w2);
+  at('2026-11-14T02:00:00Z');
+  const run2 = await runOf((await fireAndStart(s2.id)).started[0].runId);
+  advance(30 * MINUTE);
+  assert.equal(await runs.reconcileRun(run2.id), 'UNCHANGED');
+  await db.runner.update({ where: { id: w2.runnerId }, data: { maxConcurrent: 2 } });
+  advance(10 * MINUTE - 1);
+  assert.equal(await runs.reconcileRun(run2.id), 'UNCHANGED');
+  advance(1);
+  assert.equal(await runs.reconcileRun(run2.id), 'RETRY');
+  assert.equal((await runOf(run2.id)).failureReason, 'RUNNER_UNAVAILABLE');
+});
+
+test('§7.2 / §8.4 a run waiting for a full runner: pausing the schedule retires its session; a MANUAL one keeps waiting; Stop ends a session never delivered', { skip }, async () => {
+  reset();
+  at('2026-11-14T00:00:00Z');
+  const w = await world('runner-full-paused');
+  await occupy(w);
+  const s = await created(w);
+  at('2026-11-14T02:00:00Z');
+  const run = await runOf((await fireAndStart(s.id)).started[0].runId);
+  advance(MINUTE);
+  assert.equal(await runs.reconcileRun(run.id), 'UNCHANGED');
+  await schedules.pause(w.owner, s.id);
+  advance(MINUTE);
+  assert.equal(await runs.reconcileRun(run.id), 'CANCELLED', 'the next pass retires it');
+  assert.equal((await runOf(run.id)).state, 'CANCELLED');
+  assert.equal((await db.session.findUniqueOrThrow({ where: { id: run.sessionId! } })).status, 'CANCELLED');
+
+  // The owner's Run now on the paused schedule (the prod case: a MANUAL run) waits for its slot.
+  reset();
+  const manual = await runs.runNow(w.owner, s.id);
+  const m = await runOf(manual.id);
+  assert.equal(m.state, 'RUNNING');
+  advance(HOUR);
+  assert.equal(await runs.reconcileRun(manual.id), 'UNCHANGED');
+  assert.equal((await runOf(manual.id)).sessionId, m.sessionId);
+  // Stopping it ends the session rather than interrupting it: interrupted, it would still start once a slot frees.
+  const stopped = await runs.stopRun(w.owner, manual.id);
+  assert.equal(stopped.state, 'CANCELLED');
+  assert.equal(stopped.failureReason, 'CANCELLED_BY_OWNER');
+  assert.deepEqual(calls, [{ op: 'end', sessionId: m.sessionId! }]);
+  assert.equal((await db.session.findUniqueOrThrow({ where: { id: m.sessionId! } })).status, 'CANCELLED');
+  assert.equal((await liveSessionsOf(manual.id)).length, 0);
 });
 
 test('§7.2 a run whose session never appeared is retried after 10 minutes (ENGINE_CRASHED_BEFORE_START)', { skip }, async () => {
