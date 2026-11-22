@@ -43,6 +43,7 @@ import { api } from '../../api';
 import { routeId } from '../../lib/idCodec';
 import { machineName } from '../../lib/machineSetup';
 import { MachineOsIcon } from '../../lib/machineOs';
+import { MANAGED_UPDATE_ROW_LABEL, MANAGED_UPDATE_ROW_TITLE } from '../../lib/runnerCopy';
 import { managedRowOf, useManagedRunner, useManagedRunnerId } from '../../lib/managedRunner';
 import { Spinner } from '../ui/Spinner';
 import { publishedRunnerVersionQuery, runnersQuery, workspacesQuery } from '../../lib/queries';
@@ -313,6 +314,7 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
               managedId={managedRunnerId}
               stateOf={stateOf}
               managedRowOf={managedRowFor}
+              cloudUpdate={managed?.status.update?.phase === 'available'}
             />
           )}
         </NavGroup>
@@ -468,8 +470,11 @@ function MachineRows({
   managedId,
   stateOf,
   managedRowOf,
+  cloudUpdate = false,
 }: {
   runners: Runner[];
+  /** A newer build waits for Orbit Cloud (managed.status.update): its row carries the update dot. */
+  cloudUpdate?: boolean;
   /** Which runner is Orbit Cloud, if any. */
   managedId: string | null;
   stateOf: (runner: Runner) => MachineState;
@@ -527,7 +532,7 @@ function MachineRows({
             to={`/settings/machines/${cloud.id}`}
             icon={<CloudOutlined />}
             label={machineName(cloud, cloud.id)}
-            trailing={<MachineRowState state={stateOf(cloud)} managedRow={managedRowOf(cloud)} />}
+            trailing={<MachineRowState state={stateOf(cloud)} managedRow={managedRowOf(cloud)} update={cloudUpdate} />}
           />
           {runners.length > 0 && <div className="settings-nav-divider" role="separator" />}
         </div>
@@ -553,12 +558,14 @@ function MachineRows({
 function MachineRowState({
   state,
   managedRow,
+  update,
 }: {
   state: MachineState;
   managedRow: ManagedRunnerRow | null;
+  update?: boolean;
 }) {
   return managedRow ? (
-    <ManagedRowState row={managedRow} />
+    <ManagedRowState row={managedRow} update={update} />
   ) : (
     <span
       className={`settings-dot settings-dot--${state}`}
@@ -637,7 +644,16 @@ function MachineRow({
 }
 
 /** The managed runner's state on its machine row: a spinner while it moves, else a dot, and the short label. */
-export function ManagedRowState({ row }: { row: ManagedRunnerRow }) {
+export function ManagedRowState({ row, update }: { row: ManagedRunnerRow; update?: boolean }) {
+  // A newer build waits (managed.status.update): the same update dot and word a self-managed machine's row gets.
+  if (update && row.tone === 'ready') {
+    return (
+      <span className="settings-managed-state" data-kind={row.kind} data-update title={MANAGED_UPDATE_ROW_TITLE}>
+        <span className="settings-dot settings-dot--update" aria-hidden />
+        <span className="settings-nav-meta settings-nav-meta--update">{MANAGED_UPDATE_ROW_LABEL}</span>
+      </span>
+    );
+  }
   return (
     <span className="settings-managed-state" data-kind={row.kind} title={row.detail ?? row.label}>
       {row.tone === 'progress' ? (
