@@ -824,7 +824,7 @@ test('(2)(3) a project that looks finished is handed to its coordinator with eve
     const farFuture = new Date(Date.now() + 86_400_000);
     const due = (at = farFuture) => projectsToRecordAsDone(stack.db as unknown as PrismaService, w.ownerId, [w.projectId], at);
     for (const data of [
-      { status: RunStatus.FAILED, finishedAt: new Date(), retryAt: null },
+      { status: RunStatus.FAILED, lastTurnOutcome: 'FAILED', finishedAt: new Date(), retryAt: null },
       { status: RunStatus.AWAITING_INPUT, finishedAt: null, retryAt: new Date(Date.now() + 60_000) },
       { status: RunStatus.PENDING, retryAt: null },
       { status: RunStatus.RUNNING, retryAt: null },
@@ -857,7 +857,7 @@ test('(2)(3) a project that looks finished is handed to its coordinator with eve
       data: { deliveredAt: null, status: 'ANSWERED' },
     });
     for (const data of [
-      { status: RunStatus.FAILED, finishedAt: new Date(), endReason: 'USER_ENDED', deletedAt: null },
+      { status: RunStatus.FAILED, lastTurnOutcome: 'FAILED', finishedAt: new Date(), endReason: 'USER_ENDED', deletedAt: null },
       { status: RunStatus.AWAITING_INPUT, finishedAt: null, endReason: null, deletedAt: new Date() },
     ]) {
       await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data });
@@ -992,7 +992,7 @@ test('a looks-finished fact first raised during FAILED waits and is delivered on
   const sessionId = await workSession(stack, w, task.id, 'orbit/walkthrough');
   await settleExecutable(stack, task.id);
   await queuedJob(stack, w, 'LAND_TASK', task.id, 'NOTHING_TO_LAND');
-  await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED, finishedAt: new Date()} });
+  await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED, lastTurnOutcome: 'FAILED', finishedAt: new Date()} });
   await stack.receipts.record(w.ownerId, sessionId, {
     result: 'ALREADY_MERGED', sourceSha: sha('7'), targetBranch: await projectBranch(stack, w), targetShaBefore: sha('7'),
   }, 'RUNNER');
@@ -1167,7 +1167,7 @@ test('a settled-project fact refused during FAILED recovers on the reconcile tic
     await workSession(stack, w, task.id, null, RunStatus.SUCCEEDED, ['walkthrough.md']);
     await stack.db.session.update({
       where: { id: w.coordinatorSessionId },
-      data: { status: RunStatus.FAILED, finishedAt: new Date()},
+      data: { status: RunStatus.FAILED, lastTurnOutcome: 'FAILED', finishedAt: new Date()},
     });
     await settleExecutable(stack, task.id);
     const prisma = stack.db as unknown as PrismaService;

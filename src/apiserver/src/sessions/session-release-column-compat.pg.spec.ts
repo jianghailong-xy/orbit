@@ -19,8 +19,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { cpSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { cpSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
@@ -208,12 +207,13 @@ test('release_cause and session_release_cause_chk are gone; the writers, and dep
     // Deploy 2's migrations are this tree's without deploy 3's three (the evidence of task 351QPAh8wuz6nl3n1ghm2 shows
     // the project branch's folder is exactly that). A server boots by running migrate deploy over its own folder.
     const api = join(__dirname, '..', '..');
-    const deploy2 = mkdtempSync(join(tmpdir(), 'deploy2-'));
+    // Inside the apiserver directory, so the config's imports (prisma/config, dotenv) resolve as they do for the real
+    // one: from src/apiserver/node_modules or, where npm hoisted them (CI), from the repository's node_modules.
+    const deploy2 = mkdtempSync(join(api, '.deploy2-'));
     t.after(() => rmSync(deploy2, { recursive: true, force: true }));
     cpSync(join(api, 'prisma'), join(deploy2, 'prisma'), { recursive: true });
     cpSync(join(api, 'prisma.config.ts'), join(deploy2, 'prisma.config.ts'));
     for (const name of DEPLOY_3_MIGRATIONS) rmSync(join(deploy2, 'prisma', 'migrations', name), { recursive: true });
-    symlinkSync(join(api, 'node_modules'), join(deploy2, 'node_modules'));
     let out: string;
     try {
       out = execFileSync(process.execPath, [require.resolve('prisma/build/index.js'), 'migrate', 'deploy'], {
