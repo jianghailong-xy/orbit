@@ -26,7 +26,10 @@ export const DRIVE_FEED_KEEP_MS = 24 * 60 * 60 * 1000;
 
 /** What one sweep did. */
 export interface FileSweepResult {
-  /** Drive stagings removed because nothing had touched them for DRIVE_STAGING_IDLE_MS. */
+  /**
+   * Drive stagings removed because nothing had touched them for DRIVE_STAGING_IDLE_MS, and the files a replacing rename
+   * removed (drive_removed_entry) kept that long for a handle still writing one.
+   */
   stagingsRemoved: number;
   /** Drive commit answers and change-feed rows removed because they were older than DRIVE_FEED_KEEP_MS. */
   feedRowsRemoved: number;
@@ -169,6 +172,16 @@ export class FileRetentionSweep implements OnApplicationBootstrap, OnModuleDestr
             FOR UPDATE SKIP LOCKED
          )
            AND touched_at < ${before}::timestamptz`;
+      total += removed;
+      if (removed < SWEEP_BATCH) break;
+    }
+    // A file a replacing rename removed is kept for a handle still writing it as long as an untouched staging is (§3.2).
+    for (;;) {
+      const removed = await this.prisma.$executeRaw`
+        DELETE FROM drive_removed_entry
+         WHERE (owner_id, entry_id) IN (
+           SELECT owner_id, entry_id FROM drive_removed_entry WHERE removed_at < ${before}::timestamptz LIMIT ${SWEEP_BATCH}
+         )`;
       total += removed;
       if (removed < SWEEP_BATCH) return total;
     }

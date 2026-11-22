@@ -7,7 +7,8 @@
  *
  *   (1) a self-registered runner's credential puts, gets, lists, moves and deletes by path, as the drive tools do: mkdir -p,
  *       create, a staging's chunks, commit, stat, list (a one-chunk file carries its sha256), manifest, a chunk's bytes
- *       whole and by Range, overwrite making a version, a retried commit applied once, rename, utimens, delete to Trash;
+ *       whole and by Range, overwrite making a version, a retried commit applied once, rename, a rename onto a file
+ *       keeping the target's id and making a version of it (§3.2), utimens, delete to Trash;
  *   (2) the door has no Trash and no share operation: no route of it names either, a Trash path is not a route, a deleted
  *       entry is reached by no path or id, and the share-link routes refuse a runner credential;
  *   (3) another account is answered as nothing: its entry by id, its chunk by sha256, its staging, its commit id, a
@@ -226,8 +227,35 @@ test('Orbit Files drive: the runner drive door — drive tools by path, no Trash
 
     const other = await put(aliceRunner.token, '/Proj/other.md', Buffer.from('other'));
     ok(other.reply, 'another file');
+    // A move onto a file (§3.2, a write-then-os.replace save): the target keeps its id and takes the source's content as
+    // a new version, its previous one going to Trash as a version; the source is gone, not in Trash.
+    const r2Was = (await db.driveEntry.findUniqueOrThrow({ where: { id: toUuid(stat.id) } })).currentVersionId!;
     const onto = ok(await as(aliceRunner.token, 'POST', '/rename', { from: '/Proj/other.md', to: '/Proj/r2.md' }), 'a move onto a file').json;
     assert.equal(onto.path, '/Proj/r2.md');
+    assert.equal(onto.id, stat.id, 'the target keeps its entry id');
+    const ontoManifest = ok(await as(aliceRunner.token, 'GET', `/manifest?id=${stat.id}`), 'the manifest after the move').json;
+    assert.deepEqual(ontoManifest.chunks.map((c: { sha256: string }) => c.sha256), [sha256(Buffer.from('other'))], "the source's content");
+    const r2Previous = await db.driveVersion.findUniqueOrThrow({ where: { id: r2Was } });
+    assert.equal(r2Previous.entryId, toUuid(stat.id));
+    assert.equal((await db.driveTrashGroup.findUniqueOrThrow({ where: { id: r2Previous.trashGroupId! } })).kind, 'VERSION', 'the previous version is in Trash');
+    refused(await as(aliceRunner.token, 'GET', `/stat?path=${q('/Proj/other.md')}`), 404, 'DRIVE_ENTRY_NOT_FOUND', 'the source by path');
+    refused(await as(aliceRunner.token, 'GET', `/stat?id=${other.entry.id}`), 404, 'DRIVE_ENTRY_NOT_FOUND', 'the source by id');
+    assert.equal(await db.driveEntry.count({ where: { ownerId: alice, name: 'other.md' } }), 0, 'and not in Trash');
+    // A handle still bound to the source opens a staging and commits: a new file in Trash named after it.
+    const lateBytes = Buffer.from('written after the move');
+    const lateStaging = ok(await as(aliceRunner.token, 'POST', '/stagings', { entryId: other.entry.id }), 'a staging for the removed source').json;
+    const lateChunk = await raw(server, 'PUT', `/api/runner/drive/stagings/${lateStaging.id}/chunks/0`, aliceRunner.token, lateBytes, {
+      'x-orbit-chunk-sha256': sha256(lateBytes),
+    });
+    assert.equal(lateChunk.status, 200, lateChunk.body.toString());
+    const late = ok(await as(aliceRunner.token, 'POST', '/commit', {
+      commitId: randomUUID(), entryId: other.entry.id, handleId: randomUUID(), mode: 'OVERWRITE', baseVersionId: other.body.baseVersionId,
+      stagingId: lateStaging.id, chunks: [{ idx: 0, sha256: sha256(lateBytes), size: lateBytes.length }],
+    }), 'a commit for the removed source').json;
+    const lateRow = await db.driveEntry.findUniqueOrThrow({ where: { id: toUuid(late.entryId) } });
+    assert.equal(lateRow.name, 'other.md');
+    assert.notEqual(lateRow.trashedAt, null, 'in the owner\'s Trash');
+    assert.equal(ok(await as(aliceRunner.token, 'GET', `/stat?path=${q('/Proj/r2.md')}`), 'r2.md after').json.id, stat.id, 'r2.md untouched by it');
     refused(
       await as(aliceRunner.token, 'POST', '/rename', { from: '/Proj/r2.md', to: '/Proj/sub', noReplace: true }),
       409, 'DRIVE_NAME_TAKEN', 'noReplace onto a taken name',

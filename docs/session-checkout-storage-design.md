@@ -81,9 +81,17 @@ with driver options are left out of `/system/df` sizes altogether.
 
 ## 3. Constraints
 
-- **Managed container hardening is fixed.** The channel (`deploy/managed-runner/docker-channel/channel.py`, around line
-  576) refuses privileged mode, added capabilities, devices, host binds and user-namespace modes. So no mounts, no
-  FUSE, no loop devices and no kernel modules inside the container. Nothing in this design may relax that.
+- **Managed container hardening is fixed.** The channel (`deploy/managed-runner/docker-channel/channel.py`) refuses
+  privileged mode, added capabilities, devices, host binds and user-namespace modes for the runner container, and the
+  Pod template drops every capability. So the runner container cannot mount anything, use FUSE or loop devices, or
+  load kernel modules. **One exception, decided for Orbit Files (docs/orbit-files-drive-design.md,
+  docs/orbit-files-drive-technical-design.md §6):** the runner container may *receive* exactly one mount made outside
+  it, `/run/orbit-files` (a plain per-runner directory with slave propagation; the drive's FUSE mount sits below it),
+  from an Orbit-owned mounter. On Kubernetes that is the `files.orbit.dev` CSI node driver
+  (`deploy/managed-runner/files-csi/`). On Docker, only if it is built (§6.2 of the technical design; it is not
+  today), it is the per-runner `mrf-<uuid>` container, the only container the channel would create with `SYS_ADMIN`,
+  `/dev/fuse` and the `orbit-files-mounter` AppArmor profile. Nothing else in this design may relax the runner
+  container's hardening.
 - **Docker volume accounting is logical.** The 20 GiB limit is measured with Docker's sizes. Clones save host disk but do
   not lower the measured size.
 - **Kubernetes backend.** The original baseline is an ext4 RBD filesystem of a fixed size

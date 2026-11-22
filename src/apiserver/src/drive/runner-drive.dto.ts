@@ -72,7 +72,7 @@ export class RunnerDriveCommitDto extends WithWriter {
   @IsOptional() @IsPublicId() stagingId?: string;
 }
 
-/** `POST /runner/drive/rename`: `from` (or `id`) to the path `to`; onto a file it replaces it, unless `noReplace`. */
+/** `POST /runner/drive/rename`: `from` (or `id`) to the path `to`; onto a file it makes a version of it, unless `noReplace`. */
 export class RunnerDriveRenameDto extends WithWriter {
   @IsOptional() @IsString() @MaxLength(4096) from?: string;
   @IsOptional() @IsPublicId() id?: string;

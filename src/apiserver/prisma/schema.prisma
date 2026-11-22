@@ -379,6 +379,8 @@ model User {
   driveTrashGroups   DriveTrashGroup[]
   driveCommits       DriveCommit[]
   driveChanges       DriveChange[]
+  /// Files a replacing rename removed, for a handle still writing one (migration 1438).
+  driveRemovedEntries DriveRemovedEntry[]
   /// The mount credentials of its managed runner's generations (migration 1339).
   driveMountCredentials DriveMountCredential[]
 
@@ -3753,6 +3755,23 @@ model DriveCommit {
   @@id([ownerId, commitId], map: "drive_commit_pkey")
   @@index([createdAt], map: "drive_commit_created_at_idx")
   @@map("drive_commit")
+}
+
+/// A file a rename onto an existing file removed outright (1438, §3.2): its name and folder, so a mount handle still bound
+/// to its id commits as a new file in Trash named after it (`successor_id`, made by the first such commit). No foreign
+/// key to the entry, the folder or the successor: each is read by id and checked. Pruned after seven days.
+model DriveRemovedEntry {
+  ownerId     String    @map("owner_id") @db.Uuid
+  owner       User      @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "drive_removed_entry_owner_id_fkey")
+  entryId     String    @map("entry_id") @db.Uuid
+  parentId    String    @map("parent_id") @db.Uuid
+  name        String
+  removedAt   DateTime  @default(now()) @map("removed_at") @db.Timestamptz(3)
+  successorId String?   @map("successor_id") @db.Uuid
+
+  @@id([ownerId, entryId], map: "drive_removed_entry_pkey")
+  @@index([removedAt], map: "drive_removed_entry_removed_at_idx")
+  @@map("drive_removed_entry")
 }
 
 /// The drive's change feed (1327, §5.4): one row per change to an entry, kept a day. `at` is the clock when the row was
