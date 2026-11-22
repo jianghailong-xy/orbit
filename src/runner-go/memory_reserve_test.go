@@ -81,6 +81,14 @@ func TestRunLoopClaimsNothingBelowTheMemoryReserve(t *testing.T) {
 		t.Error("the startup reclaim's active starts do not wait for a permit and the memory reserve")
 	}
 	loop := body[strings.Index(body, "\tfor loopCtx.Err() == nil {"):]
+	// Every reclaim the claim loop makes later starts its RUNNING sessions through the same permit, one after another.
+	if starts, admitted := strings.Count(loop, "startSession(pending.job, pending.initiallyActive)"),
+		strings.Count(loop, "admitReclaimed(pending)\n"); starts == 0 || admitted != starts {
+		t.Errorf("%d reclaimed starts in the claim loop, %d of them waiting for their permit first", starts, admitted)
+	}
+	if !strings.Contains(body, "admitReclaimed := func(pending reclaimedStart) {\n\t\tif pending.initiallyActive {\n\t\t\tpool.waitReclaimPermit(loopCtx, turnMemory)") {
+		t.Error("a later reclaim's RUNNING session does not wait for a permit and the memory reserve")
+	}
 	gate := strings.Index(loop, "\t\tif !turnMemory.admits() {\n\t\t\tselect {\n\t\t\tcase <-loopCtx.Done():\n\t\t\tcase <-time.After(500 * time.Millisecond):\n\t\t\t}\n\t\t\tcontinue\n\t\t}\n")
 	saturation := strings.Index(loop, "if pool.admissionIdleCapacity() <= 0 {")
 	claim := strings.Index(loop, "job, err := t.claimSession(loopCtx, &claims, scope...)")

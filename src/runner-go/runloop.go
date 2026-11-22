@@ -2828,6 +2828,14 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// Retried with backoff: on a joint restart the apiserver is often still down when
 	// we come up, and a single failed attempt would orphan every resumable session for
 	// the rest of this process — their queued turns then sit PENDING forever.
+	// A RUNNING session a reclaim after the startup one hands back (the deferred retry, the late claim check, a failed
+	// claim's reconciliation) takes its turn permit as the startup reclaim's do: once a slot and the memory reserve are
+	// free (sessionPool.waitReclaimPermit). Those reclaims start their sessions one after another, so one at a time.
+	admitReclaimed := func(pending reclaimedStart) {
+		if pending.initiallyActive {
+			pool.waitReclaimPermit(loopCtx, turnMemory)
+		}
+	}
 	reclaimed := false
 	// When a reclaim sets conflicted sessions aside, retry at this time so they do
 	// not stay unsupervised; zero means nothing is waiting.
@@ -3009,6 +3017,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			}
 			for _, pending := range recovered {
 				logln(fmt.Sprintf("reclaiming session %s — %s", pending.job.SessionID, pending.job.Title))
+				admitReclaimed(pending)
 				startSession(pending.job, pending.initiallyActive)
 				pending.endTakeover()
 			}
@@ -3040,6 +3049,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			}
 			for _, pending := range recovered {
 				logln(fmt.Sprintf("reclaiming session %s — %s (late claim check)", pending.job.SessionID, pending.job.Title))
+				admitReclaimed(pending)
 				startSession(pending.job, pending.initiallyActive)
 				pending.endTakeover()
 			}
@@ -3124,6 +3134,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				}
 				for _, pending := range recovered {
 					logln(fmt.Sprintf("recovering ambiguously claimed session %s — %s", pending.job.SessionID, pending.job.Title))
+					admitReclaimed(pending)
 					startSession(pending.job, pending.initiallyActive)
 					pending.endTakeover()
 				}
@@ -3210,6 +3221,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				reclaimRetryAt = time.Now().Add(reclaimRetryInterval)
 			}
 			for _, pending := range recovered {
+				admitReclaimed(pending)
 				startSession(pending.job, pending.initiallyActive)
 				pending.endTakeover()
 			}
