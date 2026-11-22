@@ -366,6 +366,8 @@ P1 不路由，所以可以先把最难的部分（同 cwd 子进程、事件内
     只在这次运行属于该会话和账号、派给的正是这台 runner、且仍是 `RUNNING` 时放行，其余照旧按托管会话的 runner 判断。
   - 目标 runner 上没有父会话的 socket，Plan 门读不到实时模式；远程运行的子引擎带 `ORBIT_SUBAGENT_REMOTE_MODE`
     （领取时的模式），Plan 门按它判断。所以在 Plan 模式下领取的运行仍然不能上传。
+  - 远程运行的 worktree 在 `~/.orbit/remote-subagents/<run>/tree`，在 Orbit 自己的目录里；`file_upload` 把这次运行自己的
+    worktree 当作它的 checkout 放行（别的运行的不放行），父会话的 uploads 目录照旧可用。
   - `file_fetch` 和其他 Orbit 写操作没有放开：服务端仍只认托管父会话的 runner。
 - 看不到父会话未提交的改动：工具描述里写明「remote SubAgents run on that workspace's own HEAD and return text only」，
   父 Agent 需要它看到新代码时，自己先提交并推送（或者在 prompt 里写清楚）。
