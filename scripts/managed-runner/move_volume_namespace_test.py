@@ -172,7 +172,7 @@ class MoveVolumeNamespaceTest(unittest.TestCase):
         self.assertEqual(run.returncode, 0, run.stderr)
         self.assertIn("dry run", run.stderr)
         self.assertEqual(self.read(), before)
-        self.assertFalse((self.backup / "moved.tsv").exists())
+        self.assertFalse(self.backup.exists(), "a dry run makes no backup directory either")
 
     def test_it_refuses_what_would_lose_or_share_the_volume(self):
         cases = {
