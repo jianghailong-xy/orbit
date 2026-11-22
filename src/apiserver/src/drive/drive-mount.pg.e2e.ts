@@ -21,7 +21,7 @@
  *     paths and the times are reported. DRIVE_MOUNT_E2E_ROWS=1,2,3 runs only those rows (setup always runs).
  *   - DRIVE_MOUNT_E2E_REPORT names a file for the row-by-row table.
  *
- * Not here: rows 55 and 56 (the wiring and engine-grants tasks), 59 (the engine's Plan mode, §7), 60 (the door task),
+ * Not here: row 55 (the wiring task), 59 (the engine's Plan mode, §7), 60 (the door task),
  * 61 (the runner's entrypoint, runner-go). Not destructive: every row belongs to the account this run creates.
  */
 import assert from 'node:assert/strict';
@@ -1505,6 +1505,47 @@ f = open('$F/long52.log', 'w'); f.write('one line\\n'); f.flush(); time.sleep(70
     assert.match(s.out, /Software caused connection abort|Transport endpoint is not connected/);
     await waitFor('the drive is back', async () => (await sh(a, 'ls $F/b.txt')).code === 0, 15_000, 100);
     d.push(`a call blocked ${(blocked / 1000).toFixed(1)} s until the watchdog aborted the connection: the call in flight got "${/Software caused connection abort|Transport endpoint is not connected/.exec(s.out)![0]}" (the kernel's errno for requests in flight on an abort; later calls get "Transport endpoint is not connected"); recovered as in 53`);
+  });
+
+  // Row 56 (docs/orbit-files-drive-technical-design.md §5.9, §7.2): for each engine's own sandbox, a process started
+  // under it writes and reads ~/Files, the daemon is SIGKILLed, the parent remounts, and the SAME process writes and reads
+  // again. Cursor's is bwrap with the parent bound (cursor_sandbox.go wrap); Codex's is `codex sandbox`, whose writable
+  // roots are the ones codexSandboxPolicy names. Claude Code, OpenCode, Antigravity, Kimi and DSH run no OS sandbox of
+  // their own on Linux (their grants are launch arguments and permission rules), so their process is a plain one.
+  await row('56', 'each engine\'s sandbox keeps ~/Files across a remount', async (d) => {
+    const probe = (name: string) => `n=${name}
+      echo "before-$n" > "$F/e56-$n.txt" && echo "before write ok" && cat "$F/e56-$n.txt" && echo "before read ok" || echo "before FAILED"
+      sleep 3
+      s=$(date +%s%N); rc=1
+      for i in $(seq 1 200); do
+        if echo "after-$n" > "$F/e56-$n.txt" 2>/dev/null && [ "$(cat "$F/e56-$n.txt" 2>/dev/null)" = "after-$n" ]; then rc=0; break; fi
+        sleep 0.1
+      done
+      echo "after rc=$rc ms=$(( ($(date +%s%N) - s) / 1000000 ))"`;
+    const bwrap = (binds: string[]) => `exec bwrap --die-with-parent --new-session --unshare-user --unshare-pid --unshare-ipc --unshare-uts --ro-bind / / --dev /dev --proc /proc ${binds.map((b) => `--bind ${b} ${b}`).join(' ')} -- bash -c '"$0"' "$P"`;
+    const cases: Array<{ name: string; wrap: (script: string) => string; expectAfter: 'ok' | 'stale' }> = [
+      { name: 'cursor', expectAfter: 'ok', wrap: (x) => `P='${x}'; ${bwrap([a.root])}` },
+      { name: 'cursor-bound-the-mount-itself', expectAfter: 'stale', wrap: (x) => `P='${x}'; ${bwrap([a.drive])}` },
+      { name: 'codex', expectAfter: 'ok', wrap: (x) => `P='${x}'; exec codex sandbox -c sandbox_mode=workspace-write -c 'sandbox_workspace_write.writable_roots=["${a.root}","${a.drive}","${a.F}"]' -- bash -c '"$0"' "$P"` },
+      { name: 'plain-engine-process', expectAfter: 'ok', wrap: (x) => `P='${x}'; exec bash -c '"$0"' "$P"` },
+    ];
+    for (const c of cases) {
+      const script = probe(c.name).replace(/'/g, "'\\''");
+      const run = sh(a, c.wrap(script), { timeoutMs: 90_000 });
+      await sleep(1_200);
+      const pid = Number(rootSh(`pgrep -u 65532 -f "serve.*--state-dir=${a.root}" | head -1`).stdout.trim());
+      assert.ok(pid > 0, 'a daemon to kill');
+      process.kill(pid, 'SIGKILL');
+      const r = await run;
+      const text = `${r.out}${r.err}`;
+      assert.match(text, /before write ok[\s\S]*before read ok/, `${c.name}: before the kill\n${text}`);
+      const after = /after rc=(\d+) ms=(\d+)/.exec(r.out);
+      assert.ok(after, `${c.name}: no verdict\n${text}`);
+      if (c.expectAfter === 'ok') assert.equal(after![1], '0', `${c.name}: after the remount\n${text}`);
+      else assert.notEqual(after![1], '0', `${c.name}: expected the stale bind of the mount itself to fail\n${text}`);
+      d.push(`${c.name}: wrote and read before the kill; after the remount ${after![1] === '0' ? `wrote and read again ${after![2]} ms later` : 'could not (the mount it bound is dead): the reason the parent is bound, never drive/'}`);
+      await waitFor('the drive is back', async () => (await sh(a, 'ls $F/b.txt')).code === 0, 20_000, 200);
+    }
   });
 
   await row('57', 'umount, fusermount3 -u, mount -o remount,ro from the agent', async (d) => {

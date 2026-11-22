@@ -294,3 +294,49 @@ func TestSupersededInstanceDriveWriteIsRefused(t *testing.T) {
 		t.Fatalf("the instance is not told it is revoked: %v", err)
 	}
 }
+
+// §12.2: Claude Default mode treats the drive as a workspace root exactly as it treats the uploads folder: both are
+// --add-dir working directories, and nothing else is added to the launch (no allow rule, no skipped permissions), so an
+// edit there asks as an edit in the checkout does and leaving the workspace asks nothing.
+func TestClaudeDefaultModeTreatsTheDriveAsAWorkspaceRoot(t *testing.T) {
+	fakeDriveMount(t, true)
+	job := claudeSpawnJob(t)
+	job.Agent.PermissionMode = "default"
+	scratch := t.TempDir()
+	with := claudeCommandArgs(job, scratch, true)
+	fakeDriveMount(t, false)
+	without := claudeCommandArgs(job, scratch, true)
+
+	if !containsArgs(with, []string{"--permission-mode", "default"}) || containsArgs(with, []string{"--dangerously-skip-permissions"}) {
+		t.Fatalf("default mode launch = %v", with)
+	}
+	uploads := uploadsDir(job.SessionID)
+	if !containsString(addDirs(with), uploads) {
+		t.Fatalf("uploads folder is not a working directory: %v", with)
+	}
+	extra := addDirs(with)[len(addDirs(without)):]
+	if len(extra) != 3 {
+		t.Fatalf("the drive added %v, want the parent and both spellings", extra)
+	}
+	// The drive changes nothing but those working directories and the guidance text about it.
+	var stripped, plain []string
+	for i := 0; i < len(with); i++ {
+		if with[i] == "--add-dir" && containsString(extra, with[i+1]) {
+			i++
+			continue
+		}
+		stripped = append(stripped, with[i])
+		if with[i] == "--append-system-prompt" {
+			i++
+		}
+	}
+	for i := 0; i < len(without); i++ {
+		plain = append(plain, without[i])
+		if without[i] == "--append-system-prompt" {
+			i++
+		}
+	}
+	if !reflect.DeepEqual(stripped, plain) {
+		t.Fatalf("the drive changed more than its working directories:\nwith    %.600v\nwithout %.600v", stripped, plain)
+	}
+}
