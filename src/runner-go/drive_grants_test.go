@@ -68,9 +68,14 @@ func TestCodexGrantsTheDriveWritableInAutoAndReadsItInPlan(t *testing.T) {
 	roots := codexRuntimeWorkspaceRoots("auto", nil, "/repo", "/tmp/uploads")
 	policy := codexSandboxPolicy("auto", nil, "/repo", "/tmp/uploads")
 	writable, _ := policy["writableRoots"].([]string)
-	for _, root := range driveRootsForTest() {
-		if !containsString(roots, root) || !containsString(writable, root) {
-			t.Fatalf("auto: %s missing from workspace roots %v / writable roots %v", root, roots, writable)
+	// The sandbox gets the drive's own path only: the parent is unwritable to the agent and the link is a symlink,
+	// and either one makes Codex's bwrap refuse every command (row 56).
+	if !containsString(roots, driveMountPath) || !containsString(writable, driveMountPath) {
+		t.Fatalf("auto: %s missing from workspace roots %v / writable roots %v", driveMountPath, roots, writable)
+	}
+	for _, root := range []string{driveParentPath, driveHomePath} {
+		if containsString(roots, root) || containsString(writable, root) {
+			t.Fatalf("auto: %s must not be a sandbox root: %v / %v", root, roots, writable)
 		}
 	}
 	// The classifier treats the drive as a workspace root, never as a temp one.
@@ -93,12 +98,12 @@ func TestCodexGrantsTheDriveWritableInAutoAndReadsItInPlan(t *testing.T) {
 
 	job := &ClaimedSession{SessionID: "s", Agent: AgentExecConfig{}}
 	args := codexExecCommandArgs(job, "/repo", "/tmp/uploads", nil, "")
-	if dirs := addDirs(args); !reflect.DeepEqual(dirs, []string{"/tmp/uploads", driveParentPath}) {
+	if dirs := addDirs(args); !reflect.DeepEqual(dirs, []string{"/tmp/uploads", driveMountPath}) {
 		t.Fatalf("codex exec --add-dir = %v", dirs)
 	}
 
 	fakeDriveMount(t, false)
-	if roots := codexRuntimeWorkspaceRoots("auto", nil, "/repo", "/tmp/uploads"); containsString(roots, driveParentPath) {
+	if roots := codexRuntimeWorkspaceRoots("auto", nil, "/repo", "/tmp/uploads"); containsString(roots, driveMountPath) {
 		t.Fatalf("no drive mounted, yet %v", roots)
 	}
 	if dirs := addDirs(codexExecCommandArgs(job, "/repo", "/tmp/uploads", nil, "")); !reflect.DeepEqual(dirs, []string{"/tmp/uploads"}) {

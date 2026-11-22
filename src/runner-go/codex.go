@@ -491,7 +491,7 @@ func appendCodexOrbitMCPConfig(args []string, exe string) []string {
 func codexExecCommandArgs(job *ClaimedSession, execDir, upDir string, imagePaths []string, exe string) []string {
 	args := []string{"-C", execDir, "-s", "danger-full-access", "-a", "never", "--add-dir", upDir}
 	if driveMounted() {
-		args = append(args, "--add-dir", driveParentPath)
+		args = append(args, "--add-dir", driveMountPath)
 	}
 	args = append(args, "exec")
 	if job.RuntimeSessionID != "" {

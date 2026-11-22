@@ -30,7 +30,14 @@ func codexAutoApprovalContextFor(execDir, upDir string, readOnlyRoots ...string)
 func codexRuntimeWorkspaceRoots(permissionMode string, job *ClaimedSession, execDir, upDir string) []string {
 	roots := []string{execDir, upDir}
 	if permissionMode == "auto" {
-		roots = append(roots, driveGrantRoots()...)
+		// Only the drive's own path, never the /run/orbit-files parent or the ~/Files link: Codex's command sandbox
+		// (bwrap) is built per command, so it needs no parent to follow a remount, and it fails the command outright
+		// on a parent the agent cannot write ("Can't create file .../.git") or on a root that is a symlink ("crosses
+		// writable symlink"). Measured live in drive-mount.pg.e2e.ts row 56. The approval classifier below still knows
+		// the other spellings.
+		if driveMounted() {
+			roots = append(roots, driveMountPath)
+		}
 		if job != nil && job.WT != nil && job.WT.RepoDir != "" {
 			// A linked worktree stores its index and worktree metadata in the shared repository's
 			// .git directory. Grant that metadata directory alone so local git commands do not

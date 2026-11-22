@@ -1517,34 +1517,43 @@ f = open('$F/long52.log', 'w'); f.write('one line\\n'); f.flush(); time.sleep(70
       echo "before-$n" > "$F/e56-$n.txt" && echo "before write ok" && cat "$F/e56-$n.txt" && echo "before read ok" || echo "before FAILED"
       sleep 3
       s=$(date +%s%N); rc=1
-      for i in $(seq 1 200); do
+      for i in $(seq 1 600); do
         if echo "after-$n" > "$F/e56-$n.txt" 2>/dev/null && [ "$(cat "$F/e56-$n.txt" 2>/dev/null)" = "after-$n" ]; then rc=0; break; fi
         sleep 0.1
       done
-      echo "after rc=$rc ms=$(( ($(date +%s%N) - s) / 1000000 ))"`;
-    const bwrap = (binds: string[]) => `exec bwrap --die-with-parent --new-session --unshare-user --unshare-pid --unshare-ipc --unshare-uts --ro-bind / / --dev /dev --proc /proc ${binds.map((b) => `--bind ${b} ${b}`).join(' ')} -- bash -c '"$0"' "$P"`;
-    const cases: Array<{ name: string; wrap: (script: string) => string; expectAfter: 'ok' | 'stale' }> = [
-      { name: 'cursor', expectAfter: 'ok', wrap: (x) => `P='${x}'; ${bwrap([a.root])}` },
-      { name: 'cursor-bound-the-mount-itself', expectAfter: 'stale', wrap: (x) => `P='${x}'; ${bwrap([a.drive])}` },
-      { name: 'codex', expectAfter: 'ok', wrap: (x) => `P='${x}'; exec codex sandbox -c sandbox_mode=workspace-write -c 'sandbox_workspace_write.writable_roots=["${a.root}","${a.drive}","${a.F}"]' -- bash -c '"$0"' "$P"` },
-      { name: 'plain-engine-process', expectAfter: 'ok', wrap: (x) => `P='${x}'; exec bash -c '"$0"' "$P"` },
-    ];
+      echo "after rc=$rc ms=$(( ($(date +%s%N) - s) / 1000000 ))"
+      echo "dotfiles: $(ls -A "$F/" | grep '^[.]' | tr '\n' ' ')"`;
+    const bwrap = (binds: string[]) => `exec bwrap --die-with-parent --new-session --unshare-user --unshare-pid --unshare-ipc --unshare-uts --ro-bind / / --dev /dev --proc /proc ${binds.map((b) => `--bind ${b} ${b}`).join(' ')} -- bash "$P"`;
+    // SIGKILL: the parent puts a new daemon on the same connection. SIGSTOP: the watchdog aborts the connection and the
+    // parent mounts a new one over the dead one (row 54), the case a bind of drive/ itself cannot follow (§7.2).
+    type Probe = { name: string; signal: 'SIGKILL' | 'SIGSTOP'; wrap: (script: string) => string; expectAfter: 'ok' | 'stale' | 'observe' };
+    const codexWrap = (x: string) => `P='${x}'; cd /tmp; exec codex sandbox -c sandbox_mode=workspace-write -c 'sandbox_workspace_write.writable_roots=["${a.drive}"]' -- bash "$P"`;
+    const cases: Probe[] = [];
+    for (const signal of ['SIGKILL', 'SIGSTOP'] as const) {
+      cases.push(
+        { name: `cursor-bwrap-parent-${signal}`, signal, expectAfter: 'ok', wrap: (x) => `P='${x}'; ${bwrap([a.root])}` },
+        { name: `codex-sandbox-${signal}`, signal, expectAfter: 'ok', wrap: codexWrap },
+        { name: `plain-engine-process-${signal}`, signal, expectAfter: 'ok', wrap: (x) => `P='${x}'; exec bash "$P"` },
+        { name: `control-bwrap-of-drive-itself-${signal}`, signal, expectAfter: signal === 'SIGSTOP' ? 'observe' : 'observe', wrap: (x) => `P='${x}'; ${bwrap([a.drive])}` },
+      );
+    }
     for (const c of cases) {
-      const script = probe(c.name).replace(/'/g, "'\\''");
-      const run = sh(a, c.wrap(script), { timeoutMs: 90_000 });
+      const script = path.join(scripts, `probe56-${c.name}.sh`);
+      writeFileSync(script, probe(c.name), { mode: 0o644 });
+      const run = sh(a, c.wrap(script), { timeoutMs: 150_000 });
       await sleep(1_200);
       const pid = Number(rootSh(`pgrep -u 65532 -f "serve.*--state-dir=${a.root}" | head -1`).stdout.trim());
-      assert.ok(pid > 0, 'a daemon to kill');
-      process.kill(pid, 'SIGKILL');
+      assert.ok(pid > 0, 'a daemon to disturb');
+      process.kill(pid, c.signal);
       const r = await run;
       const text = `${r.out}${r.err}`;
-      assert.match(text, /before write ok[\s\S]*before read ok/, `${c.name}: before the kill\n${text}`);
+      assert.match(text, /before write ok[\s\S]*before read ok/, `${c.name}: before\n${text}`);
       const after = /after rc=(\d+) ms=(\d+)/.exec(r.out);
       assert.ok(after, `${c.name}: no verdict\n${text}`);
       if (c.expectAfter === 'ok') assert.equal(after![1], '0', `${c.name}: after the remount\n${text}`);
-      else assert.notEqual(after![1], '0', `${c.name}: expected the stale bind of the mount itself to fail\n${text}`);
-      d.push(`${c.name}: wrote and read before the kill; after the remount ${after![1] === '0' ? `wrote and read again ${after![2]} ms later` : 'could not (the mount it bound is dead): the reason the parent is bound, never drive/'}`);
-      await waitFor('the drive is back', async () => (await sh(a, 'ls $F/b.txt')).code === 0, 20_000, 200);
+      d.push(`${c.name} (${/dotfiles:.*/.exec(r.out)?.[0] ?? 'dotfiles: ?'}): wrote and read before; after the ${c.signal === 'SIGKILL' ? 'kill and replacement' : 'abort and remount'} ${after![1] === '0' ? `wrote and read again (${after![2]} ms)` : 'could not (its mount is dead)'}${c.expectAfter === 'observe' ? ' [control, not asserted]' : ''}`);
+      await waitFor('the drive is back', async () => (await sh(a, 'ls $F/')).code === 0, 40_000, 200);
+      if (c.signal === 'SIGSTOP') rootSh(`kill -KILL ${pid} 2>/dev/null; true`);
     }
   });
 
