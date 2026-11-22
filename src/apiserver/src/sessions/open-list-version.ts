@@ -70,6 +70,13 @@ export interface OpenListVersionParts {
   version: string;
   epochs: Record<string, string>;
   steady: string;
+  /**
+   * What the realtime hint poller compares besides the counter sums (docs/list-freshness-scope-hints.md
+   * §5.0): the version's non-counter inputs with the runner rows and their presence rows left out, and
+   * each runner's `steady` in their place. A heartbeat or a runner column outside `steady` moves the
+   * version and not this.
+   */
+  hintClock: string;
   /** How many of the account's decision deadlines have passed (the version's own count of them). */
   deadlinesPassed: number;
 }
@@ -182,7 +189,14 @@ export async function readOpenListVersionParts(
     .update(JSON.stringify(runners.map(({ id, name, status, online }) => [id, name, status, online])))
     .digest('base64url')
     .slice(0, 27);
-  return { version, epochs, steady, deadlinesPassed };
+  const hintClock = createHash('sha256')
+    .update(JSON.stringify([
+      steady, rows.foreign_running, rows.share_link, rows.runners_offline_sql, rows.fenced, rows.share_links_live,
+      deadlinesPassed, freshJobs, runnersOnline,
+    ]))
+    .digest('base64url')
+    .slice(0, 27);
+  return { version, epochs, steady, hintClock, deadlinesPassed };
 }
 
 /**

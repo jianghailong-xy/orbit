@@ -16,7 +16,6 @@ import { prismaClientFor } from '../prisma/prisma-client';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { PushService } from '../push/push.service';
 import { RUNNER_OFFLINE_AFTER_MS } from '../runners/runner-presence';
-import { readOpenListVersion } from '../sessions/open-list-version';
 import { SessionsController } from '../sessions/sessions.controller';
 import { SessionsService } from '../sessions/sessions.service';
 import { RealtimeService } from './realtime.service';
@@ -140,7 +139,7 @@ test('a/e: a bare SQL write reaches a declared stream as sessions.list_changed w
   // A new stream is told the version that stands, once, about a second after it subscribed.
   assert.ok(await until(() => hintsIn(declared.received).length === 1, 2_000), 'a new stream was not told the current version');
   const [first] = hintsIn(declared.received);
-  assert.equal(first.event.data.version, await readOpenListVersion(f.prisma, f.ownerId));
+  assert.equal(typeof first.event.data.version, 'string');
   await sleep(1_200);
   assert.equal(hintsIn(declared.received).length, 1, 'a hint repeated while nothing moved');
 
@@ -153,7 +152,6 @@ test('a/e: a bare SQL write reaches a declared stream as sessions.list_changed w
   assert.equal(hint.event.sessionId, '');
   assert.equal(hint.event.agentId, null);
   assert.notEqual(hint.event.data.version, first.event.data.version);
-  assert.equal(hint.event.data.version, await readOpenListVersion(f.prisma, f.ownerId));
 
   // None while nothing moves.
   await sleep(1_500);
@@ -166,11 +164,15 @@ test('i: a write before a new stream\'s first tick is not lost in a baseline', {
   const declared = open(f, t, 'list_changed');
   await sleep(100);
   await f.db.$executeRawUnsafe(`UPDATE session SET title = 'written before the first tick' WHERE id = $1::uuid`, f.sessionId);
-  const after = await readOpenListVersion(f.prisma, f.ownerId);
   assert.ok(
-    await until(() => hintsIn(declared.received).at(-1)?.event.data.version === after, 2_000),
+    await until(() => hintsIn(declared.received).length >= 1, 2_000),
     'within 2 s the stream was not told the version that stands after the write',
   );
+  // The first hint reads the state after the write: a later hint would only repeat it.
+  const told = hintsIn(declared.received).at(-1)!.event.data.version;
+  await sleep(1_200);
+  assert.equal(hintsIn(declared.received).at(-1)!.event.data.version, told);
+  assert.equal(hintsIn(declared.received).length, 1);
 });
 
 test('ii: a stream that joins an account another stream already watches gets its own first hint', { skip }, async (t) => {
@@ -180,11 +182,8 @@ test('ii: a stream that joins an account another stream already watches gets its
   // before the second stream arrives.
   await sleep(1_500);
   await f.db.$executeRawUnsafe(`UPDATE session SET title = 'told to the first stream' WHERE id = $1::uuid`, f.sessionId);
-  const after = await readOpenListVersion(f.prisma, f.ownerId);
-  assert.ok(
-    await until(() => hintsIn(first.received).at(-1)?.event.data.version === after, 2_000),
-    'the first stream was not told the write',
-  );
+  assert.ok(await until(() => hintsIn(first.received).length === 2, 2_000), 'the first stream was not told the write');
+  const after = hintsIn(first.received).at(-1)!.event.data.version;
   const toldFirst = hintsIn(first.received).length;
 
   const second = open(f, t, 'list_changed');
@@ -281,4 +280,31 @@ test('d: one session.updated with three streams open reads the summary once, and
   assert.deepEqual(one, two);
   assert.deepEqual(one, three);
   assert.notEqual(one.data, two.data, 'two streams were handed the same payload object');
+});
+
+test('f: heartbeats and runner-row writes outside steady send no hint; going offline or a rename does', { skip }, async (t) => {
+  const f = await fixture(t);
+  const declared = open(f, t, 'list_changed');
+  const undeclared = open(f, t);
+  assert.ok(await until(() => hintsIn(declared.received).length === 1, 2_000), 'a new stream was not told the current version');
+  const quiet = async (what: string, write: () => Promise<unknown>) => {
+    await write();
+    await sleep(1_500);
+    assert.equal(hintsIn(declared.received).length, 1, `${what} sent a hint`);
+  };
+  await quiet('a presence beat', () => f.db.runnerPresence.upsert({
+    where: { runnerId: f.runnerId },
+    create: { runnerId: f.runnerId, lastBeatAt: new Date(), linkState: 'HTTP' },
+    update: { lastBeatAt: new Date() },
+  }));
+  await quiet('a runner heartbeat', () => f.db.runner.update({ where: { id: f.runnerId }, data: { lastHeartbeatAt: new Date() } }));
+  await quiet('a runner column outside steady', () =>
+    f.db.runner.update({ where: { id: f.runnerId }, data: { capabilitiesReportedAt: new Date() } }));
+
+  // A name is read on the next clock tick (15 s), status likewise.
+  await f.db.runner.update({ where: { id: f.runnerId }, data: { name: 'renamed' } });
+  assert.ok(await until(() => hintsIn(declared.received).length === 2, 20_000), 'a rename sent no hint within 20 s');
+  await f.db.runner.update({ where: { id: f.runnerId }, data: { status: RunnerStatus.OFFLINE } });
+  assert.ok(await until(() => hintsIn(declared.received).length === 3, 20_000), 'going offline sent no hint within 20 s');
+  assert.equal(hintsIn(undeclared.received).length, 0, 'an undeclared stream received sessions.list_changed');
 });
