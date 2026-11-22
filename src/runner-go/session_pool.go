@@ -206,9 +206,6 @@ type bgHold struct {
 type sessionPool struct {
 	mu          sync.Mutex
 	max         int
-	// admissionHold is why this runner takes no new work now, or "" (managed_disk_reserve.go). Read
-	// without p.mu, so whoever sets it never measures anything under the pool's lock.
-	admissionHold atomic.Pointer[string]
 	clock       poolClock
 	sessions    map[string]*liveSession
 	worktreeOps map[string]*worktreeOperationState
@@ -246,6 +243,10 @@ type sessionPool struct {
 	// accountSwap is the Claude login swap in progress, nil when none is: every session on one of its
 	// two folders starts no turn until it ends (claude_account_swap_relay.go).
 	accountSwap *poolAccountSwap
+
+	// admissionHold is why this runner takes no new work now, or "" (managed_disk_reserve.go). Read
+	// without p.mu, so whoever sets it never measures anything under the pool's lock.
+	admissionHold atomic.Pointer[string]
 }
 
 func newSessionPool(max int) *sessionPool {
