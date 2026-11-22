@@ -1735,7 +1735,8 @@ struct AgentSessionRow: View {
     // it and no "Recap · <time>" before it (the owner, 2026-10-22). Tags are filed and filtered by.
     private var line: SessionLine {
         SessionLine.make(for: session, live: !deleted, watching: watching,
-                         recaps: app.user?.preferences?.showRecaps ?? true, machine: machine)
+                         recaps: app.user?.preferences?.showRecaps ?? true, machine: machine,
+                         cloneHeard: app.cloneLedger.heard(session.agent?.id ?? session.agentId))
     }
     /// The machine the session runs on: a session held for the Claude region names it ("Anthropic
     /// unavailable on HPC", web `sessionLine`'s `machine`).

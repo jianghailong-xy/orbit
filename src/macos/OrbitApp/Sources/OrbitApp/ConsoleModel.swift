@@ -593,6 +593,11 @@ final class ConsoleModel {
     /// When that detail was read: a clone frame heard before it is older news than its cloneState.
     private(set) var madeWorkspaceReadAt: Date?
     var madeWorkspaceID: String? { madeWorkspace?.id }
+    /// The workspace the session runs in, as its detail read it, when that is a GitHub clone: what the waiting card
+    /// of a session held by the clone names (`QueuedClone.card`). Any session of the workspace, not only the one that
+    /// made it.
+    private(set) var cloneWorkspace: SessionAgentRef?
+    private(set) var cloneWorkspaceReadAt: Date?
     /// The line this conversation opens with, when it made its workspace (board rule 8).
     var createdWorkspaceLine: CreatedWorkspaceLine? {
         guard let madeWorkspace, let name = madeWorkspace.name, let runnerName else { return nil }
@@ -2641,6 +2646,10 @@ final class ConsoleModel {
         guard let session, session.id == sessionID else { return }
         conversationCreatedAt = session.createdAt
         // A list row carries no flag, so only the detail moves this; it never goes back to false.
+        if let agent = session.agent, agent.cloneState != nil {
+            cloneWorkspace = agent
+            cloneWorkspaceReadAt = Date()
+        }
         if session.createdWorkspace == true {
             madeWorkspace = session.agent
             madeWorkspaceReadAt = Date()
