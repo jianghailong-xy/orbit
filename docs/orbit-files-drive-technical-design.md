@@ -938,7 +938,7 @@ reason for an "outside the workspace" card.
 
 | Engine | Where | Change |
 |---|---|---|
-| Claude | `claude_spawn.go:151` | `--add-dir` for `/home/orbit/Files` and `/run/orbit-files/drive` beside the uploads folder, in every mode. Plan mode (`--permission-mode plan`) already refuses every edit and command, so the drive is readable and not writable. |
+| Claude | `claude_spawn.go:151` | `--add-dir` for `/home/orbit/Files` and `/run/orbit-files/drive` beside the uploads folder, in every mode. Plan mode (`--permission-mode plan`) does not refuse a write by itself: it asks its permission prompt about every Write, Edit and Bash call, so the runner refuses a drive write there (see below). |
 | Codex app-server | `codex_auto_policy.go:22` (`codexAutoApprovalContextFor`), `:31` (`codexRuntimeWorkspaceRoots`), `:48` (`codexSandboxPolicy`) | `/run/orbit-files` and both drive spellings join `workspaceRoots` (not `tempRoots`) and the Auto sandbox's `writableRoots`. Plan keeps its refusal of every write (`codex_appserver.go:1132`); the read-only subagent's `readOnly` sandbox still reads them. |
 | Codex exec | `codex.go:490` | `--add-dir` for `/run/orbit-files` beside the uploads folder. |
 | Cursor | `cursor_sandbox.go` (`detectCursorSandbox` roots) | `/run/orbit-files` (the parent, never the resolved `drive/`) joins the bwrap writable roots outside Plan; Plan's ACP mode refuses edits (`cursor_permissions.go:87`). |
@@ -946,6 +946,29 @@ reason for an "outside the workspace" card.
 | Antigravity | `antigravity_approval.go:597` | The approval policy gains a `Drive` root (`/run/orbit-files` and both spellings) beside `Uploads`, writable outside Plan. |
 | Background jobs | `background_socket.go:463` | `extraDirs` gains the drive. |
 | `file_upload`, reply files | `file_tools.go:577`, `session.go:865` | The drive joins the path rules (D20, D21). |
+
+How Plan keeps the drive read-only. No engine's Plan mode can be relied on to refuse every write by itself: Claude
+Code's Plan asks its permission prompt about each Write, Edit and Bash call, and an Allow on that card wrote the drive
+(walk [permission modes and container hardening](orbit-task:350KSODTF8PzMHyZ3bSxP), round 3); Kimi's plan mode asks
+about every shell call the same way. So wherever the runner answers an engine's permission request, a Plan-mode call
+that would write under `/home/orbit/Files`, `/run/orbit-files` or `/run/orbit-files/drive`, by any spelling (`~`,
+`$HOME`, a relative path or a link), is refused on the spot with "The Files drive is read-only in Plan mode", and no
+card is filed (`plan_drive.go`, `planDriveWrite`). The calls are Write, Edit, MultiEdit and NotebookEdit naming a path
+there, and a shell command that names a path there and is not a read-only command (a known reader such as `ls`, `cat`,
+`grep` or `find` without `-delete`/`-exec`, with no redirection into the drive and no command substitution). Reads are
+not refused, and every other path keeps the Plan behaviour it had.
+
+| Engine | Plan enforcement for the drive |
+|---|---|
+| Claude | `mcp.go` `permissionPrompt` refuses a drive write when the session's live mode is Plan, before any card; the PreToolUse hook (`hook_bg_guard.go`) refuses the same Bash command, so an allow rule that skips the prompt does not run it. |
+| Kimi | `kimiAutomaticPermissionOption` rejects a Plan-mode drive write ahead of the allow rules and the card. |
+| Cursor | Plan already rejects every request unasked; the drive check also comes ahead of a standing allow rule (`cursor_permissions.go`). |
+| Codex app-server | Plan answers every approval request itself with a refusal (`codexAutomaticApproval`), so none reaches a card. |
+| OpenCode | Plan denies `edit`, `write` and `patch`, and its `bash: ask` is rejected by non-interactive OpenCode; the runner mediates no approval. |
+| Antigravity | Plan runs `agy --mode plan` with no Orbit approval hook and no allow rule but Orbit's tools, so agy refuses the write itself. |
+| DeepSeek Harness | Has no Plan mode: a Plan session is refused before it starts. |
+
+The tests are `src/runner-go/plan_drive_test.go` (row 59*).
 
 Claude Default mode: a Default-mode edit in the drive asks exactly as the same edit in the checkout does, and nothing
 asks about leaving the workspace (§12 decision 2, as recommended). The walk
