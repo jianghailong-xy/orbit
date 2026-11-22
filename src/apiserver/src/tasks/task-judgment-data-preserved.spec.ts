@@ -3295,7 +3295,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1429 adds six nullable rating columns, a check on rating_score and an (owner_id, created_at) index on
       // subagent_run; no row is written, and no preserved relation, trigger, function or DONE fence changes.
       // Written as 1420 on its task branch, it was renumbered after main took 1420 to 1428.
-      '1429_subagent_run_rating'],
+      '1429_subagent_run_rating',
+      // 1432 drops 0130's claim index session_task_execution_claim_idx CONCURRENTLY (plan step 4.5, release B); 1426's
+      // index goes on enforcing one live run per task. Session is not a preserved relation, and no function, trigger,
+      // type, constraint or DONE fence changes. No INSERT, UPDATE or DELETE.
+      '1432_drop_session_task_execution_claim_idx'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

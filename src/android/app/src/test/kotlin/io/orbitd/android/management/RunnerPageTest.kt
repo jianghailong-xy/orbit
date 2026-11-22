@@ -562,7 +562,7 @@ class RunnerPageTest {
 
         assertEquals(SandboxFixView.Ready("Starts a session in orbit-develop on this machine, with Codex."),
             RunnerPage.sandboxFixView(runner()))
-        assertEquals(SandboxFixView.Fixing(AgentFixing("sandboxMissing", "codex", "s1", "w1", "orbit-develop")),
+        assertEquals(SandboxFixView.Fixing(AgentFixing("sandboxMissing", "codex", "s1", "w1", "orbit-dev")),
             RunnerPage.sandboxFixView(runner(fixing = fixingEntry("sandboxMissing", "codex"))))
         assertEquals(SandboxFixView.Handled("s2", "orbit-develop"), RunnerPage.sandboxFixView(runner(handled =
             """{"kind":"sandboxMissing","engine":"codex","sessionId":"s2","workspaceId":"w1","workspaceName":"orbit-develop","status":"SUCCEEDED"}""")))

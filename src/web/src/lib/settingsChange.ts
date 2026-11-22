@@ -111,7 +111,7 @@ export function keyPathLabel(key: TieredSettingKey): string | null {
 }
 
 const THEME_LABELS: Readonly<Record<string, string>> = { system: 'System', light: 'Light', dark: 'Dark' };
-const OPTIMIZE_LABELS: Readonly<Record<string, string>> = { cost: 'Cost', balance: 'Balance', intelligence: 'Intelligence' };
+export const OPTIMIZE_LABELS: Readonly<Record<string, string>> = { cost: 'Cost', balance: 'Balance', intelligence: 'Intelligence' };
 
 /** A value as the Settings page shows it: `Chinese (Simplified)`, not `zh-Hans`; `On`, not `true`. */
 export function settingValueLabel(key: TieredSettingKey, value: unknown): string {
