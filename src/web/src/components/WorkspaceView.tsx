@@ -581,6 +581,7 @@ import {
   isSessionTerminal,
   SESSION_ACTIVITY_WORD,
   sessionActivityOf,
+  sessionWaitingOnOf,
   sessionEndedBanner,
   sessionIsStarting,
   sessionLifecycleLabel,
@@ -1235,6 +1236,12 @@ const parkedWorkLabel = (s: any): ParkedWork | null => {
     : { text: bgRunningLabel(s.runningBgCount), kind, active: backgroundWorkIsActive(s) };
 };
 
+// A queued turn the server says is on hold (`waitingOn` HOLD: the dispatch pause, a paused account, an
+// unavailable provider) where the queue would otherwise say only "Queued": no gate of a runner names it.
+const holdWord = (s: any): string | null =>
+  sessionWaitingOnOf(s) === 'HOLD' && s.queuedReason === null ? ON_HOLD_LABEL : null;
+const ON_HOLD_LABEL = 'On hold';
+
 // The line shown under a session title. For a LIVE (openable) session that's working we
 // surface its current state — the tool in flight, that it's blocked on you, or a bare
 // "Running…" — so the row never collapses to just a title with no sign of progress.
@@ -1423,7 +1430,7 @@ export const sessionLine = (
       return { text: CAPACITY_HELD_LINE, tone: 'queued', hint: capacityHeldHint(s, machine, Date.now()) };
     // A runner draining for its update is the one queue word in the warning colour (board 2 ①): it
     // can last hours, and only the owner can shorten it.
-    return { text: held ?? queuedLabel(s), tone: !held && isRunnerUpdating(s) ? 'warning' : 'queued' };
+    return { text: held ?? holdWord(s) ?? queuedLabel(s), tone: !held && isRunnerUpdating(s) ? 'warning' : 'queued' };
   }
   // Parked (AWAITING_INPUT) but still doing background work — a sub-workspace and/or background
   // shells that outlive the turn — so it doesn't read as idle. A spawned sub-workspace parks the
@@ -1811,7 +1818,7 @@ export function statusLabel(session: any, watching?: string | null, machine?: st
   if ((session.pendingApprovals ?? 0) > 0) return waitingLabel(session);
   // Where `Waiting for your confirmation` would be, while the report is with its reviewer (§5 N3).
   if (session.confirmationUnderReview) return UNDER_REVIEW;
-  if (state === 'SUCCEEDED') return 'Succeeded';
+  if (state === 'SUCCEEDED') return 'Finished';
   if (waitingNoticeFor(session)) return startingLabel(session);
   if (isGenerating(session, state)) return 'Running';
   if (state === 'AWAITING_INPUT') {
@@ -1829,7 +1836,7 @@ export function statusLabel(session: any, watching?: string | null, machine?: st
   }
   if (state === 'INTERRUPTED') return 'Interrupted';
   if (state === 'ENDED') return 'Ended';
-  return claudeRegionHeldWords(session, machine) ?? queuedLabel(session); // PENDING
+  return claudeRegionHeldWords(session, machine) ?? holdWord(session) ?? queuedLabel(session); // PENDING
 }
 
 // What a failed session's glyph says — StatusIcon's FAILED tooltips, word for word: the error
@@ -1917,7 +1924,7 @@ export function StatusIcon({ session, watching, machine }: { session: any; watch
     );
   if (state === 'SUCCEEDED')
     return (
-      <Tooltip content="Succeeded">
+      <Tooltip content="Finished">
         <CheckCircleFilled style={{ color: 'var(--success-solid)', fontSize }} />
       </Tooltip>
     );
@@ -2013,7 +2020,7 @@ export function StatusIcon({ session, watching, machine }: { session: any; watch
     );
   // PENDING — waiting for an active turn slot, or held for the Claude region, as the row says.
   return (
-    <Tooltip content={claudeRegionHeldWords(session, machine) ?? queuedTitle(session)}>
+    <Tooltip content={claudeRegionHeldWords(session, machine) ?? holdWord(session) ?? queuedTitle(session)}>
       <ClockCircleOutlined style={{ color: 'var(--scrollbar-hover)', fontSize }} />
     </Tooltip>
   );

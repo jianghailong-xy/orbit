@@ -414,7 +414,8 @@ export const SESSION_TARGET_WORDS: Record<string, string> = {
   RUNNING: 'Running',
   AWAITING_INPUT: 'Waiting for your reply',
   INTERRUPTED: 'Interrupted',
-  SUCCEEDED: 'Succeeded',
+  // Decision D2: a session never "succeeds"; the run that finished its task's work is Finished.
+  SUCCEEDED: 'Finished',
   FAILED: 'Failed',
   ENDED: 'Ended',
 };

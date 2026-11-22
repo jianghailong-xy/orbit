@@ -11,9 +11,9 @@ import {
   sessionPhaseOf,
   sessionReleasedOf,
   sessionWaitingOnOf,
-  type SessionStateSource,
 } from './sessionState';
 import { followDelay, WORKING_POLL_MS } from '../pages/SharedSessionPage';
+import { held, olderServer, resumable, SITUATIONS, type Payload } from './sessionPhaseFields.fixture';
 
 /**
  * Plan step 5.2 (docs/session-three-state-plan.md §8): the web decides send versus resume, the wait after End
@@ -21,75 +21,6 @@ import { followDelay, WORKING_POLL_MS } from '../pages/SharedSessionPage';
  * fields exactly as before when an older control plane sends neither. Every situation below is the payload a
  * current server sends (legacy fields unchanged, beside the four new ones), and the same payload without them.
  */
-
-type Payload = SessionStateSource & {
-  id: string;
-  startedAt?: string | null;
-  capabilities?: {
-    canSend?: boolean;
-    canResume?: boolean;
-    resumeBlockedReason?: string | null;
-  };
-};
-
-const held = { canSend: true, canResume: false, resumeBlockedReason: 'NOT_TERMINAL' };
-const resumable = { canSend: true, canResume: true, resumeBlockedReason: null };
-
-/** The eight situations of the task, plus the two where the new fields and the old run state disagree. */
-const SITUATIONS: Record<string, Payload> = {
-  'held idle': {
-    id: 's', status: 'AWAITING_INPUT', runStatus: 'AWAITING_INPUT', runState: 'AWAITING_INPUT',
-    phase: 'IDLE', released: false, lastTurnOutcome: 'ANSWERED', waitingOn: null, capabilities: held,
-  },
-  'released by a failed turn': {
-    id: 's', status: 'FAILED', runStatus: 'FAILED', runState: 'FAILED', startedAt: '2026-11-22T00:00:00Z',
-    phase: 'IDLE', released: true, lastTurnOutcome: 'FAILED', waitingOn: null, capabilities: resumable,
-  },
-  'released by End': {
-    id: 's', status: 'CANCELLED', runStatus: 'CANCELLED', runState: 'ENDED', endReason: 'ended',
-    phase: 'IDLE', released: true, lastTurnOutcome: 'ANSWERED', waitingOn: null, capabilities: resumable,
-  },
-  'a task run that finished': {
-    id: 's', status: 'SUCCEEDED', runStatus: 'SUCCEEDED', runState: 'SUCCEEDED', endReason: 'task_done',
-    phase: 'IDLE', released: true, lastTurnOutcome: 'ANSWERED', waitingOn: null, capabilities: resumable,
-  },
-  'running a job with no turn': {
-    id: 's', status: 'AWAITING_INPUT', runStatus: 'AWAITING_INPUT', runState: 'AWAITING_INPUT',
-    activity: 'BACKGROUND_JOB',
-    phase: 'RUNNING', released: false, lastTurnOutcome: 'ANSWERED', waitingOn: null, capabilities: held,
-  },
-  'waiting on an approval': {
-    id: 's', status: 'RUNNING', runStatus: 'RUNNING', runState: 'RUNNING',
-    phase: 'RUNNING', released: false, lastTurnOutcome: null, waitingOn: 'PERSON', capabilities: held,
-  },
-  'on hold': {
-    id: 's', status: 'PENDING', runStatus: 'PENDING', runState: 'QUEUED', error: 'Account paused until 2099-01-01',
-    phase: 'PENDING', released: false, lastTurnOutcome: 'ANSWERED', waitingOn: 'HOLD', capabilities: held,
-  },
-  'will wake': {
-    id: 's', status: 'AWAITING_INPUT', runStatus: 'AWAITING_INPUT', runState: 'AWAITING_INPUT', activity: 'WAITING',
-    phase: 'IDLE', released: false, lastTurnOutcome: 'ANSWERED', waitingOn: 'WAKE', capabilities: held,
-  },
-  // An End asked of a session parked after an interrupted turn: the legacy run state already says ENDED, but no
-  // runner has let go yet (INTERRUPTED is a held status), so the server answers ENDING until the release lands.
-  'ending after an interrupted turn': {
-    id: 's', status: 'INTERRUPTED', runStatus: 'INTERRUPTED', runState: 'ENDED', endReason: 'ended',
-    phase: 'IDLE', released: false, lastTurnOutcome: 'INTERRUPTED', waitingOn: null,
-    capabilities: { canSend: false, canResume: false, resumeBlockedReason: 'ENDING' },
-  },
-  // A failed release with an automatic retry armed: released, and something will wake it.
-  'released with a retry armed': {
-    id: 's', status: 'FAILED', runStatus: 'FAILED', runState: 'FAILED', retryAt: '2099-01-01T00:00:00Z',
-    startedAt: '2026-11-22T00:00:00Z',
-    phase: 'IDLE', released: true, lastTurnOutcome: 'FAILED', waitingOn: 'WAKE', capabilities: resumable,
-  },
-};
-
-/** The same payload from a control plane that predates the four fields. */
-const olderServer = (payload: Payload): Payload => {
-  const { phase: _p, released: _r, lastTurnOutcome: _o, waitingOn: _w, ...rest } = payload;
-  return rest;
-};
 
 describe('the new-field readers', () => {
   it('read the server fields as sent', () => {
@@ -131,6 +62,8 @@ describe('send versus resume', () => {
     ['on hold', 'SEND', 'SEND'],
     ['will wake', 'SEND', 'SEND'],
     ['released with a retry armed', 'RESUME', 'RESUME'],
+    ['ended, runner never confirmed', 'RESUME', 'RESUME'],
+    ['old plain row stored SUCCEEDED', 'RESUME', 'RESUME'],
     // Still held: the message waits for the End to settle instead of opening a new session beside it. An older
     // server's run state called it ended and fell through to a new session.
     ['ending after an interrupted turn', 'BLOCK', 'CREATE'],
@@ -230,6 +163,8 @@ describe('polling stops', () => {
     ['on hold', true, WORKING_POLL_MS, true, WORKING_POLL_MS],
     ['will wake', true, WAITING, true, WAITING],
     ['released with a retry armed', false, null, false, null],
+    ['ended, runner never confirmed', false, null, false, null],
+    ['old plain row stored SUCCEEDED', false, null, false, null],
     // Held until the release lands, so it is still followed; the older reading stopped at once.
     ['ending after an interrupted turn', true, WAITING, false, null],
   ];

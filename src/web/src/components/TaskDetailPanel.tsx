@@ -128,7 +128,7 @@ export const SESSION_STATE_META: Record<SessionRunState, { label: string; tone: 
   // queuedLabel), not here.
   QUEUED: { label: QUEUED_LABEL, tone: 'muted' },
   RUNNING: { label: 'Running', tone: 'blue' },
-  SUCCEEDED: { label: 'Succeeded', tone: 'green' },
+  SUCCEEDED: { label: 'Finished', tone: 'green' },
   FAILED: { label: 'Failed', tone: 'red' },
   AWAITING_INPUT: { label: 'Awaiting reply', tone: 'amber' },
   INTERRUPTED: { label: 'Interrupted', tone: 'muted' },

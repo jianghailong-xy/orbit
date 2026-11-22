@@ -81,6 +81,8 @@ export interface SessionStateSource {
    *  server. Absent from an older control plane; see sessionPhaseOf, sessionReleasedOf. */
   phase?: string | null;
   released?: boolean | null;
+  /** `LANDING` for a landing container, whose release with no end reason finished its work. */
+  sessionKind?: string | null;
   lastTurnOutcome?: string | null;
   waitingOn?: string | null;
 }
@@ -190,6 +192,8 @@ const legacySessionRunState = (session: SessionStateSource): SessionRunState | n
  * exists. That ordering prevents a stale legacy COMPLETED value from overriding CANCELLED.
  */
 export function sessionRunStateOf(session: SessionStateSource): SessionRunState {
+  const fromFields = runStateFromPhaseFields(session);
+  if (fromFields) return fromFields;
   const explicit = normalizedValue<SessionRunState>(session.runState, SESSION_RUN_STATE_SET);
   if (explicit) return explicit;
 
@@ -221,6 +225,33 @@ export function sessionRunStateOf(session: SessionStateSource): SessionRunState 
       // Unknown future/legacy raw values must not accidentally look live or queued.
       return 'ENDED';
   }
+}
+
+/** Whether a released session finished its work: its task ended DONE, or it is a landing that settled
+ *  (the server's releaseFinishedTheWork). The only release worded "Finished" (decision D2). */
+export const sessionFinishedTheWork = (session: SessionStateSource): boolean =>
+  session.released === true &&
+  ((session.endReason ?? '') === 'task_done' ||
+    ((session.sessionKind ?? '') === 'LANDING' && !session.endReason));
+
+/**
+ * The run state a payload with the new fields reads as (contracts/session-state.contract.json), or null from an
+ * older control plane, which keeps the legacy reading below. A release is a failure only when the last turn failed
+ * and nobody asked for an end (decision D9); it finished the work only by sessionFinishedTheWork; any other release
+ * ended. A held session is queued, running, or parked: RUNNING with `activity` set is work outside a turn (a job, a
+ * sub-agent, the engine's own turn), which the parked branches of every surface already draw.
+ */
+function runStateFromPhaseFields(session: SessionStateSource): SessionRunState | null {
+  const phase = sessionPhaseOf(session);
+  if (!phase || typeof session.released !== 'boolean') return null;
+  const outcome = sessionLastTurnOutcomeOf(session);
+  if (session.released) {
+    if (!session.endReason && outcome === 'FAILED') return 'FAILED';
+    return sessionFinishedTheWork(session) ? 'SUCCEEDED' : 'ENDED';
+  }
+  if (phase === 'PENDING') return 'QUEUED';
+  if (phase === 'RUNNING') return session.activity ? 'AWAITING_INPUT' : 'RUNNING';
+  return outcome === 'INTERRUPTED' ? 'INTERRUPTED' : 'AWAITING_INPUT';
 }
 
 export type SessionLifecycleView = 'open' | 'completed' | 'trash';
@@ -262,7 +293,9 @@ const SESSION_ACTIVITIES: ReadonlySet<string> = new Set<SessionActivity>(['TURN'
 export const sessionActivityOf = (session: SessionStateSource): SessionActivity | null => {
   if (sessionRunStateOf(session) !== 'AWAITING_INPUT') return null;
   const value = (session.activity ?? '').toUpperCase();
-  return SESSION_ACTIVITIES.has(value) ? (value as SessionActivity) : null;
+  if (SESSION_ACTIVITIES.has(value)) return value as SessionActivity;
+  // The server's `waitingOn` says the same of a parked session a watch, wake-up or retry will give a turn.
+  return sessionWaitingOnOf(session) === 'WAKE' ? 'WAITING' : null;
 };
 
 /** The words for a parked session's activity, shared by every surface that says it. */
@@ -278,7 +311,9 @@ const SESSION_RUN_WORD: Record<SessionRunState, string> = {
   QUEUED: 'Queued',
   RUNNING: 'Running',
   AWAITING_INPUT: 'Awaiting reply',
-  SUCCEEDED: 'Succeeded',
+  // Decision D2: a session never "succeeds". The one release that finished its work is a task's run that
+  // ended DONE, or a settled landing (sessionFinishedTheWork).
+  SUCCEEDED: 'Finished',
   FAILED: 'Failed',
   INTERRUPTED: 'Interrupted',
   ENDED: 'Ended',
@@ -415,7 +450,10 @@ export function sessionEndedBanner(
   let base: string;
   switch (state) {
     case 'SUCCEEDED':
-      base = 'Session succeeded.';
+      base =
+        (session.endReason ?? '').toLowerCase() === 'task_done'
+          ? 'The linked task is done, so the session finished.'
+          : 'Session finished.';
       break;
     case 'FAILED':
       // Not "Session failed" while the server is going to re-send it: the card above this line
