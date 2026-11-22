@@ -112,7 +112,7 @@ test('listed_at moves only when the session changes for its owner', {
       maxConcurrent: 8, capabilities: [], capabilitiesReportedAt: new Date(), lastHeartbeatAt: new Date(),
     },
   });
-  await db.workspace.create({ data: { id: workspaceId, ownerId, runnerId, name: 'listed-at-ws', enabled: true } });
+  await db.workspace.create({ data: { id: workspaceId, ownerId, runnerId, name: 'listed-at-ws', enabled: true, workDir: '/tmp/listed-at' } });
   const runner = { id: runnerId, ownerId };
   const user = { userId: ownerId } as never;
 
