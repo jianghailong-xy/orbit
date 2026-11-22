@@ -652,8 +652,8 @@ test('a write to each LANDING-only source leaves every flat Open-list row as it 
     }],
     ['a promotion', () => db.projectPromotion.create({
       data: {
-        projectId: project.id, ownerId: f.ownerId, codebaseId, sourceKind: 'TASK', sourceRef: 'refs/heads/olv-d1',
-        upstreamRef: 'refs/heads/main', includedTaskIds: [task.id],
+        projectId: project.id, ownerId: f.ownerId, codebaseId, sourceKind: 'PROJECT_BRANCH', sourceRef: 'refs/heads/olv-d1',
+        upstreamRef: 'refs/heads/main', includedTaskIds: [],
       },
     })],
     ['an integration job', () => db.projectIntegrationJob.create({
