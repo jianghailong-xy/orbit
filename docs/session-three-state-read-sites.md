@@ -61,9 +61,11 @@ index are below, with what each does after the drop:
 - Comments only, describing the claim by the old name:
   - `projects/live-session-status.ts`, `sessions/sessions.service.ts`, `tasks/tasks.service.ts`;
   - web `lib/taskRunHandoff.ts`, macOS `App/TaskRunHandoff.swift`.
-- Specs: some match a refusal by substring, which the new name still meets (`tasks/project-budget-idle-session`,
-  `tasks/task-run-winner-recovery`). Others build the old index's error shape for a unit classifier
-  (`sessions/resume-lost-execution-claim`, `tasks/task-run-winner-recovery.spec`).
+- Specs:
+  - `tasks/project-budget-idle-session` matches a refusal by substring, which the new name still meets.
+  - `tasks/task-run-winner-recovery.pg.spec` pins the index name a real server reports, which is 1426's since
+    1432. The unit fixtures it holds to that pin (`tasks/task-run-winner-recovery.spec`,
+    `sessions/resume-lost-execution-claim`) carry the new name too.
 - `../scripts/session-claim-index-precheck.sql`, the pre-check for deploy 2, reads the old index by
   `::regclass` and errors once it is gone. Its successor is `../scripts/session-claim-index-drop-precheck.sql`.
 - Release A's spec puts 0130's index back before it re-runs 1426.
