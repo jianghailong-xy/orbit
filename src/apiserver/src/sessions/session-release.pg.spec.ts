@@ -179,18 +179,18 @@ async function released(sql: Client, id: string): Promise<Released> {
   return row;
 }
 
-function assertReleased(row: Released, status: string, why: string): void {
+function assertReleased(row: Released, status: string, why: string, failure?: boolean): void {
   assert.equal(row.status, status);
   assert.ok(row.finished_at instanceof Date, `${status}/${why}: the release column is set`);
   // The failure question (common/session-release.ts, design §12.3): released by a failure exactly when FAILED with no
   // end reason. W7 (removal step R4): FAILED with an end recorded, one somebody asked for and the runner never
-  // honoured, is a stop; while the cause was read, it was a failure. W5 (removal step R7): a failed import runs no
-  // turn, so it records no turn outcome, and goes to Trash; once the status bridge went it reads as a stop.
+  // honoured, is a stop; while the cause was read, it was a failure. `failure` names the cases removal step R7 (the
+  // status bridge gone) answers otherwise, each where it is called.
   const failed = releaseWasFailure({
     finishedAt: row.finished_at, endReason: row.end_reason, lastTurnOutcome: row.last_turn_outcome, status: row.status,
   });
-  assert.equal(failed, row.status === 'FAILED' && row.end_reason == null && why !== 'import_failed',
-    `${status}/${why}: read as a failure exactly when FAILED with no end reason, but for a failed import`);
+  assert.equal(failed, failure ?? (row.status === 'FAILED' && row.end_reason == null),
+    `${status}/${why}: read as a failure ${failure === undefined ? 'exactly when FAILED with no end reason' : `: ${failure}`}`);
 }
 
 /**
@@ -278,10 +278,12 @@ test('every release writes the release column and its cause, and the revive clea
       ok: false, error: 'transcript holds no conversation',
     });
     assert.equal(answer.failed, true);
-    assertReleased(await released(sql, id), 'FAILED', 'import_failed');
+    // W5 (removal step R7): a failed import runs no turn, so it records no turn outcome, and goes to Trash; once the
+    // status bridge went it reads as a stop.
+    assertReleased(await released(sql, id), 'FAILED', 'import_failed', false);
   });
 
-  await t.test('(5) the reaper\'s sweep: an end settled late keeps its reason, a cancel never honoured is a failure', async () => {
+  await t.test('(5) the reaper\'s sweep: an end settled late keeps its reason, a cancel never honoured is FAILED', async () => {
     const w = await world(s.db, 'reaper-end');
     const stale = new Date(Date.now() - 10 * 60_000);
     // A graceful end the runner never acknowledged, and a cancel that landed on a queued row.
@@ -304,8 +306,11 @@ test('every release writes the release column and its cause, and the revive clea
     assertReleased(await released(sql, ended), 'CANCELLED', 'ended');
     assertReleased(await released(sql, queued), 'CANCELLED', 'cancelled');
     const unhonouredRow = await released(sql, unhonoured);
-    assertReleased(unhonouredRow, 'FAILED', 'end_not_honored');
+    // W7 with no reason recorded (no current writer leaves one: every end request writes its reason): the turn the
+    // reaper cut off records CANCELLED, so once the status bridge went (R7) it reads as the stop W7's rule says.
+    assertReleased(unhonouredRow, 'FAILED', 'end_not_honored', false);
     assert.equal(unhonouredRow.end_reason, null, 'end_reason is written exactly as before: not at all');
+    assert.equal(unhonouredRow.last_turn_outcome, 'CANCELLED', 'the cut-off records CANCELLED');
     const deleteRow = await released(sql, deleteUnhonoured);
     assertReleased(deleteRow, 'FAILED', 'end_not_honored');
     assert.equal(deleteRow.end_reason, 'deleted', 'end_reason keeps the end that was asked for');
@@ -317,20 +322,24 @@ test('every release writes the release column and its cause, and the revive clea
     const forceFinalize = (s.reaper as unknown as {
       forceFinalize(id: string, runnerId: string, taskId: null, reason: string, opts: object): Promise<void>;
     }).forceFinalize.bind(s.reaper);
-    // As the sweep's three branches call it (reaper.service.ts): offline, runtime never up, API-error reply.
+    // As the sweep's three branches call it (reaper.service.ts): offline, runtime never up, API-error reply, each
+    // with the carrying turn's outcome it records (removal step R2).
     const lost = await session(s.db, w);
     await forceFinalize(lost, w.runnerId, null, 'runner offline', {
       expectedStatuses: [RunStatus.RUNNING], onlyIfNotCancelling: true,
+      carryingTurn: { outcome: 'FAILED', orLatest: false },
     });
     assertReleased(await released(sql, lost), 'FAILED', 'runner_lost');
     const neverUp = await session(s.db, w, { runtimeSessionId: null });
     await forceFinalize(neverUp, w.runnerId, null, 'claude runtime not initialized', {
       expectedStatuses: [RunStatus.RUNNING], onlyIfNotCancelling: true,
+      carryingTurn: { outcome: 'FAILED', orLatest: false },
     });
     assertReleased(await released(sql, neverUp), 'FAILED', 'setup_failed');
     const apiError = await session(s.db, w, { status: RunStatus.AWAITING_INPUT });
     await forceFinalize(apiError, w.runnerId, null, 'run failed (API error)', {
       expectedStatuses: [RunStatus.AWAITING_INPUT], onlyIfNotCancelling: true,
+      carryingTurn: { outcome: 'FAILED', orLatest: true },
     });
     assertReleased(await released(sql, apiError), 'FAILED', 'turn_failed');
   });
@@ -410,8 +419,11 @@ test('every release writes the release column and its cause, and the revive clea
         });
       }
     }
-    // Both backfills of this project, by prisma, on a database holding every row the cases above wrote.
-    await deployAgain(sql, url, ['1202_turn_outcome_backfill', '1262_session_release_backfill']);
+    // Both backfills of this project, by prisma, on a database holding every row the cases above wrote. 1262 writes
+    // release_cause, which 1431 (deploy 3) dropped, so 1261 runs again first to give the column back as 1262 met it,
+    // and 1431 drops it again after, leaving the database as every migration leaves it.
+    await deployAgain(sql, url, ['1202_turn_outcome_backfill', '1261_session_release_cause', '1262_session_release_backfill']);
+    await deployAgain(sql, url, ['1431_session_release_cause_drop']);
 
     for (const m of made) {
       const row = await released(sql, m.id);
