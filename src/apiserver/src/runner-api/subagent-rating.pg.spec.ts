@@ -96,6 +96,8 @@ test('subagent_rate: the parent rates its own run, and the Model tiers view read
         error: data.error ?? null, ...(data.createdAt ? { createdAt: data.createdAt } : {}),
         // A terminal status is a released session: session_release_fact_chk (1401/1402) wants finished_at with it.
         ...(['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(data.status ?? '') ? { finishedAt: data.createdAt ?? new Date() } : {}),
+        // A failure release carries FAILED on its turn (removal step R2), which is what reads it as one since R7.
+        ...(data.status === RunStatus.FAILED ? { lastTurnOutcome: 'FAILED' } : {}),
       },
     });
     return row.id;
