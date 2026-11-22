@@ -27,18 +27,24 @@ final class CloneWaitShotsTests: XCTestCase {
             ("pending", .init(state: .pending, progress: nil, repository: "acme/widgets")),
             ("cloning-42", .init(state: .cloning, progress: 42, repository: "acme/widgets")),
         ]
-        for (device, width) in [("mac", CGFloat(640)), ("phone", CGFloat(390))] {
+        for (device, width) in [("mac", CGFloat(900))] {
             for scheme in [ColorScheme.light, .dark] {
                 for (name, card) in cards {
                     for compact in [false, true] {
                         let view = CloneWaitCardView(card: card, machine: "HPC", compact: compact)
-                            .frame(width: width, height: compact ? 90 : 220)
+                            .frame(width: width, height: compact ? 90 : 360)
                             .background(Color(nsColor: .windowBackgroundColor))
-                            .environment(\.colorScheme, scheme)
-                        let r = ImageRenderer(content: view)
-                        r.scale = 2
-                        let tiff = try XCTUnwrap(r.nsImage?.tiffRepresentation)
-                        let png = try XCTUnwrap(NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]))
+                        // The real AppKit-hosted view, drawn the way a window draws it, so the spinner is the real one.
+                        let host = NSHostingView(rootView: view)
+                        host.frame = NSRect(x: 0, y: 0, width: width, height: compact ? 90 : 360)
+                        let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+                        window.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
+                        window.contentView = host
+                        host.layoutSubtreeIfNeeded()
+                        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+                        let rep = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+                        host.cacheDisplay(in: host.bounds, to: rep)
+                        let png = try XCTUnwrap(rep.representation(using: .png, properties: [:]))
                         try png.write(to: dir.appendingPathComponent("\(device)-\(scheme == .dark ? "dark" : "light")-\(name)-\(compact ? "compact" : "full").png"))
                     }
                 }
