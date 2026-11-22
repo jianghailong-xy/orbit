@@ -87,7 +87,7 @@ class StickyQuestionHeaderTest : ComposerShellTest() {
         compose.onNodeWithTag("transcript-list").performScrollToIndex(0)
         await { !has(capsule) }
 
-        compose.onNodeWithText("Jump to latest").performClick()
+        compose.onNodeWithContentDescription("Jump to latest").performClick()
         await { has(hasTestTag("event:30")) && !has(hasTestTag("transcript-jump")) }
         assertFalse("back at the tail, the bar's middle is empty again", has(capsule))
     }

@@ -36,6 +36,7 @@ import {
 } from '../projects/coordinator-pg-test-safety';
 import { SessionsService } from '../sessions/sessions.service';
 import type { ScheduleAlert } from './schedule-attention';
+import { scheduleBudgetStarts, scheduleOverBudget } from './schedule-start-check';
 import { SessionsScheduleRunPort } from './schedule-run-sessions';
 import { ScheduleRunsService, type ScheduleRunSessionPort } from './schedule-runs.service';
 import { SchedulesService, type ScheduleActor, type ScheduleCreateInput } from './schedules.service';
@@ -573,4 +574,50 @@ test('e. the owner\'s Run now inside a full week starts, and the next automatic 
   // The day after, the oldest slot has left the window: it runs again.
   const [next] = await nextSlot(s.id);
   assert.equal(next?.outcome, 'STARTED');
+});
+
+/** Six delivered runs in a week of a daily rule (envelope 7), then the owner's Run now on the 22nd, never delivered. */
+async function sixDeliveredThenUndeliveredPress(label: string) {
+  pushed = [];
+  at('2026-11-16T09:58:00Z');
+  const w = await world(label);
+  const s = await created(w, { rule: daily('10:00') });
+  assert.equal(s.envelopeRunsPerWeek, 7);
+  await noneMissed(s.id, await runSlots(w, s.id, 6));
+  at('2026-11-22T08:00:00Z');
+  const press = await runs.runNow(w.owner, s.id);
+  const pressed = await db.scheduleRun.findUniqueOrThrow({ where: { id: press.id } });
+  assert.equal(pressed.state, 'RUNNING');
+  assert.ok(pressed.startedAt && pressed.sessionId, 'the press opened a session');
+  assert.equal(await db.conversationTurn.count({ where: { sessionId: pressed.sessionId!, deliveredAt: { not: null } } }), 0, 'never delivered');
+  return { w, s, pressed };
+}
+
+test('f. six delivered runs plus a MISSED RUNNER_UNAVAILABLE run that never reached its engine: the next slot starts', { skip }, async () => {
+  const { s, pressed } = await sixDeliveredThenUndeliveredPress('budget-undelivered-missed');
+  // Five tries, none delivered, then MISSED: it keeps startedAt, as in production.
+  await db.scheduleRun.update({
+    where: { id: pressed.id },
+    data: { state: 'MISSED', failureReason: 'RUNNER_UNAVAILABLE', endedAt: advance(10 * MINUTE) },
+  });
+  const row = await db.scheduleRun.findUniqueOrThrow({ where: { id: pressed.id } });
+  assert.ok(row.startedAt, 'the missed run kept startedAt');
+  const [slot] = await nextSlot(s.id);
+  assert.equal(slot?.outcome, 'STARTED', 'an undelivered run does not cost the slot its place');
+});
+
+test('g. six delivered runs plus a RUNNING run not yet delivered: the next slot is OVER_BUDGET and the refusal reads the same count', { skip }, async () => {
+  const { w, s } = await sixDeliveredThenUndeliveredPress('budget-undelivered-live');
+  // A live run holds its place: a session's Run now is refused with 7 of 7.
+  await assert.rejects(runs.runNow(w.agent, s.id), (e) => {
+    assert.equal(code(e), 'SCHEDULE_OVER_BUDGET');
+    assert.match(message(e) ?? '', /has started 7 runs in the past 7 days; its owner allowed 7 a week/);
+    return true;
+  });
+  // The next slot (the 22nd, 10:00) is over budget. It would also wait behind the run in progress (start()'s busy
+  // check), so the budget is read the way start() reads it for that slot.
+  const slot = new Date('2026-11-22T10:00:00Z');
+  const schedule = await db.schedule.findUniqueOrThrow({ where: { id: s.id } });
+  assert.equal(await scheduleBudgetStarts(db, schedule, slot), 7, 'six delivered plus the live undelivered run');
+  assert.equal(await scheduleOverBudget(db, schedule, slot), true);
 });

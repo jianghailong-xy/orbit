@@ -87,6 +87,8 @@ object ManagedRunner {
         val canEnsure: Boolean,
         val canWake: Boolean,
         val canRetry: Boolean,
+        /** The runner runs an older build than the current image's (docs/managed-runner-update-now-design.md); null when current or unknown. */
+        val update: ManagedUpdate? = null,
     )
 
     data class Display(
@@ -134,6 +136,7 @@ object ManagedRunner {
             canEnsure = actions?.bool("canEnsure") == true,
             canWake = actions?.bool("canWake") == true,
             canRetry = actions?.bool("canRetry") == true,
+            update = ManagedRunnerUpdateLogic.update(o),
         )
     }
 

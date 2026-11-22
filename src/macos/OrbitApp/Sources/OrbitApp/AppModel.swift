@@ -3009,8 +3009,8 @@ final class AppModel {
                 return
             }
             await projects?.load()
-            showToast(SessionProjectCopy.projectPaused, subtitle: row.title,
-                      detail: SessionProjectCopy.pausedDetail(running: row.runningCount),
+            showToast(SessionProjectCopy.pausedTitle, subtitle: row.title,
+                      detail: SessionProjectCopy.pausedStill(running: row.runningCount),
                       icon: "pause.fill", undo: { [weak self] in self?.resumeProject(row) })
         }
     }
@@ -3035,8 +3035,8 @@ final class AppModel {
             }
             await projects?.load()
             if calls.contains(where: { if case .fuse = $0 { return true } else { return false } }) {
-                showToast(SessionProjectCopy.resumed, subtitle: row.title,
-                          detail: SessionProjectCopy.limitNotRaised, icon: "play.fill")
+                showToast(SessionProjectCopy.resumedTitle, subtitle: row.title,
+                          detail: SessionProjectCopy.resumedLimitNote, icon: "play.fill")
             }
         }
     }
@@ -3045,8 +3045,8 @@ final class AppModel {
         var status: Int?
         var body: String?
         if case APIError.http(let code, let text) = error { status = code; body = text }
-        showToast(SessionProjectCopy.pauseRefused(resuming: resuming), subtitle: row.title,
-                  detail: SessionProjectCopy.pauseRefusal(status: status, body: body, resuming: resuming),
+        showToast(SessionProjectCopy.refusedTitle(resuming: resuming), subtitle: row.title,
+                  detail: SessionProjectCopy.refusedReason(status: status, body: body, resuming: resuming),
                   tone: .error)
     }
 

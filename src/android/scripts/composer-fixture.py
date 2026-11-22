@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """A07 loopback contract fixture. Records authenticated requests and accepted state, not a deployment."""
+import base64
 import argparse, hashlib, json, re, socket, threading, time, uuid
 from email.parser import BytesParser
 from email.policy import default
@@ -20,9 +21,11 @@ class State:
         self.rows=[]; self.turns={}; self.attachments={}; self.calls=[]; self.attempts={}; self.controls=[]
         self.losses=0; self.uploadFailures=0; self.uploadDelay=0; self.denial=0; self.config={}; self.expired=False; self.rotation=0
         self.status='AWAITING_INPUT'; self.revision=0; self.creations=[]; self.downloads=[]; self.discussion=False
-        self.rejectTurnOnce=False; self.rejectTurnStatus=409
+        self.rejectTurnOnce=False; self.rejectTurnStatus=409; self.sendEvents=[]
         # A07c scenarios: fields over the session, the runner, the account's providers/pools, the retry door's answer.
         self.extraDetail={}; self.runnerExtra={}; self.providers=None; self.pools=[]; self.retryMessage={'text':'last failed message'}
+        # GET /users/me, for a scenario that needs the account's preferences (translation): None answers as before.
+        self.me=None
     def detail(self):
         return {'id':SESSION,'title':'Composer conversation','workspaceId':WORKSPACE,'assignedRunnerId':RUNNER,
             'status':self.status,'runState':self.status,'lifecycleState':'OPEN','provider':'codex','model':'fixture-model',
@@ -60,11 +63,13 @@ class Handler(BaseHTTPRequestHandler):
             with state.lock:
                 if body.get('reset'): state.reset()
                 for k in ['losses','uploadFailures','uploadDelay','denial','status','expired','discussion','rejectTurnOnce','rejectTurnStatus',
-                          'extraDetail','runnerExtra','providers','pools','retryMessage','rows']:
+                          'extraDetail','runnerExtra','providers','pools','retryMessage','rows','me']:
                     if k in body: setattr(state,k,body[k])
+                # Account events (a clone's `agent.changed` frame) to relay once on the next poll of /api/events.
+                state.sendEvents=state.sendEvents+body.get('events',[])
                 # Files a scenario's transcript links to, served as the attachments the app downloads.
                 for key,f in body.get('files',{}).items():
-                    data=f['text'].encode()
+                    data=base64.b64decode(f['base64']) if 'base64' in f else f['text'].encode()
                     state.attachments[key]={'name':f['name'],'mime':f['mime'],'size':len(data),'sha256':hashlib.sha256(data).hexdigest(),
                         'sessionId':SESSION,'bytes':data,'references':[]}
             return self.reply({'ok':True})
@@ -154,11 +159,15 @@ class Handler(BaseHTTPRequestHandler):
                         for row in list(state.rows):
                             if row['seq']>last_seq:
                                 self.wfile.write(b'data: '+encoded(row)+b'\n\n'); last_seq=row['seq']
+                    if path=='/api/events':
+                        with state.lock: pending,state.sendEvents=state.sendEvents,[]
+                        for event in pending: self.wfile.write(b'data: '+encoded(event)+b'\n\n')
                     value={'type':'session.updated','sessionId':SESSION,'data':{}} if path=='/api/events' and revision!=state.revision else {'type':'ping','seq':9007199254740991,'payload':{}}
                     revision=state.revision
                     self.wfile.write(b'data: '+encoded(value)+b'\n\n'); self.wfile.flush(); time.sleep(1)
             except (BrokenPipeError,ConnectionResetError): pass
             self.close_connection=True; return
+        if path=='/api/users/me' and state.me is not None: return self.reply(state.me)
         if path=='/api/workspaces': return self.reply([{'id':WORKSPACE,'name':'Composer fixture','runnerId':RUNNER,'enabled':True}])
         if path==f'/api/workspaces/{WORKSPACE}': return self.reply({'id':WORKSPACE,'name':'Composer fixture','runnerId':RUNNER,'provider':'codex','model':'fixture-model'})
         if path=='/api/sessions': return self.reply([state.detail()] if parse_qs(url.query).get('view',['open'])[0]=='open' else [])
