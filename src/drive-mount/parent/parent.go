@@ -12,6 +12,9 @@
 //     at once), kills the daemon and mounts again (row 54).
 //   - It answers the daemon's "which session is host pid P?" from /proc, for attribution (§5.8).
 //   - A daemon fenced by the door (exit 3) is not replaced: its instance was superseded (§8.2).
+//   - What a dead daemon left in its spool, the chunks of its open writes, is moved into unsent/ before another daemon
+//     starts on that spool (§6.1 "Restart and upgrade"): its writers were told by ENOTCONN or EIO, and the bytes stay
+//     readable to the agent for 24 h.
 package parent
 
 import (
@@ -58,7 +61,15 @@ type Config struct {
 	WatchdogDeadline time.Duration
 	// StopWait is how long a stopping daemon may take to commit its open writes (60 s).
 	StopWait time.Duration
-	Log      *log.Logger
+	// UnsentLimit bounds unsent/, as the daemon's --unsent-limit (1 GiB): what salvage moves there is held to it too.
+	UnsentLimit int64
+	// OnMount, when set, is called each time a daemon answers on a new mount: the CSI plugin publishes on the first.
+	OnMount func()
+	// KeepMountOnStop leaves the mount in place when ctx ends: the daemon is still stopped and commits what it can,
+	// and callers meet ENOTCONN until a later parent mounts again over it. The CSI plugin stops so when it is
+	// restarted or upgraded, and unmounts only on NodeUnpublishVolume (Detach).
+	KeepMountOnStop bool
+	Log             *log.Logger
 }
 
 func (c *Config) defaults() {
@@ -73,6 +84,9 @@ func (c *Config) defaults() {
 	}
 	if c.UID == 0 && c.GID == 0 {
 		c.UID, c.GID = 65532, 65532
+	}
+	if c.UnsentLimit == 0 {
+		c.UnsentLimit = 1 << 30
 	}
 	if c.Log == nil {
 		c.Log = log.New(os.Stderr, "orbit-files-mount: ", log.LstdFlags)
@@ -91,6 +105,9 @@ func Run(ctx context.Context, cfg Config) error {
 	who := newWhois(cfg.PodUID)
 	layers := 0
 	for attempt := 0; ; attempt++ {
+		if n := Salvage(cfg.Root, cfg.SpoolDir, cfg.UnsentLimit); n > 0 {
+			cfg.Log.Printf("moved %d spool chunks of a dead daemon into %s", n, filepath.Join(cfg.Root, "unsent"))
+		}
 		d, err := start(ctx, &cfg, who)
 		if err != nil {
 			cfg.Log.Printf("mount failed: %v", err)
@@ -102,6 +119,9 @@ func Run(ctx context.Context, cfg Config) error {
 			}
 		}
 		cfg.Log.Printf("mounted %s (daemon pid %d, connection %d)", cfg.MountPoint(), d.cmd.Process.Pid, d.conn)
+		if cfg.OnMount != nil {
+			cfg.OnMount()
+		}
 		missed := make(chan struct{}, 1)
 		watchCtx, stopWatch := context.WithCancel(ctx)
 		go watchdog(watchCtx, &cfg, missed)
@@ -109,7 +129,9 @@ func Run(ctx context.Context, cfg Config) error {
 		case <-ctx.Done():
 			stopWatch()
 			d.stop(cfg.StopWait)
-			detach(cfg.MountPoint())
+			if !cfg.KeepMountOnStop {
+				detach(cfg.MountPoint())
+			}
 			return nil
 		case <-d.exited:
 			stopWatch()
@@ -371,6 +393,12 @@ func mounted(mp string) bool {
 func abort(conn int) {
 	_ = os.WriteFile(fmt.Sprintf("/sys/fs/fuse/connections/%d/abort", conn), []byte("1"), 0o200)
 }
+
+// Detach lazily unmounts every mount stacked at mp.
+func Detach(mp string) { detach(mp) }
+
+// Mounted reports whether mp is a mount point.
+func Mounted(mp string) bool { return mounted(mp) }
 
 // detach lazily unmounts every mount stacked at mp.
 func detach(mp string) {

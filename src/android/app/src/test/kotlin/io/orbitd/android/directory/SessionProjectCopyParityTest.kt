@@ -77,6 +77,9 @@ class SessionProjectCopyParityTest {
      * session list draws; and the project page's status line before any count, its empty and its failed states, which the page here
      * draws outside this table (`statusLabel`, its own empty line, the shared StatusMessage). */
     private val notInThisTable = setOf("progressHint", "openCoordinator", "pageStatus", "pageEmpty", "pageUnread", "retry")
+    /** The project row's Pause and Resume words (§4.3), which Android keeps in [ProjectPauseCopy], not in this table. */
+    private val inProjectPauseCopy = setOf("pause", "resume", "pausedAtLimit", "pausedRuns", "pausedAgo", "pausedTitle", "pausedStill",
+        "undo", "resumedTitle", "resumedLimitNote", "refusedTitle", "refusedReason")
 
     /** Every word of the web's `SESSION_PROJECT_COPY` is held here or named above as not in this table: a word the web adds that
      * Android does not carry fails (OrbitKit's `testEveryWebWordIsHeldHereOrNamed`). */
@@ -84,10 +87,23 @@ class SessionProjectCopyParityTest {
         val table = web.substringAfter("export const SESSION_PROJECT_COPY = {", "").substringBefore("\n} as const;", "")
         val keys = Regex("^  (\\w+):", RegexOption.MULTILINE).findAll(table).map { it.groupValues[1] }.toList()
         assertTrue("no words read from SESSION_PROJECT_COPY", keys.isNotEmpty())
-        val unheld = keys.filter { it !in held && it !in notInThisTable }
+        val unheld = keys.filter { it !in held && it !in notInThisTable && it !in inProjectPauseCopy }
         assertTrue("SESSION_PROJECT_COPY says $unheld, which SessionProjectCopy neither holds nor names", unheld.isEmpty())
-        val gone = (held + notInThisTable - keys.toSet()).sorted()
+        val gone = (held + notInThisTable + inProjectPauseCopy - keys.toSet()).sorted()
         assertTrue("SESSION_PROJECT_COPY no longer says $gone", gone.isEmpty())
+    }
+
+    /** The Pause and Resume words [ProjectPauseCopy] holds are the web's, word for word. */
+    @Test fun thePauseWordsAreTheWebs() {
+        listOf("pause" to ProjectPauseCopy.pause, "resume" to ProjectPauseCopy.resume, "pausedTitle" to ProjectPauseCopy.pausedTitle,
+            "undo" to ProjectPauseCopy.undo, "resumedTitle" to ProjectPauseCopy.resumedTitle,
+            "resumedLimitNote" to ProjectPauseCopy.limitNotRaised,
+        ).forEach { (key, value) ->
+            assertTrue("sessionProjects.ts no longer says $key: '$value'", web.contains("  $key: '$value',"))
+        }
+        assertTrue(web.contains("`Paused at the daily limit · \${observed}/\${limit} today` : 'Paused at the daily limit'"))
+        assertEquals("Paused at the daily limit · 6/6 today", ProjectPauseCopy.pausedAtLimit(6, 6))
+        assertEquals("Paused at the daily limit", ProjectPauseCopy.pausedAtLimit(null, null))
     }
 
     /** The landing line's words: the count a server sends alone, several jobs, and the job's own state words. */

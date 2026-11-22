@@ -1,9 +1,10 @@
 import { Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { ControlEvent, ControlEventType, type ControlListChanged } from '@orbit/shared';
+import { createHash } from 'node:crypto';
 import { Observable } from 'rxjs';
 import type { PrismaService } from '../prisma/prisma.service';
-import { readOpenListVersion } from '../sessions/open-list-version';
+import { readOpenListVersionParts } from '../sessions/open-list-version';
 
 /** How often the account counters are summed, and so the soonest a hint follows a write. */
 export const LIST_CHANGED_COUNTER_EVERY_MS = 1_000;
@@ -22,8 +23,8 @@ interface Watched {
   streams: Set<Stream>;
   /** The account's counter total at the last read; undefined until the first one. */
   sum?: string;
-  /** The account's version at the last read; undefined until the first one. */
-  version?: string;
+  /** The clock part of the hint token at its last read (`hintClock`); undefined until the first one. */
+  clockPart?: string;
 }
 
 /**
@@ -33,10 +34,14 @@ interface Watched {
  * It does not depend on any write path publishing anything. Every table the Open list is built
  * from bumps the account's `open_list_epoch` counters (migrations 0484/0487), so this process sums
  * those counters once a second — one statement for every account it has a hinted stream of, however
- * many streams and devices that is — and reads the account's version when its total moved. What
+ * many streams and devices that is — and tells a stream when the total moved. What
  * moves only with the clock (a runner going offline, a job going quiet, a review window or an
- * escalation passing) moves no counter, so every 15 s the whole version (`readOpenListVersion`) is
- * read for each watched account as well.
+ * escalation passing) moves no counter, so every 15 s the clock part of the hint token is read for
+ * each watched account as well.
+ *
+ * What it compares is a hint token, not the list's version (docs/list-freshness-scope-hints.md §5.0):
+ * the counter sums and that clock part, which leaves out the runners' heartbeats and the runner
+ * columns outside `steady`. A second in which only counters moved reads nothing but the sums.
  *
  * What a stream was told is kept per stream, not per account. A new stream is told the current
  * version at the first tick after it subscribed, whether or not anything moved: a client reads its
@@ -127,10 +132,13 @@ export class OpenListHints {
         const moved = watched.sum !== sum;
         watched.sum = sum;
         const untold = [...watched.streams].some((stream) => stream.told === undefined);
-        if (moved || clock || untold || watched.version === undefined) {
-          watched.version = await readOpenListVersion(this.prisma, ownerId, Date.now());
+        // The counters moving does not read the version: the clock part is what the counters do not
+        // cover, and it is read on the clock tick and for a new stream only.
+        if (clock || untold || watched.clockPart === undefined) {
+          watched.clockPart = (await readOpenListVersionParts(this.prisma, ownerId, Date.now())).hintClock;
         }
-        const version = watched.version;
+        // Opaque to clients, which compare it with the previous hint's only.
+        const version = createHash('sha256').update(`${sum}|${watched.clockPart}`).digest('base64url').slice(0, 27);
         for (const stream of watched.streams) {
           if (stream.told === version) continue;
           stream.told = version;

@@ -10,6 +10,7 @@ system, at `/run/orbit-files/drive` on an Orbit Cloud runner, which the runner s
 | `door` | The door client: the mount credential and the managed-runner instance on every request, deadlines (9 s metadata, 60 s a chunk), offline after three failures in 10 s, or at once when a request passes its deadline with nothing answered while it waited, fencing on a superseded or revoked instance. |
 | `drivefs` | The file system: inode table, listings and lookups with the change feed's invalidations (`feed.go`), entry-bound write states with commit-on-close, `CONTINUE`/`OVERWRITE`/`APPEND` and the 64 KiB tail merge (`wfile.go`), the evict-and-refetch spool (`spool.go`), the chunk cache (`cache.go`), refusals and `errors.log`/`status.json`/`unsent/` (`report.go`), attribution (`attrib.go`). |
 | `parent` | The privileged parent of one runner's daemon: opens `/dev/fuse`, mounts `fuse.orbit-files` `nosuid,nodev,noexec,default_permissions,allow_other`, starts the daemon as uid 65532 with the descriptor (`/dev/fd/3`), the credential through a pipe and a socket for attribution; replaces a daemon that dies, and aborts and replaces one that freezes (the watchdog: a forced `statx` of the mount's root every 10 s, answered from memory, 5 s deadline). The CSI plugin (`files.orbit.dev`) runs this per runner. |
+| `csi` | `files.orbit.dev`, the CSI node plugin (`orbit-files-mount csi`): checks each publish (managed namespace, `{ runnerId }` only, the door's verdict on the Pod), runs one `parent` per runner as a uid of its own, binds the plain per-runner directory onto the kubelet's target, and adopts every published drive again after a restart. Manifests: `deploy/managed-runner/files-csi/`. |
 | `sandbox` | What the daemon applies to itself once mounted: `no_new_privs`, undumpable, and a seccomp filter refusing mounts, namespaces, tracing, modules, keys and BPF. |
 
 ## Running it
@@ -22,7 +23,8 @@ orbit-files-mount mount --root /var/lib/orbit-files/<runner> --spool /var/lib/or
 ```
 
 `--root` is the plain directory the runner Pod receives as `/run/orbit-files`; the drive is mounted at `<root>/drive`,
-and `errors.log`, `status.json` and `unsent/` are beside it. Every other flag is the daemon's (`orbit-files-mount serve
+and `errors.log`, `status.json` and `unsent/` are beside it. Before each daemon starts, the parent moves whatever a dead daemon left in the spool into `unsent/` (a
+daemon that stops cleanly leaves nothing there). Every other flag is the daemon's (`orbit-files-mount serve
 --help`): `--spool-limit` (4 GiB), `--cache-limit` (1 GiB), `--unsent-limit` (1 GiB), `--idle-commit` (30 s),
 `--max-commit-interval` (5 min), `--close-wait` (30 s), `--feed-wait` (15 s).
 
