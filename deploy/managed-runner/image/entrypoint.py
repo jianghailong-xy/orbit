@@ -13,6 +13,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 from urllib.parse import urlsplit
 
 # The user's persistent volume is mounted as the home directory itself.
@@ -31,6 +32,25 @@ MOVING_HOME = ".orbit-earlier-home"
 # What prepare() and a managed or enrolled start write before `orbit run`: all a start of this image on an earlier
 # volume could have left beside `home` without running anything.
 BOOTSTRAP_FILES = ("config.json", "container-identity.json", "container.lock", "managed-instance.json")
+# A home an image of today's layout without move_earlier_home ran in beside the earlier one, when it is still unused
+# (root_home_use): set aside, never deleted, so that the earlier home can take the root. Its entries move into
+# SETTING_ASIDE, whose existence says the set-aside is under way, and that folder is then named EMPTY_HOME and the
+# time it was set aside (UTC), where it stays.
+SETTING_ASIDE = ".orbit-setting-aside-home"
+EMPTY_HOME = ".orbit-empty-home-"
+# Where a runner keeps an engine's sign-in, relative to home: Claude Code's, Codex's, Kimi Code's, Antigravity's and
+# Cursor's, for the runner's own account and each one added on it (<ORBIT_HOME>/<engine>-accounts/<id>,
+# src/runner-go/account_slot.go). Anything at one of these paths is a sign-in, whatever it holds.
+SIGN_INS = (
+    ".claude/.credentials.json", ".orbit/claude-accounts/*/.credentials.json",
+    ".codex/auth.json", ".orbit/codex-accounts/*/auth.json",
+    ".kimi-code/credentials/*", ".orbit/kimi-accounts/*/credentials/*",
+    ".orbit/antigravity/google/antigravity-cli/antigravity-oauth-token",
+    ".orbit/antigravity-accounts/*/antigravity-cli/antigravity-oauth-token",
+    ".gemini/antigravity-cli/antigravity-oauth-token",
+    ".orbit/cursor/*/xdg-config/cursor/auth.json", ".orbit/cursor-accounts/*/xdg-config/cursor/auth.json",
+    ".config/cursor/auth.json", ".cursor/auth.json",
+)
 # The instance identity the Pod states through the Downward API; `orbit run` sends it with every
 # request (src/runner-go/managed_instance.go).
 INSTANCE_ENV = ("ORBIT_MANAGED_RUNNER_GENERATION", "ORBIT_MANAGED_RUNNER_POD_UID")
@@ -381,11 +401,11 @@ def earlier_home():
 def fresh_home_beside(home):
     """Today's folders beside the earlier home, when they hold nothing a runner wrote: only folders, and in .orbit the
     bootstrap's own files. A start of a pre-move image of today's layout leaves that and nothing more before it runs;
-    the earlier home is the runner's and this is not. None when anything else is there: a home this image has run in
-    is not replaced."""
+    the earlier home is the runner's and this is not. None when anything else is there: a home this image has run in,
+    which root_home_use weighs."""
     found = []
     for path in ROOT.iterdir():
-        if path.name in ("home", "lost+found"):
+        if path.name in ("home", "lost+found") or path.name.startswith(EMPTY_HOME):
             continue
         if path.name not in (".orbit", ".codex", ".claude", "orbit-repos") or path.is_symlink() or not path.is_dir():
             return None
@@ -398,6 +418,68 @@ def fresh_home_beside(home):
     return found
 
 
+def first_file(path):
+    """The first entry under path that is not a folder (a file, a link, anything else), or None: folders alone are
+    what a start makes for a workspace before anything is put in it."""
+    if path.is_symlink() or not path.is_dir():
+        return path
+    for parent, folders, files in os.walk(path):
+        for name in (*files, *folders):
+            entry = Path(parent) / name
+            if name in files or entry.is_symlink():
+                return entry
+    return None
+
+
+def root_home_use():
+    """What says the home at the volume root has been used, beside an earlier home in `home`, or None when it is
+    still UNUSED. The rule (owner, 2026-11-22), with `home` and lost+found left out of the root home:
+      - a sign-in: anything at one of SIGN_INS (an engine's credential, the runner's own account or an added one);
+      - a workspace file: anything but folders under a folder at the root whose name does not start with `.`, which
+        is orbit-repos and every workspace's stored path under home (migration 0980 named them /home/orbit/...), or
+        under .orbit/worktrees, the sessions' checkouts. Empty folders are what a start makes before any work.
+    Nothing else counts: conversations, logs, the runner's state and the engines' settings an unused start writes
+    go with the home when it is set aside. A workspace stored under a hidden folder of home is not looked at."""
+    for pattern in SIGN_INS:
+        found = next(ROOT.glob(pattern), None)
+        if found is not None:
+            return f"a sign-in at {found}"
+    for path in sorted(ROOT.iterdir()):
+        if path.name in ("home", "lost+found") or path.name.startswith("."):
+            continue
+        found = first_file(path)
+        if found is not None:
+            return f"a workspace file at {found}"
+    worktrees = ROOT / ".orbit" / "worktrees"
+    if worktrees.exists() or worktrees.is_symlink():
+        found = first_file(worktrees)
+        if found is not None:
+            return f"a workspace file at {found}"
+    return None
+
+
+def set_aside_root_home(aside):
+    """Move every entry of the root home but `home` and lost+found into aside, one durable rename at a time (.orbit
+    last), then name aside EMPTY_HOME and the time. A start stopped half-way carries on from where it stopped."""
+    for path in sorted(ROOT.iterdir(), key=lambda entry: (entry.name == ".orbit", entry.name)):
+        if path.name in ("home", "lost+found", SETTING_ASIDE) or path.name.startswith(EMPTY_HOME):
+            continue
+        target = aside / path.name
+        if target.exists() or target.is_symlink():
+            raise ValueError(f"{target} is in the way of the root home's {path.name}; move it to finish setting the "
+                             f"root home aside in {aside}")
+        os.rename(path, target)
+        fsync_directory(ROOT)
+        fsync_directory(aside)
+    named = ROOT / (EMPTY_HOME + time.strftime("%Y%m%dT%H%M%SZ", time.gmtime()))
+    if named.exists() or named.is_symlink():
+        raise ValueError(f"{named} is in the way of the root home set aside in {aside}")
+    os.rename(aside, named)
+    fsync_directory(ROOT)
+    print(f"orbit-container: the unused home at the volume root is set aside in {named}; the earlier image's home "
+          "takes its place", file=sys.stderr)
+
+
 def move_earlier_home():
     """Move the home an earlier image left in `home` to the volume root, which is home now, before anything else
     touches the volume. Under the volume lock: the earlier home's own lock file, which moves with its .orbit and stays
@@ -405,10 +487,13 @@ def move_earlier_home():
 
     Each step is a rename, made durable before the next, and a start stopped half-way finishes on the next one:
     `home` is first set aside as MOVING_HOME, its entries then move out one by one (.orbit last), the paths this image
-    reads are rewritten, and the empty MOVING_HOME goes last. Folders this image made beside `home` before it moved
-    anything are removed first; a home it has run in is left as it is, and so is `home`, with a warning.
+    reads are rewritten, and the empty MOVING_HOME goes last. Before that, whatever this image left at the root:
+    folders it made before it ran anything are removed; a home it ran in that is still unused (root_home_use) is set
+    aside in a dated EMPTY_HOME folder, never deleted (set_aside_root_home); a home with any real use is left as it
+    is, and so is `home`, with a warning that names the use.
     """
     moving = ROOT / MOVING_HOME
+    aside = ROOT / SETTING_ASIDE
     if not moving.exists() and not moving.is_symlink():
         home = earlier_home()
         if home is None:
@@ -417,15 +502,25 @@ def move_earlier_home():
         private_path(home / ".orbit", directory=True)
         lock_fd = lock_volume(home / ".orbit")
         try:
-            fresh = fresh_home_beside(home)
+            setting_aside = aside.exists() or aside.is_symlink()
+            fresh = [] if setting_aside else fresh_home_beside(home)
             if fresh is None:
-                print(f"orbit-container: this volume holds an earlier image's home in {home} and a home this image "
-                      "has run in; it starts on the second and leaves the first as it is", file=sys.stderr)
-                os.close(lock_fd)
-                return None
+                use = root_home_use()
+                if use is not None:
+                    print(f"orbit-container: this volume holds an earlier image's home in {home} and a home this image "
+                          f"has run in ({use}); it starts on the second and leaves the first as it is", file=sys.stderr)
+                    os.close(lock_fd)
+                    return None
             if (ROOT / ".orbit" / "container.lock").exists():
                 os.close(lock_volume(ROOT / ".orbit"))  # Nothing runs on the folders about to go.
-            for path in fresh:
+            if fresh is None:
+                aside.mkdir(mode=0o700)
+                fsync_directory(ROOT)
+                setting_aside = True
+            if setting_aside:
+                private_path(aside, directory=True)
+                set_aside_root_home(aside)
+            for path in fresh or ():
                 shutil.rmtree(path)
             fsync_directory(ROOT)
             os.rename(home, moving)

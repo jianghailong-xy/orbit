@@ -169,7 +169,9 @@ the volume lock and one durable rename at a time (`move_earlier_home`; owner 202
 2026-11-17 choice to discard those volumes). It rewrites the config's work directory and renames Claude
 Code's conversation folders to today's paths. The image keeps `/var/lib/orbit/home` as a link to
 `/home/orbit`, so the paths the old home recorded inside itself still resolve. A volume that also holds a
-home this image has already run in keeps that one, and the old `home` folder is left in place.) The managed image uses
+home this image has already run in keeps that one, and the old `home` folder is left in place, unless that home
+is still unused (no engine sign-in, no workspace file): then it is set aside in a dated `.orbit-empty-home-<ts>`
+folder and the old home moves to the root (owner 2026-11-22; the rule is in deploy/managed-runner/README.md).) The managed image uses
 the following fixed absolute locations on every node and image rebuild:
 
 | Location or environment | Data to retain |

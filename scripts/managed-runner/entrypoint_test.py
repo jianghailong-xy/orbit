@@ -749,21 +749,146 @@ class EarlierHomeTest(ManagedBootstrapFixture):
         self.started_env()
         self.assert_moved(files)
 
-    def test_a_home_this_image_has_run_in_is_kept_and_the_earlier_one_left(self):
-        self.earlier_volume()
-        self.runner.prepare()
-        conversation = self.runner.ROOT / ".claude/projects/-home-orbit-orbit-repos-x/today.jsonl"
-        conversation.parent.mkdir(parents=True)
-        conversation.write_text("held in today's home")
+    MIDDLE_POD_UID = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d"
+
+    def unused_root_home(self):
+        """What a start of an image of today's layout without move_earlier_home left at the root once it ran beside the
+        earlier home: its config and markers for the same runner, the runner's state and logs, the engines' settings,
+        a conversation of a turn it carried on, the folder of the workspace at its stored path and the store Kimi's
+        sign-in would go in, both empty, an empty session checkout folder: no sign-in and no workspace file."""
+        root = self.runner.ROOT
+        files = {
+            ".orbit/config.json": json.dumps(
+                {"serverUrl": "https://control.example.test", "runnerId": RUNNER_ID, "runnerToken": "empty-home-credential",
+                 "name": "Orbit Cloud", "labels": [], "maxConcurrent": 1, "workDir": str(root / "orbit-repos"),
+                 "autoInstallEngines": False}, sort_keys=True),
+            ".orbit/container-identity.json": json.dumps(
+                {"layoutVersion": 1, "runnerId": RUNNER_ID, "serverUrl": "https://control.example.test",
+                 "workDir": str(root / "orbit-repos")}, sort_keys=True),
+            ".orbit/managed-instance.json": json.dumps({"runnerId": RUNNER_ID, "generation": 1,
+                                                        "podUid": self.MIDDLE_POD_UID}),
+            ".orbit/container.lock": "",
+            ".orbit/runs/session-1/meta.json": json.dumps({"sessionUuid": self.CONVERSATION}),
+            ".orbit/logs/runner.log": "started on an empty home\n",
+            ".claude.json": "{}",
+            f".claude/projects/-home-orbit-update-now-it/{self.CONVERSATION}.jsonl": "rebuilt in the empty home\n",
+            ".codex/config.toml": "",
+        }
+        for name, content in files.items():
+            path = root / name
+            path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            path.write_text(content)
+            path.chmod(0o600)
+        for name in ("orbit-repos", "update-now-it", ".orbit/worktrees/session-1", ".kimi-code/credentials"):
+            (root / name).mkdir(parents=True, exist_ok=True, mode=0o700)
+        return files
+
+    def set_aside(self):
+        return [path for path in self.runner.ROOT.iterdir() if path.name.startswith(self.runner.EMPTY_HOME)]
+
+    def assert_set_aside(self, files):
+        root = self.runner.ROOT
+        aside = self.set_aside()
+        self.assertEqual(len(aside), 1, f"one folder the unused home is set aside in: {sorted(root.iterdir())}")
+        self.assertRegex(aside[0].name, r"^\.orbit-empty-home-[0-9]{8}T[0-9]{6}Z$")
+        self.assertFalse((root / self.runner.SETTING_ASIDE).exists())
+        for name, content in files.items():
+            self.assertEqual((aside[0] / name).read_text(), content, f"{name}, set aside and not deleted")
+        for name in ("orbit-repos", "update-now-it", ".orbit/worktrees/session-1", ".kimi-code/credentials"):
+            self.assertTrue((aside[0] / name).is_dir(), name)
+        self.assertFalse((root / "update-now-it").exists(), "the empty home's workspace folder went with it")
+
+    def reset_volume(self):
+        shutil.rmtree(self.runner.ROOT)
+        self.runner.ROOT.mkdir(mode=0o700)
+
+    def test_an_unused_root_home_is_set_aside_and_the_earlier_home_moved_to_the_root(self):
+        files = self.earlier_volume()
+        unused = self.unused_root_home()
         with redirect_stderr(io.StringIO()) as err:
             self.started_env()
-        self.assertIn("leaves the first as it is", err.getvalue())
-        self.assertEqual(conversation.read_text(), "held in today's home")
-        self.assertEqual(json.loads(self.config.read_text())["name"], "Orbit Cloud", "today's home, as before")
+        self.assertIn("set aside in", err.getvalue())
+        self.assertNotIn("leaves the first as it is", err.getvalue())
+        self.assert_moved(files)
+        self.assert_set_aside(unused)
+        self.assertEqual(json.loads((self.orbit / "managed-instance.json").read_text())["podUid"],
+                         "9e8d7c6b-5a49-4382-9716-152433221100", "the earlier home's marker, for this Pod")
+
+    def test_a_used_root_home_is_kept_and_the_earlier_one_left_with_a_warning(self):
+        uses = {
+            "a sign-in at": (".claude/.credentials.json", ".orbit/claude-accounts/a1/.credentials.json", ".codex/auth.json",
+                             ".orbit/codex-accounts/a1/auth.json", ".kimi-code/credentials/kimi-code.json",
+                             ".orbit/kimi-accounts/a1/credentials/kimi-code.json",
+                             ".orbit/antigravity/google/antigravity-cli/antigravity-oauth-token",
+                             ".orbit/antigravity-accounts/a1/antigravity-cli/antigravity-oauth-token",
+                             ".orbit/cursor/default/xdg-config/cursor/auth.json",
+                             ".orbit/cursor-accounts/a1/xdg-config/cursor/auth.json"),
+            "a workspace file at": ("update-now-it/README.md", "orbit-repos/project/README.md",
+                                    "projects/deep/workspace/notes.txt", ".orbit/worktrees/session-1/main.go"),
+        }
+        for kind, names in uses.items():
+            for name in names:
+                with self.subTest(use=name):
+                    self.reset_volume()
+                    self.foreground.reset_mock()
+                    self.earlier_volume()
+                    self.unused_root_home()
+                    use = self.runner.ROOT / name
+                    use.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+                    use.write_text("real use")
+                    with redirect_stderr(io.StringIO()) as err:
+                        self.started_env()
+                    self.assertIn("leaves the first as it is", err.getvalue())
+                    self.assertIn(f"({kind} {use})", err.getvalue())
+                    self.assertEqual(use.read_text(), "real use")
+                    self.assertEqual(json.loads(self.config.read_text())["name"], "Orbit Cloud", "today's home, as before")
+                    self.assertTrue((self.runner.ROOT / "home/.orbit/config.json").is_file())
+                    self.assertFalse((self.runner.ROOT / self.runner.MOVING_HOME).exists())
+                    self.assertFalse((self.runner.ROOT / self.runner.SETTING_ASIDE).exists())
+                    self.assertEqual(self.set_aside(), [])
+
+    def test_a_link_in_a_workspace_is_a_use(self):
+        self.earlier_volume()
+        self.unused_root_home()
+        (self.runner.ROOT / "update-now-it/src").symlink_to("/elsewhere")
+        with redirect_stderr(io.StringIO()) as err:
+            self.started_env()
+        self.assertIn("a workspace file at", err.getvalue())
         self.assertTrue((self.runner.ROOT / "home/.orbit/config.json").is_file())
-        self.assertFalse((self.runner.ROOT / self.runner.MOVING_HOME).exists())
+
+    def test_a_runner_holding_the_root_home_s_lock_stops_the_set_aside(self):
+        self.earlier_volume()
+        self.unused_root_home()
+        holder = os.open(self.orbit / "container.lock", os.O_RDWR)
+        self.addCleanup(os.close, holder)
+        fcntl.flock(holder, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        self.assert_refused()
+        self.assertTrue((self.runner.ROOT / "home/.orbit/config.json").is_file())
+        self.assertEqual(json.loads(self.config.read_text())["name"], "Orbit Cloud")
+        self.assertFalse((self.runner.ROOT / self.runner.SETTING_ASIDE).exists())
+
+    def test_a_recovered_volume_starts_again_without_moving_anything(self):
+        files = self.earlier_volume()
+        unused = self.unused_root_home()
+        self.started_env()
+        aside = self.set_aside()
+        listing = sorted(str(path.relative_to(self.runner.ROOT)) for path in self.runner.ROOT.rglob("*"))
+        self.foreground.reset_mock()
+        with redirect_stderr(io.StringIO()) as err:
+            self.started_env()
+        self.assertEqual(err.getvalue(), "")
+        self.assertEqual(self.set_aside(), aside)
+        self.assertEqual(sorted(str(path.relative_to(self.runner.ROOT)) for path in self.runner.ROOT.rglob("*")), listing)
+        self.assert_moved(files)
+        self.assert_set_aside(unused)
 
     def test_a_start_stopped_at_any_step_finishes_the_move_on_the_next(self):
+        self.stop_at_every_rename(lambda: (self.earlier_volume(), None))
+
+    def test_a_start_stopped_at_any_step_finishes_setting_aside_and_the_move_on_the_next(self):
+        self.stop_at_every_rename(lambda: (self.earlier_volume(), self.unused_root_home()))
+
+    def stop_at_every_rename(self, volume):
         rename = os.rename
         steps = 0
 
@@ -772,15 +897,17 @@ class EarlierHomeTest(ManagedBootstrapFixture):
             steps += 1
             rename(*args)
 
-        files = self.earlier_volume()
-        with mock.patch.object(self.runner.os, "rename", side_effect=counting):
+        files, unused = volume()
+        with mock.patch.object(self.runner.os, "rename", side_effect=counting), redirect_stderr(io.StringIO()):
             self.started_env()
-        self.assertGreater(steps, 3)
+        # The move's renames, and with an unused home each of its root entries' and the dated folder's before them.
+        entries = {name.split("/")[0] for name in unused or ()} | ({"orbit-repos", "update-now-it", ".kimi-code"}
+                                                                   if unused else set())
+        self.assertGreater(steps, 3 + len(entries) + bool(unused))
         for stop_at in range(1, steps + 1):
             with self.subTest(stop_at=stop_at):
-                shutil.rmtree(self.runner.ROOT)
-                self.runner.ROOT.mkdir(mode=0o700)
-                files = self.earlier_volume()
+                self.reset_volume()
+                files, unused = volume()
                 done = 0
 
                 def stopped(*args):
@@ -791,12 +918,18 @@ class EarlierHomeTest(ManagedBootstrapFixture):
                     rename(*args)
 
                 self.foreground.reset_mock()
-                with mock.patch.object(self.runner.os, "rename", side_effect=stopped):
+                with mock.patch.object(self.runner.os, "rename", side_effect=stopped), redirect_stderr(io.StringIO()):
                     with self.assertRaises(OSError):
                         self.runner.main(["run"])
                 self.foreground.assert_not_called()
-                self.started_env()
+                with redirect_stderr(io.StringIO()) as err:
+                    self.started_env()
+                self.assertNotIn("leaves the first as it is", err.getvalue())
                 self.assert_moved(files)
+                if unused:
+                    self.assert_set_aside(unused)
+                else:
+                    self.assertEqual(self.set_aside(), [])
 
     def test_a_folder_called_home_on_today_s_volume_is_not_an_earlier_home(self):
         self.runner.prepare()
