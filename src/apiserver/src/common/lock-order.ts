@@ -397,8 +397,10 @@ export const LOCK_ORDER_COMPATIBLE = [
       '(owner, source), held to commit, it was both: writers of one account queued on it, and two ' +
       'taking two counters in opposite write orders deadlocked (open-list-version.pg.spec.ts). ' +
       'Some UPDATEs bump nothing at all: a landing\'s renewal (0512), a watch\'s clock (0641), and a ' +
-      'session or conversation_turn write that changes only columns no Open list reads (1420). Each ' +
-      'decides that by comparing the statement\'s transition tables, which takes no lock, so a ' +
+      'session or conversation_turn write that changes only columns no Open list reads (1420), and a ' +
+      'workspace write of a heartbeat\'s directory and disk probe alone (1423). Each decides that by ' +
+      'comparing the statement\'s transition tables — 1423 also reads, without a lock, the ' +
+      'workspace\'s PENDING sessions and their runners\' disk floors when its free bytes moved — so a ' +
       'skipped bump only removes the one lock above, never adds one.',
   },
 ] as const;

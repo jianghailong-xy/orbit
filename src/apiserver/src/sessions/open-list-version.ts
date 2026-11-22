@@ -216,6 +216,21 @@ export const OPEN_LIST_UNDRAWN_TURN_COLUMNS = [
   'wiki_context', 'coordinator_context_key',
 ] as const;
 
+/**
+ * The `workspace` columns a runner heartbeat's directory and disk probe writes, none of which an Open
+ * list draws (migration 1423_open_list_workspace_probes, `open_list_bump_owner`): the row reads a
+ * workspace's id, name, model and effort, and the queued gates its clone_state and, against the
+ * floor of a never-started PENDING session's runner, its free bytes. So an UPDATE that changes only
+ * these moves no counter, except a free-bytes change that flips that disk gate's verdict
+ * (common/runner-disk-gate.ts `sessionDiskHoldSql`), which the function bumps on by itself
+ * (`open-list-workspace-probes.pg.spec.ts`). A column the list starts to read must leave this list
+ * and that function.
+ */
+export const OPEN_LIST_UNDRAWN_WORKSPACE_COLUMNS = [
+  'work_dir_exists', 'work_dir_is_git', 'work_dir_probed_at', 'work_dir_free_bytes', 'work_dir_total_bytes',
+  'repo_url',
+] as const;
+
 /** The views the version answers for: Open, and its legacy alias. */
 export function isOpenListView(view: string | undefined): boolean {
   return view === undefined || view === 'open' || view === 'active';

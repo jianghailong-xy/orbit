@@ -3255,7 +3255,14 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1411 (renumbered from a second 1410) adds three nullable columns on coordinator_handoff (what a handoff's
       // successor runs on); no row is written, and coordinator_handoff is not a preserved relation — no trigger,
       // function or DONE fence changes.
-      '1411_coordinator_handoff_successor'],
+      '1411_coordinator_handoff_successor',
+      // 1420 only replaces 0487's `open_list_bump_session` and `open_list_bump_via_session`, and 1423 0512's
+      // `open_list_bump_owner`, so that an UPDATE changing only columns no Open list reads bumps no Open-list counter
+      // (a session's or a turn's bookkeeping; a workspace's heartbeat probe). No table, column, constraint or trigger
+      // is created, altered or dropped; the functions write `open_list_epoch` alone, and none of the six preserved
+      // triggers/functions is named or replaced. No INSERT, UPDATE or DELETE runs at apply time.
+      '1420_open_list_undrawn_writes',
+      '1423_open_list_workspace_probes'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
