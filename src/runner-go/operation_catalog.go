@@ -47,6 +47,7 @@ const (
 	objectTask          operationObject = "task"
 	objectTaskList      operationObject = "task_list"
 	objectProject       operationObject = "project"
+	objectSubagent      operationObject = "subagent"
 	objectSession       operationObject = "session"
 	objectAgent         operationObject = "agent"
 	objectRunner        operationObject = "runner"
@@ -338,6 +339,7 @@ var catalogPlanRunsWrites = map[string]string{
 	"watch_create":           "waits on Orbit's own work for this session; a wait changes no work",
 	"watch_update":           "changes what this session waits for, and nothing else",
 	"watch_cancel":           "stops a wait of this session's own",
+	"subagent_rate":          "records what this session made of a SubAgent's result; it changes no work",
 	"schedule_wakeup":        "schedules this session's own next turn; it changes no work",
 	"notify":                 "puts a line in front of the owner; a message is not work",
 	"ask_owner":              "puts a question to the owner; a question is not work",
@@ -2786,6 +2788,23 @@ func buildOperationCatalog() []*operation {
 			}, "message"),
 		},
 		{
+			"name":        "subagent_rate",
+			"description": subagentRateDescription,
+			"inputSchema": obj(map[string]interface{}{
+				"runId": map[string]interface{}{
+					"type": "string", "description": "The runId returned by delegate.",
+				},
+				"score": map[string]interface{}{
+					"type": "integer", "minimum": 1, "maximum": 5,
+					"description": "How useful the result was, from 1 (discarded or redone) to 5 (used as-is).",
+				},
+				"note": map[string]interface{}{
+					"type": "string", "maxLength": maxSubagentRatingNoteChars,
+					"description": "A short reason for the score.",
+				},
+			}, "runId", "score"),
+		},
+		{
 			"name": "schedule_wakeup",
 			"description": "Wake this session later, once or on a loop. Orbit's server holds the timer: when it is due, " +
 				"a turn starts in this session carrying your reason and prompt — even if this engine was recycled or the " +
@@ -4545,6 +4564,7 @@ func finishOperationCatalog(ops []*operation) []*operation {
 		{"wiki", wikiCLICapabilities},
 		{"wiki", wikiImportCLICapabilities},
 		{"file", fileCLICapabilities},
+		{"subagent", subagentCLICapabilities},
 		{"settings", settingsCLICapabilities},
 		{"account", userCLICapabilities},
 		{"guide", guideCLICapabilities},
@@ -5140,6 +5160,14 @@ var catalogMetadata = map[string]operationMeta{
 		Intent:          "Be woken when sessions finish their turn, need a person, or end.",
 		SuccessEvidence: "The watch id and when it will next be evaluated.",
 		NextStep:        "End the turn; the watch wakes this session.",
+	},
+	"subagent_rate": {
+		Object:          objectSubagent,
+		Intent:          "Rate how useful a SubAgent's result was.",
+		Retry:           "Resending the same score and note replaces the rating with the same values and a new timestamp.",
+		Returns:         "The run id, score, note, rating timestamp, rater identity and whether the rating replaced an earlier one (JSON).",
+		SuccessEvidence: "The server recorded the rating for the returned run id.",
+		Example:         map[string]interface{}{"score": 4},
 	},
 	"schedule_wakeup": {
 		Object: objectSession,

@@ -3,7 +3,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import type { SubagentTiersResponse } from '@orbit/shared';
+import type { ModelQuality, SubagentTiersResponse } from '@orbit/shared';
 import { ModelTiers } from './ModelTiers';
 
 /**
@@ -17,24 +17,47 @@ vi.mock('../api', async (original) => ({ ...(await original<typeof import('../ap
 const { api } = await import('../api');
 const apiMock = vi.mocked(api);
 
+/** No SubAgent run and no done task: the row reads "No runs yet". */
+const NONE: ModelQuality = {
+  subagent: { averageRating: null, ratedCount: 0, runCount: 0, raters: [] },
+  tasks: { firstPassRate: null, firstPassTaskCount: 0, completedTaskCount: 0 },
+};
+/** Enough of both, rated by two parents' models. */
+const RATED: ModelQuality = {
+  subagent: {
+    averageRating: 4.4, ratedCount: 23, runCount: 41,
+    raters: [
+      { engine: 'claude', provider: 'claude', model: 'claude-opus-5-5', label: 'Opus 5.5', count: 15 },
+      { engine: 'claude', provider: 'claude', model: 'claude-sonnet-5-5', label: 'Sonnet 5.5', count: 8 },
+    ],
+  },
+  tasks: { firstPassRate: 0.86, firstPassTaskCount: 45, completedTaskCount: 52 },
+};
+/** Some of each, below both minimums. */
+const SPARSE: ModelQuality = {
+  subagent: { averageRating: null, ratedCount: 3, runCount: 12,
+    raters: [{ engine: 'claude', provider: 'claude', model: 'claude-opus-5-5', label: 'Opus 5.5', count: 3 }] },
+  tasks: { firstPassRate: null, firstPassTaskCount: 4, completedTaskCount: 6 },
+};
+
 const TIERS: SubagentTiersResponse = {
   providers: [
     {
       slug: 'cursor', label: 'Cursor', kind: 'builtin', providerId: null, billing: 'subscription',
       models: [
-        { model: 'claude-opus-5-6', levels: ['L', 'XL'], source: 'catalogue', editable: true, outputPricePerMTok: null },
-        { model: 'grok-4.7', levels: ['L'], source: 'owner', editable: true, outputPricePerMTok: null },
-        { model: 'claude-opus-5', levels: [], source: null, editable: true, outputPricePerMTok: null, supersededBy: 'claude-opus-5-6' },
-        { model: 'kimi-k3', levels: [], source: null, editable: true, outputPricePerMTok: null },
+        { model: 'claude-opus-5-6', levels: ['L', 'XL'], source: 'catalogue', editable: true, outputPricePerMTok: null, quality: RATED },
+        { model: 'grok-4.7', levels: ['L'], source: 'owner', editable: true, outputPricePerMTok: null, quality: SPARSE },
+        { model: 'claude-opus-5', levels: [], source: null, editable: true, outputPricePerMTok: null, supersededBy: 'claude-opus-5-6', quality: NONE },
+        { model: 'kimi-k3', levels: [], source: null, editable: true, outputPricePerMTok: null, quality: NONE },
       ],
     },
     {
       slug: 'my-endpoint', label: 'My endpoint', kind: 'key', providerId: 'k1', billing: 'key',
-      models: [{ model: 'qwen-coder', levels: ['M'], source: 'owner', editable: true, outputPricePerMTok: null }],
+      models: [{ model: 'qwen-coder', levels: ['M'], source: 'owner', editable: true, outputPricePerMTok: null, quality: NONE }],
     },
     {
       slug: 'deepseek', label: 'DeepSeek', kind: 'key', providerId: 'k2', billing: 'key',
-      models: [{ model: 'deepseek-v4-pro', levels: ['L'], source: 'catalogue', editable: false, outputPricePerMTok: 1.98 }],
+      models: [{ model: 'deepseek-v4-pro', levels: ['L'], source: 'catalogue', editable: false, outputPricePerMTok: 1.98, quality: NONE }],
     },
   ],
 };
@@ -131,6 +154,28 @@ describe('ModelTiers', () => {
     expect(await openMenu('grok-4.7')).toEqual(['S', 'M', 'L', 'XL', 'Clear']);
     await choose('Clear');
     expect(writes).toEqual([{ path: '/providers/builtin/cursor/model-tier', body: { model: 'grok-4.7', tier: null } }]);
+  });
+
+  it('shows a Quality column: two figures, why one is missing, and No runs yet', async () => {
+    await mount();
+    expect([...document.querySelectorAll('.model-tiers thead th')].map((th) => th.textContent))
+      .toEqual(['Provider', 'Model', 'Tier', 'Quality', 'Price / M out']);
+    const quality = (model: string) => [...rowOf(model).querySelectorAll('.model-tiers-quality .model-tiers-quality-line')]
+      .map((line) => line.textContent);
+    expect(quality('claude-opus-5-6')).toEqual(['SubAgents4.4 · 23 rated of 41', 'Tasks86% first pass · 52 tasks']);
+    expect(quality('grok-4.7')).toEqual(['SubAgentsNot enough ratings', 'TasksNot enough tasks']);
+    expect(rowOf('grok-4.7').querySelectorAll('.model-tiers-quality .model-tiers-muted')).toHaveLength(2);
+    expect(rowOf('kimi-k3').querySelector('.model-tiers-quality')?.textContent).toBe('No runs yet');
+    expect(document.querySelector('#tiers')?.textContent).toContain('Quality is shown, not used for routing.');
+  });
+
+  it('says who rated in a tooltip on the SubAgents line, only where there is an average', async () => {
+    await mount();
+    expect(rowOf('grok-4.7').querySelector('.model-tiers-rated')).toBeNull();
+    const line = rowOf('claude-opus-5-6').querySelector<HTMLElement>('.model-tiers-rated')!;
+    await act(async () => { line.focus(); line.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 150)));
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toBe('Rated by Opus 5.5 (15) · Sonnet 5.5 (8)');
   });
 
   it("keeps a key's model on its own door", async () => {

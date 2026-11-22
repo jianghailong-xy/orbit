@@ -312,10 +312,8 @@ struct LandingTimelineView: View {
             ForEach(Array(steps.enumerated()), id: \.element.key) { index, step in
                 let last = index == steps.count - 1
                 // A task exempt from the landing check (P-C2, board 04 b): Skipped, with its reason.
-                let status: StepStatus = LandingCheckSkip.taskExempt(step) != nil ? .skipped
-                    : LandingSteps.failed(step, kind: section.kind) ? .failed
-                    : last && live ? .running
-                    : last && current && landing.currentAttempt?.state == "QUEUED" ? .pending : .ok
+                let status = LandingStepStatus.of(step, kind: section.kind, isLast: last, live: live,
+                                                  queued: current && landing.currentAttempt?.state == "QUEUED")
                 stepRow(step, status: status, section: section)
             }
             // A task exempt from the landing check (board 04 b, D5): the merge check still runs on the
@@ -347,20 +345,6 @@ struct LandingTimelineView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    enum StepStatus { case ok, failed, running, pending, skipped }
-
-    /// A task exempt from the landing check (board 04 b): "Landing check · Skipped", and "Exempt: why".
-    private static func stepName(_ step: LandingStep, _ status: StepStatus) -> String {
-        status == .skipped ? LandingProvenanceCopy.checkSkipped : step.name
-    }
-
-    private static func stepSummary(_ step: LandingStep, _ status: StepStatus) -> String {
-        if status == .skipped, let line = LandingCheckSkip.taskExempt(step).flatMap(LandingCheckSkip.exemptLine) {
-            return line
-        }
-        return LandingCheckCopy.timelineText(step.summary)
-    }
-
     private static func icon(_ key: String) -> String {
         switch key {
         case "queue": return "list.bullet"
@@ -383,7 +367,7 @@ struct LandingTimelineView: View {
     /// One step as the chat's tool row (`ToolCardView`'s row): the tone bar, the caret, the icon tile,
     /// its name in the mono face, its summary line and its mark. No time on a phone's row; the lines it
     /// opens to carry theirs.
-    @ViewBuilder private func stepRow(_ step: LandingStep, status: StepStatus,
+    @ViewBuilder private func stepRow(_ step: LandingStep, status: LandingStepStatus,
                                       section: IntegrationTimelineSection) -> some View {
         let key = "\(section.jobId)|\(step.key)"
         let open = pressed[key] ?? (status == .failed || status == .running)
@@ -397,10 +381,10 @@ struct LandingTimelineView: View {
                     .font(.orbitMeta).foregroundStyle(tone)
                     .frame(width: 20, height: 20)
                     .background(tone.opacity(0.14), in: RoundedRectangle(cornerRadius: 5))
-                Text(Self.stepName(step, status))
+                Text(LandingStepStatus.name(step, status))
                     .font(.orbitMono.weight(.semibold)).foregroundStyle(status == .skipped ? .orange : .primary)
                     .lineLimit(1).fixedSize()
-                Text(Self.stepSummary(step, status))
+                Text(LandingStepStatus.summary(step, status))
                     .font(.orbitLabel).foregroundStyle(.secondary)
                     .lineLimit(1).truncationMode(.tail)
                 Spacer(minLength: 4)
@@ -478,9 +462,9 @@ struct LandingTimelineView: View {
                openLog.check == check.index {
                 LandingCheckLogView(sessionID: sessionID, selectors: openLog)
                     .padding(.leading, 24)
-            } else if entry.kind == "CHECK_FINISHED", let check = entry.check, !entry.checkPassed {
+            } else if LandingCheckSkip.showsInlineOutput(entry), let check = entry.check {
                 // A check that failed shows the tail it died on, inline (mockup 05 g); a passed
-                // one keeps its `Log ›` and stays one line.
+                // one keeps its `Log ›` and stays one line, and one its exempt task skipped has none.
                 LandingInlineOutput(
                     sessionID: sessionID,
                     selectors: LandingLogSelectors(jobId: section.jobId, claim: entry.claim,

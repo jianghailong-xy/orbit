@@ -1779,6 +1779,16 @@ Run without root, it changes nothing and says what to run instead:
 orbit host: setup writes machine-wide systemd units and must run as root — re-run: sudo /usr/local/bin/orbit host setup --server https://orbit.example.com
 ```
 
+Run without root from any other copy, such as the account's own one where install.sh put it, it names the copy to put
+in place first, since setup would refuse to run from that copy under sudo too:
+
+```text
+orbit host: setup writes machine-wide systemd units, so it must run as root and from /usr/local/bin/orbit, the one binary the host broker runs, rather than /home/alice/.orbit/bin/orbit.
+Put a root-owned copy in place, then set the host up from it:
+  sudo install -o 0 -g 0 -m 0755 /home/alice/.orbit/bin/orbit /usr/local/bin/orbit
+  sudo /usr/local/bin/orbit host setup --server https://orbit.example.com
+```
+
 Setup refuses any binary other than `/usr/local/bin/orbit` before it writes or runs anything. Root's own copy, where
 install.sh puts it, is one:
 
