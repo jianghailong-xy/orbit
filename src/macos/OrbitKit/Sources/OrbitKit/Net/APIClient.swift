@@ -1870,6 +1870,12 @@ public final class APIClient: @unchecked Sendable {
     /// Every provider with its models' SubAgent tiers and prices (GET /providers/subagent-tiers): the
     /// Providers page's Model tiers table and the SubAgents settings' provider list.
     public func subagentTiers() async throws -> SubagentTiersResponse { try await get("providers/subagent-tiers") }
+    /// How each model's SubAgent runs went since `since` (GET /tasks/model-routing/report/subagents): the Model routing
+    /// page's runs beside each model's tier. Nil `since` is All time.
+    public func subagentRoutingReport(since: String?) async throws -> SubagentRoutingReport {
+        try await get("tasks/model-routing/report/subagents",
+                      query: since.map { [URLQueryItem(name: "since", value: $0)] } ?? [])
+    }
     /// Set or clear (nil) the owner's tier for one model, at the path SubagentSettings.tierPath names: a key of
     /// their own, or a built-in engine's catalogue.
     public func setModelTier(path: String, model: String, tier: String?) async throws {

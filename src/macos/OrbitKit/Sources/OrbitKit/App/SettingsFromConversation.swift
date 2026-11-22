@@ -98,8 +98,9 @@ public enum SettingsFromConversation {
             row("recaps", "Session recaps", .general, "General", "New sessions"),
             row("promptSuggestions", "Suggested replies", .general, "General", "New sessions"),
             row("promptOptimizer", "Prompt optimizer", .general, "General", "New sessions"),
-            row("modelRouting", "Route by tier", .general, "General", "New sessions"),
-            row("optimizeFor", "Optimize For", .general, "General", "New sessions"),
+            // Providers → Model routing on the web, a page with no sections: `Settings › Model routing`.
+            row("modelRouting", "Route by tier", .modelRouting, "Model routing", nil),
+            row("optimizeFor", "Optimize For", .modelRouting, "Model routing", nil),
             row("defaultPermissionMode", "Default permission mode", .general, "General", "New sessions"),
             row("enableOrchestration", "Let sessions orchestrate", .general, "General", "Orchestration"),
             row("cardFreeTaskCreates", "Tasks a session files without asking", .general, "General", "Orchestration"),

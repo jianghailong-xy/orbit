@@ -54,8 +54,8 @@ final class AgentsModel {
     /// keys, and what each engine can run on. Read when that page asks, unlike the catalogue above.
     private(set) var ownKeys: [ConfiguredProvider] = []
     private(set) var ownKeysState = ListLoadState()
-    /// Every provider with its models' SubAgent tiers (GET /providers/subagent-tiers): the Infrastructure
-    /// page's Model tiers and an Agent's SubAgents provider list. Nil until read.
+    /// Every provider with its models' SubAgent tiers (GET /providers/subagent-tiers): the Model routing
+    /// page's models and an Agent's SubAgents provider list. Nil until read.
     private(set) var subagentTiers: SubagentTiersResponse?
     private(set) var subagentTiersFailed = false
     /// The shared Codex pools this account is in (GET /providers/shared-pools), read into their own
@@ -260,6 +260,12 @@ final class AgentsModel {
         } catch {
             subagentTiersFailed = true
         }
+    }
+
+    /// How each model's SubAgent runs went in a period (GET /tasks/model-routing/report/subagents): the Model routing
+    /// page's runs beside each model's tier. Read by the page itself, each time its period changes.
+    func subagentRoutingReport(_ period: ModelRoutingPeriod) async throws -> SubagentRoutingReport {
+        try await api.subagentRoutingReport(since: period.since(now: Date()))
     }
 
     /// Set or clear (nil) the owner's tier for one model (of their own key, or of a built-in engine's catalogue),

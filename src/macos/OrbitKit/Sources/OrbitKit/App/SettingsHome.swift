@@ -4,9 +4,11 @@ import CoreGraphics   // CGSize/CGRect's Swift members on Apple platforms; Found
 #endif
 
 /// A page Settings opens from its list, each one a frame of Settings' own stack
-/// (`NavNode.settingsPage`). Change password is the one opened from a page rather than the list: Profile's.
+/// (`NavNode.settingsPage`). Change password and Model routing are the ones opened from a page rather than the list:
+/// Profile's, and Providers' (Machines & models' on a Mac and an iPad), as the web has Model routing under Providers.
 public enum SettingsPage: String, Hashable, Sendable, CaseIterable {
     case general, notifications, profile, sharedLinks, accessTokens, terminals, github, machines, providers, changePassword
+    case modelRouting
 
     /// The page's navigation title — the same words as the row that opens it.
     public var title: String {
@@ -21,6 +23,7 @@ public enum SettingsPage: String, Hashable, Sendable, CaseIterable {
         case .machines:       return SettingsHome.title(.machines)
         case .providers:      return SettingsHome.title(.providers)
         case .changePassword: return SettingsCopy.changePassword
+        case .modelRouting:   return ModelRouting.title
         }
     }
 }
@@ -165,10 +168,10 @@ public enum SettingsHome {
 /// the web's Session defaults card and its Session orchestration card — each in a section of its own
 /// with the web's hint as its footer, as the Notifications page's switches have theirs
 /// (docs/mocks/ios-settings-order, 2A). Every one is the whole account's, so it is answered on its
-/// row and opens nothing.
+/// row and opens nothing. Route by tier and Optimize For are not here: they are Model routing's, as on the web.
 public enum SessionSettings {
     public enum Row: String, CaseIterable, Sendable {
-        case defaultPermission, orchestration, modelRouting, optimizeFor, promptSuggestions, recaps
+        case defaultPermission, orchestration, promptSuggestions, recaps
     }
 
     /// One group on the page: a row's section, Settings › Translation's, or the Prompt optimizer's.
@@ -187,18 +190,10 @@ public enum SessionSettings {
             row == .promptSuggestions ? [.row(row), .promptOptimizer] : [.row(row)]
         }
 
-    /// Whether a row is drawn: Optimize For only while smart model selection is on, the one thing that
-    /// reads it (owner, 2026-11-20); its saved value is kept while it is hidden. Every other row always.
-    public static func shows(_ row: Row, smartModelSelection: Bool) -> Bool {
-        row != .optimizeFor || smartModelSelection
-    }
-
     public static func title(_ row: Row) -> String {
         switch row {
         case .defaultPermission: return "Default permission"
         case .orchestration:     return "Session orchestration"
-        case .modelRouting:      return SettingsCopy.smartModelSelection
-        case .optimizeFor:       return SettingsCopy.optimizeFor
         case .promptSuggestions: return SettingsCopy.suggestedReplies
         case .recaps:            return SettingsCopy.sessionRecaps
         }
@@ -209,8 +204,6 @@ public enum SessionSettings {
         switch row {
         case .defaultPermission: return SettingsCopy.defaultPermissionHint
         case .orchestration:     return SettingsCopy.letSessionsOrchestrateHint
-        case .modelRouting:      return SettingsCopy.smartModelSelectionHint
-        case .optimizeFor:       return SettingsCopy.optimizeForHint
         case .promptSuggestions: return SettingsCopy.suggestedRepliesHint
         case .recaps:            return SettingsCopy.sessionRecapsHint
         }
@@ -341,16 +334,17 @@ public enum SettingsCopy {
     public static let letSessionsOrchestrate = "Let sessions orchestrate"
     public static let letSessionsOrchestrateHint = "Sessions in every workspace can start and manage other sessions, and manage your agents and runners, through the orbit MCP tools and CLI: create, change and delete agents, install engines on runners and delete them. Off → those tools are hidden and refused."
 
-    // MARK: Smart model selection (the web page's Session defaults card)
+    // MARK: Route by tier (the web's Model routing page)
 
-    /// The account's master switch for smart model selection, on unless turned off. On iOS' Sessions
+    /// The account's master switch for routing by tier, on unless turned off. On the Model routing
     /// page the row is the switch and the hint its footer.
     public static let smartModelSelection = "Route by tier"
     public static let smartModelSelectionHint = "Coordinators suggest a tier for each task, and a SubAgent's size sets its own. Task runs and SubAgents run on a model of that tier from your providers. Off: tasks keep their Agent's model and SubAgents their parent session's."
 
     // MARK: Optimize For (board docs/mocks/routing-mode-account, approved 2026-11-19)
 
-    /// The account's one routing pick, directly under Route by tier (Smart model selection until 2026-11-22).
+    /// The account's one routing pick, directly under Route by tier (Smart model selection until 2026-11-22), and
+    /// drawn only while that is on, the one thing that reads it (owner, 2026-11-20); its saved value is kept meanwhile.
     public static let optimizeFor = "Optimize For"
     public static let optimizeForHint = "What to favour when a model is picked at a tier."
 

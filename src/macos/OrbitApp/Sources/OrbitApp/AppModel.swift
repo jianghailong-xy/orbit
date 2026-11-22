@@ -2267,10 +2267,25 @@ final class AppModel {
     /// has no page of its own on the phone, opens Settings' own list.
     func openSettings(at place: SettingPlace) {
         settingsAnchor = place.key
+        if place.page == .modelRouting { return openModelRouting() }
         #if os(iOS)
         if let page = place.page { nav.openSettings(at: page) } else { nav.openSettings() }
         #else
         selectedSection = .settings
+        #endif
+    }
+
+    /// Model routing, where the web has it, under Providers: on iOS the Settings sheet's Providers page with Model
+    /// routing pushed over it, so back lands on Providers; on the Mac the Machines & models section with the page in
+    /// its detail pane, as a selected machine's record would be.
+    func openModelRouting() {
+        #if os(iOS)
+        nav.openSettings(at: .providers)
+        nav.push(.settingsPage(.modelRouting))
+        #else
+        selectedSection = .runners
+        nav.popRunnerPages()
+        nav.replaceTop(with: .settingsPage(.modelRouting))
         #endif
     }
 

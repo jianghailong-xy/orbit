@@ -88,15 +88,23 @@ final class SettingsFromConversationCopyParityTests: XCTestCase {
         let card = try read("src/web/src/lib/settingsChange.ts")
         for key in ["theme", "translationEnabled", "translationLanguage", "translationAgentLanguage", "translationBilingual",
                     "notifySessionFinished", "notifyAgentMessage", "recaps", "promptSuggestions", "promptOptimizer",
-                    // modelRouting and optimizeFor left out: the web moved them to Providers → Model routing, and this
-                    // client still draws them in General › New sessions until its Settings follows.
-                    "defaultPermissionMode", "enableOrchestration", "cardFreeTaskCreates"] {
+                    "modelRouting", "optimizeFor", "defaultPermissionMode", "enableOrchestration", "cardFreeTaskCreates"] {
             let place = try XCTUnwrap(SettingsFromConversation.place(key), key)
             assertSays(index, "'\(place.title)'", in: Self.index)
             assertSays(pages, "label: '\(place.webPage)'", in: Self.pages)
             if let section = place.section {
                 assertSays(card, "\(key == "translationAgentLanguage" ? "agentLanguage" : key): '\(section)'", in: Self.copy)
             }
+        }
+        // Route by tier and Optimize For are on the web's Model routing page, which has no sections: the card names it
+        // `Settings › Model routing`, as `settingPathLabel` does, and Open in Settings opens that page.
+        assertSays(pages, "MODEL_ROUTING_PAGE = { path: '/settings/providers/routing', label: 'Model routing' }", in: Self.pages)
+        assertSays(card, "[...PERSONAL_PAGES, MODEL_ROUTING_PAGE]", in: Self.copy)
+        for key in ["modelRouting", "optimizeFor"] {
+            assertSays(index, "'\(key)', '/settings/providers/routing',", in: Self.index)
+            XCTAssertFalse(card.contains("\(key): '"), "the web gave \(key) a section; the native card names none")
+            XCTAssertEqual(SettingsFromConversation.pathLabel(forKey: key), "Settings › Model routing", key)
+            XCTAssertEqual(SettingsFromConversation.place(key)?.page, .modelRouting, key)
         }
         for key in ["defaultModel", "defaultModels", "defaultEffort", "subagentBlockedProviders"] {
             assertSays(tiers, "'\(SettingsFromConversation.title(key))'", in: Self.tiers)

@@ -87,7 +87,7 @@ struct SkillRow: View {
 ///
 /// iOS Settings opens it twice, as the web's Settings nav has two groups: Machines (what needs a person
 /// about a machine, the machines, Add) and Providers (what needs a person about a pool, the pools, the
-/// keys, the model tiers). Everywhere else it is the whole page.
+/// keys, the Model routing row). Everywhere else it is the whole page.
 struct RunnersListView: View {
     enum Part { case all, machines, providers }
 
@@ -163,9 +163,7 @@ struct RunnersListView: View {
                     MachinesAndModelsKeysSection(keys: lists.keys, balances: model.agents?.deepSeekBalances ?? [:],
                                               cursorModel: MachinesAndModels.cursorModel(lists.runners.filter { $0.online == true }),
                                               open: opensPools ? push : nil)
-                    if let agents = model.agents {
-                        InfrastructureModelTiersSection(agents: agents)
-                    }
+                    modelRoutingSection
                 }
             }
             .orbitRevealSurface()   // macOS: reveal the unified `orbitSurface`
@@ -221,6 +219,39 @@ struct RunnersListView: View {
             Button { model.push(.runnerDetail(runnerID: r.id)) } label: {
                 row.foregroundStyle(Color.primary)
             }
+        }
+    }
+
+    /// The row to Model routing, where the model tiers are, as the web has it under Providers: it says how routing
+    /// runs now — Off, or the Optimize For it routes by. A stack pushes the page; the three-column pane shows it in the
+    /// detail, as a selected machine's record.
+    private var modelRoutingSection: some View {
+        Section {
+            Button(action: openModelRouting) {
+                LabeledContent {
+                    HStack(spacing: 6) {
+                        Text(ModelRouting.rowValue(model.user?.preferences)).foregroundStyle(Color.secondary)
+                        Image(systemName: "chevron.right").foregroundStyle(.tertiary)
+                    }
+                } label: {
+                    Label(ModelRouting.title, systemImage: "list.number")
+                }
+                .foregroundStyle(Color.primary)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("providers.modelRouting")
+        } footer: {
+            Text(ModelRouting.description)
+        }
+    }
+
+    private func openModelRouting() {
+        if rowNavigation == .push {
+            model.push(.settingsPage(.modelRouting))
+        } else {
+            model.nav.popRunnerPages()
+            model.nav.replaceTop(with: .settingsPage(.modelRouting))
         }
     }
 
@@ -576,6 +607,9 @@ struct RunnerDetailView: View {
         case .runnerName(let id)?:
             RunnerNamePage(runnerID: id)
                 .modifier(RunnerSubpageBack())
+        case .settingsPage(.modelRouting)?:
+            // Opened from the list's Model routing row, in place of a record.
+            ModelRoutingPage()
         default:
             record
         }

@@ -72,11 +72,6 @@ final class SubagentSettingsTests: XCTestCase {
         XCTAssertNil(sparse.raters, "no tooltip without an average")
     }
 
-    func testTableSkipsProvidersWithoutModels() throws {
-        XCTAssertEqual(SubagentSettings.tableProviders(try tiers().providers).map(\.slug),
-                       ["deepseek", "claude", "codex", "my-endpoint"])
-    }
-
     func testTierText() {
         XCTAssertEqual(SubagentSettings.tierText([]), "Not set")
         XCTAssertTrue(SubagentSettings.tierIsUnset([]))

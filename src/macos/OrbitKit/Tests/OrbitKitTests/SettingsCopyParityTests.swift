@@ -20,7 +20,7 @@ import XCTest
 final class SettingsCopyParityTests: XCTestCase {
 
     private static let general = "src/web/src/pages/settings/GeneralPage.tsx"
-    /// Since Model routing (Providers), Smart model selection and Optimize For are on the web's Model routing page.
+    /// Since Model routing (Providers), Route by tier and Optimize For are on the web's Model routing page.
     private static let modelRouting = "src/web/src/pages/settings/ModelRoutingPage.tsx"
     private static let notifications = "src/web/src/pages/settings/NotificationsPage.tsx"
     private static let appearance = "src/web/src/pages/settings/AppearancePage.tsx"
@@ -131,7 +131,7 @@ final class SettingsCopyParityTests: XCTestCase {
         assertSays(page, "full: '\(SettingsCopy.letSessionsOrchestrateHint)',", in: Self.general)
     }
 
-    /// Smart model selection: the web Model routing page's switch, with its title and full hint.
+    /// Route by tier: the web Model routing page's switch, with its title and full hint.
     func testSmartModelSelectionSaysWhatTheWebPageSays() throws {
         let page = try web(Self.modelRouting)
         // The title is settingsIndex.ts's, which the page draws; the full hint stays on the page.
@@ -140,7 +140,6 @@ final class SettingsCopyParityTests: XCTestCase {
         assertSays(page, "full: \"\(SettingsCopy.smartModelSelectionHint)\",", in: Self.modelRouting)
         assertSays(page, "checked={prefs.modelRouting !== false}", in: Self.modelRouting)
         assertSays(page, "save.mutate({ modelRouting: v })", in: Self.modelRouting)
-        XCTAssertEqual(SessionSettings.title(.modelRouting), SettingsCopy.smartModelSelection)
     }
 
     /// Session recaps (0418): the web General page's switch, with its title and full hint — the same

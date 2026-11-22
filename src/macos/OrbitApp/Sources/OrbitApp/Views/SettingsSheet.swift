@@ -86,6 +86,7 @@ private struct SettingsPageView: View {
         case .machines:       RunnersListView(rowNavigation: .push, part: .machines)
         case .providers:      RunnersListView(rowNavigation: .push, part: .providers)
         case .changePassword: ChangePasswordPage()
+        case .modelRouting:   ModelRoutingPage()
         }
     }
 }
@@ -723,10 +724,6 @@ private struct SessionSettingsPage: View {
     @State private var permMode: PermissionMode = .default
     /// The account's one orchestration switch. Absent on the server means on.
     @State private var orchestration = true
-    /// The account's switch for smart model selection. Absent on the server means off.
-    @State private var modelRouting = false
-    /// The account's "Optimize For" pick. Absent on the server means Balance.
-    @State private var optimizeFor: OptimizeFor = .balance
     /// The account's switch for suggested replies. Absent on the server means on.
     @State private var promptSuggestions = true
     /// The account's switch for session recaps. Absent on the server means on.
@@ -744,13 +741,11 @@ private struct SessionSettingsPage: View {
             ForEach(SessionSettings.groups, id: \.self) { group in
                 switch group {
                 case .row(let row):
-                    if SessionSettings.shows(row, smartModelSelection: modelRouting) {
-                        Section {
-                            control(row).settingRow(Self.key(row))
-                            SettingChangedLineView(key: Self.key(row))
-                        } footer: {
-                            Text(SessionSettings.footer(row))
-                        }
+                    Section {
+                        control(row).settingRow(Self.key(row))
+                        SettingChangedLineView(key: Self.key(row))
+                    } footer: {
+                        Text(SessionSettings.footer(row))
                     }
                 case .translation:
                     translationSection
@@ -771,14 +766,6 @@ private struct SessionSettingsPage: View {
         .onChange(of: orchestration) { _, value in
             guard (model.user?.preferences?.enableOrchestration ?? true) != value else { return }
             Task { await model.savePreferences(UpdatePreferencesRequest(enableOrchestration: value)) }
-        }
-        .onChange(of: modelRouting) { _, value in
-            guard (model.user?.preferences?.smartModelSelection ?? false) != value else { return }
-            Task { await model.savePreferences(UpdatePreferencesRequest(modelRouting: value)) }
-        }
-        .onChange(of: optimizeFor) { _, value in
-            guard OptimizeFor(stored: model.user?.preferences?.optimizeFor) != value else { return }
-            Task { await model.savePreferences(UpdatePreferencesRequest(optimizeFor: value.rawValue)) }
         }
         .onChange(of: promptSuggestions) { _, value in
             guard (model.user?.preferences?.suggestedReplies ?? true) != value else { return }
@@ -811,15 +798,13 @@ private struct SessionSettingsPage: View {
         switch row {
         case .defaultPermission: return "defaultPermissionMode"
         case .orchestration:     return "enableOrchestration"
-        case .modelRouting:      return "modelRouting"
-        case .optimizeFor:       return "optimizeFor"
         case .promptSuggestions: return "promptSuggestions"
         case .recaps:            return "recaps"
         }
     }
 
-    /// A row's own control: the mode is a menu on the row, as the list's Appearance is; Optimize For is
-    /// a segmented picker; the other four are the account's switches.
+    /// A row's own control: the mode is a menu on the row, as the list's Appearance is; the other three
+    /// are the account's switches.
     @ViewBuilder private func control(_ row: SessionSettings.Row) -> some View {
         let title = SessionSettings.title(row)
         switch row {
@@ -830,12 +815,6 @@ private struct SessionSettingsPage: View {
                 }
             }
         case .orchestration:     Toggle(title, isOn: $orchestration)
-        case .modelRouting:      Toggle(title, isOn: $modelRouting)
-        case .optimizeFor:
-            Picker(title, selection: $optimizeFor) {
-                ForEach(OptimizeFor.allCases) { Text($0.label).tag($0) }
-            }
-            .pickerStyle(.segmented)
         case .promptSuggestions: Toggle(title, isOn: $promptSuggestions)
         case .recaps:            Toggle(title, isOn: $recaps)
         }
@@ -915,8 +894,6 @@ private struct SessionSettingsPage: View {
         // a mode the account isn't actually running.
         permMode = PermissionMode(rawValue: p?.defaultPermissionMode ?? "") ?? AgentDefaults.defaultPermissionMode
         orchestration = p?.enableOrchestration ?? true
-        modelRouting = p?.smartModelSelection ?? false
-        optimizeFor = OptimizeFor(stored: p?.optimizeFor)
         promptSuggestions = p?.suggestedReplies ?? true
         recaps = p?.showRecaps ?? true
         translation = !SessionTranslation.unavailable(model.user) && p?.translationEnabled == true

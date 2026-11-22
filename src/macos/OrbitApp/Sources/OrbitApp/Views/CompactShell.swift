@@ -443,6 +443,7 @@ private struct CompactSections: View {
                         case .accountPool(let poolID):    AccountPoolSettingsPage(poolID: poolID)
                         case .sharedPool(let poolID):     SharedPoolSettingsPage(poolID: poolID)
                         case .providerDetail(let providerID): ProviderDetailSettingsPage(providerID: providerID)
+                        case .settingsPage(.modelRouting): ModelRoutingPage()
                         default:                          EmptyView()
                         }
                     }

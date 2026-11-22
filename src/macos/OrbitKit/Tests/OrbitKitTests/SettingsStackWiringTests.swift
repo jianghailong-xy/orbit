@@ -242,8 +242,10 @@ final class SettingsStackWiringTests: XCTestCase {
         XCTAssertEqual(page.components(separatedBy: "translationSection").count - 1, 2,
                        "Translation is drawn once, from the groups, and defined once")
         XCTAssertTrue(page.contains("Text(SessionSettings.footer(row))"), "each row's hint is its footer")
-        XCTAssertTrue(page.contains("if SessionSettings.shows(row, smartModelSelection: modelRouting) {"),
-                      "Optimize For is drawn only while the switch on the page is on")
+        // Route by tier and Optimize For moved to Model routing (`testModelRoutingHoldsTheRoutingSwitchesAndTheModels`).
+        for gone in ["$modelRouting", "$optimizeFor", "UpdatePreferencesRequest(modelRouting:", "UpdatePreferencesRequest(optimizeFor:"] {
+            XCTAssertFalse(page.contains(gone), "General still draws \(gone)")
+        }
         XCTAssertTrue(page.contains(".navigationTitle(SettingsPage.general.title)"))
         let controls = try slice(page, from: "@ViewBuilder private func control(_ row: SessionSettings.Row) -> some View {",
                                  to: "private func seed()")
@@ -258,8 +260,6 @@ final class SettingsStackWiringTests: XCTestCase {
         for (toggle, write, seed) in [
             ("Toggle(title, isOn: $orchestration)", "UpdatePreferencesRequest(enableOrchestration: value)",
              "orchestration = p?.enableOrchestration ?? true"),
-            ("Toggle(title, isOn: $modelRouting)", "UpdatePreferencesRequest(modelRouting: value)",
-             "modelRouting = p?.smartModelSelection ?? false"),
             ("Toggle(title, isOn: $promptSuggestions)", "UpdatePreferencesRequest(promptSuggestions: value)",
              "promptSuggestions = p?.suggestedReplies ?? true"),
             ("Toggle(title, isOn: $recaps)", "UpdatePreferencesRequest(recaps: value)", "recaps = p?.showRecaps ?? true"),
@@ -279,17 +279,65 @@ final class SettingsStackWiringTests: XCTestCase {
             XCTAssertTrue(page.contains(write), "the page no longer writes \(write)")
             XCTAssertTrue(page.contains(seed), "the page no longer seeds \(seed)")
         }
-        // Optimize For (board docs/mocks/routing-mode-account): a segmented picker directly under
-        // Smart model selection, absent reading as Balance, written the moment it moves.
-        XCTAssertTrue(controls.contains("Picker(title, selection: $optimizeFor)"))
-        XCTAssertTrue(page.contains("UpdatePreferencesRequest(optimizeFor: value.rawValue)"))
-        XCTAssertTrue(page.contains("optimizeFor = OptimizeFor(stored: p?.optimizeFor)"))
-        XCTAssertEqual(page.components(separatedBy: "guard (model.user?.preferences?.").count - 1, 6,
+        XCTAssertEqual(page.components(separatedBy: "guard (model.user?.preferences?.").count - 1, 5,
                        "every switch's write is guarded against the account's own value")
         XCTAssertTrue(page.contains("PromptOptimizer.switchedOn(model.user?.preferences) != value else { return }"),
                       "the prompt optimizer's write is guarded against the account's own value (absent = on)")
-        XCTAssertTrue(page.contains("guard OptimizeFor(stored: model.user?.preferences?.optimizeFor) != value else { return }"),
-                      "Optimize For's write is guarded against the account's own value (absent = Balance)")
+    }
+
+    /// Model routing (the web's Providers → Model routing): Route by tier, Optimize For under it only while it is on,
+    /// then the models with their tiers and runs. Each switch is written the moment it moves, guarded against the
+    /// account's own value — absent is on, and Balance — so seeding writes nothing. Providers opens it on the phone,
+    /// Machines & models on a Mac and an iPad (in the detail pane), and the Mac's Settings form points at it.
+    func testModelRoutingHoldsTheRoutingSwitchesAndTheModels() throws {
+        let page = code(try slice(try appSource("Views/ModelRoutingViews.swift"),
+                                  from: "struct ModelRoutingPage: View {", to: "struct ModelRoutingRow: View {"))
+        for line in [
+            "Toggle(SettingsCopy.smartModelSelection, isOn: $modelRouting)", ".settingRow(\"modelRouting\")",
+            "SettingChangedLineView(key: \"modelRouting\")", "Text(SettingsCopy.smartModelSelectionHint)",
+            "if modelRouting {", "Picker(SettingsCopy.optimizeFor, selection: $optimizeFor)", ".settingRow(\"optimizeFor\")",
+            "SettingChangedLineView(key: \"optimizeFor\")", "Text(SettingsCopy.optimizeForHint)",
+            "guard (model.user?.preferences?.smartModelSelection ?? true) != value else { return }",
+            "UpdatePreferencesRequest(modelRouting: value)",
+            "guard OptimizeFor(stored: model.user?.preferences?.optimizeFor) != value else { return }",
+            "UpdatePreferencesRequest(optimizeFor: value.rawValue)",
+            "modelRouting = p?.smartModelSelection ?? true", "optimizeFor = OptimizeFor(stored: p?.optimizeFor)",
+            ".navigationTitle(ModelRouting.title)", ".settingsAnchorScroll()",
+            "ModelRouting.sections(model.agents?.subagentTiers?.providers ?? [], report?.subagents ?? [])",
+            ".task(id: period) { await loadReport() }",
+            "RunnerSectionHeader(ModelRouting.routedByTier)", "RunnerSectionHeader(ModelRouting.calledByName)",
+            "RunnerSectionHeader(ModelRouting.notRouted)", "ModelRouting.noTierNoRuns(sections.idle.count, open: showsIdle)",
+        ] {
+            XCTAssertTrue(page.contains(line), "the Model routing page lost \(line)")
+        }
+        let row = code(try slice(try appSource("Views/ModelRoutingViews.swift"),
+                                 from: "struct ModelRoutingRow: View {", to: "struct ModelTierCell: View {"))
+        XCTAssertTrue(row.contains("if kind == .tiers, let flag = ModelRouting.flag(row) {"), "a run outside its tier is flagged")
+        XCTAssertTrue(row.contains(".foregroundStyle(tier.outside ? Color.orange : Color.primary)"))
+
+        let pages = code(try slice(try appSource("Views/SettingsSheet.swift"),
+                                   from: "private struct SettingsPageView: View {", to: "// MARK: - The list"))
+        XCTAssertTrue(pages.contains("case .modelRouting:   ModelRoutingPage()"))
+        let runners = try appSource("Views/SkillsRunnersView.swift")
+        let list = code(try slice(runners, from: "struct RunnersListView: View {", to: "private var title: String {"))
+        XCTAssertTrue(list.contains("if part != .machines {"))
+        XCTAssertTrue(list.contains("modelRoutingSection"), "Providers opens Model routing")
+        XCTAssertFalse(list.contains("InfrastructureModelTiersSection"), "the tiers are Model routing's now")
+        XCTAssertTrue(list.contains("model.push(.settingsPage(.modelRouting))"))
+        XCTAssertTrue(list.contains("model.nav.replaceTop(with: .settingsPage(.modelRouting))"))
+        XCTAssertTrue(list.contains("Text(ModelRouting.rowValue(model.user?.preferences))"))
+        XCTAssertTrue(code(runners).contains("case .settingsPage(.modelRouting)?:\n            ModelRoutingPage()"),
+                      "the three-column pane shows the page in place of a record")
+        XCTAssertTrue(code(try appSource("Views/CompactShell.swift")).contains("case .settingsPage(.modelRouting): ModelRoutingPage()"))
+
+        let mac = code(try appSource("Views/SettingsAdminView.swift"))
+        for gone in ["$modelRouting", "$optimizeFor", "UpdatePreferencesRequest(modelRouting:", "UpdatePreferencesRequest(optimizeFor:"] {
+            XCTAssertFalse(mac.contains(gone), "the Mac's Settings form still draws \(gone)")
+        }
+        XCTAssertTrue(mac.contains("model.openModelRouting()"))
+        let app = code(try appSource("AppModel.swift"))
+        XCTAssertTrue(app.contains("if place.page == .modelRouting { return openModelRouting() }"),
+                      "Open in Settings on a routing card opens Model routing")
     }
 
     /// The avatar and name are one button, pencilled as ChatGPT's are, that opens the edit-profile

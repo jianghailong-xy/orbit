@@ -1,6 +1,6 @@
 import Foundation
 
-// SubAgents settings and the Providers page's Model tiers table (docs/subagent-design.md §7, board
+// SubAgents settings and the Model routing page's tier cells (docs/subagent-design.md §7, board
 // docs/mocks/subagent/05.png). The wire shapes mirror src/shared/src/dto.ts `SubagentTiersResponse`;
 // the words and the small rules both clients draw alike live here so they are testable off Apple.
 
@@ -206,13 +206,10 @@ public enum SubagentSettings {
     public static let providersLoadFailed = "Couldn't load providers"
     public static let saveBlockedFailed = "Couldn't save blocked providers"
 
-    public static let modelTiers = "Model tiers"
     public static let columnProvider = "Provider"
     public static let columnModel = "Model"
     public static let columnTier = "Tier"
     public static let columnPrice = "Price / M out"
-    public static let tiersFooter = "Preset tiers and prices follow the catalogue. A model with no tier still "
-        + "runs SubAgents, after every model whose tier fits."
     public static let notSet = "Not set"
     public static let allLevels = "S–XL by effort"
     public static let subscription = "Subscription"
@@ -270,11 +267,6 @@ public enum SubagentSettings {
     }
 
     // MARK: tiers table
-
-    /// The providers the Model tiers table lists: those with at least one model.
-    public static func tableProviders(_ providers: [ProviderTierRow]) -> [ProviderTierRow] {
-        providers.filter { !$0.models.isEmpty }
-    }
 
     /// A model's Tier cell: "Not set", "S–XL by effort", or the levels joined ("L · XL").
     public static func tierText(_ levels: [String]) -> String {

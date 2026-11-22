@@ -48,12 +48,12 @@ final class SettingsHomeTests: XCTestCase {
     }
 
     /// The rows that open a page open their own, titled as the row is; Appearance's menu opens nothing,
-    /// and Change password is Profile's page, not the list's.
+    /// Change password is Profile's page, not the list's, and Model routing is Providers', as on the web.
     func testTheRowsThatOpenAPageOpenTheirOwn() {
         let opening = SettingsHome.Row.allCases.compactMap(SettingsHome.page)
-        XCTAssertEqual(Set(opening), Set(SettingsPage.allCases).subtracting([.changePassword]),
+        XCTAssertEqual(Set(opening), Set(SettingsPage.allCases).subtracting([.changePassword, .modelRouting]),
                        "a page no row opens, or a row opening two")
-        XCTAssertEqual(opening.count, SettingsPage.allCases.count - 1)
+        XCTAssertEqual(opening.count, SettingsPage.allCases.count - 2)
         for row in SettingsHome.Row.allCases {
             if let page = SettingsHome.page(row) {
                 XCTAssertEqual(page.title, SettingsHome.title(row), "the page is called what its row is")
@@ -61,22 +61,22 @@ final class SettingsHomeTests: XCTestCase {
         }
         XCTAssertNil(SettingsHome.page(.appearance))
         XCTAssertEqual(SettingsPage.changePassword.title, "Change password")
+        XCTAssertEqual(SettingsPage.modelRouting.title, "Model routing")
     }
 
     /// Sessions, the page Preferences' first row opens: the web's Session defaults and Session
     /// orchestration cards, a setting a row in the order the list had them, each with the web's hint
-    /// as its footer (docs/mocks/ios-settings-order, 2A). Optimize For sits directly under Smart
-    /// model selection (board docs/mocks/routing-mode-account, approved 2026-11-19).
-    func testTheSessionsPageHoldsTheSixSettingsWithTheWebsHints() {
+    /// as its footer (docs/mocks/ios-settings-order, 2A). Route by tier and Optimize For are not among
+    /// them: they moved to Model routing under Providers, as the web's did.
+    func testTheSessionsPageHoldsTheFourSettingsWithTheWebsHints() {
         XCTAssertEqual(SessionSettings.Row.allCases,
-                       [.defaultPermission, .orchestration, .modelRouting, .optimizeFor, .promptSuggestions, .recaps])
+                       [.defaultPermission, .orchestration, .promptSuggestions, .recaps])
         XCTAssertEqual(SessionSettings.Row.allCases.map(SessionSettings.title),
-                       ["Default permission", "Session orchestration", "Route by tier", "Optimize For",
-                        "Suggested replies", "Session recaps"])
+                       ["Default permission", "Session orchestration", "Suggested replies", "Session recaps"])
+        XCTAssertFalse(SessionSettings.Row.allCases.map(SessionSettings.title).contains(SettingsCopy.smartModelSelection))
+        XCTAssertFalse(SessionSettings.Row.allCases.map(SessionSettings.title).contains(SettingsCopy.optimizeFor))
         XCTAssertEqual(SessionSettings.footer(.defaultPermission), SettingsCopy.defaultPermissionHint)
         XCTAssertEqual(SessionSettings.footer(.orchestration), SettingsCopy.letSessionsOrchestrateHint)
-        XCTAssertEqual(SessionSettings.footer(.modelRouting), SettingsCopy.smartModelSelectionHint)
-        XCTAssertEqual(SessionSettings.footer(.optimizeFor), SettingsCopy.optimizeForHint)
         XCTAssertEqual(SessionSettings.footer(.promptSuggestions), SettingsCopy.suggestedRepliesHint)
         XCTAssertEqual(SessionSettings.footer(.recaps), SettingsCopy.sessionRecapsHint)
         let footers = SessionSettings.Row.allCases.map(SessionSettings.footer)
@@ -88,18 +88,8 @@ final class SettingsHomeTests: XCTestCase {
     /// keep their order around it.
     func testTheSessionsPagePutsTranslationAfterDefaultPermission() {
         XCTAssertEqual(SessionSettings.groups,
-                       [.row(.defaultPermission), .translation, .row(.orchestration), .row(.modelRouting),
-                        .row(.optimizeFor), .row(.promptSuggestions), .promptOptimizer, .row(.recaps)])
-    }
-
-    /// Optimize For is drawn only while smart model selection is on, the one thing that reads it
-    /// (owner, 2026-11-20); every other row always is.
-    func testOptimizeForShowsOnlyWhileSmartModelSelectionIsOn() {
-        XCTAssertTrue(SessionSettings.shows(.optimizeFor, smartModelSelection: true))
-        XCTAssertFalse(SessionSettings.shows(.optimizeFor, smartModelSelection: false))
-        for row in SessionSettings.Row.allCases where row != .optimizeFor {
-            XCTAssertTrue(SessionSettings.shows(row, smartModelSelection: false), row.rawValue)
-        }
+                       [.row(.defaultPermission), .translation, .row(.orchestration),
+                        .row(.promptSuggestions), .promptOptimizer, .row(.recaps)])
     }
 
     // MARK: - What a row says
