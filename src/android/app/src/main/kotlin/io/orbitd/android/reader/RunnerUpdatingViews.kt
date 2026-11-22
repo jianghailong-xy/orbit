@@ -22,6 +22,9 @@ import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import io.orbitd.android.directory.QueuedCapacity
+import io.orbitd.android.directory.QueuedClone
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import io.orbitd.android.directory.QueuedDiskLow
 import io.orbitd.android.directory.QueuedGate
 import io.orbitd.android.directory.RunnerUpdating
@@ -106,5 +109,47 @@ internal fun RunnerUpdatingFoot(gate: QueuedGate, machine: String?, modifier: Mo
                 if (!full && !disk) later?.invoke()
             }
         }
+    }
+}
+
+/**
+ * The waiting card of a session held by its workspace's clone (web `CloneWaitNotice`, board docs/mocks/clone-progress-wait-card ②):
+ * what is cloning, git's percentage once it has said one, and where. [clone] is null for a failed clone, which says its two plain
+ * sentences. [compact] is the card under a transcript, left-aligned; the full-height card is centred.
+ */
+@Composable
+internal fun CloneWaitNotice(clone: QueuedClone.Wait?, failed: Boolean, machine: String?, compact: Boolean, modifier: Modifier = Modifier) {
+    val secondary = MaterialTheme.colorScheme.onSurfaceVariant
+    val title = when {
+        clone != null -> QueuedClone.waitTitle(clone.state, clone.repository)
+        failed -> QueuedClone.FAILED_TITLE
+        else -> QueuedClone.TITLE
+    }
+    val align = if (compact) Alignment.Start else Alignment.CenterHorizontally
+    val pad = if (compact) Modifier.padding(horizontal = 16.dp, vertical = 14.dp) else Modifier.padding(horizontal = 24.dp, vertical = 32.dp)
+    Column(modifier.fillMaxWidth().then(pad).testTag("clone-wait"), horizontalAlignment = align, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            // The full-height card's own dots already say it is waiting; the compact one has none, so it spins until a percentage is heard.
+            if (compact && clone != null && clone.progress == null) CircularProgressIndicator(Modifier.size(14.dp).testTag("clone-wait:spinner"), strokeWidth = 1.5.dp)
+            Text(title, Modifier.testTag("clone-wait:title"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold,
+                textAlign = if (compact) TextAlign.Start else TextAlign.Center)
+        }
+        clone?.progress?.let { progress ->
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                LinearProgressIndicator(progress = { progress / 100f },
+                    modifier = Modifier.width(220.dp).height(4.dp).semantics { contentDescription = title }.testTag("clone-wait:bar"),
+                    drawStopIndicator = {}, gapSize = 0.dp)
+                Text("$progress%", Modifier.testTag("clone-wait:percent"), style = MaterialTheme.typography.bodyMedium, color = secondary)
+            }
+        }
+        val where = machine?.takeIf { clone != null }
+        Text(
+            when {
+                clone == null && failed -> QueuedClone.FAILED_WAIT
+                where != null -> "On $where. ${QueuedClone.STARTS}"
+                else -> QueuedClone.STARTS
+            },
+            Modifier.testTag("clone-wait:description"), style = MaterialTheme.typography.bodyMedium, color = secondary,
+            textAlign = if (compact) TextAlign.Start else TextAlign.Center)
     }
 }
