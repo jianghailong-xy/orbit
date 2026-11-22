@@ -3295,7 +3295,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1429 adds six nullable rating columns, a check on rating_score and an (owner_id, created_at) index on
       // subagent_run; no row is written, and no preserved relation, trigger, function or DONE fence changes.
       // Written as 1420 on its task branch, it was renumbered after main took 1420 to 1428.
-      '1429_subagent_run_rating'],
+      '1429_subagent_run_rating',
+      // 1444 adds four nullable work-session columns and three checks on project_open_item, and widens
+      // project_integration_job_retry_failure_class_chk to admit CONFLICT (revision 42, §12.4, R1); no row is
+      // written, and no preserved relation, trigger, function or DONE fence changes.
+      '1444_open_item_work_session'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
