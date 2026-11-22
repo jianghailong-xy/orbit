@@ -2,13 +2,13 @@
 
 [firewall.py](firewall.py) keeps the rules on a Docker-backend deployment's host that leave a managed runner what it
 needs and nothing else of the host or the network behind it. Every account's managed runner is a container on one
-bridge network of the host, `orbit-managed-runners`. Without these rules, code in it reaches every service the host
+bridge network of the host, `orbit-cloud-runners`. Without these rules, code in it reaches every service the host
 listens to on an address other than loopback (sshd, for one), and through the host the private networks behind it:
 task D5 measured both on the HPC host.
 
 Root Compose runs it as the `managed-runner-firewall` service, built from [Dockerfile](Dockerfile) (Python's standard
 library, the iptables binaries of both backends and this one file), under the `managed-runner-firewall` profile. A
-fresh install (`scripts/install-server.sh`) switches that profile on in `.env` beside the Docker backend's, and so do
+fresh install with `--managed-runners` (`scripts/install-server.sh`) switches that profile on in `.env` beside the Docker backend's, and so do
 `--enable-managed-runners` and `--enable-managed-runner-firewall`; `--no-managed-runner-firewall` leaves it off, and an
 upgrade never starts, builds or recreates it. The design record is
 [docs/managed-runner-design.md](../../../docs/managed-runner-design.md), "Implementation record: the managed runners'
@@ -126,7 +126,7 @@ The service runs `serve`. The others, run as `docker compose run --rm --no-deps 
 | `status` | What the status file says (exit 0 while it says enforced). |
 | `preflight` | Whether the host can carry the rules: Docker's chains in one backend, and every match and target tried in a scratch chain no packet reaches, then removed. |
 | `remove` | Every jump and chain of this program, the nat guard's included, in both backends and families, whatever bridge it names. Stop the service first, or it writes them again. |
-| `docker-dns`, `probe` | Run on the managed runners' network instead (`--network orbit-managed-runners`, no privilege): the DNS servers Docker forwards to from there, and connections that must be reached (`--reach`) or refused by a firewall (`--blocked`). The install uses both. |
+| `docker-dns`, `probe` | Run on the managed runners' network instead (`--network orbit-cloud-runners`, no privilege): the DNS servers Docker forwards to from there, and connections that must be reached (`--reach`) or refused by a firewall (`--blocked`). The install uses both. |
 
 ## What it cannot do
 

@@ -36,6 +36,7 @@ import {
   scheduleGoalReachedPushTitle,
   scheduleHeldClause,
   scheduleHeldWaiting,
+  scheduleStoppedAsPlannedText,
   scheduleWidenWaitingText,
   type ScheduleEnvelope,
   type ScheduleEnvelopePart,
@@ -59,7 +60,8 @@ export type ScheduleAlertKind =
   | 'WIDEN'
   | 'GOAL_REACHED'
   | 'ONCE_MISSED'
-  | 'OVER_BUDGET';
+  | 'OVER_BUDGET'
+  | 'PLANNED_END';
 
 /** One push. `opens` is where a tap goes: the run's session, or the schedule. */
 export interface ScheduleAlert {
@@ -264,6 +266,11 @@ export function goalReachedCopy(title: string): { title: string; body: string } 
     title: line(scheduleGoalReachedPushTitle(title), 120),
     body: 'A run found nothing left to watch and ended this scheduled task. Undo resumes it.',
   };
+}
+
+/** §8.5: the one push for a planned end reached, "Stopped as planned after 12 runs". */
+export function plannedEndCopy(title: string, runs: number): { title: string; body: string } {
+  return { title: line(title, 120), body: scheduleStoppedAsPlannedText(runs) };
 }
 
 export function onceMissedCopy(title: string): { title: string; body: string } {

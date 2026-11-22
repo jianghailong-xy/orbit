@@ -236,7 +236,7 @@ runs: this host's own containers, `.env` and runner link are left as they are.
 `<registry>/orbit-apiserver:<commit>`, which `wiki-worker` runs too, `<registry>/orbit-web:<commit>`, and
 `<registry>/orbit-link-gateway:<commit>`, where that commit is the last one under `src/link-gateway`, its
 whole build context, so that a release which does not change the gateway recreates nothing, and
-`<registry>/orbit-managed-runner:<commit>`, the hosted runners' image, where that commit is the last one that
+`<registry>/orbit-cloud-runner:<commit>`, the hosted runners' image, where that commit is the last one that
 changed what `deploy/managed-runner/image` builds it from (the runner's Go sources but its tests, its module
 files, DeepSeek Harness's lockfile, and the image's directory), so that a release which does not change the
 runner builds none and moves no hosted runner. A commit without `deploy/managed-runner/image` has none. A tag names one
@@ -288,7 +288,7 @@ the two Compose files a target lists beside `docker-compose.yml`, `deploy/postgr
    the reason ([Without a gap](#without-a-gap), below). Where the target runs managed runners on Kubernetes (its
    `.env` sets `ORBIT_MANAGED_RUNNERS_ENABLED=true`, and `profile.json` in `ORBIT_MANAGED_RUNNERS_DIR` says
    `"backend": "kubernetes"`), it also prints the hosted runners' image: `unchanged`, or the profile's
-   `runner.image` and the release's image by digest, `<registry>/orbit-managed-runner@sha256:<64 hex>`;
+   `runner.image` and the release's image by digest, `<registry>/orbit-cloud-runner@sha256:<64 hex>`;
 5. stops, having changed nothing, if an image the release runs does not come from the registry: `postgres` and
    `pgbackup` have theirs only from `deploy/postgres-pinned.yml`, so a target whose `COMPOSE_FILE` does not
    list it is refused. `--plan` stops here in any case, with every file put back;
@@ -569,8 +569,8 @@ the checkout's files named in step 4. Stop and report at the first step that fai
 ## Notes
 
 - Managed runners stay as the deployment's `.env` has them: the script never writes `.env`. A
-  deployment installed before them, or with `--no-managed-runners`, keeps them off; only a fresh
-  install (`scripts/install-server.sh`) or an administrator switches them on (docs/self-hosting.md,
+  deployment installed before them, or without `--managed-runners`, keeps them off; only a fresh
+  install with `--managed-runners` (`scripts/install-server.sh`) or an administrator switches them on (docs/self-hosting.md,
   "Managed runners"). Where `.env` does not turn on the `managed-runners-docker` Compose profile,
   Compose does not list `docker-channel`, and the script builds, recreates and writes exactly what it
   did before managed runners existed: nothing under `data/`, no managed runner image.
@@ -578,7 +578,7 @@ the checkout's files named in step 4. Stop and report at the first step that fai
   1. finds the managed runners' directory where Compose binds it into `docker-channel`, and stops
      before building anything if its `channel.json` and `profile.json` are not there;
   2. builds `docker-channel` with the other images, then the managed runner image from
-     `deploy/managed-runner/image` as `orbit-managed-runner:local` (local, never pushed; `--no-cache`
+     `deploy/managed-runner/image` as `orbit-cloud-runner:local` (local, never pushed; `--no-cache`
      applies to it too);
   3. when its image ID is new, writes that ID into both files, each replaced whole by a rename;
   4. recreates the other services as above, then the apiserver again if that did not recreate it

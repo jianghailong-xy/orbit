@@ -111,6 +111,11 @@ export const ENGINE_SESSION_GUARD_SITES: Readonly<Record<string, EngineSessionGu
     snippet: '// Stopping a turn — or stopping one and replacing it — is an engine door (§2.9 LS6).',
     note: 'POST /interrupt and the runner interruption door',
   },
+  'SessionsService.stopBackgroundJob': {
+    file: 'sessions/sessions.service.ts',
+    snippet: "// Stopping a job is an engine door (§2.9 LS6): the platform's landing container runs no bg_run job.\n    assertEngineSessionRow(session);",
+    note: 'POST /background/jobs/:jobId/stop',
+  },
   'SessionsService.getSendable': {
     file: 'sessions/sessions.service.ts',
     snippet: '// A LANDING row is never sendable: the composer, End and the queued-turn doors all reach this',
@@ -338,6 +343,7 @@ export const ENGINE_SESSION_DOORS: Readonly<Record<string, string>> = {
   'PATCH /sessions/:id/settings': 'SessionsService.updateSettings',
   'POST /sessions/:id/restart': 'SessionsService.restart',
   'POST /sessions/:id/interrupt': 'SessionsService.interrupt',
+  'POST /sessions/:id/background/jobs/:jobId/stop': 'SessionsService.stopBackgroundJob',
   'POST /sessions/:id/end': 'SessionsService.getSendable',
   'POST /sessions/:id/merge': 'SessionsService.mergeToMain',
   'POST /sessions/:id/merge-repair': 'SessionsService.startMergeRepair',

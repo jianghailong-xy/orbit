@@ -74,6 +74,8 @@ import io.orbitd.android.watch.WatchStore
 import io.orbitd.android.composer.MachineSetup
 import io.orbitd.android.composer.MachineSetupCopy
 import io.orbitd.android.composer.NewSessionComposer
+import io.orbitd.android.composer.NewWorkspaceButton
+import io.orbitd.android.composer.NewWorkspaceCopy
 import io.orbitd.android.composer.NoMachineWelcomeCard
 import io.orbitd.android.composer.rememberAccountName
 import io.orbitd.android.composer.rememberManagedOffered
@@ -235,6 +237,11 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
             if (navigation.current != next) LastPageMarks.opened(next)
             navigation = navigation.push(next)
         }
+        fun replaceTop(next: OrbitRoute) {
+            keyboard?.hide(); focus.clearFocus()
+            if (navigation.current != next) LastPageMarks.opened(next)
+            navigation = navigation.replaceTop(next)
+        }
         fun openScheduledRun(id: String) = open(OrbitRoute(Destination.SESSION, id, folderId = ScheduledRunsFolder.ID))
         if (route.destination == Destination.SESSION && route.folderId == ScheduledRunsFolder.ID &&
             navigation.frames.getOrNull(navigation.frames.lastIndex - 1)?.let {
@@ -282,6 +289,10 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
         val managedLandingReady = managedOfferedForLanding == false || managedForLanding.loaded
         val machinesToSetUp = MachineSetup.machinesToSetUp(data.effectiveRunnerRows, data.effectiveWorkspaceRows, managedStatus = managedStatus)
         val firstOnline = MachineSetup.firstOnlineRunnerId(data.effectiveRunnerRows, managedStatus = managedStatus)
+        // The drawer's Workspaces + (docs/mocks/new-workspace-form/02-apple-entry, owner A): every machine, with what it holds. None until
+        // the workspace list has answered, when every machine would read as bare.
+        val newWorkspaceMachines = if (data.ready) MachineSetup.newWorkspaceMachines(data.effectiveRunnerRows, data.effectiveWorkspaceRows,
+            managedStatus = managedStatus) else emptyList()
         fun openNewSession(origin: Origin = Origin.LIST) {
             val workspace = route.workspaceId ?: workspaces.firstOrNull()?.id
             when {
@@ -393,7 +404,11 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                             onClick = { select(WAITING_ON_YOU, OrbitRoute(Destination.WAITING_ON_YOU, origin = Origin.DRAWER)) },
                             trailing = { WaitingOnYouDrawerCount(remember(signedIn.handle) { OwnerRequestStore.of(app.session, signedIn.handle, app.processScope) }, projects.projects, revision, terminalsChanged) },
                             modifier = Modifier.testTag("drawer:waiting-on-you")) { DrawerLabel(WAITING_ON_YOU) }
-                        DrawerWorkspacesHeading("Workspaces")
+                        DrawerWorkspacesHeading("Workspaces") {
+                            NewWorkspaceButton(newWorkspaceMachines) { machine ->
+                                select(machineDraftDestination(machine.id), newWorkspaceRoute(machine.id, machine.workspaces > 0, Origin.DRAWER))
+                            }
+                        }
                         DrawerUnreachableRow(data) { app.realtime.refreshDirectory() }
                         if (data.ready && data.workspaces.isEmpty() && machinesToSetUp.isEmpty()) Text(MachineSetupCopy.NO_WORKSPACES_YET, Modifier.padding(16.dp))
                         workspaces.forEach { workspace ->
@@ -449,7 +464,8 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                         PageBar.Title(route) {
                             if (machineName != null) {
                                 Column {
-                                    Text(MachineSetupCopy.SETUP_PAGE_TITLE, maxLines = 1, style = MaterialTheme.typography.titleMedium)
+                                    Text(if (route.addsWorkspace) NewWorkspaceCopy.NEW_WORKSPACE else MachineSetupCopy.SETUP_PAGE_TITLE, maxLines = 1,
+                                        style = MaterialTheme.typography.titleMedium)
                                     Text(machineName, maxLines = 1, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             } else {
@@ -464,9 +480,12 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                         }
                     }, actions = {
                         PageBar.Actions(route, this)
-                        if (navigation.canGoBack) IconButton(onClick = { scope.launch { focus.clearFocus(); drawer.open() } }) { NeedsYouMenuIcon(app, "Open navigation") }
+                        // A workspace's new session page has back alone in its bar, as iOS's draft does, and a session page back and
+                        // its own ⋯ (iOS `ConsoleView`'s toolbar): neither carries the drawer or a refresh.
+                        val draftPage = route.destination == Destination.DRAFT && route.workspaceId != null || route.destination == Destination.SESSION
+                        if (navigation.canGoBack && !draftPage) IconButton(onClick = { scope.launch { focus.clearFocus(); drawer.open() } }) { NeedsYouMenuIcon(app, "Open navigation") }
                         // iOS: a session list is refreshed by pulling it.
-                        if (route.destination != Destination.WORKSPACES && route.destination != Destination.WORKSPACE && route.destination != Destination.FOLDER)
+                        if (route.destination != Destination.WORKSPACES && route.destination != Destination.WORKSPACE && route.destination != Destination.FOLDER && !draftPage)
                             IconButton(onClick = { app.realtime.refreshDirectory() }) { Icon(painterResource(R.drawable.ic_refresh), "Refresh directory") }
                     })
             }) { padding ->
@@ -490,7 +509,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                     swap = { next -> keyboard?.hide(); focus.clearFocus(); navigation = navigation.back().push(next) }) {
                                     navigation = navigation.dropSession(route.id!!)
                                 }
-                                Destination.DRAFT -> NewSessionComposer(app, signedIn.handle, route, data, ::open) { key, root -> land(key, root) }
+                                Destination.DRAFT -> NewSessionComposer(app, signedIn.handle, route, data, ::open, ::land, ::replaceTop)
                                 Destination.TASKS, Destination.TASK, Destination.LIST -> TasksScreen(app, signedIn.handle, route, revision, ::open) { navigation = navigation.back() }
                                 Destination.PROJECTS, Destination.PROJECT -> ProjectsScreen(app, signedIn.handle, route, ::open) { navigation = navigation.back() }
                                 Destination.WIKI, Destination.WIKI_ENTRY, Destination.WIKI_BROWSE, Destination.WIKI_INDEX,

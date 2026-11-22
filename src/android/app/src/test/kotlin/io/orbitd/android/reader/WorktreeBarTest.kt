@@ -12,6 +12,9 @@ import io.orbitd.android.core.net.HttpMethod
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.directory.DirectoryApi
 import kotlinx.coroutines.*
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.currentTime
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.serialization.json.*
 import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.State
@@ -115,6 +118,25 @@ class WorktreeBarTest {
     private fun patches() = server.calls.filter { it.path == listOf("workspaces", workspaceId) && it.method == HttpMethod.PATCH }.map(::body)
     private fun shown(text: String) = compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
     private fun settle(next: JsonObject) { detail = next; runBlocking { model.loadDetail() }; compose.waitForIdle() }
+
+    /** Criterion 4 (page polls follow the stream): a running session's bar, with nothing in flight, is read on the stream's cadence — when the
+     * page opens and once a minute — and not on a 3–5 s timer (the owner's ~31 `GET sessions/:id` a minute). A merge pending is read on its
+     * own bounded 3 s while it lasts. On a test clock; the reads are counted, as a request recorder would. */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test fun aRunningBarWithNothingInFlightIsReadOnceAMinuteNotOnATimer() = kotlinx.coroutines.test.runTest {
+        detail = session("status" to JsonPrimitive("RUNNING"))
+        show()
+        val signal = kotlinx.coroutines.flow.MutableStateFlow(io.orbitd.android.realtime.PageSignal(true, 0))
+        val reads = mutableListOf<Long>()
+        backgroundScope.launch {
+            io.orbitd.android.realtime.PagePolls.follow(signal, { model.inFlightMs() }, jitter = { 1.0 }) { reads += currentTime }
+        }
+        runCurrent()
+        advanceTimeBy(150_000); runCurrent()
+        assertEquals("the stream's page read and its minute, nothing between: $reads", listOf(0L, 60_000L, 120_000L), reads)
+        model.offer(session("status" to JsonPrimitive("RUNNING"), "mergeStatus" to JsonPrimitive("pending")))
+        assertEquals(3_000L, model.inFlightMs())
+    }
 
     @Test fun aCleanTreeMergesToTheTargetThePersonPickedAndTheBarFollowsTheRunnersAnswer() {
         show()

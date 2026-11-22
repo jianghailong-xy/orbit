@@ -137,13 +137,14 @@ class OwnerAnswerCardDeviceTest : IncrementDeviceTest() {
         capture("3-queued")
     }
 
-    /** (3) View details: the question replayed, and the words the coordinator was told folded at the foot of the replay. */
+    /** (3) View details: the question replayed in place (board card-ui-polish ③), and the words the coordinator was told folded at its foot. */
     @Test fun viewDetailsHoldsWhatTheCoordinatorWasTold() = journey {
         openConversation()
         scrollTranscriptTo(hasTestTag("record:5:ownerAnswer"))
-        compose.onNodeWithTag(recordKey).performClick()
-        await("the card's review") { exists(hasTestTag("card-review")) && exists(hasTestTag("$recordKey:told"), unmerged = true) }
-        verify("the review is the record's", textOf("card-review:title") == CoordinatorQuestions.answeredHeading)
+        compose.onNodeWithTag("$recordKey:details", useUnmergedTree = true).performClick()
+        await("the record unfolded") { exists(hasTestTag("$recordKey:unfolded"), unmerged = true) && exists(hasTestTag("$recordKey:told"), unmerged = true) }
+        verify("no sheet opened", !exists(hasTestTag("card-review")))
+        verify("its last row folds it back", exists(hasText(CoordinatorQuestions.hideDetails), unmerged = true))
         verify("the words are folded", !exists(hasTestTag("$recordKey:told:words"), unmerged = true))
         compose.onNode(hasText(OwnerAnswerLine.told) and hasClickAction()).performScrollTo().performClick()
         await("the words the coordinator was told") { exists(hasTestTag("$recordKey:told:words"), unmerged = true) }

@@ -227,9 +227,10 @@ async function fixture(db: PrismaClient, label: string): Promise<Fixture> {
 
 /** One more finished task serving the criterion: a new serving set, so a new fact about it. */
 async function finishServingWork(db: PrismaClient, f: Fixture, n: number): Promise<void> {
+  const taskId = randomUUID();
   await db.task.create({
     data: {
-      id: randomUUID(),
+      id: taskId,
       ownerId: f.ownerId,
       projectId: f.projectId,
       title: `serving work ${n}`,
@@ -242,6 +243,13 @@ async function finishServingWork(db: PrismaClient, f: Fixture, n: number): Promi
       criterionRevision: f.criterion.revision,
       autoRunWhenReady: false,
     },
+  });
+  // The work's session, on its own branch with a commit reported: revision 42 (§12.15 P-M3) reads
+  // landing from the delivered commit, so a DONE task that ran no branch and reported nothing has
+  // nothing to land, and its criterion would read LANDED with no CRITERION_UNLANDED fact.
+  await openSession(db, f, {
+    taskId, status: RunStatus.SUCCEEDED, startsTaskWork: true,
+    isolationStatus: 'worktree', branch: `orbit/serving-${n}-${taskId.slice(0, 8)}`, changedFiles: ['src/work.ts'],
   });
 }
 
@@ -272,7 +280,14 @@ async function failWork(db: PrismaClient, f: Fixture, n: number): Promise<string
 async function openSession(
   db: PrismaClient,
   f: Fixture,
-  options: { taskId?: string; status?: RunStatus; startsTaskWork?: boolean } = {},
+  options: {
+    taskId?: string;
+    status?: RunStatus;
+    startsTaskWork?: boolean;
+    isolationStatus?: string;
+    branch?: string;
+    changedFiles?: string[];
+  } = {},
 ): Promise<string> {
   const id = randomUUID();
   await db.session.create({
@@ -289,6 +304,10 @@ async function openSession(
       status: options.status ?? RunStatus.AWAITING_INPUT,
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: options.startsTaskWork ?? false,
+      ...(options.isolationStatus ? { isolationStatus: options.isolationStatus } : {}),
+      ...(options.branch ? { branch: options.branch } : {}),
+      ...(options.changedFiles ? { changedFiles: options.changedFiles } : {}),
+      ...(options.status === RunStatus.SUCCEEDED ? { finishedAt: new Date() } : {}),
     },
   });
   return id;

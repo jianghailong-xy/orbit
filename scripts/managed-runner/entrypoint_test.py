@@ -458,7 +458,7 @@ class ManagedBootstrapFixture(EntrypointFixture):
         self.issue(1, "generation-1-credential")
         os.environ.pop("ORBIT_RUNNER_ENROLLMENT_TOKEN_FILE")
         os.environ.update({
-            "ORBIT_RUNNER_NAME": "orbit-managed",
+            "ORBIT_RUNNER_NAME": "Orbit Cloud",
             "ORBIT_RUNNER_EXPECTED_ID": RUNNER_ID,
             "ORBIT_RUNNER_CREDENTIAL_FILE": str(self.bootstrap / "token"),
             "ORBIT_MANAGED_RUNNER_GENERATION": "1",

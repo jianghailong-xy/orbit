@@ -192,9 +192,9 @@ describe('Orbit Cloud: the managed runner\'s name, version line and updates on i
     const page = await machinePage(MANAGED);
     expect(title(page)).toBe('Orbit Cloud');
     // The account's own machine named like the server's managed runner is still its own name.
-    ownReport = { name: 'orbit-managed' };
+    ownReport = { name: 'orbit-cloud' };
     const own = await machinePage(OWN);
-    expect(title(own)).toBe('orbit-managed');
+    expect(title(own)).toBe('orbit-cloud');
   });
 
   it('an owner-given name still wins', async () => {

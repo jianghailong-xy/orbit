@@ -10,6 +10,7 @@ import {
   type RunningWorktreeOperation,
 } from './dispatch-pause';
 import { QueueService } from './queue.service';
+import { heldSql } from '../common/session-release';
 
 /** Reads and switches the runner dispatch pause (dispatch-pause.ts). */
 @Injectable()
@@ -34,7 +35,7 @@ export class DispatchPauseService {
              floor(extract(epoch FROM now() - t."delivered_at"))::int AS "elapsedSeconds"
         FROM "session" s
         JOIN "conversation_turn" t ON t."session_id" = s."id" AND t."status" = 'IN_FLIGHT'
-       WHERE s."status" IN ('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED')
+       WHERE ${heldSql('s."status"')}
          AND t."kind" IN ('message', 'shell')
        ORDER BY t."delivered_at" ASC NULLS FIRST, t."id"`;
     const integrationJobs = await this.prisma.$queryRaw<RunningIntegrationJob[]>`
@@ -117,7 +118,7 @@ export class DispatchPauseService {
         SELECT DISTINCT s."id"::text AS "id"
           FROM "session" s
           JOIN "conversation_turn" t ON t."session_id" = s."id" AND t."status" = 'PENDING'
-         WHERE s."status" IN ('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED')
+         WHERE ${heldSql('s."status"')}
            AND t."kind" IN ('message', 'shell', 'reload')`;
       for (const { id } of held) this.realtime.notifyInbox(id);
       const runners = await this.prisma.$queryRaw<Array<{ runnerId: string }>>`

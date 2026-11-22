@@ -65,6 +65,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun OwnerRequestCard(asked: OwnerRequest, store: OwnerRequestStore, runner: (String?) -> String, open: (String) -> Unit,
     now: Instant = Instant.now(), focusInput: Boolean = false, discuss: ((String) -> Unit)? = null) {
+    if (asked.kind == OwnerRequests.SETTINGS_CHANGE && asked.pending) { SettingsChangeCard(asked, store); return }
     if (!asked.pending) { OwnerRequestResolved(asked, store, runner, now); return }
     // The agent's words in the owner's language (Settings › Translation), flipped whole to its own words by the foot; the doors
     // take the request's id and option indexes, which a translation does not change.
@@ -426,6 +427,7 @@ private fun StepValue(value: String, action: String?, onAction: () -> Unit) {
 /** A request that has ended, as one row (web `OwnerRequestResolved`): how, who, when, and from which device. */
 @Composable
 fun OwnerRequestResolved(request: OwnerRequest, store: OwnerRequestStore, runner: (String?) -> String, now: Instant = Instant.now()) {
+    if (request.kind == OwnerRequests.SETTINGS_CHANGE && request.state in setOf("DONE", "DECLINED")) { SettingsChangeFolded(request, store); return }
     val scope = rememberCoroutineScope()
     var busy by remember(request.id) { mutableStateOf(false) }
     var failure by remember(request.id) { mutableStateOf<String?>(null) }

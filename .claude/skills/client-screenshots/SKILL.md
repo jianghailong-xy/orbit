@@ -11,6 +11,7 @@ to the page, and the test saves a PNG plus a text dump of what was on screen.
 | | Android | iOS |
 |---|---|---|
 | Where | Linux host with `/opt/android-sdk` (this checkout) | The Mac mini: delegate with `workspace: "orbit-macos"` (or `needs: ["os:darwin"]`) |
+| Device | Pixel 10 Pro display, 1280×2856 @ 480 dpi (`A07_DISPLAY`) | iPhone 17 Pro simulator, 1206×2622 |
 | Fixture | `src/android/scripts/composer-fixture.py` (started by the script) | `stub.py` of a probe harness under `docs/evidence/*/probe-harness` |
 | Drives | an instrumented journey in `ComposerDeviceTest` calling `capture("<name>")` | an XCUITest calling `shot("<name>")` |
 | Output | `<out>/a07-composer/<name>.png` + `<name>-ui.txt` | `<probe>/shots/<name>.png` (+ xcresult attachments) |
@@ -73,13 +74,17 @@ $ANDROID_HOME/platform-tools/adb start-server 9>&- 3>&-   # before the lock, or 
 flock -w 1800 /var/lib/orbit/android/ui.lock sh -c \
   'systemctl is-active --quiet orbit-android-emulator.service || systemctl start orbit-android-emulator.service'
 out=<this session's uploads dir>/android-shots-$(date -u +%Y%m%dT%H%M%SZ)   # must not exist yet
+A07_DISPLAY=1280x2856@480 \
 A07_TEST='io.orbitd.android.composer.ComposerDeviceTest#newSessionUsesWorkspaceDraftAndNavigatesAfterCreation' \
   bash src/android/scripts/composer-device-test.sh 36 \
   src/android/app/build/outputs/apk/debug/app-debug.apk \
   src/android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk "$out"
 ```
 
-- The display is 720×1280 at 320 dpi, light mode. Use `A07_NIGHT=yes` for dark and `A07_FONT_SCALE=1.3` for large text.
+- Screenshots use a Pixel 10 Pro display: `A07_DISPLAY=1280x2856@480` (427×952 dp). The SDK has no Pixel 11 Pro profile;
+  the owner chose this on 2026-11-20. It sets the shared emulator's size and density for the run and puts them back after. It
+  has no rounded corners or camera cutout. Without `A07_DISPLAY`, the script uses 720×1280 at 320 dpi, which the device tests
+  were written for. Light mode is the default. Use `A07_NIGHT=yes` for dark and `A07_FONT_SCALE=1.3` for large text.
 - `$out/result.txt` with `exit_code=0` means it passed. A failed journey still writes `<journey>-failure.png`. A name in
   `missing-captures.txt` means the system returned no screenshot under load: rerun into a new directory.
 
@@ -151,16 +156,31 @@ Known build breaks in this harness (seen 2026-11-20, Xcode 27, Mac HEAD 874fa56f
   `WikiChatViews.swift` from the shared sources and compile patched copies under `.shot-probe/`, with
   `TranscriptView(wikiChat:)` moved beside the view.
 
-### B3. Run
+### B3. Run on an iPhone 17 Pro
+
+Shots are taken on an **iPhone 17 Pro** (402×874 pt, PNGs 1206×2622), to set beside Android's Pixel 10 Pro display (A3).
+The owner chose this on 2026-11-20. `run.sh` picks "the newest iPhone Pro" by itself, so pin the device in its copy: replace
+the `IPHONE_UDID=$(xcrun simctl list devices available -j | python3 …)` block in `.shot-probe/run.sh` with
+
+```bash
+IPHONE_UDID=$(xcrun simctl list devices available | grep -m1 'iPhone 17 Pro (' | grep -oE '[0-9A-F-]{36}')
+[ -n "$IPHONE_UDID" ] || { echo "no iPhone 17 Pro simulator: xcrun simctl list devicetypes | grep 17"; exit 1; }
+```
+
+The `(` matters: without it the pattern also matches "iPhone 17 Pro Max". Since Xcode 27, a destination given by name alone
+no longer matches, so the UDID is what goes to `-destination id=…`. If no iPhone 17 Pro device exists, create one:
+`xcrun simctl create "iPhone 17 Pro" com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro`. Then:
 
 ```bash
 bash .shot-probe/run.sh; echo exit=$?
 ls .shot-probe/shots/*.png
+xcrun simctl list devices | grep "$IPHONE_UDID"     # record the device name and its iOS version
+sips -g pixelWidth -g pixelHeight .shot-probe/shots/*.png   # 1206 × 2622 on an iPhone 17 Pro
 ```
 
-The run boots the newest iPhone Pro simulator, serves the stub, builds and runs the tests, and copies the PNGs into
-`.shot-probe/shots/`. Takes ~10–20 min cold. Build errors are in `.shot-probe/build-ios.log` (`grep -n 'error:'`). Paths
-the stub doesn't serve are in `shots/not-served.txt`. If the page needs one of them, add it to `stub.py`.
+`run.sh` serves the stub, builds and runs the tests, and copies the PNGs into `.shot-probe/shots/`. Takes ~10–20 min cold.
+Build errors are in `.shot-probe/build-ios.log` (`grep -n 'error:'`). Paths the stub doesn't serve are in
+`shots/not-served.txt`. If the page needs one of them, add it to `stub.py`.
 
 ### B4. Hand back from the Mac
 

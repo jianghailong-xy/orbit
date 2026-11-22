@@ -94,9 +94,17 @@ internal object LandingSteps {
         }
     }
 
+    /** A finished landing check that was not run because its task is exempt (§12.15 P-C2): the reason the server recorded, or null
+     *  for any other line. It is skipped, not failed. Web's `landingCheckTaskExempt`. */
+    fun taskExempt(entry: LandingEntry): String? =
+        if (entry.kind != "CHECK_FINISHED" || entry.data?.text("skipped") != "TASK_EXEMPT") null else entry.data?.text("reason").orEmpty()
+
+    /** The Landing check step of a task exempt from it: the reason it was skipped for, or null for any other step. */
+    fun skippedReason(step: LandingStep): String? = if (step.key == "check:LANDING_CHECK") taskExempt(step.summary) else null
+
     /** A step stopped short: one of its lines is a stop or a refusal, or a check or result that did not end well. */
     fun failed(step: LandingStep, kind: String): Boolean = step.entries.any { (_, entry) ->
-        entry.data?.text("skipped") != "PATHS_EXEMPT" && (entry.kind in FAILURES || (entry.kind in setOf("CHECK_FINISHED", "RESULT", "RESULT_FALLBACK") && !LandingSessionModel.entryOk(entry, kind)))
+        entry.data?.text("skipped") != "PATHS_EXEMPT" && taskExempt(entry) == null && (entry.kind in FAILURES || (entry.kind in setOf("CHECK_FINISHED", "RESULT", "RESULT_FALLBACK") && !LandingSessionModel.entryOk(entry, kind)))
     }
 
     /** How long a landing's checks took together; null when none recorded a duration. */

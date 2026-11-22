@@ -272,7 +272,7 @@ func (rig *startupReclaimRig) claim(job *ClaimedSession) error {
 	if err != nil {
 		return err
 	}
-	if reclaimStatusOpen(status) {
+	if reclaimStatusOpen(status, true) {
 		rig.startSession(job, reclaimInitiallyActive(status))
 	}
 	return nil

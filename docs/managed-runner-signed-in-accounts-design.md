@@ -34,7 +34,7 @@ Production on 2026-11-16 (read-only queries on 10.66.0.4):
 - 6 accounts have a live login session (an unrevoked, unexpired refresh token) and no mapping; 5 of them were active
   in the last 7 days. One of them last signed in on 11-09 and has only refreshed since, so it has no managed runner
   and would have to press Set up;
-- the pool (`orbit-ws03/orbit-managed`) admits 3 active users and 4 Pods; 1 is in use. `lifecycle.idleSeconds` is
+- the pool (`orbit-ws03/orbit-cloud`) admits 3 active users and 4 Pods; 1 is in use. `lifecycle.idleSeconds` is
   86400, so an idle runner goes to sleep and frees its compute after a day.
 
 ## Proposal

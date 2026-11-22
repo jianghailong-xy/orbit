@@ -57,7 +57,8 @@ export type HeartbeatFactRole =
   | 'REPORT'
   /** Written on every beat by the statement that writes the beat itself (readLinkBeat, recordRunnerResources,
    *  recordRunnerBeat), so it needs no digest: the machine's resources, which change on nearly every beat, and the
-   *  sessions its background jobs hold slots for. */
+   *  sessions its background jobs hold slots for; and what is executing in each session, which replaceExecutingSets
+   *  writes on every beat that carries it. */
   | 'PRESENCE'
   /** The heartbeat route does not read it. */
   | 'UNREAD';
@@ -81,6 +82,9 @@ export type HeartbeatFactRole =
  *   resources                                    kept on the presence row by the beat's own write (runners/runner-resources.ts).
  *   backgroundJobSessionIds                      kept on the presence row by the beat's own write, replaced on every beat
  *                                                (runners/runner-background-holders.ts).
+ *   executing, executingAt                       what runs in each supervised session, and when the runner composed it,
+ *                                                replacing the sessions' inferred sets on every beat that carries it, by its
+ *                                                own statement beside the beat's (runners/runner-executing-sets.ts).
  *   the rest but idleCapacity                    reports: the runner row's catalogues and state, its plan usage, its
  *                                                sessions' worktrees, its workspaces' directories.
  */
@@ -110,6 +114,8 @@ export const HEARTBEAT_FACTS = {
   browser: 'REPORT',
   resources: 'PRESENCE',
   backgroundJobSessionIds: 'PRESENCE',
+  executing: 'PRESENCE',
+  executingAt: 'PRESENCE',
 } as const satisfies { [K in keyof Required<RunnerHeartbeatRequest>]: HeartbeatFactRole };
 
 export type HeartbeatFactKind = keyof typeof HEARTBEAT_FACTS;
@@ -248,6 +254,11 @@ export const HEARTBEAT_DELIVERIES = {
     how: 'MARKED',
     writers: ['runner-api/runner-subagents.controller.ts#stopRemoteSubagentRun'],
     pending: "a remote SubAgent run of the runner RUNNING, whose parent's end is read on every beat (remoteSubagentHeartbeat)",
+  },
+  stopBackgroundJobs: {
+    how: 'MARKED',
+    writers: ['sessions/sessions.service.ts#stopBackgroundJob'],
+    pending: "an owner's stop of a bg_run job still in its session's running set: every full answer lists it (backgroundJobStopsFor)",
   },
   managedSleep: { how: 'FULL_ONLY', reads: 'a managed runner is admitted by RunnerAuthGuard and reconciles in full on every beat' },
   cursorKeyChecks: {
@@ -945,6 +956,7 @@ export function heartbeatAnswerHandsOut(answer: RunnerHeartbeatResponse): boolea
     || (answer.wikiRepoOps?.length ?? 0) > 0
     || (answer.remoteSubagentRuns?.length ?? 0) > 0
     || (answer.stopSubagentRunIds?.length ?? 0) > 0
+    || (answer.stopBackgroundJobs?.length ?? 0) > 0
     || (answer.mainCheckoutRequests?.length ?? 0) > 0
     || (answer.cursorKeyChecks?.length ?? 0) > 0
     || (answer.secretGrantsRemoving?.length ?? 0) > 0

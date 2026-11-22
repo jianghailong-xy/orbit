@@ -4193,7 +4193,7 @@
     "name": "Orbit Cloud (managed) on a release with ORBIT_NO_SELFUPDATE and behind: Orbit rolls its image, so no Updates are turned off",
     "input": {
       "runner": {
-        "name": "orbit-managed",
+        "name": "orbit-cloud",
         "hostname": "lab-host",
         "version": "0.1.190",
         "online": true,
@@ -4243,7 +4243,7 @@
     "name": "Orbit Cloud (managed) on a managed-<sha> image: its version line says Orbit keeps it up to date, never the hash",
     "input": {
       "runner": {
-        "name": "orbit-managed",
+        "name": "orbit-cloud",
         "version": "managed-95884b154feb3d4e2a575fb012c4185b20c282ac",
         "online": true,
         "lastHeartbeatAt": "2026-09-29T00:14:45Z",
@@ -4291,7 +4291,7 @@
     "name": "Orbit Cloud (managed) asleep on a managed-<sha> image: offline since, and kept up to date by Orbit",
     "input": {
       "runner": {
-        "name": "orbit-managed",
+        "name": "orbit-cloud",
         "version": "managed-95884b154feb3d4e2a575fb012c4185b20c282ac",
         "online": false,
         "lastHeartbeatAt": "2026-09-27T00:15:00Z",

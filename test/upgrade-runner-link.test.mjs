@@ -61,9 +61,9 @@ case "$*" in
   "network inspect -f {{range .IPAM.Config}}{{.Gateway}} {{end}} "*) echo "172.30.0.1 " ;;
   "network inspect -f {{.EnableIPv6}} "*) echo false ;;
   "network inspect -f {{with index .Options \"com.docker.network.bridge.name\"}}{{.}}{{else}}br-{{printf \"%.12s\" .Id}}{{end}} "*) echo br-0123456789ab ;;
-  "run --rm --network host "*" orbit-managed-runner-firewall:local preflight") echo '{"backend": "nft", "ipv6": "present", "iptables": "iptables v1.8.13"}' ;;
-  "run --rm --network host "*" orbit-managed-runner-firewall:local apply "*) echo '{"backend": "nft", "enforced": true, "problems": [], "written": ["IPv4", "IPv6"]}' ;;
-  "run --rm --network orbit-managed-runners "*" orbit-managed-runner-firewall:local docker-dns") echo '[]' ;;
+  "run --rm --network host "*" orbit-cloud-runner-firewall:local preflight") echo '{"backend": "nft", "ipv6": "present", "iptables": "iptables v1.8.13"}' ;;
+  "run --rm --network host "*" orbit-cloud-runner-firewall:local apply "*) echo '{"backend": "nft", "enforced": true, "problems": [], "written": ["IPv4", "IPv6"]}' ;;
+  "run --rm --network orbit-cloud-runners "*" orbit-cloud-runner-firewall:local docker-dns") echo '[]' ;;
   "network inspect "*) [ -e "$FAKE_DOCKER_LOG.network" ] || exit 1 ;;
   "network create "*) : >"$FAKE_DOCKER_LOG.network" ;;
 esac
@@ -491,7 +491,7 @@ test('no script writes the switch: RUNNER_LINK_REQUIRED and runner_link_switch a
 
 test('a fresh install writes the link\'s lines once, after the managed runners\' profile, shows no secret, and checks the way a runner takes', (t) => {
   const fixture = makeFixture(t);
-  const run = fixture.run(INSTALL, ['--public-origin', 'http://10.66.82.117:2086', '--managed-runner-image', 'orbit-managed-runner:fixture']);
+  const run = fixture.run(INSTALL, ['--public-origin', 'http://10.66.82.117:2086', '--managed-runners', '--managed-runner-image', 'orbit-cloud-runner:fixture']);
   assert.equal(run.status, 0, run.output);
   assertNoSecretShown(fixture, run);
   const text = readFileSync(fixture.envFile, 'utf8');
@@ -539,7 +539,7 @@ test('a fresh install whose link does not answer, or whose image makes no secret
 
 test('the firewall added later goes into both of a deployment\'s profile lines', (t) => {
   const fixture = makeFixture(t);
-  assert.equal(fixture.run(INSTALL, ['--no-managed-runner-firewall', '--managed-runner-image', 'orbit-managed-runner:fixture', '--no-start']).status, 0);
+  assert.equal(fixture.run(INSTALL, ['--managed-runners', '--no-managed-runner-firewall', '--managed-runner-image', 'orbit-cloud-runner:fixture', '--no-start']).status, 0);
   const run = fixture.run(INSTALL, ['--enable-managed-runner-firewall']);
   assert.equal(run.status, 0, run.output);
   assert.deepEqual(readFileSync(fixture.envFile, 'utf8').split('\n').filter((line) => line.startsWith('COMPOSE_PROFILES=')), [

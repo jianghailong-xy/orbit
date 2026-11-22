@@ -21,6 +21,7 @@ class BackgroundRowParityTest {
         Wire.json.parseToJsonElement(file!!.readText()).jsonObject
     }
     private val cases get() = fixture["cases"]!!.jsonArray.map { it.jsonObject }
+    private fun clearedAt(c: JsonObject) = BackgroundRow.clearedAt(c["lastUserMessageAt"].text(), c["lastAgentTurnStartedAt"].text())
     private fun JsonElement?.text() = (this as? JsonPrimitive)?.contentOrNull
 
     private fun item(o: JsonObject) = BackgroundRow.Item(o["id"].text()!!, o["name"].text()!!,
@@ -47,7 +48,7 @@ class BackgroundRowParityTest {
         for (c in cases) {
             val list = c["list"]!!.jsonArray.map { it.jsonObject }
             val live = c["sessionLive"]!!.jsonPrimitive.boolean
-            assertEquals(c["case"].text(), expected(c["expect"]!!.jsonObject), BackgroundRow.rowOf(list, c["lastUserMessageAt"].text(), live))
+            assertEquals(c["case"].text(), expected(c["expect"]!!.jsonObject), BackgroundRow.rowOf(list, clearedAt(c), live))
         }
     }
 
@@ -69,8 +70,15 @@ class BackgroundRowParityTest {
         assertTrue("no case of a not-live session with a running item", stale.isNotEmpty())
         for (c in stale) {
             val list = c["list"]!!.jsonArray.map { BackgroundRow.Input.of(it.jsonObject) }
-            assertTrue(c["case"].text(), BackgroundRow.shown(list, c["lastUserMessageAt"].text(), sessionLive = false).first.isEmpty())
+            assertTrue(c["case"].text(), BackgroundRow.shown(list, clearedAt(c), sessionLive = false).first.isEmpty())
         }
+    }
+
+    @Test fun theCutOffIsTheLaterOfTheTwo() {
+        assertNull(BackgroundRow.clearedAt(null, null))
+        assertEquals("2026-11-16T02:40:00.000Z", BackgroundRow.clearedAt("2026-11-16T02:40:00.000Z", null))
+        assertEquals("2026-11-16T02:41:00.000Z", BackgroundRow.clearedAt(null, "2026-11-16T02:41:00.000Z"))
+        assertEquals("2026-11-16T02:42:00.000Z", BackgroundRow.clearedAt("2026-11-16T02:42:00.000Z", "2026-11-16T02:41:00.000Z"))
     }
 
     private companion object { const val FIXTURE = "src/shared/src/background-row.fixture.json" }

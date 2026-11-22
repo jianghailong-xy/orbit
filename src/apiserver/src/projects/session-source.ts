@@ -695,6 +695,8 @@ export async function freezeSessionSourcePin(
           // started reads exactly like every other refused start.
           error: `${refusal.code}: ${reason}`,
           finishedAt: new Date(),
+          // The run never started (design §4.2).
+          releaseCause: 'setup_failed',
           // The claim's own markers. `run_claimed_at` is what a waiting notice counts from and the
           // owner of the inbox lease is a process that is not coming back for this run.
           runClaimedAt: null,

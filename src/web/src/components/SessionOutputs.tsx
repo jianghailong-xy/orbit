@@ -177,7 +177,11 @@ export function SessionOutputs({
   const [noticeHiddenFor, setNoticeHiddenFor] = useState<string | null>(null);
   const firstChanged = detail?.changedFiles?.[0]?.path ?? null;
   useEffect(() => {
-    if (openDiffSignal && firstChanged) setOpenFile(firstChanged);
+    // An open that names no commit is the whole branch: All changes, never the commit last looked at.
+    if (openDiffSignal && firstChanged) {
+      setOpenCommit(null);
+      setOpenFile(firstChanged);
+    }
     // Only a new signal opens it; a file list that changes underneath must not reopen a closed drawer.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openDiffSignal]);
@@ -498,7 +502,11 @@ export function SessionOutputs({
         committed={committed}
         openPath={openFile}
         onSelect={setOpenFile}
-        onClose={() => setOpenFile(null)}
+        onClose={() => {
+          // The drawer opens again on All changes unless a commit is chosen.
+          setOpenFile(null);
+          setOpenCommit(null);
+        }}
         commits={commits}
         openCommit={openCommit}
         onSelectCommit={(sha) => (sha ? openCommitDiff(sha) : openAll())}

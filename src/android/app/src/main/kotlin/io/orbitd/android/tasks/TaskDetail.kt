@@ -48,6 +48,7 @@ import io.orbitd.android.composer.ProviderEngines
 import io.orbitd.android.management.LocalSmartSelection
 import io.orbitd.android.management.RunnerPage
 import io.orbitd.android.navigation.*
+import io.orbitd.android.projects.ProjectSettingChange
 import io.orbitd.android.projects.TaskDependencyGraphView
 import io.orbitd.android.taskprojects.*
 import io.orbitd.android.text.*
@@ -58,6 +59,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.*
+import java.time.Instant
 import java.util.UUID
 
 /** Everything the page read for one task. A re-read replaces it in place; a failed one keeps it. */
@@ -92,6 +94,8 @@ private class TaskDetailData {
     /** Every runner of the account: whether Cursor CLI is offered as a pin at all (ProviderEngines.androidShowsEngine). */
     var runners by mutableStateOf<List<JsonObject>>(emptyList())
     var providers by mutableStateOf<List<JsonObject>>(emptyList())
+    /** The project's `settingChanges`, read only while the task is exempt: who marked the exemption and when. */
+    var settingChanges by mutableStateOf<List<ProjectSettingChange>>(emptyList())
     var busy by mutableStateOf(false)
     /** A refusal of what an open sheet sent, said on the sheet: the page's banner is behind it. */
     var sheetError by mutableStateOf<String?>(null)
@@ -151,6 +155,9 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
                 val runners = rows("runners")
                 val pools = rows("providers", "pools")
                 val sharedPools = rows("providers", "shared-pools")
+                // Who marked an exempt task, and when: the project's own change records (the web reads them off the project too).
+                val projectId = task.text("projectId")?.takeIf { TaskLandingExemption.of(task) != null }
+                val project = async { projectId?.let { runCatching { api.read(listOf("projects", it)) as? JsonObject }.getOrNull() } }
                 data.owner = owner.await()
                 attribution.await().onSuccess { data.attribution = it; data.attributionFailed = false }.onFailure { if (data.attribution == null) data.attributionFailed = true }
                 graph.await()?.let { data.graph = it }
@@ -159,6 +166,7 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
                 lists.await()?.let { data.lists = it }
                 share.await()?.let { data.share = it }
                 runner.await()?.let { data.runner = it }
+                if (projectId == null) data.settingChanges = emptyList() else project.await()?.let { data.settingChanges = ProjectSettingChange.read(it) }
                 runners.await()?.let { data.runners = it }
                 providers.await()?.let { keys ->
                     data.providers = (keys + pools.await().orEmpty().map { ProviderEngines.poolRow(it, ProviderEngines.CLAUDE) } +
@@ -354,8 +362,14 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
             TaskDetailLogic.liveRun(task)?.let { live -> item(key = "now") { NowSection(task, live, data, open) } }
             data.evidence.lastOrNull()?.let { latest -> item(key = "evidence") { EvidenceSection(task, latest) } }
             // Where the task's work stands after DONE (§2.7a): the newest landing attempt and why it waits or where it stopped.
-            TaskLandingLogic.status(TaskIntegrationView.of(task))?.let { landing ->
-                item(key = "landing") { LandingSection(landing, open) }
+            // An exempt task has the section for its exemption even before it has a landing (D5).
+            val landing = TaskLandingLogic.status(TaskIntegrationView.of(task))
+            val exemption = TaskLandingExemption.of(task)
+            if (landing != null || exemption != null) item(key = "landing") {
+                LandingSection(landing, open) {
+                    exemption?.let { TaskLandingExemptView(it, TaskLandingExemption.marked(data.settingChanges, task.text("id")), Instant.now(), enabled) {
+                        patch(TaskLandingExemption.removeRequest) } }
+                }
             }
             // What "done" means for this task, and who decides it. Before the brief: it is the contract the run and its reader are
             // both held to. Unset, the command pair is not drawn: its "a person decides" contradicted a task judged by evidence.
@@ -583,37 +597,45 @@ private fun ActionRow(row: TaskActionRow, canStart: Boolean, enabled: Boolean, t
 }
 
 /** The task's Landing section (§2.7a, web `LandTaskStatus`): the badge, the generation, the step it
- * is on or stopped at, a silent runner's report, the reason and the receipt, the six facts — then
- * the one way into its landing session. Read-only: no retry, merge or release door lives here. */
+ * is on or stopped at, a silent runner's report, the reason and the receipt, the six facts — then a task's
+ * landing-check exemption ([exempt], D5) and the one way into its landing session. The landing itself is
+ * read-only: no retry, merge or release door lives here; the exemption's Remove is the owner's own flag. */
 @Composable
-private fun LandingSection(status: TaskLandingStatus, open: (OrbitRoute) -> Unit) {
-    TaskSectionHeader(TaskLandingCopy.landingSection, status.generation?.let { "${TaskLandingCopy.generation} $it" })
+private fun LandingSection(status: TaskLandingStatus?, open: (OrbitRoute) -> Unit, exempt: @Composable () -> Unit = {}) {
+    TaskSectionHeader(TaskLandingCopy.landingSection, status?.generation?.let { "${TaskLandingCopy.generation} $it" })
     Column(Modifier.fillMaxWidth().testTag("task-landing"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            status.badge?.let { badge ->
-                val ink = landingInk(badge.tone)
-                Text(badge.label, Modifier.testTag("task-landing-badge").background(ink.copy(alpha = 0.14f), RoundedCornerShape(50))
-                    .padding(horizontal = 8.dp, vertical = 2.dp), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = ink)
-            }
-            status.step?.let { Text(it, Modifier.testTag("task-landing-step"), style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2) }
-        }
-        status.noReport?.let { Text(it, Modifier.testTag("task-landing-no-report"), style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold, color = LocalOrbitColors.current.needsYou) }
-        status.reason?.let { Text(it, Modifier.testTag("task-landing-reason"), style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        status.receipt?.let { Text(it, Modifier.testTag("task-landing-receipt"), style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        if (status.facts.isNotEmpty()) Column(Modifier.testTag("task-landing-facts"), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            status.facts.forEach { fact ->
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(fact.label, Modifier.width(92.dp), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(fact.value, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-            }
-        }
-        TaskLandingLogic.route(status)?.let { route ->
+        if (status != null) LandTaskLines(status)
+        exempt()
+        status?.let(TaskLandingLogic::route)?.let { route ->
             TextButton(onClick = { open(route) }, modifier = Modifier.testTag("task-landing-open")) { Text("${TaskLandingCopy.openLanding} ›") }
+        }
+    }
+}
+
+/** The newest LAND_TASK's own lines: the badge and step, a silent runner's report, the reason, the receipt and the six facts. */
+@Composable
+private fun LandTaskLines(status: TaskLandingStatus) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        status.badge?.let { badge ->
+            val ink = landingInk(badge.tone)
+            Text(badge.label, Modifier.testTag("task-landing-badge").background(ink.copy(alpha = 0.14f), RoundedCornerShape(50))
+                .padding(horizontal = 8.dp, vertical = 2.dp), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = ink)
+        }
+        status.step?.let { Text(it, Modifier.testTag("task-landing-step"), style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2) }
+    }
+    status.noReport?.let { Text(it, Modifier.testTag("task-landing-no-report"), style = MaterialTheme.typography.labelMedium,
+        fontWeight = FontWeight.SemiBold, color = LocalOrbitColors.current.needsYou) }
+    status.reason?.let { Text(it, Modifier.testTag("task-landing-reason"), style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant) }
+    status.receipt?.let { Text(it, Modifier.testTag("task-landing-receipt"), style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant) }
+    if (status.facts.isNotEmpty()) Column(Modifier.testTag("task-landing-facts"), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        status.facts.forEach { fact ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(fact.label, Modifier.width(92.dp), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(fact.value, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
         }
     }
 }
@@ -671,7 +693,7 @@ private class RunPins(val task: JsonObject, val data: TaskDetailData, assignee: 
     val runProvider = pinnedProvider ?: pinnedEngine?.let { engine -> if (engine == ProviderEngines.DSH) firstDeepSeekKey?.id ?: engine else engine }
         ?: assigneeProvider
     val models = catalog?.models(runEngine, runProvider).orEmpty()
-    val unpinned = if (smartSelection && assignee?.flag("modelRouting") == true) TaskDetailCopy.smartSelectionPlaceholder else TaskDetailCopy.providerDefault
+    val unpinned = if (smartSelection) TaskDetailCopy.smartSelectionPlaceholder else TaskDetailCopy.providerDefault
     val modelValue = task.text("model")?.let { m -> models.firstOrNull { it.text("value") == m }?.text("label") ?: m } ?: unpinned
 }
 
@@ -710,7 +732,7 @@ private fun RunsWithSheet(app: OrbitApplication, handle: SessionHandle, task: Js
                 listOf<Pair<String?, String>>(null to TaskListCopy.unassigned) + orderedWorkspaceRows(workspaces).map { it.text("id") to (it.text("name") ?: "Workspace") } +
                     listOfNotNull(currentAssignee?.takeIf { a -> workspaces.none { ObjectId.same(it.text("id"), a.text("id")) } }?.let { it.text("id") to (it.text("name") ?: it.text("id").orEmpty()) }),
                 tag = "task-assignee") { patch(buildJsonObject { put("assigneeId", it?.let(::JsonPrimitive) ?: JsonNull) }) }
-            // The account's switch for smart model selection, off by default: then none of it is drawn here — no Suggested, no ✦
+            // The account's switch for smart model selection, on by default: then none of it is drawn here — no Suggested, no ✦
             // placeholder, no coordinator's reason — as on the web and iOS (9fb3ae6ee).
             val picks = TaskDetailLogic.modelHintPicks(task.objects("modelHintOptions"))
             if (smartSelection) PickerRow(TaskDetailCopy.suggestedLabel, picks.firstOrNull { it.value == task.text("modelHint") }?.label ?: task.text("modelHint") ?: TaskDetailCopy.noSuggestion,

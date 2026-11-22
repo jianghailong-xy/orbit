@@ -802,3 +802,37 @@ func TestSessionPoolTerminalMergeAllowsNilSupervisorOnly(t *testing.T) {
 	}
 	release()
 }
+
+// A mode chosen while the engine was cold arrives only in the claim that wakes it. The run's job service keeps the
+// first claim's job and reads its live mode holder, so the claim adopts that holder and publishes its own mode there:
+// before, the holder went on saying the run's first mode (a read-only Kimi SubAgent of a session switched from Auto
+// to Default ran its shell calls with no card, 2026-11-20).
+func TestSessionPoolActivationPublishesTheClaimsModeToTheRunsLiveMode(t *testing.T) {
+	p := newSessionPool(1)
+	first := poolJob("a")
+	first.Agent.PermissionMode = "auto"
+	first.liveMode = &sessionLiveMode{mode: "auto"}
+	s, added := p.register(first, func() {}, false)
+	if !added {
+		t.Fatal("the session was not registered")
+	}
+	claim := poolJob("a")
+	claim.Agent.PermissionMode = "default"
+	if _, ok := p.activate(claim); !ok {
+		t.Fatal("the claim did not activate the supervisor")
+	}
+	if _, claimed, ok := p.reserveEngine(s, context.Background(), context.Background()); !ok || claimed != claim {
+		t.Fatalf("the supervisor did not adopt the claim: %v %p", ok, claimed)
+	}
+	if claim.liveMode != first.liveMode {
+		t.Fatal("the claim must share the run's live mode holder")
+	}
+	if got := first.liveMode.current(); got != "default" {
+		t.Fatalf("the run's live mode = %q after a Default claim, want default", got)
+	}
+	// What a read-only Kimi SubAgent started by the run's job service (whose job is the first claim) now reads.
+	child := subagentChildJob(first, AgentExecConfig{Provider: providerKimi}, subagentDefinition{Name: "explore", Readonly: true}, "run1", providerKimi, "")
+	if kimiReadonlyShellFollowsParent(child, "Bash") {
+		t.Fatal("a read-only Kimi SubAgent of a session now in Default must file a card")
+	}
+}

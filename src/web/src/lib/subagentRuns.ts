@@ -191,9 +191,10 @@ export function delegateRunId(content: unknown): string | null {
   }
 }
 
-/** Whether a run that has ended did not finish: failed, interrupted or stopped (OrbitKit's `outcomeIsFailure`). */
+/** Whether a run that has ended did not finish: failed or interrupted. A stopped run was stopped on purpose, so it is
+ *  grey and no failure (docs/mocks/subagent-card-and-end-line D1). */
 export const subagentRunFailed = (run: SubagentRunView): boolean =>
-  run.status === 'FAILED' || run.status === 'INTERRUPTED' || run.status === 'STOPPED';
+  run.status === 'FAILED' || run.status === 'INTERRUPTED';
 
 /** How long a run took, once it has ended (`50s`, `4m 12s`); null while it runs. */
 export function subagentDuration(run: SubagentRunView): string | null {

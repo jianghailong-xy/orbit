@@ -97,6 +97,8 @@ final class QueuedTurnCardsTests: XCTestCase {
         // Settings › Translation: how far the owner's own message got in translation — their words,
         // not a card (`TranslationTests` covers it off the queue).
         "translation",
+        // The session's opening prompt, which the held tag's Cancel leaves alone (`HeldCancelTests`).
+        "opening",
     ]
 
     /// What the agent reads on such a turn: words written for it, which no card is read out of.

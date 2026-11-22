@@ -1,8 +1,8 @@
 {
   "name": "orbit.watch",
-  "contractVersion": 1,
-  "predicateVersion": 3,
-  "servedPredicateVersions": [1, 2, 3],
+  "contractVersion": 2,
+  "predicateVersion": 4,
+  "servedPredicateVersions": [1, 2, 3, 4],
   "doc": "docs/watch-contract.md",
   "baseline": {
     "mainCommit": "88239c791f704faad01bf8c8a6144f85539c973a"
@@ -20,7 +20,8 @@
       "authority": "src/apiserver/src/common/session-scheduling.ts UNSETTLED_SESSION_STATUSES",
       "isNot": [
         "SESSION_RUN_TERMINAL: AWAITING_INPUT and INTERRUPTED are settled but not terminal.",
-        "TASK_DONE: a settled turn says nothing about the task's completion criterion."
+        "TASK_DONE: a settled turn says nothing about the task's completion criterion.",
+        "SESSION_QUIESCENT: a turn that settled while the session's own background job, subagent or engine turn still runs, or while a watch, wake-up or retry is armed to give it another, is settled but not quiescent."
       ]
     },
     "SESSION_RUN_TERMINAL": {
@@ -89,6 +90,34 @@
         "SESSION_RUN_TERMINAL: a quiet job is still in flight. The writes that end a session's run clear its running jobs (src/apiserver/src/sessions/running-work.ts), so an ended run is not where this leaf holds, and ANY_OF with SESSION_RUN_TERMINAL is how a watch hears that end.",
         "TASK_NO_PROGRESS_FOR: output is not progress. A job printing a heartbeat line is not quiet, and nothing a job prints is read."
       ]
+    },
+    "SESSION_QUIESCENT": {
+      "targetKind": "SESSION",
+      "sinceVersion": 4,
+      "definition": "SESSION_TURN_SETTLED holds, nothing is executing for the session and nothing is armed to wake it. Executing: a dispatched turn, or on a session whose status is open (PENDING, RUNNING, AWAITING_INPUT, INTERRUPTED) the engine's own turn (engine_turn_active), a subagent (running_subagents) or a runner-hosted background job (running_bg_jobs). Armed to wake it: an auto-retry (retry_at) on a session not moved to Completed or Trash, or, on a session that has not ended (its run is not SUCCEEDED, FAILED or ENDED and it is still Open), an ACTIVE RESUME_SESSION watch it observes or a PENDING scheduled wake-up. A watch or a wake-up left on an ended session is stale, because no machine wake reaches an ended session, and does not hold the session unquiet. For a LANDING session, as for SESSION_TURN_SETTLED, only once its landing has ended (completed_at is set).",
+      "sourceColumns": [
+        "session.status",
+        "session.end_reason",
+        "session.completed_at",
+        "session.archived_at",
+        "session.deleted_at",
+        "session.kind",
+        "session.engine_turn_active",
+        "session.running_subagents",
+        "session.running_bg_jobs",
+        "session.retry_at",
+        "watch.observer_session_id",
+        "watch.state",
+        "watch.action",
+        "session_scheduled_wakeup.session_id",
+        "session_scheduled_wakeup.state"
+      ],
+      "authority": "src/apiserver/src/common/session-working.ts isSessionExecuting and the wake facts; src/apiserver/src/runner-api/background-job-wake.ts sessionHasEnded",
+      "decidedBy": "the evaluator's schedule and its hints, as for every status leaf. A background job, a subagent or an engine turn ending announces no hint of its own, so the reconciliation sweep (at most reconcileIntervalMs) is what notices it.",
+      "isNot": [
+        "SESSION_TURN_SETTLED: that leaf keeps its meaning, a status that left PENDING and RUNNING, and every watch stored with it is decided as before.",
+        "SESSION_RUN_TERMINAL: a quiescent session may be waiting for input; nothing about its run is over."
+      ]
     }
   },
 
@@ -105,7 +134,8 @@
     "versions": {
       "1": "ALL, ANY, ALL_OF and ANY_OF over the leaves that declare no sinceVersion. No AT_LEAST and no params key.",
       "2": "Version 1 plus AT_LEAST, the params key, and the leaves that declare sinceVersion 2.",
-      "3": "Version 2 plus the leaves that declare sinceVersion 3."
+      "3": "Version 2 plus the leaves that declare sinceVersion 3.",
+      "4": "Version 3 plus the leaves that declare sinceVersion 4."
     },
     "notes": [
       "Closed set. No shell, no SQL, no log regex, no free-text expression.",
@@ -472,8 +502,17 @@
       },
       "session_await": {
         "targetKind": "SESSION",
-        "default": "ALL_SETTLED_OR_ANY_NEEDS_ATTENTION",
+        "default": "ALL_QUIESCENT_OR_ANY_NEEDS_ATTENTION",
         "until": {
+          "ALL_QUIESCENT_OR_ANY_NEEDS_ATTENTION": {
+            "kind": "ANY_OF",
+            "operands": [
+              { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "SESSION_QUIESCENT" },
+              { "kind": "ANY", "over": "ALL_TARGETS", "leaf": "SESSION_NEEDS_ATTENTION" }
+            ]
+          },
+          "ALL_QUIESCENT": { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "SESSION_QUIESCENT" },
+          "ANY_QUIESCENT": { "kind": "ANY", "over": "ALL_TARGETS", "leaf": "SESSION_QUIESCENT" },
           "ALL_SETTLED_OR_ANY_NEEDS_ATTENTION": {
             "kind": "ANY_OF",
             "operands": [
@@ -502,12 +541,13 @@
     "sessionCreateWait": {
       "watch": {
         "targets": "the session just created",
-        "predicate": { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "SESSION_TURN_SETTLED" },
+        "predicate": { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "SESSION_QUIESCENT" },
+        "predicateVersion": 4,
         "action": "RESUME_SESSION",
         "idempotencyKey": "session-create-wait:<sessionId>"
       },
       "order": "The watch is recorded before the wait begins, so a caller killed or cut off mid-wait leaves it behind to wake its session.",
-      "inline": "A session that settles within the wait budget is returned in full, exactly as before, and the call releases the watch.",
+      "inline": "A session whose status settles within the wait budget is returned in full only once the watch has also MATCHED, so the inline answer and the wake decide by the same leaf; the call then releases the watch. Without a recorded watch (legacy, unrecorded) the inline poll reads the status alone.",
       "handedBack": {
         "TIMEOUT": "The wait budget ran out. The call returns the session as last seen with the watch beside it, still waiting.",
         "TRANSPORT_ERROR": "The control plane stopped answering mid-wait. The call returns the session as last seen with the watch beside it instead of an error."
@@ -876,6 +916,36 @@
       "why": "Named, the leaf asks about that job alone: another job's silence is not this one's. Unnamed, the quiet job beside it would hold it."
     },
     {
+      "id": "turn-settled-with-a-job-running-is-not-quiescent",
+      "given": { "session": { "status": "AWAITING_INPUT", "endReason": null }, "jobs": [{ "id": "bgj_0a1b2c3d4e5f", "lastOutputSecondsAgo": 5 }] },
+      "expect": { "SESSION_TURN_SETTLED": true, "SESSION_QUIESCENT": false },
+      "why": "The headline of version 4: a child that ended its turn to wait for its own background job has not finished, so session_await and session_create(wait) keep waiting for it."
+    },
+    {
+      "id": "turn-settled-with-a-subagent-running-is-not-quiescent",
+      "given": { "session": { "status": "AWAITING_INPUT", "endReason": null, "runningSubagents": ["toolu_01"] } },
+      "expect": { "SESSION_TURN_SETTLED": true, "SESSION_QUIESCENT": false },
+      "why": "A subagent reports back into its session, which then has more to do."
+    },
+    {
+      "id": "turn-settled-awaiting-its-own-watch-is-not-quiescent",
+      "given": { "session": { "status": "AWAITING_INPUT", "endReason": null, "hasResumeWatch": true } },
+      "expect": { "SESSION_TURN_SETTLED": true, "SESSION_QUIESCENT": false },
+      "why": "A session that ended its turn on task_await or session_await will be woken by that watch: it is waiting on its own work, not finished."
+    },
+    {
+      "id": "failed-with-a-retry-armed-is-not-quiescent",
+      "given": { "session": { "status": "FAILED", "endReason": null, "retryAt": "in 10 minutes" } },
+      "expect": { "SESSION_TURN_SETTLED": true, "SESSION_RUN_TERMINAL": true, "SESSION_QUIESCENT": false },
+      "why": "The auto-retry sweep re-sends a FAILED session's turn, so it will run again."
+    },
+    {
+      "id": "ended-session-with-a-stale-watch-is-quiescent",
+      "given": { "session": { "status": "CANCELLED", "endReason": "ended", "hasResumeWatch": true, "hasPendingWakeup": true } },
+      "expect": { "SESSION_QUIESCENT": true },
+      "why": "No machine wake reaches an ended session, so a watch or wake-up left on it wakes nobody and must not keep a parent waiting for ever."
+    },
+    {
       "id": "ended-job-is-not-quiet",
       "given": {
         "session": { "status": "AWAITING_INPUT" },
@@ -883,7 +953,7 @@
         "ended": [{ "id": "bgj_0a1b2c3d4e5f", "lastOutputSecondsAgo": 400 }],
         "params": { "seconds": 300, "jobId": "bgj_0a1b2c3d4e5f" }
       },
-      "expect": { "SESSION_JOB_NO_OUTPUT_FOR": false },
+      "expect": { "SESSION_JOB_NO_OUTPUT_FOR": false, "SESSION_QUIESCENT": true },
       "why": "A job that ended has stopped, not stalled, and its end is bg_run's own wake to report. A watch on it alone waits for its TTL; one that has to hear an end too names it under ANY_OF."
     },
     {

@@ -62,7 +62,7 @@ function kubeconfig(overrides: { context?: Record<string, unknown>; cluster?: Re
     ],
     contexts: [
       { name: 'production', context: { cluster: 'production-cluster', user: 'production-admin', namespace: 'default' } },
-      { name: 'orbit-fake', context: { cluster: 'test-cluster', user: 'manager', namespace: 'orbit-managed-test', ...overrides.context } },
+      { name: 'orbit-fake', context: { cluster: 'test-cluster', user: 'manager', namespace: 'orbit-cloud-test', ...overrides.context } },
     ],
   };
 }
@@ -113,7 +113,7 @@ test('the context must point at the profile API server and namespace; unsafe cre
     kubeClientFromProfile(PROFILE, { readFile: reader({ [KUBECONFIG]: config, ...extra }), transport: scripted().transport });
 
   assert.throws(build(kubeconfig({ cluster: { server: 'https://elsewhere.invalid:6443' } })), /points at https:\/\/elsewhere\.invalid:6443, not the profile/);
-  assert.throws(build(kubeconfig({ context: { namespace: 'default' } })), /names namespace default, not the profile's orbit-managed-test/);
+  assert.throws(build(kubeconfig({ context: { namespace: 'default' } })), /names namespace default, not the profile's orbit-cloud-test/);
   assert.throws(build(kubeconfig({ cluster: { 'insecure-skip-tls-verify': true } })), /skips TLS verification/);
   assert.throws(build(kubeconfig({ user: { exec: { command: 'aws' } } })), /uses exec/);
   assert.throws(build(kubeconfig({ user: { 'auth-provider': { name: 'gcp' } } })), /uses auth-provider/);
@@ -121,7 +121,7 @@ test('the context must point at the profile API server and namespace; unsafe cre
   assert.throws(build(kubeconfig({ cluster: { 'certificate-authority-data': undefined, 'certificate-authority': 'ca.pem' } })), /must be an absolute path/);
   assert.throws(build('apiVersion: v1\nkind: Config\n'), /is not readable JSON/);
   const twice = kubeconfig();
-  twice.contexts.push({ name: 'orbit-fake', context: { cluster: 'production-cluster', user: 'production-admin', namespace: 'orbit-managed-test' } });
+  twice.contexts.push({ name: 'orbit-fake', context: { cluster: 'production-cluster', user: 'production-admin', namespace: 'orbit-cloud-test' } });
   assert.throws(build(twice), /more than one context named "orbit-fake"/);
   assert.throws(() => new KubeHttpClient({ server: 'http://kube.invalid', namespace: 'x', tls: {}, requestTimeoutMs: 1 }), /over https/);
 });
@@ -155,7 +155,7 @@ test('a client certificate is presented when the context uses one', async () => 
 });
 
 test('requests: paths, verbs, bodies and answers', async () => {
-  const pvc = buildManagedPvc({ ownerId: 'o', runnerId: '0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b', generation: 1, namespace: 'orbit-managed-test' }, PROFILE);
+  const pvc = buildManagedPvc({ ownerId: 'o', runnerId: '0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b', generation: 1, namespace: 'orbit-cloud-test' }, PROFILE);
   const created = { ...pvc, metadata: { ...pvc.metadata, uid: 'uid-1' } };
   const { sent, kube } = client(
     json(404, { kind: 'Status', reason: 'NotFound' }),
@@ -167,12 +167,12 @@ test('requests: paths, verbs, bodies and answers', async () => {
     json(200, { apiVersion: 'v1', kind: 'PersistentVolume', metadata: { name: 'pv-1' }, spec: {} }),
     json(404, {}),
   );
-  const ns = '/api/v1/namespaces/orbit-managed-test';
+  const ns = '/api/v1/namespaces/orbit-cloud-test';
 
   assert.equal(await kube.persistentVolumeClaims.get(pvc.metadata.name), null);
   assert.deepEqual(await kube.persistentVolumeClaims.create(pvc), created);
   await assert.rejects(kube.persistentVolumeClaims.create(pvc), (e: unknown) => e instanceof KubeApiError && e.status === 409 && e.reason === 'AlreadyExists');
-  assert.deepEqual(await kube.persistentVolumeClaims.list({ labelSelector: 'app.kubernetes.io/name=orbit-managed-runner' }), [created]);
+  assert.deepEqual(await kube.persistentVolumeClaims.list({ labelSelector: 'app.kubernetes.io/name=orbit-cloud-runner' }), [created]);
   await kube.pods.delete('mr-x', { uid: 'pod-uid-1' });
   await kube.pods.delete('mr-x'); // already gone: resolves
   assert.equal((await kube.getPersistentVolume('pv-1'))?.metadata.name, 'pv-1');
@@ -184,7 +184,7 @@ test('requests: paths, verbs, bodies and answers', async () => {
       `GET ${ns}/persistentvolumeclaims/${pvc.metadata.name}`,
       `POST ${ns}/persistentvolumeclaims`,
       `POST ${ns}/persistentvolumeclaims`,
-      `GET ${ns}/persistentvolumeclaims?labelSelector=app.kubernetes.io%2Fname%3Dorbit-managed-runner`,
+      `GET ${ns}/persistentvolumeclaims?labelSelector=app.kubernetes.io%2Fname%3Dorbit-cloud-runner`,
       `DELETE ${ns}/pods/mr-x`,
       `DELETE ${ns}/pods/mr-x`,
       'GET /api/v1/persistentvolumes/pv-1',
@@ -233,8 +233,8 @@ test('a Pod patch is a JSON Patch of that one Pod, and a test that does not hold
   assert.deepEqual(await kube.pods.patch('mr-x', operations), pod);
   await assert.rejects(kube.pods.patch('mr-x', operations), (e: unknown) => e instanceof KubeApiError && e.status === 422 && !isRetryableKubeError(e));
   assert.deepEqual(sent.map((r) => `${r.method} ${r.url.pathname}${r.url.search}`), [
-    'PATCH /api/v1/namespaces/orbit-managed-test/pods/mr-x',
-    'PATCH /api/v1/namespaces/orbit-managed-test/pods/mr-x',
+    'PATCH /api/v1/namespaces/orbit-cloud-test/pods/mr-x',
+    'PATCH /api/v1/namespaces/orbit-cloud-test/pods/mr-x',
   ]);
   assert.equal(sent[0].headers['content-type'], 'application/json-patch+json');
   assert.deepEqual(JSON.parse(sent[0].body!), operations);
@@ -247,7 +247,7 @@ test('names and namespaces are fixed: no path injection, no create outside the n
   await assert.rejects(kube.pods.get('../../secrets/x'), /not a Kubernetes object name/);
   await assert.rejects(kube.secrets.get('Mixed_Case'), /not a Kubernetes object name/);
   const pod = { apiVersion: 'v1', kind: 'Pod', metadata: { name: 'mr-x', namespace: 'kube-system' }, spec: {} } as Pod;
-  await assert.rejects(kube.pods.create(pod), /outside namespace orbit-managed-test/);
+  await assert.rejects(kube.pods.create(pod), /outside namespace orbit-cloud-test/);
   assert.equal(sent.length, 0, 'refused before anything was sent');
 });
 
@@ -261,7 +261,7 @@ test('a watch streams JSON lines, a line split across chunks included, and a ref
   const body = `${events[0]}\n${events[1].slice(0, 20)}|${events[1].slice(20)}\n${events[2]}\n`;
   const { sent, kube } = client({ status: 200, body }, json(403, { kind: 'Status', reason: 'Forbidden' }));
   const seen: Array<KubeWatchEvent<Pod>> = [];
-  const watch = kube.pods.watch({ labelSelector: 'app.kubernetes.io/name=orbit-managed-runner', resourceVersion: '7' }, (e) => seen.push(e));
+  const watch = kube.pods.watch({ labelSelector: 'app.kubernetes.io/name=orbit-cloud-runner', resourceVersion: '7' }, (e) => seen.push(e));
   await watch.done;
   assert.deepEqual(seen.map((e) => e.type), ['ADDED', 'MODIFIED', 'DELETED']);
   assert.equal(sent[0].url.searchParams.get('watch'), 'true');
@@ -271,23 +271,23 @@ test('a watch streams JSON lines, a line split across chunks included, and a ref
 });
 
 test('the single-writer reads and the admission probe: receipts read-only, attachments listed, a create dry-run', async () => {
-  const pod = { apiVersion: 'v1', kind: 'Pod', metadata: { name: 'mr-probe', namespace: 'orbit-managed-test' }, spec: {} } as Pod;
+  const pod = { apiVersion: 'v1', kind: 'Pod', metadata: { name: 'mr-probe', namespace: 'orbit-cloud-test' }, spec: {} } as Pod;
   const { sent, kube } = client(
     json(200, { apiVersion: 'v1', kind: 'ConfigMap', metadata: { name: 'mr-fence-x', uid: 'cm-1' }, data: { 'receipt.json': '{}' } }),
     json(404, { kind: 'Status', reason: 'NotFound' }),
     json(200, { items: [{ apiVersion: 'storage.k8s.io/v1', kind: 'VolumeAttachment', metadata: { name: 'csi-1' }, spec: { source: { persistentVolumeName: 'pv-1' }, nodeName: 'node-a' } }] }),
-    json(400, { kind: 'Status', reason: 'BadRequest', message: 'admission webhook "pods.managed-runner.orbit.dev" denied the request: orbit-managed-runner-admission: NOT_THE_FIXED_NAME: no' }),
+    json(400, { kind: 'Status', reason: 'BadRequest', message: 'admission webhook "pods.managed-runner.orbit.dev" denied the request: orbit-cloud-runner-admission: NOT_THE_FIXED_NAME: no' }),
   );
   assert.equal((await kube.configMaps.get('mr-fence-x'))?.data?.['receipt.json'], '{}');
   assert.equal(await kube.configMaps.get('mr-fence-y'), null);
   assert.deepEqual(Object.keys(kube.configMaps), ['get'], 'a receipt can be read, never written');
   const attachments = await kube.listVolumeAttachments();
   assert.equal(attachments[0].spec.source.persistentVolumeName, 'pv-1');
-  await assert.rejects(kube.pods.create(pod, { dryRun: true }), (e: KubeApiError) => e.status === 400 && /orbit-managed-runner-admission/.test(e.message));
+  await assert.rejects(kube.pods.create(pod, { dryRun: true }), (e: KubeApiError) => e.status === 400 && /orbit-cloud-runner-admission/.test(e.message));
   assert.deepEqual(sent.map((r) => `${r.method} ${r.url.pathname}${r.url.search}`), [
-    'GET /api/v1/namespaces/orbit-managed-test/configmaps/mr-fence-x',
-    'GET /api/v1/namespaces/orbit-managed-test/configmaps/mr-fence-y',
+    'GET /api/v1/namespaces/orbit-cloud-test/configmaps/mr-fence-x',
+    'GET /api/v1/namespaces/orbit-cloud-test/configmaps/mr-fence-y',
     'GET /apis/storage.k8s.io/v1/volumeattachments',
-    'POST /api/v1/namespaces/orbit-managed-test/pods?dryRun=All',
+    'POST /api/v1/namespaces/orbit-cloud-test/pods?dryRun=All',
   ]);
 });

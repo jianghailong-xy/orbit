@@ -53,6 +53,48 @@ export interface MoveDialogSession {
   projectId?: string;
 }
 
+/**
+ * Filing a session in a folder of its own workspace, or in none — Move…'s first group, and the
+ * same request and toast when a row is dragged onto a folder (`lib/sessionDrag`). The row moves at
+ * once: the folder is written into every loaded list before the request goes, and written back if
+ * the server refuses. Either way the lists are read again afterwards. True once the server has it.
+ */
+export function useSessionFolderFiling() {
+  const message = useToast();
+  const qc = useQueryClient();
+  const refreshSessionLists = useRefreshSessionLists();
+  const refreshAfterSessionMove = (session: MoveDialogSession): void => {
+    refreshSessionLists();
+    if (session.projectId) void qc.invalidateQueries({ queryKey: ['project-sessions', session.projectId] });
+    void qc.invalidateQueries({ queryKey: ['session-counts'] });
+    void qc.invalidateQueries({ queryKey: ['session', session.id], exact: true });
+    void qc.invalidateQueries({ queryKey: ['session-folders'] });
+  };
+  const fileInFolder = async (
+    session: MoveDialogSession,
+    folder: { id: string; name: string } | null,
+    origin: { name: string } | null,
+  ): Promise<boolean> => {
+    const destination = folder?.id ?? null;
+    const previous = qc.getQueriesData<any[]>({ queryKey: ['sessions'] });
+    qc.setQueriesData<any[]>({ queryKey: ['sessions'] }, (old) =>
+      Array.isArray(old) ? old.map((s) => (s.id === session.id ? { ...s, folderId: destination } : s)) : old,
+    );
+    try {
+      await moveSession(session.id, { folderId: destination });
+      message.success(movedToFolderToast(folder, origin));
+      return true;
+    } catch (error) {
+      previous.forEach(([key, value]) => qc.setQueryData(key, value));
+      message.error("Couldn't move the session", moveFailureText(error));
+      return false;
+    } finally {
+      refreshAfterSessionMove(session);
+    }
+  };
+  return { fileInFolder, refreshAfterSessionMove };
+}
+
 /** What a workspace's next session would start on, as its row names it: an engine's own sign-in by
  *  the engine's CLI (ENGINE_CLI_NAMES), anything else by the slug the answer carries. */
 const providerName = (slug: string): string => (isEngine(slug) ? ENGINE_CLI_NAMES[slug] : slug);
@@ -89,7 +131,7 @@ export function SessionMoveModal({
   const { managed } = useManagedRunner(open);
   const message = useToast();
   const qc = useQueryClient();
-  const refreshSessionLists = useRefreshSessionLists();
+  const { fileInFolder, refreshAfterSessionMove } = useSessionFolderFiling();
   // The workspace step on screen; null for the first one.
   const [step, setStep] = useState<SessionMoveTarget | null>(null);
   // Folders made from a workspace step, until the server's answer lists them.
@@ -129,13 +171,7 @@ export function SessionMoveModal({
   const currentFolderId = byName.some((f) => f.id === session.folderId) ? (session.folderId ?? null) : null;
   const counts = new Map((answer?.folders ?? []).map((f) => [f.id, f.sessionCount] as const));
 
-  const refreshAfterMove = (): void => {
-    refreshSessionLists();
-    if (session.projectId) void qc.invalidateQueries({ queryKey: ['project-sessions', session.projectId] });
-    void qc.invalidateQueries({ queryKey: ['session-counts'] });
-    void qc.invalidateQueries({ queryKey: ['session', session.id], exact: true });
-    void qc.invalidateQueries({ queryKey: ['session-folders'] });
-  };
+  const refreshAfterMove = (): void => refreshAfterSessionMove(session);
 
   // First group: file the session in a folder of its own workspace, or in none. Immediate, like
   // the iOS panel — the row moves at once and the dialog closes with a toast saying where to.
@@ -147,21 +183,9 @@ export function SessionMoveModal({
     }
     const origin = byName.find((f) => f.id === currentFolderId) ?? null;
     setPhase('filing');
-    const previous = qc.getQueriesData<any[]>({ queryKey: ['sessions'] });
-    qc.setQueriesData<any[]>({ queryKey: ['sessions'] }, (old) =>
-      Array.isArray(old) ? old.map((s) => (s.id === session.id ? { ...s, folderId: destination } : s)) : old,
-    );
-    try {
-      await moveSession(session.id, { folderId: destination });
-      message.success(movedToFolderToast(folder, origin));
-      onClose();
-    } catch (error) {
-      previous.forEach(([key, value]) => qc.setQueryData(key, value));
-      message.error("Couldn't move the session", moveFailureText(error));
-    } finally {
-      setPhase(null);
-      refreshAfterMove();
-    }
+    const filed = await fileInFolder(session, folder, origin);
+    setPhase(null);
+    if (filed) onClose();
   };
 
   // A workspace step's folder pick: confirm, then move — ending the session first when it is idle.

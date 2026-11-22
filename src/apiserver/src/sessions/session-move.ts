@@ -12,13 +12,14 @@ import { sanitizeRunnerEngines } from '../common/runner-engines';
 import { reportedRunAccount } from '../providers/plan-usage-accounts';
 import { makeBranchName } from './naming';
 import { branchName } from '../projects/project-criterion-landing';
+import { RELEASED_SESSION_STATUSES } from '../common/session-release';
 
 /** What a runner declares when it can take in a session moved from another workspace: it checks an
  *  old checkout's repository and branch before reusing it, and carries a Claude conversation over to
  *  the new directory (runner session_move.go). Only such a runner is offered as a place to move to. */
 export const SESSION_MOVE_V1 = 'session-move/v1';
 
-const ENDED: readonly RunStatus[] = [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED];
+const ENDED: readonly RunStatus[] = RELEASED_SESSION_STATUSES;
 
 const RUNTIME_LABEL: Record<AgentProvider, string> = {
   [AgentProvider.CLAUDE]: 'Claude',

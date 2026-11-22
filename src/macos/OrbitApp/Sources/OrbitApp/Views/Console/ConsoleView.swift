@@ -104,6 +104,9 @@ struct ConsoleView: View {
             isRunning: { id in console.state.background.contains { $0.id == id && $0.status == "running" } },
             subagentItems: { console.state.subagentItems[$0] ?? [] },
             subagentRun: { console.subagentRuns[$0] },
+            workflowRun: { console.workflowRuns[$0] },
+            workflows: { Array(console.workflowRuns.values) },
+            reveal: { console.revealAgent($0) },
             parentEngine: appModel.session(id: console.sessionID)?.engine,
             fullPayload: { await console.fullPayload(seq: $0) })
     }
@@ -187,12 +190,12 @@ struct ConsoleView: View {
         #if os(iOS)
         if #available(iOS 26.0, *) {
             transcript.safeAreaBar(edge: .bottom, spacing: 0) {
-                composerBand(console).environment(\.floatsOverTranscript, true)
+                AnyView(composerBand(console).environment(\.floatsOverTranscript, true))
             }
         } else {
             VStack(spacing: 0) {
                 transcript
-                composerBand(console)
+                AnyView(composerBand(console))
             }
         }
         #else
@@ -345,8 +348,11 @@ struct ConsoleView: View {
                 // The folded row by the shared rule; its names stop rotating while the band is folded.
                 BackgroundTrayView(procs: console.state.background, progress: console.state.taskProgress,
                                    row: BackgroundRowRule.row(console.state.background, items: console.state.items,
+                                                              lastAgentTurnStartedAt: console.state.agentTurnStartedAt,
                                                               sessionLive: console.isLive),
-                                   paused: foldsChrome(console) || foldsBand(console))
+                                   paused: foldsChrome(console) || foldsBand(console),
+                                   revealJob: { console.revealJob($0) },
+                                   stopJob: { try await console.stopJob($0) })
                 // The tasks this session's agent created, beside the code the bar below
                 // carries — the session's two kinds of output, together.
                 CreatedTasksCard(console: console)
@@ -377,8 +383,11 @@ struct ConsoleView: View {
             let handoffRow = CoordinatorHandoffRow.resolve(handoff, enginePhase: handoffSession?.enginePhase)
             if let handoffRow {
                 if case .completed = handoffRow {} else {
-                    CoordinatorHandoffStatusView(row: handoffRow) { handoffPress(console, $0) }
-                        .padding(.bottom, .composerBandGap)
+                    CoordinatorHandoffStatusView(row: handoffRow, savedSuccessor: handoff?.successor,
+                                                 choiceSources: console.choiceSources) { action, successor in
+                        handoffPress(console, action, successor: successor)
+                    }
+                    .padding(.bottom, .composerBandGap)
                 }
             }
             if case .completed(let successor)? = handoffRow {
@@ -401,10 +410,11 @@ struct ConsoleView: View {
 
     /// A press on the handoff's row: Skip the note, Cancel handover, or a failure's way out. The
     /// project is the one this conversation coordinates — or, once it no longer does, belongs to.
-    private func handoffPress(_ console: ConsoleModel, _ action: CoordinatorHandoffAction) {
+    private func handoffPress(_ console: ConsoleModel, _ action: CoordinatorHandoffAction,
+                              successor: CoordinatorHandoffSuccessor?) {
         let session = appModel.session(id: console.sessionID)
         guard let projectID = session?.projectId ?? session?.projectMembership?.projectId else { return }
-        Task { await console.coordinatorHandoff(projectID: projectID, action) }
+        Task { await console.coordinatorHandoff(projectID: projectID, action, successor: successor) }
     }
 
     private func consoleBody(navTitleWidth: CGFloat) -> some View {
@@ -419,7 +429,10 @@ struct ConsoleView: View {
                         ?? landing.projectMembership?.projectId,
                     focusID: sessionID)
             } else if let console = registry.peek(sessionID) {
-                transcriptAndBand(console, navTitleWidth: navTitleWidth)
+                // Erased on purpose: the two dozen modifiers below each wrapped the transcript and the
+                // whole band's view type, and resolving and sizing that nested type at launch ran the
+                // iPhone's 1 MB main-thread stack out (TestFlight 0.1.261 (13668), 2026-11-21).
+                AnyView(transcriptAndBand(console, navTitleWidth: navTitleWidth))
                 // The owner requests this conversation filed, each drawn where it was asked.
                 .onChange(of: appModel.ownerRequests?.forSession(sessionID), initial: true) { _, requests in
                     console.adoptOwnerRequests(requests ?? [])
@@ -1086,6 +1099,8 @@ struct TranscriptView: View {
         // Held by its runner's update (board 5 of docs/mocks/runner-update-drain): the foot row of
         // the reader's last message says so, or, before there is one, the queued page does.
         .environment(\.runnerUpdatingFoot, runnerUpdatingFoot)
+        // …and where that message is one no runner has taken, Cancel beside the tag (`HeldCancel`).
+        .environment(\.heldCancel, { [console] bubble in Task { await console.cancelHeld(bubble) } })
         .overlay { runnerUpdatingPage }
         // macOS shows the session state in this band. iOS gave the state up with the nav-bar title,
         // for reading space (see `ConsoleView`'s toolbar), so the band is retired there.
@@ -1167,9 +1182,13 @@ struct TranscriptView: View {
         .environment(\.answeredQuestions, console.answeredQuestions)
         // The item a record link or a search hit asked for: a long message from another session opens to it.
         .environment(\.revealedItemID, console.revealedItemID)
-        // Where a SubAgent's finished line finds the card it was started from, and the scroll to it.
-        .environment(\.subagentCardLinks, SubagentCardLinks(find: { console.delegateCard(forRun: $0) },
-                                                            reveal: { console.revealAgent($0) }))
+        // A SubAgent's end turns, joined to their cards by run id: what the agent read, and a queued one's
+        // Don't send (`SubagentCardEnd`).
+        .environment(\.subagentWakes, console.subagentWakes)
+        .environment(\.subagentQueuedWakes, console.subagentQueuedWakes)
+        // A bg_run job's card: its runner reports, its wake turns and a queued one's Don't send, joined by
+        // job id, and where it reads its tail and asks to stop it (`JobCardView`).
+        .environment(\.jobCardHost, console.jobCardHost(place: app.session(id: console.sessionID)?.agent?.name))
         .scrollContentBackground(.hidden)   // show the window background, not the List's own
         #if os(iOS)
         // Turn OFF the scroll view's touch delay so an in-list control (the jump-to-latest disc, the
@@ -1669,16 +1688,16 @@ struct TranscriptView: View {
             // BELOW it — which is why the bar at the top of this console points down at it.
             #if os(iOS)
             if let run = folds[card.id] {
-                settledFoldRow(run, card: card)
+                settledFoldRow(run, card: card).orbitCardWidth()
             } else {
-                DeliveredDecisionCardView(console: console, card: card)
+                DeliveredDecisionCardView(console: console, card: card).orbitCardWidth()
             }
             #else
-            DeliveredDecisionCardView(console: console, card: card)
+            DeliveredDecisionCardView(console: console, card: card).orbitCardWidth()
             #endif
         case .approval(let approval):
             // No `AnchorRow`: an approval isn't a "Your question" the sticky header names.
-            ApprovalCard(console: console, approval: approval)
+            ApprovalCard(console: console, approval: approval).orbitCardWidth()
         case .recap(let card):
             // No `AnchorRow`: the recap sums the conversation up; it asks nothing.
             RecapCardView(card: card, onHide: hideRecap)
@@ -1697,7 +1716,8 @@ struct TranscriptView: View {
                 Task { await console.cancelQueued(bubble) }
             }, steer: SteerControls(bubble: bubble, withdrawing: console.withdrawingSteers) {
                 Task { await console.withdrawSteer(bubble) }
-            }, putBack: putBack(bubble))
+            }, putBack: putBack(bubble),
+               revealItemCard: { console.revealOpenItemCard($0) })
             .environment(\.runnerUpdatingQueued, runnerUpdatingQueued(bubble))
         case .bottom:
             // Both shapes end in the room the list's fade lies over (`fadesIntoComposerBand`), so a list
@@ -2000,7 +2020,10 @@ struct TranscriptView: View {
         guard let session = app.session(id: console.sessionID),
               let subtitle = SessionHeader.subtitle(for: session, watching: watching, now: now,
                                                     machine: console.runnerName) else {
-            return Text(console.state.status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized)
+            // A status word this build does not know reads as the neutral ended wording.
+            let status = console.state.status
+            return Text(status == .unknown ? "Ended"
+                        : status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized)
                 .foregroundColor(.secondary)
         }
         let word = SessionHeader.headerWord(for: session, watching: watching, now: now, machine: console.runnerName)
@@ -2172,7 +2195,7 @@ struct SessionStatusCardView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
         }
-        .frame(maxWidth: 560, alignment: .leading)
+        .frame(maxWidth: ConversationCardWidth.max, alignment: .leading)
         .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 8))
         .overlay {
             RoundedRectangle(cornerRadius: 8)
@@ -2552,9 +2575,16 @@ struct TranscriptItemView: View {
         case .user(let b):
             // Which card a user turn is — or the owner's bubble — is decided in one place, for the
             // transcript and the queued tail alike (`UserTurnRow`).
-            UserTurnRow(bubble: b, steer: steerControls(b), putBack: putBack(b))
+            UserTurnRow(bubble: b, steer: steerControls(b), putBack: putBack(b), revealItemCard: { console?.revealOpenItemCard($0) ?? false })
         case .assistant(let b): AssistantBubbleView(bubble: b)
         case .thinking(let b):  ThinkingView(block: b)
+        case .toolCall(let c) where c.name == WorkflowBlock.toolName:
+            // An Orbit workflow: its own block, opening to its calls by phase (board subagent-workflow part 4).
+            WorkflowBlockView(card: c, fullPayload: fullPayload)
+        case .toolCall(let c) where BgJobCard.drawsCard(c):
+            // A bg_run call is its job's card from start to end (board A1); one refused, or whose answer
+            // names no job, stays a call.
+            JobCardView(card: c)
         case .toolCall(let c):
             // The owner's "Chat about this" reply to one of Orbit's own cards: their message, drawn as
             // theirs under the call rather than left inside its result (`OwnerChatReply`).
@@ -2578,18 +2608,18 @@ struct TranscriptItemView: View {
             }
         case .error(_, let message):
             if let console, console.executesDsh, let repair = DshRuntime.repair(message) {
-                DshRepairCardView(console: console, repair: repair)
+                DshRepairCardView(console: console, repair: repair).orbitCardWidth()
             } else if let repair = EngineAuth.antigravityRepair(message), let console, console.executesAntigravity {
-                AntigravityRepairCardView(console: console, repair: repair)
+                AntigravityRepairCardView(console: console, repair: repair).orbitCardWidth()
             } else if let summary = ToolFailureSummary.parse(message) {
-                ToolFailureCardView(message: message, summary: summary)
+                ToolFailureCardView(message: message, summary: summary).orbitCardWidth()
             } else {
                 Label(message, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red).textSelection(.enabled)
             }
         case .authError(let id, let message):
             if let console {
-                AuthErrorCardView(console: console, message: message, settled: console.settlement.auth[id])
+                AuthErrorCardView(console: console, message: message, settled: console.settlement.auth[id]).orbitCardWidth()
             } else {
                 // No console to act through (a preview / detached render): the diagnosis alone,
                 // which is what the runtime said in the first place.
@@ -2598,7 +2628,7 @@ struct TranscriptItemView: View {
             }
         case .autoRetry(let notice):
             if let console {
-                AutoRetryCardView(console: console, notice: notice)
+                AutoRetryCardView(console: console, notice: notice).orbitCardWidth()
             } else {
                 // Same as above: with no session to read the armed retry off, or to retry through,
                 // what's left is the runtime's own sentence.
@@ -2619,7 +2649,7 @@ struct TranscriptItemView: View {
             // The main checkout's card (board 01) or one action's line (board 03). Without a console to
             // act through, the event's own sentence, as the notice it used to be.
             if let console, let changed = item.changed {
-                MainCheckoutCardView(console: console, item: item, notice: changed)
+                MainCheckoutCardView(console: console, item: item, notice: changed).orbitCardWidth()
             } else if let console, let result = item.result {
                 MainCheckoutResultRow(console: console, result: result)
             } else {

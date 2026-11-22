@@ -644,6 +644,15 @@ func integrateOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, sc
 		}
 	}
 
+	// The task is exempt from the project's landing check (§12.15 P-C2): the command carried only its
+	// acceptance, which passed above. Record the check that was not run, and why, where it would have
+	// run, so the result says the landing was not checked rather than leaving it to be inferred.
+	if cmd.Kind == "LAND_TASK" && cmd.LandingCheckExemptReason != "" {
+		result.Checks = append(result.Checks, IntegrationCheckResult{
+			Name: "LANDING_CHECK", Skipped: "TASK_EXEMPT", Reason: cmd.LandingCheckExemptReason,
+		})
+	}
+
 	// ── J-S6a the tree that is about to land ──────────────────────────────────────────────────
 	head, _ := git(scratch, "rev-parse", "HEAD")
 	dirty, _ := git(scratch, "status", "--porcelain", "--untracked-files=no")
