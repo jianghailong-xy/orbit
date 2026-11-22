@@ -51,7 +51,7 @@
 
 - `clientTurnId` 是事实的全函数，前缀属于下表的闭集；`content` 只由不可变的行派生（重放时逐字节比较，见 `createTurn` 的幂等分支）。
 - 外部账本（投递行、回复行）的 ACK 在 `participateSendTransaction` 里与轮次同一事务写下；会话已结束（`completed_at` 非空、`INTERRUPTED` 且有 `end_reason`、终态、在 Trash、已请求取消）时在钩子里抛错，轮次不写。
-- 不走 `SessionsService.resume`：不复活已结束的会话，也不 steer 正在跑的轮次。**唯一的例外**（修订 42，§12.5 W6，owner 裁决 R3）：前缀 `landing-fix:v1:` 可以经 resume 路径复活 `end_reason = 'task_done'` 的任务会话，别的已结束状态仍在钩子里抛错。
+- 不走 `SessionsService.resume`：不复活已结束的会话，也不 steer 正在跑的轮次。**唯一的例外**，同时是对「不复活」与「不走 resume」两句的例外（修订 42，§12.5 W6，owner 裁决 R3）：前缀 `landing-fix:v1:` 可以经 resume 路径复活 `end_reason = 'task_done'` 的任务会话，别的已结束状态仍在钩子里抛错。
 - 排队的平台轮次会被四处排空点丢掉（`turnComplete` 的 failSession 排空、`/finalize`、`ReaperService.forceFinalize`、`SessionsService.transitionEnd`），打断与撤回会整行删除。平台轮次在这些点先被「退回」（§4.4 X-D5），与 `watch-wake-drain.ts` 的 `deadLetterQueuedWatchWakes` 同一形状。
 - 修订 12 不改变 `open-item:v1` 的投递文本：投递内容的生成器（`project-open-item.ts` 的 `integrationItemFacts` / `failureClassLines`）不读本修订新增的 payload 字段，重放仍逐字节一致；落地链接只加在待办 payload 的 `landingSessionId` 与服务端决定的 `OPEN_LANDING` 卡片动作中（§4.8）。晋升待办从来没有 `OPEN_TASK_SESSION`（`open-item-doors.ts` 对它只投影 `ASK_COORDINATOR_AGAIN`、`RETRY`、`REVIEW`）；暂时保留的是转录卡上的「Open the failed session ↗」链接（web `OpenItemDeliveryCard.tsx`，OrbitKit `OpenItemDelivery.swift`）与行上的 `sessionId`，客户端都能画 `OPEN_LANDING` 之后再去掉。
 
@@ -2563,7 +2563,7 @@ owner 2026-11-20 问：Orbit 是 agent-first 的平台，落地、合并检查�
 
 ### 12.5 规则
 
-**W5（交出）**：J-T7 写作业终态的事务里，待办照 §4.2 开出；W4 成立时同一事务写 `work_session_id` 与 `work_session_offered_at`，**并清掉该任务的交付身份**（R2：`delivered_sha`、`delivered_base_sha`、`delivered_branch`、`delivered_session_id`、`delivered_at` 置空；这条任务回到「身份未冻结、等工作结算」的状态，§10.5 O-L4 第 3 条），并且**不**按 §4.4 X-D4 投给协调会话、**不**写 `escalate_at`（没有人欠着它，时钟不为它走；与修订 13「协调会话接手了的待办没有升级时刻」同一个道理）。提交后的边沿把失败送进任务会话（W6）；事实驱动的补偿点是这条待办的读（`openItemOwed` 的兜底）与该会话的下一次 `turnComplete`。
+**W5（交出）**：J-T7 写作业终态的事务里，待办照 §4.2 开出；W4 成立时同一事务写 `work_session_id` 与 `work_session_offered_at`，**并在送达落地修复轮次的那个事务里（W6 的钩子）清掉该任务的交付身份，清法同 `task_reopen`**（R2：`delivered_sha`、`delivered_base_sha`、`delivered_branch`、`delivered_session_id`、`delivered_at` 置空；这条任务回到「身份未冻结、等工作结算」的状态，§10.5 O-L4 第 3 条），并且**不**按 §4.4 X-D4 投给协调会话、**不**写 `escalate_at`（没有人欠着它，时钟不为它走；与修订 13「协调会话接手了的待办没有升级时刻」同一个道理）。提交后的边沿把失败送进任务会话（W6）；事实驱动的补偿点是这条待办的读（`openItemOwed` 的兜底）与该会话的下一次 `turnComplete`。
 
 **W6（送达；G6 的一处例外）**：载体仍是 `SessionsService.createTurn(… intent: 'NEXT_TURN', participateSendTransaction)`，新前缀进 §0.3 的表：
 
@@ -2582,6 +2582,7 @@ G6 写「不复活已结束的会话」。**本前缀是例外，且只此一种
 - 任务**保持 DONE**。这一轮不开新的生命周期代，不重新冻结判据，轮次结束不重跑验收、不重提证据。裁决过的是这份工作；这一轮做的是让它能落上线，判它的是 J-S5（任务验收与落地检查在组合树上重跑）。
 - 它不占项目的任务预算（R3：任务保持 DONE，项目预算只数非 DONE 的任务），也不排队等名额；runner 一侧照旧按这条会话的认领排。J-T2 的领取条件「该任务没有 `finished_at IS NULL` 的工作会话」（J-T1e）让本任务的落地在这一轮结束之前不会被领取，不需要新的守卫。
 - 它不计入协调会话的自主花费（§6.1，只数协调会话的 `turn_end` 行）：是平台投递的轮次（G7「外部」），发生在工作会话里。花费由 W8 的轮数封顶。
+- 实现前要核实：平台对 DONE 任务空闲会话的收尾（`endIdleWorkOfDoneTask`、reaper）不会结束一条已复活、仍有唤醒源（后台作业、定时唤醒）的会话；若会，先修这一处（R2）。
 - 任务是 DONE 时一轮结束的既有行为（2026-11-20 核对）：不排验收、不验证、不要证据、不开新的 epoch 或 `attemptGeneration`。三处缺口实现时要堵：回合结束的排空可能把过期的 `SEND_BACK` 再投一遍，要求再交一版证据（`evidence-review.service.ts`）；`task_evidence_submit` 仍会往 DONE 的任务上存证据；开着的 `task_attempt` 会被计量并叫醒协调会话（`attempt-budget-meter.service.ts`）。
 
 内容只由不可变的行派生（重放逐字节一致）：作业的结构化结果、`project_integration_job_log` 里该检查的失败段（`integrate.go#addFailureLines` 写下的那几行）、落地会话 id。文案（产品文案，英文）：
@@ -2608,13 +2609,13 @@ The full record: landing <landingSessionId>.
 
 任务会话对自己任务的落地有读口：`session_get(landingSessionId)` 与 `project_integration_get` 对「本会话的任务」放行（今天只放行协调会话）。
 
-**W7（三种结局）**：都在已提交事实的边沿上。**决定在这条会话的工作结算时做**（R2），不在这一轮的 `turnComplete` 上做：DONE 任务上一次成功的 `turnComplete` 既不重新冻结身份、也不入队；`/finalize` 经 `settleDeliveredIdentityAfterFinish` 走 `settleDeliveredIdentity(WORK_FINISHED)`，身份已有 `delivered_at` 时它返回 `STANDING`，这正是 W5 要先清掉身份的原因。普通路线与 `queueLandingRetry` 到的都是 `queueLandTask`，键 `ij:v1:LAND_TASK:<taskId>:<generation>`，先插入者赢，不会入队两次。J-T1e（`integration-job-relay.ts#claimOne`，对 `LAND_TASK` 与 `CHECK_PROMOTION`）让落地等这条会话 finish 之后才被领取。
+**W7（三种结局）**：都在已提交事实的边沿上。**决定在这条会话的工作结算时做**（R2），不在这一轮的 `turnComplete` 上做：DONE 任务上一次成功的 `turnComplete` 既不重新冻结身份、也不入队；`/finalize` 经 `settleDeliveredIdentityAfterFinish` 走 `settleDeliveredIdentity(WORK_FINISHED)`，身份已有 `delivered_at` 时它返回 `STANDING`，这正是 W5 要先清掉身份的原因。任务有一条在任务会话手里的待办时，finish 路径走 `queueLandingRetry`（请求者 = 任务会话），不走普通的 `queueForDoneTask`；两条路到的都是 `queueLandTask`，键 `ij:v1:LAND_TASK:<taskId>:<generation>`，先插入者赢，不会入队两次。J-T1e（`integration-job-relay.ts#claimOne`，对 `LAND_TASK` 与 `CHECK_PROMOTION`）让落地等这条会话 finish 之后才被领取。
 
 | 事实 | 结局 | 同一事务写下 |
 |---|---|---|
-| 这条会话的工作结算（P-M1 的 finish 路径：`/finalize` → `settleDeliveredIdentityAfterFinish` → `settleDeliveredIdentity(WORK_FINISHED)`），重新冻结出的 `delivered_sha` ≠ 失败作业的 `source_sha`，任务仍 DONE | **再落一代**（这就是 J-T1c，本条是它的实现） | 身份由结算按 §10.5 O-L4 重新冻结（W5 已清掉旧的；**不给 O-L4 开例外**）；经 `queueLandingRetry` 入队下一代（§12.4 的 `retry_*` 写法）；待办用 `markOpenItemsHandling` 点名这一条记 H1（`handling_job_id`、`handling_session_id` = 任务会话；`markEarlierLandingItemsHandling` 只管重开，不用）。`MAIN` 线：`delivered_sha` 变了不触发 M-T6，所以走 `CHECK_PROMOTION` 的重检路径（`retry_kind_chk` 已允许），旧候选按 M-T6 被取代并关掉它名下 OPEN 的失败待办，新候选 `source_sha` = 新的 `delivered_sha` |
+| 这条会话的工作结算（P-M1 的 finish 路径：`/finalize` → `settleDeliveredIdentityAfterFinish` → `settleDeliveredIdentity(WORK_FINISHED)`），重新冻结出的 `delivered_sha` ≠ 失败作业的 `source_sha`，任务仍 DONE | **再落一代**（这就是 J-T1c，本条是它的实现） | 身份由结算按 §10.5 O-L4 重新冻结（W5 已清掉旧的；**不给 O-L4 开例外**）；经 `queueLandingRetry` 入队下一代（§12.4 的 `retry_*` 写法）；待办用 `markOpenItemsHandling` 点名这一条记 H1（`handling_job_id`、`handling_session_id` = 任务会话；`markEarlierLandingItemsHandling` 只管重开，不用）。`MAIN` 线：`delivered_sha` 变了不触发 M-T6，所以走 `CHECK_PROMOTION` 的重检路径（`retry_kind_chk` 已允许），旧候选按 M-T6 被取代，新候选 `source_sha` = 新的 `delivered_sha`；M-T6 关掉旧候选名下 OPEN 的失败待办时，**交给任务会话的那一条（H1 记了 `handling_session_id` = 任务会话的）除外**：它保持 OPEN、处理中，直到新的 `CHECK_PROMOTION` / 落地结果按 W-T3 / W-T4 结案；旧候选名下其余 OPEN 的失败待办照 M-T6 现在的写法关掉 |
 | 同上，重新冻结出的身份与失败作业的 `source_sha` 相同（没有新提交） | **交回** `NO_NEW_COMMIT` | 写 `work_session_returned_at` 与原因；待办从此刻起按 §4.4 X-D4 投给协调会话，`waiting_since` 与 `escalate_at` 从此刻算；payload 增 `workSession: { sessionId, rounds, lastMessage }`（`lastMessage` 是会话这一轮最后说的话，同修订 32 `TASK_RUN_STOPPED` 的取法） |
-| 这一轮失败或被打断；会话在送达前后被结束、删除；W6 的 resume 或钩子抛错；原 runner 不可用或 checkout 重建失败（R3） | **交回** `TURN_FAILED` / `SESSION_ENDED` | 同上 |
+| 这一轮失败或被打断；会话在送达前后被结束、删除；W6 的 resume 或钩子抛错；原 runner 不可用或 checkout 重建失败（R3） | **交回** `TURN_FAILED` / `SESSION_ENDED` | 同上；立即交回，先按 P-M1 的 finish 路径把清掉的交付身份重新冻结回来（不给 O-L4 开例外） |
 | 任务被重开、取消、移走（J-T8 的叫停事实） | **交回** `TASK_MOVED_ON`，随即按 §4.2 的既有事实关闭 | 同上；不投递 |
 
 再落的那一代成功：J-T5 与 H2 照旧把待办写成 `RESOLVED / HANDLED`，`resolved_by_session_id` = 任务会话。协调会话从头到尾没有被叫醒，待办出现在它的 `settled` 读里（H5）。
@@ -2647,7 +2648,7 @@ The full record: landing <landingSessionId>.
 
 ### 12.8 测试
 
-- `landing-fix-work-session.pg.spec.ts`（新）：W4 的四个条件逐一取反都走 W-T6；`CONFLICT` 三种 phase 与 `CHECK_FAILED` 走 W-T1，`BASELINE_RED` / `CHECK_TIMED_OUT` / `ERROR` 不走；W-T1 同事务清了交付身份；W-T2 在 finish 上才入队、恰好一代（普通路线与 `queueLandingRetry` 同键只插一次）、`MAIN` 线走 `CHECK_PROMOTION`；`turnComplete` 本身不入队；`retry_failure_class_chk` 收 `CONFLICT`；W-T3 关待办、协调会话零轮次；W-T5 的每种原因各一例（含 R3 的另一台 runner / checkout 重建失败 → `TURN_FAILED`），复活只限 `task_done`、不占项目任务预算，交回后 `escalate_at` 从交回时刻算；W8 第三次失败直接归协调会话；重放 `landing-fix:v1:<jobId>` 逐字节一致。
+- `landing-fix-work-session.pg.spec.ts`（新）：W4 的四个条件逐一取反都走 W-T6；`CONFLICT` 三种 phase 与 `CHECK_FAILED` 走 W-T1，`BASELINE_RED` / `CHECK_TIMED_OUT` / `ERROR` 不走；W-T1 同事务清了交付身份；`MAIN-line supersession keeps the handed-off item OPEN`：MAIN 线的取代让交给任务会话的待办保持 OPEN（M-T6 不关它，W-T3 / W-T4 才结案），旧候选名下别的 OPEN 失败待办照旧关闭；W-T2 在 finish 上才入队、恰好一代（普通路线与 `queueLandingRetry` 同键只插一次）、`MAIN` 线走 `CHECK_PROMOTION`；`turnComplete` 本身不入队；`retry_failure_class_chk` 收 `CONFLICT`；W-T3 关待办、协调会话零轮次；W-T5 的每种原因各一例（含 R3 的另一台 runner / checkout 重建失败 → `TURN_FAILED`），复活只限 `task_done`、不占项目任务预算，交回后 `escalate_at` 从交回时刻算；W8 第三次失败直接归协调会话；重放 `landing-fix:v1:<jobId>` 逐字节一致。
 - `open-item-doors.spec.ts`：在任务会话手里的格子只有叫停与 chat；每格消息里的工具名仍属于这一格的门。
 - `coordinator-wake` / 保险丝：W6 的轮次不计 §6.1 的三项。
 - 会话路由普查：`landing-fix:v1:` 是唯一能续上 `task_done` 会话的平台前缀。
