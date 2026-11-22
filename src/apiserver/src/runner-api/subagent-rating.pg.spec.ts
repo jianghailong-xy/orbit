@@ -94,6 +94,8 @@ test('subagent_rate: the parent rates its own run, and the Model tiers view read
         model: data.model ?? OPUS, effort: 'high', status: data.status ?? RunStatus.AWAITING_INPUT, numTurns: 1,
         dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: Boolean(data.taskId), taskId: data.taskId ?? null,
         error: data.error ?? null, ...(data.createdAt ? { createdAt: data.createdAt } : {}),
+        // A terminal status is a released session: session_release_fact_chk (1401/1402) wants finished_at with it.
+        ...(['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(data.status ?? '') ? { finishedAt: data.createdAt ?? new Date() } : {}),
       },
     });
     return row.id;
