@@ -64,7 +64,8 @@ class ShareDeliveryTest {
             assertEquals(setOf(16, 64), state.draft.attachments.map { it.size }.toSet())
             assertNull("no upload failed", state.error)
             // Uploads only: no message, no session created.
-            val sent = paths.filterNot { it.contains("auth/") || it.endsWith("attachments") }
+            // A snapshot under the list's lock: the transport may still be appending from another thread.
+            val sent = synchronized(paths) { paths.toList() }.filterNot { it.contains("auth/") || it.endsWith("attachments") }
             assertEquals(emptyList<String>(), sent)
         } finally { model.close(); scope.cancel() }
     }

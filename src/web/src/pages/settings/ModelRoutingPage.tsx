@@ -342,7 +342,7 @@ function ModelRow({
           )}
         </td>
         <td>{row.provider && row.model ? <ModelTierCell provider={row.provider} model={row.model} /> : '—'}</td>
-        <td className="model-tiers-quality">{row.model ? <QualityCell model={row.model} /> : '—'}</td>
+        <td className="model-tiers-quality">{row.model ? <QualityCell model={row.model} pooledWith={row.pooledWith} /> : '—'}</td>
         <td className="model-tiers-price">{row.provider && row.model ? priceText(row.model, row.provider.billing) : '—'}</td>
         <td>
           {ranAt !== 'tiers' ? (

@@ -1613,6 +1613,30 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
     'must be a session of the runner\'s owner that this runner hosts, else 403 before anything is read (runner-api/runner-owner-requests.controller.ts:100); the answer is that owner\'s own preferences, read by the runner\'s owner, never by the header, and settings-cli.pg.spec.ts sends another account\'s session',
   'POST /runner/owner-requests/:id/withdraw header x-orbit-session-id':
     'must be a session of the runner\'s owner that this runner hosts, else 403 (runner-api/runner-owner-requests.controller.ts:100), and must be the session that filed the request (owner-requests/owner-requests.service.ts:233)',
+  // ── the Orbit Cloud browser's agent tools ─────────────────────────────────────────────────────────
+  'POST /runner/browser/sign-in-requests body clientRequestId':
+    'the caller\'s own idempotency key, unique per asking session, and read back only by (the runner\'s owner, the asking session, the key) (owner-requests/owner-requests.service.ts:505, read at :309); it names nothing of anybody else\'s',
+  'GET /runner/browser header x-orbit-session-id':
+    'must be a session of the runner\'s owner that this runner hosts, else 403 (runner-api/runner-browser.controller.ts:138), '
+    + 'and what is read is that owner\'s own managed runner, found by the owner (managed-runners/browser-state.ts accountStatus); '
+    + 'runner-browser-status.pg.spec.ts (3) sends another account\'s session both ways',
+  'POST /runner/browser/clear header x-orbit-session-id':
+    'must be a session of the runner\'s owner that this runner hosts, else 403 (runner-api/runner-browser.controller.ts:138), '
+    + 'and what is cleared is that owner\'s own managed runner, found by the owner (runner-api/runner-browser-clear-approval.ts '
+    + 'accountBrowserRunner); runner-browser-clear-logins.pg.spec.ts (4) sends another account\'s session',
+  'POST /runner/browser/clear body approvalId':
+    'spent only when it names a card filed by the asking session, under orbit_browser_clear_logins, ALLOWED by a person, about '
+    + 'that owner\'s managed runner and not spent before (runner-api/runner-browser-clear-approval.ts:86, the WHERE of claimBrowserClearApproval); '
+    + 'anything else is 403 and nothing is sent; runner-browser-clear-logins.pg.spec.ts (4) sends another session\'s card',
+  'POST /runner/browser/open header x-orbit-session-id':
+    'must be a session of the runner\'s owner that this runner hosts, else 403 (runner-api/runner-browser.controller.ts:138), '
+    + 'and what is opened is that owner\'s own managed runner, found by the owner (managed-runners/browser-state.ts open); '
+    + 'runner-browser-open.pg.spec.ts (3) sends another account\'s session both ways',
+  'POST /runner/browser/sign-in-requests header x-orbit-session-id':
+    'must be a session of the runner\'s owner that this runner hosts, else 403 (runner-api/runner-browser.controller.ts:138), '
+    + 'and the runner must be that owner\'s own managed runner, else 403 BROWSER_SIGN_IN_NOT_ORBIT_CLOUD (runner-browser.controller.ts:138); '
+    + 'the card is filed for that owner and session only (owner-requests/owner-requests.service.ts:467); '
+    + 'runner-browser-sign-in.pg.spec.ts (3) sends another account\'s session both ways',
   // ── the wiki's import on the server ──────────────────────────────────────────────────────────────
   'POST /runner/wiki/spaces/:id/import-jobs body id':
     'the id the command names for the job it is making: the insert does nothing when the id is taken, and the job '

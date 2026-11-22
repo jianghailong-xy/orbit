@@ -78,6 +78,7 @@ type agentToolsSwitches struct {
 	Orchestration bool `json:"orchestration"`
 	Watches       bool `json:"watches"`
 	Wiki          bool `json:"wiki"`
+	Browser       bool `json:"browser"`
 }
 
 // agentToolsInstructions is how Orbit's runtime instructions reached the model: the carrier (Claude Code's
@@ -136,7 +137,7 @@ func newAgentToolsReport(job *ClaimedSession, engine, carrier string) *agentTool
 		MCP: agentToolsMCP{Status: "starting"},
 	}
 	if job != nil {
-		r.Switches = agentToolsSwitches{Orchestration: job.AllowOrchestration, Watches: job.watchesOn(), Wiki: !job.WikiDisabled}
+		r.Switches = agentToolsSwitches{Orchestration: job.AllowOrchestration, Watches: job.watchesOn(), Wiki: !job.WikiDisabled, Browser: job.BrowserEnabled}
 		r.scheduleRun = job.ScheduleRun
 		r.PermissionMode = job.Agent.PermissionMode
 		workspace := strings.TrimSpace(job.Agent.AppendSystemPrompt)
@@ -183,6 +184,10 @@ func (r *agentToolsReport) countFamilies(listed map[string]bool) {
 		if family == "" {
 			continue
 		}
+		// Off means absent: a session spawned with the browser off has no browser family at all (browser_tools.go).
+		if op.Object == objectBrowser && !r.Switches.Browser {
+			continue
+		}
 		// No session but a scheduled run's has schedule_run_report, whatever the switches (schedule_tools.go).
 		if op.Tool == scheduleRunReportTool && !r.scheduleRun {
 			continue
@@ -209,6 +214,9 @@ func (r *agentToolsReport) countFamilies(listed map[string]bool) {
 	r.Families = r.Families[:0]
 	for _, def := range agentToolsFamilyDefs {
 		c := counts[def.ID]
+		if def.ID == "browser" && !r.Switches.Browser {
+			continue
+		}
 		c.Reason = mostFrequent(reasons[def.ID])
 		r.Families = append(r.Families, *c)
 	}
