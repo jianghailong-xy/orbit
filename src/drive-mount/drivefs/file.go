@@ -606,6 +606,9 @@ func (fs *FS) Shutdown(wait time.Duration) {
 			fs.closeFailed(wf, fs.pathForLog(wf.n.ino, ""), err)
 		}
 	}
+	// Every open write is committed now, or kept in unsent/: nothing the spool holds is left for the parent to salvage
+	// into unsent/ again when the next daemon starts (§6.1). Only a daemon that dies without stopping leaves it.
+	fs.spool.clear()
 }
 
 // Fail fails every open write from now on: the daemon is going away.

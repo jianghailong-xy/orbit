@@ -10,6 +10,11 @@
 //	orbit-files-mount serve --fuse-fd 3 ...
 //
 // itself. For development, serve can also mount a directory on its own (--mountpoint), through fusermount.
+//
+//	orbit-files-mount csi --endpoint unix:///csi/csi.sock --node-id NODE --managed-namespace NS --server URL ...
+//
+// is files.orbit.dev, the CSI node plugin that runs the privileged parent of every runner Pod's drive on its node
+// (package csi; deploy/managed-runner/files-csi).
 package main
 
 import (
@@ -29,6 +34,7 @@ import (
 
 	"github.com/hanwen/go-fuse/v2/fuse"
 
+	"orbit/drive-mount/csi"
 	"orbit/drive-mount/door"
 	"orbit/drive-mount/drivefs"
 	"orbit/drive-mount/parent"
@@ -44,13 +50,15 @@ func main() {
 		os.Exit(serve(os.Args[2:]))
 	case "mount":
 		os.Exit(mount(os.Args[2:]))
+	case "csi":
+		os.Exit(csiPlugin(os.Args[2:]))
 	default:
 		usage()
 	}
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: orbit-files-mount mount|serve [flags]")
+	fmt.Fprintln(os.Stderr, "usage: orbit-files-mount mount|serve|csi [flags]")
 	os.Exit(2)
 }
 
@@ -279,6 +287,63 @@ func mount(args []string) int {
 		PodUID: podCgroup, Watchdog: *watchdog, Log: logger,
 	})
 	if err != nil && !errors.Is(err, context.Canceled) {
+		logger.Printf("%v", err)
+		return 1
+	}
+	return 0
+}
+
+func csiPlugin(args []string) int {
+	flags := flag.NewFlagSet("csi", flag.ExitOnError)
+	endpoint := flags.String("endpoint", "unix:///csi/csi.sock", "the CSI socket the kubelet and the sidecars use")
+	nodeID := flags.String("node-id", os.Getenv("NODE_NAME"), "this node's name")
+	managed := flags.String("managed-namespace", "", "the managed-runner namespace: the only one whose Pods may have the drive")
+	secrets := flags.String("secrets-namespace", "orbit-files-system", "where Secret mrf-<runner uuid> is")
+	server := flags.String("server", "", "the Orbit server's root URL")
+	root := flags.String("root", "/var/lib/orbit-files", "the per-runner directories each runner Pod receives as /run/orbit-files")
+	spool := flags.String("spool-root", "/var/lib/orbit-files-spool", "the per-runner spools, on the node's disk")
+	state := flags.String("state-dir", "/var/lib/orbit-files-state", "what the plugin keeps of each published drive")
+	uidBase := flags.Int("daemon-uid-base", 200000, "the first uid a runner's daemon runs as; each runner on the node gets its own")
+	_ = flags.Parse(args)
+	logger := log.New(os.Stderr, "orbit-files-csi: ", log.LstdFlags)
+	if os.Geteuid() != 0 {
+		logger.Print("csi must run as root: it mounts")
+		return 2
+	}
+	if *nodeID == "" || *managed == "" || *server == "" {
+		logger.Print("--node-id, --managed-namespace and --server are required")
+		return 2
+	}
+	self, err := os.Executable()
+	if err != nil {
+		logger.Printf("%v", err)
+		return 1
+	}
+	// The watchdog aborts a frozen daemon's connection through fusectl (§5.7); a node whose init did not mount it gets
+	// it mounted here, in the plugin's own mount namespace.
+	if !parent.Mounted("/sys/fs/fuse/connections") {
+		if err := syscall.Mount("fusectl", "/sys/fs/fuse/connections", "fusectl", 0, ""); err != nil {
+			logger.Printf("fusectl is not mounted, and mounting it failed (a frozen daemon cannot be aborted): %v", err)
+		}
+	}
+	reader, err := csi.NewInClusterSecrets()
+	if err != nil {
+		logger.Printf("%v", err)
+		return 1
+	}
+	// The daemon's own flags, passed through: everything after "--".
+	driver := csi.New(csi.Config{
+		NodeID: *nodeID, ManagedNamespace: *managed, SecretsNamespace: *secrets, Server: *server, Root: *root,
+		SpoolRoot: *spool, StateDir: *state, Daemon: self, DaemonArgs: flags.Args(), UIDBase: *uidBase,
+		Secrets: reader, Log: logger,
+	})
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+	defer cancel()
+	logger.Printf("adopted %d drives published before this start", driver.Adopt(ctx))
+	err = csi.Serve(ctx, *endpoint, driver)
+	// Stopping (an upgrade, a restart): every daemon commits what it can; the mounts stay for the next start.
+	driver.Shutdown()
+	if err != nil && ctx.Err() == nil {
 		logger.Printf("%v", err)
 		return 1
 	}

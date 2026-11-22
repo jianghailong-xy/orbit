@@ -41,6 +41,11 @@ func newSpool(dir string, limit int64) (*spool, error) {
 	return &spool{dir: dir, limit: limit, clean: list.New()}, nil
 }
 
+// clear removes every write's spool file: the daemon is stopping, and what they held is committed or in unsent/.
+func (s *spool) clear() {
+	_ = os.RemoveAll(filepath.Join(s.dir, "w"))
+}
+
 // tryTake accounts for need more bytes if they fit under the limit: checked and taken at once, so two writers never
 // both take the last room.
 func (s *spool) tryTake(need int64) bool {
