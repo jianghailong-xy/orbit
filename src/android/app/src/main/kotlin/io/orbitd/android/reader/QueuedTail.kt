@@ -234,17 +234,18 @@ internal fun QueuedTurnRow(turn: QueuedTurn, open: (String) -> Unit, cancelEnabl
             // The owner's message held for its translation (board frame 6): what they wrote, and the chip or the way out of a failure.
             turn.translation?.held == true && turn.turnId != null -> {
                 val doors = LocalSessionConsole.current?.composer
-                Text("You", style = MaterialTheme.typography.labelMedium)
-                turn.translation.original.takeIf { it.isNotBlank() }?.let { MarkdownText(it, open = open) }
-                QueuedAttachments(turn, open)
-                UserTranslationFoot(turn.translation, flipped = false, onFlip = {},
-                    retry = doors?.let { { it.translationAction("turns/${turn.turnId}/translation/retry") } },
-                    sendAsWritten = doors?.let { { it.translationAction("turns/${turn.turnId}/translation/send-as-written") } })
+                UserTurnColumn {
+                    QueuedAttachments(turn, open)
+                    turn.translation.original.takeIf { it.isNotBlank() }?.let { UserWordsBubble(it, null, open) }
+                    UserTranslationFoot(turn.translation, flipped = false, onFlip = {},
+                        retry = doors?.let { { it.translationAction("turns/${turn.turnId}/translation/retry") } },
+                        sendAsWritten = doors?.let { { it.translationAction("turns/${turn.turnId}/translation/send-as-written") } })
+                }
             }
-            else -> {
-                Text("You", style = MaterialTheme.typography.labelMedium)
-                turn.event.fields.text("text")?.takeIf { it.isNotBlank() }?.let { MarkdownText(it, open = open) }
+            // The reader's own message, drawn as its sent turn will be (iOS `UserBubbleView`), the queue's line under it.
+            else -> UserTurnColumn {
                 QueuedAttachments(turn, open)
+                turn.event.fields.text("text")?.takeIf { it.isNotBlank() }?.let { UserWordsBubble(it, null, open) }
                 foot()
             }
         }
@@ -257,7 +258,8 @@ private fun SteerLine() = Text("Sending…", Modifier.testTag("queued-steer"), s
 
 @Composable
 private fun QueuedAttachments(turn: QueuedTurn, open: (String) -> Unit) {
-    turn.event.fields.objects("attachments").forEach { attachment ->
-        attachment.text("id")?.let { id -> TextButton(onClick = { open("orbit-attachment:$id") }) { Text(attachment.text("name") ?: "Attachment") } }
+    val atts = turn.event.fields.objects("attachments").mapNotNull { a ->
+        a.text("id")?.let { id -> Triple("orbit-attachment:$id", a.text("name") ?: "Attachment", a.text("mime")?.startsWith("image/") == true) }
     }
+    UserTurnAttachments(atts.filter { it.third }.map { it.first to it.second }, atts.filterNot { it.third }.map { it.first to it.second }, open)
 }

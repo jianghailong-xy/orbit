@@ -2,6 +2,7 @@ package io.orbitd.android.core.realtime
 
 import io.orbitd.android.core.auth.*
 import io.orbitd.android.core.protocol.Wire
+import java.util.WeakHashMap
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
@@ -37,8 +38,13 @@ class ReadingCache(private val auth: AuthSession, private val handle: SessionHan
     suspend fun write(key: String, revision: Long, bytes: ByteArray) = lock.withLock {
         if (access() == ReadingAccess(revision)) auth.writeData(handle, DataKind.CACHE, key, bytes)
     }
+    private val lock = lockFor(auth)
+
     companion object {
-        // Serializes marker checks and writes across route instances, including late close saves.
-        private val lock = Mutex()
+        // Serializes marker checks and writes across route instances, including late close saves: one lock per AuthSession, whose
+        // disk namespace holds the markers. Not one for the process: a step that never resumes (in Robolectric, a resume the main
+        // looper's reset dropped as its test ended) then held every later AuthSession's readers, and their stores, with it.
+        private val locks = WeakHashMap<AuthSession, Mutex>()
+        private fun lockFor(auth: AuthSession) = synchronized(locks) { locks.getOrPut(auth) { Mutex() } }
     }
 }

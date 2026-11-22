@@ -589,6 +589,7 @@ import {
   type ManagedHeartbeatAnswer,
 } from '../managed-runners/managed-runner-sleep';
 import { readManagedRunnerStorage, type ManagedRunnerStorage } from '../managed-runners/managed-runner-storage';
+import { markUpdateNowCuts } from '../managed-runners/managed-runner-update-cut';
 import {
   RUNNER_OFFLINE_AFTER_MS,
   RunnerPresenceService,
@@ -9368,6 +9369,11 @@ export class RunnerApiController {
           sessionData.poolSwitchNotice = null;
         }
       }
+      // A cut its runner's own stop marked (interrupt runner_restart) while the owner's Update Now of its Orbit Cloud
+      // container was stopping it is the update's, and is stored as the update's (managed-runner-update-cut.ts): the
+      // next generation is handed the turn back as the update's continuation. A plain read of the mapping, only for a
+      // batch holding such a cut.
+      await markUpdateNowCuts(tx, runner.id, durable, new Date());
       if (durable.length > 0) {
         // The one place a run_event is ever written, and the reason the per-token progress pings
         // stop costing 868 MB/day: `isNoiseSystemEvent` decides here whether a row is worth

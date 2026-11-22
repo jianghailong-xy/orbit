@@ -116,3 +116,11 @@ export function capacityHeldWaited(gate: CapacityGate, now: number): string | nu
   const rest = minutes % 60;
   return `Waiting ${Math.floor(minutes / 60)} h${rest ? ` ${rest} min` : ''}`;
 }
+
+/**
+ * The popover's sentence said of a scheduled run waiting for its first turn (board scheduled-run-not-started ③):
+ * `HPC is running 20 of 20 sessions. The run starts as soon as one finishes.`
+ */
+export function capacityHeldRunText(gate: CapacityGate, machine?: string | null): string {
+  return capacityHeldMessageText(gate, machine).replace('This message is sent', 'The run starts');
+}
