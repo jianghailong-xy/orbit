@@ -103,11 +103,49 @@ internal class ManagedRunnerReader(private val api: ManagementApi) {
     var refusal by mutableStateOf<String?>(null)
         private set
 
+    /** The build the last Update Now finished on, shown as the Updated card for a day; an Update Now the server took and the runner has not finished. */
+    var updated by mutableStateOf<ManagedUpdated?>(null)
+        private set
+    var pending by mutableStateOf<ManagedPendingUpdate?>(null)
+        private set
+
     suspend fun read() {
         val status = runCatching { ManagedRunner.status(api.get("managed-runner")) }.getOrNull()
-        shown = ManagedRunner.display(status)?.let { ManagedRunner.Shown(status!!, it) }
+        adopt(status)
         loaded = true
         if (status != null) ManagedRunnerIdentity.runnerId = shown?.status?.runnerId
+    }
+
+    private fun adopt(status: ManagedRunner.Status?) {
+        val finished = ManagedRunnerUpdateLogic.observe(shown?.status, status, updated, pending, System.currentTimeMillis())
+        if (finished != null && finished != updated) pending = null
+        updated = finished
+        ManagedRunnerRunningBuild.build = status?.update?.running
+        shown = ManagedRunner.display(status)?.let { ManagedRunner.Shown(status!!, it) }
+    }
+
+    /** What pressing Update Now… came to: taken (the card turns to Restarting), busy (confirm, then [updateNow] with interrupt), or refused. */
+    sealed interface UpdateResult {
+        data object Started : UpdateResult
+        data class Busy(val busy: ManagedBusy) : UpdateResult
+        data class Failed(val why: String) : UpdateResult
+    }
+
+    /** The owner's Update Now. Without [interruptTurns] a busy runner answers [UpdateResult.Busy] with what it would stop. */
+    suspend fun updateNow(interruptTurns: Boolean, turns: Int, to: ManagedBuild): UpdateResult {
+        if (busy) return UpdateResult.Failed(ManagedRunnerCopy.NOW_FAILED)
+        busy = true
+        try {
+            val answer = api.post(ManagedRunnerUpdateLogic.POST_PATH, buildJsonObject { put("interruptTurns", interruptTurns) })
+            pending = ManagedPendingUpdate(System.currentTimeMillis(), turns, to)
+            adopt(ManagedRunner.status(answer))
+            return UpdateResult.Started
+        } catch (cancel: CancellationException) { throw cancel }
+        catch (e: Exception) {
+            ManagedRunnerUpdateLogic.busy(e)?.let { return UpdateResult.Busy(it) }
+            read()
+            return UpdateResult.Failed((e as? ApiError)?.messages?.joinToString("; ")?.takeIf { it.isNotBlank() } ?: ManagedRunnerCopy.NOW_FAILED)
+        } finally { busy = false }
     }
 
     suspend fun retry() = act("Couldn't retry the managed runner") { status ->
@@ -123,7 +161,7 @@ internal class ManagedRunnerReader(private val api: ManagementApi) {
         busy = true; refusal = null
         try {
             val status = ManagedRunner.status(call(current))
-            shown = ManagedRunner.display(status)?.let { ManagedRunner.Shown(status!!, it) }
+            adopt(status)
             if (status != null) ManagedRunnerIdentity.runnerId = shown?.status?.runnerId
         } catch (cancel: CancellationException) { throw cancel }
         catch (e: Exception) {
@@ -152,7 +190,7 @@ internal fun rememberManagedRunner(api: ManagementApi, ask: Boolean): ManagedRun
 internal fun FollowManagedRunner(reader: ManagedRunnerReader, follow: Boolean) {
     LaunchedEffect(reader, follow) {
         while (follow) {
-            delay(1_000L * if (reader.shown?.display?.moving == true) ManagedRunner.POLL_MOVING_SECONDS else ManagedRunner.POLL_SETTLED_SECONDS)
+            delay(1_000L * if (reader.shown?.display?.moving == true || reader.shown?.status?.update?.phase == "updating") ManagedRunner.POLL_MOVING_SECONDS else ManagedRunner.POLL_SETTLED_SECONDS)
             reader.read()
         }
     }

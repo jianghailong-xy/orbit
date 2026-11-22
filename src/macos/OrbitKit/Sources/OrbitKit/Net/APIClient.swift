@@ -2052,6 +2052,11 @@ public final class APIClient: @unchecked Sendable {
         try await post("managed-runner/retry",
                        body: ManagedRunnerWriteRequest(idempotencyKey: idempotencyKey, revision: revision))
     }
+    /// Update Now for the owner's Orbit Cloud runner. A busy runner answers 409 `MANAGED_RUNNER_BUSY` (see
+    /// `ManagedRunnerUpdateNow.busy`) unless `interruptTurns` is true.
+    public func updateManagedRunnerNow(interruptTurns: Bool) async throws -> ManagedRunnerStatus {
+        try await post("managed-runner/update-now", body: ManagedRunnerUpdateNowRequest(interruptTurns: interruptTurns))
+    }
     /// Ask for the owner's managed runner where the server offers one (`actions.canEnsure`).
     public func ensureManagedRunner(idempotencyKey: String = UUID().uuidString) async throws -> ManagedRunnerStatus {
         try await post("managed-runner/ensure", body: ManagedRunnerWriteRequest(idempotencyKey: idempotencyKey))
