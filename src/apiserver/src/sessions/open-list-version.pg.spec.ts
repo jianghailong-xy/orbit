@@ -666,7 +666,7 @@ test('a write to each LANDING-only source leaves every flat Open-list row as it 
     ['an integration open item', () => db.projectOpenItem.create({
       data: {
         projectId: project.id, ownerId: f.ownerId, kind: 'INTEGRATION_ERROR', assignee: 'COORDINATOR',
-        assigneeReason: 'olv d1', dedupeKey: `olv-d1-${project.id}`, title: 'olv d1 item', payload: {},
+        assigneeReason: 'DEFAULT', dedupeKey: `olv-d1-${project.id}`, title: 'olv d1 item', payload: {},
         taskId: task.id, waitingSince: new Date(), assignedAt: new Date(),
       },
     })],
