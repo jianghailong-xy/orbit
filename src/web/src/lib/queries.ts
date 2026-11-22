@@ -576,7 +576,7 @@ export const workspaceSessionCountsQuery = () =>
   queryOptions({
     queryKey: ['session-counts'] as const,
     // Not `session`: a session event moves a tally only when it changes what the tallies count, which the
-    // stream decides from what each session last said (useControlPlane, countsMoved). `workspace` reaches it on a
+    // stream decides from what each session last said (useControlPlane, tallyShare). `workspace` reaches it on a
     // workspace edit and on the read that aligns a reconnect.
     meta: { entities: ['workspace'] },
     queryFn: () => api<WorkspaceSessionCounts[]>('/sessions/counts'),
