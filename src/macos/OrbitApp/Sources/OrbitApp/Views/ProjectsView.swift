@@ -1441,6 +1441,7 @@ struct ProjectDetailView: View {
         if RunSettings.shown(started: document.started) {
             Section {
                 if let view = store.integration {
+                    runSettingsSummary(store, view, document: document)
                     // First, because it decides whether the landing settings under it mean anything.
                     deliversSetting(store, view, document: document)
                     if document.nonCode {
@@ -1492,6 +1493,31 @@ struct ProjectDetailView: View {
                 sectionHeader(StartProject.howItRuns, detail: RunSettings.appliesFromNextTask)
             }
         }
+    }
+
+    /// How it runs opens with web's one-line summary (`project-run-settings-summary`): "Automatic On"
+    /// over the line, its branch and how many tasks run at once.
+    private func runSettingsSummary(_ store: ProjectDetailModel, _ view: ProjectIntegrationView,
+                                    document: ProjectDocument) -> some View {
+        let summary = RunSettings.summary(view, projectID: document.id,
+                                          automatic: document.coordinatorEnabled ?? false,
+                                          maxConcurrentTasks: store.pendingConcurrency ?? document.maxConcurrentTasks,
+                                          nonCode: document.nonCode)
+        return HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Circle().fill(Color.accentColor).frame(width: 8, height: 8)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(summary.title).font(.orbitSubtext.weight(.semibold))
+                if !summary.line.isEmpty {
+                    Text(summary.line)
+                        .font(.orbitLabel)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .padding(.vertical, 2)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("project-run-settings-summary")
     }
 
     /// Delivers (board 01 A–C): Code or Not code, each with what choosing it means, and — on a marked
