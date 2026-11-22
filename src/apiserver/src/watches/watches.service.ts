@@ -709,7 +709,7 @@ export class WatchesService {
     const sessions = await tx.session.findMany({
       where: { id: { in: ids('SESSION') }, ownerId },
       select: {
-        id: true, sessionKind: true, status: true, endReason: true,
+        id: true, sessionKind: true, status: true, finishedAt: true, endReason: true,
         completedAt: true, archivedAt: true, deletedAt: true,
         // The job leaf's columns: the jobs in flight and when each one's output last moved. Never their output.
         runningBgJobs: true, runningBgJobActivity: true,
@@ -767,6 +767,7 @@ export class WatchesService {
           kind: 'SESSION',
           sessionKind: session.sessionKind,
           status: session.status,
+          finishedAt: session.finishedAt,
           endReason: session.endReason,
           completedAt: session.completedAt,
           archivedAt: session.archivedAt,

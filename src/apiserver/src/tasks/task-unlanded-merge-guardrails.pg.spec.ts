@@ -456,6 +456,10 @@ async function settleByAcceptance(stack: Stack, f: Fixture, taskId: string, labe
     shellExitCode: shell.status!,
     shellOutput: `${shell.stdout}${shell.stderr}`,
   });
+  await stack.db.session.update({
+    where: { id: sessionId },
+    data: { status: RunStatus.SUCCEEDED, finishedAt: new Date()},
+  });
 
   assert.equal(
     (await stack.db.task.findUniqueOrThrow({ where: { id: taskId } })).status,
@@ -504,7 +508,7 @@ async function recordMerge(
       title: `${label}-merge`,
       prompt: `${label}-merge`,
       provider: 'claude',
-      status: RunStatus.SUCCEEDED,
+      status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
       dispatchOrigin: SessionDispatchOrigin.USER,
     },
   });

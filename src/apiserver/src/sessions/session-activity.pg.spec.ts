@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 
 import { Prisma, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { isReleasedStatus } from '../common/session-release';
 import type { SessionActivity } from '@orbit/shared';
 
 import type { AttachmentsService } from '../attachments/attachments.service';
@@ -86,12 +87,16 @@ async function world(
   await db.workspace.create({
     data: { id: workspaceId, ownerId: w.ownerId, runnerId, name: `${label}-agent`, enabled: true },
   });
+  const fixtureStatus = parked.status ?? status;
   await db.session.create({
     data: {
       id: w.sessionId, ownerId: w.ownerId, creatorId: w.ownerId, workspaceId, assignedRunnerId: runnerId,
       title: `${label} conversation`, prompt: 'hello', provider: 'claude', status,
       dispatchOrigin: SessionDispatchOrigin.USER, startedAt: new Date(Date.now() - 60 * 60_000), numTurns: 1,
       ...parked,
+      ...(isReleasedStatus(fixtureStatus) ? {
+        finishedAt: parked.finishedAt ?? new Date(),
+      } : {}),
     },
   });
   await db.sessionGuest.create({ data: { sessionId: w.sessionId, userId: w.guestId, ownerId: w.ownerId } });

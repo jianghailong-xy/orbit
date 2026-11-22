@@ -44,10 +44,13 @@ const CONTRACT = JSON.parse(
 const NOW = Date.parse('2026-11-19T12:00:00.000Z');
 
 function session(over: Partial<SessionFact> = {}): SessionFact {
+  // The release column a row of that status carries (session_release_fact_chk): set exactly when released.
+  const released = ['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(over.status ?? '');
   return {
     kind: 'SESSION',
     sessionKind: 'CONVERSATION',
     status: 'AWAITING_INPUT',
+    finishedAt: released ? new Date(NOW) : null,
     endReason: null,
     completedAt: null,
     archivedAt: null,

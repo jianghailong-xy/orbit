@@ -711,7 +711,7 @@ test('an exception item delivered to the coordinator records its facts beside th
         data: {
           id: landedSessionId, ownerId: w.ownerId, creatorId: w.ownerId, workspaceId: w.workspaceId,
           assignedRunnerId: w.runnerId, taskId: landed.taskId, title: 'landed', prompt: 'landed',
-          provider: 'claude', status: RunStatus.SUCCEEDED, dispatchOrigin: SessionDispatchOrigin.USER,
+          provider: 'claude', status: RunStatus.SUCCEEDED, finishedAt: new Date(), dispatchOrigin: SessionDispatchOrigin.USER,
           branch: 'orbit/item-card',
         },
       });

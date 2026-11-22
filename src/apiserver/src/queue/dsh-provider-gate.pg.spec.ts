@@ -195,12 +195,12 @@ test('P1b DeepSeek Harness provider gate on PostgreSQL', { timeout: 300_000 }, a
       assert.equal(await rawUpdate(id, `inbox_lease_owner = '${leaseOwner}'::uuid`, true), 1);
       assert.equal(await rawUpdate(id, `inbox_lease_generation = '${generation}'::uuid`, true), 1);
       assert.equal(await rawUpdate(id, 'inbox_lease_owner = NULL, inbox_lease_generation = NULL'), 1, 'release stays available');
-      assert.equal(await rawUpdate(id, "status = 'CANCELLED'"), 1);
+      assert.equal(await rawUpdate(id, "status = 'CANCELLED', finished_at = now()"), 1);
       const handoff = newTerminalResumeHandoffOwner();
-      assert.equal(await rawUpdate(id, `status = 'PENDING', inbox_lease_owner = '${handoff}'::uuid`), 1, 'server terminal revive only reserves a handoff marker');
+      assert.equal(await rawUpdate(id, `status = 'PENDING', finished_at = NULL, inbox_lease_owner = '${handoff}'::uuid`), 1, 'server terminal revive only reserves a handoff marker');
       assert.equal(await rawUpdate(id, "status = 'RUNNING'"), 0, 'the handoff marker cannot bypass the actual claim gate');
       assert.equal(await rawUpdate(id, `inbox_lease_owner = '${leaseOwner}'::uuid`), 0, 'the handoff marker cannot bypass runner takeover');
-      await rawUpdate(id, "status = 'CANCELLED', inbox_lease_owner = NULL");
+      await rawUpdate(id, "status = 'CANCELLED', finished_at = now(), inbox_lease_owner = NULL");
     }
     // The GUC is transaction-local: the prior authorized transaction cannot authorize the next one.
     assert.equal(await rawUpdate(await f.session(), "status = 'RUNNING'"), 0);

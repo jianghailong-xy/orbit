@@ -272,9 +272,10 @@ async function insertSession(row: {
   const id = randomUUID();
   await sql.query(
     `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","updated_at","status","end_reason",
-                           "completed_at","deleted_at","assigned_runner_id")
+                           "completed_at","deleted_at","assigned_runner_id", "finished_at")
      VALUES ($1,'watched session','p',$2,$2,now(),$3,$4,
-             CASE WHEN $5::boolean THEN now() END, CASE WHEN $6::boolean THEN now() END, $7)`,
+             CASE WHEN $5::boolean THEN now() END, CASE WHEN $6::boolean THEN now() END, $7,
+             CASE WHEN $3::run_status IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN now() END)`,
     [id, row.owner ?? ownerId, row.status, row.endReason ?? null, row.completedAt ?? false, row.deletedAt ?? false, row.runnerId ?? null],
   );
   return id;
@@ -673,7 +674,7 @@ test('a published event only schedules an evaluation: a status it claims is not 
   assert.equal((await readMatches(watchId)).length, 0);
 
   // The row fails too, and the same event now finds it.
-  await sql.query(`UPDATE "session" SET "status" = 'FAILED' WHERE "id" = $1`, [session]);
+  await sql.query(`UPDATE "session" SET "status" = 'FAILED', "finished_at" = COALESCE("finished_at", now()) WHERE "id" = $1`, [session]);
   realtime.publish(session, event(RunEventType.STATUS, { status: 'FAILED' }));
   const [match] = await eventually('the Match', () => readMatches(watchId), (m) => m.length === 1);
   assert.equal(match.snapshot.targets[0].observed?.status, 'FAILED');
@@ -1497,7 +1498,7 @@ test('a job that ended is not quiet: the leaf does not hold, no deadline is sche
     { predicateVersion: 3 },
   );
   assert.equal((await evaluator.evaluate(eitherWay)).outcome, 'SCHEDULED');
-  await sql.query(`UPDATE "session" SET "status" = 'SUCCEEDED' WHERE "id" = $1`, [host.sessionId]);
+  await sql.query(`UPDATE "session" SET "status" = 'SUCCEEDED', "finished_at" = COALESCE("finished_at", now()) WHERE "id" = $1`, [host.sessionId]);
   assert.equal((await evaluator.evaluate(eitherWay)).outcome, 'MATCHED');
   const [match] = await readMatches(eitherWay);
   assert.equal(match.reason, `ANY_OF(ANY SESSION_JOB_NO_OUTPUT_FOR(300s, ${JOB}) 0/1, ANY SESSION_RUN_TERMINAL 1/1)`);
@@ -1592,9 +1593,10 @@ async function quiescentSession(row: QuiescentSessionRow = {}): Promise<string> 
   const id = randomUUID();
   await sql.query(
     `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","updated_at","status","end_reason",
-                           "completed_at","running_bg_jobs","running_subagents","engine_turn_active","retry_at")
+                           "completed_at","running_bg_jobs","running_subagents","engine_turn_active","retry_at", "finished_at")
      VALUES ($1,'a child session','p',$2,$2,now(),$3,$4,CASE WHEN $5::boolean THEN now() END,$6::text[],$7::text[],$8,
-             CASE WHEN $9::int IS NOT NULL THEN now() + make_interval(secs => $9::int) END)`,
+             CASE WHEN $9::int IS NOT NULL THEN now() + make_interval(secs => $9::int) END,
+             CASE WHEN $3::run_status IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN now() END)`,
     [
       id, ownerId, row.status ?? 'AWAITING_INPUT', row.endReason ?? null, row.completed ?? false,
       row.jobs ?? [], row.subagents ?? [], row.engineTurn ?? false, row.retryInSeconds ?? null,

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ConflictException } from '@nestjs/common';
 import { RunStatus } from '@prisma/client';
+import { isReleasedStatus } from '../common/session-release';
 import { SessionsService } from './sessions.service';
 
 const now = new Date();
@@ -35,6 +36,8 @@ function makeService(
     commitStatus: null,
     commitOperationId: null,
     commitOperationOwner: null,
+    // A terminal row carries its release column (session_release_fact_chk).
+    ...(isReleasedStatus(String(overrides.status ?? RunStatus.FAILED)) ? { finishedAt: now } : {}),
     ...overrides,
   };
   const updates: unknown[] = [];

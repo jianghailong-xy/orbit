@@ -344,7 +344,7 @@ async function recordLanding(stack: Stack, f: Fixture, taskId: string, label: st
       title: `${label}-merge`,
       prompt: `${label}-merge`,
       provider: 'claude',
-      status: RunStatus.SUCCEEDED,
+      status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
       dispatchOrigin: SessionDispatchOrigin.USER,
     },
   });
@@ -456,7 +456,14 @@ async function runAcceptance(
     shellExitCode: shell.status!,
     shellOutput: `${shell.stdout}${shell.stderr}`,
   });
-  return (await stack.db.task.findUniqueOrThrow({ where: { id: taskId } })).status;
+  const { status } = await stack.db.task.findUniqueOrThrow({ where: { id: taskId } });
+  if (status === TaskStatus.DONE) {
+    await stack.db.session.update({
+      where: { id: sessionId },
+      data: { status: RunStatus.SUCCEEDED, finishedAt: new Date()},
+    });
+  }
+  return status;
 }
 
 /** Drive one serving task to DONE and assert that is what the comparison derived. */

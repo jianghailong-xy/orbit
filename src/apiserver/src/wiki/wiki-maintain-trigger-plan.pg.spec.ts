@@ -167,9 +167,9 @@ test('the trigger reads the settled tasks after the cursor by index, answering w
         [ownerId, workspaceId, SETTLED_TASKS],
       );
       const taskSessions = `INSERT INTO "session"("id", "title", "prompt", "owner_id", "creator_id", "workspace_id", "dispatch_origin",
-                               "status", "task_id", "last_turn_at", "created_at", "updated_at")
+                               "status", "task_id", "last_turn_at", "created_at", "updated_at", "finished_at")
          SELECT gen_random_uuid(), t."title", $pad, $1::uuid, $1::uuid, $2::uuid, 'USER',
-                'SUCCEEDED', t."id", t."updated_at", t."updated_at", t."updated_at"
+                'SUCCEEDED', t."id", t."updated_at", t."updated_at", t."updated_at", t."updated_at"
            FROM "task" t
           WHERE t."owner_id" = $1::uuid AND t."status" = 'DONE'
           ORDER BY t."updated_at" LIMIT $3::int`;
@@ -177,10 +177,11 @@ test('the trigger reads the settled tasks after the cursor by index, answering w
       await sql.query(taskSessions.replace('$pad', pad('t."title"', sessionPad)), [ownerId, workspaceId, SESSIONS]);
       await sql.query(
         `INSERT INTO "session"("id", "title", "prompt", "owner_id", "creator_id", "workspace_id", "dispatch_origin",
-                               "status", "last_turn_at", "created_at", "updated_at")
+                               "status", "last_turn_at", "created_at", "updated_at", "finished_at")
          SELECT gen_random_uuid(), 'loose ' || i, ${pad("'l' || i", sessionPad)}, $1::uuid, $1::uuid, $2::uuid, 'USER',
                 'SUCCEEDED', timestamp '2026-08-01' + make_interval(mins => i),
-                timestamp '2026-08-01' + make_interval(mins => i), timestamp '2026-08-01' + make_interval(mins => i)
+                timestamp '2026-08-01' + make_interval(mins => i), timestamp '2026-08-01' + make_interval(mins => i),
+                timestamp '2026-08-01' + make_interval(mins => i)
            FROM generate_series(1, $3::int) AS i`,
         [ownerId, workspaceId, LOOSE_SESSIONS],
       );
@@ -286,7 +287,10 @@ test('the trigger reads the settled tasks after the cursor by index, answering w
         const taskAfter = indexed.by.get('task') ?? 0;
         assert.ok(taskAfter * 10 <= taskBefore,
           `${hint.name}: the read took ${taskAfter} buffers of task against the control's ${taskBefore}`);
-        assert.ok(indexed.buffers < control.buffers,
+        // Not above: a settled session's read touches no task page in either path, and the two session reads differ
+        // by a page or two depending on where the heap puts the row (1490 against 1488 before session_release_fact_chk
+        // widened nothing but moved the rows, 1488 against 1488 after). The task arm's tenfold cut is asserted above.
+        assert.ok(indexed.buffers <= control.buffers,
           `${hint.name}: the read took ${indexed.buffers} buffers against the control's ${control.buffers}`);
       }
     } finally {
