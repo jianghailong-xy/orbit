@@ -2175,6 +2175,24 @@ docker compose up -d --wait --no-deps --force-recreate apiserver
 docker compose up -d --wait --no-deps --force-recreate docker-channel
 ```
 
+### The runner protocol switch
+
+`ORBIT_SESSION_RELEASE_V1` ([configuration](configuration.md)) is off by default. While it is off, runners report a
+failed turn and the end of a run as they always have. When it is `on`, runners from a release that knows the protocol
+report a failed turn as the turn's outcome, and the session's release as a report of its own. Nothing turns it on for
+you: no install, upgrade or Compose default sets it.
+
+- **When to turn it on.** Only after the release that brought it is live on every apiserver. With
+  [several apiservers](#several-apiservers), that means all of them have been recreated on it. Then set
+  `ORBIT_SESSION_RELEASE_V1=on` in `.env` and run `docker compose up -d --no-deps apiserver` (and the same for each
+  further apiserver). An apiserver without the protocol would release a session held by a failed turn as a stop. The
+  failure would be lost, along with any retry armed for it.
+- **Apiservers that disagree** (one on, one off, or one recreated without it) do no harm. A runner declares the
+  protocol only while its latest heartbeat answer says so, and stops at the first answer that does not. A session that
+  is already held still ends through its release, which every apiserver from that release onward serves.
+- **Going back.** Turn it off, recreate the apiservers, and only then go back to a release older than the one that
+  brought it.
+
 ### Moving old attachments out of Postgres
 
 Attachments uploaded before the `./data/files` mount existed keep their bytes in Postgres. They move to the file store
