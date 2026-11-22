@@ -515,7 +515,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `GET` | `/api/sessions/imported` | query `workspaceId` | `SessionsController.importedCount` |
 | `GET` | `/api/sessions/project-placement` | query `projectIds`, `view` | `SessionsController.projectPlacement` |
 | `POST` | `/api/sessions/remove-imported` | body `Object` | `SessionsController.removeImported` |
-| `GET` | `/api/sessions/search` | query `limit`, `q` | `SessionsController.search` |
+| `GET` | `/api/sessions/search` | query `folderId`, `limit`, `q` | `SessionsController.search` |
 | `GET` | `/api/share-links` | query `kind` | `ShareLinksController.list` |
 | `POST` | `/api/share-links` | body `ShareDriveFileDto` | `ShareLinksController.shareDriveFile` |
 | `DELETE` | `/api/share-links/:id` | path `id` | `ShareLinksController.turnOff` |

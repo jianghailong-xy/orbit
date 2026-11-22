@@ -356,8 +356,9 @@ export class SessionsController {
     @CurrentUser() user: AuthUser,
     @Query('q') q?: string,
     @Query('limit') limit?: string,
+    @Query('folderId', PublicIdPipe) folderId?: string,
   ) {
-    return this.sessions.search(user.userId, q, Number(limit) || 20);
+    return this.sessions.search(user.userId, q, Number(limit) || 20, folderId || null);
   }
 
   /**
