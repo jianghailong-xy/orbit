@@ -30,6 +30,7 @@ import io.orbitd.android.core.schedule.ScheduleCopy as SC
 import io.orbitd.android.core.schedule.ScheduleDisplay
 import io.orbitd.android.core.schedule.ScheduleFindingView
 import io.orbitd.android.core.schedule.ScheduleRule
+import io.orbitd.android.core.schedule.ScheduleRunStatusDisplay
 import io.orbitd.android.core.schedule.ScheduleRunView
 import io.orbitd.android.core.schedule.ScheduleView
 import io.orbitd.android.core.schedule.ScheduleWaitingItem
@@ -232,7 +233,7 @@ fun ScheduleRecordLine(record: ScheduleChangeRecord, undo: (suspend () -> String
 
 /** The run's timing and access in its conversation. */
 @Composable
-fun ScheduleRunStrip(schedule: ScheduleView, run: ScheduleRunView, condition: ConditionView? = null) {
+fun ScheduleRunStrip(schedule: ScheduleView, run: ScheduleRunView, condition: ConditionView? = null, notStarted: Boolean = false) {
     val zone = java.util.TimeZone.getDefault().id
     Column(Modifier.fillMaxWidth().padding(vertical = 6.dp).testTag("schedule-run-strip"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (run.trigger == "CONDITION") {
@@ -243,7 +244,9 @@ fun ScheduleRunStrip(schedule: ScheduleView, run: ScheduleRunView, condition: Co
             }
         } else Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Icon(painterResource(R.drawable.ic_calendar), null, Modifier.size(16.dp).padding(top = 2.dp), tint = MaterialTheme.colorScheme.primary)
-            Text(ScheduleDisplay.runStripText(run.plannedAt, run.startedAt, schedule.accessLevel, zone), style = MaterialTheme.typography.bodyMedium,
+            val text = if (notStarted) ScheduleRunStatusDisplay.strip(run, schedule.accessLevel, zone)
+                else ScheduleDisplay.runStripText(run.plannedAt, run.startedAt, schedule.accessLevel, zone)
+            Text(text, style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
