@@ -130,7 +130,7 @@ export async function readOpenListVersionParts(
       -- explanation reads from presence (runnerBackgroundHeldSessions). Only the hint token carries it, never the version.
       (SELECT string_agg(p.runner_id::text || ':' || COALESCE((SELECT string_agg(h::text, ',' ORDER BY h)
                                                                   FROM unnest(p.background_job_session_ids) h), ''), ';' ORDER BY p.runner_id)
-         FROM runner_presence p WHERE p.runner_id IN (SELECT id FROM runners)) AS bg_holders,
+         FROM runner_presence p WHERE cardinality(p.background_job_session_ids) > 0 AND p.runner_id IN (SELECT id FROM runners)) AS bg_holders,
       -- Small enough to keep reading whole: every share link the account owns.
       ${ownedBy('share_link')} AS share_link,
       -- The thresholds the list decides on Postgres' clock. Each only flips one way as time passes.
