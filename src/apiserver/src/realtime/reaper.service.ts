@@ -19,6 +19,7 @@ import {
   HELD_SESSION_STATUSES,
 } from '../common/session-release';
 import { isSessionExecuting } from '../common/session-working';
+import { wasOutOfMemoryStop } from '../managed-runners/managed-runner-fencing';
 import { fileSubagentWake, fileWorkflowWake } from '../runner-api/subagent-wake';
 import { SessionsService } from '../sessions/sessions.service';
 import { fileLostJobWake, RUNNER_LIVENESS, settleLostRunnerWork, type RunnerLiveness } from './lost-runner-work';
@@ -994,11 +995,27 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         const runner = runnerId
           ? await tx.runner.findUnique({
               where: { id: runnerId },
-              select: RUNNER_LIVENESS,
+              select: {
+                ...RUNNER_LIVENESS,
+                managedRunner: {
+                  select: { id: true, desiredState: true, managementState: true, concurrencyCap: true, fencingReceipt: true, nextAttemptAt: true },
+                },
+              },
             })
           : null;
         if (!runnerLooksOffline(runner, Date.now())) {
           return { ok: false, taskReclaimed: false, currentWorkTerminalized: 0, recanted: true };
+        }
+        // A proven OOM stop may leave turns for the replacement to reclaim. During that
+        // restart, even expired heartbeat evidence must leave those turns for reclaim.
+        const mapping = runner?.managedRunner;
+        if (mapping?.desiredState === 'RUNNING' && mapping.concurrencyCap !== null && wasOutOfMemoryStop(mapping.fencingReceipt)
+          && (
+            mapping.managementState === 'REQUESTED' || mapping.managementState === 'WAITING_CAPACITY'
+            || mapping.managementState === 'PROVISIONING' || mapping.managementState === 'STARTING'
+            || (mapping.managementState === 'FAILED' && mapping.nextAttemptAt !== null)
+          )) {
+          return { ok: false, taskReclaimed: false, currentWorkTerminalized: 0 };
         }
       }
       const carrying = opts.carryingTurn;

@@ -123,8 +123,9 @@ const WAKING_WORK: readonly ManagedRunnerWork[] = [
 ];
 
 /** The work, of what this runner holds, that needs it to run (WAKING_WORK): what a FAILED runner's slow retry waits for. */
-export async function managedRunnerWaitingWork(prisma: Pick<PrismaService, '$queryRaw'>, runnerId: string): Promise<ManagedRunnerWork[]> {
-  return (await managedRunnerWork(prisma, runnerId)).filter((kind) => WAKING_WORK.includes(kind));
+export async function managedRunnerWaitingWork(prisma: Pick<PrismaService, '$queryRaw'>, runnerId: string, reclaimRunningTurns = false): Promise<ManagedRunnerWork[]> {
+  return (await managedRunnerWork(prisma, runnerId))
+    .filter((kind) => WAKING_WORK.includes(kind) || (reclaimRunningTurns && kind === 'ACTIVE_TURN'));
 }
 
 /**

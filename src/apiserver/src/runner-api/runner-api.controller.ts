@@ -2430,6 +2430,8 @@ export class RunnerApiController {
       try {
         managedBeat = await managedRunnerHeartbeat(this.prisma, managedInstance!, managedWorkload, beatAt);
       } catch (error) {
+        // Until the mapping can be read again, keep the safe startup concurrency.
+        managedBeat.concurrencyCap = 1;
         this.logger.warn(`runner ${runner.id}: managed sleep state not read this heartbeat (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
       }
     }
@@ -2937,7 +2939,10 @@ export class RunnerApiController {
       ...(keepWorkSessionIds.length > 0 ? { keepWorkSessionIds } : {}),
       leaseLostSessionIds: ownershipLostSessionIds,
       maxConcurrent: managedSleepOn
-        ? clampManagedConcurrency(updated.maxConcurrent, managedConcurrencyCeiling(this.managedRuntime))
+        ? Math.min(
+            clampManagedConcurrency(updated.maxConcurrent, managedConcurrencyCeiling(this.managedRuntime)),
+            managedBeat.concurrencyCap ?? updated.maxConcurrent,
+          )
         : updated.maxConcurrent,
       minFreeDiskMb: managedStorage ? managedStorage.minFreeDiskMb : updated.minFreeDiskMb,
       mergeRequests,
