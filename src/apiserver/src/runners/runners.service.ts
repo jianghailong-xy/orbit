@@ -152,6 +152,8 @@ export class RunnersService {
         labels: true,
         status: true,
         maxConcurrent: true,
+        // Extra sessions on demand, edited beside maxConcurrent: how far past it Run now may go.
+        burstConcurrent: true,
         version: true,
         // When it was last heard from (runners/runner-presence.ts), shown as `lastHeartbeatAt`, and the
         // sessions its background jobs hold slots for, which `activeSessions` counts while it is online.
@@ -559,6 +561,7 @@ export class RunnersService {
     const data: {
       displayName?: string | null;
       maxConcurrent?: number;
+      burstConcurrent?: number;
       minFreeDiskMb?: number | null;
     } = {};
     if (dto.displayName !== undefined) {
@@ -569,6 +572,11 @@ export class RunnersService {
     // next cycle without restarting the runner.
     if (dto.maxConcurrent !== undefined) {
       data.maxConcurrent = dto.maxConcurrent;
+    }
+    // Extra sessions on demand: read by the next overflow claim and by the session list's Run now, so it too
+    // takes effect at once. 0 turns Run now off on this machine.
+    if (dto.burstConcurrent !== undefined) {
+      data.burstConcurrent = dto.burstConcurrent;
     }
     // Read by the auto-run sweep against each workspace's own measured filesystem; null clears
     // the floor. Also effective next sweep — nothing to restart.
@@ -584,6 +592,7 @@ export class RunnersService {
         name: true,
         displayName: true,
         maxConcurrent: true,
+        burstConcurrent: true,
         minFreeDiskMb: true,
       },
     });
