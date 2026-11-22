@@ -16,6 +16,7 @@ import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -23,7 +24,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -32,6 +35,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.nestedscroll.*
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -41,6 +45,8 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -408,8 +414,14 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         queuedTail(state.session?.snapshot?.queuedTurns.orEmpty(), state.window.events).any { it.inTray && it.heldByUpdate }
     }
     // A07-14: the turn the runner has taken, until its echo or its end — drawn where the echo will land, as the echo will be.
-    val accepted = remember(state.session?.snapshot?.queuedTurns, state.window.events) {
+    // One the reader took back with Cancel under the held tag is gone at once, before the queue's re-read says so.
+    val accepted = remember(state.session?.snapshot?.queuedTurns, state.window.events, composerState.withdrawn) {
         acceptedHeads(state.session?.snapshot?.queuedTurns.orEmpty(), state.window.events)
+            .filterNot { head -> (ObjectId.canonical(head.turnId!!) ?: head.turnId) in composerState.withdrawn }
+    }
+    // That head, while a full runner, run or batch (or an update) holds it, is still the reader's to take back (web `cancellableHeldTurn`).
+    val heldCancel = remember(state.session?.snapshot?.queuedTurns, state.window.events) {
+        cancellableHeldTurn(state.session?.snapshot?.queuedTurns.orEmpty(), state.window.events)
     }
     val liveTail = transcript != null && state.window.newerAfter == null
     val queuedShown = if (liveTail) queued.size else 0
@@ -762,7 +774,9 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 // A turn on the queued tail the update holds says so on its own line instead (docs/mocks/queued-card-runner-updating ②).
                 // So does the reader's own waiting message in the tray, whose row says it (docs/mocks/queued-card-runner-full ②).
                 val tailHeld = runnerUpdatingGate != null && live != null && (queued.any { it.heldByUpdate } || trayHeld)
-                val heldSeq = if (runnerUpdatingGate == null || live == null || tailHeld) null
+                // The accepted head, when there is one, is the reader's last message: the foot row goes under it (iOS c2cc655ac8).
+                val heldHead = if (runnerUpdatingGate == null || live == null || tailHeld) null else accepted.lastOrNull()
+                val heldSeq = if (runnerUpdatingGate == null || live == null || tailHeld || heldHead != null) null
                     else displayedRows.lastOrNull { it.event.type == "user" && it.steps.isEmpty() && it.exchanges.isEmpty() }?.event?.seq
                 val targetSeq = state.targetSeq
                 Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -775,7 +789,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     awaitEachGesture { awaitFirstDown(requireUnconsumed = false); follow = false; latestRelease() }
                 }.testTag("transcript-list").lastPageProbe(lastPage, list, view), state = list,
                     // No room under the rows but the tail row's own: every follow and jump lands on it (iOS 9d3751ec2).
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    // iOS `rowInsets`: 16 at the sides, 6 above and below every row, so 12 between two.
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     if (!displayedWindow.seeded) item(key = "loading") { LoadingMessage("Loading messages…") }
                     item(key = "older") {
                         if (displayedWindow.hasOlder) TextButton(enabled = !displayedLoading, onClick = { follow = false; model.older() }) { Text(if (displayedLoading) "Loading messages…" else "Load earlier messages") }
@@ -885,7 +900,16 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                         // A07-14: the accepted head at the history's end, ahead of the decisions and the queue, as the transcript draws
                         // a person's turn — no dashes, no "Queued", no Cancel: the runner has it.
                         items(accepted, key = { "accepted:${it.turnId}" }) { head ->
-                            Box(Modifier.testTag("accepted:${head.turnId}")) { TranscriptRowView(TranscriptRow(head), model, live, openLink) }
+                            val gate = runnerUpdatingGate?.takeIf { heldHead != null && head.turnId == heldHead.turnId }
+                            if (gate == null) Box(Modifier.testTag("accepted:${head.turnId}")) { TranscriptRowView(TranscriptRow(head), model, live, openLink) }
+                            else Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Box(Modifier.testTag("accepted:${head.turnId}")) { TranscriptRowView(TranscriptRow(head), model, live, openLink) }
+                                // ` · Cancel` beside the tag: the turn withdrawn as the tray's is, its words back in the composer.
+                                val withdraw = heldCancel?.takeIf { it.turnId == head.turnId }?.let { held ->
+                                    { composer.withdraw(held.turnId, held.words, steer = false, engine = console.engine) }
+                                }
+                                RunnerUpdatingFoot(gate, runnerUpdatingMachine, later = runnerUpdatingLater, cancel = withdraw)
+                            }
                         }
                     }
                     // At the live tail, under everything the conversation said and above the cards that ask the owner something.
@@ -916,14 +940,10 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     // A06-12: the room the fade lies over, so a list at its tail has nothing in it — and the 1 dp anchor it always was.
                     item(key = "tail") { Spacer(Modifier.height(COMPOSER_BAND_FADE + 1.dp).testTag("transcript-tail")) }
                 }
-                }
-                // Android's jump stays a row under the list (iOS floats a disc 6 pt above the fade): below the list, so never in its fade.
-                if (!follow || state.window.newerAfter != null) Row(Modifier.fillMaxWidth().testTag("transcript-jump"), horizontalArrangement = Arrangement.SpaceEvenly) {
-                    TextButton(onClick = {
-                        val last = shownRows.lastOrNull { it.event.type == "user" }
-                        if (last != null) model.show(last.event.seq)
-                    }, enabled = shownRows.any { it.event.type == "user" }) { Text("Last question") }
-                    TextButton(onClick = { follow = true; model.latest() }) { Text("Jump to latest") }
+                // iOS's floating disc (`scrollToBottomButton`): over the list's bottom centre, 6 dp above the fade, while the tail is
+                // out of view. "Your question" is the capsule over the list, as on iOS, so there is no "Last question" here.
+                if (!follow || state.window.newerAfter != null)
+                    JumpToLatestDisc(Modifier.align(Alignment.BottomCenter).padding(bottom = COMPOSER_BAND_FADE + 6.dp)) { follow = true; model.latest() }
                 }
                 // Android's own, as iOS's console shows no connection: only while the stream is being made again (A06-18), under
                 // the list so its coming and going never moves the line being read, and folded with the chrome while a phone types.
@@ -1056,6 +1076,20 @@ internal fun LiveMessage(label: String, parent: String, text: String, open: (Str
             CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) { StreamingText(text, open) }
             ReplyTranslationFoot(null, pending = true, flipped = false, onFlip = {}, retry = null)
         } else StreamingText(text, open)
+    }
+}
+
+/** iOS `scrollToBottomButton`: a 40 dp opaque disc with a down arrow in a 48 dp target, lifted off the transcript by its shadow alone. */
+@Composable
+private fun JumpToLatestDisc(modifier: Modifier, onClick: () -> Unit) {
+    Box(modifier.size(48.dp).clip(CircleShape).clickable(onClickLabel = null, role = Role.Button, onClick = onClick)
+        .semantics { contentDescription = "Jump to latest" }.testTag("transcript-jump"), contentAlignment = Alignment.Center) {
+        Surface(Modifier.size(40.dp), shape = CircleShape, // iOS `floatingDiscSurface`: white in light, a raised grey in dark (the transcript's own surface would hide it).
+            color = MaterialTheme.colorScheme.run { if (surface.luminance() < 0.5f) surfaceVariant else Color.White }, shadowElevation = 3.dp) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(painterResource(R.drawable.ic_arrow_up), null, Modifier.size(18.dp).rotate(180f), tint = MaterialTheme.colorScheme.onSurface)
+            }
+        }
     }
 }
 
