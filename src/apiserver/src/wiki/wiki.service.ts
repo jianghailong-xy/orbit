@@ -121,6 +121,7 @@ import { enqueueWikiVerifyJob, wikiVerifyJobNeeded } from './wiki-verify-jobs';
 import { entryAppliedBy } from './wiki-run-reads';
 import { listWikiTrash, moveWikiSpaceToTrash, requestWikiSpacePurge, restoreWikiSpace } from './wiki-trash';
 import { wikiChatChoices, wikiSpaceWorkspaces, wikiWorkspacesOfSpaces } from './wiki-workspaces';
+import { releasedFilter } from '../common/session-release';
 
 /** `Prisma.TransactionClient`, named once: every write below takes one, never the unmanaged client. */
 type Tx = Prisma.TransactionClient;
@@ -6106,7 +6107,7 @@ function proposerScope(principal: WikiPrincipal): Prisma.WikiChangesetWhereInput
  * nobody's to verify but a maintenance run's that adopts it.
  */
 const ENDED_SESSION: Prisma.SessionWhereInput = {
-  OR: [{ status: { in: ['SUCCEEDED', 'FAILED', 'CANCELLED'] } }, { completedAt: { not: null } }, { deletedAt: { not: null } }],
+  OR: [releasedFilter(), { completedAt: { not: null } }, { deletedAt: { not: null } }],
 };
 
 /**

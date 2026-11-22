@@ -48,6 +48,12 @@ final class SubagentSettingsTests: XCTestCase {
         XCTAssertEqual(SubagentSettings.tierText(["S", "M", "L", "XL"]), "S–XL by effort")
         XCTAssertEqual(SubagentSettings.tierText(["L", "XL"]), "L · XL")
         XCTAssertEqual(SubagentSettings.tierText(["M"]), "M")
+        let older = ProviderModelTier(model: "claude-opus-5", levels: [], supersededBy: "claude-opus-5-5")
+        XCTAssertEqual(SubagentSettings.modelTierText(older), "Older · uses claude-opus-5-5")
+        XCTAssertTrue(SubagentSettings.tierIsOlder(older))
+        let tiered = ProviderModelTier(model: "claude-opus-5", levels: ["M"], supersededBy: "claude-opus-5-5")
+        XCTAssertEqual(SubagentSettings.modelTierText(tiered), "M")
+        XCTAssertEqual(SubagentSettings.modelTierText(ProviderModelTier(model: "grok", levels: [])), "Not set")
         XCTAssertFalse(SubagentSettings.tierIsUnset(["M"]))
     }
 
@@ -117,14 +123,17 @@ final class SubagentSettingsTests: XCTestCase {
 
     func testWorkspaceFieldsDecodeAndDefault() throws {
         let set = try JSONDecoder().decode(Agent.self, from: Data("""
-        {"id":"a1","name":"orbit","subagentsEnabled":false,"subagentsMaxRunning":7}
+        {"id":"a1","name":"orbit","subagentsEnabled":false,"subagentsMaxRunning":7,"workflowsEnabled":false}
         """.utf8))
         XCTAssertEqual(set.subagentsEnabled, false)
         XCTAssertEqual(SubagentSettings.maxRunning(set.subagentsMaxRunning), 7)
+        XCTAssertEqual(set.workflowsEnabled, false)
 
         let absent = try JSONDecoder().decode(Agent.self, from: Data(#"{"id":"a1","name":"orbit"}"#.utf8))
         XCTAssertNil(absent.subagentsEnabled)
         XCTAssertEqual(absent.subagentsEnabled ?? true, true)
+        XCTAssertNil(absent.workflowsEnabled)
+        XCTAssertEqual(absent.workflowsEnabled ?? true, true, "Workflows is on unless the Agent says otherwise")
         XCTAssertEqual(SubagentSettings.maxRunning(absent.subagentsMaxRunning), 4)
         XCTAssertEqual(SubagentSettings.maxRunning(99), 16)
         XCTAssertEqual(SubagentSettings.maxRunning(0), 1)
@@ -132,14 +141,25 @@ final class SubagentSettingsTests: XCTestCase {
 
     func testWorkspaceUpdateSendsOnlyWhatMoved() throws {
         let body = try JSONSerialization.jsonObject(with: JSONEncoder().encode(
-            UpdateAgentRequest(subagentsEnabled: false, subagentsMaxRunning: 6)))
+            UpdateAgentRequest(subagentsEnabled: false, subagentsMaxRunning: 6, workflowsEnabled: false)))
             as? [String: Any]
         XCTAssertEqual(body?["subagentsEnabled"] as? Bool, false)
         XCTAssertEqual(body?["subagentsMaxRunning"] as? Int, 6)
+        XCTAssertEqual(body?["workflowsEnabled"] as? Bool, false)
         // Optimize For is the account's now (Settings → General): no Agent write can name it.
         XCTAssertFalse(body?.keys.contains("modelRoutingOptimizeFor") ?? false)
         let none = try JSONSerialization.jsonObject(with: JSONEncoder().encode(UpdateAgentRequest())) as? [String: Any]
         XCTAssertEqual(none?.isEmpty, true)
+    }
+
+    /// Board docs/mocks/subagent-workflow part 5: the Workflows row's words, and the switch following SubAgents.
+    func testWorkflowsRowFollowsSubAgents() {
+        XCTAssertEqual(SubagentSettings.workflowsTitle, "Workflows")
+        XCTAssertEqual(SubagentSettings.workflowsDetail, "Let this agent run a script that starts many SubAgents and wakes it once")
+        XCTAssertEqual(SubagentSettings.runningAtOnceDetail, "Per session: delegated SubAgents and workflow calls together")
+        XCTAssertTrue(SubagentSettings.workflowsOn(subagentsEnabled: true, workflowsEnabled: true))
+        XCTAssertFalse(SubagentSettings.workflowsOn(subagentsEnabled: true, workflowsEnabled: false))
+        XCTAssertFalse(SubagentSettings.workflowsOn(subagentsEnabled: false, workflowsEnabled: true), "off with SubAgents")
     }
 
     func testBlockedProvidersPreference() throws {

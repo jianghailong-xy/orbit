@@ -1,6 +1,7 @@
 package io.orbitd.android.reader
 
 import androidx.compose.runtime.Immutable
+import io.orbitd.android.core.cards.BgJob
 import io.orbitd.android.core.cards.ClaudeRegion
 import io.orbitd.android.core.cards.OwnerChatReply
 import io.orbitd.android.core.realtime.RunEvent
@@ -83,6 +84,9 @@ internal fun transcriptRows(events: List<RunEvent>, receipts: List<JsonObject> =
     val results = events.filter { it.type == "tool_result" && it.toolId() != null }
         .associateBy { parent(it) to it.toolId() }
     val usedResults = mutableSetOf<Long>()
+    // The runner's launch pair for a bg_run job (BgJob.isRunnerJobLaunch): the job's card is its bg_run call, so neither half draws.
+    val runnerJobLaunches = events.filter { it.type == "tool_use" && BgJob.isRunnerJobLaunch(it.fields.string("name"), it.toolId(), it.fields["input"]) }
+        .mapNotNull { it.toolId() }.toSet()
     // Only where rows stand moves: what each event says about its turn is still read in the order it happened.
     val grouped = (if (holdsSteers) SteerDelivery.place(events, receipts).drawn else events).groupBy(::parent)
     // How each of the reader's steers came out — but one the engine dropped unread, which a window short of the tail still draws.
@@ -101,6 +105,7 @@ internal fun transcriptRows(events: List<RunEvent>, receipts: List<JsonObject> =
             // read of claude's transcript would otherwise be a wall of blank "Thinking" lines.
             if (e.type == "thinking" && e.body().isEmpty()) return@mapNotNull null
             if (e.type == "tool_result" && e.seq in usedResults) return@mapNotNull null
+            if (e.type in setOf("tool_use", "tool_result") && e.toolId() in runnerJobLaunches) return@mapNotNull null
             val result = if (e.type == "tool_use") engine.toolFailures[e.toolId()]?.takeIf { e.parent().isNullOrEmpty() }
                 ?: results[parent to e.toolId()] else null
             result?.let { usedResults += it.seq }

@@ -4,7 +4,7 @@
  *   bash scripts/run-pg-spec.sh src/apiserver/src/projects/coordinator-handoff.pg.spec.ts
  *
  * `CoordinatorHandoffService` and `ProjectsService` are the real ones over the real database. The
- * session service is the only stand-in, and it writes real rows: `createTurn` inserts the note turn
+ * session service is the only stand-in, and it writes real rows: `resume` inserts the note turn
  * (`conversation_turn`), `create` a session row, `complete` its `completed_at`, `cancelQueuedTurn`
  * deletes a PENDING turn. A turn's end is what runnerApi.turnComplete hands the service
  * (`afterTurn`), with the turn's reply written as the `run_event` rows the runner flushes before it.
@@ -12,6 +12,7 @@
  * Not destructive: every row belongs to a user this run creates.
  */
 import assert from 'node:assert/strict';
+import { BadRequestException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { after, test } from 'node:test';
 
@@ -109,7 +110,9 @@ async function watch(f: Fixture, observer: string, state: string, target: { kind
 function services(f: Fixture) {
   const db = f.db;
   const turns: Array<{ sessionId: string; clientTurnId: string; content: string; intent?: string }> = [];
-  const openings: Array<{ id: string; prompt: string }> = [];
+  const openings: Array<{ id: string; prompt: string; engine?: string; provider?: string; model?: string }> = [];
+  /** Successors the stand-in's resolution refuses, by provider slug, as create() would. */
+  const refusedProviders = new Set<string>();
   const completed: string[] = [];
   /** What each completion was asked: a handoff's keeps the outgoing coordinator's background work running. */
   const completeOpts: Array<{ handingOver?: boolean } | undefined> = [];
@@ -117,8 +120,14 @@ function services(f: Fixture) {
   const published: string[] = [];
   let seq = 100;
   const sessions = {
-    createTurn: async (_owner: string, sessionId: string, dto: { clientTurnId: string; content: string; intent?: string }) => {
+    // The note turn goes through resume, which revives an ended conversation; a live one gets the turn as is.
+    resume: async (_owner: string, sessionId: string, dto: { clientTurnId: string; content: string; intent?: string }) => {
       turns.push({ sessionId, ...dto });
+      await db.session.updateMany({
+        where: { id: sessionId, status: { in: ['SUCCEEDED', 'FAILED', 'CANCELLED'] } },
+        // As the real revive: held again, so the release column and its cause go with the terminal status.
+        data: { status: 'PENDING', finishedAt: null},
+      });
       await db.conversationTurn.create({
         data: { sessionId, seq: seq++, clientTurnId: dto.clientTurnId, content: dto.content, kind: 'message', sendIntent: dto.intent ?? null },
       });
@@ -133,14 +142,19 @@ function services(f: Fixture) {
       await db.session.update({ where: { id }, data: { completedAt: new Date() } });
       return { ok: true };
     },
-    create: async (owner: string, dto: { workspaceId: string; title: string; prompt: string }) => {
+    assertStartResolves: async (_owner: string, target: { provider?: string | null }) => {
+      if (target.provider && refusedProviders.has(target.provider)) {
+        throw new BadRequestException(`provider "${target.provider}" cannot run here`);
+      }
+    },
+    create: async (owner: string, dto: { workspaceId: string; title: string; prompt: string; engine?: string; provider?: string; model?: string }) => {
       const row = await db.session.create({
         data: {
           ownerId: owner, creatorId: owner, title: dto.title, prompt: dto.prompt, workspaceId: dto.workspaceId,
           status: 'AWAITING_INPUT', dispatchOrigin: 'USER', titleManagedByProject: true,
         },
       });
-      openings.push({ id: row.id, prompt: dto.prompt });
+      openings.push({ id: row.id, prompt: dto.prompt, engine: dto.engine, provider: dto.provider, model: dto.model });
       return { id: row.id };
     },
     discardProjectCoordinatorCandidate: async (_owner: string, id: string) => {
@@ -156,7 +170,7 @@ function services(f: Fixture) {
   }) as unknown as RealtimeService;
   const projects = new ProjectsService(db as unknown as PrismaService, undefined, sessions, realtime);
   const handoffs = new CoordinatorHandoffService(db as unknown as PrismaService, projects, sessions, realtime);
-  return { projects, handoffs, turns, openings, completed, completeOpts, interrupted, published };
+  return { projects, handoffs, turns, openings, completed, completeOpts, interrupted, published, refusedProviders };
 }
 
 /** The note turn the handoff asked for, as a row. */
@@ -236,9 +250,12 @@ test('success: the note turn\'s final text becomes the successor\'s opening, the
   const out = await readSessionCoordinatorHandoffs(f.db as unknown as PrismaService, f.outgoing);
   assert.deepEqual(out.coordinatorHandoff, {
     state: 'COMPLETED', startedAt: out.coordinatorHandoff!.startedAt, failureCode: null, failureReason: null,
-    handedOverToSessionId: successor,
+    handedOverToSessionId: successor, successor: null,
   });
   assert.equal(out.coordinatorHandoffReceived, null);
+  const anchored = s.openings.find((o) => o.id === successor)!;
+  assert.deepEqual([anchored.engine, anchored.provider, anchored.model], [undefined, undefined, undefined],
+    'nothing named: the successor follows the previous coordinator (its anchor)');
   const inn = await readSessionCoordinatorHandoffs(f.db as unknown as PrismaService, successor!);
   assert.equal(inn.coordinatorHandoff, null);
   assert.equal(inn.coordinatorHandoffReceived?.handoffFromSessionId, f.outgoing);
@@ -541,4 +558,103 @@ test('the pending-waits preview lists ACTIVE and PAUSED waits, the PAUSED ones m
     { id: active, kind: 'WATCH', label: 'Waiting for "Fix login redirect" to be DONE', paused: false },
     { id: paused, kind: 'WATCH', label: 'Waiting for "Payment retries" to finish its turn', paused: true },
   ]);
+});
+
+// ── The current model no longer works ───────────────────────────────────────────────────────────
+
+test('an ended coordinator (FAILED, or recycled while idle) is revived for its note rather than refused', { skip, timeout: 120_000 }, async () => {
+  for (const status of ['FAILED', 'CANCELLED'] as const) {
+    const f = await fixture();
+    // Released as the writers release (session_release_fact_chk, and every writer since 1403/1404): finished_at and
+    // a cause, a failure cause for FAILED.
+    await f.db.session.update({
+      where: { id: f.outgoing },
+      data: { status, finishedAt: new Date()},
+    });
+    const s = services(f);
+    const started = await s.handoffs.start(f.ownerId, f.projectId);
+    assert.equal(started.state, 'WRITING', status);
+    assert.equal(s.turns.length, 1, status);
+    assert.equal((await f.db.session.findUniqueOrThrow({ where: { id: f.outgoing } })).status, 'PENDING', `${status}: revived`);
+  }
+});
+
+test('the revived coordinator fails again before answering: FAILED at the sweep, not an hour later', { skip, timeout: 120_000 }, async () => {
+  const f = await fixture();
+  const s = services(f);
+  await s.handoffs.start(f.ownerId, f.projectId);
+  // Its model cannot run: the claim fails and the conversation is FAILED, the note turn never delivered.
+  await f.db.session.update({
+    where: { id: f.outgoing }, data: { status: 'FAILED', finishedAt: new Date()},
+  });
+  assert.equal(await s.handoffs.sweep(), 1);
+  const { coordinatorHandoff } = await readSessionCoordinatorHandoffs(f.db as unknown as PrismaService, f.outgoing);
+  assert.equal(coordinatorHandoff?.state, 'FAILED');
+  assert.equal(coordinatorHandoff?.failureCode, 'TURN_FAILED');
+  assert.equal(await projectPointer(f), f.outgoing, 'nothing else changed');
+});
+
+test('the successor runs on what the owner named: kept from Hand over, replaced by a later pick, refused up front when it cannot open', { skip, timeout: 120_000 }, async () => {
+  // Named in the confirm, kept through the note turn, used by the replacement.
+  {
+    const f = await fixture();
+    const s = services(f);
+    const started = await s.handoffs.start(f.ownerId, f.projectId, { successor: { engine: 'claude', provider: ' claude ', model: '' } });
+    assert.deepEqual(started.successor, { engine: 'claude', provider: 'claude', model: null });
+    const turn = await noteTurn(f, s.turns[0].clientTurnId);
+    await reply(f, turn.id, NOTE);
+    await s.handoffs.afterTurn(f.outgoing, turn.id, 'SUCCEEDED');
+    const pointer = await projectPointer(f);
+    const opened = s.openings.find((o) => o.id === pointer)!;
+    assert.deepEqual([opened.engine, opened.provider, opened.model], ['claude', 'claude', undefined]);
+  }
+  // The note failed (the old model is broken); Hand over without a note names another, which wins.
+  {
+    const f = await fixture();
+    const s = services(f);
+    await s.handoffs.start(f.ownerId, f.projectId, { successor: { engine: 'codex' } });
+    await s.handoffs.afterTurn(f.outgoing, (await noteTurn(f, s.turns[0].clientTurnId)).id, 'FAILED');
+    const failed = await readSessionCoordinatorHandoffs(f.db as unknown as PrismaService, f.outgoing);
+    assert.deepEqual(failed.coordinatorHandoff?.successor, { engine: 'codex', provider: null, model: null }, 'the failure shows the pick');
+    const skipped = await s.handoffs.skip(f.ownerId, f.projectId, { successor: { engine: 'kimi', model: 'kimi-k3' } });
+    assert.equal(skipped.state, 'COMPLETED');
+    const opened = s.openings.find((o) => o.id === skipped.handedOverToSessionId)!;
+    assert.deepEqual([opened.engine, opened.provider, opened.model], ['kimi', undefined, 'kimi-k3']);
+  }
+  // A pick that could not open is refused before anything happens: no row, no turn, nothing completed.
+  {
+    const f = await fixture();
+    const s = services(f);
+    s.refusedProviders.add('gone-key');
+    await assert.rejects(s.handoffs.skip(f.ownerId, f.projectId, { successor: { provider: 'gone-key' } }), BadRequestException);
+    await assert.rejects(s.handoffs.start(f.ownerId, f.projectId, { successor: { provider: 'gone-key' } }), BadRequestException);
+    assert.deepEqual(s.completed, []);
+    assert.deepEqual(s.turns, []);
+    assert.equal(await f.db.coordinatorHandoff.count({ where: { projectId: f.projectId } }), 0);
+    assert.equal(await projectPointer(f), f.outgoing);
+    await assert.rejects(s.handoffs.start(f.ownerId, f.projectId, { successor: { engine: 7 } } as never), BadRequestException);
+  }
+});
+
+test('"Same as this one" (successor: null) clears an earlier pick; leaving successor out keeps it', { skip, timeout: 120_000 }, async () => {
+  const f = await fixture();
+  const s = services(f);
+  await s.handoffs.start(f.ownerId, f.projectId, { successor: { engine: 'codex', provider: 'codex' } });
+  await s.handoffs.afterTurn(f.outgoing, (await noteTurn(f, s.turns[0].clientTurnId)).id, 'FAILED');
+  // Try again with no successor in the body keeps the pick.
+  const kept = await s.handoffs.retry(f.ownerId, f.projectId, {});
+  assert.deepEqual(kept.successor, { engine: 'codex', provider: 'codex', model: null });
+  await s.handoffs.afterTurn(f.outgoing, (await noteTurn(f, s.turns[1].clientTurnId)).id, 'FAILED');
+  // Hand over without a note on "Same as this one" clears it: the successor follows the previous coordinator.
+  const skipped = await s.handoffs.skip(f.ownerId, f.projectId, { successor: null });
+  assert.equal(skipped.state, 'COMPLETED');
+  assert.equal(skipped.successor, null);
+  const opened = s.openings.find((o) => o.id === skipped.handedOverToSessionId)!;
+  assert.deepEqual([opened.engine, opened.provider, opened.model], [undefined, undefined, undefined]);
+  // An object with every field empty is the same as null.
+  const g = await fixture();
+  const t = services(g);
+  await t.handoffs.start(g.ownerId, g.projectId, { successor: { engine: 'kimi' } });
+  const cleared = await t.handoffs.start(g.ownerId, g.projectId, { successor: { engine: ' ', provider: null } });
+  assert.equal(cleared.successor, null);
 });

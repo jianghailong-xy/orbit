@@ -175,7 +175,7 @@ async function fixture(
       ...common,
       id: replaced,
       title: `${label}-replaced`,
-      status: RunStatus.FAILED,
+      status: RunStatus.FAILED, 
       finishedAt: new Date(),
     },
   });

@@ -1,17 +1,18 @@
 {
   "about": [
-    "The folded Background row of a session's composer band: `backgroundRow(list, lastUserMessageAt,",
+    "The folded Background row of a session's composer band: `backgroundRow(list, clearedAt,",
     "sessionLive)` in backgroundRow.ts. The web, OrbitKit and Android tests load this file by path and",
     "must draw exactly `expect` for every case. Owner decisions D1-D4, E1-E3 (2026-11-17), project",
     "34yq7HVPsPDGBiMEm8sL2.",
     "",
     "`list`: the session's entries from GET /sessions/:id/background, cut to the fields the row reads.",
     "`lastUserMessageAt`: the time of the session's last user message (null: none yet).",
-    "`sessionLive`: whether the session is live. `wakeTurnStartedAt`, where present, is not an input:",
-    "it records that the agent opened a turn itself after the end, which clears nothing.",
+    "`lastAgentTurnStartedAt`: when the agent's latest turn started, any turn counting, a wake's included",
+    "(null or absent: none). `sessionLive`: whether the session is live. The row's cut-off is the later of",
+    "`lastUserMessageAt` and `lastAgentTurnStartedAt` (backgroundRowClearedAt in backgroundRow.ts).",
     "",
     "Shown items: running ones (only on a live session) plus ended ones (done, failed, killed) whose",
-    "endedAt is later than lastUserMessageAt. None shown: `{hidden: true}`, no row and no folded mark.",
+    "endedAt is later than the cut-off. None shown: `{hidden: true}`, no row and no folded mark.",
     "`label` is \"Background\". `name.mode`: `one` (one item, still), `rotate` (2+ running, no failure",
     "shown: the running items newest started first, perNameMs 3000 per name, changeMs 300 per change),",
     "`pinned` (2+ shown and a failure among them: the most recently failed). With nothing running",
@@ -23,12 +24,15 @@
     "(error colour), zero parts left out, joined by \" · \"; null when no part is left.",
     "`accessibilityLabel`: \"Background processes, \" + countLine, or the one named item's name.",
     "",
-    "`covers` tags each case with the rules it pins; the shared test requires every tag in `rules`."
+    "`covers` tags each case with the rules it pins; the shared test requires every tag in `rules`.",
+    "",
+    "`events`, where present, is the session's transcript the clients read `lastUserMessageAt` from: every",
+    "client's own reader must return exactly the case's `lastUserMessageAt` from it (the newest user turn",
+    "the person typed; wake notes, watch wakes and session-to-session messages do not count)."
   ],
   "rules": {
     "hidden": "No shown items: no row.",
-    "endedAfterLastUserMessage": "An ended item is shown only if it ended after the last user message.",
-    "wakeTurn": "A turn the agent opens itself does not clear an ended item.",
+    "endedAfterLastUserMessage": "An ended item is shown only if it ended after the cut-off: the later of the last user message and the agent's latest turn start.",
     "label": "The visible label is \"Background\".",
     "single": "One shown item is drawn as its name and status mark.",
     "nameFallback": "Name = description (tail truncation), else command (middle truncation).",
@@ -38,7 +42,11 @@
     "nothingRunningLastEnded": "Nothing running: the last ended is shown, failure first.",
     "a11yCount": "Accessibility label \"Background processes, \" + the count.",
     "a11yName": "Accessibility label \"Background processes, \" + the one name.",
-    "notLive": "A non-live session's stale running items are dropped."
+    "notLive": "A non-live session's stale running items are dropped.",
+    "sessionMessage": "A message another Orbit session sent (session_send / project_send, a `sessionMessage` card on the turn) is not the person's message: it does not clear an ended item.",
+    "wakeTurnClears": "A turn the agent opens itself (a wake) starts an agent turn and clears an item that ended before it started.",
+    "endedMidTurn": "An item that ended during a turn already running stays until the next turn starts.",
+    "userMessageClears": "The person's next message after the end clears an ended item."
   },
   "rotation": {
     "perNameMs": 3000,
@@ -147,9 +155,33 @@
       }
     },
     {
-      "case": "a wake turn after the end does not clear it",
+      "case": "a wake turn clears an item that ended before it started",
       "covers": [
-        "wakeTurn",
+        "wakeTurnClears",
+        "endedAfterLastUserMessage",
+        "hidden"
+      ],
+      "list": [
+        {
+          "shellId": "bgj_s",
+          "command": "",
+          "startedSeq": 10,
+          "status": "failed",
+          "description": "OrbitKit swift test (swift:6.1) on the full HEAD tree",
+          "endedAt": "2026-11-16T02:45:00.000Z"
+        }
+      ],
+      "lastUserMessageAt": "2026-11-16T02:40:00.000Z",
+      "sessionLive": true,
+      "expect": {
+        "hidden": true
+      },
+      "lastAgentTurnStartedAt": "2026-11-16T02:46:00.000Z"
+    },
+    {
+      "case": "an item that ended during a turn already running stays until the next turn starts",
+      "covers": [
+        "endedMidTurn",
         "endedAfterLastUserMessage",
         "single"
       ],
@@ -165,7 +197,6 @@
       ],
       "lastUserMessageAt": "2026-11-16T02:40:00.000Z",
       "sessionLive": true,
-      "wakeTurnStartedAt": "2026-11-16T02:46:00.000Z",
       "expect": {
         "hidden": false,
         "label": "Background",
@@ -181,6 +212,31 @@
         "countParts": [],
         "countLine": null,
         "accessibilityLabel": "Background processes, OrbitKit swift test (swift:6.1) on the full HEAD tree"
+      },
+      "lastAgentTurnStartedAt": "2026-11-16T02:44:00.000Z"
+    },
+    {
+      "case": "the person's next message after the end clears it, an earlier agent turn does not matter",
+      "covers": [
+        "userMessageClears",
+        "endedAfterLastUserMessage",
+        "hidden"
+      ],
+      "list": [
+        {
+          "shellId": "bgj_s",
+          "command": "",
+          "startedSeq": 10,
+          "status": "failed",
+          "description": "OrbitKit swift test (swift:6.1) on the full HEAD tree",
+          "endedAt": "2026-11-16T02:45:00.000Z"
+        }
+      ],
+      "lastUserMessageAt": "2026-11-16T02:47:00.000Z",
+      "lastAgentTurnStartedAt": "2026-11-16T02:44:00.000Z",
+      "sessionLive": true,
+      "expect": {
+        "hidden": true
       }
     },
     {
@@ -890,6 +946,65 @@
       "sessionLive": false,
       "expect": {
         "hidden": true
+      }
+    },
+    {
+      "case": "a session-to-session message after the end does not clear it",
+      "covers": [
+        "sessionMessage",
+        "endedAfterLastUserMessage",
+        "single"
+      ],
+      "events": [
+        {
+          "seq": 1,
+          "type": "user",
+          "ts": "2026-11-16T02:40:00.000Z",
+          "payload": {
+            "text": "Run the swift tests"
+          }
+        },
+        {
+          "seq": 2,
+          "type": "user",
+          "ts": "2026-11-16T02:46:00.000Z",
+          "payload": {
+            "text": "Please report when the suite is green",
+            "sessionMessage": {
+              "fromSessionId": "coord_1",
+              "fromTitle": "Coordinator",
+              "fromAgentName": "orbit-ws01"
+            }
+          }
+        }
+      ],
+      "list": [
+        {
+          "shellId": "bgj_s",
+          "command": "",
+          "startedSeq": 10,
+          "status": "failed",
+          "description": "OrbitKit swift test (swift:6.1) on the full HEAD tree",
+          "endedAt": "2026-11-16T02:45:00.000Z"
+        }
+      ],
+      "lastUserMessageAt": "2026-11-16T02:40:00.000Z",
+      "sessionLive": true,
+      "expect": {
+        "hidden": false,
+        "label": "Background",
+        "name": {
+          "mode": "one",
+          "item": {
+            "id": "bgj_s",
+            "name": "OrbitKit swift test (swift:6.1) on the full HEAD tree",
+            "truncate": "tail",
+            "mark": "failed"
+          }
+        },
+        "countParts": [],
+        "countLine": null,
+        "accessibilityLabel": "Background processes, OrbitKit swift test (swift:6.1) on the full HEAD tree"
       }
     }
   ]

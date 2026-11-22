@@ -58,7 +58,12 @@ public enum SessionPreviewImages {
             // Only an attachment image is a tappable thumbnail — a remote one isn't — and most messages
             // carry none, so they skip the parse.
             guard markdown.contains(AttachmentLink.scheme + ":") else { return }
-            for block in parseMarkdownBlocks(markdown) {
+            // A table's images are pages too, in reading order: row by row, header first.
+            let blocks = parseMarkdownBlocks(markdown).flatMap { block -> [MarkdownBlock] in
+                guard case .table(let table) = block else { return [block] }
+                return ([table.headers] + table.rows).flatMap { $0.flatMap(tableCellBlocks) }
+            }
+            for block in blocks {
                 switch block {
                 case .image(let source, _):
                     guard let id = AttachmentLink.attachmentID(source: source) else { continue }

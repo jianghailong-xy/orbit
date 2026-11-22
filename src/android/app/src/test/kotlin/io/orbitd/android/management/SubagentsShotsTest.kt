@@ -31,7 +31,8 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
 
-/** NATIVE frames of the SubAgents group, its Providers list and Model tiers with the mock's data (docs/mocks/subagent/05.png), written
+/** NATIVE frames of the SubAgents group (with its Workflows row, docs/mocks/subagent-workflow part 5), its Providers list and Model
+ * tiers with the mock's data (docs/mocks/subagent/05.png), written
  * under `src/android/build/evidence/subagent-android/`; a dialog's or a menu's window is drawn over the page it opened on. */
 abstract class SubagentsShots {
     @get:Rule(order = 0) val host = object : ExternalResource() {
@@ -96,7 +97,7 @@ abstract class SubagentsShots {
         val api = api()
         page {
             Column(Modifier.padding(horizontal = 16.dp)) {
-                SubagentsSection(api, true, {}, 4, {})
+                SubagentsSection(api, true, {}, true, {}, 8, {})
             }
         }
         await("5 of 6 · Edit")
@@ -114,6 +115,17 @@ abstract class SubagentsShots {
         compose.onNodeWithTag("tier:my-endpoint:qwen-coder", useUnmergedTree = true).performClick()
         compose.waitUntil(60_000) { compose.onAllNodesWithText("XL").fetchSemanticsNodes().isNotEmpty() }
         shot("d-model-tier-menu")
+    }
+
+    @Test fun olderModelTiers() {
+        fixture.subagentTiers = SubagentFixtures.OLDER
+        val api = api()
+        page { Column(Modifier.padding(horizontal = 16.dp)) { ModelTiersSection(api, 0) } }
+        await("Older · uses claude-opus-5-5")
+        shot("g-older-tiers")
+        compose.onNodeWithTag("tier:cursor:claude-opus-4-8", useUnmergedTree = true).performClick()
+        compose.waitUntil(60_000) { compose.onAllNodesWithText("XL").fetchSemanticsNodes().isNotEmpty() }
+        shot("h-older-tier-menu")
     }
 
     @Test fun builtinModelTiers() {

@@ -233,19 +233,26 @@ async function dropSubagentWake(prisma: PrismaClient, runId: string): Promise<bo
 }
 
 /**
- * End every run of the session its runner left RUNNING as INTERRUPTED. A workflow owns its calls' wake. Called when a
- * different runner process takes the session over: the process that hosted those runs is gone, and their child
- * engines with it, so none of them will report an end. Returns the run ids so the caller can file any owed wakes once
- * this transaction has committed. A remote run is left alone: its target runner hosts it, not the process replaced.
+ * End every run of the sessions their runner left RUNNING as INTERRUPTED. A workflow owns its calls' wake. Called when a
+ * different runner process takes a session over, singly or in a batch, and when the reaper finds the runner hosting an
+ * idle-looking session lost: the process that hosted those runs is gone, and their child engines with it, so none of
+ * them will report an end. Returns the run ids so the caller can file any owed wakes once this transaction has
+ * committed. A remote run is left alone: its target runner hosts it, not the process replaced.
  */
-export async function interruptOrphanedSubagentRuns(tx: Prisma.TransactionClient, sessionId: string): Promise<string[]> {
+export async function interruptOrphanedSubagentRuns(
+  tx: Prisma.TransactionClient,
+  sessionIds: string | readonly string[],
+  result: string = ORPHANED_SUBAGENT_RESULT,
+): Promise<string[]> {
+  const ids = typeof sessionIds === 'string' ? [sessionIds] : [...sessionIds];
+  if (ids.length === 0) return [];
   const rows = await tx.$queryRaw<Array<{ id: string }>>`
     UPDATE "subagent_run"
     SET "status" = 'INTERRUPTED',
-        "result_summary" = ${ORPHANED_SUBAGENT_RESULT},
+        "result_summary" = ${result},
         "ended_at" = now(),
         "wake_owed" = ("workflow_run_id" IS NULL)
-    WHERE "session_id" = ${sessionId}::uuid AND "status" = 'RUNNING'
+    WHERE "session_id" = ANY(${ids}::uuid[]) AND "status" = 'RUNNING'
       -- A remote run (docs/subagent-design.md §10) lives on its target runner, which a takeover of the parent leaves running.
       AND "target_runner_id" IS NULL
     RETURNING "id"
@@ -259,11 +266,17 @@ export const ORPHANED_WORKFLOW_ERROR =
   'it reported an end.';
 
 /** Interrupt workflows left running by the previous process and keep their completion wakes owed. */
-export async function interruptOrphanedWorkflowRuns(tx: Prisma.TransactionClient, sessionId: string): Promise<string[]> {
+export async function interruptOrphanedWorkflowRuns(
+  tx: Prisma.TransactionClient,
+  sessionIds: string | readonly string[],
+  error: string = ORPHANED_WORKFLOW_ERROR,
+): Promise<string[]> {
+  const ids = typeof sessionIds === 'string' ? [sessionIds] : [...sessionIds];
+  if (ids.length === 0) return [];
   const rows = await tx.$queryRaw<Array<{ id: string }>>`
     UPDATE "subagent_workflow_run"
-    SET "status" = 'INTERRUPTED', "ended_at" = now(), "wake_owed" = true, "error" = ${ORPHANED_WORKFLOW_ERROR}
-    WHERE "session_id" = ${sessionId}::uuid AND "status" = 'RUNNING'
+    SET "status" = 'INTERRUPTED', "ended_at" = now(), "wake_owed" = true, "error" = ${error}
+    WHERE "session_id" = ANY(${ids}::uuid[]) AND "status" = 'RUNNING'
     RETURNING "id"
   `;
   return rows.map((row) => row.id);

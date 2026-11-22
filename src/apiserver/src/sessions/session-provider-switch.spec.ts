@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { RunStatus } from '@prisma/client';
+import { isReleasedStatus } from '../common/session-release';
 
 process.env.PROVIDER_SECRET_KEY = 'test-master-key';
 
@@ -377,6 +378,8 @@ function resumeHarness(session: Record<string, unknown>, providers: ProviderRow[
     commitStatus: null,
     commitOperationId: null,
     commitOperationOwner: null,
+    // A terminal row carries its release column (session_release_fact_chk).
+    ...(isReleasedStatus(String(session.status ?? RunStatus.SUCCEEDED)) ? { finishedAt: now } : {}),
     ...session,
   };
   const updates: Array<{ data: Record<string, unknown> }> = [];

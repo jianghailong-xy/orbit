@@ -164,10 +164,13 @@ test('the owner channel refuses a personal access token door by door and field b
   const secretToSubmit = await secretRequest();
   const secretToCancel = await secretRequest();
   const secretToRevoke = await secretRequest();
-  for (const requestId of [secretToCancel, secretToRevoke]) {
+  const secretToRevokeByGrant = await secretRequest();
+  for (const requestId of [secretToCancel, secretToRevoke, secretToRevokeByGrant]) {
     ok(await api('POST', `/owner-requests/${requestId}/secret`, login, { value: 'fixture-key' }), 'preparing a secret grant');
   }
   await db.ownerRequestSecret.update({ where: { requestId: secretToRevoke }, data: { state: 'ACTIVE', deliveredAt: new Date() } });
+  await db.ownerRequestSecret.update({ where: { requestId: secretToRevokeByGrant }, data: { state: 'ACTIVE', deliveredAt: new Date() } });
+  const grantToRevoke = (await db.ownerRequestSecret.findUniqueOrThrow({ where: { requestId: secretToRevokeByGrant } })).id;
   const grantRow = (requestId: string) => db.ownerRequestSecret.findUnique({ where: { requestId } });
   const savedSecret = await db.accountSecret.create({ data: { ownerId: userId, label: 'door fixture', valueEnc: 'to be replaced' } });
   const savedRow = () => db.accountSecret.findUnique({ where: { id: savedSecret.id } });
@@ -285,6 +288,16 @@ test('the owner channel refuses a personal access token door by door and field b
       login: 200, observe: settingsApplied,
     },
     { route: 'GET /account-secrets', path: '/account-secrets', login: 200 },
+    { route: 'GET /account-secrets/grants', path: '/account-secrets/grants?removed=30d', login: 200 },
+    {
+      route: 'POST /account-secrets/grants/:id/revoke', path: `/account-secrets/grants/${grantToRevoke}/revoke`,
+      login: 204, observe: () => grantRow(secretToRevokeByGrant),
+    },
+    {
+      route: 'POST /account-secrets', path: '/account-secrets',
+      body: { label: 'added key', value: 'added-key-value' }, login: 201,
+      observe: () => db.accountSecret.findUnique({ where: { ownerId_label: { ownerId: userId, label: 'added key' } } }),
+    },
     {
       route: 'PUT /account-secrets/:id', path: `/account-secrets/${savedSecret.id}`,
       body: { value: 'replacement-key' }, login: 204, observe: savedRow,
@@ -413,6 +426,11 @@ test('the owner channel refuses a personal access token door by door and field b
       route: 'POST /projects/:id/open-items/:itemId/resolve',
       path: `/projects/${anyProject}/open-items/${nobody()}/resolve`,
       body: { note: 'handled' },
+      login: 404,
+    },
+    {
+      route: 'POST /projects/:id/setting-changes/:changeId/revert',
+      path: `/projects/${anyProject}/setting-changes/${nobody()}/revert`,
       login: 404,
     },
     {
@@ -894,7 +912,7 @@ test('the owner channel refuses a personal access token door by door and field b
 
     // Ended after having run, so a resume revives it — the door where a mode is re-applied.
     await sql.query(
-      `UPDATE "session" SET "status" = 'SUCCEEDED', "started_at" = now(), "runtime_session_id" = $2 WHERE "id" = $1`,
+      `UPDATE "session" SET "status" = 'SUCCEEDED', "finished_at" = COALESCE("finished_at", now()), "started_at" = now(), "runtime_session_id" = $2 WHERE "id" = $1`,
       [sessionId, `runtime-${RUN}`],
     );
     await db.runner.update({ where: { id: runnerId }, data: { status: 'ONLINE', lastHeartbeatAt: new Date() } });

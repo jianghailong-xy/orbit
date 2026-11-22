@@ -192,8 +192,8 @@ import {
 import {
   TASK_SUPERSEDABLE_STATUSES,
   TASK_SUPERSESSION_MAX_HOPS,
-  EXECUTION_CLAIM_INDEX,
   conflictingUniqueKey,
+  namesExecutionClaimIndex,
   successorChain,
   supersededByAbsentReason,
   supersessionRefusal,
@@ -212,7 +212,6 @@ import {
   cascadedTaskClosure,
   touchesAcceptanceFact,
 } from './task-lock-order';
-import { PROJECT_LIVE_SESSION_STATUS_SQL } from '../projects/live-session-status';
 import { readCurrentVerifier, readTaskWorkState } from '../projects/project-task-work-state';
 import { readTaskIntegrationViews } from '../projects/project-task-integration';
 import { stopInFlightJob } from '../projects/project-integration-line';
@@ -252,6 +251,15 @@ import {
   QUOTA_BLIND_RETRY_BACKOFF_MS,
   autoRunEnd,
 } from './task-retry-policy';
+import {
+  heldFilter,
+  heldStatusFilter,
+  isReleased,
+  releasedFilter,
+  releaseFinishedTheWorkFilter,
+  releaseWasFailureFilter,
+  sessionHeldSql,
+} from '../common/session-release';
 
 export {
   AUTO_RUN_RETRY_BACKOFF_MS,
@@ -397,6 +405,8 @@ import {
   taskCodelessHasCommitsBody,
   taskCodelessReasonRequiredBody,
 } from './task-codeless';
+import { type LandingCheckExemptColumns, type LandingCheckExemptWrite, landingCheckExemptWrite } from './task-landing-check-exempt';
+import { recordSettingChange } from '../projects/project-setting-change';
 import {
   assertForkCallerOnRunner,
   assertForkPlacement,
@@ -1102,7 +1112,8 @@ export const TASK_LIST_SELECT = {
 /**
  * Was this duplicate-key error one of the TWO unique keys a task run's Session insert can reach?
  *
- * Two are in range and no others: `session_task_execution_claim_idx` (`task_id`), and — since the
+ * Two are in range and no others: the execution claim (`task_id`; `session_task_execution_claim_idx`
+ * and, beside it since 1426, `session_task_execution_claim_idx_finished_at`), and — since the
  * id is now derived from the request (`taskRunDesiredSessionId`) rather than drawn at random — the
  * PRIMARY KEY. `share_token` is the table's only other unique key, and a legacy task run leaves it
  * NULL, which PostgreSQL treats as distinct.
@@ -1123,7 +1134,7 @@ function isTaskRunClaimConflict(error: unknown): boolean {
   // moment the client moved — `session_task_execution_claim_idx` contains neither `task_id` nor
   // a standalone `id` — and every lost claim went back to reaching the API as a 500. Both
   // releases put the index name in `originalMessage`, so matching on it holds either way.
-  return named.includes(EXECUTION_CLAIM_INDEX) || /session_pkey/.test(named)
+  return namesExecutionClaimIndex(named) || /session_pkey/.test(named)
     || /task_id/.test(named) || /\bid\b/.test(named);
 }
 
@@ -1365,10 +1376,7 @@ const AUTO_RUN_READY_SQL = Prisma.sql`
   AND NOT EXISTS (
     SELECT 1 FROM session s
     WHERE s.task_id = t.id
-      AND s.status IN (${Prisma.join(
-        TASK_OCCUPYING.map((status) => Prisma.sql`${status}::run_status`),
-        ', ',
-      )})
+      AND ${sessionHeldSql('s')}
   )
   -- ...nor is a task whose current dispatch moment has already had its automatic run. Offering it
   -- again is answered from that moment's receipt with the run it already started, and starts
@@ -1423,10 +1431,7 @@ const PROJECT_INDEPENDENT_READY_SQL = Prisma.sql`
   AND NOT EXISTS (
     SELECT 1 FROM session s
     WHERE s.task_id = t.id
-      AND s.status IN (${Prisma.join(
-        TASK_OCCUPYING.map((status) => Prisma.sql`${status}::run_status`),
-        ', ',
-      )})
+      AND ${sessionHeldSql('s')}
   )
   AND NOT EXISTS (
     SELECT 1 FROM task_run_request receipt
@@ -1460,10 +1465,7 @@ const AUTO_RUN_RETRY_CANDIDATE_SQL = Prisma.sql`
   AND NOT EXISTS (
     SELECT 1 FROM session s
     WHERE s.task_id = t.id
-      AND s.status IN (${Prisma.join(
-        TASK_OCCUPYING.map((status) => Prisma.sql`${status}::run_status`),
-        ', ',
-      )})
+      AND ${sessionHeldSql('s')}
   )`;
 
 /** An auto-run task whose current dispatch moment has had its automatic run, as the retry policy reads it. */
@@ -1478,6 +1480,9 @@ interface EndedAutoRunMoment {
   sessionId: string | null;
   /** The run's own row, read for autoRunEnd; all null once that row is gone. */
   sessionStatus: RunStatus | null;
+  /** The release column and the kind: whether, with no end reason, the release finished the work (autoRunEnd). */
+  finishedAt: Date | null;
+  sessionKind: string | null;
   endReason: string | null;
   completedAt: Date | null;
   archivedAt: Date | null;
@@ -1583,10 +1588,7 @@ const SCHEDULED_DUE_SQL = Prisma.sql`
   AND NOT EXISTS (
     SELECT 1 FROM session s
     WHERE s.task_id = t.id
-      AND s.status IN (${Prisma.join(
-        TASK_OCCUPYING.map((status) => Prisma.sql`${status}::run_status`),
-        ', ',
-      )})
+      AND ${sessionHeldSql('s')}
   )`;
 
 /**
@@ -3439,7 +3441,6 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         where: { id: { in: uniqueIds.slice(offset, offset + TASK_ID_QUERY_CHUNK) }, ownerId },
         select: {
           id: true,
-          codeless: true,
           projectId: true,
           project: {
             select: {
@@ -3454,13 +3455,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           // §1.1 reads the NEWEST work session, so a task whose first attempt ran in a worktree and
           // whose latest one did not is judged by the latest — and by the repository its workspace
           // names (O-L7).
+          // Every one of them, newest first: whether any is still moving, and what each reported
+          // (§12.15 P-M1, `deliveredNothingOfItsOwn`).
           sessions: {
             where: { startsTaskWork: true, deletedAt: null },
             orderBy: { createdAt: 'desc' },
-            take: 1,
-            select: { isolationStatus: true, branch: true, workspace: { select: { repoUrl: true } } },
+            select: {
+              isolationStatus: true, branch: true, finishedAt: true, changedFiles: true,
+              workspace: { select: { repoUrl: true } },
+            },
           },
           mergeReceipts: LANDING_SERVING_WORK_SELECT.mergeReceipts,
+          deliveredSha: true,
+          deliveredBaseSha: true,
         },
       });
       for (const row of rows) {
@@ -3470,13 +3477,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // fixture says nothing about landing" into a crash on the task page.
         const work = row.sessions?.[0];
         landed.set(row.id, prerequisiteLanded({
-          codeless: row.codeless,
           projectId: row.projectId,
           codebase: row.project?.codebases?.[0] ?? null,
           work: work
             ? { isolationStatus: work.isolationStatus, branch: work.branch, repoUrl: work.workspace?.repoUrl }
             : null,
           receipts: row.mergeReceipts ?? [],
+          deliveredSha: row.deliveredSha,
+          deliveredBaseSha: row.deliveredBaseSha,
+          sessions: row.sessions,
+          workStillMoving: (row.sessions ?? []).some((session) => session.finishedAt === null),
         }));
       }
     }
@@ -3849,7 +3859,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
          -- Every task-linked session this release creates starts the task's work, so "any live
          -- run" and "any live work run" are the same set today; the two diverge in the follow-up
          -- migration that also narrows the execution claim.
-         AND s."status"::text IN (${Prisma.raw(PROJECT_LIVE_SESSION_STATUS_SQL)})
+         AND ${sessionHeldSql('s')}
        ORDER BY s."id"
        LIMIT 1
     `);
@@ -4214,6 +4224,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const forkColumns = await resolveTaskFork(
       this.prisma, ownerId, creatorSessionId, { ...dto, projectId: scopedProjectId }, null,
     );
+    // §12.15 P-C2, over the project the scope admitted, before any transaction.
+    const landingCheckExempt = await landingCheckExemptWrite(this.prisma, {
+      ownerId, projectId: scopedProjectId, actingSessionId: creatorSessionId,
+      exempt: dto.landingCheckExempt, reason: dto.landingCheckExemptReason, currentlyExempt: false,
+    });
     // Against the project this write was ADMITTED into, for the reason stated above: a coordinator
     // that names no project still files its work under the one it coordinates, and refusing that
     // request on the DTO's empty `projectId` would be a refusal of a task that lands in a project.
@@ -4287,6 +4302,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       await this.pausedListIds(ownerId, [dto.listId]),
       criterionDeclaration,
       forkColumns,
+      landingCheckExempt?.columns ?? null,
     );
     // Initial edges and their task must become visible atomically. Taking the same owner lock
     // used by add/replace prevents a concurrent reverse-edge write from observing the new task
@@ -4407,6 +4423,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             tx, ownerId, dependencyCrossings.edges, now,
           );
           const created = await tx.task.create({ data });
+          // §12.15 P-R1: the coordinator's cardless exemption leaves its record in this transaction.
+          if (landingCheckExempt?.record && created.projectId) {
+            await recordSettingChange(tx, {
+              ownerId, projectId: created.projectId, taskId: created.id, field: 'TASK_LANDING_CHECK_EXEMPT',
+              ...landingCheckExempt.record,
+            });
+          }
           // Its startWhen, in this transaction: the condition, the approved command's hash and the baseline
           // (docs/condition-triggers-design.md §6.2). A refusal (the account's 20) takes the task with it.
           if (dto.startWhen) {
@@ -4709,6 +4732,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     criterionDeclaration: { criterionDefinitionId: string; criterionRevision: number } | null,
     /** Migration 0615: the fork `resolveTaskFork` checked, or null/absent for a task not forked. */
     fork?: TaskForkColumns | null,
+    /** Migration 1350: the landing-check exemption `landingCheckExemptWrite` admitted, or null/absent. */
+    landingCheckExempt?: LandingCheckExemptColumns | null,
   ): Prisma.TaskUncheckedCreateInput {
     const sessionId = origin?.sessionId;
     return {
@@ -4760,6 +4785,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // SR55's five facts, in this INSERT and never again (0615's `task_fork_guard`). Absent on a task
       // that was not forked, so the columns stay out of the statement, as on every task before them.
       ...(fork ?? {}),
+      // §12.15 P-C2, judged by the door before this (writer, reason, line). Absent leaves the defaults.
+      ...(landingCheckExempt ?? {}),
       dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
       // Omitted means unscheduled. The `undefined` is what makes that true without a default:
       // Prisma leaves the column out of the INSERT, so the row is born NULL exactly as every task
@@ -5390,6 +5417,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       const fork = await resolveTaskFork(this.prisma, ownerId, creatorSessionId, item, index);
       if (fork) forkColumns.set(index, fork);
     }
+    // §12.15 P-C2, per item and over the project each was admitted into, like the fork above.
+    const exemptions = new Map<number, LandingCheckExemptWrite>();
+    for (const [index, item] of items.entries()) {
+      if (frozen.has(index)) continue;
+      const exemption = await landingCheckExemptWrite(this.prisma, {
+        ownerId, projectId: item.projectId, actingSessionId: creatorSessionId,
+        exempt: item.landingCheckExempt, reason: item.landingCheckExemptReason, currentlyExempt: false,
+      });
+      if (exemption) exemptions.set(index, exemption);
+    }
     // Item by item, over the project each one was ADMITTED into, and above the dry run for the
     // same reason the bound below is. A frozen item is a replay whose row already exists:
     // re-judging it could only refuse a write that already happened.
@@ -5613,8 +5650,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
               heldListIds,
               criterionDeclarations.get(index) ?? null,
               forkColumns.get(index) ?? null,
+              exemptions.get(index)?.columns ?? null,
             ),
           }));
+        const exemptionRecord = existing ? undefined : exemptions.get(index)?.record;
+        if (exemptionRecord && task.projectId) {
+          await recordSettingChange(tx, {
+            ownerId, projectId: task.projectId, taskId: task.id, field: 'TASK_LANDING_CHECK_EXEMPT',
+            ...exemptionRecord,
+          });
+        }
         if (!existing) {
           insertedIds.push(task.id);
           // Its startWhen, in this transaction, as the single door writes one (task-start-when.ts).
@@ -10141,8 +10186,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // write below). A stored change record never stops describing it, so it is not that prose.
     const clearsStaleOverrideReason = attachesVerifier
       && readTaskCriterionChange(before.completionCriterionOverrideReason) == null;
-    // The codeless door (`task-codeless.ts`): turning an existing task codeless takes it out of its
-    // criterion's landing conjunction, so it is asked why, and refused for a task whose commits are
+    // The codeless door (`task-codeless.ts`): turning an existing task codeless is asked why (it does not decide landing), and refused for a task whose commits are
     // already somewhere — those are work that has to land. Only the change is questioned: re-sending
     // the value the task has, or taking the declaration back, writes no reason and needs none.
     // Before the transaction, like every refusal on this path.
@@ -10155,6 +10199,18 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       const commits = await readTaskCommitEvidence(this.prisma, id);
       if (commits.length > 0) throw new ConflictException(taskCodelessHasCommitsBody(commits));
     }
+    // §12.15 P-C2: the landing-check exemption, over the project the task is in after this write.
+    // Before the transaction, like every refusal on this path.
+    const landingCheckExempt = await landingCheckExemptWrite(this.prisma, {
+      ownerId,
+      projectId: dto.projectId === undefined ? before.projectId : dto.projectId,
+      actingSessionId,
+      exempt: dto.landingCheckExempt,
+      reason: dto.landingCheckExemptReason,
+      currentlyExempt: before.landingCheckExempt,
+      currentReason: before.landingCheckExemptReason,
+      ownerHasWritten: before.landingCheckExemptOwnerSetAt != null,
+    });
     if (dto.assigneeId) await this.assertOwnedWorkspace(ownerId, dto.assigneeId);
     if (dto.listId) await this.assertOwnedList(ownerId, dto.listId);
     if (dto.projectId) await this.assertOwnedProject(ownerId, dto.projectId);
@@ -10342,6 +10398,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // explaining a declaration it no longer makes.
       codeless: declaresCodeless || withdrawsCodeless ? dto.codeless : undefined,
       codelessReason: declaresCodeless ? codelessReason : withdrawsCodeless ? null : undefined,
+      // The exemption and its reason and writer move together (§12.15 P-C2); absent when not named.
+      ...(landingCheckExempt?.columns ?? {}),
       // Three-state like the pins above: omitted keeps the conclusion, null revokes it. Revoking is
       // a real operation rather than an undo — a subject completed by VERIFICATION_PASSED goes back
       // to OPEN on the next reconcile, which is the point of storing the verdict rather than
@@ -10716,6 +10774,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // fence is a check the rotation it exists for can simply commit past. An agent edit inside a
       // project therefore takes the transaction; nothing else changes shape.
       !restructures && !(touchesAcceptanceFacts && before.projectId) && !scopeFence
+        && !landingCheckExempt?.record
         ? assertMaySettleWhatThisMoves(this.prisma).then(() => this.prisma.task.update({ where: { id }, data }))
         // Retried whole, on the transaction branch only. The one-statement branch is an
         // autocommit UPDATE with nothing to re-run: it has no transaction of its own, so a
@@ -11000,6 +11059,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             // Every verifier has the same carrier lifecycle. `data.status` above derives DONE from
             // any verdict before this transaction decides an optional evidence-bound request.
             let task = await tx.task.update({ where: { id }, data });
+            // §12.15 P-R1: the coordinator's cardless exemption change leaves its record in this transaction.
+            if (landingCheckExempt?.record) {
+              const recordedProjectId = task.projectId;
+              if (recordedProjectId) {
+                await recordSettingChange(tx, {
+                  ownerId, projectId: recordedProjectId, taskId: id, field: 'TASK_LANDING_CHECK_EXEMPT',
+                  ...landingCheckExempt.record,
+                });
+              }
+            }
             if (retiresAfter) {
               await writeSupersession();
               task = await tx.task.findUniqueOrThrow({ where: { id } });
@@ -11275,6 +11344,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // an unrelated blocker from some earlier episode goes on releasing its work.
       if (!stopped) await this.dispatchIndependentSiblingsOf(ownerId, doneTaskId);
     }
+  }
+
+  /**
+   * §12.15 P-M1: the finish that froze a DONE task's identity decided the route its DONE had left to
+   * it, and a task that delivered nothing of its own releases its dependents on that finish (J10's
+   * second edge, moved from the DONE to where the fact became known).
+   */
+  async dispatchDependentsOfSettledWork(ownerId: string, doneTaskId: string): Promise<void> {
+    // The whole DONE edge, again: its facts were read while the landing was still undecided — the
+    // settled project held as work still landing (`landingDeferred`) — and are re-derived now that it
+    // is decided. Each step reads committed rows, so the parts the DONE already delivered answer
+    // nothing the second time.
+    await this.dispatchDependentsAfterCompletion(ownerId, doneTaskId);
   }
 
   /**
@@ -11759,10 +11841,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
          AND NOT EXISTS (
            SELECT 1 FROM "session" s
             WHERE s."task_id" = moment."task_id"
-              AND s."status" IN (${Prisma.join(
-                TASK_OCCUPYING.map((status) => Prisma.sql`${status}::run_status`),
-                ', ',
-              )})
+              AND ${sessionHeldSql('s')}
          )`;
     return moved > 0;
   }
@@ -12247,10 +12326,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         AND NOT EXISTS (
           SELECT 1 FROM task t JOIN session s ON s.task_id = t.id
           WHERE t.list_id = tl.id
-            AND s.status IN (${Prisma.join(
-              TASK_OCCUPYING.map((status) => Prisma.sql`${status}::run_status`),
-              ', ',
-            )})
+            AND ${sessionHeldSql('s')}
         )
         -- Nothing has started recently either, so this is quiet rather than merely between runs.
         AND NOT EXISTS (
@@ -12992,8 +13068,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * this exemption exists to prevent.
    *
    * `countUnrequestedEnds` is the retry policy's question (autoRunRetryDecisions), not the
-   * dispatch's: it also counts the runs that ended CANCELLED without anybody asking, which that
-   * policy retries like failed ones and so has to count like them. A task reaching a new moment any
+   * dispatch's: it also counts the runs released without a failure and without anybody asking (no
+   * end reason, not for the work being finished: a cancel with no reason, an engine that exited by
+   * itself), which that policy retries like failed ones and so has to count like them. A task reaching a new moment any
    * other way has never had a cancelled run held against it, and still does not.
    */
   private async autoRunHoldOff(
@@ -13016,7 +13093,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         by: ['taskId'],
         where: {
           taskId: { in: ids },
-          status: RunStatus.FAILED,
+          // Released by a failure (common/session-release.ts).
+          AND: [releaseWasFailureFilter()],
           // A run that failed with no error text matches no usage-limit marker, so it is an
           // ordinary failure and counts. Said explicitly: the runner's /finalize omits `error` when
           // its engine died without a message, and a negated match alone is not true of a NULL.
@@ -13044,13 +13122,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       };
       spend(failures);
       if (countUnrequestedEnds) {
-        // autoRunEnd's UNREQUESTED cancels: no end reason, never filed away. Counted into the same
+        // autoRunEnd's UNREQUESTED ends that were not failures: released neither by a failure (counted
+        // above) nor for the work being finished, no end reason, never filed away. Counted into the same
         // budget, because a retried end that spends none is a retry with no brake.
         const cancels = await this.prisma.session.groupBy({
           by: ['taskId'],
           where: {
             taskId: { in: ids },
-            status: RunStatus.CANCELLED,
+            ...releasedFilter(),
+            NOT: [releaseWasFailureFilter(), releaseFinishedTheWorkFilter()],
             endReason: null,
             completedAt: null,
             archivedAt: null,
@@ -13081,7 +13161,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         by: ['taskId'],
         where: {
           taskId: { in: blindIds },
-          status: RunStatus.FAILED,
+          AND: [releaseWasFailureFilter()],
           ...usageLimitIs(false),
         },
         _max: { createdAt: true },
@@ -13116,7 +13196,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       SELECT t.id, t.owner_id AS "ownerId", t.assignee_id AS "workspaceId",
              a.runner_id AS "runnerId", current_moment.epoch AS "dispatchEpoch",
              receipt.result->>'sessionId' AS "sessionId", run.status AS "sessionStatus",
-             run.end_reason AS "endReason", run.completed_at AS "completedAt",
+             run.finished_at AS "finishedAt", run.kind AS "sessionKind", run.end_reason AS "endReason",
+             run.completed_at AS "completedAt",
              run.archived_at AS "archivedAt", run.deleted_at AS "deletedAt",
              run.retry_at AS "retryAt", t.engine AS "taskEngine", t.provider AS "taskProvider",
              ${modelRoutingEnabledSql('t.owner_id')} AS "modelRouting"
@@ -13868,9 +13949,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    *     There is no status in this read, so there is no status it can be wrong about.
    *  2. **No row at that id, and a Session holding the claim.** Then this request did not run, and
    *     the row in the way is not its own — it cannot be. Named, never adopted and never reported
-   *     as success, off the claim index's own predicate (`TASK_OCCUPYING` is the four statuses
-   *     `session_task_execution_claim_idx` lists, character for character) rather than off "the
-   *     newest" or "the live one".
+   *     as success, off the claim index's own predicate (`task_id`, not in the Trash, not released:
+   *     `session_task_execution_claim_idx_finished_at`, migration 1426) rather than off "the newest"
+   *     or "the live one".
    *  3. **Neither.** The claim was released between the insert and the read, so nothing of this
    *     request landed and there is nothing truthful to return. Refused with the reason — a raw
    *     duplicate-key error is not an answer, it is a 500 with a PostgreSQL sentence in it.
@@ -13949,7 +14030,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // neither, and a reader narrower than the index it is explaining answers "nothing holds the
         // claim" for rows that do.
         const holder = await this.prisma.session.findFirst({
-          where: { taskId: task.id, deletedAt: null, status: { in: TASK_OCCUPYING } },
+          where: { taskId: task.id, deletedAt: null, ...heldFilter() },
           select: {
             id: true, status: true, workspaceId: true, engine: true, provider: true, providerBuiltin: true,
             ownerId: true, model: true, startsTaskWork: true, cancelRequestedAt: true,
@@ -14931,9 +15012,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           ownerId: delivery.ownerId,
           deletedAt: null,
           startsTaskWork: true,
-          status: {
-            in: [RunStatus.PENDING, RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED],
-          },
+          status: heldStatusFilter(),
         },
         orderBy: { createdAt: 'desc' },
         select: { id: true },
@@ -15129,10 +15208,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       if (!(error instanceof SessionNotSendable)) {
         const now = await this.prisma.session.findFirst({
           where: { id: sessionId },
-          select: { status: true, deletedAt: true, cancelRequestedAt: true },
+          select: { finishedAt: true, deletedAt: true, cancelRequestedAt: true },
         });
-        const spent = !now || now.deletedAt != null || now.cancelRequestedAt != null
-          || SessionsService.TERMINAL.includes(now.status);
+        const spent = !now || now.deletedAt != null || now.cancelRequestedAt != null || isReleased(now);
         if (!spent) throw error;
       }
       throw new MentionUndeliverable(
@@ -15206,8 +15284,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // falls through to the resume path below and is handed the prompt as a new turn rather than
     // no-oping (which is why "开始执行" on a parked task used to do nothing).
     //
-    // With no ORDER BY: at most one row can satisfy this, because
-    // `session_task_execution_claim_idx` says so, and ordering a set that cannot have two members
+    // With no ORDER BY: at most one row can satisfy this, because the execution claim index
+    // (`session_task_execution_claim_idx_finished_at`) says so, and ordering a set that cannot have two members
     // only invites a reader to think it can.
     //
     // Everything the refusal names, so this door and the post-conflict one describe the row in the
@@ -15473,9 +15551,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // By id, as the plan named it; `updateConfig` itself is owner-scoped.
     const paused = await this.prisma.session.findUnique({
       where: { id: sessionId },
-      select: { model: true, status: true },
+      select: { model: true, finishedAt: true },
     });
-    if (!paused || paused.model === model || SessionsService.TERMINAL.includes(paused.status)) return;
+    if (!paused || paused.model === model || isReleased(paused)) return;
     // Orbit's change, not the owner's pick: a mode change it causes is recorded as ORBIT_CHANGE.
     await this.sessions.updateConfig(ownerId, sessionId, { model }, undefined, { origin: 'ORBIT' });
   }

@@ -103,6 +103,9 @@ public enum ComposerLogic {
         case .awaitingInput, .interrupted: return .sendNow
         case .running, .pending: return .queue
         case .succeeded, .failed, .cancelled: return .sendNow
+        // A status word this build does not know is never treated as running: send, and let the
+        // server's capabilities and answer decide.
+        case .unknown: return .sendNow
         }
     }
 

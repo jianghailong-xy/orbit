@@ -182,7 +182,7 @@ async function world(
 
   const coordinator = await conversation(`coordinator: ${label}`, {
     titleManagedByProject: true,
-    ...(options.coordinator === 'ENDED' ? { status: RunStatus.SUCCEEDED, completedAt: new Date() } : {}),
+    ...(options.coordinator === 'ENDED' ? { status: RunStatus.SUCCEEDED, finishedAt: new Date(), completedAt: new Date() } : {}),
   });
   const projectId = randomUUID();
   await db.project.create({
@@ -511,14 +511,14 @@ test('a stopped-run fact refused during FAILED recovers on the reconcile tick wi
   { skip, timeout: 120_000 }, () => withStack(async (stack) => {
     const w = await world(stack, 'stopped-recovery');
     const run = await w.run('submit the missing evidence');
-    await stack.db.session.update({ where: { id: w.coordinator }, data: { status: RunStatus.FAILED } });
+    await stack.db.session.update({ where: { id: w.coordinator }, data: { status: RunStatus.FAILED, finishedAt: new Date()} });
     await w.oneTurn(run.sessionId, `platform:${randomUUID()}`, 'The work still needs evidence.');
     assert.equal((await w.wakes())[0]?.status, 'REFUSED');
     assert.equal((await w.told()).length, 0);
     const before = (await w.wakes()).length;
     await stack.tasks.reconcileTick();
     assert.equal((await w.wakes()).length, before, 'a paused coordinator causes no new write');
-    await stack.db.session.update({ where: { id: w.coordinator }, data: { status: RunStatus.AWAITING_INPUT } });
+    await stack.db.session.update({ where: { id: w.coordinator }, data: { status: RunStatus.AWAITING_INPUT, finishedAt: null} });
     await Promise.all([stack.tasks.reconcileTick(), stack.tasks.reconcileTick()]);
     assert.equal((await w.told()).length, 1);
     assert.equal((await w.wakes()).filter((wake) => wake.status === 'DELIVERED').length, 1);
@@ -527,7 +527,7 @@ test('a stopped-run fact refused during FAILED recovers on the reconcile tick wi
     await stack.db.conversationTurn.updateMany({
       where: { sessionId: w.coordinator }, data: { status: 'ANSWERED', deliveredAt: null },
     });
-    await stack.db.session.update({ where: { id: w.coordinator }, data: { status: RunStatus.AWAITING_INPUT } });
+    await stack.db.session.update({ where: { id: w.coordinator }, data: { status: RunStatus.AWAITING_INPUT, finishedAt: null} });
     await Promise.all([stack.tasks.reconcileTick(), stack.tasks.reconcileTick()]);
     const resent = await w.told();
     assert.equal(resent.length, 2);
@@ -540,10 +540,10 @@ test('the coordinator turn ending delivers the stopped-run fact that waited duri
   { skip, timeout: 120_000 }, () => withStack(async (stack) => {
     const w = await world(stack, 'turn-end-recovery');
     const run = await w.run('work waiting for evidence');
-    await stack.db.session.update({ where: { id: w.coordinator }, data: { status: RunStatus.FAILED } });
+    await stack.db.session.update({ where: { id: w.coordinator }, data: { status: RunStatus.FAILED, finishedAt: new Date()} });
     await w.oneTurn(run.sessionId, `platform:${randomUUID()}`);
     assert.equal((await w.wakes())[0]?.status, 'REFUSED');
-    await stack.db.session.update({ where: { id: w.coordinator }, data: { status: RunStatus.AWAITING_INPUT } });
+    await stack.db.session.update({ where: { id: w.coordinator }, data: { status: RunStatus.AWAITING_INPUT, finishedAt: null} });
     // Only the coordinator's recovery turn ends: no task write, receipt or second run stop.
     await w.oneTurn(w.coordinator, randomUUID(), 'I am back.');
     assert.equal((await w.wakes()).filter((wake) => wake.status === 'DELIVERED').length, 1);

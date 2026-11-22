@@ -62,6 +62,7 @@ import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
 import '../test-support/dequeue-under-lease';
+import { settleDeliveredIdentityAfterFinish } from './project-integration-job';
 
 /**
  * Exception items (docs/project-integration-line-contract.md §4): a task FAILED from any door opens
@@ -322,7 +323,7 @@ async function attempt(
   w: World,
   label: string,
   options: {
-    session?: RunStatus;
+    session?: typeof RunStatus.RUNNING | typeof RunStatus.AWAITING_INPUT;
     taskStatus?: TaskStatus;
     acceptance?: { command: string; expectedExitCode: number };
     supersedesTaskId?: string;
@@ -654,15 +655,21 @@ async function queuedLanding(
   // The session that produced this branch has stopped moving: the runner commits a worktree when it
   // FINISHES the session (SR13), and a landing is not handed over before that (J-T1a,
   // `task-landing-races-final-commit.pg.spec.ts` — a landing judged earlier answers ALREADY_LANDED
-  // about a branch that is about to grow). The status is left as it was: what the queue reads is
-  // the finish and where HEAD ended, and this spec's cases are about the items a landing opens.
-  await stack.db.session.update({
-    where: { id: a.sessionId },
-    data: {
-      finishedAt: new Date(),
-      worktreeBranch: `orbit/${label}`,
-      worktreeDirty: false,
-    },
+  // about a branch that is about to grow). Record the release and where HEAD ended.
+  await stack.db.$transaction(async (tx) => {
+    // The finish settles the DONE's delivered identity in the transaction that writes it, as every
+    // finish door does — and decides the route a DONE written while this work moved left to it
+    // (§10.5 O-L4 3, §12.15 P-M1).
+    const finished = await tx.session.update({
+      where: { id: a.sessionId },
+      data: {
+        status: RunStatus.SUCCEEDED, finishedAt: new Date(),
+        worktreeBranch: `orbit/${label}`,
+        worktreeDirty: false,
+      },
+      select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
+    });
+    await settleDeliveredIdentityAfterFinish(tx, finished);
   });
   return a;
 }
@@ -1389,13 +1396,20 @@ test('a claim with nowhere to run it opens an item the coordinator is told about
     // The session that produced this branch has stopped moving, as in `claimedLanding`: a landing is
     // not handed over before the runner's finalize records it (J-T1a, `landingWorkHasSettled`), and
     // this case is about the other reason a claim ends where it was made.
-    await stack.db.session.update({
-      where: { id: a.sessionId },
-      data: {
-        finishedAt: new Date(),
-        worktreeBranch: 'orbit/unworkable',
-        worktreeDirty: false,
-      },
+    await stack.db.$transaction(async (tx) => {
+      // The finish settles the DONE's delivered identity in the transaction that writes it, as every
+      // finish door does — and decides the route a DONE written while this work moved left to it
+      // (§10.5 O-L4 3, §12.15 P-M1).
+      const finished = await tx.session.update({
+        where: { id: a.sessionId },
+        data: {
+          status: RunStatus.SUCCEEDED, finishedAt: new Date(),
+          worktreeBranch: 'orbit/unworkable',
+          worktreeDirty: false,
+        },
+        select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
+      });
+      await settleDeliveredIdentityAfterFinish(tx, finished);
     });
 
     const claimed = await stack.jobs.dispatch({
@@ -1466,10 +1480,16 @@ async function claimed(stack: Stack, sessionId: string): Promise<void> {
  *
  * The doors are the two `claimedLanding` walked the first time — a message turn of the run that ends
  * SUCCEEDED is what queues the reserved shell turn, and the shell's exit code is what derives DONE —
- * over a task that has been DONE once already. That DONE transaction is what queues the task's next
- * landing generation: a task whose landing stopped is integrated again by being completed again.
+ * over a task that has been DONE once already. The next landing generation queues when that work
+ * finishes.
  */
 async function rework(stack: Stack, w: World, a: Attempt, label: string): Promise<void> {
+  // The run finished (queuedLanding), so the session is released; the owner's reply revives it, which clears the
+  // release column and its cause (session_release_fact_chk).
+  await stack.db.session.update({
+    where: { id: a.sessionId },
+    data: { status: RunStatus.AWAITING_INPUT, finishedAt: null},
+  });
   const asked = await stack.sessions.createTurn(w.ownerId, a.sessionId, {
     clientTurnId: randomUUID(),
     content: `${label}: the conflict is resolved on the branch`,
@@ -1496,6 +1516,14 @@ async function rework(stack: Stack, w: World, a: Attempt, label: string): Promis
     shellOutput: '',
   });
   assert.equal(await taskStatus(stack.db, a.taskId), TaskStatus.DONE, 'the second acceptance held too');
+  await stack.db.$transaction(async (tx) => {
+    const finished = await tx.session.update({
+      where: { id: a.sessionId },
+      data: { status: RunStatus.SUCCEEDED, finishedAt: new Date()},
+      select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
+    });
+    await settleDeliveredIdentityAfterFinish(tx, finished);
+  });
 }
 
 /** What a runner reports for a job that landed: one tree tested and landed, as J2 demands. */
@@ -1529,8 +1557,7 @@ test('a landing answers the conflict item an earlier generation of the same task
       const item = await onlyItemFor(stack.db, w, task.taskId, 'the first landing conflicted');
       assert.equal(item.state, 'OPEN');
 
-      // The task is put back to work and passes its acceptance again, so its next generation is
-      // queued by that DONE (J-T1a) — and this one lands.
+      // The task passes its acceptance again and finishes, so its next generation queues and lands.
       await stack.tasks.update(w.ownerId, task.taskId, { status: DeclaredTaskStatus.IN_PROGRESS });
       await rework(stack, w, task, 'landed-after-conflict');
       const [claimed] = await stack.jobs.dispatch({

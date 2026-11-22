@@ -50,7 +50,7 @@ import {
   taskLanding,
   taskLandingSql,
 } from '../projects/project-criterion-landing';
-import { INTEGRATION_JOB_CLAIM, PROMOTION_AUTOMATIC_LAND } from '../projects/project-integration-job';
+import { INTEGRATION_JOB_CLAIM, PROMOTION_AUTOMATIC_LAND, settleDeliveredIdentityAfterFinish } from '../projects/project-integration-job';
 import { configureProjectIntegration } from '../projects/project-integration-line';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import { ProjectPromotionService } from '../projects/project-promotion.service';
@@ -322,7 +322,7 @@ async function doneCodeTask(s: Stack, w: ProjectWorld, label: string): Promise<{
       id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, taskId: declared.id, workspaceId: w.workspaceId,
       assignedRunnerId: w.runnerId, title, prompt: title, provider: 'claude', status: RunStatus.RUNNING,
       dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true, startedAt: new Date(),
-      finishedAt: new Date(Date.now() - 60_000), branch: `orbit/${label}-${sessionId.slice(0, 8)}`,
+      branch: `orbit/${label}-${sessionId.slice(0, 8)}`,
       worktreeBranch: `orbit/${label}-${sessionId.slice(0, 8)}`, worktreeDirty: false, isolationStatus: 'worktree',
       baseSha: '0'.repeat(40),
     },
@@ -347,6 +347,14 @@ async function doneCodeTask(s: Stack, w: ProjectWorld, label: string): Promise<{
   });
   const task = await s.db.task.findUniqueOrThrow({ where: { id: declared.id }, select: { status: true } });
   assert.equal(task.status, TaskStatus.DONE, 'the acceptance command agreed');
+  await s.db.$transaction(async (tx) => {
+    const finished = await tx.session.update({
+      where: { id: sessionId },
+      data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(Date.now() - 60_000)},
+      select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
+    });
+    await settleDeliveredIdentityAfterFinish(tx, finished);
+  });
   return { taskId: declared.id, sessionId };
 }
 

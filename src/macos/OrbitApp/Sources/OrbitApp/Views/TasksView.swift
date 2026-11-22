@@ -497,7 +497,7 @@ struct TasksListView: View {
     }
     #endif
 
-    /// One row, wrapped for the container it is in — the same shape as `AgentPanes.sessionRow`. The
+    /// One row, wrapped for the container it is in — the same shape as `SessionListRow`. The
     /// row view itself is the same either way, actions included; what changes is who moves the
     /// screen: the three-column `List`'s selection, or the row's own destination value on the
     /// compact stack. There is no third state for "highlighted but not openable" to live in, because
@@ -1420,6 +1420,8 @@ private struct TaskDetailContent: View {
             do { try await Task.sleep(nanoseconds: 4_000_000_000) }
             catch { return }
             guard model.taskDetailIsOpen(taskID) else { return }
+            // A run in flight is read every 4 s — while the app can be seen (§4 R3).
+            if !model.appVisible { continue }
             _ = await tasks.loadDetail(taskID)
             guard let current = tasks.detail, TaskListLogic.isBusy(current) else { return }
         }

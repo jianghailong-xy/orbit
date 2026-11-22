@@ -186,6 +186,7 @@ import {
   readDoneState,
   supersedeStaleDoneRequest,
 } from './project-done-request';
+import { sessionHeldSql } from '../common/session-release';
 
 /**
  * Who is asking for an item to be put in front of the project's coordinator conversation.
@@ -1190,7 +1191,7 @@ export class ProjectOpenItemService {
       );
     }
     const settings: ProjectStartSettings = {
-      line: body.line,
+      ...(body.line !== undefined ? { line: body.line } : {}),
       ...(body.projectBranchName != null ? { projectBranchName: body.projectBranchName } : {}),
       ...(body.upstreamRef != null ? { upstreamRef: body.upstreamRef } : {}),
       automatic: body.automatic ?? true,
@@ -2910,9 +2911,10 @@ export class ProjectOpenItemService {
     // Rank 55 before the job row's rank-60 write, as the stop door takes it: this orders the stop
     // against a result or a DONE that would queue the next generation.
     const [codebase] = await tx.$queryRaw<Array<{
-      landingCheckCommand: string | null; mergeCheckCommand: string | null;
+      landingCheckCommand: string | null; landingCheckNone: boolean; mergeCheckCommand: string | null;
     }>>(Prisma.sql`
       SELECT "landing_check_command" AS "landingCheckCommand",
+             "landing_check_none" AS "landingCheckNone",
              "merge_check_command" AS "mergeCheckCommand"
         FROM "project_codebase"
        WHERE "project_id" = ${projectId}::uuid AND "slot" = 'primary'
@@ -2928,6 +2930,7 @@ export class ProjectOpenItemService {
     const refusal = inFlightSkipRefusal({
       ...job,
       landingCheckCommand: codebase?.landingCheckCommand ?? null,
+      landingCheckNone: codebase?.landingCheckNone ?? false,
       mergeCheckCommand: codebase?.mergeCheckCommand ?? null,
     });
     if (refusal) throw new ConflictException(refusal);
@@ -3426,7 +3429,7 @@ export class ProjectOpenItemService {
                   SELECT 1 FROM "session" s
                    WHERE s."task_id" = t."id"
                      AND s."starts_task_work"
-                     AND s."status" IN ('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED')
+                     AND ${sessionHeldSql('s')}
                      AND (s."id" IS DISTINCT FROM i."session_id"
                           -- The failing attempt itself is not "in flight" merely because the turn
                           -- that wrote FAILED is still running; a message written to it afterwards

@@ -393,6 +393,12 @@ async function settleByAcceptance(stack: Stack, f: Fixture, taskId: string, labe
       status: RunStatus.RUNNING,
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
+      // The work ran in the task's own worktree and reported files: revision 42 (§12.15 P-M3) reads
+      // landing from the delivered commit, and a DONE task with no branch and nothing reported has
+      // nothing to land — it would leave its criterion's landing conjunction, not enter it.
+      isolationStatus: 'worktree',
+      branch: `orbit/${sessionId}`,
+      changedFiles: ['src/work.ts'],
     },
   });
   await stack.db.conversationTurn.create({
@@ -450,6 +456,10 @@ async function settleByAcceptance(stack: Stack, f: Fixture, taskId: string, labe
     shellExitCode: shell.status!,
     shellOutput: `${shell.stdout}${shell.stderr}`,
   });
+  await stack.db.session.update({
+    where: { id: sessionId },
+    data: { status: RunStatus.SUCCEEDED, finishedAt: new Date()},
+  });
 
   assert.equal(
     (await stack.db.task.findUniqueOrThrow({ where: { id: taskId } })).status,
@@ -498,7 +508,7 @@ async function recordMerge(
       title: `${label}-merge`,
       prompt: `${label}-merge`,
       provider: 'claude',
-      status: RunStatus.SUCCEEDED,
+      status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
       dispatchOrigin: SessionDispatchOrigin.USER,
     },
   });

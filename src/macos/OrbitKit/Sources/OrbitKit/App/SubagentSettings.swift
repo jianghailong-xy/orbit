@@ -16,19 +16,22 @@ public struct ProviderModelTier: Codable, Equatable, Sendable, Identifiable {
     public let editable: Bool
     /// USD per million output tokens, when known.
     public let outputPricePerMTok: Double?
+    /// Set on a built-in engine's older family model: the newest model of its family, which routing uses instead.
+    public let supersededBy: String?
 
     public var id: String { model }
 
     public init(model: String, levels: [String], source: String? = nil, editable: Bool = false,
-                outputPricePerMTok: Double? = nil) {
+                outputPricePerMTok: Double? = nil, supersededBy: String? = nil) {
         self.model = model
         self.levels = levels
         self.source = source
         self.editable = editable
         self.outputPricePerMTok = outputPricePerMTok
+        self.supersededBy = supersededBy
     }
 
-    private enum CodingKeys: String, CodingKey { case model, levels, source, editable, outputPricePerMTok }
+    private enum CodingKeys: String, CodingKey { case model, levels, source, editable, outputPricePerMTok, supersededBy }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -37,6 +40,7 @@ public struct ProviderModelTier: Codable, Equatable, Sendable, Identifiable {
         source = try c.decodeIfPresent(String.self, forKey: .source)
         editable = try c.decodeIfPresent(Bool.self, forKey: .editable) ?? false
         outputPricePerMTok = try c.decodeIfPresent(Double.self, forKey: .outputPricePerMTok)
+        supersededBy = try c.decodeIfPresent(String.self, forKey: .supersededBy)
     }
 }
 
@@ -110,11 +114,14 @@ public enum SubagentSettings {
     public static let groupTitle = "SubAgents"
     public static let enabledTitle = "SubAgents"
     public static let enabledDetail = "Let this agent hand work to other providers in the same folder"
+    /// Board docs/mocks/subagent-workflow part 5 (docs/subagent-workflow-design.md §6).
+    public static let workflowsTitle = "Workflows"
+    public static let workflowsDetail = "Let this agent run a script that starts many SubAgents and wakes it once"
     public static let providers = "Providers"
     public static let providersDetail = "All enabled providers. Block one to keep SubAgents off it."
     public static let edit = "Edit"
     public static let runningAtOnce = "Running at once"
-    public static let runningAtOnceDetail = "Per session, foreground and background together"
+    public static let runningAtOnceDetail = "Per session: delegated SubAgents and workflow calls together"
     public static let providersLoadFailed = "Couldn't load providers"
     public static let saveBlockedFailed = "Couldn't save blocked providers"
 
@@ -145,6 +152,12 @@ public enum SubagentSettings {
     /// A stored count, held to the range the server accepts; absent is the default.
     public static func maxRunning(_ stored: Int?) -> Int {
         min(max(stored ?? defaultMaxRunning, maxRunningRange.lowerBound), maxRunningRange.upperBound)
+    }
+
+    /// What the Workflows switch shows: it follows SubAgents, since every call of a workflow is a SubAgent, so it reads
+    /// off (and cannot be turned on) while SubAgents is off, and its own stored value otherwise.
+    public static func workflowsOn(subagentsEnabled: Bool, workflowsEnabled: Bool) -> Bool {
+        subagentsEnabled && workflowsEnabled
     }
 
     // MARK: providers
@@ -180,8 +193,17 @@ public enum SubagentSettings {
         return levels.joined(separator: " · ")
     }
 
+    /// A model's Tier cell: `tierText`, but an older family member reads "Older · uses <newest>" in place of Not set.
+    public static func modelTierText(_ model: ProviderModelTier) -> String {
+        if model.levels.isEmpty, let newest = model.supersededBy { return "Older · uses \(newest)" }
+        return tierText(model.levels)
+    }
+
     /// Whether the Tier cell warns: a model with no tier ranks after every tiered one.
     public static func tierIsUnset(_ levels: [String]) -> Bool { levels.isEmpty }
+
+    /// Whether the Tier cell reads Older (grey, not a warning): no tier of its own, a newer family member routed instead.
+    public static func tierIsOlder(_ model: ProviderModelTier) -> Bool { model.levels.isEmpty && model.supersededBy != nil }
 
     /// A model's Price / M out cell.
     public static func priceText(_ model: ProviderModelTier, billing: String) -> String {

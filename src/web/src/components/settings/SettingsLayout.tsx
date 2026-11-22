@@ -20,6 +20,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import {
   ApiOutlined,
+  BarChartOutlined,
   GithubOutlined,
   BellOutlined,
   BlockOutlined,
@@ -29,8 +30,10 @@ import {
   FolderOutlined,
   HolderOutlined,
   KeyOutlined,
+  LockOutlined,
   LeftOutlined,
   LinkOutlined,
+  OrderedListOutlined,
   PlusOutlined,
   SearchOutlined,
   SettingOutlined,
@@ -75,7 +78,9 @@ const PERSONAL_ICONS: Record<(typeof PERSONAL_PAGES)[number]['path'], ReactNode>
   '/settings/storage': <DatabaseOutlined />,
   '/settings/shared-links': <LinkOutlined />,
   '/settings/access-tokens': <KeyOutlined />,
+  '/settings/secrets': <LockOutlined />,
   '/settings/terminals': <CodeOutlined />,
+  '/settings/routing-report': <BarChartOutlined />,
 };
 
 /** Integrations' rows' icons, one per connected service. */
@@ -234,7 +239,7 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
   const nowMs = Date.now();
   // The keys page is every key, or one vendor's (/settings/providers/:vendor); not a key's own pages.
   const { pathname } = useLocation();
-  const keysPage = /^\/settings\/providers(\/(?!(new|keys|pools)(\/|$))[^/]+)?\/?$/.test(pathname);
+  const keysPage = /^\/settings\/providers(\/(?!(new|keys|pools|tiers)(\/|$))[^/]+)?\/?$/.test(pathname);
 
   const stateOf = (runner: Runner): MachineState => {
     if (runnerIsOffline(runner, nowMs)) return 'offline';
@@ -323,7 +328,11 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
         >
           {keyCount === 0 && poolCount === 0 ? (
             // With no key and no pool at all, the group is the one way to connect a provider.
-            <NavRow to="/settings/providers/new" icon={<PlusOutlined />} label="Connect a provider" />
+            <>
+              <NavRow to="/settings/providers/new" icon={<PlusOutlined />} label="Connect a provider" />
+              {/* The built-in engines have model tiers with no key at all. */}
+              <NavRow to="/settings/providers/tiers" icon={<OrderedListOutlined />} label="Model tiers" />
+            </>
           ) : (
             <>
               {/* Two rows however many vendors are connected (choice A, docs/mocks/settings-providers-compact):
@@ -341,6 +350,8 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
                 label="Account pools"
                 trailing={poolCount > 0 ? <span className="settings-nav-meta">{poolCount}</span> : undefined}
               />
+              {/* Its own row (owner, 2026-11-21): the tier every model routes SubAgents at, keys' and built-in engines'. */}
+              <NavRow to="/settings/providers/tiers" icon={<OrderedListOutlined />} label="Model tiers" />
             </>
           )}
         </NavGroup>

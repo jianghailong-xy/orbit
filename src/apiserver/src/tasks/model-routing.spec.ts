@@ -115,7 +115,7 @@ test('no suggestion preserves the full baseline for new and nonfailed runs', () 
     if (status) {
       value.history = [
         { ordinal: 2, status, quotaFailure: false, level: 'S' },
-        { ordinal: 1, status: 'FAILED', quotaFailure: false, level: 'L' },
+        { ordinal: 1, status: 'FAILED', outcome: 'FAILED', quotaFailure: false, level: 'L' },
       ];
     }
     const result = route(value);
@@ -134,7 +134,7 @@ test('baseline audit fields stay outside the routing result contract', () => {
 test('task model pin overrides suggestions, failures, catalog, Auto and quota constraints', () => {
   const value = input();
   value.task = { provider: 'claude-pool', model: 'owner-model', modelHint: 'XL' };
-  value.history = [{ ordinal: 1, status: 'FAILED', quotaFailure: false, level: 'M' }];
+  value.history = [{ ordinal: 1, status: 'FAILED', outcome: 'FAILED', quotaFailure: false, level: 'M' }];
   value.environment.modelCatalog = null;
   value.environment.defaultPermissionMode = 'auto';
   value.environment.planUsage = { claude: { sevenDayOpus: { utilization: 100 } } };
@@ -223,7 +223,7 @@ test('Codex falls back to the catalog first row, including when the default is a
 for (const [previous, expected] of [['S', 'M'], ['M', 'L'], ['L', 'XL'], ['XL', 'XL']] as const) {
   test(`nonquota failure escalates ${previous} to ${expected} without needing a suggestion`, () => {
     const value = input();
-    value.history = [{ ordinal: 1, status: 'FAILED', quotaFailure: false, level: previous }];
+    value.history = [{ ordinal: 1, status: 'FAILED', outcome: 'FAILED', quotaFailure: false, level: previous }];
     const result = route(value);
     assert.equal(result.level, expected);
     assert.match(result.reasons[0], /run 1 .* failed/);
@@ -233,7 +233,7 @@ for (const [previous, expected] of [['S', 'M'], ['M', 'L'], ['L', 'XL'], ['XL', 
 
 test('escalation takes the higher of previous tier plus one and the current suggestion', () => {
   const value = input();
-  value.history = [{ ordinal: 1, status: 'FAILED', quotaFailure: false, level: 'M' }];
+  value.history = [{ ordinal: 1, status: 'FAILED', outcome: 'FAILED', quotaFailure: false, level: 'M' }];
   value.task.modelHint = 'S';
   assert.equal(route(value).level, 'L');
   value.task = { modelHint: 'XL', modelHintReason: 'high cost of a wrong result' };
@@ -254,14 +254,14 @@ test('acceptance failure, verifier FAIL and owner SEND_BACK all escalate', () =>
 
 test('prior decision tier takes precedence over the actual model, including shadow tiers', () => {
   const value = input();
-  value.history = [{ ordinal: 1, status: 'FAILED', quotaFailure: false, level: 'S', model: OPUS }];
+  value.history = [{ ordinal: 1, status: 'FAILED', outcome: 'FAILED', quotaFailure: false, level: 'S', model: OPUS }];
   assert.equal(route(value).level, 'M');
 });
 
 for (const [model, expected] of [[SONNET, 'L'], [OPUS, 'XL'], ['sonnet', 'L'], ['opus', 'XL']] as const) {
   test(`without a decision tier the actual ${model} family determines escalation`, () => {
     const value = input();
-    value.history = [{ ordinal: 1, status: 'FAILED', quotaFailure: false, level: null, model }];
+    value.history = [{ ordinal: 1, status: 'FAILED', outcome: 'FAILED', quotaFailure: false, level: null, model }];
     const result = route(value);
     assert.equal(result.level, expected);
     const label = model === SONNET ? 'Sonnet 5.5' : model === OPUS ? 'Opus 5.5' : model;
@@ -272,14 +272,14 @@ for (const [model, expected] of [[SONNET, 'L'], [OPUS, 'XL'], ['sonnet', 'L'], [
 for (const [effort, expected] of [['low', 'M'], ['medium', 'L'], ['high', 'XL'], ['xhigh', 'XL']] as const) {
   test(`Codex actual effort ${effort} determines its prior tier`, () => {
     const value = codexInput();
-    value.history = [{ ordinal: 1, status: 'FAILED', quotaFailure: false, model: 'gpt-default', effort, runtime: 'codex' }];
+    value.history = [{ ordinal: 1, status: 'FAILED', outcome: 'FAILED', quotaFailure: false, model: 'gpt-default', effort, runtime: 'codex' }];
     assert.equal(route(value).level, expected);
   });
 }
 
 test('an unknown prior tier falls back to the suggestion or preserves baseline', () => {
   const value = input();
-  value.history = [{ ordinal: 1, status: 'FAILED', quotaFailure: false, model: 'unknown' }];
+  value.history = [{ ordinal: 1, status: 'FAILED', outcome: 'FAILED', quotaFailure: false, model: 'unknown' }];
   assertDecision(route(value), { ...value.baseline, level: null });
   value.task.modelHint = 'S';
   assert.equal(route(value).level, 'S');
@@ -287,7 +287,7 @@ test('an unknown prior tier falls back to the suggestion or preserves baseline',
 
 test('quota-only failures do not escalate with or without a suggestion', () => {
   const value = input();
-  value.history = [{ ordinal: 1, status: 'FAILED', quotaFailure: true, level: 'XL' }];
+  value.history = [{ ordinal: 1, status: 'FAILED', outcome: 'FAILED', quotaFailure: true, level: 'XL' }];
   assertDecision(route(value), { ...value.baseline, level: null });
   value.task.modelHint = 'M';
   const result = route(value);
@@ -297,10 +297,10 @@ test('quota-only failures do not escalate with or without a suggestion', () => {
 
 test('quota failures neither add escalation nor interrupt the preceding failure chain', () => {
   const value = input();
-  const prior: ModelRoutingRun = { ordinal: 1, status: 'FAILED', quotaFailure: false, level: 'M' };
+  const prior: ModelRoutingRun = { ordinal: 1, status: 'FAILED', outcome: 'FAILED', quotaFailure: false, level: 'M' };
   value.history = [
-    { ordinal: 3, status: 'FAILED', quotaFailure: true, level: 'XL' },
-    { ordinal: 2, status: 'FAILED', quotaFailure: true, level: 'L' },
+    { ordinal: 3, status: 'FAILED', outcome: 'FAILED', quotaFailure: true, level: 'XL' },
+    { ordinal: 2, status: 'FAILED', outcome: 'FAILED', quotaFailure: true, level: 'L' },
     prior,
   ];
   const result = route(value);
@@ -314,10 +314,10 @@ test('quota failures neither add escalation nor interrupt the preceding failure 
 test('a Codex run that found the model at capacity keeps the tier; a genuine failure still raises it', () => {
   const value = codexInput();
   const prior: ModelRoutingRun = {
-    ordinal: 1, status: 'FAILED', quotaFailure: false, model: 'gpt-default', effort: 'low', runtime: 'codex',
+    ordinal: 1, status: 'FAILED', outcome: 'FAILED', quotaFailure: false, model: 'gpt-default', effort: 'low', runtime: 'codex',
   };
   value.history = [
-    { ordinal: 2, status: 'FAILED', quotaFailure: false, capacityFailure: true, model: 'gpt-default', effort: 'medium', runtime: 'codex' },
+    { ordinal: 2, status: 'FAILED', outcome: 'FAILED', quotaFailure: false, capacityFailure: true, model: 'gpt-default', effort: 'medium', runtime: 'codex' },
   ];
   const kept = route(value);
   assert.equal(kept.level, null);
@@ -346,8 +346,8 @@ test('routing is deterministic and does not mutate the task, history, catalogs o
   value.environment.defaultPermissionMode = 'auto';
   value.environment.planUsage = { claude: { sevenDayOpus: { utilization: 93 } } };
   value.history = [
-    { ordinal: 2, status: 'FAILED', quotaFailure: true, level: 'L' },
-    { ordinal: 1, status: 'FAILED', quotaFailure: false, level: 'M' },
+    { ordinal: 2, status: 'FAILED', outcome: 'FAILED', quotaFailure: true, level: 'L' },
+    { ordinal: 1, status: 'FAILED', outcome: 'FAILED', quotaFailure: false, level: 'M' },
   ];
   const before = structuredClone(value);
   freeze(value);
@@ -390,7 +390,7 @@ test('rules preserve hint and pin precedence and cannot lower failure escalation
   assert.equal(route(value).level, null);
   value.task = {};
   value.features = { completionCriterion: 'EXECUTABLE', hasAcceptanceCommand: true, dependents: 0, promptChars: 100 };
-  value.history = [{ ordinal: 1, status: 'FAILED', quotaFailure: false, level: 'L' }];
+  value.history = [{ ordinal: 1, status: 'FAILED', outcome: 'FAILED', quotaFailure: false, level: 'L' }];
   assert.equal(route(value).level, 'XL');
   value.history[0].capacityFailure = true;
   assert.equal(route(value).level, 'S');
@@ -401,7 +401,7 @@ test('reason tags identify coordinator, rule, escalation and every not-routed ex
   const value = input();
   value.task.modelHint = 'XL';
   assert.match(route(value).reasons[0], /^\[coordinator\]/);
-  value.history = [{ ordinal: 1, status: 'FAILED', quotaFailure: false, level: 'S' }];
+  value.history = [{ ordinal: 1, status: 'FAILED', outcome: 'FAILED', quotaFailure: false, level: 'S' }];
   let reasons = route(value).reasons;
   assert.ok(reasons.some((reason) => /^\[escalate\]/.test(reason)));
   assert.ok(reasons.some((reason) => /^\[coordinator\]/.test(reason)));
@@ -448,9 +448,9 @@ test('Optimize For floors only missing hints, with the same escalation and pin p
     assert.equal(route(value).level, abstained);
     value.task.modelHint = 'S';
     assert.equal(route(value).level, 'S');
-    value.history = [{ ordinal: 1, status: 'FAILED', quotaFailure: false, level: 'M' }];
+    value.history = [{ ordinal: 1, status: 'FAILED', outcome: 'FAILED', quotaFailure: false, level: 'M' }];
     assert.equal(route(value).level, 'L');
-    value.history = [{ ordinal: 1, status: 'FAILED', quotaFailure: false, level: 'XL' }];
+    value.history = [{ ordinal: 1, status: 'FAILED', outcome: 'FAILED', quotaFailure: false, level: 'XL' }];
     assert.equal(route(value).level, 'XL');
     value.task.model = 'pinned';
     assert.equal(route(value).model, 'pinned');

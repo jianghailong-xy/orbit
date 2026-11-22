@@ -124,8 +124,8 @@ Optimize For 只在第 5 条（没人给档位）时抬档：Balance 至少 M，
 （价格取自 models.dev，preset 列表本来就从那里刷新，`providerPresets.ts`）；Claude / Codex 内置登录沿用今天
 `DEFAULT_MODEL_TIER_TABLE` 的映射，Kimi 内置登录也在这张表里（S/M 用 K3，L/XL 用 K3.1 Pro，没有就 K3；只给 SubAgent 用）。
 其余内置引擎（Cursor、Antigravity、OpenCode、DSH）的目录按**模型家族**定档（`MODEL_FAMILY_TIERS`：Claude Sonnet S/M、
-Claude Opus L/XL、Gemini Flash S/M、Gemini L/XL、Composer S），每档取该家族版本最新的模型，effort 夹到模型自己报的等级
-（`clampEffort`）；不属于任何已知家族的模型（Cursor 的 `grok-4.7`、`kimi-k3`，Antigravity 的 `gpt-oss-120b` 等）没有档位。
+Claude Opus L/XL、Gemini Flash S/M、Gemini L/XL、Composer S、Claude Haiku S、Kimi K3 S/M、Kimi K3.1 Pro L/XL（无 K3.1 Pro 时 K3 顶替 L/XL；`kimi-k2.*` 不定档）），每档取该家族版本最新的模型，effort 夹到模型自己报的等级
+（`clampEffort`）；不属于任何已知家族的模型（Cursor 的 `grok-4.7`、`kimi-k2.*`，Antigravity 的 `gpt-oss-120b` 等）没有档位。
 
 **owner 给内置引擎的模型定档**（owner，2026-11-20：表总会漏，漏了应该点一下就能补，而不是等发版）：任何内置引擎目录里的
 任何模型，owner 都可以在 Providers 页的 Tier 列设一个档位或清除，存在账号偏好 `builtinModelTiers`（引擎 → 模型 → 档位），
@@ -296,6 +296,12 @@ owner 什么都没设时 Claude / Codex / Kimi 的行与以前逐字节相同；
   其余显示 `Not set`；每一行都可以点开设档位（覆盖目录的档位）或清除（`builtinModelTiers`，§4.2）。
 - **报告**：沿用 model routing 报告页，加一个 SubAgents 视图：按档位、模型统计次数、成功率、花费、额度换候选次数、
   没给 `size` 的比例。
+  已做（2026-11-20，owner 批准的效果图 [`mocks/subagent-workflow/08-report.html`](./mocks/subagent-workflow/08-report.html)）：
+  model routing 报告原本只有接口、没有页面，于是新开 **设置 → Routing report**（`/settings/routing-report`），两个视图
+  SubAgents 与 Workflows（`subagent-workflow-design.md` §8 P4），接口 `GET /tasks/model-routing/report/subagents?since=&agentId=`。
+  一次运行算在 Orbit **选的**档位和模型下（同任务报告「算在首次决策」的口径），换了候选记一次 Moved on；`agentId` 是父会话的
+  Agent；workflow 的调用就是 SubAgent 运行，两个视图数同一批 `subagent_run` 行，所以 workflow 的调用合计恒等于 SubAgents 里的
+  workflow 调用数。任务的路由报告以后作为第三个视图 Tasks 放进同一页。
 
 ## 8. 分期
 

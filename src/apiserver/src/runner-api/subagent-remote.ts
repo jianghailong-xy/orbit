@@ -11,7 +11,7 @@ import {
   type SubagentRunCreateRequest,
   type SubagentWorkspaceChoice,
 } from '@orbit/shared';
-import { Prisma, RunStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import {
   ALWAYS_ALLOWED_TOOLS,
   isWiderThanParent,
@@ -31,6 +31,7 @@ import { agentProviderSeed } from '../workspaces/workspace-provider';
 import { stripNul } from './strip-nul';
 import { appliedDecision, fallbackCandidates, noProviderMessage } from './subagent-run';
 import { subagentRouteInput, type SubagentPlanUsageReader } from './subagent-route';
+import { sessionReleasedSql } from '../common/session-release';
 
 /**
  * Cross-workspace SubAgents (docs/subagent-design.md §10): a delegate call that runs on another workspace of the
@@ -644,9 +645,7 @@ export async function runOfTarget(
 }
 
 /** A run whose parent stopped it or ended: the target is to stop it. */
-const PARENT_GONE = Prisma.sql`(r."stop_requested_at" IS NOT NULL OR s."status"::text IN (${Prisma.join([
-  RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED,
-])}) OR s."cancel_requested_at" IS NOT NULL)`;
+const PARENT_GONE = Prisma.sql`(r."stop_requested_at" IS NOT NULL OR ${sessionReleasedSql('s')} OR s."cancel_requested_at" IS NOT NULL)`;
 
 /**
  * What a runner's heartbeat says of the remote SubAgent runs it is the target of (§10.2, §10.3): the ones to claim,

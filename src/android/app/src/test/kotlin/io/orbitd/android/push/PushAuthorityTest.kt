@@ -3,6 +3,7 @@ package io.orbitd.android.push
 import io.orbitd.android.core.auth.*
 import io.orbitd.android.core.net.*
 import io.orbitd.android.core.protocol.ProtocolException
+import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.navigation.Destination
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.navigation.OrbitLinks
@@ -98,11 +99,11 @@ class PushAuthorityTest {
             """{"title":"A","body":"B","kind":"approve-merge-to-main","sessionID":"$sid","openItemID":"$iid"}""")))
     }
 
-    @Test fun needsYouUsesAuthenticatedOpenSnapshotWithPublicAliasesAndExcludesStartOnlyAndFiledRows() = runBlocking {
+    @Test fun needsYouReadsTheStoresOpenRowsWithPublicAliasesAndExcludesStartOnlyAndFiledRows() = runBlocking {
         authorityFixture { authority, server, _ ->
-            server.respond = { request ->
-                assertEquals("/api/sessions?view=open", request.path)
-                response("""[
+            server.respond = { throw AssertionError("needsYou asks the server for nothing: ${it.path}") }
+            fun rows(json: String) = (Wire.json.parseToJsonElement(json) as JsonArray).map { it as JsonObject }
+            assertEquals(setOf(ObjectId.canonical("1"), ObjectId.canonical("3")), authority.needsYou(rows("""[
                     {"id":"1","status":"RUNNING","lifecycleState":"OPEN","pendingApprovals":1},
                     {"id":"${ObjectId.canonical("1")}","lifecycleState":"OPEN","pendingApprovals":2},
                     {"id":"2","lifecycleState":"OPEN","pendingApprovals":1,"waitingKind":"START_REQUEST"},
@@ -110,13 +111,8 @@ class PushAuthorityTest {
                     {"id":"5","lifecycleState":"OPEN","pendingApprovals":2,"cancelRequestedAt":"2026-10-04"},
                     {"id":"6","lifecycleState":"COMPLETED","pendingApprovals":1},
                     {"id":"7","lifecycleState":"TRASH","pendingApprovals":1}
-                ]""")
-            }
-            assertEquals(setOf(ObjectId.canonical("1"), ObjectId.canonical("3")), authority.needsYou())
-            server.respond = { response("{\"unexpected\":[]}") }
-            try { authority.needsYou(); fail("Invalid read is not an authoritative empty list") } catch (_: ProtocolException) { }
-            server.respond = { response("[{\"id\":\"1\",\"lifecycleState\":\"OPEN\",\"pendingApprovals\":\"broken\"}]") }
-            try { authority.needsYou(); fail("Invalid count is not an authoritative zero") } catch (_: ProtocolException) { }
+                ]""")))
+            try { authority.needsYou(rows("[{\"id\":\"1\",\"lifecycleState\":\"OPEN\",\"pendingApprovals\":\"broken\"}]")); fail("Invalid count is not an authoritative zero") } catch (_: ProtocolException) { }
         }
     }
 
@@ -493,7 +489,6 @@ class PushAuthorityTest {
             val push = message("approval", "sessionID" to sid)
             server.server.shutdown()
             assertEquals(PushCheck.UNKNOWN, authority.check(push))
-            try { authority.needsYou(); fail("Offline must not clear current reminders") } catch (_: NetworkException) { }
             auth.logout()
             try { authority.check(push); fail("Retired account must not finish a check") } catch (_: SessionChanged) { }
         }

@@ -399,7 +399,7 @@ async function fixture(
   await h.prisma.session.create({
     data: {
       id: sessionId, title: '修 fixture 的端口', prompt: 'p', ownerId: h.ownerId, creatorId: h.ownerId,
-      dispatchOrigin: 'USER', status: 'SUCCEEDED', lastTurnAt: new Date(), workspaceId,
+      dispatchOrigin: 'USER', status: 'SUCCEEDED', finishedAt: new Date(), lastTurnAt: new Date(), workspaceId,
     },
   });
   const callId = randomUUID();
@@ -3271,7 +3271,7 @@ async function workedSession(h: Harness, fx: Fixture, over: { heldOut?: boolean;
   const id = sessionOn(over.heldOut === true);
   await h.prisma.session.create({
     data: {
-      id, title: `修 fixture 的端口 ${id.slice(0, 8)}`, prompt: 'p', ownerId: h.ownerId, creatorId: h.ownerId, dispatchOrigin: 'USER', status: 'SUCCEEDED',
+      id, title: `修 fixture 的端口 ${id.slice(0, 8)}`, prompt: 'p', ownerId: h.ownerId, creatorId: h.ownerId, dispatchOrigin: 'USER', status: 'SUCCEEDED', finishedAt: new Date(), 
       lastTurnAt: new Date(Date.now() - 3_600_000), workspaceId: fx.workspaceId, ...(over.engine ? { engine: over.engine } : {}),
     },
   });
@@ -4993,7 +4993,7 @@ async function crossingSessions(h: Harness, fx: Fixture, count: number): Promise
     await h.prisma.session.create({
       data: {
         id, title: `spec page session ${String(i).padStart(2, '0')}`, prompt: 'p', ownerId: h.ownerId, creatorId: h.ownerId,
-        dispatchOrigin: 'USER', status: 'SUCCEEDED', lastTurnAt: restedAt(i), workspaceId: fx.workspaceId,
+        dispatchOrigin: 'USER', status: 'SUCCEEDED', finishedAt: new Date(), lastTurnAt: restedAt(i), workspaceId: fx.workspaceId,
       },
     });
     ids.push(id);

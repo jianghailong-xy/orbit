@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { Client } from 'pg';
 import { RunStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { isReleasedStatus } from '../common/session-release';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import { RunnersService } from './runners.service';
@@ -43,6 +44,9 @@ test('a draining runner lists the viewer’s turns it waits for; no other runner
     await db.session.create({ data: {
       id, ownerId, creatorId: ownerId, workspaceId: r.workspaceId, assignedRunnerId: r.id, title, prompt: title,
       provider: 'claude', providerBuiltin: true, status, dispatchOrigin: SessionDispatchOrigin.USER,
+      ...(isReleasedStatus(status) ? {
+        finishedAt: new Date(),
+      } : {}),
       ...(claimedMinutesAgo !== undefined ? { runClaimedAt: new Date(Date.now() - claimedMinutesAgo * MINUTE) } : {}),
     } });
     return id;

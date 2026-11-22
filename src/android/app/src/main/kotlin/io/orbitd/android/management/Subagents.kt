@@ -25,18 +25,20 @@ import java.util.Locale
 
 /** One model of GET providers/subagent-tiers (shared ProviderModelTier). */
 internal data class SubagentTierModel(val model: String, val levels: List<String>, val source: String?, val editable: Boolean,
-                                      val outputPricePerMTok: Double?)
+                                      val outputPricePerMTok: Double?, val supersededBy: String? = null)
 
 /** One provider of GET providers/subagent-tiers (shared ProviderTierRow), in the owner's provider order. */
 internal data class SubagentProvider(val slug: String, val label: String, val kind: String, val providerId: String?, val billing: String,
                                      val models: List<SubagentTierModel>)
 
-/** An Agent's SubAgents fields as GET workspaces/:id carries them, each with its default when absent (docs/subagent-design.md §7). */
-internal data class SubagentSettings(val enabled: Boolean, val maxRunning: Int) {
+/** An Agent's SubAgents fields as GET workspaces/:id carries them, each with its default when absent (docs/subagent-design.md §7),
+ * and its Workflows switch (docs/subagent-workflow-design.md §6). */
+internal data class SubagentSettings(val enabled: Boolean, val maxRunning: Int, val workflowsEnabled: Boolean) {
     companion object {
         fun of(workspace: JsonObject) = SubagentSettings(
             workspace.bool("subagentsEnabled") ?: true,
             (workspace.int("subagentsMaxRunning") ?: 4).coerceIn(1, Subagents.MAX_RUNNING),
+            workspace.bool("workflowsEnabled") ?: true,
         )
     }
 }
@@ -46,10 +48,12 @@ internal object Subagents {
     const val GROUP = "SubAgents"
     const val SWITCH = "SubAgents"
     const val SWITCH_DETAIL = "Let this agent hand work to other providers in the same folder"
+    const val WORKFLOWS = "Workflows"
+    const val WORKFLOWS_DETAIL = "Let this agent run a script that starts many SubAgents and wakes it once"
     const val PROVIDERS = "Providers"
     const val PROVIDERS_DETAIL = "All enabled providers. Block one to keep SubAgents off it."
     const val RUNNING = "Running at once"
-    const val RUNNING_DETAIL = "Per session, foreground and background together"
+    const val RUNNING_DETAIL = "Per session: delegated SubAgents and workflow calls together"
     const val TIERS = "Model tiers"
     const val TIERS_FOOTER = "Preset tiers and prices follow the catalogue. A model with no tier still runs SubAgents, after every model whose tier fits."
     const val NOT_SET = "Not set"
@@ -69,7 +73,7 @@ internal object Subagents {
         SubagentProvider(slug, row.str("label") ?: slug, row.str("kind").orEmpty(), row.str("providerId"), row.str("billing").orEmpty(),
             row.list("models").mapNotNull { model ->
                 val name = model.str("model")?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
-                SubagentTierModel(name, model.strings("levels"), model.str("source"), model.bool("editable") == true, model.dbl("outputPricePerMTok"))
+                SubagentTierModel(name, model.strings("levels"), model.str("source"), model.bool("editable") == true, model.dbl("outputPricePerMTok"), model.str("supersededBy"))
             })
     }
 
@@ -81,6 +85,13 @@ internal object Subagents {
         levels.containsAll(LEVELS) -> "S–XL by effort"
         else -> levels.joinToString(" · ")
     }
+
+    /** A model's Tier cell: [tierText], but an older family member reads "Older · uses <newest>" in place of Not set. */
+    fun modelTierText(model: SubagentTierModel) =
+        if (model.levels.isEmpty() && model.supersededBy != null) "Older · uses ${model.supersededBy}" else tierText(model.levels)
+
+    /** Whether the Tier cell reads Older (muted, not a warning). */
+    fun isOlder(model: SubagentTierModel) = model.levels.isEmpty() && model.supersededBy != null
 
     /** Where a model's tier is written: a built-in engine's catalogue, or a key of the owner's own; null when it is not the owner's to set. */
     fun tierPath(provider: SubagentProvider, model: SubagentTierModel): String? = when {
@@ -115,12 +126,14 @@ internal object Subagents {
 }
 
 /**
- * The Agent form's SubAgents group (docs/mocks/subagent/05.png): the switch, the Providers SubAgents may use, and how many
- * run at once. The switch and Running at once are the Agent's and saved with the form's Done; the providers blocked are the
- * account's (users/me/preferences) and saved from their own list.
+ * The Agent form's SubAgents group (docs/mocks/subagent/05.png, its Workflows row from docs/mocks/subagent-workflow part 5): the
+ * switch, Workflows, the Providers SubAgents may use, and how many run at once. The switches and Running at once are the Agent's
+ * and saved with the form's Done; the providers blocked are the account's (users/me/preferences) and saved from their own list.
+ * Workflows follows SubAgents: every call of a workflow is a SubAgent, so with SubAgents off it reads off and cannot be turned on.
  */
 @Composable
 internal fun SubagentsSection(api: ManagementApi, enabled: Boolean, setEnabled: (Boolean) -> Unit,
+                              workflowsEnabled: Boolean, setWorkflowsEnabled: (Boolean) -> Unit,
                               maxRunning: Int, setMaxRunning: (Int) -> Unit) {
     var providers by remember(api) { mutableStateOf<List<SubagentProvider>?>(null) }
     var blocked by remember(api) { mutableStateOf<List<String>>(emptyList()) }
@@ -141,6 +154,16 @@ internal fun SubagentsSection(api: ManagementApi, enabled: Boolean, setEnabled: 
                 Text(Subagents.SWITCH_DETAIL, style = MaterialTheme.typography.labelMedium, color = Ink.muted)
             }
             Switch(checked = enabled, onCheckedChange = null)
+        }
+        HorizontalDivider()
+        val workflows = enabled && workflowsEnabled
+        Row(Modifier.fillMaxWidth().toggleable(workflows, enabled = enabled, role = Role.Switch) { setWorkflowsEnabled(it) }
+            .padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(Subagents.WORKFLOWS)
+                Text(Subagents.WORKFLOWS_DETAIL, style = MaterialTheme.typography.labelMedium, color = Ink.muted)
+            }
+            Switch(checked = workflows, onCheckedChange = null, enabled = enabled)
         }
         HorizontalDivider()
         Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically,
@@ -305,16 +328,18 @@ private fun TierRow(wide: Boolean, header: Boolean, provider: @Composable (andro
 @Composable
 private fun TierCell(provider: SubagentProvider, model: SubagentTierModel, style: androidx.compose.ui.text.TextStyle,
                      set: (String, String?) -> Unit) {
-    val text = Subagents.tierText(model.levels)
-    val color = if (model.levels.isEmpty()) Ink.amber else MaterialTheme.colorScheme.onSurface
+    val text = Subagents.modelTierText(model)
+    val color = if (Subagents.isOlder(model)) Ink.muted else if (model.levels.isEmpty()) Ink.amber else MaterialTheme.colorScheme.onSurface
     val path = Subagents.tierPath(provider, model)
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        if (path == null) Text(text, style = style, color = color, maxLines = 1)
+        // "Older · uses <model>" is longer than the Tier column: it wraps there, every other value stays on one line.
+        val lines = if (Subagents.isOlder(model)) 3 else 1
+        if (path == null) Text(text, style = style, color = color, maxLines = lines)
         else {
             var open by remember { mutableStateOf(false) }
             Box {
                 Text("$text ▾", Modifier.clickable(role = Role.DropdownList) { open = true }.testTag("tier:${provider.slug}:${model.model}"),
-                    style = style, color = color, maxLines = 1)
+                    style = style, color = color, maxLines = lines)
                 DropdownMenu(open, { open = false }) {
                     Subagents.LEVELS.forEach { level ->
                         DropdownMenuItem(text = { Text(level) }, trailingIcon = if (model.levels == listOf(level)) { { Text("✓") } } else null,

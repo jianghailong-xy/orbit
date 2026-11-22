@@ -614,6 +614,7 @@ func startKimiACP(ctx context.Context, t *Transport, job *ClaimedSession, execDi
 		"ORBIT_ALLOW_ORCHESTRATION="+orchestrationEnv(job.AllowOrchestration),
 		envWatches+"="+watchesEnv(job.WatchesDisabled),
 		envWiki+"="+wikiEnv(job.WikiDisabled),
+		envWorkflows+"="+workflowsEnv(job.WorkflowsDisabled),
 		envScheduleRun+"="+scheduleRunEnv(job.ScheduleRun),
 		envMCPPermissionPrompt+"=0",
 		envSpawnDepth+"="+strconv.Itoa(job.SpawnDepth),

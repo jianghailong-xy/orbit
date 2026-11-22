@@ -23,6 +23,7 @@ import androidx.compose.ui.window.DialogProperties
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.reader.SessionMessageBubble
+import io.orbitd.android.reader.WorkflowFinishedStripView
 import io.orbitd.android.reader.personWords
 import io.orbitd.android.ui.LocalOrbitColors
 import io.orbitd.android.core.realtime.RunEvent
@@ -49,12 +50,20 @@ internal fun TranscriptCardView(card: InteractionCard, open: (String) -> Unit, e
     }
     // A SubAgent's end draws nothing: its card is the end (docs/mocks/subagent-card-and-end-line, web `Transcript.tsx`).
     if (card.family == CardFamily.BACKGROUND && card.key.endsWith(":subagent")) return
-    // A background job's news or a wakeup coming due is a line in the agent's stream (A08-11), not a card of fields.
+    // An Orbit workflow's end is its strip (board docs/mocks/subagent-workflow part 4 ②). Anything else the note carried draws its own
+    // line after it, and the agent's answer follows as its own reply.
+    if (card.family == CardFamily.BACKGROUND && card.key.endsWith(":workflow")) {
+        WorkflowFinished.parse(card.source.text("note"))?.let { WorkflowFinishedStripView(it) }
+        return
+    }
+    // A wakeup coming due is a line in the agent's stream (A08-11), not a card of fields. A background job's end, new output or stall
+    // draws nothing (board C1): like a SubAgent, the job is one card from start to end (reader `JobCardView`, joined by job id).
     if (card.family == CardFamily.BACKGROUND && card.key.endsWith(":wake")) {
+        val wakeups = BgJob.wakeupsOnly(card.source) ?: return
         val fields = event?.fields
         val delivery = event?.turnId?.let { LocalSteerDeliveries.current[it] } ?: fields?.text("delivery")
         val undelivered = delivery == "failed"
-        BackgroundWakeLine(card.source, ts, BackgroundWakeCard.steerReceipt(
+        BackgroundWakeLine(wakeups, ts, BackgroundWakeCard.steerReceipt(
             BackgroundWakeCard.steerState(fields?.get("steer") == JsonPrimitive(true), delivery, undelivered)), undelivered)
         return
     }

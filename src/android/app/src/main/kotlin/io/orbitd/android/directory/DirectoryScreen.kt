@@ -45,7 +45,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 /** What a page's list draws, worked out once per change of what it is worked out from: the body also runs for what moves no row.
  * [marks]: the project of each member that is a row of its own here, its project's row being where its coordinator runs. */
 private class ListContent(val groups: List<SessionGroup>, val projects: Map<String, SessionProjectRow>, val marks: Map<String, SessionProjectMark>,
-    val folders: List<Pair<Folder, List<DirectorySession>>>)
+    val folders: List<Pair<Folder, List<DirectorySession>>>, val held: Map<String, String>)
 
 /** How long a pull's spinner stays for a read that has not answered: a read gets 10 s, and past that the store keeps retrying by itself. */
 private const val PULL_WAIT_MS = 12_000L
@@ -127,7 +127,7 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
     val content = remember(sessions, openRows, data.folders, sidebar, view, workspace, folderId, onScheduledRuns,
         showFolders, tag, grouping, runnerOffline, watching, recaps) {
         if (onScheduledRuns) return@remember ListContent(
-            directoryGroups(sessions, view, Grouping.RECENCY), emptyMap(), emptyMap(), emptyList())
+            directoryGroups(sessions, view, Grouping.RECENCY), emptyMap(), emptyMap(), emptyList(), emptyMap())
         // This workspace's rows, by the few spellings of a workspace there are: `ObjectId.same` parses both ids, and an owner's Completed
         // has thousands of rows, mostly in other workspaces.
         val spellings = sessions.mapTo(HashSet()) { it.workspace }.filterTo(HashSet()) { ObjectId.same(it, workspace) }
@@ -149,7 +149,7 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
         val folders = if (!showFolders) emptyList() else data.folders.filter { f ->
             ObjectId.same(f.workspaceId, workspace) && (view == SessionView.OPEN || counted.any { ObjectId.same(it.folderId, f.id) })
         }.sortedBy { it.name.lowercase() }.map { f -> f to counted.filter { ObjectId.same(it.folderId, f.id) } }
-        ListContent(groups, listing?.projects.orEmpty().associateBy { it.projectId }, listing?.marks.orEmpty(), folders)
+        ListContent(groups, listing?.projects.orEmpty().associateBy { it.projectId }, listing?.marks.orEmpty(), folders, listing?.held.orEmpty())
     }
     val failure = when {
         onScheduledRuns -> scheduledList.error(view).takeIf { scheduledSnapshot == null }
@@ -215,7 +215,8 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
                                 RowDivider()
                             }
                             items(content.folders, key = { "folder:${it.first.id}" }) { (f, children) ->
-                                FolderRow(f, children, runnerOffline, watching,
+                                // A project is one row on the folder's page, so it counts once.
+                                FolderRow(f, children, children.distinctBy { content.held[it.id]?.let { p -> "project:$p" } ?: it.id }.size, runnerOffline, watching,
                                     onOpen = { open(OrbitRoute(Destination.FOLDER, f.id, workspace, origin = Origin.LIST, sessionView = view.query)) },
                                     onOptions = { action = DirectoryDialog.EditFolder(f) })
                                 RowDivider()
@@ -236,14 +237,23 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
                                     // A project's row opens its coordinator's conversation (owner 2026-11-11, docs/mocks/project-sessions-column
                                     // board 5), whose bar opens the project's sessions; a project with no coordinator opens them as a page. A row
                                     // whose line says a member waits on you opens that member, onto its waiting card (owner 2026-11-14).
-                                    if (project != null) SessionProjectRowView(project, {
+                                    if (project != null) SwipeableProjectRow(project, view, true, onAction = { act ->
+                                        val actions = SessionActions(api, app) { refresh() }
+                                        when (act) {
+                                            ProjectRowAction.PAUSE -> actions.pauseProject(project)
+                                            ProjectRowAction.RESUME -> actions.resumeProject(project)
+                                            ProjectRowAction.COMPLETE -> actions.completeProject(project.projectId, project.title)
+                                            ProjectRowAction.PIN, ProjectRowAction.UNPIN -> project.coordinator?.let { actions.pin(it.id, it.pinnedAt == null) }
+                                            ProjectRowAction.MOVE -> project.coordinator?.let { action = DirectoryDialog.Move(it) }
+                                        }
+                                    }) { SessionProjectRowView(project, {
                                         val member = project.waitingMember
                                         if (member != null) CardFocus.request(member, CardFocus.WAITING)
                                         open((member ?: project.coordinator?.id)?.let { OrbitRoute(Destination.SESSION, it, workspace, folderId) }
                                             ?: OrbitRoute(Destination.PROJECT_SESSIONS, project.projectId, workspace, origin = Origin.LIST))
                                     }) {
                                         projectMenu = project
-                                    }
+                                    } }
                                     else SessionRow(session, machine, { open(OrbitRoute(Destination.SESSION, session.id, workspace, folderId)) },
                                         deleted = view == SessionView.TRASH, watching = watching[watchKey(session.id)], mark = content.marks[session.id]) {
                                         action = DirectoryDialog.SessionMenu(session, view, content.marks[session.id])
@@ -289,7 +299,9 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
             openSessions = { open(OrbitRoute(Destination.PROJECT_SESSIONS, row.projectId, workspace, origin = Origin.LIST)) },
             openProject = { open(OrbitRoute(Destination.PROJECT, row.projectId)) },
             pin = { coordinator -> SessionActions(api, app) { refresh() }.pin(coordinator.id, coordinator.pinnedAt == null) },
-            move = { coordinator -> action = DirectoryDialog.Move(coordinator) })
+            move = { coordinator -> action = DirectoryDialog.Move(coordinator) },
+            pause = { SessionActions(api, app) { refresh() }.pauseProject(row) },
+            resume = { SessionActions(api, app) { refresh() }.resumeProject(row) })
     }
 }
 

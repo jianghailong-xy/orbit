@@ -20,6 +20,7 @@ import type {
 import { DEFAULT_ACCOUNT } from '../providers/account';
 import { reportedRunAccount } from '../providers/plan-usage-accounts';
 import { FORMER_DEFAULT_KEY, sanitizeRunnerEngines } from '../common/runner-engines';
+import { isReleased } from '../common/session-release';
 
 /** Runner swaps an added Claude account's login with the one in ~/.claude (§5). One that does not declare it would
  *  never answer the request. */
@@ -158,6 +159,7 @@ function claudeAccountOf(session: SwapSession, engines: unknown, workspaceChoice
 const SWAP_SESSION_SELECT = {
   id: true,
   status: true,
+  finishedAt: true,
   provider: true,
   providerBuiltin: true,
   claudeAccount: true,
@@ -266,22 +268,22 @@ export async function swapClaudeAccountRecords(
        AND "claude_account" IN (${DEFAULT_ACCOUNT}, ${added})`;
 
   // Every session that chose one of the two, on this runner or bound for it: its choice names the account's new folder.
-  const chosen = await tx.$queryRaw<Array<{ id: string; status: string }>>`
+  const chosen = await tx.$queryRaw<Array<{ id: string; status: string; finishedAt: Date | null }>>`
     UPDATE "session" s
        SET "claude_account" = CASE WHEN s."claude_account" = ${DEFAULT_ACCOUNT} THEN ${added} ELSE ${DEFAULT_ACCOUNT} END
      WHERE s."claude_account" IN (${DEFAULT_ACCOUNT}, ${added})
        AND (s."assigned_runner_id" = ${runnerId}::uuid
             OR (s."assigned_runner_id" IS NULL
                 AND EXISTS (SELECT 1 FROM "workspace" w WHERE w.id = s."workspace_id" AND w."runner_id" = ${runnerId}::uuid)))
-    RETURNING s.id, s.status::text AS status`;
+    RETURNING s.id, s.status::text AS status, s.finished_at AS "finishedAt"`;
 
   // Every session on either account, whether its own column moved or its workspace's choice carries it: its account's
   // folder changed under it, so a live one is reloaded into the new one.
-  const affected = new Map<string, string>(chosen.map((row) => [row.id, row.status]));
+  const affected = new Map<string, { status: string; finishedAt: Date | null }>(chosen.map((row) => [row.id, row]));
   for (const session of unchosen) {
     const target = swappedAccount(claudeAccountOf(session, runner.engines), added);
     if (!target) continue;
-    affected.set(session.id, session.status);
+    affected.set(session.id, session);
     const followsWorkspace = claudeAccountOf(
       session, runner.engines, swappedAccount(session.workspace?.claudeAccount, added) ?? session.workspace?.claudeAccount ?? null,
     );
@@ -292,18 +294,16 @@ export async function swapClaudeAccountRecords(
 
   const reload: string[] = [];
   const release: string[] = [];
-  for (const [id, status] of affected) {
-    if (ENDED.has(status)) continue;
+  for (const [id, session] of affected) {
+    if (isReleased(session)) continue;
     release.push(id);
     // A PENDING session is started by its next claim, which reads its account then.
-    if (status === 'PENDING') continue;
+    if (session.status === 'PENDING') continue;
     await reloadLocked(tx, id);
     reload.push(id);
   }
   return { reload, release };
 }
-
-const ENDED = new Set(['SUCCEEDED', 'FAILED', 'CANCELLED']);
 
 /** The session ids a pending report names, kept only when they are ids, and a bounded number of them. */
 export function swapWaitingOn(value: unknown): string[] {

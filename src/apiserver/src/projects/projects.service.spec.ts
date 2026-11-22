@@ -375,8 +375,8 @@ test('the sidebar reads queued and running integration work once for the whole p
   });
   const rows = await service.listSidebar(OWNER_ID);
   assert.equal(bindingReads, 1);
-  assert.equal(rawQueries, 4,
-    'the sidebar keeps its page-wide task/attention readers and adds the one in-flight read');
+  assert.equal(rawQueries, 5,
+    'the sidebar keeps its page-wide task/attention readers, the one in-flight read and the one fuse read');
   assert.deepEqual(rows[0].integration,
     { line: 'PROJECT_BRANCH', ref: 'project/bg', activeJobCount: 1 });
   assert.deepEqual(rows[0].buckets, { running: 0 }, 'integration work is not a task session');
@@ -563,6 +563,7 @@ test('the detail read reports progress without loading the project’s tasks', a
     // The tally is the maintained one (0282): rows read by primary key, not a groupBy over this
     // project's tasks. A read that went back to the groupBy would find no delegate here.
     projectRuling: { findMany: async () => [] },
+    projectSettingChange: { findMany: async () => [] },
     projectTaskStatusCount: {
       findMany: async (args: any) => {
         tallyArgs = args;
@@ -638,6 +639,7 @@ test('the detail read serves the authored criteria and no second representation 
     task: { groupBy: async () => assert.fail('the detail read must not tally the project’s tasks') },
     projectTaskStatusCount: { findMany: async () => [] },
     projectRuling: { findMany: async () => [] },
+    projectSettingChange: { findMany: async () => [] },
     projectAcceptanceCriterionDefinition: {
       findMany: async () => [{ id: CRITERION_A_ID, ordinal: 1, revision: 1, servingTasks: [] }],
     },
@@ -689,6 +691,7 @@ test('the detail item is the authored declaration, with no derived verdict besid
     task: { groupBy: async () => assert.fail('the detail read must not tally the project’s tasks') },
     projectTaskStatusCount: { findMany: async () => [] },
     projectRuling: { findMany: async () => [] },
+    projectSettingChange: { findMany: async () => [] },
     projectAcceptanceCriterionDefinition: {
       findMany: async () => [{ id: CRITERION_A_ID, ordinal: 1, revision: 2, servingTasks: [] }],
     },

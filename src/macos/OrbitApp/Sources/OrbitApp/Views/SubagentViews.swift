@@ -1,15 +1,16 @@
 import SwiftUI
 import OrbitKit
 
-// SubAgents (docs/subagent-design.md §7, board docs/mocks/subagent/05.png): an Agent's SubAgents group,
-// the provider list it opens, and the Infrastructure page's Model tiers table. Words and rules are
-// OrbitKit's `SubagentSettings`.
+// SubAgents (docs/subagent-design.md §7, board docs/mocks/subagent/05.png, its Workflows row from board
+// docs/mocks/subagent-workflow part 5): an Agent's SubAgents group, the provider list it opens, and the
+// Infrastructure page's Model tiers table. Words and rules are OrbitKit's `SubagentSettings`.
 
 /// An Agent's SubAgents group. The workspace fields are the form's working copy, written by Done with the
 /// rest; the blocked providers are the account's, written as each switch moves (the sheet).
 struct SubagentSettingsSection: View {
     let agents: AgentsModel
     @Binding var enabled: Bool
+    @Binding var workflowsEnabled: Bool
     @Binding var maxRunning: Int
     @Environment(AppModel.self) private var app
     @State private var editingProviders = false
@@ -21,6 +22,16 @@ struct SubagentSettingsSection: View {
             Toggle(isOn: $enabled) {
                 SubagentRowLabel(title: SubagentSettings.enabledTitle, detail: SubagentSettings.enabledDetail)
             }
+
+            // It follows SubAgents: off and not to be turned on while SubAgents is off (SubagentSettings.workflowsOn).
+            Toggle(isOn: Binding(
+                get: { SubagentSettings.workflowsOn(subagentsEnabled: enabled, workflowsEnabled: workflowsEnabled) },
+                set: { workflowsEnabled = $0 }
+            )) {
+                SubagentRowLabel(title: SubagentSettings.workflowsTitle, detail: SubagentSettings.workflowsDetail)
+            }
+            .disabled(!enabled)
+            .accessibilityIdentifier("subagents.workflows")
 
             HStack(spacing: 12) {
                 SubagentRowLabel(title: SubagentSettings.providers, detail: SubagentSettings.providersDetail)
@@ -165,6 +176,14 @@ struct InfrastructureModelTiersSection: View {
         }
     }
 
+    #if os(macOS)
+    /// Wide enough for "Older · uses claude-opus-5-5": a Mac pop-up button title cannot wrap, so it would be cut.
+    private static let tierWidth: CGFloat = 230
+    #else
+    /// A phone wraps a longer value inside this width.
+    private static let tierWidth: CGFloat = 110
+    #endif
+
     private var columnHeads: some View {
         HStack(spacing: 10) {
             #if os(iOS)
@@ -174,7 +193,7 @@ struct InfrastructureModelTiersSection: View {
             Text(SubagentSettings.columnProvider).frame(width: 110, alignment: .leading)
             Text(SubagentSettings.columnModel).frame(maxWidth: .infinity, alignment: .leading)
             #endif
-            Text(SubagentSettings.columnTier).frame(width: 110, alignment: .leading)
+            Text(SubagentSettings.columnTier).frame(width: Self.tierWidth, alignment: .leading)
             Text(SubagentSettings.columnPrice).frame(width: 96, alignment: .trailing)
         }
         .font(.orbitLabel)
@@ -187,7 +206,7 @@ struct InfrastructureModelTiersSection: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 10) {
                 Text(provider.label).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
-                tierCell(provider, model).frame(width: 110, alignment: .leading)
+                tierCell(provider, model).frame(width: Self.tierWidth, alignment: .leading)
                 priceCell(provider, model)
             }
             Text(model.model)
@@ -204,7 +223,7 @@ struct InfrastructureModelTiersSection: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            tierCell(provider, model).frame(width: 110, alignment: .leading)
+            tierCell(provider, model).frame(width: Self.tierWidth, alignment: .leading)
             priceCell(provider, model)
         }
         #endif
@@ -233,8 +252,11 @@ struct InfrastructureModelTiersSection: View {
     }
 
     @ViewBuilder private func tierControl(_ provider: ProviderTierRow, _ model: ProviderModelTier) -> some View {
-        let text = Text(SubagentSettings.tierText(model.levels))
-            .foregroundStyle(SubagentSettings.tierIsUnset(model.levels) ? Color.orange : Color.primary)
+        let text = Text(SubagentSettings.modelTierText(model))
+            .foregroundStyle(SubagentSettings.tierIsOlder(model) ? Color.secondary
+                : SubagentSettings.tierIsUnset(model.levels) ? Color.orange : Color.primary)
+            // "Older · uses <model>" is longer than the 110-point Tier column: it wraps there.
+            .multilineTextAlignment(.leading)
         if let path = SubagentSettings.tierPath(provider, model) {
             Menu {
                 ForEach(SubagentSettings.tiers, id: \.self) { tier in
@@ -253,7 +275,7 @@ struct InfrastructureModelTiersSection: View {
             }
             .menuStyle(.button)
             .buttonStyle(.borderless)
-            .fixedSize()
+            .fixedSize(horizontal: false, vertical: true)
             .accessibilityIdentifier("tier.\(provider.slug).\(model.model)")
         } else {
             text

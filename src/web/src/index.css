@@ -3601,6 +3601,11 @@ button.toast--pill:focus-visible {
   height: 26px;
   overflow: hidden;
 }
+/* The rotating names take the row's free space themselves; the spacer after them gives way, so
+   the count and the mark still sit at the right edge. */
+.bg-rot + .wt-spacer {
+  flex: none;
+}
 .bg-rot-name {
   position: absolute;
   left: 0;
@@ -3751,7 +3756,7 @@ button.toast--pill:focus-visible {
 /* The Tasks card (SessionCreatedTasksStrip.tsx) sits in the tray's shell above; these are
    only what a task list adds to it. Collapsed, the title never wraps and stays whole: beside a lone
    task's name the name truncates, beside the band (`N running · <task>`, `<total> · <task>`) the
-   band does, and the pill after either keeps its size; the failed count is red. Opened, one row per task: a fixed status column, the title (with what it
+   band does, and the pill, at the row's right edge, keeps its size; the failed count is red. Opened, one row per task: a fixed status column, the title (with what it
    replaces, in grey), its age; then the links to the rest. */
 .ct-head {
   min-width: 0;
@@ -3782,8 +3787,7 @@ button.toast--pill:focus-visible {
   white-space: nowrap;
   color: var(--brand);
 }
-.ct-one + .status-pill,
-.ct-count + .status-pill,
+.bg-tray-row > .wt-spacer + .status-pill,
 .ct-row .status-pill {
   height: 20px;
   font-size: 11.5px;
@@ -5253,8 +5257,12 @@ button.toast--pill:focus-visible {
   flex-grow: 0;
 }
 /* The iOS system colours the native swipe buttons use. */
-.session-swipe-action.complete .session-swipe-glyph {
+.session-swipe-action.complete .session-swipe-glyph,
+.session-swipe-action.resume .session-swipe-glyph {
   background: #34c759;
+}
+.session-swipe-action.pause .session-swipe-glyph {
+  background: #ff9500;
 }
 .session-swipe-action.restore .session-swipe-glyph {
   background: #007aff;
@@ -5266,8 +5274,12 @@ button.toast--pill:focus-visible {
 .session-swipe-action.purge .session-swipe-glyph {
   background: #ff3b30;
 }
-:root[data-theme='dark'] .session-swipe-action.complete .session-swipe-glyph {
+:root[data-theme='dark'] .session-swipe-action.complete .session-swipe-glyph,
+:root[data-theme='dark'] .session-swipe-action.resume .session-swipe-glyph {
   background: #30d158;
+}
+:root[data-theme='dark'] .session-swipe-action.pause .session-swipe-glyph {
+  background: #ff9f0a;
 }
 :root[data-theme='dark'] .session-swipe-action.restore .session-swipe-glyph {
   background: #0a84ff;
@@ -5307,15 +5319,15 @@ button.toast--pill:focus-visible {
     border-radius: 6px;
   }
 }
-/* A project entry is the one focusable session row. Keyboard focus takes the row's hover tint, not a
+/* Every session row (a project's too) takes keyboard focus. Focus takes the row's hover tint, not a
    ring: the browser's outer ring is clipped by the list's edge, and an inner one is covered on the
    right by the kebab's fade. */
-.session-project-row:focus-visible {
+.session-row:focus-visible {
   outline: none;
   background: var(--bg-hover);
   --session-menu-surface: var(--bg-hover);
 }
-.session-project-row.active:focus-visible {
+.session-row.active:focus-visible {
   background: var(--brand-tint-hover);
   --session-menu-surface: var(--brand-tint-hover);
 }
@@ -5526,6 +5538,10 @@ button.toast--pill:focus-visible {
 }
 .session-project-progress-bar .failed {
   background: var(--error);
+}
+/* A paused project's bar goes grey (§4.2 2b). */
+.session-project-progress.paused .session-project-progress-bar > span {
+  background: var(--text-3);
 }
 /* The landing in flight, as a card of its own (owner decision 2026-10-11, mock board
    docs/mocks/project-landing-card): the merge card's shape, on the project's sessions page under
@@ -6203,6 +6219,13 @@ button.toast--pill:focus-visible {
 .session-preview.tone-warning {
   color: var(--warning-solid);
 }
+.session-preview.tone-paused {
+  color: var(--text-3);
+}
+.session-project-pause-glyph {
+  margin-right: 4px;
+  font-size: 10px;
+}
 .session-preview.tone-queued,
 .session-preview.tone-background,
 .session-preview.tone-watching,
@@ -6341,6 +6364,66 @@ button.toast--pill:focus-visible {
 .session-folder-row.menu-open {
   background: var(--bg-hover);
   --row-bg: var(--bg-hover);
+}
+/* A session row dragged over a folder that would take it (lib/sessionDrag): the folder lights up
+   in Move's indigo. A folder's page head takes the same light while the drop would leave the folder. */
+.session-folder-row.drop-target,
+.session-folder-head.drop-target {
+  background: rgba(88, 86, 214, 0.14);
+  box-shadow: inset 0 0 0 1.5px #5856d6;
+  --row-bg: rgba(88, 86, 214, 0.14);
+}
+:root[data-theme='dark'] .session-folder-row.drop-target,
+:root[data-theme='dark'] .session-folder-head.drop-target {
+  background: rgba(94, 92, 230, 0.22);
+  box-shadow: inset 0 0 0 1.5px #5e5ce6;
+  --row-bg: rgba(94, 92, 230, 0.22);
+}
+.session-folder-head.drop-target {
+  border-radius: 8px;
+}
+/* While a row is dragged the list scrolls under the pointer; nothing in it is selected as it goes. */
+.session-col-list.dragging-session {
+  user-select: none;
+  -webkit-user-select: none;
+}
+/* A row is a control, not text: a press dragged from one that cannot be picked up (a project with no
+   coordinator, any row where there is no folder to drop on) would otherwise select the list's text from
+   there to the pointer — headings, counts, titles — and the selection would outlast the gesture. */
+.session-row,
+.session-folder-row {
+  user-select: none;
+  -webkit-user-select: none;
+}
+.session-row input {
+  user-select: text;
+  -webkit-user-select: text;
+}
+/* What a dragged row shows under the pointer: its title alone, on a compact card below-right of the
+   pointer's tip (SessionListRow's setTitleDragImage), so the arrow and the folder it is over stay in
+   sight. Built off-screen for the browser to photograph. */
+.session-drag-card {
+  position: fixed;
+  top: -1000px;
+  left: -1000px;
+  box-sizing: border-box;
+  max-width: 200px;
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-base);
+  color: var(--text-1);
+  font-size: 13px;
+  line-height: 18px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+  pointer-events: none;
+}
+/* The row being dragged stays in place, dimmed, while its image follows the pointer. */
+.session-row.dragging {
+  opacity: 0.5;
 }
 /* Keyboard focus takes the hover tint, as a project row's does, not a ring. */
 .session-folder-row:focus-visible {
@@ -12741,6 +12824,14 @@ button.chat-jump-start:hover {
   font-size: 12px;
   line-height: 1.5;
   color: var(--text-3);
+}
+.start-card-no-line .start-card-hint {
+  margin-top: 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 13.5px;
+  color: var(--text-1);
+  background: color-mix(in srgb, var(--brand) 9%, transparent);
 }
 .start-card-line {
   min-width: 170px;
@@ -21421,6 +21512,12 @@ div.landing-jobs-open {
 .landing-timeline-glyph.is-takeover {
   color: var(--warning-solid);
 }
+.landing-timeline-glyph.is-skipped {
+  color: var(--warning-solid);
+}
+.chat-tool-status.skipped {
+  color: var(--warning-solid);
+}
 .landing-timeline-glyph.is-queued {
   color: var(--text-4);
 }
@@ -24179,62 +24276,13 @@ div.landing-jobs-open {
   border-left: 2px solid var(--border-subtle);
   font-size: 12px;
 }
-.bgwake-jobs,
 .bgwake-wakeups {
   margin: 0 0 6px;
   padding: 0;
   list-style: none;
 }
-.bgwake-job + .bgwake-job,
 .bgwake-wakeup + .bgwake-wakeup {
   margin-top: 8px;
-}
-.bgwake-job-head {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  color: var(--text-2);
-}
-.bgwake-job-mark {
-  flex: none;
-}
-.bgwake-job-mark.is-ok {
-  color: var(--success-solid);
-}
-.bgwake-job-mark.is-failed {
-  color: var(--error-solid);
-}
-.bgwake-job-mark.is-running {
-  color: var(--text-3);
-}
-.bgwake-job-name {
-  flex: 1;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-.bgwake-job-exit {
-  flex: none;
-  padding: 0 6px;
-  border-radius: 4px;
-  background: var(--fill-inset);
-  color: var(--text-2);
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 11px;
-}
-.bgwake-job-cmd,
-.bgwake-job-meta {
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 11px;
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-}
-.bgwake-job-cmd {
-  margin-top: 2px;
-  color: var(--text-2);
-}
-.bgwake-job-meta {
-  margin-top: 2px;
-  color: var(--text-3);
 }
 .bgwake-wakeup-reason {
   margin-bottom: 2px;
@@ -24263,67 +24311,6 @@ div.landing-jobs-open {
   font-size: 11px;
   white-space: pre-wrap;
   word-break: break-word;
-}
-.bgwake-tail {
-  margin: 6px 0 6px 22px;
-  padding: 10px 12px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 6px;
-  background: var(--bg-sunken);
-}
-.bgwake-tail-name {
-  margin-bottom: 2px;
-  color: var(--text-2);
-  font-size: 12px;
-}
-/* A quiet job's last output, inside the fold under its row (it stays out of the fold only on a failure). */
-.bgwake-job > .bgwake-output {
-  margin-top: 6px;
-}
-.bgwake-output > summary {
-  list-style: none;
-  cursor: pointer;
-}
-.bgwake-output > summary::-webkit-details-marker {
-  display: none;
-}
-.bgwake-output-label {
-  display: block;
-  margin-bottom: 6px;
-  font-size: 12px;
-  color: var(--text-3);
-}
-/* Clamp visual lines: one long JSON line must be as compact as multiline output. */
-.bgwake-output-preview {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  line-height: 1.6;
-  max-height: 4.8em;
-  overflow: hidden;
-}
-.bgwake-output-action {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 6px;
-  color: var(--brand);
-  font-size: 12px;
-}
-.bgwake-output-collapse,
-.bgwake-output[open] .bgwake-output-preview,
-.bgwake-output[open] .bgwake-output-expand {
-  display: none;
-}
-.bgwake-output[open] .bgwake-output-collapse {
-  display: inline;
-}
-.bgwake-output[open] .bgwake-output-action .anticon {
-  transform: rotate(180deg);
-}
-.bgwake-output-full {
-  margin-top: 6px;
-  line-height: 1.6;
 }
 .bgwake-undelivered {
   margin: 2px 0 0 22px;
@@ -24476,6 +24463,109 @@ div.landing-jobs-open {
 .chat-subagent-end-run {
   font-size: 11.5px;
   color: var(--text-3);
+}
+/* A bg_run job as one card from start to end (JobCard; the owner's job-card board, rulings R1-R4 of
+   2026-11-21): a tool card in the exec tone, its kind and run time as chips, its end as the SubAgent card's
+   word chip and mark. Amber while it has gone quiet; the folded tail red for a failure, grey otherwise. */
+.chat-job-title {
+  color: var(--text-1);
+}
+.chat-job-chip.is-quiet {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+/* At phone width the kind and the run time leave the first line for a second, grey one (R4). */
+.chat-job-sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px 6px 58px;
+}
+.chat-job-sub .chat-tool-tag,
+.chat-job-sub .chat-tool-meta {
+  background: var(--fill-muted);
+  color: var(--text-3);
+}
+.chat-job-ending {
+  padding: 0 10px 6px 58px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+.chat-job-detail > .chat-job-ending {
+  padding: 4px 0 0;
+}
+.chat-job-detail > .chat-pre-wrap {
+  margin: 0;
+}
+.chat-job-tail {
+  margin: 0;
+  overflow: hidden;
+  white-space: pre;
+  text-overflow: ellipsis;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.chat-job-ending.is-failed .chat-job-tail {
+  color: var(--error);
+}
+.chat-job-meta {
+  margin: 4px 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--text-3);
+  overflow-wrap: anywhere;
+}
+.chat-job-output {
+  margin-top: 6px;
+}
+.chat-job-output .chat-pre {
+  max-height: 480px;
+  margin: 0 0 4px;
+  padding: 8px 10px;
+  overflow: auto;
+  border-radius: 6px;
+  background: var(--bg-sunken);
+  font-size: 11px;
+  line-height: 1.6;
+}
+.chat-job-detail > .chat-job-wakes {
+  margin: 8px 0 0;
+}
+.chat-job-wake-list {
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.chat-job-wake + .chat-job-wake {
+  margin-top: 4px;
+}
+.chat-job-stop {
+  flex: none;
+  font-size: 12px;
+}
+.chat-job-detail > .chat-job-stop {
+  display: inline-block;
+  margin-top: 4px;
+}
+/* The folded card's Stop is its hover menu; where nothing hovers (a phone), it stays drawn. */
+.chat-job-stop.is-hover {
+  visibility: hidden;
+}
+.chat-tool-row:hover .chat-job-stop.is-hover,
+.chat-job-stop.is-hover:focus-within {
+  visibility: visible;
+}
+@media (hover: none) {
+  .chat-job-stop.is-hover {
+    visibility: visible;
+  }
+}
+.bg-shell-stop {
+  flex: none;
+  margin-left: 6px;
+  font-size: 12px;
 }
 /* An exception item's delivery to the coordinator (components/OpenItemDeliveryCard.tsx): the same
    card shape as a watch's wake — right-aligned, control-plane-owned — with the item's own fields
@@ -29160,6 +29250,10 @@ button.agent-progress-agent:hover {
 .model-tiers-set.model-tiers-unset {
   color: var(--warning);
 }
+.model-tiers-older,
+.model-tiers-set.model-tiers-older {
+  color: var(--text-3);
+}
 .model-tiers-yours {
   margin-left: 8px;
   padding: 0 5px;
@@ -29172,6 +29266,119 @@ button.agent-progress-agent:hover {
   margin-top: 8px;
   font-size: 12px;
   color: var(--text-3);
+}
+
+/* Settings → Routing report (docs/subagent-design.md §7, board docs/mocks/subagent-workflow/08-report.html). */
+.routing-report-filters {
+  display: flex;
+  gap: 8px;
+}
+.routing-report-totals {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.routing-report-totals b {
+  color: var(--text-1);
+  font-weight: 600;
+}
+.routing-report-scroll {
+  overflow-x: auto;
+}
+.routing-report-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+/* On a phone the filters go under the title rather than squeeze it, and the table keeps its columns and scrolls
+   sideways (board note 1): a workflow's name and description wrap, so its first figures stay in view beside it. */
+@media (max-width: 600px) {
+  .routing-report-page .settings-header {
+    flex-wrap: wrap;
+  }
+  .routing-report-table {
+    width: max-content;
+    min-width: 100%;
+  }
+  .routing-report-name,
+  .routing-report-desc {
+    max-width: 200px;
+  }
+}
+.routing-report-table th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--text-3);
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+.routing-report-table td {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-1);
+  vertical-align: top;
+}
+.routing-report-table .is-num {
+  text-align: right;
+  white-space: nowrap;
+}
+.routing-report-table td.is-zero {
+  color: var(--text-3);
+}
+.routing-report-table td.is-bad {
+  color: var(--error);
+  font-weight: 600;
+}
+.routing-report-name {
+  font-weight: 600;
+}
+.routing-report-running {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--tone-bg);
+  color: var(--tone);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  vertical-align: 1px;
+}
+.routing-report-desc {
+  margin-top: 1px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.routing-report-tier {
+  display: inline-block;
+  min-width: 24px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--fill-inset);
+  font: 600 12px/20px var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  text-align: center;
+}
+.routing-report-tier-word {
+  font-size: 12.5px;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.routing-report-model {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12.5px;
+}
+.routing-report-provider {
+  margin-left: 6px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.routing-report-foot {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--text-3);
+  line-height: 1.6;
 }
 
 /* The Agent's SubAgents group (docs/subagent-design.md §7). */
@@ -29873,4 +30080,141 @@ button.agent-progress-agent:hover {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
   color: var(--text-3);
+}
+
+/* Revision 42 part two (docs/mocks/landing-measured): the landing check's origin, its No check state and
+   the coordinator's change list. */
+.project-landing-mode {
+  margin-bottom: 8px;
+}
+.project-landing-origin {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.project-landing-badge {
+  display: inline-block;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 18px;
+  white-space: nowrap;
+  color: var(--text-1);
+  background: var(--fill-2, rgba(127, 127, 127, 0.16));
+}
+.project-landing-badge.is-owner { color: #fff; background: #1f2329; }
+.project-landing-badge.is-coordinator { color: #8a5a00; background: #ffedc2; }
+.project-landing-badge.is-card { color: var(--brand-strong); background: var(--brand-tint); }
+.project-landing-badge.is-start { color: #5b3fd1; background: #ece8ff; }
+[data-theme='dark'] .project-landing-badge.is-owner { color: #1f2329; background: #e8eaed; }
+[data-theme='dark'] .project-landing-badge.is-coordinator { color: #ffd479; background: rgba(255, 190, 60, 0.18); }
+[data-theme='dark'] .project-landing-badge.is-start { color: #b9a8ff; background: rgba(140, 110, 255, 0.2); }
+.project-landing-none {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+.project-landing-none b {
+  color: var(--text-1);
+}
+.project-landing-who {
+  margin-top: 12px;
+}
+.project-landing-who-row {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  margin-top: 6px;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+.project-changes-row {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+.project-changes-count {
+  color: var(--text-3);
+}
+.project-changes {
+  margin-top: 10px;
+}
+.project-changes-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+.project-changes-list {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+.project-change-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: 'what action' 'body body' 'who who';
+  gap: 6px 12px;
+  align-items: start;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+.project-change-what { grid-area: what; font-weight: 600; }
+.project-change-body { grid-area: body; min-width: 0; }
+.project-change-who { grid-area: who; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.project-change-action { grid-area: action; }
+.project-change-row + .project-change-row {
+  border-top: 1px solid var(--border-subtle);
+}
+.project-change-values s,
+.project-change-reason,
+.project-change-when,
+.project-change-note,
+.project-change-reverted {
+  color: var(--text-3);
+}
+.project-change-code {
+  font-size: 12px;
+}
+.project-change-reverted {
+  flex-basis: 100%;
+  margin-top: 4px;
+  font-size: 12px;
+}
+.project-change-consequence {
+  margin-top: 6px;
+  color: var(--text-3);
+}
+.task-landing-exempt {
+  padding: 10px 12px;
+  margin-top: 8px;
+  border-radius: 8px;
+  background: var(--fill-1, rgba(127, 127, 127, 0.08));
+  font-size: 13px;
+}
+.task-landing-exempt-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 600;
+}
+.task-landing-exempt-reason {
+  margin: 6px 0;
+  font-weight: 500;
+}
+.task-landing-exempt .orbit-button {
+  margin-top: 8px;
+}
+.project-integration-setting.project-changes-entry {
+  display: block;
 }

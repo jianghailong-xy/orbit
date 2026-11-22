@@ -384,7 +384,7 @@ test('a coordinator asks its owner to record the project done, and the project i
         prompt: 'do the work',
         branch,
         isolationStatus: 'worktree',
-        status: RunStatus.SUCCEEDED,
+        status: RunStatus.SUCCEEDED, 
         baseSha: sha('1'),
         changedFiles: [] as never,
         createdAt: new Date(Date.now() - 10 * 60_000),
@@ -764,6 +764,17 @@ test('a coordinator asks its owner to record the project done, and the project i
   const receiptlessTask = await task(p, 'closing · merged by hand', { serves: receiptless, status: 'DONE' });
   await workBranch(p, receiptlessTask.id, 'orbit/closing-by-hand');
   const branchlessTask = await task(p, 'closing · the walkthrough', { serves: branchless, status: 'DONE' });
+  // It ran in shared isolation — no branch — and reported changes: work Orbit knows of and cannot
+  // place. Work with no branch that reported nothing has nothing to land (§12.15 P-M3).
+  await prisma.session.create({
+    data: {
+      id: randomUUID(), ownerId, creatorId: ownerId, taskId: branchlessTask.id, workspaceId: p.workspaceId,
+      assignedRunnerId: runnerId, title: 'ran the walkthrough', prompt: 'do the work', isolationStatus: 'shared',
+      status: RunStatus.SUCCEEDED, 
+      startsTaskWork: true, changedFiles: ['walkthrough.md'] as never,
+      createdAt: new Date(Date.now() - 10 * 60_000), finishedAt: new Date(Date.now() - 10 * 60_000),
+    },
+  });
 
   /** The gaps the coordinator names: the two criteria Orbit can never prove by a merge. */
   const GAPS: RequestProjectDoneBody = {
