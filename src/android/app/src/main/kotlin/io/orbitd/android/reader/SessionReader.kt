@@ -520,6 +520,17 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     val worktreeState by worktree.state.collectAsState()
     LaunchedEffect(worktreeState.detail, snapshotDetail) { console.detail = worktreeState.detail ?: snapshotDetail }
     val sessionDetail = worktreeState.detail ?: snapshotDetail
+    // Held by its GitHub workspace's clone: the waiting card says what is cloning and how far (web `useCloneWait`). A failed clone keeps
+    // the plain sentence; the detail's workspace says which repository, the stream how far.
+    val cloneHeld = listRow?.takeIf {
+        it.effectiveLifecycleState != "TRASH" && it.effectiveRunState == RunState.QUEUED && !it.regionHeld && QueuedClone.isHeld(it.queuedGate)
+    }?.queuedGate
+    val heardClonesNow by app.clones.all.collectAsState()
+    val cloneReadAt = remember(sessionDetail) { System.currentTimeMillis() }
+    val cloneWait = if (cloneHeld == null || !QueuedClone.isCloning(cloneHeld)) null else {
+        val workspace = sessionDetail?.get("workspace") as? JsonObject
+        QueuedClone.wait(workspace, workspace?.string("id")?.let { heardClonesNow[WorkspaceClone.keyOf(it)] }, cloneReadAt)
+    }
     val workspaceOfSession = (sessionDetail?.get("workspace") as? JsonObject)?.string("id") ?: sessionDetail?.string("workspaceId")
     LaunchedEffect(workspaceOfSession) { mainCheckout.bind(workspaceOfSession) }
     // What a Retry re-sends when it is the reader's: the newest message of a person the window holds.
@@ -868,7 +879,13 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     // Held by its runner's update with no message of the reader's to put the foot row under: the queued page's
                     // explanation, centred on an empty conversation (web `RunnerUpdatingQueued`).
                     val runnerUpdatingPage = runnerUpdatingGate?.takeIf { RunnerUpdating.isRunnerUpdating(it) && displayedWindow.seeded && live != null && heldSeq == null && !tailHeld && accepted.isEmpty() }
-                    if (runnerUpdatingPage != null) item(key = "runner-updating") {
+                    val cloneCard = cloneHeld != null && displayedWindow.seeded && live != null && heldSeq == null && !tailHeld && accepted.isEmpty()
+                    if (cloneCard) item(key = "clone-wait") {
+                        if (displayedRows.isEmpty()) Box(Modifier.fillParentMaxHeight(0.8f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            CloneWaitNotice(cloneWait, QueuedClone.isFailed(cloneHeld), runnerUpdatingMachine, compact = false)
+                        } else CloneWaitNotice(cloneWait, QueuedClone.isFailed(cloneHeld), runnerUpdatingMachine, compact = true)
+                    }
+                    else if (runnerUpdatingPage != null) item(key = "runner-updating") {
                         val openTurn: (String) -> Unit = { open(OrbitRoute(Destination.SESSION, it)) }
                         if (displayedRows.isEmpty()) Box(Modifier.fillParentMaxHeight(0.8f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                             RunnerUpdatingQueued(runnerUpdatingPage, runnerUpdatingMachine, openTurn, later = runnerUpdatingLater)

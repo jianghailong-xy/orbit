@@ -75,7 +75,9 @@ import io.orbitd.android.composer.MachineSetupCopy
 import io.orbitd.android.composer.NewWorkspaceCopy
 import io.orbitd.android.composer.ManagedRunner
 import io.orbitd.android.composer.ManagedRunnerIdentity
+import io.orbitd.android.composer.ManagedRunnerCopy
 import io.orbitd.android.composer.ManagedRunnerNotice
+import io.orbitd.android.composer.ManagedRunnerUpdateLogic
 import io.orbitd.android.composer.rememberManagedRunner
 import io.orbitd.android.composer.ProviderEngines
 import io.orbitd.android.navigation.Destination
@@ -318,7 +320,8 @@ internal fun MachineRows(model: RunnersModel, now: Long, openRunner: (String) ->
                                 model.reorder(pinnedIds + ids)
                             }
                         } },
-                        handle = Modifier.onGloballyPositioned { at -> list?.takeIf { it.isAttached }?.let { handles[id] = it.localBoundingBoxOf(at) } })
+                        handle = Modifier.onGloballyPositioned { at -> list?.takeIf { it.isAttached }?.let { handles[id] = it.localBoundingBoxOf(at) } },
+                        updateDot = isPinned && ManagedRunnerUpdateLogic.showsDot(managed))
                 }
             }
         }
@@ -349,7 +352,7 @@ internal data class RunnerDrag(val id: String, val order: List<String>, val offs
 @Composable
 private fun RunnerRow(runner: JsonObject, workspaces: List<JsonObject>, latest: String?, now: Long, managed: ManagedRunner.Row?,
                       pinned: Boolean, managedId: String?, canMoveUp: Boolean, canMoveDown: Boolean, open: () -> Unit,
-                      remove: () -> Unit, move: (Int) -> Unit, handle: Modifier) {
+                      remove: () -> Unit, move: (Int) -> Unit, handle: Modifier, updateDot: Boolean = false) {
     val items = RunnerPage.attention(runner, workspaces, now, latest, managed = pinned)
     val name = RunnerPage.displayName(runner, managedId)
     var menu by remember { mutableStateOf(false) }
@@ -376,6 +379,9 @@ private fun RunnerRow(runner: JsonObject, workspaces: List<JsonObject>, latest: 
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(name, Modifier.weight(1f), maxLines = 2, fontWeight = FontWeight.SemiBold.takeIf { pinned })
+                    // An older build is running and nothing is moving it yet: the machine row's update dot.
+                    if (updateDot) Box(Modifier.padding(horizontal = 6.dp).size(7.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary)
+                        .semantics { contentDescription = ManagedRunnerCopy.ROW_TITLE }.testTag("runner-update-dot"))
                     val slots = RunnerPage.slots(runner, now)
                     // The account's managed runner says the shared state's short label, never the heartbeat's Offline (D4).
                     if (managed != null) Text(managed.label, Modifier.testTag("managed-runner-label"), style = MaterialTheme.typography.bodySmall,
@@ -499,7 +505,8 @@ private fun RunnerDetail(api: ManagementApi, id: String, record: String?, revisi
                 FormSection(TerminalNeedsYou.TO_APPROVE) { TerminalRequestCards(it, terminalStore, litTerminal, notice::show) }
             }
             if (model.failed) model.error?.let { Text("⚠ $it", Modifier.padding(top = 8.dp), color = Ink.amber, style = MaterialTheme.typography.labelMedium) }
-            if (!managedWaiting) RunnerPage.updateCard(runner, now)?.let { card ->
+            if (managed != null) ManagedRunnerUpdateSection(managedReader, notice::show)
+            else if (!managedWaiting) RunnerPage.updateCard(runner, now)?.let { card ->
                 // Update Now… interrupts the turns in flight on a runner that takes it (available, draining, postponed); an older one's
                 // postponed card keeps the Update Now… that ends the postponement through Update Runner Now.
                 val updateNow = RunnerUpdateNow.offered(runner)

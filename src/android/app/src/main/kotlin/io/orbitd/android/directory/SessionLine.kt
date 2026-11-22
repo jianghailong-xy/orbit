@@ -52,7 +52,8 @@ data class SessionLine(val text: String, val tone: Tone) {
          * nothing else. [machine] is the runner it runs on, by name: a session held for the Claude region says Anthropic is
          * unavailable there, where it is known. */
         internal fun make(s: DirectorySession, live: Boolean, watching: WatchSessionSummary? = null,
-                          recaps: Boolean = true, now: Instant = Instant.now(), machine: String? = null): SessionLine {
+                          recaps: Boolean = true, now: Instant = Instant.now(), machine: String? = null,
+                          cloneProgress: Int? = null): SessionLine {
             // Somebody waiting on YOU outranks everything else the row could say, outside the generating gate: an owner
             // decision is held open by no turn, so it sits on a parked conversation.
             if (live && s.pendingApprovals > 0) return SessionLine(SessionHeader.waitingWord(s), Tone.APPROVAL)
@@ -79,6 +80,9 @@ data class SessionLine(val text: String, val tone: Tone) {
                 if (held == null && QueuedCapacity.isCapacityHeld(s.queuedGate)) return SessionLine(QueuedCapacity.CAPACITY_HELD_LINE, Tone.QUEUED)
                 // Keep Free holds a new session on a runner short of disk (web `queuedLabel`).
                 if (held == null && QueuedDiskLow.isDiskHeld(s.queuedGate)) return SessionLine(QueuedDiskLow.TITLE, Tone.QUEUED)
+                // Held by its clone: git's percentage once this app has heard one (board clone-progress-wait-card ④).
+                if (held == null && QueuedClone.isCloning(s.queuedGate)) return SessionLine(cloneProgress?.let(QueuedClone::rowLabel) ?: QueuedClone.TITLE, Tone.QUEUED)
+                if (held == null && QueuedClone.isFailed(s.queuedGate)) return SessionLine(QueuedClone.FAILED_TITLE, Tone.QUEUED)
                 return SessionLine(held ?: SessionLineCopy.queued, Tone.QUEUED)
             }
             // Parked while a sub-agent or workflow it started works on: the workspace itself is still working.
@@ -186,7 +190,9 @@ internal object SessionHeader {
         return when (s.effectiveRunState) {
             RunState.QUEUED -> if (RunnerUpdating.isRunnerUpdating(s.queuedGate)) RunnerUpdating.runnerUpdatingTitle(s.queuedGate)
                 else if (QueuedCapacity.isCapacityHeld(s.queuedGate)) QueuedCapacity.title(s.queuedGate)
-                else if (QueuedDiskLow.isDiskHeld(s.queuedGate)) QueuedDiskLow.TITLE else SessionLineCopy.queued
+                else if (QueuedDiskLow.isDiskHeld(s.queuedGate)) QueuedDiskLow.TITLE
+                else if (QueuedClone.isCloning(s.queuedGate)) QueuedClone.TITLE
+                else if (QueuedClone.isFailed(s.queuedGate)) QueuedClone.FAILED_TITLE else SessionLineCopy.queued
             RunState.RUNNING -> SessionLineCopy.stateRunning
             RunState.AWAITING_INPUT -> when {
                 // A turn the runtime started for itself keeps the run parked for its whole duration.

@@ -159,13 +159,46 @@ public enum RunnerPageCopy {
     /// A managed runner's version, when it reports none that is a release (its image is `managed-<sha>`).
     public static let MANAGED_RUNNER_KEPT_UP_TO_DATE = "Kept up to date by Orbit"
     /// About's Version note on a managed runner: Orbit rolls its image, so it neither updates itself nor needs to.
-    public static let MANAGED_RUNNER_UPDATED_BY_ORBIT = "Orbit updates this machine for you."
+    public static let MANAGED_RUNNER_UPDATED_BY_ORBIT = "Orbit moves it to each new build."
     public static let RUNNER_RUNS_AS_ROOT = "root"
     public static let RUNNER_RUNS_AS_REGULAR_USER = "regular user"
     public static let RUNNER_ROOT_NO_BYPASS =
         "Runs as root, so sessions here can’t use Bypass permissions."
     public static func runnerUpdatedFromTo(from: String, to: String) -> String { "\(from) → \(to)" }
     public static func runnerVersionUpdatingTo(version: String) -> String { "updating to \(version)" }
+
+    // MARK: Orbit Cloud's Update card (docs/managed-runner-update-now-design.md), the web's managed* sentences
+
+    /// About's Version on Orbit Cloud: the build it runs, with the day it was built when known.
+    public static func managedBuildLine(sha: String) -> String { "Build \(sha)" }
+    public static func managedBuildLineBuilt(sha: String, built: String) -> String { "Build \(sha) · \(built)" }
+    /// A build named by the day it was built: `the Nov 18 build`.
+    public static func managedBuildNamed(name: String) -> String { "the \(name) build" }
+    /// `build` is the build's name with its first letter capital: `The Nov 18 build`.
+    public static func managedUpdateAvailableTitle(build: String) -> String { "\(build) is available" }
+    /// Orbit Cloud's machine row while a newer build waits: the update dot's word and its tooltip.
+    public static let MANAGED_UPDATE_ROW_LABEL = "Update"
+    public static let MANAGED_UPDATE_ROW_TITLE = "A new build is available"
+    public static let MANAGED_UPDATE_AVAILABLE_BODY =
+        "It moves the next time this runner is idle. Update Now restarts it on the new build now — usually under a minute. Your files, sign-ins and sessions stay."
+    public static func managedUpdateRestartingTitle(build: String) -> String { "Restarting on \(build)…" }
+    public static func managedUpdateUpdatedTitle(build: String) -> String { "Updated to \(build)" }
+    public static let MANAGED_UPDATE_TAG_UPDATED = "Updated"
+    public static func managedUpdateNowBodyNone(build: String) -> String {
+        "No turn is running. It restarts on \(build) — usually under a minute. Your files, sign-ins and sessions stay."
+    }
+    public static func managedUpdateNowBodyOne(build: String) -> String {
+        "It stops this turn and restarts on \(build) — usually under a minute. It then continues where it stopped, with a note that the update interrupted it."
+    }
+    public static func managedUpdateNowBodyMany(build: String) -> String {
+        "It stops these turns and restarts on \(build) — usually under a minute. Each one then continues where it stopped, with a note that the update interrupted it."
+    }
+    /// Below the turns: a new container ends background jobs and the services they started.
+    public static func managedUpdateNowJobs(jobs: Int, noun: String) -> String {
+        "\(jobs) \(noun) in these sessions stop, and so do the services they started. Waiting work starts once it is back."
+    }
+    public static let MANAGED_UPDATE_NOW_SERVICES =
+        "Services started in these sessions stop. Waiting work starts once it is back."
 
     // MARK: the Update card (docs/runner-update-drain-design.md, board 4)
 
