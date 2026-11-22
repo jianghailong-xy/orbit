@@ -16,6 +16,9 @@ from urllib.parse import urlsplit
 
 # The user's persistent volume is mounted as the home directory itself.
 ROOT = Path("/home/orbit")
+# The volume's directory the template mounts at /tmp (managed-runner-resources.ts TMP_SUBPATH, channel.py TMP_SUBPATH):
+# filled, it gives the writer ENOSPC like the rest of the volume. The runner empties it (runner-go managed_tmp.go).
+TMP_NAME = ".orbit-tmp"
 UID = GID = 10001
 UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 GENERATION = re.compile(r"[1-9][0-9]{0,9}")
@@ -90,6 +93,20 @@ def prepare(initialize=False):
 def init_volume():
     # Scoped one-shot init: no recursive chown, credentials, network, or runner start.
     prepare(initialize=True)
+    prepare_tmp()
+
+
+def prepare_tmp():
+    """The volume's /tmp directory, open to all with the sticky bit as /tmp is. The kubelet makes a subPath it does
+    not find root-owned with the volume root's mode (0700), which UID 10001 cannot write. Anything else in its place
+    (a link, which would mount another directory at /tmp, or a file) is replaced by the directory. Absent, it is
+    left absent: the template that mounts it makes it, and an earlier one has a /tmp of its own."""
+    path = paths()[0] / TMP_NAME
+    if path.is_symlink() or (path.exists() and not path.is_dir()):
+        path.unlink()
+        path.mkdir()
+    if path.is_dir():
+        os.chmod(path, 0o1777)
 
 
 def clean_env():
@@ -208,8 +225,9 @@ def register():
             or any(path.name not in (*state_dirs, "container.lock") for path in orbit.iterdir())
             or any(any((home / name).iterdir()) for name in (".codex", ".claude"))
             or any(workspace.iterdir())
-            # lost+found: an ext4 volume's own, at its root, which is home.
-            or any(path.name not in (".orbit", ".codex", ".claude", "orbit-repos", "lost+found")
+            # lost+found: an ext4 volume's own, at its root, which is home. TMP_NAME: the template's /tmp, which the
+            # kubelet makes before any container starts.
+            or any(path.name not in (".orbit", ".codex", ".claude", "orbit-repos", "lost+found", TMP_NAME)
                    for path in home.iterdir())):
         raise ValueError("retained session/repository data has no config; restore the original identity")
     name = os.environ.get("ORBIT_RUNNER_NAME", "").strip()

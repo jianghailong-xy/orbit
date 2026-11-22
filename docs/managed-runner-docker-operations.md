@@ -879,7 +879,7 @@ firewall's log says what is wrong (`docker compose logs managed-runner-firewall`
 
 | Setting | File | Applies after |
 | --- | --- | --- |
-| Each runner's CPU, memory (with `/tmp`), processes, `/tmp` size | `profile.json` `runner.resources`, `runner.tmpSizeLimit` | `docker compose up -d --force-recreate apiserver`, at each runner's next start |
+| Each runner's CPU, memory, processes, and its share of the ephemeral budget (`/tmp` itself is on its data volume) | `profile.json` `runner.resources`, `runner.tmpSizeLimit` | `docker compose up -d --force-recreate apiserver`, at each runner's next start |
 | The most any runner may be given | `channel.json` `limits` | `docker compose up -d --force-recreate docker-channel` |
 | The most containers there may be | `channel.json` `limits.maxContainers` (by default one per CPU and per GiB of memory, whichever is fewer) | `docker-channel` recreated, then the apiserver |
 | Whether the channel removes data volumes | `channel.json` `allowVolumeRemoval` (`false` unless set) | `docker-channel` recreated |

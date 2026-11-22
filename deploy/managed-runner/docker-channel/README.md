@@ -142,16 +142,20 @@ empty, anonymous volume of the channel's own there instead, read-only, at
 beside every data volume, so its filesystem is theirs wherever the data root is, and it shows the
 channel nothing. A probe path that is not a directory stops the channel before it serves.
 
-## An executable `/tmp`
+## `/tmp` on the data volume
 
-Builds and test runners run what they write to the temporary directory: `go test` builds its test
-binary under `$TMPDIR` (or `/tmp`) and runs it there. Docker mounts a tmpfs `noexec` unless asked
-otherwise, so the template asks for `exec` (`TmpfsOptions.Options [["exec"]]`); Docker keeps a
-tmpfs `nosuid` and `nodev` whatever is asked, and takes no other option there. It is still sized
-(`resources.tmpBytes`, the profile's `runner.tmpSizeLimit`) and counted in the container's memory.
-It gives a runner nothing it did not have: its data volume is writable and executable already.
-`TmpfsOptions.Options` came with Docker Engine 27 (API 1.46). An older engine ignores it and keeps
-`/tmp` `noexec`, and the channel says so in its log at start-up. A
+A runner's `/tmp` is the `.orbit-tmp` directory of its own data volume, mounted with
+`VolumeOptions.Subpath` (Docker Engine 26, API 1.45; the channel refuses to serve on an older
+engine). Filling it gives the writing program `No space left on device` within the volume's disk
+limit; the tmpfs it replaced was held in the container's memory, so a full `/tmp` pushed the whole
+container toward its memory limit. It is executable, as the volume is, so `go test` runs the binary
+it builds there. Docker mounts a subdirectory only once it exists, so before each create the channel
+makes it (root-owned, mode 1777) through a container under the runner's name that mounts the data
+volume alone, never starts, and is removed at once; one left by a stopped channel breaks the
+template and is removed before it could start. It outlives the container, so the runner empties it
+at start and when a session ends with nothing else running (`src/runner-go/managed_tmp.go`).
+`resources.tmpBytes` (the profile's `runner.tmpSizeLimit`) is still sent and bounded by
+`limits.maxTmpBytes`, and sizes nothing. A
 container over its limit is stopped even when the record of why cannot be written (a full disk under
 the state directory). Measured overshoots, tuning, and how a runner comes back are in
 [the operations runbook](../../../docs/managed-runner-docker-operations.md#a-runners-volume-is-over-its-limit).

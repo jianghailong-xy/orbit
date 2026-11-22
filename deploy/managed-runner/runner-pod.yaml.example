@@ -57,8 +57,10 @@ spec:
       volumeMounts:
         - name: user-state
           mountPath: /home/orbit
-        - name: temporary
+        # /tmp is a directory of the data volume: filled, it gives the writer ENOSPC and evicts nothing.
+        - name: user-state
           mountPath: /tmp
+          subPath: .orbit-tmp
   containers:
     - name: runner
       image: __RUNNER_IMAGE_AT_SHA256_DIGEST__
@@ -107,8 +109,10 @@ spec:
       volumeMounts:
         - name: user-state
           mountPath: /home/orbit
-        - name: temporary
+        # /tmp is a directory of the data volume: filled, it gives the writer ENOSPC and evicts nothing.
+        - name: user-state
           mountPath: /tmp
+          subPath: .orbit-tmp
         - name: bootstrap
           mountPath: /run/orbit-bootstrap
           readOnly: true
@@ -116,9 +120,6 @@ spec:
     - name: user-state
       persistentVolumeClaim:
         claimName: __EXISTING_PER_USER_TEST_PVC__
-    - name: temporary
-      emptyDir:
-        sizeLimit: __AUTHORIZED_TMP_SIZE__
     - name: bootstrap
       secret:
         # mr-boot-<runner uuid>: replaced by the manager when the generation advances.

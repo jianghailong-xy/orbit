@@ -443,9 +443,11 @@ generation off the node.
 kubectl --kubeconfig $ADMIN_KUBECONFIG --context $TEST_CONTEXT drain <node> --ignore-daemonsets --delete-emptydir-data --force
 ```
 
-- A runner's Pod is a bare Pod with an emptyDir (`/tmp`). Without `--delete-emptydir-data` the drain refuses it ("Pods
-  with local storage"), and without `--force` too ("Pods that declare no controller"). A refused drain cordons the node
-  and evicts nothing.
+- A runner's Pod is a bare Pod. Its `/tmp` is the `.orbit-tmp` subPath of its data volume, so filling it gives the
+  writer ENOSPC and the kubelet never evicts the Pod for it; a Pod made before that change still has an emptyDir
+  `/tmp` until its next generation. Without `--delete-emptydir-data` the drain refuses such a Pod ("Pods with local
+  storage"), and without `--force` it refuses any runner Pod ("Pods that declare no controller"). A refused drain
+  cordons the node and evicts nothing.
 - The drain finishes once every Pod it evicted is gone. For a runner's Pod that is once a manager has recorded its stop
   and taken the stop-report finalizer off. With managed runners switched off, or for a managed Pod no running manager
   records, it waits until its `--timeout` ([When a Pod stays Terminating](#the-stop-report-finalizer)).
