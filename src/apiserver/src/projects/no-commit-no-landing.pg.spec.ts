@@ -50,7 +50,7 @@ import { readTaskIntegrationViews } from './project-task-integration';
  *      zero-commit task before it is not back-filled, and the task after it waits for its landing;
  *  (4) an empty branch beside a session that reported work opens LANDING_UNOBSERVED (WORK_ELSEWHERE),
  *      queues nothing, and its dependent waits;
- *  (5) a session that never reported a branch_sha still queues — the runner's J-S2 answers it;
+ *  (5) a session that never reported a branch_sha nor a diff still queues — the runner's J-S2 answers it;
  *  (6) a DONE whose work still moves queues nothing and starts no line; the runner's finalize freezes
  *      an empty branch and queues nothing either, and the 60 s ready sweep — the backstop of the
  *      post-commit edge — releases the dependent (coordinator's condition 1);
@@ -63,6 +63,21 @@ import { readTaskIntegrationViews } from './project-task-integration';
  *      one queues and starts the line (condition 5);
  * (10) the fold: a criterion served only by zero-commit tasks reads LANDED (NOTHING_TO_LAND) in both
  *      lanes, and the done check reports nothing unlanded and nothing in flight for it.
+ *
+ * The regression of 2026-11-20 (P-M1 read a non-empty `changed_files` as work elsewhere, and the runner
+ * reports it as the diff from the base to wherever HEAD is):
+ * (11) a run that checked out the project line detached and committed nothing — production's V2 row —
+ *      queues no job and opens no item, reads nothing to land in every spelling, releases its dependent
+ *      and leaves its criterion LANDED;
+ * (12) a delivered session that moved past its frozen empty identity afterwards — production's 01a1862d —
+ *      reads as work not delivered: the freeze copied an empty tip, and the session went on;
+ * (13) a session that ended with changes no commit carries (a failed finalize capture) is work of its
+ *      own: WORK_ELSEWHERE, no job, the dependent waits;
+ * (14) an identity nobody can name (the last session finished before the runner reported a tip) whose
+ *      every work session reported an EMPTY diff reads nothing to land — production's T3 — while a NULL
+ *      list, a non-empty one, an unfinished session or a MERGED receipt keep it unknown;
+ * (15) the freeze copies the tip and base of the session the work ended on, so an empty identity never
+ *      comes from a session whose own branch had moved past its base when it was frozen.
  *
  * Not destructive: every case owns freshly generated ids and reads only its own rows.
  */
@@ -217,9 +232,11 @@ interface Work {
   branch: string;
   /** The tip the runner reported; null for a session that never reported one (an older runner). */
   branchSha: string | null;
-  baseSha: string;
-  /** What its worktree reported as changed against its base; omitted, `[]`. */
-  changedFiles?: unknown[];
+  baseSha: string | null;
+  /** What its worktree reported as changed against its base; omitted, `[]`; null, never reported. */
+  changedFiles?: unknown[] | null;
+  /** Whether finishing left the checkout holding changes no commit carries; omitted, not reported. */
+  worktreeDirty?: boolean;
   /** Omitted, the session is live (AWAITING_INPUT, no finish). */
   finishedMinutesAgo?: number;
   createdMinutesAgo?: number;
@@ -236,7 +253,8 @@ async function workSession(stack: Stack, w: World, taskId: string, s: Work): Pro
       status: finished ? RunStatus.SUCCEEDED : RunStatus.AWAITING_INPUT,
       dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true, isolationStatus: 'worktree',
       branch: s.branch, branchSha: s.branchSha, baseSha: s.baseSha,
-      changedFiles: (s.changedFiles ?? []) as Prisma.InputJsonValue,
+      changedFiles: s.changedFiles === null ? Prisma.DbNull : (s.changedFiles ?? []) as Prisma.InputJsonValue,
+      ...(s.worktreeDirty !== undefined ? { worktreeDirty: s.worktreeDirty } : {}),
       numTurns: 1, startedAt: minutesAgo(s.createdMinutesAgo ?? 30), createdAt: minutesAgo(s.createdMinutesAgo ?? 30),
       ...(finished ? { finishedAt: minutesAgo(s.finishedMinutesAgo!)} : {}),
     },
@@ -257,8 +275,9 @@ async function finishDispatchedWork(stack: Stack, taskId: string, s: Omit<Work, 
     where: { id: session.id },
     data: {
       status: RunStatus.SUCCEEDED, isolationStatus: 'worktree', branch: `orbit/${taskId.slice(0, 8)}`,
-      branchSha: s.branchSha, baseSha: s.baseSha, changedFiles: (s.changedFiles ?? []) as Prisma.InputJsonValue,
-      finishedAt: new Date(), 
+      branchSha: s.branchSha, baseSha: s.baseSha,
+      changedFiles: s.changedFiles === null ? Prisma.DbNull : (s.changedFiles ?? []) as Prisma.InputJsonValue,
+      finishedAt: new Date(),
     },
   });
   await stack.db.task.update({ where: { id: taskId }, data: { status: TaskStatus.IN_PROGRESS } });
@@ -318,8 +337,9 @@ async function readings(stack: Stack, taskId: string) {
   const facts = await stack.db.task.findUniqueOrThrow({
     where: { id: taskId },
     select: {
-      deliveredSha: true, deliveredBaseSha: true,
+      status: true, deliveredSha: true, deliveredBaseSha: true,
       sessions: criterionLanding.WORK_SESSIONS_NEWEST_FIRST,
+      mergeReceipts: { select: { result: true } },
     },
   });
   return { landed: row!.landed, nothing: row!.nothing, nothingTs: criterionLanding.deliveredNothingOfItsOwn(facts) };
@@ -462,13 +482,17 @@ test('(4) an empty branch beside a session that reported work opens LANDING_UNOB
     }
   });
 
-test('(5) a session that never reported a branch_sha still queues: the runner\'s J-S2 answers it',
+test('(5) a session that never reported a branch_sha nor a diff still queues: the runner\'s J-S2 answers it',
   { skip, timeout: 180_000 }, async () => {
     const stack = await connect();
     try {
       const w = await world(stack, 'no-tip', 'PROJECT_BRANCH');
       const a = await task(stack, w, 'older-runner');
-      await workSession(stack, w, a, { branch: 'orbit/older-runner', branchSha: null, baseSha: sha('0'), finishedMinutesAgo: 1 });
+      // No tip and no list either: nothing measured the branch, so the line is asked. (An EMPTY list beside a
+      // missing tip is a measurement since the owner's ruling of 2026-11-20 — case (14).)
+      await workSession(stack, w, a, {
+        branch: 'orbit/older-runner', branchSha: null, baseSha: sha('0'), changedFiles: null, finishedMinutesAgo: 1,
+      });
 
       await confirm(stack, w, a);
 
@@ -650,6 +674,250 @@ test('(10) a criterion served only by zero-commit tasks reads LANDED (NOTHING_TO
       const views = await readTaskIntegrationViews(prisma, w.ownerId, w.projectId, served);
       assert.deepEqual(served.map((id) => views.get(id)?.state), ['NOT_APPLICABLE', 'NOT_APPLICABLE'],
         'each task row reads NOT_APPLICABLE');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+// ═══ (11)–(15) the regression of 2026-11-20 ═════════════════════════════════════════════════════
+
+/**
+ * What the runner reported for production's verification task V2 (task 34q3LH8LqvdbgtwmxxSHL, work session
+ * 62b3280c-ab6e-5dea-aaeb-c917ce420422) on 2026-11-20: 61 entries, exactly
+ * `git diff --name-only <base> <project-line commit the run checked out detached>` — none its own.
+ */
+const DETACHED_CHECKOUT_DIFF = [
+  { path: '.github/workflows/pages.yml', status: 'M', additions: 2, deletions: 2 },
+  ...Array.from({ length: 60 }, (_, index) => ({
+    path: `scripts/install/step-${String(index).padStart(2, '0')}.sh`, status: 'M', additions: 3, deletions: 1,
+  })),
+];
+
+/** One stated criterion of the project, for the fold to read. */
+async function criterion(stack: Stack, w: World, text: string): Promise<string> {
+  const id = randomUUID();
+  await stack.db.projectAcceptanceCriterionDefinition.create({
+    data: {
+      id, projectId: w.projectId, ordinal: 1, text,
+      verificationMethod: 'no-commit-no-landing.pg.spec.ts reads its landing', contentHash: '0'.repeat(64),
+    },
+  });
+  return id;
+}
+
+/** The criterion's landing and its reason, as the project's criteria read them. */
+async function criterionReading(stack: Stack, w: World, criterionId: string) {
+  const prisma = stack.db as unknown as PrismaService;
+  const row = criterionLandingWithReasons(
+    await readCriterionLandingReasonFacts(prisma, w.ownerId, w.projectId),
+    await criterionLanding.readLandingBranches(prisma, w.projectId),
+    await readInFlightLandingJobs(prisma, w.projectId),
+  ).find((answer) => answer.definitionId === criterionId);
+  return { landing: row?.landing, reason: row?.landingReason };
+}
+
+/** The LANDING_UNOBSERVED items of one task, by their reason. */
+async function unobserved(stack: Stack, taskId: string): Promise<Array<string | undefined>> {
+  return (await stack.db.projectOpenItem.findMany({
+    where: { taskId, kind: 'LANDING_UNOBSERVED' }, select: { payload: true },
+  })).map((item) => (item.payload as { reason?: string }).reason);
+}
+
+test('(11) a run that checked out the project line detached and committed nothing (V2, 2026-11-20) queues no job and opens no item, reads nothing to land in every spelling, releases its dependent and leaves its criterion LANDED',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'detached', 'PROJECT_BRANCH');
+      const criterionId = await criterion(stack, w, 'install.sh was verified before and after a run');
+      const a = await task(stack, w, 'codex verify T1 before and after a run', { criterionId });
+      // Production's row, column for column: tip = base, a clean checkout, no source pin, and the diff to
+      // the commit it checked out. Its branch is gone from origin, which nothing here reads.
+      await workSession(stack, w, a, {
+        branch: 'orbit/task-v2-codex-verify-t1-before-after-run-24579f',
+        branchSha: sha('9'), baseSha: sha('9'), changedFiles: DETACHED_CHECKOUT_DIFF, worktreeDirty: false,
+        finishedMinutesAgo: 1,
+      });
+      const b = await task(stack, w, 'after the verification', { dependsOn: a });
+
+      await confirm(stack, w, a);
+
+      const frozen = await stack.db.task.findUniqueOrThrow({
+        where: { id: a }, select: { deliveredSha: true, deliveredBaseSha: true, deliveredAt: true },
+      });
+      assert.ok(frozen.deliveredAt, 'CONTROL: the DONE froze the identity');
+      assert.equal(frozen.deliveredSha, frozen.deliveredBaseSha, 'CONTROL: no commit past the base');
+      assert.deepEqual(await jobsOf(stack, a), [], 'no landing is queued for a run that committed nothing');
+      assert.deepEqual(await unobserved(stack, a), [],
+        'and no LANDING_UNOBSERVED: the 61 files were the commit it checked out, not work somewhere else');
+      assert.deepEqual(await readings(stack, a), { landed: true, nothing: true, nothingTs: true },
+        'J9 and the P-M1 fact, SQL and TypeScript, read it as nothing to land');
+      assert.equal(await dispatched(stack, b), true, 'its dependent was dispatched on the DONE edge (J10)');
+      assert.deepEqual(await criterionReading(stack, w, criterionId), { landing: 'LANDED', reason: 'NOTHING_TO_LAND' },
+        'its criterion reads LANDED, with nothing to land');
+      const views = await readTaskIntegrationViews(stack.db as unknown as PrismaService, w.ownerId, w.projectId, [a]);
+      assert.equal(views.get(a)?.state, 'NOT_APPLICABLE', 'the task row reads NOT_APPLICABLE, not QUEUED');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('(12) a delivered session that moved past its frozen empty identity afterwards (01a1862d) reads as work not delivered, and the identity is not frozen again',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'moved-after-freeze', 'PROJECT_BRANCH');
+      const a = await task(stack, w, 'the task frozen at 07:20');
+      const base = '46dd9c68'.padEnd(40, '0');
+      // Production's three work sessions: the first ended at its base, the second never reported a tip or
+      // a base and its list is not a list, and the third is the one the identity is frozen from.
+      await workSession(stack, w, a, {
+        branch: 'orbit/first-attempt', branchSha: sha('4'), baseSha: sha('4'), worktreeDirty: false,
+        createdMinutesAgo: 90, finishedMinutesAgo: 80,
+      });
+      const second = await workSession(stack, w, a, {
+        branch: 'orbit/second-attempt', branchSha: null, baseSha: null, createdMinutesAgo: 70, finishedMinutesAgo: 60,
+      });
+      await stack.db.session.update({ where: { id: second }, data: { changedFiles: { files: 'not a list' } } });
+      const delivered = await workSession(stack, w, a, {
+        branch: 'orbit/delivered-attempt', branchSha: base, baseSha: base, worktreeDirty: false,
+        createdMinutesAgo: 50, finishedMinutesAgo: 40,
+      });
+
+      await confirm(stack, w, a);
+      const frozen = await stack.db.task.findUniqueOrThrow({
+        where: { id: a }, select: { deliveredSha: true, deliveredBaseSha: true, deliveredSessionId: true },
+      });
+      assert.deepEqual(frozen, { deliveredSha: base, deliveredBaseSha: base, deliveredSessionId: delivered },
+        'CONTROL: the DONE froze the delivered session\'s empty tip');
+
+      // The delivered session is revived after the DONE and finishes again with a commit on its own branch
+      // (07:42:54 in production): the runner's finalize rewrites its tip and its list.
+      await stack.db.session.update({
+        where: { id: delivered },
+        data: {
+          branchSha: '87c3bb8d'.padEnd(40, '0'), finishedAt: new Date(),
+          changedFiles: [{ path: 'src/one-file.ts', status: 'M', additions: 4, deletions: 1 }],
+        },
+      });
+
+      const after = await stack.db.task.findUniqueOrThrow({
+        where: { id: a }, select: { deliveredSha: true, deliveredBaseSha: true },
+      });
+      assert.deepEqual(after, { deliveredSha: base, deliveredBaseSha: base },
+        'the identity stays as it was frozen: a DONE task is not frozen again');
+      assert.deepEqual(await readings(stack, a), { landed: false, nothing: false, nothingTs: false },
+        'the commit past the frozen tip is work not delivered, in both spellings');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('(13) a session that ended with changes no commit carries (a failed finalize capture) is work of its own: WORK_ELSEWHERE, no job, the dependent waits',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'dirty-end', 'PROJECT_BRANCH');
+      const a = await task(stack, w, 'the work whose finalize could not commit');
+      // What a finalize whose commit failed reports: the unchanged tip, `[]` beside its capture error, and
+      // the checkout measured dirty — the work is still in it, on no branch.
+      await workSession(stack, w, a, {
+        branch: 'orbit/dirty-end', branchSha: sha('5'), baseSha: sha('5'), changedFiles: [], worktreeDirty: true,
+        finishedMinutesAgo: 1,
+      });
+      const b = await task(stack, w, 'after the dirty end', { dependsOn: a });
+
+      await confirm(stack, w, a);
+
+      assert.deepEqual(await jobsOf(stack, a), [], 'no landing for a branch with nothing on it');
+      assert.deepEqual(await unobserved(stack, a), ['WORK_ELSEWHERE'],
+        'one LANDING_UNOBSERVED: the work is in the checkout, not on the branch');
+      assert.deepEqual(await readings(stack, a), { landed: false, nothing: false, nothingTs: false },
+        'uncommitted work is not nothing, in both spellings');
+      assert.equal(await dispatched(stack, b), false, 'its dependent waits, with the item in front of somebody');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('(14) an identity nobody can name whose every work session reported an empty diff (T3) reads nothing to land in every spelling; a NULL or non-empty list, an unfinished session or a MERGED receipt keeps it unknown',
+  { skip, timeout: 240_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'unnamed', 'PROJECT_BRANCH');
+      const criterionId = await criterion(stack, w, 'the October measurement was taken');
+      /** A task whose one work session ended before the runner reported a tip, as T3's did. */
+      async function unnamed(title: string, work: Partial<Work>, options: { criterionId?: string } = {}) {
+        const id = await task(stack, w, title, options);
+        await stack.db.task.update({ where: { id }, data: { codeless: true } });
+        const session = await workSession(stack, w, id, {
+          branch: `orbit/${title.replace(/\W+/g, '-')}`, branchSha: null, baseSha: sha('3'), changedFiles: [],
+          worktreeDirty: false, finishedMinutesAgo: 1, ...work,
+        });
+        return { id, session };
+      }
+
+      const t3 = await unnamed('t3 measurement', {}, { criterionId });
+      const after = await task(stack, w, 'after the measurement', { dependsOn: t3.id });
+      await confirm(stack, w, t3.id);
+      const identity = await stack.db.task.findUniqueOrThrow({
+        where: { id: t3.id }, select: { deliveredSha: true, deliveredAt: true },
+      });
+      assert.deepEqual(identity, { deliveredSha: null, deliveredAt: null },
+        'CONTROL: nobody can name its identity — the session reported no tip');
+      assert.deepEqual(await jobsOf(stack, t3.id), [], 'no landing is queued for it');
+      assert.deepEqual(await readings(stack, t3.id), { landed: true, nothing: true, nothingTs: true },
+        'J9 and the P-M1 fact, SQL and TypeScript, read it as nothing to land');
+      assert.equal(await dispatched(stack, after), true, 'its dependent was dispatched on the DONE edge');
+      assert.deepEqual(await criterionReading(stack, w, criterionId), { landing: 'LANDED', reason: 'NOTHING_TO_LAND' },
+        'its criterion reads LANDED, with nothing to land');
+
+      // What keeps it unknown: no list, a list with something in it, a session still moving, a target
+      // that moved with its work.
+      const nullList = await unnamed('no list', { changedFiles: null });
+      const fullList = await unnamed('a full list', { changedFiles: DETACHED_CHECKOUT_DIFF.slice(0, 2) });
+      const moving = await unnamed('still moving', { finishedMinutesAgo: 2 });
+      await workSession(stack, w, moving.id, {
+        branch: 'orbit/still-moving-retry', branchSha: null, baseSha: sha('3'), changedFiles: [],
+      });
+      const merged = await unnamed('merged once', {});
+      for (const unknown of [nullList, fullList, merged]) await confirm(stack, w, unknown.id);
+      await stack.db.sessionMergeReceipt.create({
+        data: {
+          ownerId: w.ownerId, sessionId: merged.session, taskId: merged.id, result: 'MERGED',
+          sourceBranch: 'orbit/merged-once', sourceSha: sha('6'), targetBranch: 'main', recordedBy: 'AGENT',
+          targetShaBefore: sha('7'), targetShaAfter: sha('8'),
+          idempotencyKey: `no-commit-${merged.id}`,
+        },
+      });
+      for (const unknown of [nullList, fullList, moving, merged]) {
+        const reading = await readings(stack, unknown.id);
+        assert.equal(reading.nothing, false, 'an unmeasured or moved identity is not nothing (SQL)');
+        assert.equal(reading.nothingTs, false, 'nor in TypeScript');
+      }
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('(15) the freeze copies the tip and base of the session the work ended on: an empty identity never comes from a session whose own branch had moved past its base',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'freeze-invariant', 'NONE');
+      for (const [title, tip, base] of [['moved', sha('c'), sha('0')], ['empty', sha('7'), sha('7')]] as const) {
+        const id = await task(stack, w, `freeze ${title}`);
+        const session = await workSession(stack, w, id, {
+          branch: `orbit/freeze-${title}`, branchSha: tip, baseSha: base, worktreeDirty: false, finishedMinutesAgo: 1,
+        });
+        await confirm(stack, w, id);
+        const frozen = await stack.db.task.findUniqueOrThrow({
+          where: { id }, select: { deliveredSha: true, deliveredBaseSha: true, deliveredSessionId: true },
+        });
+        assert.deepEqual(frozen, { deliveredSha: tip, deliveredBaseSha: base, deliveredSessionId: session },
+          `the ${title} session's own tip and base are what was frozen`);
+        assert.equal(frozen.deliveredSha === frozen.deliveredBaseSha, tip === base,
+          'the identity is empty exactly when the session\'s own branch was');
+      }
     } finally {
       await stack.db.$disconnect();
     }

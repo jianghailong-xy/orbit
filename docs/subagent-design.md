@@ -360,6 +360,13 @@ P1 不路由，所以可以先把最难的部分（同 cwd 子进程、事件内
     挡不住数据库写入和网络请求。
 - **只交回文字结果**：不把任何文件带回父会话，也不留在目标 workspace。结果末尾由 runner 附一行
   `Discarded changes: <n> files (<paths…>)`，让父 Agent 知道它改过什么但没有带回。
+- **文件用 `file_upload` 交回**（owner 决策 2026-11-21）：改动不带回，但子 Agent 可以把截图、报告这类产物用 `file_upload`
+  存进 Orbit，挂在父会话下（不进父会话的工作区）。目标 runner 不托管父会话，所以：
+  - 子引擎的 `orbit mcp` 对上传、文件夹清单和 pin 的请求带 `?subagentRunId=<run>`；服务端（`sessionOfRemoteSubagent`）
+    只在这次运行属于该会话和账号、派给的正是这台 runner、且仍是 `RUNNING` 时放行，其余照旧按托管会话的 runner 判断。
+  - 目标 runner 上没有父会话的 socket，Plan 门读不到实时模式；远程运行的子引擎带 `ORBIT_SUBAGENT_REMOTE_MODE`
+    （领取时的模式），Plan 门按它判断。所以在 Plan 模式下领取的运行仍然不能上传。
+  - `file_fetch` 和其他 Orbit 写操作没有放开：服务端仍只认托管父会话的 runner。
 - 看不到父会话未提交的改动：工具描述里写明「remote SubAgents run on that workspace's own HEAD and return text only」，
   父 Agent 需要它看到新代码时，自己先提交并推送（或者在 prompt 里写清楚）。
 - **续跑**：worktree 随结束删掉，对话留下。目标 runner 把结束的运行记成 `ended`（`remote-subagents/<runId>/run.json`：

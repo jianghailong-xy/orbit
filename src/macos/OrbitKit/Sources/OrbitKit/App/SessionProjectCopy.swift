@@ -85,7 +85,9 @@ public enum SessionProjectCopy {
     /// the one the request suggests.
     public static func startSuggestion(_ settings: ProjectStartSettings, main: String? = nil) -> String {
         let main = main ?? RunSettings.mainBranchName(settings.upstreamRef)
-        return "\(settings.line == .main ? RunSettings.lineMain(main) : "Project branch") · Automatic \(settings.automatic ? "on" : "off") · \(settings.maxConcurrentTasks) at a time"
+        let line = settings.line == nil ? StartProject.landsWhenCommits
+            : settings.line == .main ? RunSettings.lineMain(main) : "Project branch"
+        return "\(line) · Automatic \(settings.automatic ? "on" : "off") · \(settings.maxConcurrentTasks) at a time"
     }
     public static let startReview = "Review and start"
     /// …and when nobody has, beside the owner's own Start….

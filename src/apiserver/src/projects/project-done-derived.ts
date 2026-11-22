@@ -586,37 +586,8 @@ export async function storeDerivedProjectStatus(
   projectId: string,
   options: StoreDerivedProjectStatusOptions = {},
 ): Promise<DerivedProjectDone> {
-  const reading = await readDerivedProjectDoneReading(prisma, ownerId, projectId);
-  const { derived } = reading;
-  const seal = reading.standing.currentVersion.digest;
-  const stored = await prisma.project.findFirst({
-    where: { id: projectId, ownerId },
-    select: {
-      title: true,
-      status: true,
-      doneBy: true,
-      doneAt: true,
-      doneCriteriaDigest: true,
-      doneTaskEpochs: true,
-      reopenedAt: true,
-      reopenedFacts: true,
-    },
-  });
-  if (!stored || stored.status === ProjectStatus.CANCELLED) return derived;
-
-  let reopenedBy: ProjectReopenReason | null = null;
-  if (stored.status === ProjectStatus.DONE && stored.doneBy === ('OWNER' satisfies ProjectDoneBy)) {
-    reopenedBy = await ownerRecordReopenedBy(prisma, ownerId, projectId, stored, seal);
-    if (reopenedBy === null) return derived;
-  } else if (stored.status === derived.status) {
-    return derived;
-  } else if (
-    derived.done
-    && stored.reopenedAt !== null
-    && await reopenStands(prisma, ownerId, projectId, stored.reopenedAt, stored.reopenedFacts)
-  ) {
-    return derived;
-  }
+  const { derived, seal, stored, write, reopenedBy } = await readDerivedProjectStatusWrite(prisma, ownerId, projectId);
+  if (!stored || write === null) return derived;
 
   const written = await prisma.project.updateMany({
     where: {
@@ -628,15 +599,7 @@ export async function storeDerivedProjectStatus(
       reopenedAt: stored.reopenedAt,
     },
     data: {
-      ...(derived.done
-        ? {
-          status: ProjectStatus.DONE,
-          doneBy: 'DERIVED' satisfies ProjectDoneBy,
-          doneAt: new Date(),
-          doneCriteriaDigest: seal,
-          acceptedGaps: [],
-        }
-        : { status: ProjectStatus.OPEN, ...NO_DONE_RECORD }),
+      ...(derived.done ? derivedDoneRecord(seal) : { status: ProjectStatus.OPEN, ...NO_DONE_RECORD }),
       ...NO_REOPEN_RECORD,
     },
   });
@@ -663,6 +626,67 @@ export async function storeDerivedProjectStatus(
     );
   }
   return derived;
+}
+
+/**
+ * What `storeDerivedProjectStatus` would write for this project now, read and not written: the facts'
+ * answer, the row as stored, and the status the projection stores over it — or null when it stores
+ * nothing (the stored status already says what the facts say, an owner's record or Reopen press stands,
+ * or the project is CANCELLED or gone). One function for the store and for a prediction of it
+ * (`landing-regression-repair.ts`), so the two cannot answer differently.
+ */
+export async function readDerivedProjectStatusWrite(
+  prisma: DerivationClient,
+  ownerId: string,
+  projectId: string,
+) {
+  const reading = await readDerivedProjectDoneReading(prisma, ownerId, projectId);
+  const { derived } = reading;
+  const seal = reading.standing.currentVersion.digest;
+  const stored = await prisma.project.findFirst({
+    where: { id: projectId, ownerId },
+    select: {
+      title: true,
+      status: true,
+      doneBy: true,
+      doneAt: true,
+      doneCriteriaDigest: true,
+      doneTaskEpochs: true,
+      reopenedAt: true,
+      reopenedFacts: true,
+    },
+  });
+  const unchanged = { derived, seal, stored, write: null, reopenedBy: null };
+  if (!stored || stored.status === ProjectStatus.CANCELLED) return unchanged;
+
+  let reopenedBy: ProjectReopenReason | null = null;
+  if (stored.status === ProjectStatus.DONE && stored.doneBy === ('OWNER' satisfies ProjectDoneBy)) {
+    reopenedBy = await ownerRecordReopenedBy(prisma, ownerId, projectId, stored, seal);
+    if (reopenedBy === null) return unchanged;
+  } else if (stored.status === derived.status) {
+    return unchanged;
+  } else if (
+    derived.done
+    && stored.reopenedAt !== null
+    && await reopenStands(prisma, ownerId, projectId, stored.reopenedAt, stored.reopenedFacts)
+  ) {
+    return unchanged;
+  }
+  const write: ProjectStatus = derived.done ? ProjectStatus.DONE : ProjectStatus.OPEN;
+  return { derived, seal, stored, write, reopenedBy };
+}
+
+/** The DONE the projection stores: recorded DERIVED, now, against the seal it was derived against. One
+ *  record for `storeDerivedProjectStatus` and for the landing repair's DONE over OPEN
+ *  (`landing-regression-repair.ts`), so the two cannot record DONE differently. */
+export function derivedDoneRecord(seal: string) {
+  return {
+    status: ProjectStatus.DONE,
+    doneBy: 'DERIVED' satisfies ProjectDoneBy,
+    doneAt: new Date(),
+    doneCriteriaDigest: seal,
+    acceptedGaps: [],
+  } satisfies Prisma.ProjectUpdateManyMutationInput;
 }
 
 /** The DONE record of a project that is not recorded done (`project.done_*`, migration 0345). */

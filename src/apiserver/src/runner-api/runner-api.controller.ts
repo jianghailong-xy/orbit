@@ -281,7 +281,7 @@ import {
 } from '../sessions/current-work-delivery';
 import { fileSubagentWake, fileWorkflowWake, interruptOrphanedSubagentRuns, interruptOrphanedWorkflowRuns } from './subagent-wake';
 import { orbitWorkflowLaunchReceipt, workflowClaimFields } from './workflow-run';
-import { remoteSubagentHeartbeat } from './subagent-remote';
+import { remoteSubagentHeartbeat, sessionOfRemoteSubagent } from './subagent-remote';
 import { backgroundJobStopsFor } from './background-job-stops';
 import { CLEARED_RUNNING_WORK } from '../sessions/running-work';
 import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
@@ -5616,7 +5616,8 @@ export class RunnerApiController {
    * A file an agent keeps with `file_upload` (docs/orbit-files-design.md §2.3). A route of its own rather than fields on
    * the one above: an older server takes those fields, ignores them and answers 200, while this path answers it 404,
    * which the runner reports. It streams and cleans up exactly as the one above does, and FilesService.uploadFile says
-   * what `taskId` may be.
+   * what `taskId` may be. A remote SubAgent keeps its file under its parent's session by naming its run
+   * (sessionOfRemoteSubagent, docs/subagent-design.md §10.2).
    */
   @UseGuards(RunnerAuthGuard)
   @StaysOnHttps()
@@ -5630,8 +5631,11 @@ export class RunnerApiController {
     @Param('id', PublicIdPipe) sessionId: string,
     @UploadedFileParam() file: FileUpload | undefined,
     @Body() dto: UploadFileDto,
+    @Query('subagentRunId', PublicIdPipe) subagentRunId?: string,
   ): Promise<FileView> {
-    const session = await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
+    const ownerId = (runner as { ownerId?: string }).ownerId;
+    const session = (await sessionOfRemoteSubagent(this.prisma, { id: runner.id, ownerId }, sessionId, subagentRunId))
+      ?? (await this.assertSessionOwnership(sessionId, runner.id, ownerId));
     assertValidUpload(file);
     return this.files.uploadFile(file as FileUpload, session, dto);
   }
@@ -7183,6 +7187,10 @@ export class RunnerApiController {
           // intends to undo by itself" — which is what keeps the STATUS published below from
           // announcing a settlement that hasn't happened.
           retryAt: true,
+          // A session completed or trashed since the turn began is out of the auto-retry sweep: no arm below.
+          completedAt: true,
+          archivedAt: true,
+          deletedAt: true,
           // How much of that budget is spent, for the one failure class whose wait is decided
           // here rather than by a reply's text — see `retryArmAt` below.
           retryAttempts: true,
@@ -7747,7 +7755,8 @@ export class RunnerApiController {
         && isUsageLimitErrorText(failureText)
           ? await this.usageLimitRetry(tx, runner.id, usageLimitEngine, current, failureText!)
           : null;
-      const retryArmAt = keyRetryAt
+      const filed = current.completedAt != null || current.archivedAt != null || current.deletedAt != null;
+      const retryArmAt = filed ? null : keyRetryAt
         ? new Date(keyRetryAt.getTime() + Math.floor(Math.random() * QUOTA_RETRY_JITTER_MS))
         : usageLimit
           ? usageLimit.retryAt
@@ -8517,6 +8526,17 @@ export class RunnerApiController {
       ));
       // A task that is done answers whatever exception was open about it (contract §4.2).
       await this.openItems?.resolveByFact([finalized.taskId]);
+    } else if (
+      'taskCompleted' in finalized
+      && finalized.applied
+      && finalized.status === RunStatus.AWAITING_INPUT
+      && finalized.taskOwnerId
+      && finalized.taskId
+    ) {
+      // §12.15 P-M1: a DONE written by another door while this work session was still in its turn
+      // (an evidence CONFIRM, the owner's Confirm done) could not end it then; its park asks now.
+      // Nothing for a task that is not DONE or a session with more to do (`endIdleWorkOfDoneTask`).
+      await this.tasks?.requestEndOfIdleWork(finalized.taskOwnerId, finalized.taskId);
     }
     // The exception half of that same edge. `taskCompleted` is true only for a DERIVED DONE, so
     // three real endings reach nothing above: an acceptance code that disagreed and derived FAILED,
@@ -10151,7 +10171,9 @@ export class RunnerApiController {
           ? ((await this.queue.sharedPoolRetryAt(tx, current, new Date()))
             ?? (await this.queue.loginPoolRetryAt(tx, current, new Date())))
           : null;
-      const quotaRetryAt = quotaSpent
+      // A completed or trashed session is out of the auto-retry sweep: an arm written now could never fire.
+      const filed = current.completedAt != null || current.archivedAt != null || current.deletedAt != null;
+      const quotaRetryAt = filed ? null : quotaSpent
         ? await this.quotaRetryAt(tx, runner.id, current, dto.error!, workspace)
         : keyRetryAt
           ? new Date(keyRetryAt.getTime() + Math.floor(Math.random() * QUOTA_RETRY_JITTER_MS))
@@ -10176,8 +10198,8 @@ export class RunnerApiController {
             new Date(),
           )
         : null;
-      const signInRetryAt = signInMove ? new Date() : null;
-      const signInColumns: Prisma.SessionUncheckedUpdateManyInput = signInMove && signInEngine && signInRunner
+      const signInRetryAt = signInMove && !filed ? new Date() : null;
+      const signInColumns: Prisma.SessionUncheckedUpdateManyInput = signInMove && signInEngine && signInRunner && !filed
         ? {
             [ACCOUNT_CHOICE[signInEngine]]: signInMove.to,
             ...(signInMove.defaultRemoved ? { [ACCOUNT_PINNED[signInEngine]]: false } : {}),
@@ -11534,10 +11556,15 @@ export class RunnerApiController {
         poolSwitchNotice: true,
         poolCodexAccountId: true,
         poolKeyId: true,
+        // A completed or trashed session is out of the auto-retry sweep: an arm written now could never fire.
+        completedAt: true,
+        archivedAt: true,
+        deletedAt: true,
         workspace: { select: { env: true, codexAccount: true, claudeAccount: true, kimiAccount: true, cursorAccount: true } },
       },
     });
     if (!session) return {};
+    if (session.completedAt || session.archivedAt || session.deletedAt) return {};
     // A built-in Claude session whose account refused its sign-in — the runtime said "Failed to
     // authenticate" — moves on Automatic to another of the runner's accounts that can run, and is
     // re-sent there at once, as a usage limit moves it below. The events path queues the reload that

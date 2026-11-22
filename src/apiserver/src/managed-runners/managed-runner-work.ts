@@ -1,6 +1,7 @@
 import { Prisma, type ManagedRunner } from '@prisma/client';
 
 import { sessionExecutingOutsideTurnSql } from '../common/session-working';
+import { autoRetryEligibleSql } from '../sessions/auto-retry-eligibility';
 import type { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -70,7 +71,7 @@ function workSql(runner: Prisma.Sql) {
     // Already due: a wakeup or a retry still to come stays on the server and wakes the runner then.
     DUE_WAKEUP: Prisma.sql`EXISTS (SELECT 1 FROM "session_scheduled_wakeup" w JOIN "session" s ON s."id" = w."session_id"
       WHERE ${onRunner} AND w."state" = 'PENDING' AND w."due_at" <= now())`,
-    DUE_RETRY: Prisma.sql`EXISTS (SELECT 1 FROM "session" s WHERE ${onRunner} AND s."retry_at" IS NOT NULL AND s."retry_at" <= now())`,
+    DUE_RETRY: Prisma.sql`EXISTS (SELECT 1 FROM "session" s WHERE ${onRunner} AND s."retry_at" IS NOT NULL AND s."retry_at" <= now() AND ${autoRetryEligibleSql('s')})`,
     // A landing runs on the machine its source session's checkout lives on (integration-job-relay
     // claimOne): queued for that machine, or running on it.
     INTEGRATION_JOB: Prisma.sql`EXISTS (SELECT 1 FROM "project_integration_job" j
