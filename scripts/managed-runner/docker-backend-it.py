@@ -77,6 +77,9 @@ def main():
     parser.add_argument("--next-image", help="the image an upgrade in the test moves the runners to (the test restarts the channel on it)")
     parser.add_argument("--stop-grace-seconds", type=int, default=60, help="the channel's stopGraceSeconds (production: 240)")
     parser.add_argument("--link-gateway", type=Path, help="the runner link gateway binary (go build ./src/link-gateway) the test runs")
+    parser.add_argument("--earlier-channel", type=Path,
+                        help="the channel.py the runner first starts under, from an image before the /home/orbit layout "
+                             "(git show 95884b154f:deploy/managed-runner/docker-channel/channel.py)")
     args = parser.parse_args()
 
     run_id = time.strftime("%m%d%H%M", time.gmtime()) + secrets.token_hex(2)
@@ -172,6 +175,8 @@ def main():
             "extraLabels": {label[0]: label[1]},
         }, indent=2))
         run([sys.executable, "-I", CHANNEL, "check-config", "--config", channel_config], capture=True)
+        if args.earlier_channel:
+            run([sys.executable, "-I", args.earlier_channel, "check-config", "--config", channel_config], capture=True)
 
         it_config = work / "it.json"
         it_config.write_text(json.dumps({
@@ -181,6 +186,7 @@ def main():
             "testLabel": {"key": label[0], "value": label[1]},
             **({"nextImage": next_image} if next_image else {}),
             **({"linkGateway": str(args.link_gateway.resolve())} if args.link_gateway else {}),
+            **({"earlierChannel": str(args.earlier_channel.resolve())} if args.earlier_channel else {}),
         }, indent=2))
 
         spec = f"build/managed-runners/{args.spec}"
