@@ -3283,10 +3283,15 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // beside 0130's claim index (plan step 4.5, release A), dropping a leftover INVALID one first. Session is not a
       // preserved relation, and no function, trigger, type, constraint or DONE fence changes. No INSERT, UPDATE or DELETE.
       '1426_session_task_execution_claim_finished_at_idx',
-      // 1427 replaces 0512's `open_list_bump_owner` so that a workspace UPDATE changing only heartbeat-probe columns
+      // 1427 is one UPDATE of session: it clears retry_at and retry_claimed_at on completed or trashed sessions, arms
+      // the auto-retry sweep can never fire. Session is not a preserved relation; it creates, alters or drops nothing,
+      // and names none of the preserved triggers or functions.
+      '1427_clear_dormant_session_retry_arms',
+      // 1428 replaces 0512's `open_list_bump_owner` so that a workspace UPDATE changing only heartbeat-probe columns
       // bumps no Open-list counter. It creates, alters or drops no table, column, constraint or trigger, and it names
       // or replaces none of the preserved triggers or functions. No INSERT, UPDATE or DELETE runs at apply time.
-      '1427_open_list_workspace_probes'],
+      // Written as 1423 and then 1427 on the project line, it was renumbered after main took 1427.
+      '1428_open_list_workspace_probes'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
