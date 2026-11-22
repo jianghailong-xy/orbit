@@ -970,7 +970,15 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     const failed = status === RunStatus.FAILED;
     // Due immediately (see below), and carried on the published STATUS so that event says the
     // same thing the row does: this end is one the server means to undo, not a settlement.
-    const retryAt = opts.armRetry ? new Date() : null;
+    // A session its owner completed or trashed is out of the auto-retry sweep, so an arm written
+    // now could never fire; it would only hold its runner awake (sessions/auto-retry-eligibility.ts).
+    const filed = opts.armRetry
+      ? await this.prisma.session.findFirst({
+          where: { id: sessionId, OR: [{ completedAt: { not: null } }, { deletedAt: { not: null } }] },
+          select: { id: true },
+        })
+      : null;
+    const retryAt = opts.armRetry && !filed ? new Date() : null;
     const resetTaskTo = opts.resetTaskTo ?? TaskStatus.OPEN;
     // Retried whole. The reaper re-reads the session under its row lock and decides from that read,
     // so a re-run either finds the same stalled run or finds that somebody finished it first.
