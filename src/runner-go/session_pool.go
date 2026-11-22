@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -203,11 +204,14 @@ type bgHold struct {
 // victim remains counted as resident until its process Wait completes, so a new
 // process can never transiently push resident engines over max.
 type sessionPool struct {
-	mu          sync.Mutex
-	max         int
-	clock       poolClock
-	sessions    map[string]*liveSession
-	worktreeOps map[string]*worktreeOperationState
+	mu  sync.Mutex
+	max int
+	// admissionHold is why this runner takes no new work now, or "" (managed_disk_reserve.go). Read
+	// without p.mu, so whoever sets it never measures anything under the pool's lock.
+	admissionHold atomic.Pointer[string]
+	clock         poolClock
+	sessions      map[string]*liveSession
+	worktreeOps   map[string]*worktreeOperationState
 	// bgJobs is sessionID → live background shell id → what is known about it: the
 	// name a receipt calls it, and whether the runner hosts it. A shell is a writer
 	// of the checkout for exactly as long as it runs, and it routinely outlives the
@@ -427,7 +431,7 @@ func (p *sessionPool) admissionOccupancy() (int, []string) {
 		}
 	}
 	sort.Strings(backgroundOnly)
-	if p.drainingForUpdate {
+	if p.drainingForUpdate || p.admissionHoldReason() != "" {
 		return 0, backgroundOnly
 	}
 	idle := p.max - len(occupied)
@@ -478,6 +482,46 @@ func (p *sessionPool) reclaimSlotsTakenLocked() int {
 		occupied[id] = true
 	}
 	return len(occupied)
+}
+
+// idleForTmpSweep says whether nothing is running here that could be using /tmp: no session holds a turn, an
+// engine, a self-driven turn or a reclaim, and no background job runs (managed_tmp.go).
+func (p *sessionPool) idleForTmpSweep() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, s := range p.sessions {
+		if s.active || s.resident || s.selfDrivenTurn {
+			return false
+		}
+	}
+	for _, active := range p.reclaiming {
+		if active {
+			return false
+		}
+	}
+	for _, jobs := range p.bgJobs {
+		if len(jobs) > 0 {
+			return false
+		}
+	}
+	return len(p.hostless) == 0
+}
+
+// setAdmissionHold sets why this runner takes no new work ("" for none) and returns what it was before.
+func (p *sessionPool) setAdmissionHold(reason string) string {
+	if before := p.admissionHold.Swap(&reason); before != nil {
+		return *before
+	}
+	return ""
+}
+
+// admissionHoldReason is why this runner takes no new work now, or "" when it takes work: while it is set the
+// pool offers no capacity (admissionOccupancy) and a reclaimed turn waits to start (waitForAdmission).
+func (p *sessionPool) admissionHoldReason() string {
+	if reason := p.admissionHold.Load(); reason != nil {
+		return *reason
+	}
+	return ""
 }
 
 // holdWorktreeForBackgroundJob records one background shell as a live writer of
