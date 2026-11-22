@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -467,6 +468,11 @@ func (s *mcpServer) listedToolDescriptors() []map[string]interface{} {
 		if !s.workflowsOff {
 			tools = append(tools, workflowToolDescriptor(schemaObject))
 		}
+	} else {
+		// A SubAgent cannot rate another run.
+		tools = slices.DeleteFunc(tools, func(tool map[string]interface{}) bool {
+			return tool["name"] == "subagent_rate"
+		})
 	}
 	if s.onlyTools != nil {
 		tools = onlyMCPTools(tools, s.onlyTools)
@@ -641,7 +647,7 @@ var recoveryUtilityCLI = []cliCapabilitySpec{
 }
 
 func recoveryCLISpecGroups() [][]cliCapabilitySpec {
-	return [][]cliCapabilitySpec{baseCLICapabilities, projectCLICapabilities, sessionCLICapabilities, agentCLICapabilities, runnerCLICapabilities, providerCLICapabilities, notifyCLICapabilities, watchCLICapabilities, wikiCLICapabilities, wikiImportCLICapabilities, fileCLICapabilities, settingsCLICapabilities, browserCLICapabilities, userCLICapabilities, mergeReceiptCLICapabilities, guideCLICapabilities, recoveryUtilityCLI}
+	return [][]cliCapabilitySpec{baseCLICapabilities, projectCLICapabilities, sessionCLICapabilities, agentCLICapabilities, runnerCLICapabilities, providerCLICapabilities, notifyCLICapabilities, watchCLICapabilities, wikiCLICapabilities, wikiImportCLICapabilities, fileCLICapabilities, subagentCLICapabilities, settingsCLICapabilities, browserCLICapabilities, userCLICapabilities, mergeReceiptCLICapabilities, guideCLICapabilities, recoveryUtilityCLI}
 }
 
 func recoveryCLIOptions(argv []string) (map[string]bool, int, int) {

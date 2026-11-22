@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client';
 import type { PrismaService } from '../prisma/prisma.service';
-import { heldSql } from '../common/session-release';
+import { sessionHeldIndexedSql } from '../common/session-release';
 
 /**
  * What a heartbeat the link gateway forwarded is answered with beside today's HeartbeatResponse
@@ -110,7 +110,7 @@ export function runnerLinkHintsSql(runnerId: string): Prisma.Sql {
           FROM "session" s
           JOIN "approval" a ON a."session_id" = s.id AND a.status IN ('ALLOWED', 'DENIED')
           WHERE s."assigned_runner_id" = ${runnerId}::uuid
-            AND ${heldSql('s.status')}
+            AND ${sessionHeldIndexedSql('s')}
             AND (
               s.status = 'RUNNING' OR (s.status = 'AWAITING_INPUT' AND s."engine_turn_active")
               OR cardinality(s."running_bg_shells") > 0

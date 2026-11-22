@@ -98,7 +98,7 @@ class BackgroundTrayTest {
         compose.setContent {
             val c = cases[index]
             OrbitTheme {
-                BackgroundTray(c["list"]!!.jsonArray.map { it.jsonObject }, c["lastUserMessageAt"]?.jsonPrimitive?.contentOrNull,
+                BackgroundTray(c["list"]!!.jsonArray.map { it.jsonObject }, BackgroundRow.clearedAt(c["lastUserMessageAt"]?.jsonPrimitive?.contentOrNull, c["lastAgentTurnStartedAt"]?.jsonPrimitive?.contentOrNull),
                     c["sessionLive"]!!.jsonPrimitive.boolean)
             }
         }
@@ -219,7 +219,7 @@ class BackgroundTrayTest {
         val failed = obj("""{"shellId":"b2","kind":"shell","toolUseId":"tu_b2","command":"npm run build","startedSeq":12,
             "startedTs":"${ago(7_200)}","status":"failed","endedAt":"${ago(60)}"}""")
         setTray(list = listOf(running("a", 10, "web suite"), failed, job), lastUser = ago(3_600))
-        compose.onNodeWithContentDescription("Background processes, 2 running · 1 failed").performClick()
+        compose.onNodeWithContentDescription("Background processes, 2 running").performClick()
         settle()
         compose.onNodeWithText("Background processes").assertExists()
         compose.onNodeWithText("2 running · 3 total").assertExists()
@@ -253,14 +253,11 @@ class BackgroundTrayTest {
         settle()
     }
 
-    @Test fun aFailedJobCountsInRed() {
+    // E2 (revised 2026-11-21): the owner can do nothing about a failed job, so the folded row does not count it.
+    @Test fun aFailedJobIsNotCounted() {
         val failed = JsonObject(job("bgj_f", "failed") + ("endedAt" to JsonPrimitive(ago(60))))
         val row = BackgroundRow.rowOf(listOf(failed, job("bgj_r", "running")), null, true)!!
-        assertTrue(row.countParts.toString(), row.countParts.any { it.kind == "failed" && it.text == "1 failed" })
-        // The folded row draws a failed part in the error colour (its semantics are cleared to its one label, so this is read from the source).
-        val tray = generateSequence(File(System.getProperty("user.dir")).absoluteFile) { it.parentFile }
-            .map { File(it, "app/src/main/kotlin/io/orbitd/android/reader/BackgroundTray.kt") }.first { it.isFile }.readText()
-        assertTrue(tray.contains("if (part.kind == \"failed\") MaterialTheme.colorScheme.error else secondary"))
+        assertEquals(listOf(BackgroundRow.CountPart("running", "1 running")), row.countParts)
     }
 
     @Test fun tappingAJobInTheOpenedListGoesToItsCard() {
@@ -298,6 +295,15 @@ class BackgroundTrayTest {
         // The list, opened over an ended item, does not spin a stale running one either.
         assertEquals("unknown", BackgroundTrayLogic.status(three[0], sessionLive = false))
         assertEquals("1 total", BackgroundTrayLogic.countText(listOf(three[0]), sessionLive = false))
+    }
+
+    @Test fun theLatestAgentTurnStartsAtItsEarliestEvent() {
+        assertNull(BackgroundTrayLogic.lastAgentTurnStartedAt(listOf(RunEvent("user", 1, obj("""{"text":"Hi"}"""), ts = "2026-11-16T02:40:00.000Z"))))
+        val events = listOf(
+            RunEvent("assistant", 1, obj("{}"), turnId = "t1", ts = "2026-11-16T02:41:00.000Z"),
+            RunEvent("assistant", 2, obj("{}"), turnId = "t2", ts = "2026-11-16T02:42:00.000Z"),
+            RunEvent("tool_use", 3, obj("{}"), turnId = "t2", ts = "2026-11-16T02:43:00.000Z"))
+        assertEquals("2026-11-16T02:42:00.000Z", BackgroundTrayLogic.lastAgentTurnStartedAt(events))
     }
 
     @Test fun theLastUserMessageIsTheNewestTypedTurn() {

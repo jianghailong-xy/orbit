@@ -72,6 +72,11 @@ public struct TranscriptState: Equatable, Sendable, Codable {
     /// started itself included) clears it. The composer decides whether to offer it
     /// (`ComposerLogic.offeredPromptSuggestion`).
     public var promptSuggestion: String?
+    /// The turn the newest agent event (any event but `user`) belongs to, and the earliest time seen
+    /// in that turn: when the agent's latest turn started (`BackgroundRowRule`'s cut-off). A wake's
+    /// turn counts from its recorded note.
+    public var agentTurnId: String?
+    public var agentTurnStartedAt: String?
     /// Settings › Translation: the suggestion's own event and its translation into the owner's
     /// language (from its payload, or folded in from the live `translation` event). Transient: a
     /// rehydrated snapshot offers the English until the window is re-read.
@@ -97,7 +102,7 @@ public struct TranscriptState: Equatable, Sendable, Codable {
     // Tolerant decode so snapshots written before `queued` (or the history-window cursor) existed
     // still rehydrate (the keys just default) instead of discarding the whole cached session; the
     // other fields keep their prior strictness. `encode(to:)` stays synthesized from these keys.
-    enum CodingKeys: String, CodingKey { case items, pendingApprovals, background, queued, accepted, unreadSteers, status, maxSeq, oldestSeq, hasMoreOlder, contextTokens, contextWindow, subagentItems, taskProgress, promptSuggestion, turnEnds }
+    enum CodingKeys: String, CodingKey { case items, pendingApprovals, background, queued, accepted, unreadSteers, status, maxSeq, oldestSeq, hasMoreOlder, contextTokens, contextWindow, agentTurnId, agentTurnStartedAt, subagentItems, taskProgress, promptSuggestion, turnEnds }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         items = try c.decode([TranscriptItem].self, forKey: .items)
@@ -115,6 +120,8 @@ public struct TranscriptState: Equatable, Sendable, Codable {
         subagentItems = (try? c.decodeIfPresent([String: [TranscriptItem]].self, forKey: .subagentItems)) ?? [:]
         taskProgress = (try? c.decodeIfPresent([String: TaskProgress].self, forKey: .taskProgress)) ?? [:]
         promptSuggestion = (try? c.decodeIfPresent(String.self, forKey: .promptSuggestion)) ?? nil
+        agentTurnId = (try? c.decodeIfPresent(String.self, forKey: .agentTurnId)) ?? nil
+        agentTurnStartedAt = (try? c.decodeIfPresent(String.self, forKey: .agentTurnStartedAt)) ?? nil
         turnEnds = (try? c.decodeIfPresent([TurnEndMark].self, forKey: .turnEnds)) ?? []
     }
 }
@@ -317,6 +324,11 @@ public struct TranscriptReducer: Sendable, Codable {
                 state.hasMoreOlder = ev.seq > 1   // seqs start at 1; a page before it answers the rest
             }
         }
+        if ev.type != .user, let turn = ev.turnId, let ts = ev.ts {
+            if turn != state.agentTurnId { state.agentTurnId = turn; state.agentTurnStartedAt = ts }
+            else if let at = RelativeTime.parse(ts), let was = state.agentTurnStartedAt.flatMap(RelativeTime.parse),
+                    at < was { state.agentTurnStartedAt = ts }
+        }
         let legacy = ev.type == .system && str(ev, "subtype") == "secret_patch_withheld"
             && str(ev, "path").map { path in
                 ["Orbit is still checking this runner's checkouts for a secret the owner removed, so it left this diff out of what it reports for now. Nothing in the file is known to hold a secret; its diff shows again with the session's next report.",
@@ -446,7 +458,8 @@ public struct TranscriptReducer: Sendable, Codable {
     /// for older clients, so malformed or unknown diagnostics deliberately return nil and retain the
     /// old error path. An event stored before the runner sent the metadata is read through
     /// `EngineStderr.legacyRecoverableDiagnostic`, as on web.
-    private func recoverableDiagnostic(_ ev: RunEvent) -> (label: String, message: String, key: String)? {
+    private func recoverableDiagnostic(_ ev: RunEvent) -> (label: String, message: String, key: String,
+                                                          component: String?, code: String?)? {
         guard let rawMessage = str(ev, "stderr") else { return nil }
         let message = EngineStderr.clean(rawMessage)
         guard !message.isEmpty else { return nil }
@@ -471,17 +484,20 @@ public struct TranscriptReducer: Sendable, Codable {
             return nil
         }
         let phase = string("phase").map { $0 == "startup" ? "Startup" : $0 }
-        let label = [phase, string("component"), string("code")].compactMap { $0 }.joined(separator: " · ")
+        let component = string("component")
+        let code = string("code")
+        let label = [phase, component, code].compactMap { $0 }.joined(separator: " · ")
         let key = EngineStderr.diagnosticFoldKey(
-            component: string("component"), phase: string("phase"), severity: string("severity"),
-            impact: string("impact"), recoverable: recoverable, code: string("code"),
+            component: component, phase: string("phase"), severity: string("severity"),
+            impact: string("impact"), recoverable: recoverable, code: code,
             message: string("message") ?? message)
-        return (label: label, message: message, key: key)
+        return (label: label, message: message, key: key, component: component, code: code)
     }
 
     /// A recoverable diagnostic's `.diagnostic` row. A repeat bumps the first row's count instead of
     /// taking a row of its own, as a repeated stderr line does (web parity: `structuredDiagnostic`).
-    private mutating func appendDiagnostic(_ diagnostic: (label: String, message: String, key: String)) {
+    private mutating func appendDiagnostic(_ diagnostic: (label: String, message: String, key: String,
+                                                         component: String?, code: String?)) {
         if let id = diagnosticSeen[diagnostic.key],
            let i = state.items.firstIndex(where: { $0.id == id }),
            case .diagnostic(var row) = state.items[i] {
@@ -493,7 +509,9 @@ public struct TranscriptReducer: Sendable, Codable {
         diagnosticSeen[diagnostic.key] = id
         state.items.append(.diagnostic(DiagnosticNotice(id: id, label: diagnostic.label,
                                                         text: EngineStderr.logText(diagnostic.message),
-                                                        message: diagnostic.message)))
+                                                        message: diagnostic.message,
+                                                        component: diagnostic.component,
+                                                        code: diagnostic.code)))
     }
 
     /// Drop the loaded transcript window so a tail page can re-seed it from scratch — the reducer
@@ -527,6 +545,8 @@ public struct TranscriptReducer: Sendable, Codable {
         clearLiveToolOutputsAtBoundary()
         legacyWithheld = nil
         state.items = []
+        state.agentTurnId = nil
+        state.agentTurnStartedAt = nil
         state.maxSeq = 0
         state.oldestSeq = nil
         state.hasMoreOlder = false
@@ -974,6 +994,18 @@ public struct TranscriptReducer: Sendable, Codable {
             leaving.insert(b, at: 0)
         }
         state.queued += leaving
+        // A message held for its translation that stays in the conversation is skipped below as if
+        // echoed, so its chip follows the listing here: translated while it waits for a runner slot,
+        // it no longer reads "Translating…" until the runner's echo comes (web parity: the snapshot
+        // carries `translation`).
+        let listedTranslation = Dictionary(turns.compactMap { t in t.turnTranslation.map { (t.turnId, $0) } },
+                                           uniquingKeysWith: { _, last in last })
+        for i in state.items.indices {
+            guard case .user(var b) = state.items[i], b.pending, let id = b.turnId,
+                  let translation = listedTranslation[id], b.translation != translation else { continue }
+            b.translation = translation
+            state.items[i] = .user(b)
+        }
         // Every row the tail drew before this listing, the accepted head's first — matched below
         // whichever of the two a turn has moved between.
         let previous = state.accepted + state.queued
@@ -2482,6 +2514,12 @@ private enum EngineStderr {
             ]
             if let phase { diagnostic["phase"] = .string(phase) }
             return diagnostic
+        }
+        // Codex's sandbox setup asks for the system bubblewrap and falls back to its bundled copy
+        // (docs/mocks/codex-sandbox-fix-with-agent). A current runner sends this structured; events
+        // stored before it did are recognized here so the warning and its action survive.
+        if lower.contains("could not find bubblewrap on path") {
+            return degraded("sandbox", "bubblewrap_missing", phase: "startup")
         }
         if lower.contains("codex_models_manager") && lower.contains("failed to refresh available models") {
             if lower.contains("401") && tokenInvalidated {

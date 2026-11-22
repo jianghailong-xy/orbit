@@ -154,6 +154,7 @@ let merges: Array<Record<string, unknown>> = [];
 let startRequest: Record<string, unknown> | null = null;
 /** The exceptions the open-items door serves as the coordinator's — a blocked candidate's holder. */
 let withCoordinatorItems: Array<Record<string, unknown>> = [];
+let closedQuestions: Array<Record<string, unknown>> = [];
 /** The items the open-items door serves as the owner's — a coordinator's question. */
 let needsYouItems: Array<Record<string, unknown>> = [];
 let openItemsCalls = 0;
@@ -268,6 +269,7 @@ beforeEach(() => {
   merges = [];
   startRequest = null;
   withCoordinatorItems = [];
+  closedQuestions = [];
   needsYouItems = [];
   openItemsCalls = 0;
   integrationView = null;
@@ -314,7 +316,7 @@ beforeEach(() => {
     if (path === `/projects/${PROJECT_ID}/handoffs`) return reply([]);
     if (path === `/projects/${PROJECT_ID}/open-items`) {
       openItemsCalls += 1;
-      return reply({ needsYou: needsYouItems, withCoordinator: withCoordinatorItems, startRequest });
+      return reply({ needsYou: needsYouItems, withCoordinator: withCoordinatorItems, closedQuestions, startRequest });
     }
     if (path === `/projects/${PROJECT_ID}/integration`) return reply(integrationView ?? []);
     if (path === `/projects/${PROJECT_ID}/acceptance/confirmation`) return reply(null);
@@ -1239,9 +1241,13 @@ describe('a project row whose member is waiting on you', { timeout: 60_000 }, ()
   const conversation = (): HTMLElement | null => mounted().querySelector<HTMLElement>('.workspace-scroll-wrap > .workspace-sessions');
   const card = (): HTMLElement | null => conversation()?.querySelector<HTMLElement>('.owner-request-card') ?? null;
   // Where things sit: the conversation's scroller at y=100, the waiting card far below the fold at
-  // y=900, so a reveal that brings the card's top to the scroller's top scrolls by 900 - 100 - 12.
+  // y=900, so a reveal that brings the card's top to the scroller's top scrolls by 900 - 100 - 48 (clear of the
+  // "Jump to the beginning" pill, which a transcript scrolled off its top and tail offers).
   const scrollTops = new WeakMap<Element, number>();
+  // How far content that landed after the open has pushed the waiting card down.
+  let grownAbove = 0;
   beforeEach(() => {
+    grownAbove = 0;
     rows = [LOOSE, COORDINATOR, waitingMember];
     ownerRequests = [request];
     const events = [
@@ -1259,7 +1265,10 @@ describe('a project row whose member is waiting on you', { timeout: 60_000 }, ()
       value(this: HTMLElement) {
         const waitingCard = this.classList.contains('owner-request-card') || this.classList.contains('coordinator-question')
           || (this.classList.contains('review-card') && this.id.startsWith('question-'));
-        const top = waitingCard ? 900 - (scrollTops.get(conversation()!) ?? 0)
+        // An answered question's record sits higher up the transcript than anything still waiting.
+        const record = this.classList.contains('answered-question-inline');
+        const top = record ? 500 - (scrollTops.get(conversation()!) ?? 0)
+          : waitingCard ? 900 + grownAbove - (scrollTops.get(conversation()!) ?? 0)
           : this.classList.contains('workspace-sessions') ? 100 : 0;
         return { top, bottom: top + 400, left: 0, right: 400, width: 400, height: 400, x: 0, y: top, toJSON: () => ({}) };
       },
@@ -1281,9 +1290,9 @@ describe('a project row whose member is waiting on you', { timeout: 60_000 }, ()
       await click(projectRow(), 'the project row');
       await until(() => expect(location).toBe(memberAddress));
       await until(() => expect(card()).not.toBeNull());
-      await until(() => expect(conversation()!.scrollTop).toBe(900 - 100 - 12));
+      await until(() => expect(conversation()!.scrollTop).toBe(900 - 100 - 48));
       // The card's header and title are in view, with the gap above them clear of anything pinned.
-      expect(card()!.getBoundingClientRect().top).toBe(100 + 12);
+      expect(card()!.getBoundingClientRect().top).toBe(100 + 48);
       expect(card()!.querySelector('.owner-request-waiting')?.textContent).toBe('Waiting on you');
       expect(card()!.querySelector('.owner-request-title')?.textContent).toBe(request.title);
       if (phone) {
@@ -1301,6 +1310,29 @@ describe('a project row whose member is waiting on you', { timeout: 60_000 }, ()
       }
     });
 
+    it('keeps the waiting card in place as the conversation lands above it, until the reader scrolls', async () => {
+      await mount();
+      await click(projectRow(), 'the project row');
+      await until(() => expect(conversation()!.scrollTop).toBe(900 - 100 - 48));
+      const stream = (): FakeEventSource => FakeEventSource.streams[FakeEventSource.streams.length - 1];
+      await until(() => expect(stream()?.url).toContain(`/sessions/${TASK.id}/`));
+      const land = async (seq: number): Promise<void> => {
+        await act(async () => {
+          stream().onmessage?.({ data: JSON.stringify({ seq, type: 'assistant', payload: { text: `More ${seq}` }, turnId: 't1', ts: '2026-10-03T08:00:02Z' }) });
+        });
+        await settle();
+      };
+      // Rows land above the card: it is put back at the top, not left where the new rows pushed it.
+      grownAbove = 300;
+      await land(3);
+      expect(conversation()!.scrollTop).toBe(900 + 300 - 100 - 48);
+      // The reader takes the scroller: what lands next moves the card, and nothing brings it back.
+      await act(async () => { conversation()!.dispatchEvent(new Event('wheel')); });
+      grownAbove = 500;
+      await land(4);
+      expect(conversation()!.scrollTop).toBe(900 + 300 - 100 - 48);
+    });
+
     // Owner 2026-11-16 (docs/mocks/coordinator-question-jump): the coordinator waiting on you with a
     // question opens at that question's card, as a waiting member opens at its own.
     it('opens the coordinator when the coordinator itself is waiting, at its question', async () => {
@@ -1314,11 +1346,19 @@ describe('a project row whose member is waiting on you', { timeout: 60_000 }, ()
         waitingSince: '2026-10-03T09:00:00Z',
         question: { question: 'Can you restore Nacos?', options: [{ label: 'I’ll restore it now' }], recommendedOption: 0, blocksTaskIds: [], ifUnanswered: null },
       }];
+      // A question answered earlier in the conversation is drawn above as its record: a record is
+      // not waiting on anyone, so the open question below it is where the row lands.
+      closedQuestions = [{
+        itemId: 'item-answered', question: { question: 'Which region?', options: [{ label: 'us-east' }], recommendedOption: 0 },
+        askedAt: '2026-10-03T08:00:00Z', resolution: 'ANSWERED', resolvedBy: 'USER', resolvedAt: '2026-10-03T08:00:00.500Z',
+        answer: { option: 0, text: null }, delivery: null, withdrawReason: null,
+      }];
       await mount();
       await click(projectRow(), 'the project row');
       await until(() => expect(location).toBe(coordinatorAddress));
       await until(() => expect(conversation()?.querySelector('#question-item-question')).not.toBeNull());
-      await until(() => expect(conversation()!.scrollTop).toBe(900 - 100 - 12));
+      await until(() => expect(conversation()?.querySelector('#question-record-item-answered')).not.toBeNull());
+      await until(() => expect(conversation()!.scrollTop).toBe(900 - 100 - 48));
     });
 
     it('opens the coordinator when nobody is waiting', async () => {
@@ -1762,6 +1802,79 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     expect(menuItem('Move')).toBeUndefined();
     await click(menuItem('Pin'), 'Pin');
     await until(() => expect(apiModule.pinSession).toHaveBeenCalledWith(TASK.id));
+  });
+
+  // A project's row is its coordinator's session row (SessionListRow): what one row kind does, the other does.
+  it('opens a phone project row’s menu on a held press, as a session row’s, and its release does not open the row', async () => {
+    mobile = true;
+    await mount();
+    const entry = projectRow();
+    Object.defineProperty(entry, 'getBoundingClientRect', { configurable: true, value: () => ({ width: 400, left: 0, top: 100 }) });
+    const down = new Event('touchstart', { bubbles: true, cancelable: true });
+    Object.defineProperty(down, 'touches', { value: [{ clientX: 120, clientY: 130 }] });
+    const before = location;
+    await act(async () => entry.dispatchEvent(down));
+    await until(() => expect(menuItem('Sessions')).toBeTruthy());
+    expect(menuItems().map((item) => item.textContent?.trim())).toEqual(['Open Session', 'Sessions', 'Open Project', 'Pin', 'Move…']);
+    const up = new Event('touchend', { bubbles: true, cancelable: true });
+    Object.defineProperty(up, 'touches', { value: [] });
+    await act(async () => entry.dispatchEvent(up));
+    expect(up.defaultPrevented, 'the release must not send the click that opens the row').toBe(true);
+    expect(location).toBe(before);
+    await click(menuItem('Pin'), 'Pin');
+    await until(() => expect(apiModule.pinSession).toHaveBeenCalledWith(COORDINATOR.id));
+  });
+
+  it('fires nothing on a full rightward swipe of a phone project row', async () => {
+    mobile = true;
+    projects = [project({ startedAt: '2026-10-01T00:00:00Z' } as never)];
+    await mount();
+    await swipe(projectRow(), 300);
+    expect(apiModule.pinSession).not.toHaveBeenCalled();
+    expect(vi.mocked(apiModule.api)).not.toHaveBeenCalledWith(expect.stringMatching(/\/(pause|resume)$/), expect.anything());
+  });
+
+  it('puts Pause first on a running project row and Resume first on a paused one, in the swipe and the menu', async () => {
+    mobile = true;
+    projects = [project({ startedAt: '2026-10-01T00:00:00Z' } as never)];
+    await mount();
+    const labels = () => [...projectRow().querySelectorAll('.session-swipe-actions.leading button')].map((b) => b.getAttribute('aria-label'));
+    expect(labels()).toEqual(['Pause', 'Pin']);
+    await swipe(projectRow(), 90);
+    await click(projectRow().querySelector('.session-swipe-action.pause'), 'the swipe Pause');
+    await until(() => expect(vi.mocked(apiModule.api)).toHaveBeenCalledWith(`/projects/${PROJECT_ID}/pause`, { method: 'POST' }));
+  });
+
+  it('lists Pause first in the desktop menu group of a running project', async () => {
+    projects = [project({ startedAt: '2026-10-01T00:00:00Z' } as never)];
+    await mount();
+    await hoverProjectMenu();
+    await until(() => expect(menuItems().map((item) => item.textContent?.trim())).toEqual(['Open Session', 'Sessions', 'Open Project', 'Pause', 'Pin', 'Move…']));
+  });
+
+  it('shows Resume with the grey paused line on an owner-paused project row', async () => {
+    mobile = true;
+    projects = [project({ startedAt: '2026-10-01T00:00:00Z', pausedAt: '2026-10-04T08:00:00Z', pausedReason: 'OWNER' } as never)];
+    await mount();
+    const entry = projectRow();
+    expect([...entry.querySelectorAll('.session-swipe-actions.leading button')].map((b) => b.getAttribute('aria-label'))).toEqual(['Resume', 'Pin']);
+    expect(entry.querySelector('.session-preview.tone-paused')?.textContent).toMatch(/^Paused · /);
+    expect(entry.querySelector('.session-project-progress.paused')).not.toBeNull();
+  });
+
+  it('gives a plain session row keyboard focus, Enter and a right-click menu, as a project row has', async () => {
+    await mount(undefined, `/sessions/${TASK.id}`);
+    for (const entry of [memberRow(LOOSE.title)!, projectRow()]) {
+      expect(entry.getAttribute('tabindex')).toBe('0');
+      expect(entry.getAttribute('role')).toBe('button');
+    }
+    const loose = memberRow(LOOSE.title)!;
+    await act(async () => loose.focus());
+    await act(async () => loose.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
+    await until(() => expect(location).toBe(`/sessions/${LOOSE.id}`));
+    await act(async () => memberRow(LOOSE.title)!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })));
+    await until(() => expect(menuItem('Rename…')).toBeTruthy());
+    expect(menuItems().map((item) => item.textContent?.trim())).toContain('Move…');
   });
 
   it('returns to the originating folder with the page back button', async () => {

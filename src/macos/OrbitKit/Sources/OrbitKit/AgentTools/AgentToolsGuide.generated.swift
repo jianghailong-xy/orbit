@@ -743,6 +743,13 @@ let agentToolsGuideJSON = #"""
       ]
     },
     {
+      "id": "subagents",
+      "label": "SubAgents",
+      "tools": [
+        "subagent_rate"
+      ]
+    },
+    {
       "id": "background",
       "label": "Background jobs",
       "tools": [

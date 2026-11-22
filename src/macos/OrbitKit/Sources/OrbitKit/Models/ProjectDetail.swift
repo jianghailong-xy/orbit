@@ -131,15 +131,19 @@ public struct ProjectIntegrationSettings: Codable, Equatable, Sendable {
     public let mergeCheckCommand: String?
     /// How long an exception may wait on the coordinator before it becomes the owner's.
     public let escalationSeconds: Int?
+    /// The landing check and who set it last (§12.16); nil from a server that predates it.
+    public let landingCheck: ProjectLandingCheck?
 
     public init(line: IntegrationLine? = nil, ref: String? = nil, upstreamRef: String? = nil,
-                locked: Bool = false, mergeCheckCommand: String? = nil, escalationSeconds: Int? = nil) {
+                locked: Bool = false, mergeCheckCommand: String? = nil, escalationSeconds: Int? = nil,
+                landingCheck: ProjectLandingCheck? = nil) {
         self.line = line
         self.ref = ref
         self.upstreamRef = upstreamRef
         self.locked = locked
         self.mergeCheckCommand = mergeCheckCommand
         self.escalationSeconds = escalationSeconds
+        self.landingCheck = landingCheck
     }
 
     public init(from decoder: Decoder) throws {
@@ -150,6 +154,7 @@ public struct ProjectIntegrationSettings: Codable, Equatable, Sendable {
         locked = try c.decodeIfPresent(Bool.self, forKey: .locked) ?? false
         mergeCheckCommand = try c.decodeIfPresent(String.self, forKey: .mergeCheckCommand)
         escalationSeconds = try c.decodeIfPresent(Int.self, forKey: .escalationSeconds)
+        landingCheck = try? c.decodeIfPresent(ProjectLandingCheck.self, forKey: .landingCheck)
     }
 }
 
@@ -201,9 +206,9 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
     public let acceptedGaps: [AcceptedGap]
     /// The non-code mark and the criteria moved out (`ProjectDoneFollowUps.swift`).
     public let followUps: ProjectDoneFollowUpFields
-    /// The project's landing-check history, newest first (§12.15 P-R1); nil from a server that
-    /// predates it. Records this build cannot read are left out.
-    public let settingChanges: [ProjectSettingChange]?
+    /// The coordinator's cardless landing-check changes and the owner's own, newest first (§12.15
+    /// P-R1). Nil from a server that predates them, which draws no Coordinator's changes row.
+    public var settingChanges: [ProjectSettingChange]? = nil
 
     /// The explicit non-code mark: the page names it where it would name the branch.
     public var nonCode: Bool { followUps.nonCodeMark != nil }
@@ -236,10 +241,8 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
                 startedAt: String? = nil, startedAtRead: Bool = false, pausedAt: String? = nil,
                 maxConcurrentTasks: Int? = nil, derivedDone: ProjectDerivedDone? = nil,
                 doneBy: ProjectDoneBy? = nil, doneAt: String? = nil, acceptedGaps: [AcceptedGap] = [],
-                followUps: ProjectDoneFollowUpFields = ProjectDoneFollowUpFields(),
-                settingChanges: [ProjectSettingChange]? = nil) {
+                followUps: ProjectDoneFollowUpFields = ProjectDoneFollowUpFields()) {
         self.id = id
-        self.settingChanges = settingChanges
         self.title = title
         self.status = status
         self.goal = goal
@@ -306,6 +309,8 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
         doneAt = try? c.decodeIfPresent(String.self, forKey: .doneAt)
         acceptedGaps = ((try? c.decodeIfPresent([AcceptedGap].self, forKey: .acceptedGaps)) ?? nil) ?? []
         followUps = (try? ProjectDoneFollowUpFields(from: decoder)) ?? ProjectDoneFollowUpFields()
+        // Each record decoded on its own: one this build cannot read is left out rather than taking
+        // the whole list with it (as the second port on main did; kept when the two were merged).
         settingChanges = ((try? c.decodeIfPresent([LossyDecodable<ProjectSettingChange>].self,
                                                   forKey: .settingChanges)) ?? nil)?.compactMap(\.value)
     }
@@ -777,149 +782,6 @@ public struct ProjectBranchCandidates: Codable, Equatable, Sendable {
     }
 }
 
-/// Who last wrote a project's landing check (§12.14) — `@orbit/shared`'s `LandingCheckSetBy`: the
-/// owner, a card the owner answered, the owner's Start press confirming the coordinator's proposal,
-/// or the coordinator with no card.
-public enum LandingCheckSetBy: String, Codable, CaseIterable, Equatable, Sendable {
-    case owner = "OWNER"
-    case card = "CARD"
-    case start = "START"
-    case coordinator = "COORDINATOR"
-}
-
-/// A project's landing check as `integration.landingCheck` gives it (§12.16) — `@orbit/shared`'s
-/// `ProjectLandingCheck`. `command` is `NONE` for no check, nil for the merge check.
-public struct ProjectLandingCheck: Codable, Equatable, Sendable {
-    public let command: String?
-    /// Nil when nobody has written it, or by a writer this build does not know.
-    public let setBy: LandingCheckSetBy?
-    public let setBySessionId: String?
-    public let setAt: String?
-
-    public init(command: String?, setBy: LandingCheckSetBy? = nil, setBySessionId: String? = nil,
-                setAt: String? = nil) {
-        self.command = command
-        self.setBy = setBy
-        self.setBySessionId = setBySessionId
-        self.setAt = setAt
-    }
-
-    public init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        command = try c.decodeIfPresent(String.self, forKey: .command)
-        setBy = (try? c.decodeIfPresent(LandingCheckSetBy.self, forKey: .setBy)) ?? nil
-        setBySessionId = try? c.decodeIfPresent(String.self, forKey: .setBySessionId)
-        setAt = try? c.decodeIfPresent(String.self, forKey: .setAt)
-    }
-}
-
-/// One field's value in a landing-check change: the project's landing check, or one task's exemption
-/// — `@orbit/shared`'s `ProjectLandingCheckValue | ProjectTaskExemptValue`, told apart by `none`.
-public enum ProjectSettingChangeValue: Codable, Equatable, Sendable {
-    case landingCheck(command: String?, timeoutSeconds: Int?, none: Bool)
-    case taskExempt(exempt: Bool, reason: String?)
-
-    enum CodingKeys: String, CodingKey { case command, timeoutSeconds, none, exempt, reason }
-
-    public init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        if c.contains(.none) {
-            self = .landingCheck(command: try c.decodeIfPresent(String.self, forKey: .command),
-                                 timeoutSeconds: try c.decodeIfPresent(Int.self, forKey: .timeoutSeconds),
-                                 none: try c.decode(Bool.self, forKey: .none))
-        } else {
-            self = .taskExempt(exempt: try c.decode(Bool.self, forKey: .exempt),
-                               reason: try c.decodeIfPresent(String.self, forKey: .reason))
-        }
-    }
-
-    public func encode(to encoder: Encoder) throws {
-        var c = encoder.container(keyedBy: CodingKeys.self)
-        switch self {
-        case .landingCheck(let command, let timeoutSeconds, let none):
-            try c.encode(command, forKey: .command)
-            try c.encode(timeoutSeconds, forKey: .timeoutSeconds)
-            try c.encode(none, forKey: .none)
-        case .taskExempt(let exempt, let reason):
-            try c.encode(exempt, forKey: .exempt)
-            try c.encode(reason, forKey: .reason)
-        }
-    }
-}
-
-/// One record in a project's landing-check history, as `project_get.settingChanges` lists it, newest
-/// first (§12.15 P-R1) — `@orbit/shared`'s `ProjectSettingChangeView`. Only a `COORDINATOR` row that
-/// nothing reverted and whose new value is still current is `revertible`; the owner puts its old
-/// value back with `POST /projects/:id/setting-changes/:id/revert`.
-public struct ProjectSettingChange: Codable, Equatable, Sendable, Identifiable {
-    public enum Field: String, Codable, Equatable, Sendable {
-        case landingCheck = "LANDING_CHECK"
-        case taskLandingCheckExempt = "TASK_LANDING_CHECK_EXEMPT"
-    }
-    public enum Origin: String, Codable, Equatable, Sendable {
-        case coordinator = "COORDINATOR"
-        case owner = "OWNER"
-        case card = "CARD"
-        case unknown
-
-        public init(from decoder: Decoder) throws {
-            self = Origin(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .unknown
-        }
-    }
-
-    public let id: String
-    public let projectId: String
-    public let taskId: String?
-    public let field: Field
-    public let origin: Origin
-    public let oldValue: ProjectSettingChangeValue
-    public let newValue: ProjectSettingChangeValue
-    public let reason: String?
-    public let writtenBySessionId: String?
-    /// The change an owner's revert put back, on the revert's own row.
-    public let revertsChangeId: String?
-    /// When an owner's revert put this change back.
-    public let revertedAt: String?
-    public let revertible: Bool
-    public let createdAt: String
-
-    public init(id: String, projectId: String = "", taskId: String? = nil, field: Field = .landingCheck,
-                origin: Origin, oldValue: ProjectSettingChangeValue, newValue: ProjectSettingChangeValue,
-                reason: String? = nil, writtenBySessionId: String? = nil, revertsChangeId: String? = nil,
-                revertedAt: String? = nil, revertible: Bool = false, createdAt: String = "") {
-        self.id = id
-        self.projectId = projectId
-        self.taskId = taskId
-        self.field = field
-        self.origin = origin
-        self.oldValue = oldValue
-        self.newValue = newValue
-        self.reason = reason
-        self.writtenBySessionId = writtenBySessionId
-        self.revertsChangeId = revertsChangeId
-        self.revertedAt = revertedAt
-        self.revertible = revertible
-        self.createdAt = createdAt
-    }
-
-    public init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        id = try c.decode(String.self, forKey: .id)
-        projectId = try c.decodeIfPresent(String.self, forKey: .projectId) ?? ""
-        taskId = try c.decodeIfPresent(String.self, forKey: .taskId)
-        field = try c.decode(Field.self, forKey: .field)
-        origin = try c.decodeIfPresent(Origin.self, forKey: .origin) ?? .unknown
-        oldValue = try c.decode(ProjectSettingChangeValue.self, forKey: .oldValue)
-        newValue = try c.decode(ProjectSettingChangeValue.self, forKey: .newValue)
-        reason = try c.decodeIfPresent(String.self, forKey: .reason)
-        writtenBySessionId = try c.decodeIfPresent(String.self, forKey: .writtenBySessionId)
-        revertsChangeId = try c.decodeIfPresent(String.self, forKey: .revertsChangeId)
-        revertedAt = try c.decodeIfPresent(String.self, forKey: .revertedAt)
-        revertible = try c.decodeIfPresent(Bool.self, forKey: .revertible) ?? false
-        createdAt = try c.decodeIfPresent(String.self, forKey: .createdAt) ?? ""
-    }
-}
-
 /// The integration line plus what the queue has done with it — the facts the page's line row draws,
 /// and the settings How it runs edits.
 public struct ProjectIntegrationView: Codable, Equatable, Sendable {
@@ -948,8 +810,9 @@ public struct ProjectIntegrationView: Codable, Equatable, Sendable {
     public let landingCheckCommand: String?
     public let landingCheckTimeoutSeconds: Int?
     public let landingCheckCommandAbsentReason: String?
-    /// The landing check and who set it last (§12.16); nil from a server that predates it.
-    public let landingCheck: ProjectLandingCheck?
+    /// The landing check and who set it last (§12.16): `command` is `NONE` for No check. Nil from a
+    /// server that predates it, which draws no badge.
+    public var landingCheck: ProjectLandingCheck? = nil
     public let mergeCheckTimeoutSeconds: Int?
     public let mergeCheckCommand: String?
     /// How long an exception may wait on the coordinator before it becomes the owner's. Nil from a
@@ -989,10 +852,8 @@ public struct ProjectIntegrationView: Codable, Equatable, Sendable {
                 landingCheckCommand: String? = nil, landingCheckTimeoutSeconds: Int? = nil,
                 landingCheckCommandAbsentReason: String? = nil, mergeCheckTimeoutSeconds: Int? = nil,
                 escalationSeconds: Int? = nil, landTasks: [ProjectLandTask] = [],
-                inFlightJobs: [ProjectIntegrationJob]? = nil, deliveryMode: DeliveryMode? = nil,
-                landingCheck: ProjectLandingCheck? = nil) {
+                inFlightJobs: [ProjectIntegrationJob]? = nil, deliveryMode: DeliveryMode? = nil) {
         self.line = line
-        self.landingCheck = landingCheck
         self.ref = ref
         self.upstreamRef = upstreamRef
         self.upstreamChosenAt = upstreamChosenAt
@@ -1035,8 +896,7 @@ public struct ProjectIntegrationView: Codable, Equatable, Sendable {
         landingCheckCommand = try c.decodeIfPresent(String.self, forKey: .landingCheckCommand)
         landingCheckTimeoutSeconds = try c.decodeIfPresent(Int.self, forKey: .landingCheckTimeoutSeconds)
         landingCheckCommandAbsentReason = try c.decodeIfPresent(String.self, forKey: .landingCheckCommandAbsentReason)
-        // Who set it is an older server's absence when this build cannot read it.
-        landingCheck = (try? c.decodeIfPresent(ProjectLandingCheck.self, forKey: .landingCheck)) ?? nil
+        landingCheck = try? c.decodeIfPresent(ProjectLandingCheck.self, forKey: .landingCheck)
         mergeCheckTimeoutSeconds = try c.decodeIfPresent(Int.self, forKey: .mergeCheckTimeoutSeconds)
         escalationSeconds = try? c.decodeIfPresent(Int.self, forKey: .escalationSeconds)
         commitsAheadOfUpstream = try c.decodeIfPresent(Int.self, forKey: .commitsAheadOfUpstream)
@@ -1539,7 +1399,7 @@ public struct UpdateProjectIntegrationRequest: Encodable, Equatable, Sendable {
     public let mergeCheckCommand: String??
     public let landingCheckCommand: String??
     public let landingCheckTimeoutSeconds: Int??
-    /// `NONE`: run no landing check (§12.15 P-C1); a command or a null command lifts it. Nil leaves it.
+    /// `NONE`: run no landing check (§12.15 P-C1). Writing a landing-check command, or null, lifts it.
     public let landingCheck: String?
     public let exceptionEscalationSeconds: Int?
     /// How the work reaches main (§10.5 O-L1); nil leaves it alone. `agentPush` only with a main
@@ -1548,10 +1408,10 @@ public struct UpdateProjectIntegrationRequest: Encodable, Equatable, Sendable {
 
     public init(line: IntegrationLine? = nil, upstreamRef: String? = nil, mergeCheckCommand: String?? = nil,
                 landingCheckCommand: String?? = nil, landingCheckTimeoutSeconds: Int?? = nil,
-                exceptionEscalationSeconds: Int? = nil, deliveryMode: DeliveryMode? = nil,
-                landingCheck: String? = nil) {
-        self.line = line
+                landingCheck: String? = nil,
+                exceptionEscalationSeconds: Int? = nil, deliveryMode: DeliveryMode? = nil) {
         self.landingCheck = landingCheck
+        self.line = line
         self.upstreamRef = upstreamRef
         self.mergeCheckCommand = mergeCheckCommand
         self.landingCheckCommand = landingCheckCommand

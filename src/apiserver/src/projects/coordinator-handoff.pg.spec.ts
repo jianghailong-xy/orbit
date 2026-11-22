@@ -125,7 +125,8 @@ function services(f: Fixture) {
       turns.push({ sessionId, ...dto });
       await db.session.updateMany({
         where: { id: sessionId, status: { in: ['SUCCEEDED', 'FAILED', 'CANCELLED'] } },
-        data: { status: 'PENDING' },
+        // As the real revive: held again, so the release column and its cause go with the terminal status.
+        data: { status: 'PENDING', finishedAt: null},
       });
       await db.conversationTurn.create({
         data: { sessionId, seq: seq++, clientTurnId: dto.clientTurnId, content: dto.content, kind: 'message', sendIntent: dto.intent ?? null },
@@ -169,7 +170,13 @@ function services(f: Fixture) {
   }) as unknown as RealtimeService;
   const projects = new ProjectsService(db as unknown as PrismaService, undefined, sessions, realtime);
   const handoffs = new CoordinatorHandoffService(db as unknown as PrismaService, projects, sessions, realtime);
-  return { projects, handoffs, turns, openings, completed, completeOpts, interrupted, published, refusedProviders };
+  return { db, projects, handoffs, turns, openings, completed, completeOpts, interrupted, published, refusedProviders };
+}
+
+/** The engine took the note turn and the turn failed there: delivered, then ended FAILED. */
+async function failedInEngine(s: { db: PrismaClient; handoffs: CoordinatorHandoffService }, sessionId: string, turnId: string) {
+  await s.db.conversationTurn.update({ where: { id: turnId }, data: { deliveredAt: new Date() } });
+  await s.handoffs.afterTurn(sessionId, turnId, 'FAILED');
 }
 
 /** The note turn the handoff asked for, as a row. */
@@ -313,6 +320,8 @@ for (const [label, end, code, reason] of [
     await s.handoffs.start(f.ownerId, f.projectId);
     const turn = await noteTurn(f, s.turns[0].clientTurnId);
 
+    // The engine took it, then it ended this way.
+    await f.db.conversationTurn.update({ where: { id: turn.id }, data: { deliveredAt: new Date() } });
     await s.handoffs.afterTurn(f.outgoing, turn.id, end);
 
     assert.equal(await projectPointer(f), f.outgoing);
@@ -381,7 +390,7 @@ test('try again after a failure: a new note turn under a new key; the old turn\'
   const s = services(f);
   await s.handoffs.start(f.ownerId, f.projectId);
   const first = await noteTurn(f, s.turns[0].clientTurnId);
-  await s.handoffs.afterTurn(f.outgoing, first.id, 'FAILED');
+  await failedInEngine(s, f.outgoing, first.id);
 
   const retried = await s.handoffs.retry(f.ownerId, f.projectId);
   assert.equal(retried.state, 'WRITING');
@@ -405,7 +414,7 @@ test('try again after a failure: a new note turn under a new key; the old turn\'
   const g = await fixture();
   const t = services(g);
   await t.handoffs.start(g.ownerId, g.projectId);
-  await t.handoffs.afterTurn(g.outgoing, (await noteTurn(g, t.turns[0].clientTurnId)).id, 'FAILED');
+  await failedInEngine(t, g.outgoing, (await noteTurn(g, t.turns[0].clientTurnId)).id);
   assert.equal((await t.handoffs.start(g.ownerId, g.projectId)).state, 'WRITING');
   assert.equal(t.turns.length, 2);
 });
@@ -434,7 +443,7 @@ test('skip the note while WRITING: replaced at once with no note, the queued not
   assert.equal(inn.coordinatorHandoffReceived?.handoffFromSessionId, f.outgoing);
 
   // The note turn ending after the skip (the completion dropped it) changes nothing.
-  await s.handoffs.afterTurn(f.outgoing, turn.id, 'FAILED');
+  await failedInEngine(s, f.outgoing, turn.id);
   assert.equal((await readSessionCoordinatorHandoffs(f.db as unknown as PrismaService, f.outgoing)).coordinatorHandoff?.state, 'COMPLETED');
 });
 
@@ -442,7 +451,7 @@ test('hand over without a note after a failure, and with no handoff under way at
   const f = await fixture();
   const s = services(f);
   await s.handoffs.start(f.ownerId, f.projectId);
-  await s.handoffs.afterTurn(f.outgoing, (await noteTurn(f, s.turns[0].clientTurnId)).id, 'FAILED');
+  await failedInEngine(s, f.outgoing, (await noteTurn(f, s.turns[0].clientTurnId)).id);
   const skipped = await s.handoffs.skip(f.ownerId, f.projectId);
   assert.equal(skipped.state, 'COMPLETED');
   assert.equal(skipped.failureReason, null);
@@ -529,7 +538,7 @@ test('cancel handover: nothing changes, the queued note turn is withdrawn, and t
   await t.handoffs.cancel(g.ownerId, g.projectId);
   assert.deepEqual(t.interrupted, [g.outgoing]);
   await t.handoffs.start(g.ownerId, g.projectId);
-  await t.handoffs.afterTurn(g.outgoing, (await noteTurn(g, t.turns[1].clientTurnId)).id, 'FAILED');
+  await failedInEngine(t, g.outgoing, (await noteTurn(g, t.turns[1].clientTurnId)).id);
   assert.equal((await t.handoffs.cancel(g.ownerId, g.projectId)).state, 'CANCELLED');
   assert.equal(await projectPointer(g), g.outgoing);
 });
@@ -564,7 +573,12 @@ test('the pending-waits preview lists ACTIVE and PAUSED waits, the PAUSED ones m
 test('an ended coordinator (FAILED, or recycled while idle) is revived for its note rather than refused', { skip, timeout: 120_000 }, async () => {
   for (const status of ['FAILED', 'CANCELLED'] as const) {
     const f = await fixture();
-    await f.db.session.update({ where: { id: f.outgoing }, data: { status } });
+    // Released as the writers release (session_release_fact_chk, and every writer since 1403/1404): finished_at and
+    // a cause, a failure cause for FAILED.
+    await f.db.session.update({
+      where: { id: f.outgoing },
+      data: { status, finishedAt: new Date()},
+    });
     const s = services(f);
     const started = await s.handoffs.start(f.ownerId, f.projectId);
     assert.equal(started.state, 'WRITING', status);
@@ -573,17 +587,61 @@ test('an ended coordinator (FAILED, or recycled while idle) is revived for its n
   }
 });
 
-test('the revived coordinator fails again before answering: FAILED at the sweep, not an hour later', { skip, timeout: 120_000 }, async () => {
+test('the revived coordinator fails again before its note turn reaches the engine: COORDINATOR_CANT_RUN at the sweep, not an hour later', { skip, timeout: 120_000 }, async () => {
   const f = await fixture();
   const s = services(f);
   await s.handoffs.start(f.ownerId, f.projectId);
   // Its model cannot run: the claim fails and the conversation is FAILED, the note turn never delivered.
-  await f.db.session.update({ where: { id: f.outgoing }, data: { status: 'FAILED' } });
+  await f.db.session.update({
+    where: { id: f.outgoing }, data: { status: 'FAILED', finishedAt: new Date()},
+  });
   assert.equal(await s.handoffs.sweep(), 1);
   const { coordinatorHandoff } = await readSessionCoordinatorHandoffs(f.db as unknown as PrismaService, f.outgoing);
   assert.equal(coordinatorHandoff?.state, 'FAILED');
-  assert.equal(coordinatorHandoff?.failureCode, 'TURN_FAILED');
-  assert.equal(await projectPointer(f), f.outgoing, 'nothing else changed');
+  assert.equal(coordinatorHandoff?.failureCode, 'COORDINATOR_CANT_RUN');
+  assert.equal(coordinatorHandoff?.failureReason,
+    "The handoff note wasn't written: the model of this coordinator could not start. Pick another model and hand over without a note.");
+  assert.equal(await projectPointer(f), f.outgoing, 'nothing else changed: no successor was picked');
+});
+
+test('the coordinator cannot run and the owner picked a successor: the handover goes on without a note, on that successor', { skip, timeout: 120_000 }, async () => {
+  // The turn-complete hook: the note turn failed without the engine ever taking it.
+  {
+    const f = await fixture();
+    const active = await watch(f, f.outgoing, 'ACTIVE', { kind: 'TASK', id: f.taskId, leaf: 'TASK_DONE' });
+    const s = services(f);
+    await s.handoffs.start(f.ownerId, f.projectId, { successor: { engine: 'claude', provider: 'claude' } });
+    await s.handoffs.afterTurn(f.outgoing, (await noteTurn(f, s.turns[0].clientTurnId)).id, 'FAILED');
+    const successor = await projectPointer(f);
+    assert.notEqual(successor, f.outgoing, 'handed over');
+    assert.deepEqual(s.completed, [f.outgoing]);
+    const opened = s.openings.find((o) => o.id === successor)!;
+    assert.deepEqual([opened.engine, opened.provider], ['claude', 'claude'], 'on the picked model');
+    assert.ok(!opened.prompt.includes('<handoff_note>'), 'with no note');
+    assert.equal((await observers(f, [active]))[active].observer, successor, 'its waits moved');
+    const inn = await readSessionCoordinatorHandoffs(f.db as unknown as PrismaService, successor!);
+    assert.equal(inn.coordinatorHandoffReceived?.note, null);
+    assert.equal(inn.coordinatorHandoffReceived?.handoffFromSessionId, f.outgoing);
+  }
+  // The sweep: the revived conversation failed again before its note turn was delivered.
+  {
+    const f = await fixture();
+    const s = services(f);
+    await s.handoffs.start(f.ownerId, f.projectId, { successor: { engine: 'claude', provider: 'claude' } });
+    await f.db.session.update({ where: { id: f.outgoing }, data: { status: 'FAILED', finishedAt: new Date() } });
+    assert.equal(await s.handoffs.sweep(), 1);
+    assert.notEqual(await projectPointer(f), f.outgoing, 'handed over');
+    assert.equal((await readSessionCoordinatorHandoffs(f.db as unknown as PrismaService, f.outgoing)).coordinatorHandoff?.state, 'COMPLETED');
+  }
+  // A note turn the engine took and then failed is the ordinary failure: Try again may help, nothing moves.
+  {
+    const f = await fixture();
+    const s = services(f);
+    await s.handoffs.start(f.ownerId, f.projectId, { successor: { engine: 'claude', provider: 'claude' } });
+    await failedInEngine(s, f.outgoing, (await noteTurn(f, s.turns[0].clientTurnId)).id);
+    assert.equal(await projectPointer(f), f.outgoing);
+    assert.equal((await readSessionCoordinatorHandoffs(f.db as unknown as PrismaService, f.outgoing)).coordinatorHandoff?.failureCode, 'TURN_FAILED');
+  }
 });
 
 test('the successor runs on what the owner named: kept from Hand over, replaced by a later pick, refused up front when it cannot open', { skip, timeout: 120_000 }, async () => {
@@ -605,7 +663,7 @@ test('the successor runs on what the owner named: kept from Hand over, replaced 
     const f = await fixture();
     const s = services(f);
     await s.handoffs.start(f.ownerId, f.projectId, { successor: { engine: 'codex' } });
-    await s.handoffs.afterTurn(f.outgoing, (await noteTurn(f, s.turns[0].clientTurnId)).id, 'FAILED');
+    await failedInEngine(s, f.outgoing, (await noteTurn(f, s.turns[0].clientTurnId)).id);
     const failed = await readSessionCoordinatorHandoffs(f.db as unknown as PrismaService, f.outgoing);
     assert.deepEqual(failed.coordinatorHandoff?.successor, { engine: 'codex', provider: null, model: null }, 'the failure shows the pick');
     const skipped = await s.handoffs.skip(f.ownerId, f.projectId, { successor: { engine: 'kimi', model: 'kimi-k3' } });
@@ -632,11 +690,11 @@ test('"Same as this one" (successor: null) clears an earlier pick; leaving succe
   const f = await fixture();
   const s = services(f);
   await s.handoffs.start(f.ownerId, f.projectId, { successor: { engine: 'codex', provider: 'codex' } });
-  await s.handoffs.afterTurn(f.outgoing, (await noteTurn(f, s.turns[0].clientTurnId)).id, 'FAILED');
+  await failedInEngine(s, f.outgoing, (await noteTurn(f, s.turns[0].clientTurnId)).id);
   // Try again with no successor in the body keeps the pick.
   const kept = await s.handoffs.retry(f.ownerId, f.projectId, {});
   assert.deepEqual(kept.successor, { engine: 'codex', provider: 'codex', model: null });
-  await s.handoffs.afterTurn(f.outgoing, (await noteTurn(f, s.turns[1].clientTurnId)).id, 'FAILED');
+  await failedInEngine(s, f.outgoing, (await noteTurn(f, s.turns[1].clientTurnId)).id);
   // Hand over without a note on "Same as this one" clears it: the successor follows the previous coordinator.
   const skipped = await s.handoffs.skip(f.ownerId, f.projectId, { successor: null });
   assert.equal(skipped.state, 'COMPLETED');

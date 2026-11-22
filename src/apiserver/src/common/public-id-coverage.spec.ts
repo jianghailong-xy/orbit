@@ -92,6 +92,13 @@ const NON_ID_PARAMS = new Set(['token', 'userCode', 'seq', 'version', 'account',
 
 const OPAQUE_PARAM_ROUTES: Readonly<Record<string, string>> = {};
 
+// An id a runner issued, not an Orbit public id: a bg_run job handle (`bgj_…`) on the two routes that
+// stop one and read its output (POST /sessions/:id/background/jobs/:jobId/stop, GET …/tail). The
+// service matches it against the session's own `running_bg_jobs` text array and never decodes it, so
+// there is no Orbit row to resolve and no id to translate; a string naming no job of that session is
+// a 404, which is what the other three lists' members are protected against too.
+const RUNNER_ISSUED_PARAMS = new Set(['jobId']);
+
 // Query filters, on the other hand, are a mixed bag of ids and ordinary filters, so those do
 // read the shared classification — one list, so a name can't be an id on the way out and a
 // free-form string on the way in.
@@ -208,7 +215,7 @@ function inspect(controller: new (...args: never[]) => unknown) {
         if (!validatesOpaqueUuid(arg.pipes ?? [])) opaqueUnvalidated.push(routeArg);
       }
       const wanted =
-        (kind === PARAM && !NON_ID_PARAMS.has(name) && !OPAQUE_PARAM_ROUTES[routeArg])
+        (kind === PARAM && !NON_ID_PARAMS.has(name) && !RUNNER_ISSUED_PARAMS.has(name) && !OPAQUE_PARAM_ROUTES[routeArg])
         || (kind === QUERY && ID_QUERIES.has(name));
       if (!wanted) continue;
       seen.push(`${method}(${name})`);

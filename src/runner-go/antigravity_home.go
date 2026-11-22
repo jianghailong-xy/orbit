@@ -302,6 +302,9 @@ func antigravityMCPServers(agent AgentExecConfig, orbitExe string) map[string]in
 			// the server gets it whatever agy passes.
 			env[envSubagentRunID] = runID
 		}
+		if mode := strings.TrimSpace(agent.Env[envSubagentRemoteMode]); mode != "" {
+			env[envSubagentRemoteMode] = mode
+		}
 		servers["orbit"] = map[string]interface{}{
 			"command": orbitExe,
 			"args":    []string{"mcp"},

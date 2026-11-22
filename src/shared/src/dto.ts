@@ -2564,11 +2564,18 @@ export type RunnerEngineUpdateDismissals = Partial<Record<ReportedEngine, string
 
 /**
  * Fix with an agent (POST /runners/:id/attention/:kind/fix): the machine-side warnings a press hands to
- * an agent on that machine. `engineNotUpdating` and `installFailed` name an engine; `cannotSelfUpdate`
- * (the runner can't update itself, or its updates are turned off) is the runner's own, and so is
- * `engineUpdateFailed` (an Update engines run whose report has failed lines, whichever engines they name).
+ * an agent on that machine. `engineNotUpdating`, `installFailed` and `sandboxMissing` name an engine;
+ * `cannotSelfUpdate` (the runner can't update itself, or its updates are turned off) is the runner's own,
+ * and so is `engineUpdateFailed` (an Update engines run whose report has failed lines, whichever engines
+ * they name). `sandboxMissing` is the engine's own prerequisite a session's transcript caught (Codex
+ * without bubblewrap on PATH).
  */
-export type RunnerAttentionFixKind = 'engineNotUpdating' | 'cannotSelfUpdate' | 'installFailed' | 'engineUpdateFailed';
+export type RunnerAttentionFixKind =
+  | 'engineNotUpdating'
+  | 'cannotSelfUpdate'
+  | 'installFailed'
+  | 'engineUpdateFailed'
+  | 'sandboxMissing';
 
 /** Why no agent can start on a machine: it is offline, no workspace runs on it, or the engine its
  *  most recently used workspace runs on is signed out there. */
@@ -2577,11 +2584,24 @@ export type RunnerAgentFixBlockedCode = 'offline' | 'noWorkspace' | 'engineSigne
 /** An agent already at work on one warning: the session a press started, while it is open. */
 export interface RunnerAgentFixing {
   kind: RunnerAttentionFixKind;
-  /** The engine for `engineNotUpdating` and `installFailed`; null for `cannotSelfUpdate` and `engineUpdateFailed`. */
+  /** The engine for `engineNotUpdating`, `installFailed` and `sandboxMissing`; null for
+   *  `cannotSelfUpdate` and `engineUpdateFailed`. */
   engine: ReportedEngine | null;
   sessionId: string;
   workspaceId: string;
   workspaceName: string;
+}
+
+/** The latest agent a warning was handed to once its session is over. A transcript row is history,
+ *  so it shows what was done about it instead of offering a second agent; the session stays openable. */
+export interface RunnerAgentFixHandled {
+  kind: RunnerAttentionFixKind;
+  engine: ReportedEngine | null;
+  sessionId: string;
+  workspaceId: string;
+  workspaceName: string;
+  /** How that session ended. */
+  status: 'SUCCEEDED' | 'FAILED' | 'CANCELLED';
 }
 
 /**
@@ -2600,11 +2620,13 @@ export interface RunnerAgentFix {
   blocked: { code: RunnerAgentFixBlockedCode; message: string } | null;
   /** The warnings an agent is fixing now, each with its open session. */
   fixing: RunnerAgentFixing[];
+  /** The warnings whose latest agent session is over, each with how it ended. */
+  handled: RunnerAgentFixHandled[];
 }
 
 /** POST /runners/:id/attention/:kind/fix body. */
 export interface RunnerAttentionFixRequest {
-  /** Required for `engineNotUpdating` and `installFailed`. */
+  /** Required for `engineNotUpdating`, `installFailed` and `sandboxMissing`. */
   engine?: ReportedEngine;
   /** `cannotSelfUpdate` only: the newest runner release the client knows of (it reads dl/version.json),
    *  quoted in the agent's first message. */
@@ -3220,8 +3242,83 @@ export interface ProviderModelTier {
    *  (PATCH /providers/mine/:providerId/model-tier), or any model of a built-in engine's catalogue
    *  (PATCH /providers/builtin/:slug/model-tier, which overrides the catalogue's tier). */
   editable: boolean;
+  /** Set on a built-in engine's untiered model whose family's newest model, this one, is tiered on that engine:
+   *  routing deliberately uses the newest, so the client reads "Older · uses <model>", not "Not set". Display only. */
+  supersededBy?: string;
   /** USD per million output tokens, when known (models.dev); null for a subscription or an unpriced key. */
   outputPricePerMTok: number | null;
+  /** How well this model completed work, for display only: routing never reads it (docs/subagent-design.md §7.1). */
+  quality: ModelQuality;
+}
+
+/** How far back the Model tiers quality reads, in days. */
+export const MODEL_QUALITY_WINDOW_DAYS = 90;
+/** A rating this many days old weighs half as much as one made today. */
+export const MODEL_QUALITY_HALF_LIFE_DAYS = 30;
+/** Fewer ratings than this read as "Not enough ratings": no average is given. */
+export const MODEL_QUALITY_MIN_RATINGS = 5;
+/** Fewer completed tasks than this read as "Not enough tasks": no rate is given. */
+export const MODEL_QUALITY_MIN_TASKS = 10;
+
+/** Who rated a model's SubAgent runs: the parent sessions' own model, and how many of the ratings it gave. */
+export interface ModelQualityRater {
+  engine: string | null;
+  provider: string;
+  model: string | null;
+  /** The model's name as the owner's tables give it, else its id; null when the parent named no model. */
+  label: string | null;
+  count: number;
+}
+
+/**
+ * SubAgent runs on this model in the last MODEL_QUALITY_WINDOW_DAYS days, and how the parents that started them
+ * rated them (subagent_rate, 1 to 5). The average weighs each rating by its age (half-life
+ * MODEL_QUALITY_HALF_LIFE_DAYS); it is null below MODEL_QUALITY_MIN_RATINGS ratings.
+ */
+export interface ModelSubagentQuality {
+  averageRating: number | null;
+  ratedCount: number;
+  /** The runs that ended, rated or not. */
+  runCount: number;
+  /** Most ratings first. */
+  raters: ModelQualityRater[];
+}
+
+/**
+ * Tasks whose first run was on this model in the last MODEL_QUALITY_WINDOW_DAYS days and that are done, and how
+ * many of them passed first time: one run, never failed, sent back or failed by a verifier. A run that failed on a
+ * usage limit or a model at capacity is not counted at all. The rate is null below MODEL_QUALITY_MIN_TASKS.
+ */
+export interface ModelTaskQuality {
+  firstPassRate: number | null;
+  firstPassTaskCount: number;
+  completedTaskCount: number;
+}
+
+export interface ModelQuality {
+  subagent: ModelSubagentQuality;
+  tasks: ModelTaskQuality;
+}
+
+/** POST /runner/sessions/:id/subagents/:runId/rating (subagent_rate): the parent's rating of a run it started. */
+export interface SubagentRatingRequest {
+  /** 1 = discarded it or had to redo it, 3 = usable after fixes, 5 = used as-is. */
+  score: number;
+  /** Up to SUBAGENT_RATING_NOTE_MAX characters. */
+  note?: string;
+}
+
+export const SUBAGENT_RATING_NOTE_MAX = 500;
+
+export interface SubagentRatingResponse {
+  runId: string;
+  score: number;
+  note: string | null;
+  ratedAt: string;
+  /** The rating parent's own engine, provider and model, as the session ran when it rated. */
+  rater: { engine: string | null; provider: string; model: string | null };
+  /** A rating this run already had was replaced. */
+  replaced: boolean;
 }
 
 /** One provider as the SubAgents settings and the Tier column list it, in the owner's provider order. */

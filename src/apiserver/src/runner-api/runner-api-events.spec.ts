@@ -4,6 +4,7 @@ import { renderRawQuery, noSessionRequests } from '../test-support/prisma-transa
 import { test } from 'node:test';
 import { ConflictException, ForbiddenException, Logger } from '@nestjs/common';
 import { Prisma, RunStatus } from '@prisma/client';
+import { isReleasedStatus } from '../common/session-release';
 import { API_ERROR_RETRY_BACKOFF_MS, MAX_API_ERROR_RETRIES, RunEventType } from '@orbit/shared';
 import { RunnerApiController } from './runner-api.controller';
 import { coordinatorDeliveryTurnId } from '../projects/coordinator-delivery.service';
@@ -147,6 +148,8 @@ function makeController(
       findUniqueOrThrow: async () => ({
         ownerId: 'owner-1',
         status,
+        // A terminal row carries its release column (session_release_fact_chk).
+        ...(isReleasedStatus(status) ? { finishedAt: new Date() } : {}),
         runtimeSessionId,
         cancelRequestedAt: null,
         runningBgShells: stored.runningBgShells ?? [],

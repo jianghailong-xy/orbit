@@ -98,14 +98,15 @@ func (s *bgJobService) admit(spec bgJobSpec) bgGateVerdict {
 }
 
 // routineOnDsh applies Auto's rule for one sandbox escalation to a job. The rule reads a command line, so a
-// request that also sets variables is not routine: LD_PRELOAD or BASH_ENV change what that line does.
+// request that also sets variables is not routine: LD_PRELOAD or BASH_ENV change what that line does. The
+// session's other directories (its uploads) count as the workspace does, as they do inside the session.
 func (s *bgJobService) routineOnDsh(spec bgJobSpec) bool {
 	if s.requestSetsEnv(spec) {
 		return false
 	}
 	return dshAutoRoutineEscalation(dshPermissionAsk{Name: "bash", Input: map[string]interface{}{
 		"command": spec.Command, "workdir": spec.Dir, "sandbox_permissions": "require_escalated",
-	}}, s.execDir)
+	}}, s.execDir, s.extraDirs...)
 }
 
 // requestSetsEnv reports whether a job's environment holds anything beyond the agent's own.

@@ -612,6 +612,7 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 		p.emitFor(turnID, kind, payload)
 	})
 	permissions.workspace = spec.Cwd
+	permissions.uploads = uploadsDir(p.job.SessionID)
 	app, err := startDshACP(p.ctx, *spec, mapper, permissions, p.emit)
 	if err != nil {
 		return fail("failed to start DeepSeek Harness: " + err.Error())

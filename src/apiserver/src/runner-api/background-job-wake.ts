@@ -1,11 +1,5 @@
 import { BackgroundJobWake, ConversationTurn, Prisma } from '@prisma/client';
-import {
-  BG_JOB_STOPPED_BY_OWNER,
-  deriveSessionLifecycleState,
-  deriveSessionRunState,
-  SessionLifecycleState,
-  SessionRunState,
-} from '@orbit/shared';
+import { BG_JOB_STOPPED_BY_OWNER } from '@orbit/shared';
 import { IsIn, IsInt, IsOptional, IsString, Matches, MaxLength, Min, ValidateIf } from 'class-validator';
 import { stripNul } from './strip-nul';
 
@@ -178,21 +172,11 @@ export async function jobExitFiled(
 
 /**
  * Whether a session has ended in any of the ways a turn filed now would undo. `createTurn` refuses
- * the Trash, the terminal statuses and a requested cancel on its own; it does not refuse a session
+ * the Trash, a released session and a requested cancel on its own; it does not refuse a session
  * completed while parked, nor an interrupted one whose end was recorded — and a wake must not
- * bring either back.
+ * bring either back. The rule is common/session-release.ts `sessionHasEnded`.
  */
-export function sessionHasEnded(session: {
-  status: string;
-  endReason: string | null;
-  completedAt: Date | null;
-  archivedAt: Date | null;
-  deletedAt: Date | null;
-}): boolean {
-  if (deriveSessionLifecycleState(session) !== SessionLifecycleState.OPEN) return true;
-  const run = deriveSessionRunState(session);
-  return run === SessionRunState.ENDED || run === SessionRunState.SUCCEEDED || run === SessionRunState.FAILED;
-}
+export { sessionHasEnded } from '../common/session-release';
 
 /**
  * The session's wake turn nobody has been handed yet on this route, if there is one: a queued
@@ -592,6 +576,11 @@ const ENDED_BECAUSE: Record<string, string> = {
   FAILED: 'It did not finish its work.',
 };
 
+/** The block's ask to rate each result (subagent-rating.ts). Optional: nothing waits on a rating. */
+export const SUBAGENT_RATE_LINE =
+  '  Once you have used a result, rate it with mcp__orbit__subagent_rate (its run id, score 1-5, an optional note): ' +
+  '1 you discarded it or redid the work, 3 usable after fixes, 5 used as-is. Optional: nothing waits on it.';
+
 /**
  * The block a SubAgent's wake is delivered in. It names the SubAgent by its description and run, says how it
  * ended (and why, for one that did not finish), and quotes its result. `turnKind` is the delivering turn's, as for
@@ -621,6 +610,7 @@ export function buildSubagentFinishedBlock(wakes: StoredWake[], turnKind: string
     '  The control plane recorded this for you; the user did not say it. Whatever a SubAgent changed is in your working ' +
       'tree, uncommitted: review it before you commit. To continue one, call delegate with resume set to its run id.',
   );
+  lines.push(SUBAGENT_RATE_LINE);
   lines.push('</orbit-subagent-finished>');
   return lines.join('\n');
 }

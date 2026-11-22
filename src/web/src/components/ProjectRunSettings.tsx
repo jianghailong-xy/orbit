@@ -73,15 +73,13 @@ import {
   RUN_DELIVERS_CODE_HINT,
   RUN_DELIVERS_NOT_CODE,
   RUN_DELIVERS_NOT_CODE_HINT,
-  RUN_LANDING,
-  RUN_LANDING_OFF_HINT,
   RUN_TO_CODE,
   RUN_TO_NOT_CODE,
   formatDoneDateTime,
   nonCodeProvenance,
   nonCodeReasonLine,
 } from '../lib/projectDone';
-import { projectIntegrationQuery, projectPromotionQuery } from '../lib/queries';
+import { projectPromotionQuery } from '../lib/queries';
 import { ago } from '../lib/watches';
 import { MainBranchSelect } from './MainBranchSelect';
 import { START_MAX_CONCURRENT_TASKS } from './StartProjectCard';
@@ -96,6 +94,7 @@ import { ProjectChangesRow } from './ProjectLandingChanges';
 import { Select } from './ui/Select';
 import { Spinner } from './ui/Spinner';
 import { Switch } from './ui/Switch';
+import { useProjectIntegration } from '../lib/pollOwner';
 
 /**
  * "How it runs" — every setting the start card set, in one block on the project page once the
@@ -210,7 +209,7 @@ function updateProjectAuthorization(projectId: string, body: AuthorizationBody):
 }
 
 /** `POST /projects/:id/pause` or `/resume` — the owner's alone. */
-function moveProject(projectId: string, door: 'pause' | 'resume'): Promise<ProjectPauseState> {
+export function moveProject(projectId: string, door: 'pause' | 'resume'): Promise<ProjectPauseState> {
   return api<ProjectPauseState>(`/projects/${encodeURIComponent(projectId)}/${door}`, { method: 'POST' });
 }
 
@@ -347,7 +346,7 @@ export function ProjectRunSettings({
 }): JSX.Element {
   const qc = useQueryClient();
   // The same read the integration row above makes, by the same key: one request for both.
-  const integration = useQuery({ ...projectIntegrationQuery(projectId), enabled: Boolean(projectId) });
+  const integration = useProjectIntegration(projectId);
   const view = integration.data ?? null;
   // The merge on offer, read only where the Delivery row is drawn: switching to the agent's way while
   // one is live asks first (owner decision 2026-11-10). Same key as the card's own read.
@@ -512,7 +511,6 @@ export function ProjectRunSettings({
             </div>
           </div>
 
-          {draft.nonCode ? null : (<>
           <div className="project-integration-setting">
             <div className="project-integration-setting-label">{RUN_TASKS_LAND_ON}</div>
             <div>
@@ -602,8 +600,6 @@ export function ProjectRunSettings({
             </div>
           ) : null}
 
-          </>)}
-
           <div className="project-integration-setting">
             <div className="project-integration-setting-label">{RUN_AUTOMATIC}</div>
             <div>
@@ -649,13 +645,7 @@ export function ProjectRunSettings({
         <div className="project-run-settings-group">
           <div className="project-run-settings-group-head">{RUN_INTEGRATION}</div>
 
-          {draft.nonCode ? (
-            <div className="project-integration-setting project-run-landing-off">
-              <div className="project-integration-setting-label">{RUN_LANDING}</div>
-              <div className="project-integration-setting-hint">{RUN_LANDING_OFF_HINT}</div>
-            </div>
-          ) : (
-            <>
+          <>
               <div className="project-integration-setting">
                 <div className="project-integration-setting-label">{LANDING_CHECK_COPY.LABEL}</div>
                 <div>
@@ -733,8 +723,7 @@ export function ProjectRunSettings({
                   {missingCheck ? <div className="start-card-warn">{runNoMergeCheckWarning(main)}</div> : null}
                 </div>
               </div>
-            </>
-          )}
+          </>
 
           <div className="project-integration-setting">
             <div className="project-integration-setting-label">{RUN_ESCALATE_AFTER}</div>

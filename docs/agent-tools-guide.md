@@ -453,6 +453,7 @@ Agent tools on a session counts each family as that session's engine lists it. T
 | Schedules (12) | `condition_get`, `schedule_create`, `schedule_delete`, `schedule_end`, `schedule_get`, `schedule_list`, `schedule_pause`, `schedule_resume`, `schedule_run_now`, `schedule_run_report`, `schedule_run_stop`, `schedule_update` |
 | Waits (6) | `task_await`, `watch_cancel`, `watch_create`, `watch_get`, `watch_list`, `watch_update` |
 | Files (4) | `file_fetch`, `file_list`, `file_pin`, `file_upload` |
+| SubAgents (1) | `subagent_rate` |
 | Background jobs (5) | `bg_kill`, `bg_list`, `bg_output`, `bg_run`, `schedule_wakeup` |
 | Questions for you (8) | `ask_owner`, `notify`, `open_item_hand_over`, `request_owner_action`, `settings_get`, `settings_propose`, `task_request_confirmation`, `withdraw_owner_request` |
 | Wiki (5) | `wiki_draft`, `wiki_get`, `wiki_note`, `wiki_propose`, `wiki_search` |

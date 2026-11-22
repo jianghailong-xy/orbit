@@ -29,6 +29,7 @@ import {
 import { encodeId } from '../lib/idCodec';
 import { projectIntegrationQuery, projectOpenItemsQuery } from '../lib/queries';
 import {
+  START_NO_LINE,
   START_PROJECT_TITLE,
   START_ROW_NOT_ASKED,
   START_ROW_OWN,
@@ -489,6 +490,22 @@ describe('ProjectOpenItems — the start of a project nobody has started', () =>
     // Somebody is waiting on the owner for it, so it counts with what needs them.
     expect(html).toContain('2 need you · oldest first');
     expect(html).not.toContain(START_ROW_NOT_ASKED);
+  });
+
+  it('a request that names no line names none on its row: the start card\'s one sentence, not "a project branch"', () => {
+    const lineless = item({
+      ...START,
+      startRequest: { ...START.startRequest!, settings: { automatic: true, maxConcurrentTasks: 3, mergeCheckCommand: 'npm test' } },
+    });
+    const summary = startRequestSummary(lineless.startRequest!.settings);
+    expect(summary).toBe('The coordinator asked · Lands on the project’s branch when a task commits · Automatic on · at most 3 at a time');
+    expect(summary).toContain(START_NO_LINE);
+    const html = openItems({ needsYou: [], withCoordinator: [], startRequest: lineless });
+    expect(html).toContain(summary);
+    expect(html).not.toContain('a project branch');
+    // A request that names its line reads as before.
+    expect(startRequestSummary(START.startRequest!.settings))
+      .toBe('The coordinator asked · a project branch · Automatic on · at most 3 at a time');
   });
 
   it('says directly into the main branch the start card opens with: main as before, else the branch by name', () => {

@@ -87,12 +87,12 @@ test('terminal fencing tombstones only the Session current concrete generation',
   await retireSessionInboxGeneration(tx as never, SESSION_ID);
 
   assert.equal(calls.length, 1);
-  // The statement as Prisma sends it: the released-status fragment (common/session-release.ts) is a
-  // nested Prisma.Sql, which Prisma inlines into the text.
+  // The statement as Prisma sends it: the released fragment (common/session-release.ts, the release column since plan
+  // step 4.3) is a nested Prisma.Sql, which Prisma inlines into the text.
   const statement = Prisma.sql(calls[0][0] as readonly string[], ...(calls[0].slice(1) as Prisma.Sql[]));
   assert.match(statement.sql, /UPDATE "inbox_lease_generation" AS generation/);
   assert.match(statement.sql, /"retired_at" = COALESCE\(generation\."retired_at", now\(\)\)/);
-  assert.match(statement.sql, /session\.status IN \('SUCCEEDED', 'FAILED', 'CANCELLED'\)/);
+  assert.match(statement.sql, /session\."finished_at" IS NOT NULL/);
   assert.match(statement.sql, /generation\.generation = session\."inbox_lease_generation"/);
   assert.deepEqual(statement.values, [SESSION_ID]);
 });

@@ -4,7 +4,15 @@ import type { WatchView } from '@orbit/shared';
 import { getToken } from '../api';
 import { streamReport } from './listBudget';
 import { cloneEventOf, hearClone, sameWorkspace } from './workspaceClone';
-import { heldIds, sessionReaches, type SessionReachDeclaration, type SessionSubject } from './sessionReach';
+import {
+  heldIds,
+  sessionReaches,
+  taskReaches,
+  type SessionReachDeclaration,
+  type SessionSubject,
+  type TaskChange,
+  type TaskReachDeclaration,
+} from './sessionReach';
 import type { ProjectPlacement } from './queries';
 
 // Coalesce a burst of control events (a turn end fires status + approval back-to-back) into a
@@ -75,7 +83,7 @@ const isOpenList = (queryKey: readonly unknown[]): boolean =>
 
 /** Every entity a control-plane event can move, as the query declarations name them. Used by the
  *  reconnect's sweep, which has to reach all of them at once. */
-const ENTITIES = ['task', 'session', 'project', 'workspace', 'checkout', 'tag', 'folder', 'provider', 'watch', 'wiki', 'terminal'] as const;
+const ENTITIES = ['task', 'session', 'project', 'workspace', 'checkout', 'tag', 'folder', 'provider', 'watch', 'wiki', 'terminal', 'ownerRequest', 'scheduleCard'] as const;
 
 /**
  * Whether a cached query says, in `meta.entities`, that it derives from one of `entities`. Every
@@ -103,11 +111,79 @@ type EventData = {
   projectMembership?: { projectId?: unknown } | null;
 } | null | undefined;
 
+/** The ids of a string array an event carries, or null when it carries none (an older server's event). */
+const idsOrNull = (value: unknown): string[] | null =>
+  Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : null;
+
+/** What a `task.changed` says of its rows (lib/sessionReach TaskChange). An event that does not say it is bounded is a
+ *  resync, as the server's normalizer reads it. */
+const taskChangeOf = (data: { taskId?: unknown; taskIds?: unknown; resync?: unknown; creatorSessionIds?: unknown } | null | undefined): TaskChange => ({
+  taskIds: taskIdsOf(data),
+  creatorSessionIds: idsOrNull(data?.creatorSessionIds),
+  resync: data?.resync !== false,
+});
+
+/** The task changes of a coalescing window, as refetchEntities reads them. */
+type TaskScope = { changes: TaskChange[]; any: boolean };
+/** The sessions whose schedule cards a window's events named. */
+type CardScope = { sessions: Set<string>; all: boolean };
+
 /** The ids a `task.changed` names: `taskIds`, and `taskId` from an older server. */
 const taskIdsOf = (data: { taskId?: unknown; taskIds?: unknown } | null | undefined): string[] => [
   ...(Array.isArray(data?.taskIds) ? data.taskIds.filter((id): id is string => typeof id === 'string') : []),
   ...(typeof data?.taskId === 'string' ? [data.taskId] : []),
 ];
+
+/**
+ * What `GET /sessions/counts` counts a session in (SessionsService.workspaceSessionCounts), as far as a summary or a
+ * list row says it. The server counts an Open conversation of a workspace: in `active` while it is RUNNING or
+ * PENDING; in `running` for a dispatched turn (RUNNING); in `needsYou` while a person has to answer it, which takes it
+ * out of `running` and `jobs`. The rest of `running` (the engine's own turn, a sub-agent) and of `jobs` (a bg_run job
+ * or watch in flight) is held by columns no summary carries, and counts only while the session is held (PENDING,
+ * RUNNING, AWAITING_INPUT, INTERRUPTED): a released one has them cleared. So those two can move only with that class,
+ * or with a process starting or ending (`background.task`), and the rest waits for the safety read.
+ */
+type TallyFacts = { workspace: string; open: boolean; status: string; needsYou: boolean };
+/** The fields of a summary, or of a session row this tab read, that `TallyFacts` is made from. */
+type TallyRow = {
+  id?: unknown;
+  status?: unknown;
+  runStatus?: unknown;
+  lifecycleState?: unknown;
+  sessionKind?: unknown;
+  agentId?: unknown;
+  agent?: { id?: unknown } | null;
+  pendingApprovals?: unknown;
+  waitingKind?: unknown;
+} | null | undefined;
+/** The statuses whose session holds no process and whose turn is over. */
+const RELEASED_STATUSES = new Set(['SUCCEEDED', 'FAILED', 'CANCELLED']);
+/** The `background.task` statuses that end a process (runner-api's bgEnded). */
+const PROCESS_ENDED = new Set(['completed', 'failed', 'killed', 'stopped']);
+/** Statuses that count alike: AWAITING_INPUT and INTERRUPTED are counted by the same rules, and so are the released. */
+const tallyClass = (status: string): string =>
+  status === 'AWAITING_INPUT' || status === 'INTERRUPTED' ? 'held' : RELEASED_STATUSES.has(status) ? 'released' : status;
+/** A start request lights no tally (owner-decision-signal.ts START_REQUEST), as the Session list's bar leaves it out. */
+const needsYouOf = (pendingApprovals: unknown, waitingKind: unknown): boolean =>
+  Number(pendingApprovals ?? 0) > 0 && waitingKind !== 'START_REQUEST';
+const tallyFactsOf = (row: TallyRow, workspaceId: string): TallyFacts => {
+  // The summary's own workspace before the envelope's, which the server resolves through a cache of its own.
+  const workspace = row?.agentId || row?.agent?.id || workspaceId;
+  return {
+    workspace: typeof workspace === 'string' ? workspace : '',
+    // A landing is in no tally, and neither is a session outside the Open list.
+    open: (row?.lifecycleState ?? 'OPEN') === 'OPEN' && row?.sessionKind !== 'LANDING',
+    status: String(row?.runStatus ?? row?.status ?? ''),
+    needsYou: needsYouOf(row?.pendingApprovals, row?.waitingKind),
+  };
+};
+/** A session's share of its workspace's tallies, '' when it is in none. Two facts with the same share move no tally. */
+const tallyShare = (facts: TallyFacts): string => {
+  if (!facts.open || !facts.workspace) return '';
+  const counted = tallyClass(facts.status);
+  if (counted === 'released' && !facts.needsYou) return '';
+  return `${facts.workspace} ${counted}${facts.needsYou ? ' needs-you' : ''}`;
+};
 
 /**
  * Opens one per-tab control-plane stream and turns it into liveness for the session-list queries,
@@ -139,6 +215,9 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     // The project pages whose reads are due ('' for every project), with the entities the events
     // that queued them said moved.
     const projectPagesDue = new Map<string, Set<string>>();
+    // The projects the due task changes' rows are in (`task.changed` `rowProjectIds`), which are the integration lines
+    // they can move; null once one of them did not say.
+    let integrationsDue: Set<string> | null = new Set();
     // Whether this connection has delivered a `sessions.list_changed`. The server sends the first
     // within a second of a connection that declared the hint (docs/realtime-control-plane-stream.md
     // §4.8); from then on that hint is what reads the Open lists, and no other event reads them. Until
@@ -245,7 +324,81 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     const refetchOpenList = (): void => {
       if (!hinted) return;
       refresh({ predicate: ({ queryKey }) => isOpenList(queryKey) });
+    };
+    // The sidebar's tallies (queries.ts workspaceSessionCountsQuery), read at the end of a window in which some
+    // session's share of them moved (`tallyShare`), a session's process may have started or ended, or this tab wrote.
+    // Anything else leaves them to the safety read.
+    const refetchCounts = (): void => {
       refresh({ queryKey: ['session-counts'] });
+    };
+    // What each session counts in, as the stream last described it, and the processes each was last reported
+    // running by: a runner-hosted job re-reports itself `running` once a minute.
+    const tallies = new Map<string, TallyFacts>();
+    const processes = new Map<string, Set<string>>();
+    // This window's sessions, each with its share as the window found it (null: unknown), and whether a process
+    // started or ended in it.
+    const sharesBefore = new Map<string, string | null>();
+    let processMoved = false;
+    // What a session counts in when the stream has not described it yet: what this tab last read of it.
+    const readFacts = (sessionId: string): TallyFacts | undefined => {
+      for (const [key, cached] of qc.getQueriesData<unknown>({ predicate: ({ queryKey }) => queryKey[0] === 'sessions' || (queryKey[0] === 'session' && queryKey.length === 2) })) {
+        const rows = (Array.isArray(cached) ? cached : key[0] === 'session' && cached ? [cached] : []) as TallyRow[];
+        const row = rows.find((candidate) => candidate?.id === sessionId);
+        if (row) return tallyFactsOf(row, '');
+      }
+      return undefined;
+    };
+    const noteTallies = (type: string, sessionId: string, data: EventData, workspaceId: string): void => {
+      if (!sessionId) return;
+      if (type === 'background.task') {
+        const task = data as { status?: unknown; name?: unknown; toolUseId?: unknown; kind?: unknown } | null | undefined;
+        const status = String(task?.status ?? '');
+        // A `service` is never in `jobs`; an older server sends no kind, nor an id, so a name stands in for one.
+        const process = typeof task?.toolUseId === 'string' && task.toolUseId ? task.toolUseId : `name:${String(task?.name ?? '')}`;
+        const running = processes.get(sessionId) ?? new Set<string>();
+        if (status === 'running' && task?.kind !== 'service') {
+          if (!running.has(process)) processMoved = true;
+          running.add(process);
+          processes.set(sessionId, running);
+        } else if (PROCESS_ENDED.has(status)) {
+          // Not only a job: an Agent call the engine ran in the background ends the same way, and leaves `running`.
+          running.delete(process);
+          processMoved = true;
+        }
+        return;
+      }
+      const summary = type === 'session.created' || type === 'session.updated';
+      if (!summary && type !== 'session.ended' && !type.startsWith('approval.')) return;
+      // A created session was in no Open list a moment ago, so it was in no tally.
+      const created = type === 'session.created';
+      const before = created ? undefined : tallies.get(sessionId) ?? readFacts(sessionId);
+      if (!sharesBefore.has(sessionId)) sharesBefore.set(sessionId, created ? '' : before ? tallyShare(before) : null);
+      const approval = data as { pendingApprovals?: unknown; waitingKind?: unknown } | null | undefined;
+      // An approval's event that says no count (an older server) says nothing of what the session needs.
+      if (!summary && type !== 'session.ended' && typeof approval?.pendingApprovals !== 'number') {
+        sharesBefore.set(sessionId, null);
+        return;
+      }
+      const next: TallyFacts | undefined = summary
+        ? tallyFactsOf(data as TallyRow, workspaceId)
+        : type === 'session.ended'
+          ? { workspace: before?.workspace ?? workspaceId, open: false, status: before?.status ?? '', needsYou: false }
+          : before && { ...before, needsYou: needsYouOf(approval?.pendingApprovals, approval?.waitingKind) };
+      if (!next) return;
+      tallies.set(sessionId, next);
+      // A session that ended or left the Open list had its processes taken off it (sessions/running-work.ts).
+      if (!next.open || tallyClass(next.status) === 'released') processes.delete(sessionId);
+    };
+    // Whether this window moved a tally; it starts the next window afresh.
+    const talliesMoved = (): boolean => {
+      let moved = processMoved;
+      for (const [sessionId, before] of sharesBefore) {
+        const now = tallies.get(sessionId);
+        if (before === null || !now || tallyShare(now) !== before) moved = true;
+      }
+      sharesBefore.clear();
+      processMoved = false;
+      return moved;
     };
     // The project pages on screen: the events below name the project, or ('') every project, and
     // the entities they say moved. Which of a page's reads that dirties is their own declaration —
@@ -257,24 +410,36 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     // One read per PROJECT_PAGE_MIN_INTERVAL_MS at most, and never sooner than the coalescing
     // window: these are the expensive reads, and the floor is the list budget's
     // (docs/list-freshness-design.md §4).
-    const refetchProjectPages = (projectId: string, entities: readonly string[]): void => {
+    const refetchProjectPages = (projectId: string, entities: readonly string[], rowProjects?: readonly string[] | null): void => {
       let due = projectPagesDue.get(projectId);
       if (!due) projectPagesDue.set(projectId, (due = new Set()));
       for (const entity of entities) due.add(entity);
+      if (!projectId) {
+        if (!rowProjects) integrationsDue = null;
+        else for (const id of rowProjects) integrationsDue?.add(id);
+      }
       if (projectPagesTimer) return;
       const wait = Math.max(REFRESH_DEBOUNCE_MS, PROJECT_PAGE_MIN_INTERVAL_MS - (Date.now() - projectPagesReadAt));
       projectPagesTimer = setTimeout(() => {
         projectPagesTimer = undefined;
         projectPagesReadAt = Date.now();
         const due = [...projectPagesDue].map(([id, entities]) => [id, [...entities]] as const);
+        const integrations = integrationsDue;
         projectPagesDue.clear();
+        integrationsDue = new Set();
+        // An event naming no project (a task change) reaches a project's integration line only when its rows are in
+        // that project, or it does not say where they are.
+        const integrationReached = (id: string, query: Query): boolean =>
+          Boolean(id) || query.queryKey[2] !== 'integration' || integrations === null ||
+          integrations.has(String(query.queryKey[1]));
         refresh({
           predicate: (query) =>
             query.queryKey[0] === 'project' &&
             // A held proposal's queue has its own event and its own narrowed path
             // (refetchCriteriaDecisions); a task event says nothing about a proposal.
             query.queryKey[2] !== 'pending-criteria-decisions' &&
-            due.some(([id, entities]) => (!id || query.queryKey[1] === id) && derivedFrom(query, entities)),
+            due.some(([id, entities]) =>
+              (!id || query.queryKey[1] === id) && derivedFrom(query, entities) && integrationReached(id, query)),
         });
       }, wait);
     };
@@ -311,9 +476,6 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       if (root === 'watches') return true;
       // The lists index: its own longer floor, refetchTaskLists.
       if (root === 'task-lists') return true;
-      // The sidebar's tallies: once the hint drives the Open lists, it reads them too
-      // (refetchOpenList), so an event's path must not ask for them a second time.
-      if (root === 'session-counts' && hinted) return true;
       // An evidence revision: an answered revision never changes.
       if (root === 'task-evidence') return true;
       // A search is a snapshot of a moving list, asked when its query changes and held for a
@@ -346,9 +508,33 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
      * almost every second under load. Whatever else names `session` (a write this tab made, a held criteria
      * proposal) names no one session, and reaches every such read.
      */
-    const refetchEntities = (entities: ReadonlySet<string>, subjects: readonly SessionSubject[], anySession: boolean): void => {
+    const refetchEntities = (
+      entities: ReadonlySet<string>,
+      subjects: readonly SessionSubject[],
+      anySession: boolean,
+      tasks: TaskScope,
+      cards: CardScope,
+    ): void => {
       if (entities.size === 0) return;
       const named = [...entities].filter((entity) => entity !== 'session' || anySession);
+      // A read that says which task changes reach it (`meta.taskReach`, a session's created tasks) is read for the
+      // window's task events only when one of them can move it; every other task-derived read, for any of them.
+      const taskReached = (query: Query): boolean => {
+        const declared = query.meta?.taskReach as TaskReachDeclaration | undefined;
+        if (!declared || tasks.any) return true;
+        const reach = typeof declared === 'function' ? declared(query.state.data) : declared;
+        return tasks.changes.some((change) => taskReaches(reach, change));
+      };
+      // A session's schedule cards (`meta.scheduleCardsOf`) are read when `schedule_cards.changed` names the session.
+      const cardsReached = (query: Query): boolean => {
+        const of = query.meta?.scheduleCardsOf;
+        return cards.all || typeof of !== 'string' || cards.sessions.has(of);
+      };
+      const declares = (query: Query): boolean =>
+        ((query.meta?.entities as string[] | undefined) ?? []).some((entity) =>
+          named.includes(entity) &&
+          (entity !== 'task' || taskReached(query)) &&
+          (entity !== 'scheduleCard' || cardsReached(query)));
       const bySession = entities.has('session') && !anySession;
       // Whether a list other than a Scheduled runs folder holds the session (sessionReach's `scheduledRuns`).
       const listed = (id: string): boolean =>
@@ -364,7 +550,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       refresh({
         predicate: (query) =>
           !hasOwnBudget(query) &&
-          (derivedFrom(query, named) || (bySession && derivedFrom(query, ['session']) && reached(query))),
+          (declares(query) || (bySession && derivedFrom(query, ['session']) && reached(query))),
       });
     };
     // The rail's project summaries. The session lists draw each row's project membership and
@@ -431,6 +617,18 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       // Exact: the diff under `['session', id, 'diff']` is refreshed on turn_end by the console
       // itself, and is far too expensive to re-run on every status change.
       refresh({ queryKey: ['session', id], exact: true });
+    };
+    // A scheduled run's session draws its run from its schedule cards (`run`: its state, its report), and the run moves
+    // with that session's own run, which no schedule write announces: while the run is open, the session's `session.*`
+    // events read its cards. An ended run is settled, and an ordinary session's cards follow `schedule_cards.changed`.
+    const refetchScheduleRun = (id: string): void => {
+      refresh({
+        predicate: (query) => {
+          if (query.meta?.scheduleCardsOf !== id) return false;
+          const run = (query.state.data as { run?: { endedAt?: unknown } | null } | undefined)?.run;
+          return run != null && run.endedAt == null;
+        },
+      });
     };
     // The owner's watches, once per window. Every cached watch declares `watch` — the four list
     // reads and any single watch under `['watches', 'one', id]` (queries.ts) — so one invalidation
@@ -513,6 +711,10 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       // The owner's terminals: one asked to be approved, a request was decided or collected, or one was revoked
       // (`terminals.changed`). The approve card and Settings → Terminals both declare `terminal`.
       if (type === 'terminals.changed') return ['terminal'];
+      // A request was filed, answered, expired or withdrawn: the open list's nudge (`hints=owner_requests`).
+      if (type === 'owner_requests.changed') return ['ownerRequest'];
+      // Some sessions' schedule cards moved (`hints=schedule_cards`); which sessions is `pendingCards`.
+      if (type === 'schedule_cards.changed') return ['scheduleCard'];
       // A session's state, its approvals, and a background job of its ending, which moves its row's
       // job mark and its workspace's tally.
       if (type.startsWith('session.') || type.startsWith('approval.') || type === 'background.task') {
@@ -527,7 +729,11 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     // session behind it (refetchEntities).
     const pendingSubjects = new Map<string, SessionSubject>();
     let pendingAnySession = false;
-    const pendingFlags = new Set<'openList' | 'watches'>();
+    const pendingFlags = new Set<'openList' | 'watches' | 'counts'>();
+    // The window's task changes, and whether a task event said nothing of its rows (refetchEntities' `tasks`); the
+    // sessions whose schedule cards the window's events named, and whether one named every session's.
+    const pendingTasks: TaskScope = { changes: [], any: false };
+    const pendingCards: CardScope = { sessions: new Set(), all: false };
     const pendingSessions = new Set<string>();
     const pendingProjects = new Set<string>();
     const openWindow = (): void => {
@@ -536,17 +742,26 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
         refreshTimer = undefined;
         // One scan for the whole burst: a query several of the window's events reach (a session
         // list, on a rename and the event that announces it) is marked once, not once per path.
-        refetchEntities(pending, [...pendingSubjects.values()], pendingAnySession);
+        refetchEntities(pending, [...pendingSubjects.values()], pendingAnySession, pendingTasks, pendingCards);
         if (pending.has('task')) refetchTaskLists();
         if (pending.has('project')) refetchProjects();
         if (pending.has('watch') || pendingFlags.has('watches')) refetchWatches();
         if (pendingFlags.has('openList')) refetchOpenList();
-        for (const id of pendingSessions) refetchSessionDetail(id);
+        // Decided once the window's events are all in: an approval asked and answered inside it moved nothing.
+        if (talliesMoved() || pendingFlags.has('counts')) refetchCounts();
+        for (const id of pendingSessions) {
+          refetchSessionDetail(id);
+          refetchScheduleRun(id);
+        }
         for (const id of pendingProjects) refetchCriteriaDecisions(id);
         pending.clear();
         pendingSubjects.clear();
         pendingAnySession = false;
         pendingFlags.clear();
+        pendingTasks.changes = [];
+        pendingTasks.any = false;
+        pendingCards.sessions.clear();
+        pendingCards.all = false;
         pendingSessions.clear();
         pendingProjects.clear();
       }, REFRESH_DEBOUNCE_MS);
@@ -591,6 +806,13 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       // differently, and is read through its own delta read rather than through the session events
       // that would read every session list for it (sessions.list_changed names no session).
       if (type === 'sessions.list_changed') pendingFlags.add('openList');
+      if (type === 'task.changed') pendingTasks.changes.push(taskChangeOf(data));
+      else if (type.startsWith('task.')) pendingTasks.any = true;
+      if (type === 'schedule_cards.changed') {
+        const named = idsOrNull((data as { cardSessionIds?: unknown } | null | undefined)?.cardSessionIds);
+        if (!named || named.length === 0 || (data as { resync?: unknown } | null | undefined)?.resync === true) pendingCards.all = true;
+        else for (const id of named) pendingCards.sessions.add(id);
+      }
       for (const entity of entitiesFor(type, data)) {
         pending.add(entity);
         if (entity !== 'session') continue;
@@ -613,6 +835,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
           pendingAnySession = true;
         }
       }
+      noteTallies(type, sessionId, data, workspaceId);
       if (watchFollows(type, sessionId, data)) pendingFlags.add('watches');
       // Only the `session.*` family: those are the events that can move a session's run state,
       // and so the ones a frozen detail has to be corrected by. An approval or a background task
@@ -632,6 +855,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       pendingAnySession = true;
       // The server's hint for the write joins this read in the window.
       pendingFlags.add('openList');
+      pendingFlags.add('counts');
       openWindow();
     };
     // What a stream that opened after a gap reads again (W6): every cached read that declares a
@@ -671,6 +895,10 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       dropped = true;
       if (!missedEvents) droppedAt = Date.now();
       missedEvents = true;
+      // What the stream said of each session stops being what the tallies count once events go missing; the
+      // reconnect reads them again, and each session is judged against what this tab reads of it from then on.
+      tallies.clear();
+      processes.clear();
       es?.close();
       setLive(false); // the gated interval polls take back over meanwhile
       streamReport.dropped();
@@ -683,7 +911,8 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       hinted = false;
       lastMsgAt = Date.now();
       // `hints=list_changed` asks for the Open list's hint (docs/realtime-control-plane-stream.md §4.8).
-      es = new EventSource(`/api/events?access_token=${encodeURIComponent(getToken() ?? '')}&hints=list_changed`);
+      // `schedule_cards` asks for `schedule_cards.changed` (§4.10), which a session's schedule cards are read on.
+      es = new EventSource(`/api/events?access_token=${encodeURIComponent(getToken() ?? '')}&hints=list_changed,owner_requests,schedule_cards`);
       es.onopen = () => {
         lastMsgAt = Date.now();
         setLive(true);
@@ -777,7 +1006,10 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
         if (ev.type.startsWith('session.') && typeof projectId === 'string' && projectId) {
           refetchProjectPages(projectId, ['session']);
         }
-        if (ev.type === 'task.changed') refetchProjectPages('', ['task']);
+        if (ev.type === 'task.changed') {
+          const change = taskChangeOf(ev.data);
+          refetchProjectPages('', ['task'], change.resync ? null : idsOrNull((ev.data as { rowProjectIds?: unknown } | null | undefined)?.rowProjectIds));
+        }
         // The translator was skipped or is in use again (MeTranslation.translationUnavailableUntil): the composer's
         // tag reads /users/me.
         if (ev.type === 'translation.status_changed') void qc.invalidateQueries({ queryKey: ['user', 'me'], exact: true });

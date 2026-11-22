@@ -89,7 +89,7 @@ describe('families', () => {
 
   it('every family the guide declares has a label', () => {
     expect(AGENT_TOOLS_GUIDE.families.map((f) => f.id)).toEqual([
-      'tasks', 'projects', 'task-lists', 'schedules', 'waits', 'files', 'background', 'owner', 'wiki', 'browser',
+      'tasks', 'projects', 'task-lists', 'schedules', 'waits', 'files', 'subagents', 'background', 'owner', 'wiki', 'browser',
       'providers', 'merge-receipts', 'guide', 'orchestration',
     ]);
   });

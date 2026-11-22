@@ -200,7 +200,7 @@ func TestEveryOperationHasCatalogMetadata(t *testing.T) {
 		objectAgent: true, objectRunner: true, objectProvider: true, objectWatch: true,
 		objectWiki: true, objectFile: true, objectOwner: true, objectAccount: true,
 		objectBackgroundJob: true, objectPermission: true, objectMergeReceipt: true, objectSchedule: true,
-		objectCatalog: true, objectBrowser: true,
+		objectCatalog: true, objectSubagent: true, objectBrowser: true,
 	}
 	validRisks := map[operationRisk]bool{riskLow: true, riskMedium: true, riskHigh: true}
 	validApprovals := map[operationApproval]bool{approvalKindNone: true, approvalKindCard: true, approvalKindOwner: true}

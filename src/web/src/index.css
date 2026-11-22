@@ -3756,7 +3756,7 @@ button.toast--pill:focus-visible {
 /* The Tasks card (SessionCreatedTasksStrip.tsx) sits in the tray's shell above; these are
    only what a task list adds to it. Collapsed, the title never wraps and stays whole: beside a lone
    task's name the name truncates, beside the band (`N running · <task>`, `<total> · <task>`) the
-   band does, and the pill after either keeps its size; the failed count is red. Opened, one row per task: a fixed status column, the title (with what it
+   band does, and the pill, at the row's right edge, keeps its size; the failed count is red. Opened, one row per task: a fixed status column, the title (with what it
    replaces, in grey), its age; then the links to the rest. */
 .ct-head {
   min-width: 0;
@@ -3787,8 +3787,7 @@ button.toast--pill:focus-visible {
   white-space: nowrap;
   color: var(--brand);
 }
-.ct-one + .status-pill,
-.ct-count + .status-pill,
+.bg-tray-row > .wt-spacer + .status-pill,
 .ct-row .status-pill {
   height: 20px;
   font-size: 11.5px;
@@ -4670,6 +4669,16 @@ button.toast--pill:focus-visible {
 .wt-merge-cmd:hover .wt-merge-cmd-copy {
   display: inline;
 }
+/* The ✕ that closes a failed merge's strip: its top-right corner, clear of the message. */
+.wt-merge.wt-merge-closable {
+  position: relative;
+  padding-right: 34px;
+}
+.wt-merge-dismiss {
+  position: absolute;
+  top: 7px;
+  right: 8px;
+}
 .wt-merge-err {
   color: var(--error);
   white-space: pre-wrap;
@@ -5258,8 +5267,12 @@ button.toast--pill:focus-visible {
   flex-grow: 0;
 }
 /* The iOS system colours the native swipe buttons use. */
-.session-swipe-action.complete .session-swipe-glyph {
+.session-swipe-action.complete .session-swipe-glyph,
+.session-swipe-action.resume .session-swipe-glyph {
   background: #34c759;
+}
+.session-swipe-action.pause .session-swipe-glyph {
+  background: #ff9500;
 }
 .session-swipe-action.restore .session-swipe-glyph {
   background: #007aff;
@@ -5271,8 +5284,12 @@ button.toast--pill:focus-visible {
 .session-swipe-action.purge .session-swipe-glyph {
   background: #ff3b30;
 }
-:root[data-theme='dark'] .session-swipe-action.complete .session-swipe-glyph {
+:root[data-theme='dark'] .session-swipe-action.complete .session-swipe-glyph,
+:root[data-theme='dark'] .session-swipe-action.resume .session-swipe-glyph {
   background: #30d158;
+}
+:root[data-theme='dark'] .session-swipe-action.pause .session-swipe-glyph {
+  background: #ff9f0a;
 }
 :root[data-theme='dark'] .session-swipe-action.restore .session-swipe-glyph {
   background: #0a84ff;
@@ -5312,15 +5329,15 @@ button.toast--pill:focus-visible {
     border-radius: 6px;
   }
 }
-/* A project entry is the one focusable session row. Keyboard focus takes the row's hover tint, not a
+/* Every session row (a project's too) takes keyboard focus. Focus takes the row's hover tint, not a
    ring: the browser's outer ring is clipped by the list's edge, and an inner one is covered on the
    right by the kebab's fade. */
-.session-project-row:focus-visible {
+.session-row:focus-visible {
   outline: none;
   background: var(--bg-hover);
   --session-menu-surface: var(--bg-hover);
 }
-.session-project-row.active:focus-visible {
+.session-row.active:focus-visible {
   background: var(--brand-tint-hover);
   --session-menu-surface: var(--brand-tint-hover);
 }
@@ -5531,6 +5548,10 @@ button.toast--pill:focus-visible {
 }
 .session-project-progress-bar .failed {
   background: var(--error);
+}
+/* A paused project's bar goes grey (§4.2 2b). */
+.session-project-progress.paused .session-project-progress-bar > span {
+  background: var(--text-3);
 }
 /* The landing in flight, as a card of its own (owner decision 2026-10-11, mock board
    docs/mocks/project-landing-card): the merge card's shape, on the project's sessions page under
@@ -6208,6 +6229,13 @@ button.toast--pill:focus-visible {
 .session-preview.tone-warning {
   color: var(--warning-solid);
 }
+.session-preview.tone-paused {
+  color: var(--text-3);
+}
+.session-project-pause-glyph {
+  margin-right: 4px;
+  font-size: 10px;
+}
 .session-preview.tone-queued,
 .session-preview.tone-background,
 .session-preview.tone-watching,
@@ -6346,6 +6374,66 @@ button.toast--pill:focus-visible {
 .session-folder-row.menu-open {
   background: var(--bg-hover);
   --row-bg: var(--bg-hover);
+}
+/* A session row dragged over a folder that would take it (lib/sessionDrag): the folder lights up
+   in Move's indigo. A folder's page head takes the same light while the drop would leave the folder. */
+.session-folder-row.drop-target,
+.session-folder-head.drop-target {
+  background: rgba(88, 86, 214, 0.14);
+  box-shadow: inset 0 0 0 1.5px #5856d6;
+  --row-bg: rgba(88, 86, 214, 0.14);
+}
+:root[data-theme='dark'] .session-folder-row.drop-target,
+:root[data-theme='dark'] .session-folder-head.drop-target {
+  background: rgba(94, 92, 230, 0.22);
+  box-shadow: inset 0 0 0 1.5px #5e5ce6;
+  --row-bg: rgba(94, 92, 230, 0.22);
+}
+.session-folder-head.drop-target {
+  border-radius: 8px;
+}
+/* While a row is dragged the list scrolls under the pointer; nothing in it is selected as it goes. */
+.session-col-list.dragging-session {
+  user-select: none;
+  -webkit-user-select: none;
+}
+/* A row is a control, not text: a press dragged from one that cannot be picked up (a project with no
+   coordinator, any row where there is no folder to drop on) would otherwise select the list's text from
+   there to the pointer — headings, counts, titles — and the selection would outlast the gesture. */
+.session-row,
+.session-folder-row {
+  user-select: none;
+  -webkit-user-select: none;
+}
+.session-row input {
+  user-select: text;
+  -webkit-user-select: text;
+}
+/* What a dragged row shows under the pointer: its title alone, on a compact card below-right of the
+   pointer's tip (SessionListRow's setTitleDragImage), so the arrow and the folder it is over stay in
+   sight. Built off-screen for the browser to photograph. */
+.session-drag-card {
+  position: fixed;
+  top: -1000px;
+  left: -1000px;
+  box-sizing: border-box;
+  max-width: 200px;
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-base);
+  color: var(--text-1);
+  font-size: 13px;
+  line-height: 18px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+  pointer-events: none;
+}
+/* The row being dragged stays in place, dimmed, while its image follows the pointer. */
+.session-row.dragging {
+  opacity: 0.5;
 }
 /* Keyboard focus takes the hover tint, as a project row's does, not a ring. */
 .session-folder-row:focus-visible {
@@ -9833,6 +9921,34 @@ button.chat-jump-start:hover {
   font-weight: 600;
 }
 
+/* A clone's progress in the waiting card (docs/mocks/clone-progress-wait-card ②): git's percentage between
+   the title and where it runs, on the bar the conversation's first line uses, drawn wider here. */
+.chat-clone-meter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.chat-clone-meter .msc-clone-bar {
+  width: 220px;
+}
+.chat-clone-meter .msc-clone-pct {
+  min-width: 34px;
+  text-align: left;
+}
+.chat-queued-desc.chat-clone-desc {
+  max-width: 480px;
+}
+.chat-queued-desc b {
+  color: var(--text-2);
+  font-weight: 600;
+}
+.chat-slot-wait.chat-clone-wait {
+  gap: 8px;
+  padding: 14px 16px;
+}
+
 /* How long the wait above has been going. Rides inside the title so it shares that line, at
    normal weight because .chat-slot-wait bolds its first child. Tabular figures so the ticking
    second does not shift the title beside it once a second. */
@@ -10188,6 +10304,32 @@ button.chat-jump-start:hover {
 .chat-notice.chat-diagnostic .chat-diagnostic-text a {
   color: inherit;
   text-decoration: underline;
+}
+
+/* Fix with an agent under the transcript's sandbox warning
+   (docs/mocks/codex-sandbox-fix-with-agent): the button and the line saying where its session runs,
+   or the agent's session while it is open, or the one that already finished with the warning. */
+.chat-sandbox-fix {
+  margin: 10px 0 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-subtle);
+}
+.chat-sandbox-fix-line {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+.chat-sandbox-fix.fixing .chat-sandbox-fix-line,
+.chat-sandbox-fix.handled .chat-sandbox-fix-line {
+  margin-top: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0 4px;
+  color: var(--text-2);
 }
 
 /* Sign-in failure: a remedy card, not an error line. Sits at message width so it reads as
@@ -29172,6 +29314,10 @@ button.agent-progress-agent:hover {
 .model-tiers-set.model-tiers-unset {
   color: var(--warning);
 }
+.model-tiers-older,
+.model-tiers-set.model-tiers-older {
+  color: var(--text-3);
+}
 .model-tiers-yours {
   margin-left: 8px;
   padding: 0 5px;
@@ -29184,6 +29330,29 @@ button.agent-progress-agent:hover {
   margin-top: 8px;
   font-size: 12px;
   color: var(--text-3);
+}
+/* The Quality column (docs/subagent-design.md §7.1, board docs/mocks/model-quality/01-board.png): two lines per model. */
+.model-tiers-quality {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.model-tiers-quality-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  line-height: 19px;
+  width: max-content;
+}
+.model-tiers-quality-source {
+  min-width: 57px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.model-tiers-muted {
+  color: var(--text-3);
+}
+.model-tiers-rated {
+  cursor: help;
 }
 
 /* Settings → Routing report (docs/subagent-design.md §7, board docs/mocks/subagent-workflow/08-report.html). */
@@ -29297,6 +29466,89 @@ button.agent-progress-agent:hover {
   font-size: 12px;
   color: var(--text-3);
   line-height: 1.6;
+}
+
+/* Settings → Providers → Model routing: each model's tier beside how its runs went. */
+.model-routing-table td {
+  vertical-align: middle;
+}
+.model-routing-section td {
+  padding: 7px 10px;
+  background: var(--fill-inset);
+  color: var(--text-2);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.model-routing-section-note {
+  margin-left: 8px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-3);
+}
+.model-routing-fold,
+.model-routing-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+.model-routing-open > span[aria-hidden] {
+  color: var(--text-3);
+  font-size: 10px;
+}
+.model-routing-flag {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--warning);
+}
+td > .routing-report-tier + .model-routing-flag {
+  display: inline;
+  margin-left: 8px;
+}
+.model-routing-outside {
+  color: var(--warning);
+}
+.model-routing-tier td {
+  padding-top: 5px;
+  padding-bottom: 5px;
+  background: var(--fill-inset);
+}
+.model-routing-tier td:first-child {
+  padding-left: 28px;
+}
+.model-routing-bar {
+  display: flex;
+  width: 150px;
+  height: 16px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--fill-inset);
+}
+.model-routing-bar i {
+  min-width: 3px;
+  font-style: normal;
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+  color: #fff;
+}
+.model-routing-bar-S { background: #7aa7d9; }
+.model-routing-bar-M { background: #4f86c6; }
+.model-routing-bar-L { background: #2f5f9e; }
+.model-routing-bar-XL { background: #1d3d6b; }
+.model-routing-bar i.is-outside {
+  background: repeating-linear-gradient(45deg, #f59e0b, #f59e0b 3px, #fbbf24 3px, #fbbf24 6px);
+  color: #5a3300;
 }
 
 /* The Agent's SubAgents group (docs/subagent-design.md §7). */
@@ -29913,12 +30165,6 @@ button.agent-progress-agent:hover {
 }
 .ag-more {
   display: none;
-}
-.ag-failed {
-  flex: none;
-  color: var(--error);
-  font-weight: 600;
-  white-space: nowrap;
 }
 .ag-facts {
   display: inline-flex;

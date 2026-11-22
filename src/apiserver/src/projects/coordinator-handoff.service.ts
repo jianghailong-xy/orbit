@@ -18,6 +18,7 @@ import {
   RunEventType,
 } from '@orbit/shared';
 
+import { isReleased, RELEASE_FAILURE_SELECT, releaseWasFailure } from '../common/session-release';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
@@ -38,8 +39,6 @@ import { ProjectsService } from './projects.service';
 
 /** How often WRITING handoffs are looked at for a note turn that timed out or was taken away. */
 const SWEEP_MS = 30_000;
-/** A conversation in one of these has ended (SessionsService.TERMINAL). */
-const TERMINAL_STATUSES: readonly RunStatus[] = [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED];
 /** A note turn answered this long ago whose end the turn-complete hook never settled. */
 const ANSWERED_GRACE_MS = 60_000;
 
@@ -231,7 +230,8 @@ export class CoordinatorHandoffService implements OnModuleInit, OnModuleDestroy 
     });
     if (turn?.clientTurnId !== row.clientTurnId) return;
     if (status !== RunStatus.SUCCEEDED) {
-      await this.fail(row.id, row.attempt, status === RunStatus.INTERRUPTED ? 'TURN_STOPPED' : 'TURN_FAILED');
+      if (status === RunStatus.INTERRUPTED) await this.fail(row.id, row.attempt, 'TURN_STOPPED');
+      else await this.noteTurnFailed(row);
       return;
     }
     await this.noteWritten(row, turnId);
@@ -256,7 +256,7 @@ export class CoordinatorHandoffService implements OnModuleInit, OnModuleDestroy 
       const [session, turn] = await Promise.all([
         this.prisma.session.findUnique({
           where: { id: row.fromSessionId },
-          select: { status: true, completedAt: true, archivedAt: true, deletedAt: true },
+          select: { ...RELEASE_FAILURE_SELECT, completedAt: true, archivedAt: true, deletedAt: true },
         }),
         this.prisma.conversationTurn.findUnique({
           where: { sessionId_clientTurnId: { sessionId: row.fromSessionId, clientTurnId: row.clientTurnId } },
@@ -266,13 +266,14 @@ export class CoordinatorHandoffService implements OnModuleInit, OnModuleDestroy 
       let code: CoordinatorHandoffFailureCode | null = null;
       if (!session || session.completedAt || session.archivedAt || session.deletedAt) code = 'TURN_STOPPED';
       else if (!turn) code = 'TURN_STOPPED';
-      else if (turn.status !== 'ANSWERED' && TERMINAL_STATUSES.includes(session.status)) {
+      else if (turn.status !== 'ANSWERED' && isReleased(session)) {
         // The note turn revived the conversation and it ended again before answering: most often its
         // own model could not run (a provider whose sign-in failed, an engine that would not start).
-        code = session.status === RunStatus.FAILED ? 'TURN_FAILED' : 'TURN_STOPPED';
+        // Released by a failure (common/session-release.ts), or stopped: an end that was asked for is a stop.
+        code = releaseWasFailure(session) ? 'TURN_FAILED' : 'TURN_STOPPED';
       } else if (turn.status === 'ANSWERED') {
         if (turn.answeredAt && now.getTime() - turn.answeredAt.getTime() < ANSWERED_GRACE_MS) continue;
-        if (session.status === RunStatus.FAILED) code = 'TURN_FAILED';
+        if (releaseWasFailure(session)) code = 'TURN_FAILED';
         else {
           await this.noteWritten(row, turn.id);
           settled += 1;
@@ -284,6 +285,10 @@ export class CoordinatorHandoffService implements OnModuleInit, OnModuleDestroy 
         code = 'TIMED_OUT';
       }
       if (!code) continue;
+      if (code === 'TURN_FAILED') {
+        if (await this.noteTurnFailed(row)) settled += 1;
+        continue;
+      }
       if (await this.fail(row.id, row.attempt, code)) {
         settled += 1;
         if (code === 'TIMED_OUT') await this.withdrawNoteTurn(row);
@@ -293,6 +298,36 @@ export class CoordinatorHandoffService implements OnModuleInit, OnModuleDestroy 
   }
 
   // ── Inside ───────────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * The note turn failed. When it never reached the engine (never delivered: the coordinator's own model
+   * could not even start, as a provider whose sign-in failed or an engine that will not start) this
+   * conversation will not write a note however often it is asked. With a successor the owner named, the
+   * handover goes on without a note, on that successor, which is what Hand over asked for; with none,
+   * COORDINATOR_CANT_RUN says to pick one. A turn the engine did take and fail is TURN_FAILED, where Try
+   * again may help. True when this call settled the attempt.
+   */
+  private async noteTurnFailed(row: CoordinatorHandoffRow): Promise<boolean> {
+    const turn = row.clientTurnId
+      ? await this.prisma.conversationTurn.findUnique({
+        where: { sessionId_clientTurnId: { sessionId: row.fromSessionId, clientTurnId: row.clientTurnId } },
+        select: { deliveredAt: true },
+      })
+      : null;
+    if (turn?.deliveredAt) return this.fail(row.id, row.attempt, 'TURN_FAILED');
+    if (!successorOf(row)) return this.fail(row.id, row.attempt, 'COORDINATOR_CANT_RUN');
+    const moved = await this.prisma.coordinatorHandoff.updateMany({
+      where: { id: row.id, state: 'WRITING', attempt: row.attempt },
+      data: { state: 'HANDING_OVER', note: null },
+    });
+    if (moved.count === 0) return false;
+    const handingOver = { ...row, state: 'HANDING_OVER', note: null };
+    this.publish(handingOver);
+    await this.replace(row.ownerId, handingOver, null).catch((e) => this.logger.warn(
+      `handoff ${row.id}: the replacement without a note failed: ${e instanceof Error ? e.message : String(e)}`,
+    ));
+    return true;
+  }
 
   /** The note is in: HANDING_OVER with it, then the replacement. An empty reply is a failure. */
   private async noteWritten(row: CoordinatorHandoffRow, turnId: string): Promise<void> {

@@ -250,7 +250,7 @@ class ProjectSessionsShellTest {
     @Test fun theRowsMenuOpensTheSessionItSpeaksForItsSessionsAndItsProject() {
         signIn(); openAlpha()
         rowMenu()
-        assertEquals(listOf("Open Session", "Sessions", "Open Project", "Pin", "Move…", "Close"), dialogButtons())
+        assertEquals(listOf("Open Session", "Sessions", "Open Project", "Pause", "Pin", "Move…", "Close"), dialogButtons())
         compose.onNode(hasText("Open Session") and hasAnyAncestor(isDialog())).performClick()
         // The member in Beta the line names opens over the list.
         await { ProjectShell.calls.any { it == "GET sessions/${ProjectShell.WAITING}" } }

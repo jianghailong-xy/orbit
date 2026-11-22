@@ -2,9 +2,14 @@ import Foundation
 import XCTest
 @testable import OrbitKit
 
-/// The landing check's three values, who set it, and the coordinator's change list with Revert
-/// (revision 42 part two, rulings D3–D7, D9), held to the browser's rules and wiring.
+/// What main's second port of revision 42 part two (c7b17038b8) asserted that `LandingMeasuredTests`
+/// did not, held on this client's types once the two were merged into one: the new `landingCheck`
+/// deciding the value over the older field, a writer this build does not know, a change list holding a
+/// record this build cannot read or draw, the card's own change, the exemption row's task link, and the
+/// browser's wiring of the row, the list and the revert.
 final class LandingCheckChangesTests: XCTestCase {
+
+    private let now = RelativeTime.parse("2026-11-20T12:00:00.000Z")!
 
     private func web(_ relative: String) throws -> String {
         var dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
@@ -19,66 +24,35 @@ final class LandingCheckChangesTests: XCTestCase {
         return ""
     }
 
-    private func json(_ body: UpdateProjectIntegrationRequest?) throws -> [String: Any] {
-        let body = try XCTUnwrap(body)
-        return try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(body)) as? [String: Any])
+    // MARK: the value and who set it
+
+    func testTheLandingCheckDecidesOverTheOlderField() {
+        // Web's `landingCheckModeOf`: where the server sends `landingCheck`, its command decides, null
+        // included; the older `landingCheckCommand` is read only without it.
+        var stale = ProjectIntegrationView(landingCheckCommand: "stale")
+        stale.landingCheck = ProjectLandingCheck(command: nil)
+        XCTAssertEqual(LandingCheckSetting.of(stale, now: now).mode, .mergeCheck)
+        XCTAssertEqual(LandingCheckSetting.of(ProjectIntegrationView(landingCheckCommand: "make fast"), now: now).mode, .command)
+        XCTAssertEqual(LandingCheckSetting.of(ProjectIntegrationView(), now: now).mode, .mergeCheck)
     }
 
-    // MARK: the three values
-
-    func testTheModeIsReadOffTheLandingCheckFirstAndTheCommandOtherwise() throws {
-        let decoded = try JSONDecoder().decode(ProjectIntegrationView.self, from: Data("""
-            {"landingCheckCommand":null,"landingCheck":{"command":"NONE","setBy":"COORDINATOR",
-             "setBySessionId":"s1","setAt":"2026-11-20T10:00:00.000Z"}}
-            """.utf8))
-        XCTAssertEqual(decoded.landingCheck?.setBy, .coordinator)
-        XCTAssertEqual(decoded.landingCheck?.setAt, "2026-11-20T10:00:00.000Z")
-        XCTAssertEqual(LandingCheckMode.of(decoded), .noCheck)
-        XCTAssertEqual(LandingCheckMode.of(ProjectIntegrationView(landingCheckCommand: "make fast")), .command)
-        XCTAssertEqual(LandingCheckMode.of(ProjectIntegrationView()), .mergeCheck)
-        XCTAssertEqual(LandingCheckMode.of(ProjectIntegrationView(landingCheckCommand: "stale",
-            landingCheck: ProjectLandingCheck(command: nil))), .mergeCheck, "the landing check wins over the old field")
-        // A writer this build does not know is nobody, not a failed read.
-        let unknown = try JSONDecoder().decode(ProjectIntegrationView.self, from: Data("""
+    func testAWriterThisBuildDoesNotKnowIsNobody() throws {
+        let view = try JSONDecoder().decode(ProjectIntegrationView.self, from: Data("""
             {"landingCheck":{"command":"make","setBy":"ROBOT","setBySessionId":null,"setAt":null}}
             """.utf8))
-        XCTAssertNil(unknown.landingCheck?.setBy)
-        XCTAssertEqual(unknown.landingCheck?.command, "make")
-        XCTAssertEqual(LandingCheckMode.allCases.map(\.label), ["Merge check", "Command", "No check"])
-    }
-
-    func testWhoSetItIsTheBadgeAndTheTime() {
-        let now = ISO8601DateFormatter().date(from: "2026-11-20T12:00:00Z")!
-        XCTAssertEqual(LandingCheckOriginCopy.line(ProjectLandingCheck(command: nil, setBy: .coordinator,
-                                                                       setAt: "2026-11-20T10:00:00Z"), now: now),
-                       "Coordinator · set 2h ago")
-        XCTAssertEqual(LandingCheckOriginCopy.line(ProjectLandingCheck(command: nil, setBy: .start), now: now), "Set at start")
-        XCTAssertNil(LandingCheckOriginCopy.line(ProjectLandingCheck(command: nil), now: now))
-        XCTAssertNil(LandingCheckOriginCopy.line(nil, now: now))
-        XCTAssertEqual(LandingCheckSetBy.allCases.map(LandingCheckOriginCopy.badge),
-                       ["You", "Approved on a card", "Set at start", "Coordinator"])
-    }
-
-    func testNoCheckIsWrittenByNameAndACommandOrTheMergeCheckLiftsIt() throws {
-        let merge = ProjectIntegrationView(landingCheckTimeoutSeconds: 600)
-        // To No check: by name, and no timeout with it.
-        let none = try json(RunSettings.landingCheckWrite(merge, mode: .noCheck, command: "", timeout: 900))
-        XCTAssertEqual(none["landingCheck"] as? String, "NONE")
-        XCTAssertNil(none["landingCheckCommand"])
-        XCTAssertNil(none["landingCheckTimeoutSeconds"])
-        // Already No check: nothing.
-        let stored = ProjectIntegrationView(landingCheck: ProjectLandingCheck(command: "NONE"))
-        XCTAssertNil(RunSettings.landingCheckWrite(stored, mode: .noCheck, command: "x", timeout: nil))
-        // Out of No check, to the merge check: a null command, even though the old field is null too.
-        let lifted = try json(RunSettings.landingCheckWrite(stored, mode: .mergeCheck, command: "make", timeout: nil))
-        XCTAssertTrue(lifted["landingCheckCommand"] is NSNull)
-        XCTAssertNil(lifted["landingCheck"])
-        // A command, sent as typed.
-        let command = try json(RunSettings.landingCheckWrite(merge, mode: .command, command: "  make fast ", timeout: 600))
-        XCTAssertEqual(command["landingCheckCommand"] as? String, "  make fast ")
-        XCTAssertNil(command["landingCheckTimeoutSeconds"])
-        // A blank command is the merge check.
-        XCTAssertNil(RunSettings.landingCheckWrite(merge, mode: .command, command: "  ", timeout: 600))
+        XCTAssertEqual(view.landingCheck?.setBy, "ROBOT", "kept as the server said it")
+        let setting = LandingCheckSetting.of(view, now: now)
+        XCTAssertEqual(setting.mode, .command)
+        XCTAssertEqual(setting.command, "make")
+        XCTAssertNil(setting.origin, "a writer this build does not know wears no badge")
+        // Set at start, with no time on it: the badge alone.
+        var started = ProjectIntegrationView()
+        started.landingCheck = ProjectLandingCheck(command: nil, setBy: "START")
+        XCTAssertEqual(LandingCheckSetting.of(started, now: now).origin?.label, "Set at start")
+        XCTAssertNil(LandingCheckSetting.of(started, now: now).origin?.when)
+        var nobody = ProjectIntegrationView()
+        nobody.landingCheck = ProjectLandingCheck(command: nil)
+        XCTAssertNil(LandingCheckSetting.of(nobody, now: now).origin)
     }
 
     // MARK: the change list
@@ -93,44 +67,44 @@ final class LandingCheckChangesTests: XCTestCase {
           "oldValue":{"exempt":false,"reason":null},"newValue":{"exempt":true,"reason":"docs only"},
           "reason":null,"writtenBySessionId":null,"revertsChangeId":null,"revertedAt":null,
           "revertible":false,"createdAt":"2026-11-20T09:00:00.000Z"},
-         {"id":"c1","projectId":"p1","taskId":null,"field":"LANDING_CHECK","origin":"COORDINATOR",
+         {"id":"c1","projectId":"p1","taskId":null,"field":"LANDING_CHECK","origin":"CARD",
           "oldValue":{"command":"make","timeoutSeconds":null,"none":false},
           "newValue":{"command":null,"timeoutSeconds":null,"none":true},
-          "reason":"no tests yet","writtenBySessionId":"s1","revertsChangeId":null,
-          "revertedAt":"2026-11-20T11:00:00.000Z","revertible":false,"createdAt":"2026-11-20T08:00:00.000Z"},
+          "reason":null,"writtenBySessionId":null,"revertsChangeId":null,"revertedAt":null,
+          "revertible":false,"createdAt":"2026-11-20T08:00:00.000Z"},
          {"id":"c0","projectId":"p1","taskId":null,"field":"SOMETHING_NEW","origin":"OWNER",
-          "oldValue":{},"newValue":{},"revertible":false,"createdAt":""}]
+          "oldValue":{},"newValue":{},"revertible":false,"createdAt":"2026-11-20T07:00:00.000Z"},
+         {"projectId":"p1","field":"LANDING_CHECK","origin":"COORDINATOR"}]
         """
 
-    func testTheProjectReadCarriesTheChangesAndLeavesOutWhatItCannotRead() throws {
+    func testTheProjectReadKeepsWhatItCanReadAndDrawsWhatItKnows() throws {
         let document = try JSONDecoder().decode(ProjectDocument.self, from: Data("""
             {"id":"p1","title":"P","settingChanges":\(Self.changes)}
             """.utf8))
         let changes = try XCTUnwrap(document.settingChanges)
-        XCTAssertEqual(changes.map(\.id), ["c3", "c2", "c1"])
-        XCTAssertNil(try JSONDecoder().decode(ProjectDocument.self, from: Data(#"{"id":"p1"}"#.utf8)).settingChanges)
+        // The record with no id cannot be read: it is left out, not the whole list with it.
+        XCTAssertEqual(changes.map(\.id), ["c3", "c2", "c1", "c0"])
+        // A field this build does not know still decodes (it is the server's string), and is not drawn.
+        XCTAssertEqual(changes.last?.field, "SOMETHING_NEW")
+        let rows = CoordinatorChanges.rows(changes, now: now)
+        XCTAssertEqual(rows.map(\.id), ["c3", "c2", "c1"])
+        XCTAssertEqual(CoordinatorChanges.count(changes), 3)
+        XCTAssertNil(try JSONDecoder().decode(ProjectDocument.self, from: Data(#"{"id":"p1","title":"P"}"#.utf8)).settingChanges)
         // Round trip, as the page's cache writes it.
         let again = try JSONDecoder().decode(ProjectDocument.self, from: JSONEncoder().encode(document))
         XCTAssertEqual(again.settingChanges, changes)
 
-        let (coordinator, owner, reverted) = (changes[0], changes[1], changes[2])
-        XCTAssertEqual(LandingChanges.what(coordinator), "Landing check")
-        XCTAssertEqual(LandingChanges.what(owner), "Check exempt")
-        XCTAssertEqual(LandingChanges.valueText(coordinator.oldValue).text, "Uses merge check")
-        XCTAssertTrue(LandingChanges.valueText(coordinator.newValue) == ("make fast", true))
-        XCTAssertEqual(LandingChanges.valueText(reverted.newValue).text, "No check")
-        XCTAssertEqual(LandingChanges.valueText(owner.newValue).text, "exempt")
-        XCTAssertEqual(LandingChanges.valueText(owner.oldValue).text, "not exempt")
-        XCTAssertEqual(LandingChanges.origin(coordinator), "Coordinator")
-        XCTAssertEqual(LandingChanges.origin(owner), "You")
-        // Revert exactly where the server says so; the owner's own change says there is nothing to revert.
-        XCTAssertEqual(LandingChanges.action(coordinator), .revert)
-        XCTAssertEqual(LandingChanges.action(owner), .note("Your change · nothing to revert"))
-        XCTAssertEqual(LandingChanges.action(reverted), .nothing)
-        let revertRow = ProjectSettingChange(id: "c4", origin: .owner, oldValue: reverted.newValue,
-                                             newValue: reverted.oldValue, revertsChangeId: "c1")
-        XCTAssertEqual(LandingChanges.action(revertRow), .nothing, "a revert's own row offers nothing")
-        XCTAssertEqual(LandingChanges.confirmBody(coordinator), "Landing check goes back from make fast to Uses merge check.")
+        let (coordinator, owner, card) = (rows[0], rows[1], rows[2])
+        XCTAssertTrue(coordinator.revertible)
+        XCTAssertNil(coordinator.note)
+        XCTAssertNil(coordinator.taskID, "a landing-check row names no task")
+        XCTAssertEqual(owner.note, "Your change · nothing to revert")
+        XCTAssertEqual(owner.taskID, "t9", "an exemption row opens its task")
+        // A change approved on a card is the owner's too: nothing to revert (web: origin !== 'COORDINATOR').
+        XCTAssertEqual(card.originLabel, "Approved on a card")
+        XCTAssertFalse(card.revertible)
+        XCTAssertEqual(card.note, "Your change · nothing to revert")
+        XCTAssertEqual(CoordinatorChanges.revertText(changes[0]), "Landing check goes back from make fast to Uses merge check.")
     }
 
     // MARK: the browser's wiring
@@ -140,7 +114,7 @@ final class LandingCheckChangesTests: XCTestCase {
         for literal in [
             "`/projects/${encodeURIComponent(projectId)}/setting-changes/${encodeURIComponent(change.id)}/revert`, { method: 'POST' },",
             "{change.revertible ? (",
-            ") : change.origin !== 'COORDINATOR' && !change.revertsChangeId ? (",
+            ") : change.origin !== 'COORDINATOR' ? (",
             "if (!changes || changes.length === 0) return null;",
             "{changesRowLabel(changes.length)} ›",
             "{change.revertedAt ? <div className=\"project-change-reverted\">{revertedLine(ago(change.revertedAt, now))}</div> : null}",
@@ -150,6 +124,7 @@ final class LandingCheckChangesTests: XCTestCase {
             "<div className=\"project-change-consequence\">{CHANGES_COPY.CONFIRM_CONSEQUENCE}</div>",
             "confirmText: CHANGES_COPY.REVERT,",
             "cancelText: CHANGES_COPY.CANCEL,",
+            ">\(LandingProvenanceCopy.openTask)</Link>",
         ] {
             XCTAssertTrue(list.contains(literal), "ProjectLandingChanges.tsx no longer says \(literal)")
         }
@@ -161,6 +136,7 @@ final class LandingCheckChangesTests: XCTestCase {
             "{setAt ? <span className=\"project-landing-origin-time\">{`set ${ago(setAt, now)}`}</span> : null}",
             "<b>{LANDING_MODE_COPY.NONE_HEAD}</b> {LANDING_MODE_COPY.NONE_BODY}",
             "{LANDING_CHECK_COPY.HINT} {LANDING_MODE_COPY.COMMAND_NOTE}",
+            "{LANDING_CHECK_ORIGIN_NOTES.map((entry) => (",
         ] {
             XCTAssertTrue(block.contains(literal), "ProjectRunSettings.tsx no longer says \(literal)")
         }

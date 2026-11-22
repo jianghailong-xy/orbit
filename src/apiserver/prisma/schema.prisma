@@ -2129,13 +2129,9 @@ model Session {
   // runner's async /finalize. null = a natural agent finish (read `status`) or a
   // pre-migration row. Values: see SessionEndReason in @orbit/shared.
   endReason            String?   @map("end_reason")
-  // Why the session was released (no runner holds it): written with `finishedAt` and the terminal status in
-  // every write that releases the session, cleared with `finishedAt` by the revive. The end reasons plus
-  // turn_failed, runner_lost, setup_failed, engine_exited, engine_failed, end_not_honored, import_failed,
-  // landing_settled (migrations 1261 and 1403, CHECK session_release_cause_chk; values in
-  // common/session-release.ts). Backfilled by 1262 and 1405. The status is FAILED exactly when the cause is a
-  // failure cause (FAILURE_RELEASE_CAUSES; CHECK session_release_failure_chk, 1406).
-  releaseCause         String?   @map("release_cause")
+  // No failure fact on the session (design §12, decision D9; removal step R5, 2026-11-21): the nullable column `release_cause` and its CHECK
+  // session_release_cause_chk still exist in the database, and this model does not declare it. Nothing writes it
+  // and nothing reads it; migration R8 drops both one deploy after this field left the model.
   // How the session's latest completed turn ended: ANSWERED | FAILED | INTERRUPTED | CANCELLED, the same
   // value as that turn's `outcome`, written by runner turn-complete in the write that parks the session
   // (migration 1201, CHECK session_last_turn_outcome_chk). Backfilled from status and endReason (1202); null
@@ -3260,10 +3256,20 @@ model SubagentRun {
   callIndex        Int?      @map("call_index")
   label            String?
   phase            String?
+  /// The parent's rating of the result, 1 to 5 (subagent_rate, migration 1420; check subagent_run_rating_score_check).
+  /// Shown on the Model tiers view; routing never reads it. A later rating replaces this one.
+  ratingScore      Int?      @map("rating_score")
+  ratingNote       String?   @map("rating_note")
+  ratedAt          DateTime? @map("rated_at") @db.Timestamptz(3)
+  /// The rating parent's own engine, provider and model when it rated.
+  raterEngine      String?   @map("rater_engine")
+  raterProvider    String?   @map("rater_provider")
+  raterModel       String?   @map("rater_model")
 
   @@unique([sessionId, toolUseId])
   @@index([sessionId, status])
   @@index([targetRunnerId, status])
+  @@index([ownerId, createdAt])
   @@unique([workflowRunId, callIndex])
   @@map("subagent_run")
 }
@@ -7883,7 +7889,7 @@ model CoordinatorHandoff {
   /// The note turn's `conversation_turn.client_turn_id`; null once a skip took the note out.
   clientTurnId  String?   @map("client_turn_id")
   startedAt     DateTime  @default(now()) @map("started_at")
-  /// TURN_FAILED | TURN_STOPPED | TIMED_OUT | EMPTY_NOTE | REPLACE_FAILED, only while FAILED.
+  /// TURN_FAILED | TURN_STOPPED | TIMED_OUT | EMPTY_NOTE | REPLACE_FAILED | COORDINATOR_CANT_RUN, only while FAILED.
   failureCode   String?   @map("failure_code")
   note          String?
   /// The waits the swap moved, as `{ id, label, paused }`.

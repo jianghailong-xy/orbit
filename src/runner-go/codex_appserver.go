@@ -987,6 +987,19 @@ func codexStderrIsStateInitFailure(line string) bool {
 // repeats through a session, and the turns themselves still complete.
 func codexStderrDiagnostic(line string) (map[string]interface{}, bool) {
 	lower := strings.ToLower(line)
+	// Codex's sandbox setup logs this at ERROR and then runs with its bundled copy, so the turn
+	// still works: a degraded sandbox, not a failed run. Matched on Codex's own sentence, not the
+	// URL or the word "bubblewrap", so another sandbox line keeps its existing treatment.
+	if strings.Contains(lower, "could not find bubblewrap on path") {
+		return map[string]interface{}{
+			"component":   "sandbox",
+			"phase":       "startup",
+			"severity":    "WARN",
+			"impact":      "degraded",
+			"recoverable": true,
+			"code":        "bubblewrap_missing",
+		}, true
+	}
 	tokenInvalidated := strings.Contains(lower, "token_invalidated") || strings.Contains(lower, "token has been invalidated")
 	if strings.Contains(lower, "codex_models_manager") &&
 		strings.Contains(lower, "failed to refresh available models") {

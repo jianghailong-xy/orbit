@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 37 |
-| `user` | 491 |
+| `user` | 494 |
 | `admin` | 31 |
-| `runner` | 211 |
+| `runner` | 212 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **774** |
+| **Total** | **778** |
 
 ## Public routes
 
@@ -203,10 +203,10 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/projects/:id/acceptance/merge-evidence` | body `RecordMergeEvidenceDto`; path `id` | `ProjectsController.recordMergeEvidence` |
 | `POST` | `/api/projects/:id/blockers/:blockerId/resolve` | body `ResolveProjectBlockerDto`; path `blockerId`, `id` | `ProjectsController.resolveBlocker` |
 | `POST` | `/api/projects/:id/coordinator` | body `OpenProjectCoordinatorDto`; path `id` | `ProjectsController.openCoordinator` |
-| `POST` | `/api/projects/:id/coordinator/handoff` | path `id` | `CoordinatorHandoffController.start` |
+| `POST` | `/api/projects/:id/coordinator/handoff` | body `Object`; path `id` | `CoordinatorHandoffController.start` |
 | `POST` | `/api/projects/:id/coordinator/handoff/cancel` | path `id` | `CoordinatorHandoffController.cancel` |
-| `POST` | `/api/projects/:id/coordinator/handoff/retry` | path `id` | `CoordinatorHandoffController.retry` |
-| `POST` | `/api/projects/:id/coordinator/handoff/skip` | path `id` | `CoordinatorHandoffController.skip` |
+| `POST` | `/api/projects/:id/coordinator/handoff/retry` | body `Object`; path `id` | `CoordinatorHandoffController.retry` |
+| `POST` | `/api/projects/:id/coordinator/handoff/skip` | body `Object`; path `id` | `CoordinatorHandoffController.skip` |
 | `GET` | `/api/projects/:id/coordinator/pending-waits` | path `id` | `CoordinatorHandoffController.pendingWaits` |
 | `POST` | `/api/projects/:id/coordinator/rebind` | body `RebindProjectCoordinatorDto`; path `id` | `ProjectsController.rebindCoordinator` |
 | `POST` | `/api/projects/:id/coordinator/replace` | body `ReplaceProjectCoordinatorDto`; path `id` | `ProjectsController.replaceCoordinator` |
@@ -381,6 +381,8 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `DELETE` | `/api/sessions/:id/auto-retry` | path `id` | `SessionsController.cancelAutoRetry` |
 | `POST` | `/api/sessions/:id/auto-retry` | body `Object`; path `id` | `SessionsController.armAutoRetry` |
 | `GET` | `/api/sessions/:id/background` | path `id` | `SessionsController.backgroundShells` |
+| `POST` | `/api/sessions/:id/background/jobs/:jobId/stop` | path `id`, `jobId` | `SessionsController.stopBackgroundJob` |
+| `GET` | `/api/sessions/:id/background/jobs/:jobId/tail` | path `id`, `jobId`; query `lines` | `SessionsController.backgroundJobTail` |
 | `POST` | `/api/sessions/:id/checkout/discard` | path `id` | `SessionsController.discardCheckout` |
 | `POST` | `/api/sessions/:id/commit` | path `id` | `SessionsController.commitWorktree` |
 | `GET` | `/api/sessions/:id/compact` | path `id` | `SessionsController.getCompact` |
@@ -402,6 +404,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/sessions/:id/interrupt` | body `Object`; path `id` | `SessionsController.interrupt` |
 | `GET` | `/api/sessions/:id/landing/log` | path `id`; query `check`, `claim`, `cursor`, `jobId`, `round` | `SessionsController.landingLog` |
 | `POST` | `/api/sessions/:id/merge` | body `Object`; path `id` | `SessionsController.mergeToMain` |
+| `POST` | `/api/sessions/:id/merge-failure/dismiss` | path `id` | `SessionsController.dismissMergeFailure` |
 | `GET` | `/api/sessions/:id/merge-receipts` | path `id`; query `limit` | `SessionsController.listMergeReceipts` |
 | `POST` | `/api/sessions/:id/merge-receipts` | body `RecordMergeReceiptDto`; path `id` | `SessionsController.recordMergeReceipt` |
 | `POST` | `/api/sessions/:id/merge-repair` | body `Object`; path `id` | `SessionsController.mergeRepair` |
@@ -505,7 +508,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/users/me/avatar` | — | `UsersController.avatar` |
 | `PUT` | `/api/users/me/avatar` | — | `UsersController.setAvatar` |
 | `PATCH` | `/api/users/me/preferences` | body `UpdatePreferencesDto` | `UsersController.updatePreferences` |
-| `GET` | `/api/watches` | query `needsAttention`, `state` | `WatchesController.list` |
+| `GET` | `/api/watches` | query `following`, `needsAttention`, `state` | `WatchesController.list` |
 | `POST` | `/api/watches` | body `CreateWatchDto` | `WatchesController.create` |
 | `GET` | `/api/watches/:id` | path `id` | `WatchesController.get` |
 | `PATCH` | `/api/watches/:id` | body `UpdateWatchDto`; path `id` | `WatchesController.update` |
@@ -738,11 +741,11 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/runner/sessions/:id/end` | path `id` | `RunnerSessionsController.endSession` |
 | `GET` | `/api/runner/sessions/:id/events` | path `id`; query `after`, `limit` | `RunnerApiController.sessionEvents` |
 | `POST` | `/api/runner/sessions/:id/events` | body `Object`; path `id` | `RunnerApiController.events` |
-| `POST` | `/api/runner/sessions/:id/file-bundles` | body `CreateFileBundleDto`; path `id` | `RunnerFilesController.createBundle` |
-| `POST` | `/api/runner/sessions/:id/files` | body `UploadFileDto`; path `id` | `RunnerApiController.uploadFile` |
+| `POST` | `/api/runner/sessions/:id/file-bundles` | body `CreateFileBundleDto`; path `id`; query `subagentRunId` | `RunnerFilesController.createBundle` |
+| `POST` | `/api/runner/sessions/:id/files` | body `UploadFileDto`; path `id`; query `subagentRunId` | `RunnerApiController.uploadFile` |
 | `GET` | `/api/runner/sessions/:id/files/:fileId` | path `fileId`, `id` | `RunnerFilesController.describe` |
-| `DELETE` | `/api/runner/sessions/:id/files/:fileId/pin` | path `fileId`, `id` | `RunnerFilesController.unpin` |
-| `PUT` | `/api/runner/sessions/:id/files/:fileId/pin` | path `fileId`, `id` | `RunnerFilesController.pin` |
+| `DELETE` | `/api/runner/sessions/:id/files/:fileId/pin` | path `fileId`, `id`; query `subagentRunId` | `RunnerFilesController.unpin` |
+| `PUT` | `/api/runner/sessions/:id/files/:fileId/pin` | path `fileId`, `id`; query `subagentRunId` | `RunnerFilesController.pin` |
 | `POST` | `/api/runner/sessions/:id/finalize` | body `Object`; path `id` | `RunnerApiController.finalize` |
 | `POST` | `/api/runner/sessions/:id/import-result` | body `Object`; path `id` | `RunnerApiController.importResult` |
 | `GET` | `/api/runner/sessions/:id/inbox` | path `id`; query `acceptsSteer`, `leaseGeneration`, `runningTurnId` | `RunnerApiController.inbox` |
@@ -763,6 +766,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `PATCH` | `/api/runner/sessions/:id/subagents/:runId` | body `SubagentRunUpdateDto`; path `id`, `runId` | `RunnerSubagentsController.updateSubagentRun` |
 | `GET` | `/api/runner/sessions/:id/subagents/:runId/events` | path `id`, `runId`; query `after` | `RunnerSubagentsController.readRelayedSubagentEvents` |
 | `POST` | `/api/runner/sessions/:id/subagents/:runId/fallback` | body `SubagentFallbackDto`; path `id`, `runId` | `RunnerSubagentsController.nextSubagentCandidate` |
+| `POST` | `/api/runner/sessions/:id/subagents/:runId/rating` | body `SubagentRatingDto`; path `id`, `runId` | `RunnerSubagentsController.rateSubagentRun` |
 | `POST` | `/api/runner/sessions/:id/subagents/:runId/stop` | path `id`, `runId` | `RunnerSubagentsController.stopRemoteSubagentRun` |
 | `POST` | `/api/runner/sessions/:id/takeover-leases` | body `Object`; path `id` | `RunnerApiController.takeoverLeases` |
 | `POST` | `/api/runner/sessions/:id/turn-complete` | body `Object`; path `id` | `RunnerApiController.turnComplete` |

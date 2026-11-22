@@ -172,7 +172,7 @@ const projectRead = (projectId: string) => (path: string): boolean =>
 const placementRead = (...projectIds: string[]) => (path: string): boolean =>
   path.startsWith('/sessions/project-placement?') &&
   (projectIds.length === 0 || new URLSearchParams(path.split('?')[1]).get('projectIds') === [...projectIds].sort().join(','));
-const WATCH_READS = 4; // one watches read is four requests (queries.ts watchesQuery)
+const WATCH_READS = 1; // one watches read is one request (queries.ts watchesQuery, GET /watches?following=true)
 
 const OPEN_LIST = sessionsQuery({ runnerId: 'R1', workspaceId: 'W1', view: 'open', limit: 40 });
 const isOpenList = (path: string): boolean => path.startsWith('/sessions?runnerId=R1&workspaceId=W1');

@@ -221,8 +221,31 @@ func TestDshAgentOverlay(t *testing.T) {
 	// environment hands the session's toolchains (runnerCacheEnv).
 	roots := inserts["orbit-sandbox-cache-root"]
 	pluginSource(roots, dshSandboxCacheRootPlugin)
-	if mapValue(roots["config"])["root"] != runnerCacheRoot() {
+	if mapValue(roots["config"])["root"] != runnerCacheRoot() || mapValue(roots["config"])["extra"] != nil {
 		t.Fatalf("cache root row = %+v", roots)
+	}
+	// A session's uploads directory rides the same plugin as an extra writable root.
+	uploads := t.TempDir()
+	withUploads, err := prepareDshAgentConfigAt(input, &DshAgentOverlay{Uploads: uploads}, exe, filepath.Join(t.TempDir(), "uploads"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var uploadRows []map[string]interface{}
+	uploadData, _ := os.ReadFile(withUploads.Args[5])
+	if err := json.Unmarshal(uploadData, &uploadRows); err != nil {
+		t.Fatal(err)
+	}
+	var extra interface{}
+	for _, row := range uploadRows {
+		list, _ := row["insert"].([]interface{})
+		for _, raw := range list {
+			if insert := mapValue(raw); insert["id"] == "orbit-sandbox-cache-root" {
+				extra = mapValue(insert["config"])["extra"]
+			}
+		}
+	}
+	if list, _ := extra.([]interface{}); len(list) != 1 || list[0] != uploads {
+		t.Fatalf("uploads root = %#v in %s", extra, uploadData)
 	}
 	bare, err := prepareDshAgentConfigAt(input, &DshAgentOverlay{}, exe, filepath.Join(t.TempDir(), "bare"))
 	if err != nil || len(bare.Args) != 6 {

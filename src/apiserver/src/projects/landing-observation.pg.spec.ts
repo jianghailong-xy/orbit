@@ -322,7 +322,7 @@ async function workSession(stack: Stack, w: World, taskId: string, s: WorkSessio
       branch: s.branch, branchSha: s.branchSha, baseSha: s.baseSha, numTurns: 1,
       startedAt: minutesAgo(30), createdAt: minutesAgo(30), runtimeSessionId: randomUUID(),
       ...(s.changedFiles ? { changedFiles: s.changedFiles as Prisma.InputJsonValue } : {}),
-      ...(finished ? { finishedAt: minutesAgo(s.finishedMinutesAgo!) } : {}),
+      ...(finished ? { finishedAt: minutesAgo(s.finishedMinutesAgo!)} : {}),
     },
   });
   return id;
@@ -611,7 +611,7 @@ test('(2) J-T9: a silent observation is ended ERROR · RUNNER_LOST by the next t
 
 // ═══ (3) §10.9 3: the empty branch ═══════════════════════════════════════════════════════════
 
-test('(3) §10.9 3, O-R2 at the DONE (§12.15 P-M1): an empty branch with no work reported is not observed and reads as nothing to land; one whose session reported work opens WORK_ELSEWHERE at its DONE; work in another repository is not observed',
+test('(3) §10.9 3, O-R2 at the DONE (§12.15 P-M1): an empty branch with no work of its own anywhere is not observed and reads as nothing to land; one whose other session has a commit of its own opens WORK_ELSEWHERE at its DONE; work in another repository is not observed',
   { skip, timeout: 240_000 }, async () => {
     const stack = await connect();
     try {
@@ -619,10 +619,19 @@ test('(3) §10.9 3, O-R2 at the DONE (§12.15 P-M1): an empty branch with no wor
       const nothing = await finishedTask(stack, w, 'nothing of its own', {
         branch: 'orbit/nothing', branchSha: sha('1'), baseSha: sha('1'),
       });
-      const elsewhere = await finishedTask(stack, w, 'work done elsewhere', {
-        branch: 'orbit/elsewhere', branchSha: sha('2'), baseSha: sha('2'),
-        changedFiles: [{ path: 'src/elsewhere.ts', status: 'M' }],
+      // Work elsewhere, measured: an earlier attempt's own branch has a commit past its base, and the attempt
+      // that finished last — the one the identity is frozen from — has nothing past its own. A `changed_files`
+      // beside an empty branch of its own is not that (the 2026-11-20 regression: a checked-out commit's diff).
+      const elsewhereTaskId = await ownerTask(stack, w, 'work done elsewhere');
+      await workSession(stack, w, elsewhereTaskId, {
+        branch: 'orbit/elsewhere-first', branchSha: sha('7'), baseSha: sha('2'),
+        changedFiles: [{ path: 'src/elsewhere.ts', status: 'M' }], finishedMinutesAgo: 5,
       });
+      await workSession(stack, w, elsewhereTaskId, {
+        branch: 'orbit/elsewhere', branchSha: sha('2'), baseSha: sha('2'), finishedMinutesAgo: 2,
+      });
+      await confirm(stack, w, elsewhereTaskId);
+      const elsewhere = { taskId: elsewhereTaskId };
       const otherWorkspace = randomUUID();
       await stack.db.workspace.create({
         data: {
@@ -649,7 +658,7 @@ test('(3) §10.9 3, O-R2 at the DONE (§12.15 P-M1): an empty branch with no wor
         SELECT ${Prisma.raw(prerequisiteLandedSql('t'))} AS "landed" FROM "task" t WHERE t."id" = ${nothing.taskId}::uuid`);
       assert.equal(released?.landed, true, 'J9: nothing to land releases its dependents');
 
-      assert.deepEqual(await receiptsOf(stack, elsewhere.taskId), [], 'a session reported work: no receipt');
+      assert.deepEqual(await receiptsOf(stack, elsewhere.taskId), [], 'a session has a commit of its own: no receipt');
       const [unobserved, ...more] = await openItems(stack, w, 'LANDING_UNOBSERVED');
       assert.equal(more.length, 0);
       assert.equal(unobserved.taskId, elsewhere.taskId);

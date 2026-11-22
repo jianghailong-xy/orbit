@@ -103,6 +103,8 @@ func runDshChild(ctx context.Context, c subagentChild) (ExecResult, string, erro
 			return bridgeDshPermission(withSubagentApprovals(askCtx, c.runID), c.t, c.parent.SessionID, ask)
 		}, emitFor)
 	permissions.workspace = spec.Cwd
+	// The parent's uploads directory, which the parent writes to unasked when it is Claude Code or Codex.
+	permissions.uploads = uploadsDir(c.parent.SessionID)
 	app, err := startDshACP(ctx, spec, mapper, permissions, c.emit)
 	if err != nil {
 		return ExecResult{Status: stFailed}, engineSession, fmt.Errorf("failed to start DeepSeek Harness: %w", err)

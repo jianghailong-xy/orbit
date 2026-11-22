@@ -37,6 +37,41 @@ final class SubagentSettingsTests: XCTestCase {
         XCTAssertEqual(r.providers[4].kind, "pool")
     }
 
+    /// The Quality column (docs/subagent-design.md §7.1, board docs/mocks/model-quality/01-board.png): decoded from the
+    /// tiers response, absent read as no runs, and drawn as the two lines web draws.
+    func testQualityDecodesAndAbsentIsNoRuns() throws {
+        let json = """
+        {"providers":[{"slug":"claude","label":"Claude","kind":"builtin","billing":"subscription","models":[
+          {"model":"claude-opus-5-5","levels":["L"],"quality":{
+            "subagent":{"averageRating":4.4,"ratedCount":23,"runCount":41,"raters":[
+              {"engine":"claude","provider":"claude","model":"claude-opus-5-5","label":"Opus 5.5","count":15},
+              {"engine":"claude","provider":"claude","model":"claude-sonnet-5-5","label":"Sonnet 5.5","count":8}]},
+            "tasks":{"firstPassRate":0.86,"firstPassTaskCount":45,"completedTaskCount":52}}},
+          {"model":"claude-haiku-5-5","levels":["S"]}]}]}
+        """
+        let models = try JSONDecoder().decode(SubagentTiersResponse.self, from: Data(json.utf8)).providers[0].models
+        XCTAssertEqual(models[0].quality.subagent.raters.map(\.count), [15, 8])
+        XCTAssertEqual(models[1].quality, .none)
+
+        let rated = SubagentSettings.qualityLines(models[0].quality)
+        XCTAssertFalse(rated.empty)
+        XCTAssertEqual(rated.subagents, QualityLine(text: "4.4 · 23 rated of 41", muted: false))
+        XCTAssertEqual(rated.tasks, QualityLine(text: "86% first pass · 52 tasks", muted: false))
+        XCTAssertEqual(rated.raters, "Rated by Opus 5.5 (15) · Sonnet 5.5 (8)")
+        XCTAssertTrue(SubagentSettings.qualityLines(models[1].quality).empty)
+    }
+
+    func testQualityBelowTheMinimumsSaysWhy() {
+        let sparse = SubagentSettings.qualityLines(ModelQuality(
+            subagent: ModelSubagentQuality(ratedCount: 3, runCount: 12,
+                                           raters: [ModelQualityRater(provider: "codex", count: 3)]),
+            tasks: ModelTaskQuality(firstPassTaskCount: 6, completedTaskCount: 6)))
+        XCTAssertFalse(sparse.empty, "some runs: both lines, not No runs yet")
+        XCTAssertEqual(sparse.subagents, QualityLine(text: "Not enough ratings", muted: true))
+        XCTAssertEqual(sparse.tasks, QualityLine(text: "Not enough tasks", muted: true))
+        XCTAssertNil(sparse.raters, "no tooltip without an average")
+    }
+
     func testTableSkipsProvidersWithoutModels() throws {
         XCTAssertEqual(SubagentSettings.tableProviders(try tiers().providers).map(\.slug),
                        ["deepseek", "claude", "codex", "my-endpoint"])
@@ -48,6 +83,12 @@ final class SubagentSettingsTests: XCTestCase {
         XCTAssertEqual(SubagentSettings.tierText(["S", "M", "L", "XL"]), "S–XL by effort")
         XCTAssertEqual(SubagentSettings.tierText(["L", "XL"]), "L · XL")
         XCTAssertEqual(SubagentSettings.tierText(["M"]), "M")
+        let older = ProviderModelTier(model: "claude-opus-5", levels: [], supersededBy: "claude-opus-5-5")
+        XCTAssertEqual(SubagentSettings.modelTierText(older), "Older · uses claude-opus-5-5")
+        XCTAssertTrue(SubagentSettings.tierIsOlder(older))
+        let tiered = ProviderModelTier(model: "claude-opus-5", levels: ["M"], supersededBy: "claude-opus-5-5")
+        XCTAssertEqual(SubagentSettings.modelTierText(tiered), "M")
+        XCTAssertEqual(SubagentSettings.modelTierText(ProviderModelTier(model: "grok", levels: [])), "Not set")
         XCTAssertFalse(SubagentSettings.tierIsUnset(["M"]))
     }
 

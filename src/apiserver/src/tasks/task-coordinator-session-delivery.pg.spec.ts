@@ -268,6 +268,7 @@ async function fixture(
         prompt: `协调：${label}`,
         provider: 'claude',
         status: wanted === 'PARKED' ? RunStatus.AWAITING_INPUT : RunStatus.SUCCEEDED,
+        ...(wanted === 'PARKED' ? {} : { finishedAt: new Date()}),
         dispatchOrigin: SessionDispatchOrigin.USER,
         titleManagedByProject: true,
         ...(wanted === 'ENDED' ? { completedAt: new Date() } : {}),
@@ -361,12 +362,11 @@ async function settleByAcceptance(stack: Stack, f: Fixture, taskId: string, labe
       status: RunStatus.RUNNING,
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
-      // The work ran in the task's own worktree and reported files: revision 42 (§12.15 P-M3) reads
-      // landing from the delivered commit, and a DONE task with no branch and nothing reported has
-      // nothing to land — it would leave its criterion's landing conjunction, not enter it.
-      isolationStatus: 'worktree',
-      branch: `orbit/${sessionId}`,
-      changedFiles: ['src/work.ts'],
+      // The attempt commits on a worktree branch of its own, past the commit it forked from: work with
+      // something to land. A run that never made a branch delivered nothing to land (§12.15 P-M3).
+      isolationStatus: 'worktree', branch: `orbit/${label}-${sessionId.slice(0, 8)}`,
+      worktreeBranch: `orbit/${label}-${sessionId.slice(0, 8)}`, baseSha: 'a'.repeat(40), branchSha: 'b'.repeat(40),
+      worktreeDirty: false, changedFiles: ['src/work.ts'],
     },
   });
   await stack.db.conversationTurn.create({
@@ -423,6 +423,10 @@ async function settleByAcceptance(stack: Stack, f: Fixture, taskId: string, labe
     subtype: 'shell',
     shellExitCode: shell.status!,
     shellOutput: `${shell.stdout}${shell.stderr}`,
+  });
+  await stack.db.session.update({
+    where: { id: sessionId },
+    data: { status: RunStatus.SUCCEEDED, finishedAt: new Date()},
   });
 
   assert.equal(
@@ -490,7 +494,7 @@ async function coordinatorReadsIt(db: PrismaClient, f: Fixture) {
   });
   await db.session.update({
     where: { id: f.coordinatorSessionId! },
-    data: { status: RunStatus.AWAITING_INPUT },
+    data: { status: RunStatus.AWAITING_INPUT, finishedAt: null},
   });
 }
 

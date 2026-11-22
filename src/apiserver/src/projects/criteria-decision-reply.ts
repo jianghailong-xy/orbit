@@ -9,6 +9,7 @@ import { base62ToUuid, uuidToBase62 } from '@orbit/shared';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionsService } from '../sessions/sessions.service';
+import { isReleased } from '../common/session-release';
 import { criteriaProposalDiff } from './criteria-pending-decisions';
 import {
   CRITERIA_WEAKENING_EFFECT_CLASS,
@@ -235,7 +236,7 @@ export async function sendCriteriaDecisionReply(
   const session = await prisma.session.findFirst({
     where: { id: sessionId, ownerId },
     select: {
-      id: true, title: true, status: true, cancelRequestedAt: true, deletedAt: true, taskId: true,
+      id: true, title: true, finishedAt: true, cancelRequestedAt: true, deletedAt: true, taskId: true,
     },
   });
   if (!session) return { channel: 'NOT_SENT', sessionId, reason: 'SESSION_GONE' };
@@ -273,7 +274,7 @@ export async function sendCriteriaDecisionReply(
 
   const ended = session.deletedAt !== null
     || session.cancelRequestedAt !== null
-    || SessionsService.TERMINAL.includes(session.status);
+    || isReleased(session);
   if (!ended) {
     try {
       await sessions.createTurn(ownerId, session.id, {
