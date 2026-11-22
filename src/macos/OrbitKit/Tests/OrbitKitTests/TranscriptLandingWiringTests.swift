@@ -80,21 +80,27 @@ final class TranscriptLandingWiringTests: XCTestCase {
                                    to: "private func landingAnchor(")
         XCTAssertTrue(keepLanding.contains("held.keep(in: console.sessionID, contentHeight: nil, at: Date())"))
         XCTAssertTrue(keepLanding.contains("landing = nil"), "a hold past its quiet is let go")
+        XCTAssertTrue(keepLanding.contains("held.puttingBack(from: Double(ruler.contentOffset))"),
+                      "a publish's put-back is measured too")
         XCTAssertTrue(keepLanding.contains("proxy.scrollTo(held.rowID, anchor: landingAnchor(held))"))
 
         // A row measured, an image loaded, a translation: the content's height changed.
         let tracker = try code(view, from: "private struct ScrollTracker", to: "/// Publishes the id of the item currently under")
-        XCTAssertTrue(tracker.contains("let held = landingHolds(now.contentHeight != was.contentHeight ? now.contentHeight : nil)"),
-                      "every geometry reading that resized the content is handed to the hold")
+        XCTAssertTrue(tracker.contains("let held = landingHolds(now.offset, now.contentHeight != was.contentHeight ? now.contentHeight : nil)"),
+                      "every geometry reading is handed to the hold, with its offset and any new height")
         XCTAssertTrue(tracker.contains("let pinned = !held && TailPinning.pinned("),
                       "and the tail is not pinned while a row is held (web measure(): !landingRef.current)")
-        let holds = try code(view, from: "private func landingHolds(resizedTo height: Double?) -> Bool {",
+        let holds = try code(view, from: "private func landingHolds(offset: Double, resizedTo height: Double?) -> Bool {",
                              to: "private func keepLanding(")
-        XCTAssertTrue(holds.contains("held.keep(in: console.sessionID, contentHeight: height, at: Date())"))
-        XCTAssertTrue(holds.contains("if height != nil { holdScroll(to: held.rowID, anchor: landingAnchor(held), animated: false) }"),
+        let read = try XCTUnwrap(holds.range(of: "held.read(offset: offset, at: Date())"),
+                                 "the reading settles whether the last put-back moved the list")
+        let checked = try XCTUnwrap(holds.range(of: "held.keep(in: console.sessionID, contentHeight: height, at: Date())"))
+        XCTAssertLessThan(read.lowerBound, checked.lowerBound, "before the quiet is checked")
+        XCTAssertTrue(holds.contains("if height != nil { holdScroll(to: held.rowID, anchor: landingAnchor(held), animated: false, putsBack: true) }"),
                       "put back as a held scroll: this arrives off a layout report")
         let trackers = try code(view, from: "private func tracker(ruler:", to: "private func repinAfterResize")
-        XCTAssertEqual(trackers.components(separatedBy: "landingHolds: landingHolds").count - 1, 2, "on both platforms")
+        XCTAssertEqual(trackers.components(separatedBy: "landingHolds: { landingHolds(offset: $0, resizedTo: $1) }").count - 1, 2,
+                       "on both platforms")
 
         let repin = try code(view, from: "private func repinAfterResize() {", to: "#if os(iOS)")
         XCTAssertTrue(repin.contains("landing == nil"), "a viewport resize does not carry a held row off to the tail")
@@ -125,6 +131,23 @@ final class TranscriptLandingWiringTests: XCTestCase {
         XCTAssertFalse(console.contains("addingTimeInterval(60)"), "not 60 s")
         let focus = try code(console, from: "func focusWaitingCard() {", to: "private func followPendingWaitingCard() {")
         XCTAssertTrue(focus.contains("pendingWaitingCardAt = Date()"))
+    }
+
+    /// Only a put-back that moved the list restarts the quiet (web `keepLanding`): a new content
+    /// height alone does not, or a session that keeps streaming would hold the row, and suspend the
+    /// tail pin, for as long as it runs.
+    func testOnlyAPutBackThatMovedTheListRestartsTheQuiet() throws {
+        let view = try app("Views/Console/ConsoleView.swift")
+        let made = try code(view, from: ".onChange(of: heldScroll) { _, held in", to: ".onAppear {")
+        XCTAssertTrue(made.contains("if held.putsBack, var row = landing, row.rowID == held.rowID { row.puttingBack(from: Double(ruler.contentOffset)) landing = row }"),
+                      "a held put-back records the offset it starts from, for the next reading to compare")
+        XCTAssertTrue(view.contains("var putsBack = false"), "the held scroll says it is a put-back")
+        XCTAssertFalse(view.contains("movedAt"), "the view never restarts the wait itself")
+
+        let landing = try source("src/macos/OrbitKit/Sources/OrbitKit/Transcript/TranscriptLanding.swift")
+        let keep = try code(landing, from: "public func keep(in sessionID: String, contentHeight: Double?, at now: Date) -> Bool {",
+                            to: "public mutating func puttingBack(")
+        XCTAssertFalse(keep.contains("movedAt ="), "a new height is not evidence the row moved")
     }
 
     func testTailPinningSaysTheHoldSuspendsThePinAsWebDoes() throws {

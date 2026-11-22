@@ -4,7 +4,8 @@ import XCTest
 /// The row a transcript was opened at (a waiting card, a record a link named) is held in place
 /// while the rest of the conversation lands, until the reader takes over or nothing has moved it for
 /// `quiet`. A request to open at a waiting card lapses after 10 s (web `landingRef`/`keepLanding`,
-/// `LANDING_QUIET_MS`, `WAITING_REVEAL_EXPIRES_MS`). Where the transcript drops the hold on reader
+/// `LANDING_QUIET_MS`, `WAITING_REVEAL_EXPIRES_MS`). What restarts the quiet wait is in
+/// `TranscriptLandingPutBackTests`. Where the transcript drops the hold on reader
 /// input, a jump, a send or a session switch is pinned in `TranscriptLandingWiringTests`.
 final class TranscriptLandingTests: XCTestCase {
     private let t0 = Date(timeIntervalSince1970: 1_800_000_000)
@@ -12,24 +13,34 @@ final class TranscriptLandingTests: XCTestCase {
 
     func testAHeldWaitingCardIsPutBackWhenRowsLandOrGrowAboveItWithinTheQuietWindow() {
         var card = TranscriptLanding(rowID: "card:q1", sessionID: "S1", place: .top, at: t0)
-
-        // The rest of the first page lands above it: the content takes a new height.
+        // The rest of the first page lands above it, then an image loads: the content takes a new
+        // height each time, and the card is put back each time.
         XCTAssertTrue(card.keep(in: "S1", contentHeight: 2400, at: at(1)))
-        // An image above it loads 4 s later. Still inside the quiet window, because the landing
-        // above restarted it.
-        XCTAssertTrue(card.keep(in: "S1", contentHeight: 2760, at: at(5.5)), "the row that grew is put back")
-        XCTAssertEqual(card.movedAt, at(5.5), "and the quiet wait starts again from it")
-        // A publish with nothing resized still puts the card back, without restarting the wait.
-        XCTAssertTrue(card.keep(in: "S1", contentHeight: nil, at: at(9)))
-        XCTAssertEqual(card.movedAt, at(5.5))
+        XCTAssertTrue(card.keep(in: "S1", contentHeight: 2760, at: at(4)), "the row that grew is put back")
+        // A publish with nothing resized puts the card back too.
+        XCTAssertTrue(card.keep(in: "S1", contentHeight: nil, at: at(4.9)))
     }
 
     func testARecordJumpIsHeldTheSameWay() {
         var record = TranscriptLanding(rowID: "row-42", sessionID: "S1", place: .center, at: t0)
         XCTAssertEqual(record.place, .center, "a record is held in the middle of the view, where it was jumped to")
         XCTAssertTrue(record.keep(in: "S1", contentHeight: 1800, at: at(2)))
-        XCTAssertTrue(record.keep(in: "S1", contentHeight: 1950, at: at(6)), "a translation above it moved it: put back")
+        XCTAssertTrue(record.keep(in: "S1", contentHeight: 1950, at: at(4)), "a translation above it: put back")
         XCTAssertFalse(record.keep(in: "S1", contentHeight: nil, at: at(11)), "and let go once nothing moved it for 5 s")
+    }
+
+    /// A session that keeps streaming grows the transcript with every row. Rows appended at the tail,
+    /// or growing below the card, change the content's height and leave the card where it is: that
+    /// must not hold it (and suspend the tail pin) for as long as the session runs. The hold lets go
+    /// 5 s after the card last moved (here, when it was placed), however many heights come in.
+    func testRowsThatKeepLandingUnderACardInPlaceDoNotHoldItPastTheQuiet() {
+        var card = TranscriptLanding(rowID: "card:q1", sessionID: "S1", place: .top, at: t0)
+        for second in 1...4 {
+            XCTAssertTrue(card.keep(in: "S1", contentHeight: 1000 + 100 * Double(second), at: at(Double(second))))
+        }
+        XCTAssertFalse(card.keep(in: "S1", contentHeight: 1500, at: at(5)),
+                       "a new height alone is no evidence the card moved")
+        XCTAssertFalse(card.keep(in: "S1", contentHeight: 1600, at: at(6)))
     }
 
     func testTheHoldIsReleasedAfterTheQuietTimeout() {

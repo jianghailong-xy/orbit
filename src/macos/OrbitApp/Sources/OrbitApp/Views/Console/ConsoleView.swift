@@ -1054,12 +1054,12 @@ struct TranscriptView: View {
                              readingBack: readingBack,
                              dragged: { if bandOpened.wrappedValue { bandOpened.wrappedValue = false } },
                              readerScrolled: { landing = nil; console.readerTookOver() },
-                             landingHolds: landingHolds)
+                             landingHolds: { landingHolds(offset: $0, resizedTo: $1) })
         #else
         return ScrollTracker(atBottom: $atBottom, tailOutOfView: $tailOutOfView, ruler: ruler,
                              recompute: recomputeStuck, follow: repinAfterResize,
                              readerScrolled: { landing = nil; console.readerTookOver() },
-                             landingHolds: landingHolds)
+                             landingHolds: { landingHolds(offset: $0, resizedTo: $1) })
         #endif
     }
 
@@ -1087,17 +1087,20 @@ struct TranscriptView: View {
         #endif
     }
 
-    /// The scroll geometry changed under a held row (`ScrollTracker.landingHolds`): put it back when
-    /// the content took a new height, and say whether it is still held. This arrives off a layout
-    /// report, so the put-back is a held scroll (`heldScroll`), as `repinAfterResize`'s is.
-    private func landingHolds(resizedTo height: Double?) -> Bool {
+    /// The scroll geometry changed under a held row (`ScrollTracker.landingHolds`). The reading's
+    /// offset first settles whether the last put-back moved the list, which is what restarts the
+    /// quiet wait (`TranscriptLanding.read`). Then the row is put back when the content took a new
+    /// height, and the answer is whether it is still held. This arrives off a layout report, so the
+    /// put-back is a held scroll (`heldScroll`), as `repinAfterResize`'s is.
+    private func landingHolds(offset: Double, resizedTo height: Double?) -> Bool {
         guard var held = landing else { return false }
+        held.read(offset: offset, at: Date())
         guard held.keep(in: console.sessionID, contentHeight: height, at: Date()) else {
             landing = nil
             return false
         }
         if held != landing { landing = held }
-        if height != nil { holdScroll(to: held.rowID, anchor: landingAnchor(held), animated: false) }
+        if height != nil { holdScroll(to: held.rowID, anchor: landingAnchor(held), animated: false, putsBack: true) }
         return true
     }
 
@@ -1108,6 +1111,8 @@ struct TranscriptView: View {
             landing = nil
             return false
         }
+        held.puttingBack(from: Double(ruler.contentOffset))
+        if held != landing { landing = held }
         proxy.scrollTo(held.rowID, anchor: landingAnchor(held))
         return true
     }
@@ -1423,6 +1428,12 @@ struct TranscriptView: View {
                     proxy.scrollTo(held.rowID, anchor: held.anchor)
                 }
             } else {
+                // A held row put back: the next geometry reading says whether this moved the list
+                // (`TranscriptLanding.read`), measured from the offset the last reading left.
+                if held.putsBack, var row = landing, row.rowID == held.rowID {
+                    row.puttingBack(from: Double(ruler.contentOffset))
+                    landing = row
+                }
                 proxy.scrollTo(held.rowID, anchor: held.anchor)
             }
         }
@@ -1835,9 +1846,10 @@ struct TranscriptView: View {
 
     /// Carry a scroll into the next update rather than making it from here (see `heldScroll`). A new
     /// tick each time, so asking twice for the same row scrolls twice.
-    private func holdScroll(to rowID: String, anchor: UnitPoint, opensReview: Bool = false, animated: Bool = true) {
+    private func holdScroll(to rowID: String, anchor: UnitPoint, opensReview: Bool = false, animated: Bool = true, putsBack: Bool = false) {
         heldScroll = HeldScroll(rowID: rowID, anchor: anchor, tick: (heldScroll?.tick ?? 0) &+ 1,
-                                sessionID: console.sessionID, opensReview: opensReview, animated: animated)
+                                sessionID: console.sessionID, opensReview: opensReview, animated: animated,
+                                putsBack: putsBack)
     }
 
     /// The bar opens the same review as tapping a preview. Inline cards remain scroll-only.
@@ -2280,6 +2292,9 @@ private struct HeldScroll: Equatable {
     /// still moving does not — an animated scroll is aimed at the layout of the frame it starts in,
     /// and a composer growing under it left the tail a line short of the bottom.
     var animated = true
+    /// The put-back of a row held in place (`TranscriptView.landing`), whose effect on the offset
+    /// decides whether the hold's quiet wait starts again.
+    var putsBack = false
 }
 
 #if os(iOS)
@@ -2480,9 +2495,10 @@ private struct ScrollTracker: ViewModifier {
     /// (`TranscriptView.landing`).
     var readerScrolled: () -> Void = {}
     /// Whether a row the transcript was opened at is held in place (`TranscriptView.landingHolds`),
-    /// handed the content's height when this reading changed it, so the row is put back. The tail is
-    /// not pinned while one is held (web: `measure()` reads `!landingRef.current`).
-    var landingHolds: (_ resizedTo: Double?) -> Bool = { _ in false }
+    /// handed this reading's offset, and the content's height when this reading changed it, so the
+    /// row is put back. The tail is not pinned while one is held (web: `measure()` reads
+    /// `!landingRef.current`).
+    var landingHolds: (_ offset: Double, _ resizedTo: Double?) -> Bool = { _, _ in false }
     /// Whether the reader is the one moving the list: a finger on it, or the momentum of one.
     /// `.animating` is SwiftUI moving it (a jump-to-latest, the sticky header) and `.idle` is it
     /// sitting still while content is re-laid-out underneath — neither is a reader. `TailPinning`
@@ -2541,7 +2557,7 @@ private struct ScrollTracker: ViewModifier {
                                      topInset: Double(geo.contentInsets.top),
                                      bottomInset: Double(geo.contentInsets.bottom))
                 } action: { was, now in
-                    let held = landingHolds(now.contentHeight != was.contentHeight ? now.contentHeight : nil)
+                    let held = landingHolds(now.offset, now.contentHeight != was.contentHeight ? now.contentHeight : nil)
                     let pinned = !held && TailPinning.pinned(wasPinned: atBottom, from: was, to: now,
                                                              readerDriven: readerIsMoving,
                                                              evidence: Self.evidence)
