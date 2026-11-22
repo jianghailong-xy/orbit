@@ -7,7 +7,7 @@ import {
   type SessionWaitingOn,
 } from '@orbit/shared';
 
-import { isReleased } from '../common/session-release';
+import { isReleased, releaseFinishedTheWork } from '../common/session-release';
 import {
   isSessionExecuting,
   PENDING_WAKEUP,
@@ -29,12 +29,15 @@ import { countLiveApprovals } from './abandoned-approvals';
  * lists them per kind; the legacy fields beside them are untouched (session-state-legacy-fields.spec.ts).
  */
 
-/** The row columns the four fields read. Absent execution and wake facts read as "not there", as for an old row. */
+/** The row columns the fields read. Absent execution and wake facts read as "not there", as for an old row; an absent
+ *  end reason as none asked for, and an absent kind as a conversation. */
 export interface SessionPhaseRow extends SessionWorkingRow {
   /** The release column (common/session-release.ts). */
   finishedAt: Date | string | null;
   lastTurnOutcome?: string | null;
   error?: string | null;
+  endReason?: string | null;
+  sessionKind?: string | null;
 }
 
 /** What holds a queued turn outside the row: the dispatch pause, and the runner it is assigned to. */
@@ -104,7 +107,8 @@ function turnOutcomeOf(value: string | null | undefined): SessionTurnOutcome | n
   return (SESSION_TURN_OUTCOMES as readonly string[]).includes(value ?? '') ? (value as SessionTurnOutcome) : null;
 }
 
-/** The four fields from a row and what holds it. */
+/** The fields from a row and what holds it. `endReason` is the column as stored, and `workFinished` the release
+ *  module's own answer (releaseFinishedTheWork): nothing here derives either a second time. */
 export function sessionPhaseFields(
   row: SessionPhaseRow,
   hold: SessionHoldFacts,
@@ -115,6 +119,12 @@ export function sessionPhaseFields(
     released: isReleased(row),
     lastTurnOutcome: turnOutcomeOf(row.lastTurnOutcome),
     waitingOn: deriveSessionWaitingOn(row, hold, pendingApprovals),
+    endReason: row.endReason ?? null,
+    workFinished: releaseFinishedTheWork({
+      finishedAt: row.finishedAt,
+      endReason: row.endReason ?? null,
+      sessionKind: row.sessionKind ?? 'CONVERSATION',
+    }),
   };
 }
 
@@ -126,6 +136,8 @@ interface FactsRow {
   finishedAt: Date | null;
   lastTurnOutcome: string | null;
   error: string | null;
+  endReason: string | null;
+  sessionKind: string;
   engineTurnActive: boolean;
   runningSubagents: string[];
   runningBgJobs: string[];
@@ -140,7 +152,7 @@ interface FactsRow {
 type Db = Prisma.TransactionClient;
 
 /**
- * The four fields for the sessions `ids`, by id; a session that is not there is absent. One statement reads the row,
+ * The fields for the sessions `ids`, by id; a session that is not there is absent. One statement reads the row,
  * its wake facts, its runner and the dispatch pause. `pendingApprovals` is the count the caller already has (the list
  * row, the realtime summary, the link preview); a session it does not name is counted here, the way
  * `session.updated` counts it (`countLiveApprovals` plus the owner decisions on it).
@@ -154,6 +166,7 @@ export async function readSessionPhaseFields(
   const rows = await db.$queryRaw<FactsRow[]>(Prisma.sql`
     SELECT s."id" AS "id", s."owner_id"::text AS "ownerId", s."task_id" AS "taskId", s."status" AS "status",
            s."finished_at" AS "finishedAt", s."last_turn_outcome" AS "lastTurnOutcome", s."error" AS "error",
+           s."end_reason" AS "endReason", s."kind"::text AS "sessionKind",
            s."engine_turn_active" AS "engineTurnActive", s."running_subagents" AS "runningSubagents",
            s."running_bg_jobs" AS "runningBgJobs", s."running_bg_shells" AS "runningBgShells", s."retry_at" AS "retryAt",
            (${Prisma.raw(RESUME_WATCH.sql('s'))}) AS "hasResumeWatch",

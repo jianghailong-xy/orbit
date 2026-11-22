@@ -47,6 +47,8 @@ export interface GuestSessionSummary {
   released?: boolean;
   lastTurnOutcome?: SessionTurnOutcome | null;
   waitingOn?: SessionWaitingOn | null;
+  endReason?: string | null;
+  workFinished?: boolean;
   addedAt: string;
   lastTurnAt: string | null;
 }

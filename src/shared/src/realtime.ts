@@ -220,6 +220,8 @@ export interface ControlSessionSummary {
   released?: boolean;
   lastTurnOutcome?: SessionTurnOutcome | null;
   waitingOn?: SessionWaitingOn | null;
+  endReason?: string | null;
+  workFinished?: boolean;
   /** Server-derived actions; optional for rolling-version compatibility. */
   capabilities?: SessionCapabilities;
   /** The engine the session runs on for good — the CLI on the runner (`claude`, `codex`, `kimi`,
@@ -391,6 +393,7 @@ export interface ControlSessionEnded {
   released?: boolean;
   lastTurnOutcome?: SessionTurnOutcome | null;
   waitingOn?: SessionWaitingOn | null;
+  workFinished?: boolean;
 }
 
 /** `data` for `session.error`. `recoverable=true` marks a mid-turn (non-fatal) error — e.g. a

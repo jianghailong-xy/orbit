@@ -1,6 +1,6 @@
 import { questionsWithCoordinator } from '../sessions/run-question';
 import { KEEP_BACKGROUND_WORK_END_CONTENT } from '../sessions/running-work';
-import { readMergeRecovery, type MergeRecoveryAction } from '@orbit/shared';
+import { readMergeRecovery, type MergeRecoveryAction, type SessionPhaseFields } from '@orbit/shared';
 import { readOneSessionPhaseFields } from '../sessions/session-phase';
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit, Optional } from '@nestjs/common';
 import { EventEmitter } from 'events';
@@ -241,6 +241,13 @@ function scheduleCardsChangedData(payload: Record<string, unknown>): Record<stri
 }
 
 /** Reconstruct lifecycle fields for the legacy session.ended wire event. */
+/** The session-phase fields without the row's end reason, for the one event that sends the end reason it settled with. */
+function withoutEndReason(fields: SessionPhaseFields | null): Omit<SessionPhaseFields, 'endReason'> | null {
+  if (!fields) return null;
+  const { endReason: _fromRow, ...rest } = fields;
+  return rest;
+}
+
 function endedSessionStates(
   status: RunStatus | string,
   endReason: SessionEndReason | string | null,
@@ -1681,8 +1688,9 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
             lifecycleState,
             filingState,
             endReason,
-            // The row as it stands now (sessions/session-phase.ts); absent when the session is gone.
-            ...(await readOneSessionPhaseFields(this.prisma, sessionId)),
+            // The row as it stands now (sessions/session-phase.ts); absent when the session is gone. The end reason
+            // stays the one the end settled with, as this event has always sent it.
+            ...withoutEndReason(await readOneSessionPhaseFields(this.prisma, sessionId)),
           };
         }
       case ControlEventType.SESSION_ERROR:
