@@ -167,8 +167,10 @@ func runDuperemove(ctx context.Context, root, hashfile string) error {
 	if err := os.MkdirAll(filepath.Dir(hashfile), 0o700); err != nil {
 		return err
 	}
-	argv := []string{"duperemove", "-r", "-d", "-h", "-q", "--hashfile=" + hashfile,
-		"--exclude=" + filepath.Dir(hashfile) + "/*", root}
+	// 4k blocks reach the small files node_modules is mostly made of (the default, 128k, skips every file under it),
+	// and partial shares the parts two files have in common, not only whole extents that match.
+	argv := []string{"duperemove", "-r", "-d", "-h", "-q", "-b", "4k", "--dedupe-options=partial",
+		"--hashfile=" + hashfile, "--exclude=" + filepath.Dir(hashfile) + "/*", root}
 	argv = append([]string{"nice", "-n", "19"}, argv...)
 	if _, err := exec.LookPath("ionice"); err == nil {
 		argv = append([]string{"ionice", "-c", "3"}, argv...)
