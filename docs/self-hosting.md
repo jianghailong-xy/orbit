@@ -10,7 +10,9 @@ and [runner troubleshooting](runner-troubleshooting.md) when enrollment or execu
 
 ## Requirements
 
-- Docker Engine with the Compose plugin
+- Docker Engine with the Compose and buildx plugins. Ubuntu's and Debian's `docker.io` packages leave buildx out:
+  `scripts/install-server.sh` installs `docker-buildx` with apt where it is missing, and without it Compose warns
+  on every build and falls back to its own builder
 - Enough CPU, memory, and disk to build the images and retain Postgres data
 - A Linux host for the server deployment
 - One or more runner machines with a supported runtime installed and authenticated, or room on this host for

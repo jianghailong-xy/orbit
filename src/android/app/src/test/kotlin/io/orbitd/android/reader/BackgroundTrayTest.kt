@@ -219,7 +219,7 @@ class BackgroundTrayTest {
         val failed = obj("""{"shellId":"b2","kind":"shell","toolUseId":"tu_b2","command":"npm run build","startedSeq":12,
             "startedTs":"${ago(7_200)}","status":"failed","endedAt":"${ago(60)}"}""")
         setTray(list = listOf(running("a", 10, "web suite"), failed, job), lastUser = ago(3_600))
-        compose.onNodeWithContentDescription("Background processes, 2 running · 1 failed").performClick()
+        compose.onNodeWithContentDescription("Background processes, 2 running").performClick()
         settle()
         compose.onNodeWithText("Background processes").assertExists()
         compose.onNodeWithText("2 running · 3 total").assertExists()
@@ -253,14 +253,11 @@ class BackgroundTrayTest {
         settle()
     }
 
-    @Test fun aFailedJobCountsInRed() {
+    // E2 (revised 2026-11-21): the owner can do nothing about a failed job, so the folded row does not count it.
+    @Test fun aFailedJobIsNotCounted() {
         val failed = JsonObject(job("bgj_f", "failed") + ("endedAt" to JsonPrimitive(ago(60))))
         val row = BackgroundRow.rowOf(listOf(failed, job("bgj_r", "running")), null, true)!!
-        assertTrue(row.countParts.toString(), row.countParts.any { it.kind == "failed" && it.text == "1 failed" })
-        // The folded row draws a failed part in the error colour (its semantics are cleared to its one label, so this is read from the source).
-        val tray = generateSequence(File(System.getProperty("user.dir")).absoluteFile) { it.parentFile }
-            .map { File(it, "app/src/main/kotlin/io/orbitd/android/reader/BackgroundTray.kt") }.first { it.isFile }.readText()
-        assertTrue(tray.contains("if (part.kind == \"failed\") MaterialTheme.colorScheme.error else secondary"))
+        assertEquals(listOf(BackgroundRow.CountPart("running", "1 running")), row.countParts)
     }
 
     @Test fun tappingAJobInTheOpenedListGoesToItsCard() {

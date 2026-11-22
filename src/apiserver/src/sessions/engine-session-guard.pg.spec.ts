@@ -306,6 +306,7 @@ const USER_DRIVERS: Readonly<Record<string, Drive>> = {
   'POST /sessions/:id/commit': (s, w, id) => s.sessions.commitWorktree(w.ownerId, id),
   'POST /sessions/:id/checkout/discard': (s, w, id) => s.sessions.discardCheckout(w.ownerId, id),
   'POST /sessions/:id/adopt-branch': (s, w, id) => s.sessions.adoptWorktreeBranch(w.ownerId, id),
+  'POST /sessions/:id/merge-failure/dismiss': (s, w, id) => s.sessions.dismissMergeFailure(w.ownerId, id),
   'POST /sessions/:id/retry-message': (s, w, id) => s.autoRetry.resendRetryMessage(w.ownerId, id),
   'POST /sessions/:id/auto-retry': (s, w, id) => s.sessions.armAutoRetry(w.ownerId, id, future()),
   // The job id is checked after the engine-session guard, so a landing session is refused before any
