@@ -255,12 +255,25 @@ struct ConsoleView: View {
         return session
     }
 
+    /// What the waiting card of a session its GitHub workspace's clone holds draws, or nil (web `useCloneWait`).
+    private func cloneWaitCard(_ console: ConsoleModel) -> QueuedClone.Card? {
+        guard let session = appModel.session(id: console.sessionID) else { return nil }
+        return QueuedClone.card(session: session, workspace: console.cloneWorkspace,
+                                heard: appModel.cloneLedger.heard(console.cloneWorkspace?.id),
+                                storedAt: console.cloneWorkspaceReadAt)
+    }
+
     private func bandMembers(_ console: ConsoleModel) -> some View {
         // Unread messages, error, background tray, git bar, composer — web's order
         // (`workspace-composer`). Staged attachments are not a member: they sit inside the
         // composer's card, above the text they go out with. The band owns the gutter and the
         // gaps; members only say whether they are on screen.
         ComposerBand {
+            // Under a transcript that has content, the clone's wait stands as a note beneath it (web's compact card).
+            if let card = cloneWaitCard(console), !console.state.items.isEmpty {
+                CloneWaitCardView(card: card, machine: console.runnerName, compact: true)
+                    .padding(.bottom, .composerBandGap)
+            }
             // The reader's messages nothing has read yet: the conversation's next lines, so the
             // band's first card, right under the conversation and above the parking strip
             // (docs/mocks/pending-tray-above-parking, decided 2026-10-28). Not folded while
@@ -1135,6 +1148,12 @@ struct TranscriptView: View {
     }
 
     @ViewBuilder private var runnerUpdatingPage: some View {
+        if let session = app.session(id: console.sessionID), console.state.items.isEmpty,
+           let card = QueuedClone.card(session: session, workspace: console.cloneWorkspace,
+                                       heard: app.cloneLedger.heard(console.cloneWorkspace?.id),
+                                       storedAt: console.cloneWorkspaceReadAt) {
+            CloneWaitCardView(card: card, machine: console.runnerName)
+        }
         if let session = runnerUpdatingSession, RunnerUpdating.holds(session), !runnerUpdatingTailHeld,
            RunnerUpdating.footBubbleID(console.state.items, accepted: console.state.accepted) == nil {
             RunnerUpdatingQueuedView(session: session, machine: console.runnerName, runnerID: console.runnerID,
