@@ -308,10 +308,26 @@ test('f: heartbeats and runner-row writes outside steady send no hint; going off
   await sleep(1_500);
   assert.equal(hintsIn(declared.received).length, 1, 'a beat sent a hint at the clock tick');
 
+  // What a queued row's explanation reads from presence still moves the token: the holders of the
+  // runner's slots through background jobs, named by a beat.
+  const queued = await f.db.session.findUniqueOrThrow({ where: { id: f.sessionId } });
+  const holder = randomUUID();
+  await f.db.session.create({
+    data: {
+      id: holder, ownerId: f.ownerId, creatorId: f.ownerId, workspaceId: queued.workspaceId, assignedRunnerId: f.runnerId,
+      title: 'lch queued', prompt: 'lch', provider: 'claude', providerBuiltin: true, status: RunStatus.PENDING,
+      dispatchOrigin: SessionDispatchOrigin.USER,
+    },
+  });
+  // The insert moves a counter and so a hint of its own; settle it before the beat.
+  assert.ok(await until(() => hintsIn(declared.received).length === 2, 2_000), 'the queued row sent no hint');
+  await f.db.runnerPresence.update({ where: { runnerId: f.runnerId }, data: { backgroundJobSessionIds: [f.sessionId] } });
+  assert.ok(await until(() => hintsIn(declared.received).length === 3, 20_000), 'a beat naming background holders sent no hint within 20 s');
+
   // A name is read on the next clock tick (15 s), status likewise.
   await f.db.runner.update({ where: { id: f.runnerId }, data: { name: 'renamed' } });
-  assert.ok(await until(() => hintsIn(declared.received).length === 2, 20_000), 'a rename sent no hint within 20 s');
+  assert.ok(await until(() => hintsIn(declared.received).length === 4, 20_000), 'a rename sent no hint within 20 s');
   await f.db.runner.update({ where: { id: f.runnerId }, data: { status: RunnerStatus.OFFLINE } });
-  assert.ok(await until(() => hintsIn(declared.received).length === 3, 20_000), 'going offline sent no hint within 20 s');
+  assert.ok(await until(() => hintsIn(declared.received).length === 5, 20_000), 'going offline sent no hint within 20 s');
   assert.equal(hintsIn(undeclared.received).length, 0, 'an undeclared stream received sessions.list_changed');
 });

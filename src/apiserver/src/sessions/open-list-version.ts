@@ -73,7 +73,8 @@ export interface OpenListVersionParts {
   /**
    * What the realtime hint poller compares besides the counter sums (docs/list-freshness-scope-hints.md
    * §5.0): the version's non-counter inputs with the runner rows and their presence rows left out, and
-   * each runner's `steady` in their place. A heartbeat or a runner column outside `steady` moves the
+   * each runner's `steady` and the background-job holders of its presence row (the queued explanation
+   * reads them) in their place. A heartbeat or a runner column outside `steady` moves the
    * version and not this.
    */
   hintClock: string;
@@ -125,6 +126,11 @@ export async function readOpenListVersionParts(
       (SELECT count(*)::text || '/' || COALESCE(sum(hashtextextended(v, 0)), 0)::text FROM runners) AS runner,
       -- Those runners' presence rows, which a heartbeat rewrites without touching the runner's own.
       ${rowsOf('x', Prisma.sql`FROM runner_presence x WHERE x.runner_id IN (SELECT id FROM runners)`)} AS runner_presence,
+      -- The sessions each runner's last beat says hold a slot through a background job: what the queued
+      -- explanation reads from presence (runnerBackgroundHeldSessions). Only the hint token carries it, never the version.
+      (SELECT string_agg(p.runner_id::text || ':' || COALESCE((SELECT string_agg(h::text, ',' ORDER BY h)
+                                                                  FROM unnest(p.background_job_session_ids) h), ''), ';' ORDER BY p.runner_id)
+         FROM runner_presence p WHERE p.runner_id IN (SELECT id FROM runners)) AS bg_holders,
       -- Small enough to keep reading whole: every share link the account owns.
       ${ownedBy('share_link')} AS share_link,
       -- The thresholds the list decides on Postgres' clock. Each only flips one way as time passes.
@@ -164,7 +170,7 @@ export async function readOpenListVersionParts(
       ) d) AS deadlines
   `);
 
-  const { bg_jobs, runner_clock, deadlines, ...rows } = row;
+  const { bg_jobs, runner_clock, deadlines, bg_holders, ...rows } = row;
   // Same predicates as the readers, on the same instant-or-earlier: each count only moves one way.
   const deadlinesPassed = ((deadlines ?? []) as Array<number | null>)
     .filter((at) => at != null && at <= nowMs).length;
@@ -191,7 +197,7 @@ export async function readOpenListVersionParts(
     .slice(0, 27);
   const hintClock = createHash('sha256')
     .update(JSON.stringify([
-      steady, rows.foreign_running, rows.share_link, rows.runners_offline_sql, rows.fenced, rows.share_links_live,
+      steady, bg_holders ?? null, rows.foreign_running, rows.share_link, rows.runners_offline_sql, rows.fenced, rows.share_links_live,
       deadlinesPassed, freshJobs, runnersOnline,
     ]))
     .digest('base64url')
