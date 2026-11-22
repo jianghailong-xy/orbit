@@ -639,6 +639,57 @@ checkouts below its floor as any runner does
   `.orbit/checkout-exclude` makes checkouts smaller on either filesystem
   ([the format](runner-troubleshooting.md#f-a-sessions-checkout-lacks-some-paths)).
 
+## Out of memory kills one process: the kubelet's `singleProcessOOMKill`
+
+On cgroup v2 the kubelet writes `memory.oom.group=1` into every container's cgroup by default. A runner container
+that reaches its memory limit then loses **every** process at once: `tini`, the daemon, every engine and every
+session's tools. dmesg says `Tasks in /kubepods.slice/…/cri-containerd-<id>.scope are going to be killed due to
+memory.oom.group set`, and the Pod stops with `OOMKilled`. The kubelet's `singleProcessOOMKill: true` stops it writing
+that flag, so the kernel kills only the process it picks (the largest one, after `oom_score_adj`), and the container
+keeps running. It is a `KubeletConfiguration` field only: no kubelet flag sets it. On cgroup v1 it is always on and
+may not be set to false.
+
+Every node that runs managed runners needs it. On k3s:
+
+1. Check that the kubelet knows the field. k3s has no `k3s kubelet --help`, but the binary carries the field's name and
+   description: `strings "$(command -v k3s)" | grep -m3 singleProcessOOMKill`. Then check how k3s starts the kubelet:
+   `journalctl -u k3s | grep 'Running kubelet' | tail -1`. k3s passes `--config-dir=/var/lib/rancher/k3s/agent/etc/kubelet.conf.d`
+   and rewrites `00-k3s-defaults.conf` there at every start, so do not edit that file.
+2. Back up `/etc/rancher/k3s`, then add two files. `/etc/rancher/k3s/kubelet-orbit.yaml`:
+
+   ```yaml
+   apiVersion: kubelet.config.k8s.io/v1beta1
+   kind: KubeletConfiguration
+   singleProcessOOMKill: true
+   ```
+
+   and `/etc/rancher/k3s/config.yaml.d/95-orbit-kubelet.yaml`, which hands it to the kubelet. k3s's own
+   `00-k3s-defaults.conf` does not set the field, so nothing overrides it:
+
+   ```yaml
+   kubelet-arg+:
+     - "config=/etc/rancher/k3s/kubelet-orbit.yaml"
+   ```
+
+3. Restart k3s at a quiet moment: `systemctl restart k3s`. Containers keep running through the restart
+   (`KillMode=process`), but the API server and the kubelet are away until k3s is back (9 s on .3), so every Pod on
+   the node is briefly unmanaged and no runner Pod can be created. Before the restart, check that no runner is running a turn: read each runner Pod's log (`kubectl logs
+   --since=20m`), and list the processes in its container cgroup from the host. An idle runner has only `tini`,
+   `orbit-container run` and `orbit run`.
+4. Verify. `kubectl get --raw /api/v1/nodes/<node>/proxy/configz` must show `"singleProcessOOMKill": true`, and the
+   file must be in the kubelet's drop-in directory: k3s v1.37.2 copies a `config=` kubelet-arg file to
+   `/var/lib/rancher/k3s/agent/etc/kubelet.conf.d/10-cli-config.conf` and still passes only `--config-dir`, so the
+   `Running kubelet` line does not change. The kubelet writes
+   `memory.oom.group` only when it creates a container. Containers made before the restart keep `1` until their Pod's
+   next generation (a sleep and wake, or an image roll), and new ones read `0` in
+   `/sys/fs/cgroup/kubepods.slice/…/cri-containerd-<id>.scope/memory.oom.group`. A test Pod in a scratch namespace
+   proves it: give it a 64 MiB limit, a `sleep` beside it, and `dd bs=256M count=1`. dmesg then shows one `Killed
+   process … (dd)` and no `memory.oom.group set` line, `memory.events` counts `oom_kill 1` and `oom_group_kill 0`, and
+   the container's restart count stays 0. Delete the namespace afterwards.
+
+To undo it, remove `95-orbit-kubelet.yaml` and restart k3s. The .3 deployment's run of this procedure is in
+[its record](managed-runner-k3s-xfs-deployment.md#memory-one-process-not-the-container-2026-11-22).
+
 ## Names from before orbit-cloud (2026-11-20)
 
 Until 2026-11-20 these names said `orbit-managed`; they now say `orbit-cloud`. What a cluster already holds keeps working:
@@ -668,4 +719,5 @@ Until 2026-11-20 these names said `orbit-managed`; they now say `orbit-cloud`. W
 | Idle interval, attempts, backoff, poll, lease, startup deadline, heartbeat freshness, drain | The profile, `lifecycle` | The apiserver's restart |
 | The manager's identity and rights | Its ServiceAccount, Role, ClusterRole and the kubeconfig the profile names | At once (RBAC); the kubeconfig at the apiserver's restart |
 | The admission guard | `ValidatingWebhookConfiguration` `orbit-cloud-runner-pods`; the API server's admission configuration (token) | At once; the token at the API server's restart |
+| One process, not the container, on out of memory (`singleProcessOOMKill: true`) | Each node's kubelet configuration; on k3s `/etc/rancher/k3s/kubelet-orbit.yaml`, loaded by `/etc/rancher/k3s/config.yaml.d/95-orbit-kubelet.yaml` | The k3s restart, for containers created after it |
 | The webhook token's hash | The profile, `admission.webhookTokenSha256` | The apiserver's restart |
