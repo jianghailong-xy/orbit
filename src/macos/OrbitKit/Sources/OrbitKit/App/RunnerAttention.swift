@@ -903,12 +903,15 @@ public enum RunnerAttention {
     }
 
     /// How a version is shown beside a runner's name: `v<version>`. A managed runner (Orbit Cloud) shows
-    /// its release when it reports one, and otherwise says Orbit keeps it up to date — never its image hash.
-    public static func runnerVersionLine(_ version: String?, managed: Bool = false) -> String? {
+    /// its release when it reports one, else the build it runs — `Build 95884b1 · Nov 16`, the date from
+    /// the status's `update` when it says — and only without either, that Orbit keeps it up to date.
+    public static func runnerVersionLine(_ version: String?, managed: Bool = false,
+                                         known: ManagedRunnerBuild? = ManagedRunnerRunningBuild.build) -> String? {
         let trimmed = version?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if managed {
-            return isReleaseVersion(trimmed)
-                ? RunnerPageCopy.runnerVersionTag(version: trimmed) : RunnerPageCopy.MANAGED_RUNNER_KEPT_UP_TO_DATE
+            if isReleaseVersion(trimmed) { return RunnerPageCopy.runnerVersionTag(version: trimmed) }
+            return ManagedRunnerUpdateLogic.runningBuild(version: trimmed, known: known).map { ManagedRunnerUpdateLogic.buildLine($0) }
+                ?? RunnerPageCopy.MANAGED_RUNNER_KEPT_UP_TO_DATE
         }
         return trimmed.isEmpty ? nil : RunnerPageCopy.runnerVersionTag(version: trimmed)
     }

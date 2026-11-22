@@ -207,7 +207,10 @@ struct RunnersListView: View {
             RunnerRow(runner: r, workspaces: model.runners?.agents(forRunner: r.id) ?? [],
                       latestVersion: model.runners?.latestVersion,
                       managed: ManagedRunnerLogic.row(runnerID: r.id, status: model.managedRunner?.status),
-                      isManaged: isManaged, disclosure: rowNavigation == .push)
+                      isManaged: isManaged,
+                      updateAvailable: ManagedRunnerLogic.row(runnerID: r.id, status: model.managedRunner?.status) != nil
+                          && ManagedRunnerUpdateLogic.showsDot(model.managedRunner?.status),
+                      disclosure: rowNavigation == .push)
             if separates { Divider() }
         }
         switch rowNavigation {
@@ -443,6 +446,8 @@ struct RunnerRow: View {
     /// and with the feature off.
     var managed: ManagedRunnerRow? = nil
     var isManaged = false
+    /// A newer build is available for the managed runner (`ManagedRunnerUpdateLogic.showsDot`).
+    var updateAvailable = false
     /// Whether the row draws the disclosure a pushing row needs; a selection row has none.
     var disclosure = false
     var now = Date()
@@ -473,6 +478,14 @@ struct RunnerRow: View {
                         Text(RunnerPageFormat.displayName(runner))
                             .fontWeight(isManaged ? .semibold : nil)
                             .lineLimit(1)
+                        if updateAvailable {
+                            // An older build is running: the machine row's update dot.
+                            Circle()
+                                .fill(Color.accentColor)
+                                .frame(width: 7, height: 7)
+                                .accessibilityLabel("Update available")
+                                .accessibilityIdentifier("runner-update-dot")
+                        }
                         Spacer(minLength: 8)
                         if let managed {
                             Text(managed.label)
@@ -667,7 +680,9 @@ struct RunnerDetailContent: View {
             }
             // A managed runner that has not reported yet has no release, readings or engines to show:
             // no Update card, and one quiet line where Resources and Engines would be.
-            if !managedWaiting, let card = RunnerPageFormat.updateCard(runner, now: now) {
+            if managed != nil, let managedRunner = model.managedRunner {
+                ManagedRunnerUpdateSection(managedRunner: managedRunner, onNotice: show)
+            } else if !managedWaiting, let card = RunnerPageFormat.updateCard(runner, now: now) {
                 updateSection(card)
             }
             if !items.isEmpty {
@@ -1135,6 +1150,9 @@ struct RunnerDetailContent: View {
                      RunnerPageFormat.versionValue(runner, latest: runners.latestVersion, managed: managedRow != nil))
             // A managed runner never installs a release into itself: Orbit replaces its image.
             aboutRow(RunnerPageCopy.RUNNER_ABOUT_LAST_UPDATE, managedRow == nil ? RunnerPageFormat.lastUpdate(runner) : nil)
+            if managedRow != nil {
+                aboutRow(ManagedRunnerUpdateCopy.ABOUT_UPDATES, ManagedRunnerUpdateCopy.ABOUT_UPDATES_VALUE)
+            }
             // Only while a release is waiting: a check with nothing newer to install is not offered.
             if RunnerPageFormat.isBehindLatest(runner, latest: runners.latestVersion),
                RunnerAttention.runnerCanUpdateNow(runner, nowMs: RunnerPageFormat.nowMs(now)) {
