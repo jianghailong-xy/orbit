@@ -572,7 +572,8 @@ import {
   CLONE_RETRY_FAILED,
   composerPlaceholderFor,
 } from '../lib/machineSetupCopy';
-import { githubRepositoryOf, hearClone, retryClone } from '../lib/workspaceClone';
+import { cloneHeardOf, githubRepositoryOf, hearClone, retryClone, useCloneHeardVersion } from '../lib/workspaceClone';
+import { CloneWaitNotice, useCloneWait } from './CloneWaitNotice';
 import { bindingPlanUsageRow, currentPlanUsageRows, modelPlanUsage } from '../lib/planUsage';
 import { useToast } from '../lib/toast';
 import { showToast } from '../lib/toastStore';
@@ -650,6 +651,7 @@ import {
   runnerUpdatingTag,
   runnerUpdatingTitle,
   runnerUpdatingWaited,
+  cloneRowLabel,
   queuedLabel,
   queuedNoticeVisible,
   queuedTitle,
@@ -1425,6 +1427,9 @@ export const sessionLine = (
       return { text: CAPACITY_HELD_LINE, tone: 'queued', hint: capacityHeldHint(s, machine, Date.now()) };
     // A runner draining for its update is the one queue word in the warning colour (board 2 ①): it
     // can last hours, and only the owner can shorten it.
+    // Held by its clone, the row says git's percentage once this tab has heard one (board clone-progress-wait-card ④).
+    const cloned = !held && s.queuedReason === 'WORKSPACE_CLONING' ? cloneHeardOf(s.workspace?.id) : null;
+    if (cloned?.state === 'CLONING' && cloned.progress !== null) return { text: cloneRowLabel(cloned.progress), tone: 'queued' };
     return { text: held ?? queuedLabel(s), tone: !held && isRunnerUpdating(s) ? 'warning' : 'queued' };
   }
   // Parked (AWAITING_INPUT) but still doing background work — a sub-workspace and/or background
@@ -3646,6 +3651,8 @@ export function WorkspaceView({
   useEffect(() => {
     if (resolvedWorkspaceId && !listProjectId) rememberListFolder(resolvedWorkspaceId, folderParam);
   }, [resolvedWorkspaceId, listProjectId, folderParam]);
+  // A clone frame moves a held row's percentage (sessionLine), which the listing below has to redraw for.
+  const cloneHeardVersion = useCloneHeardVersion();
   // The list split into its folder rows and the sessions in no folder — the ones the Pinned and
   // time sections below are made of. A folder's page lists the sessions filed in it instead.
   const folderListing = useMemo(
@@ -3665,7 +3672,7 @@ export function WorkspaceView({
     }),
     [openFolder, visibleSessions, workspaceFolders, projectsQ.data, projectData.coordinators, projectData.contentSessions,
       projectData.sessionCounts, effectiveView, listByTag, runner.online, runnerShownName, watchingBySession, selectedSession, recapsEnabled,
-      resolvedWorkspaceId],
+      resolvedWorkspaceId, cloneHeardVersion],
   );
   // A project's entry is in the list only where its coordinator runs (owner 2026-11-07), so it stands
   // for the coordinator; one with no coordinator is passed over, as a folder row is.
@@ -4551,6 +4558,11 @@ export function WorkspaceView({
     typeof runner.activeSessions === 'number' ? runner.activeSessions : slotUsage.active;
   // The gate comes from the selected session's own row: only the server can tell whether the
   // runner, this run, or the batch is what is holding it.
+  // Held by its GitHub workspace's clone: the waiting card says what is cloning and how far (board clone-progress-wait-card ②).
+  const cloneWait = useCloneWait(
+    (selectedSession ?? selected)?.queuedReason === 'WORKSPACE_CLONING' ? selectedId : null,
+    detailForSelected?.workspace,
+  );
   const slotWaitDescription = pendingSlotDescription(
     activeSlots,
     runner.maxConcurrent,
@@ -11191,10 +11203,14 @@ export function WorkspaceView({
                       actions={isRunnerStopping(runnerUpdatingGate) ? undefined : <div className="runner-update-actions"><RunnerUpdateLaterMenu runnerId={runner.id} />{runnerTakesUpdateNow(runner) && <RunnerUpdateNowButton runner={runner} machine={runnerShownName} />}</div>}
                     />
                   ) : (
-                    <>
-                      <div className="chat-queued-title">{queuedTitle(selectedSession ?? selected)}</div>
-                      <div className="chat-queued-desc">{slotWaitDescription}</div>
-                    </>
+                    cloneWait ? (
+                      <CloneWaitNotice clone={cloneWait} machine={runnerShownName} />
+                    ) : (
+                      <>
+                        <div className="chat-queued-title">{queuedTitle(selectedSession ?? selected)}</div>
+                        <div className="chat-queued-desc">{slotWaitDescription}</div>
+                      </>
+                    )
                   )}
                 </div>
               )}
@@ -11417,7 +11433,11 @@ export function WorkspaceView({
                 !queuedFoot &&
                 !tailHeld &&
                 transcriptEvents.length > 0 && (
-                dshQueueRepair ? <DshRepairCard repair={dshQueueRepair} help={authErrorHelp} /> : antigravityQueueRepair ? <AntigravityRepairCard repair={antigravityQueueRepair} help={authErrorHelp} /> : <div className="chat-note chat-slot-wait">
+                dshQueueRepair ? <DshRepairCard repair={dshQueueRepair} help={authErrorHelp} /> : antigravityQueueRepair ? <AntigravityRepairCard repair={antigravityQueueRepair} help={authErrorHelp} /> : cloneWait ? (
+                  <div className="chat-note chat-slot-wait chat-clone-wait">
+                    <CloneWaitNotice clone={cloneWait} machine={runnerShownName} />
+                  </div>
+                ) : <div className="chat-note chat-slot-wait">
                   <span>{queuedTitle(selectedSession ?? selected)}</span>
                   <span>{slotWaitDescription}</span>
                 </div>
