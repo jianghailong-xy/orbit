@@ -42,6 +42,7 @@ import type { ManagedRunnerManager } from './managed-runner-manager';
 import { MANAGED_RUNNER_NAME } from './managed-runner-resources';
 import { placeNewMapping } from './managed-runner-placement';
 import { MANAGED_RUNNER_RUNTIME, type ManagedRunnerRuntime } from './managed-runner-runtime';
+import { clampManagedConcurrency, managedConcurrencyCeiling } from './managed-runner-concurrency';
 import type { ManagedRunnerSignIn } from './managed-runner-sign-in';
 import { SIGNED_IN_PAGE, SIGNED_IN_PASS_SECONDS, SignedInPassTimer, signedInWithoutMapping } from './managed-runner-signed-in';
 import { managedRunnerWork, recordManagedDemand } from './managed-runner-work';
@@ -575,7 +576,8 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
               name: MANAGED_RUNNER_NAME,
               tokenHash: sha256(generateToken(32)),
               status: 'OFFLINE',
-              maxConcurrent: profile.runner.maxConcurrent,
+              // The profile's seed, at most what the runner's memory allows (managed-runner-concurrency.ts).
+              maxConcurrent: clampManagedConcurrency(profile.runner.maxConcurrent, managedConcurrencyCeiling(runtime)),
               // Not the column's 10 GB default: with no floor set, a managed runner keeps a share of its volume free
               // (managed-runner-storage.ts).
               minFreeDiskMb: null,
