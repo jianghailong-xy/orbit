@@ -413,7 +413,8 @@ func (g *selfUpdateGate) notePostponedLocked() {
 // the control plane does not take a scoped claim (serverScopes false: an older one would ignore the
 // scope and hand over any session), so the pool claims nothing, as before.
 func drainClaimScope(pool *sessionPool, serverScopes bool) []string {
-	if !serverScopes || !pool.isDrainingForUpdate() {
+	// Below the data volume's free-space reserve nothing new is claimed, a drain's message included.
+	if !serverScopes || !pool.isDrainingForUpdate() || pool.admissionHoldReason() != "" {
 		return nil
 	}
 	return pool.liveEngineTurnSessionIDs()
@@ -1559,6 +1560,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// job the image before handed on as it re-executed is still this process's child, and until the
 	// pool holds it again the sweep takes its checkout for one nobody is using.
 	pool.adoptRecordedJobs()
+	// A managed runner's /tmp is a directory of its data volume and outlives the container: what the container
+	// before left in it goes now, before anything here writes there (managed_tmp.go).
+	sweepManagedTmpAtStart(pool)
 	// Remote SubAgents a previous process was hosting when it ended unreported: worktrees removed, runs INTERRUPTED.
 	go recoverRemoteSubagents(t)
 	// A copy of the Google sign-in lives in a session's directory only while an agy runs on it; the
@@ -1598,6 +1602,11 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 
 	loopCtx, stopLoop := context.WithCancelCause(context.Background())
 	loopCancel := func() { stopLoop(nil) }
+	// A managed runner takes no new work while its data volume is below its free-space reserve
+	// (managed_disk_reserve.go). Checked once now, before the reclaim and the first claim.
+	if currentManagedInstance() != nil {
+		watchDataVolumeReserve(loopCtx, pool, func() string { return measureDataVolumeHold(&storage) }, dataVolumeCheckInterval)
+	}
 	// The other half of what a finished session's checkout can hold: one that still has
 	// uncommitted work is never reclaimed, so the control plane is told which ones those are
 	// (abandoned_checkout.go). Its own goroutine and its own clock — it reads every checkout,
@@ -2776,6 +2785,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				}
 				forgetMergeTarget(j.SessionID)
 				pool.finish(live)
+				// A session's end: what the work left in a managed runner's /tmp goes once nothing else runs.
+				sweepManagedTmpWhenIdle(pool)
 			}()
 
 			// An OPEN reclaim can contain many idle sessions. Keep those supervisors
@@ -2798,6 +2809,10 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			// secrets: until then the scrubber does not know them (secretStore.waitReady). Bounded, so a control
 			// plane that does not answer holds nothing up for long.
 			secrets.waitReady(loopCtx, secretStartupWait)
+			// A reclaimed turn starts only above the data volume's free-space reserve (managed_disk_reserve.go).
+			if activeAtRegister && j.Reclaimed {
+				waitForAdmission(jobCtx, loopCtx, pool, j.SessionID, dataVolumeCheckInterval)
+			}
 			runInteractiveSession(t, j, jobCtx, loopCtx, dir, codexUsage.mergeCodexRateLimits, pool, live)
 		}(job, execDir, s, initiallyActive)
 	}
