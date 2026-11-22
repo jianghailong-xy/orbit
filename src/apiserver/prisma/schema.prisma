@@ -3252,10 +3252,20 @@ model SubagentRun {
   callIndex        Int?      @map("call_index")
   label            String?
   phase            String?
+  /// The parent's rating of the result, 1 to 5 (subagent_rate, migration 1420; check subagent_run_rating_score_check).
+  /// Shown on the Model tiers view; routing never reads it. A later rating replaces this one.
+  ratingScore      Int?      @map("rating_score")
+  ratingNote       String?   @map("rating_note")
+  ratedAt          DateTime? @map("rated_at") @db.Timestamptz(3)
+  /// The rating parent's own engine, provider and model when it rated.
+  raterEngine      String?   @map("rater_engine")
+  raterProvider    String?   @map("rater_provider")
+  raterModel       String?   @map("rater_model")
 
   @@unique([sessionId, toolUseId])
   @@index([sessionId, status])
   @@index([targetRunnerId, status])
+  @@index([ownerId, createdAt])
   @@unique([workflowRunId, callIndex])
   @@map("subagent_run")
 }
@@ -7875,7 +7885,7 @@ model CoordinatorHandoff {
   /// The note turn's `conversation_turn.client_turn_id`; null once a skip took the note out.
   clientTurnId  String?   @map("client_turn_id")
   startedAt     DateTime  @default(now()) @map("started_at")
-  /// TURN_FAILED | TURN_STOPPED | TIMED_OUT | EMPTY_NOTE | REPLACE_FAILED, only while FAILED.
+  /// TURN_FAILED | TURN_STOPPED | TIMED_OUT | EMPTY_NOTE | REPLACE_FAILED | COORDINATOR_CANT_RUN, only while FAILED.
   failureCode   String?   @map("failure_code")
   note          String?
   /// The waits the swap moved, as `{ id, label, paused }`.

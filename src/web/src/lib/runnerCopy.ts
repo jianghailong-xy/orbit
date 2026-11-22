@@ -566,6 +566,10 @@ export function agentFixFixing(workspace: string): string {
   return `An agent is fixing this in ${workspace} · `;
 }
 export const AGENT_FIX_OPEN_SESSION = 'Open session';
+/** A transcript's history row, after the agent it was handed to finished; the link opens it. */
+export function agentFixFixed(workspace: string): string {
+  return `Fixed by an agent in ${workspace} · `;
+}
 /** Under the button on an Install failed panel: where the session would run. */
 export function agentFixStartsIn(workspace: string, engine: string): string {
   return `Starts a session in ${workspace} on this machine, with ${engine}.`;

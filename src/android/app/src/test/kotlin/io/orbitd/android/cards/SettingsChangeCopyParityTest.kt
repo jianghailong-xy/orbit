@@ -64,7 +64,9 @@ class SettingsChangeCopyParityTest {
         val tiers = read("src/shared/src/settingsTiers.ts")
         val pages = read("src/web/src/pages/settings/settingsIndex.ts")
         for (key in listOf("theme", "translationEnabled", "translationLanguage", "translationAgentLanguage", "translationBilingual",
-            "notifySessionFinished", "notifyAgentMessage", "recaps", "promptSuggestions", "promptOptimizer", "modelRouting", "optimizeFor",
+            "notifySessionFinished", "notifyAgentMessage", "recaps", "promptSuggestions", "promptOptimizer",
+            // modelRouting and optimizeFor left out: the web moved them to Providers → Model routing, and this client
+            // still draws them in General › New sessions until its Settings follows.
             "defaultPermissionMode", "enableOrchestration", "cardFreeTaskCreates")) {
             val place = SettingsFromConversation.place(key)!!
             assertSays(index, "settingsIndex.ts", "'${place.title}'")

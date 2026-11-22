@@ -155,8 +155,8 @@ class SmartSelectionGateTest {
                 }
             }
         }
-        await("smart selection: off"); await("Smart model selection")
-        compose.onNode(hasText("Smart model selection") and isToggleable()).performScrollTo().performClick()
+        await("smart selection: off"); await("Route by tier")
+        compose.onNode(hasText("Route by tier") and isToggleable()).performScrollTo().performClick()
         await("smart selection: on")
         assertEquals(true, fixture.modelRouting)
     }
@@ -167,10 +167,10 @@ class SmartSelectionGateTest {
             SettingsScreen(api, OrbitRoute(Destination.SETTINGS, "sessions"), revision, {}, {}, logout = {}, changed = {}, workspaceDeleted = {},
                 deviceAlerts = { true }, notifications = {}, about = {})
         }
-        await("Smart model selection")
+        await("Route by tier")
         compose.onNodeWithText(SMART_MODEL_SELECTION_HINT, useUnmergedTree = true).assertExists()
         // An account that never wrote it reads on.
-        val row = hasText("Smart model selection") and isToggleable()
+        val row = hasText("Route by tier") and isToggleable()
         compose.waitUntil(60_000) { runCatching { compose.onNode(row).assertIsOn() }.isSuccess }
         compose.onNode(row).performScrollTo().performClick()
         compose.waitUntil(60_000) { fixture.modelRouting == false }

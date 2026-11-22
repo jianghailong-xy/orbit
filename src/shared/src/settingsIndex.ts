@@ -32,15 +32,16 @@ export const PERSONAL_SETTINGS = {
     'Default permission mode',
     'The mode a new session starts in, unless the composer picks another.',
   ),
+  // Providers → Model routing, beside the model tiers they route by.
   modelRouting: setting(
     'modelRouting',
-    '/settings/general',
-    'Smart model selection',
-    'Task runs and SubAgents get a model matched to how hard the work is.',
+    '/settings/providers/routing',
+    'Route by tier',
+    'Task runs and SubAgents run on a model of the tier their work needs.',
   ),
   optimizeFor: setting(
     'optimizeFor',
-    '/settings/general',
+    '/settings/providers/routing',
     'Optimize For',
     'What to favour when a model is picked at a tier.',
   ),

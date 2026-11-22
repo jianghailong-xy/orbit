@@ -194,6 +194,11 @@ final class ConsoleModel {
     private(set) var sessionForkSource: String?
     private(set) var antigravityInstalling = false
     private(set) var runnerInstall: RunnerInstallState?
+    /// Fix with an agent's state on this session's machine, for the transcript's missing-bubblewrap
+    /// warning (`RunnerAgentFixLogic.sandboxState`). Nil from an older server, which draws no action.
+    private(set) var runnerAgentFix: RunnerAgentFix?
+    /// A sandbox Fix with an agent press is on its way; its button holds until the runner is read again.
+    private(set) var sandboxFixStarting = false
 
     var canInstallAntigravity: Bool {
         runnerID != nil && runnerOnline == true && runnerAntigravity?.supported == true
@@ -396,6 +401,24 @@ final class ConsoleModel {
         guard let runnerID, let runners = try? await api.runners() else { return }
         if let runner = runners.first(where: { $0.id == runnerID }) { adoptRunnerSnapshot(runner) }
         else { clearRunnerSnapshot() }
+    }
+
+    /// Fix with an agent under the transcript's missing-bubblewrap warning
+    /// (docs/mocks/codex-sandbox-fix-with-agent): one press starts a session on this machine to install
+    /// it, then the runner is read again so the row turns into the fixing line. A refusal (a 409's own
+    /// sentence) is the status line, as on the machine page.
+    func fixSandbox() async {
+        guard let runnerID, !sandboxFixStarting else { return }
+        sandboxFixStarting = true
+        defer { sandboxFixStarting = false }
+        let target = RunnerAgentFixTarget(kind: .sandboxMissing, engine: RunnerAgentFixLogic.SANDBOX_FIX_ENGINE)
+        do {
+            _ = try await api.fixRunnerAttention(runnerID, kind: .sandboxMissing,
+                                                 body: RunnerAgentFixLogic.request(target, latestVersion: nil))
+        } catch {
+            statusMessage = "\(RunnerPageCopy.AGENT_FIX_FAILED) — \(APIClient.failureReason(error))"
+        }
+        await refreshRunner()
     }
     /// A provider switch made while this session was ENDED. There is nothing to PATCH then, so it
     /// rides along with the resume that revives it — the route Model/Mode/Effort already take.
@@ -2378,6 +2401,7 @@ final class ConsoleModel {
         runnerAntigravity = runner.antigravity
         runnerVersion = runner.version
         runnerInstall = runner.install
+        runnerAgentFix = runner.agentFix
         runnerCapabilities = runner.capabilities
         runnerRunsAsRoot = runner.runsAsRoot
     }
@@ -2394,6 +2418,7 @@ final class ConsoleModel {
         runnerAntigravity = nil
         runnerVersion = nil
         runnerInstall = nil
+        runnerAgentFix = nil
         runnerCapabilities = nil
         runnerRunsAsRoot = nil
     }

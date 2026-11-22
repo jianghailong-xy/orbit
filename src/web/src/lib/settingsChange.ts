@@ -6,7 +6,7 @@ import {
   type SettingTier,
   type TieredSettingKey,
 } from '@orbit/shared';
-import { PERSONAL_PAGES } from '../pages/settings/settingsIndex';
+import { MODEL_ROUTING_PAGE, PERSONAL_PAGES } from '../pages/settings/settingsIndex';
 import { MODE_OPTIONS } from './workspaceDefaults';
 
 /**
@@ -58,8 +58,6 @@ export function settingsChangesOf(payload: unknown): SettingsChangeEntry[] {
 /** The section of its page each General row is drawn under (GeneralPage.tsx); a page with no sections has none. */
 const SECTIONS: Readonly<Record<string, string>> = {
   defaultPermissionMode: 'New sessions',
-  modelRouting: 'New sessions',
-  optimizeFor: 'New sessions',
   promptSuggestions: 'New sessions',
   promptOptimizer: 'New sessions',
   recaps: 'New sessions',
@@ -102,7 +100,7 @@ export function settingKeyOfAnchor(anchor: string): TieredSettingKey | null {
 
 /** `Settings › General › Translation`: where a row is, as the card and the link card name it. */
 export function settingPathLabel(place: Pick<SettingPlace, 'anchor' | 'path'>): string {
-  const page = PERSONAL_PAGES.find((p) => p.path === place.path)?.label;
+  const page = [...PERSONAL_PAGES, MODEL_ROUTING_PAGE].find((p) => p.path === place.path)?.label;
   return ['Settings', page, SECTIONS[place.anchor]].filter(Boolean).join(' › ');
 }
 
