@@ -4,6 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import {
   BookOutlined,
   KeyOutlined,
+  LoginOutlined,
   OrderedListOutlined,
   QuestionOutlined,
   SafetyCertificateOutlined,
@@ -20,6 +21,7 @@ import { markdownToPlainText } from '../lib/markdownText';
 import { streamPoll } from '../lib/listBudget';
 import type { SidebarProject } from '../lib/projectAttention';
 import {
+  BROWSER_SIGN_IN_COPY,
   WAITING_ON_YOU,
   projectsWithQuestions,
   useSnoozes,
@@ -51,6 +53,7 @@ const ACTION: Readonly<Record<AgentRequestKind, string>> = {
   CONFIRM: 'Review',
   WIKI_CREATE: 'Review',
   SETTINGS_CHANGE: 'Review',
+  BROWSER_SIGN_IN: BROWSER_SIGN_IN_COPY.action,
 };
 
 const ICON: Readonly<Record<AgentRequestKind, ReactNode>> = {
@@ -60,6 +63,7 @@ const ICON: Readonly<Record<AgentRequestKind, ReactNode>> = {
   CONFIRM: <SafetyCertificateOutlined />,
   WIKI_CREATE: <BookOutlined />,
   SETTINGS_CHANGE: <SettingOutlined />,
+  BROWSER_SIGN_IN: <LoginOutlined />,
 };
 
 /** "holds 2 tasks", and for how long once that has passed a day: the part of the row that is overdue. */

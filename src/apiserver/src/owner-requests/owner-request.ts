@@ -3,12 +3,14 @@
  *
  * One model for the things a session can need from a person: a DECISION it may not make, a
  * SECRET only the owner holds, a MANUAL_STEP only a person can do, a yes/no CONFIRM, and a WIKI_CREATE —
- * a wiki for its repository, which only the owner makes (docs/wiki-explicit-creation-design.md §3.6). This file
+ * a wiki for its repository, which only the owner makes (docs/wiki-explicit-creation-design.md §3.6), and a BROWSER_SIGN_IN
+ * — a sign-in to a site in the Orbit Cloud runner's shared browser, which only the owner does (browser_request_sign_in,
+ * docs/mocks/runner-browser/03-agent-tools.html ①). This file
  * is the rules with no database in them — what a filing must hold per kind, the state machine, and
  * the lock-screen copy — so they can be read and tested in one place.
  */
 
-export const OWNER_REQUEST_KINDS = ['DECISION', 'SECRET', 'MANUAL_STEP', 'CONFIRM', 'WIKI_CREATE'] as const;
+export const OWNER_REQUEST_KINDS = ['DECISION', 'SECRET', 'MANUAL_STEP', 'CONFIRM', 'WIKI_CREATE', 'BROWSER_SIGN_IN'] as const;
 export type OwnerRequestKind = (typeof OWNER_REQUEST_KINDS)[number];
 
 /**
@@ -62,6 +64,44 @@ export const SETTINGS_CHANGE_DECLINED = 'SETTINGS_CHANGE_DECLINED';
 export const SETTINGS_OWNER_CHANNEL_ONLY = 'SETTINGS_OWNER_CHANNEL_ONLY';
 /** Saving a SETTINGS_CHANGE card after one of its settings changed since it was proposed (design §5.2). */
 export const SETTINGS_STALE = 'SETTINGS_STALE';
+
+/**
+ * BROWSER_SIGN_IN (board docs/mocks/runner-browser/03-agent-tools.html ①). Filed only by browser_request_sign_in, through
+ * POST /runner/browser/sign-in-requests, from a session on the account's Orbit Cloud runner; never through
+ * request_owner_action's door, which refuses the kind. Orbit writes the title from the site; the agent's reason is `why`.
+ * Answered DONE (the owner signed in) or DECLINED (Not now); the agent's call waits for that answer and returns it, so the
+ * ending is not also delivered as a turn.
+ */
+export const BROWSER_SIGN_IN_KIND = 'BROWSER_SIGN_IN';
+/** The site a BROWSER_SIGN_IN names: a host as the agent typed it (`github.com`, `accounts.google.com:443`). */
+export const BROWSER_SIGN_IN_SITE = /^[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?(?::\d{1,5})?$/;
+export const MAX_BROWSER_SIGN_IN_SITE = 253;
+/** The reason the decline door records for the card's Not now. */
+export const BROWSER_SIGN_IN_NOT_NOW = 'Not now';
+
+/** The card's title, which the server writes: "Sign in to github.com". */
+export function browserSignInTitle(site: string): string {
+  return `Sign in to ${site}`;
+}
+
+/**
+ * The site as browser_request_sign_in passed it, reduced to its host: an agent that pastes the login page's URL names the
+ * same site as one that types the host. Lowercased; a path, query or credentials in the URL are dropped, never stored.
+ * Undefined when what is left is not a host.
+ */
+export function browserSignInSite(raw: string | undefined): string | undefined {
+  let site = raw?.trim() ?? '';
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(site)) {
+    try {
+      site = new URL(site).host;
+    } catch {
+      return undefined;
+    }
+  }
+  site = site.toLowerCase();
+  if (!site || site.length > MAX_BROWSER_SIGN_IN_SITE || !BROWSER_SIGN_IN_SITE.test(site)) return undefined;
+  return site;
+}
 
 /** The maintenance a wiki made from a WIKI_CREATE card starts with (design §3.6): the Create wiki form's defaults. */
 export const WIKI_CREATE_DAILY_RUN_LIMIT = 8;
@@ -188,6 +228,11 @@ export function normalizeOwnerRequest(filing: OwnerRequestFiling, now: Date): Ow
   const title = trimmed(filing.title);
   const why = trimmed(filing.why);
   const { kind } = filing;
+  if (kind === BROWSER_SIGN_IN_KIND) {
+    throw new OwnerRequestNotFileable(
+      'a BROWSER_SIGN_IN request is filed with browser_request_sign_in, from a session on the Orbit Cloud runner',
+    );
+  }
   if (kind === 'WIKI_CREATE') {
     const carried = NOT_FOR_WIKI_CREATE.find((field) => filing[field] !== undefined);
     if (carried) {
@@ -294,6 +339,7 @@ const ALERT_TITLES: Readonly<Record<FiledOwnerRequestKind, string>> = {
   CONFIRM: 'Please confirm',
   WIKI_CREATE: 'Create a wiki?',
   SETTINGS_CHANGE: 'Confirm settings',
+  BROWSER_SIGN_IN: 'Sign in needed',
 };
 
 /** Longest body a lock screen shows without cutting it. */

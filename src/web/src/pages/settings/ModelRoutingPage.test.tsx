@@ -58,10 +58,11 @@ function render(
   address: string,
   report: SubagentRoutingReport | null = BOARD_REPORT,
   key: { period: ReportPeriod; agentId: string | null } = { period: '30d', agentId: null },
+  tiers: SubagentTiersResponse = TIERS,
 ) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   qc.setQueryData(workspacesQuery().queryKey, [{ id: 'ws1', name: 'orbit' }, { id: 'ws2', name: 'website' }]);
-  qc.setQueryData(subagentTiersQuery().queryKey, TIERS);
+  qc.setQueryData(subagentTiersQuery().queryKey, tiers);
   if (report) qc.setQueryData(subagentRoutingReportQuery(key.period, key.agentId).queryKey, report);
   return renderToStaticMarkup(
     <QueryClientProvider client={qc}>
@@ -117,6 +118,25 @@ describe('Settings → Providers → Model routing', () => {
       'DeepSeek Flash|DeepSeek|Not set|No runs yet|$0.42|Not routed|395|89%|$172.34',
       '▸ No tier, no runs · 1 model',
     ]);
+  });
+
+  it("names one model's rows on different providers alike, keeps them together, and says the Quality is pooled", () => {
+    const k3 = { key: 'kimi-k3', name: 'Kimi K3' };
+    const quality: ModelQuality = {
+      subagent: { averageRating: null, ratedCount: 0, runCount: 3, raters: [] },
+      tasks: { firstPassRate: 0.8, firstPassTaskCount: 8, completedTaskCount: 10 },
+    };
+    const tiers: SubagentTiersResponse = {
+      providers: TIERS.providers.map((provider) =>
+        provider.slug === 'kimi' ? { ...provider, models: [model('kimi-code/k3', ['S', 'M'], { identity: k3, quality })] }
+          : provider.slug === 'moonshot'
+            ? { ...provider, models: [...provider.models, model('kimi-k3', ['S'], { editable: false, identity: k3, quality })] }
+            : provider),
+    };
+    const listed = rows(render(PAGE, BOARD_REPORT, undefined, tiers));
+    const at = listed.findIndex((row) => row.includes('|Kimi Code|'));
+    expect(listed[at]).toContain('|80% first pass · 10 tasks|Pooled with Kimi (Moonshot)|');
+    expect(listed[at + 1]).toMatch(/^Kimi K3\|Kimi \(Moonshot\)\|S\|.*80% first pass · 10 tasks\|Pooled with Kimi Code\|/);
   });
 
   it("keeps Model tiers' Quality column beside the tier, its footnote under the table", () => {
