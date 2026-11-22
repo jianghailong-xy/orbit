@@ -50,7 +50,7 @@ export const ROUTING_HINTS = {
 
 /**
  * Settings → Providers → Model routing: what was Model tiers and the Routing report, on one page. First the account's
- * two routing switches (Smart model selection, and Optimize For under it), then every model with the tier it is
+ * two routing switches (Route by tier, and Optimize For under it), then every model with the tier it is
  * routed at — set here — beside how its runs went in the period (docs/subagent-design.md §7,
  * docs/subagent-workflow-design.md §8 P4). The view, period and Agent live in the address, so a link opens the same
  * report; they filter the runs, not the tiers.
@@ -98,7 +98,7 @@ export function ModelRoutingPage() {
             tooltip={h.modelRouting.full}
             control={
               <Switch
-                aria-label="Smart model selection"
+                aria-label="Route by tier"
                 checked={prefs.modelRouting !== false}
                 onCheckedChange={(v) => save.mutate({ modelRouting: v })}
                 loading={save.isPending}
@@ -106,7 +106,7 @@ export function ModelRoutingPage() {
             }
           />
           {/* Account-wide since 2026-11-19 (board docs/mocks/routing-mode-account); absent means Balance. Only
-              smart model selection reads it, so it shows only while that is on (owner, 2026-11-20); the saved
+              Route by tier reads it, so it shows only while that is on (owner, 2026-11-20); the saved
               value is kept while it is off. */}
           {prefs.modelRouting !== false && (
             <SettingsRow

@@ -36,8 +36,8 @@ export const PERSONAL_SETTINGS = {
   modelRouting: setting(
     'modelRouting',
     '/settings/providers/routing',
-    'Smart model selection',
-    'Task runs and SubAgents get a model matched to how hard the work is.',
+    'Route by tier',
+    'Task runs and SubAgents run on a model of the tier their work needs.',
   ),
   optimizeFor: setting(
     'optimizeFor',

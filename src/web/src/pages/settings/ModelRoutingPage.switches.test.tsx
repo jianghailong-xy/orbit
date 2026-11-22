@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { meQuery, type Me, type UserPreferences } from '../../lib/queries';
 
 /**
- * Smart model selection, one switch for the whole account (`preferences.modelRouting`), first on Providers →
+ * Route by tier (once Smart model selection), one switch for the whole account (`preferences.modelRouting`), first on Providers →
  * Model routing. Like the other switches on the page it is ON until turned off: an account that never
  * wrote it reads on. Under it, Optimize For: one for every Agent (`preferences.optimizeFor`, board
  * docs/mocks/routing-mode-account), Balance until the owner picks another.
@@ -23,9 +23,9 @@ const { api } = await import('../../api');
 const apiMock = vi.mocked(api);
 const { ModelRoutingPage } = await import('./ModelRoutingPage');
 
-const LABEL = 'Smart model selection';
+const LABEL = 'Route by tier';
 /** The one line the board shortens it to, and the full text kept as the control's tooltip. */
-const HINT = 'Task runs and SubAgents get a model matched to how hard the work is.';
+const HINT = 'Task runs and SubAgents run on a model of the tier their work needs.';
 const FULL_HINT =
   "Coordinators suggest a tier for each task, and a SubAgent's size sets its own. Task runs and SubAgents run on a model of that tier from your providers. Off: tasks keep their Agent's model and SubAgents their parent session's.";
 

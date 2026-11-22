@@ -18,8 +18,8 @@ export const PERSONAL_PAGES = [
 ] as const;
 
 /**
- * Providers → Model routing: each model's tier beside how its runs went, and the account's routing switches (Smart
- * model selection, Optimize For). It holds what Model tiers and the Routing report were.
+ * Providers → Model routing: each model's tier beside how its runs went, and the account's routing switches (Route
+ * by tier, Optimize For). It holds what Model tiers and the Routing report were.
  */
 export const MODEL_ROUTING_PAGE = { path: '/settings/providers/routing', label: 'Model routing' } as const;
 

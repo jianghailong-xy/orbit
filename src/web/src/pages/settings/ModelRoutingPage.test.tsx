@@ -85,7 +85,7 @@ describe('Settings → Providers → Model routing', () => {
     const html = render(PAGE);
     expect(html).toMatch(/<h1[^>]*>Model routing<\/h1>/);
     expect(text(html)).toContain('Which tier each model takes SubAgent work at, and how that work went.');
-    expect(text(html).indexOf('Smart model selection')).toBeLessThan(text(html).indexOf('|Models|'));
+    expect(text(html).indexOf('Route by tier')).toBeLessThan(text(html).indexOf('|Models|'));
     expect(html).toContain('aria-label="Period"');
     expect(html).toContain('aria-label="Agent"');
     expect(text(html)).toContain('|Last 30 days|');

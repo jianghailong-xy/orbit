@@ -8,7 +8,7 @@
 [`mocks/model-routing-ios.png`](./mocks/model-routing-ios.png)（iOS / macOS）。界面文案以同目录的 `.html` 源文件为准。
 
 > **用词**：本文的 **Agent** 指线上叫 Agent 的 `workspace` 行（契约 §2 Legacy agent alias），不是契约 §3.1 的 `agent` 表。
-> 这个功能在界面上叫 **Smart model selection**，在代码和契约里叫 **Model Routing（路由）**；**档位**指 S / M / L / XL。
+> 这个功能在界面上叫 **Route by tier**（2026-11-22 前叫 Smart model selection，在 设置 → Providers → Model routing），在代码和契约里叫 **Model Routing（路由）**；**档位**指 S / M / L / XL。
 
 > **Phase 2 design amendment (2026-11-08, pending owner confirmation):** §3.5 and §10.3 define auto-hint and Optimize For for project `34tXXUHZEcGeWeB0hp5YU`. They supersede the phase-1 missing-hint rules in §0, §1 and §3.2 only when the new policy is enabled. Other sections describe the phase-1 baseline. This amendment changes documentation only.
 
