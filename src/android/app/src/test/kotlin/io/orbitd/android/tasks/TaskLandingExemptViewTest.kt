@@ -33,7 +33,7 @@ import org.robolectric.annotation.GraphicsMode
 /**
  * A task's landing-check exemption on its page (revision 42 part two, D5), as the web's `TaskDetailPanel.test.tsx` holds it: Exempt
  * with its reason, who marked it and when, and Remove exemption; nothing for a task that is not exempt; and the section for an exempt
- * task with no landing yet. Each state's frame, light and dark, is written under `src/android/build/evidence/task-landing-exempt-android/`.
+ * task with no landing yet. Ported from main's second Android port (22189bf97a) onto this project's `TaskExemptionRow`. Each state's frame, light and dark, is written under `src/android/build/evidence/task-landing-exempt-android/`.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], application = ManagementShellApplication::class, qualifiers = "w411dp-h4000dp")
@@ -92,9 +92,10 @@ class TaskLandingExemptViewTest {
         val base = compose.activity.window.decorView
         val full = Bitmap.createBitmap(base.width, base.height, Bitmap.Config.ARGB_8888)
         base.draw(Canvas(full))
-        val bounds = compose.onNodeWithTag("task-landing").fetchSemanticsNode().boundsInWindow
+        val bounds = compose.onNodeWithTag("task-landing-exempt").fetchSemanticsNode().boundsInWindow
         val pad = (12 * compose.density.density).toInt()
-        val top = max(0, bounds.top.toInt() - (44 * compose.density.density).toInt())
+        val top = max(0, (compose.onAllNodesWithTag("task-landing").fetchSemanticsNodes().firstOrNull()?.boundsInWindow?.top ?: bounds.top).toInt() -
+            (44 * compose.density.density).toInt())
         val bottom = min(full.height, bounds.bottom.toInt() + pad)
         val cut = Bitmap.createBitmap(full, 0, top, full.width, bottom - top)
         File(output, "$name.png").outputStream().use { cut.compress(Bitmap.CompressFormat.PNG, 100, it) }
@@ -104,13 +105,13 @@ class TaskLandingExemptViewTest {
         page(task("DONE", exempt = true, landed = true))
         listOf(false, true).forEach { dark ->
             this.dark.value = dark
-            compose.waitUntil(60_000) { compose.onAllNodesWithTag("task-landing-exempt-origin").fetchSemanticsNodes().isNotEmpty() }
+            compose.waitUntil(60_000) { compose.onAllNodesWithText("marked 20m ago", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
             val block = hasAnyAncestor(hasTestTag("task-landing-exempt"))
-            compose.onNode(hasText("Landing check") and block).assertExists()
-            compose.onNodeWithTag("task-landing-exempt-badge").assertTextEquals("Exempt")
-            compose.onNodeWithTag("task-landing-exempt-reason").assertTextEquals(reason)
-            compose.onNode(hasText("Coordinator") and block).assertExists()
-            compose.onNode(hasText("marked 20m ago") and block).assertExists()
+            compose.onNode(hasText("Landing check") and block, useUnmergedTree = true).assertExists()
+            compose.onNodeWithTag("task-landing-exempt-chip", useUnmergedTree = true).assertTextEquals("Exempt")
+            compose.onNodeWithTag("task-landing-exempt-reason", useUnmergedTree = true).assertTextEquals(reason)
+            compose.onNodeWithTag("task-landing-exempt-by:who", useUnmergedTree = true).assertTextEquals("Coordinator")
+            compose.onNode(hasText("marked 20m ago") and hasAnyAncestor(hasTestTag("task-landing-exempt-by")), useUnmergedTree = true).assertExists()
             compose.onNodeWithTag("task-landing-exempt-remove").assertTextEquals("Remove exemption").assertIsEnabled()
             // Its landing still reads as it did, above the exemption.
             compose.onNodeWithTag("task-landing-badge").assertTextEquals("Landed")
@@ -132,7 +133,7 @@ class TaskLandingExemptViewTest {
         page(task("OPEN", exempt = true, landed = false))
         listOf(false, true).forEach { dark ->
             this.dark.value = dark
-            compose.waitUntil(60_000) { compose.onAllNodesWithTag("task-landing-exempt-origin").fetchSemanticsNodes().isNotEmpty() }
+            compose.waitUntil(60_000) { compose.onAllNodesWithText("marked 20m ago", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithTag("task-landing-exempt").assertExists()
             compose.onNodeWithTag("task-landing-badge").assertDoesNotExist()
             compose.onNodeWithTag("task-landing-open").assertDoesNotExist()

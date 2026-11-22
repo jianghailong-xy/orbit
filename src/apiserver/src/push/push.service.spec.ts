@@ -2,11 +2,12 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { uuidToBase62 } from '@orbit/shared';
+import { SessionEndReason, uuidToBase62 } from '@orbit/shared';
 import { test } from 'node:test';
 import { ConfigService } from '@nestjs/config';
 import { RunStatus } from '@prisma/client';
 import { PushService } from './push.service';
+import { releaseFactsOf } from '../common/session-release-shapes.fixture';
 import { findingCollapseId, findingCopy } from '../schedules/schedule-attention';
 
 function enabledConfig(): ConfigService {
@@ -194,6 +195,8 @@ function settledSession(over: Record<string, unknown> = {}) {
   return {
     title: 'Fix the login bug',
     ownerId: 'owner-1',
+    // Released having finished the work, as its writer stores it beside SUCCEEDED: the alert reads these (plan step 4.8).
+    ...releaseFactsOf('finished work'),
     status: RunStatus.SUCCEEDED,
     retryAt: null,
     completedAt: null,
@@ -249,7 +252,7 @@ test('a settled session alerts its owner, collapsing on the session', async () =
 
 test('a failure carries its first error line', async () => {
   const { service, sent } = settleHarness(
-    settledSession({ status: RunStatus.FAILED, error: 'API Error: 529 overloaded_error' }),
+    settledSession({ ...releaseFactsOf('failed'), status: RunStatus.FAILED, error: 'API Error: 529 overloaded_error' }),
   );
 
   await service.notifySessionSettled('s-1');
@@ -260,7 +263,7 @@ test('a failure carries its first error line', async () => {
 });
 
 test('an ending not worth an interruption sends nothing', async () => {
-  const { service, sent } = settleHarness(settledSession({ status: RunStatus.CANCELLED }));
+  const { service, sent } = settleHarness(settledSession({ ...releaseFactsOf('ended'), status: RunStatus.CANCELLED }));
   await service.notifySessionSettled('s-1');
   assert.equal(sent.length, 0);
 });
@@ -1294,7 +1297,7 @@ test('an escalated item whose coordinator cannot be reached says so, not "no one
   });
   const live = { status: 'AWAITING_INPUT', endReason: null, completedAt: null, archivedAt: null, deletedAt: null, cancelRequestedAt: null };
   const cases = [
-    { what: 'reaped, runner away', session: { ...live, status: 'FAILED', cancelRequestedAt: new Date() }, blocked: 'RUNNER_OFFLINE',
+    { what: 'reaped, runner away', session: { ...live, status: 'FAILED', finishedAt: new Date(), cancelRequestedAt: new Date() }, blocked: 'RUNNER_OFFLINE',
       title: 'Now yours — no one acted on this for 2h 56m' },
     { what: 'live, but no message reaches it', session: live, blocked: 'RUN_RETIRED',
       title: 'Now yours — the coordinator can’t take messages' },

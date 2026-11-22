@@ -347,7 +347,7 @@ test('T3 provider-engine API on PostgreSQL', { timeout: 600_000 }, async (t) => 
     // An edit every engine using it survives is taken: another DeepSeek key.
     await providers.update(owner, ds.id, { apiKey: 'sk-dialect-rotated' } as never);
     // Once nothing uses it on DeepSeek Harness, the protocol may move.
-    await db.session.update({ where: { id: harness.id }, data: { completedAt: new Date(), status: RunStatus.CANCELLED } });
+    await db.session.update({ where: { id: harness.id }, data: { completedAt: new Date(), status: RunStatus.CANCELLED, finishedAt: new Date()} });
     await db.task.update({ where: { id: pinned.id }, data: { status: TaskStatus.CANCELLED } });
     await providers.update(owner, ds.id, { runtime: 'codex' } as never);
     assert.equal((await db.modelProvider.findUniqueOrThrow({ where: { id: ds.id } })).runtime, 'codex');
@@ -363,7 +363,7 @@ test('T3 provider-engine API on PostgreSQL', { timeout: 600_000 }, async (t) => 
     await create(at, { engine: AgentProvider.OPENCODE, provider: ds.slug, model: 'deepseek-v4-flash' });
     await create(at, { engine: AgentProvider.DSH, provider: ds.slug });
     const ended = await create(at, { engine: AgentProvider.CLAUDE, provider: ds.slug, model: 'deepseek-v4-flash' });
-    await db.session.update({ where: { id: ended.id }, data: { completedAt: new Date(), status: RunStatus.CANCELLED } });
+    await db.session.update({ where: { id: ended.id }, data: { completedAt: new Date(), status: RunStatus.CANCELLED, finishedAt: new Date()} });
     // A session an older client opened in OpenCode's old encoding names the key by its model.
     await db.session.create({ data: {
       title: 'old encoding', prompt: '', ownerId: owner, creatorId: owner, workspaceId: at.workspaceId,

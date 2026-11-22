@@ -375,7 +375,7 @@ test('a scheduled wakeup is held by the control plane and delivered as a turn wh
 
     // The session ends while its wakeup waits.
     assert.equal((await schedule(on.ended, { delaySeconds: 60, reason: 'the session ends first' })).status, 200);
-    await prisma.session.update({ where: { id: on.ended }, data: { status: RunStatus.CANCELLED, endReason: 'ended' } });
+    await prisma.session.update({ where: { id: on.ended }, data: { status: RunStatus.CANCELLED, finishedAt: new Date(), endReason: 'ended' } });
 
     // A background job's wake turn nobody has been handed yet; a wakeup comes due while it waits.
     const job = 'bgj_0123456789ab';

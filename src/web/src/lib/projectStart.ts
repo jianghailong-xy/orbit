@@ -538,9 +538,10 @@ export const START_ROW_NOT_ASKED = 'not asked yet';
  *  find the start card, which the conversation scrolls to once it is drawn. */
 export const START_PROJECT_INTENT = 'start-project';
 
-/** A line as a sentence names it, mid-sentence: "a project branch", "directly into main". */
+/** A line as a sentence names it, mid-sentence: "a project branch", "directly into main". It takes a
+ *  line that was named: a request with none names none (`START_NO_LINE`), never "a project branch". */
 export function runLineInSentence(
-  line: ProjectStartSettings['line'],
+  line: NonNullable<ProjectStartSettings['line']>,
   main: string = DEFAULT_MAIN_BRANCH,
 ): string {
   return line === 'MAIN' ? `directly into ${main}` : 'a project branch';
@@ -549,14 +550,15 @@ export function runLineInSentence(
 /** The request's row under its title: who asked, and what it suggests — "The coordinator asked · a
  *  project branch · Automatic on · at most 3 at a time". Directly into the main branch the start
  *  opens with (`startMainBranch`), which a page holding no integration read takes from the
- *  suggestion alone. */
+ *  suggestion alone. A request that names no line says so in the start card's own sentence:
+ *  "The coordinator asked · Lands on the project’s branch when a task commits · …". */
 export function startRequestSummary(
   settings: ProjectStartSettings,
   main: string = mainBranchName(settings.upstreamRef),
 ): string {
   return [
     START_ROW_ASKED,
-    runLineInSentence(settings.line, main),
+    settings.line ? runLineInSentence(settings.line, main) : START_NO_LINE,
     `${RUN_AUTOMATIC} ${settings.automatic ? 'on' : 'off'}`,
     `at most ${settings.maxConcurrentTasks} at a time`,
   ].join(' · ');

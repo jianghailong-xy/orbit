@@ -231,6 +231,9 @@ async function conversation(
       prompt: title,
       provider: 'claude',
       status: options.status ?? RunStatus.AWAITING_INPUT,
+      ...(options.status === RunStatus.SUCCEEDED || options.status === RunStatus.FAILED
+        ? { finishedAt: new Date()}
+        : options.status === RunStatus.CANCELLED ? { finishedAt: new Date()} : {}),
       dispatchOrigin: SessionDispatchOrigin.USER,
       ...(options.taskId === undefined ? { titleManagedByProject: true } : {}),
       ...(options.ended ? { completedAt: new Date() } : {}),
@@ -877,7 +880,7 @@ test('(9) the hold ends the moment the coordinator cannot act on it, and not whi
       const later = new Date(Date.now() + (ESCALATION_SECONDS + 60) * 1_000);
       await stack.db.session.update({
         where: { id: w.coordinatorSessionId! },
-        data: { status: RunStatus.FAILED },
+        data: { status: RunStatus.FAILED, finishedAt: new Date()},
       });
       assert.deepEqual(await ownerAsked(stack, w), [], 'a paused coordinator lost the revision it was handed');
       assert.deepEqual(await ownerAsked(stack, w, later), []);
@@ -890,7 +893,7 @@ test('(9) the hold ends the moment the coordinator cannot act on it, and not whi
       // Parked on a retry is the same pause.
       await stack.db.session.update({
         where: { id: w.coordinatorSessionId! },
-        data: { status: RunStatus.AWAITING_INPUT, retryAt: new Date(Date.now() + 3_600_000) },
+        data: { status: RunStatus.AWAITING_INPUT, finishedAt: null, retryAt: new Date(Date.now() + 3_600_000) },
       });
       assert.deepEqual(await ownerAsked(stack, w, later), []);
       assert.equal(await ownerCount(stack, w, later), 0);
@@ -898,7 +901,7 @@ test('(9) the hold ends the moment the coordinator cannot act on it, and not whi
       // Over — filed as Completed by its owner: it will not decide anything, and the owner is asked.
       await stack.db.session.update({
         where: { id: w.coordinatorSessionId! },
-        data: { status: RunStatus.FAILED, retryAt: null, completedAt: new Date() },
+        data: { status: RunStatus.FAILED, finishedAt: new Date(), retryAt: null, completedAt: new Date() },
       });
       assert.deepEqual(await ownerAsked(stack, w), [w.taskId]);
       assert.equal(await ownerCount(stack, w), 1);
@@ -1049,7 +1052,7 @@ test('(13) a coordinator conversation that is only down is not written to or rev
       const w = await world(stack, 'down');
       await stack.db.session.update({
         where: { id: w.coordinatorSessionId! },
-        data: { status: RunStatus.FAILED },
+        data: { status: RunStatus.FAILED, finishedAt: new Date()},
       });
       const badgeBefore = await badge(stack, w);
       await submit(stack, w);

@@ -14,7 +14,7 @@ import {
   deriveSessionState,
 } from '@orbit/shared';
 import { runnerIsOnline, type RunnerBeats } from '../runners/runner-presence';
-import { RELEASED_SESSION_STATUSES } from '../common/session-release';
+import { isReleased } from '../common/session-release';
 
 /** The raw fields required to augment a Prisma/API session row. */
 export interface RawSessionStateFields {
@@ -33,6 +33,8 @@ export interface SessionCapabilityFields extends RawSessionStateFields {
   provider?: string | null;
   providerBuiltin?: boolean | null;
   permissionMode?: string | null;
+  /** The release column (common/session-release.ts): a released session is what a resume revives. */
+  finishedAt: Date | string | null;
   cancelRequestedAt: Date | string | null;
   startedAt: Date | string | null;
   numTurns: number;
@@ -48,8 +50,6 @@ export interface SessionCapabilityFields extends RawSessionStateFields {
     | null;
 }
 
-const TERMINAL_RUN_STATUSES = new Set<string>(RELEASED_SESSION_STATUSES);
-
 /**
  * Single source of truth for both resume authorization and action affordances sent to
  * clients. Keep this pure so list/detail/realtime and the mutation guard cannot drift.
@@ -59,7 +59,7 @@ export function deriveSessionCapabilities(
   nowMs: number = Date.now(),
 ): SessionCapabilities {
   const lifecycleState = deriveSessionLifecycleState(session);
-  const terminal = TERMINAL_RUN_STATUSES.has(String(session.status).toUpperCase());
+  const terminal = isReleased(session);
   let resumeBlockedReason: SessionResumeBlockedReason | null = null;
 
   if (lifecycleState === SessionLifecycleState.TRASH) {

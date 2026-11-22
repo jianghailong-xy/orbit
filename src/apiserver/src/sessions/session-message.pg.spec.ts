@@ -57,6 +57,7 @@ import {
   SessionDispatchOrigin,
   SessionRunSource,
 } from '@prisma/client';
+import { isReleasedStatus } from '../common/session-release';
 import { base62ToUuid, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -173,6 +174,7 @@ test('one session’s message to another is signed, delivered as such, and bound
   /** A session on this runner, parked between turns — the shape a live orchestrating caller has. */
   async function session(title: string, data: Partial<Prisma.SessionUncheckedCreateInput> = {}): Promise<string> {
     const id = randomUUID();
+    const fixtureStatus = data.status ?? RunStatus.AWAITING_INPUT;
     await prisma.session.create({
       data: {
         id, ownerId, creatorId: ownerId, workspaceId: workerWorkspaceId, assignedRunnerId: runnerId,
@@ -180,6 +182,9 @@ test('one session’s message to another is signed, delivered as such, and bound
         numTurns: 1, startedAt: new Date(), runtimeSessionId: `runtime-${id}`,
         dispatchOrigin: SessionDispatchOrigin.USER, runSource: SessionRunSource.MANUAL,
         ...data,
+        ...(isReleasedStatus(fixtureStatus) ? {
+          finishedAt: data.finishedAt ?? new Date(),
+        } : {}),
       },
     });
     return id;
@@ -608,7 +613,7 @@ test('one session’s message to another is signed, delivered as such, and bound
   /** A message the runner took and echoed, whose turn then died on the provider: the turn settled
    *  and the session parked as `parkedAs` with a retry armed — what ingest's quota and provider-error
    *  branches leave behind. Answers the instant to sweep at. */
-  async function failAndArm(sessionId: string, parkedAs: RunStatus): Promise<Date> {
+  async function failAndArm(sessionId: string, parkedAs: typeof RunStatus.FAILED | typeof RunStatus.AWAITING_INPUT): Promise<Date> {
     const delivered = await claimAndPoll(sessionId);
     await echo(sessionId, 1, delivered.json.turnId, { text: String(delivered.json.content ?? '') });
     await prisma.conversationTurn.updateMany({
@@ -621,7 +626,9 @@ test('one session’s message to another is signed, delivered as such, and bound
       data: {
         status: parkedAs, retryAt: armedAt, retryAttempts: 0,
         // A provider error settles the run FAILED and asks the process to stop (`sweep`'s own note).
-        ...(parkedAs === RunStatus.FAILED ? { cancelRequestedAt: new Date(), finishedAt: new Date() } : {}),
+        ...(parkedAs === RunStatus.FAILED
+          ? { cancelRequestedAt: new Date(), finishedAt: new Date()}
+          : { finishedAt: null}),
       },
     });
     // A resume refuses a runner that has not been heard from in 90s, and this file runs for minutes.

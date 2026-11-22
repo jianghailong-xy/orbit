@@ -431,7 +431,8 @@ struct SessionProjectPage: View {
     /// counts, over the project's landing sessions and its merges into main. Nil for a project that
     /// has never had a landing, which draws no row.
     private var landingsSummary: LandingsRowSummary? {
-        SessionProjectLandings.rowSummary(landingRows, merges: merge?.merged ?? [],
+        guard !ProjectPage.noLineYet(app.projectSessionsIntegration) else { return nil }
+        return SessionProjectLandings.rowSummary(landingRows, merges: merge?.merged ?? [],
                                           main: RunSettings.mainBranchName(app.projectSessionsIntegration?.upstreamRef))
     }
     /// The merge job in flight, if one is — its id, kind and the sentence where it stopped.
@@ -863,7 +864,8 @@ struct SessionProjectPage: View {
     /// job's card is the merge card's (`mergeCard`), so this one stays about tasks landing on the
     /// project branch.
     @ViewBuilder private var landingCard: some View {
-        if let integration = app.projectSessionsIntegration, integration.inFlight != nil {
+        if let integration = app.projectSessionsIntegration, integration.inFlight != nil,
+           !ProjectPage.noLineYet(integration) {
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 if let card = ProjectMergeCard.taskLandingCard(integration, now: context.date,
                                                                updatedAt: app.projectSessionsIntegrationReadAt,

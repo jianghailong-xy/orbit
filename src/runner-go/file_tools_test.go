@@ -45,7 +45,9 @@ type fakeFileServer struct {
 	files  map[string]*fakeFile
 	next   int
 	calls  []string
-	fields []map[string]string
+	// queries is each call's query string, beside calls.
+	queries []string
+	fields  []map[string]string
 	bundle map[string]interface{}
 	// refuse is what the server says of a file it finds a credential in, by the file's name.
 	refuse map[string]string
@@ -133,6 +135,7 @@ func (f *fakeFileServer) serve(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, r.Method+" "+r.URL.Path)
+	f.queries = append(f.queries, r.URL.RawQuery)
 	if r.Header.Get("authorization") != "Bearer runner-secret" {
 		f.t.Errorf("%s %s came without the runner credential", r.Method, r.URL.Path)
 	}
@@ -380,6 +383,33 @@ func TestFileUploadKeepsOneFileAndSaysWhatItIs(t *testing.T) {
 	}
 	if got.MimeType != "application/json" {
 		t.Errorf("mimeType = %q", got.MimeType)
+	}
+}
+
+// A remote SubAgent keeps files under its parent's session, which its own runner does not host: each call that keeps
+// one names the run, by which the server lets that runner in (docs/subagent-design.md §10.2).
+func TestFileUploadFromASubAgentNamesItsRun(t *testing.T) {
+	api := newFakeFileServer(t)
+	s := api.mcp(t)
+	t.Setenv(envSubagentRunID, "run-1")
+	path := writeTestFile(t, filepath.Join(inCheckout(t), "shot.png"), "png")
+	root := filepath.Join(inCheckout(t), "shots")
+	writeTestFile(t, filepath.Join(root, "light.png"), "light")
+
+	fileResult(t, s, "file_upload", map[string]interface{}{"path": path, "pin": true})
+	fileResult(t, s, "file_upload", map[string]interface{}{"path": root})
+
+	want := []string{
+		"POST /api/runner/sessions/session-1/files", "PUT /api/runner/sessions/session-1/files/file1/pin",
+		"POST /api/runner/sessions/session-1/files", "POST /api/runner/sessions/session-1/file-bundles",
+	}
+	if !equalStrings(api.calls, want) {
+		t.Fatalf("calls = %v, want %v", api.calls, want)
+	}
+	for i, query := range api.queries {
+		if query != "subagentRunId=run-1" {
+			t.Errorf("%s came with query %q, want the run named", api.calls[i], query)
+		}
 	}
 }
 

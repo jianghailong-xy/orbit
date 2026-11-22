@@ -193,7 +193,7 @@ test('a candidate is not frozen before the work it offers has stopped moving', {
         createdAt: when.createdAt,
         ...(when.finished
           ? {
-            status: RunStatus.SUCCEEDED,
+            status: RunStatus.SUCCEEDED, 
             finishedAt: when.finished,
             worktreeBranch: when.worktreeBranch ?? branch,
             worktreeDirty: when.worktreeDirty ?? false,
@@ -224,14 +224,20 @@ test('a candidate is not frozen before the work it offers has stopped moving', {
    */
   async function enqueueOverMovingWork(tx: Prisma.TransactionClient, taskId: string) {
     const moving = (await tx.session.findMany({
-      where: { taskId, startsTaskWork: true, deletedAt: null, finishedAt: null }, select: { id: true },
+      where: { taskId, startsTaskWork: true, deletedAt: null, status: RunStatus.RUNNING }, select: { id: true },
     })).map((row) => row.id);
     if (moving.length > 0) {
-      await tx.session.updateMany({ where: { id: { in: moving } }, data: { finishedAt: new Date() } });
+      await tx.session.updateMany({
+        where: { id: { in: moving } },
+        data: { status: RunStatus.SUCCEEDED, finishedAt: new Date()},
+      });
     }
     const queued = await enqueueForDoneTask(tx, ownerId, taskId);
     if (moving.length > 0) {
-      await tx.session.updateMany({ where: { id: { in: moving } }, data: { finishedAt: null } });
+      await tx.session.updateMany({
+        where: { id: { in: moving } },
+        data: { status: RunStatus.RUNNING, finishedAt: null},
+      });
       await tx.task.update({ where: { id: taskId }, data: DELIVERED_IDENTITY_CLEARED });
     }
     return queued;
@@ -385,7 +391,7 @@ test('a candidate is not frozen before the work it offers has stopped moving', {
       await prisma.session.update({
         where: { id: runningSession },
         data: {
-          status: RunStatus.SUCCEEDED,
+          status: RunStatus.SUCCEEDED, 
           finishedAt: new Date(),
           worktreeBranch: runningBranch,
           worktreeDirty: false,

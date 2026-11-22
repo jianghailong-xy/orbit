@@ -93,6 +93,9 @@ class WorktreeBarTest {
         return when {
             path == listOf("sessions", id) -> ok(detail.toString())
             path == listOf("sessions", id, "merge") -> { detail = JsonObject(detail + ("mergeStatus" to JsonPrimitive("pending"))); ok("{}") }
+            path == listOf("sessions", id, "merge-failure", "dismiss") -> {
+                detail = JsonObject(detail - "mergeStatus" - "mergeError"); ok("""{"ok":true,"dismissed":true}""")
+            }
             path == listOf("sessions", id, "commit") -> { detail = JsonObject(detail + ("commitStatus" to JsonPrimitive("pending"))); ok("{}") }
             path == listOf("sessions", id, "diff") -> ok("""{"patches":[{"path":"src/reader/Bar.kt","patch":"diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n-old line\n+new line"}]}""")
             path == listOf("sessions", id, "worktree-file") -> when (api.query.toMap()["path"]) {
@@ -187,6 +190,19 @@ class WorktreeBarTest {
         settle(session("mergeStatus" to JsonPrimitive("error"), "mergeError" to JsonPrimitive("target has uncommitted changes")))
         compose.onNodeWithText("target has uncommitted changes").assertIsDisplayed()
         compose.onNodeWithText("Retry merge to main").assertIsDisplayed()
+    }
+
+    @Test fun theCloseOnAFailedMergeClearsItAndTheBarOffersMergeAgain() {
+        detail = session("mergeStatus" to JsonPrimitive("error"), "mergeTarget" to JsonPrimitive("main"),
+            "mergeError" to JsonPrimitive("could not push main to origin: remote: error: GH006: Protected branch update failed"))
+        show()
+        compose.onNodeWithText("Retry merge to main").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Dismiss").performClick()
+        compose.waitUntil(5_000) { sent("sessions", id, "merge-failure", "dismiss").isNotEmpty() }
+        compose.waitForIdle()
+        compose.onNodeWithTag("merge-failure-dismiss").assertDoesNotExist()
+        assertFalse(shown("Retry merge to main"))
+        assertTrue(shown("Merge to main"))
     }
 
     @Test fun aDirtyLiveTreeCommitsAndAFailedCommitSaysWhy() {

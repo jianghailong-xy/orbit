@@ -44,7 +44,11 @@ import { CoordinatorWakeService } from './coordinator-wake.service';
 import { CriterionReadyProducer } from './criterion-ready.producer';
 import { CriterionUnlandedProducer } from './criterion-unlanded.producer';
 import { ProjectOpenItemEscalationService } from './open-item-escalation.service';
-import { INTEGRATION_JOB_CLAIM, PROMOTION_AUTOMATIC_LAND } from './project-integration-job';
+import {
+  INTEGRATION_JOB_CLAIM,
+  PROMOTION_AUTOMATIC_LAND,
+  settleDeliveredIdentityAfterFinish,
+} from './project-integration-job';
 import { configureProjectIntegration } from './project-integration-line';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { ProjectPromotionService } from './project-promotion.service';
@@ -382,8 +386,6 @@ async function doneCodeTask(
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       startedAt: new Date(),
-      // The work stopped moving a minute ago (§2.6 J-T1a), so every claim below is after it.
-      finishedAt: new Date(Date.now() - 60_000),
       branch: `orbit/${label}-${randomUUID().slice(0, 6)}`,
       isolationStatus: 'worktree',
       baseSha: 'b'.repeat(40),
@@ -425,6 +427,14 @@ async function doneCodeTask(
   });
   const task = await db.task.findUniqueOrThrow({ where: { id: declared.id }, select: { status: true } });
   assert.equal(task.status, TaskStatus.DONE, 'the acceptance command agreed');
+  await db.$transaction(async (tx) => {
+    const finished = await tx.session.update({
+      where: { id: sessionId },
+      data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(Date.now() - 60_000)},
+      select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
+    });
+    await settleDeliveredIdentityAfterFinish(tx, finished);
+  });
   return { taskId: declared.id, sessionId };
 }
 
@@ -898,7 +908,7 @@ test('a task rerun queued or running is progress: it has no deadline, then its l
       const retried = await retryTask(stack, w, red.taskId);
       await makeDue(stack, red.itemId);
       // Isolate the handling-job exemption from the taken-up exemption.
-      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED } });
+      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED, finishedAt: new Date()} });
 
       assert.deepEqual(await stack.escalation.sweep(), [], 'a queued rerun has no escalation deadline');
       let held = await item(stack.db, red.itemId);
@@ -940,7 +950,7 @@ test('a promotion re-check queued or running is progress: it cannot escalate bef
       const retried = await retryCandidate(stack, w, blocked.promotionId);
       await makeDue(stack, blocked.itemId);
       // Isolate the handling-job exemption from the taken-up exemption.
-      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED } });
+      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED, finishedAt: new Date()} });
       assert.deepEqual(await stack.escalation.sweep(), [], 'a queued re-check has no deadline');
       let read = await stack.openItems.list(w.ownerId, w.projectId);
       const queued = read.withCoordinator.find((row) => row.itemId === blocked.itemId);
@@ -966,7 +976,7 @@ test('a promotion re-check queued or running is progress: it cannot escalate bef
       const secondRetry = await retryCandidate(stack, v, again.promotionId);
       await makeDue(stack, again.itemId);
       // Isolate the handling-job exemption from the taken-up exemption.
-      await stack.db.session.update({ where: { id: v.coordinatorSessionId }, data: { status: RunStatus.FAILED } });
+      await stack.db.session.update({ where: { id: v.coordinatorSessionId }, data: { status: RunStatus.FAILED, finishedAt: new Date()} });
       assert.deepEqual(await stack.escalation.sweep(), [], 'the queued failing re-check is still progress');
       const red = await onlyClaim(stack, v, 'CHECK_PROMOTION');
       assert.deepEqual(await stack.escalation.sweep(), [], 'the running failing re-check is still progress');

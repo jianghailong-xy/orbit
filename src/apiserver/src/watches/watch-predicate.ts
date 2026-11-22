@@ -22,13 +22,13 @@ import {
   deriveSessionLifecycleState,
   deriveSessionRunState,
   SessionLifecycleState,
-  SessionRunState,
   TASK_PROGRESS_LIMITS,
   TaskStatus,
   WATCH_LIMITS,
   type WatchTargetObservation,
 } from '@orbit/shared';
 
+import { runIsOver } from '../common/session-release';
 import { UNSETTLED_SESSION_STATUSES } from '../common/session-scheduling';
 import {
   ARMED_RETRY,
@@ -136,6 +136,8 @@ export type WatchTargetFact =
       /** CONVERSATION, or LANDING for the platform-driven container a landing subject opens. */
       sessionKind: string;
       status: string;
+      /** `session.finished_at`: the release column. */
+      finishedAt: Date | null;
       endReason: string | null;
       completedAt: Date | null;
       archivedAt: Date | null;
@@ -211,11 +213,6 @@ export function sessionJobsOf(runningBgJobs: readonly string[], activity: unknow
 }
 
 const TERMINAL_TASK_STATUSES: readonly string[] = [TaskStatus.DONE, TaskStatus.CANCELLED, TaskStatus.FAILED];
-const TERMINAL_RUN_STATES: readonly SessionRunState[] = [
-  SessionRunState.SUCCEEDED,
-  SessionRunState.FAILED,
-  SessionRunState.ENDED,
-];
 const TERMINAL_LIFECYCLE_STATES: readonly SessionLifecycleState[] = [
   SessionLifecycleState.COMPLETED,
   SessionLifecycleState.TRASH,
@@ -339,7 +336,10 @@ export function leafHolds(test: WatchLeafTest, fact: WatchTargetFact, now: numbe
         && !sessionFactExecuting(fact)
         && !sessionFactWakeArmed(fact);
     case 'SESSION_RUN_TERMINAL':
-      return fact.kind === 'SESSION' && TERMINAL_RUN_STATES.includes(deriveSessionRunState(fact));
+      // The run is over: released (`finished_at`), or interrupted with an end recorded. Never which terminal value
+      // the session holds: the stored meaning (the derived run state is SUCCEEDED, FAILED or ENDED) is the same
+      // rows under session_release_fact_chk (plan step 4.8; common/session-release.ts runIsOver).
+      return fact.kind === 'SESSION' && runIsOver(fact);
     case 'SESSION_LIFECYCLE_TERMINAL':
       return fact.kind === 'SESSION' && TERMINAL_LIFECYCLE_STATES.includes(deriveSessionLifecycleState(fact));
     case 'SESSION_NEEDS_ATTENTION':

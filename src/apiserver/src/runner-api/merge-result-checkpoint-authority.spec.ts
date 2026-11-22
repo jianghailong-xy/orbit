@@ -56,6 +56,7 @@ function harness(opts: {
     [
       {
         status: RunStatus.SUCCEEDED,
+        finishedAt: new Date(),
         inboxLeaseOwner: null,
         mergeStatus: 'pending',
         mergeOperationId: OPERATION_ID,

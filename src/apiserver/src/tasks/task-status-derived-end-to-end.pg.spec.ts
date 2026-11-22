@@ -358,7 +358,7 @@ suite(
     await db.session.update({
       where: { id: verifierSessionId },
       data: {
-        status: RunStatus.SUCCEEDED,
+        status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
         endReason: VERIFICATION_RUN_END_REASON,
         completedAt: new Date(),
       },

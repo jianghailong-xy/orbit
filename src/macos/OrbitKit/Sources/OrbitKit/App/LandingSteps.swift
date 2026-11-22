@@ -139,7 +139,8 @@ public enum LandingSteps {
     public static func failed(_ step: LandingStep, kind: String) -> Bool {
         step.entries.contains { item in
             let entry = item.entry
-            if entry.data?["skipped"]?.stringValue == "PATHS_EXEMPT" { return false }
+            // A landing check skipped for exempt paths (K2) or an exempt task (P-C2) did not fail.
+            if LandingCheckSkip.isSkip(entry) { return false }
             if failures.contains(entry.kind) { return true }
             if ["CHECK_FINISHED", "RESULT", "RESULT_FALLBACK"].contains(entry.kind) {
                 return !entry.succeeded(in: kind)

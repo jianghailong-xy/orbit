@@ -49,7 +49,7 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { RunStatus, RunnerStatus, type PrismaClient } from '@prisma/client';
+import { Prisma, RunStatus, RunnerStatus, type PrismaClient } from '@prisma/client';
 import type { IntegrationJobCommand, IntegrationJobResultRequest } from '@orbit/shared';
 import { Client } from 'pg';
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -76,7 +76,7 @@ const sha = (nibble: string) => nibble.repeat(40);
 interface Finish {
   changedFiles?: unknown[];
   baseSha?: string;
-  status?: RunStatus;
+  status?: typeof RunStatus.SUCCEEDED | typeof RunStatus.FAILED;
 }
 
 /** The diff summary a session that delivered something reports. */
@@ -221,7 +221,11 @@ async function harness(t: { after(fn: () => Promise<void> | void): void }) {
         isolationStatus: 'worktree',
         status: finish.status ?? RunStatus.SUCCEEDED,
         baseSha: finish.baseSha ?? sha('1'),
-        changedFiles: (finish.changedFiles ?? []) as never,
+        // A session that reported no work is written as one that reported no list at all: J8 reads the
+        // two alike, and these cases are about what the LINE answers for such a branch. An EMPTY list
+        // beside a missing tip is, since the owner's ruling of 2026-11-20, the runner measuring nothing of
+        // the task's own, which its DONE decides without asking the line (`unnamedIdentityMeasuresNothing`).
+        changedFiles: finish.changedFiles?.length ? finish.changedFiles as never : Prisma.DbNull,
         createdAt: new Date(Date.now() - minutesAgo * 60_000),
         finishedAt: new Date(Date.now() - minutesAgo * 60_000),
       },

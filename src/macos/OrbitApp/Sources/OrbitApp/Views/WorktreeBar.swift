@@ -221,15 +221,27 @@ struct WorktreeBar: View {
             // sitting on its bottom border (web `.wt-merge-inset`, board docs/mocks/merge-conflict-strip).
             if d.mergeRecovery == nil, conflict != nil || failure != nil {
                 Divider()
-                Group {
-                    if let conflict {
-                        WorktreeMergeConflictView(conflict: conflict).id(d.mergeError ?? "")
-                    } else if let failure {
-                        failureView(message: failure)
+                HStack(alignment: .top, spacing: 8) {
+                    Group {
+                        if let conflict {
+                            WorktreeMergeConflictView(conflict: conflict).id(d.mergeError ?? "")
+                        } else if let failure {
+                            failureView(message: failure)
+                        }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    // Closes it everywhere (web `.wt-merge-dismiss`, board docs/mocks/merge-error-dismiss).
+                    Button { Task { await console.worktree.dismissMergeFailure() } } label: {
+                        Image(systemName: "xmark").font(.orbitLabel)
+                            .padding(4).contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain).foregroundStyle(.secondary)
+                    .disabled(console.worktree.busy)
+                    .accessibilityLabel("Dismiss")
+                    .help("Dismiss")
+                    .padding(.top, -4)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 10).padding(.top, 9).padding(.bottom, 10)
+                .padding(.leading, 10).padding(.trailing, 6).padding(.top, 9).padding(.bottom, 10)
             }
             // A merge held for target recovery is the bar's second row: what holds it, one line, and
             // the review behind it in a sheet — never the review itself, which is taller than the band
@@ -1129,7 +1141,7 @@ struct BackgroundTrayView: View {
     /// The name the row shows now.
     private func current(_ row: BackgroundRowRule.Row) -> BackgroundRowRule.Item {
         switch row.name {
-        case .one(let item), .pinned(let item): return item
+        case .one(let item): return item
         case .rotate(let items, _, _): return items[turn % items.count]
         }
     }
@@ -1161,7 +1173,7 @@ struct BackgroundTrayView: View {
             if !row.countParts.isEmpty {
                 row.countParts.enumerated().reduce(Text("")) { line, part in
                     line + Text(part.offset == 0 ? "" : " · ")
-                        + Text(part.element.text).foregroundStyle(part.element.kind == "failed" ? Color.red : Color.secondary)
+                        + Text(part.element.text)
                 }
                 .font(.orbitMeta).foregroundStyle(.secondary).lineLimit(1).fixedSize()
             }

@@ -279,7 +279,7 @@ async function workSession(stack: Stack, w: World, taskId: string, s: WorkSessio
       startedAt: minutesAgo(30), createdAt: minutesAgo(30), runtimeSessionId: randomUUID(),
       ...(s.worktreeBranch ? { worktreeBranch: s.worktreeBranch } : {}),
       ...(s.changedFiles ? { changedFiles: s.changedFiles as Prisma.InputJsonValue } : {}),
-      ...(finished ? { finishedAt: minutesAgo(s.finishedMinutesAgo!) } : {}),
+      ...(finished ? { finishedAt: minutesAgo(s.finishedMinutesAgo!)} : {}),
     },
   });
   return id;
@@ -714,18 +714,26 @@ test('(4) §10.9 4, O-L6: a check that finds the delivered commit already on mai
       assert.equal((await itemsOf(stack, old, 'LANDED_WITHOUT_CONFIRMATION')).length, 1);
 
       // §12.15 P-M1 (O-L7 at the DONE): a branch that carried no commit of its own is not offered to
-      // the line at all. With no session that reported work there is nothing to land: no candidate, no
-      // check, no receipt — it reads as nothing to land. With one that did, the work is elsewhere: no
-      // candidate either, and LANDING_UNOBSERVED (WORK_ELSEWHERE) is in front of somebody.
+      // the line at all. With no session holding work of its own there is nothing to land: no candidate,
+      // no check, no receipt — it reads as nothing to land. With one that does — an earlier attempt whose
+      // own branch has a commit past its base — the work is elsewhere: no candidate either, and
+      // LANDING_UNOBSERVED (WORK_ELSEWHERE) is in front of somebody.
       const empty = await finishedTask(stack, w, 'carried nothing', {
         branch: 'orbit/nothing', branchSha: sha('b'), baseSha: sha('b'),
       });
       assert.equal(await stack.db.projectPromotion.count({ where: { taskId: empty.taskId } }), 0,
         'an empty branch is offered to no check');
       assert.deepEqual(await receiptsOf(stack, empty.taskId), [], 'and no receipt is written for it');
-      const workedElsewhere = await finishedTask(stack, w, 'worked somewhere this branch is not', {
-        branch: 'orbit/elsewhere', branchSha: sha('b'), baseSha: sha('b'), changedFiles: [{ path: 'a.txt' }],
+      const workedElsewhereId = await ownerTask(stack, w, 'worked somewhere this branch is not');
+      await workSession(stack, w, workedElsewhereId, {
+        branch: 'orbit/elsewhere-first', branchSha: sha('e'), baseSha: sha('b'), changedFiles: [{ path: 'a.txt' }],
+        finishedMinutesAgo: 5,
       });
+      await workSession(stack, w, workedElsewhereId, {
+        branch: 'orbit/elsewhere', branchSha: sha('b'), baseSha: sha('b'), finishedMinutesAgo: 2,
+      });
+      await confirm(stack, w, workedElsewhereId);
+      const workedElsewhere = { taskId: workedElsewhereId };
       assert.equal(await stack.db.projectPromotion.count({ where: { taskId: workedElsewhere.taskId } }), 0);
       assert.deepEqual(await receiptsOf(stack, workedElsewhere.taskId), [], 'no receipt claims work that is not there');
       const elsewhereItem = await stack.db.projectOpenItem.findFirst({

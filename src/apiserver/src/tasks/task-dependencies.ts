@@ -567,10 +567,18 @@ export function everyPrerequisiteDoneOrRetiredSql(alias = 't'): string {
  * keeping the job table out is what lets this ship before the queue that fills it does.
  */
 export function prerequisiteLandedSql(alias = 'chain_task'): string {
+  return `(${deliveredNothingOfItsOwnSql(alias)} OR ${prerequisiteLandedOtherwiseSql(alias)})`;
+}
+
+/**
+ * `prerequisiteLandedSql` without its §12.15 P-M1 disjunct: cases 1–3 above, which say the prerequisite has
+ * no landing to wait for whatever its DONE measured. Spelled apart so a prediction can tell a dependent
+ * that J9 releases anyway from one that only the P-M1 fact releases (`landing-regression-repair.ts`).
+ */
+export function prerequisiteLandedOtherwiseSql(alias = 'chain_task'): string {
   const results = LANDED_RESULTS.map((result) => `'${result}'`).join(', ');
   return `(
-      ${deliveredNothingOfItsOwnSql(alias)}
-      OR (NOT EXISTS (
+      (NOT EXISTS (
         SELECT 1 FROM "project_codebase" landing_line
          WHERE landing_line."project_id" = ${alias}."project_id"
            AND landing_line."slot" = 'primary'
