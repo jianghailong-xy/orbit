@@ -38,7 +38,8 @@ acquisition and claim guards' `PENDING` to `RUNNING` (activity, `SAME`); the end
 read `release_cause` against the failure causes until removal step R4 (design §12.6) restated the three
 clauses, in 1425 itself (not deployed), on the release module's failure question
 (`releaseWasFailureSql('NEW')`: `finished_at`, `end_reason`, `last_turn_outcome`, and the status bridge
-until R7), with `last_turn_outcome` added to their column lists. The unique index is step 4.5's.
+until R7, whose migration 1429 re-creates them without it in deploy 3), with `last_turn_outcome` added to their
+column lists. The unique index is step 4.5's.
 
 Plan step 4.5, release A (migration 1426) built `session_task_execution_claim_idx_finished_at` on
 `session(task_id) WHERE task_id IS NOT NULL AND deleted_at IS NULL AND finished_at IS NULL` beside

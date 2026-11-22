@@ -857,6 +857,14 @@ The fixture shows what R8 has to clear today: `pg_depend` on `session.release_ca
 (the value CHECK, 1401's clause, 1406) and three triggers (the 1425 WHEN clauses). R1 and R4 remove all but the
 value CHECK.
 
+As built for deploy 3 (2026-11-22, task 351QPAh8wuz6nl3n1ghm2): R6 is migration 1428 (one statement per table,
+not batches: the FAILED rows are a few hundred at most; trashed rows are not written, and the residual shape A2 gets
+`CANCELLED` by the coordinator's ruling), R7 is the release module without the arm plus migration 1429 for the three
+triggers, R8 is migration 1431, which checks `pg_depend` itself before it drops anything. The read-only checks to
+run before and after are `scripts/session-release-cause-drop-precheck.sql` and `-postcheck.sql`;
+`common/session-release-backfill.pg.spec.ts` runs all three migrations through prisma on a populated database at
+deploy 2's state.
+
 Optional, not needed for the drop: give B2 rows (an old "cancel not honored" with no end reason) `end_reason =
 'cancelled'` from their `error`, so they read as an end that was asked for rather than a failure. Their number
 was not measured.
