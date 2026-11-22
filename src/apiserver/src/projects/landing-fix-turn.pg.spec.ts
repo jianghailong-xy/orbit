@@ -102,6 +102,7 @@ interface Stack {
   attempts: SessionAttemptService;
   convergence: CoordinatorConvergenceService;
   evidence: TaskCompletionEvidenceService;
+  reviews: EvidenceReviewService;
   api: RunnerApiController;
 }
 
@@ -145,6 +146,7 @@ async function connect(): Promise<Stack> {
     attempts,
     convergence,
     evidence: new TaskCompletionEvidenceService(prisma, undefined, undefined, undefined, reviews),
+    reviews,
     api,
   };
 }
@@ -684,6 +686,10 @@ async function acrossTheTurn(label: string, revived: boolean): Promise<void> {
       (error: { getResponse?: () => { code?: string } }) => error.getResponse?.()?.code === 'TASK_DONE_LANDING_FIX',
     );
 
+    // And the leader's reconcile sweep runs while the turn does (tasks.service.ts, every send-back owed to
+    // any session): the revived session is live again, and the old SEND_BACK must not be put to it.
+    await stack.reviews.deliverSendBacksOwedTo();
+
     // The turn spends past the attempt's budget, as a long fix would, and ends.
     await stack.db.session.update({
       where: { id: t.sessionId }, data: { numTurns: (DEFAULT_ATTEMPT_BUDGET.maxTurns as number) + 5 },
@@ -703,6 +709,9 @@ async function acrossTheTurn(label: string, revived: boolean): Promise<void> {
     assert.equal((await stack.db.conversationTurn.findUniqueOrThrow({ where: { id: turn.id } })).status, 'ANSWERED',
       'CONTROL: the landing-fix turn was answered');
 
+    // The turn end's own drain, and the sweep once more after it.
+    await stack.reviews.deliverSendBacksOwedTo(t.sessionId);
+    await stack.reviews.deliverSendBacksOwedTo();
     const after = await snapshot(stack, w, t);
     assert.deepEqual(after, before, 'the landing-fix turn moved the task, its evidence, or the coordinator');
   } finally {
