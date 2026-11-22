@@ -34,6 +34,8 @@ type DshAgentOverlay struct {
 	// Uploads is the session's uploads directory, a writable root of its shell sandbox beside the shared cache
 	// root (dshSandboxCacheRootPlugin). Empty leaves the cache root alone.
 	Uploads string
+	// Drive is the Orbit Files drive's roots (the parent included), writable beside Uploads; empty when none is mounted.
+	Drive []string
 }
 
 func (i DshLaunchInput) String() string {
@@ -411,8 +413,13 @@ func dshAgentOverlayPatch(home string, agent DshAgentOverlay) ([]byte, error) {
 	// the runner name one directory.
 	// The session's uploads directory rides beside it (extra), as Claude Code's --add-dir does.
 	rootsConfig := map[string]interface{}{"root": runnerCacheRoot()}
+	var extra []string
 	if strings.TrimSpace(agent.Uploads) != "" {
-		rootsConfig["extra"] = []string{agent.Uploads}
+		extra = append(extra, agent.Uploads)
+	}
+	extra = append(extra, agent.Drive...)
+	if len(extra) > 0 {
+		rootsConfig["extra"] = extra
 	}
 	if err := insert("orbit-sandbox-cache-root", "sandbox-cache-root", dshSandboxCacheRootPlugin, rootsConfig); err != nil {
 		return nil, err
@@ -435,6 +442,7 @@ func dshSessionAgentOverlay(job *ClaimedSession) *DshAgentOverlay {
 	if upDir := uploadsDir(job.SessionID); os.MkdirAll(upDir, 0o755) == nil {
 		overlay.Uploads = upDir
 	}
+	overlay.Drive = driveGrantRoots()
 	return overlay
 }
 

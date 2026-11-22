@@ -16,10 +16,13 @@ import (
 
 func fakeDriveMount(t *testing.T, mounted bool) {
 	t.Helper()
-	oldInfo, oldMount, oldHome := mountinfoPath, driveMountPath, driveHomePath
-	t.Cleanup(func() { mountinfoPath, driveMountPath, driveHomePath = oldInfo, oldMount, oldHome })
+	oldInfo, oldMount, oldHome, oldParent, oldStatus := mountinfoPath, driveMountPath, driveHomePath, driveParentPath, driveStatusPath
+	t.Cleanup(func() {
+		mountinfoPath, driveMountPath, driveHomePath, driveParentPath, driveStatusPath = oldInfo, oldMount, oldHome, oldParent, oldStatus
+	})
 	dir := t.TempDir()
 	mountinfoPath, driveMountPath, driveHomePath = filepath.Join(dir, "mountinfo"), filepath.Join(dir, "drive"), filepath.Join(dir, "Files")
+	driveParentPath, driveStatusPath = dir, filepath.Join(dir, "status.json")
 	if err := os.Mkdir(driveMountPath, 0o755); err != nil {
 		t.Fatal(err)
 	}

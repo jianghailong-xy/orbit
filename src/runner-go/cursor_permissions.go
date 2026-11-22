@@ -428,10 +428,11 @@ func (b *cursorPermissionBridge) permission(id interface{}, params map[string]in
 
 // uploadsEdit is whether ask writes one file inside the session's uploads directory, once links are resolved.
 func (b *cursorPermissionBridge) uploadsEdit(ask cursorPermissionAsk) bool {
-	if b.uploads == "" || (ask.Name != "Write" && ask.Name != "Edit") {
+	if ask.Name != "Write" && ask.Name != "Edit" {
 		return false
 	}
-	return pathWithin(firstString(mapValue(ask.Input), "file_path"), b.uploads)
+	path := firstString(mapValue(ask.Input), "file_path")
+	return pathWithin(path, b.uploads) || pathWithinAny(path, driveGrantRoots())
 }
 
 // noteBypass says once per process why a session in Bypass is being asked at all.

@@ -10,13 +10,53 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 var (
 	mountinfoPath  = "/proc/self/mountinfo"
 	driveMountPath = "/run/orbit-files/drive"
 	driveHomePath  = "/home/orbit/Files"
+	// driveParentPath is the plain directory the daemon mounts below. A sandbox that binds paths is given this one:
+	// it receives a remount of drive/, where a bind of drive/ itself would keep the dead mount (design §7.2).
+	driveParentPath = "/run/orbit-files"
 )
+
+// driveStatusPath is the daemon's status.json, in the plain parent directory beside the mount.
+var driveStatusPath = filepath.Join(driveParentPath, "status.json")
+
+// driveStatusFreshness is how long a status.json stays believable: the daemon rewrites it every few seconds, so one
+// older than this belongs to a daemon that is gone, and whatever it held can no longer be flushed (design §8.1).
+const driveStatusFreshness = 2 * time.Minute
+
+// driveUncommittedHandles is how many handles of the mounted drive hold bytes no commit has taken: status.json's
+// uncommittedHandles, or 0 when no drive is mounted, the file cannot be read, or the daemon stopped writing it.
+func driveUncommittedHandles() int {
+	if !driveMounted() {
+		return 0
+	}
+	data, err := os.ReadFile(driveStatusPath)
+	if err != nil {
+		return 0
+	}
+	var status struct {
+		UncommittedHandles int       `json:"uncommittedHandles"`
+		UpdatedAt          time.Time `json:"updatedAt"`
+	}
+	if json.Unmarshal(data, &status) != nil || status.UncommittedHandles < 0 || time.Since(status.UpdatedAt) > driveStatusFreshness {
+		return 0
+	}
+	return status.UncommittedHandles
+}
+
+// driveGrantRoots is what an engine's sandbox or working-directory grant names for the Orbit Files drive: the parent
+// and both spellings of the drive, or nothing on a runner that has no drive mounted (design §7.1, §7.2).
+func driveGrantRoots() []string {
+	if !driveMounted() {
+		return nil
+	}
+	return []string{driveParentPath, driveHomePath, driveMountPath}
+}
 
 func driveMounted() bool {
 	data, err := os.ReadFile(mountinfoPath)

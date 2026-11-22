@@ -152,6 +152,11 @@ func claudeCommandArgs(job *ClaimedSession, scratchDir string, firstSpawn bool) 
 	if err := os.MkdirAll(upDir, 0o755); err == nil {
 		args = append(args, "--add-dir", upDir)
 	}
+	// The drive is a workspace root beside the uploads folder in every mode; Plan mode refuses edits and commands
+	// itself, so there it is only read (design §7.2).
+	for _, root := range driveGrantRoots() {
+		args = append(args, "--add-dir", root)
+	}
 	return args
 }
 

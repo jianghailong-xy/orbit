@@ -21,7 +21,7 @@ type codexAutoApprovalContext struct {
 
 func codexAutoApprovalContextFor(execDir, upDir string, readOnlyRoots ...string) codexAutoApprovalContext {
 	return codexAutoApprovalContext{
-		workspaceRoots: []string{execDir, upDir},
+		workspaceRoots: append([]string{execDir, upDir}, driveGrantRoots()...),
 		tempRoots:      []string{upDir},
 		readOnlyRoots:  append([]string(nil), readOnlyRoots...),
 	}
@@ -30,6 +30,7 @@ func codexAutoApprovalContextFor(execDir, upDir string, readOnlyRoots ...string)
 func codexRuntimeWorkspaceRoots(permissionMode string, job *ClaimedSession, execDir, upDir string) []string {
 	roots := []string{execDir, upDir}
 	if permissionMode == "auto" {
+		roots = append(roots, driveGrantRoots()...)
 		if job != nil && job.WT != nil && job.WT.RepoDir != "" {
 			// A linked worktree stores its index and worktree metadata in the shared repository's
 			// .git directory. Grant that metadata directory alone so local git commands do not
