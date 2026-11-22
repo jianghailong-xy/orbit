@@ -1,5 +1,5 @@
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
--- 1428: the turn outcome of every failure the status alone records (docs/session-three-state-design.md §12.6,
+-- 1433: the turn outcome of every failure the status alone records (docs/session-three-state-design.md §12.6,
 -- removal step R6, decision D9; project 3508bDBDE5xPH43TYuiqP). Deploy 3.
 --
 -- WHY
@@ -9,7 +9,7 @@
 -- because the writers of deploy 1 and earlier (the reaper, the runner's finalize, the refused source, the import)
 -- record a failure in the status alone: their rows say FAILED and carry no FAILED turn outcome (the hand-over shapes
 -- H2, H4, H6 of common/session-release-shapes.fixture.ts, and every such row released before deploy 2). Removal step
--- R7 drops the bridge (1429 and the release module); this file first writes, for each of those rows, the turn
+-- R7 drops the bridge (1434 and the release module); this file first writes, for each of those rows, the turn
 -- outcome the bridge was answering with, so that no stored row changes its answer.
 --
 -- WHAT IT WRITES
@@ -50,13 +50,24 @@
 -- reply's comment due (asker_stopped), an unanswered review whose reviewer it is (reviewer_ended, only for a filed
 -- row: a failure is not "ended" to it). Whatever those writes closed then is closed already; the pre-check of the
 -- task's evidence counts what is still open on these rows (0 expected). For an A2 row, which turns into a stop,
--- reviewer_ended fires as a stop's release fires it. The statement-level open-list epoch triggers of both tables bump their epochs. No BEFORE UPDATE
--- trigger of session lists last_turn_outcome, and none of conversation_turn lists outcome or error.
+-- reviewer_ended fires as a stop's release fires it. No BEFORE UPDATE trigger of session lists last_turn_outcome, and
+-- none of conversation_turn lists outcome or error.
+--
+-- The Open-list epoch triggers are statement-level (FOR EACH STATEMENT, REFERENCING OLD/NEW TABLE), so each of the two
+-- statements fires its table's once, not once per row: session_open_list_epoch_update runs open_list_bump_session()
+-- and conversation_turn_open_list_epoch_update runs open_list_bump_via_session('conversation_turn'), both as 1420 left
+-- them. last_turn_outcome, outcome and error are drawn columns (in neither function's skip list), so each bumps the
+-- Open-list counter once per owner of a written CONVERSATION row: one sessions.list_changed hint per such account.
+-- Neither calls open_list_bump_owner(), the function main's 1428_open_list_workspace_probes replaces (it serves the
+-- workspace, task, project and other owner-keyed tables), so that change does not touch these statements.
+-- 1427_clear_dormant_session_retry_arms (main) runs before this file and clears retry_at/retry_claimed_at only on
+-- completed or trashed rows; it changes no column this file reads, so the rows written here are the same with or
+-- without it.
 --
 -- WHICH RELEASE IT MAY SHIP IN
 -- ----------------------------
 -- Deploy 3 only, once deploy 2 is live on every server: a deploy-1 server would go on releasing failures without a
--- turn outcome after this file ran. 1429 (the bridge leaves the triggers) and the release module without the bridge
+-- turn outcome after this file ran. 1434 (the bridge leaves the triggers) and the release module without the bridge
 -- ride the same deploy, after it.
 --
 -- LOCKS, SIZE
@@ -69,8 +80,9 @@
 --
 -- NUMBERING, RE-RUNNABILITY
 -- -------------------------
--- 1428: the next free number above 1427 (main, project/* and pushed orbit/* scanned 2026-11-22). Not a multiple of
--- 10. Can run twice: a second run finds no row of either shape.
+-- 1433: the next free number above 1432 (main, project/*, pushed orbit/* and probe/* scanned 2026-11-22: 1427 three
+-- times, 1428 on main, 1432 on probe/claim-index-release-b-1432). Written as 1428, renumbered after main took 1428.
+-- Not a multiple of 10. Can run twice: a second run finds no row of either shape.
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
 
 DO $$

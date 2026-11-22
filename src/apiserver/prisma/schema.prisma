@@ -2126,7 +2126,7 @@ model Session {
   // pre-migration row. Values: see SessionEndReason in @orbit/shared.
   endReason            String?   @map("end_reason")
   // No failure fact on the session (design §12, decision D9): the field `release_cause` left this model in deploy 2
-  // (removal step R5, 2026-11-21), and migration 1431 dropped the column and its CHECK session_release_cause_chk in
+  // (removal step R5, 2026-11-21), and migration 1435 dropped the column and its CHECK session_release_cause_chk in
   // deploy 3 (R8, 2026-11-22). A failure is the carrying turn's outcome, copied to lastTurnOutcome below.
   // How the session's latest completed turn ended: ANSWERED | FAILED | INTERRUPTED | CANCELLED, the same
   // value as that turn's `outcome`, written by runner turn-complete in the write that parks the session

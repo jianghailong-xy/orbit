@@ -1,6 +1,6 @@
 /**
- * DEPLOY 3 ON A DATABASE AT DEPLOY 2'S STATE: 1428 BACKFILLS THE TURN OUTCOME, 1429 DROPS THE TRIGGERS' STATUS BRIDGE,
- * 1431 DROPS release_cause, AND NO STORED ROW CHANGES ITS ANSWER BUT THE TWO NAMED ONES.
+ * DEPLOY 3 ON A DATABASE AT DEPLOY 2'S STATE: 1433 BACKFILLS THE TURN OUTCOME, 1434 DROPS THE TRIGGERS' STATUS BRIDGE,
+ * 1435 DROPS release_cause, AND NO STORED ROW CHANGES ITS ANSWER BUT THE TWO NAMED ONES.
  *
  * docs/session-three-state-design.md §12.6, removal steps R6, R7 and R8 (decision D9). Against PostgreSQL, through the
  * real `prisma migrate deploy`:
@@ -14,7 +14,7 @@
  *       non-work turn ahead of the work turn, a failed import with a message queued during it (in Trash), open
  *       requests to bridged rows with and without a retry armed; the production pre-check
  *       (scripts/session-release-cause-drop-precheck.sql) is run on it and answers what it should
- *   (3) 1428, 1429 and 1431 are applied by prisma: every row's last_turn_outcome is what the fixture's `backfilled`
+ *   (3) 1433, 1434 and 1435 are applied by prisma: every row's last_turn_outcome is what the fixture's `backfilled`
  *       says, the carrying turn and no other got FAILED and the session's error, the failure question (without the
  *       bridge) answers as deploy 2's reading (with it) did before on every row but W5 and A2, the column and its CHECK
  *       are gone, no trigger names a terminal status, and the post-check (scripts/session-release-cause-drop-postcheck.sql)
@@ -51,7 +51,7 @@ const DEPLOY_2_STATE = [
   '1425_ended_triggers_read_release',
 ];
 const DEPLOY_3 = [
-  '1428_session_turn_outcome_backfill', '1429_ended_triggers_drop_status_bridge', '1431_session_release_cause_drop',
+  '1433_session_turn_outcome_backfill', '1434_ended_triggers_drop_status_bridge', '1435_session_release_cause_drop',
 ];
 
 /** Deploy 2's failure question, as 1425 and the release module spelled it: with the status bridge. */
@@ -110,7 +110,7 @@ interface Row {
   label: string;
   shape: ReleaseShape;
   turns: Turn[];
-  /** The index in `turns` of the turn 1428 writes, or null for none. */
+  /** The index in `turns` of the turn 1433 writes, or null for none. */
   carrying: number | null;
   error?: string;
   retryArmed?: boolean;
@@ -125,14 +125,14 @@ function rowsOf(): Row[] {
     label: shape.name, shape, turns: shape.lastTurnOutcome ? [answered(shape.lastTurnOutcome)] : [], carrying: null,
   }));
   const set = (label: string, patch: Partial<Row>) => Object.assign(rows.find((row) => row.label === label)!, patch);
-  // H2: a deploy-1 reaper's drain answered every turn with no outcome: no turn for 1428 to write.
+  // H2: a deploy-1 reaper's drain answered every turn with no outcome: no turn for 1433 to write.
   set('H2', { turns: [answered(), answered(null)], error: 'runner offline', openRequest: true });
   // H4: a deploy-1 refused source leaves the dispatched turn PENDING, behind an `end` turn that is no work turn.
   set('H4', { turns: [answered(), { kind: 'end', status: 'PENDING', outcome: null },
     { kind: 'message', status: 'PENDING', outcome: null }], carrying: 2, error: 'SOURCE_REFUSED: no such ref' });
   // H6: a deploy-1 finalize, the engine failed with nothing but an old turn behind it.
   set('H6', { turns: [answered(null)], error: 'engine crashed' });
-  // W5: a failed import with a message queued during it, in Trash: 1428 writes neither the session nor the turn.
+  // W5: a failed import with a message queued during it, in Trash: 1433 writes neither the session nor the turn.
   set('W5', { turns: [{ kind: 'message', status: 'PENDING', outcome: null }], error: 'transcript holds no conversation' });
   rows.push(
     // A lost runner whose turn is still IN_FLIGHT, with an older work turn PENDING: the IN_FLIGHT one carries it.
@@ -146,7 +146,7 @@ function rowsOf(): Row[] {
   return rows;
 }
 
-test('deploy 3 on a populated database at deploy 2\'s state: 1428, 1429 and 1431 by the real prisma migrate deploy', {
+test('deploy 3 on a populated database at deploy 2\'s state: 1433, 1434 and 1435 by the real prisma migrate deploy', {
   skip, concurrency: 1, timeout: 600_000,
 }, async (t) => {
   const url = URL!;
@@ -280,7 +280,7 @@ test('deploy 3 on a populated database at deploy 2\'s state: 1428, 1429 and 1431
     assert.equal(pre.release_cause_chk_valid, true);
   });
 
-  await t.test('(3) 1428, 1429, 1431: the backfill, the failure question without the bridge, the column gone', async () => {
+  await t.test('(3) 1433, 1434, 1435: the backfill, the failure question without the bridge, the column gone', async () => {
     const turnsBefore = (await sql.query(
       `SELECT "id", "status", "outcome", "error" FROM "conversation_turn" WHERE "session_id" = ANY($1::uuid[])`,
       [[...sessionIds.values()]])).rows as Array<{ id: string; status: string; outcome: string | null; error: string | null }>;

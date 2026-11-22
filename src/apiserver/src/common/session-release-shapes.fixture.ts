@@ -33,16 +33,16 @@ export interface ReleaseShape {
   sessionKind: 'CONVERSATION' | 'LANDING';
   /**
    * Its writer records the turn outcome (§12.1). False where the status alone recorded the failure: a deploy-1
-   * server's releases (H2, H4, H6), which deploy 2 read through the status bridge and migration 1428 backfilled before
+   * server's releases (H2, H4, H6), which deploy 2 read through the status bridge and migration 1433 backfilled before
    * removal step R7 dropped it, and the failed import (W5), which nothing backfills: it is in Trash.
    */
   carriesTurnOutcome: boolean;
-  /** Released into Trash (`deleted_at` set) by its writer: W5. Migration 1428 writes no trashed row. */
+  /** Released into Trash (`deleted_at` set) by its writer: W5. Migration 1433 writes no trashed row. */
   trashed?: boolean;
   /**
    * A row its writer would leave after deploy 3 answers otherwise than deploy 2 read the stored one, and why: an end
    * asked for with no reason recorded, whose cut-off turn says CANCELLED (W7's rule, reached through the turn instead of
-   * the end reason). No writer leaves one; 1428 gave every stored one the FAILED its status said.
+   * the end reason). No writer leaves one; 1433 gave every stored one the FAILED its status said.
    */
   afterDeploy3?: 'END_ASKED';
   /** How many production rows have the shape, where measured (design §12.2, the coordinator's counts). */
@@ -206,7 +206,7 @@ export const RELEASE_SHAPES: readonly ReleaseShape[] = [
     status: 'CANCELLED', released: true, endReason: null, lastTurnOutcome: 'CANCELLED',
     sessionKind: 'CONVERSATION', carriesTurnOutcome: true, oldProtocol: 'A1' },
   // A deploy-1 server's releases during deploy 2's hand-over: the status says FAILED, the turn outcome is the last
-  // turn's from before (design §12.6 fact 1). Deploy 2 read them through the status bridge; migration 1428 (R6, deploy
+  // turn's from before (design §12.6 fact 1). Deploy 2 read them through the status bridge; migration 1433 (R6, deploy
   // 3) wrote their turn outcome before R7 dropped it.
   { name: 'H2', what: 'deploy-1 reaper: runner lost, no turn outcome recorded', writer: 'deploy 1 realtime/reaper.service.ts',
     status: 'FAILED', released: true, endReason: null, lastTurnOutcome: 'ANSWERED',
@@ -231,7 +231,7 @@ export function releaseFactsOfShape(shape: ReleaseShape, at: Date = new Date()):
 }
 
 /**
- * The shape as migration 1428 (removal step R6) leaves its stored row: last_turn_outcome FAILED on a release that is
+ * The shape as migration 1433 (removal step R6) leaves its stored row: last_turn_outcome FAILED on a release that is
  * FAILED with no end reason and no FAILED turn outcome, outside Trash; CANCELLED on the residual shape A2 (released, not
  * FAILED, no end reason, a FAILED copy kept). Every other shape is left as it is. The migration's SQL is held to this in
  * common/session-release-backfill.pg.spec.ts.

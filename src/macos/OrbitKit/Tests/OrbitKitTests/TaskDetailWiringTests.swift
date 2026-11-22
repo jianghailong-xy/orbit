@@ -54,7 +54,7 @@ final class TaskDetailWiringTests: XCTestCase {
 
     private static let pageOrder = [
         "header(task)", "banners(task)", "actions(task)", "verifierSection(task)", "nowSection(task, run)",
-        "evidenceSection(task, latest)", "landingSection(landing)", "acceptanceSection(task)", "briefSection(task)",
+        "evidenceSection(task, latest)", "landingSection(landing, exemption: exemption, task: task)", "acceptanceSection(task)", "briefSection(task)",
         "planSection(task)", "runsWithSection(task)", "inputsSection(task,", "attributionSection(task)",
         "followedBySection(task)", "activitySection(task)",
     ]

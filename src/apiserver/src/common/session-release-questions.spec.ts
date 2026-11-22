@@ -22,10 +22,10 @@ import { backfilled, RELEASE_SHAPES, releaseFactsOfShape, type ReleaseShape } fr
  *                  them today; only the project branch's cause reading, never deployed, said not.
  *   RESIDUAL       A2, the coordinator's residual shape: a failed turn's copy kept through a release that is no
  *                  failure, with no turn for option A to cut off (production: 0 rows). Read as a failure as stored;
- *                  migration 1428 gives it CANCELLED, a stop, by the coordinator's ruling.
- * Removal step R7 dropped the status bridge, after migration 1428 (R6) wrote the turn outcome of every stored row the
- * bridge was answering for. So every shape, as 1428 leaves it, answers as deploy 2 read it with the bridge, but for A2
- * (now a stop, as ruled) and W5 (in Trash, which 1428 does not write: a stop, and no reader of the failure question
+ *                  migration 1433 gives it CANCELLED, a stop, by the coordinator's ruling.
+ * Removal step R7 dropped the status bridge, after migration 1433 (R6) wrote the turn outcome of every stored row the
+ * bridge was answering for. So every shape, as 1433 leaves it, answers as deploy 2 read it with the bridge, but for A2
+ * (now a stop, as ruled) and W5 (in Trash, which 1433 does not write: a stop, and no reader of the failure question
  * reaches a trashed import). A row a writer leaves after deploy 3 needs no backfill: it answers as deploy 2 read it,
  * but for W7 with no reason recorded, which no writer leaves.
  *
@@ -44,9 +44,9 @@ interface Answers {
   statusFailed: boolean;
   /** Deploy 2's answer for the row as stored. */
   deploy2: boolean;
-  /** This build's answer for the row as stored, before 1428. */
+  /** This build's answer for the row as stored, before 1433. */
   failed: boolean;
-  /** This build's answer for the row as 1428 leaves it. */
+  /** This build's answer for the row as 1433 leaves it. */
   failedBackfilled: boolean;
   finished: boolean;
 }
@@ -92,7 +92,7 @@ test('released by a failure: the shapes named by why answer as named, and a held
         break;
       case 'RESIDUAL':
         assert.equal(a.failed, true, `${name}: as stored, the kept copy reads as a failure`);
-        assert.equal(a.failedBackfilled, false, `${name}: 1428 gives it CANCELLED, a stop, as ruled`);
+        assert.equal(a.failedBackfilled, false, `${name}: 1433 gives it CANCELLED, a stop, as ruled`);
         break;
     }
     if (!a.shape.released) assert.equal(a.failed, false, `${name}: held`);
@@ -106,17 +106,17 @@ test('the work finished: task_done, or a LANDING container released with no end 
   }
 });
 
-test('as 1428 leaves every stored row, each shape answers as deploy 2 read it with the bridge, but for A2 and W5', () => {
+test('as 1433 leaves every stored row, each shape answers as deploy 2 read it with the bridge, but for A2 and W5', () => {
   const differ = ANSWERS.filter((a) => a.failedBackfilled !== a.deploy2).map((a) => a.shape.name);
   assert.deepEqual(differ, ['W5', 'A2'], 'the two named differences, and no other');
   const w5 = ANSWERS.find((a) => a.shape.name === 'W5')!;
-  assert.equal(w5.shape.trashed, true, 'W5 is in Trash, which 1428 does not write');
+  assert.equal(w5.shape.trashed, true, 'W5 is in Trash, which 1433 does not write');
   assert.equal(w5.failedBackfilled, false, 'W5: no turn, so a stop once the bridge is gone');
   for (const a of ANSWERS) {
     if (!a.shape.carriesTurnOutcome && !a.shape.trashed) {
       // The deploy-1 hand-over rows: the bridge answered for them in deploy 2, the backfilled turn outcome now.
       assert.equal(a.failed, false, `${a.shape.name}: as stored, nothing but the status said failed`);
-      assert.equal(a.failedBackfilled, true, `${a.shape.name}: 1428 wrote the FAILED the bridge read`);
+      assert.equal(a.failedBackfilled, true, `${a.shape.name}: 1433 wrote the FAILED the bridge read`);
     }
   }
 });
@@ -161,7 +161,7 @@ test('the new runner protocol: each shape answers both questions as the old prot
     }
     const old = answersOfName(oldProtocol);
     assert.equal(a.failed, old.failed, `${name}: released by a failure, as ${oldProtocol}`);
-    assert.equal(a.failedBackfilled, old.failedBackfilled, `${name}: and as 1428 leaves it, as ${oldProtocol}`);
+    assert.equal(a.failedBackfilled, old.failedBackfilled, `${name}: and as 1433 leaves it, as ${oldProtocol}`);
     assert.equal(a.finished, old.finished, `${name}: the work finished, as ${oldProtocol}`);
   }
   // The four failures read as failures, the stops as stops.
@@ -176,13 +176,13 @@ test('the new runner protocol: each shape answers both questions as the old prot
 test('the table, printed', () => {
   const yes = (value: boolean) => (value ? 'yes' : '-');
   const lines = [
-    '| shape | what | status | end_reason | last_turn_outcome | kind | failed: status (deploy 1) | failed: deploy 2 (bridge) | failed: now, as stored | failed: now, after 1428 | finished: now | why it differs | production |',
+    '| shape | what | status | end_reason | last_turn_outcome | kind | failed: status (deploy 1) | failed: deploy 2 (bridge) | failed: now, as stored | failed: now, after 1433 | finished: now | why it differs | production |',
     '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
   ];
   for (const a of ANSWERS) {
     const s = a.shape;
     const why = [s.failureChange, s.afterDeploy3 ? `${s.afterDeploy3} if written after deploy 3` : null,
-      !s.carriesTurnOutcome ? (s.trashed ? 'in Trash, not backfilled' : 'backfilled by 1428') : null]
+      !s.carriesTurnOutcome ? (s.trashed ? 'in Trash, not backfilled' : 'backfilled by 1433') : null]
       .filter(Boolean).join('; ');
     lines.push(`| ${s.name} | ${s.what} | ${s.status} | ${s.endReason ?? '-'} | `
       + `${s.lastTurnOutcome ?? '-'} | ${s.sessionKind} | ${yes(a.statusFailed)} | ${yes(a.deploy2)} | ${yes(a.failed)} | `

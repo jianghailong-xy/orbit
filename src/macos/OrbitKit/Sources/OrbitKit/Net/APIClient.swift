@@ -1324,13 +1324,6 @@ public final class APIClient: @unchecked Sendable {
         try await postEmpty("projects/\(projectID)/integration/jobs/\(jobID)/retry")
     }
 
-    /// Revert, on a coordinator's change in the project's landing-check history (§12.15 P-R1): the
-    /// server puts the change's old value back and the field then needs a card from the coordinator.
-    /// The answer is not read: the page reads the project again.
-    public func revertSettingChange(projectID: String, changeID: String) async throws {
-        _ = try await postRaw("projects/\(projectID)/setting-changes/\(changeID)/revert", body: Optional<Empty>.none)
-    }
-
     /// The owner's "Land without the check" on a landing in flight (§2.4 J-S5): the server stops it
     /// and lands it again with the landing check not run, recorded as skipped by the owner. The
     /// answer is not read: the card redraws from the integration view read again.
@@ -1379,6 +1372,13 @@ public final class APIClient: @unchecked Sendable {
     public func updateProjectIntegration(_ projectID: String,
                                          _ body: UpdateProjectIntegrationRequest) async throws -> ProjectIntegrationView {
         try await patch("projects/\(projectID)/integration", body: body)
+    }
+
+    /// The owner's Revert on one of the coordinator's recorded landing-check changes (§12.15 P-R1):
+    /// its old value is put back as the owner's own, so the coordinator needs a card for that field
+    /// from then on. Answers the revert's own record; the page reads the project again.
+    public func revertSettingChange(_ projectID: String, changeID: String) async throws -> ProjectSettingChange {
+        try await postEmpty("projects/\(projectID)/setting-changes/\(changeID)/revert")
     }
 
     /// Pause project: nothing starts its tasks or merges it into main by itself until it is resumed;

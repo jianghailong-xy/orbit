@@ -141,7 +141,7 @@ const LANDING_KIND = 'LANDING';
 /**
  * What "released by a failure" reads of a session row, and the status word beside it. The question reads no status:
  * the status bridge that read FAILED beside the turn outcome, for the rows a deploy-1 server released during deploy 2's
- * hand-over, went with removal step R7 (design §12.6, deploy 3), after migration 1428 wrote the turn outcome of every
+ * hand-over, went with removal step R7 (design §12.6, deploy 3), after migration 1433 wrote the turn outcome of every
  * such row. `status` stays in the row (and in RELEASE_FAILURE_SELECT) for the readers that select these columns and
  * read the status word themselves: the held statuses they compare against, the word they publish.
  */

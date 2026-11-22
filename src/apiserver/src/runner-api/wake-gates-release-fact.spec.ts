@@ -56,7 +56,7 @@ interface Row {
 function outcomesOf(status: string, endReason: string | null, filing: string): readonly (string | null)[] {
   // A SUCCEEDED or CANCELLED release whose turn failed is a failure by the turn: no writer leaves one with no end asked.
   // A FAILED release with no end asked carries FAILED on its turn (removal step R2's writers record it, and migration
-  // 1428 wrote it on every stored row the status bridge used to carry, which R7 removed), but for the failed import,
+  // 1433 wrote it on every stored row the status bridge used to carry, which R7 removed), but for the failed import,
   // which records none and is in Trash.
   if (status === 'FAILED' && endReason === null) return filing === 'trash' ? ['FAILED', null] : ['FAILED'];
   if (status === 'FAILED') return OUTCOMES;
