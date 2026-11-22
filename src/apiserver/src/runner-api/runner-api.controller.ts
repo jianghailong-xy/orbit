@@ -3,7 +3,7 @@ import { appendRunQuestionContext, questionRecipient, RUN_QUESTION_PREFIX } from
 import { DRAIN_SKIPS_HELD, translationLanguages, turnTranslationOf } from '../sessions/turn-translation';
 import { isRunNotifyTurn, runNotifyContent } from '../sessions/run-notify';
 import { acceptedFinalizeBranch, codelessClaimFields } from '../sessions/codeless-checkout';
-import { BG_OWNER_STOP_V1, BROWSER_CLEAR_V1, type BackgroundJobStopCommand, CONDITION_PROBE_CAPABILITY, readMergeRecovery, mergeRecoveryReady, RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON, type MergeRecovery } from '@orbit/shared';
+import { BG_OWNER_STOP_V1, BROWSER_CLEAR_V1, BROWSER_OPEN_V1, type BackgroundJobStopCommand, CONDITION_PROBE_CAPABILITY, readMergeRecovery, mergeRecoveryReady, RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON, type MergeRecovery } from '@orbit/shared';
 import { OWNER_SECRET_CAPABILITY, OwnerSecretsService } from '../owner-requests/owner-secrets.service';
 import { ConditionsService } from '../conditions/conditions.service';
 import { GithubWorkspaceService } from '../github/github-workspace.service';
@@ -574,12 +574,14 @@ import {
 import { storedBrowserState } from '../managed-runners/browser-state';
 import { refuseManagedRunnerDeletion } from '../managed-runners/managed-runner-delete';
 import { DELETE_APPROVAL_TOOL_NAMES, deleteCardInput } from './runner-delete-approval';
+import { BROWSER_CLEAR_APPROVAL_TOOL_NAME, browserClearCardInput } from './runner-browser-clear-approval';
 import { sanitizeWorkspaceWrite } from './runner-agents.controller';
 import { workspaceWriteCardInput } from './runner-workspace-approval';
 import { turnOutcomeOf } from './turn-outcome';
 import { carryingTurnOf, recordCarryingTurnOutcome } from '../common/carrying-turn';
 import { authorizeManagedRunnerInstance, type ManagedRunnerInstance } from '../managed-runners/managed-runner-instance';
 import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/managed-runner-gate';
+import { browserClaimFields, MANAGED_RUNNER_BROWSER_GATE, type ManagedRunnerBrowserGate } from '../managed-runners/managed-runner-browser-gate';
 import {
   managedRunnerHeartbeat,
   sanitizeManagedWorkload,
@@ -1759,6 +1761,8 @@ export class RunnerApiController {
      */
     @Optional() private readonly coordinatorHandoffs?: CoordinatorHandoffService,
     @Optional() private readonly conditions?: ConditionsService,
+    /** The browser switch, said on every reclaim as on a claim (browserClaimFields); absent in hand-built specs: off. */
+    @Optional() @Inject(MANAGED_RUNNER_BROWSER_GATE) private readonly browserGate?: ManagedRunnerBrowserGate,
     @Optional() private readonly coordinatorFacts?: CoordinatorFactQueueService,
   ) {
     this.files = files ?? new FilesService(prisma);
@@ -2782,6 +2786,7 @@ export class RunnerApiController {
     let postponeSelfUpdateUntil: RunnerHeartbeatResponse['postponeSelfUpdateUntil'];
     let selfUpdateNow: RunnerHeartbeatResponse['selfUpdateNow'];
     let clearBrowserProfile: RunnerHeartbeatResponse['clearBrowserProfile'];
+    let openBrowser: RunnerHeartbeatResponse['openBrowser'];
     let regionCheckRequest: RunnerHeartbeatResponse['regionCheckRequest'];
     let forkSnapshotsOpen: RunnerHeartbeatResponse['forkSnapshotsOpen'];
     try {
@@ -2863,6 +2868,11 @@ export class RunnerApiController {
       if (runnerSupportsCapability(capabilities, BROWSER_CLEAR_V1)) {
         clearBrowserProfile = await this.drainBrowserClearRequest(runner.id);
       }
+      // A session's browser_open (managed-runners/browser-state.ts#open), claimed the same way, by a runner that
+      // declares browser-open/v1 only.
+      if (runnerSupportsCapability(capabilities, BROWSER_OPEN_V1)) {
+        openBrowser = await this.drainBrowserOpenRequest(runner.id);
+      }
       // The owner's Check again, redelivered rather than claimed: a beat that skips it costs nothing, so it is last.
       regionCheckRequest = await this.drainRegionCheckRequest(runner.id, capabilities);
       // A listing, read on every full beat like agentDirs; a beat that fails before it states nothing, which the
@@ -2937,6 +2947,7 @@ export class RunnerApiController {
       postponeSelfUpdateUntil,
       selfUpdateNow,
       ...(clearBrowserProfile ? { clearBrowserProfile } : {}),
+      ...(openBrowser ? { openBrowser } : {}),
       // Only when a claim holds a command for this process: an older runner's response stays the shape
       // it always was, and a direct caller comparing responses sees no new key.
       ...(codexRateLimitResetRequest ? { codexRateLimitResetRequest } : {}),
@@ -3313,6 +3324,24 @@ export class RunnerApiController {
    * the claim, predicated on the time read, so a second press written between the read and the clear stays for the
    * next beat. The runner's `browser.profileClearedAt` is the answer.
    */
+  /** A session's browser_open, claimed by the beat that hands it over: what it asks for, or undefined. */
+  private async drainBrowserOpenRequest(runnerId: string): Promise<RunnerHeartbeatResponse['openBrowser']> {
+    const row = await this.prisma.runner.findUnique({
+      where: { id: runnerId },
+      select: { browserOpenRequestedAt: true, browserOpenRequest: true },
+    });
+    const at = row?.browserOpenRequestedAt;
+    if (!at) return undefined;
+    const claimed = await this.prisma.runner.updateMany({
+      where: { id: runnerId, browserOpenRequestedAt: at },
+      data: { browserOpenRequestedAt: null, browserOpenRequest: Prisma.DbNull },
+    });
+    if (claimed.count === 0) return undefined;
+    const asked = (row.browserOpenRequest ?? {}) as { sessionId?: unknown; url?: unknown };
+    const sessionId = typeof asked.sessionId === 'string' ? asked.sessionId : '';
+    return typeof asked.url === 'string' && asked.url !== '' ? { sessionId, url: asked.url } : { sessionId };
+  }
+
   private async drainBrowserClearRequest(runnerId: string): Promise<true | undefined> {
     const row = await this.prisma.runner.findUnique({ where: { id: runnerId }, select: { browserClearRequestedAt: true } });
     const at = row?.browserClearRequestedAt;
@@ -4741,6 +4770,8 @@ export class RunnerApiController {
         ...watchClaimFields(watchRollout, s.ownerId),
         // And the wiki, on the same rule (wiki/wiki-rollout.ts).
         ...wikiClaimFields(wikiRollout, s.ownerId),
+        // And the browser switch (managed-runner-browser-gate.ts), read as the claim path reads it.
+        ...browserClaimFields(this.browserGate),
         // cf. the claim path: the Agent's Workflows switch, which may have moved since the session was first claimed.
         ...workflowClaimFields(workspace),
         // cf. the claim path: a scheduled run's session lists schedule_run_report.
@@ -6758,6 +6789,9 @@ export class RunnerApiController {
     // session's own, is refused before it is filed, since no answer to it could be acted on.
     const deleting = await deleteCardInput(this.prisma, { ownerId, ...asker }, toolName, input);
     if (deleting) return deleting as unknown as Prisma.InputJsonValue;
+    // So does browser_clear_logins' card, and the clear goes through only against it (runner-browser-clear-approval.ts).
+    const clearing = await browserClearCardInput(this.prisma, this.browserGate, ownerId, toolName);
+    if (clearing) return clearing as unknown as Prisma.InputJsonValue;
     // So does a workspace write's, and the write goes through only against it (runner-workspace-approval.ts).
     if (WORKSPACE_WRITE_APPROVAL_TOOL_NAMES.has(toolName)) {
       const write = sanitizeWorkspaceWrite(PublicIdPipe.forFields('runnerId').transform(input, { type: 'body' }));
@@ -6820,6 +6854,8 @@ export class RunnerApiController {
     // Deleting a runner or a workspace is asked every time; the delete routes refuse a card no person
     // answered, so a rule that answered it would only turn the owner's "always" into a refusal.
     if (DELETE_APPROVAL_TOOL_NAMES.has(dto.toolName)) return false;
+    // And clearing the browser's saved logins: the clear route refuses a card no person answered.
+    if (dto.toolName === BROWSER_CLEAR_APPROVAL_TOOL_NAME) return false;
     // The same for a workspace write: each one is its own question, about values no rule has read.
     if (WORKSPACE_WRITE_APPROVAL_TOOL_NAMES.has(dto.toolName)) return false;
     // A card that names only a server may be about any of its tools, and a rule cannot have been
@@ -10496,6 +10532,9 @@ export class RunnerApiController {
       if (!outcome.taskReclaimed) this.realtime.publishTaskChanged(sessionId, outcome.taskId);
       await this.tasks?.deliverDispatchRefusalAfterCommit(outcome.taskId);
     }
+    // §12.5 W6: a failed landing handed to this work session while it was on its way to its DONE's end
+    // is delivered now that the end is over — the landing-fix turn revives it. Nothing for any other.
+    if ('taskId' in outcome && outcome.taskId) await this.openItems?.offerLandingFixesTo(sessionId);
     if ('currentWorkTerminalized' in outcome && (outcome.currentWorkTerminalized ?? 0) > 0) {
       this.realtime.publishQueuedTurnsChanged(sessionId);
     }

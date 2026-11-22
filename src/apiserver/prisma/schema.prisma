@@ -938,6 +938,10 @@ model Runner {
   // The owner's Clear saved logins (1090): handed to the next heartbeat as clearBrowserProfile and cleared there,
   // like selfUpdateRequestedAt. The report's profileClearedAt is the answer.
   browserClearRequestedAt DateTime? @map("browser_clear_requested_at")
+  // A session's browser_open (1237): handed to the next heartbeat as openBrowser and cleared there, like
+  // browserClearRequestedAt. browserOpenRequest is what it asks for: {sessionId, url?}, cleared with it.
+  browserOpenRequestedAt DateTime? @map("browser_open_requested_at")
+  browserOpenRequest Json? @map("browser_open_request")
   // The push that something of the owner's waits on this runner's drain (0595): set by the one
   // heartbeat that sends it, cleared by a beat that is not draining, so each drain pushes once.
   drainWaitingPushedAt DateTime? @map("drain_waiting_pushed_at")
@@ -8240,6 +8244,10 @@ model OwnerRequest {
   /// SETTINGS_CHANGE (migration 1273): `{ changes: [{ key, from, to, tier }] }`, written by the server. NULL otherwise.
   /// Its partial unique `owner_request_settings_change_pending_key` holds a session to one PENDING SETTINGS_CHANGE.
   payload             Json?
+  /// BROWSER_SIGN_IN (migration 1393): the site the agent asked the owner to sign in to, and the Orbit Cloud runner
+  /// whose browser they sign in on. Nothing else of the browser is stored. History, no FK.
+  browserSite             String?   @map("browser_site")
+  browserRunnerId         String?   @map("browser_runner_id") @db.Uuid
   expiresAt           DateTime? @map("expires_at") @db.Timestamptz(3)
   clientRequestId     String?   @map("client_request_id")
   resolvedAt          DateTime? @map("resolved_at") @db.Timestamptz(3)
@@ -10627,4 +10635,18 @@ model HelpFeedback {
   @@id([userId, kind, itemId])
   @@index([kind, itemId])
   @@map("help_feedback")
+}
+
+/// Which model ids name the same model (migration 1432), for Settings → Model routing: a row's name and pooled
+/// Quality. Keyed by modelRuleKey (model-identity.ts); what its rules cannot settle DeepSeek decides once.
+/// Not an owner's row: an id means the same on every account. Display only: routing never reads it.
+model ModelIdentity {
+  ruleKey      String   @id @map("rule_key")
+  /// The rule key of the model this one is; its own when it is no other's.
+  canonicalKey String   @map("canonical_key")
+  /// The model's vendor name (`Claude Sonnet 5.5`); null when none was given.
+  name         String?
+  decidedAt    DateTime @default(now()) @map("decided_at") @db.Timestamptz(3)
+
+  @@map("model_identity")
 }

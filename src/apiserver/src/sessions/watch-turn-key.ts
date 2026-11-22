@@ -90,6 +90,15 @@ export const EVIDENCE_SEND_BACK_TURN_KEY_PREFIX = 'evidence-send-back:v1:';
  */
 export const OPEN_ITEM_TURN_KEY_PREFIX = 'open-item:v1:';
 
+/**
+ * The namespace a failed landing is handed to its task's own work session in
+ * (projects/landing-fix-turn.ts `landingFixTurnId`, docs/project-integration-line-contract.md §12.5 W6):
+ * `landing-fix:v1:<jobId>`. The one platform prefix that may revive an ended session — one that ended
+ * because its task was done (sessions/platform-turn-revival.ts). Spelled here for the reason the reply
+ * prefix is.
+ */
+export const LANDING_FIX_TURN_KEY_PREFIX = 'landing-fix:v1:';
+
 /** Every prefix a caller's own `clientTurnId` may not start with. */
 const RESERVED_TURN_KEY_PREFIXES = [
   RUN_QUESTION_PREFIX,
@@ -107,6 +116,8 @@ const RESERVED_TURN_KEY_PREFIXES = [
   // (DeepSeek Harness, P5), and whose exit code is judged against the task. Only the server queues one.
   TASK_ACCEPTANCE_CLIENT_TURN_PREFIX,
   OPEN_ITEM_TURN_KEY_PREFIX,
+  // Its turn revives a session that ended because its task was done; a caller naming it would buy that.
+  LANDING_FIX_TURN_KEY_PREFIX,
 ] as const;
 
 /**
@@ -155,6 +166,11 @@ export function assertClientTurnIdNotReserved(clientTurnId: string | undefined |
   if (reserved === OPEN_ITEM_TURN_KEY_PREFIX) {
     throw new BadRequestException(
       `clientTurnId must not start with "${OPEN_ITEM_TURN_KEY_PREFIX}" — that prefix is reserved for the exception items the server hands to a project's coordinator itself, each read back off its key. Choose your own key, such as a UUID.`,
+    );
+  }
+  if (reserved === LANDING_FIX_TURN_KEY_PREFIX) {
+    throw new BadRequestException(
+      `clientTurnId must not start with "${LANDING_FIX_TURN_KEY_PREFIX}" — that prefix is reserved for the failed landings the server hands to a task's own work session itself (docs/project-integration-line-contract.md §12.5 W6). Choose your own key, such as a UUID.`,
     );
   }
   if (reserved) {

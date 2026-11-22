@@ -207,6 +207,14 @@ const evidenceInclude = {
 
 type EvidenceRow = Prisma.TaskCompletionEvidenceGetPayload<{ include: typeof evidenceInclude }>;
 
+/** A failed landing of this task is in its work session's hands (§12.4, W5): offered and not handed back. */
+async function landingFixInProgress(tx: Prisma.TransactionClient, taskId: string): Promise<boolean> {
+  const held = await tx.projectOpenItem.count({
+    where: { taskId, state: 'OPEN', workSessionOfferedAt: { not: null }, workSessionReturnedAt: null },
+  });
+  return held > 0;
+}
+
 function legacyImportResponse(row: EvidenceRow['legacyImport']): TaskLegacyEvidenceImportDto | null {
   if (!row) return null;
   return {
@@ -373,6 +381,18 @@ export class TaskCompletionEvidenceService {
         select: { id: true },
       });
       if (!sourceSession) throw new NotFoundException('source session for task not found');
+      // §12.5 W6 (revision 42): while a failed landing of this DONE task is in its work session's hands,
+      // the session is fixing the landing, not the work — the work was judged already, and the task stays
+      // DONE through the fix. A revision submitted now would answer a question nobody is asking.
+      if (task.status === TaskStatus.DONE && await landingFixInProgress(tx, taskId)) {
+        throw new ConflictException({
+          code: 'TASK_DONE_LANDING_FIX',
+          message: 'this task is DONE and Orbit handed its failed landing to its work session to fix; no evidence is '
+            + 'asked for. Fix the landing on the branch, commit, and end the turn: Orbit lands the new commit and '
+            + 'runs the checks again by itself. Nothing was written.',
+          requiredAction: 'FIX_THE_LANDING_AND_END_THE_TURN',
+        });
+      }
       const sourceAttempt = await tx.taskAttempt.findUnique({
         where: { sessionId: sourceSession.id },
         select: { id: true },

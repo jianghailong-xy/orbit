@@ -3664,6 +3664,11 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 	specs = append(specs, subagentCLICapabilities...)
 	// Ungated too, and SessionOnly: a proposal is a card in the session's conversation (settings_tools.go).
 	specs = append(specs, settingsCLICapabilities...)
+	// The browser commands only while the server's browser switch is on, as the engine was spawned with it: off, the
+	// `orbit browser` family is absent (browser_tools.go).
+	if browserToolsEnabledFromEnv() {
+		specs = append(specs, browserCLICapabilitiesHere()...)
+	}
 	// The guide reads the catalogue and asks the server nothing, so every process is offered it.
 	specs = append(specs, guideCLICapabilities...)
 	if includeOrchestration {
@@ -3714,6 +3719,10 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 	var allDescriptors map[string]map[string]interface{}
 	for _, op := range built.Ops {
 		if op.CLI == nil || listed[op.Tool] {
+			continue
+		}
+		// Off means absent: not withheld with a reason, not there (browser_tools.go).
+		if browserOpAbsent(op) {
 			continue
 		}
 		if allDescriptors == nil {
