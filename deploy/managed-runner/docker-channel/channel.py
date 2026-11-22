@@ -18,9 +18,10 @@ The rules it keeps, whoever asks:
   - Every volume and container it creates carries `orbit.managed-runner.instance=<instanceId>`. It
     reads, returns, changes and removes nothing without that label.
   - Containers come only from its template: the configured image, UID 10001, every capability
-    dropped, no-new-privileges, a read-only root filesystem, CPU, memory, PID and /tmp limits (an
-    executable tmpfs, nosuid and nodev), the one configured network, and two volumes: the runner's
-    own data volume and its bootstrap volume.
+    dropped, no-new-privileges, a read-only root filesystem, CPU, memory and PID limits, the one
+    configured network, and two volumes: the runner's own data volume and its bootstrap volume. /tmp
+    is a directory of the data volume (TMP_SUBPATH), so filling it gives the writer ENOSPC within the
+    volume's disk limit instead of taking the container's memory as a tmpfs did.
     A request names identities and amounts, never Docker parameters. Privileged mode, capabilities,
     host directories, the Docker socket, host network/PID/IPC, devices and anything else it does
     not know are refused by name. What it is about to create is checked against the same rules,
@@ -75,10 +76,10 @@ import traceback
 import urllib.parse
 import uuid
 
-# Docker Engine 25 and later; every field used here exists in it but one: TmpfsOptions.Options, which makes /tmp
-# executable, came with Engine 27 (API 1.46). An older engine ignores it, and its /tmp stays noexec.
-API = "/v1.44"
-EXEC_TMPFS_ENGINE = 27
+# Docker Engine 26 and later (API 1.45): the first to mount a volume's subdirectory (VolumeOptions.Subpath), which is
+# how the data volume's TMP_SUBPATH becomes the runner's /tmp.
+API = "/v1.45"
+SUBPATH_ENGINE = 26
 LABEL = "orbit.managed-runner."
 INSTANCE_LABEL = LABEL + "instance"
 KIND_LABEL = LABEL + "kind"
@@ -101,6 +102,10 @@ RUNNER_USER = "10001:10001"
 DATA_MOUNT = "/home/orbit"
 BOOT_MOUNT = "/run/orbit-bootstrap"
 TMP_MOUNT = "/tmp"
+# The data volume's directory mounted at /tmp (src/apiserver/src/managed-runners/managed-runner-resources.ts, TMP_SUBPATH,
+# is the same on Kubernetes). Made before the container that mounts it, mode 1777 (ensure_tmp_directory); the runner
+# empties it at start and after sessions (src/runner-go/managed_tmp.go).
+TMP_SUBPATH = ".orbit-tmp"
 RUNNER_NAME = "Orbit Cloud"
 MAX_BODY = 64 * 1024
 GiB = 2 ** 30
@@ -566,10 +571,10 @@ def container_spec(config, request, instance_uid, extra_labels=None):
                  "VolumeOptions": {"NoCopy": False}},
                 {"Type": "volume", "Source": boot_volume_name(runner_id, generation), "Target": BOOT_MOUNT, "ReadOnly": False,
                  "VolumeOptions": {"NoCopy": True, "Labels": boot_labels}},
-                # Executable: builds and test runners (go test among them) run what they write there. Docker keeps it
-                # nosuid and nodev whatever is asked, and takes no option here but exec and noexec.
-                {"Type": "tmpfs", "Target": TMP_MOUNT,
-                 "TmpfsOptions": {"SizeBytes": resources["tmpBytes"], "Mode": 0o1777, "Options": [["exec"]]}},
+                # A directory of the data volume: full, it gives the writer ENOSPC, and it counts in the volume's disk
+                # limit rather than in the container's memory. Executable, as the volume is.
+                {"Type": "volume", "Source": data_volume_name(runner_id), "Target": TMP_MOUNT, "ReadOnly": False,
+                 "VolumeOptions": {"NoCopy": True, "Subpath": TMP_SUBPATH}},
             ],
             "Binds": [],
             "Devices": [],
@@ -639,8 +644,9 @@ def unsafe(config, spec):
     bad(host.get("MemorySwap") != host.get("Memory"), "swap beyond the memory limit")
     bad((host.get("RestartPolicy") or {}).get("Name") not in ("no", "", None), "a restart policy")
     mounts = host.get("Mounts") or []
-    expected_targets = {DATA_MOUNT: "volume", BOOT_MOUNT: "volume", TMP_MOUNT: "tmpfs"}
+    expected_targets = {DATA_MOUNT: "volume", BOOT_MOUNT: "volume", TMP_MOUNT: "volume"}
     bad(sorted(m.get("Target") for m in mounts) != sorted(expected_targets), "mounts other than the data volume, bootstrap volume and /tmp")
+    data_sources = {m.get("Source") for m in mounts if m.get("Target") == DATA_MOUNT}
     for mount in mounts:
         kind, target, source = mount.get("Type"), mount.get("Target"), mount.get("Source") or ""
         bad(expected_targets.get(target) != kind, f"a {kind} mount at {target}")
@@ -650,11 +656,10 @@ def unsafe(config, spec):
             bad(not runner_of_data_volume(source), "a data volume that is not a managed runner's")
         if target == BOOT_MOUNT:
             bad(not re.fullmatch(r"mr-boot-[0-9a-f-]{36}-g[1-9][0-9]*", source), "a bootstrap volume that is not a managed runner's")
-        if target == TMP_MOUNT and kind == "tmpfs":
-            tmpfs = mount.get("TmpfsOptions") or {}
-            bad(not (tmpfs.get("SizeBytes") or 0) > 0, "a /tmp without a size limit")
-            # None: an engine older than 27 drops the option, and its /tmp stays noexec (prepare warns).
-            bad(tmpfs.get("Options") not in (None, [], [["exec"]]), "/tmp mount options other than exec")
+        if target == TMP_MOUNT:
+            bad(source not in data_sources, "a /tmp that is not the container's own data volume")
+            bad(((mount.get("VolumeOptions") or {}).get("Subpath")) != TMP_SUBPATH,
+                f"a /tmp that is not the data volume's {TMP_SUBPATH} directory")
     env = spec.get("Env") or []
     bad(sorted(e.split("=", 1)[0] for e in env) != sorted(RUNNER_ENV_KEYS), "an environment other than the runner's")
     bad(any("docker.sock" in e or "DOCKER_HOST" in e for e in env), "the Docker socket in the environment")
@@ -670,13 +675,16 @@ def unsafe_container(config, inspected, image_env=()):
     env = cfg.get("Env") or []
     template_env = [e for e in env if e.split("=", 1)[0] in RUNNER_ENV_KEYS]
     foreign_env = [e.split("=", 1)[0] for e in env if e.split("=", 1)[0] not in RUNNER_ENV_KEYS and e not in image_env]
+    # Docker's own list of mounts does not say which subdirectory of a volume it mounted; what it was asked for does.
+    options = {m.get("Target"): m.get("VolumeOptions") for m in host.get("Mounts") or [] if m.get("Type") == "volume"}
     as_spec = {
         "Image": inspected.get("Image"),
         "User": cfg.get("User"),
         "Env": template_env,
         "HostConfig": {
             **host,
-            "Mounts": [{"Type": m.get("Type"), "Target": m.get("Destination"), "Source": m.get("Name") or m.get("Source") or ""}
+            "Mounts": [{"Type": m.get("Type"), "Target": m.get("Destination"), "Source": m.get("Name") or m.get("Source") or "",
+                        "VolumeOptions": options.get(m.get("Destination"))}
                        for m in mounts if m.get("Type") != "tmpfs"]
             + [{"Type": "tmpfs", "Target": target} for target in (host.get("Tmpfs") or {})]
             + [{"Type": "tmpfs", "Target": m.get("Target"), "TmpfsOptions": m.get("TmpfsOptions")}
@@ -689,6 +697,17 @@ def unsafe_container(config, inspected, image_env=()):
     if foreign_env:
         problems.append(f"environment the template did not set: {', '.join(sorted(foreign_env))}")
     return problems
+
+
+def tmp_directory_archive():
+    """The data volume's /tmp directory, as the tar Docker extracts into the volume: root-owned, mode 1777, as /tmp is."""
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode="w", format=tarfile.PAX_FORMAT) as tar:
+        entry = tarfile.TarInfo(TMP_SUBPATH)
+        entry.type, entry.mode, entry.uid, entry.gid, entry.mtime = tarfile.DIRTYPE, 0o1777, 0, 0, int(time.time())
+        entry.uname = entry.gname = "root"
+        tar.addfile(entry)
+    return buffer.getvalue()
 
 
 def bootstrap_archive(token, generation, instance):
@@ -786,8 +805,9 @@ class Channel:
         log(f"containers of this instance: at most {self.max_containers}"
             + ("" if configured else " (one per CPU and per GiB of this host's memory, whichever is fewer)"))
         engine = re.match(r"(\d+)\.", info.get("ServerVersion") or "")
-        if engine and int(engine.group(1)) < EXEC_TMPFS_ENGINE:
-            log(f"warning: Docker {info.get('ServerVersion')} ignores TmpfsOptions.Options: runners' /tmp stays noexec until Docker {EXEC_TMPFS_ENGINE}")
+        if engine and int(engine.group(1)) < SUBPATH_ENGINE:
+            raise ValueError(f"Docker {info.get('ServerVersion')} cannot mount a volume's subdirectory, which runners' /tmp is: "
+                             f"this channel needs Docker {SUBPATH_ENGINE} or later")
         probe = self.config.get("diskProbePath")
         if probe and not os.path.isdir(probe):
             raise ValueError(f"the disk probe path {probe} is not a directory: the storage budget would measure nothing")
@@ -1144,8 +1164,7 @@ class Channel:
         for key, ceiling in (("cpuMillis", limits["maxCpuMillis"]), ("memoryBytes", limits["maxMemoryBytes"]),
                              ("pids", limits["maxPids"]), ("tmpBytes", limits["maxTmpBytes"])):
             count_field(resources, key, ceiling, f"resources.{key}")
-        if resources["tmpBytes"] > resources["memoryBytes"]:
-            raise Refused(400, "PARAMETER_REFUSED", "resources.tmpBytes is held in memory and cannot exceed resources.memoryBytes")
+        # tmpBytes is still asked for and bounded, as the manager sends it, but sizes nothing: /tmp is on the data volume.
         runner = strict(body.get("runner"), {"serverUrl", "maxConcurrent"}, "runner")
         server_url_field(runner.get("serverUrl"))
         count_field(runner, "maxConcurrent", limits["maxConcurrent"], "runner.maxConcurrent")
@@ -1238,6 +1257,7 @@ class Channel:
                 raise Refused(429, "CONTAINER_LIMIT", f"containers of this instance: {count}, at its limit (limits.maxContainers "
                               f"{self.max_containers}); another is made only once one of them is removed")
             try:
+                self.ensure_tmp_directory(name, spec)
                 self.docker.create_container(name, spec)
             except DockerError as error:
                 if error.status == 409:
@@ -1257,6 +1277,19 @@ class Channel:
             raise
         log(f"container {name} created and started")
         return self.container_view(self.docker.container(name))
+
+    def ensure_tmp_directory(self, name, spec):
+        """The data volume's TMP_SUBPATH, made before the container that mounts it at /tmp: Docker mounts a volume's
+        subdirectory only once it is there. Made through a container under the runner's own name that mounts the data
+        volume alone, never starts, and is removed at once. One a stopped channel left behind breaks the template, so
+        it is removed before it could ever start (create_container, finish_interrupted_creates)."""
+        prep = json.loads(json.dumps(spec))
+        prep["HostConfig"]["Mounts"] = [m for m in prep["HostConfig"]["Mounts"] if m["Target"] == DATA_MOUNT]
+        self.docker.create_container(name, prep)
+        try:
+            self.docker.put_archive(name, DATA_MOUNT, tmp_directory_archive())
+        finally:
+            self.docker.remove_container(name)
 
     def populate_and_start(self, name, credential, generation, runner_id, instance_uid):
         instance = {"runnerId": runner_id, "generation": generation, "instanceUid": instance_uid}
