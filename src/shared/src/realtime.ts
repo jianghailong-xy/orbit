@@ -150,10 +150,11 @@ export const CONTROL_HINT_OWNER_REQUESTS = 'owner_requests';
 
 /** `data` for `sessions.list_changed`. */
 export interface ControlListChanged {
-  /** The account's Open-list data version as it stood when the hint was sent: the opaque part of the
-   *  ETag the unfiltered Open list is served with (`W/"ol1-<version>"`). A filtered list's ETag is
-   *  derived from it, so a client compares it with nothing but a previous hint's. The first hint a
-   *  stream gets, shortly after it connects, carries the current version even when nothing moved. */
+  /** An opaque hint token: the account's Open-list counter sums and the clock part of the list (runners'
+   *  id, name, status and liveness, share links, foreign running turns, the clock thresholds), which
+   *  leaves out runner heartbeats. It is NOT the Open list's ETag version. A client compares it with
+   *  nothing but a previous hint's. The first hint a stream gets, shortly after it connects, carries
+   *  the current token even when nothing moved. */
   version: string;
 }
 

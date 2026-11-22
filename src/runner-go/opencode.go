@@ -939,6 +939,10 @@ func openCodeConfigContent(job *ClaimedSession, scratchDir, agentName string, es
 		if runID := strings.TrimSpace(job.Agent.Env[envSubagentRunID]); runID != "" {
 			environment[envSubagentRunID] = runID
 		}
+		// A remote SubAgent's mode, which its Plan gate reads (sessionPermissionMode).
+		if mode := strings.TrimSpace(job.Agent.Env[envSubagentRemoteMode]); mode != "" {
+			environment[envSubagentRemoteMode] = mode
+		}
 		// Where `orbit mcp` reaches the runner to start a background job the runner
 		// owns. Written here as well as into the OpenCode process env, because this
 		// block is what OpenCode hands its local MCP servers.

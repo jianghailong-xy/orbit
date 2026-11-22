@@ -328,20 +328,20 @@ final class ProjectDetailModel {
         await load()
     }
 
-    /// Revert, on a coordinator's change to the landing check (§12.15 P-R1, D7): the old value goes
-    /// back and the field needs a card from then on. Then the page reads everything again, the list
-    /// with it. Throws what the server answered, for the list to say.
-    func revertSettingChange(_ changeID: String) async throws {
-        try await api.revertSettingChange(projectID: projectID, changeID: changeID)
-        onChanged()
-        await load()
-    }
-
     /// "Land without the check" on the landing in flight (§2.4 J-S5): the server stops it and lands
     /// it again with the landing check not run. Then the page reads everything again, so the card
     /// says where the skip stands. Throws what the server answered, for the card to say.
     func skipLandingCheck(_ taskID: String) async throws {
         try await api.skipLandingCheck(projectID, taskID: taskID)
+        await load()
+    }
+
+    /// The owner's Revert on one of the coordinator's landing-check changes (§12.15 P-R1): the old
+    /// value goes back as the owner's own; then the page reads everything again, so the list and the
+    /// setting say where things stand. Throws what the server answered, for the page to say.
+    func revertSettingChange(_ changeID: String) async throws {
+        _ = try await api.revertSettingChange(projectID, changeID: changeID)
+        onChanged()
         await load()
     }
 
