@@ -251,7 +251,10 @@ final class WikiChatModel {
             try? await Task.sleep(nanoseconds: 400_000_000)
             guard let self else { return }
             self.nudgeTask = nil
-            await self.reloadLoaded()
+            // Hidden since it was asked: owed, one read when the app is shown (§4 R3).
+            VisibilityGate.app.read("wiki-chat.loaded") { [weak self] in
+                Task { await self?.reloadLoaded() }
+            }
         }
     }
 

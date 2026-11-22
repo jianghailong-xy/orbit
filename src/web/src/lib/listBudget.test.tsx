@@ -32,7 +32,8 @@ import { useSessionProjectData } from './useSessionProjectData';
  *      for an event about what a watch follows.
  * W6 — a reopened stream reads what is on screen once, a few at a time, a browser back online too.
  * W7 — a workspace changed (`agent.changed`) re-reads the workspaces.
- * W4 — a tab's project reads are one list: a tenth of them a minute while the stream is live.
+ * W4 — a workspace list places its projects with one read: once on load, once a window for an event about
+ *      one of them, the safety read once a minute, nothing while hidden.
  */
 
 const h = vi.hoisted(() => ({
@@ -61,7 +62,9 @@ vi.mock('../api', async (importOriginal) => {
   return {
     ...actual,
     getToken: () => 'token',
-    api: vi.fn((path: string) => answer(path, () => (path.startsWith('/watches') ? h.watches : []))),
+    api: vi.fn((path: string) => answer(path, () => (path.startsWith('/watches')
+      ? h.watches
+      : path.startsWith('/sessions/project-placement') ? { projects: [] } : []))),
     getSession: vi.fn((id: string) => answer(`/sessions/${id}`, () => ({ id, status: 'RUNNING' }))),
     getSessionDiff: vi.fn((id: string) => answer(`/sessions/${id}/diff`, () => ({ files: [] }))),
   };
@@ -165,7 +168,11 @@ const exactly = (path: string) => (candidate: string): boolean => candidate === 
 const startsWith = (prefix: string) => (candidate: string): boolean => candidate.startsWith(prefix);
 const projectRead = (projectId: string) => (path: string): boolean =>
   path.startsWith('/sessions?') && new URLSearchParams(path.split('?')[1]).get('projectId') === projectId;
-const WATCH_READS = 4; // one watches read is four requests (queries.ts watchesQuery)
+/** The workspace list's placement read (useSessionProjectData), naming exactly these projects when given. */
+const placementRead = (...projectIds: string[]) => (path: string): boolean =>
+  path.startsWith('/sessions/project-placement?') &&
+  (projectIds.length === 0 || new URLSearchParams(path.split('?')[1]).get('projectIds') === [...projectIds].sort().join(','));
+const WATCH_READS = 1; // one watches read is one request (queries.ts watchesQuery, GET /watches?following=true)
 
 const OPEN_LIST = sessionsQuery({ runnerId: 'R1', workspaceId: 'W1', view: 'open', limit: 40 });
 const isOpenList = (path: string): boolean => path.startsWith('/sessions?runnerId=R1&workspaceId=W1');
@@ -179,7 +186,7 @@ function OnScreen({ queries }: { queries: UseQueryOptions<any, any, any, any>[] 
 /** A workspace list's project reads, as WorkspaceView makes them (useSessionProjectData). */
 function ProjectReads({ sessions }: { sessions: SessionListItem[] }): null {
   const controlLive = useControlPlaneLive();
-  useSessionProjectData({ sessions, view: 'open', enabled: true, controlLive, needsYou: () => false });
+  useSessionProjectData({ sessions, view: 'open', enabled: true, controlLive });
   return null;
 }
 
@@ -234,13 +241,13 @@ describe('R2: while the stream is down, the gated polls back off together', () =
     random = vi.spyOn(Math, 'random').mockReturnValue(0); // no jitter, so the steps read exactly
     await mount(<ProjectReads sessions={[member('C1', 'P1', 'COORDINATOR')]} />);
     await open();
-    expect(reads(projectRead('P1')), 'the project was never read').toBeGreaterThan(0);
+    expect(reads(placementRead('P1')), 'the project was never read').toBeGreaterThan(0);
 
     const droppedAt = Date.now();
     const from = mark();
     await drop();
     await advance(150_000);
-    const times = h.calls.slice(from).filter((call) => projectRead('P1')(call.path)).map((call) => call.at - droppedAt);
+    const times = h.calls.slice(from).filter((call) => placementRead('P1')(call.path)).map((call) => call.at - droppedAt);
     const gaps = times.map((at, i) => at - (i === 0 ? 0 : times[i - 1]));
     expect(gaps.slice(0, 5), 'the polls did not back off 4 → 8 → 16 → 30 s').toEqual([4_000, 8_000, 16_000, 30_000, 30_000]);
     expect(Math.min(...gaps.slice(3)), 'a poll came faster than once in 30 s after the backoff capped').toBeGreaterThanOrEqual(30_000);
@@ -249,14 +256,18 @@ describe('R2: while the stream is down, the gated polls back off together', () =
   it('spreads the polls by their own jitter, never faster than the step', async () => {
     let draw = 0;
     random = vi.spyOn(Math, 'random').mockImplementation(() => [0.9, 0.1, 0.5][draw++ % 3]);
-    await mount(<ProjectReads sessions={[member('C1', 'P1', 'COORDINATOR'), member('C2', 'P2', 'COORDINATOR')]} />);
+    // Two workspace lists, so two placement reads.
+    await mount(<>
+      <ProjectReads sessions={[member('C1', 'P1', 'COORDINATOR')]} />
+      <ProjectReads sessions={[member('C2', 'P2', 'COORDINATOR')]} />
+    </>);
     await open();
     const droppedAt = Date.now();
     const from = mark();
     await drop();
     await advance(10_000);
     const first = (projectId: string): number =>
-      h.calls.slice(from).find((call) => projectRead(projectId)(call.path))!.at - droppedAt;
+      h.calls.slice(from).find((call) => placementRead(projectId)(call.path))!.at - droppedAt;
     for (const projectId of ['P1', 'P2']) {
       expect(first(projectId)).toBeGreaterThanOrEqual(4_000);
       expect(first(projectId)).toBeLessThanOrEqual(4_800);
@@ -277,7 +288,7 @@ describe('R2: while the stream is down, the gated polls back off together', () =
     let droppedAt = Date.now();
     await drop();
     await advance(30_000);
-    let next = h.calls.slice(from).filter((call) => projectRead('P1')(call.path)).map((call) => call.at - droppedAt);
+    let next = h.calls.slice(from).filter((call) => placementRead('P1')(call.path)).map((call) => call.at - droppedAt);
     expect(next[0], 'a stream that never delivered a message reset the backoff').toBe(30_000);
 
     // One that delivers a message ends it: the next outage starts again at 4 s.
@@ -287,7 +298,7 @@ describe('R2: while the stream is down, the gated polls back off together', () =
     droppedAt = Date.now();
     await drop();
     await advance(5_000);
-    next = h.calls.slice(from).filter((call) => projectRead('P1')(call.path)).map((call) => call.at - droppedAt);
+    next = h.calls.slice(from).filter((call) => placementRead('P1')(call.path)).map((call) => call.at - droppedAt);
     expect(next[0]).toBe(4_000);
   });
 
@@ -297,9 +308,9 @@ describe('R2: while the stream is down, the gated polls back off together', () =
     await open();
     await drop();
     const from = mark();
-    h.failing = projectRead('P1');
+    h.failing = placementRead('P1');
     await advance(11_000); // the 4 s poll, and well past the second it would have been retried at
-    expect(reads(projectRead('P1'), from), 'a failed poll was asked for twice').toBe(1);
+    expect(reads(placementRead('P1'), from), 'a failed poll was asked for twice').toBe(1);
   });
 });
 
@@ -470,23 +481,78 @@ describe('W6: a reopened stream reads what is on screen once, a few at a time', 
   });
 });
 
-describe('W4: a tab’s project reads are one list', () => {
-  it('reads a tenth of 75 projects a minute while the stream is live, and every one within ten minutes', async () => {
-    // Each project's coordinator is in the list, so each has one read: its Open members elsewhere.
-    const sessions = Array.from({ length: 75 }, (_, i) => member(`C${i}`, `P${i}`, 'COORDINATOR'));
-    await mount(<ProjectReads sessions={sessions} />);
+describe('W4: a workspace list places its projects with one read', () => {
+  // Thirty projects, none of whose coordinators the list holds: on a page load that was an Open read a
+  // project and a Completed one after it, some sixty requests (2026-11-21).
+  const thirty = Array.from({ length: 30 }, (_, i) => member(`M${i}`, `P${i}`));
+  const memberEvent = (i: number) =>
+    publish('session.updated', { id: `M${i}`, projectMembership: { projectId: `P${i}`, role: 'TASK' } }, `M${i}`);
+
+  it('reads once on load for 30 projects, not 30 to 60', async () => {
+    await mount(<ProjectReads sessions={thirty} />);
+    await open();
+    await advance(5_000);
+    expect(reads(startsWith('/sessions?projectId=')), 'a project was read on its own').toBe(0);
+    expect(reads(placementRead(...thirty.map((s) => s.projectMembership!.projectId))), 'not one placement read').toBe(1);
+    expect(h.calls).toHaveLength(1);
+  });
+
+  it('re-reads at most once a window for member events, and not for a project it does not show', async () => {
+    await mount(<ProjectReads sessions={thirty} />);
+    await open();
+    await advance(2_000);
+    let from = mark();
+
+    // A burst about one project: one read, a window after the first event.
+    for (let n = 0; n < 5; n += 1) {
+      await memberEvent(3);
+      await advance(150);
+    }
     await advance(1_000);
-    expect(reads(startsWith('/sessions?projectId=')), 'the page did not read each project once').toBe(75);
+    expect(reads(placementRead(), from), 'a burst for one project was not read exactly once').toBe(1);
+
+    // Events every 300 ms for 6 s: never two reads inside one window, and never put off for good.
+    from = mark();
+    for (let n = 0; n < 20; n += 1) {
+      await memberEvent(n % 2 === 0 ? 3 : 7);
+      await advance(300);
+    }
+    await advance(1_000);
+    const times = h.calls.slice(from).filter((call) => placementRead()(call.path)).map((call) => call.at);
+    expect(times.length, 'six seconds of events were never read').toBeGreaterThanOrEqual(2);
+    for (let i = 1; i < times.length; i += 1) {
+      expect(times[i] - times[i - 1], 'two placement reads inside one window').toBeGreaterThanOrEqual(1_000);
+    }
+
+    // A project this list does not show.
+    from = mark();
+    await publish('session.updated', { id: 'X', projectMembership: { projectId: 'P99', role: 'TASK' } }, 'X');
+    await advance(2_000);
+    expect(reads(placementRead(), from), 'another project’s event read the placement').toBe(0);
+  });
+
+  it('reads once a minute while the stream is live and nothing happens', async () => {
+    await mount(<ProjectReads sessions={thirty} />);
     await open();
     const from = mark();
+    await live(5 * 60_000);
+    const n = reads(placementRead(), from);
+    expect(n, 'the safety read did not come').toBeGreaterThanOrEqual(4);
+    expect(n, 'the safety read came more than once a minute').toBeLessThanOrEqual(5);
+    expect(reads(startsWith('/sessions?projectId='), from)).toBe(0);
+  });
 
-    for (let minute = 1; minute <= 10; minute += 1) {
-      const before = mark();
-      await live(60_000);
-      expect(reads(startsWith('/sessions?projectId='), before), `minute ${minute} read too many projects`).toBeLessThanOrEqual(8);
-    }
-    for (let i = 0; i < 75; i += 1) {
-      expect(reads(projectRead(`P${i}`), from), `project P${i} went ten minutes unread`).toBeGreaterThanOrEqual(1);
-    }
+  it('reads nothing while the tab is hidden, and once when it is back in view', async () => {
+    await mount(<ProjectReads sessions={thirty} />);
+    await open();
+    await advance(2_000);
+    await show('hidden');
+    const from = mark();
+    for (let n = 0; n < 5; n += 1) await memberEvent(n);
+    await live(5 * 60_000);
+    expect(reads(placementRead(), from), 'a hidden tab read the placement').toBe(0);
+    await show('visible');
+    await advance(2_000);
+    expect(reads(placementRead(), from), 'back in view, the placement was not read exactly once').toBe(1);
   });
 });

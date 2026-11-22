@@ -13,6 +13,8 @@
  *   POST /projects/:id/coordinator/handoff/cancel → Cancel handover / Keep this coordinator
  *   POST /projects/:id/coordinator/handoff/retry  → Try again (after FAILED)
  *
+ * start, skip and retry take an optional body `CoordinatorHandoffRequest`: what the successor runs on.
+ *
  * STATE ON SESSIONS: `GET /sessions/:id` and the realtime `session.updated` summary carry
  * `coordinatorHandoff` (on the outgoing coordinator) and `coordinatorHandoffReceived` (on its
  * successor), each null when there is nothing to show. Every transition publishes `session.updated`
@@ -59,7 +61,10 @@ export type CoordinatorHandoffFailureCode =
   | 'TURN_STOPPED'
   | 'TIMED_OUT'
   | 'EMPTY_NOTE'
-  | 'REPLACE_FAILED';
+  | 'REPLACE_FAILED'
+  /** The note turn never reached the engine: this coordinator's own model could not start. Only when no
+   *  successor was picked; with one, the handover goes on without a note. */
+  | 'COORDINATOR_CANT_RUN';
 
 /** The end of "The handoff note wasn't written: …", per code. */
 export const COORDINATOR_HANDOFF_FAILURE_REASONS: Readonly<Record<CoordinatorHandoffFailureCode, string>> = {
@@ -68,6 +73,7 @@ export const COORDINATOR_HANDOFF_FAILURE_REASONS: Readonly<Record<CoordinatorHan
   TIMED_OUT: 'the turn timed out.',
   EMPTY_NOTE: 'the reply was empty.',
   REPLACE_FAILED: 'the new coordinator could not be opened.',
+  COORDINATOR_CANT_RUN: 'the model of this coordinator could not start. Pick another model and hand over without a note.',
 };
 
 /**
@@ -117,6 +123,26 @@ export function coordinatorPendingWaitLine(wait: Pick<CoordinatorPendingWait, 'l
   return `${wait.label}${wait.paused ? ' (paused)' : ''}${kind ? ` · ${kind}` : ''}`;
 }
 
+/**
+ * What the successor runs on, as the owner names it in the confirm dialog or beside Hand over without a note.
+ * Each field as `POST /sessions` takes it (engine, provider slug, model id). All absent or null keeps the
+ * previous coordinator's engine, provider and model, which is what a handoff did before this existed. Pick
+ * another when the current one is the reason for handing over: a provider whose sign-in failed, an engine
+ * that will not start.
+ */
+export interface CoordinatorHandoffSuccessor {
+  engine?: string | null;
+  provider?: string | null;
+  model?: string | null;
+}
+
+/** The body of `POST …/handoff`, `…/handoff/skip` and `…/handoff/retry`. A successor named here replaces the
+ *  one named earlier in the same handoff; `successor: null` ("Same as this one") clears it; left out keeps it. Refused 400/409 up front when that start would be
+ *  refused, so the current coordinator is never completed for a successor that cannot open. */
+export interface CoordinatorHandoffRequest {
+  successor?: CoordinatorHandoffSuccessor | null;
+}
+
 /** `coordinatorHandoff` on the OUTGOING coordinator's session (detail and `session.updated`). */
 export interface SessionCoordinatorHandoff {
   state: CoordinatorHandoffState;
@@ -127,6 +153,9 @@ export interface SessionCoordinatorHandoff {
   failureReason: string | null;
   /** The successor, once COMPLETED; null before. */
   handedOverToSessionId: string | null;
+  /** What the owner named for the successor to run on; null when nothing was (it keeps this coordinator's).
+   *  A client that predates it ignores it. */
+  successor?: CoordinatorHandoffSuccessor | null;
 }
 
 /** `coordinatorHandoffReceived` on the SUCCESSOR's session (detail and `session.updated`). */
@@ -154,6 +183,8 @@ export interface CoordinatorHandoffView {
   handedOverToSessionId: string | null;
   /** The moved waits once COMPLETED, `[]` before. */
   movedWaits: CoordinatorPendingWait[];
+  /** As on `SessionCoordinatorHandoff`. */
+  successor?: CoordinatorHandoffSuccessor | null;
 }
 
 /** The sentence a FAILED handoff shows for a code. */
@@ -195,6 +226,10 @@ export const COORDINATOR_HANDOFF_COPY = {
   tryAgain: 'Try again',
   handOverWithoutNote: 'Hand over without a note',
   keepThisCoordinator: 'Keep this coordinator',
+  /** The successor's model row in the confirm dialog and under a failed handoff. */
+  successorRowTitle: 'New coordinator runs on',
+  successorKeep: 'Same as this one',
+  successorRowDetail: "Pick another if this one's model or provider has stopped working.",
   /** A handoff press the server refused: the toast's title on web, the lead of the line on the phones and the Mac. */
   refused: "Couldn't hand over",
 } as const;

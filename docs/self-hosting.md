@@ -10,7 +10,9 @@ and [runner troubleshooting](runner-troubleshooting.md) when enrollment or execu
 
 ## Requirements
 
-- Docker Engine with the Compose plugin
+- Docker Engine with the Compose and buildx plugins. Ubuntu's and Debian's `docker.io` packages leave buildx out:
+  `scripts/install-server.sh` installs `docker-buildx` with apt where it is missing, and without it Compose warns
+  on every build and falls back to its own builder
 - Enough CPU, memory, and disk to build the images and retain Postgres data
 - A Linux host for the server deployment
 - One or more runner machines with a supported runtime installed and authenticated, or room on this host for
@@ -37,8 +39,9 @@ cd orbit
 ```
 
 For a new deployment, `scripts/install-server.sh` does the rest of this section and the next: it writes `.env`
-with two independently generated secrets, prepares [managed runners](#managed-runners), firewalls their network on
-this host, sets up the [runner link](#runner-link), and starts the stack. Give it the external origin when you serve
+with two independently generated secrets, sets up the [runner link](#runner-link), and starts the stack. With
+`--managed-runners` it also prepares [managed runners](#managed-runners) (Orbit Cloud) and firewalls their network on
+this host; without it they are off. Give it the external origin when you serve
 Orbit on a domain or at an address of its own:
 
 ```bash
@@ -1277,7 +1280,8 @@ optimization left. Only statements whose text is fixed can be named:
 
 ## Managed runners
 
-A new deployment gives every account a runner of its own, so nobody has to register a machine before a first
+Managed runners (Orbit Cloud) are off in a new deployment unless it is installed with `--managed-runners`, or an
+administrator switches them on later (below). Where they are on, every account gets a runner of its own, so nobody has to register a machine before a first
 session. It is a container on this host's Docker, given when the account signs in, with a data volume that keeps
 its checkouts, sessions and engine sign-ins. After an hour with nothing to do it sleeps: the container stops and
 the volume stays. A new message, a task that can run or a scheduled wakeup starts it again, on the same volume.
@@ -1290,7 +1294,7 @@ Runners that people register themselves keep working beside it.
 
 ### What the install sets up
 
-`scripts/install-server.sh` prepares managed runners, then writes three lines into `.env`:
+`scripts/install-server.sh --managed-runners` prepares managed runners, then writes three lines into `.env`:
 
 ```dotenv
 ORBIT_MANAGED_RUNNERS_ENABLED=true
@@ -1339,7 +1343,8 @@ COMPOSE_PROFILES=managed-runners-docker,managed-runner-firewall
 
 The first account, the administrator created at `/setup`, is given its runner when it signs in. The runner takes
 sessions once a runtime is signed in on it; until then it reports that none is installed and signed in.
-`--no-managed-runners` installs with `ORBIT_MANAGED_RUNNERS_ENABLED=false` and prepares none of the above.
+Without `--managed-runners` the install writes `ORBIT_MANAGED_RUNNERS_ENABLED=false` and prepares none of the above
+(`--no-managed-runners` says the same explicitly).
 `--no-managed-runner-firewall` installs managed runners without their firewall and leaves this host's firewall alone:
 `COMPOSE_PROFILES` then names `managed-runners-docker` alone, `.env` carries a note that the firewall is off, and the
 install says so as it starts and as it ends. Read [Isolation and its limits](#isolation-and-its-limits) before
@@ -1426,7 +1431,7 @@ Managed runners are switched in `.env`, and only there. An upgrade never writes 
   that is running keeps running, every volume stays, and switching them on again carries on from where they were.
 - **On again:** set `ORBIT_MANAGED_RUNNERS_ENABLED=true` and run `docker compose up -d apiserver`.
 - **On, for a deployment installed without them:** every deployment installed before managed runners existed, and
-  one installed with `--no-managed-runners`. Upgrade it first, then, from its checkout:
+  one installed without `--managed-runners`. Upgrade it first, then, from its checkout:
 
   ```bash
   scripts/install-server.sh --enable-managed-runners
@@ -1772,6 +1777,16 @@ Run without root, it changes nothing and says what to run instead:
 
 ```text
 orbit host: setup writes machine-wide systemd units and must run as root — re-run: sudo /usr/local/bin/orbit host setup --server https://orbit.example.com
+```
+
+Run without root from any other copy, such as the account's own one where install.sh put it, it names the copy to put
+in place first, since setup would refuse to run from that copy under sudo too:
+
+```text
+orbit host: setup writes machine-wide systemd units, so it must run as root and from /usr/local/bin/orbit, the one binary the host broker runs, rather than /home/alice/.orbit/bin/orbit.
+Put a root-owned copy in place, then set the host up from it:
+  sudo install -o 0 -g 0 -m 0755 /home/alice/.orbit/bin/orbit /usr/local/bin/orbit
+  sudo /usr/local/bin/orbit host setup --server https://orbit.example.com
 ```
 
 Setup refuses any binary other than `/usr/local/bin/orbit` before it writes or runs anything. Root's own copy, where

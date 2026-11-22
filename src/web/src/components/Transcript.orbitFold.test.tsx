@@ -211,14 +211,14 @@ describe('turns Orbit opened, folded', () => {
   });
 
   it('folds only a short answer: a watch under 220 characters, anything else under 80, never a reply', () => {
+    // A scheduled wakeup: a background job's news draws nothing at all, so it has no line to fold under (JobCard).
     const wake = (id: string, name: string) => [
-      '<background-job-wake>',
-      '  A background job you started with bg_run has news you were waiting for; the control plane opened this turn for it:',
-      `    ${id}｜query｜bash q.sh｜${name}`,
-      '      ended｜completed｜exit code 0',
-      `      output /root/.orbit/runs/x/${id}.output｜this covers bytes 0–20`,
-      '  The control plane recorded this for you; the user did not write it. Read the whole output with mcp__orbit__bg_output by id.',
-      '</background-job-wake>',
+      '<scheduled-wakeup>',
+      '  The wakeup you asked for with schedule_wakeup is due; the control plane opened this turn for it:',
+      `    2026-11-20T10:00:00.000Z scheduled 300 seconds out, due 2026-11-20T10:05:00.000Z`,
+      `    reason: ${id} ${name}`,
+      '  The control plane recorded this for you; the user did not say it.',
+      '</scheduled-wakeup>',
     ].join('\n');
     const job = (min: number, id: string, reply: string) =>
       exchange(min, { text: wake(id, id), controlPlaneNote: wake(id, id) }, reply, ['mcp__orbit__bg_output']);
@@ -239,7 +239,7 @@ describe('turns Orbit opened, folded', () => {
     expect(events.filter((e) => e.type === 'assistant').map((e) => String(e.payload.text).length).slice(1, 5)).toEqual([14, 102, 211, 256]);
     mount(events);
     // Each folds alone: the job's long answer stands between them.
-    expect(text('.orbit-exchange-root .orbit-exchange-what').map((w) => w!.split(':')[0])).toEqual(['Background job finished', 'Watch triggered']);
+    expect(text('.orbit-exchange-root .orbit-exchange-what').map((w) => w!.split(':')[0])).toEqual(['Scheduled wakeup', 'Watch triggered']);
     expect(q('.orbit-exchanges')).toBeNull();
     // A job's answer of 80 or more, a watch's of 220 or more, and any reply stay drawn as they were.
     expect(container.textContent).toContain('Found it: the job waits on lane 7');

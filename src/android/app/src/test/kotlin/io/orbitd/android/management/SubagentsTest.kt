@@ -22,10 +22,21 @@ import org.robolectric.annotation.Config
 internal object SubagentFixtures {
     val TIERS = """{"providers":[
         {"slug":"deepseek","label":"DeepSeek","kind":"key","providerId":"${ManagementFixture.KEY_DEEPSEEK}","billing":"key",
-          "models":[{"model":"deepseek-chat","levels":["S","M"],"source":"catalogue","editable":false,"outputPricePerMTok":0.6}]},
+          "models":[{"model":"deepseek-chat","levels":["S","M"],"source":"catalogue","editable":false,"outputPricePerMTok":0.6,
+            "quality":{"subagent":{"averageRating":3.2,"ratedCount":14,"runCount":30,"raters":[
+              {"engine":"claude","provider":"claude","model":"claude-opus-5-5","label":"Opus 5.5","count":10},
+              {"engine":"codex","provider":"codex","model":"gpt-5.6-sol","label":null,"count":4}]},
+              "tasks":{"firstPassRate":null,"firstPassTaskCount":0,"completedTaskCount":0}}}]},
         {"slug":"claude","label":"Claude","kind":"builtin","providerId":null,"billing":"subscription",
-          "models":[{"model":"claude-sonnet-5-5","levels":["S","M"],"source":"catalogue","editable":false,"outputPricePerMTok":null},
-            {"model":"claude-opus-5-5","levels":["L","XL"],"source":"catalogue","editable":false,"outputPricePerMTok":null}]},
+          "models":[{"model":"claude-sonnet-5-5","levels":["S","M"],"source":"catalogue","editable":false,"outputPricePerMTok":null,
+              "quality":{"subagent":{"averageRating":null,"ratedCount":3,"runCount":12,"raters":[
+                {"engine":"claude","provider":"claude","model":"claude-opus-5-5","label":"Opus 5.5","count":3}]},
+                "tasks":{"firstPassRate":null,"firstPassTaskCount":5,"completedTaskCount":6}}},
+            {"model":"claude-opus-5-5","levels":["L","XL"],"source":"catalogue","editable":false,"outputPricePerMTok":null,
+              "quality":{"subagent":{"averageRating":4.4,"ratedCount":23,"runCount":41,"raters":[
+                {"engine":"claude","provider":"claude","model":"claude-opus-5-5","label":"Opus 5.5","count":15},
+                {"engine":"claude","provider":"claude","model":"claude-sonnet-5-5","label":"Sonnet 5.5","count":8}]},
+                "tasks":{"firstPassRate":0.86,"firstPassTaskCount":45,"completedTaskCount":52}}}]},
         {"slug":"codex","label":"Codex","kind":"builtin","providerId":null,"billing":"subscription",
           "models":[{"model":"gpt-5.6-sol","levels":["S","M","L","XL"],"source":"catalogue","editable":false,"outputPricePerMTok":null}]},
         {"slug":"my-endpoint","label":"My endpoint","kind":"key","providerId":"${ManagementFixture.KEY_OPENAI}","billing":"key",
@@ -43,6 +54,16 @@ internal object SubagentFixtures {
             {"model":"kimi-k3","levels":[],"source":null,"editable":true,"outputPricePerMTok":null}]},
         {"slug":"my-endpoint","label":"My endpoint","kind":"key","providerId":"${ManagementFixture.KEY_OPENAI}","billing":"key",
           "models":[{"model":"qwen-coder","levels":["M"],"source":"owner","editable":true,"outputPricePerMTok":null}]}]}"""
+
+    /** Cursor's catalogue with older family members: they read "Older · uses <newest>" after the tiered rows, before Not set. */
+    val OLDER = """{"providers":[
+        {"slug":"cursor","label":"Cursor","kind":"builtin","providerId":null,"billing":"subscription",
+          "models":[{"model":"claude-opus-5-5","levels":["L","XL"],"source":"catalogue","editable":true,"outputPricePerMTok":null},
+            {"model":"gemini-4-neon","levels":["L","XL"],"source":"catalogue","editable":true,"outputPricePerMTok":null},
+            {"model":"claude-opus-5","levels":[],"source":null,"editable":true,"outputPricePerMTok":null,"supersededBy":"claude-opus-5-5"},
+            {"model":"claude-opus-4-8","levels":[],"source":null,"editable":true,"outputPricePerMTok":null,"supersededBy":"claude-opus-5-5"},
+            {"model":"gemini-4-argon","levels":[],"source":null,"editable":true,"outputPricePerMTok":null,"supersededBy":"gemini-4-neon"},
+            {"model":"grok-4.7","levels":[],"source":null,"editable":true,"outputPricePerMTok":null}]}]}"""
 }
 
 /** The SubAgents settings and Model tiers (docs/subagent-design.md §7): what is read, what is drawn, and what is written. */
@@ -74,7 +95,10 @@ class SubagentsTest {
     @Test fun theTiersResponseDecodesAndTheWorkspaceFieldsDefaultWhenAbsent() {
         val providers = Subagents.decode(Json.parseToJsonElement(SubagentFixtures.TIERS))
         assertEquals(listOf("deepseek", "claude", "codex", "my-endpoint", "kimi", "team-codex"), providers.map { it.slug })
-        assertEquals(SubagentTierModel("deepseek-chat", listOf("S", "M"), "catalogue", false, 0.6), providers[0].models.single())
+        val deepseek = providers[0].models.single()
+        assertEquals(SubagentTierModel("deepseek-chat", listOf("S", "M"), "catalogue", false, 0.6), deepseek.copy(quality = SubagentQuality.NONE))
+        assertEquals(3.2, deepseek.quality.averageRating)
+        assertEquals(listOf(10, 4), deepseek.quality.raters.map { it.count })
         assertEquals(ManagementFixture.KEY_OPENAI, providers[3].providerId)
         assertNull(providers[1].providerId)
         assertEquals("subscription", providers[1].billing)
@@ -95,6 +119,10 @@ class SubagentsTest {
         assertEquals("S–XL by effort", Subagents.tierText(listOf("S", "M", "L", "XL")))
         assertEquals("L · XL", Subagents.tierText(listOf("L", "XL")))
         assertEquals("M", Subagents.tierText(listOf("M")))
+        val older = SubagentTierModel("claude-opus-5", emptyList(), null, true, null, "claude-opus-5-5")
+        assertEquals("Older · uses claude-opus-5-5", Subagents.modelTierText(older))
+        assertEquals("M", Subagents.modelTierText(older.copy(levels = listOf("M"))))
+        assertEquals("Not set", Subagents.modelTierText(older.copy(supersededBy = null)))
         val model = SubagentTierModel("m", emptyList(), null, false, null)
         assertEquals("$0.60", Subagents.priceText(model.copy(outputPricePerMTok = 0.6), "key"))
         assertEquals("$15.00", Subagents.priceText(model.copy(outputPricePerMTok = 15.0), "subscription"))
@@ -229,6 +257,35 @@ class SubagentsTest {
         compose.waitUntil(60_000) { fixture.calls.count { it == "GET providers/subagent-tiers" } > reads }
         assertEquals(buildJsonObject { put("model", "qwen-coder"); put("tier", "L") },
             written("PATCH providers/mine/${ManagementFixture.KEY_OPENAI}/model-tier").single())
+    }
+
+    /** The Quality lines (docs/subagent-design.md §7.1, board docs/mocks/model-quality/01-board.png, owner's A1·B1·C1). */
+    @Test fun theQualityLinesReadAsIosAndWebReadThem() {
+        val claude = Subagents.decode(Json.parseToJsonElement(SubagentFixtures.TIERS)).first { it.slug == "claude" }
+        val opus = Subagents.qualityLines(claude.models.first { it.model == "claude-opus-5-5" }.quality)
+        assertEquals(QualityLines(false, QualityLine("4.4 · 23 rated of 41", false), "Rated by Opus 5.5 (15) · Sonnet 5.5 (8)",
+            QualityLine("86% first pass · 52 tasks", false)), opus)
+        val sonnet = Subagents.qualityLines(claude.models.first { it.model == "claude-sonnet-5-5" }.quality)
+        assertEquals(QualityLines(false, QualityLine(Subagents.NOT_ENOUGH_RATINGS, true), null, QualityLine(Subagents.NOT_ENOUGH_TASKS, true)), sonnet)
+        // Absent on an older server, or nothing run: No runs yet.
+        assertTrue(Subagents.qualityLines(SubagentQuality.of(null)).empty)
+        // A rater with no label is named by its provider.
+        val deepseek = Subagents.decode(Json.parseToJsonElement(SubagentFixtures.TIERS)).first { it.slug == "deepseek" }.models.single()
+        assertEquals("Rated by Opus 5.5 (10) · codex (4)", Subagents.qualityLines(deepseek.quality).raters)
+    }
+
+    @Test fun modelTiersShowQualityUnderTheModelAndATapSaysWhoRated() {
+        val api = api()
+        compose.setContent { MachinesAndModelsSettings(api, 0, null, {}, {}) }
+        await("qwen-coder")
+        listOf("4.4 · 23 rated of 41", "86% first pass · 52 tasks", Subagents.NOT_ENOUGH_RATINGS, Subagents.NOT_ENOUGH_TASKS,
+            Subagents.NO_RUNS_YET, Subagents.QUALITY_FOOTER).forEach {
+            assertTrue("$it is drawn", compose.onAllNodesWithText(it, substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
+        }
+        // Only a line with an average says who rated.
+        assertEquals(0, compose.onAllNodesWithTag("quality-raters:claude:claude-sonnet-5-5", useUnmergedTree = true).fetchSemanticsNodes().size)
+        compose.onNodeWithTag("quality-raters:claude:claude-opus-5-5", useUnmergedTree = true).performScrollTo().performClick()
+        await("Rated by Opus 5.5 (15) · Sonnet 5.5 (8)")
     }
 
     @Test fun aBuiltInEnginesModelTakesATierThroughTheBuiltinDoor() {

@@ -66,14 +66,24 @@ type SessionRow = Record<string, unknown>;
  *  `{ taskId: null }` branch, and a fake that let a missing relation through would report the
  *  predicate as working when it excluded every session that has no task at all. */
 function matchesBranch(row: SessionRow, cond: Record<string, unknown>): boolean {
-  return Object.entries(cond).every(([key, expected]) => matchesField(row[key], expected));
+  return Object.entries(cond).every(([key, expected]) => {
+    // A branch may hold its own OR or AND: the release module's failure filter is one such branch.
+    if (key === 'OR') return (expected as Array<Record<string, unknown>>).some((c) => matchesBranch(row, c));
+    if (key === 'AND') return (expected as Array<Record<string, unknown>>).every((c) => matchesBranch(row, c));
+    return matchesField(row[key], expected);
+  });
 }
 
-/** One field of a branch: a scalar, `{ not: value }`, or a to-one relation filter, nested as deep as
- *  the `where` goes (the cancelled-project veto reads `task.project.status`). */
+/** One field of a branch: a scalar, `{ not: value }` and `{ equals: value }` (either or both), or a to-one
+ *  relation filter, nested as deep as the `where` goes (the cancelled-project veto reads `task.project.status`). */
 function matchesField(actual: unknown, expected: unknown): boolean {
   if (expected !== null && typeof expected === 'object' && !(expected instanceof Date)) {
-    if ('not' in expected) return (actual ?? null) !== (expected as { not: unknown }).not;
+    if ('not' in expected || 'equals' in expected) {
+      const filter = expected as { not?: unknown; equals?: unknown };
+      if ('not' in filter && (actual ?? null) === filter.not) return false;
+      return !('equals' in filter) || (actual ?? null) === filter.equals;
+    }
+    if ('in' in expected) return (expected as { in: unknown[] }).in.includes(actual ?? null);
     const related = actual as Record<string, unknown> | null | undefined;
     if (!related) return false;
     return Object.entries(expected as Record<string, unknown>)
@@ -452,6 +462,15 @@ function row(over: SessionRow = {}): SessionRow {
     assignedRunner: { planUsage: null, status: 'ONLINE', lastHeartbeatAt: NOW },
     status: RunStatus.AWAITING_INPUT,
     ...over,
+    // A FAILED row is released by a failure, as every writer releases one: the release column set (at the sweep's own
+    // instant unless the case says when, so the offline wait has spent nothing) and the failure on its last turn,
+    //. The rest are held.
+    ...(over.status === RunStatus.FAILED
+      ? {
+          finishedAt: over.finishedAt !== undefined ? over.finishedAt : NOW,
+          lastTurnOutcome: over.lastTurnOutcome !== undefined ? over.lastTurnOutcome : 'FAILED',
+        }
+      : {}),
   };
 }
 
@@ -698,7 +717,7 @@ test("a Claude session on Automatic goes as soon as another of its runner's acco
 // the session to the user having never once tried it.
 test('waits for an offline runner without spending an attempt', async () => {
   const { service, resumed, rows } = makeService([
-    row({ status: RunStatus.FAILED, cancelRequestedAt: PAST, assignedRunner: offlineRunner }),
+    row({ status: RunStatus.FAILED, finishedAt: NOW, cancelRequestedAt: PAST, assignedRunner: offlineRunner }),
   ]);
   await service.sweep(NOW);
   assert.deepEqual(resumed, [], 'resume() would only refuse it as RUNNER_OFFLINE');

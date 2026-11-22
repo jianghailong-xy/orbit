@@ -15,6 +15,7 @@ import type { BgShell, BgShellStatus } from '../lib/backgroundShells';
 import { deriveBackgroundShells, mergeBackgroundShells } from '../lib/backgroundShells';
 import {
   backgroundRow,
+  backgroundRowClearedAt,
   progressTrayLine,
   type BackgroundRowCountPart,
   type BackgroundRowItem,
@@ -23,8 +24,17 @@ import {
 } from '@orbit/shared';
 import { splitRecordedNote } from '../lib/deliveredMessage';
 import { parseWatchWake } from '../lib/watches';
+import { parseSessionMessage } from '../lib/sessionMessage';
 import { EMPTY_LIVE_TASK_PROGRESS, type LiveTaskProgress } from '../lib/liveTaskProgress';
 import { TaskProgressBlock } from './TaskProgressBlock';
+import { stopBackgroundJob } from '../api';
+import { Popconfirm } from './ui/Popconfirm';
+
+/** The Job card a bg_run job's row scrolls to (JobCard marks it), where it is on the page. */
+const jobCardOf = (jobId: string): HTMLElement | null =>
+  typeof document === 'undefined'
+    ? null
+    : (Array.from(document.querySelectorAll<HTMLElement>('[data-bg-job]')).find((card) => card.dataset.bgJob === jobId) ?? null);
 
 /**
  * "Background processes" tray, shown above the composer like the worktree status bar. It
@@ -43,11 +53,14 @@ import { TaskProgressBlock } from './TaskProgressBlock';
  * latest live output. We merge: the complete set from the server, the freshest tail from the window.
  */
 export function BackgroundShellsTray({
+  sessionId,
   events,
   live,
   serverShells,
   liveProgress = EMPTY_LIVE_TASK_PROGRESS,
 }: {
+  /** The session the list is of: what a job row's Stop asks to stop it in. */
+  sessionId?: string;
   events: RunEvent[];
   live?: boolean;
   serverShells?: BgShell[];
@@ -60,8 +73,12 @@ export function BackgroundShellsTray({
     [events, live, serverShells],
   );
   // The folded row is the shared rule's (src/shared backgroundRow.ts, background-row.fixture.json):
-  // what is running on a live session, plus what ended after the person's last message.
-  const since = useMemo(() => lastUserMessageAt(events), [events]);
+  // what is running on a live session, plus what ended after the later of the person's last message
+  // and the start of the agent's latest turn (a wake's turn included).
+  const since = useMemo(
+    () => backgroundRowClearedAt(lastUserMessageAt(events), lastAgentTurnStartedAt(events)),
+    [events],
+  );
   const row = useMemo(() => backgroundRow(shells, since, !!live), [shells, since, live]);
   const [open, setOpen] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -113,7 +130,21 @@ export function BackgroundShellsTray({
               shell={s}
               progress={liveProgress.get(s.toolUseId) ?? s.progress}
               expanded={expandedId === s.shellId}
-              onToggle={() => setExpandedId((id) => (id === s.shellId ? null : s.shellId))}
+              onToggle={() => {
+                // A bg_run job's row goes to its Job card, as the Agents list goes to a run's block (R1).
+                const card = s.kind === 'job' ? jobCardOf(s.shellId) : null;
+                if (card) {
+                  setOpen(false);
+                  card.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                  return;
+                }
+                setExpandedId((id) => (id === s.shellId ? null : s.shellId));
+              }}
+              onStop={
+                sessionId && s.kind === 'job' && s.status === 'running' && s.stoppable
+                  ? () => stopBackgroundJob(sessionId, s.shellId)
+                  : undefined
+              }
             />
           ))}
         </div>
@@ -123,15 +154,39 @@ export function BackgroundShellsTray({
 }
 
 /**
+ * When the agent's latest turn started: the earliest event of the turn the newest agent event
+ * (anything but a `user` event) belongs to, so a wake's turn counts from its recorded note. Null
+ * while no agent event carries a turn.
+ */
+export function lastAgentTurnStartedAt(events: RunEvent[]): string | null {
+  let turnId: string | null = null;
+  for (let i = events.length - 1; i >= 0; i--) {
+    const ev = events[i];
+    if (ev.type !== 'user' && ev.turnId && ev.ts) {
+      turnId = ev.turnId;
+      break;
+    }
+  }
+  if (!turnId) return null;
+  let start: string | null = null;
+  for (const ev of events) {
+    if (ev.turnId === turnId && ev.ts && (start === null || Date.parse(ev.ts) < Date.parse(start))) start = ev.ts;
+  }
+  return start;
+}
+
+/**
  * When the person last wrote: the newest `user` event with words they typed. A turn Orbit opened
  * itself (a background job's or a SubAgent's wake: nothing typed, only the recorded note) or a
- * watch's wake is not their message, so it clears nothing (decision D1).
+ * watch's wake is not their message (the turn it opens is the agent's, see lastAgentTurnStartedAt); nor is a message another
+ * Orbit session sent (`sessionMessage` card).
  */
 export function lastUserMessageAt(events: RunEvent[]): string | null {
   for (let i = events.length - 1; i >= 0; i--) {
     const ev = events[i];
     if (ev.type !== 'user' || !ev.ts) continue;
     const p = (ev.payload ?? {}) as { text?: unknown };
+    if (parseSessionMessage(p)) continue;
     const recorded = splitRecordedNote(p);
     const text = recorded ? recorded.text : typeof p.text === 'string' ? p.text : '';
     if (text.trim() === '' || parseWatchWake(text)) continue;
@@ -141,16 +196,7 @@ export function lastUserMessageAt(events: RunEvent[]): string | null {
 }
 
 function CountLine({ parts }: { parts: BackgroundRowCountPart[] }) {
-  return (
-    <span className="bg-tray-count">
-      {parts.map((part, i) => (
-        <span key={part.kind}>
-          {i > 0 && ' · '}
-          {part.kind === 'failed' ? <span className="ct-failed">{part.text}</span> : part.text}
-        </span>
-      ))}
-    </span>
-  );
+  return <span className="bg-tray-count">{parts.map((part) => part.text).join(' · ')}</span>;
 }
 
 const reducedMotion = (): boolean =>
@@ -248,11 +294,14 @@ function BgShellRow({
   progress,
   expanded,
   onToggle,
+  onStop,
 }: {
   shell: BgShell;
   progress?: TaskProgress;
   expanded: boolean;
   onToggle: () => void;
+  /** A running bg_run job its runner can stop (R3); unset for anything else. */
+  onStop?: () => Promise<unknown>;
 }) {
   const title = shell.description || shell.command;
   const task = shell.kind === 'agent' || shell.kind === 'workflow';
@@ -268,6 +317,21 @@ function BgShellRow({
         </span>
         <span className="bg-shell-id">{shell.shellId}</span>
         {shell.startedTs && <span className="bg-shell-age">{relAge(shell.startedTs)}</span>}
+        {onStop && (
+          <span className="bg-shell-stop" onClick={(event) => event.stopPropagation()}>
+            <Popconfirm
+              title="Stop this job?"
+              confirmText="Stop"
+              danger
+              onConfirm={onStop}
+              trigger={
+                <button type="button" className="chat-subagent-link chat-job-stop-btn">
+                  Stop
+                </button>
+              }
+            />
+          </span>
+        )}
         <span className="bg-shell-caret">{expanded ? <DownOutlined /> : <RightOutlined />}</span>
       </div>
       {line && <div className="bg-shell-sub">{line}</div>}

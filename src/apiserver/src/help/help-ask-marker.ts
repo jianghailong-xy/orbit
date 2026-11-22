@@ -2,6 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { Prisma, RunStatus } from '@prisma/client';
 import type { HelpAskMarker, HelpAskOutcome, HelpAskPage } from '@orbit/shared';
 import { isSessionGenerating } from '../common/session-generating';
+import { releaseWasFailure, type ReleaseFailureFacts } from '../common/session-release';
 
 // What `session.help_ask` (migration 0850) holds and how it reads: pure, so the claim (queue.service.ts) and the
 // runner doors can read it without the Ask door's module (help-ask.ts).
@@ -49,8 +50,11 @@ export function helpAskTitle(content: string): string {
 }
 
 /** Where an Ask stands, as Your questions says it. */
-export function helpAskOutcome(session: { status: RunStatus; engineTurnActive: boolean }): HelpAskOutcome {
-  if (session.status === RunStatus.FAILED) return 'failed';
+export function helpAskOutcome(
+  session: ReleaseFailureFacts & { status: RunStatus; engineTurnActive: boolean },
+): HelpAskOutcome {
+  // Released by a failure (common/session-release.ts).
+  if (releaseWasFailure(session)) return 'failed';
   if (session.status === RunStatus.PENDING || session.status === RunStatus.RUNNING || isSessionGenerating(session)) return 'working';
   return 'answered';
 }

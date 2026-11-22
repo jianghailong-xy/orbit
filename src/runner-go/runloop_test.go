@@ -338,7 +338,10 @@ func TestCarryOverModelCapabilities(t *testing.T) {
 	}
 }
 
-func TestReclaimStatusOpenRejectsTerminalAndUnknownRows(t *testing.T) {
+// The seven words this binary knows answer exactly as before the lease was consulted: the four open
+// words (and a legacy server's empty status) are open, the three terminal words are closed even when
+// the takeover holds the lease, as an older server's answered takeover of a terminal row does.
+func TestReclaimStatusOpenKnownWordsAreUnchanged(t *testing.T) {
 	for _, tc := range []struct {
 		status string
 		open   bool
@@ -351,10 +354,29 @@ func TestReclaimStatusOpenRejectsTerminalAndUnknownRows(t *testing.T) {
 		{stSucceeded, false},
 		{stFailed, false},
 		{stCancelled, false},
-		{"FUTURE_TERMINAL", false},
 	} {
-		if got := reclaimStatusOpen(tc.status); got != tc.open {
-			t.Errorf("reclaimStatusOpen(%q) = %v, want %v", tc.status, got, tc.open)
+		for _, leaseHeld := range []bool{true, false} {
+			if got := reclaimStatusOpen(tc.status, leaseHeld); got != tc.open {
+				t.Errorf("reclaimStatusOpen(%q, %v) = %v, want %v", tc.status, leaseHeld, got, tc.open)
+			}
+		}
+		if got := reclaimStatusEnded(tc.status); got == tc.open {
+			t.Errorf("reclaimStatusEnded(%q) = %v, want %v", tc.status, got, !tc.open)
+		}
+	}
+}
+
+// A word this binary does not know is open exactly when the server's answer says the lease is held.
+func TestReclaimStatusOpenUnknownWordFollowsTheLease(t *testing.T) {
+	for _, word := range []string{"IDLE", "FUTURE_TERMINAL"} {
+		if !reclaimStatusOpen(word, true) {
+			t.Errorf("reclaimStatusOpen(%q, true) = false, want an unknown word with the lease held open", word)
+		}
+		if reclaimStatusOpen(word, false) {
+			t.Errorf("reclaimStatusOpen(%q, false) = true, want an unknown word without the lease closed", word)
+		}
+		if reclaimStatusEnded(word) {
+			t.Errorf("reclaimStatusEnded(%q) = true, want an unknown word left to its takeover", word)
 		}
 	}
 }

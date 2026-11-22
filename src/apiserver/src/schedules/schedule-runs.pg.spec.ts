@@ -11,6 +11,8 @@
  *     scheduled-run block — opened through the real SessionsService.create;
  *   * §7.1 / §7.2: the report's four rules; NO_REPORT, RUN_LIMIT, APPROVAL_TIMEOUT; retries only for a run whose first
  *     turn has no delivered_at; consecutive failures counted and the schedule never paused;
+ *   * §7.2: a session a full runner holds waits for its slot until the catch-up deadline (RUNNER_FULL past it);
+ *     one held by anything else keeps the 10-minute RUNNER_UNAVAILABLE rule;
  *   * §8.4: Run now and Stop this run.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/schedules/schedule-runs.pg.spec.ts
@@ -22,8 +24,8 @@ import { randomUUID } from 'node:crypto';
 import { after, before, test } from 'node:test';
 
 import { BadRequestException } from '@nestjs/common';
-import { PermissionMode } from '@orbit/shared';
-import { PrismaClient, RunnerStatus, SessionDispatchOrigin, SessionRunSource } from '@prisma/client';
+import { PermissionMode, SCHEDULE_COPY } from '@orbit/shared';
+import { Prisma, PrismaClient, RunnerStatus, SessionDispatchOrigin, SessionRunSource } from '@prisma/client';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -33,6 +35,7 @@ import {
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
 import { SessionsService } from '../sessions/sessions.service';
+import { queuedReasonSql } from '../sessions/queued-reason-sql';
 import {
   OPEN_PR_DISALLOWED_TOOLS,
   scheduleRunAgentFields,
@@ -40,6 +43,7 @@ import {
   scheduleRunMode,
 } from './schedule-access';
 import type { ScheduleAlert } from './schedule-attention';
+import { ScheduleReadsService } from './schedule-reads.service';
 import { SessionsScheduleRunPort } from './schedule-run-sessions';
 import {
   SCHEDULE_APPROVAL_TIMEOUT_MS,
@@ -62,6 +66,8 @@ let clockNow = new Date('2026-11-14T08:00:00Z');
 const clock = () => clockNow;
 let schedules: SchedulesService;
 let runs: ScheduleRunsService;
+let reads: ScheduleReadsService;
+let sessionsService: SessionsService;
 let calls: Array<{ op: 'interrupt' | 'complete' | 'end'; sessionId: string }> = [];
 let opened: OpenRunSession[] = [];
 let pushed: ScheduleAlert[] = [];
@@ -89,7 +95,7 @@ before(async () => {
   // The real create door, as the production port uses it; the runner and realtime sides are not under test.
   // Every runner and realtime side effect is a no-op: what is under test is the rows.
   const quiet = new Proxy({}, { get: () => () => undefined });
-  const sessionsService = new SessionsService(db as never, quiet as never, quiet as never);
+  sessionsService = new SessionsService(db as never, quiet as never, quiet as never);
   const real = new SessionsScheduleRunPort(sessionsService);
   const port: ScheduleRunSessionPort = {
     land: (owner, sessionId) => real.land(owner, sessionId),
@@ -114,6 +120,7 @@ before(async () => {
   };
   schedules = new SchedulesService(db as unknown as PrismaService, clock);
   runs = new ScheduleRunsService(db as unknown as PrismaService, port, clock, { notify: async (alert) => void pushed.push(alert) });
+  reads = new ScheduleReadsService(db as unknown as PrismaService);
 });
 
 after(async () => {
@@ -836,7 +843,7 @@ test('§5.2 / §7.2 a run that never reached its engine (no delivered_at) is ret
     assert.equal(current.attempt, attempt);
     sessions.push(current.sessionId!);
     const error = attempt === 4 ? "You've hit your usage limit. Try again later." : 'spawn failed';
-    await db.session.update({ where: { id: current.sessionId! }, data: { status: 'FAILED', error, retryAt: FUTURE } });
+    await db.session.update({ where: { id: current.sessionId! }, data: { status: 'FAILED', finishedAt: new Date(), error, retryAt: FUTURE } });
     assert.equal(await runs.reconcileRun(run.id), 'RETRY');
     const waiting = await runOf(run.id);
     assert.equal(waiting.state, 'QUEUED');
@@ -854,7 +861,7 @@ test('§5.2 / §7.2 a run that never reached its engine (no delivered_at) is ret
   // The next hourly attempt would start after the window (02:00Z the next day) closes: the slot is MISSED.
   at('2026-11-15T01:30:00Z');
   const late = await runOf(run.id);
-  await db.session.update({ where: { id: late.sessionId! }, data: { status: 'FAILED', error: 'spawn failed' } });
+  await db.session.update({ where: { id: late.sessionId! }, data: { status: 'FAILED', finishedAt: new Date(), error: 'spawn failed' } });
   assert.equal(await runs.reconcileRun(run.id), 'MISSED');
   const missed = await runOf(run.id);
   assert.equal(missed.state, 'MISSED');
@@ -872,7 +879,7 @@ test('§5.2 a ONCE run failing before delivery near the end of its 24-hour windo
   const { started } = await fireAndStart(s.id);
   const run = await runOf(started[0].runId);
   assert.equal(run.trigger, 'CATCH_UP');
-  await db.session.update({ where: { id: run.sessionId! }, data: { status: 'FAILED', error: 'spawn failed' } });
+  await db.session.update({ where: { id: run.sessionId! }, data: { status: 'FAILED', finishedAt: new Date(), error: 'spawn failed' } });
   assert.equal(await runs.reconcileRun(run.id), 'MISSED', 'a retry in a minute would be past the window');
   assert.equal((await scheduleOf(s.id)).consecutiveFailures, 0);
 });
@@ -882,7 +889,7 @@ test('§7.2 a run whose first turn was delivered is never retried: ENGINE_CRASHE
   at('2026-11-14T00:00:00Z');
   const w = await world('no-retry');
   const { run, sessionId } = await runningRun(w);
-  await db.session.update({ where: { id: sessionId }, data: { status: 'FAILED', error: 'engine exited' } });
+  await db.session.update({ where: { id: sessionId }, data: { status: 'FAILED', finishedAt: new Date(), error: 'engine exited' } });
   assert.equal(await runs.reconcileRun(run.id), 'FAILED');
   const failed = await runOf(run.id);
   assert.equal(failed.failureReason, 'ENGINE_CRASHED');
@@ -1030,7 +1037,7 @@ test('§7.2 A2: a process that died after retiring but before re-queueing, or a 
   at('2026-11-14T02:00:00Z');
   const run = await runOf((await fireAndStart(s.id)).started[0].runId);
   // Retired, and the process died there: the run is still RUNNING on an ended, undelivered session.
-  await db.session.update({ where: { id: run.sessionId! }, data: { status: 'CANCELLED', cancelRequestedAt: clockNow } });
+  await db.session.update({ where: { id: run.sessionId! }, data: { status: 'CANCELLED', finishedAt: new Date(), cancelRequestedAt: clockNow } });
   assert.equal(await runs.reconcileRun(run.id), 'RETRY');
   // A session of the run left alive (a create that committed after its caller gave up) is retired before a new one.
   const stray = randomUUID();
@@ -1047,6 +1054,172 @@ test('§7.2 A2: a process that died after retiring but before re-queueing, or a 
   const live = await liveSessionsOf(run.id);
   assert.equal(live.length, 1);
   assert.equal(live[0].id, (await runOf(run.id)).sessionId);
+});
+
+/** One turn running on the world's runner, which has one slot (the runner default): the runner is full. */
+async function occupy(w: World): Promise<string> {
+  const id = randomUUID();
+  await db.session.create({
+    data: {
+      id, ownerId: w.ownerId, creatorId: w.ownerId, workspaceId: w.workspaceId, assignedRunnerId: w.runnerId,
+      title: 'another turn', prompt: 'p', provider: 'claude', engine: 'claude', providerBuiltin: true,
+      dispatchOrigin: SessionDispatchOrigin.USER, status: 'RUNNING',
+      startedAt: clockNow, runtimeSessionId: randomUUID(), numTurns: 1,
+    },
+  });
+  return id;
+}
+
+/** The queued reason the session list shows for this session: the gate the run is judged by. */
+async function listedReason(w: World, sessionId: string): Promise<string | null> {
+  const rows = await db.$queryRaw<Array<{ reason: string | null }>>(Prisma.sql`
+    SELECT ${queuedReasonSql()} AS reason FROM "session" s LEFT JOIN runner r ON r.id = s.assigned_runner_id
+     WHERE s.id = ${sessionId}::uuid AND s.owner_id = ${w.ownerId}::uuid`);
+  return rows[0]?.reason ?? null;
+}
+
+test('§7.2 a full runner is not a missing one: past 10 minutes the run keeps its one session and attempt, and goes on once a slot frees', { skip }, async () => {
+  reset();
+  at('2026-11-14T00:00:00Z');
+  const w = await world('runner-full');
+  await occupy(w);
+  const s = await created(w);
+  at('2026-11-14T02:00:00Z');
+  const run = await runOf((await fireAndStart(s.id)).started[0].runId);
+  const first = run.sessionId!;
+  assert.equal((await db.session.findUniqueOrThrow({ where: { id: first } })).status, 'PENDING');
+  assert.equal(await listedReason(w, first), 'runner_at_capacity', 'the list says Queued · runner full');
+  for (const waited of [10 * MINUTE, 11 * MINUTE, HOUR, 7 * HOUR]) {
+    at(new Date(Date.parse('2026-11-14T02:00:00Z') + waited).toISOString());
+    assert.equal(await runs.reconcileRun(run.id), 'UNCHANGED', `still waiting for a slot after ${waited / MINUTE} min`);
+    const waiting = await runOf(run.id);
+    assert.equal(waiting.state, 'RUNNING');
+    assert.equal(waiting.sessionId, first, 'the same session');
+    assert.equal(waiting.attempt, 1, 'no new attempt');
+    assert.equal(waiting.capacityHeldAt?.getTime(), clockNow.getTime(), 'seen held at this pass');
+  }
+  assert.deepEqual(calls, [], 'nothing retired or interrupted');
+  assert.deepEqual((await liveSessionsOf(run.id)).map((x) => x.id), [first]);
+  assert.equal(opened.length, 1, 'one session opened in all');
+
+  // A slot frees. Seven hours after the start, the 10-minute limit counts from the last pass that saw it held.
+  await db.runner.update({ where: { id: w.runnerId }, data: { maxConcurrent: 2 } });
+  assert.equal(await listedReason(w, first), null, 'nothing holds it now');
+  advance(10 * MINUTE - 1);
+  assert.equal(await runs.reconcileRun(run.id), 'UNCHANGED', 'a slot that has just freed gets its 10 minutes to be claimed');
+  // The runner claims it and the engine takes the first turn: the run goes on as any other.
+  await delivered(first, clockNow);
+  advance(MINUTE);
+  assert.equal(await runs.reconcileRun(run.id), 'UNCHANGED');
+  await runs.report(w.ownerId, first, { outcome: 'NO_CHANGE', summary: 'Nothing new.' });
+  const ended = await runOf(run.id);
+  assert.equal(ended.state, 'NO_CHANGE');
+  assert.equal(ended.sessionId, first);
+  assert.equal(ended.attempt, 1);
+  assert.equal(ended.failureReason, null);
+  assert.equal(ended.plannedAt.toISOString(), '2026-11-14T02:00:00.000Z');
+});
+
+test('§7.2 a run still waiting for a full runner past its catch-up deadline is MISSED (RUNNER_FULL), not "found no runner online", and its session is ended', { skip }, async () => {
+  reset();
+  at('2026-11-14T00:00:00Z');
+  const w = await world('runner-full-deadline');
+  await occupy(w);
+  const s = await created(w);
+  at('2026-11-14T02:00:00Z');
+  const run = await runOf((await fireAndStart(s.id)).started[0].runId);
+  const sessionId = run.sessionId!;
+  // A DAILY slot's catch-up window is one day: 02:00Z the next day is the deadline.
+  at('2026-11-15T02:00:00Z');
+  assert.equal(await runs.reconcileRun(run.id), 'UNCHANGED', 'at the deadline it may still start');
+  assert.deepEqual(calls, []);
+  at('2026-11-15T02:00:00.001Z');
+  assert.equal(await runs.reconcileRun(run.id), 'MISSED');
+  const missed = await runOf(run.id);
+  assert.equal(missed.state, 'MISSED');
+  assert.equal(missed.failureReason, 'RUNNER_FULL');
+  assert.notEqual(missed.failureReason, 'RUNNER_UNAVAILABLE');
+  assert.equal(missed.attempt, 1, 'one attempt, one session, the whole time');
+  assert.notEqual(SCHEDULE_COPY.failureReasons.RUNNER_FULL, SCHEDULE_COPY.failureReasons.RUNNER_UNAVAILABLE);
+  assert.match(SCHEDULE_COPY.failureReasons.RUNNER_FULL, /full runner/);
+  assert.deepEqual(calls, [{ op: 'end', sessionId }], 'its session is retired');
+  assert.equal((await db.session.findUniqueOrThrow({ where: { id: sessionId } })).status, 'CANCELLED', 'ended: no claim takes it');
+  assert.equal((await liveSessionsOf(run.id)).length, 0);
+  assert.equal((await scheduleOf(s.id)).consecutiveFailures, 0, 'a slot not run is not a failure');
+});
+
+test('§7.2 a session not held by capacity keeps the 10-minute RUNNER_UNAVAILABLE rule and its retry: a runner draining for an update, full or not, and a freed slot nobody claims', { skip }, async () => {
+  reset();
+  at('2026-11-14T00:00:00Z');
+  const w = await world('draining-full');
+  await occupy(w);
+  await db.runner.update({ where: { id: w.runnerId }, data: { heartbeatDraining: true } });
+  const s = await created(w);
+  at('2026-11-14T02:00:00Z');
+  const run = await runOf((await fireAndStart(s.id)).started[0].runId);
+  const first = run.sessionId!;
+  assert.equal(await listedReason(w, first), 'runner_updating', 'full, but the update is what holds it');
+  advance(10 * MINUTE - 1);
+  assert.equal(await runs.reconcileRun(run.id), 'UNCHANGED');
+  assert.equal((await runOf(run.id)).capacityHeldAt, null);
+  advance(1);
+  assert.equal(await runs.reconcileRun(run.id), 'RETRY');
+  const retried = await runOf(run.id);
+  assert.equal(retried.state, 'QUEUED');
+  assert.equal(retried.attempt, 2);
+  assert.equal(retried.failureReason, 'RUNNER_UNAVAILABLE');
+  assert.equal(retried.notBeforeAt!.getTime(), clockNow.getTime() + MINUTE);
+  assert.equal((await db.session.findUniqueOrThrow({ where: { id: first } })).status, 'CANCELLED');
+
+  // Held by a full runner for half an hour, then the slot frees and nobody claims the session: 10 minutes after
+  // the last pass that saw it held, it is RUNNER_UNAVAILABLE and retried like any other.
+  at('2026-11-14T00:00:00Z');
+  const w2 = await world('freed-unclaimed');
+  await occupy(w2);
+  const s2 = await created(w2);
+  at('2026-11-14T02:00:00Z');
+  const run2 = await runOf((await fireAndStart(s2.id)).started[0].runId);
+  advance(30 * MINUTE);
+  assert.equal(await runs.reconcileRun(run2.id), 'UNCHANGED');
+  await db.runner.update({ where: { id: w2.runnerId }, data: { maxConcurrent: 2 } });
+  advance(10 * MINUTE - 1);
+  assert.equal(await runs.reconcileRun(run2.id), 'UNCHANGED');
+  advance(1);
+  assert.equal(await runs.reconcileRun(run2.id), 'RETRY');
+  assert.equal((await runOf(run2.id)).failureReason, 'RUNNER_UNAVAILABLE');
+});
+
+test('§7.2 / §8.4 a run waiting for a full runner: pausing the schedule retires its session; a MANUAL one keeps waiting; Stop ends a session never delivered', { skip }, async () => {
+  reset();
+  at('2026-11-14T00:00:00Z');
+  const w = await world('runner-full-paused');
+  await occupy(w);
+  const s = await created(w);
+  at('2026-11-14T02:00:00Z');
+  const run = await runOf((await fireAndStart(s.id)).started[0].runId);
+  advance(MINUTE);
+  assert.equal(await runs.reconcileRun(run.id), 'UNCHANGED');
+  await schedules.pause(w.owner, s.id);
+  advance(MINUTE);
+  assert.equal(await runs.reconcileRun(run.id), 'CANCELLED', 'the next pass retires it');
+  assert.equal((await runOf(run.id)).state, 'CANCELLED');
+  assert.equal((await db.session.findUniqueOrThrow({ where: { id: run.sessionId! } })).status, 'CANCELLED');
+
+  // The owner's Run now on the paused schedule (the prod case: a MANUAL run) waits for its slot.
+  reset();
+  const manual = await runs.runNow(w.owner, s.id);
+  const m = await runOf(manual.id);
+  assert.equal(m.state, 'RUNNING');
+  advance(HOUR);
+  assert.equal(await runs.reconcileRun(manual.id), 'UNCHANGED');
+  assert.equal((await runOf(manual.id)).sessionId, m.sessionId);
+  // Stopping it ends the session rather than interrupting it: interrupted, it would still start once a slot frees.
+  const stopped = await runs.stopRun(w.owner, manual.id);
+  assert.equal(stopped.state, 'CANCELLED');
+  assert.equal(stopped.failureReason, 'CANCELLED_BY_OWNER');
+  assert.deepEqual(calls, [{ op: 'end', sessionId: m.sessionId! }]);
+  assert.equal((await db.session.findUniqueOrThrow({ where: { id: m.sessionId! } })).status, 'CANCELLED');
+  assert.equal((await liveSessionsOf(manual.id)).length, 0);
 });
 
 test('§7.2 a run whose session never appeared is retried after 10 minutes (ENGINE_CRASHED_BEFORE_START)', { skip }, async () => {
@@ -1073,7 +1246,7 @@ test('§8.4 a retry is CANCELLED when its schedule was paused meanwhile; a MANUA
   at('2026-11-14T02:00:00Z');
   const run = await runOf((await fireAndStart(s.id)).started[0].runId);
   await schedules.pause(w.owner, s.id);
-  await db.session.update({ where: { id: run.sessionId! }, data: { status: 'FAILED', error: 'spawn failed' } });
+  await db.session.update({ where: { id: run.sessionId! }, data: { status: 'FAILED', finishedAt: new Date(), error: 'spawn failed' } });
   assert.equal(await runs.reconcileRun(run.id), 'CANCELLED');
   assert.equal((await runOf(run.id)).state, 'CANCELLED');
   advance(HOUR);
@@ -1081,7 +1254,7 @@ test('§8.4 a retry is CANCELLED when its schedule was paused meanwhile; a MANUA
 
   const manual = await runs.runNow(w.owner, s.id);
   const m = await runOf(manual.id);
-  await db.session.update({ where: { id: m.sessionId! }, data: { status: 'FAILED', error: 'spawn failed' } });
+  await db.session.update({ where: { id: m.sessionId! }, data: { status: 'FAILED', finishedAt: new Date(), error: 'spawn failed' } });
   assert.equal(await runs.reconcileRun(manual.id), 'RETRY');
 });
 
@@ -1356,6 +1529,40 @@ test('LAND: a report does not bypass the working-time limit while the turn is st
   assert.equal((await db.session.findUniqueOrThrow({ where: { id: sessionId } })).mergeStatus, null);
 });
 
+// Work outside a turn leaves the session at AWAITING_INPUT (common/session-working.ts): the turn is over, the run is not.
+const OUTSIDE_TURN_WORK: Array<{ kind: string; running: Prisma.SessionUpdateInput; ended: Prisma.SessionUpdateInput }> = [
+  { kind: 'a background job', running: { runningBgJobs: ['bgj_still_going'] }, ended: { runningBgJobs: [] } },
+  { kind: 'a subagent', running: { runningSubagents: ['toolu_subagent'] }, ended: { runningSubagents: [] } },
+  { kind: 'an engine turn', running: { engineTurnActive: true }, ended: { engineTurnActive: false } },
+];
+
+for (const work of OUTSIDE_TURN_WORK) {
+  test(`LAND: a run does not land while its session at AWAITING_INPUT still has ${work.kind} executing`, { skip }, async () => {
+    const { w, run, sessionId } = await landFixture(`land-executing-${work.kind.replace(/\W+/g, '-')}`);
+    await runs.report(w.ownerId, sessionId, { outcome: 'CHANGED', key: 'engine@next', summary: 'Bumped the engine.' });
+    await db.session.update({ where: { id: sessionId }, data: { status: 'AWAITING_INPUT', ...work.running } });
+    await runs.landReportedRuns();
+    assert.equal((await runOf(run.id)).landingStatus, 'WAITING', `no landing while ${work.kind} is executing`);
+    assert.equal((await db.session.findUniqueOrThrow({ where: { id: sessionId } })).mergeStatus, null);
+    await db.session.update({ where: { id: sessionId }, data: work.ended });
+    await runs.landReportedRuns();
+    assert.equal((await runOf(run.id)).landingStatus, 'MERGING', `lands once ${work.kind} has ended`);
+    assert.equal((await db.session.findUniqueOrThrow({ where: { id: sessionId } })).mergeStatus, 'pending');
+  });
+}
+
+test('LAND: the working-time limit still bounds a run waiting on a background job after its turn', { skip }, async () => {
+  const { w, run, sessionId } = await landFixture('land-limit-bg-job');
+  await runs.report(w.ownerId, sessionId, { outcome: 'CHANGED', key: 'early', summary: 'Committed the bump.' });
+  await db.session.update({ where: { id: sessionId }, data: { status: 'AWAITING_INPUT', runningBgJobs: ['bgj_never_ends'] } });
+  advance(31 * MINUTE);
+  await runs.landReportedRuns();
+  assert.equal((await runOf(run.id)).state, 'FAILED');
+  assert.equal((await runOf(run.id)).failureReason, 'RUN_LIMIT');
+  assert.equal((await runOf(run.id)).landedSha, null);
+  assert.ok(calls.some((c) => c.op === 'interrupt' && c.sessionId === sessionId));
+});
+
 test('LAND: a pending landing keeps prior failures and Waiting on you until a confirmed success', { skip }, async () => {
   const { w, run, sessionId } = await landFixture('land-failure-accounting');
   await runs.report(w.ownerId, sessionId, { outcome: 'FAILED', summary: 'The check failed.' });
@@ -1374,4 +1581,130 @@ test('LAND: a pending landing keeps prior failures and Waiting on you until a co
   assert.equal((await runOf(second.id)).landingStatus, 'NO_COMMITS');
   assert.equal((await scheduleOf(run.scheduleId)).consecutiveFailures, 0);
   assert.equal((await db.ownerRequest.findUniqueOrThrow({ where: { id: prior.id } })).state, 'WITHDRAWN');
+});
+
+// =============================================================================================================
+// A run's session page (board docs/mocks/scheduled-run-not-started ②③④, owner's B1 and C1)
+// =============================================================================================================
+
+/** The workspace's Scheduled runs folder (`GET /sessions?scheduled=1`), Open and Completed. */
+async function scheduledFolder(w: World): Promise<string[]> {
+  const [open, completed] = await Promise.all([
+    sessionsService.list(w.ownerId, { view: 'open', workspaceId: w.workspaceId, scheduled: true }),
+    sessionsService.list(w.ownerId, { view: 'completed', workspaceId: w.workspaceId, scheduled: true }),
+  ]);
+  return [...open, ...completed].map((r) => r.id);
+}
+
+test('② a run that never reached its engine: each try\'s session reads every try, when it gave up and the next run; no try is listed, the last opens from the run history', { skip }, async () => {
+  reset();
+  at('2026-11-14T00:00:00Z');
+  const w = await world('didnt-run');
+  const s = await created(w);
+  at('2026-11-14T02:00:00Z');
+  await fireAndStart(s.id);
+  const [run] = await runsOf(s.id);
+  const first = (await runOf(run.id)).sessionId!;
+  await db.session.update({ where: { id: first }, data: { status: 'FAILED', finishedAt: clockNow, error: 'spawn failed' } });
+  assert.equal(await runs.reconcileRun(run.id), 'RETRY');
+  advance(MINUTE);
+  assert.deepEqual((await runs.startDue(25, s.id)).map((r) => r.outcome), ['STARTED']);
+  const second = (await runOf(run.id)).sessionId!;
+  // The second try is claimed, and its engine stops before the turn reaches it; the next wait would pass the window.
+  at('2026-11-15T01:58:00Z');
+  await db.session.update({ where: { id: second }, data: { status: 'FAILED', finishedAt: clockNow, startedAt: clockNow, error: 'spawn failed' } });
+  assert.equal(await runs.reconcileRun(run.id), 'MISSED');
+  const missed = await runOf(run.id);
+  // A try started when its session was opened (the create door's own clock, not this spec's).
+  const opened = async (id: string) => (await db.session.findUniqueOrThrow({ where: { id } })).createdAt.toISOString();
+  const [firstAt, secondAt] = [await opened(first), await opened(second)];
+
+  for (const [n, sessionId] of [[1, first], [2, second]] as const) {
+    const cards = await reads.sessionCards(w.ownerId, sessionId);
+    assert.equal(cards.run?.state, 'MISSED');
+    assert.equal(cards.run?.failureReason, 'ENGINE_CRASHED_BEFORE_START');
+    assert.equal(cards.run?.sessionId, second, 'the run names its last try');
+    assert.deepEqual(cards.runStatus, {
+      tries: [
+        { sessionId: first, startedAt: firstAt, claimed: false, reachedEngine: false },
+        { sessionId: second, startedAt: secondAt, claimed: true, reachedEngine: false },
+      ],
+      thisTry: n,
+      gaveUpAt: missed.endedAt!.toISOString(),
+      notBeforeAt: null,
+      nextDueAt: (await scheduleOf(s.id)).nextDueAt!.toISOString(),
+      queue: null,
+    });
+  }
+
+  // C1: neither try is in the Scheduled runs folder; the run's history names the last, which opens by id.
+  const folder = await scheduledFolder(w);
+  assert.ok(!folder.includes(first) && !folder.includes(second), 'a try that never reached its engine is not listed');
+  const history = await runs.history(w.ownerId, s.id);
+  assert.equal(history.find((h) => h.id === run.id)?.session?.id, second);
+  assert.equal((await sessionsService.getForOrchestration(w.ownerId, second))?.id, second, 'it opens by id');
+});
+
+test('③ a run waiting on a full runner: its session reads the gate, how long it has waited from, and the deadline it gives up at; it is listed while it waits', { skip }, async () => {
+  reset();
+  at('2026-11-14T00:00:00Z');
+  const w = await world('queued-full');
+  await occupy(w);
+  const s = await created(w);
+  at('2026-11-14T02:00:00Z');
+  const run = await runOf((await fireAndStart(s.id)).started[0].runId);
+  const sessionId = run.sessionId!;
+  at('2026-11-14T03:12:00Z');
+  assert.equal(await runs.reconcileRun(run.id), 'UNCHANGED');
+  const cards = await reads.sessionCards(w.ownerId, sessionId);
+  assert.equal(cards.run?.state, 'RUNNING');
+  assert.equal(cards.runStatus?.thisTry, 1);
+  assert.equal(cards.runStatus?.gaveUpAt, null);
+  assert.deepEqual(cards.runStatus?.queue, {
+    queuedReason: 'runner_at_capacity',
+    queuedActive: 1,
+    queuedLimit: 1,
+    queuedHeldByJobs: 0,
+    since: (await db.session.findUniqueOrThrow({ where: { id: sessionId } })).createdAt.toISOString(),
+    // A DAILY slot's catch-up window is one day.
+    deadline: '2026-11-15T02:00:00.000Z',
+  });
+  assert.ok((await scheduledFolder(w)).includes(sessionId), 'a try still waiting for a slot is listed');
+
+  // A slot frees: nothing holds it, so there is no gate to show.
+  await db.runner.update({ where: { id: w.runnerId }, data: { maxConcurrent: 2 } });
+  assert.equal((await reads.sessionCards(w.ownerId, sessionId)).runStatus?.queue, null);
+});
+
+test('④ an earlier try whose run went on in another session reads that it did, and only the try that ran is listed', { skip }, async () => {
+  reset();
+  at('2026-11-14T00:00:00Z');
+  const w = await world('started-later');
+  const s = await created(w);
+  at('2026-11-14T02:00:00Z');
+  await fireAndStart(s.id);
+  const [run] = await runsOf(s.id);
+  const first = (await runOf(run.id)).sessionId!;
+  await db.session.update({ where: { id: first }, data: { status: 'FAILED', finishedAt: clockNow, error: 'spawn failed' } });
+  assert.equal(await runs.reconcileRun(run.id), 'RETRY');
+  const queued = await reads.sessionCards(w.ownerId, first);
+  assert.equal(queued.runStatus?.notBeforeAt, '2026-11-14T02:01:00.000Z', 'the next try');
+  advance(MINUTE);
+  await runs.startDue(25, s.id);
+  const second = (await runOf(run.id)).sessionId!;
+  await delivered(second, clockNow);
+
+  const cards = await reads.sessionCards(w.ownerId, first);
+  assert.equal(cards.run?.sessionId, second);
+  assert.equal(cards.runStatus?.thisTry, 1);
+  assert.deepEqual(cards.runStatus?.tries.map((t) => [t.sessionId, t.reachedEngine]), [[first, false], [second, true]]);
+  assert.equal(cards.runStatus?.gaveUpAt, null);
+  assert.equal(cards.runStatus?.notBeforeAt, null);
+  const folder = await scheduledFolder(w);
+  assert.ok(!folder.includes(first), 'the try that never reached its engine is not listed');
+  assert.ok(folder.includes(second), 'the try that ran is');
+  // The run's session itself ends with a result, still listed: what it did is there to read.
+  await runs.report(w.ownerId, second, { outcome: 'CHANGED', key: 'k', summary: 'New.' });
+  await db.session.update({ where: { id: second }, data: { status: 'FAILED', finishedAt: clockNow } });
+  assert.ok((await scheduledFolder(w)).includes(second));
 });

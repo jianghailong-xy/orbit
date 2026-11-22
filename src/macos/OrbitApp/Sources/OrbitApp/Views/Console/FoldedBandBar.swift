@@ -151,7 +151,8 @@ struct FoldedBandBar: View {
     /// The Background row's own reading (`BackgroundRowRule`): no mark when the row shows nothing.
     private var processes: String? {
         FoldedBand.processes(console.state.background,
-                             lastUserMessageAt: BackgroundRowRule.lastUserMessageAt(console.state.items),
+                             clearedAt: BackgroundRowRule.clearedAt(items: console.state.items,
+                                                                    lastAgentTurnStartedAt: console.state.agentTurnStartedAt),
                              sessionLive: console.isLive)
     }
 

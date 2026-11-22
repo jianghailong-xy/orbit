@@ -392,6 +392,22 @@ public final class APIClient: @unchecked Sendable {
         try await get("sessions/\(sessionID)/background")
     }
 
+    /// The newest lines of one bg_run job's output (GET /sessions/:id/background/jobs/:jobId/tail, at
+    /// most 40), read by the runner hosting it just now: what a running Job card shows (R2). A 404/409
+    /// says it cannot be read (a runner too old, output gone); a 503/504 that the runner is away for now.
+    /// Web parity: `getBackgroundJobTail`.
+    public func backgroundJobTail(sessionID: String, jobID: String) async throws -> BackgroundJobTail {
+        try await get("sessions/\(sessionID)/background/jobs/\(jobID)/tail")
+    }
+
+    /// The owner's stop of one running bg_run job (POST /sessions/:id/background/jobs/:jobId/stop): its
+    /// end arrives as the job's terminal report, killed with the reason `stopped_by_owner` (R3). Web
+    /// parity: `stopBackgroundJob`.
+    @discardableResult
+    public func stopBackgroundJob(sessionID: String, jobID: String) async throws -> BackgroundJobStop {
+        try await postEmpty("sessions/\(sessionID)/background/jobs/\(jobID)/stop")
+    }
+
     /// The session's SubAgent runs, oldest first (GET /sessions/:id/subagents): what each `delegate`
     /// call's block shows beside it — tier, model, Why, time and cost (docs/subagent-design.md §6.4).
     public func sessionSubagents(sessionID: String) async throws -> [SubagentRunView] {
@@ -1308,13 +1324,6 @@ public final class APIClient: @unchecked Sendable {
         try await postEmpty("projects/\(projectID)/integration/jobs/\(jobID)/retry")
     }
 
-    /// Revert, on a coordinator's change in the project's landing-check history (§12.15 P-R1): the
-    /// server puts the change's old value back and the field then needs a card from the coordinator.
-    /// The answer is not read: the page reads the project again.
-    public func revertSettingChange(projectID: String, changeID: String) async throws {
-        _ = try await postRaw("projects/\(projectID)/setting-changes/\(changeID)/revert", body: Optional<Empty>.none)
-    }
-
     /// The owner's "Land without the check" on a landing in flight (§2.4 J-S5): the server stops it
     /// and lands it again with the landing check not run, recorded as skipped by the owner. The
     /// answer is not read: the card redraws from the integration view read again.
@@ -1363,6 +1372,13 @@ public final class APIClient: @unchecked Sendable {
     public func updateProjectIntegration(_ projectID: String,
                                          _ body: UpdateProjectIntegrationRequest) async throws -> ProjectIntegrationView {
         try await patch("projects/\(projectID)/integration", body: body)
+    }
+
+    /// The owner's Revert on one of the coordinator's recorded landing-check changes (§12.15 P-R1):
+    /// its old value is put back as the owner's own, so the coordinator needs a card for that field
+    /// from then on. Answers the revert's own record; the page reads the project again.
+    public func revertSettingChange(_ projectID: String, changeID: String) async throws -> ProjectSettingChange {
+        try await postEmpty("projects/\(projectID)/setting-changes/\(changeID)/revert")
     }
 
     /// Pause project: nothing starts its tasks or merges it into main by itself until it is resumed;
@@ -1416,12 +1432,15 @@ public final class APIClient: @unchecked Sendable {
         try await get("projects/\(projectID)/coordinator/pending-waits")
     }
 
-    /// One of the handoff's presses: `nil` is Hand over, then `skip` (Skip the note / Hand over without
+    /// One of the handoff's presses: `start` is Hand over, then `skip` (Skip the note / Hand over without
     /// a note), `cancel` (Cancel handover / Keep this coordinator) and `retry` (Try again). Each
     /// answers the handoff as it now stands; a 409 is a press that does not fit its state.
     public func coordinatorHandoff(_ projectID: String,
-                                   _ action: CoordinatorHandoffAction = .start) async throws -> CoordinatorHandoffView {
-        try await postEmpty("projects/\(projectID)/coordinator/handoff\(action.pathSuffix)")
+                                   _ action: CoordinatorHandoffAction = .start,
+                                   successor: CoordinatorHandoffSuccessor? = nil) async throws -> CoordinatorHandoffView {
+        let path = "projects/\(projectID)/coordinator/handoff\(action.pathSuffix)"
+        if action == .cancel { return try await postEmpty(path) }
+        return try await post(path, body: CoordinatorHandoffRequest(successor: successor))
     }
 
     /// Lift a task list's pause, so its otherwise-ready tasks can run.
@@ -2033,6 +2052,11 @@ public final class APIClient: @unchecked Sendable {
         try await post("managed-runner/retry",
                        body: ManagedRunnerWriteRequest(idempotencyKey: idempotencyKey, revision: revision))
     }
+    /// Update Now for the owner's Orbit Cloud runner. A busy runner answers 409 `MANAGED_RUNNER_BUSY` (see
+    /// `ManagedRunnerUpdateNow.busy`) unless `interruptTurns` is true.
+    public func updateManagedRunnerNow(interruptTurns: Bool) async throws -> ManagedRunnerStatus {
+        try await post("managed-runner/update-now", body: ManagedRunnerUpdateNowRequest(interruptTurns: interruptTurns))
+    }
     /// Ask for the owner's managed runner where the server offers one (`actions.canEnsure`).
     public func ensureManagedRunner(idempotencyKey: String = UUID().uuidString) async throws -> ManagedRunnerStatus {
         try await post("managed-runner/ensure", body: ManagedRunnerWriteRequest(idempotencyKey: idempotencyKey))
@@ -2353,6 +2377,12 @@ public final class APIClient: @unchecked Sendable {
     /// session's tracked branch, so Merge/diff act on the real work instead of a stale "In main".
     public func adoptBranch(sessionID: String) async throws {
         _ = try await postRaw("sessions/\(sessionID)/adopt-branch", body: Optional<Empty>.none)
+    }
+
+    /// Close a failed merge's strip: the server clears the stored conflict or error, so every client's
+    /// bar shows Merge (or "In main") again. Nothing in git changes.
+    public func dismissMergeFailure(sessionID: String) async throws {
+        _ = try await postRaw("sessions/\(sessionID)/merge-failure/dismiss", body: Optional<Empty>.none)
     }
 
     // MARK: link previews

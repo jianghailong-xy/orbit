@@ -71,7 +71,7 @@ final class SettingsHomeTests: XCTestCase {
         XCTAssertEqual(SessionSettings.Row.allCases,
                        [.defaultPermission, .orchestration, .modelRouting, .optimizeFor, .promptSuggestions, .recaps])
         XCTAssertEqual(SessionSettings.Row.allCases.map(SessionSettings.title),
-                       ["Default permission", "Session orchestration", "Smart model selection", "Optimize For",
+                       ["Default permission", "Session orchestration", "Route by tier", "Optimize For",
                         "Suggested replies", "Session recaps"])
         XCTAssertEqual(SessionSettings.footer(.defaultPermission), SettingsCopy.defaultPermissionHint)
         XCTAssertEqual(SessionSettings.footer(.orchestration), SettingsCopy.letSessionsOrchestrateHint)

@@ -12,6 +12,7 @@ import androidx.compose.foundation.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.edit
 import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
@@ -45,6 +46,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.perf.OrbitPerf
+import io.orbitd.android.realtime.PagePoll
 import io.orbitd.android.realtime.restoredFields
 import io.orbitd.android.R
 import io.orbitd.android.composer.CoordinatorHandoff
@@ -78,6 +80,7 @@ import io.orbitd.android.cards.LocalSteerDeliveries
 import io.orbitd.android.cards.NeedsYouLogic
 import io.orbitd.android.cards.SessionCardsReads
 import io.orbitd.android.cards.rememberSessionCards
+import io.orbitd.android.core.cards.BackgroundRow
 import io.orbitd.android.core.cards.CardFamily
 import io.orbitd.android.core.cards.CardPreviews
 import io.orbitd.android.cards.ReaderSide
@@ -212,7 +215,18 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     val list = rememberLazyListState()
     // Opened from a project row onto the card a member waits on you with (owner 2026-11-14): placed at the cards, not the tail.
     val ontoWaitingCard = remember(route.id) { CardFocus.pending(route.id!!) == CardFocus.WAITING }
-    DisposableEffect(route.id) { onDispose { if (CardFocus.pending(route.id!!) == CardFocus.WAITING) CardFocus.spend(route.id!!) } }
+    DisposableEffect(route.id) { onDispose { if (CardFocus.pending(route.id!!) == CardFocus.WAITING) CardFocus.spend(route.id!!); CardFocus.release(route.id!!) } }
+    // The record a jump landed on, held there like the opened card: the line's seq and the offset it was placed at.
+    var recordHeld by remember(model) { mutableStateOf<Pair<Long, Int>?>(null) }
+    val recordAt = remember(model) { LongArray(1) }
+    // Rows start after the items the list draws ahead of them ("loading", "older", "handoff-note", "created-workspace"); the list's
+    // builder writes it, so a jump counts what is there.
+    val rowsStart = remember(model) { IntArray(1) { 1 } }
+    val releaseHolds = {
+        CardFocus.release(route.id!!); recordHeld = null
+        if (CardFocus.pending(route.id!!) == CardFocus.WAITING) CardFocus.spend(route.id!!)
+    }
+    val latestRelease by rememberUpdatedState(releaseHolds)
     var follow by rememberSaveable { mutableStateOf(route.recordId == null && !ontoWaitingCard) }
     var placed by remember(model) { mutableStateOf(false) }
     var dragging by remember { mutableStateOf(false) }
@@ -292,7 +306,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         val target = state.targetSeq?.let { anchorRow(currentRows, it) }
         if (target != null) {
             follow = false
-            list.scrollToItem(currentRows.indexOf(target) + 1, state.targetOffset)
+            list.scrollToItem(rowsStart[0] + currentRows.indexOf(target), state.targetOffset)
+            recordHeld = target.event.seq to state.targetOffset; recordAt[0] = CardFocus.now()
         } else if (follow) list.scrollToItem((list.layoutInfo.totalItemsCount - 1).coerceAtLeast(0))
         placed = true; positioning = false
     }
@@ -305,6 +320,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     val item = visible.firstOrNull { it.key.toString().startsWith("event:") }
                     val seq = item?.key?.toString()?.substringAfter(':')?.toLongOrNull()
                     if (seq != null) model.position(seq, -item.offset, follow)
+                    // A reader resting on the cards, with no transcript row in view, still decides whether a resync may reseed under them.
+                    else model.reading(follow)
                 }
             }
     }
@@ -400,6 +417,38 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     // own top into view. Once per open; a jump the open itself asked for (a record) wins.
     var placedAtCards by remember(model) { mutableStateOf(false) }
     var listHeight by remember { mutableIntStateOf(0) }
+    var cardsSize by remember { mutableIntStateOf(0) }
+    // Held in place (web `landingRef`): the opened card, or a jumped-to record, is put back whenever the conversation changes around
+    // it, until the reader takes the scroller, goes to the tail, or nothing has changed for HOLD_QUIET_MS.
+    val heldCard = CardFocus.held(route.id!!)
+    LaunchedEffect(heldCard?.key, state.window.events, cardsSize, state.session?.let(cards::shown)?.size) {
+        val held = heldCard ?: return@LaunchedEffect
+        if (!CardFocus.reapply(route.id!!)) return@LaunchedEffect
+        // Once the change has been laid out: how far the card stands from where it was brought to, and back by that much.
+        withFrameNanos { }; withFrameNanos { }
+        val delta = (CardFocus.position(route.id!!, held.key) ?: return@LaunchedEffect) - held.top
+        if (kotlin.math.abs(delta) >= 1f && CardFocus.held(route.id!!)?.key == held.key) {
+            positioning = true
+            list.scrollBy(delta)
+            positioning = false
+            CardFocus.moved(route.id!!)
+        }
+    }
+    LaunchedEffect(recordHeld, state.window.events, rowsStart[0], cardsSize) {
+        val (seq, offset) = recordHeld ?: return@LaunchedEffect
+        // Nothing has moved it for HOLD_QUIET_MS: let it go; otherwise put it back, and the quiet starts again.
+        if (CardFocus.now() - recordAt[0] >= CardFocus.HOLD_QUIET_MS) { recordHeld = null; return@LaunchedEffect }
+        val target = anchorRow(currentRows, seq)
+        if (target != null && !positioning) {
+            positioning = true
+            val before = list.firstVisibleItemIndex to list.firstVisibleItemScrollOffset
+            list.scrollToItem(rowsStart[0] + currentRows.indexOf(target), offset)
+            positioning = false
+            // Only a put-back that moved the view restarts the quiet (web `keepLanding`).
+            if (before != (list.firstVisibleItemIndex to list.firstVisibleItemScrollOffset)) recordAt[0] = CardFocus.now()
+        }
+    }
+    LaunchedEffect(follow) { if (follow) { CardFocus.release(route.id!!); recordHeld = null } }
     LaunchedEffect(placed) {
         if (!placed || !ontoWaitingCard || placedAtCards || route.recordId != null) return@LaunchedEffect
         placedAtCards = true
@@ -466,6 +515,17 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     val worktreeState by worktree.state.collectAsState()
     LaunchedEffect(worktreeState.detail, snapshotDetail) { console.detail = worktreeState.detail ?: snapshotDetail }
     val sessionDetail = worktreeState.detail ?: snapshotDetail
+    // Held by its GitHub workspace's clone: the waiting card says what is cloning and how far (web `useCloneWait`). A failed clone keeps
+    // the plain sentence; the detail's workspace says which repository, the stream how far.
+    val cloneHeld = listRow?.takeIf {
+        it.effectiveLifecycleState != "TRASH" && it.effectiveRunState == RunState.QUEUED && !it.regionHeld && QueuedClone.isHeld(it.queuedGate)
+    }?.queuedGate
+    val heardClonesNow by app.clones.all.collectAsState()
+    val cloneReadAt = remember(sessionDetail) { System.currentTimeMillis() }
+    val cloneWait = if (cloneHeld == null || !QueuedClone.isCloning(cloneHeld)) null else {
+        val workspace = sessionDetail?.get("workspace") as? JsonObject
+        QueuedClone.wait(workspace, workspace?.string("id")?.let { heardClonesNow[WorkspaceClone.keyOf(it)] }, cloneReadAt)
+    }
     val workspaceOfSession = (sessionDetail?.get("workspace") as? JsonObject)?.string("id") ?: sessionDetail?.string("workspaceId")
     LaunchedEffect(workspaceOfSession) { mainCheckout.bind(workspaceOfSession) }
     // What a Retry re-sends when it is the reader's: the newest message of a person the window holds.
@@ -497,9 +557,11 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     LaunchedEffect(console, model) {
         refreshWhileStreaming(model.state.map { it.session?.connection == ConnectionState.CONNECTED }, console::refreshRunner)
     }
-    LaunchedEffect(worktree, state.denied) {
-        if (!state.denied) worktree.poll { (worktree.state.value.detail ?: snapshotDetail)?.let { it.string("runStatus") ?: it.string("status") } in
-            setOf("RUNNING", "AWAITING_INPUT", "INTERRUPTED") }
+    // The bar's detail follows the account stream like every page's poll: a read on a connect, the store's snapshot reads in between
+    // ([WorktreeModel.offer]), a minute's safety read, and its own bounded cadence only while a merge or commit is in flight. It stops with
+    // the Activity.
+    PagePoll(app, handle, emptySet(), worktree, state.denied, inFlightMs = { worktree.inFlightMs() }) {
+        if (!state.denied) worktree.loadDetail()
     }
     // A06-5: the viewport changing size under a pinned reader (keyboard, a taller composer, the reconnect
     // line) asks for the tail again; nothing else re-anchors the bottom of a list that shrank.
@@ -581,6 +643,23 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     val subagentQueued = remember(queuedTurns, queuedCancelEnabled, liveTail) {
         if (!liveTail) emptyMap() else subagentQueuedWakes(queuedTurns, queuedCancelEnabled) { turnId -> composer.control("turns/$turnId", HttpMethod.DELETE) }
     }
+    // Each bg_run job's card reads its job by id: its row of the Background list, its wake turns, a wake still on the queue, and the
+    // tail and stop routes (JobCardView; board 350t1lTONlrPMjilBdXx7, rulings R1-R4).
+    val jobApi = remember(handle, route.id) { BackgroundJobApi(app.session, handle, route.id!!) }
+    val jobWakes = remember(state.window.events, steerDeliveries) { JobCards.wakes(state.window.events, steerDeliveries) }
+    val jobQueued = remember(queuedTurns, queuedCancelEnabled, liveTail) {
+        if (!liveTail) emptyMap() else jobQueuedWakes(queuedTurns, queuedCancelEnabled) { turnId -> composer.control("turns/$turnId", HttpMethod.DELETE) }
+    }
+    val jobSessionLive = BackgroundTrayLogic.sessionLive(sessionDetail)
+    val jobWhere = (sessionDetail?.get("workspace") as? JsonObject)?.string("name") ?: worktreeState.workspace?.string("name")
+    val jobCards = remember(background, jobWakes, jobQueued, jobSessionLive, jobWhere, jobApi) {
+        JobCards(JobCards.shells(background.orEmpty()), jobWakes, jobQueued, jobSessionLive, jobWhere, jobApi::tail, jobApi::stop)
+    }
+    // A job's row in the opened Background list goes to its card, when that card is drawn (R1).
+    val jobCalls = remember(state.window.events) { jobCallsById(state.window.events) }
+    val jobJump: (String) -> (() -> Unit)? = { jobId ->
+        jobCalls[jobId]?.takeIf { seq -> currentRows.any { it.contains(seq) } }?.let { seq -> { model.show(seq) } }
+    }
     // A workflow's finished strip points back at its block, when that block is drawn.
     val workflowCalls = remember(state.window.events) {
         state.window.events.filter { it.type == "tool_use" && it.parent() == null && it.fields.string("name") == WorkflowBlock.TOOL_NAME }
@@ -593,7 +672,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         LocalSessionConsole provides console, LocalMainCheckout provides mainCheckout, LocalWatchTargetNames provides targetNames, LocalAnsweredQuestions provides answeredQuestions,
         LocalRevealItemCard provides revealItemCard, LocalExchangeTree provides exchangeTree, LocalSubagentRuns provides subagentRuns,
         LocalSubagentWakes provides subagentWakes, LocalSubagentQueuedWakes provides subagentQueued,
-        LocalWorkflowRuns provides workflowRuns, LocalWorkflowCardJump provides workflowJump) {
+        LocalWorkflowRuns provides workflowRuns, LocalWorkflowCardJump provides workflowJump, LocalJobCards provides jobCards) {
         SessionCardsReads(cards)
         BoxWithConstraints(Modifier.fillMaxSize()) {
         val view = LocalView.current
@@ -693,7 +772,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 }.nestedScroll(nested).pointerInput(model) {
                     // Do not consume the gesture: native selection/links still receive it.
                     // A touch pauses following so a live update cannot move text under a selection.
-                    awaitEachGesture { awaitFirstDown(requireUnconsumed = false); follow = false }
+                    awaitEachGesture { awaitFirstDown(requireUnconsumed = false); follow = false; latestRelease() }
                 }.testTag("transcript-list").lastPageProbe(lastPage, list, view), state = list,
                     // No room under the rows but the tail row's own: every follow and jump lands on it (iOS 9d3751ec2).
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -708,6 +787,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     }
                     // Board 02 ③: a successor opens with the note its predecessor wrote, and the waits that moved here.
                     val receivedHandoff = CoordinatorHandoff.received(detail)
+                    rowsStart[0] = (if (!displayedWindow.seeded) 1 else 0) + 1 + (if (receivedHandoff != null && displayedWindow.seeded && !displayedWindow.hasOlder) 1 else 0) +
+                        (if (createdWorkspaceLine != null && !displayedWindow.hasOlder) 1 else 0)
                     if (receivedHandoff != null && displayedWindow.seeded && !displayedWindow.hasOlder) item(key = "handoff-note") { Box(Modifier.conversationCard()) {
                         HandoffNoteCard(receivedHandoff, io.orbitd.android.core.cards.CoordinatorCleanStart.history(
                             detail?.text("createdAt"), session?.snapshot?.standing.orEmpty(), cards.merged)) { open(OrbitRoute(Destination.SESSION, it)) }
@@ -781,7 +862,13 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     // Held by its runner's update with no message of the reader's to put the foot row under: the queued page's
                     // explanation, centred on an empty conversation (web `RunnerUpdatingQueued`).
                     val runnerUpdatingPage = runnerUpdatingGate?.takeIf { RunnerUpdating.isRunnerUpdating(it) && displayedWindow.seeded && live != null && heldSeq == null && !tailHeld && accepted.isEmpty() }
-                    if (runnerUpdatingPage != null) item(key = "runner-updating") {
+                    val cloneCard = cloneHeld != null && displayedWindow.seeded && live != null && heldSeq == null && !tailHeld && accepted.isEmpty()
+                    if (cloneCard) item(key = "clone-wait") {
+                        if (displayedRows.isEmpty()) Box(Modifier.fillParentMaxHeight(0.8f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            CloneWaitNotice(cloneWait, QueuedClone.isFailed(cloneHeld), runnerUpdatingMachine, compact = false)
+                        } else CloneWaitNotice(cloneWait, QueuedClone.isFailed(cloneHeld), runnerUpdatingMachine, compact = true)
+                    }
+                    else if (runnerUpdatingPage != null) item(key = "runner-updating") {
                         val openTurn: (String) -> Unit = { open(OrbitRoute(Destination.SESSION, it)) }
                         if (displayedRows.isEmpty()) Box(Modifier.fillParentMaxHeight(0.8f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                             RunnerUpdatingQueued(runnerUpdatingPage, runnerUpdatingMachine, openTurn, later = runnerUpdatingLater)
@@ -807,7 +894,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     }
                     item(key = "newer") { if (displayedWindow.newerAfter != null) TextButton(enabled = !displayedLoading, onClick = model::newer) { Text("Load newer messages") } }
                     item(key = "interaction-cards") {
-                        Box(Modifier.onSizeChanged { if (rail.grew(it.height) && placed && follow && state.window.newerAfter == null) repin++ }) {
+                        Box(Modifier.onSizeChanged { cardsSize = it.height; if (rail.grew(it.height) && placed && follow && state.window.newerAfter == null) repin++ }) {
                             // The list's height below the floating needs-you bar: a card brought in by its top lands under the bar, not behind it.
                             CompositionLocalProvider(LocalCardViewport provides listHeight.coerceAtLeast(0)) { SessionCards(cards, openLink, discuss = discussCard) }
                         }
@@ -882,9 +969,15 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) { SessionWatches(app, handle, route.id!!, open = open) }
                 // The session's background processes, by the shared row rule (board v2; iOS `BackgroundTrayView`): between what it
                 // waits on and the tasks it created. Its names stop rotating while the band is folded away.
-                val lastUserMessageAt = remember(state.window.events) { BackgroundTrayLogic.lastUserMessageAt(state.window.events) }
+                val backgroundClearedAt = remember(state.window.events) {
+                    BackgroundRow.clearedAt(BackgroundTrayLogic.lastUserMessageAt(state.window.events), BackgroundTrayLogic.lastAgentTurnStartedAt(state.window.events))
+                }
                 Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) {
-                    BackgroundTray(background.orEmpty(), lastUserMessageAt, BackgroundTrayLogic.sessionLive(detail), folded = foldsChrome)
+                    // A running job's row takes Stop through the same routes as its card (R3).
+                    CompositionLocalProvider(LocalJobCards provides jobCards) {
+                        BackgroundTray(background.orEmpty(), backgroundClearedAt, BackgroundTrayLogic.sessionLive(detail), folded = foldsChrome,
+                            jumpToJob = jobJump)
+                    }
                 }
                 Box(Modifier.conversationCard().typingFold(foldsChrome)) { SessionTasksCard(app, handle, route.id!!, cards, openLink) }
                 // The composer's send in flight holds Merge as a queued turn does (A06-14, iOS `console.sending`).
@@ -909,10 +1002,10 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 val handoffProject = detail?.let(CoordinatorHandoff::projectId)
                 val handoffApi = remember(handle) { CoordinatorHandoffApi(app.session, handle) }
                 var handoffBusy by remember(handle, route.id) { mutableStateOf(false) }
-                HandoffStatus(handoff, busy = handoffBusy, act = { action ->
+                if (detail != null) HandoffStatus(handoff, composer, composerState, detail, busy = handoffBusy, act = { action, successor ->
                     if (handoffProject != null) scope.launch {
                         handoffBusy = true
-                        try { handoffApi.post(handoffProject, action) }
+                        try { handoffApi.post(handoffProject, action, successor) }
                         catch (cancel: CancellationException) { throw cancel }
                         catch (e: Exception) { OrbitToasts.show(CoordinatorHandoff.refusal(e), tone = ToastTone.ERROR) }
                         finally { handoffBusy = false; app.realtime.refreshSession() }

@@ -168,11 +168,11 @@ test('runnable filter is applied before pagination with the same rules as the Ru
     // action: nothing has written one since the control loop went.
     assert.match(
       sql,
-      /NOT EXISTS \(\s*SELECT 1 FROM "session" passed_live[\s\S]*passed_live\."status"::text IN \('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'\)/,
+      /NOT EXISTS \(\s*SELECT 1 FROM "session" passed_live[\s\S]*passed_live\."finished_at" IS NULL/,
     );
     assert.match(
       sql,
-      /AND EXISTS \(\s*SELECT 1 FROM "session" passed_run[\s\S]*passed_run\."status"::text = 'SUCCEEDED'[\s\S]*passed_run\."end_reason" = 'task_done'/,
+      /AND EXISTS \(\s*SELECT 1 FROM "session" passed_run[\s\S]*passed_run\."finished_at" IS NOT NULL[\s\S]*passed_run\."end_reason" = 'task_done'/,
     );
     assert.match(sql, /t\.completion_policy = 'MANUAL'::task_completion_policy/);
     assert.match(sql, /aggregate_child\.parent_task_id = t\.id/);

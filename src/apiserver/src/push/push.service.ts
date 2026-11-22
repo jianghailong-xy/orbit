@@ -1,4 +1,7 @@
-import { runningSubagentCards } from '../sessions/abandoned-approvals';
+import { readByLiveBackgroundJob, runningSubagentCards } from '../sessions/abandoned-approvals';
+import { isSessionGenerating } from '../common/session-generating';
+import { ENGINE_TURN } from '../common/session-working';
+import { RELEASE_FACTS_SELECT } from '../common/session-release';
 import { visibleQuestions, questionHolds } from '../sessions/run-question';
 import http2 from 'node:http2';
 import { randomUUID } from 'node:crypto';
@@ -11,7 +14,7 @@ import { COORDINATOR_PAUSE_SELECT, conversationIsPaused } from '../projects/coor
 import { openFuseEpisodeId } from '../projects/project-fuse';
 import { ConfigService } from '@nestjs/config';
 import * as jwt from 'jsonwebtoken';
-import { RunStatus, type DeviceToken } from '@prisma/client';
+import { Prisma, RunStatus, type DeviceToken } from '@prisma/client';
 import { AgentProvider, ENGINE_CLI_NAMES, RUN_NOTICE_MESSAGE_MAX, TRANSLATION_TIMEOUT_MS, uuidToBase62, type LoginEngine } from '@orbit/shared';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
@@ -126,6 +129,35 @@ const FEISHU_EVENT_KINDS: Readonly<Record<string, string>> = {
   schedule: 'Scheduled task',
   condition: 'Condition',
 };
+
+/**
+ * The sessions that can hold a card raised outside a dispatched turn, whose status that work leaves at AWAITING_INPUT
+ * (docs/session-three-state-design.md §11.3 item 2): the engine's own turn, or a runner-hosted process still up. The
+ * process is read off `runningBgShells`, the set `abandoned-approvals.ts` collects a job's card on, not
+ * `runningBgJobs`: a card is answerable exactly while the reap would leave it, and the badge rings for no other.
+ */
+const OUTSIDE_TURN_CARD_SESSIONS: Prisma.SessionWhereInput = {
+  OR: [{ status: RunStatus.AWAITING_INPUT, ...ENGINE_TURN.where }, { runningBgShells: { isEmpty: false } }],
+};
+
+/**
+ * The cards of such a session somebody still has to answer, on the readers `SessionsService.stillBeingAsked` names: a
+ * card that names a background job while that job is in the session's set (`readByLiveBackgroundJob`), and one that
+ * names none while the engine's own turn is generating. A job's card whose job has ended is the reap's, never counted.
+ * SubAgent cards are the subagent half's and are not selected here.
+ */
+function outsideTurnCards<T extends { backgroundJobId?: string | null; toolUseId?: string | null }>(session: {
+  status: RunStatus;
+  engineTurnActive?: boolean | null;
+  runningBgShells?: readonly string[] | null;
+  approvals?: readonly T[] | null;
+}): T[] {
+  const generating = isSessionGenerating(session);
+  return (session.approvals ?? []).filter((card) =>
+    card.backgroundJobId == null
+      ? generating
+      : readByLiveBackgroundJob({ backgroundJobId: card.backgroundJobId }, session.runningBgShells ?? []));
+}
 
 /**
  * Shared reminder eligibility and reconciliation, with independent transports: APNs, FCM, and the account's own Feishu
@@ -293,18 +325,23 @@ export class PushService {
   async notifyApprovalRequest(sessionId: string, approvalId: string, toolName: string, coordinatorFallback = false): Promise<void> {
     if (!this.enabled) return;
     try {
+      const gates = { completedAt: null, archivedAt: null, deletedAt: null, cancelRequestedAt: null };
+      const select = { title: true, ownerId: true, notificationsMuted: true, notifyNeedsYou: true, runSource: true };
       const session = await this.prisma.session.findFirst({
         where: {
           id: sessionId,
           // A running turn asks, and so does a SubAgent still running after its parent's turn ended
           // (docs/subagent-design.md §5.3); the "needs you" set below decides whether this card is one.
           OR: [{ status: RunStatus.RUNNING }, { runningSubagents: { isEmpty: false } }],
-          completedAt: null,
-          archivedAt: null,
-          deletedAt: null,
-          cancelRequestedAt: null,
+          ...gates,
         },
-        select: { title: true, ownerId: true, notificationsMuted: true, notifyNeedsYou: true, runSource: true },
+        select,
+      }) ?? await this.prisma.session.findFirst({
+        // And so does work outside a dispatched turn, on a session still at AWAITING_INPUT: a background job, or a turn
+        // the engine started itself (docs/session-three-state-design.md §11.3 item 2). Asked second, and only when the
+        // first finds nothing, so the ordinary RUNNING approval still costs one read.
+        where: { id: sessionId, ...OUTSIDE_TURN_CARD_SESSIONS, ...gates },
+        select,
       });
       if (!session) return;
       // A scheduled task's run rings through its Waiting on you item instead (schedules/schedule-attention.ts).
@@ -566,7 +603,7 @@ export class PushService {
         select: {
           title: true,
           ownerId: true,
-          status: true,
+          ...RELEASE_FACTS_SELECT,
           retryAt: true,
           completedAt: true,
           deletedAt: true,
@@ -1632,7 +1669,7 @@ export class PushService {
    *  make visible. It does carry the same gate a card does — a project with no coordinator bound,
    *  or one whose conversation was filed away, is counted by neither (`readOwnerItemSessionIds`). */
   async needsYouSessions(ownerId: string): Promise<string[]> {
-    const [rows, blockedOnOwner, withSubagents] = await Promise.all([
+    const [rows, blockedOnOwner, withSubagents, outsideTurn] = await Promise.all([
       this.prisma.session.findMany({
         where: {
           ownerId,
@@ -1665,6 +1702,31 @@ export class PushService {
           approvals: { where: { status: 'PENDING', subagentRunId: { not: null } }, select: { id: true, toolName: true, subagentRunId: true } },
         },
       }),
+      // The conversations whose card was raised outside a dispatched turn, which leaves the status at AWAITING_INPUT
+      // (docs/session-three-state-design.md §11.3 item 2): which of their cards count is `outsideTurnCards` below.
+      this.prisma.session.findMany({
+        where: {
+          ownerId,
+          sessionKind: 'CONVERSATION',
+          completedAt: null,
+          archivedAt: null,
+          deletedAt: null,
+          cancelRequestedAt: null,
+          ...OUTSIDE_TURN_CARD_SESSIONS,
+          approvals: { some: { status: 'PENDING', subagentRunId: null } },
+        },
+        select: {
+          id: true,
+          taskId: true,
+          status: true,
+          engineTurnActive: true,
+          runningBgShells: true,
+          approvals: {
+            where: { status: 'PENDING', subagentRunId: null },
+            select: { id: true, toolName: true, backgroundJobId: true, toolUseId: true },
+          },
+        },
+      }),
     ]);
     const visible = new Set((await visibleQuestions(this.prisma, rows.filter(r => r.taskId).flatMap(r => r.approvals))).map(a => a.id));
     // A running SubAgent's card is a question whatever its parent is doing (docs/subagent-design.md §5.3): a
@@ -1672,9 +1734,23 @@ export class PushService {
     const subagentCards = await visibleQuestions(this.prisma, await runningSubagentCards(this.prisma, withSubagents.flatMap(
       (r) => (r.approvals ?? []).map((card: { id: string; toolName: string; subagentRunId?: string | null }) => ({ ...card, sessionId: r.id })),
     )));
+    // A turn's card whose call has returned is over (the reap's finished-call rule, `reapApprovalsOfEndedTurns`).
+    const turnCalls = (outsideTurn ?? []).flatMap((r) => outsideTurnCards(r)
+      .filter((card) => card.backgroundJobId == null && card.toolUseId)
+      .map((card) => ({ sessionId: r.id, toolUseId: card.toolUseId as string })));
+    const returned = turnCalls.length === 0 ? new Set<string>() : new Set((await this.prisma.toolCall.findMany({
+      where: { OR: turnCalls.map((c) => ({ sessionId: c.sessionId, toolUseId: c.toolUseId })), finishedAt: { not: null } },
+      select: { sessionId: true, toolUseId: true },
+    })).map((call) => `${call.sessionId}:${call.toolUseId}`));
+    const outsideTurnIds: string[] = [];
+    for (const r of outsideTurn ?? []) {
+      const cards = outsideTurnCards(r).filter((card) => !card.toolUseId || !returned.has(`${r.id}:${card.toolUseId}`));
+      if (cards.length > 0 && (!r.taskId || (await visibleQuestions(this.prisma, cards)).length > 0)) outsideTurnIds.push(r.id);
+    }
     return [...new Set([
       ...rows.filter(r => !r.taskId || r.approvals.some(a => visible.has(a.id))).map(r => r.id),
       ...subagentCards.map(card => card.sessionId),
+      ...outsideTurnIds,
       ...blockedOnOwner,
     ])];
   }

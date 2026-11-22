@@ -80,6 +80,7 @@ Usage:
   orbit watch <command>             Wait on Orbit tasks and sessions without polling
   orbit wiki <command>              Read the Orbit wiki and propose to it
   orbit file <command>              Keep files in Orbit instead of in the repository
+  orbit subagent <command>          Rate a SubAgent run this session started
   orbit secret exec NAME -- CMD     Run CMD with a secret the owner delivered to this runner
   orbit notify --message TEXT       Alert this account's devices with a line you write
   orbit token <command>             Mint/list/revoke credentials for headless processes
@@ -239,6 +240,7 @@ running it when the machine is idle. Disable the periodic check with ORBIT_NO_EN
 	"watch":     watchHelp,
 	"wiki":      wikiHelp,
 	"file":      fileHelp,
+	"subagent":  subagentHelp,
 	"settings":  settingsHelp,
 	"token":     tokenHelp,
 	"login":     loginHelp,
@@ -326,6 +328,7 @@ var leafHelpFamilies = map[string]bool{
 	"watch":     true,
 	"wiki":      true,
 	"file":      true,
+	"subagent":  true,
 	"settings":  true,
 	"session":   true,
 	"provider":  true,
@@ -465,6 +468,8 @@ func runOrbitCLI(args []string, in io.Reader, out, errW io.Writer) error {
 		return runCLICommand("orbit wiki", args, true, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdWikiCLI(args[1:], in, out) })
 	case "file":
 		return runCLICommand("orbit file", args, true, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdFileCLI(args[1:], out) })
+	case "subagent":
+		return runCLICommand("orbit subagent", args, true, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdSubagentCLI(args[1:], out) })
 	case "settings":
 		return runCLICommand("orbit settings", args, true, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdSettingsCLI(args[1:], out) })
 	case "token":
@@ -540,12 +545,16 @@ func cmdRegister(flags map[string]string, bools map[string]bool) {
 		fmt.Fprintf(os.Stderr, "orbit register: cannot keep the runner's config in %s: %v\nNothing was registered. If an earlier sudo left it to root: sudo chown -R %s %s\n", machineHome(), err, who, machineHome())
 		os.Exit(1)
 	}
-	// One runner per machine. Re-registering re-issues its credential, so confirm
-	// before clobbering the config.
+	// One runner per OS user (the config is in this user's ~/.orbit). Re-registering
+	// re-issues its credential, so confirm before clobbering the config.
 	if existing := loadConfig(); existing != nil && !bools["force"] {
+		osUser := "Linux user"
+		if runtime.GOOS == "darwin" {
+			osUser = "macOS user"
+		}
 		ok := confirm(fmt.Sprintf(
-			"This machine is already registered as %q (%s).\nRegister again (re-issues its credential)? [Y/n] ",
-			existing.Name, existing.ServerURL), true)
+			"This %s is already registered as %q (%s).\nRegister again (re-issues its credential)? [Y/n] ",
+			osUser, existing.Name, existing.ServerURL), true)
 		if !ok {
 			fmt.Println("aborted — pass --force to re-register without confirming")
 			os.Exit(0)

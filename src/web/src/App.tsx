@@ -26,7 +26,7 @@ import { GeneralSettingsPage } from './pages/settings/GeneralPage';
 import { NotificationsSettingsPage } from './pages/settings/NotificationsPage';
 import { AppearanceSettingsPage } from './pages/settings/AppearancePage';
 import { StorageSettingsPage } from './pages/settings/StoragePage';
-import { RoutingReportPage } from './pages/settings/RoutingReportPage';
+import { ModelRoutingPage } from './pages/settings/ModelRoutingPage';
 import { StorageFilesPage } from './pages/settings/StorageFilesPage';
 import { AdminUsersPage } from './pages/AdminUsersPage';
 import { AdminSignInPage } from './pages/AdminSignInPage';
@@ -45,6 +45,7 @@ import { SetupPage } from './pages/SetupPage';
 import { ProjectDetailPage, ProjectsPage } from './pages/ProjectsPage';
 import { SharedLinksPage } from './pages/SharedLinksPage';
 import { AccessTokensPage } from './pages/AccessTokensPage';
+import { SecretsPage } from './pages/SecretsPage';
 import { TerminalsPage } from './pages/TerminalsPage';
 import { FeishuConnectGroupPage } from './pages/FeishuConnectGroupPage';
 import { FeishuIntegrationPage } from './pages/FeishuIntegrationPage';
@@ -95,6 +96,13 @@ function ProvidersRedirect() {
   const rest = pathname.replace(/^\/(admin\/)?providers\/?/, '');
   const to = rest === '' || /^(new|pools)(\/|$)/.test(rest) ? rest : `keys/${rest}`;
   return <Navigate to={{ pathname: `/settings/providers${to ? `/${to}` : ''}`, search }} replace />;
+}
+
+// An address a page left, landing where it went with the query it carried (a link to the Routing report's
+// Workflows view for 7 days opens Model routing on the same view and period).
+function KeepQueryRedirect({ to }: { to: string }) {
+  const { search } = useLocation();
+  return <Navigate to={{ pathname: to, search }} replace />;
 }
 
 // /settings/machines/:id, drawn afresh for each machine so nothing typed on one carries to the next.
@@ -315,10 +323,12 @@ export function App() {
             <Route path="shared-links" element={<SharedLinksPage />} />
             {/* The personal access tokens this account has issued: issue, list, revoke. */}
             <Route path="access-tokens" element={<AccessTokensPage />} />
+            {/* Every copy of a secret on a machine, and the saved secrets (project "Secrets management page"). */}
+            <Route path="secrets" element={<SecretsPage />} />
             {/* The terminals this account has approved: list, revoke (docs/terminal-session-design.md). */}
             <Route path="terminals" element={<TerminalsPage />} />
-            {/* How routed SubAgents and Orbit workflows went (board docs/mocks/subagent-workflow/08-report.html). */}
-            <Route path="routing-report" element={<RoutingReportPage />} />
+            {/* The Routing report's old address: it is on Providers → Model routing now, its view and filters kept. */}
+            <Route path="routing-report" element={<KeepQueryRedirect to="/settings/providers/routing" />} />
             {/* The account's own Feishu or Lark app (docs/feishu-bot-design.md §4.1, §4.2). */}
             <Route path="integrations/feishu" element={<FeishuIntegrationPage />} />
             {/* Connecting a Feishu group, opened from the bot's card with its one-time ticket (docs/feishu-bot-design.md §8.1). */}
@@ -338,6 +348,9 @@ export function App() {
             <Route path="providers/keys/:id" element={<ProviderConnectPage />} />
             <Route path="providers/pools" element={<SettingsPoolsPage />} />
             <Route path="providers/pools/:id" element={<ProviderPoolPage />} />
+            {/* Every model's tier beside how its runs went; Model tiers' old address leads here. */}
+            <Route path="providers/routing" element={<ModelRoutingPage />} />
+            <Route path="providers/tiers" element={<KeepQueryRedirect to="/settings/providers/routing" />} />
             <Route path="providers/:vendor" element={<SettingsKeysPage />} />
             <Route path="workspaces/:id" element={<SettingsWorkspacePage />} />
           </Route>

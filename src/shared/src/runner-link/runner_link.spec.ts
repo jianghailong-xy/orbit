@@ -163,6 +163,21 @@ function samples(): Sample[] {
       pasteId: 4,
       error: 'No page in the browser has focus',
     }),
+    sample(pb.BackgroundJobTailRequestSchema, {
+      requestId: 'req-3', sessionId: 'ses-1', jobId: 'bgj_0a0b0c0d0e0f', maxLines: 40, maxBytes: 8192,
+    }),
+    sample(pb.BackgroundJobTailResponseSchema, {
+      requestId: 'req-3',
+      sessionId: 'ses-1',
+      jobId: 'bgj_0a0b0c0d0e0f',
+      outcome: pb.BackgroundJobTailOutcome.OK,
+      status: 'failed',
+      exited: true,
+      exitCode: 3,
+      text: 'FAIL  src/app.test.ts\n',
+      truncated: true,
+      outputBytes: 40960n,
+    }),
   ];
 
   // One Frame per member of its body, each wrapping the first sample of that member's type.

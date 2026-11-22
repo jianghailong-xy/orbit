@@ -22,7 +22,7 @@
 | 平台 | Linux x64 上的 Node 26（实测 v26.10.0）：服务 PATH 中有就用它，没有时安装先下载官方 v26.10.0 到 `${ORBIT_HOME}/engines/node/v26.10.0`（见[运行时环境](deepseek-harness-runtime-environment.md#固定版本安装)） | macOS、Windows、arm64：runner 返回 `DSH_PLATFORM_UNSUPPORTED`（未在真实 macOS runner 上实测，见第 6 节）；官方 Node 26 构建在本机起不来时，安装返回 `DSH_NODE_UNSUPPORTED` |
 | 凭据【解耦后】 | DeepSeek API key：preset `deepseek`，或自定义且主机为 `api.deepseek.com`；Anthropic 方言，不是 Claude 订阅 token（Web 表单、`POST /api/providers/mine`；CLI/MCP 建的自定义 key 只要主机是它也算）。同一把 key 同时用于 Claude Code、OpenCode 和 DeepSeek Harness；DeepSeek Harness 会话可以在多把 DeepSeek key 之间选择和切换。原 preset `deepseek-harness`、runtime `dsh` 的配置由存量迁移并入 DeepSeek key，旧 slug 仍解析为该 key + DeepSeek Harness | DeepSeek 账号登录（第三阶段） |
 | 模型 | 运行时目录实测返回 deepseek-v4-flash（默认） | — |
-| 任务判据 | EXECUTABLE（验收命令由 runner 在工作区执行，不经过 dsh 和模型）、EVIDENCE_JUDGMENT、OWNER_CONFIRMED | 用户手动输入的 `!` shell 在 dsh 上仍被拒绝 |
+| 任务判据 | EXECUTABLE（验收命令由 runner 在工作区执行，不经过 dsh 和模型）、EVIDENCE_JUDGMENT、OWNER_CONFIRMED；用户手动输入的 `!` shell 同样由 runner 在工作区执行，不经过 dsh | — |
 | 客户端 | Web 已实测；macOS/iOS 只通过了 CI 构建和测试 | macOS/iOS 未在真实 Harness 会话上操作，也没有实机测试 |
 
 【解耦后】DeepSeek key 上 engine 为 Claude Code 的会话（解耦前的旧 `deepseek` 会话），始终由 `claude -p` 执行。卸载 dsh、回退 runner 都不改变它们。但停用或删除这把 key，会同时停掉它在 Claude Code、OpenCode 和 DeepSeek Harness 上的会话。

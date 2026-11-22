@@ -52,6 +52,7 @@ import {
 } from '@prisma/client';
 import { RunEventType, uuidToBase62 } from '@orbit/shared';
 
+import { isReleasedStatus } from '../common/session-release';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated } from '../projects/coordinator-pg-test-safety';
@@ -170,13 +171,15 @@ async function waitingRun(
   },
 ): Promise<{ sessionId: string; requestId: string }> {
   const sessionId = randomUUID();
+  const status = run.session?.status ?? RunStatus.AWAITING_INPUT;
   await db.session.create({
     data: {
       id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, taskId, workspaceId: w.workspaceId,
       assignedRunnerId: w.runnerId, title: `run of ${taskId}`, prompt: 'do the work', provider: 'claude',
-      status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+      status, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
       startedAt: new Date(),
       ...run.session,
+      ...(isReleasedStatus(status) ? { finishedAt: run.session?.finishedAt ?? new Date()} : {}),
     },
   });
   let seq = 1;

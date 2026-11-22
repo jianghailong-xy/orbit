@@ -6,11 +6,13 @@ import {
   NotFoundException,
   Optional,
 } from '@nestjs/common';
+import { RunEventType } from '@orbit/shared';
 import { Prisma } from '@prisma/client';
 
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
+import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { CompletionInputRouter } from './completion-input-router.service';
 import type { CoordinatorSpendLimits } from './convergence-contract';
@@ -108,6 +110,8 @@ export class ProjectFuseService {
     /** F-T1's other half: a pause is one of the four things only the owner can lift, so their
      *  phone is told (§7.6 V12). `@Optional()` for the reason `ProjectOpenItemService` gives. */
     @Optional() private readonly push?: PushService,
+    /** A pause and its resume change the project's sidebar row (`fuse`), so its readers re-read. */
+    @Optional() private readonly realtime?: RealtimeService,
   ) {}
 
   /**
@@ -134,8 +138,10 @@ export class ProjectFuseService {
     // The card this call opens, if it is the call that opens one: read back after the commit,
     // because a retried transaction opens one on its last attempt and none on the ones before it.
     let openedItemId: string | null = null;
+    let openedOwnerId: string | null = null;
     const episodeId = await withTransactionRetry(this.prisma, async (tx) => {
       openedItemId = null;
+      openedOwnerId = null;
       // The project row serialises this against a second crossing fact of the same project, and is
       // taken before the episode and card rows it decides.
       await tx.$executeRaw(Prisma.sql`
@@ -189,10 +195,12 @@ export class ProjectFuseService {
         select: { id: true },
       });
       openedItemId = item.id;
+      openedOwnerId = project.ownerId;
       return episode.id;
     }, loggedRetry(this.logger, 'projectFuse.evaluate'));
     // F-T1: the owner is told once, about the pause this call made (§7.6 V12).
     if (openedItemId) void this.push?.notifyOwnerItem(openedItemId);
+    if (openedOwnerId) this.realtime?.publishForUser(openedOwnerId, RunEventType.PROJECT_CHANGED, projectId);
     return episodeId;
   }
 
@@ -379,6 +387,8 @@ export class ProjectFuseService {
       });
       return { episode, resumedAt: now, held };
     }, loggedRetry(this.logger, 'projectFuse.resume'));
+    // The row's `fuse` just went back to not paused, wherever the owner pressed it.
+    this.realtime?.publishForUser(resumed.episode.ownerId, RunEventType.PROJECT_CHANGED, projectId);
 
     const replayed: ReplayedAction[] = [];
     for (const action of resumed.held) {

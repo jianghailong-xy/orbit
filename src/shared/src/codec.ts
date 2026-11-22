@@ -77,6 +77,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'codebaseId',
   // `project_criterion_confirmation.check_task_id` — the task an Agent check of a criterion ran as (0545).
   'checkTaskId',
+  // `owner_request_secret.saved_secret_id` (1400): the saved secret "Use saved" made a grant from, the id the owner's
+  // card already sends in a submit body. An address, not a fence.
+  'savedSecretId',
   'id',
   'ownerId',
   'userId',
@@ -501,6 +504,12 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // response bodies, so they follow the same rule (see the `@IsPublicId({ each: true })` DTOs).
   'tagIds',
   'taskIds',
+  // `task.changed`'s `creatorSessionIds` and `rowProjectIds`, and `schedule_cards.changed`'s `cardSessionIds`
+  // (control-plane stream): the sessions that created the changed tasks and the projects they are in, and the sessions
+  // whose schedule cards moved.
+  'creatorSessionIds',
+  'rowProjectIds',
+  'cardSessionIds',
   // `owner_request.blocks_task_ids` (0503): the tasks an owner request blocks — task addresses like `taskIds`.
   'blocksTaskIds',
   'dependsOnTaskIds',

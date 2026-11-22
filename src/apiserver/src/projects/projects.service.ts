@@ -24,6 +24,7 @@ import {
   deriveSessionLifecycleState,
   type ProjectIntegrationRead,
   type ProjectListCoordinatorActivity,
+  type ProjectSidebarFuse,
   type ProjectPauseState,
   RunEventType,
   SessionLifecycleState,
@@ -55,6 +56,8 @@ export interface CoordinatorHandoffBinding {
   note: string | null;
   /** The pending-waits preview read before the swap, for the moved waits' labels. */
   waits: readonly CoordinatorPendingWait[];
+  /** What the owner named for the successor to run on; null keeps the previous coordinator's. */
+  successor?: CoordinatorHandoffSuccessor | null;
 }
 import { MergeReceiptRow, mergeReceiptRow } from '../sessions/merge-receipt';
 import {
@@ -75,7 +78,7 @@ import {
   verificationEpochNeedsHumanSql,
   verificationEpochOpenSql,
 } from '../tasks/verification-dependency';
-import { ProjectStatus as SharedProjectStatus, uuidToBase62 } from '@orbit/shared';
+import { type CoordinatorHandoffSuccessor, ProjectStatus as SharedProjectStatus, uuidToBase62 } from '@orbit/shared';
 import {
   CRITERIA_DECISIONS,
   CreateProjectDto,
@@ -160,11 +163,12 @@ import {
   type TaskRunOverlay,
 } from '../sessions/task-work-carrier';
 import { SessionsService, type SessionReceiveBlockedReason } from '../sessions/sessions.service';
+import { isReleased } from '../common/session-release';
 import { tellEvidenceUndecidable } from '../tasks/undecidable-evidence';
 import { CoordinatorConvergenceService } from './coordinator-convergence.service';
 import { CoordinatorEvidenceQueueService } from './coordinator-evidence-queue.service';
 import { coordinatorFuseUsage, readCoordinatorWakeups } from './coordinator-progress';
-import { openFuseEpisodeId } from './project-fuse';
+import { type OpenFuseEpisode, openFuseEpisodeId, readOpenFuseEpisodes } from './project-fuse';
 import { ProjectPanorama, readProjectPanorama } from './project-panorama';
 import { readTaskIntegrationViews } from './project-task-integration';
 import {
@@ -550,6 +554,9 @@ const SIDEBAR_PROJECT_SELECT = {
   status: true,
   createdAt: true,
   startedAt: true,
+  // The row's pause line and its Pause / Resume action (design §4.2 2b, §4.3).
+  pausedAt: true,
+  pausedReason: true,
   coordinatorSession: { select: COORDINATOR_ACTIVITY_SELECT },
 } satisfies Prisma.ProjectSelect;
 
@@ -710,6 +717,13 @@ function coordinatorActivityOf(
     (isSessionGenerating(session) ||
       (session.status === RunStatus.AWAITING_INPUT && session.runningSubagents.length > 0));
   return { working, lastTurnAt: session.lastTurnAt };
+}
+
+/** A sidebar row's `fuse`: never absent, so a client reads one shape whether or not it is paused. */
+function sidebarFuse(episode: OpenFuseEpisode | undefined): ProjectSidebarFuse {
+  return episode
+    ? { paused: true, episodeId: episode.id, observed: episode.observed, limit: episode.limit }
+    : { paused: false, episodeId: null, observed: null, limit: null };
 }
 
 type WithAcceptanceDefinitions = {
@@ -3113,12 +3127,15 @@ export class ProjectsService {
       select: SIDEBAR_PROJECT_SELECT,
     });
     if (projects.length === 0) return [];
-    const [rollups, attention, bindings] = await Promise.all([
+    const projectIds = projects.map((project) => project.id);
+    const [rollups, attention, bindings, fuses] = await Promise.all([
       readProjectSidebarRollups(this.prisma, ownerId),
       // The same reader the index folds, narrowed to the projects this read returns, so the rail
       // and the page cannot disagree about what waits on the reader.
       readProjectListAttention(this.prisma, ownerId, ProjectStatus.OPEN),
-      readProjectListBindings(this.prisma, projects.map((project) => project.id)),
+      readProjectListBindings(this.prisma, projectIds),
+      // One statement for the whole page, never one per project: this read is the 15-second poll.
+      readOpenFuseEpisodes(this.prisma, projectIds),
     ]);
     return projects.map(({ coordinatorSession, ...project }) => ({
       ...project,
@@ -3134,6 +3151,9 @@ export class ProjectsService {
       integration: bindings.get(project.id)?.integration ?? null,
       // The main branch the session list's landing line names; null with no repository bound.
       mainBranch: bindings.get(project.id)?.mainBranch ?? null,
+      // The daily limit's pause (design §4.2 2a), lifted by `/fuse/:episodeId/resume`; apart from
+      // `pausedAt`, which is the owner's Pause (or the older Automatic switch) and `/resume`'s.
+      fuse: sidebarFuse(fuses.get(project.id)),
     }));
   }
 
@@ -5049,6 +5069,11 @@ export class ProjectsService {
         ownerId,
         {
           workspaceId: runIn,
+          // A handoff's successor on what the owner named, when they named something: the previous
+          // coordinator's model may be the very reason for handing over. Otherwise the anchor below.
+          ...(handoff?.successor?.engine ? { engine: handoff.successor.engine } : {}),
+          ...(handoff?.successor?.provider ? { provider: handoff.successor.provider } : {}),
+          ...(handoff?.successor?.model ? { model: handoff.successor.model } : {}),
           title: coordinatorSessionTitle(project.title),
           prompt: buildCoordinatorOpening(
             project.title,
@@ -5834,8 +5859,8 @@ export class ProjectsService {
   /**
    * Whether this conversation's run is over — the branch the delivery above takes.
    *
-   * Deliberately the same line `resume` draws for itself (`SessionsService.TERMINAL`): a terminal
-   * run is what a revive is for, and every other state a resolved coordinator can be in — live,
+   * Deliberately the same line `resume` draws for itself: a released run (the release column,
+   * common/session-release.ts) is what a revive is for, and every other state a resolved coordinator can be in — live,
    * waiting for a runner, awaiting input — is written to directly. Read here rather than inferred
    * from `receiveBlockedReasonFor`'s answer, which says whether a message CAN be delivered and not
    * which verb delivers it. A row that vanished between the resolution and this read is not read as
@@ -5844,9 +5869,9 @@ export class ProjectsService {
   private async conversationHasEnded(ownerId: string, sessionId: string): Promise<boolean> {
     const session = await this.prisma.session.findFirst({
       where: { id: sessionId, ownerId },
-      select: { status: true },
+      select: { finishedAt: true },
     });
-    return session != null && SessionsService.TERMINAL.includes(session.status);
+    return session != null && isReleased(session);
   }
 
   /** The sentence an `HttpException` carries, for the refusal that wraps it. */

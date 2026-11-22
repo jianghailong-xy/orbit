@@ -9,10 +9,11 @@ import {
   sessionTaskCard,
   toUuid,
   type SessionCreatedTaskCounts,
+  type SessionCreatedTasks,
   type WatchView,
 } from '@orbit/shared';
 import { pageHref } from '../lib/orbitLink';
-import { sessionCreatedTasksQuery, watchesQuery } from '../lib/queries';
+import { watchesQuery } from '../lib/queries';
 import { isLiveWatch, taskStaleLines, watchedTasks, watchesFollowing } from '../lib/watches';
 import { TaskStatusPill } from './TaskStatusPill';
 import { relTime } from './Transcript';
@@ -34,16 +35,21 @@ import { useNow } from './WatchParts';
  * one took over as the one doing the work, with `replaces` naming the original, and its tallies count
  * those same rows — so re-sorting or re-reading them here is how the pills and the sentence would
  * stop agreeing. `sessionTaskCard` only lifts the watched ones to the top.
+ *
+ * The rows are the page's read (`sessionCreatedTasksQuery`, which the session page owns and hands in
+ * as `tasks`), so the strip adds no read of its own: one read serves the page.
  */
 export function SessionCreatedTasksStrip({
   sessionId,
+  tasks: data,
   openRequest = 0,
 }: {
   sessionId: string;
+  /** The session's created tasks, as the page read them; undefined until that read answers. */
+  tasks: SessionCreatedTasks | undefined;
   /** Bumped to open the list from elsewhere on the page — the start card's "View tasks". */
   openRequest?: number;
 }) {
-  const { data } = useQuery(sessionCreatedTasksQuery(sessionId));
   const watchesQ = useQuery(watchesQuery());
   const now = useNow();
   const [open, setOpen] = useState(false);
@@ -61,6 +67,7 @@ export function SessionCreatedTasksStrip({
   const single = card.counts.total === 1 && card.rows.length === 1 ? card.rows[0] : undefined;
   // More than one: what is running, or the newest task and how it stands, as the Agents line says it.
   const band = sessionTaskBand(card);
+  const pill = single ? single.standing : band?.row.standing;
   const toggle = () => setOpen((o) => !o);
 
   return (
@@ -74,7 +81,6 @@ export function SessionCreatedTasksStrip({
               {single.title}
             </span>
             {single.watched && <WatchEye stale={single.stale} />}
-            {single.standing && <TaskStatusPill {...single.standing} />}
           </>
         ) : (
           <>
@@ -94,12 +100,13 @@ export function SessionCreatedTasksStrip({
                   )}
                   {band.text}
                 </span>
-                {band.row.standing && <TaskStatusPill {...band.row.standing} />}
               </>
             )}
           </>
         )}
         <span className="wt-spacer" />
+        {/* The pill sits at the right edge, as the Agents line's failed count and the branch bar's state do. */}
+        {pill && <TaskStatusPill {...pill} />}
         <button
           type="button"
           className="wt-expand"

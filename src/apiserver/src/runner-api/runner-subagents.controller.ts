@@ -28,6 +28,7 @@ import {
   type SubagentCandidateTarget,
   type SubagentDecision,
   type SubagentFallbackResponse,
+  type SubagentRatingResponse,
   type SubagentRunCreateResponse,
   type SubagentRunStatus,
   type SubagentRunUpdateResponse,
@@ -90,9 +91,9 @@ import {
 } from './subagent-remote';
 import { sessionHasEnded } from './background-job-wake';
 import { fileSubagentWake, fileWorkflowWake } from './subagent-wake';
+import { rateSubagentRun, SubagentRatingDto } from './subagent-rating';
 import { WORKFLOW_SCRIPT_MAX_BYTES, WorkflowRunCreateDto, WorkflowRunUpdateDto } from './workflow-run';
-
-const TERMINAL: RunStatus[] = [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED];
+import { isReleased } from '../common/session-release';
 
 /** How a SubAgent's child runs on one candidate: the claim-shaped config, and what it resolved to. */
 interface ChildExec {
@@ -117,6 +118,8 @@ function refusalText(error: HttpException): string {
 const SUBAGENT_PARENT_SELECT = {
   ownerId: true,
   status: true,
+  // The release column: a released parent opens no SubAgent run (common/session-release.ts).
+  finishedAt: true,
   workspaceId: true,
   assignedRunnerId: true,
   provider: true,
@@ -242,7 +245,7 @@ export class RunnerSubagentsController {
       const session = await tx.session.findUniqueOrThrow({
         where: { id: sessionId },
         select: {
-          ownerId: true, status: true, endReason: true, completedAt: true, archivedAt: true, deletedAt: true,
+          ownerId: true, status: true, finishedAt: true, endReason: true, completedAt: true, archivedAt: true, deletedAt: true,
           workspace: { select: { subagentsEnabled: true, workflowsEnabled: true } },
         },
       });
@@ -371,7 +374,7 @@ export class RunnerSubagentsController {
     return withTransactionRetry(this.prisma, async (tx) => {
       await tx.$queryRaw`SELECT 1 FROM "session" WHERE "id" = ${sessionId}::uuid FOR UPDATE`;
       const session = await tx.session.findUniqueOrThrow({ where: { id: sessionId }, select: SUBAGENT_PARENT_SELECT });
-      if (TERMINAL.includes(session.status)) throw new ConflictException('the session has ended');
+      if (isReleased(session)) throw new ConflictException('the session has ended');
       const opened = await tx.subagentRun.findUnique({
         where: { sessionId_toolUseId: { sessionId, toolUseId: dto.toolUseId } },
       });
@@ -618,7 +621,7 @@ export class RunnerSubagentsController {
     const answer = await withTransactionRetry(this.prisma, async (tx) => {
       await tx.$queryRaw`SELECT 1 FROM "session" WHERE "id" = ${sessionId}::uuid FOR UPDATE`;
       const session = await tx.session.findUniqueOrThrow({ where: { id: sessionId }, select: SUBAGENT_PARENT_SELECT });
-      if (TERMINAL.includes(session.status)) throw new ConflictException('the session has ended');
+      if (isReleased(session)) throw new ConflictException('the session has ended');
       const opened = await tx.subagentRun.findUnique({ where: { sessionId_toolUseId: { sessionId, toolUseId: dto.toolUseId } } });
       if (opened) return this.remoteAnswer(opened);
       assertSubagentsEnabled(session.workspace);
@@ -1071,6 +1074,24 @@ export class RunnerSubagentsController {
     const remote = await this.prisma.subagentRun.findFirst({ where: { id: runId, sessionId }, select: { targetRunnerId: true } });
     if (remote?.targetRunnerId) throw remoteRunEndRefusal();
     return this.endRun(sessionId, runId, dto);
+  }
+
+  /**
+   * The parent rates a run it started (`subagent_rate`, docs/subagent-design.md §7.1): how useful its result was,
+   * 1 to 5, with an optional note. Only the session that started the run can: the session must be one this runner
+   * hosts, and the run is matched by (id, that session). A later rating replaces the earlier one. Display only:
+   * the Model tiers view reads it, routing never does.
+   */
+  @Post('sessions/:id/subagents/:runId/rating')
+  @HttpCode(200)
+  async rateSubagentRun(
+    @CurrentRunner() runner: Runner,
+    @Param('id', PublicIdPipe) sessionId: string,
+    @Param('runId', PublicIdPipe) runId: string,
+    @Body() dto: SubagentRatingDto,
+  ): Promise<SubagentRatingResponse> {
+    await this.assertParentOfRunner(sessionId, runner);
+    return rateSubagentRun(this.prisma, sessionId, runId, dto);
   }
 
   /** A run's end, reported by the runner that ran it: the parent's for its own machine, the target's for a remote one. */

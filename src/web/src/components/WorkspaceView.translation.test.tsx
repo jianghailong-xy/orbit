@@ -20,6 +20,7 @@ vi.mock('../api', async (importOriginal) => {
     api: vi.fn(),
     getSessionEventPage: vi.fn(),
     listQueuedTurns: vi.fn(),
+    sendTurn: vi.fn(),
     retryTurnTranslation: vi.fn(),
     sendTurnAsWritten: vi.fn(),
     retryReplyTranslation: vi.fn(),
@@ -30,7 +31,7 @@ vi.mock('../lib/transcriptStore', () => ({
   saveTranscript: async () => {},
 }));
 
-const { api, getSessionEventPage, listQueuedTurns, retryTurnTranslation, sendTurnAsWritten } = await import('../api');
+const { api, getSessionEventPage, listQueuedTurns, sendTurn, retryTurnTranslation, sendTurnAsWritten } = await import('../api');
 const apiMock = vi.mocked(api);
 const seedMock = vi.mocked(getSessionEventPage);
 const { WorkspaceView } = await import('./WorkspaceView');
@@ -139,6 +140,7 @@ beforeEach(() => {
   locations = [];
   vi.mocked(listQueuedTurns).mockReset();
   vi.mocked(listQueuedTurns).mockImplementation(async () => queue as never);
+  vi.mocked(sendTurn).mockReset();
   vi.mocked(retryTurnTranslation).mockReset();
   vi.mocked(retryTurnTranslation).mockImplementation(async (_s, turnId) => ({
     turnId,
@@ -404,6 +406,55 @@ describe('a message held for its translation', () => {
     expect(bubble.textContent).toContain(HELD_TEXT);
     expect(bubble.textContent).not.toContain('Queued for next turn');
     expect(mounted().querySelector('.pending-tray')).toBeNull();
+  });
+
+  it.each([false, true])('clears the chip when the held message becomes the accepted head (opening: %s)', async (opening) => {
+    const row = { ...held('TRANSLATING'), opening };
+    if (opening) seedMock.mockResolvedValue({ events: [], hasMore: false });
+    queue = [row];
+    await mount();
+    await waitForUi(() => expect(mounted().querySelector('.chat-translate-chip')?.textContent).toBe('Translating…'));
+
+    queue = [{ ...row, placement: 'accepted', content: 'Run all the tests again', translation: { ...row.translation, state: 'DONE' } }];
+    await publish([{ seq: 0, type: 'queued_turns_changed' }]);
+
+    await waitForUi(() => {
+      expect(mounted().querySelector('.chat-translate-chip')).toBeNull();
+      expect([...mounted().querySelectorAll('.chat-user:not(.chat-queued)')].at(-1)?.textContent).toContain(HELD_TEXT);
+    });
+  });
+
+  it('keeps a translated follow-up in the tray when the older send response arrives', async () => {
+    session = { ...PARKED, status: 'RUNNING', runStatus: 'RUNNING', runState: 'RUNNING', engineTurnActive: true };
+    const response = Promise.withResolvers<Awaited<ReturnType<typeof sendTurn>>>();
+    vi.mocked(sendTurn).mockReturnValueOnce(response.promise);
+    const row = held('TRANSLATING');
+    await mount();
+    await waitForUi(() => expect(box()).toBeTruthy());
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(box(), HELD_TEXT);
+      box().dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => {
+      box().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', altKey: true, bubbles: true, cancelable: true }));
+    });
+    await waitForUi(() => expect(sendTurn).toHaveBeenCalledOnce());
+
+    queue = [row];
+    await publish([{ seq: 0, type: 'queued_turns_changed' }]);
+    await waitForUi(() => expect(mounted().querySelector('.chat-translate-chip')?.textContent).toBe('Translating…'));
+
+    queue = [{ ...row, content: 'Run all the tests again', translation: { ...row.translation, state: 'DONE' } }];
+    await publish([{ seq: 0, type: 'queued_turns_changed' }]);
+    const trayText = () => mounted().querySelector('.pending-tray-text')?.textContent;
+    await waitForUi(() => expect(trayText()).toBe(HELD_TEXT));
+
+    await act(async () => response.resolve({
+      turnId: row.turnId, seq: 2, kind: 'message', placement: 'queued',
+      translation: { state: 'TRANSLATING', from: 'zh-Hans', original: HELD_TEXT },
+    }));
+    expect(mounted().querySelector('.chat-translate-chip')).toBeNull();
+    expect(trayText()).toBe(HELD_TEXT);
   });
 
   it("failed: Retry and Send as written call the A1 doors for that turn", async () => {

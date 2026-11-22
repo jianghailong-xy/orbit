@@ -61,7 +61,19 @@ const fileCallTimeout = 2 * time.Minute
 
 // fileDoorRoute is the upload route. Not the attachment route, which an older server would answer 200 while ignoring
 // every field this sends: this path, it answers 404, which fileCallError turns into a sentence.
-func fileDoorRoute(sessionID string) string { return "/runner/sessions/" + sessionID + "/files" }
+func fileDoorRoute(sessionID string) string {
+	return "/runner/sessions/" + sessionID + "/files" + subagentRunQuery()
+}
+
+// subagentRunQuery names the SubAgent run this process belongs to, if any, on a call that keeps a file. The session is
+// the parent's, which a remote SubAgent's runner does not host: the server lets the run's target runner in by it
+// (docs/subagent-design.md §10.2).
+func subagentRunQuery() string {
+	if runID := strings.TrimSpace(os.Getenv(envSubagentRunID)); runID != "" {
+		return "?subagentRunId=" + url.QueryEscape(runID)
+	}
+	return ""
+}
 
 // sessionFile is one file as the server describes it. On the machine door `id` is the UUID and `publicId` the short id;
 // on every other door both are the short id. An agent is shown the short id, so that the same file is spelled the same
@@ -239,7 +251,7 @@ func (t *Transport) createFileBundle(sessionID, name, label string, files []bund
 		body["label"] = label
 	}
 	var out sessionFile
-	err := t.do(nil, http.MethodPost, "/runner/sessions/"+sessionID+"/file-bundles", body, &out, fileCallTimeout)
+	err := t.do(nil, http.MethodPost, "/runner/sessions/"+sessionID+"/file-bundles"+subagentRunQuery(), body, &out, fileCallTimeout)
 	return out, err
 }
 
@@ -256,7 +268,7 @@ func (t *Transport) setFilePinned(sessionID, fileID string, pinned bool) (sessio
 		method = http.MethodDelete
 	}
 	var out sessionFile
-	err := t.do(nil, method, "/runner/sessions/"+sessionID+"/files/"+url.PathEscape(fileID)+"/pin", nil, &out, taskOpTimeout)
+	err := t.do(nil, method, "/runner/sessions/"+sessionID+"/files/"+url.PathEscape(fileID)+"/pin"+subagentRunQuery(), nil, &out, taskOpTimeout)
 	return out, err
 }
 
@@ -523,6 +535,11 @@ func uploadPath(t *Transport, tool fileToolContext, path, taskID, label, as stri
 // reaches that directory and file_upload does not.
 func newFileUploadScope(sessionID string) localFileScope {
 	dirs := artifactRequestRoots(sessionID)
+	// A remote SubAgent runs in a worktree of its own under Orbit's directory (addRemoteSubagentTree), which is its
+	// checkout as a session's worktree is the session's. On any other machine nothing stands there.
+	if runID := strings.TrimSpace(os.Getenv(envSubagentRunID)); validatePathSegmentID(runID) == nil {
+		dirs = append(dirs, filepath.Join(remoteSubagentDir(runID), "tree"))
+	}
 	cwd, err := os.Getwd()
 	if err != nil || hasOwnWorktree(sessionID) || !usableAsARoot(cwd) {
 		return newLocalFileScope(dirs)

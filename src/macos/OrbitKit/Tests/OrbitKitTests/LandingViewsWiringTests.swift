@@ -283,8 +283,10 @@ final class LandingViewsWiringTests: XCTestCase {
     /// reread while the attempt is live.
     func testTheTaskPageDrawsItsLandingSection() throws {
         let tasks = code(try appSource("Views/TasksView.swift"))
-        XCTAssertTrue(tasks.contains("if let landing = TaskLandingLogic.status(task.integration, taskStatus: task.status.rawValue) {"))
-        XCTAssertTrue(tasks.contains("private func landingSection(_ status: TaskLandingStatus) -> some View {"))
+        XCTAssertTrue(tasks.contains("let landing = TaskLandingLogic.status(task.integration, taskStatus: task.status.rawValue)"))
+        // Drawn for a landing, or for a task exempt from the landing check (board 04 b, D5).
+        XCTAssertTrue(tasks.contains("private func landingSection(_ landing: TaskLandingStatus?, exemption: TaskLandingCheckExemption?,"))
+        XCTAssertTrue(tasks.contains("TaskExemptionRow(exemption: exemption"))
         XCTAssertTrue(tasks.contains("LandingEntryLink(entry: .link(sessionID), compact: false)"))
         XCTAssertTrue(tasks.contains("TaskLandingCopy.refetchInterval(tasks.detail?.integration)"))
         XCTAssertTrue(tasks.contains("private func pollLanding() async {"))
@@ -332,7 +334,9 @@ final class LandingViewsWiringTests: XCTestCase {
     /// READY is a pass, a merge to main's is not).
     func testTheTimelinesMarksReadTheLinesFields() throws {
         let page = code(try appSource("Views/LandingSessionPageView.swift"))
-        XCTAssertTrue(page.contains("} else if entry.kind == \"CHECK_FINISHED\", let check = entry.check, !entry.checkPassed {"))
+        // The inline output's rule reads `checkPassed` and the exempt task's skip
+        // (`LandingCheckSkip.showsInlineOutput`, held in TaskLandingExemptTests).
+        XCTAssertTrue(page.contains("} else if LandingCheckSkip.showsInlineOutput(entry), let check = entry.check {"))
         XCTAssertTrue(page.contains("let mark = glyph(entry, jobKind: section.kind, entries: entries, index: index)"),
                       "a line's mark is read with its section's job kind")
         XCTAssertTrue(page.contains("return entry.succeeded(in: jobKind) ? Mark(glyph: \"✓\", color: .green) : Mark(glyph: \"✗\", color: .red)"))

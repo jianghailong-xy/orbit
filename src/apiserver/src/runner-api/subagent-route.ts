@@ -4,6 +4,7 @@ import {
   credentialEngines,
   ENGINE_CLI_NAMES,
   type ProviderModelTier,
+  type RunnerModelInfo,
   type ProviderTierRow,
   type SubagentTiersResponse,
   providerPreset,
@@ -25,6 +26,7 @@ import { isPoolCandidate } from '../providers/pool-admission';
 import { followsRuntimeCatalog, withPreset } from '../providers/preset-overlay';
 import { COMPATIBILITY_GUARD_SLUGS } from '../providers/providers.service';
 import {
+  familyNewest,
   familyTier,
   MODEL_ROUTING_LEVELS,
   type BuiltinModelTiers,
@@ -41,6 +43,8 @@ import {
   type SubagentRoutingInput,
 } from '../tasks/model-routing';
 import { engineState, fullestWindow, quotaTiming, taskRouteReads } from '../tasks/task-route-decision';
+import { addTally, emptyTally, qualityKey, qualityOf, readModelQuality } from './model-quality';
+import { modelLabels } from './subagent-run';
 
 /** The account-level preference listing the providers SubAgents may not run on (docs/subagent-design.md §6.2). */
 export function subagentBlockedProviders(preferences: unknown): string[] {
@@ -340,6 +344,19 @@ async function readConfiguredProviders(
   return [...keys, ...poolProviders];
 }
 
+/** Marks each untiered model of a built-in engine whose family's newest model is tiered there: routing uses the
+ *  newest on purpose, so the page reads "Older · uses <newest>", not "Not set". An owner's tier makes a model
+ *  tiered, so it is never marked. Display only; no routing decision reads this. */
+export function markSuperseded(models: readonly ProviderModelTier[], catalog: readonly RunnerModelInfo[]): void {
+  for (const model of models) {
+    if (model.levels.length > 0) continue;
+    const newest = familyNewest(model.model, catalog);
+    if (newest && newest !== model.model && models.some((row) => row.model === newest && row.levels.length > 0)) {
+      model.supersededBy = newest;
+    }
+  }
+}
+
 /**
  * The Providers page's Tier column and the SubAgents settings' provider list (docs/subagent-design.md §7): every
  * provider routeSubagent considers, in its order, each with the tiers the router reads for its models. The
@@ -361,6 +378,9 @@ export async function subagentTierView(db: Prisma.TransactionClient, ownerId: st
     builtinModelTiers: ownerTiers,
   };
   const configured = await readConfiguredProviders(db, ownerId, { catalog: catalogInput.modelCatalog, planUsage: null, now });
+  // Display only (docs/subagent-design.md §7.1): read beside the tiers, never handed to routeSubagent.
+  const tallies = await readModelQuality(db, ownerId, now);
+  const labels = modelLabels([], catalogInput.modelCatalog);
   const builtins: ConfiguredProvider[] = Object.values(AgentProvider).map((slug) => ({
     label: ENGINE_CLI_NAMES[slug],
     kind: 'key',
@@ -375,6 +395,7 @@ export async function subagentTierView(db: Prisma.TransactionClient, ownerId: st
       .map((entry, index): ProviderTierRow => {
         const builtin = index < builtins.length;
         const models = new Map<string, ProviderModelTier>();
+        const engines = [...new Set(entry.provider.engines.map((engine) => engine.engine))];
         for (const engine of entry.provider.engines) {
           const rows = subagentEngineRows(engine, catalogInput) as Array<SubagentModelRow & Partial<KeyModelRow>>;
           // A built-in engine lists its whole catalogue, the models no row tiers as Not set; a key on that catalogue
@@ -392,6 +413,14 @@ export async function subagentTierView(db: Prisma.TransactionClient, ownerId: st
               source: null,
               editable: false,
               outputPricePerMTok: null,
+              quality: qualityOf(
+                engines.reduce((sum, engine) => {
+                  const tally = tallies.get(qualityKey(entry.provider.slug, engine, row.model));
+                  if (tally) addTally(sum, tally);
+                  return sum;
+                }, emptyTally()),
+                (model) => labels.get(model) ?? model,
+              ),
             };
             if (row.level && !seen.levels.includes(row.level)) seen.levels.push(row.level);
             seen.source = seen.source ?? row.source ?? (owned?.[row.model] ? 'owner' : row.level ? 'catalogue' : null);
@@ -403,13 +432,20 @@ export async function subagentTierView(db: Prisma.TransactionClient, ownerId: st
         for (const model of models.values()) {
           model.levels.sort((a, b) => MODEL_ROUTING_LEVELS.indexOf(a) - MODEL_ROUTING_LEVELS.indexOf(b));
         }
+        // A built-in engine's older family models sort after its tiered ones and before the plain Not set ones.
+        if (builtin) markSuperseded([...models.values()], catalogInput.modelCatalog?.[entry.provider.slug as AgentProvider] ?? []);
+        const ordered = [...models.values()];
+        if (builtin) {
+          const rank = (model: ProviderModelTier) => (model.levels.length > 0 ? 0 : model.supersededBy ? 1 : 2);
+          ordered.sort((a, b) => rank(a) - rank(b));
+        }
         return {
           slug: entry.provider.slug,
           label: entry.label,
           kind: builtin ? 'builtin' : entry.kind,
           providerId: entry.providerId,
           billing: entry.provider.billing,
-          models: [...models.values()],
+          models: ordered,
         };
       }),
   };

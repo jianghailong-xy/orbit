@@ -36,6 +36,7 @@ import {
 } from '@prisma/client';
 import { Client } from 'pg';
 
+import { isReleasedStatus } from '../common/session-release';
 import { prismaClientFor } from '../prisma/prisma-client';
 import type { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
@@ -107,6 +108,7 @@ async function account(db: PrismaClient, label: string): Promise<Account> {
     title: string,
     extra: Partial<Omit<Prisma.SessionUncheckedCreateInput, 'id' | 'ownerId' | 'creatorId' | 'title' | 'prompt'>> = {},
   ) => {
+    const status = extra.status ?? RunStatus.AWAITING_INPUT;
     await db.session.create({
       data: {
         id,
@@ -117,9 +119,12 @@ async function account(db: PrismaClient, label: string): Promise<Account> {
         title,
         prompt: title,
         provider: 'claude',
-        status: RunStatus.AWAITING_INPUT,
+        status,
         dispatchOrigin: SessionDispatchOrigin.USER,
         ...extra,
+        ...(isReleasedStatus(status) ? {
+          finishedAt: extra.finishedAt ?? new Date(),
+        } : {}),
       },
     });
   };

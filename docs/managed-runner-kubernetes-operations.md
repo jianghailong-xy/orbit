@@ -654,8 +654,225 @@ Until 2026-11-20 these names said `orbit-managed`; they now say `orbit-cloud`. W
   those as well as `X-Orbit-Cloud-Runner-*`, so a Pod keeps working until its image is replaced.
 - The hosted runners' image is now `<registry>/orbit-cloud-runner`. The first release after the rename builds and pushes
   it there; the earlier `<registry>/orbit-managed-runner` digests stay in the registry for a rollback.
-- The namespace is whatever the profile's `kubernetes.namespace` says. An existing `orbit-managed` namespace needs no
-  change.
+- The namespace is whatever the profile's `kubernetes.namespace` says. A namespace cannot be renamed: moving the runners
+  out of `orbit-managed` is [Move the runners to another namespace](#move-the-runners-to-another-namespace). Production
+  moved its 7 runners to `orbit-cloud` that way on 2026-11-22, with management off for about 6 minutes, and then
+  deleted `orbit-managed` and its guard `orbit-managed-runner-pods`.
+
+## Move the runners to another namespace
+
+A namespace cannot be renamed, and a claim cannot change namespace. Each runner's data volume moves on its own: with
+reclaim policy `Retain`, deleting its claim leaves the PV and the RBD image, and the PV is then bound to a new claim of
+the same name in the other namespace. The PV, its UID and its CSI volume handle stay what Orbit recorded; the claim gets
+a new UID, which the runner's mapping must record. The manager drives only the namespace its profile names, and on a
+single cluster it treats every Kubernetes mapping as its own, so the mappings, the profile and the claims change
+together, with managed runners switched off and every runner asleep. Orbit itself stays up; Orbit Cloud runners do
+not wake from step 3 until step 7.
+
+Written for production's move from `orbit-managed` to `orbit-cloud` on `orbit-ws03`; the same steps move any
+namespace. Run the cluster's steps on the k3s host as root and the server's in the deploy directory of the apiserver's
+host:
+
+```bash
+K="k3s kubectl"; OLD=orbit-managed; NEW=orbit-cloud          # on the k3s host
+DC="docker compose"; PSQL="$DC exec -T postgres psql -U orbit -d orbit -v ON_ERROR_STOP=1"   # on the apiserver's host
+MOVE=/root/ns-move-$(date -u +%Y%m%d)                         # on each host: backups and records, mode 0700
+```
+
+### 1. Before the window: back up, and prepare the new namespace
+
+Nothing here changes what runs; the new namespace holds nothing a runner uses until step 6.
+
+1. On the apiserver's host, keep copies: `install -d -m 700 $MOVE`, then `cp -p` the profile and the kubeconfig it
+   names (both in `ORBIT_MANAGED_RUNNERS_DIR`) into `$MOVE`, and
+   `$DC exec -T postgres pg_dump -U orbit -d orbit --data-only -t managed_runner -t managed_runner_capacity >$MOVE/rows.sql`.
+2. On the k3s host, `install -d -m 700 $MOVE` and save the manager's objects:
+   `$K get sa,role,rolebinding orbit-mr-manager -n $OLD -o json >$MOVE/manager.json`,
+   `$K get clusterrolebinding orbit-mr-manager-storage -o json >$MOVE/crb.json`, and the guard in force, found by the
+   namespace it selects rather than by name (production's is `orbit-managed-runner-pods`; a cluster deployed after the
+   rename has `orbit-cloud-runner-pods`):
+
+   ```bash
+   OLD_GUARD="$($K get validatingwebhookconfigurations -o json | python3 -I -c 'import json,sys; old=sys.argv[1]; print(" ".join(w["metadata"]["name"] for w in json.load(sys.stdin)["items"] if any((h.get("namespaceSelector") or {}).get("matchLabels",{}).get("kubernetes.io/metadata.name")==old for h in w.get("webhooks",[]))))' $OLD)"
+   echo "$OLD_GUARD"    # exactly one name
+   $K get validatingwebhookconfiguration "$OLD_GUARD" -o json >$MOVE/webhook.json
+   NEW_GUARD=orbit-cloud-runner-pods; [ "$OLD_GUARD" = "$NEW_GUARD" ] && NEW_GUARD="orbit-cloud-runner-pods-$NEW"
+   ```
+
+   The copy must never take the name of the guard in force: applying it would make that guard select `$NEW` and leave
+   `$OLD` unguarded.
+3. Make the namespace and the manager's identity in it, from those copies with the namespace replaced:
+
+   ```bash
+   $K create namespace $NEW
+   python3 -I - "$MOVE/manager.json" "$OLD" "$NEW" <<'EOF' | $K apply -f -
+   import json, sys
+   objects, old, new = json.load(open(sys.argv[1]))["items"], sys.argv[2], sys.argv[3]
+   for o in objects:
+       m = o["metadata"]
+       o["metadata"] = {"name": m["name"], "namespace": new, "labels": m.get("labels", {})}
+       o.pop("status", None); o.pop("secrets", None)
+       for s in o.get("subjects", []):
+           if s.get("namespace") == old: s["namespace"] = new
+   print(json.dumps({"apiVersion": "v1", "kind": "List", "items": objects}))
+   EOF
+   $K create -n $NEW -f - <<EOF
+   {"apiVersion": "v1", "kind": "Secret", "type": "kubernetes.io/service-account-token",
+    "metadata": {"name": "orbit-mr-manager-token", "annotations": {"kubernetes.io/service-account.name": "orbit-mr-manager"}}}
+   EOF
+   $K patch clusterrolebinding orbit-mr-manager-storage --type json \
+     -p "[{\"op\": \"add\", \"path\": \"/subjects/-\", \"value\": {\"kind\": \"ServiceAccount\", \"name\": \"orbit-mr-manager\", \"namespace\": \"$NEW\"}}]"
+   for verb in "create pods" "get persistentvolumeclaims" "create secrets" "get persistentvolumes"; do
+     $K auth can-i $verb -n $NEW --as=system:serviceaccount:$NEW:orbit-mr-manager | sed "s/^/$verb: /"
+   done
+   ```
+
+   Every `can-i` answers `yes`, as it does for `$OLD` (`--as=system:serviceaccount:$OLD:orbit-mr-manager`).
+4. The admission guard for the new namespace, a copy of the one in force under the new name (same URL and CA bundle):
+
+   ```bash
+   python3 -I - "$MOVE/webhook.json" "$NEW" "$NEW_GUARD" <<'EOF' | $K create -f -
+   import json, sys
+   w, new, name = json.load(open(sys.argv[1])), sys.argv[2], sys.argv[3]
+   w["metadata"] = {"name": name, "labels": {**w["metadata"].get("labels", {}), "app.kubernetes.io/name": "orbit-cloud-runner"}}
+   for hook in w["webhooks"]:
+       hook["namespaceSelector"] = {"matchLabels": {"kubernetes.io/metadata.name": new}}
+   print(json.dumps(w))
+   EOF
+   ```
+
+   `create`, not `apply`: it refuses rather than replace an existing guard. It guards only `$NEW`, where nothing runs
+   yet, and `$OLD_GUARD` keeps guarding `$OLD`.
+5. The kubeconfig for the new identity: the current one with the context's namespace set to `$NEW` and the user's token
+   replaced by the new Secret's. Make it on the k3s host and copy it beside the profile on the apiserver's host as
+   `kubeconfig-orbit-ws03.json.$NEW`, mode 0600, never printing it:
+
+   ```bash
+   token="$($K get secret orbit-mr-manager-token -n $NEW -o jsonpath='{.data.token}' | base64 -d)"
+   # with the current kubeconfig copied to $MOVE/kubeconfig.json (mode 0600):
+   TOKEN="$token" python3 -I - "$MOVE/kubeconfig.json" "$NEW" >"$MOVE/kubeconfig.$NEW.json" <<'EOF'
+   import json, os, sys
+   k, new = json.load(open(sys.argv[1])), sys.argv[2]
+   for c in k["contexts"]: c["context"]["namespace"] = new
+   for u in k["users"]: u["user"] = {"token": os.environ["TOKEN"]}
+   print(json.dumps(k, indent=2))
+   EOF
+   chmod 600 "$MOVE/kubeconfig.$NEW.json"; unset token
+   ```
+
+6. Optional, independent of the rest, and only where the API server's admission configuration is in a directory named
+   after the namespace, as production's is (`/etc/rancher/k3s/orbit-managed/`, drop-in `90-orbit-admission.yaml`; the
+   lab's is `/etc/rancher/k3s/orbit-admission/` and needs nothing): move it out of `/etc/rancher/k3s/$OLD/`. `cp -a /etc/rancher/k3s/$OLD /etc/rancher/k3s/$NEW`, replace `/etc/rancher/k3s/$OLD/` with
+   `/etc/rancher/k3s/$NEW/` in `config.yaml.d/90-orbit-admission.yaml` and in `$NEW/admission-configuration.json`, then
+   `systemctl restart k3s`. Pods keep running across the restart; the API answers again within a minute. Check that the
+   guard still answers: the dry run of [step 4 of the deployment](#deploy-a-test-environment) (an unowned
+   `mr-data-<uuid>` claim) is refused in `$OLD`. Remove `/etc/rancher/k3s/$OLD` in step 8.
+
+### 2. Put every runner to sleep
+
+Each runner must be `SLEEPING` with no Pod. A ready runner sleeps as its owner's **Sleep** does, which never interrupts
+work: the manager drains it, and it exits only once idle by its own account.
+
+```bash
+$PSQL -c "select runner_id, management_state, desired_state, pod_uid is not null as pod, resource_operation_state from managed_runner where cluster_key = 'orbit-ws03' and namespace = '$OLD'"
+$PSQL -c "update managed_runner set desired_state = 'SLEEPING', revision = revision + 1 where cluster_key = 'orbit-ws03' and namespace = '$OLD' and management_state = 'READY' and desired_state = 'RUNNING'"
+```
+
+Repeat the first query until every row says `SLEEPING`, no Pod and no operation; a drain gives up after
+`lifecycle.drainSeconds` (600) if the runner stays busy, and new work wakes a runner again. A runner `STARTING` or
+`FAILED` must first be brought to `SLEEPING`, or to `FAILED` with nothing in flight and its Pod gone: find out why
+before the window.
+
+### 3. Freeze management
+
+Set `ORBIT_MANAGED_RUNNERS_ENABLED=false` in the apiserver host's `.env` and recreate the apiservers
+(`$DC up -d --no-deps apiserver`, then any `apiserver-2` and on). Its log no longer says
+`managed runners are enabled in ...`. Nothing managed moves now: no Pod or claim is created, stopped or deleted, and work
+for a sleeping runner waits. Then check that the step-2 query still says every row `SLEEPING` with no Pod, and on the
+k3s host that `$K get pods -n $OLD` lists nothing and no VolumeAttachment names their PVs
+(`$K get volumeattachments`). If a runner woke between steps 2 and 3, switch back on, and start again at step 2.
+
+### 4. Move each volume
+
+Only the mappings' claims move: a namespace can hold others (the lab keeps smoke-test claims there), and step 5 refuses
+a move no mapping matches. On the apiserver's host,
+`$PSQL -Atc "select pvc_name from managed_runner where cluster_key = 'orbit-ws03' and namespace = '$OLD' order by pvc_name" >$MOVE/claims.txt`,
+and copy it to `$MOVE` on the k3s host. There, with `scripts/managed-runner/move_volume_namespace.py` from this
+repository, and a directory of its own for this attempt and direction (`forward`; a rollback uses `back`, a second
+attempt `forward-2`), so that its `moved.tsv` holds only this attempt's moves:
+
+```bash
+DIR=$MOVE/forward
+while read -r pvc; do
+  KUBECTL="$K" python3 -I move_volume_namespace.py --from $OLD --to $NEW --pvc "$pvc" --backup $DIR --dry-run || break
+done <$MOVE/claims.txt
+while read -r pvc; do
+  KUBECTL="$K" python3 -I move_volume_namespace.py --from $OLD --to $NEW --pvc "$pvc" --backup $DIR || break
+done <$MOVE/claims.txt
+```
+
+Each refuses, having changed nothing, if its claim is not Bound, its PV is not `Retain` or not bound to it, a Pod mounts
+it or a VolumeAttachment names its PV. Before deleting a claim it saves the claim and its PV in `$MOVE`; a run that
+stopped part way is finished by running it again with the same directory. `$DIR/moved.tsv` gets one line per volume:
+the claim's name, its old and new UIDs, the PV, its UID and its volume handle; it must have as many lines as
+`claims.txt`. Copy it to `$MOVE/forward.tsv` on the apiserver's host.
+
+### 5. Record the moves
+
+On the apiserver's host, in one transaction, each update matched to exactly one row by everything recorded, and the
+capacity pool's row with them:
+
+```bash
+{
+  echo 'begin;'
+  while IFS=$'\t' read -r pvc old new pv pvuid handle; do
+    echo "do \$\$ declare n int; begin
+      update managed_runner set namespace = '$NEW', pvc_uid = '$new', revision = revision + 1
+       where cluster_key = 'orbit-ws03' and namespace = '$OLD' and pvc_name = '$pvc' and pvc_uid = '$old'
+         and pv_uid = '$pvuid' and volume_handle = '$handle' and management_state = 'SLEEPING' and pod_uid is null;
+      get diagnostics n = row_count;
+      if n <> 1 then raise exception 'pvc % matched % rows', '$pvc', n; end if; end \$\$;"
+  done <$MOVE/forward.tsv
+  echo "update managed_runner_capacity set namespace = '$NEW' where cluster_key = 'orbit-ws03' and namespace = '$OLD';"
+  echo "do \$\$ begin if exists (select 1 from managed_runner where cluster_key = 'orbit-ws03' and namespace = '$OLD') then raise exception 'a mapping is still in $OLD'; end if; end \$\$;"
+  echo 'commit;'
+} >$MOVE/record.sql
+$PSQL -f - <$MOVE/record.sql
+```
+
+A mapping whose volume was not moved stops the transaction, and nothing is recorded.
+
+### 6. Point the profile at the new namespace
+
+In the managed runners' directory, replace `kubeconfig-orbit-ws03.json` with `kubeconfig-orbit-ws03.json.$NEW` (by a
+rename, mode 0600), and in `profile.json` set `kubernetes.namespace` to `$NEW`, `admission.managerUsername` to
+`system:serviceaccount:$NEW:orbit-mr-manager`, and, while there, `kubernetes.kubeconfig` to the file's path under
+`/var/lib/orbit-cloud-runners/`. The kubeconfig's context namespace and the profile's must be the same: the apiserver
+refuses to start managed runners otherwise.
+
+### 7. Switch management back on, and wake one runner
+
+Set `ORBIT_MANAGED_RUNNERS_ENABLED=true` and recreate the apiservers. The log says
+`managed runners are enabled in orbit-ws03 (namespace orbit-cloud)`. Wake one runner (send a message to a session on
+it): the manager proves the guard in `$NEW` with its dry-run probe, and the runner's Pod `mr-<runner uuid>` starts in
+`$NEW` on the moved claim, with its files as they were. The others wake as work reaches them.
+
+### Rollback
+
+Until step 7 nothing has run on the moved volumes. To go back: with management still off (or off again, step 3), move
+each volume back (the same loop with `--from $NEW --to $OLD` and `DIR=$MOVE/back`), record `back/moved.tsv` as in
+step 5 with `$OLD` and `$NEW` swapped, put back the profile and the
+kubeconfig from `$MOVE`, and switch management on. The new namespace, its manager identity and its guard can stay until
+the move is tried again.
+
+### 8. Clean up, once the runners have run in the new namespace
+
+`$K get pvc -n $OLD` lists none of `claims.txt`. Then delete the old guard, `$K delete validatingwebhookconfiguration
+"$OLD_GUARD"` (on production `orbit-managed-runner-pods`); delete the
+namespace `$OLD` (its ServiceAccount, its token, its Role and RoleBinding and the earlier generations' bootstrap
+Secrets go with it, and the token is no longer accepted); remove its subject from `orbit-mr-manager-storage`; remove
+`/etc/rancher/k3s/$OLD` if step 1.6 moved it; and remove the old kubeconfig and profile copies from `$MOVE` once they
+are no longer needed for a rollback.
 
 ## Where each setting lives
 

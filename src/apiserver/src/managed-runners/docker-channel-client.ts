@@ -85,6 +85,9 @@ export interface ChannelInfo {
   schemaVersion: number;
   instanceId: string;
   image: string;
+  /** The image's `org.opencontainers.image.revision` label: the source commit it was built from. Null when the
+   *  image has none; absent from an older channel. */
+  imageRevision?: string | null;
   network: { name: string; internal: boolean; interContainer: boolean } | null;
   limits: Record<string, number>;
   stopGraceSeconds: number;

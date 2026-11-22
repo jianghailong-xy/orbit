@@ -69,8 +69,10 @@ const MINUTE = 60_000;
 type CoordinatorState = 'live' | 'down' | 'retry' | 'ended' | 'cancelled';
 
 function coordinatorColumns(state: CoordinatorState) {
+  const failed = state === 'down' || state === 'retry';
   return {
-    status: state === 'down' || state === 'retry' ? RunStatus.FAILED : RunStatus.AWAITING_INPUT,
+    status: failed ? RunStatus.FAILED : RunStatus.AWAITING_INPUT,
+    finishedAt: failed ? new Date() : null,
     retryAt: state === 'retry' ? new Date(Date.now() + 60 * MINUTE) : null,
     completedAt: state === 'ended' ? new Date() : null,
     cancelRequestedAt: state === 'cancelled' ? new Date() : null,

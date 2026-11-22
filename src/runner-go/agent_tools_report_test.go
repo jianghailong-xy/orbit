@@ -281,9 +281,10 @@ func TestAgentToolsReportReadsTheRecordedEngineFrames(t *testing.T) {
 	}
 	job := agentToolsJob() // orchestration off, as the probe's orbit mcp was spawned
 	r := claudeAgentToolsReport(job, init)
-	want := len(agentToolsServedForTest(agentToolsSwitches{Orchestration: false, Watches: true, Wiki: true}))
-	if r.MCP.Status != "connected" || r.MCP.Tools != want {
-		t.Errorf("recorded Claude init read as %+v, want connected with %d tools", r.MCP, want)
+	// Claude enumerated the tools in the recording. Keep the count from that probe as the catalogue grows.
+	const recordedClaudeTools = 94
+	if r.MCP.Status != "connected" || r.MCP.Tools != recordedClaudeTools {
+		t.Errorf("recorded Claude init read as %+v, want connected with %d tools", r.MCP, recordedClaudeTools)
 	}
 	if r.Skill.Loaded == nil || !*r.Skill.Loaded {
 		t.Errorf("recorded Claude init does not show the playbooks loaded: %+v", r.Skill)
@@ -294,6 +295,8 @@ func TestAgentToolsReportReadsTheRecordedEngineFrames(t *testing.T) {
 		}
 	}
 
+	// Codex reported whether the server connected. The runner infers its tools from the current catalogue.
+	want := len(agentToolsServedForTest(agentToolsSwitches{Orchestration: false, Watches: true, Wiki: true}))
 	lines, err := os.ReadFile(filepath.Join("testdata", "agent-tools", "recorded", "codex-0.167.2-startup.jsonl"))
 	if err != nil {
 		t.Fatal(err)

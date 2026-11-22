@@ -1701,6 +1701,25 @@ model ManagedRunner {
   /// keeps the runner wanted (desiredState RUNNING), and once it has stopped the runner wakes at once as the next
   /// generation, made from that image. Null for a drain to sleep, and once the roll ends or is called off.
   imageRollTo         String?                     @map("image_roll_to")
+  /// READY on a previous image: when the manager first found the instance made from an image other than the one it
+  /// makes instances from now, with that image's source commit (`org.opencontainers.image.revision`) as
+  /// `currentImageSha`. Both null while the instance is current or the backend cannot name the current build; the
+  /// owner's status reads them (`update`) without asking the backend.
+  imageOutdatedSince  DateTime?                   @map("image_outdated_since") @db.Timestamptz(3)
+  currentImageSha     String?                     @map("current_image_sha")
+  /// The owner's Update Now (managed-runner.service.ts updateNow): when it was asked for, and by whom (the owner's
+  /// user id). Kept as the record of the last request. It is in progress while `updateCompletedAt` is null or older:
+  /// the manager rolls the READY instance onto the current image once it is idle, or stops it at once for a request
+  /// that may interrupt its turns (`updateInterruptTurns`), and records `updateCompletedAt` when the next generation is
+  /// READY. Demand never calls it off.
+  updateRequestedAt   DateTime?                   @map("update_requested_at") @db.Timestamptz(3)
+  updateRequestedBy   String?                     @map("update_requested_by")
+  updateCompletedAt   DateTime?                   @map("update_completed_at") @db.Timestamptz(3)
+  /// Whether that request, made while the runner was busy, may interrupt its running turns (`interruptTurns: true`):
+  /// the manager then asks the backend to stop the instance (`stopInstance`, Docker) instead of waiting for it to be
+  /// idle, and its host's report of the exit is the stop proof the next generation waits for. On a backend that cannot
+  /// stop an instance (Kubernetes) the request waits for idle all the same. False for a request on an idle runner.
+  updateInterruptTurns Boolean                    @default(false) @map("update_interrupt_turns")
   initialProvider    String?                      @map("initial_provider")
   resourceProfileId  String?                      @map("resource_profile_id")
   /// The one resource operation in flight: which (`CREATE_PVC`, `CREATE_SECRET`, `CREATE_POD`,
@@ -2125,6 +2144,14 @@ model Session {
   // runner's async /finalize. null = a natural agent finish (read `status`) or a
   // pre-migration row. Values: see SessionEndReason in @orbit/shared.
   endReason            String?   @map("end_reason")
+  // No failure fact on the session (design §12, decision D9; removal step R5, 2026-11-21): the nullable column `release_cause` and its CHECK
+  // session_release_cause_chk still exist in the database, and this model does not declare it. Nothing writes it
+  // and nothing reads it; migration R8 drops both one deploy after this field left the model.
+  // How the session's latest completed turn ended: ANSWERED | FAILED | INTERRUPTED | CANCELLED, the same
+  // value as that turn's `outcome`, written by runner turn-complete in the write that parks the session
+  // (migration 1201, CHECK session_last_turn_outcome_chk). Backfilled from status and endReason (1202); null
+  // when no turn has settled since, or when the old row could not say.
+  lastTurnOutcome      String?   @map("last_turn_outcome")
   // Denormalized preview: the text of the most recent `assistant` RunEvent, written on
   // event ingestion. Lets the session list show a last-reply line without querying the
   // (high-volume, append-only) run_event table per row. null until the first reply.
@@ -2209,6 +2236,12 @@ model Session {
   // older runner reports nothing) and counts as it did before this column existed. Only meaningful
   // while live. See src/apiserver/src/sessions/background-job-activity.ts.
   runningBgJobActivity Json      @default("{}") @map("running_bg_job_activity")
+  // The bg_run jobs of `runningBgJobs` the session's owner asked to stop from the app (POST
+  // /sessions/:id/background/jobs/:jobId/stop). Every full heartbeat answer to the session's
+  // runner lists the ones still in `runningBgJobs` (stopBackgroundJobs), so the stop is redelivered
+  // until the job's terminal report takes it out of that set; an id no longer there is inert. The
+  // route prunes it to `runningBgJobs` as it adds. Only meaningful while live.
+  bgJobStopRequests    String[]  @default([]) @map("bg_job_stop_requests")
   // Denormalized set of the agent's still-running sub-agents (Task/Agent tool): the tool_use
   // ids of sub-agent launches that haven't yet reported a terminal `<task-notification>`
   // (background_task). Added on launch, removed on completion, cleared on (re)spawn. The Agent
@@ -2224,6 +2257,10 @@ model Session {
   // `status` remains the sole source of truth for runner-slot accounting, so a self-driven
   // turn never consumes a permit it did not acquire.
   engineTurnActive     Boolean   @default(false) @map("engine_turn_active")
+  /// The runner-clock time (an event's `ts`) of the newest event batch that moved engineTurnActive, runningSubagents,
+  /// runningBgJobs or runningBgShells. A heartbeat's `executing` composed before it does not replace those sets: the
+  /// batch is newer news than the beat (runners/runner-executing-sets.ts, migration 1267). Internal: never sent.
+  executingEventAt     DateTime? @map("executing_event_at")
   // When the engine first spoke for the CURRENT run: cleared by every claim, stamped by the
   // first event the engine itself produced (a spawn handshake, or any generation event when a
   // warm process is reused and there is no handshake). RUNNING with this still null is the
@@ -3087,6 +3124,12 @@ model ConversationTurn {
   /// the control plane's note, so `content` stays the owner's words. Null for every other turn.
   wikiContext     Json?     @map("wiki_context")
   answeredAt      DateTime? @map("answered_at")
+  /// How this turn's latest completion ended (migration 1201, CHECK conversation_turn_outcome_chk):
+  /// ANSWERED | FAILED | INTERRUPTED | CANCELLED, written by runner turn-complete in the write that settles
+  /// `status`. Null on a turn no completion has settled, on a kind that is not a turn of work (steer, withdraw,
+  /// control turns), and on every turn written before 1201. `error` is what it failed or was stopped with.
+  outcome         String?
+  error           String?
   createdAt       DateTime  @default(now()) @map("created_at")
 
   // Image blobs sent with this turn (web composer). Linked when the turn is enqueued;
@@ -3228,10 +3271,20 @@ model SubagentRun {
   callIndex        Int?      @map("call_index")
   label            String?
   phase            String?
+  /// The parent's rating of the result, 1 to 5 (subagent_rate, migration 1420; check subagent_run_rating_score_check).
+  /// Shown on the Model tiers view; routing never reads it. A later rating replaces this one.
+  ratingScore      Int?      @map("rating_score")
+  ratingNote       String?   @map("rating_note")
+  ratedAt          DateTime? @map("rated_at") @db.Timestamptz(3)
+  /// The rating parent's own engine, provider and model when it rated.
+  raterEngine      String?   @map("rater_engine")
+  raterProvider    String?   @map("rater_provider")
+  raterModel       String?   @map("rater_model")
 
   @@unique([sessionId, toolUseId])
   @@index([sessionId, status])
   @@index([targetRunnerId, status])
+  @@index([ownerId, createdAt])
   @@unique([workflowRunId, callIndex])
   @@map("subagent_run")
 }
@@ -7851,11 +7904,16 @@ model CoordinatorHandoff {
   /// The note turn's `conversation_turn.client_turn_id`; null once a skip took the note out.
   clientTurnId  String?   @map("client_turn_id")
   startedAt     DateTime  @default(now()) @map("started_at")
-  /// TURN_FAILED | TURN_STOPPED | TIMED_OUT | EMPTY_NOTE | REPLACE_FAILED, only while FAILED.
+  /// TURN_FAILED | TURN_STOPPED | TIMED_OUT | EMPTY_NOTE | REPLACE_FAILED | COORDINATOR_CANT_RUN, only while FAILED.
   failureCode   String?   @map("failure_code")
   note          String?
   /// The waits the swap moved, as `{ id, label, paused }`.
   movedWaits    Json      @default("[]") @map("moved_waits")
+  /// What the successor runs on, as the owner named it (migration 1410); all null keeps the previous
+  /// coordinator's engine, provider and model.
+  successorEngine   String? @map("successor_engine")
+  successorProvider String? @map("successor_provider")
+  successorModel    String? @map("successor_model")
   endedAt       DateTime? @map("ended_at")
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at")
@@ -8228,6 +8286,13 @@ model OwnerRequestSecret {
   deliveredAt DateTime?    @map("delivered_at") @db.Timestamptz(3)
   removedAt   DateTime?    @map("removed_at") @db.Timestamptz(3)
   removalNote String?      @map("removal_note")
+  /// The saved secret "Use saved" made this grant from (migration 1400); NULL once that saved secret is deleted.
+  /// Indexed by the partial `owner_request_secret_saved_secret_idx` (WHERE saved_secret_id IS NOT NULL), which
+  /// Prisma does not model.
+  savedSecretId String?        @map("saved_secret_id") @db.Uuid
+  savedSecret   AccountSecret? @relation(fields: [savedSecretId], references: [id], onDelete: SetNull)
+  /// The runner's name when the grant was made, so a copy on a runner deleted since is still named.
+  runnerName  String?      @map("runner_name")
   createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
 
@@ -8243,8 +8308,11 @@ model AccountSecret {
   owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   label     String
   valueEnc  String   @map("value_enc")
+  /// When "Use saved" last made a grant from it (migration 1400).
+  lastUsedAt DateTime? @map("last_used_at") @db.Timestamptz(3)
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  grants    OwnerRequestSecret[]
 
   @@unique([ownerId, label], map: "account_secret_owner_label_key")
   @@map("account_secret")
@@ -10311,6 +10379,9 @@ model ScheduleRun {
   /// The level the run started with (§6.2, migration 0860): what its session is held to, whatever the schedule
   /// says later. NULL until the run starts.
   accessLevel      ScheduleAccessLevel? @map("access_level")
+  /// The last time the watch pass found the run's session, not yet delivered, held by a full runner, run or batch
+  /// (§7.2, migration 1430): such a run waits for a slot, and the 10-minute undelivered limit counts from here.
+  capacityHeldAt   DateTime?          @map("capacity_held_at") @db.Timestamptz(3)
   createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
   sessions         Session[]
 

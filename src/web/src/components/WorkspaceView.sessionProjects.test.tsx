@@ -256,6 +256,24 @@ beforeEach(() => {
       return reply(inScope.filter((r) => r.lifecycleState === lifecycle &&
         (!params.has('projectId') || r.projectMembership?.projectId === params.get('projectId'))));
     }
+    if (path.startsWith('/sessions/project-placement?')) {
+      // What the server answers (SessionsService.projectPlacement), from every workspace's rows.
+      listCalls.push(path);
+      const params = new URLSearchParams(path.split('?')[1]);
+      const lifecycle = params.get('view') === 'completed' ? 'COMPLETED' : 'OPEN';
+      const all = [...rows, ...remoteRows];
+      return reply({ projects: (params.get('projectIds') ?? '').split(',').filter(Boolean).map((projectId) => {
+        const ofProject = all.filter((r) => r.projectMembership?.projectId === projectId);
+        const coordinator = ofProject.find((r) => r.projectMembership?.role === 'COORDINATOR' && r.lifecycleState !== 'TRASH') ?? null;
+        const inView = ofProject.filter((r) => r.lifecycleState === lifecycle);
+        return {
+          projectId,
+          coordinator,
+          waiting: inView.filter((r) => ((r as { pendingApprovals?: number }).pendingApprovals ?? 0) > 0),
+          sessionCount: new Set([...inView.map((r) => r.id), ...(coordinator ? [coordinator.id] : [])]).size,
+        };
+      }) });
+    }
     if (path.startsWith('/sessions/')) {
       if (path.includes('/events/page')) return reply({ events: [], hasMore: false });
       if (path.includes('/diff')) return reply({ files: [] });
@@ -319,8 +337,9 @@ describe('project entry typography', () => {
 
   it('shows keyboard focus as the row tint, not a ring the list edge or the kebab fade would cut', () => {
     const css = fromRepo('src/index.css', 'src/web/src/index.css').replace(/\/\*[\s\S]*?\*\//gu, '');
+    // Every session row's, a project's included: the project row is its coordinator's session row.
     const rule = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/gu)].find(([, selector]) =>
-      /^\.session-project-row:focus-visible\s*$/u.test(selector.trim()));
+      /^\.session-row:focus-visible\s*$/u.test(selector.trim()));
     expect(rule?.[2]).toMatch(/outline\s*:\s*none/u);
     expect(rule?.[2]).toMatch(/background\s*:\s*var\(--bg-hover\)/u);
     expect(rule?.[2]).toMatch(/--session-menu-surface\s*:\s*var\(--bg-hover\)/u);
@@ -387,8 +406,10 @@ describe('project entries in the session list', { timeout: 60_000 }, () => {
     const mark = sessionRow('Build the package').querySelector('.session-sub > .session-project-progress');
     expect(mark?.textContent).toBe('2/5');
     expect(mark?.getAttribute('title')).toBe('Part of Project Alpha · open its sessions');
-    expect(listCalls.some((p) => p.includes('view=completed') && p.includes(`projectId=${PROJECT_ID}`))).toBe(true);
-    expect(listCalls.some((p) => p.includes('view=completed') && !p.includes('workspaceId=') && !p.includes('projectId='))).toBe(false);
+    expect(listCalls.some((p) => p.startsWith('/sessions/project-placement?') && p.includes('view=completed') &&
+      new URLSearchParams(p.split('?')[1]).get('projectIds') === PROJECT_ID)).toBe(true);
+    expect(listCalls.some((p) => p.startsWith('/sessions?') && p.includes('view=completed') &&
+      !p.includes('workspaceId=') && !p.includes('projectId='))).toBe(false);
   });
 
   it('keeps legacy server sessions flat when projectMembership is absent', async () => {
@@ -424,7 +445,8 @@ describe('project entries in the session list', { timeout: 60_000 }, () => {
     expect(mounted().querySelector('.session-search')).not.toBeNull();
     expect(projectRows()).toHaveLength(0);
     const folder = [...mounted().querySelectorAll<HTMLElement>('.session-folder-row')].find((el) => el.textContent?.includes(FOLDER.name))!;
-    expect(folder.querySelector('.session-folder-count')?.textContent).toBe('2');
+    // The folder's count is the rows its page lists: the project is one row, not one per member.
+    expect(folder.querySelector('.session-folder-count')?.textContent).toBe('1');
     await click(folder, 'the coordinator folder');
     await until(() => expect(titles()).toEqual(['Project Alpha']));
     expect(projectRows()).toHaveLength(1);
@@ -798,12 +820,12 @@ describe('project members outside the coordinator’s workspace, the arrow keys 
     const here = withWorkspace(pid(823), 'slow workspace');
     rows = [{ ...TASK, ...here }, { ...OLDER, ...here }];
     remoteRows = [{ ...COORDINATOR, ...elsewhere }];
-    // The project's own read is held: until it answers, the member waits in a row like a folder's.
+    // The placement read is held: until it answers, the member waits in a row like a folder's.
     let answer = (): void => {};
     const held = new Promise<void>((resolve) => { answer = resolve; });
     const fixtureApi = vi.mocked(apiModule.api).getMockImplementation()! as (...args: unknown[]) => Promise<unknown>;
     vi.mocked(apiModule.api).mockImplementation(((path: string, ...rest: unknown[]) =>
-      path.startsWith('/sessions?') && new URLSearchParams(path.split('?')[1]).has('projectId')
+      path.startsWith('/sessions/project-placement?')
         ? held.then(() => fixtureApi(path, ...rest))
         : fixtureApi(path, ...rest)) as unknown as typeof apiModule.api);
     await mount(() => expect(titles()).toEqual(['Project Alpha', 'Older conversation']), `/workspaces/${here.workspaceId}`);

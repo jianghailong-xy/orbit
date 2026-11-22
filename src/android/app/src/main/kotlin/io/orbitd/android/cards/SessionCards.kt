@@ -12,6 +12,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.runtime.saveable.SaveableStateHolder
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -241,9 +243,12 @@ fun SessionCards(cards: SessionCardsModel, open: (String) -> Unit, discuss: ((St
                 // The waiting card a project row opened onto shows its top, not its foot: a span from its top nearly the list's height.
                 if (asked == CardFocus.WAITING && viewport > 0) requester.bringIntoView(Rect(0f, 0f, 1f, viewport * 0.9f))
                 else requester.bringIntoView()
+                // Spent, and then held where it was brought to: the reader re-applies it as the conversation moves around it.
+                withFrameNanos { }
+                CardFocus.hold(session.id, card.key, asked == CardFocus.WAITING)
                 CardFocus.spend(session.id)
             }
-            Box(Modifier.bringIntoViewRequester(requester).then(if (CoordinatorQueue.isSent(card)) Modifier else Modifier.conversationCard())) {
+            Box(Modifier.bringIntoViewRequester(requester).onGloballyPositioned { CardFocus.report(session.id, card.key, it.positionInRoot().y) }.then(if (CoordinatorQueue.isSent(card)) Modifier else Modifier.conversationCard())) {
                 val preview = CardPreviews.preview(card)
                 val fresh = cards.fresh(session, card)
                 val result = results[card.key]?.takeIf { it.binding == card.binding } ?: CardActionState()

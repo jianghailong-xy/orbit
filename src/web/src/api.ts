@@ -19,6 +19,8 @@ import type {
   WorkflowRunView,
 } from '@orbit/shared';
 import type {
+  BackgroundJobStopResponse,
+  BackgroundJobTailResponse,
   BgShell,
   ConfirmationAnswersCard,
   ConfirmationReturnCard,
@@ -486,6 +488,14 @@ export const readDirProbe = (runnerId: string, path: string, signal?: AbortSigna
  *  its live-derived overlay — see mergeBackgroundShells. */
 export const getBackgroundShells = (id: string): Promise<BgShell[]> =>
   api<BgShell[]>(`/sessions/${id}/background`);
+
+/** The newest lines of one bg_run job's output (GET /sessions/:id/background/jobs/:jobId/tail, at most 40). */
+export const getBackgroundJobTail = (id: string, jobId: string): Promise<BackgroundJobTailResponse> =>
+  api<BackgroundJobTailResponse>(`/sessions/${id}/background/jobs/${encodeURIComponent(jobId)}/tail`);
+
+/** The owner's stop of one running bg_run job: its end arrives as the job's terminal report. */
+export const stopBackgroundJob = (id: string, jobId: string): Promise<BackgroundJobStopResponse> =>
+  api<BackgroundJobStopResponse>(`/sessions/${id}/background/jobs/${encodeURIComponent(jobId)}/stop`, { method: 'POST' });
 
 /** The session's SubAgent runs, oldest first: what each `delegate` block shows beside its call. */
 export const getSessionSubagents = (id: string): Promise<SubagentRunView[]> =>
@@ -1162,6 +1172,11 @@ export const commitSession = (sessionId: string) =>
  *  Pure server-side re-point; the change reflects on the next detail fetch. */
 export const adoptSessionBranch = (sessionId: string) =>
   api<{ ok: true; branch: string }>(`/sessions/${sessionId}/adopt-branch`, { method: 'POST' });
+
+/** Close a failed merge's strip (its ✕): the server clears the stored conflict or error, so the bar
+ *  goes back to Merge, or to "✓ In main". Nothing in git changes. */
+export const dismissMergeFailure = (sessionId: string) =>
+  api<{ ok: true; dismissed: boolean }>(`/sessions/${sessionId}/merge-failure/dismiss`, { method: 'POST' });
 
 // Lifecycle actions for sessions. Complete moves a session into Completed; delete
 // moves it to Trash. Both keep all data; restore brings either back to Open. Purge is
