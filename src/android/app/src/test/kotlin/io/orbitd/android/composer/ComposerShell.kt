@@ -52,7 +52,7 @@ internal object ComposerShell {
     fun reset() {
         while (frames.tryReceive().isSuccess) Unit
         while (controlFrames.tryReceive().isSuccess) Unit
-        calls.clear(); bodies.clear(); answers.clear(); gates.clear(); disk.clear()
+        calls.clear(); bodies.clear(); answers.clear(); gates.clear(); disk.clear(); diskGates.clear()
         session = emptyMap(); workspace = emptyMap(); providers = "[]"; pools = "[]"; sharedPools = "[]"
         events = emptyList(); around = null; pageGate = null; retryMessage = """{"text":""}"""; attachments = emptyMap()
         runner = obj("""{"id":"$RUNNER","name":"Fixture runner","online":true,"status":"ONLINE","version":"0.1.230",
@@ -134,6 +134,10 @@ internal object ComposerShell {
 
     /** Drafts and outboxes are kept, as the device keeps them, for the life of the process. */
     private val disk = ConcurrentHashMap<String, ByteArray>()
+    /** Holds a disk read of one key until it completes (key → gate), as a slow device store would; [diskReadsHeld] has the keys a
+     * read is held at now. */
+    val diskGates = ConcurrentHashMap<String, kotlinx.coroutines.CompletableDeferred<Unit>>()
+    val diskReadsHeld: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
     fun session() = AuthSession(transport, object : CredentialStore {
         private var value: StoredSession? = null
@@ -144,7 +148,10 @@ internal object ComposerShell {
         override suspend fun load(): String? = null
         override suspend fun save(server: String) = Unit
     }, object : SessionDataStore {
-        override suspend fun read(account: AccountKey, kind: DataKind, key: String): ByteArray? = disk["$kind:$key"]
+        override suspend fun read(account: AccountKey, kind: DataKind, key: String): ByteArray? {
+            diskGates[key]?.let { gate -> diskReadsHeld += key; try { gate.await() } finally { diskReadsHeld -= key } }
+            return disk["$kind:$key"]
+        }
         override suspend fun write(account: AccountKey, kind: DataKind, key: String, bytes: ByteArray) { disk["$kind:$key"] = bytes.copyOf() }
         override suspend fun clearAll() = disk.clear()
     }, "a07c-composer", dispatcher = Dispatchers.Unconfined, eventTransport = events_)

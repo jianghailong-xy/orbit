@@ -45,8 +45,8 @@ final class ConsoleRegistry {
     /// focused. Driven by `focus(_:agentID:)` off the app's focus state.
     private var streamingSessionID: String?
     private var lru: LRUOrder
-    /// `maxSeq` last written to disk per session — lets `persist` skip no-op saves.
-    private var savedSeq: [String: Int] = [:]
+    /// What is already on disk per session — lets `persist` skip no-op saves.
+    private var saved = TranscriptSaveLedger()
     /// Records a link asked a console to open at, held until that console is made (`openRecord`).
     private var pendingRecords: [String: String] = [:]
     /// The account a draft about to open for a workspace starts on, by workspace id: what the usage-limit
@@ -199,7 +199,7 @@ final class ConsoleRegistry {
         model(for: sessionID, agentID: agentID).startStreaming()   // hydrate + mark MRU, then stream
     }
 
-    /// Persist a session's transcript if it advanced since the last write. Called for the focused
+    /// Persist a session's transcript if it changed since the last write. Called for the focused
     /// session on the poll cadence (so a crash loses at most a few seconds) and when leaving it.
     func flush(_ sessionID: String?) {
         guard let sessionID, let model = models[sessionID] else { return }
@@ -247,7 +247,7 @@ final class ConsoleRegistry {
         for model in models.values { model.stopStreaming() }
         streamingSessionID = nil
         models.removeAll()
-        savedSeq.removeAll()
+        saved.forgetAll()
         lru = LRUOrder(capacity: lru.capacity)
         // A result read after sign-out would land on whoever signs in next.
         operationsPoll?.cancel()
@@ -262,7 +262,7 @@ final class ConsoleRegistry {
         models[sessionID]?.stopStreaming()
         if streamingSessionID == sessionID { streamingSessionID = nil }
         models[sessionID] = nil
-        savedSeq[sessionID] = nil
+        saved.forget(sessionID)
         lru.remove(sessionID)
         store.remove(sessionID: sessionID)
     }
@@ -271,7 +271,7 @@ final class ConsoleRegistry {
 
     private func makeModel(_ sessionID: String, agentID: String?) -> ConsoleModel {
         let restored = store.load(sessionID: sessionID)
-        if let restored { savedSeq[sessionID] = restored.state.maxSeq }
+        if let restored { saved.restored(sessionID, restored) }
         let model = ConsoleModel(sessionID: sessionID, agentID: agentID, baseURL: baseURL,
                                  tokenStore: tokenStore, attachments: attachments, restoring: restored)
         model.onToast = { [weak self] request in self?.onToast(request, sessionID) }
@@ -342,7 +342,7 @@ final class ConsoleRegistry {
         }
     }
 
-    /// Snapshot a console's reducer and write it, unless nothing advanced since the last write.
+    /// Snapshot a console's reducer and write it, unless nothing durable changed since the last write.
     ///
     /// `synchronously: false` hands the write to a background task. Encoding a whole transcript to
     /// JSON and writing it is tens of milliseconds on a long session, and the focused console repeats
@@ -360,11 +360,9 @@ final class ConsoleRegistry {
         // stays on disk instead.
         guard !model.detached else { return }
         let reducer = model.snapshotReducer()
-        guard savedSeq[sessionID] != reducer.state.maxSeq else { return }   // nothing new durable
-        // Claimed before the write, so a later tick can't queue a second write of the same state.
-        // A failed write was already indistinguishable from a successful one (the store swallows it)
-        // and self-heals on the next advance.
-        savedSeq[sessionID] = reducer.state.maxSeq
+        // Nothing durable the disk copy lacks: no newer event, and no reply a translation was folded
+        // into since. Claimed before the write (see `TranscriptSaveLedger.claim`).
+        guard saved.claim(sessionID, reducer) else { return }
         guard !synchronously else {
             store.save(sessionID: sessionID, reducer: reducer)
             return

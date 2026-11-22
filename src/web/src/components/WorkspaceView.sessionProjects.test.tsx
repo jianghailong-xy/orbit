@@ -445,7 +445,8 @@ describe('project entries in the session list', { timeout: 60_000 }, () => {
     expect(mounted().querySelector('.session-search')).not.toBeNull();
     expect(projectRows()).toHaveLength(0);
     const folder = [...mounted().querySelectorAll<HTMLElement>('.session-folder-row')].find((el) => el.textContent?.includes(FOLDER.name))!;
-    expect(folder.querySelector('.session-folder-count')?.textContent).toBe('2');
+    // The folder's count is the rows its page lists: the project is one row, not one per member.
+    expect(folder.querySelector('.session-folder-count')?.textContent).toBe('1');
     await click(folder, 'the coordinator folder');
     await until(() => expect(titles()).toEqual(['Project Alpha']));
     expect(projectRows()).toHaveLength(1);
