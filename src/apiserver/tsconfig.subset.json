@@ -1,1 +1,0 @@
-{"extends":"./tsconfig.test.json","files":["src/tasks/task-completion-evidence-api.spec.ts","src/sessions/session-terminal-status-readers.spec.ts","src/tasks/task-judgment-data-preserved.spec.ts"],"include":[]}
