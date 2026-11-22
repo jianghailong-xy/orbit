@@ -33,7 +33,7 @@ describe('watchesQuery', () => {
     expect(h.paths).toEqual(['/watches?following=true']);
 
     h.paths = [];
-    await client.invalidateQueries({ queryKey: ['watches'] });
+    await client.refetchQueries({ queryKey: ['watches'], type: 'all' });
     expect(h.paths).toEqual(['/watches?following=true']);
   });
 
