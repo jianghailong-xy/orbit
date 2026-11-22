@@ -455,14 +455,31 @@ private struct MarkdownTableView: View {
     }
 
     private func cell(_ text: String, column: Int, header: Bool) -> some View {
-        inlineMarkdown(text)
-            .font(.orbitTableCell)
-            .fontWeight(header ? .semibold : .regular)
-            .frame(maxWidth: .infinity, alignment: frameAlignment(column))
-            .padding(.vertical, 4)
-            .padding(.horizontal, 8)
-            .background(header ? Color.primary.opacity(0.06) : Color.clear)
-            .overlay(Rectangle().stroke(border, lineWidth: 0.5))
+        // A cell may hold an image (a reply listing its screenshots in a table); the inline parser
+        // drops those, so the cell is split into its text and image pieces.
+        let blocks = tableCellBlocks(text)
+        return VStack(alignment: frameAlignment(column).horizontal, spacing: 4) {
+            ForEach(blocks.indices, id: \.self) { i in
+                switch blocks[i] {
+                case .image(let source, let alt):
+                    MarkdownImageView(source: source, alt: alt, cap: MarkdownImageView.cellCap)
+                case .paragraph(let text):
+                    inlineMarkdown(text)
+                default:
+                    EmptyView()
+                }
+            }
+        }
+        .font(.orbitTableCell)
+        .fontWeight(header ? .semibold : .regular)
+        .frame(maxWidth: .infinity, alignment: frameAlignment(column))
+        .padding(.vertical, 4)
+        .padding(.horizontal, 8)
+        // Fill the row's height, so a short cell beside a tall one (an image) keeps its border at the
+        // row's bottom instead of drawing it under its own text, like an underline.
+        .frame(maxHeight: .infinity, alignment: .top)
+        .background(header ? Color.primary.opacity(0.06) : Color.clear)
+        .overlay(Rectangle().stroke(border, lineWidth: 0.5))
     }
 
     private func frameAlignment(_ column: Int) -> Alignment {
@@ -585,14 +602,18 @@ private struct MarkdownImageView: View {
     // rendered edge-to-edge, but a `fullScreenCover` transition could hand its `GeometryReader` a
     // stale / inset-free width that stuck, and the image overflowed again — a fixed cap is immune.)
     #if os(iOS)
-    private static let cap = CGSize(width: 300, height: 460)
+    static let proseCap = CGSize(width: 300, height: 460)
+    /// A table cell's image leaves room for the columns beside it on a phone; a tap still opens it full screen.
+    static let cellCap = CGSize(width: 160, height: 160)
     #else
-    private static let cap = CGSize(width: 480, height: 360)
+    static let proseCap = CGSize(width: 480, height: 360)
+    static let cellCap = CGSize(width: 240, height: 240)
     #endif
+    var cap: CGSize = proseCap
 
     /// Scale the source down to touch the cap (never up — web's `max-*` only shrinks), keeping aspect,
     /// so the rounded border hugs the image with no letterbox margin (see `ChatAttachmentImage`).
-    private static func fitted(_ src: CGSize) -> CGSize {
+    private func fitted(_ src: CGSize) -> CGSize {
         guard src.width > 0, src.height > 0 else { return cap }
         let k = min(cap.width / src.width, cap.height / src.height, 1)
         return CGSize(width: src.width * k, height: src.height * k)
@@ -606,7 +627,7 @@ private struct MarkdownImageView: View {
                 switch phase {
                 case .success(let image):
                     image.resizable().scaledToFit()
-                        .frame(maxWidth: Self.cap.width, maxHeight: Self.cap.height, alignment: .leading)
+                        .frame(maxWidth: cap.width, maxHeight: cap.height, alignment: .leading)
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                         .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(.primary.opacity(0.08)) }
                 case .failure:
@@ -627,7 +648,7 @@ private struct MarkdownImageView: View {
     @ViewBuilder private func attachmentImage(_ id: String) -> some View {
         Group {
             if let img = store.image(for: id) {
-                let size = Self.fitted(img.size)
+                let size = fitted(img.size)
                 withPreview(
                     Image(platformImage: img)
                         .resizable().scaledToFit()
@@ -686,7 +707,7 @@ private struct MarkdownImageView: View {
     private var unavailable: some View {
         if let path = fetchablePath {
             if let image = inlineImage {
-                let size = Self.fitted(image.size)
+                let size = fitted(image.size)
                 withPreview(Image(platformImage: image)
                     .resizable().scaledToFit()
                     .frame(width: size.width, height: size.height)

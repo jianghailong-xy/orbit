@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 37 |
-| `user` | 491 |
+| `user` | 493 |
 | `admin` | 31 |
 | `runner` | 207 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **770** |
+| **Total** | **772** |
 
 ## Public routes
 
@@ -381,6 +381,8 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `DELETE` | `/api/sessions/:id/auto-retry` | path `id` | `SessionsController.cancelAutoRetry` |
 | `POST` | `/api/sessions/:id/auto-retry` | body `Object`; path `id` | `SessionsController.armAutoRetry` |
 | `GET` | `/api/sessions/:id/background` | path `id` | `SessionsController.backgroundShells` |
+| `POST` | `/api/sessions/:id/background/jobs/:jobId/stop` | path `id`, `jobId` | `SessionsController.stopBackgroundJob` |
+| `GET` | `/api/sessions/:id/background/jobs/:jobId/tail` | path `id`, `jobId`; query `lines` | `SessionsController.backgroundJobTail` |
 | `POST` | `/api/sessions/:id/checkout/discard` | path `id` | `SessionsController.discardCheckout` |
 | `POST` | `/api/sessions/:id/commit` | path `id` | `SessionsController.commitWorktree` |
 | `GET` | `/api/sessions/:id/compact` | path `id` | `SessionsController.getCompact` |

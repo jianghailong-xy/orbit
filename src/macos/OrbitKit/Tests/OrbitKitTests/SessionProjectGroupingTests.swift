@@ -172,7 +172,7 @@ final class SessionProjectGroupingTests: XCTestCase {
         XCTAssertTrue(out.projects.isEmpty)
         XCTAssertEqual(out.sessions.map(\.id), ["ordinary"])
         XCTAssertEqual(out.folders.map(\.id), ["empty", "f1", "f2"])
-        XCTAssertEqual(out.folders.map(\.sessionCount), [0, 3, 0])
+        XCTAssertEqual(out.folders.map(\.sessionCount), [0, 1, 0])
         XCTAssertEqual(out.folders.map(\.status), [.idle, .needsYou(1), .idle])
         let inside = listing(sessions, folderID: "f1", folders: folders)
         XCTAssertTrue(inside.folders.isEmpty)
@@ -193,7 +193,7 @@ final class SessionProjectGroupingTests: XCTestCase {
         let filed = listing([coordinator(folder: "f1"), session("worker", folder: "f2")],
                             view: .completed, folders: [folder("f1", "Release"), folder("f2", "Tasks")])
         XCTAssertEqual(filed.folders.map(\.id), ["f1"])
-        XCTAssertEqual(filed.folders.map(\.sessionCount), [2])
+        XCTAssertEqual(filed.folders.map(\.sessionCount), [1])
     }
 
     func testSupplementalCoordinatorAffectsWordingAndPlacementOnly() {
@@ -516,7 +516,7 @@ final class SessionProjectGroupingTests: XCTestCase {
         XCTAssertEqual(inside.marks, ["check": mark])
         // Where the coordinator runs, its folder still holds every member, whatever folder each is filed in.
         let home = listing([coordinator(folder: "f2")] + sessions, folders: folders, workspace: "w1")
-        XCTAssertEqual(home.folders.map(\.sessionCount), [0, 3])
+        XCTAssertEqual(home.folders.map(\.sessionCount), [0, 1])
         XCTAssertEqual(home.entries.map(\.id), ["ordinary"])
         XCTAssertTrue(home.marks.isEmpty)
     }

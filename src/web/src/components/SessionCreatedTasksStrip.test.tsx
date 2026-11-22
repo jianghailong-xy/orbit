@@ -202,8 +202,8 @@ describe('the collapsed row', () => {
       );
       const named = c.created!.items.find((item) => item.id === c.band!.row)!;
       const pill = named.running ? 'Running' : named.queued ? 'Queued' : null;
-      if (pill) expect(one('.ct-count + .status-pill')?.textContent, c.name).toBe(pill);
-      else expect(one('.ct-count + .status-pill'), c.name).not.toBeNull();
+      if (pill) expect(one('.wt-spacer + .status-pill')?.textContent, c.name).toBe(pill);
+      else expect(one('.wt-spacer + .status-pill'), c.name).not.toBeNull();
       expect(one('.ct-one'), c.name).toBeNull();
     }
   });
@@ -213,7 +213,7 @@ describe('the collapsed row', () => {
       created({ total: 2, done: 2, items: [row(2, { status: 'DONE' }), row(1, { status: 'DONE' })] }),
     );
     expect(one('.bg-tray-count')?.textContent).toBe('2 · Task 1');
-    expect(one('.ct-count + .status-pill')?.textContent).toBe('Done');
+    expect(one('.wt-spacer + .status-pill')?.textContent).toBe('Done');
     expect(one('.ct-failed')).toBeNull();
   });
 

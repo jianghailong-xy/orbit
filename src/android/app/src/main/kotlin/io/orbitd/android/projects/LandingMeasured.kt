@@ -189,8 +189,10 @@ internal fun TaskExemptionRow(exemption: TaskLandingExemption, change: ProjectSe
         exemption.reason?.takeIf { it.isNotBlank() }?.let {
             Text(it, Modifier.testTag("task-landing-exempt-reason"), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
         }
-        // The owner's own write names no session; a coordinator's names its own.
-        val setBy = if (exemption.bySessionId == null) "OWNER" else "COORDINATOR"
+        // Who marked it is the record's origin, read as web reads it (Coordinator, Approved on a card, else You); with no record,
+        // the task's own fields: the owner's write names no session, a coordinator's names its own.
+        val setBy = change?.origin?.let { if (it == "COORDINATOR" || it == "CARD") it else "OWNER" }
+            ?: if (exemption.bySessionId == null) "OWNER" else "COORDINATOR"
         WhoLine(setBy, change?.createdAt?.let { ProjectTime.ago(it, now) }?.let(LandingMeasuredCopy::markedAgo), "task-landing-exempt-by")
         FilledTonalButton(onClick = remove, enabled = enabled, modifier = Modifier.padding(top = 4.dp).heightIn(min = 36.dp).testTag("task-landing-exempt-remove"),
             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp)) { Text(LandingMeasuredCopy.removeExemption) }

@@ -254,9 +254,11 @@ object ProjectSettingChanges {
     /** The rows the list draws: an owner's revert is said on the row it put back ("Reverted by you", board ⑤ d), not as a row of its own. */
     fun listed(changes: List<Change>): List<Change> = changes.filter { it.revertsChangeId == null }
 
-    /** The newest recorded change of [taskId]'s exemption: who exempted it, and when. */
+    /** Who exempted [taskId] and when: the newest record of its exemption that set it and was not reverted, as web's
+     *  `TaskLandingExempt` finds it. */
     fun latestExemption(changes: List<Change>?, taskId: String): Change? =
-        changes?.firstOrNull { it.field == "TASK_LANDING_CHECK_EXEMPT" && it.taskId != null && io.orbitd.android.navigation.ObjectId.same(it.taskId, taskId) }
+        changes?.firstOrNull { it.field == "TASK_LANDING_CHECK_EXEMPT" && it.taskId != null && io.orbitd.android.navigation.ObjectId.same(it.taskId, taskId) &&
+            (it.new as? Value.Exempt)?.exempt == true && it.revertedAt == null }
 }
 
 /** One task's exemption from its project's landing check, as the task read gives it (§12.15 P-C2): absent on a server that predates

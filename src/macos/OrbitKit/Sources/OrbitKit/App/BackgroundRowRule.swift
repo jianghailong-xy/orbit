@@ -1,12 +1,13 @@
 import Foundation
 
 /// The folded "Background" row of a session's composer band: what it draws, from the session's
-/// background list, the time of the session's last user message and whether the session is live.
+/// background list, the cut-off time (`clearedAt`) and whether the session is live.
 /// A port of `backgroundRow` in src/shared/src/backgroundRow.ts; `BackgroundRowRuleParityTests`
 /// runs it over every case of `background-row.fixture.json`, which the web and Android read too.
 ///
 /// Owner decisions (project 34yq7HVPsPDGBiMEm8sL2, 2026-11-17): an ended process stays until the
-/// user's next message, and a wake turn does not clear it (D1); the visible label is "Background",
+/// user's next message or the agent's next turn, whichever comes first, a wake's turn included
+/// (D1, revised 2026-11-21; an item that ended mid-turn stays until the next turn starts); the visible label is "Background",
 /// the screen reader keeps "Background processes" (D2); several running rotate their names, newest
 /// started first, 3000 ms each with a 300 ms change (E1); a shown failure is pinned (E2); nothing
 /// running names the last one to end, the most recent failure first (E3).
@@ -94,10 +95,10 @@ public enum BackgroundRowRule {
 
     /// The items the row shows: the running ones (only on a live session — a session that is not
     /// live has nothing running, whatever its list last said) and the ended ones that ended after
-    /// the last user message (all ended ones when the session has none).
-    public static func shown(_ list: [Input], lastUserMessageAt: String?,
+    /// `clearedAt` (all ended ones when it is nil).
+    public static func shown(_ list: [Input], clearedAt: String?,
                              sessionLive: Bool) -> (running: [Input], ended: [Input]) {
-        let since = time(lastUserMessageAt)
+        let since = time(clearedAt)
         let running = sessionLive ? list.filter { $0.status == "running" } : []
         let ended = list.filter { s in
             guard ["done", "failed", "killed"].contains(s.status), let end = time(s.endedAt) else { return false }
@@ -107,8 +108,8 @@ public enum BackgroundRowRule {
     }
 
     /// What the folded row draws, or nil for no row.
-    public static func row(_ list: [Input], lastUserMessageAt: String?, sessionLive: Bool) -> Row? {
-        let (running, ended) = shown(list, lastUserMessageAt: lastUserMessageAt, sessionLive: sessionLive)
+    public static func row(_ list: [Input], clearedAt: String?, sessionLive: Bool) -> Row? {
+        let (running, ended) = shown(list, clearedAt: clearedAt, sessionLive: sessionLive)
         let shown = running + ended
         guard !shown.isEmpty else { return nil }
 
@@ -165,8 +166,23 @@ public enum BackgroundRowRule {
     }
 
     /// The row for a session's tray, as `ConsoleModel` holds it.
-    public static func row(_ procs: [BackgroundProc], items: [TranscriptItem], sessionLive: Bool) -> Row? {
-        row(inputs(procs), lastUserMessageAt: lastUserMessageAt(items), sessionLive: sessionLive)
+    public static func row(_ procs: [BackgroundProc], items: [TranscriptItem],
+                           lastAgentTurnStartedAt: String? = nil, sessionLive: Bool) -> Row? {
+        row(inputs(procs), clearedAt: clearedAt(items: items, lastAgentTurnStartedAt: lastAgentTurnStartedAt),
+            sessionLive: sessionLive)
+    }
+
+    /// The row's cut-off: the later of the person's last message and the agent's latest turn start
+    /// (nil: neither). Port of `backgroundRowClearedAt`.
+    public static func clearedAt(lastUserMessageAt: String?, lastAgentTurnStartedAt: String?) -> String? {
+        guard let a = time(lastUserMessageAt) else { return time(lastAgentTurnStartedAt) == nil ? nil : lastAgentTurnStartedAt }
+        guard let b = time(lastAgentTurnStartedAt) else { return lastUserMessageAt }
+        return b > a ? lastAgentTurnStartedAt : lastUserMessageAt
+    }
+
+    /// The cut-off for a session's transcript: its last typed message against its latest agent turn.
+    public static func clearedAt(items: [TranscriptItem], lastAgentTurnStartedAt: String?) -> String? {
+        clearedAt(lastUserMessageAt: lastUserMessageAt(items), lastAgentTurnStartedAt: lastAgentTurnStartedAt)
     }
 
     /// When the person last sent a message: the newest user turn somebody typed. A turn Orbit opened

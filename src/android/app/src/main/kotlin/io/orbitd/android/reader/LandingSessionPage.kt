@@ -473,7 +473,7 @@ private fun LandingBudgetMeter(progress: Float, usual: Float?) {
  *  then its lines gathered into steps (`LandingSteps`), each a tool row. A step opens to its own lines, the server's sentences as they
  *  were, a check's to its output too; a step that failed or runs now starts open. */
 @Composable
-private fun LandingTimelineSectionView(section: LandingSection, view: LandingView, now: Instant, zone: ZoneId,
+internal fun LandingTimelineSectionView(section: LandingSection, view: LandingView, now: Instant, zone: ZoneId,
     onLog: suspend (LandingLogSelectors, String?) -> LandingLogPage?) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val current = section.jobId == view.currentAttempt?.jobId
@@ -614,7 +614,8 @@ private fun LandingEntryLine(section: LandingSection, index: Int, entry: Landing
         }
         when {
             selectors != null && openLog == selectors -> LandingLogBlock(selectors, onLog)
-            selectors != null && !LandingSessionModel.checkPassed(entry) -> LandingInlineOutput(selectors, onLog)
+            // A check its task is exempt from was not run: it has no output to read (D5).
+            selectors != null && !LandingSessionModel.checkPassed(entry) && entry.data?.text("skipped") != "TASK_EXEMPT" -> LandingInlineOutput(selectors, onLog)
         }
     }
 }

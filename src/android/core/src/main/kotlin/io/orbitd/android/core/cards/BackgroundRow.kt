@@ -78,12 +78,24 @@ object BackgroundRow {
 
     private fun time(iso: String?): Instant? = iso?.let { runCatching { Instant.parse(it) }.getOrNull() }
 
+    /** The row's cut-off: the later of the person's last message and the agent's latest turn start (null: none). */
+    fun clearedAt(lastUserMessageAt: String?, lastAgentTurnStartedAt: String?): String? {
+        val a = time(lastUserMessageAt)
+        val b = time(lastAgentTurnStartedAt)
+        return when {
+            a == null -> if (b == null) null else lastAgentTurnStartedAt
+            b == null -> lastUserMessageAt
+            b > a -> lastAgentTurnStartedAt
+            else -> lastUserMessageAt
+        }
+    }
+
     /**
      * The items the row shows: the running ones (only on a live session — a session that is not live has nothing running,
-     * whatever its list last said) and the ended ones that ended after the last user message (all ended ones when there is none).
+     * whatever its list last said) and the ended ones that ended after `clearedAt` (all ended ones when there is none).
      */
-    fun shown(list: List<Input>, lastUserMessageAt: String?, sessionLive: Boolean): Pair<List<Input>, List<Input>> {
-        val since = time(lastUserMessageAt)
+    fun shown(list: List<Input>, clearedAt: String?, sessionLive: Boolean): Pair<List<Input>, List<Input>> {
+        val since = time(clearedAt)
         val running = if (sessionLive) list.filter { it.status == "running" } else emptyList()
         val ended = list.filter { s ->
             val end = time(s.endedAt)
@@ -93,8 +105,8 @@ object BackgroundRow {
     }
 
     /** What the folded row draws, or null for no row. */
-    fun row(list: List<Input>, lastUserMessageAt: String?, sessionLive: Boolean): Row? {
-        val (running, ended) = shown(list, lastUserMessageAt, sessionLive)
+    fun row(list: List<Input>, clearedAt: String?, sessionLive: Boolean): Row? {
+        val (running, ended) = shown(list, clearedAt, sessionLive)
         val shown = running + ended
         if (shown.isEmpty()) return null
 
@@ -131,8 +143,8 @@ object BackgroundRow {
     }
 
     /** The row for a session's list as the server sends it. */
-    fun rowOf(list: List<JsonObject>, lastUserMessageAt: String?, sessionLive: Boolean): Row? =
-        row(list.map(Input::of), lastUserMessageAt, sessionLive)
+    fun rowOf(list: List<JsonObject>, clearedAt: String?, sessionLive: Boolean): Row? =
+        row(list.map(Input::of), clearedAt, sessionLive)
 
     private val ENDED = setOf("done", "failed", "killed")
 }

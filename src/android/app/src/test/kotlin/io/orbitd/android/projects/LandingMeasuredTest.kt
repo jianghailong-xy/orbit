@@ -164,6 +164,29 @@ class LandingMeasuredTest {
         assertFalse(without.contains("integrating")); assertFalse(without.contains("onIntegrationLine")); assertFalse(without.contains("onUpstream"))
     }
 
+    /** Who marked a task exempt (web `TaskLandingExempt`): the newest record of its exemption that set it and was not reverted, and
+     *  its origin as the pill reads it. Ported from main's second Android port (22189bf97a). */
+    @Test fun whoMarkedAnExemptionIsTheNewestUnrevertedRecordThatSetIt() {
+        fun change(id: String, taskId: String = "t1", exempt: Boolean = true, revertedAt: String? = null, origin: String = "COORDINATOR",
+            field: String = "TASK_LANDING_CHECK_EXEMPT", value: String = """"oldValue":{"exempt":${!exempt},"reason":null},"newValue":{"exempt":$exempt,"reason":"r"}""") =
+            """{"id":"$id","projectId":"p1","taskId":"$taskId","field":"$field","origin":"$origin",$value,"reason":"r","revertsChangeId":null,
+            "revertedAt":${revertedAt?.let { "\"$it\"" } ?: "null"},"revertible":true,"createdAt":"2026-11-21T11:40:00Z"}"""
+        val list = ProjectSettingChanges.of(j("""{"settingChanges":[
+            ${change("c0", field = "LANDING_CHECK", value = """"oldValue":{"command":null,"timeoutSeconds":null,"none":false},"newValue":{"command":"make","timeoutSeconds":null,"none":false}""")},
+            ${change("c1", taskId = "t2")},
+            ${change("c2", exempt = false)},
+            ${change("c3", revertedAt = "2026-11-21T11:50:00Z")},
+            ${change("c4", origin = "CARD")},
+            ${change("c5")}]}"""))!!
+        val marked = ProjectSettingChanges.latestExemption(list, "t1")!!
+        assertEquals("c4", marked.id)
+        assertEquals("Approved on a card", LandingMeasuredCopy.who(marked.origin))
+        assertEquals("marked 20m ago", LandingMeasuredCopy.markedAgo(ProjectTime.ago(marked.createdAt, java.time.Instant.parse("2026-11-21T12:00:00Z"))!!))
+        assertNull(ProjectSettingChanges.latestExemption(list, "t3"))
+        assertNull(ProjectSettingChanges.latestExemption(emptyList(), "t1"))
+        assertNull(ProjectSettingChanges.latestExemption(null, "t1"))
+    }
+
     // MARK: the landing's check list (P-C2, D5)
 
     @Test fun aLandingCheckItsTaskIsExemptFromIsSkippedNotFailed() {

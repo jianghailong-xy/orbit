@@ -1,15 +1,20 @@
 import type { BgShell } from './background';
 
 // The folded "Background" row of a session's composer band: what it draws, from the session's
-// background list (GET /sessions/:id/background), the time of the session's last user message and
-// whether the session is live. One rule for web, OrbitKit and Android; every client's tests read
+// background list (GET /sessions/:id/background), the cut-off time below and whether the session
+// is live. One rule for web, OrbitKit and Android; every client's tests read
 // `background-row.fixture.json` beside this file, so the three cannot drift.
 //
 // Owner decisions (project 34yq7HVPsPDGBiMEm8sL2, 2026-11-17):
-//   D1  an ended process stays until the user's next message; a wake turn does not clear it.
-//       `lastUserMessageAt` is the newest message the person typed. A wake note, a watch's wake and a
+//   D1  (revised 2026-11-21) an ended item, failed included, is shown only until the agent's next
+//       turn or the person's next message after it ended, whichever comes first. `clearedAt` is the
+//       later of the last message the person typed and the start of the agent's latest turn (any
+//       turn, a wake's included: once the agent has been told, someone has followed it up); an
+//       ended item is shown only if it ended after `clearedAt`. A wake note, a watch's wake and a
 //       message another Orbit session sent (session_send / project_send, a `sessionMessage` card,
-//       a coordinator's included) are not the person's message and never count (ruling 2026-11-20).
+//       a coordinator's included) are not the person's message and never count as one (ruling
+//       2026-11-20); the turn they open does count, as the agent's turn. An item that ended while
+//       a turn was running stays until the next turn starts.
 //   D2  the visible label is "Background"; the screen reader keeps "Background processes".
 //   E1  several running: rotate the names, newest started first, 3000 ms each, 300 ms change.
 //   E2  while a failed process is shown, the most recently failed one is pinned.
@@ -84,20 +89,31 @@ export function backgroundItemName(item: BackgroundRowInput): { name: string; tr
 
 const time = (iso: string | null | undefined): number => (iso ? Date.parse(iso) : Number.NaN);
 
+/** The row's cut-off: the later of the person's last message and the agent's latest turn start (null: none). */
+export function backgroundRowClearedAt(
+  lastUserMessageAt: string | null,
+  lastAgentTurnStartedAt: string | null,
+): string | null {
+  const a = time(lastUserMessageAt);
+  const b = time(lastAgentTurnStartedAt);
+  if (Number.isNaN(a)) return Number.isNaN(b) ? null : lastAgentTurnStartedAt;
+  if (Number.isNaN(b)) return lastUserMessageAt;
+  return b > a ? lastAgentTurnStartedAt : lastUserMessageAt;
+}
+
 /**
  * What the folded row draws.
  *
  * Shown items are the running ones (only on a live session: a session that is not live has
- * nothing running, whatever its list last said) plus the ended ones that ended after the last
- * user message (all ended ones when the session has none). A wake turn is not a user message, so
- * it clears nothing.
+ * nothing running, whatever its list last said) plus the ended ones that ended after `clearedAt`
+ * (all ended ones when it is null). See D1 above.
  */
 export function backgroundRow(
   list: BackgroundRowInput[],
-  lastUserMessageAt: string | null,
+  clearedAt: string | null,
   sessionLive: boolean,
 ): BackgroundRow {
-  const since = time(lastUserMessageAt);
+  const since = time(clearedAt);
   const running = sessionLive ? list.filter((s) => s.status === 'running') : [];
   const ended = list.filter(
     (s) =>

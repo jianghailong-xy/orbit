@@ -37,8 +37,9 @@ cd orbit
 ```
 
 For a new deployment, `scripts/install-server.sh` does the rest of this section and the next: it writes `.env`
-with two independently generated secrets, prepares [managed runners](#managed-runners), firewalls their network on
-this host, sets up the [runner link](#runner-link), and starts the stack. Give it the external origin when you serve
+with two independently generated secrets, sets up the [runner link](#runner-link), and starts the stack. With
+`--managed-runners` it also prepares [managed runners](#managed-runners) (Orbit Cloud) and firewalls their network on
+this host; without it they are off. Give it the external origin when you serve
 Orbit on a domain or at an address of its own:
 
 ```bash
@@ -1277,7 +1278,8 @@ optimization left. Only statements whose text is fixed can be named:
 
 ## Managed runners
 
-A new deployment gives every account a runner of its own, so nobody has to register a machine before a first
+Managed runners (Orbit Cloud) are off in a new deployment unless it is installed with `--managed-runners`, or an
+administrator switches them on later (below). Where they are on, every account gets a runner of its own, so nobody has to register a machine before a first
 session. It is a container on this host's Docker, given when the account signs in, with a data volume that keeps
 its checkouts, sessions and engine sign-ins. After an hour with nothing to do it sleeps: the container stops and
 the volume stays. A new message, a task that can run or a scheduled wakeup starts it again, on the same volume.
@@ -1290,7 +1292,7 @@ Runners that people register themselves keep working beside it.
 
 ### What the install sets up
 
-`scripts/install-server.sh` prepares managed runners, then writes three lines into `.env`:
+`scripts/install-server.sh --managed-runners` prepares managed runners, then writes three lines into `.env`:
 
 ```dotenv
 ORBIT_MANAGED_RUNNERS_ENABLED=true
@@ -1339,7 +1341,8 @@ COMPOSE_PROFILES=managed-runners-docker,managed-runner-firewall
 
 The first account, the administrator created at `/setup`, is given its runner when it signs in. The runner takes
 sessions once a runtime is signed in on it; until then it reports that none is installed and signed in.
-`--no-managed-runners` installs with `ORBIT_MANAGED_RUNNERS_ENABLED=false` and prepares none of the above.
+Without `--managed-runners` the install writes `ORBIT_MANAGED_RUNNERS_ENABLED=false` and prepares none of the above
+(`--no-managed-runners` says the same explicitly).
 `--no-managed-runner-firewall` installs managed runners without their firewall and leaves this host's firewall alone:
 `COMPOSE_PROFILES` then names `managed-runners-docker` alone, `.env` carries a note that the firewall is off, and the
 install says so as it starts and as it ends. Read [Isolation and its limits](#isolation-and-its-limits) before
@@ -1426,7 +1429,7 @@ Managed runners are switched in `.env`, and only there. An upgrade never writes 
   that is running keeps running, every volume stays, and switching them on again carries on from where they were.
 - **On again:** set `ORBIT_MANAGED_RUNNERS_ENABLED=true` and run `docker compose up -d apiserver`.
 - **On, for a deployment installed without them:** every deployment installed before managed runners existed, and
-  one installed with `--no-managed-runners`. Upgrade it first, then, from its checkout:
+  one installed without `--managed-runners`. Upgrade it first, then, from its checkout:
 
   ```bash
   scripts/install-server.sh --enable-managed-runners

@@ -164,7 +164,7 @@ export enum ControlEventType {
 - `SESSION_ENDED`:`{ status, runStatus, sessionState, runState, lifecycleState, endReason }`。例如运行中的 Session 被用户 Complete 后,是 `runState=ENDED`(中性终态)、`lifecycleState=COMPLETED`;新客户端分别展示执行结果与所在位置,"是哪个动作结束的"读 `endReason` 而不是读 `runState`(见 [session-lifecycle-design.md](./session-lifecycle-design.md) §2.1)。兼容 payload 可额外携带 `filingState=ARCHIVED`。
 - `SESSION_ERROR`(决议 Q3):`{ message, recoverable }`。`recoverable=false` 通常伴随 status→FAILED 的 `session.updated`(列表行由后者更新);`recoverable=true` 是中途错误(如内容过滤),status 仍可能停在 `AWAITING_INPUT`,此事件携带 `session.updated` 没有的信息。**客户端通知去重见 §5.2**。
 - `APPROVAL_*`:`{ approvalId, pendingApprovals }`(计数用于角标/红点;明细仍走现有 approvals 端点)。
-- `BACKGROUND_TASK`:`{ name, status, exitCode? }`。
+- `BACKGROUND_TASK`:`{ name, status, exitCode?, toolUseId?, kind? }`。`toolUseId` and `kind` are sent when the runner reported them: a runner-hosted job re-reports itself `running` once a minute, and they are what lets a client tell that heartbeat (same `toolUseId`) and a `service` (which no tally counts) from a counted job starting.
 
 ### 4.3 控制面事件子集(从 hub 里筛什么)
 
@@ -290,6 +290,19 @@ GET /api/events?hints=list_changed
 **事件摘要每事件只读一次。** `session.created/updated` 的 `ControlSessionSummary`(以及其它需要查库的事件载荷)按 hub 消息读一次,在该账户本进程的所有连接间共享;每个连接拿到的内容与各自读一次时相同。
 
 ---
+
+### 4.9 `owner_requests.changed`: a request changed (opt-in)
+
+```
+GET /api/events?hints=owner_requests
+```
+
+`hints` is comma-separated (`list_changed,owner_requests` declares both); unknown values are ignored (`CONTROL_HINT_OWNER_REQUESTS`). **A stream that did not declare it never receives `owner_requests.changed`**, for the reason §4.8 gives: shipped clients re-read everything on a type they do not know. Nothing changes for them, and the asking session's `session.updated` is still published exactly as before.
+
+- Envelope `{ type: 'owner_requests.changed', sessionId: '', agentId: null, ts, data: { version } }`, user-scoped (`sessionId` empty). `version` is opaque. It is a nudge to make a conditional `GET /owner-requests?state=open`, never a change to apply.
+- **Derived, not published by the writers** (`realtime/owner-request-hints.ts`), like §4.8. An owner request is written by an agent's own filing and answer, the expiry sweep, a wiki being made, schedules, conditions (can't-read and still-waiting items) and secret delivery, in five services and about thirty call sites, mostly inside transactions with no commit hook. Every write moves the row's `updated_at`, so once a second one statement reads the count and newest `updated_at` of each watched account's PENDING requests (all the open list draws, through the `(owner_id, state, created_at)` index, so its cost follows what is open and not the account's history); the signal therefore covers filed, answered, expired, withdrawn, declined and any other change of a request, by any writer including a later one, and is sent after the commit.
+- A new stream is told the current version about a second after it connects, whether or not anything moved; a client's connect-time read is answered against it. After that a stream is told only a version that differs from the one it holds, at most once a second (several writes in a second are one event). An event unrelated to requests (a plain `session.updated`) moves nothing and sends nothing.
+- A request that passes its deadline is read as expired before the sweep writes it; the event follows the sweep's write, and a client keeps its safety read for the gap.
 
 ## 5. 客户端设计(macOS,`src/macos`)
 

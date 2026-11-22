@@ -497,7 +497,7 @@ struct TasksListView: View {
     }
     #endif
 
-    /// One row, wrapped for the container it is in — the same shape as `AgentPanes.sessionRow`. The
+    /// One row, wrapped for the container it is in — the same shape as `SessionListRow`. The
     /// row view itself is the same either way, actions included; what changes is who moves the
     /// screen: the three-column `List`'s selection, or the row's own destination value on the
     /// compact stack. There is no third state for "highlighted but not openable" to live in, because
