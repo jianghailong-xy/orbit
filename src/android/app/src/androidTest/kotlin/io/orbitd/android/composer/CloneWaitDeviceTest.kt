@@ -68,7 +68,7 @@ class CloneWaitDeviceTest {
         compose.onNodeWithText("Composer conversation").performClick()
         awaitText("Waiting to clone acme/widgets"); awaitText("Add a dark mode switch to the settings page.")
         // The spinner turns: several frames, so one shows its arc open.
-        for (i in 1..6) { capture("compact-pending-$i"); SystemClock.sleep(170) }
+        for (i in 1..8) { capture("compact-pending-$i"); SystemClock.sleep(i * 230L) }
         control("""{"extraDetail":${extra("CLONING")},"events":[${frame("CLONING", 57)}]}""")
         awaitText("Cloning acme/widgets"); awaitText("57%"); capture("compact-cloning-57")
         File(evidence, "clone-wait-result.txt").writeText("PASS\n")
