@@ -1554,6 +1554,19 @@ test('GET /watches?following=true answers the union a Following page draws: the 
     assert.equal(row.targets[0].title, newest.body.find((w: { id: string }) => w.id === id)?.targets[0].title ?? row.targets[0].title);
   }
 
+  // Conditional answer: the same list is a 304 to the validator it came with, and a changed watch is a 200 again.
+  const conditional = (etag: string) => fetch(`${h.base}/api/watches?following=true`, {
+    headers: { authorization: `Bearer ${owner.bearer}`, 'if-none-match': etag },
+  });
+  const validated = await fetch(`${h.base}/api/watches?following=true`, { headers: { authorization: `Bearer ${owner.bearer}` } });
+  const etag = validated.headers.get('etag');
+  assert.ok(etag, 'the union read carries an ETag');
+  assert.equal((await conditional(etag)).status, 304, 'nothing changed, so the read is answered 304');
+  expectStatus(await call(h, owner.bearer, 'POST', `/watches/${live.id}/pause`), 200, 'pause the live watch');
+  const changed = await conditional(etag);
+  assert.equal(changed.status, 200, 'a watch changed, so the read is answered 200 again');
+  assert.notEqual(changed.headers.get('etag'), etag);
+
   expectStatus(await call(h, owner.bearer, 'GET', '/watches?following=false'), 400, 'following=false');
   expectStatus(await call(h, owner.bearer, 'GET', '/watches?following=true&state=ACTIVE'), 400, 'following with a state');
 });
