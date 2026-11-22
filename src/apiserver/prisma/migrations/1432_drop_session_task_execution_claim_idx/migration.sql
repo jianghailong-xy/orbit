@@ -56,9 +56,9 @@
 --
 -- NUMBERING, RE-RUNNABILITY
 -- -------------------------
--- 1432: main, project/* and pushed orbit/* branches use up to 1431 (deploy 3's 1428, 1429 and 1431; rescanned
--- 2026-11-22). Not a multiple of 10. Independent of deploy 3's other migrations, in either order. Can run twice:
--- IF EXISTS.
+-- 1432: used by no other migration on main, project/* or pushed orbit/* branches (rescanned 2026-11-22 07:45Z;
+-- deploy 3's others are 1433 to 1435). Not a multiple of 10. Independent of deploy 3's other migrations, in either
+-- order. Can run twice: IF EXISTS.
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
 
 DROP INDEX CONCURRENTLY IF EXISTS "session_task_execution_claim_idx";
