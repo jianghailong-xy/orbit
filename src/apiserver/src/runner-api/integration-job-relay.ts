@@ -45,6 +45,7 @@ import {
   isTerminalJobState,
   jobLanded,
   landingFailureClass,
+  landingFixWorkSession,
   skippedMergeCheck,
   type SkippedMergeCheckRecord,
   landingJudgedTooEarly,
@@ -2898,6 +2899,17 @@ export async function applyIntegrationJobResult(
       const stoppedCheckTimeoutSeconds = state === 'CHECK_FAILED' && checks.some((check) => check.timedOut)
         ? await checkBudgetsOf(tx, job)
         : null;
+      // Revision 42 (§12.3, W4, W-T1 / W-T6): a conflict or a red check of the work's own making goes
+      // first to the task's own work session, when W4 holds; any other result, or W4 false, opens the
+      // item for the coordinator exactly as before.
+      const workSessionId = await landingFixWorkSession(tx, {
+        jobKind: job.kind,
+        sessionId: job.sessionId,
+        taskId: job.kind === 'LAND_TASK' ? liveTaskId : candidateRow?.taskId ?? null,
+        landingId: job.landingId,
+        failureClass: landingFailureClass({ state, checks, baselineRed: body.baselineRed === true }),
+        candidateSourceKind: candidateRow?.sourceKind ?? null,
+      });
       const opened = await recordIntegrationFailure(tx, {
         projectId: job.projectId,
         ownerId: job.ownerId,
@@ -2915,6 +2927,7 @@ export async function applyIntegrationJobResult(
         // §4.7 H4: when this job is a rerun whose item the clock handed to the owner while it ran, the
         // failure it opens stays theirs — the coordinator's rerun does not carry the decision back.
         heldByOwner: await ownerHoldOnHandledItems(tx, job.id),
+        workSessionId,
         payload: {
           ...(body.baselineRed === true ? {
             baseline: {

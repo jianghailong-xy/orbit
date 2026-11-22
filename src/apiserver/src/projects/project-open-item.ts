@@ -207,6 +207,8 @@ export interface OpenItemActionsSource {
   phase?: string | null;
   jobKind?: string | null;
   payload?: unknown;
+  /** Revision 42 (W9): the item is in its task's own work session's hands (`inWorkSessionHands`). */
+  workSession?: boolean;
 }
 
 /**
@@ -292,6 +294,8 @@ export interface OpenItemDecisionRow {
   handover_note?: string | null;
   source_job?: string | null;
   failure_class?: string | null;
+  /** Revision 42 (W9): the item is in its task's own work session's hands (`inWorkSessionHands`). */
+  workSession?: boolean;
   /** The project's main branch by name (`mainBranchOf`), which the next step says a merge reaches;
    *  null or absent with no repository bound, and the sentence then says main. */
   mainBranch?: string | null;
@@ -310,6 +314,7 @@ function doorInputForRow(row: OpenItemDecisionRow): OpenItemDoorInput {
     phase: row.phase,
     jobKind: row.jobKind,
     payload: row.payload,
+    workSession: row.workSession,
   };
 }
 
@@ -1211,6 +1216,25 @@ export async function recordTaskFailure(
   return { itemId: created.id, projectId: task.projectId, taskId: failure.taskId, assignee };
 }
 
+/**
+ * Revision 42 (§12.4, W5): the item is in its task's own work session's hands — offered to it and not
+ * handed back. While it is, it is delivered to no coordinator (X-D4), carries no escalation time, and
+ * the coordinator's resolve and retry doors refuse it (W9, 409 OPEN_ITEM_WITH_WORK_SESSION).
+ */
+export function inWorkSessionHands(item: {
+  workSessionOfferedAt: Date | null;
+  workSessionReturnedAt: Date | null;
+}): boolean {
+  return item.workSessionOfferedAt !== null && item.workSessionReturnedAt === null;
+}
+
+/** W9's refusal: two sessions fixing the same failure at once have no winner. */
+export const OPEN_ITEM_WITH_WORK_SESSION = 'OPEN_ITEM_WITH_WORK_SESSION';
+export const OPEN_ITEM_WITH_WORK_SESSION_MESSAGE =
+  "this item is in the hands of its task's own work session, which is fixing it on its branch. "
+  + 'Orbit lands the fix by itself, or hands the item back to the coordinator if the session cannot fix it; '
+  + 'until then it cannot be resolved or retried.';
+
 /** An integration that stopped, as the transaction that finished the job knows it (§2.6). */
 export interface IntegrationFailure {
   projectId: string;
@@ -1231,6 +1255,13 @@ export interface IntegrationFailure {
    * with the reason and the wait it already had, rather than going back to the coordinator.
    */
   heldByOwner?: OwnerHeldItem | null;
+  /**
+   * Revision 42 (§12.5 W5): the task's own work session this failure is handed to first, when W4 holds
+   * (`landingFixWorkSession`). The item is opened in its hands: `work_session_id` and
+   * `work_session_offered_at` written, no `escalate_at`, and no coordinator delivery (X-D4) until it is
+   * handed back (W7).
+   */
+  workSessionId?: string | null;
 }
 
 /** An item the account owner holds, as the item that repeats its failure inherits it (§4.7 H4). */
@@ -1277,6 +1308,7 @@ export async function recordIntegrationFailure(
   const now = new Date();
   // §4.7 H4: a rerun's failure stays with the owner who already held the failure it repeats.
   const held = failure.heldByOwner ?? null;
+  const workSessionId = failure.workSessionId ?? null;
   const [holder, holderBecause]: [OpenItemAssignee, OpenItemAssigneeReason] =
     held ? ['OWNER', held.assigneeReason] : [assignee, assigneeReason];
   const [created] = await tx.projectOpenItem.createManyAndReturn({
@@ -1301,9 +1333,12 @@ export async function recordIntegrationFailure(
       waitingSince: held?.waitingSince ?? now,
       assignedAt: now,
       escalatedAt: held?.escalatedAt ?? null,
-      escalateAt: holder === 'COORDINATOR'
+      // W5: nobody owes an item the work session holds, so no clock runs for it.
+      escalateAt: holder === 'COORDINATOR' && !workSessionId
         ? new Date(now.getTime() + project.exceptionEscalationSeconds * 1_000)
         : null,
+      workSessionId,
+      workSessionOfferedAt: workSessionId ? now : null,
     }],
     skipDuplicates: true,
     select: { id: true },
@@ -2168,6 +2203,9 @@ export interface OpenItemMessageSource {
   landedFixes?: readonly LandedFix[];
   /** The commit the item's own failed landing was handed (its job's `source_sha`), when it has one. */
   failedSourceSha?: string | null;
+  /** Revision 42 (W9): the item is in its task's own work session's hands, so its cell holds no
+   *  coordinator door and the text names none. */
+  workSession?: boolean;
 }
 
 /**
@@ -2856,8 +2894,26 @@ function checkResult(value: IntegrationItemPayload['check']): IntegrationCheckRe
  * front of the coordinator again — and then says everything it said the first time.
  */
 export function openItemMessage(item: OpenItemMessageSource): string {
+  // Revision 42 (W5, W9): an item its task's own work session holds is not the coordinator's to act on
+  // yet, and its cell holds no coordinator door, so the text names none. `deliver` does not send it.
+  if (item.workSession) return workSessionItemMessage(item);
   const landed = landedFixPreface(item);
   return landed ? `${landed}\n\n${openItemBody(item)}` : openItemBody(item);
+}
+
+/** What an item in its task's own work session's hands says (revision 42, §12.5 W9): where it is, and
+ *  that nothing is asked of the reader until it is handed back. */
+function workSessionItemMessage(item: OpenItemMessageSource): string {
+  const task = item.taskId ? ` of task ${uuidToBase62(item.taskId)}` : '';
+  return [
+    `From Orbit · exception item: ${item.title}`,
+    '',
+    `This failure is in the hands of the work session${task}, which is fixing it on its own branch. `
+      + 'Nothing is asked of you: Orbit lands the new commit and runs the checks again by itself, and if '
+      + 'the session cannot fix it, the item is handed back to the coordinator with the reason.',
+    '',
+    `Item id: ${uuidToBase62(item.id)}.`,
+  ].join('\n');
 }
 
 /**
@@ -2880,6 +2936,7 @@ function landedFixPreface(item: OpenItemMessageSource): string | null {
     phase: payload.phase ?? null,
     jobKind: payload.jobKind ?? null,
     failureClass: payload.failureClass ?? null,
+    workSession: item.workSession,
   });
   const projectId = uuidToBase62(item.projectId);
   const resolve = `${doors.resolveMcp} (projectId: ${projectId}, itemId: ${uuidToBase62(item.id)})`;
@@ -2981,6 +3038,7 @@ function openItemBody(item: OpenItemMessageSource): string {
     phase: payload.phase ?? null,
     jobKind: payload.jobKind ?? null,
     failureClass: payload.failureClass ?? null,
+    workSession: item.workSession,
   });
   const notice = `Item id: ${uuidToBase62(item.id)}. This is a notice, not an interruption: the turn you were running was not interrupted by it, `
     + 'and you are reading it only after that turn ended, so go by the database state you have just read yourself.';

@@ -1169,6 +1169,83 @@ export async function queueLandingRetry(
   };
 }
 
+/** W8 (§12.5, A-Q32): how many landing generations the task's own work session may ask for in one
+ *  task segment. Counted from committed job rows, never timed. */
+export const LANDING_FIX_ROUNDS = 2;
+
+/** The landing failures that go first to the task's own work session (§12.3): a conflict in any
+ *  phase, and a check failure of the work's own making. Baseline-red, timed-out and errored results
+ *  are not the work's fault and stay the coordinator's. */
+const HANDED_OFF_FAILURE_CLASSES: ReadonlySet<LandingFailureClass> = new Set(['CONFLICT', 'CHECK_FAILED']);
+
+/**
+ * W4 (§12.3, §12.5 W5): the work session a failed landing is handed to first, or null when the
+ * failure goes to the coordinator exactly as before (W-T6).
+ *
+ * Read in the J-T7 result transaction, before the item is opened, from the rows as they stand there.
+ * Plain reads: no row is locked, so the result path takes no lock it did not take before.
+ *
+ * The failure must be one §12.3 hands off — a task landing's CONFLICT (REBASE, MERGE or MAIN_SYNC) or
+ * CHECK_FAILED, or the same two on a MAIN line's TASK_BRANCH candidate check or landing; a
+ * PROJECT_BRANCH promotion has no task and so no task's session. The session is the one the job was
+ * queued from (`job.session_id`, the delivered branch's), and all four of W4's conditions hold:
+ *  1. it is a CONVERSATION that starts task work, not in Trash, with no cancel requested;
+ *  2. it is still open, or it ended because its task was done (`task_done`) — a session a person ended
+ *     is not revived;
+ *  3. the task is still DONE and this session is still its newest work session;
+ *  4. fewer than {@link LANDING_FIX_ROUNDS} generations of this task segment were asked for by it (W8).
+ */
+export async function landingFixWorkSession(
+  tx: Prisma.TransactionClient,
+  input: {
+    jobKind: string;
+    /** The job's session: the work session whose branch this attempt carried. */
+    sessionId: string | null;
+    /** The task the attempt is about: the job's for a LAND_TASK, the candidate's for a promotion. */
+    taskId: string | null;
+    /** The task segment the attempt belongs to (§2.9), whose rounds W8 counts. */
+    landingId: string | null;
+    failureClass: LandingFailureClass | null;
+    /** The candidate's source kind, for a promotion job; null for a task landing. */
+    candidateSourceKind: string | null;
+  },
+): Promise<string | null> {
+  if (!input.failureClass || !HANDED_OFF_FAILURE_CLASSES.has(input.failureClass)) return null;
+  const promotion = input.jobKind === 'CHECK_PROMOTION' || input.jobKind === 'LAND_PROMOTION';
+  if (!(input.jobKind === 'LAND_TASK' || (promotion && input.candidateSourceKind === 'TASK_BRANCH'))) return null;
+  if (!input.sessionId || !input.taskId) return null;
+
+  // 1 and 2.
+  const session = await tx.session.findFirst({
+    where: { id: input.sessionId },
+    select: {
+      sessionKind: true, startsTaskWork: true, deletedAt: true, cancelRequestedAt: true,
+      finishedAt: true, endReason: true, taskId: true,
+    },
+  });
+  if (!session || session.sessionKind !== 'CONVERSATION' || !session.startsTaskWork
+    || session.deletedAt !== null || session.cancelRequestedAt !== null
+    || session.taskId !== input.taskId) return null;
+  if (session.finishedAt !== null && session.endReason !== 'task_done') return null;
+
+  // 3.
+  const task = await tx.task.findFirst({
+    where: { id: input.taskId },
+    select: { status: true, sessions: { ...workSessionsOfTaskSelect(), take: 1, select: { id: true } } },
+  });
+  if (!task || task.status !== TaskStatus.DONE || task.sessions[0]?.id !== input.sessionId) return null;
+
+  // 4.
+  const rounds = await tx.projectIntegrationJob.count({
+    where: {
+      retryRequestedBySessionId: input.sessionId,
+      ...(input.landingId ? { landingId: input.landingId } : {}),
+    },
+  });
+  if (rounds >= LANDING_FIX_ROUNDS) return null;
+  return input.sessionId;
+}
+
 /**
  * The tip of the branch a rerun of this task's landing would hand the line — the same
  * `landingWorkSession` choice `queueLandingRetry` makes — as its runner last reported it

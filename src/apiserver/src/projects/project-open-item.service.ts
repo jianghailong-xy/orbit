@@ -93,6 +93,9 @@ import {
   landingLineOf,
   openItemMessage,
   openItemOwed,
+  inWorkSessionHands,
+  OPEN_ITEM_WITH_WORK_SESSION,
+  OPEN_ITEM_WITH_WORK_SESSION_MESSAGE,
   openItemVisible,
   openItemTurnId,
   openItemsNoLongerOwed,
@@ -633,6 +636,17 @@ function itemTranslatedFields(kind: string, handoverNote: string | null | undefi
   return { ...fields, handoverNote: true };
 }
 
+/** W9 (revision 42, §12.5): the coordinator's and owner's resolve and retry doors refuse an item in its
+ *  task's own work session's hands. */
+function withWorkSession(): ConflictException {
+  return new ConflictException({ code: OPEN_ITEM_WITH_WORK_SESSION, message: OPEN_ITEM_WITH_WORK_SESSION_MESSAGE });
+}
+
+/** The rows a hand-close may write: not offered to a work session, or handed back from it (W9). */
+const NOT_WITH_WORK_SESSION = {
+  OR: [{ workSessionOfferedAt: null }, { workSessionReturnedAt: { not: null } }],
+} satisfies Prisma.ProjectOpenItemWhereInput;
+
 /**
  * Exception items after the fact that opened them has committed: delivering them to the project's
  * coordinator, handing them to the owner when there is nobody to deliver to, closing them when the
@@ -722,6 +736,8 @@ export class ProjectOpenItemService {
       const mine = await this.prisma.projectOpenItem.findMany({
         where: {
           taskId: { in: ids }, state: 'OPEN', assignee: 'OWNER', kind: { not: LANDED_WITHOUT_CONFIRMATION_KIND },
+          // W5: an item in the task's own work session's hands asks nothing of the owner yet.
+          OR: [{ workSessionOfferedAt: null }, { workSessionReturnedAt: { not: null } }],
         },
         select: { id: true },
         orderBy: [{ waitingSince: 'asc' }, { id: 'asc' }],
@@ -743,7 +759,12 @@ export class ProjectOpenItemService {
     if (ids.length === 0) return;
     await this.guarded('deliverForItems', async () => {
       const owed = await this.prisma.projectOpenItem.findMany({
-        where: { id: { in: ids }, state: 'OPEN', assignee: 'COORDINATOR' },
+        where: {
+          id: { in: ids },
+          state: 'OPEN',
+          // W5: an item handed to its task's own work session goes to that session (`deliver`'s seam).
+          OR: [{ assignee: 'COORDINATOR' }, { workSessionOfferedAt: { not: null }, workSessionReturnedAt: null }],
+        },
         select: { id: true },
         orderBy: [{ waitingSince: 'asc' }, { id: 'asc' }],
       });
@@ -811,6 +832,18 @@ export class ProjectOpenItemService {
   }
 
   /**
+   * THE SEAM FOR W6 (§12.5, revision 42): deliver the `landing-fix:v1:<jobId>` turn to the work
+   * session an item was handed to. Reached after the hand-off's J-T7 transaction has committed,
+   * through every delivery entry point (`deliverForItems` from the result route, `deliverOwed` as the
+   * backstop), in place of the coordinator's delivery. The turn itself — its content, the revival of a
+   * `task_done` session, and clearing the task's delivered identity in the transaction that writes the
+   * turn (R2) — is task 350mtSLp7QV140aRvZRwL's; until it lands, the item waits in the session's hands.
+   */
+  async offerLandingFix(itemId: string): Promise<void> {
+    void itemId;
+  }
+
+  /**
    * Queue one item on the conversation that coordinates its project (§4.4 X-D1, X-D2).
    *
    * The conversation is read at THIS moment rather than when the item was opened: a project that
@@ -836,10 +869,20 @@ export class ProjectOpenItemService {
         ownerId: true,
         handlingJobId: true,
         integrationJobId: true,
+        workSessionOfferedAt: true,
+        workSessionReturnedAt: true,
         project: { select: { coordinatorEnabled: true, coordinatorSessionId: true } },
       },
     });
-    if (!item || item.state !== 'OPEN' || item.assignee !== 'COORDINATOR') return;
+    if (!item || item.state !== 'OPEN') return;
+    // Revision 42 (§12.5 W5, X-D4): an item in its task's own work session's hands is that session's,
+    // not the coordinator's, until it is handed back (W7) — whoever asks, and whichever assignee the
+    // item will have once it is handed back (W10: the hand-off does not read the Automatic switch).
+    if (inWorkSessionHands(item)) {
+      await this.offerLandingFix(item.id);
+      return;
+    }
+    if (item.assignee !== 'COORDINATOR') return;
     // H1 is a live hand-off, not a second delivery. A terminal handling job deliberately falls
     // through (the item may need a fresh decision), but QUEUED/RUNNING rows stay out of every
     // coordinator delivery entry point, including an owner's explicit "ask again" press.
@@ -1995,6 +2038,8 @@ export class ProjectOpenItemService {
         // The cell the refusals below name the doors of, and what O-X1 asks about.
         promotionId: true,
         payload: true,
+        workSessionOfferedAt: true,
+        workSessionReturnedAt: true,
         project: { select: { coordinatorSessionId: true } },
       },
     });
@@ -2006,6 +2051,8 @@ export class ProjectOpenItemService {
         + 'answered by a fact or by somebody else, and a second press would write over that.',
     });
     if (item.state !== 'OPEN') throw notOpen();
+    // W9 (revision 42): while the task's own work session is fixing it, nobody closes it by hand.
+    if (inWorkSessionHands(item)) throw withWorkSession();
     const resolution = HAND_CLOSABLE_RESOLUTIONS[item.kind];
     if (!resolution) {
       throw new ConflictException({ code: OPEN_ITEM_HAS_ITS_OWN_DOOR, message: ownDoorRefusal(item) });
@@ -2079,7 +2126,7 @@ export class ProjectOpenItemService {
     }
 
     const settled = await this.prisma.projectOpenItem.updateMany({
-      where: { id: itemId, state: 'OPEN' },
+      where: { id: itemId, state: 'OPEN', ...NOT_WITH_WORK_SESSION },
       data: {
         state: 'RESOLVED',
         resolution,
@@ -2350,9 +2397,15 @@ export class ProjectOpenItemService {
         : [];
       const openItems = await tx.projectOpenItem.findMany({
         where: { projectId, taskId, kind: { in: [...INTEGRATION_ITEM_KINDS] }, state: 'OPEN' },
-        select: { id: true, kind: true, assignee: true, assigneeReason: true, integrationJobId: true, payload: true },
+        select: {
+          id: true, kind: true, assignee: true, assigneeReason: true, integrationJobId: true, payload: true,
+          workSessionOfferedAt: true, workSessionReturnedAt: true,
+        },
         orderBy: [{ waitingSince: 'asc' }, { id: 'asc' }],
       });
+      // W9 (revision 42): the task's own work session is fixing this landing; a rerun beside it would
+      // be a second fixer of the same failure.
+      if (openItems.some(inWorkSessionHands)) throw withWorkSession();
       const ownerBlockers = await tx.projectBlocker.findMany({
         where: { projectId, subjectType: 'TASK', subjectId: taskId, owner: 'USER', resolvedAt: null },
         select: { id: true, kind: true },
@@ -3052,9 +3105,14 @@ export class ProjectOpenItemService {
         : [];
       const openItems = await tx.projectOpenItem.findMany({
         where: { projectId, promotionId, kind: { in: [...INTEGRATION_ITEM_KINDS] }, state: 'OPEN' },
-        select: { id: true, kind: true, assignee: true, assigneeReason: true },
+        select: {
+          id: true, kind: true, assignee: true, assigneeReason: true,
+          workSessionOfferedAt: true, workSessionReturnedAt: true,
+        },
         orderBy: [{ waitingSince: 'asc' }, { id: 'asc' }],
       });
+      // W9 (revision 42): a MAIN line's task-branch candidate whose failure its task's session is fixing.
+      if (openItems.some(inWorkSessionHands)) throw withWorkSession();
       const decision = decidePromotionRetry({
         requester: ownerRequester ? 'OWNER' : 'COORDINATOR',
         coordinatorEnabled: current.coordinatorEnabled,
@@ -3571,6 +3629,8 @@ export class ProjectOpenItemService {
         fuseEpisodeId: true,
         assignedAt: true,
         translation: true,
+        workSessionOfferedAt: true,
+        workSessionReturnedAt: true,
         ...HANDLING_SELECT,
         deliveries: {
           where: { purpose: 'ITEM' },
@@ -3779,6 +3839,8 @@ export class ProjectOpenItemService {
           fuseEpisodeId: row.fuseEpisodeId,
           askable,
           payload: row.payload,
+          // W9: an item its task's own session holds offers no press here (`OPEN_ITEM_WORK_SESSION_DOOR_TABLE`).
+          workSession: inWorkSessionHands(row),
         }),
         requiredAction: openItemRequiredAction({
           kind: row.kind,
@@ -3804,6 +3866,7 @@ export class ProjectOpenItemService {
           state: 'OPEN',
           handledBy: handledBy.get(row.id) ?? [],
           handoverNote: row.handoverNote,
+          workSession: inWorkSessionHands(row),
         }),
         handling,
         outcome: null,
