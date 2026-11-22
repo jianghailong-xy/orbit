@@ -518,7 +518,7 @@ export function ScheduleRunStatusCard({ of, names }: { of: ScheduleRunOfSession;
         <div className="sched-run-chips">
           {text.tries.map((time, i) => <span key={`${i}:${time}`} className="sched-run-chip">{time}</span>)}
         </div>
-        {text.gaveUp ? <div className="sched-run-meta">{text.gaveUp}</div> : null}
+        {text.gaveUp ? <div className="sched-run-meta is-gave-up">{text.gaveUp}</div> : null}
         {text.next ? <div className="sched-run-meta">{text.next}</div> : null}
         <div className="sched-run-doors">
           <Button className="sched-run-door" variant="primary" disabled={runNow.isPending} onClick={() => runNow.mutate()}>
