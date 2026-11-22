@@ -130,7 +130,7 @@ Step 4.5 is the one that can double-run a task if it is wrong. It gets its own t
 review and a rehearsal on a production copy.
 
 **Step 4.5, release B.** Release A is migration 1426 and the readers that state `finished_at IS NULL`. It shipped
-in deploy 2 (`a7f28ff0ac`). Release B is migration 1432, `DROP INDEX CONCURRENTLY IF EXISTS
+in deploy 2 (`a7f28ff0ac`). Release B is migration 1444, `DROP INDEX CONCURRENTLY IF EXISTS
 "session_task_execution_claim_idx"`, alone in its file because Prisma sends a file holding that statement as
 one string (the header says why). It changes no server code that reads the claim, and it rides deploy 3.
 

@@ -1,5 +1,5 @@
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
--- 1432: drop 0130's one-live-run-per-task index, the one stated on the status set. Release B of two
+-- 1444: drop 0130's one-live-run-per-task index, the one stated on the status set. Release B of two
 -- (docs/session-three-state-plan.md §7 step 4.5; project 3508bDBDE5xPH43TYuiqP).
 --
 -- WHAT IT DROPS, AND WHAT STAYS
@@ -46,19 +46,20 @@
 -- --------------------
 -- A wait that outlasts lock_timeout (a transaction holding session open for more than 30 s), statement_timeout, a
 -- cancel or a lost connection ends the drop with the index still in the catalog, INVALID (pg_index.indisvalid =
--- false). The planner no longer reads it, and 1426's index enforces the claim either way. Prisma records 1432 as
+-- false). The planner no longer reads it, and 1426's index enforces the claim either way. Prisma records 1444 as
 -- failed, the deploy-3 server does not start (migrations apply at boot, before it serves), the deploy-2 server goes
 -- on serving, and every later deploy stops on P3009 until an operator runs
---   prisma migrate resolve --rolled-back 1432_drop_session_task_execution_claim_idx
+--   prisma migrate resolve --rolled-back 1444_drop_session_task_execution_claim_idx
 -- and deploys again; IF EXISTS makes the re-run drop what is left, or find nothing. Drilled in the spec above. By
 -- hand, the same statement does it. To find one:
 --   SELECT indexrelid::regclass FROM pg_index WHERE NOT indisvalid AND indrelid = 'session'::regclass;
 --
 -- NUMBERING, RE-RUNNABILITY
 -- -------------------------
--- 1432: used by no other migration on main, project/* or pushed orbit/* branches (rescanned 2026-11-22 07:45Z;
--- deploy 3's others are 1433 to 1435). Not a multiple of 10. Independent of deploy 3's other migrations, in either
--- order. Can run twice: IF EXISTS.
+-- 1444: written as 1432, renumbered on 2026-11-23 after main took 1432 (model_identity) and 1433; 1444 is above
+-- everything on main (rescanned 2026-11-23). Not a multiple of 10. It runs after deploy 3's 1441 to 1443 (the
+-- column drop included); neither reads what the other changes, so the order between them does not matter.
+-- Can run twice: IF EXISTS.
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
 
 DROP INDEX CONCURRENTLY IF EXISTS "session_task_execution_claim_idx";

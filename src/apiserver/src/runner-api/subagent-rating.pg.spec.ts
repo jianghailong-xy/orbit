@@ -10,7 +10,8 @@
  *   2. GET /providers/subagent-tiers (subagentTierView) gives each model its SubAgent runs and the decayed average
  *      of their ratings ("Not enough ratings" below 5: no average), and its done tasks' first-pass rate (none below
  *      10). A run that failed on a usage limit or a model at capacity counts neither as a failure nor as a run, and
- *      another account's runs and tasks are never counted.
+ *      another account's runs and tasks are never counted. A model's figures are pooled over its every row: the
+ *      same id on another engine, and an id model_identity says is the same model.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/subagent-rating.pg.spec.ts
  *
@@ -38,6 +39,8 @@ const DAY = 86_400_000;
 const OPUS = 'claude-opus-5-5';
 const SONNET = 'claude-sonnet-5-5';
 const HAIKU = 'claude-haiku-5-5';
+/** An id the rules cannot tie to Haiku, decided to be Haiku in model_identity (as DeepSeek would): unique per run. */
+const HAIKU_ALIAS = `haiku-alias-${randomUUID()}`;
 
 const silent = (): never =>
   new Proxy({}, { get: (_target, key) => (key === 'then' ? undefined : () => undefined) }) as never;
@@ -65,6 +68,8 @@ test('subagent_rate: the parent rates its own run, and the Model tiers view read
       { value: SONNET, label: 'Sonnet 5.5', priority: 1 },
       { value: HAIKU, label: 'Haiku 5.5', priority: 2 },
     ],
+    // The same Sonnet on another engine, and an alias of Haiku.
+    antigravity: [{ value: SONNET, label: SONNET }, { value: HAIKU_ALIAS, label: HAIKU_ALIAS }],
   };
   async function account() {
     const ownerId = randomUUID();
@@ -237,5 +242,18 @@ test('subagent_rate: the parent rates its own run, and the Model tiers view read
     const opus = claude.models.find((m) => m.model === OPUS)!.quality;
     assert.equal(opus.tasks.completedTaskCount, 1);
     assert.equal(opus.tasks.firstPassRate, null, 'below 10 completed tasks: Not enough tasks');
+
+    // One model, many rows: Sonnet on Antigravity reads Claude Code's figures, and an id model_identity ties to
+    // Haiku reads Haiku's, under Haiku's identity.
+    await prisma.modelIdentity.create({ data: { ruleKey: HAIKU_ALIAS, canonicalKey: HAIKU, name: 'Claude Haiku 5.5' } });
+    const pooled = await subagentTierView(prisma as never, mine.ownerId);
+    const agy = pooled.providers.find((p) => p.slug === 'antigravity' && p.kind === 'builtin')!;
+    const agySonnet = agy.models.find((m) => m.model === SONNET)!;
+    assert.deepEqual(agySonnet.quality, sonnet, 'the same id on another engine is the same model');
+    assert.deepEqual(agySonnet.identity, { key: SONNET, name: null });
+    const alias = agy.models.find((m) => m.model === HAIKU_ALIAS)!;
+    assert.deepEqual(alias.quality, haiku, 'an id model_identity ties to Haiku reads Haiku');
+    assert.deepEqual(alias.identity, { key: HAIKU, name: 'Claude Haiku 5.5' });
+    await prisma.modelIdentity.delete({ where: { ruleKey: HAIKU_ALIAS } });
   });
 });

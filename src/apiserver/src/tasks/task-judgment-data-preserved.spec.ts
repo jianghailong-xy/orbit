@@ -3199,6 +3199,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1220 sets fastupdate = off on run_event's trigram index and merges its pending list; no row is written, and
       // no preserved relation, trigger, function or DONE fence changes.
       '1220_run_event_text_trgm_fastupdate_off',
+      // 1237 adds two nullable columns with no default (browser_open_requested_at, browser_open_request) to `runner`,
+      // which is not a preserved relation; no row is written, and no trigger, function or DONE fence changes.
+      '1237_runner_browser_open_request',
       // 1240 adds a plain index on project_coordinator_wake (idempotency_key); no row is written, and no preserved
       // relation, trigger, function or DONE fence changes.
       '1240_project_coordinator_wake_key_idx',
@@ -3248,6 +3251,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // and task.landing_check_exempt_owner_set_at; neither table is a preserved relation, and no trigger,
       // function or DONE fence changes.
       '1390_project_setting_change',
+      // 1393 restates owner_request's kind CHECK to admit BROWSER_SIGN_IN beside 1273's SETTINGS_CHANGE and adds two
+      // nullable columns with a CHECK that every existing row passes; no row is written, and no preserved relation,
+      // trigger, function or DONE fence changes.
+      '1393_owner_request_browser_sign_in',
       // 1400 adds three nullable columns, a foreign key and a partial index on owner_request_secret and account_secret;
       // no row is written, and no preserved relation, trigger, function or DONE fence changes.
       '1400_owner_secret_saved_links',
@@ -3311,10 +3318,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // row is written, and no trigger, function or DONE fence changes.
       // Written as 1430 on the project line, it was renumbered after main took 1430.
       '1431_managed_runner_update_interrupt',
-      // 1432 drops 0130's claim index session_task_execution_claim_idx CONCURRENTLY (plan step 4.5, release B); 1426's
-      // index goes on enforcing one live run per task. Session is not a preserved relation, and no function, trigger,
-      // type, constraint or DONE fence changes. No INSERT, UPDATE or DELETE.
-      '1432_drop_session_task_execution_claim_idx',
+      // 1432 creates model_identity (rule_key, canonical_key, name, decided_at) and 1433 seeds it with INSERTs: a new
+      // table, not a preserved relation; no preserved relation, trigger, function or DONE fence is read or changed.
+      '1432_model_identity',
+      '1433_model_identity_seed',
       // 1441 to 1443, deploy 3 of design §12.6 (removal steps R6 to R8; written as 1428, 1429 and 1431, then 1433 to 1435,
       // renumbered above what main and the other lines took). 1441 writes session.last_turn_outcome (FAILED on a release
       // the status alone records as a failure, CANCELLED on the residual A2 shape) and conversation_turn.outcome and error
@@ -3323,7 +3330,13 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // not preserved relations: no preserved relation is read, written or dropped, and the DONE fence is unchanged.
       '1441_session_turn_outcome_backfill',
       '1442_ended_triggers_drop_status_bridge',
-      '1443_session_release_cause_drop'],
+      '1443_session_release_cause_drop',
+      // 1444 drops 0130's claim index session_task_execution_claim_idx CONCURRENTLY (plan step 4.5, release B); 1426's
+      // index goes on enforcing one live run per task. Session is not a preserved relation, and no function, trigger,
+      // type, constraint or DONE fence changes. No INSERT, UPDATE or DELETE.
+      // Written as 1432 on the project line, it was renumbered after main took 1432 and 1433 (model_identity); it runs
+      // after deploy 3's 1441 to 1443, and neither reads what the other changes.
+      '1444_drop_session_task_execution_claim_idx'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
