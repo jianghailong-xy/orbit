@@ -1,6 +1,7 @@
 import { questionsWithCoordinator } from '../sessions/run-question';
 import { KEEP_BACKGROUND_WORK_END_CONTENT } from '../sessions/running-work';
 import { readMergeRecovery, type MergeRecoveryAction } from '@orbit/shared';
+import { readOneSessionPhaseFields } from '../sessions/session-phase';
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit, Optional } from '@nestjs/common';
 import { EventEmitter } from 'events';
 import { randomUUID } from 'crypto';
@@ -1680,6 +1681,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
             lifecycleState,
             filingState,
             endReason,
+            // The row as it stands now (sessions/session-phase.ts); absent when the session is gone.
+            ...(await readOneSessionPhaseFields(this.prisma, sessionId)),
           };
         }
       case ControlEventType.SESSION_ERROR:
@@ -1879,6 +1882,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       questionWithCoordinator: s.taskId ? (await questionsWithCoordinator(this.prisma, [sessionId])).get(sessionId) ?? null : null,
       pendingApprovals,
       waitingKind: sessionWaitingKind(approvals, decisions),
+      // phase, released, lastTurnOutcome, waitingOn (sessions/session-phase.ts), over the count above.
+      ...(await readOneSessionPhaseFields(this.prisma, sessionId, pendingApprovals)),
       confirmationUnderReview: underReview
         ? {
           ...underReview,

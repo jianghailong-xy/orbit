@@ -3299,6 +3299,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1430 adds one nullable column, capacity_held_at, to schedule_run; no row is written, and no preserved
       // relation, trigger, function or DONE fence changes.
       '1430_schedule_run_capacity_held_at',
+      // 1432 drops 0130's claim index session_task_execution_claim_idx CONCURRENTLY (plan step 4.5, release B); 1426's
+      // index goes on enforcing one live run per task. Session is not a preserved relation, and no function, trigger,
+      // type, constraint or DONE fence changes. No INSERT, UPDATE or DELETE.
+      '1432_drop_session_task_execution_claim_idx',
       // 1441 to 1443, deploy 3 of design §12.6 (removal steps R6 to R8; written as 1428, 1429 and 1431, then 1433 to 1435,
       // renumbered above what main and the other lines took). 1441 writes session.last_turn_outcome (FAILED on a release
       // the status alone records as a failure, CANCELLED on the residual A2 shape) and conversation_turn.outcome and error

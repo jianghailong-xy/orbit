@@ -129,6 +129,37 @@ The largest phase: 93 server rows and 14 database objects marked `MOVE` in the a
 Step 4.5 is the one that can double-run a task if it is wrong. It gets its own task, its own
 review and a rehearsal on a production copy.
 
+**Step 4.5, release B.** Release A is migration 1426 and the readers that state `finished_at IS NULL`. It shipped
+in deploy 2 (`a7f28ff0ac`). Release B is migration 1432, `DROP INDEX CONCURRENTLY IF EXISTS
+"session_task_execution_claim_idx"`, alone in its file because Prisma sends a file holding that statement as
+one string (the header says why). It changes no server code that reads the claim, and it rides deploy 3.
+
+The rehearsal is `apiserver/src/sessions/session-claim-index-release-b.pg.spec.ts`. It runs on a database at
+deploy 2's migration state, populated with more than 2,000 synthetic sessions. It drives the auto-run sweep,
+manual start, resume and the auto-retry revive from two service stacks at once, before and after the drop.
+Every statement is watched at the pg driver, and it counts 42P10 errors and tasks with two unreleased
+sessions. It also drills an interrupted drop: INVALID index, P3009, `migrate resolve --rolled-back`, redeploy.
+
+Before deploy 3, confirm that no running replica states the old predicate. Two checks, both read-only:
+
+1. **The containers.** On the deploy host, list every running container of the apiserver image:
+   `docker ps --format '{{.Names}} {{.Image}}' | grep orbit-apiserver`. That covers the
+   apiserver, any `-next` left by a deploy and the wiki-worker, which runs the same image. Each tag must be
+   `a7f28ff0ac` or a commit that contains it (`git merge-base --is-ancestor a7f28ff0ac <tag>`). A deploy-1
+   image (`45c327a903`) means the drop must wait.
+2. **The database.** Run `psql "$DATABASE_URL" -X -f scripts/session-claim-index-drop-precheck.sql` twice, at
+   least five minutes apart. It must show 1426 applied, 1426's index valid and unique, no INVALID index on
+   `session`, and no task with two live runs. `old_carrier_calls` must not grow between the two runs.
+   `old_carrier_calls` counts calls in `pg_stat_statements` to deploy 1's form of the task carrier:
+   `deleted_at IS NULL` followed directly by the status list, with no `finished_at IS NULL` between them.
+   Deploy 1's capacity counts, ready-to-run reads and project rollups send that form; release A sends none of
+   it. The spec proves the fingerprint against both.
+
+No statement names either index's predicate in `ON CONFLICT ... WHERE` (none since `2133b988ed`, which deploy 1
+already contains), so no server can raise 42P10 from the drop. A deploy-2 server serving beside the deploy-3 one
+during the hand-over sees the new index alone. Its inserts and revives are refused by that index, its P2002
+classifiers match the new name (it begins with the old one), and its claim reads are planned through it.
+
 ## 8. Phase 5: wire and clients
 
 | Step | Work | Done when |

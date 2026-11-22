@@ -162,6 +162,11 @@ export class LinkPreviewsService {
           retryAt: row.retryAt,
           engineTurnActive: row.engineTurnActive,
           activity: row.activity,
+          // As the list row carries them (sessions/session-phase.ts).
+          phase: row.phase,
+          released: row.released,
+          lastTurnOutcome: row.lastTurnOutcome,
+          waitingOn: row.waitingOn,
           pendingApprovals: row.pendingApprovals,
           waitingKind: row.waitingKind,
           runningBgCount: row.runningBgCount,

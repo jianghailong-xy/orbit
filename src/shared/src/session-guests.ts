@@ -3,6 +3,7 @@
  * reply in it, and each guest's messages are turns of the owner's own session, sent as external sender ORBIT_GUEST.
  */
 
+import type { SessionPhase, SessionTurnOutcome, SessionWaitingOn } from './session-phase';
 import type { SessionActivity } from './task-run-reason';
 
 /** One person who can reply, as the owner's `GET /sessions/:id/guests` lists them. */
@@ -40,6 +41,12 @@ export interface GuestSessionSummary {
   lifecycleState: string;
   /** What the session is doing beyond its status (SessionActivity); absent from an older server. */
   activity?: SessionActivity | null;
+  /** The three-state field and the facts beside it (session-phase.ts, contracts/session-state.contract.json).
+   *  Absent from an older control plane. */
+  phase?: SessionPhase;
+  released?: boolean;
+  lastTurnOutcome?: SessionTurnOutcome | null;
+  waitingOn?: SessionWaitingOn | null;
   addedAt: string;
   lastTurnAt: string | null;
 }
