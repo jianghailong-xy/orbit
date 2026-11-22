@@ -657,7 +657,19 @@ async function queuedLanding(
   // The session that produced this branch has stopped moving: the runner commits a worktree when it
   // FINISHES the session (SR13), and a landing is not handed over before that (J-T1a,
   // `task-landing-races-final-commit.pg.spec.ts` — a landing judged earlier answers ALREADY_LANDED
-  // about a branch that is about to grow). Record the release and where HEAD ended.
+  // about a branch that is about to grow). Record where HEAD ended, then the release: the DONE asked its idle
+  // session to end (§12.15 P-M1, `endIdleWorkOfDoneTask`), and the runner's finalize is that end, the finish door
+  // that writes the release fact and settles the DONE's delivered identity. Only a session no end was asked of is
+  // finished in place.
+  await stack.db.session.update({
+    where: { id: a.sessionId },
+    data: { worktreeBranch: `orbit/${label}`, worktreeDirty: false },
+  });
+  const { inboxLeaseOwner } = await stack.db.session.findUniqueOrThrow({
+    where: { id: a.sessionId },
+    select: { inboxLeaseOwner: true },
+  });
+  if (await drainRequestedEnd(stack, w, a.sessionId, inboxLeaseOwner ?? undefined)) return a;
   await stack.db.$transaction(async (tx) => {
     // The finish settles the DONE's delivered identity in the transaction that writes it, as every
     // finish door does — and decides the route a DONE written while this work moved left to it
