@@ -424,7 +424,7 @@ public enum DeliveryAnchor {
              .evidenceDecision, .ownerDecisionReceipt, .evidenceDecisionReceipt,
              .promotionApproval, .promotionReceipt, .coordinatorQuestion,
              .coordinatorQuestionRecord, .escalatedItem, .fusePause, .ownerRequest, .crossingBatch,
-             .scheduleCard, .scheduleRecord, .scheduleRunStrip, .scheduleRunReport:
+             .scheduleCard, .scheduleRecord, .scheduleRunStrip, .scheduleRunReport, .permissionModeChange:
             return items.last?.id
         }
     }
