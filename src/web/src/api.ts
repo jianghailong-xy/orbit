@@ -38,6 +38,9 @@ import type {
   OwnerAnswerCard,
   ProjectStartedCard,
   SessionCapabilities,
+  SessionPhase,
+  SessionTurnOutcome,
+  SessionWaitingOn,
   SessionLandingView,
   SessionMessageCard,
   SessionMessageFrom,
@@ -2063,6 +2066,12 @@ export interface SessionDetail {
   /** Explicit runner/process state. `status` is its legacy alias. */
   runStatus?: string;
   status?: string;
+  /** The three-state field and the facts beside it (contracts/session-state.contract.json). Absent from an
+   *  older control plane; read through lib/sessionState (sessionPhaseOf, sessionReleasedOf). */
+  phase?: SessionPhase;
+  released?: boolean;
+  lastTurnOutcome?: SessionTurnOutcome | null;
+  waitingOn?: SessionWaitingOn | null;
   title?: string;
   /** The Project this Session coordinates. Null for ordinary Sessions. */
   projectId?: string | null;

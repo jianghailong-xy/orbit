@@ -721,6 +721,35 @@ class ComposerDeviceTest {
         capture("session-page")
     }
 
+    /** The reader's own turn as iOS draws it (OrbitApp `UserBubbleView`): a sent screenshot over the trailing bubble, the Chinese the
+     * owner wrote with the English the agent got under it ("Show both languages"), copy · time · the translation foot; the reply under
+     * it the document alone. Compared against the iPhone's frame of the same transcript. */
+    @Test fun userBubbleImageAndBothLanguages() = journey("user-bubble") {
+        val shot = Bitmap.createBitmap(540, 1170, Bitmap.Config.ARGB_8888)
+        android.graphics.Canvas(shot).apply {
+            drawColor(android.graphics.Color.rgb(248, 248, 250))
+            val grey = android.graphics.Paint().apply { color = android.graphics.Color.rgb(200, 200, 206) }
+            for (i in 0 until 14) drawRect(40f, 160f + i * 64f, if (i % 3 == 2) 330f else 500f, 184f + i * 64f, grey)
+            drawRect(30f, 1060f, 510f, 1130f, android.graphics.Paint().apply { color = android.graphics.Color.rgb(30, 110, 220) })
+        }
+        val png = java.io.ByteArrayOutputStream().also { shot.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
+        val image = "01a0cca7-8609-70ed-a0e2-d4b55b832b70"
+        login("""{"me":{"id":"a07-user","email":"a07@example.test","name":"A07","translationAvailable":true,
+              "preferences":{"translationEnabled":true,"translationLanguage":"zh-Hans","translationBilingual":true}},
+            "files":{"$image":{"name":"Screenshot_1259.png","mime":"image/png","base64":"${java.util.Base64.getEncoder().encodeToString(png)}"}},
+            "rows":[{"seq":1,"type":"user","turnId":"t-1","ts":"${now(-130)}","payload":{"text":"Please review the rendering of the Android session chat window.",
+                "translation":{"state":"DONE","from":"zh-Hans","original":"Android session 聊天窗口的渲染请 review 下"},
+                "attachments":[{"id":"$image","name":"Screenshot_1259.png","mime":"image/png"}]}},
+              {"seq":2,"type":"assistant","turnId":"t-1","ts":"${now(-100)}","payload":{"text":"I'll compare it with the iPhone frame and send you both.",
+                "translation":{"lang":"zh-Hans","text":"我会把它和 iPhone 的画面对比，然后把两张都发给你。"}}},
+              {"seq":3,"type":"turn_end","turnId":"t-1","payload":{"subtype":"success"}}]}""")
+        awaitText("Hide original")
+        compose.waitUntil(15000) { compose.onAllNodes(hasTestTag("user-turn-image"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("user-bubble", useUnmergedTree = true).performScrollTo()
+        compose.waitForIdle()
+        capture("user-bubble-image-bilingual")
+    }
+
     /** The auto-retry card (baseline): a spent quota counts down to its reset, and its switch turns the armed retry off. */
     @Test fun a07cAutoRetryCardCountsDownAndItsSwitchTurnsItOff() = journey("a07c-auto-retry") {
         login("""{"rows":[{"seq":1,"type":"user","payload":{"text":"Ship the release notes"}},
