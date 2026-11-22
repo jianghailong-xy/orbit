@@ -156,7 +156,6 @@ import {
   runnersQuery,
   pendingCriteriaDecisionsQuery,
   pendingDecisionsQuery,
-  projectIntegrationQuery,
   projectMergedPromotionsQuery,
   projectOpenItemsQuery,
   projectPromotionQuery,
@@ -363,6 +362,8 @@ import {
   retryReplyTranslation,
 } from '../api';
 import { DshRepairCard } from './Transcript';
+import { useAgentFix } from './AgentFix';
+import { sandboxFixTarget } from '../lib/agentFix';
 import type { TranslationActionResponse } from '@orbit/shared';
 import { useApprovalDecisions } from '../lib/approvalDecisions';
 import {
@@ -386,7 +387,7 @@ import {
 } from './RunNeverStartedCard';
 import { claudeRegionHeld, claudeRegionHeldWords, useClaudeRegionCheckAgain } from '../lib/claudeRegion';
 import { approvalRememberOffered, DSH_RUNNER_CAPABILITY, dshRepair } from '../lib/dshRuntime';
-import { AntigravityRepairCard, antigravityRepair, AttachmentImage, QueuedFootCtx, type AuthErrorHelp, type AutoRetryHelp, type CursorQuotaHelp, QueuedUserTurn, type SteerWithdrawHandle, type TurnAttachmentRef, type TurnImage, type UnreadSteer, unreadSteersOf } from './Transcript';
+import { AntigravityRepairCard, antigravityRepair, AttachmentImage, QueuedFootCtx, type AuthErrorHelp, type AutoRetryHelp, type CursorQuotaHelp, QueuedUserTurn, type SandboxFixHelp, type SteerWithdrawHandle, type TurnAttachmentRef, type TurnImage, type UnreadSteer, unreadSteersOf } from './Transcript';
 import { PendingTray, type PendingTrayRow } from './PendingTray';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { ApprovalPanel, DECLINE_PLACEHOLDER, decliningPrefix } from './ApprovalPanel';
@@ -409,7 +410,7 @@ import {
 } from './CriteriaDecisionCard';
 import { AnsweredQuestionCard, CoordinatorQuestions, closedQuestionRows, coordinatorQuestions } from './CoordinatorQuestionCard';
 import { useSessionOwnerRequestInserts } from './OwnerRequestCard';
-import { useScheduleRunOfSession, useSessionScheduleInserts } from './ScheduleCards';
+import { useScheduleRunOfSession, useSessionScheduleCards, useSessionScheduleInserts } from './ScheduleCards';
 import {
   OWNER_REQUEST_CHAT_PLACEHOLDER,
   OWNER_REQUEST_CHAT_PREFIX,
@@ -570,7 +571,8 @@ import {
   CLONE_RETRY_FAILED,
   composerPlaceholderFor,
 } from '../lib/machineSetupCopy';
-import { githubRepositoryOf, hearClone, retryClone } from '../lib/workspaceClone';
+import { cloneHeardOf, githubRepositoryOf, hearClone, retryClone, useCloneHeardVersion } from '../lib/workspaceClone';
+import { CloneWaitNotice, useCloneWait } from './CloneWaitNotice';
 import { bindingPlanUsageRow, currentPlanUsageRows, modelPlanUsage } from '../lib/planUsage';
 import { useToast } from '../lib/toast';
 import { showToast } from '../lib/toastStore';
@@ -648,6 +650,7 @@ import {
   runnerUpdatingTag,
   runnerUpdatingTitle,
   runnerUpdatingWaited,
+  cloneRowLabel,
   queuedLabel,
   queuedNoticeVisible,
   queuedTitle,
@@ -681,6 +684,7 @@ import {
   type OptimizedInsert,
   type PromptOptimizerTarget,
 } from './PromptOptimizer';
+import { useProjectIntegration } from '../lib/pollOwner';
 
 // The queue's types live with the stream that keeps the queue (lib/useSessionStream); the modules
 // and tests that import them from here still can.
@@ -1423,6 +1427,9 @@ export const sessionLine = (
       return { text: CAPACITY_HELD_LINE, tone: 'queued', hint: capacityHeldHint(s, machine, Date.now()) };
     // A runner draining for its update is the one queue word in the warning colour (board 2 ①): it
     // can last hours, and only the owner can shorten it.
+    // Held by its clone, the row says git's percentage once this tab has heard one (board clone-progress-wait-card ④).
+    const cloned = !held && s.queuedReason === 'WORKSPACE_CLONING' ? cloneHeardOf(s.workspace?.id) : null;
+    if (cloned?.state === 'CLONING' && cloned.progress !== null) return { text: cloneRowLabel(cloned.progress), tone: 'queued' };
     return { text: held ?? queuedLabel(s), tone: !held && isRunnerUpdating(s) ? 'warning' : 'queued' };
   }
   // Parked (AWAITING_INPUT) but still doing background work — a sub-workspace and/or background
@@ -1611,7 +1618,7 @@ function SessionProjectStartRow({ start, projectId }: { start: StartPageRow; pro
   const settings = asked?.startRequest?.settings ?? null;
   // The integration read the landing line beside it holds (one query key): what the suggestion's
   // Directly into names is the main branch the start card opens with.
-  const integration = useQuery(projectIntegrationQuery(projectId));
+  const integration = useProjectIntegration(projectId);
   const standing = integration.data && typeof integration.data === 'object' ? integration.data : null;
   return (
     <div className="session-project-start">
@@ -1657,7 +1664,7 @@ function SessionProjectStartRow({ start, projectId }: { start: StartPageRow; pro
  *  (`ProjectMergeStrip`). Its own component, so the second hand redraws this card and not the
  *  console around it. */
 function SessionProjectLanding({ projectId, onOpen }: { projectId: string; onOpen: () => void }) {
-  const integration = useQuery(projectIntegrationQuery(projectId));
+  const integration = useProjectIntegration(projectId);
   const view = integration.data && typeof integration.data === 'object' ? integration.data : null;
   const live = view?.inFlight != null && !isMergeJob(view.inFlight);
   const listed = view?.inFlightJobs !== undefined;
@@ -3604,7 +3611,7 @@ export function WorkspaceView({
   // day's counts, over the project's landing sessions and its merges into main.
   // No Landings row while the project's line has not started (revision 42 §12.16, ruling D2): the
   // integration read says so with `line: null`; an unanswered read draws as it always did.
-  const pageIntegrationQ = useQuery({ ...projectIntegrationQuery(openProjectId ?? ''), enabled: !!openProjectId });
+  const pageIntegrationQ = useProjectIntegration(openProjectId ?? '');
   const pageLineNotStarted = pageIntegrationQ.data != null && typeof pageIntegrationQ.data === 'object'
     && pageIntegrationQ.data.line === null;
   const landingsSummary = useMemo(
@@ -3644,6 +3651,8 @@ export function WorkspaceView({
   useEffect(() => {
     if (resolvedWorkspaceId && !listProjectId) rememberListFolder(resolvedWorkspaceId, folderParam);
   }, [resolvedWorkspaceId, listProjectId, folderParam]);
+  // A clone frame moves a held row's percentage (sessionLine), which the listing below has to redraw for.
+  const cloneHeardVersion = useCloneHeardVersion();
   // The list split into its folder rows and the sessions in no folder — the ones the Pinned and
   // time sections below are made of. A folder's page lists the sessions filed in it instead.
   const folderListing = useMemo(
@@ -3663,7 +3672,7 @@ export function WorkspaceView({
     }),
     [openFolder, visibleSessions, workspaceFolders, projectsQ.data, projectData.coordinators, projectData.contentSessions,
       projectData.sessionCounts, effectiveView, listByTag, runner.online, runnerShownName, watchingBySession, selectedSession, recapsEnabled,
-      resolvedWorkspaceId],
+      resolvedWorkspaceId, cloneHeardVersion],
   );
   // A project's entry is in the list only where its coordinator runs (owner 2026-11-07), so it stands
   // for the coordinator; one with no coordinator is passed over, as a folder row is.
@@ -3828,10 +3837,7 @@ export function WorkspaceView({
   const titleBarPageShown = !!titleBarProjectId && (isMobile ? sheetProjectId === titleBarProjectId
     : titleBarProjectId === columnProjectId && projectColumnOpen);
   const titleBarReadsLine = !!titleBarProjectId && !selectedTrashed && !titleBarPageShown;
-  const titleBarIntegrationQ = useQuery({
-    ...projectIntegrationQuery(titleBarProjectId ?? ''),
-    enabled: titleBarReadsLine,
-  });
+  const titleBarIntegrationQ = useProjectIntegration(titleBarProjectId ?? '', titleBarReadsLine);
   const titleBarPromotionQ = useQuery({
     ...projectPromotionQuery(titleBarProjectId ?? ''),
     enabled: titleBarReadsLine,
@@ -4549,6 +4555,11 @@ export function WorkspaceView({
     typeof runner.activeSessions === 'number' ? runner.activeSessions : slotUsage.active;
   // The gate comes from the selected session's own row: only the server can tell whether the
   // runner, this run, or the batch is what is holding it.
+  // Held by its GitHub workspace's clone: the waiting card says what is cloning and how far (board clone-progress-wait-card ②).
+  const cloneWait = useCloneWait(
+    (selectedSession ?? selected)?.queuedReason === 'WORKSPACE_CLONING' ? selectedId : null,
+    detailForSelected?.workspace,
+  );
   const slotWaitDescription = pendingSlotDescription(
     activeSlots,
     runner.maxConcurrent,
@@ -5717,8 +5728,19 @@ export function WorkspaceView({
   // A scheduled task's run: its schedule and run (crumb, strip, report), and the cards and change lines a session put
   // up, each where it happened (docs/mocks/scheduled-tasks/web/02-board.png).
   const isScheduleRun = detailForSelected?.runSource === 'SCHEDULE';
-  const scheduleRun = useScheduleRunOfSession(isScheduleRun && !selectedTrashed ? selectedId : null);
-  const scheduleInserts = useSessionScheduleInserts(selectedTrashed ? null : selectedId, transcriptEvents, scheduleRun);
+  // One read of the conversation's schedule cards serves the cards, the change records and a run's strip and report.
+  const scheduleCards = useSessionScheduleCards(selectedTrashed ? null : selectedId);
+  const scheduleRun = useScheduleRunOfSession(isScheduleRun && !selectedTrashed ? selectedId : null, scheduleCards);
+  const scheduleInserts = useSessionScheduleInserts(
+    selectedTrashed ? null : selectedId,
+    scheduleCards,
+    transcriptEvents,
+    scheduleRun,
+    { runner: runnerShownName, engine: ENGINE_CLI_NAMES[selectedEngine] },
+  );
+  // A run that did not get under way in this session (board scheduled-run-not-started ②③④, owner's B1): its card
+  // says what happened to the run and holds the doors, in place of the composer and the notes about this session.
+  const scheduleRunCard = Boolean(scheduleRun?.card);
 
   // Cross-project requests into the project this conversation coordinates, one decision card per
   // batch, drawn where the batch was first asked (board docs/mocks/handoff-in-chat). The batches
@@ -9300,6 +9322,18 @@ export function WorkspaceView({
       navigate,
     ],
   );
+  // The transcript's missing-bubblewrap warning (docs/mocks/codex-sandbox-fix-with-agent): the same
+  // one-press door as the machine page's Fix with an agent, drawn under the row that caught it.
+  const sandboxFix = useAgentFix(runner.id);
+  const sandboxFixHelp: SandboxFixHelp = useMemo(
+    () => ({
+      fix: runner.agentFix,
+      start: () => sandboxFix.mutate(sandboxFixTarget()),
+      starting: sandboxFix.isPending,
+    }),
+    // `mutate` is referentially stable; `sandboxFix` itself is not, so depend on what moves.
+    [runner.agentFix, sandboxFix.mutate, sandboxFix.isPending],
+  );
   // A failed clone's Retry, from the never-started card (the conversation's first line has its own).
   const retryCloneNow = useMutation({
     mutationFn: (workspaceId: string) => retryClone(workspaceId),
@@ -11159,10 +11193,10 @@ export function WorkspaceView({
                   take, and suppresses them: the same empty transcript cannot be both a start that
                   is on its way and a start that was refused. Under a transcript that already has
                   content it stands where their one-line forms do, below the last turn. */}
-              {selected && !selectedTrashed && neverStarted && transcriptEvents.length === 0 && (
+              {selected && !selectedTrashed && !scheduleRunCard && neverStarted && transcriptEvents.length === 0 && (
                 <RunNeverStartedCard never={neverStarted} actions={neverStartedActions} />
               )}
-              {placeholder === 'queued' && showQueuedNotice && !neverStarted && (
+              {placeholder === 'queued' && showQueuedNotice && !neverStarted && !scheduleRunCard && (
                 dshQueueRepair ? <DshRepairCard repair={dshQueueRepair} help={authErrorHelp} /> : antigravityQueueRepair ? <AntigravityRepairCard repair={antigravityQueueRepair} help={authErrorHelp} /> : <div className="chat-queued-state">
                   <div className="chat-queued-dots" aria-hidden="true">
                     <span />
@@ -11177,14 +11211,18 @@ export function WorkspaceView({
                       actions={isRunnerStopping(runnerUpdatingGate) ? undefined : <div className="runner-update-actions"><RunnerUpdateLaterMenu runnerId={runner.id} />{runnerTakesUpdateNow(runner) && <RunnerUpdateNowButton runner={runner} machine={runnerShownName} />}</div>}
                     />
                   ) : (
-                    <>
-                      <div className="chat-queued-title">{queuedTitle(selectedSession ?? selected)}</div>
-                      <div className="chat-queued-desc">{slotWaitDescription}</div>
-                    </>
+                    cloneWait ? (
+                      <CloneWaitNotice clone={cloneWait} machine={runnerShownName} spinner={false} />
+                    ) : (
+                      <>
+                        <div className="chat-queued-title">{queuedTitle(selectedSession ?? selected)}</div>
+                        <div className="chat-queued-desc">{slotWaitDescription}</div>
+                      </>
+                    )
                   )}
                 </div>
               )}
-              {placeholder === 'starting' && showStartingNotice && !neverStarted && (
+              {placeholder === 'starting' && showStartingNotice && !neverStarted && !scheduleRunCard && (
                 <div className="chat-queued-state">
                   <div className="chat-queued-dots" aria-hidden="true">
                     <span />
@@ -11223,6 +11261,7 @@ export function WorkspaceView({
                 inserts={transcriptInserts}
                 authErrorHelp={authErrorHelp}
                 autoRetryHelp={autoRetryHelp}
+                sandboxFixHelp={sandboxFixHelp}
                 restoreUndelivered={restoreUndelivered}
                 steerWithdrawal={steerWithdrawal}
                 linkStateWord={orbitLinkStateWord}
@@ -11391,18 +11430,23 @@ export function WorkspaceView({
               {/* A conversation that has talked, whose next message waits on something only the
                   reader or the machine can change (P9 §8.1): the card, in place of the queued
                   note, which would read as an ordinary wait for a slot. */}
-              {selected && !selectedTrashed && neverStarted && transcriptEvents.length > 0 && (
+              {selected && !selectedTrashed && !scheduleRunCard && neverStarted && transcriptEvents.length > 0 && (
                 <RunNeverStartedCard never={neverStarted} actions={neverStartedActions} />
               )}
               {selected &&
                 !selectedTrashed &&
+                !scheduleRunCard &&
                 showQueuedNotice &&
                 !neverStarted &&
                 // The foot row of the waiting message says it instead (board 2 ⑤).
                 !queuedFoot &&
                 !tailHeld &&
                 transcriptEvents.length > 0 && (
-                dshQueueRepair ? <DshRepairCard repair={dshQueueRepair} help={authErrorHelp} /> : antigravityQueueRepair ? <AntigravityRepairCard repair={antigravityQueueRepair} help={authErrorHelp} /> : <div className="chat-note chat-slot-wait">
+                dshQueueRepair ? <DshRepairCard repair={dshQueueRepair} help={authErrorHelp} /> : antigravityQueueRepair ? <AntigravityRepairCard repair={antigravityQueueRepair} help={authErrorHelp} /> : cloneWait ? (
+                  <div className="chat-note chat-slot-wait chat-clone-wait">
+                    <CloneWaitNotice clone={cloneWait} machine={runnerShownName} />
+                  </div>
+                ) : <div className="chat-note chat-slot-wait">
                   <span>{queuedTitle(selectedSession ?? selected)}</span>
                   <span>{slotWaitDescription}</span>
                 </div>
@@ -11412,6 +11456,7 @@ export function WorkspaceView({
                   shared with the pane above rather than left to that coincidence. */}
               {selected &&
                 !selectedTrashed &&
+                !scheduleRunCard &&
                 showStartingNotice &&
                 !neverStarted &&
                 transcriptEvents.length > 0 && (
@@ -11537,6 +11582,7 @@ export function WorkspaceView({
               )}
               {selected &&
                 !selectedTrashed &&
+                !scheduleRunCard &&
                 isSessionTerminal(selectedSession ?? selected) && (
                 <div className="chat-note">
                   {sessionEndedBanner(
@@ -11630,7 +11676,7 @@ export function WorkspaceView({
         </div>
 
       {/* A machine with no workspace has nothing to send to: its setup card makes the workspace. */}
-      {!bareMachine && <div className="workspace-composer">
+      {!bareMachine && !(scheduleRunCard && !selectedTrashed) && <div className="workspace-composer">
         {/* The reader's messages nothing has read yet: the conversation's next lines, so the band's
             first member, right under the conversation and above the parking strip below
             (docs/mocks/pending-tray-above-parking, decided 2026-10-28). */}
@@ -11668,7 +11714,7 @@ export function WorkspaceView({
         {/* The tasks this session's agent created, beside the branch below: the conversation's two
             kinds of output next to each other. Hidden until it has created one. */}
         {selectedId && !selectedTrashed && (
-          <SessionCreatedTasksStrip sessionId={selectedId} openRequest={createdTasksOpenRequest} />
+          <SessionCreatedTasksStrip sessionId={selectedId} tasks={createdTasks.data} openRequest={createdTasksOpenRequest} />
         )}
         {/* The Orbit Cloud runner's browser, while it runs: opens the live view (docs/runner-browser-design.md §5). */}
         {selectedId && !selectedTrashed && (

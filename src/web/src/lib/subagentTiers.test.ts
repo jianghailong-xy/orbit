@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { modelTierText, priceText, providersCountText, tierText } from './subagentTiers';
+import { modelTierText, priceText, providersCountText, qualityLines, tierText } from './subagentTiers';
 
 const model = (outputPricePerMTok: number | null) => ({
   model: 'm', levels: [], source: null, editable: false, outputPricePerMTok,
+  quality: {
+    subagent: { averageRating: null, ratedCount: 0, runCount: 0, raters: [] },
+    tasks: { firstPassRate: null, firstPassTaskCount: 0, completedTaskCount: 0 },
+  },
 });
 
 describe('the Tier column and the SubAgents Providers button (docs/subagent-design.md §7)', () => {
@@ -30,5 +34,34 @@ describe('the Tier column and the SubAgents Providers button (docs/subagent-desi
     const providers = ['claude', 'codex', 'deepseek', 'kimi', 'my-endpoint', 'team'].map((slug) => ({ slug }));
     expect(providersCountText(providers, [])).toBe('6 of 6 · Edit');
     expect(providersCountText(providers, ['codex', 'gone'])).toBe('5 of 6 · Edit');
+  });
+});
+
+describe('the Quality cell (docs/subagent-design.md §7.1)', () => {
+  it('reads both figures with their counts, and who rated', () => {
+    expect(qualityLines({
+      subagent: { averageRating: 4.2, ratedCount: 18, runCount: 40,
+        raters: [{ engine: 'claude', provider: 'claude', model: 'claude-opus-5-5', label: 'Opus 5.5', count: 18 }] },
+      tasks: { firstPassRate: 0.824, firstPassTaskCount: 28, completedTaskCount: 34 },
+    })).toEqual({
+      empty: false,
+      subagents: { text: '4.2 · 18 rated of 40', muted: false, raters: 'Rated by Opus 5.5 (18)' },
+      tasks: { text: '82% first pass · 34 tasks', muted: false },
+    });
+  });
+
+  it('says why a figure is missing, and No runs yet only when there is nothing at all', () => {
+    const sparse = qualityLines({
+      subagent: { averageRating: null, ratedCount: 4, runCount: 9,
+        raters: [{ engine: 'codex', provider: 'codex', model: 'gpt-5.5', label: null, count: 4 }] },
+      tasks: { firstPassRate: null, firstPassTaskCount: 9, completedTaskCount: 9 },
+    });
+    expect(sparse.empty).toBe(false);
+    expect(sparse.subagents).toEqual({ text: 'Not enough ratings', muted: true, raters: null });
+    expect(sparse.tasks).toEqual({ text: 'Not enough tasks', muted: true });
+    expect(qualityLines({
+      subagent: { averageRating: null, ratedCount: 0, runCount: 0, raters: [] },
+      tasks: { firstPassRate: null, firstPassTaskCount: 0, completedTaskCount: 0 },
+    }).empty).toBe(true);
   });
 });

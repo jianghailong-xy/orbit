@@ -11,7 +11,7 @@ package io.orbitd.android.core.cards
  *       Result:
  *         <the result, four spaces in>          — or —   (no result)
  *       … the next run …
- *       <two sentences for the agent>
+ *       <the sentences for the agent>
  *     </orbit-subagent-finished>
  *
  * A wording this does not recognise parses as nothing at all rather than half a line: the note then stays the entry it has always been.

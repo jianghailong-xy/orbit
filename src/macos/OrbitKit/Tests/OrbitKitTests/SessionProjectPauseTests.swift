@@ -125,16 +125,16 @@ final class SessionProjectPauseTests: XCTestCase {
     // MARK: toasts
 
     func testToastWords() {
-        XCTAssertEqual(SessionProjectCopy.pausedDetail(running: 2), "2 runs still going · nothing new starts or merges")
-        XCTAssertEqual(SessionProjectCopy.pausedDetail(running: 1), "1 run still going · nothing new starts or merges")
-        XCTAssertEqual(SessionProjectCopy.pausedDetail(running: 0), "Nothing new starts or merges")
-        XCTAssertEqual(SessionProjectCopy.pauseRefusal(status: 403, body: nil, resuming: false),
+        XCTAssertEqual(SessionProjectCopy.pausedStill(running: 2), "2 runs still going · nothing new starts or merges")
+        XCTAssertEqual(SessionProjectCopy.pausedStill(running: 1), "1 run still going · nothing new starts or merges")
+        XCTAssertEqual(SessionProjectCopy.pausedStill(running: 0), "Nothing new starts or merges")
+        XCTAssertEqual(SessionProjectCopy.refusedReason(status: 403, body: nil, resuming: false),
                        "Only the project's owner can pause it")
-        XCTAssertEqual(SessionProjectCopy.pauseRefusal(status: 403, body: nil, resuming: true),
+        XCTAssertEqual(SessionProjectCopy.refusedReason(status: 403, body: nil, resuming: true),
                        "Only the project's owner can resume it")
-        XCTAssertEqual(SessionProjectCopy.pauseRefusal(status: 409, body: "{\"code\":\"PROJECT_NOT_STARTED\"}", resuming: false),
+        XCTAssertEqual(SessionProjectCopy.refusedReason(status: 409, body: "{\"code\":\"PROJECT_NOT_STARTED\"}", resuming: false),
                        "The project hasn't started yet")
-        XCTAssertEqual(SessionProjectCopy.pauseRefusal(status: 500, body: "{\"message\":\"Try later\"}", resuming: false),
+        XCTAssertEqual(SessionProjectCopy.refusedReason(status: 500, body: "{\"message\":\"Try later\"}", resuming: false),
                        "Try later")
     }
 }

@@ -171,6 +171,8 @@ internal object ProjectShell {
     /** WAITING's transcript (`sessions/WAITING/events/page`) and its pending approvals, as JSON arrays; null answers with none. */
     @Volatile var waitingEvents: String? = null
     @Volatile var waitingApprovals: String? = null
+    /** Whether WAITING's detail names its project, so its conversation reads the project's open items (the answered-question records). */
+    @Volatile var waitingReadsProject = false
     /** Whether Plain notes, in no project, waits on the owner too, so a conversation opened elsewhere shows the needs-you capsule. */
     @Volatile var plainWaiting = false
     /** A crossing decision's answer by its door id and body, when a test answers each row itself; null answers as [decide] does. */
@@ -192,7 +194,7 @@ internal object ProjectShell {
         trashed = emptySet(); holdDelete = null; holdMembers = null; attention = null
         quietAttention = null; coordinatorWorking = false
         configRevision = null; automatic = true; maxConcurrentTasks = 2; crossings = null; tasks = null; coordEvents = null; onDecision = null
-        lineIdle = false; memberWaiting = true; coordinatorWaiting = false; waitingEvents = null; waitingApprovals = null; plainWaiting = false
+        lineIdle = false; memberWaiting = true; coordinatorWaiting = false; waitingEvents = null; waitingApprovals = null; waitingReadsProject = false; plainWaiting = false
         while (accountEvents.tryReceive().isSuccess) Unit
     }
 
@@ -227,7 +229,7 @@ internal object ProjectShell {
             lastTurnAt = ago(30), approvals = if (coordinatorWaiting) 1 else 0)
         WORKER -> row(WORKER, "Wire tests", ALPHA, "RUNNING", ""","lastToolUse":"Bash",${member("TASK")}${
             sourceLanding?.let { ""","sourceLanding":$it""" }.orEmpty()}""", lastTurnAt = ago(2))
-        WAITING -> if (memberWaiting) row(WAITING, "Quota retry", BETA, "AWAITING_INPUT", ""","waitingKind":"OWNER_CONFIRMATION",${member("TASK")}""", lastTurnAt = ago(10), approvals = 1)
+        WAITING -> if (memberWaiting) row(WAITING, "Quota retry", BETA, "AWAITING_INPUT", ""","waitingKind":"OWNER_CONFIRMATION",${if (waitingReadsProject) "\"projectId\":\"$LAUNCH\"," else ""}${member("TASK")}""", lastTurnAt = ago(10), approvals = 1)
             else row(WAITING, "Quota retry", BETA, "AWAITING_INPUT", ""","lastAssistantText":"Retried the quota read",${member("TASK")}""", lastTurnAt = ago(10))
         PLAIN -> if (plainWaiting) row(PLAIN, "Plain notes", ALPHA, "AWAITING_INPUT", ""","waitingKind":"OWNER_CONFIRMATION"""", approvals = 1)
             else row(PLAIN, "Plain notes", ALPHA, "AWAITING_INPUT", ""","lastAssistantText":"Notes kept"""")

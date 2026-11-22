@@ -3,7 +3,6 @@ package io.orbitd.android.reader
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -12,14 +11,11 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.customActions
@@ -63,7 +59,6 @@ import io.orbitd.android.translation.TranslationShown
 import io.orbitd.android.translation.UserTranslationFoot
 import io.orbitd.android.management.RunnerUpdateNow
 import io.orbitd.android.text.*
-import io.orbitd.android.R
 import io.orbitd.android.ui.LocalOrbitColors
 import io.orbitd.android.wiki.RelativeTime
 import kotlinx.coroutines.CancellationException
@@ -275,7 +270,10 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
     // A reply is the page's own text (iOS `AssistantBubbleView`): no heading, copied by selecting it, or by TalkBack's Copy message.
     val plainReply = event.type == "assistant" && !detailOnly && cards.isEmpty() && repair == null
     // A person's bubble and a plain reply sit on the list's own 16dp margin, as iOS's 16pt; other rows keep their 10dp inset.
-    Column(Modifier.fillMaxWidth().background(bg).padding(horizontal = if (userBubble || plainReply) 0.dp else 10.dp, vertical = 10.dp).testTag(row.key)
+    // Nor do they, or a stretch of reasoning, add any above or below: the list's 12dp between rows is iOS's 6 + 6 (`rowInsets`).
+    val bare = !highlighted && (userBubble || plainReply || event.type == "thinking")
+    Column(Modifier.fillMaxWidth().background(bg).padding(horizontal = if (userBubble || plainReply) 0.dp else 10.dp,
+        vertical = if (bare) 0.dp else 10.dp).testTag(row.key)
         .then(if (plainReply) Modifier.semantics { customActions = listOf(CustomAccessibilityAction("Copy message") { loadFull(copy = true); true }) }
             else Modifier), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (answerLine != null) { cards.forEach { TranscriptCardView(it, open, shown) }; return@Column }
@@ -303,6 +301,46 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
         // The main checkout's card (board 01) and an action's outcome line (board 03).
         if (event.type == MainCheckout.ROW_CARD) { MainCheckout.changedNotice(shown.fields)?.let { Box(Modifier.conversationCard()) { MainCheckoutCard(it, row.key, event.seq, event.ts) } }; return@Column }
         if (event.type == MainCheckout.ROW_RESULT) { MainCheckout.resultNotice(shown.fields)?.let { MainCheckoutResultRow(it) }; return@Column }
+        // A person's turn as iOS draws it (`UserBubbleView`, UserBubble.kt): images and files over the bubble, the English the agent got
+        // inside it under the words, then copy · time · the translation's press on the trailing edge.
+        if (userBubble) {
+            val atts = (shown.fields["attachments"] as? JsonArray).orEmpty().filterIsInstance<JsonObject>().mapNotNull { a ->
+                a.string("id")?.let { id -> Triple("orbit-attachment:$id", a.string("name") ?: "Attachment", a.string("mime")?.startsWith("image/") == true) }
+            }
+            val words = shownWords(shown)
+            val doors = console?.composer
+            val turnId = event.turnId
+            val foot = turnTranslation?.let { turn -> @Composable {
+                UserTranslationFoot(turn, flipped, { shownOriginals?.toggle(translationKey) ?: Unit },
+                    retry = if (doors != null && turnId != null) ({ doors.translationAction("turns/$turnId/translation/retry") }) else null,
+                    sendAsWritten = if (doors != null && turnId != null) ({ doors.translationAction("turns/$turnId/translation/send-as-written") }) else null,
+                    bilingual = bilingual, originalHidden = originalHidden, onHideOriginal = shownOriginals?.let { { it.toggle(hiddenKey) } })
+            } }
+            // A delivered translation's press ends the copy/time line; any other state of it is a line of its own under it (iOS `meta`).
+            val delivered = turnTranslation?.state == Translation.TurnState.DONE
+            // A steer's state stands in for its time, as on iOS.
+            val time = if (row.steer == null) RelativeTime.format(event.ts) else null
+            UserTurnColumn {
+                if (title != ExternalSender.you) UserTurnSender(title)
+                UserTurnAttachments(atts.filter { it.third }.map { it.first to it.second }, atts.filterNot { it.third }.map { it.first to it.second }, open)
+                if (words.isNotBlank()) UserWordsBubble(words, BilingualShown.userEnglish(shown.personWords(), turnTranslation, showsBoth), open)
+                if (shown.truncated) TextButton(enabled = !loading, onClick = { loadFull() }) { Text(if (error) "Couldn't load full message · Retry" else "Read full message") }
+                if (words.isNotBlank() || time != null || (delivered && foot != null)) UserTurnMetaLine(lead = {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        if (words.isNotBlank()) UserTurnCopy { loadFull(copy = true, reveal = false) }
+                        time?.let { UserTurnMetaText(it) }
+                    }
+                }, foot = if (delivered) foot else null, dotted = time != null)
+                if (!delivered) foot?.invoke()
+                row.steer?.let { steer ->
+                    val personWords = shown.personWords().trim()
+                    val composer = console?.composer?.takeIf { steer.delivery == "failed" && personWords.isNotEmpty() }
+                    val loaded = composer?.state?.collectAsState()?.value?.loaded == true
+                    SteerStateLine(steer, putBack = composer?.takeIf { loaded }?.let { box -> { box.putBack(personWords) } })
+                }
+            }
+            return@Column
+        }
         // A thinking row is its own one line (A06-11); a question card's line folds and opens it, as its record does.
         if (!detailOnly && event.type != "thinking" && bubble == null && !userBubble && !plainReply) Row(Modifier.fillMaxWidth().then(if (questions.isEmpty()) Modifier else Modifier
             .clickable(onClickLabel = if (questionShown) "Hide options" else "Show options", role = Role.Button) { questionOpen = !questionShown }
@@ -411,8 +449,7 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
         } else if (event.type == "interrupt") {
             // The title is the whole row, as on web and iOS: the payload is the runner's bookkeeping (the request a Stop answered, the
             // restart's reason), which the body below would print as raw JSON.
-        } else UserBubbleFrame(userBubble, sender = title.takeIf { it != ExternalSender.you }, time = RelativeTime.format(event.ts),
-            copy = if (shown.body().isNotBlank()) ({ loadFull(copy = true) }) else null) {
+        } else Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             val atts = (shown.fields["attachments"] as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
             val attachmentOnly = shown.type == "user" && shown.body().isBlank() && atts.isNotEmpty()
             // Delivery's appended note stays out of the person's words and is never rendered separately.
@@ -427,7 +464,7 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
                 if (pairs != null) InterleavedReply(pairs, open)
                 else if (pendingReply) CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
                     MarkdownText(words.ifBlank { shown.payload.toString() }, open = open)
-                } else UserBubbleBox(userBubble) { MarkdownText(words.ifBlank { shown.payload.toString() }, open = open) }
+                } else MarkdownText(words.ifBlank { shown.payload.toString() }, open = open)
                 // The English the agent read or wrote, below its dashed divider; a long reply's collapsed (frame 3).
                 (if (event.type == "user") BilingualShown.userEnglish(shown.personWords(), turnTranslation, showsBoth)
                     else if (event.type == "assistant") BilingualShown.replyEnglish(shown.body(), replyTranslation, showsBoth) else null)
@@ -477,38 +514,6 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
     }
 }
 
-/** The tint of a person's bubble, as iOS's `.tint.opacity(0.15)` reads on an iPhone (measured: light #E0E9FF, dark #071026). */
-@Composable
-private fun userBubbleColor(): Color = if (MaterialTheme.colorScheme.surface.luminance() > 0.5f) Color(0xFFE0E9FF) else Color(0xFF071026)
-
-/** A person's words in their bubble (iOS `UserBubbleView`): 12dp corners, 12 by 8 inside; anything else draws [content] as it is. */
-@Composable
-private fun UserBubbleBox(on: Boolean, content: @Composable () -> Unit) {
-    if (!on) { content(); return }
-    Box(Modifier.clip(RoundedCornerShape(12.dp)).background(userBubbleColor()).padding(horizontal = 12.dp, vertical = 8.dp)
-        .testTag("user-bubble")) { content() }
-}
-
-/**
- * A person's turn laid out as iOS's: pushed right past a 60dp gutter, [sender] over it when it is somebody other than the reader,
- * and under it a copy and its [time] (iOS `metaRow`). Off, [content] is drawn as every other row's body is.
- */
-@Composable
-private fun UserBubbleFrame(on: Boolean, sender: String?, time: String?, copy: (() -> Unit)?, content: @Composable ColumnScope.() -> Unit) {
-    if (!on) { Column(verticalArrangement = Arrangement.spacedBy(6.dp), content = content); return }
-    Row(Modifier.fillMaxWidth().padding(start = 60.dp), horizontalArrangement = Arrangement.End) {
-        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            sender?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            content()
-            if (copy != null || time != null) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (copy != null) Icon(painterResource(R.drawable.ic_copy), "Copy message", Modifier.size(16.dp)
-                    .clickable(role = Role.Button, onClickLabel = "Copy message", onClick = copy), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                time?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            }
-        }
-    }
-}
-
 /**
  * How a steer of the reader's came out, under its words (web `SteerState` and `UserBubble`'s undelivered line, OrbitApp's meta line): its
  * state in every client's words — in the warning tone once it did not land or nobody can say it did, the server's reason a long press
@@ -553,8 +558,18 @@ private fun EngineLine(event: RunEvent) {
         "notice" -> GlyphLine("⚠", text, if (event.fields["settled"] == JsonPrimitive(true)) MaterialTheme.colorScheme.onSurfaceVariant
             else LocalOrbitColors.current.needsYou, MaterialTheme.typography.labelLarge)
         "auth_settled" -> SettledAuthLine(text, event.fields["resolved"] == JsonPrimitive(true))
-        "diagnostic" -> DiagnosticLine(event.fields.string("label").orEmpty(), EngineStderr.logText(text),
-            (event.fields["repeats"] as? JsonPrimitive)?.intOrNull ?: 1)
+        "diagnostic" -> {
+            val line: @Composable () -> Unit = {
+                DiagnosticLine(event.fields.string("label").orEmpty(), EngineStderr.logText(text),
+                    (event.fields["repeats"] as? JsonPrimitive)?.intOrNull ?: 1)
+            }
+            val console = LocalSessionConsole.current
+            // The sandbox warning offers the agent that installs what Codex wants (docs/mocks/codex-sandbox-fix-with-agent);
+            // every other diagnostic stays a plain row.
+            if (event.fields.string("component") == "sandbox" && event.fields.string("code") == "bubblewrap_missing" && console != null)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { line(); SandboxFixCard(console) }
+            else line()
+        }
         // The self-healing failure's sentence; the card around it (countdown, Retry) is the auto-retry card's.
         else -> GlyphLine("◷", text, MaterialTheme.colorScheme.onSurfaceVariant, MaterialTheme.typography.bodyMedium)
     }

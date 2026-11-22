@@ -224,6 +224,13 @@ public struct TranscriptReducer: Sendable, Codable {
     /// yet is waiting for it (web: `turnTranslated`). Transient like `turnAccountedFor`.
     private var turnTranslated = false
 
+    /// Bumped each time a durable row changes in place with no new seq: a live `translation` folded
+    /// into a reply already in the window (`applyTranslation`). `maxSeq` cannot say that a snapshot
+    /// written before it is stale, and this can (`TranscriptSaveLedger`). Transient like
+    /// `turnAccountedFor`: a restored reducer starts at 0, as does the record of the snapshot it was
+    /// restored from.
+    public private(set) var inPlaceRevision = 0
+
     /// Latest broadcast-only foreground-shell snapshot, including the runner's monotonic version.
     /// Keeping this beside (rather than inside) ``TranscriptState`` lets an output that beats its
     /// durable tool_use wait here, and lets a reordered replica notification be rejected. It is
@@ -458,7 +465,8 @@ public struct TranscriptReducer: Sendable, Codable {
     /// for older clients, so malformed or unknown diagnostics deliberately return nil and retain the
     /// old error path. An event stored before the runner sent the metadata is read through
     /// `EngineStderr.legacyRecoverableDiagnostic`, as on web.
-    private func recoverableDiagnostic(_ ev: RunEvent) -> (label: String, message: String, key: String)? {
+    private func recoverableDiagnostic(_ ev: RunEvent) -> (label: String, message: String, key: String,
+                                                          component: String?, code: String?)? {
         guard let rawMessage = str(ev, "stderr") else { return nil }
         let message = EngineStderr.clean(rawMessage)
         guard !message.isEmpty else { return nil }
@@ -483,17 +491,20 @@ public struct TranscriptReducer: Sendable, Codable {
             return nil
         }
         let phase = string("phase").map { $0 == "startup" ? "Startup" : $0 }
-        let label = [phase, string("component"), string("code")].compactMap { $0 }.joined(separator: " · ")
+        let component = string("component")
+        let code = string("code")
+        let label = [phase, component, code].compactMap { $0 }.joined(separator: " · ")
         let key = EngineStderr.diagnosticFoldKey(
-            component: string("component"), phase: string("phase"), severity: string("severity"),
-            impact: string("impact"), recoverable: recoverable, code: string("code"),
+            component: component, phase: string("phase"), severity: string("severity"),
+            impact: string("impact"), recoverable: recoverable, code: code,
             message: string("message") ?? message)
-        return (label: label, message: message, key: key)
+        return (label: label, message: message, key: key, component: component, code: code)
     }
 
     /// A recoverable diagnostic's `.diagnostic` row. A repeat bumps the first row's count instead of
     /// taking a row of its own, as a repeated stderr line does (web parity: `structuredDiagnostic`).
-    private mutating func appendDiagnostic(_ diagnostic: (label: String, message: String, key: String)) {
+    private mutating func appendDiagnostic(_ diagnostic: (label: String, message: String, key: String,
+                                                         component: String?, code: String?)) {
         if let id = diagnosticSeen[diagnostic.key],
            let i = state.items.firstIndex(where: { $0.id == id }),
            case .diagnostic(var row) = state.items[i] {
@@ -505,7 +516,9 @@ public struct TranscriptReducer: Sendable, Codable {
         diagnosticSeen[diagnostic.key] = id
         state.items.append(.diagnostic(DiagnosticNotice(id: id, label: diagnostic.label,
                                                         text: EngineStderr.logText(diagnostic.message),
-                                                        message: diagnostic.message)))
+                                                        message: diagnostic.message,
+                                                        component: diagnostic.component,
+                                                        code: diagnostic.code)))
     }
 
     /// Drop the loaded transcript window so a tail page can re-seed it from scratch — the reducer
@@ -530,6 +543,25 @@ public struct TranscriptReducer: Sendable, Codable {
     /// older history, which one page fetch settles.
     public mutating func reopenUnsettledOlderEdge() {
         if !state.hasMoreOlder, let oldest = state.oldestSeq, oldest > 1 { state.hasMoreOlder = true }
+    }
+
+    /// What becomes of the loaded window when the stream cannot resume it: the server's `resync`, or
+    /// a reconnect's catch-up that spent its budget short of the tail (web parity: `replaceWindow` in
+    /// useSessionStream.ts; Android `ReadingWindow.live`).
+    ///
+    /// A reader following the tail gets a fresh tail page: the window is dropped (`resetForResync`)
+    /// and nil comes back, for the caller to seed it. A reader who has scrolled up keeps the window.
+    /// Swapping it then moved whatever they were reading out from under them, to wherever the new
+    /// page put the same scroll position. Its rows stay exactly as they are and its bottom becomes a
+    /// gap, as in a window opened at a record (`applyRecordPage`). The seq that comes back is where
+    /// the gap starts, the `after=` cursor the caller pages forward from. An empty window has nothing
+    /// to keep and is always reset.
+    public mutating func replaceWindow(readerAtTail: Bool) -> Int? {
+        guard !readerAtTail, state.maxSeq > 0 else {
+            resetForResync()
+            return nil
+        }
+        return state.maxSeq
     }
 
     public mutating func resetForResync() {
@@ -1275,6 +1307,9 @@ public struct TranscriptReducer: Sendable, Codable {
         b.translation = translation.unchanged(from: b.text) ? nil : translation
         b.awaitsTranslation = nil
         state.items[i] = .assistant(b)
+        // The reply is durable and its seq is already written: without this the snapshot on disk
+        // keeps it untranslated (`inPlaceRevision`).
+        inPlaceRevision &+= 1
     }
 
     /// Settings › Translation: the line under the owner's message changes with its held turn —
@@ -2508,6 +2543,12 @@ private enum EngineStderr {
             ]
             if let phase { diagnostic["phase"] = .string(phase) }
             return diagnostic
+        }
+        // Codex's sandbox setup asks for the system bubblewrap and falls back to its bundled copy
+        // (docs/mocks/codex-sandbox-fix-with-agent). A current runner sends this structured; events
+        // stored before it did are recognized here so the warning and its action survive.
+        if lower.contains("could not find bubblewrap on path") {
+            return degraded("sandbox", "bubblewrap_missing", phase: "startup")
         }
         if lower.contains("codex_models_manager") && lower.contains("failed to refresh available models") {
             if lower.contains("401") && tokenInvalidated {

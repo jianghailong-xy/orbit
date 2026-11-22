@@ -3,19 +3,23 @@
 > owner 11-06 问：wiki 页面上要有一个聊天窗口，用来边聊天边修改 wiki。
 > owner 11-06 定：入口是右下角的圆形悬浮按钮；五条按推荐；orbit 这个 space 默认用 `orbit-develop`（HPC）；定向重写只绕开不写文档的作业（§8.5）。全部见 §12。
 > owner 11-07 定：面板的输入框换成 session 页的 composer，用方案 A（效果图 `docs/mocks/wiki/43-chat-session-composer`，§4.1、§4.2）。
-> 本文是产品方案，还没有任何实现。效果图：`docs/mocks/wiki/42-wiki-chat`（图里的对话、条目和合并都是示意）；面板的输入框以效果图 43 为准。
+> owner 11-21 定：按 agent-first 的第一原理重写 agent 的行为（§4.3）。起因是一次真实对话：owner 在 wiki 首页说「帮我把数据库的 Schema 设计更新到 wiki 里」，agent 因为读不到文档和 plan，回答「打开对应的页面，再发一条消息」，把找东西的活交回给人。改的是：agent 读得到你看得到的 wiki（读与引分开，并在出处校验上真正挡住，§4.2）；先自己查清楚再起草；只问该你答的问题。
+> owner 11-22 定：你的话本身就是授权，用方案 A（§7.2、§12.1 第 13 条）：在写死的边界内，「从 main 重写」起草即写，卡上给结果和 `Undo`，不再按一次。11-21 那版的起草时预览（`docs_preview`）随之去掉：A 之后它只剩代价（§7.4）。这一版吸收了 11-21 修订的独立评审。
+> 本文最初是产品方案；§1 是 11-06 写方案时的现状。聊天、草稿、`wiki_draft`、`docs_follow`、留版已经实现（契约 §28–§30），11-21 与 11-22 的修订还没有实现。效果图：`docs/mocks/wiki/42-wiki-chat`（图里的对话、条目和合并都是示意）；面板的输入框以效果图 43 为准。
 > 它取代 `docs/wiki-comment-to-session-design.md` 的入口部分（§2、§3、§5、§11.1–§11.5），留用那份的 §12（任何改动进 main 都跟上、任何重写都留版），去掉其中的 runner 路径（§11.7）：P11（2026-10-19）已经删了 runner 上写文档的路径。
 
 ---
 
 ## 0. 一页结论
 
+总原则（owner 11-21 定）：**你给目标和授权，其余都是 agent 的。** 找东西、收集上下文、判断落在哪一层、起草、核对，都由 agent 做。agent 不把能自己做的事交回给你：一轮结束时留给你的，只能是该你做的决定（§4.3）。
+
 1. **聊天就是一场普通会话，停靠在 wiki 页面里。** 不另造模型循环和对话存储。工具、审批、权限模式、费用、会话列表、手机端都沿用。
 2. **聊天不改文档的字，改字的来源。** 文档是服务端从代码和记录生成的，手改的字下次重写就没了。所以每句要求落到重写后还在的地方：条目、这一节的重写、plan，或者 main（§6）。
-3. **agent 只起草，你按 Apply 才写。** 草稿不进 Review，不走机器核实，不占待审名额。按下等于 Review 的 Accept：trust = confirmed（§7）。
-4. **按下之后，条目立刻生效，受影响的节定向重写。** 不等维护的 20 个会话或 24 小时。写完能逐句看改了什么，也能撤销。同一 space 正在跑的 articles、verify、import 不挡它；有写文档的作业在跑时要等它结束，卡上写明（§8）。
+3. **按压只给请求没授过的权（11-22 定，方案 A）。** 「从 main 重写」在写死的边界内起草即写，卡上是结果和 `Undo`：这次改动的担保来自代码，你的话已经授过权（§7.2）。条目、plan 改动、读过网页的聊天、超出边界的重写照旧要按 Apply：草稿不进 Review，不走机器核实，不占待审名额，按下等于 Review 的 Accept：trust = confirmed（§7）。
+4. **写完给你看结果。** 条目立刻生效，受影响的节定向重写。不等维护的 20 个会话或 24 小时。写完能逐句看改了什么，也能撤销。同一 space 正在跑的 articles、verify、import 不挡它；有写文档的作业在跑时要等它结束，卡上写明（§8）。
 5. **入口是右下角的圆形悬浮按钮。** 聊天收起后不结束，按钮带状态（§3）。
-6. **上下文都看得见。** 当前页和选中的句子显示在输入框里，可以叉掉，没显示的不发（§4）。
+6. **你看得到的 wiki，agent 都读得到。** 文档、plan、条目都能读（只读），当前页只是「你多半在说哪里」的提示，不是 agent 视野的边界。读和引分开：读 wiki 的调用不能当出处，这一条在出处校验上挡住（§4.2）。你附上的当前页和选中的句子显示在输入框里，可以叉掉，没显示的不发（§4）。
 7. **跑在 workspace 所在的 runner 上，用独立 worktree，起点是 `origin/main`。** workspace 每个 space 选一次，之后记住，不自动换机器（§5）。
 
 ---
@@ -27,7 +31,7 @@
 | 文档 | 只有服务端的 `docs_build` 与 `maintain` 作业能写（契约 `docs.who`），user 门只有 3 个读路由（`wiki-docs.controller.ts`）。整节替换，不留旧文（§22.5） | 留版；单节重写的入口 |
 | 条目 | owner 有表单（`WikiEntryDrawer.tsx`、`WikiNewEntry.tsx`），agent 走 `wiki_propose`。11-02 的数据：owner 的 3 个 space 里 28,489 条有效条目，经人确认的 142 条，owner 亲手写的 0 条 | 一条比表单省事的路 |
 | plan | owner 能编辑、确认、重建（`wiki-plan.controller.ts`）。会话读不了也写不了（契约 `plan.who`） | 从聊天发起的路 |
-| 会话 | 能读条目，读不到文档和 plan（契约 §22.8），也不知道你在看哪一页 | 把页面带给它 |
+| 会话 | 能读条目，读不到文档和 plan（契约 §22.8），也不知道你在看哪一页。11-21 实测：在 wiki 首页说「把数据库 Schema 设计更新到 wiki」，agent 连有没有讲 schema 的文档都查不到，只能让你去开页面 | 读得到你看得到的一切（§4.2），页面作为提示带给它 |
 | 选区、开会话 | 文档页没有选区。[评论项目](orbit-project:34cbCXaNMJIHWoigS7XWd) 10-09 建好，到今天 `startedAt` 还是空，10 个任务全 OPEN | 由本方案接手 |
 | 单节重写 | `runWikiDocsBuild` 进程里有 `only`（`wiki-docs-build.ts`），但 build 路由按整个 plan 版本，`docs_follow` 还不存在 | 作业和入口 |
 
@@ -37,11 +41,11 @@
 
 1. 右下角圆按钮打开面板。面板停靠在右边，挤开正文。
 2. 拖选一句，选区按句吸附（规则照 10-09 的设计 §2），浮出 `Ask`。按了把这几句放进输入框，不弹窗。
-3. 你说话。你的话原样成为消息，附件单独存。
-4. agent 查代码和条目，先判断这话该落在哪一层（§6），再起草。
-5. 聊天里出现一张改动卡，左边正文标出会牵动的节。不满意就接着说，新卡替换旧卡。
-6. 按 `Apply`。条目立刻生效，卡变成 `Applied`，这几节开始重写。
-7. 写完，左边新句有绿线，节旁 `Updated`；聊天里 `Wiki updated`，`See changes` 逐句对照。
+3. 你说话，在哪一页都行，不用先找到「对的那一页」。你的话原样成为消息，附件单独存。
+4. agent 自己查：`origin/main` 的代码和设计文档、wiki 的全部结构（plan、文档、节、各节写的是什么、什么时候写的）、已有的条目，比出差距。再判断这话该落在哪一层（§6），起草（§4.3）。
+5. 聊天里出现一张改动卡，先用一两句白话说落在哪、为什么，左边正文标出会牵动的节。在 A 的边界内的「从 main 重写」（§7.2）不等你按，起草即开始写；其余的卡等你。不满意就接着说，新卡替换旧卡。
+6. 要按的卡按 `Apply`。条目立刻生效，卡变成 `Applied`，这几节开始重写。
+7. 写完，左边新句有绿线，节旁 `Updated`；卡上 `Wiki updated`，`See changes` 逐句对照。重写被挡住或失败，卡上写明、圆按钮亮琥珀色（§3），不沉默；agent 在你下一句话时随附注知道结果（§7.2）。
 8. 不想要了按 `Undo`。
 
 只想问问题时，agent 带引用地回答，没有卡，什么都不变。设计 §1.1 的实测是 owner 的问句以诊断和现行逻辑居多，所以问答多半是这个窗口最常见的用法。回答里的 `orbit-wiki` 链接和节号在左边打开，不离开聊天。
@@ -102,8 +106,48 @@
 - **都能叉掉，没显示的不发。** 发送时定格，叉掉的就不发。发出后气泡下面是 `⊕ Orbit attached: Wiki selection · 3.1 §3 · 1 sentence · 2 sources`，展开看全文。
 - **图片与文件：** 和 session 页一样上传，消息只带它们的 id。之后的消息走这场会话自己的发消息门；新聊天的第一条在建聊天的门（`POST /api/wiki/spaces/:id/chats` 的 `attachmentIds`）带上，和第一句在同一个事务里挂到第一条 turn 上。
 - **在服务端展开。** 客户端只发 `{ docSlug, sectionKey, sentenceIds }`，投递时服务端读当时的句子和脚注，走现有的附注机制（`control-plane-note.ts`、`deliveredMessage.ts` 的 `describeNote`）。`conversation_turn.content` 仍然只有你的话，所以这句话能被当一手出处（契约 `tiered.auto.ownerWords` 要求 owner 经 user 门发、带 UUID 的 client turn id）。
-- **不加读文档的工具。** 契约 §22.8「没有读写文档的 MCP 工具」不动：屏幕上有的，附注带过去；plan 同样由页面带。
-- 这一场的第一条消息多一段给 agent 的话（`<orbit_wiki_chat>`）：你在 wiki 页旁边聊天；先判断该改哪一层；条目改动用 `wiki_propose`，重写和 plan 用 `wiki_draft`，都只是草稿；不要改文档。
+- **附件是提示，不是视野。** 当前页说的是「你多半在说哪里」；agent 要的其余上下文自己去读（下一条），不靠你翻页带给它。
+- **没带页面时附上目录（owner 11-21 定，第一步，不用 runner 发版）。** 一条消息没带当前页（wiki 首页、Activity、Review，或你叉掉了页面）时，服务端照附注机制加一段 `<orbit_wiki_contents>`：已确认 plan 的版本；每篇的编号、slug、标题、分类；每节的 key、标题、是否写过、写成时的提交。不带 `covers` 和句子，一个 35 篇的 space 约 3k token。一场聊天里只在第一次需要时附，plan 换了版本再附。这一段单独就能解掉 11-21 那次对话：有没有讲 schema 的文档、在哪几节，agent 都看得到，「从 main 重写」要的 slug 和 key、plan 卡新开一篇要的分类也都有了。发出后气泡下面照样列出 `Wiki contents`。
+- **`wiki_read`：按需读（owner 11-21 定，第二步，要 runner 发版；取代 11-06 的「不加读文档的工具」）。** 只读，**先只对聊天会话开放**，和 `wiki_draft` 一样；别的会话以后看用量再说。
+  - 不带参数：同上面的目录；带 `q`：标题、`covers` 与句子里含这些词的节。
+  - `doc`：这一篇在已确认 plan 里的完整定义（plan 卡的 `change.docs` 要的就是它，含 `covers`）和写成的句子与脚注；再带 `section` 只取一节。
+  - `draft`：这场聊天的一张卡：状态、要写的节、写的进展与结果（§8.3），以及写成的新旧句子。
+  - 另带 agent 撞墙前该知道的事：plan 有没有待确认的草稿（有的话 `wiki_draft` 会拒 `WIKI_PLAN_STALE`），这个 space 正在跑或排着的写文档作业。
+  - 一次回答至多 `readMaxChars` = 60,000 字，超出的截断并给 `more`，契约写明。只靠未经担保、带污染标记的条目写成的句子，照条目读的规则不给。每次读照 `wiki_get` 记 `wiki_exposure`。
+- **读和引分开，在出处校验上挡住（11-22 按评审改）。** 11-06 不给读，是怕文档的话被当成知识的出处，绕一圈又写回文档。11-21 那版说「没有出处种类指向文档，所以放开读也安全」，这不对：`tool_call` 和 `event` 是出处种类，引一次调用时，引文按调用连同结果（`toolCallText`）核对（`wiki.service.ts` 的 `tool_call` 分支），所以引一次读 wiki 的调用，就能把文档的句子当出处；聊天按下又不走核实，直接成 confirmed 的条目。今天读 wiki 的调用（`wiki_search`、`wiki_get`）也只是降成非 `observed`，没有被拒。要补三处，各配一个 pg spec：
+  1. **出处解析拒读 wiki 的调用。** `tool_call` 或 `event` 出处指向的调用是读 wiki 的（`wikiCallReadsWiki`），一律 `WIKI_SOURCE_UNRESOLVED`。这也改了今天 `wiki_search`、`wiki_get` 被引时的行为：从降级变成拒，理由相同——wiki 说过的话不是它所说之事的证据。
+  2. **`wiki_read` 与 `orbit wiki read` 进读 wiki 的名单**（`src/shared/src/wiki.ts` 的 `WIKI_READ_TOOL`、`WIKI_READ_COMMAND`，契约 `maintenance.dossier.wikiReads`）：案卷跳过它，证据分级不算 `observed`。
+  3. **写文档的材料不收读 wiki 的调用。** 否则一节的脚注可以指向一次 `wiki_read` 的结果：文档引文档。
+  - 目录附注和 `wiki_read` 的结果头上都写明「这是视图，不是出处：要引就引它脚注指向的代码和记录」。文档照旧不进自动推送的 `<orbit_wiki_context>`。
+- **给 agent 的话（`<orbit_wiki_chat>`）：** 你在 wiki 页旁边聊天；当前页只是提示，wiki 的结构在 `Wiki contents` 附注里，内容用 `wiki_read` 自己查，不要让 owner 去开页面；先判断该改哪一层；条目改动用 `wiki_propose`，重写和 plan 用 `wiki_draft`；在边界内的「从 main 重写」起草即写，其余都是草稿；不要改文档；不要引读 wiki 的调用；只问该 owner 答的问题，问时带上你的推荐。
+  - **改了也要送到已有的聊天。** 今天这一段只随一场聊天的第一条消息走，而圆按钮接上的多半是最近一场还开着的旧聊天。所以服务端记下这场聊天上次送达的版本，这段话的文字变了，就随下一条消息再送一次；同样的规则写进 `wiki_read` 的工具说明和 agent 指令，不只靠这一段。
+
+### 4.3 Agent 的行为（owner 11-21 定）
+
+第一原理：人给目标和授权，agent 做其余的一切。agent 看得比人少，人就得替它取上下文，角色就反了。检查放在写、放在「谁担保这是真的」、放在超出所说范围的改动上，不放在读上。
+
+**一个请求的六步。** 以「帮我把数据库的 Schema 设计更新到 wiki 里」为例：
+
+1. **读出目标。** 你要的是 wiki 准确地讲现在的 schema、放在对的地方。你不需要知道层、slug、重建这些词，agent 的回答里也不拿它们当前提。
+2. **自己查。** `origin/main` 的 `schema.prisma` 和最近的迁移、解释表为什么长这样的设计文档；目录附注和 `wiki_read` 看整个 wiki 有没有、在哪里讲 schema；相关条目；比出差距。
+3. **判断落在哪，用白话说。** 有一篇但落后于 main：重写那几节。散在几篇里：plan 卡，把它们收拢。没有：plan 卡加一篇。设计的「为什么」没记下来：条目。这几样可以在一次回答里一起起草。
+4. **你判断的是结果，不是机制。** 在 A 的边界内的重写直接写，你看到的是写成的新旧对照和 `Undo`（§7.4）；要按的卡上写的是改完的样子：条目的全文、plan 改完的目录。
+5. **只问真正的分岔，带默认。** 比如「你也可能是想改 schema 的设计本身。我按『把现在的设计写进 wiki』理解，不对就说」。不问「这在哪一页」：那是 agent 自己查得到的。
+6. **说实话，不替没读过的东西担保。** 句子由服务端的写作模型写，agent 在起草这一轮里看不到。回答说它要求了什么、排上了什么；写成的样子在卡上（`See changes`）。agent 可以用 `wiki_read` 的 `draft` 读结果，你下一句话时结果也随附注送到（§7.2）。写完不另开一轮去核：句子已由服务端逐句对原文核过，agent 能动的只有条目和 `covers`，另开一轮只花钱、没有补救的手段。
+
+**好的回答长这样（示意）：**
+
+> wiki 里没有专讲 schema 的文档。表结构零散在 3.1 §4 和 5.2 §2，两处都早于迁移 0412–0418。我起草了一篇新文档「Database schema」，放在 Architecture 下，6 节；原来那两节改成指向它，不再重复。这是 plan 的改动，卡上是改完的目录，按 Apply & rebuild 写入。
+
+另一种情况（示意）：
+
+> wiki 的 4.2「Data model」讲的就是 schema，但 §2、§3 早于迁移 0412–0418。我已按 main 重写这两节，进展在卡上；不对就按 Undo。
+
+**不做：**
+
+- 一轮结束时把能自己做的事交给你（「打开那一页再发一次」「告诉我文档叫什么」）。
+- 只说「我做不到」而不说做到了哪一步、还差什么、谁能补上。读不到的东西（比如机器离线、仓库读不到）照实说，同时给出下一步。
+- 把内部机制当成你要理解的前提：卡的种类、层、slug 留在卡上给想看的人看，回答先说结果。
 
 ---
 
@@ -143,11 +187,13 @@
 | 你说 | 其实要改的 | 落到 | 卡 | 门 |
 |---|---|---|---|---|
 | 「这句的原因写错了」「这个坑修好了」 | 知识 | 条目 | `Add / Amend / Supersede / Retire` | 现有写入口，经草稿 |
-| 「这个数早就变了」 | 文档落后于 main | 重写这一节 | `Rewrite from main` | 新：按下排 `docs_follow` |
+| 「这个数早就变了」 | 文档落后于 main | 重写这一节 | `Rewrite from main` | 在 A 的边界内起草即排 `docs_follow`；否则按下排（§7.2） |
 | 「这篇太长，拆开」「写给新人看」 | 结构和写法 | plan（写法要求落在节的 `covers` 上，指纹包含它，下次重写还在） | `Plan change`：一张卡可改几篇，拆一篇就是一张卡（移一节到新开的一篇），卡面先写移节、再逐篇写改动（图 42 ③） | 现有 `plan/edits`、`confirm`、`build`，一按三步；几篇的改动合成一次 plan 编辑，对改完的整份 plan 过一次闸，任何一篇过不了就什么都不写、卡上列出全部错误。Undo 把 plan 和那次重建写过的节放回去（§7.2） |
 | 「这里应该改成 45 秒」 | 系统本身 | 代码或它引用的设计文档 | 没有卡，是会话的改动条 | 审批照拨盘走，Merge 你按，进 main 后 §8.1 跟上 |
 
-agent 判断错了怎么办：你接着说，或者按 Discard。卡上写明落在哪一层，这个判断是看得见的。
+「你说」这一列只是举例。你不必说成哪一种，也不必在对应的那一页上说：agent 用目录附注、`wiki_read` 和代码自己查出该落在哪一行（§4.3）。一个请求可以同时落到几行，比如「把 schema 设计更新到 wiki」可能是一张 plan 卡加一篇文档，再加几条记设计原因的条目。
+
+agent 判断错了怎么办：你接着说，或者按 Discard。卡上先用白话写落在哪、为什么，再写层，这个判断是看得见的。
 
 ---
 
@@ -156,7 +202,8 @@ agent 判断错了怎么办：你接着说，或者按 Discard。卡上写明落
 ### 7.1 草稿
 
 - 一场聊天是带 `wiki_chat_space_id` 的会话。这样的会话调 `wiki_propose`，**所有 op 都先成草稿**（包括平时自动生效的 `reinforce`、`challenge`，和 `wiki_note` 的 `corrects`）：照常跑校验（schema、出处、引文、脱敏、CAS、污染标记），不写条目，回答 `status: "draft"`。这样「不按就不变」才是真话。不带 `corrects` 的 `wiki_note` 不变，它本来就只是留给维护的线索。
-- 重写和 plan 用新工具 `wiki_draft`，只对聊天会话开放，别的会话调用被拒。需要 runner 发版。它不接受、不确认，也不是页面覆写，契约 `agentSurface.notTools` 不破。
+- 重写和 plan 用新工具 `wiki_draft`，只对聊天会话开放，别的会话调用被拒。需要 runner 发版。它不接受、不确认，也不是页面覆写。它要的 slug、节的 key 在目录附注里，plan 里一篇的完整定义用 `wiki_read` 取（§4.2），不靠你开着那一页。
+- **A 之后 `wiki_draft` 会引起文档的写（11-22）。** 在边界内的重写卡，起草即排 `docs_follow`：字仍然只由服务端的作业写，agent 仍然没有接受、确认、覆写页面的工具。契约 `agentSurface.notTools` 与 §7.2 照此改写措辞：「agent 能让服务端按 main 重写它点名的节，不能决定写什么字」。
 - 草稿存自己的表（`wiki_chat_draft`），不进 `wiki_changeset`，所以不占 `pendingOpsPerSpace` 的 30 个名额，也不留 `proposed` 的条目。
 - 卡从工具结果里的 `draftId` 画，状态读服务端，不解析对话文字。任何引擎都一样，完整会话页和手机上画的是同一张卡。
 - 案卷跳过聊天里的草稿调用（同 `wiki-dossier.ts` 跳过读 wiki）。否则被你 Discard 的草稿，下一次维护可能又读回来。你的原话照常进案卷。
@@ -171,8 +218,22 @@ agent 判断错了怎么办：你接着说，或者按 Discard。卡上写明落
 | `Undo` | 现有 `changesets/:id/revert`，加恢复节的旧版 | 整次撤回，节恢复到 Apply 之前那一版。plan 卡（owner 11-07 定）：plan 回到这张卡按之前的内容，作为你的新版本存下并确认；那次重建改写或拿掉的节恢复到重建前留下的那一版，不调模型，留一版原因 `restore`；plan 在这张卡之后又动过时不可撤 |
 
 - **一张卡一按。** 一张卡可以有几个 op，一起生效。
-- **agent 下一轮知道结果。** Applied、Discarded、Undone 随下一条消息作为附注送达，不单独开回合。
+- **agent 下一轮知道结果。** Applied、Discarded、Undone 与重写的结果随下一条消息作为附注送达，不单独开回合：按压和作业结束都不启动 agent（理由见 §4.3 第 6 步）。
 - **安全底线不动。** `decide` 仍然只在 owner 门上；agent 仍然没有接受、确认的工具。
+- **什么必须按（owner 11-21 定原则，11-22 选 A）：** 按压只用在请求本身没授过的权上：担保一件事是真的（条目的 trust = confirmed 只有你能给）；结构的改动（plan）；撤不回的事。读不需要按。
+
+**方案 A：不按就写的边界。** 「是不是你说的范围」服务端判断不了：agent-first 下你说的是目标，节是 agent 挑的。所以边界写成服务端能查的条件，全部满足才不按就写，缺一条就照旧等你按，卡上写明为什么：
+
+| 条件 | 不满足时卡上写 |
+|---|---|
+| 卡是 `kind: rewrite`，不带条目 op、不带 plan 改动 | —（本来就是要按的卡） |
+| 节都在已确认的 plan 里、已经写过，至多一张卡 5 节 | —（`wiki_draft` 照旧拒） |
+| 这场聊天没读过网页（没有污染标记） | `Apply to write: this chat read web content` |
+| 这个 space 今天不按就写的节没超过 `chatAutoSectionsPerDay` = 20（强制的节不算 `followSectionsPerDay`，没有这道闸，agent 一循环就是没有上限的 System model 花费） | `Apply to write: today's automatic rewrites are used up` |
+| 这场聊天里没有还等你按、会重写同一节的卡 | 不改写法，只等：那张卡按了或弃了再写，同一节只写一次 |
+
+- **不按就写的节，不给你的原话当材料。** §8.2 的强制材料里有「这场聊天里你的原话」，它能被引成脚注，开了 Footnotes 的分享链接上访客读得到（§10）。没经你按就发布你的话不对，所以这类重写只用代码、记录和条目；要把你的话写进去，那是条目卡，要按。
+- **卡上不写 `Confirmed by you`。** 没按过就不是你确认的。这类卡的标题是 `Rewritten from main`，写的进展和结果照 §8.3，动作是 `Undo` 与 `See changes`（§7.3）。
 
 ### 7.3 卡的状态
 
@@ -197,7 +258,24 @@ plan 卡（§6 第三行，一张卡可改几篇）：
 | `Applied · Confirmed by you`，下一行 `The plan has changed since, so this can no longer be undone.` | 已按，plan 之后又动过 | Open in Plan |
 | `Undone` | 已撤：plan 回到按之前的内容（新的一版，已确认），重建写过的节放回去 | — |
 
+不按就写的重写卡（§7.2 方案 A）：
+
+| 显示 | 条件 | 动作 |
+|---|---|---|
+| `Rewritten from main`，下面接 §8.3 的进展与结果 | 起草即排上，或已写完 | Undo · See changes（写完后） |
+| `Draft · Rewrite from main`，下一行 §7.2 表里的原因 | 边界缺一条，等你按 | Apply · Discard |
+| `Undone` | 写完又按了 Undo | — |
+
 重写的进展接在卡下面，见 §8.3。
+
+### 7.4 结果在卡上（owner 11-21 定原则，11-22 去掉预览）
+
+你判断的应该是结果，不是机制。11-21 那版想在起草时就把节写成预览（`docs_preview`），按下即发布。选了 A 以后，预览只剩代价，所以去掉：
+
+- **不按就写的重写，结果就是写成的那一版。** 卡上 `See changes` 逐句对照新旧，不对就 `Undo`，回到写之前那一版（§8.4）。这比先看预览再按少一步，看到的是同一个东西。
+- **条目卡：** 卡上就是条目的全文，按下写的就是它；牵动的节在按下之后重写，结果接在卡下面。
+- **plan 卡：** 改完的目录（新篇、移节、改名、新的 `covers`）就是这次结构改动的结果；那次重建的句子在按下之后写。
+- **预览还有哪些没解决的问题（留作记录）：** 按下时核「预览是否还新鲜」要重新收集材料，经维护 workspace 的 runner 读仓库，做不成一个短事务；在 Apply 的事务里发布预览是一次绕过「一个 space 只有一个写文档的作业」（§8.5）的写；起草时新条目还没有 id 和修订，脚注的 `via_entry_id` 无从写起；plan 卡要对着一个还没存、没确认的 plan 版本写；被弃和被替换的草稿也花模型调用。以后真要预览，从这几条开始。
 
 ---
 
@@ -207,7 +285,7 @@ plan 卡（§6 第三行，一张卡可改几篇）：
 
 沿用 10-09 §12 的 `docs_follow`，只跑 wiki-worker：
 
-- **聊天按压：** 卡上列的节强制重写（写 `stale_at`，不看指纹），优先级 1。
+- **聊天：** 按下 Apply，或不按就写的重写卡起草时（§7.2 方案 A），卡上列的节强制重写（写 `stale_at`，不看指纹），优先级 1。不按就写的节计入 `chatAutoSectionsPerDay`，不计 `followSectionsPerDay`。
 - **改动进 main：** 会话合并回执、落地线进 main 的回执。只写引用了被改文件的节，指纹没变不调模型，追赶期照跑，每个 space 每天至多 40 节（`followSectionsPerDay`），超出的留给常规维护，Activity 写明。优先级 0；这场合并来自聊天时是 1。
 - 每个 space 最多排一个，排队中再来的并进去。重写只由这两个事实触发，不加时钟。
 
@@ -215,7 +293,7 @@ plan 卡（§6 第三行，一张卡可改几篇）：
 
 **卡上的 `Rewrites`** 在起草时算好：附件里的节；经由这条条目的句子所在的节（脚注的 `via_entry_id`）；新条目按 `sectionFit` 排名靠前的节。一张卡至多 5 节。
 
-**强制的节多给两样材料**，否则新条目可能被 `entriesPerSection` 的上限挤掉，写回原样：这次改动的条目（及其出处）、这场聊天里你的原话。句子照旧逐句引一手原文、逐字核对；你的 turn 是能引的，文档和评论不是（§22.8）。
+**强制的节多给两样材料**，否则新条目可能被 `entriesPerSection` 的上限挤掉，写回原样：这次改动的条目（及其出处）、这场聊天里你的原话。句子照旧逐句引一手原文、逐字核对；你的 turn 是能引的，文档、评论和读 wiki 的调用不是（§22.8，§4.2）。不按就写的重写不给你的原话（§7.2）。
 
 ### 8.3 结果
 
@@ -274,7 +352,11 @@ plan 卡（§6 第三行，一张卡可改几篇）：
 | plan 改了，这一节没了 | 卡写 `Section no longer in the plan`，不重写 |
 | 会话 Trash | 聊天从历史里消失，已 Apply 的不受影响，没处理的草稿成 `Not applied` |
 | 配额、槽位 | 同普通会话：`Waiting for slot` 等照旧显示 |
-| 重复条目 | 语义检索没开，agent 判断「库里有没有」可能不准（11-06 搜 `wiki chat` 返回 10 条，没一条讲聊天）。附注带上当前页能缓解；按压前卡上显示 `similar[]` |
+| 重复条目 | 语义检索没开，agent 判断「库里有没有」可能不准（11-06 搜 `wiki chat` 返回 10 条，没一条讲聊天）。目录附注和 `wiki_read` 让 agent 看得到文档里已经讲了什么，能缓解；按压前卡上显示 `similar[]` |
+| 你说的地方在 wiki 里找不到 | agent 自己判断是该新开一篇还是并进已有的一篇，起草出来让你看；不让你去找 |
+| agent 读不到（机器离线、仓库读不到） | 照实说读不到什么、因此做到了哪一步，并给出下一步；不把找东西的活交给你 |
+| plan 有待确认的草稿 | `wiki_read` 先告诉 agent；它不去撞 `WIKI_PLAN_STALE`，照实说要先处理那份草稿，并给出 Plan 页的链接 |
+| 不按就写的重写读起来一样 | 卡上 `§3 reads the same`，算进「等你」（§8.3）：agent 判断它落后于 main，写出来却没变，值得你看一眼 |
 
 ---
 
@@ -282,15 +364,17 @@ plan 卡（§6 第三行，一张卡可改几篇）：
 
 | 理念（出处） | 这里怎么守 |
 |---|---|
-| 「产品理念是人驱动 agent 去做事」（owner） | 你说，agent 查和起草 |
+| 「产品理念是人驱动 agent 去做事」（owner） | 你说，agent 查和起草；你在哪一页说都行，agent 自己找到地方（§4.3） |
+| 人给目标和授权，agent 做其余的一切（owner 11-21） | agent 读得到你看得到的 wiki；一轮结束时留给你的只有该你做的决定；问时带推荐 |
+| 你判断的是结果，不是机制（owner 11-21） | 不按就写的看写成的对照，要按的看条目全文和改完的目录（§7.4） |
 | 「人只对目标、风险、预算和不可委托授权负责」（owner） | Apply 和 Merge 是你的，其余 agent 做 |
-| 「人已经授过的权，不该再问第二遍」（owner） | 一张卡一按，按下之后的重写不再问 |
+| 「人已经授过的权，不该再问第二遍」（owner） | 一张卡一按，按下之后的重写不再问；你的话已经授过的「从 main 重写」不再按（§7.2 方案 A） |
 | 「Nothing blocks in silence」（`docs/product-intro.md`） | 被挡住的重写写在卡上、算进「等你」，圆按钮也亮 |
 | 「时钟不得启动 agent 工作」（`open-item-escalation.service.ts`） | 重写只由按压和进 main 触发；草稿不催、不过期 |
-| 文档是视图，不是知识（契约 §22.8） | 不改字，不当出处 |
-| 确认只存在于 owner 通道（设计 §0 第 3 条） | 草稿不是确认，按压在 JWT 门上 |
+| 文档是视图，不是知识（契约 §22.8） | 不改字，不当出处；读得到，引不了：读 wiki 的调用在出处校验上被拒（§4.2） |
+| 确认只存在于 owner 通道（设计 §0 第 3 条） | 草稿不是确认，按压在 JWT 门上；不按就写的重写不写 `Confirmed by you`，也不给任何条目 trust |
 
-**不做：** 直接改文档的字；服务端另造聊天；分 Ask / Edit 两种模式；自动合并；第一版的「自动应用」开关（先看真实的按压和 Discard 比例）；评论卡和它的 11 种状态；访客聊天；Android。
+**不做：** 直接改文档的字；服务端另造聊天；分 Ask / Edit 两种模式；自动合并；「自动应用」开关（方案 A 的边界写死在 §7.2，不是开关；要放宽先看真实的 Undo 比例）；起草时预览（§7.4）；对聊天以外的会话开放 `wiki_read`；评论卡和它的 11 种状态；访客聊天；Android。
 
 ---
 
@@ -301,7 +385,7 @@ plan 卡（§6 第三行，一张卡可改几篇）：
 1. 入口是窗口右下角的圆形悬浮按钮，页头不放。
 2. 聊天不直接改文档的字。
 3. 聊天是普通会话，跑在 workspace 所在的 runner 上，用独立 worktree，起点是 `origin/main`。
-4. 每张卡都要按 Apply，按下即 confirmed，跳过机器核实。
+4. 每张卡都要按 Apply，按下即 confirmed，跳过机器核实。（11-22 改：边界内的「从 main 重写」不按，见第 13 条。）
 5. 评论项目并进来：留用留版和跟进，不做 Go 那份和评论卡。
 6. 第一版：web 桌面先通条目、重写、代码三条路，iOS 紧跟，plan 卡放第二步。
 7. orbit 这个 space 默认 `orbit-develop`（HPC）。
@@ -309,9 +393,21 @@ plan 卡（§6 第三行，一张卡可改几篇）：
 8. 定向重写只绕开不写文档的作业（§8.5）。
 9. 新项目开工后，关掉旧的评论项目。
 
+**owner 2026-11-21 定（agent-first 修订）：**
+
+10. agent 的行为按 §4.3：人给目标和授权，agent 做其余的一切，只问该你答的问题，问时带推荐。
+11. agent 读得到你看得到的 wiki：先是没带页面时的目录附注，再是只对聊天开放的只读工具 `wiki_read`；读与引分开，读 wiki 的调用在出处校验上被拒（§4.2）。取代 11-06 的「不加读文档的工具」。
+12. 卡上给你看结果，不是机制（§7.4）。
+
+**owner 2026-11-22 定：**
+
+13. 你的话本身就是授权，用方案 A（§7.2）：在写死的边界内，「从 main 重写」起草即写，卡上是结果、`See changes` 和 `Undo`，标题 `Rewritten from main`，不写 `Confirmed by you`，不用你的原话当材料；条目、plan、读过网页的聊天、超出每日节数的，照旧要按。
+14. 去掉 11-21 那版的起草时预览（`docs_preview`）：A 之后它只剩代价，没解决的问题记在 §7.4。
+15. 按压和作业结束都不启动 agent 的回合；结果随你的下一句话送到（§4.3 第 6 步）。
+
 ### 12.2 待定
 
-没有。
+没有。`chatAutoSectionsPerDay` = 20、`readMaxChars` = 60,000 是起步的数，按 §14 量到的再调。
 
 ---
 
@@ -323,7 +419,11 @@ plan 卡（§6 第三行，一张卡可改几篇）：
 | 迁移 | `wiki_chat_draft`；`wiki_doc_section_version`；`session.wiki_chat_space_id`；`wiki_job` 的新 kind 与索引 | 取号前扫 main、`project/*`、已推的 `orbit/*`；普查照规矩登记 |
 | apiserver | 新 `wiki/wiki-chat.ts` 与 controller（建聊天、列聊天、草稿的读与按压）；`sessions.service.ts` 建会话的选项；`projects/session-source.ts`；`runner-api/control-plane-note.ts` 的附注；`wiki.service.ts` 的草稿分支；`wiki/wiki-docs.ts` 留版；`wiki/wiki-dossier.ts` | user 门 JWT，带会话头拒 |
 | wiki-worker | 新 `docs_follow` 作业，复用 `runWikiDocsBuild` 的 `only`，加额外材料；`wiki-jobs.ts` | 合并排队、每日节数闸、被挡原因进 Activity |
-| runner | `wiki_tools.go`、`wiki_cli.go`（`wiki_draft`，cli/mcp 对照、help、agent_instructions 三张表）；`worktree.go`（空分支清理） | 需要发版 |
+| runner | `wiki_tools.go`、`wiki_cli.go`（`wiki_draft`、`wiki_read`，cli/mcp 对照、help、agent_instructions 三张表）；`worktree.go`（空分支清理） | 需要发版 |
+| agent-first 修订（11-21、11-22）· 出处 | `wiki.service.ts` 的出处解析：`tool_call`、`event` 指向读 wiki 的调用一律 `WIKI_SOURCE_UNRESOLVED`；`src/shared/src/wiki.ts` 的 `WIKI_READ_TOOL`、`WIKI_READ_COMMAND` 加 `wiki_read`；写文档的材料去掉读 wiki 的调用；契约 §22.8、`maintenance.dossier.wikiReads` 照改 | 三处各一个 pg spec；先于 `wiki_read` 上线 |
+| 同上 · 目录附注 | `wiki-chat-notes.ts` 加 `<orbit_wiki_contents>`（复用读已确认 plan 与写成节的函数）与「上次送达的版本」；`<orbit_wiki_chat>` 文字变了再送；`WIKI_CHAT_PROMPT`（`src/shared/src/wikiChat.ts`）按 §4.2 改；契约 `chat.notes` 加 `contents`；web `deliveredMessage.ts`、iOS 的附注标签 `Wiki contents` | 不用 runner 发版，单独就能解掉 11-21 那次对话 |
+| 同上 · `wiki_read` | runner 的 `operation_catalog.go`、`wiki_tools.go`、`wiki_cli.go`（cli/mcp 对照、help、agent_instructions 三张表）；apiserver 的 runner 门读路由；契约 §11 的「五个工具」改六个、`TestWikiAgentSurfaceIsTheContracts`、`docs.tool`、`plan.who` 加聊天会话的只读、`readMaxChars` | 要 runner 发版 |
+| 同上 · 方案 A | `wiki_draft` 的 rewrite 分支在边界内起草即排 `docs_follow`；`chatAutoSectionsPerDay` 与每日计数；不按就写的不给原话材料；同节等待；契约 `chat.drafts.states` 加 `Rewritten from main`、`chat.copy` 加两句 `Apply to write: …`，`agentSurface.notTools` 改措辞；web、iOS 的卡对照 | 端到端验收：在 wiki 首页说「把数据库 Schema 设计更新到 wiki」，agent 不让你开页面：有落后的节就直接重写、卡上带 `Undo`，没有就给出 plan 卡 |
 | web | 从 `WorkspaceView.tsx` 抽实时流（`EventSource` 那个 effect）和 `Transcript` 外面那 9 层 provider，成可复用的会话组件；新 `WikiChatFab`、`WikiChatPanel`、`WikiDraftCard`、`WikiSeeChanges`、`lib/wikiChat.ts`；`WikiPage.tsx`、`WikiDocPage.tsx`；`deliveredMessage.ts` 的附注标签；`WikiActivityPage.tsx` 的 Docs 行 | 这是最大的一块：实时流和输入框都在这个 12,646 行的文件里。`Transcript` 本身已能单独用（分享页）。先做不改行为的拆分，再做面板 |
 | iOS | `WikiDocView.swift`；`Console/ConsoleView.swift` 的 `TranscriptView` 放进 sheet，要核对依赖；OrbitKit 的状态逻辑与 `WikiCopy` 对照 | SwiftUI 只在 CI 编 |
 
@@ -334,6 +434,8 @@ plan 卡（§6 第三行，一张卡可改几篇）：
 **第一步（web 桌面）：** 量 → 契约 → 留版 → 跟进 → 聊天会话 → 草稿与按压 → 拆分 → 面板与入口 → 选区与卡 → 端到端。
 
 **第二步：** iOS；plan 卡（web 与 iOS）；owner 走查（部署、runner 发版、iOS 发版之后）。
+
+**agent-first 修订（11-21、11-22）：** 出处校验补三处 → 目录附注与提示词（不用 runner 发版，先解掉「去开页面」）→ 方案 A → `wiki_read`（runner 发版）。出处一步必须先于 `wiki_read`。
 
 **还没量的，排在最前面：**
 

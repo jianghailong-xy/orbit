@@ -348,5 +348,49 @@ final class RunnerAgentFixTests: XCTestCase {
         XCTAssertEqual(RunnerPageCopy.agentFixStartsIn(workspace: "orbit-develop", engine: "Claude Code"),
                        "Starts a session in orbit-develop on this machine, with Claude Code.")
         XCTAssertEqual(RunnerPageCopy.agentFixSignInAbove(engine: "Claude Code"), " Sign in to Claude Code above to use this.")
+        XCTAssertEqual(RunnerPageCopy.agentFixFixed(workspace: "orbit-develop"), "Fixed by an agent in orbit-develop · ")
+        XCTAssertEqual(RunnerPageCopy.agentFixSignInOnMachinePage(engine: "Claude Code"),
+                       " Sign in to Claude Code on the machine page to use this.")
+    }
+
+    // MARK: the transcript's sandbox warning
+
+    /// Codex without bubblewrap (docs/mocks/codex-sandbox-fix-with-agent): the row offers the agent
+    /// where it would start, shows it at work, then shows the one that already finished with the row.
+    func testSandboxStateOffersTheAgentThenShowsTheOneThatFinished() {
+        let ready = RunnerAgentFix(workspaceId: "ws1", workspaceName: "orbit-develop",
+                                   engine: "codex", engineName: "Codex", blocked: nil, fixing: [], handled: [])
+        XCTAssertEqual(RunnerAgentFixLogic.sandboxState(ready),
+                       .ready(hint: "Starts a session in orbit-develop on this machine, with Codex."))
+
+        let fixing = RunnerAgentFixing(kind: "sandboxMissing", engine: "codex", sessionId: "s1",
+                                       workspaceId: "ws1", workspaceName: "orbit-develop")
+        let atWork = RunnerAgentFix(workspaceId: "ws1", workspaceName: "orbit-develop",
+                                    engine: "codex", engineName: "Codex", blocked: nil, fixing: [fixing], handled: [])
+        XCTAssertEqual(RunnerAgentFixLogic.sandboxState(atWork), .fixing(fixing))
+
+        let handled = RunnerAgentFixHandled(kind: "sandboxMissing", engine: "codex", sessionId: "s2",
+                                            workspaceId: "ws1", workspaceName: "orbit-develop", status: "SUCCEEDED")
+        let after = RunnerAgentFix(workspaceId: "ws1", workspaceName: "orbit-develop",
+                                   engine: "codex", engineName: "Codex", blocked: nil, fixing: [], handled: [handled])
+        XCTAssertEqual(RunnerAgentFixLogic.sandboxState(after),
+                       .handled(sessionId: "s2", workspaceName: "orbit-develop"))
+    }
+
+    func testSandboxStateGreyedOutSaysWhereToSignIn() {
+        let fix = RunnerAgentFix(workspaceId: "ws1", workspaceName: "orbit-develop",
+                                 engine: "claude", engineName: "Claude Code",
+                                 blocked: .init(code: "engineSignedOut", message: Self.signedOut), fixing: [], handled: [])
+        XCTAssertEqual(RunnerAgentFixLogic.sandboxState(fix),
+                       .blocked(reason: Self.signedOut + " Sign in to Claude Code on the machine page to use this."))
+    }
+
+    func testSandboxStateIsNilFromAnOlderServer() {
+        XCTAssertNil(RunnerAgentFixLogic.sandboxState(nil))
+    }
+
+    func testASandboxFixRequestNamesCodex() {
+        XCTAssertEqual(RunnerAgentFixLogic.request(.init(kind: .sandboxMissing, engine: "codex"), latestVersion: nil),
+                       RunnerAttentionFixRequest(engine: "codex"))
     }
 }

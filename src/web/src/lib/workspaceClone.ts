@@ -84,6 +84,21 @@ const subscribe = (listener: () => void) => {
   return () => listeners.delete(listener);
 };
 
+/** What the stream last said about this workspace's clone, read outside React (a list row's line). */
+export function cloneHeardOf(workspaceId: string | null | undefined): CloneHeard | null {
+  return workspaceId ? heard.get(keyOf(workspaceId)) ?? null : null;
+}
+
+let version = 0;
+listeners.add(() => {
+  version += 1;
+});
+
+/** A number that moves whenever the stream says anything about any clone: a list keyed on it redraws its lines. */
+export function useCloneHeardVersion(): number {
+  return useSyncExternalStore(subscribe, () => version);
+}
+
 /** What the stream last said about this workspace's clone, or null when it has said nothing yet. */
 export function useCloneHeard(workspaceId: string | null | undefined): CloneHeard | null {
   return useSyncExternalStore(subscribe, () => (workspaceId ? heard.get(keyOf(workspaceId)) ?? null : null));

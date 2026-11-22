@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SubagentRunView, WorkflowRunView } from '@orbit/shared';
 import type { RunEvent } from '../components/Transcript';
+import { useSubagentRuns } from './subagentRuns';
 import { useWorkflowRuns, workflowRunsSignature, type WorkflowRuns } from './workflowRuns';
 
 /**
@@ -175,5 +176,73 @@ describe('a session\'s workflows on the web', () => {
     const all = Object.values(life);
     expect(workflowRunsSignature(all)).toBe('1,2,3,4,7,8,9,10,11');
     expect(workflowRunsSignature([life.call0, life.call0Started]), 'a delegate call nested under no workflow is not a workflow call').toBe('');
+  });
+
+  it('read /subagents once when a delegate signature and a workflow signature move together, and neither view misses it', async () => {
+    let delegateSeen: ReturnType<typeof useSubagentRuns> = new Map();
+    function Both({ events }: { events: readonly RunEvent[] }) {
+      delegateSeen = useSubagentRuns('s1', events);
+      seen = useWorkflowRuns('s1', events);
+      return null;
+    }
+    const both = async (events: readonly RunEvent[]) => {
+      await act(async () => {
+        root.render(<Both events={events} />);
+        for (let i = 0; i < 5; i++) await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+    };
+    const delegate = ev(20, 'tool_use', { id: 'toolu_d', name: 'mcp__orbit__delegate', input: { prompt: 'x' } });
+    server.workflows = [workflow({})];
+    server.runs = [run(0, {}), { ...run(0, {}), toolUseId: 'toolu_d', workflowRunId: null, callIndex: null, label: null, phase: null }];
+    await both([delegate, life.opened]);
+    expect(reads.filter((url) => url.endsWith('/subagents'))).toHaveLength(1);
+    expect(delegateSeen.get('toolu_d')?.status).toBe('RUNNING');
+    expect(seen.workflows.get(WF)?.status).toBe('RUNNING');
+
+    // The delegate ends and a workflow call is made on one update: one more read, both views move.
+    reads.length = 0;
+    server.runs = [run(0, {}), { ...run(0, {}), toolUseId: 'toolu_d', workflowRunId: null, callIndex: null, label: null, phase: null, status: 'DONE' }];
+    server.workflows = [workflow({ callsDone: 1 })];
+    const delegateEnded = ev(21, 'tool_result', { toolUseId: 'toolu_d', content: [{ type: 'text', text: '{}' }] });
+    await both([delegate, life.opened, delegateEnded, life.call0]);
+    expect(reads.filter((url) => url.endsWith('/subagents'))).toHaveLength(1);
+    expect(delegateSeen.get('toolu_d')?.status).toBe('DONE');
+    expect(seen.workflows.get(WF)).toMatchObject({ callsDone: 1 });
+    expect(seen.calls.get(`${WF}#0`)?.status).toBe('RUNNING');
+  });
+
+  it('sends at most two /subagents reads when three observers move in separate ticks, and each ends with the trailing answer', async () => {
+    const answers = [[run(0, {})], [run(0, { status: 'DONE', endedAt: '2026-11-19T10:00:09.000Z' })]];
+    let gate: (() => void) | null = null;
+    const subagentReads: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url === '/api/sessions/s1/workflows') {
+        return new Response(JSON.stringify([workflow({})]), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      subagentReads.push(url);
+      const body = answers[Math.min(subagentReads.length, answers.length) - 1];
+      // The first read stays in flight while the signatures move.
+      if (subagentReads.length === 1) await new Promise<void>((resolve) => { gate = resolve; });
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+    }));
+    const seenBy: { a?: ReturnType<typeof useSubagentRuns>; b?: ReturnType<typeof useSubagentRuns>; w?: WorkflowRuns } = {};
+    function A({ events }: { events: readonly RunEvent[] }) { seenBy.a = useSubagentRuns('s1', events); return null; }
+    function B({ events }: { events: readonly RunEvent[] }) { seenBy.b = useSubagentRuns('s1', events); return null; }
+    function W({ events }: { events: readonly RunEvent[] }) { seenBy.w = useWorkflowRuns('s1', events); return null; }
+    const delegateCall = ev(20, 'tool_use', { id: `${WF}#0`, name: 'mcp__orbit__delegate', input: { prompt: 'x' } });
+    const results = (n: number) => Array.from({ length: n }, (_, k) => ev(30 + k, 'tool_result', { toolUseId: `${WF}#0`, content: 'x' }));
+    const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+    const events = (n: number) => [life.opened, life.call0, delegateCall, ...results(n)];
+    const moves = [
+      (n: number) => root.render(<><A events={events(n)} /><B events={[]} /><W events={[]} /></>),
+      (n: number) => root.render(<><A events={events(n)} /><B events={events(n)} /><W events={[]} /></>),
+      (n: number) => root.render(<><A events={events(n)} /><B events={events(n)} /><W events={events(n)} /></>),
+    ];
+    for (let n = 1; n <= 5; n++) {
+      await act(async () => { moves[Math.min(n, 3) - 1](n); await tick(); });
+    }
+    await act(async () => { (gate as (() => void) | null)?.(); for (let i = 0; i < 8; i++) await tick(); });
+    expect(subagentReads).toHaveLength(2);
+    for (const view of [seenBy.a, seenBy.b, seenBy.w?.calls]) expect(view?.get(`${WF}#0`)?.status).toBe('DONE');
   });
 });

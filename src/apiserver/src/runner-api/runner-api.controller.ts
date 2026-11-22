@@ -587,6 +587,7 @@ import {
   type ManagedHeartbeatAnswer,
 } from '../managed-runners/managed-runner-sleep';
 import { readManagedRunnerStorage, type ManagedRunnerStorage } from '../managed-runners/managed-runner-storage';
+import { markUpdateNowCuts } from '../managed-runners/managed-runner-update-cut';
 import {
   RUNNER_OFFLINE_AFTER_MS,
   RunnerPresenceService,
@@ -7187,6 +7188,10 @@ export class RunnerApiController {
           // intends to undo by itself" — which is what keeps the STATUS published below from
           // announcing a settlement that hasn't happened.
           retryAt: true,
+          // A session completed or trashed since the turn began is out of the auto-retry sweep: no arm below.
+          completedAt: true,
+          archivedAt: true,
+          deletedAt: true,
           // How much of that budget is spent, for the one failure class whose wait is decided
           // here rather than by a reply's text — see `retryArmAt` below.
           retryAttempts: true,
@@ -7751,7 +7756,8 @@ export class RunnerApiController {
         && isUsageLimitErrorText(failureText)
           ? await this.usageLimitRetry(tx, runner.id, usageLimitEngine, current, failureText!)
           : null;
-      const retryArmAt = keyRetryAt
+      const filed = current.completedAt != null || current.archivedAt != null || current.deletedAt != null;
+      const retryArmAt = filed ? null : keyRetryAt
         ? new Date(keyRetryAt.getTime() + Math.floor(Math.random() * QUOTA_RETRY_JITTER_MS))
         : usageLimit
           ? usageLimit.retryAt
@@ -9327,6 +9333,11 @@ export class RunnerApiController {
           sessionData.poolSwitchNotice = null;
         }
       }
+      // A cut its runner's own stop marked (interrupt runner_restart) while the owner's Update Now of its Orbit Cloud
+      // container was stopping it is the update's, and is stored as the update's (managed-runner-update-cut.ts): the
+      // next generation is handed the turn back as the update's continuation. A plain read of the mapping, only for a
+      // batch holding such a cut.
+      await markUpdateNowCuts(tx, runner.id, durable, new Date());
       if (durable.length > 0) {
         // The one place a run_event is ever written, and the reason the per-token progress pings
         // stop costing 868 MB/day: `isNoiseSystemEvent` decides here whether a row is worth
@@ -10166,7 +10177,9 @@ export class RunnerApiController {
           ? ((await this.queue.sharedPoolRetryAt(tx, current, new Date()))
             ?? (await this.queue.loginPoolRetryAt(tx, current, new Date())))
           : null;
-      const quotaRetryAt = quotaSpent
+      // A completed or trashed session is out of the auto-retry sweep: an arm written now could never fire.
+      const filed = current.completedAt != null || current.archivedAt != null || current.deletedAt != null;
+      const quotaRetryAt = filed ? null : quotaSpent
         ? await this.quotaRetryAt(tx, runner.id, current, dto.error!, workspace)
         : keyRetryAt
           ? new Date(keyRetryAt.getTime() + Math.floor(Math.random() * QUOTA_RETRY_JITTER_MS))
@@ -10191,8 +10204,8 @@ export class RunnerApiController {
             new Date(),
           )
         : null;
-      const signInRetryAt = signInMove ? new Date() : null;
-      const signInColumns: Prisma.SessionUncheckedUpdateManyInput = signInMove && signInEngine && signInRunner
+      const signInRetryAt = signInMove && !filed ? new Date() : null;
+      const signInColumns: Prisma.SessionUncheckedUpdateManyInput = signInMove && signInEngine && signInRunner && !filed
         ? {
             [ACCOUNT_CHOICE[signInEngine]]: signInMove.to,
             ...(signInMove.defaultRemoved ? { [ACCOUNT_PINNED[signInEngine]]: false } : {}),
@@ -11549,10 +11562,15 @@ export class RunnerApiController {
         poolSwitchNotice: true,
         poolCodexAccountId: true,
         poolKeyId: true,
+        // A completed or trashed session is out of the auto-retry sweep: an arm written now could never fire.
+        completedAt: true,
+        archivedAt: true,
+        deletedAt: true,
         workspace: { select: { env: true, codexAccount: true, claudeAccount: true, kimiAccount: true, cursorAccount: true } },
       },
     });
     if (!session) return {};
+    if (session.completedAt || session.archivedAt || session.deletedAt) return {};
     // A built-in Claude session whose account refused its sign-in — the runtime said "Failed to
     // authenticate" — moves on Automatic to another of the runner's accounts that can run, and is
     // re-sent there at once, as a usage limit moves it below. The events path queues the reload that
