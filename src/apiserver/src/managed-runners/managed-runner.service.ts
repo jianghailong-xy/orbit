@@ -25,6 +25,7 @@ import {
 } from '@orbit/shared';
 
 import { generateToken, sha256 } from '../common/crypto.util';
+import { heldStatusFilter } from '../common/session-release';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -437,7 +438,7 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
       orderBy: [{ startedAt: 'asc' }, { id: 'asc' }],
     });
     const open = await this.prisma.session.findMany({
-      where: { assignedRunnerId: runnerId, status: { in: ['PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'] } },
+      where: { assignedRunnerId: runnerId, status: heldStatusFilter() },
       select: { runningBgShells: true },
     });
     const recorded = open.reduce((sum, s) => sum + s.runningBgShells.length, 0);

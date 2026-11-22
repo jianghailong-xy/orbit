@@ -4423,6 +4423,10 @@ export const EXCLUDED_SOURCES: readonly ExcludedSource[] = [
     why: 'The Docker backend\'s real-Docker integration test, run only by scripts/managed-runner/docker-backend-it.py against the disposable PostgreSQL that script creates and migrates; `coordinator-pg-test-safety` refuses any other database. Its writes seed the owners, sessions and tasks a wake needs, as a PostgreSQL spec\'s do. tsconfig.json keeps it out of the application build, and nothing imports it.',
   },
   {
+    path: 'managed-runners/managed-runner-update-now.it.ts',
+    why: 'The real-Docker run of an owner\'s Update Now on a busy runner, run only by scripts/managed-runner/docker-backend-it.py (--spec managed-runner-update-now.it.js) against the disposable PostgreSQL that script creates and migrates; `coordinator-pg-test-safety` refuses any other database. Its writes seed the owner and the workspace a session needs, as a PostgreSQL spec\'s do. tsconfig.json keeps it out of the application build, and nothing imports it.',
+  },
+  {
     path: 'auth/tenant-isolation-fixtures.ts',
     why: 'The tenant isolation census\'s fixtures: the accounts and every object they hold, written straight into their tables as each spec of their own writes them, for the census\'s two PostgreSQL specs to send across accounts. Imported by those specs alone, never by an application module or reachable from an HTTP route.',
   },
