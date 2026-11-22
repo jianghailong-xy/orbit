@@ -41,6 +41,29 @@ class ScheduleCopyParityTest {
         for (path in ScheduleCopy.contract.keys.sorted()) if (path !in flat) fail("ScheduleCopy holds $path, which the contract no longer has")
     }
 
+    @Test fun runStatusCopyMatchesTheContractAndWebSource() {
+        val flat = mutableMapOf<String, String>()
+        flatten(contract.getValue("runStatusCopy"), "", flat)
+        assertEquals(flat, ScheduleRunStatusCopy.contract)
+
+        val webPath = "src/shared/src/schedule.ts"
+        val web = generateSequence(File("").absoluteFile) { it.parentFile }
+            .map { File(it, webPath) }.firstOrNull { it.isFile } ?: error("$webPath is missing")
+        val source = web.readText().substringAfter("export const SCHEDULE_RUN_STATUS_COPY = {").substringBefore("} as const;")
+        val groupPattern = Regex("""(?m)^  (\w+): \{\n([\s\S]*?)^  },""")
+        val wordPattern = Regex("""(?m)^ +(\w+): (['"])(.*)\2,$""")
+        val webCopy = mutableMapOf<String, String>()
+        for (group in groupPattern.findAll(source)) {
+            for (word in wordPattern.findAll(group.groupValues[2])) {
+                webCopy["${group.groupValues[1]}.${word.groupValues[1]}"] = word.groupValues[3]
+            }
+        }
+        for (word in wordPattern.findAll(source.replace(groupPattern, ""))) {
+            webCopy[word.groupValues[1]] = word.groupValues[3]
+        }
+        assertEquals(webCopy, ScheduleRunStatusCopy.contract)
+    }
+
     @Test fun everyClosedSetMemberHasItsWords() {
         val sets = contract.getValue("closedSets").jsonObject
         fun list(name: String) = sets[name]?.jsonArray?.map { it.jsonPrimitive.content } ?: run { fail("closedSets.$name"); emptyList() }

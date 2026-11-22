@@ -15,6 +15,7 @@ import {
   SCHEDULE_REQUEST_STATES,
   SCHEDULE_RUN_SESSION_STATES,
   SCHEDULE_RUN_STATES,
+  SCHEDULE_RUN_STATUS_COPY,
   SCHEDULE_RUN_TRIGGERS,
   SCHEDULE_STALE_REASONS,
   SCHEDULE_STATES,
@@ -69,6 +70,10 @@ function strings(value: unknown): string[] {
 describe('schedule contract', () => {
   it('SCHEDULE_COPY is the contract copy, byte for byte', () => {
     expect(CONTRACT.copy).toEqual(JSON.parse(JSON.stringify(SCHEDULE_COPY)));
+  });
+
+  it('SCHEDULE_RUN_STATUS_COPY is the contract run status copy, byte for byte', () => {
+    expect(CONTRACT.runStatusCopy).toEqual(SCHEDULE_RUN_STATUS_COPY);
   });
 
   it('every line is English', () => {

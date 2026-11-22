@@ -46,7 +46,8 @@ class ScheduleApi(private val api: OrbitApi, private val handle: SessionHandle) 
     suspend fun pause(id: String) { send(listOf("schedules", id, "pause"), HttpMethod.POST) }
     suspend fun resume(id: String) { send(listOf("schedules", id, "resume"), HttpMethod.POST) }
     /** Run now: one run outside the rule, counted against the week like any other. */
-    suspend fun runNow(id: String) { send(listOf("schedules", id, "run"), HttpMethod.POST) }
+    suspend fun runNow(id: String): ScheduleRunAnswer? =
+        ScheduleRunAnswer.parse(parse(send(listOf("schedules", id, "run"), HttpMethod.POST)))
     /** Undo one revision: the change line's and the history's Undo. */
     suspend fun undo(id: String, revision: Int) {
         send(listOf("schedules", id, "undo"), HttpMethod.POST, buildJsonObject { put("revision", revision) })
