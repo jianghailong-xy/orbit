@@ -24,6 +24,8 @@
  *       `end_reason` null and `last_turn_outcome` FAILED, reads as a failure, and the retry armed for it fires
  *   (7) the token is read per request: declared on the failed turn and not on the end (the old finalize), or the
  *       reverse (the old failed turn, then a release), the session ends released and reads as the failure
+ *   (8) the token in the body's `releaseProtocol` (how a runner on the link declares it, step 6.2) is the same
+ *       declaration; any other word there is none
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/session-release-protocol.pg.spec.ts
  *
@@ -514,5 +516,28 @@ test('one server serves the old and the new runner protocol (plan step 6.1)', {
     assert.deepEqual(await facts(sql, b.id, b.failing), before, 'a release of a released session changes nothing');
     assert.equal(await commentsOn(sql, b.taskId), 1);
     // And declared on the failed turn with nothing after it is (6): the cancel grace releases it.
+  });
+
+  await t.test('(8) the declaration in the body, as a runner on the link sends it, is the same declaration', async () => {
+    // The link forwards only what its Hello declared and carries no header of its own (plan step 6.2): the body's
+    // releaseProtocol says it instead.
+    const old = await taskRun('body-old');
+    await s.api.turnComplete({ id: old.w.runnerId }, old.id, { turnId: old.failing, ...FAILED_TURN } as never);
+    await s.api.finalize({ id: old.w.runnerId }, old.id, { status: SharedRunStatus.FAILED } as never);
+    const r = await taskRun('body-declared');
+    const answer = await s.api.turnComplete({ id: r.w.runnerId }, r.id,
+      { turnId: r.failing, ...FAILED_TURN, releaseProtocol: SESSION_RELEASE_V1 } as never);
+    assert.equal(answer.status, RunStatus.RUNNING, 'held, as under the header');
+    assert.equal((await facts(sql, r.id, r.failing)).released, false);
+    await s.api.release({ id: r.w.runnerId }, r.id, { releaseProtocol: SESSION_RELEASE_V1 } as never);
+    assert.deepEqual(await facts(sql, r.id, r.failing), await facts(sql, old.id, old.failing),
+      'and its release ends in the old protocol\'s facts');
+    // Any other word in the field declares nothing: the old protocol.
+    const other = await taskRun('body-other');
+    const oldAnswer = await s.api.turnComplete({ id: other.w.runnerId }, other.id,
+      { turnId: other.failing, ...FAILED_TURN, releaseProtocol: 'session-release/v2' } as never);
+    assert.equal(oldAnswer.status, RunStatus.FAILED);
+    assert.match(await refusal(s.api.release({ id: other.w.runnerId }, other.id, { releaseProtocol: 'yes' } as never)),
+      /session-release\/v1/);
   });
 });

@@ -28,3 +28,34 @@ export function readRelease(current: ReleaseReportFacts, cutOffTurnOutcome: 'FAI
   if (current.endReason != null || current.cancelRequestedAt) return 'END_ASKED';
   return cutOffTurnOutcome === 'FAILED' ? 'FAILED_CUT_OFF' : 'STOPPED';
 }
+
+/**
+ * The apiserver's switch for offering the new runner protocol (SESSION_RELEASE_V1): `ORBIT_SESSION_RELEASE_V1=on`. Off
+ * unless set. While it is on, every heartbeat answer says `sessionReleaseV1: true`, and a runner declares the protocol
+ * only on the strength of that word (runner-go session_release.go). The server serves a runner that declares it either
+ * way, switch or no switch: the switch decides only whether runners are told to.
+ *
+ * Why a switch and not the release itself: a replica cannot know what the other replicas run. During a hand-over from a
+ * server without SESSION_RELEASE_V1, that older replica's reaper would release a held failed turn as a stop, and its
+ * finalize would read the hold as CANCELLED, losing the failure and its retry. So it is the operator who says the fleet
+ * is safe. Turn it on only once every replica runs a release that serves the protocol, and turn it off before rolling
+ * back past one (docs/session-three-state-plan.md step 6.2).
+ */
+export const SESSION_RELEASE_SWITCH = 'ORBIT_SESSION_RELEASE_V1';
+
+export function sessionReleaseOffered(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env[SESSION_RELEASE_SWITCH]?.trim().toLowerCase() === 'on';
+}
+
+/**
+ * Whether a runner report declares SESSION_RELEASE_V1: in X-Orbit-Runner-Capabilities over HTTPS, or in the body's
+ * `releaseProtocol`, which is how a runner on the runner link declares it per request (the link forwards only the
+ * capabilities its Hello declared, and carries no request header of its own).
+ */
+export function declaresSessionRelease(
+  declaredInHeader: boolean,
+  body: { releaseProtocol?: unknown } | null | undefined,
+  token: string,
+): boolean {
+  return declaredInHeader || body?.releaseProtocol === token;
+}
