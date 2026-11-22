@@ -185,6 +185,10 @@ export interface ManagedInstance {
    *  now (Docker: the image ID against the profile's `runner.image`, which an upgrade moves on; Kubernetes: a Pod
    *  container's image against the profile's `runner.image`). Absent otherwise. */
   readonly previousImage?: string;
+  /** With `previousImage`: the source commit the image it is made from now was built from (its
+   *  `org.opencontainers.image.revision` label; Docker: as the channel reports it, Kubernetes: the profile's
+   *  `runner.imageRevision`). Absent when the host or profile does not say. */
+  readonly currentImageRevision?: string;
 }
 
 /** A fencing receipt left for an instance, and what reading it concluded. */
@@ -282,8 +286,9 @@ export interface ManagedRunnerBackend {
   recheckReachability?(): Promise<void>;
   /**
    * The image a READY instance of a previous image (`previousImage`) is moved onto once it is idle: drained and woken
-   * at once as the next generation (the manager's image roll). Kubernetes: the profile's `runner.image`. Absent on a
-   * backend whose instances keep their image until they next sleep (Docker).
+   * at once as the next generation (the manager's image roll). Kubernetes: the profile's `runner.image`; Docker: the
+   * image new containers are made from (the profile's, or the channel's on a profile that adopts it). Absent on a
+   * backend whose instances keep their image until they next sleep, or while that image is not known yet.
    */
   readonly rollImage?: string;
 

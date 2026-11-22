@@ -231,7 +231,7 @@ final class TranscriptScrollWiringTests: XCTestCase {
                       "the dismissed review releases its remembered conversation")
         let held = try XCTUnwrap(blocks(opening:
             "private func holdScroll(to rowID: String, anchor: UnitPoint, opensReview: Bool = false,"
-                + " animated: Bool = true) {",
+                + " animated: Bool = true, putsBack: Bool = false) {",
                                        in: view).first)
         XCTAssertTrue(held.contains("sessionID: console.sessionID, opensReview: opensReview"),
                       "the deferred request keeps its originating conversation and review intent")

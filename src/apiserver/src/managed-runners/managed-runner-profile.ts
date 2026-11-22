@@ -59,6 +59,9 @@ export interface ManagedRunnerProfile {
   runner: {
     /** Pinned by digest: `<repository>@sha256:<64 hex>`. */
     image: string;
+    /** That image's `org.opencontainers.image.revision` label, the source commit it was built from: what the status
+     *  names as the current build when a runner runs an older one. Optional: without it the status cannot tell. */
+    imageRevision?: string;
     /** The Orbit server the runner reports to: HTTPS, or HTTP to a loopback address. */
     serverUrl: string;
     maxConcurrent: number;
@@ -190,6 +193,9 @@ export interface DockerRunnerHost extends DockerChannelHost {
   /** This host's pool budget; absent, the profile's `capacity` (if any), the rest derived from the host. */
   capacity?: DockerRunnerProfile['capacity'];
 }
+
+/** A source commit, as the image's revision label carries it. */
+const SOURCE_REVISION = /^[0-9a-f]{7,40}$/;
 
 /** `runner.image` on a remote profile: adopt the image each channel reports in /v1/info. */
 export const DOCKER_IMAGE_FROM_CHANNEL = 'channel';
@@ -328,6 +334,9 @@ export function parseManagedRunnerProfile(value: unknown): ManagedRunnerProfileR
     ...(at('files') === undefined ? {} : { files: { namespace: text('files.namespace', DNS_LABEL, 'must be a DNS label') } }),
     runner: {
       image: text('runner.image', PINNED_IMAGE, 'must be pinned by digest (<repository>@sha256:<64 hex>)'),
+      ...(at('runner.imageRevision') !== undefined
+        ? { imageRevision: text('runner.imageRevision', SOURCE_REVISION, 'must be a git commit SHA (7 to 40 lowercase hex)') }
+        : {}),
       serverUrl: https('runner.serverUrl', true),
       maxConcurrent: count('runner.maxConcurrent', 1),
       tmpSizeLimit: text('runner.tmpSizeLimit', QUANTITY, 'is not a quantity'),

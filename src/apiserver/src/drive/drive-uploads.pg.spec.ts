@@ -31,7 +31,7 @@ import { test } from 'node:test';
 
 import { type INestApplication, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { NestFactory, Reflector } from '@nestjs/core';
+import { APP_INTERCEPTOR, NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { json } from 'express';
 import type { PrismaClient } from '@prisma/client';
@@ -39,6 +39,7 @@ import { Client } from 'pg';
 
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { FilesService } from '../files/files.service';
+import { UserFileResponseInterceptor } from '../files/user-file-response';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
@@ -46,7 +47,7 @@ import { DriveChunksService, DRIVE_CHUNK_MAX } from './drive-chunks.service';
 import { DriveContentService } from './drive-content.service';
 import { DriveDownloadLinks } from './drive-download-links';
 import { DriveUploadsService } from './drive-uploads.service';
-import { DriveController } from './drive.controller';
+import { DriveController, DriveDownloadController } from './drive.controller';
 import { DriveService } from './drive.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -72,10 +73,12 @@ test('Orbit Files drive: resumable upload and ranged download', { skip: !URL, co
   let caller: string = owner;
 
   @Module({
-    controllers: [DriveController],
+    controllers: [DriveController, DriveDownloadController],
     providers: [
       JwtAuthGuard,
       Reflector,
+      // As FilesModule registers it: every StreamableFile leaves under the user-file rule.
+      { provide: APP_INTERCEPTOR, useClass: UserFileResponseInterceptor },
       { provide: JwtService, useValue: { verifyAsync: async () => ({ sub: caller }) } },
       { provide: PrismaService, useValue: db },
       { provide: FilesService, useValue: files },
@@ -159,6 +162,26 @@ test('Orbit Files drive: resumable upload and ranged download', { skip: !URL, co
     assert.equal(sha256(got.bytes), sha256(whole));
     assert.equal(got.reply.headers.get('accept-ranges'), 'bytes');
     assert.equal(got.reply.headers.get('etag')?.startsWith(`"${versionId}.`), true);
+  });
+
+  await t.test('(1b) every content reply names the file it saves, under the user-file rule', async () => {
+    const name = 'résumé 日本語.bin';
+    const upload = await open({ name, size: 5 });
+    assert.equal((await putChunk(upload.id, 0, Buffer.from('hello'))).status, 200);
+    const done = (await (await call('POST', `/uploads/${upload.id}/complete`)).json()) as { id: string; currentVersionId: string };
+    const expected = `attachment; filename*=UTF-8''${encodeURIComponent(name)}`;
+    const link = (await (await call('POST', `/entries/${done.id}/download-link`, { body: {} })).json()) as { path: string };
+    const routes = [
+      await fetch(`http://127.0.0.1:${(app.getHttpServer().address() as AddressInfo).port}${link.path}`),
+      (await download(done.id)).reply,
+      await call('GET', `/versions/${done.currentVersionId}/content`),
+    ];
+    for (const reply of routes) {
+      assert.equal(reply.status, 200);
+      assert.equal(reply.headers.get('content-disposition'), expected);
+      assert.equal(reply.headers.get('content-security-policy'), 'sandbox');
+      assert.equal(reply.headers.get('x-content-type-options'), 'nosniff');
+    }
   });
 
   await t.test('(2) a ranged download returns the requested bytes', async () => {

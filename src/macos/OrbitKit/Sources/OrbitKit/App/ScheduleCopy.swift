@@ -156,6 +156,7 @@ public enum ScheduleCopy {
     ]
     public static let failureReasons: [String: String] = [
         "RUNNER_UNAVAILABLE": "found no runner online",
+        "RUNNER_FULL": "waited for a full runner until its window closed",
         "QUOTA": "hit the engine's usage limit",
         "ENGINE_CRASHED_BEFORE_START": "stopped before its engine started",
         "LANDING_FAILED": "could not land on main",
@@ -478,6 +479,7 @@ public enum ScheduleCopy {
         "runStates.HELD": ScheduleCopy.runStates["HELD"]!,
         "runStates.CANCELLED": ScheduleCopy.runStates["CANCELLED"]!,
         "failureReasons.RUNNER_UNAVAILABLE": ScheduleCopy.failureReasons["RUNNER_UNAVAILABLE"]!,
+        "failureReasons.RUNNER_FULL": ScheduleCopy.failureReasons["RUNNER_FULL"]!,
         "failureReasons.QUOTA": ScheduleCopy.failureReasons["QUOTA"]!,
         "failureReasons.ENGINE_CRASHED_BEFORE_START": ScheduleCopy.failureReasons["ENGINE_CRASHED_BEFORE_START"]!,
         "failureReasons.REPORTED_FAILED": ScheduleCopy.failureReasons["REPORTED_FAILED"]!,

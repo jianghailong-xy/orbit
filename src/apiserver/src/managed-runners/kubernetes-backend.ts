@@ -163,8 +163,8 @@ function podPreparing(pod: Pod): boolean {
   });
 }
 
-/** `pod` as an instance, `image` being the one the profile names now. */
-function instanceOf(pod: Pod, image: string): KubeInstance {
+/** `pod` as an instance, `image` being the one the profile names now and `revision` its source commit, if known. */
+function instanceOf(pod: Pod, image: string, revision?: string): KubeInstance {
   const terminated = podTerminated(pod);
   const previous = podImages(pod).find((made) => made !== image);
   return {
@@ -180,7 +180,7 @@ function instanceOf(pod: Pod, image: string): KubeInstance {
     // itself: it waits for the manager, which records its stop and then removes it (`removeInstance`).
     removing: !!pod.metadata.deletionTimestamp && !(terminated && podHeldForStopReport(pod)),
     exit: exitOf(pod),
-    ...(previous ? { previousImage: previous } : {}),
+    ...(previous ? { previousImage: previous, ...(revision ? { currentImageRevision: revision } : {}) } : {}),
     pod,
   };
 }
@@ -327,7 +327,7 @@ export class KubernetesBackend implements ManagedRunnerBackend {
 
   async readInstance(mapping: ManagedRunner): Promise<KubeInstance | null> {
     const pod = await this.kube.pods.get(managedPodName(mapping.runnerId));
-    return pod ? instanceOf(pod, this.profile.runner.image) : null;
+    return pod ? instanceOf(pod, this.profile.runner.image, this.profile.runner.imageRevision) : null;
   }
 
   /**

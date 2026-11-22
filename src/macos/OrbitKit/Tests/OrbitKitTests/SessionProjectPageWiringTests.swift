@@ -236,31 +236,29 @@ final class SessionProjectPageWiringTests: XCTestCase {
                              to: "\n        }")
         XCTAssertTrue(card.contains("console.cardRequestFollowed()"))
         XCTAssertTrue(card.contains("atBottom = false"), "off the live tail, so the next publish does not pull it down")
-        XCTAssertTrue(card.contains("holdScroll(to: hold.rowID, anchor: .top, animated: false)"),
+        XCTAssertTrue(card.contains("holdScroll(to: request.rowID, anchor: .top, animated: false)"),
                       "the card's top — header and title — not its middle or the transcript's end")
         XCTAssertFalse(card.contains("opensReview"), "the card is answered in place, no review sheet")
-        XCTAssertTrue(card.contains("for delay in [0.4, 1.0, 2.0] {"),
-                      "re-aimed while the rows above are measured: a self-sizing List lands by estimates first")
+        XCTAssertTrue(card.contains("landing = TranscriptLanding(rowID: request.rowID, sessionID: sessionID, place: .top, at: Date())"),
+                      "held while the rows above are measured: a self-sizing List lands by estimates first")
         let publishFollow = try slice(view, from: ".onChange(of: console.stateRevision) {", to: "recomputeStuck()")
-        XCTAssertTrue(publishFollow.contains("if let hold = cardHold, hold.sessionID == console.sessionID, Date() < hold.until {"),
-                      "a publish in the first moments keeps the card's top rather than following the tail")
-        XCTAssertTrue(view.contains("atBottom = true; cardHold = nil; console.readerTookOver()"),
+        XCTAssertTrue(publishFollow.contains("if keepLanding(proxy) {"),
+                      "a publish while the card is held keeps the card's top rather than following the tail")
+        XCTAssertTrue(view.contains("atBottom = true; landing = nil; console.readerTookOver()"),
                       "the reader's own send lets go of the card, and of a request not yet followed")
-        // The reader's own scroll lets go too: the re-aims and the publish branch stop once a finger
+        // The reader's own scroll lets go too: the put-backs and the publish branch stop once a finger
         // (or, on macOS, the trackpad or wheel) has moved the list.
         let trackers = try slice(view, from: "private func tracker(ruler:", to: "private func repinAfterResize")
-        XCTAssertEqual(trackers.components(separatedBy: "readerScrolled: { cardHold = nil; console.readerTookOver() }").count - 1, 2,
+        XCTAssertEqual(trackers.components(separatedBy: "readerScrolled: { landing = nil; console.readerTookOver() }").count - 1, 2,
                        "both platforms' trackers clear the hold, and a request not yet followed, on the reader's scroll")
         let tookOver = try slice(console, from: "func readerTookOver() {", to: "\n    }")
-        XCTAssertTrue(tookOver.contains("pendingWaitingCardUntil = nil"))
+        XCTAssertTrue(tookOver.contains("pendingWaitingCardAt = nil"))
         XCTAssertTrue(tookOver.contains("cardRequest = nil"))
         let scrollTracker = try slice(view, from: "private struct ScrollTracker", to: "private struct AnchorRow: ViewModifier {")
         XCTAssertTrue(scrollTracker.contains("if phase == .interacting { readerScrolled() }"),
                       "the reader's interaction, never the app's own scrollTo (.animating or none)")
         XCTAssertEqual(try branches(of: "if phase == .interacting { readerScrolled() }", in: scrollTracker), [],
                        "on both platforms, not inside the iOS-only block")
-        let reaim = try slice(card, from: "for delay in [0.4, 1.0, 2.0] {", to: "holdScroll(")
-        XCTAssertTrue(reaim.contains("guard cardHold == hold"), "a re-aim after the reader scrolled does nothing")
         XCTAssertTrue(view.contains(".onAppear { proxy.scrollTo(bottomID, anchor: .bottom); recomputeStuck() }"),
                       "every other opening keeps the bottom pin")
     }

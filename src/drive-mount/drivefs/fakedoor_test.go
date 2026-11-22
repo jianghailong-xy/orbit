@@ -36,6 +36,8 @@ type fakeDoor struct {
 	removed  map[string]*fakeRemoved
 	puts     int
 	fail     func(r *http.Request) int // a status to answer instead, or 0
+	// delay is how long to keep a request waiting before serving it, holding nothing else up.
+	delay func(r *http.Request) time.Duration
 	// loseCommitAnswers commits are applied and then answered 502, as when the answer is lost on the way.
 	loseCommitAnswers int
 }
@@ -124,6 +126,19 @@ func (f *fakeDoor) at(p string) *fakeEntry {
 	return cur
 }
 
+// add makes a folder, or an empty file, named name in the folder parent, as another runner would.
+func (f *fakeDoor) add(parent, kind, name string) *fakeEntry {
+	e := &fakeEntry{id: f.id("e"), parent: parent, kind: kind, name: name, mtime: time.Now()}
+	if kind == "FILE" {
+		v := &fakeVersion{id: f.id("v"), entry: e.id}
+		f.versions[v.id] = v
+		e.version = v.id
+	}
+	f.entries[e.id] = e
+	f.change(e, "UPSERT")
+	return e
+}
+
 func (f *fakeDoor) change(e *fakeEntry, op string) {
 	f.seq++
 	e.seq = f.seq
@@ -142,6 +157,12 @@ func refuse(w http.ResponseWriter, status int, code string, extra map[string]int
 
 func (f *fakeDoor) serve(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
+	if f.delay != nil {
+		d := f.delay(r)
+		f.mu.Unlock()
+		time.Sleep(d)
+		f.mu.Lock()
+	}
 	defer f.mu.Unlock()
 	if f.fail != nil {
 		if st := f.fail(r); st != 0 {

@@ -1,7 +1,7 @@
-import { HttpException, HttpStatus, Injectable, Logger, Optional } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable, Logger, type OnApplicationBootstrap, type OnModuleDestroy, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { randomBytes } from 'node:crypto';
-import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
+import { classifyTransactionFault, loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { DRIVE_CHUNK_MAX } from './drive-chunks.service';
@@ -14,11 +14,13 @@ import { DRIVE_CHUNK_MAX } from './drive-chunks.service';
  *   - An overwrite makes a version and puts the previous one in Trash, in a VERSION group of its own; an append grows the
  *     current version in place and makes none (§3.2).
  *   - A delete moves an entry, and everything under a folder, to Trash in one DELETE group; deletes carrying the same burst
- *     key within 10 s join one group, so an `rm -rf` through the mount is one group (§3.3, §3.4).
- *   - A group restores whole, under the owner's lock, recreating missing folders, and a name a live entry took meanwhile
- *     gets the first free `name (n).ext` (§3.5).
+ *     key within 10 s join one group, so an `rm -rf` through the mount is one group (§3.3, §3.4). A folder is hidden by
+ *     the first transaction and what is under it is marked a batch per transaction, so no folder is too big to delete.
+ *   - A group restores whole, under the owner's lock, a batch per transaction, recreating missing folders, and a name a
+ *     live entry took meanwhile gets the first free `name (n).ext` (§3.5).
  *   - Folder trash, folder move, restore and delete for good take a per-account advisory lock; a write into a folder holds
- *     that folder FOR SHARE and re-checks it is live (§1.4). Every transaction is bounded: 10 s a statement, 20 s in all.
+ *     that folder FOR SHARE and re-checks it is live (§1.4). Every transaction is bounded: 10 s a statement, 20 s in all;
+ *     one cut off by a bound answers 503 DRIVE_LIMIT_HIT, not a bare 500.
  *   - Every change writes one drive_change row and moves the entry's `seq`; the feed re-reads 60 s back so a row whose
  *     transaction committed late is never skipped (§5.4). Each committed change is announced as `drive.changed`.
  *
@@ -38,6 +40,13 @@ const PAGE_MAX = 1000;
 const PAGE_DEFAULT = 200;
 const FEED_PAGE = 1000;
 const TRANSACTION = { timeout: 20_000, maxWait: 5_000 };
+/** How many entries one transaction of a folder's trash or of a restore moves at most (§1.4, §3.5). */
+export const DRIVE_TRASH_BATCH = 1000;
+/** How many top-level items whose folder is not live one restore transaction makes a place for (liveDestination). */
+const ORPHAN_BATCH = 100;
+/** A group still marking that has not been added to for this long is taken up by the drive's timer (finishStoppedTrash). */
+export const STOPPED_MARKING_MS = 10 * 60 * 1000;
+const STOPPED_MARKING_SWEEP_MS = 10 * 60 * 1000;
 
 export const DRIVE_ENTRY_NOT_FOUND = 'DRIVE_ENTRY_NOT_FOUND';
 export const DRIVE_PARENT_GONE = 'DRIVE_PARENT_GONE';
@@ -56,6 +65,7 @@ export const DRIVE_VERSION_NOT_FOUND = 'DRIVE_VERSION_NOT_FOUND';
 export const DRIVE_VERSION_CURRENT = 'DRIVE_VERSION_CURRENT';
 export const DRIVE_TRASH_GROUP_NOT_FOUND = 'DRIVE_TRASH_GROUP_NOT_FOUND';
 export const DRIVE_CURSOR_INVALID = 'DRIVE_CURSOR_INVALID';
+export const DRIVE_LIMIT_HIT = 'DRIVE_LIMIT_HIT';
 
 type Tx = Prisma.TransactionClient;
 export type DriveEntryRow = EntryRow;
@@ -130,6 +140,21 @@ function refusal(status: HttpStatus, code: string, message: string, extra: Recor
 const notFound = () => refusal(HttpStatus.NOT_FOUND, DRIVE_ENTRY_NOT_FOUND, 'No such file or folder.');
 const parentGone = () => refusal(HttpStatus.NOT_FOUND, DRIVE_PARENT_GONE, 'The folder is gone or in Trash.');
 const nameTaken = (name: string) => refusal(HttpStatus.CONFLICT, DRIVE_NAME_TAKEN, `"${name}" is already taken in that folder.`);
+
+/**
+ * A drive transaction cut off by a bound of §1.4 (a statement past 10 s, the transaction past 20 s), or turned away by the
+ * database, answered 503 DRIVE_LIMIT_HIT rather than a bare 500. What committed before it stays, and a folder's trash or
+ * a restore sent again carries on from there.
+ */
+function limitHit(error: unknown): never {
+  if (!(error instanceof HttpException) && classifyTransactionFault(error).family === 'RESOURCE') {
+    throw new HttpException(
+      { statusCode: 503, code: DRIVE_LIMIT_HIT, message: 'The drive could not finish this in time. What was done is kept; try again.', retryable: true },
+      HttpStatus.SERVICE_UNAVAILABLE,
+    );
+  }
+  throw error;
+}
 
 /** A version 7 UUID, as the schema's own ids are, for rows written with an id chosen first. */
 export function uuidv7(): string {
@@ -241,13 +266,33 @@ const isUniqueViolation = (error: unknown) =>
   error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
 
 @Injectable()
-export class DriveService {
+export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(DriveService.name);
+  private finisher?: ReturnType<typeof setInterval>;
+  private finishing?: Promise<unknown>;
 
   constructor(
     private readonly prisma: PrismaService,
     @Optional() private readonly realtime?: RealtimeService,
   ) {}
+
+  /** The timer that finishes a folder's trash left part-way (finishStoppedTrash). Racing a live marking is safe: both mark under the account's lock. */
+  onApplicationBootstrap(): void {
+    this.finisher = setInterval(() => {
+      if (this.finishing) return;
+      this.finishing = this.finishStoppedTrash()
+        .catch((error) => this.logger.error(`finishing a folder trash left part-way failed: ${error instanceof Error ? error.message : String(error)}`))
+        .finally(() => {
+          this.finishing = undefined;
+        });
+    }, STOPPED_MARKING_SWEEP_MS);
+    this.finisher.unref();
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    clearInterval(this.finisher);
+    await this.finishing;
+  }
 
   /** `drive.changed` after a commit: an accelerant, which a client may miss and reads the feed for anyway. */
   private announce(ownerId: string, seq: number | null): void {
@@ -1041,147 +1086,182 @@ export class DriveService {
    * key (a delete through the mount) it joins the open DELETE group of the same key last added to less than 10 s ago, so
    * the many deletes of one `rm -rf` are one group whose top item is the folder (§3.4). The owner's own delete is a
    * group of its own, closed at once, which the web's undo restores.
+   *
+   * A folder is hidden at once: the first transaction marks it, and as much under it as one batch holds. What is left is
+   * marked into the same group a batch per transaction (finishTrash), so a folder of any size stays inside §1.4's bounds.
+   * A folder whose marking stopped part-way (a bound hit, the process gone) is finished by deleting it again, which then
+   * answers its group, or by the drive's timer (finishStoppedTrash).
    */
   async moveToTrash(
     ownerId: string,
     id: string,
     options: { writer?: DriveWriter; burstKey?: string | null; burstWindowMs?: number } = {},
   ) {
-    const outcome = await withTransactionRetry(this.prisma, async (tx) => {
+    const first = await withTransactionRetry(this.prisma, async (tx) => {
       await bound(tx);
       const seen = await tx.driveEntry.findFirst({ where: { id, ownerId } });
-      if (!seen || seen.trashedAt) throw notFound();
-      if (seen.parentId === null) throw refusal(HttpStatus.CONFLICT, DRIVE_ROOT, 'The root folder cannot be moved to Trash.');
-      if (seen.kind === 'FOLDER') {
-        await lockAccount(tx, ownerId);
-        // First every folder of the subtree FOR UPDATE, which waits out any create holding one FOR SHARE and stops new ones.
-        await tx.$queryRaw`
-          WITH RECURSIVE "sub" AS (
-            SELECT "id" FROM "drive_entry" WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
-            UNION ALL
-            SELECT e."id" FROM "drive_entry" e JOIN "sub" ON e."parent_id" = "sub"."id"
-             WHERE e."owner_id" = ${ownerId}::uuid AND e."kind" = 'FOLDER' AND e."trashed_at" IS NULL
-          )
-          SELECT "id" FROM "drive_entry" WHERE "id" IN (SELECT "id" FROM "sub") FOR UPDATE`;
-      } else {
-        await tx.$queryRaw`SELECT "id" FROM "drive_entry" WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid FOR UPDATE`;
+      if (!seen) throw notFound();
+      if (seen.trashedAt) {
+        const stopped = seen.kind === 'FOLDER' && seen.trashTop
+          && (await tx.driveTrashGroup.count({ where: { id: seen.trashGroupId!, ownerId, marking: true } })) > 0;
+        if (!stopped) throw notFound();
+        return { groupId: seen.trashGroupId!, seq: 0, open: null };
       }
+      if (seen.parentId === null) throw refusal(HttpStatus.CONFLICT, DRIVE_ROOT, 'The root folder cannot be moved to Trash.');
+      if (seen.kind === 'FOLDER') await lockAccount(tx, ownerId);
+      // The entry FOR UPDATE: for a folder this waits out any create holding it FOR SHARE and stops new ones (§1.4).
+      await tx.$queryRaw`SELECT "id" FROM "drive_entry" WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid FOR UPDATE`;
       const entry = await tx.driveEntry.findUniqueOrThrow({ where: { id } });
       if (entry.trashedAt) throw notFound();
       const writer = await checkedWriter(tx, ownerId, options.writer ?? OWNER_WRITER);
       const now = new Date();
       const groupId = await deleteGroupFor(tx, ownerId, entry, writer, now, options.burstKey ?? null, options.burstWindowMs);
-      // Then, in a statement of its own and so on a snapshot that sees every create that committed meanwhile, the entry
-      // and everything live under it.
-      const marked = await tx.$queryRaw<Array<{ id: string; parent_id: string | null; kind: string; size_bytes: bigint }>>`
-        WITH RECURSIVE "sub" AS (
-          SELECT "id" FROM "drive_entry" WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
-          UNION ALL
-          SELECT e."id" FROM "drive_entry" e JOIN "sub" ON e."parent_id" = "sub"."id"
-           WHERE e."owner_id" = ${ownerId}::uuid AND e."trashed_at" IS NULL
-        )
-        UPDATE "drive_entry" d
-           SET "trashed_at" = ${now}, "trash_group_id" = ${groupId}::uuid, "trash_top" = (d."id" = ${id}::uuid),
-               "updated_at" = ${now}
-          FROM "sub"
-         WHERE d."id" = "sub"."id" AND d."trashed_at" IS NULL
-        RETURNING d."id", d."parent_id", d."kind", d."size_bytes"`;
+      const top = await tx.$queryRaw<MarkedRow[]>`
+        UPDATE "drive_entry"
+           SET "trashed_at" = ${now}, "trash_group_id" = ${groupId}::uuid, "trash_top" = true, "updated_at" = ${now}
+         WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid AND "trashed_at" IS NULL
+        RETURNING "id", "parent_id", "kind", "size_bytes"`;
       // Items of the same burst already in the group hang under this folder now: it is their top.
       await tx.driveEntry.updateMany({
         where: { ownerId, trashGroupId: groupId, parentId: id, trashTop: true },
         data: { trashTop: false },
       });
+      // Then, in statements of their own and so on snapshots that see every create that committed meanwhile, what is
+      // live under it, up to a batch.
+      const under = entry.kind === 'FOLDER'
+        ? await markUnder(tx, ownerId, groupId, [id], now, DRIVE_TRASH_BATCH)
+        : { marked: [], open: [], verified: false };
+      const marked = [...top, ...under.marked];
       await tx.driveTrashGroup.update({
         where: { id: groupId },
-        data: {
-          lastAddedAt: now,
-          itemCount: { increment: marked.length },
-          sizeBytes: { increment: marked.reduce((sum, m) => sum + (m.kind === 'FILE' ? m.size_bytes : 0n), 0n) },
-        },
+        data: { lastAddedAt: now, ...countsOf(marked), ...(under.open.length ? { marking: true } : {}) },
       });
       const seq = await recordChanges(tx, ownerId, marked.map((m) => ({ entryId: m.id, parentId: m.parent_id, op: 'REMOVE' as const })));
-      return { groupId, seq };
-    }, loggedRetry(this.logger, 'drive.moveToTrash', { transaction: TRANSACTION }));
-    this.announce(ownerId, outcome.seq);
-    return { trashGroupId: outcome.groupId };
+      return { groupId, seq, open: under.open as string[] | null };
+    }, loggedRetry(this.logger, 'drive.moveToTrash', { transaction: TRANSACTION })).catch(limitHit);
+    this.announce(ownerId, first.seq);
+    if (first.open === null || first.open.length) await this.finishTrash(ownerId, first.groupId, first.open);
+    return { trashGroupId: first.groupId };
   }
 
   /**
-   * Restore one Trash group whole (§3.5), under the account's lock. Each top-level item goes back to its folder if that
-   * folder is live; otherwise the missing folders of its path are made again (a live folder of the same name is used).
-   * A name a live entry took meanwhile gets the first free `name (n).ext`; descendants come back with their item and keep
-   * their names. A VERSION group restores its version as the current one.
+   * What is still live under the folders of a group, marked into it a batch per transaction under the account's lock
+   * (§1.4): from `open`, the folders whose children are still to mark, or with null from a look over the whole group. A
+   * marking that ran out of open folders looks the group over once more when the group says its marking is under way, as
+   * another folder of a burst may still be marking into it; a look that finds nothing lifts the mark. Stops when the group
+   * is gone, restored or deleted for good meanwhile: what was not marked yet was never in Trash.
+   */
+  private async finishTrash(ownerId: string, groupId: string, open: string[] | null): Promise<void> {
+    for (let from = open; ;) {
+      const step = await withTransactionRetry(this.prisma, async (tx) => {
+        await bound(tx);
+        await lockAccount(tx, ownerId);
+        const group = await tx.driveTrashGroup.findFirst({ where: { id: groupId, ownerId }, select: { marking: true } });
+        if (!group) return null;
+        const now = new Date();
+        const under = await markUnder(tx, ownerId, groupId, from, now, DRIVE_TRASH_BATCH);
+        const done = under.verified || (!under.open.length && !group.marking);
+        await tx.driveTrashGroup.update({
+          where: { id: groupId },
+          data: { ...countsOf(under.marked), ...(under.verified ? { marking: false } : {}) },
+        });
+        const seq = await recordChanges(tx, ownerId, under.marked.map((m) => ({ entryId: m.id, parentId: m.parent_id, op: 'REMOVE' as const })));
+        return { seq, open: under.open, done };
+      }, loggedRetry(this.logger, 'drive.finishTrash', { transaction: TRANSACTION })).catch(limitHit);
+      if (!step) return;
+      this.announce(ownerId, step.seq);
+      if (step.done) return;
+      from = step.open.length ? step.open : null;
+    }
+  }
+
+  /**
+   * Every group whose folder marking stopped part-way and has not moved for STOPPED_MARKING_MS, finished (finishTrash):
+   * the drive timer's run, and a spec's. Answers how many it took up.
+   */
+  async finishStoppedTrash(now: Date = new Date()): Promise<number> {
+    const stopped = await this.prisma.driveTrashGroup.findMany({
+      where: { marking: true, lastAddedAt: { lt: new Date(now.getTime() - STOPPED_MARKING_MS) } },
+      select: { id: true, ownerId: true },
+      orderBy: { lastAddedAt: 'asc' },
+      take: 100,
+    });
+    for (const group of stopped) await this.finishTrash(group.ownerId, group.id, null);
+    return stopped.length;
+  }
+
+  /**
+   * Restore one Trash group whole (§3.5), under the account's lock, in transactions of at most DRIVE_TRASH_BATCH entries.
+   * Each top-level item goes back to its folder if that folder is live; otherwise the missing folders of its path are made
+   * again (a live folder of the same name is used). A name a live entry took meanwhile gets the first free `name (n).ext`;
+   * descendants come back with their item and keep their names, but for one a live entry took, or one a second entry of
+   * the group shares in the same folder, which gets the suffix too. A VERSION group restores its version as the current
+   * one. Sent again after a bound was hit, it carries on with what is still in the group.
    */
   async restoreGroup(ownerId: string, groupId: string, writer: DriveWriter = OWNER_WRITER) {
-    const outcome = await withTransactionRetry(this.prisma, async (tx) => {
-      await bound(tx);
-      await lockAccount(tx, ownerId);
-      const found = await tx.$queryRaw<Array<{ id: string; kind: string }>>`
-        SELECT "id", "kind" FROM "drive_trash_group" WHERE "id" = ${groupId}::uuid AND "owner_id" = ${ownerId}::uuid FOR UPDATE`;
-      if (!found.length) throw refusal(HttpStatus.NOT_FOUND, DRIVE_TRASH_GROUP_NOT_FOUND, 'No such group in Trash.');
-      const checked = await checkedWriter(tx, ownerId, writer);
-      const now = new Date();
-      if (found[0].kind === 'VERSION') {
-        const version = await tx.driveVersion.findFirst({ where: { ownerId, trashGroupId: groupId } });
-        if (!version) throw refusal(HttpStatus.NOT_FOUND, DRIVE_TRASH_GROUP_NOT_FOUND, 'No such group in Trash.');
-        const { entry, seq } = await restoreAsCurrent(tx, ownerId, version, checked, now);
-        return { restored: [entry.id], seq };
-      }
-      const changes: ChangeRow[] = [];
-      const tops = await tx.driveEntry.findMany({
-        where: { ownerId, trashGroupId: groupId, trashTop: true },
-        orderBy: [{ trashedAt: 'asc' }, { id: 'asc' }],
-      });
-      const restored: string[] = [];
-      for (const top of tops) {
-        const dest = await liveDestination(tx, ownerId, top.parentId!, checked, now, changes);
-        const name = await freeName(tx, ownerId, dest, top.name, top.kind, 'SUFFIX');
-        await tx.driveEntry.update({
-          where: { id: top.id },
-          data: { parentId: dest, name, trashedAt: null, trashGroupId: null, trashTop: false, updatedAt: now, ...lastWriterFields(checked, now) },
-        });
-        changes.push({ entryId: top.id, parentId: dest, op: 'UPSERT' });
-        restored.push(top.id);
-      }
-      // The rest hang under a top item. Two of them with one name in one folder (deleted, made again and deleted again in
-      // one burst) cannot both have it back: every one but the first gets a suffix, after the others are live.
-      const rest = await tx.driveEntry.findMany({
-        where: { ownerId, trashGroupId: groupId },
-        orderBy: [{ trashedAt: 'asc' }, { id: 'asc' }],
-        select: { id: true, parentId: true, name: true, kind: true },
-      });
-      const seenNames = new Set<string>();
-      const clashing: typeof rest = [];
-      for (const r of rest) {
-        const key = `${r.parentId}\u0000${r.name}`;
-        if (seenNames.has(key)) clashing.push(r);
-        else seenNames.add(key);
-      }
-      const clashIds = clashing.map((c) => c.id);
-      const bulk = await tx.driveEntry.updateManyAndReturn({
-        where: { ownerId, trashGroupId: groupId, ...(clashIds.length ? { id: { notIn: clashIds } } : {}) },
-        data: { trashedAt: null, trashGroupId: null, trashTop: false, updatedAt: now, ...lastWriterFields(checked, now) },
-        select: { id: true, parentId: true },
-      });
-      for (const b of bulk) {
-        changes.push({ entryId: b.id, parentId: b.parentId, op: 'UPSERT' });
-        restored.push(b.id);
-      }
-      for (const c of clashing) {
-        const name = await freeName(tx, ownerId, c.parentId!, c.name, c.kind, 'SUFFIX');
-        await tx.driveEntry.update({
-          where: { id: c.id },
-          data: { name, trashedAt: null, trashGroupId: null, trashTop: false, updatedAt: now, ...lastWriterFields(checked, now) },
-        });
-        changes.push({ entryId: c.id, parentId: c.parentId, op: 'UPSERT' });
-        restored.push(c.id);
-      }
-      await tx.driveTrashGroup.delete({ where: { id: groupId } });
-      const seq = await recordChanges(tx, ownerId, changes);
-      return { restored, seq };
-    }, loggedRetry(this.logger, 'drive.restoreGroup', { transaction: TRANSACTION }));
-    this.announce(ownerId, outcome.seq);
-    return { entryIds: outcome.restored };
+    const restored: string[] = [];
+    let open: string[] | null = null;
+    let orphansLeft = true;
+    for (let first = true; ; first = false) {
+      const step = await withTransactionRetry(this.prisma, async (tx) => {
+        await bound(tx);
+        await lockAccount(tx, ownerId);
+        const found = await tx.$queryRaw<Array<{ id: string; kind: string }>>`
+          SELECT "id", "kind" FROM "drive_trash_group" WHERE "id" = ${groupId}::uuid AND "owner_id" = ${ownerId}::uuid FOR UPDATE`;
+        if (!found.length) {
+          if (first) throw refusal(HttpStatus.NOT_FOUND, DRIVE_TRASH_GROUP_NOT_FOUND, 'No such group in Trash.');
+          return null;
+        }
+        const checked = await checkedWriter(tx, ownerId, writer);
+        const now = new Date();
+        if (found[0].kind === 'VERSION') {
+          const version = await tx.driveVersion.findFirst({ where: { ownerId, trashGroupId: groupId } });
+          if (!version) throw refusal(HttpStatus.NOT_FOUND, DRIVE_TRASH_GROUP_NOT_FOUND, 'No such group in Trash.');
+          const { entry, seq } = await restoreAsCurrent(tx, ownerId, version, checked, now);
+          return { ids: [entry.id], seq, open: [] as string[], orphansLeft: false, done: true };
+        }
+        const changes: ChangeRow[] = [];
+        const ids: string[] = [];
+        // Top-level items whose folder is not live: theirs is made again or reused (liveDestination), a few at a time.
+        const orphans = orphansLeft
+          ? await tx.$queryRaw<Array<{ id: string; parent_id: string; name: string; kind: string }>>`
+              SELECT e."id", e."parent_id", e."name", e."kind" FROM "drive_entry" e JOIN "drive_entry" p ON p."id" = e."parent_id"
+               WHERE e."owner_id" = ${ownerId}::uuid AND e."trash_group_id" = ${groupId}::uuid AND e."trash_top"
+                 AND p."trashed_at" IS NOT NULL
+               ORDER BY e."trashed_at" ASC, e."id" ASC LIMIT ${ORPHAN_BATCH}`
+          : [];
+        const reopened: string[] = [];
+        for (const top of orphans) {
+          const dest = await liveDestination(tx, ownerId, top.parent_id, checked, now, changes);
+          const name = await freeName(tx, ownerId, dest, top.name, top.kind, 'SUFFIX');
+          await tx.driveEntry.update({
+            where: { id: top.id },
+            data: { parentId: dest, name, trashedAt: null, trashGroupId: null, trashTop: false, updatedAt: now, ...lastWriterFields(checked, now) },
+          });
+          changes.push({ entryId: top.id, parentId: dest, op: 'UPSERT' });
+          ids.push(top.id);
+          if (top.kind === 'FOLDER') reopened.push(top.id);
+        }
+        // The rest come back folder by folder from the live folders they hang in: on the first pass every live folder
+        // an item of the group is in, top-level items included.
+        const from = open ?? (await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT DISTINCT e."parent_id" AS "id" FROM "drive_entry" e JOIN "drive_entry" p ON p."id" = e."parent_id"
+           WHERE e."owner_id" = ${ownerId}::uuid AND e."trash_group_id" = ${groupId}::uuid AND p."trashed_at" IS NULL`).map((r) => r.id);
+        const next = await restoreUnder(tx, ownerId, groupId, [...from, ...reopened], checked, now, DRIVE_TRASH_BATCH - ids.length, changes, ids);
+        const left = orphans.length === ORPHAN_BATCH;
+        const done = !left && !next.length;
+        if (done) await deleteEmptyGroups(tx, ownerId, [groupId]);
+        const seq = await recordChanges(tx, ownerId, changes);
+        return { ids, seq, open: next, orphansLeft: left, done };
+      }, loggedRetry(this.logger, 'drive.restoreGroup', { transaction: TRANSACTION })).catch(limitHit);
+      if (!step) break;
+      restored.push(...step.ids);
+      this.announce(ownerId, step.seq);
+      if (step.done) break;
+      open = step.open;
+      orphansLeft = step.orphansLeft;
+    }
+    return { entryIds: restored };
   }
 
   /**
@@ -1189,73 +1269,54 @@ export class DriveService {
    * rest), under the account's lock like the whole group. The item is any entry of the group: a top item, or one under a
    * folder of the group. It goes back to its folder if that folder is live; otherwise the missing folders of its path are
    * made again, as a group restore makes them (liveDestination), and the group's own folders stay in Trash. A name a live
-   * entry took meanwhile gets the first free suffix. What hangs under the item comes back with it and keeps its names.
-   * The group keeps the rest; it is deleted once nothing is in it, its counts recounted otherwise.
+   * entry took meanwhile gets the first free suffix. What hangs under the item comes back with it and keeps its names, in
+   * transactions of at most DRIVE_TRASH_BATCH entries. The group keeps the rest; it is deleted once nothing is in it, its
+   * counts recounted otherwise.
    */
   async restoreItem(ownerId: string, groupId: string, entryId: string, writer: DriveWriter = OWNER_WRITER) {
-    const outcome = await withTransactionRetry(this.prisma, async (tx) => {
-      await bound(tx);
-      await lockAccount(tx, ownerId);
-      const found = await tx.$queryRaw<Array<{ id: string; kind: string }>>`
-        SELECT "id", "kind" FROM "drive_trash_group" WHERE "id" = ${groupId}::uuid AND "owner_id" = ${ownerId}::uuid FOR UPDATE`;
-      if (!found.length) throw refusal(HttpStatus.NOT_FOUND, DRIVE_TRASH_GROUP_NOT_FOUND, 'No such group in Trash.');
-      const item = await tx.driveEntry.findFirst({ where: { id: entryId, ownerId, trashGroupId: groupId } });
-      if (!item) throw notFound();
-      const checked = await checkedWriter(tx, ownerId, writer);
-      const now = new Date();
-      const changes: ChangeRow[] = [];
-      const dest = await liveDestination(tx, ownerId, item.parentId!, checked, now, changes);
-      const name = await freeName(tx, ownerId, dest, item.name, item.kind, 'SUFFIX');
-      await tx.driveEntry.update({
-        where: { id: item.id },
-        data: { parentId: dest, name, trashedAt: null, trashGroupId: null, trashTop: false, updatedAt: now, ...lastWriterFields(checked, now) },
-      });
-      changes.push({ entryId: item.id, parentId: dest, op: 'UPSERT' });
-      const restored = [item.id];
-      // What hangs under it in the group comes back with it, under the names it had.
-      const under = await tx.$queryRaw<Array<{ id: string; parent_id: string; name: string; kind: string }>>`
-        WITH RECURSIVE "sub" AS (
-          SELECT e."id", e."parent_id", e."name", e."kind", e."trashed_at" FROM "drive_entry" e
-           WHERE e."parent_id" = ${item.id}::uuid AND e."owner_id" = ${ownerId}::uuid AND e."trash_group_id" = ${groupId}::uuid
-          UNION ALL
-          SELECT e."id", e."parent_id", e."name", e."kind", e."trashed_at" FROM "drive_entry" e JOIN "sub" ON e."parent_id" = "sub"."id"
-           WHERE e."owner_id" = ${ownerId}::uuid AND e."trash_group_id" = ${groupId}::uuid
-        )
-        SELECT "id", "parent_id", "name", "kind" FROM "sub" ORDER BY "trashed_at" ASC, "id" ASC`;
-      // Two of them with one name in one folder (deleted, made again and deleted again in one burst) cannot both have it
-      // back: every one but the first gets a suffix, after the others are live — as a whole group's restore does.
-      const seenNames = new Set<string>();
-      const clashing = under.filter((r) => {
-        const key = `${r.parent_id}\u0000${r.name}`;
-        if (seenNames.has(key)) return true;
-        seenNames.add(key);
-        return false;
-      });
-      const clashIds = new Set(clashing.map((c) => c.id));
-      const plain = under.filter((r) => !clashIds.has(r.id)).map((r) => r.id);
-      if (plain.length) {
-        await tx.driveEntry.updateMany({
-          where: { ownerId, trashGroupId: groupId, id: { in: plain } },
-          data: { trashedAt: null, trashGroupId: null, trashTop: false, updatedAt: now, ...lastWriterFields(checked, now) },
-        });
-      }
-      for (const r of under) {
-        if (clashIds.has(r.id)) {
-          const freed = await freeName(tx, ownerId, r.parent_id, r.name, r.kind, 'SUFFIX');
-          await tx.driveEntry.update({
-            where: { id: r.id },
-            data: { name: freed, trashedAt: null, trashGroupId: null, trashTop: false, updatedAt: now, ...lastWriterFields(checked, now) },
-          });
+    const restored: string[] = [];
+    let open: string[] | null = null;
+    for (;;) {
+      const step = await withTransactionRetry(this.prisma, async (tx) => {
+        await bound(tx);
+        await lockAccount(tx, ownerId);
+        const found = await tx.$queryRaw<Array<{ id: string; kind: string }>>`
+          SELECT "id", "kind" FROM "drive_trash_group" WHERE "id" = ${groupId}::uuid AND "owner_id" = ${ownerId}::uuid FOR UPDATE`;
+        if (!found.length) {
+          if (open === null) throw refusal(HttpStatus.NOT_FOUND, DRIVE_TRASH_GROUP_NOT_FOUND, 'No such group in Trash.');
+          return null;
         }
-        changes.push({ entryId: r.id, parentId: r.parent_id, op: 'UPSERT' });
-        restored.push(r.id);
-      }
-      await deleteEmptyGroups(tx, ownerId, [groupId]);
-      const seq = await recordChanges(tx, ownerId, changes);
-      return { restored, seq };
-    }, loggedRetry(this.logger, 'drive.restoreItem', { transaction: TRANSACTION }));
-    this.announce(ownerId, outcome.seq);
-    return { entryIds: outcome.restored };
+        const checked = await checkedWriter(tx, ownerId, writer);
+        const now = new Date();
+        const changes: ChangeRow[] = [];
+        const ids: string[] = [];
+        let from = open;
+        if (from === null) {
+          const item = await tx.driveEntry.findFirst({ where: { id: entryId, ownerId, trashGroupId: groupId } });
+          if (!item) throw notFound();
+          const dest = await liveDestination(tx, ownerId, item.parentId!, checked, now, changes);
+          const name = await freeName(tx, ownerId, dest, item.name, item.kind, 'SUFFIX');
+          await tx.driveEntry.update({
+            where: { id: item.id },
+            data: { parentId: dest, name, trashedAt: null, trashGroupId: null, trashTop: false, updatedAt: now, ...lastWriterFields(checked, now) },
+          });
+          changes.push({ entryId: item.id, parentId: dest, op: 'UPSERT' });
+          ids.push(item.id);
+          from = item.kind === 'FOLDER' ? [item.id] : [];
+        }
+        // What hangs under it in the group comes back with it, under the names it had.
+        const next = await restoreUnder(tx, ownerId, groupId, from, checked, now, DRIVE_TRASH_BATCH - ids.length, changes, ids);
+        if (!next.length) await deleteEmptyGroups(tx, ownerId, [groupId]);
+        const seq = await recordChanges(tx, ownerId, changes);
+        return { ids, seq, open: next };
+      }, loggedRetry(this.logger, 'drive.restoreItem', { transaction: TRANSACTION })).catch(limitHit);
+      if (!step) break;
+      restored.push(...step.ids);
+      this.announce(ownerId, step.seq);
+      if (!step.open.length) break;
+      open = step.open;
+    }
+    return { entryIds: restored };
   }
 
   /**
@@ -1322,7 +1383,7 @@ export class DriveService {
         SELECT DISTINCT v."trash_group_id" FROM "drive_version" v JOIN "sub" ON v."entry_id" = "sub"."id" WHERE v."trash_group_id" IS NOT NULL`;
       await tx.driveEntry.deleteMany({ where: { ownerId, trashGroupId: groupId, trashTop: true } });
       await deleteEmptyGroups(tx, ownerId, [groupId, ...touched.map((t) => t.group_id)]);
-    }, loggedRetry(this.logger, 'drive.deleteGroup', { transaction: TRANSACTION }));
+    }, loggedRetry(this.logger, 'drive.deleteGroup', { transaction: TRANSACTION })).catch(limitHit);
     return { deleted: true };
   }
 
@@ -1348,7 +1409,7 @@ export class DriveService {
       await tx.driveEntry.deleteMany({ where: { ownerId, trashTop: true, trashedAt: { not: null } } });
       await tx.driveVersion.deleteMany({ where: { ownerId, replacedAt: { not: null }, trashGroupId: { not: null } } });
       await tx.driveTrashGroup.deleteMany({ where: { ownerId, entries: { none: {} }, versions: { none: {} } } });
-    }, loggedRetry(this.logger, 'drive.emptyTrash', { transaction: TRANSACTION }));
+    }, loggedRetry(this.logger, 'drive.emptyTrash', { transaction: TRANSACTION })).catch(limitHit);
     return { deleted: true };
   }
 }
@@ -1649,6 +1710,130 @@ async function deleteEmptyGroups(tx: Tx, ownerId: string, ids: string[]): Promis
           FROM "drive_trash_group" g2 WHERE g2."owner_id" = ${ownerId}::uuid AND g2."id" = ANY(${unique}::uuid[])
       ) c
      WHERE g."id" = c."id"`;
+}
+
+/** An entry a folder's trash marked, as its UPDATE answers it. */
+interface MarkedRow {
+  id: string;
+  parent_id: string | null;
+  kind: string;
+  size_bytes: bigint;
+}
+
+/** What marked entries add to their group's counts. */
+function countsOf(marked: MarkedRow[]) {
+  return {
+    itemCount: { increment: marked.length },
+    sizeBytes: { increment: marked.reduce((sum, m) => sum + (m.kind === 'FILE' ? BigInt(m.size_bytes) : 0n), 0n) },
+  };
+}
+
+/**
+ * What is live in the folders `from` of a group (null: in any folder of the group, a look over it all), marked into the
+ * group, up to `limit` entries. Each batch is picked by a statement of its own, so it sees every create that committed
+ * meanwhile, and a create that comes after finds its folder trashed (§1.4); a folder marked joins the open folders, and
+ * the open folders are let go once a batch finds fewer than it asked for. Folders are locked before files, as a file
+ * rename locks its destination folder before the file. `verified`: a look over the group found nothing live under it.
+ */
+async function markUnder(
+  tx: Tx,
+  ownerId: string,
+  groupId: string,
+  from: string[] | null,
+  now: Date,
+  limit: number,
+): Promise<{ marked: MarkedRow[]; open: string[]; verified: boolean }> {
+  const marked: MarkedRow[] = [];
+  let open = from;
+  while (marked.length < limit) {
+    if (open === null) {
+      const holding = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT DISTINCT p."id" FROM "drive_entry" p
+          JOIN "drive_entry" c ON c."owner_id" = p."owner_id" AND c."parent_id" = p."id" AND c."trashed_at" IS NULL
+         WHERE p."owner_id" = ${ownerId}::uuid AND p."trash_group_id" = ${groupId}::uuid AND p."kind" = 'FOLDER'`;
+      if (!holding.length) return { marked, open: [], verified: true };
+      open = holding.map((h) => h.id);
+    }
+    if (!open.length) break;
+    const want = limit - marked.length;
+    const picked = await tx.$queryRaw<Array<{ id: string; kind: string }>>`
+      SELECT c."id", c."kind" FROM "drive_entry" c JOIN "drive_entry" p ON p."id" = c."parent_id"
+       WHERE c."owner_id" = ${ownerId}::uuid AND c."parent_id" = ANY(${open}::uuid[]) AND c."trashed_at" IS NULL
+         AND p."trash_group_id" = ${groupId}::uuid
+       LIMIT ${want}`;
+    const reached: string[] = [];
+    for (const kind of ['FOLDER', 'FILE']) {
+      const ids = picked.filter((p) => p.kind === kind).map((p) => p.id);
+      if (!ids.length) continue;
+      const rows = await tx.$queryRaw<MarkedRow[]>`
+        UPDATE "drive_entry"
+           SET "trashed_at" = ${now}, "trash_group_id" = ${groupId}::uuid, "trash_top" = false, "updated_at" = ${now}
+         WHERE "id" = ANY(${ids}::uuid[]) AND "owner_id" = ${ownerId}::uuid AND "trashed_at" IS NULL
+        RETURNING "id", "parent_id", "kind", "size_bytes"`;
+      marked.push(...rows);
+      if (kind === 'FOLDER') reached.push(...rows.map((r) => r.id));
+    }
+    open = picked.length < want ? reached : [...open, ...reached];
+  }
+  return { marked, open: open ?? [], verified: false };
+}
+
+/**
+ * Entries of a DELETE group hanging in the live folders `from`, out of Trash folder by folder, each folder's in the order
+ * they were deleted, until `limit` have come back; a folder that comes back joins the open folders. One whose name a live
+ * entry has, or an entry back before it in the same folder had, gets the first free suffix once the others are live
+ * (§3.5). A folder that went to Trash again meanwhile is let go: what hangs in it stays in the group. Answers the folders
+ * still open.
+ */
+async function restoreUnder(
+  tx: Tx,
+  ownerId: string,
+  groupId: string,
+  from: string[],
+  writer: DriveWriter,
+  now: Date,
+  limit: number,
+  changes: ChangeRow[],
+  ids: string[],
+): Promise<string[]> {
+  const open = [...new Set(from)];
+  let left = limit;
+  while (left > 0 && open.length) {
+    const folder = open[0];
+    const picked = await tx.$queryRaw<Array<{ id: string; name: string; kind: string; taken: boolean }>>`
+      SELECT c."id", c."name", c."kind",
+             EXISTS (SELECT 1 FROM "drive_entry" l
+                      WHERE l."owner_id" = c."owner_id" AND l."parent_id" = c."parent_id" AND l."name" = c."name"
+                        AND l."trashed_at" IS NULL) AS "taken"
+        FROM "drive_entry" c JOIN "drive_entry" p ON p."id" = c."parent_id"
+       WHERE c."owner_id" = ${ownerId}::uuid AND c."parent_id" = ${folder}::uuid AND c."trash_group_id" = ${groupId}::uuid
+         AND p."trashed_at" IS NULL
+       ORDER BY c."trashed_at" ASC, c."id" ASC LIMIT ${left}`;
+    if (picked.length < left) open.shift();
+    left -= picked.length;
+    const names = new Set<string>();
+    const plain: string[] = [];
+    const clashing: typeof picked = [];
+    for (const r of picked) {
+      if (r.taken || names.has(r.name)) clashing.push(r);
+      else {
+        names.add(r.name);
+        plain.push(r.id);
+      }
+    }
+    const back = { trashedAt: null, trashGroupId: null, trashTop: false, updatedAt: now, ...lastWriterFields(writer, now) };
+    if (plain.length) await tx.driveEntry.updateMany({ where: { ownerId, trashGroupId: groupId, id: { in: plain } }, data: back });
+    for (const c of clashing) {
+      const name = await freeName(tx, ownerId, folder, c.name, c.kind, 'SUFFIX');
+      await tx.driveEntry.update({ where: { id: c.id }, data: { ...back, name } });
+    }
+    for (const r of picked) {
+      changes.push({ entryId: r.id, parentId: folder, op: 'UPSERT' });
+      ids.push(r.id);
+      if (r.kind === 'FOLDER') open.push(r.id);
+    }
+  }
+  return open;
 }
 
 /** Every chunk a commit names is this account's to name, with its bytes kept and the size it says (§3.1, §4.4). */

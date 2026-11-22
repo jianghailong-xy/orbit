@@ -171,16 +171,23 @@ Two writes must never leave a live entry under a trashed folder, or a folder ins
   creates, commits, file renames and deletes do not take it (they are the hot path).
 - **A write into a folder takes `FOR SHARE` on that folder's row and re-checks `trashed_at IS NULL`** after the lock is
   granted (Read Committed re-reads a locked row), answering `ENOENT` (door: `404 DRIVE_PARENT_GONE`) if it went to Trash.
-- **Folder trash is two statements**: first `SELECT … FOR UPDATE` of the folder and every descendant folder (a recursive
-  query), which waits out any create holding `FOR SHARE` on one of them and blocks new ones; then, in a **new
-  statement** (a fresh snapshot that sees every create that committed meanwhile), mark the folder and all descendants.
-  A create that committed before the lock is marked; one that comes after finds its parent trashed.
+- **Folder trash marks a batch per statement, and a batch per transaction**: first `SELECT … FOR UPDATE` of the
+  folder, which waits out any create holding `FOR SHARE` on it and blocks new ones, and the folder marked; then, each
+  in a **new statement** (a fresh snapshot that sees every create that committed meanwhile), the live children of the
+  folders marked so far, up to 1,000 entries a transaction, folders locked before files. A create that committed before
+  its folder was marked is marked with the next batch; one that comes after finds its parent trashed. The first
+  transaction hides the folder and answers its group; what one transaction cannot hold is marked into the same group by
+  the next ones, each under the owner lock, so a folder of 100,000 entries stays inside the bounds below. Until the
+  last batch the group carries `marking`; a group left marking (its process gone, a bound hit) is finished by
+  deleting the folder again, or by the drive's own timer. A restore or delete-for-good meanwhile ends the marking:
+  what was not marked yet never left its place.
 - **A folder move** checks, under the owner lock, that the destination is not the folder itself or inside it (walking the
   destination's ancestors), answering `409 DRIVE_MOVE_INTO_ITSELF` / `EINVAL`. With the owner lock no two moves can
   interleave to form a cycle.
 - **Restore** recreates or reuses parents under the owner lock (§3.5).
 - **Every drive transaction is short**: no store I/O inside it (§3.2), a Prisma interactive-transaction timeout of 20 s
-  and `SET LOCAL statement_timeout = '10s'`. Production Postgres is 16 (`deploy/postgres-pinned.yml`), which has no
+  and `SET LOCAL statement_timeout = '10s'`. One that still hits a bound answers `503 DRIVE_LIMIT_HIT`
+  (`retryable: true`), never a bare 500; what committed before it is kept, and the same request sent again carries on. Production Postgres is 16 (`deploy/postgres-pinned.yml`), which has no
   `transaction_timeout`, so the client-side timeout is the bound the change feed relies on (§5.4).
 
 ## 2. Chunked, streamed store
@@ -311,8 +318,8 @@ Versions are kept until the owner deletes them for good (D2, D17; limits are the
 ### 3.3 Delete to Trash
 
 - `unlink`/`rmdir` through the mount, `delete` from a drive tool, and the owner's Move to Trash set `trashed_at` and
-  `trash_group_id` on the entry and, for a folder, every descendant (§1.4), and write `drive_change` `REMOVE` rows.
-  Nothing is deleted.
+  `trash_group_id` on the entry and, for a folder, every descendant, a batch per transaction (§1.4), and write
+  `drive_change` `REMOVE` rows. Nothing is deleted.
 - An entry in Trash cannot be reached by any path, by the mount, by drive tools, or by a share link (§9). Agents cannot
   see Trash (D11): the door has no Trash route. A mount handle already open on it can still commit (§3.1).
 - Move to Trash asks nothing; the web's undo is a restore of the group the response named (board choice b).
@@ -342,8 +349,10 @@ Restoring a group, under the owner lock (§1.4), in transactions of at most 1,00
    suffix below).
 2. If the item's name is taken by a live entry in the destination, the restored item gets the first free name of
    `name (2).ext`, `name (3).ext`, … (the extension is kept; a folder or a name without a dot gets the suffix at the end).
-3. Descendants come back with their item and keep their names.
-4. `trashed_at`, `trash_group_id` and `trash_top` are cleared; `drive_change` rows are written; the group row is deleted.
+3. Descendants come back with their item, folder by folder from the top, and keep their names; one whose name a live
+   entry has, or one restored before it in the same folder had, gets the suffix too.
+4. `trashed_at`, `trash_group_id` and `trash_top` are cleared; `drive_change` rows are written; the group row is deleted
+   with the last batch. A restore cut off by a bound is carried on by restoring the group again.
 
 Restoring a replaced version (board choice c):
 
@@ -621,6 +630,13 @@ The product asks for a clear error, not a hang.
 
 - Every door request has a deadline (10 s for metadata, 60 s for a chunk). After three failures in 10 s the daemon is
   **offline**: it probes every 5 s and fails what needs the server at once instead of waiting each time.
+- **A slow answer is not no answer.** A refused or reset connection, or a 5xx, is one failure. A request past its
+  deadline is offline at once only if the server answered nothing while it waited: a request still waiting halfway to
+  its deadline, with nothing answered since it was sent, probes the door meanwhile, so a server that is up but busy
+  (a loaded host, a long Postgres transaction) answers the probe and the timeout is one failure, while one that holds
+  connections unanswered answers neither and is offline within the deadline. A read (`stat`, a listing) past its
+  deadline on a server that answered is sent once more, given three times the deadline, instead of failing the call,
+  so one slow answer neither fails the operation nor every operation after it in an agent's long `rm -rf`.
 - **Offline is read-only from cache.** Reads of cached chunks, and lookups and listings in the metadata cache (up to
   10 minutes old), work. Everything else fails `EIO` at once: reads of uncached chunks, uncached lookups and listings,
   `open(O_CREAT)` (it must create the entry), `mkdir`, `rename`, `unlink`, and **`write()` itself** on any handle, so
