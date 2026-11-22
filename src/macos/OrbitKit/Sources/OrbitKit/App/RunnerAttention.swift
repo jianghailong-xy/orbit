@@ -918,9 +918,13 @@ public enum RunnerAttention {
 
     /// The list's second line. Online: `<hostname> · v<version>`, leaving out a hostname that is
     /// empty or the same as the name shown above it. Offline: `Offline · last seen 14d ago · v<version>`.
-    /// A managed runner's version is `runnerVersionLine`'s.
+    /// A managed runner's version is `runnerVersionLine`'s — except that this port runs the shared case
+    /// file against the web's rule (`runnerAttention.ts`), which still says "Kept up to date by Orbit"
+    /// for a managed image until the web half of the build line lands.
     public static func runnerListSubtitle(_ runner: RunnerAttentionRunner, nowMs: Int64, managed: Bool = false) -> String {
-        let version = runnerVersionLine(runner.version, managed: managed)
+        let version = managed && !isReleaseVersion(runner.version)
+            ? RunnerPageCopy.MANAGED_RUNNER_KEPT_UP_TO_DATE
+            : runnerVersionLine(runner.version, managed: managed)
         if runnerIsOffline(runner, nowMs: nowMs) {
             let lastSeen = runner.lastHeartbeatAt.flatMap { $0.isEmpty ? nil : $0 }
             let status = lastSeen.map { RunnerPageCopy.runnerOfflineLastSeen(when: ago($0, nowMs: nowMs)) }

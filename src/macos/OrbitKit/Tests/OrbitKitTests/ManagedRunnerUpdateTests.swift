@@ -75,15 +75,15 @@ final class ManagedRunnerUpdateTests: XCTestCase {
     }
 
     func testRestartingHasNoButton() throws {
-        let status = try status(update: update("updating"))
-        let card = try XCTUnwrap(ManagedRunnerUpdateLogic.card(status: status, now: now, timeZone: utc))
+        let restarting = try status(update: update("updating"))
+        let card = try XCTUnwrap(ManagedRunnerUpdateLogic.card(status: restarting, now: now, timeZone: utc))
         XCTAssertEqual(card.phase, "updating")
         XCTAssertEqual(card.title, "Restarting into the Nov 18 build…")
         XCTAssertEqual(card.tag, "Restarting")
         XCTAssertEqual(card.body, "Usually under a minute.")
         XCTAssertTrue(card.warn)
         XCTAssertFalse(card.canUpdateNow)
-        XCTAssertFalse(ManagedRunnerUpdateLogic.showsDot(status), "nothing left to press")
+        XCTAssertFalse(ManagedRunnerUpdateLogic.showsDot(restarting), "nothing left to press")
         let waiting = try status(update: update("updating", extra: ", \"waitsForIdle\": true"))
         XCTAssertEqual(ManagedRunnerUpdateLogic.card(status: waiting, now: now, timeZone: utc)?.body,
                        "It restarts once the runner is idle.")
