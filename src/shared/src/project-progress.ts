@@ -1973,6 +1973,36 @@ export interface ProjectSidebarTaskCounts {
   total: number;
 }
 
+/** Who paused a project (`project.paused_reason`): Pause project, or the older Automatic switch. */
+export type ProjectPausedReason = 'OWNER' | 'LEGACY_AUTOMATIC_OFF';
+
+/**
+ * The project's open spend-fuse pause, as `GET /projects/sidebar` serves it: the daily limit paused
+ * its coordinator, and `POST /projects/:id/fuse/:episodeId/resume` lifts it.
+ *
+ * `observed` and `limit` are the reading the pause was taken on (`<observed>/<limit> today` on the
+ * row); all three are null when `paused` is false.
+ */
+export interface ProjectSidebarFuse {
+  paused: boolean;
+  episodeId: string | null;
+  observed: number | null;
+  limit: number | null;
+}
+
+/**
+ * The pause fields of a `GET /projects/sidebar` row (design §4.2 2a/2b, §4.3 Pause / Resume).
+ *
+ * Optional because a server that predates them sends none, and a row without them is a project
+ * that is not paused.
+ */
+export interface ProjectSidebarPause<Instant = string> {
+  /** When the project was paused; null when it is not. */
+  pausedAt?: Instant | null;
+  pausedReason?: ProjectPausedReason | null;
+  fuse?: ProjectSidebarFuse;
+}
+
 /**
  * What `GET /projects` says about who must act on a project, and how long they have had to — the
  * blockers the list has always aggregated plus the items behind them (§7.1 V1).

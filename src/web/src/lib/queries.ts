@@ -575,7 +575,10 @@ export interface WorkspaceSessionCounts {
 export const workspaceSessionCountsQuery = () =>
   queryOptions({
     queryKey: ['session-counts'] as const,
-    meta: { entities: ['session', 'workspace'] },
+    // Not `session`: a session event moves a tally only when it changes what the tallies count, which the
+    // stream decides from what each session last said (useControlPlane, tallyShare). `workspace` reaches it on a
+    // workspace edit and on the read that aligns a reconnect.
+    meta: { entities: ['workspace'] },
     queryFn: () => api<WorkspaceSessionCounts[]>('/sessions/counts'),
   });
 
@@ -850,24 +853,28 @@ export const openProjectsQuery = () =>
   });
 
 /**
- * The owner requests in one state, newest first, at most 200. No event of its own announces one: the asking
- * session's `session.updated` does (see the meta below), and the poll is the safety read; a press re-reads it at once.
+ * The owner requests in one state, newest first, at most 200. The open list is read when the server says a request
+ * changed (`owner_requests.changed`, docs/realtime-control-plane-stream.md §4.9) and on the safety read; a press
+ * re-reads it at once.
  */
 export const ownerRequestsQuery = (filter: OwnerRequestListFilter) =>
-  queryOptions({
-    queryKey: ['owner-requests', filter] as const,
-    // Filing, answering or expiring a request publishes a `session.updated` of the session that asked
-    // (OwnerRequestsService, the schedule and condition notifiers), and a summary says nothing of requests, so any
-    // session event may be one: the open list, small, is read on every one (lib/sessionReach says nothing). The
-    // other states are the whole history (`all` was 52 kB on 2026-11-20): no session event reads them; a request
-    // arriving in or leaving the open list does (useControlPlane, followOpenRequests).
-    meta: {
-      entities: ['session'],
-      ...(filter === 'open' ? {} : { sessionReach: 'none' satisfies SessionReach }),
-    },
-    queryFn: () => api<{ requests: OwnerRequest[] }>(`/owner-requests?state=${filter}`),
-    refetchInterval: streamPoll(20_000),
-  });
+  filter === 'open'
+    ? queryOptions({
+        queryKey: ['owner-requests', filter] as readonly ['owner-requests', OwnerRequestListFilter],
+        // `ownerRequest` is named only by `owner_requests.changed`: filing, answering or expiring a request used to be
+        // read off any session event, and 96% of those reads answered 304 (2026-11-21).
+        meta: { entities: ['ownerRequest'] },
+        queryFn: () => api<{ requests: OwnerRequest[] }>(`/owner-requests?state=${filter}`),
+        refetchInterval: streamPoll(20_000),
+      })
+    : queryOptions({
+        queryKey: ['owner-requests', filter] as readonly ['owner-requests', OwnerRequestListFilter],
+        // The other states are the whole history (`all` was 52 kB on 2026-11-20): no event reads them; a request
+        // arriving in or leaving the open list does (useControlPlane, followOpenRequests).
+        meta: { entities: ['session'], sessionReach: 'none' satisfies SessionReach },
+        queryFn: () => api<{ requests: OwnerRequest[] }>(`/owner-requests?state=${filter}`),
+        refetchInterval: streamPoll(20_000),
+      });
 
 /** The owner's saved account secrets, by label: what "Use saved" offers on a secret request. */
 export const accountSecretsQuery = () =>

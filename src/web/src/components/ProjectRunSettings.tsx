@@ -210,7 +210,7 @@ function updateProjectAuthorization(projectId: string, body: AuthorizationBody):
 }
 
 /** `POST /projects/:id/pause` or `/resume` — the owner's alone. */
-function moveProject(projectId: string, door: 'pause' | 'resume'): Promise<ProjectPauseState> {
+export function moveProject(projectId: string, door: 'pause' | 'resume'): Promise<ProjectPauseState> {
   return api<ProjectPauseState>(`/projects/${encodeURIComponent(projectId)}/${door}`, { method: 'POST' });
 }
 

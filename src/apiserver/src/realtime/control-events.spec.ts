@@ -123,6 +123,15 @@ test('backgroundPayloadOf names the process from command and includes a numeric 
   assert.equal('exitCode' in noExit, false);
 });
 
+test('backgroundPayloadOf carries the process id and a runner-hosted job\'s kind', () => {
+  assert.deepEqual(
+    backgroundPayloadOf({ toolUseId: 'bgj_1', kind: 'service', command: 'npm run dev', status: 'running', idleMs: 5 }),
+    { name: 'npm run dev', status: 'running', toolUseId: 'bgj_1', kind: 'service' },
+  );
+  // An engine's own shell states no kind, and an empty id is no id.
+  assert.deepEqual(backgroundPayloadOf({ toolUseId: '', status: 'completed' }), { name: 'background task', status: 'completed' });
+});
+
 test('approvalIdOf reads payload.id', () => {
   assert.equal(approvalIdOf({ id: 'ap1', toolName: 'Bash' }), 'ap1');
   assert.equal(approvalIdOf({ approvalId: 'ap2' }), 'ap2');

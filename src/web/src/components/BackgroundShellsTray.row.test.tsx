@@ -13,7 +13,7 @@ import {
   type BgShell,
 } from '@orbit/shared';
 import type { RunEvent } from './Transcript';
-import { BackgroundShellsTray, lastUserMessageAt } from './BackgroundShellsTray';
+import { BackgroundShellsTray, lastAgentTurnStartedAt, lastUserMessageAt } from './BackgroundShellsTray';
 
 vi.mock('../api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api')>();
@@ -33,6 +33,7 @@ interface RowCase {
   list: BackgroundRowInput[];
   events?: RunEvent[];
   lastUserMessageAt: string | null;
+  lastAgentTurnStartedAt?: string | null;
   sessionLive: boolean;
   expect: BackgroundRow;
 }
@@ -63,6 +64,10 @@ const shell = (s: BackgroundRowInput & Partial<BgShell>): BgShell => ({
 /** The person's message at `at`, as the event stream carries it. */
 const userAt = (at: string | null, seq = 1): RunEvent[] =>
   at ? [{ seq, type: 'user', ts: at, turnId: `turn-${seq}`, payload: { text: 'Go on' } }] : [];
+
+/** The agent's turn starting at `at`: an assistant event of its own turn. */
+const agentTurnAt = (at: string | null | undefined, seq = 50): RunEvent[] =>
+  at ? [{ seq, type: 'assistant', ts: at, turnId: `turn-agent-${seq}`, payload: { text: 'On it' } }] : [];
 
 const MARK_CLASS: Record<BackgroundRowItem['mark'], string> = {
   running: 'running',
@@ -108,8 +113,15 @@ describe('the folded row, by background-row.fixture.json', () => {
 
   it.each(fixture.cases.map((c) => [c.case, c] as const))('%s', (_name, c) => {
     // A case that carries its transcript is read through the reader, as every client must.
-    if (c.events) expect(lastUserMessageAt(c.events)).toBe(c.lastUserMessageAt);
-    render(c.list.map(shell), c.events ?? userAt(c.lastUserMessageAt), c.sessionLive);
+    if (c.events) {
+      expect(lastUserMessageAt(c.events)).toBe(c.lastUserMessageAt);
+      expect(lastAgentTurnStartedAt(c.events)).toBe(c.lastAgentTurnStartedAt ?? null);
+    }
+    render(
+      c.list.map(shell),
+      c.events ?? [...userAt(c.lastUserMessageAt), ...agentTurnAt(c.lastAgentTurnStartedAt)],
+      c.sessionLive,
+    );
     const want = c.expect;
     if (want.hidden) {
       expect(container.innerHTML).toBe('');
@@ -291,21 +303,46 @@ describe('the session it is fed', () => {
     shell({ shellId: 'bgj_f', command: '', description: 'OrbitKit swift test', startedSeq: 10, status: 'failed', endedAt: failedAt }),
   ];
 
-  it('a wake turn is not a user message: the ended process stays', () => {
-    const events: RunEvent[] = [
-      ...userAt('2026-11-16T02:40:00.000Z'),
-      // The control plane's wake: nothing typed, only its recorded note.
-      {
-        seq: 2,
-        type: 'user',
-        ts: '2026-11-16T02:46:00.000Z',
-        turnId: 'turn-wake',
-        payload: { text: '<background-job id="bgj_f">failed</background-job>', controlPlaneNote: '<background-job id="bgj_f">failed</background-job>' },
-      },
-    ];
+  const wakeEvents = (assistantAt: string): RunEvent[] => [
+    ...userAt('2026-11-16T02:40:00.000Z'),
+    // The control plane's wake: nothing typed, only its recorded note; the agent answers in its turn.
+    {
+      seq: 2,
+      type: 'user',
+      ts: '2026-11-16T02:46:00.000Z',
+      turnId: 'turn-wake',
+      payload: { text: '<background-job id="bgj_f">failed</background-job>', controlPlaneNote: '<background-job id="bgj_f">failed</background-job>' },
+    },
+    { seq: 3, type: 'assistant', ts: assistantAt, turnId: 'turn-wake', payload: { text: 'Fixing it' } },
+  ];
+
+  it('a wake turn is not a user message, but it is the agent\'s turn: it clears the failed item', () => {
+    const events = wakeEvents('2026-11-16T02:46:05.000Z');
     expect(lastUserMessageAt(events)).toBe('2026-11-16T02:40:00.000Z');
+    expect(lastAgentTurnStartedAt(events)).toBe('2026-11-16T02:46:00.000Z');
     render(FAILED, events, true);
-    expect(one('.bg-tray-name')?.textContent).toBe('OrbitKit swift test');
+    expect(container.innerHTML).toBe('');
+  });
+
+  it('a failed bg_run job leaves the row once a later agent turn starts', () => {
+    const job = [
+      shell({ shellId: 'bgj_j', kind: 'job', command: 'npm run build', description: 'Release build', startedSeq: 10, status: 'failed', endedAt: failedAt }),
+    ];
+    const before = userAt('2026-11-16T02:40:00.000Z');
+    render(job, [...before, ...agentTurnAt('2026-11-16T02:44:00.000Z')], true);
+    expect(one('.bg-tray-name')?.textContent).toBe('Release build');
+    render(job, [...before, ...agentTurnAt('2026-11-16T02:44:00.000Z'), ...agentTurnAt('2026-11-16T02:50:00.000Z', 60)], true);
+    expect(container.innerHTML).toBe('');
+  });
+
+  it('reads the start of the latest agent turn from the earliest event of that turn', () => {
+    expect(lastAgentTurnStartedAt(userAt('2026-11-16T02:40:00.000Z'))).toBeNull();
+    const events: RunEvent[] = [
+      { seq: 1, type: 'assistant', ts: '2026-11-16T02:41:00.000Z', turnId: 't1', payload: {} },
+      { seq: 2, type: 'assistant', ts: '2026-11-16T02:42:00.000Z', turnId: 't2', payload: {} },
+      { seq: 3, type: 'tool_use', ts: '2026-11-16T02:43:00.000Z', turnId: 't2', payload: {} },
+    ];
+    expect(lastAgentTurnStartedAt(events)).toBe('2026-11-16T02:42:00.000Z');
   });
 
   it("the person's next message folds it away", () => {

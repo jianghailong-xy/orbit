@@ -149,13 +149,19 @@ export class OpenListHints {
     }
   }
 }
+function declares(hints: string | string[] | undefined, name: string): boolean {
+  const values = Array.isArray(hints) ? hints : hints === undefined ? [] : [hints];
+  return values.some((value) => value.split(',').some((hint) => hint.trim() === name));
+}
 /** Whether a `GET /api/events?hints=` value declares `list_changed`. */
 export function declaresListChanged(hints: string | string[] | undefined): boolean {
-  return declaresHint(hints, 'list_changed');
+  return declares(hints, 'list_changed');
 }
-
-/** Whether a `GET /api/events?hints=` value declares `hint`. */
-export function declaresHint(hints: string | string[] | undefined, hint: string): boolean {
-  const values = Array.isArray(hints) ? hints : hints === undefined ? [] : [hints];
-  return values.some((value) => value.split(',').some((declared) => declared.trim() === hint));
+/** Whether a `GET /api/events?hints=` value declares `owner_requests`. */
+export function declaresOwnerRequests(hints: string | string[] | undefined): boolean {
+  return declares(hints, 'owner_requests');
+}
+/** Whether a `GET /api/events?hints=` value declares `drive_changed`. */
+export function declaresDriveChanged(hints: string | string[] | undefined): boolean {
+  return declares(hints, 'drive_changed');
 }
