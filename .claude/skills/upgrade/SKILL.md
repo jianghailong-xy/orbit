@@ -569,8 +569,8 @@ the checkout's files named in step 4. Stop and report at the first step that fai
 ## Notes
 
 - Managed runners stay as the deployment's `.env` has them: the script never writes `.env`. A
-  deployment installed before them, or with `--no-managed-runners`, keeps them off; only a fresh
-  install (`scripts/install-server.sh`) or an administrator switches them on (docs/self-hosting.md,
+  deployment installed before them, or without `--managed-runners`, keeps them off; only a fresh
+  install with `--managed-runners` (`scripts/install-server.sh`) or an administrator switches them on (docs/self-hosting.md,
   "Managed runners"). Where `.env` does not turn on the `managed-runners-docker` Compose profile,
   Compose does not list `docker-channel`, and the script builds, recreates and writes exactly what it
   did before managed runners existed: nothing under `data/`, no managed runner image.

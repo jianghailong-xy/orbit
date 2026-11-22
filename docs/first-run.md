@@ -37,10 +37,10 @@ the full SHA before building. If any prerequisite is missing, install it before 
 ## 2. Generate secrets and choose the network boundary
 
 - [ ] Write `.env` with `scripts/install-server.sh --no-start`. It generates `JWT_SECRET` and
-  `PROVIDER_SECRET_KEY` independently, writes the file with mode 0600 and switches
-  [managed runners](self-hosting.md#managed-runners) on: every account gets a runner of its own, a container on
-  this host's Docker, at sign-in. Read who gets one and how far a container isolates it; `--no-managed-runners`
-  leaves them off. By hand instead: `cp .env.example .env`, then generate two independent values with
+  `PROVIDER_SECRET_KEY` independently and writes the file with mode 0600.
+  [Managed runners](self-hosting.md#managed-runners) (Orbit Cloud) stay off unless you add `--managed-runners`:
+  every account then gets a runner of its own, a container on this host's Docker, at sign-in. Read who gets one and
+  how far a container isolates it before you switch them on. By hand instead: `cp .env.example .env`, then generate two independent values with
   `openssl rand -base64 32`, one for `JWT_SECRET` and the other for `PROVIDER_SECRET_KEY`, and protect the file
   with `chmod 600 .env`. Back it up securely, and do not print its contents into a shared transcript.
 - [ ] Set `PUBLIC_ORIGIN` before the web build (`--public-origin` for the install script). For a local smoke test
