@@ -545,6 +545,11 @@ model 一律取**实际运行**的（会话上首次 claim 之后的值）：生
 验证 FAIL 用 verifier 的当前 `verdict` 和 `updated_at`，SEND_BACK 用 `decided_at`，归到判定时最近创建的工作运行；
 同一工作运行的多个失败信号只计一次。任务当前状态与完成判据从 task 读取，不把 SUCCEEDED 会话当作 DONE 任务。
 
+**Model tiers 的 Quality 列**（`docs/subagent-design.md` §7.1）也读这套一次通过口径，但不经过本报告接口：
+`taskFirstPassByModel` 按首次运行的 provider × engine × model 分组，只算近 90 天内首次运行的 DONE 任务，分母是完成数；
+额度和满载失败的运行（`limitFailure`，与上表 `averageFailureCount` 排除的是同一批）整条不计，既不算失败也不算一次运行。
+它只用于显示，路由不读。
+
 ### 10.2 开启节奏
 
 1. **影子两周**：P1 的影子接入与 P2 的建议档位都落地后开始计时。所有 Agent 默认关闭，每次新建运行都写影子决策。期间看两件事：
