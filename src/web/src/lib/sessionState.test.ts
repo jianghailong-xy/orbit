@@ -221,7 +221,7 @@ describe('sessionEndedBanner', () => {
         true,
         true,
       ),
-    ).toBe('Session succeeded. Sending a message will resume this session in Open.');
+    ).toBe('Session finished. Sending a message will resume this session in Open.');
     expect(
       sessionEndedBanner(
         { runState: 'ENDED', lifecycleState: 'OPEN', endReason: 'task_cancelled' },
@@ -276,7 +276,7 @@ describe('sessionEndedBanner', () => {
         'The previous session context is no longer available.',
       ),
     ).toBe(
-      'Session succeeded. The previous session context is no longer available. Sending a message starts a new session.',
+      'Session finished. The previous session context is no longer available. Sending a message starts a new session.',
     );
   });
 });
