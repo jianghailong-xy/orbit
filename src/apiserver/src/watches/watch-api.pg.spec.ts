@@ -1548,7 +1548,11 @@ test('GET /watches?following=true answers the union a Following page draws: the 
   assert.equal(new Set(ids).size, ids.length, 'each watch appears once');
   assert.deepEqual(ids.slice(0, 100), newest.body.map((w: { id: string }) => w.id), 'the newest 100 come first, as the old read answers them');
   assert.deepEqual(ids.slice(100), [live.id, paused.id, revoked.id], 'then the live and needing-attention watches the newest did not hold');
-  assert.ok(answered.body.every((w: { targets: unknown[] }) => w.targets.length === 1), 'every watch is named as the other reads name it');
+  for (const id of [fresh.id, live.id, paused.id, revoked.id]) {
+    const row = answered.body.find((w: { id: string }) => w.id === id);
+    assert.equal(row.targets.length, 1, `${id} carries its target, as the other reads carry it`);
+    assert.equal(row.targets[0].title, newest.body.find((w: { id: string }) => w.id === id)?.targets[0].title ?? row.targets[0].title);
+  }
 
   expectStatus(await call(h, owner.bearer, 'GET', '/watches?following=false'), 400, 'following=false');
   expectStatus(await call(h, owner.bearer, 'GET', '/watches?following=true&state=ACTIVE'), 400, 'following with a state');
