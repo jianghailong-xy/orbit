@@ -383,6 +383,11 @@ func (b *cursorPermissionBridge) permission(id interface{}, params map[string]in
 	}
 	policy := b.policy()
 	switch {
+	// The Files drive is read-only in Plan, whatever a standing rule allows (plan_drive.go).
+	case policy.Mode == "plan" && planDriveWrite(ask.Name, mapValue(ask.Input)):
+		if b.now(id, ask.ToolUseID, cursorSelected(cursorRejectOnce)) {
+			b.note(ask.TurnID, "permission_denied", ask.ToolUseID, ask.Name, planDriveRefusal)
+		}
 	case b.preApproved(ask):
 		b.now(id, ask.ToolUseID, cursorSelected(cursorAllowOnce))
 	case policy.Answer == cursorAnswerRefuse:

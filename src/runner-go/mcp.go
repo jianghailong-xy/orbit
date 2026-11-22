@@ -3048,6 +3048,9 @@ func (s *mcpServer) permissionPrompt(args map[string]interface{}) map[string]int
 	if answer, decided := s.answerOrbitToolPrompt(args); decided {
 		return answer
 	}
+	if s.planDriveWritePrompt(args) {
+		return toolResult(denyJSON(planDriveRefusal), false)
+	}
 	body, refusal := approvalBodyOfPrompt(args)
 	if refusal != "" {
 		return toolResult(denyJSON(refusal), false)
@@ -3128,6 +3131,22 @@ func (s *mcpServer) answerOrbitToolPrompt(args map[string]interface{}) (map[stri
 		return toolResult(denyJSON(refusal), false), true
 	}
 	return toolResult(allowJSON(args["input"], nil), false), true
+}
+
+// planDriveWritePrompt reports whether Claude's permission prompt asks about a write under the Files drive in a
+// session that is in Plan mode now, which is refused without a card (plan_drive.go). The live mode is read only for a
+// call that writes there; a mode that cannot be read leaves the call to the card, as before.
+func (s *mcpServer) planDriveWritePrompt(args map[string]interface{}) bool {
+	input, _ := args["input"].(map[string]interface{})
+	if !planDriveWrite(getString(args, "tool_name"), input) {
+		return false
+	}
+	mode := s.permissionMode
+	if mode == nil {
+		mode = sessionPermissionMode
+	}
+	current, known, err := mode()
+	return known && err == nil && current == "plan"
 }
 
 // askQuestionInput rebuilds AskUserQuestion's input for an allow decision: the

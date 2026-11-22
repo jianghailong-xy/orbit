@@ -46,7 +46,7 @@ func TestClaudeLaunchGrantsTheDriveInEveryMode(t *testing.T) {
 					t.Fatalf("--add-dir %s missing from %v", root, args)
 				}
 			}
-			// Plan mode is what makes it read-only: the CLI refuses every edit and command itself.
+			// Plan mode is passed through; the runner's prompt refuses a write in the drive (plan_drive_test.go).
 			if !containsArgs(args, []string{"--permission-mode", mode}) {
 				t.Fatalf("permission mode %s not passed: %v", mode, args)
 			}
