@@ -53,7 +53,7 @@ final class SessionPhaseBehaviorTests: XCTestCase {
         let retrying = try session(#""status":"FAILED","released":true,"lastTurnOutcome":"FAILED","retryAt":"2099-01-01""#)
         let requested = try session(#""status":"FAILED","released":true,"lastTurnOutcome":"FAILED","endReason":"ended""#)
         let finished = try session(#""status":"FAILED","released":true,"workFinished":true"#)
-        let plain = try session(#""status":"SUCCEEDED","released":true""#)
+        let plain = try session(#""status":"SUCCEEDED","released":true"#)
         let legacyHeld = try session(#""status":"RUNNING""#)
         let legacyEnded = try session(#""status":"CANCELLED","endReason":"ended""#)
         let failedEvent = NotificationEvent.finished(sessionID: "s", title: "Session", status: .failed)
@@ -124,13 +124,13 @@ final class SessionPhaseBehaviorTests: XCTestCase {
              "On hold", "clock", .neutral),
             (#""status":"FAILED","released":true,"endReason":"ended","lastTurnOutcome":"FAILED""#,
              "Ended", "checkmark.circle", .neutral),
-            (#""status":"SUCCEEDED","released":true""#,
+            (#""status":"SUCCEEDED","released":true"#,
              "Ended", "checkmark.circle", .neutral),
             (#""status":"AWAITING_INPUT","released":false,"endReason":"ended","lastTurnOutcome":"INTERRUPTED""#,
              "Interrupted", "minus.circle", .neutral),
             (#""status":"INTERRUPTED","released":true,"endReason":"ended","lastTurnOutcome":"INTERRUPTED""#,
              "Ended", "checkmark.circle", .neutral),
-            (#""status":"FAILED","released":true,"workFinished":true""#,
+            (#""status":"FAILED","released":true,"workFinished":true"#,
              "Finished", "checkmark.circle.fill", .success),
             (#""status":"SUCCEEDED","released":true,"workFinished":false,"endReason":"task_done""#,
              "Ended", "checkmark.circle", .neutral),
