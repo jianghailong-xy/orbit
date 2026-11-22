@@ -94,6 +94,8 @@ export interface Pod {
     phase?: string;
     startTime?: string;
     reason?: string;
+    /** The kubelet's sentence beside `reason`, as for an eviction: which resource ran out. */
+    message?: string;
     conditions?: PodCondition[];
     initContainerStatuses?: PodContainerStatus[];
     containerStatuses?: PodContainerStatus[];

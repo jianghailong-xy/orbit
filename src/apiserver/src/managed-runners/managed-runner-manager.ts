@@ -129,9 +129,11 @@ import { RUNNER_BEATS, RUNNER_SILENT_AFTER_MS, runnerLastBeatAt } from '../runne
  *     A crash loop still ends FAILED, and is then tried again by itself on a slow, growing backoff
  *     (15 min up to 6 h) while work is waiting for it, through the same gate (`fail`, `crashRetried`);
  *     a cause that needs an operator stays FAILED. Every such stop is logged; running out of memory
- *     has reasons of its own for the owner.
- *   - The owner is told it is restarting (POD_RESTARTING, POD_RESTARTING_OUT_OF_MEMORY) until it is
- *     READY. A wait on the way — its predecessor's volume detaching, a volume held, the environment's
+ *     and an eviction for full temporary storage have reasons of their own for the owner. The commit
+ *     that records the stop also marks the runner row OFFLINE (`commit`'s `runnerOffline`), so its
+ *     machine reads offline at once rather than by its heartbeat's age.
+ *   - The owner is told it is restarting (POD_RESTARTING, POD_RESTARTING_OUT_OF_MEMORY,
+ *     POD_RESTARTING_STORAGE_FULL) until it is READY. A wait on the way — its predecessor's volume detaching, a volume held, the environment's
  *     cap, a transient error — is said while it lasts and carries that reason, which comes back once
  *     the wait is over (`waitReason`).
  *   - No instance is created on a volume something else holds, a backup's helper container say: it
@@ -242,12 +244,20 @@ const REASONS: Record<string, { message: string; retryable: boolean }> = {
     message: 'The runner ran out of memory and stopped, so it is being started again on the same data volume. Messages sent meanwhile wait for it.',
     retryable: true,
   },
+  POD_RESTARTING_STORAGE_FULL: {
+    message: 'The runner filled its temporary storage and was stopped, so it is being started again on the same data volume. Messages sent meanwhile wait for it.',
+    retryable: true,
+  },
   POD_TERMINATED: {
     message: 'The runner instance stopped too often to be started again at once. It is started again by itself later while work is waiting for it, and a retry starts it now; the data volume is kept.',
     retryable: true,
   },
   POD_OUT_OF_MEMORY: {
     message: 'The runner kept running out of memory, so it is not started again at once. It is started again by itself later while work is waiting for it, and a retry starts it now; the data volume is kept. If it keeps happening, an operator can give runners more memory.',
+    retryable: true,
+  },
+  POD_STORAGE_FULL: {
+    message: 'The runner kept filling its temporary storage and being stopped, so it is not started again at once. It is started again by itself later while work is waiting for it, and a retry starts it now; the data volume is kept.',
     retryable: true,
   },
   KUBERNETES_FORBIDDEN: { message: 'The cluster refused the manager. An operator has to check its permissions; then it can be retried.', retryable: true },
@@ -354,7 +364,12 @@ export const ATTEMPT_RESET_MS = 3_600_000;
 /** A reason an automatic restart stands under (`terminated`). */
 function restartingReason(reason: unknown): boolean {
   const code = (reason as { code?: unknown } | null | undefined)?.code;
-  return code === 'POD_RESTARTING' || code === 'POD_RESTARTING_OUT_OF_MEMORY';
+  return code === 'POD_RESTARTING' || code === 'POD_RESTARTING_OUT_OF_MEMORY' || code === 'POD_RESTARTING_STORAGE_FULL';
+}
+
+/** How a step's commit is written: `runnerOffline`, it records a proven stop, so the runner row is marked OFFLINE with it. */
+interface CommitOptions {
+  runnerOffline?: boolean;
 }
 
 export function managedRunnerReason(code: string): ManagedRunnerReason {
@@ -1401,8 +1416,10 @@ export class ManagedRunnerManager {
    *     throughout, as for a retry.
    *   - asked to sleep by its owner, it goes to sleep: the drain's end (`draining`) releases it.
    *
-   * Every such stop is logged with its exit code and whether it ran out of memory, and the owner's
-   * reason says which, while it restarts and once it has failed.
+   * Every such stop is logged with its exit code and whether it ran out of memory or filled its temporary storage, and
+   * the owner's reason says which, while it restarts and once it has failed. Whichever way it goes, the commit that
+   * records the stop proof marks the runner row OFFLINE in the same transaction (`runnerOffline`): the instance is
+   * proven stopped, so its machine is offline now, not once its heartbeat has aged.
    *
    * The stop the owner's Update Now asked for (`stopForOwnerUpdate`: their request may interrupt turns, and it is in
    * progress, and the instance is the READY one of a previous image) is no failure: wanted running, it goes back to
@@ -1419,12 +1436,15 @@ export class ManagedRunnerManager {
     const recorded = { fencingReceipt: proof as unknown as Prisma.InputJsonValue };
     const detail = `${this.backend.terms.instance} ${instance.uid} is ${instance.phase}`;
     const outOfMemory = instance.exit?.outOfMemory === true;
+    const storageFull = !outOfMemory && instance.exit?.storageFull === true;
+    const cause = outOfMemory ? 'out of memory' : storageFull ? 'evicted for full temporary storage' : 'not out of memory';
     const stopped = `managed runner ${mapping.id}: POD_TERMINATED: ${this.backend.terms.instance} ${instance.uid} of generation ${mapping.generation} `
-      + `stopped in ${mapping.managementState} with exit code ${instance.exit?.code ?? 'unknown'}, ${outOfMemory ? 'out of memory' : 'not out of memory'}`;
+      + `stopped in ${mapping.managementState} with exit code ${instance.exit?.code ?? 'unknown'}, ${cause}`;
+    const offline = { runnerOffline: true };
     if (mapping.desiredState !== 'RUNNING') {
       this.log.warn(`${stopped}; its owner asked it to sleep, so it goes to sleep`);
       return {
-        next: await this.commit(mapping, { ...recorded, managementState: 'DRAINING', imageRollTo: null, stateEnteredAt: now, drainDemandRevision: mapping.demandRevision, lastError: Prisma.DbNull }),
+        next: await this.commit(mapping, { ...recorded, managementState: 'DRAINING', imageRollTo: null, stateEnteredAt: now, drainDemandRevision: mapping.demandRevision, lastError: Prisma.DbNull }, offline),
       };
     }
     if (mapping.managementState === 'READY' && instance.previousImage && ownerUpdatePending(mapping) && mapping.updateInterruptTurns) {
@@ -1438,14 +1458,14 @@ export class ManagedRunnerManager {
           nextAttemptAt: null,
           startupDeadlineAt: null,
           lastError: Prisma.DbNull,
-        }),
+        }, offline),
       };
     }
     const { maxAttempts } = this.profile.lifecycle;
     const attempt = (this.stoodUp(mapping) || this.ranSinceRestart(mapping) ? 0 : mapping.attempt) + 1;
     if (attempt >= maxAttempts) {
       this.log.warn(`${stopped}; FAILED: attempt ${attempt} of ${maxAttempts} in a row; tried again in ${Math.round(slowRetryDelayMs(attempt - maxAttempts) / 60_000)} min while work is waiting`);
-      return this.fail(mapping, outOfMemory ? 'POD_OUT_OF_MEMORY' : 'POD_TERMINATED', detail, { ...recorded, attempt });
+      return this.fail(mapping, outOfMemory ? 'POD_OUT_OF_MEMORY' : storageFull ? 'POD_STORAGE_FULL' : 'POD_TERMINATED', detail, { ...recorded, attempt }, offline);
     }
     const delayMs = this.backoffDelay(attempt);
     this.log.warn(`${stopped}; starting generation ${mapping.generation + 1} on the same volume in ${Math.ceil(delayMs / 1000)} s (attempt ${attempt} of ${maxAttempts})`);
@@ -1456,8 +1476,8 @@ export class ManagedRunnerManager {
       attempt,
       nextAttemptAt: new Date(now.getTime() + delayMs),
       startupDeadlineAt: null,
-      lastError: { ...managedRunnerReason(outOfMemory ? 'POD_RESTARTING_OUT_OF_MEMORY' : 'POD_RESTARTING'), detail },
-    });
+      lastError: { ...managedRunnerReason(outOfMemory ? 'POD_RESTARTING_OUT_OF_MEMORY' : storageFull ? 'POD_RESTARTING_STORAGE_FULL' : 'POD_RESTARTING'), detail },
+    }, offline);
     return { done: 'BACKOFF' };
   }
 
@@ -2097,14 +2117,40 @@ export class ManagedRunnerManager {
     });
   }
 
-  /** Compare-and-set on the revision this pass read, while this replica still holds the lease. */
-  private async commit(mapping: ManagedRunner, data: Prisma.ManagedRunnerUpdateManyMutationInput): Promise<ManagedRunner> {
+  /**
+   * Compare-and-set on the revision this pass read, while this replica still holds the lease. With `runnerOffline`
+   * (a proven stop, `terminated`), the runner row is marked OFFLINE in the same transaction (`commitStopped`).
+   */
+  private async commit(mapping: ManagedRunner, data: Prisma.ManagedRunnerUpdateManyMutationInput, opts: CommitOptions = {}): Promise<ManagedRunner> {
+    if (opts.runnerOffline) return this.commitStopped(mapping, data);
     const now = this.now();
     const { count } = await this.prisma.managedRunner.updateMany({
       where: { id: mapping.id, revision: mapping.revision, leaseHolder: this.holder },
       data: { ...data, revision: { increment: 1 }, leaseExpiresAt: this.leaseUntil(now) },
     });
     if (count === 0) throw new Superseded();
+    return this.reread(mapping.id);
+  }
+
+  /**
+   * `commit` of a step that records a proven stop of the instance: the mapping's compare-and-set, then the runner row
+   * marked OFFLINE, in one transaction, so no reader sees the stop recorded and the machine still ONLINE. Its next
+   * generation's first heartbeat marks it ONLINE again.
+   */
+  private async commitStopped(mapping: ManagedRunner, data: Prisma.ManagedRunnerUpdateManyMutationInput): Promise<ManagedRunner> {
+    const now = this.now();
+    await withTransactionRetry(
+      this.prisma,
+      async (tx) => {
+        const { count } = await tx.managedRunner.updateMany({
+          where: { id: mapping.id, revision: mapping.revision, leaseHolder: this.holder },
+          data: { ...data, revision: { increment: 1 }, leaseExpiresAt: this.leaseUntil(now) },
+        });
+        if (count === 0) throw new Superseded();
+        await tx.runner.updateMany({ where: { id: mapping.runnerId, status: { not: 'OFFLINE' } }, data: { status: 'OFFLINE' } });
+      },
+      loggedRetry(this.log, 'managedRunners.commitStopped'),
+    );
     return this.reread(mapping.id);
   }
 
@@ -2288,7 +2334,13 @@ export class ManagedRunnerManager {
    * slowRetryDelayMs(attempt - maxAttempts) away, so each consecutive failure waits longer, up to 6 h. Nothing is
    * tried before then, nor at all while no work is waiting (`crashRetried`).
    */
-  private async fail(mapping: ManagedRunner, code: string, detail: string, also: Prisma.ManagedRunnerUpdateManyMutationInput = {}): Promise<Step> {
+  private async fail(
+    mapping: ManagedRunner,
+    code: string,
+    detail: string,
+    also: Prisma.ManagedRunnerUpdateManyMutationInput = {},
+    opts: CommitOptions = {},
+  ): Promise<Step> {
     const reason = managedRunnerReason(code);
     const now = this.now();
     const { maxAttempts } = this.profile.lifecycle;
@@ -2301,7 +2353,7 @@ export class ManagedRunnerManager {
       stateEnteredAt: now,
       nextAttemptAt: reason.retryable ? new Date(now.getTime() + slowRetryDelayMs(attempt - maxAttempts)) : null,
       lastError: { ...reason, detail },
-    });
+    }, opts);
     return { done: 'FAILED' };
   }
 
@@ -2348,12 +2400,12 @@ export class ManagedRunnerManager {
    * proven first. A recorded or possibly created instance keeps it: that one is released only through
    * the stop gate. A retry, or a wake, is admitted again from REQUESTED.
    */
-  private async commitReleasingCompute(mapping: ManagedRunner, data: Prisma.ManagedRunnerUpdateManyMutationInput): Promise<void> {
+  private async commitReleasingCompute(mapping: ManagedRunner, data: Prisma.ManagedRunnerUpdateManyMutationInput, opts: CommitOptions = {}): Promise<void> {
     const held = readReservation(mapping.reservation);
     const compute = computeOf(held);
     const createInFlight = mapping.resourceOperationKind === 'CREATE_POD' && mapping.resourceOperationState === 'PENDING';
     if (!held || !compute || mapping.podUid || createInFlight) {
-      await this.commit(mapping, data);
+      await this.commit(mapping, data, opts);
       return;
     }
     const now = this.now();
@@ -2370,6 +2422,7 @@ export class ManagedRunnerManager {
           },
         });
         if (count === 0) throw new Superseded();
+        if (opts.runnerOffline) await tx.runner.updateMany({ where: { id: mapping.runnerId, status: { not: 'OFFLINE' } }, data: { status: 'OFFLINE' } });
         await releaseCapacity(tx, held.pool, compute, null);
       },
       loggedRetry(this.log, 'managedRunners.releaseIdleCompute'),

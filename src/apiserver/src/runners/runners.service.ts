@@ -920,14 +920,14 @@ export class RunnersService {
     engine: LoginEngine,
     account: string,
   ): Promise<RunnerClaudeAccountSwapState> {
-    if (engine !== 'claude') throw new BadRequestException('Only a Claude Code account can be made the Default');
-    if (account === 'default') throw new BadRequestException('This account is already the Default');
-    if (!ACCOUNT_ID_PATTERN.test(account ?? '')) throw new BadRequestException('Unknown account');
     const runner = await this.prisma.runner.findFirst({
       where: { id, ownerId },
       select: { engines: true, capabilities: true, capabilitiesReportedAt: true, claudeAccountSwapStatus: true },
     });
     if (!runner) throw new NotFoundException('runner not found');
+    if (engine !== 'claude') throw new BadRequestException('Only a Claude Code account can be made the Default');
+    if (account === 'default') throw new BadRequestException('This account is already the Default');
+    if (!ACCOUNT_ID_PATTERN.test(account ?? '')) throw new BadRequestException('Unknown account');
     const capabilities = runner.capabilitiesReportedAt ? (runner.capabilities ?? []) : [];
     if (!capabilities.includes(CLAUDE_ACCOUNT_SWAP_V1) || !capabilities.includes(CLAUDE_ACCOUNT_MOVE_V1)) {
       throw new BadRequestException(CLAUDE_ACCOUNT_SWAP_TOO_OLD);

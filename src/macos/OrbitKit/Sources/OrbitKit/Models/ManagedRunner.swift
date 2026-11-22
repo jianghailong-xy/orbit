@@ -100,6 +100,9 @@ public struct ManagedRunnerStatus: Decodable, Equatable, Sendable {
     public let usable: Bool
     public let reason: ManagedRunnerReason?
     public let retryAfter: String?
+    /// Its next automatic try, as the server stored it: a restart's backoff, or a FAILED runner's slow retry (which may
+    /// be past: it is taken once work is waiting). Nil when none is scheduled, and from a server that predates the field.
+    public let nextAttemptAt: String?
     /// What the runner was found ready with, which its first session starts on:
     /// a runtime signed in on it, or one of the owner's model keys (its slug). Nil until the runner
     /// has been READY.
