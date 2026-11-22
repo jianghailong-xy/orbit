@@ -33,23 +33,48 @@ export function delegateRunsSignature(events: readonly RunEvent[]): string {
   return seqs.join(',');
 }
 
-const pendingReads = new Map<string, Promise<SubagentRunView[]>>();
+interface SubagentFlight {
+  /** True until the request has gone out: callers in the same tick join it. */
+  starting: boolean;
+  promise: Promise<SubagentRunView[]>;
+  /** The one read issued when this one ends, for every caller that asked while it was in flight. */
+  trailing: Promise<SubagentRunView[]> | null;
+}
+
+const flights = new Map<string, SubagentFlight>();
+
+function beginRead(sessionId: string): Promise<SubagentRunView[]> {
+  const flight: SubagentFlight = {
+    starting: true,
+    trailing: null,
+    promise: Promise.resolve().then(() => {
+      flight.starting = false;
+      return getSessionSubagents(sessionId);
+    }),
+  };
+  const done = () => {
+    if (!flight.trailing && flights.get(sessionId) === flight) flights.delete(sessionId);
+  };
+  flight.promise.then(done, done);
+  flights.set(sessionId, flight);
+  return flight.promise;
+}
 
 /**
- * The one owner of `GET /sessions/:id/subagents`: the delegate view and the workflow view both read through it, so
- * reads asked for in the same tick (both signatures moving on one transcript update) are one request. The request
- * goes out after the tick's callers have joined, so a caller never gets an answer older than its own signature.
+ * The one owner of `GET /sessions/:id/subagents`: the delegate view, the workflow view and the page's own read all
+ * go through it, with at most one request in flight per session. Callers in the tick that starts a read join it
+ * (the request goes out after they have). A caller that asks while it is in flight joins one trailing read, issued
+ * when the first ends, so nobody gets an answer older than its own change and a burst is two requests at most.
  */
 export function readSessionSubagents(sessionId: string): Promise<SubagentRunView[]> {
-  let read = pendingReads.get(sessionId);
-  if (!read) {
-    read = Promise.resolve().then(() => {
-      pendingReads.delete(sessionId);
-      return getSessionSubagents(sessionId);
-    });
-    pendingReads.set(sessionId, read);
-  }
-  return read;
+  const flight = flights.get(sessionId);
+  if (!flight) return beginRead(sessionId);
+  if (flight.starting) return flight.promise;
+  flight.trailing ??= flight.promise.then(
+    () => beginRead(sessionId),
+    () => beginRead(sessionId),
+  );
+  return flight.trailing;
 }
 
 /** The session's SubAgent runs by delegate call, re-read whenever one starts or ends in the transcript. */

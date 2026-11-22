@@ -210,4 +210,39 @@ describe('a session\'s workflows on the web', () => {
     expect(seen.workflows.get(WF)).toMatchObject({ callsDone: 1 });
     expect(seen.calls.get(`${WF}#0`)?.status).toBe('RUNNING');
   });
+
+  it('sends at most two /subagents reads when three observers move in separate ticks, and each ends with the trailing answer', async () => {
+    const answers = [[run(0, {})], [run(0, { status: 'DONE', endedAt: '2026-11-19T10:00:09.000Z' })]];
+    let gate: (() => void) | null = null;
+    const subagentReads: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url === '/api/sessions/s1/workflows') {
+        return new Response(JSON.stringify([workflow({})]), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      subagentReads.push(url);
+      const body = answers[Math.min(subagentReads.length, answers.length) - 1];
+      // The first read stays in flight while the signatures move.
+      if (subagentReads.length === 1) await new Promise<void>((resolve) => { gate = resolve; });
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+    }));
+    const seenBy: { a?: ReturnType<typeof useSubagentRuns>; b?: ReturnType<typeof useSubagentRuns>; w?: WorkflowRuns } = {};
+    function A({ events }: { events: readonly RunEvent[] }) { seenBy.a = useSubagentRuns('s1', events); return null; }
+    function B({ events }: { events: readonly RunEvent[] }) { seenBy.b = useSubagentRuns('s1', events); return null; }
+    function W({ events }: { events: readonly RunEvent[] }) { seenBy.w = useWorkflowRuns('s1', events); return null; }
+    const delegateCall = ev(20, 'tool_use', { id: `${WF}#0`, name: 'mcp__orbit__delegate', input: { prompt: 'x' } });
+    const results = (n: number) => Array.from({ length: n }, (_, k) => ev(30 + k, 'tool_result', { toolUseId: `${WF}#0`, content: 'x' }));
+    const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+    const events = (n: number) => [life.opened, life.call0, delegateCall, ...results(n)];
+    const moves = [
+      (n: number) => root.render(<><A events={events(n)} /><B events={[]} /><W events={[]} /></>),
+      (n: number) => root.render(<><A events={events(n)} /><B events={events(n)} /><W events={[]} /></>),
+      (n: number) => root.render(<><A events={events(n)} /><B events={events(n)} /><W events={events(n)} /></>),
+    ];
+    for (let n = 1; n <= 5; n++) {
+      await act(async () => { moves[Math.min(n, 3) - 1](n); await tick(); });
+    }
+    await act(async () => { (gate as (() => void) | null)?.(); for (let i = 0; i < 8; i++) await tick(); });
+    expect(subagentReads).toHaveLength(2);
+    for (const view of [seenBy.a, seenBy.b, seenBy.w?.calls]) expect(view?.get(`${WF}#0`)?.status).toBe('DONE');
+  });
 });
