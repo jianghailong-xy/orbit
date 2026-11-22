@@ -379,6 +379,8 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // A CURRENT_WORK receipt names the exact executable it was aimed at. That is a row address
   // (not a delivery fence), so it must use the same public spelling as turnId.
   'targetTurnId',
+  // Run now's pass (Session.overCapacityTurnId): the queued turn it covers, handed to the runner beside overCapacity.
+  'overCapacityTurnId',
   // The turn the newest runner link inbox fetch handed out (`session.inbox_request_turn_id`, 0448),
   // which the same fetch sent again is answered with. The server looks the turn up by it; no runner
   // echoes it, and the request id beside it is what a resend is matched by. A turn's address.

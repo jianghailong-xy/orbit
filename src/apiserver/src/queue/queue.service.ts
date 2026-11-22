@@ -778,17 +778,16 @@ export class QueueService {
       `);
         // The ordinary claim first, so a message already waiting takes a slot that came free before a passed one is
         // put over the limit (F). The overflow claim runs only when it took nothing and a pass waits on this runner,
-        // which the partial index session_over_capacity_pending_idx answers from a handful of rows.
+        // which the partial index session_over_capacity_pending_idx answers from a handful of rows. Asked first, under
+        // the claim lock, so the claim statement stays this transaction's last read.
+        const passWaiting = !scopedClaim && (await tx.$queryRaw<Array<{ waiting: boolean }>>`
+          SELECT EXISTS (
+            SELECT 1 FROM "session" s
+             WHERE s."assigned_runner_id" = ${runner.id}::uuid
+               AND s."over_capacity_turn_id" IS NOT NULL AND s.status = 'PENDING'
+          ) AS waiting`)[0]?.waiting === true;
         let claimed = await claimOne(false);
-        if (claimed.length === 0 && !scopedClaim) {
-          const [waiting] = await tx.$queryRaw<Array<{ waiting: boolean }>>`
-            SELECT EXISTS (
-              SELECT 1 FROM "session" s
-               WHERE s."assigned_runner_id" = ${runner.id}::uuid
-                 AND s."over_capacity_turn_id" IS NOT NULL AND s.status = 'PENDING'
-            ) AS waiting`;
-          if (waiting?.waiting) claimed = await claimOne(true);
-        }
+        if (claimed.length === 0 && passWaiting) claimed = await claimOne(true);
         // A row an older replica wrote has no engine: record the one it is about to run on, derived by
         // the rules that replica follows, in this same transaction (§1.1). From here on nothing derives
         // it again — a later edit of its key cannot move it onto another CLI.

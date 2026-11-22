@@ -12943,6 +12943,7 @@ export class SessionsService {
    */
   async runNow(ownerId: string, id: string, actingSessionId: string | null) {
     refuseRunNowForSession(actingSessionId);
+    assertEngineSessionRow(await this.get(ownerId, id)); // ownership check (404s otherwise); a landing is the platform's
     const granted = await withTransactionRetry(this.prisma, async (tx) => {
       // The session row first, as every turn write takes it: the seed and the pass are then one decision about it.
       const [session] = await tx.$queryRaw<Array<{
