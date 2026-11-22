@@ -1601,6 +1601,10 @@ final class ConsoleModel {
             }
             catchUpPending = false
             catchUpAfterFailure = false
+            // The catch-up ran out of budget under a reader who had scrolled up: their window was
+            // kept with its bottom open (`replaceWindow`), so the stream stays closed until they page
+            // down to the latest or jump to it.
+            if detached { continue }
             // No page seeded the window (every tail attempt failed): the connect below is cursor-less
             // and its capped replay can start mid-conversation, so its first event sets the older edge.
             if reducer.state.maxSeq == 0 { reducer.expectReplayToSetOlderEdge() }
@@ -1663,12 +1667,13 @@ final class ConsoleModel {
             // refresh the status from REST before reconnecting.
             if outcome == .ended || outcome == .cancelled { publishStateNow() }
             if outcome == .ended { await refreshServerStatus() }
-            // Ordered by the server: this window is not a viable place to resume from. Throw it
-            // away and re-seed exactly as a cold open does, so the next connect resumes from the
-            // fresh page's max seq. A seed that fails leaves the reducer empty, which makes the
+            // Ordered by the server: this window is not a viable place to resume from. At the tail,
+            // throw it away and re-seed exactly as a cold open does, so the next connect resumes from
+            // the fresh page's max seq. A seed that fails leaves the reducer empty, which makes the
             // reconnect cursor-less — and a cursor-less replay is server-capped, so the fallback
-            // is still a bounded catch-up rather than the full history.
-            if outcome == .resync { await reseedFromTailPage() }
+            // is still a bounded catch-up rather than the full history. Under a reader who scrolled
+            // up the window is kept and the stream stays closed (`replaceWindow`).
+            if outcome == .resync { await replaceWindow() }
             catchUpAfterFailure = (outcome == .failed)   // the next iteration may need to close a gap
             switch reconnectPolicy.next(after: outcome) {
             case .stop:
@@ -1680,7 +1685,7 @@ final class ConsoleModel {
     }
 
     /// Fold the newest page of persisted events into an empty window — the tail-first seed, used
-    /// both on a cold open and when a `resync` clears the window (see `reseedFromTailPage`).
+    /// both on a cold open and when a `resync` clears the window (see `replaceWindow`).
     ///
     /// Retries a few times before giving up. A transient failure here (common on mobile) used to
     /// fall straight through to the SSE loop with `sinceSeq: 0`, replaying the WHOLE transcript
@@ -1719,8 +1724,9 @@ final class ConsoleModel {
     ///
     /// The budget mirrors the server's own policy: it answers a gap wider than `SSE_GAP_CAP` (1000)
     /// with `resync` rather than replaying it (`catchUpPages` × `olderPage` = the same 1000), so
-    /// past that budget the window is re-seeded from a tail page instead. The reader is at the tail
-    /// either way, and the middle of a gap nobody saw carries nothing the tail page doesn't.
+    /// past that budget the window is replaced as a `resync` would replace it (`replaceWindow`): from
+    /// a tail page for a reader at the tail, for whom the middle of a gap nobody saw carries nothing
+    /// the tail page doesn't, and kept with its bottom open under a reader who scrolled up.
     ///
     /// A failed page is not retried here: the stream attempt right after this IS the retry, with
     /// everything that landed already folded in (that is the whole point — the next attempt resumes
@@ -1746,21 +1752,31 @@ final class ConsoleModel {
             guard let next = page.after else { return }   // this page reached the newest event
             cursor = next
         }
-        // Still short of the tail after the whole budget: re-seed, as the server's `resync` would
-        // have. The window is replaced wholesale, so the dropped middle leaves no hole.
-        await reseedFromTailPage()
+        // Still short of the tail after the whole budget: replace the window, as the server's
+        // `resync` would have. Re-seeded, it is replaced wholesale, so the dropped middle leaves no
+        // hole; kept, its bottom is the gap.
+        await replaceWindow()
     }
 
-    /// Act on the server's `resync`: drop the loaded window and rebuild it from a tail page.
+    /// Act on the server's `resync` (or a catch-up out of budget), the reducer's `replaceWindow`.
     ///
-    /// The cleared state is deliberately NOT published on its own — a seed usually lands in a few
+    /// A reader following the tail has the loaded window dropped and rebuilt from a tail page. The
+    /// cleared state is deliberately NOT published on its own — a seed usually lands in a few
     /// hundred milliseconds, and painting an empty transcript in between would flash the screen
     /// blank on what the user experiences as a plain reconnect. The stale rows stay up until the
     /// fresh page replaces them (or, if every attempt fails, until the capped cursor-less replay
     /// on the next connect does).
-    private func reseedFromTailPage() async {
+    ///
+    /// A reader who has scrolled up (`readingHistory`) keeps the window: a fresh page under them
+    /// moved what they were reading. It becomes a window opened at a record, its bottom a gap at its
+    /// last seq (`newerCursor`) and the stream held off (`run()`), so scrolling down pages forward
+    /// (`loadNewer`) and the jump-to-latest control takes a tail page (`jumpToLatest`).
+    private func replaceWindow() async {
         guard !sessionID.isEmpty else { return }
-        reducer.resetForResync()
+        if let gap = reducer.replaceWindow(readerAtTail: !readingHistory) {
+            newerCursor = gap
+            return
+        }
         await seedTailPage()
     }
 
@@ -1919,7 +1935,8 @@ final class ConsoleModel {
     private var prependAnchorID: String?
 
     /// True while the reader has scrolled up off the live tail — fed by `TranscriptView`'s
-    /// `atBottom`. It gates the window cap, and only that.
+    /// `atBottom`. It gates the window cap, and whether a window the stream cannot resume is swapped
+    /// for a tail page or kept under the reader (`replaceWindow`).
     private var readingHistory = false
 
     /// Tell the console whether the reader is up in the history rather than pinned at the live tail.

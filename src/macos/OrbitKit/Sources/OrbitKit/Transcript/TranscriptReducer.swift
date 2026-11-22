@@ -538,6 +538,25 @@ public struct TranscriptReducer: Sendable, Codable {
         if !state.hasMoreOlder, let oldest = state.oldestSeq, oldest > 1 { state.hasMoreOlder = true }
     }
 
+    /// What becomes of the loaded window when the stream cannot resume it: the server's `resync`, or
+    /// a reconnect's catch-up that spent its budget short of the tail (web parity: `replaceWindow` in
+    /// useSessionStream.ts; Android `ReadingWindow.live`).
+    ///
+    /// A reader following the tail gets a fresh tail page: the window is dropped (`resetForResync`)
+    /// and nil comes back, for the caller to seed it. A reader who has scrolled up keeps the window.
+    /// Swapping it then moved whatever they were reading out from under them, to wherever the new
+    /// page put the same scroll position. Its rows stay exactly as they are and its bottom becomes a
+    /// gap, as in a window opened at a record (`applyRecordPage`). The seq that comes back is where
+    /// the gap starts, the `after=` cursor the caller pages forward from. An empty window has nothing
+    /// to keep and is always reset.
+    public mutating func replaceWindow(readerAtTail: Bool) -> Int? {
+        guard !readerAtTail, state.maxSeq > 0 else {
+            resetForResync()
+            return nil
+        }
+        return state.maxSeq
+    }
+
     public mutating func resetForResync() {
         replaySetsOlderEdge = false
         // Retire any running shell before discarding its card. Otherwise a delayed notification
