@@ -38,7 +38,8 @@ final class ManagedRunnerUpdateTests: XCTestCase {
         let card = try XCTUnwrap(ManagedRunnerUpdateLogic.card(status: status, now: now, timeZone: utc))
         XCTAssertEqual(card.phase, "available")
         XCTAssertEqual(card.title, "The Nov 18 build is available")
-        XCTAssertEqual(card.body, "It moves the next time this runner is idle. Update Now restarts it on the new build now.")
+        XCTAssertEqual(card.body, RunnerPageCopy.MANAGED_UPDATE_AVAILABLE_BODY)
+        XCTAssertEqual(card.body, "It moves the next time this runner is idle. Update Now restarts it on the new build now — usually under a minute. Your files, sign-ins and sessions stay.")
         XCTAssertFalse(card.warn)
         XCTAssertTrue(card.canUpdateNow)
         XCTAssertTrue(ManagedRunnerUpdateLogic.showsDot(status), "the machine row's update dot")
@@ -57,11 +58,11 @@ final class ManagedRunnerUpdateTests: XCTestCase {
         let confirmation = ManagedRunnerUpdateLogic.confirmation(
             busy, build: ManagedRunnerBuild(sha: "1a2b3c4d", builtAt: "2026-11-18T08:00:00Z"), now: now, timeZone: utc)
         XCTAssertEqual(confirmation.title, "Update Orbit Cloud now?")
-        XCTAssertEqual(confirmation.body, "It stops 2 turns and restarts on the Nov 18 build. Each continues where it stopped.")
-        XCTAssertEqual(confirmation.turns, ["Fix login redirect · 18 min", "Backfill shard rows · 1 h 4 min"])
-        XCTAssertEqual(confirmation.jobsNote, "3 background jobs stop too.")
+        XCTAssertEqual(confirmation.body, "It stops these turns and restarts on the Nov 18 build — usually under a minute. Each one then continues where it stopped, with a note that the update interrupted it.")
+        XCTAssertEqual(confirmation.turns, ["Fix login redirect · running 18 min", "Backfill shard rows · running 1 h 4 min"])
+        XCTAssertEqual(confirmation.jobsNote, "3 background jobs in these sessions stop, and so do the services they started. Waiting work starts once it is back.")
         XCTAssertEqual(confirmation.confirm, "Interrupt 2 Turns and Update")
-        XCTAssertTrue(confirmation.message.contains("3 background jobs stop too."))
+        XCTAssertTrue(confirmation.message.contains("3 background jobs in these sessions stop, and so do the services they started. Waiting work starts once it is back."))
     }
 
     func testBusyConfirmationOfOneTurnAndOneJob() throws {
@@ -69,8 +70,8 @@ final class ManagedRunnerUpdateTests: XCTestCase {
             "{\"code\":\"MANAGED_RUNNER_BUSY\",\"turns\":[{\"sessionId\":\"s1\",\"title\":null,\"startedAt\":null}],\"backgroundJobs\":1}".utf8))
         let confirmation = ManagedRunnerUpdateLogic.confirmation(busy, build: ManagedRunnerBuild(sha: "1a2b3c4d"), now: now)
         XCTAssertEqual(confirmation.turns, ["Untitled session"])
-        XCTAssertEqual(confirmation.body, "It stops 1 turn and restarts on the build 1a2b3c4. It continues where it stopped.")
-        XCTAssertEqual(confirmation.jobsNote, "1 background job stops too.")
+        XCTAssertEqual(confirmation.body, "It stops this turn and restarts on the 1a2b3c4 build — usually under a minute. It then continues where it stopped, with a note that the update interrupted it.")
+        XCTAssertEqual(confirmation.jobsNote, "1 background job in these sessions stop, and so do the services they started. Waiting work starts once it is back.")
         XCTAssertEqual(confirmation.confirm, "Interrupt 1 Turn and Update")
     }
 
@@ -78,26 +79,29 @@ final class ManagedRunnerUpdateTests: XCTestCase {
         let restarting = try status(update: update("updating"))
         let card = try XCTUnwrap(ManagedRunnerUpdateLogic.card(status: restarting, now: now, timeZone: utc))
         XCTAssertEqual(card.phase, "updating")
-        XCTAssertEqual(card.title, "Restarting into the Nov 18 build…")
+        XCTAssertEqual(card.title, "Restarting on the Nov 18 build…")
         XCTAssertEqual(card.tag, "Restarting")
         XCTAssertEqual(card.body, "Usually under a minute.")
         XCTAssertTrue(card.warn)
         XCTAssertFalse(card.canUpdateNow)
         XCTAssertFalse(ManagedRunnerUpdateLogic.showsDot(restarting), "nothing left to press")
-        let waiting = try status(update: update("updating", extra: ", \"waitsForIdle\": true"))
-        XCTAssertEqual(ManagedRunnerUpdateLogic.card(status: waiting, now: now, timeZone: utc)?.body,
-                       "It restarts once the runner is idle.")
+        let interrupted = ManagedRunnerUpdateLogic.card(status: restarting, pendingTurns: 2, now: now, timeZone: utc)
+        XCTAssertEqual(interrupted?.body, "2 interrupted turns continue once it is back. Usually under a minute.")
     }
 
     func testUpdatedFollowsARestartForADay() throws {
         let updating = try status(update: update("updating"))
         let current = try status()
-        let mark = ManagedRunnerUpdateLogic.observe(previous: updating, next: current, updated: nil, now: now)
+        let pending = ManagedRunnerPendingUpdate(at: now.addingTimeInterval(-34), interruptedTurns: 2,
+                                                 to: ManagedRunnerBuild(sha: "1a2b3c4d5e6f", builtAt: "2026-11-18T08:00:00Z"))
+        let mark = ManagedRunnerUpdateLogic.observe(previous: updating, next: current, updated: nil, pending: pending, now: now)
+        XCTAssertEqual(mark?.tookSeconds, 34)
         XCTAssertEqual(mark?.build.sha, "1a2b3c4d5e6f")
         let card = try XCTUnwrap(ManagedRunnerUpdateLogic.card(status: current, updated: mark, now: now.addingTimeInterval(60), timeZone: utc))
         XCTAssertEqual(card.phase, "updated")
         XCTAssertEqual(card.title, "Updated to the Nov 18 build")
-        XCTAssertEqual(card.tag, "10:26")
+        XCTAssertEqual(card.tag, "Updated")
+        XCTAssertEqual(card.body, "Took 34 s. 2 interrupted turns resumed.")
         XCTAssertFalse(card.canUpdateNow)
         XCTAssertNil(ManagedRunnerUpdateLogic.card(status: current, updated: mark, now: now.addingTimeInterval(25 * 3600), timeZone: utc))
         // A read that fails keeps the mark; a new update ends it.

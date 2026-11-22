@@ -483,7 +483,7 @@ struct RunnerRow: View {
                             Circle()
                                 .fill(Color.accentColor)
                                 .frame(width: 7, height: 7)
-                                .accessibilityLabel("Update available")
+                                .accessibilityLabel(RunnerPageCopy.MANAGED_UPDATE_ROW_TITLE)
                                 .accessibilityIdentifier("runner-update-dot")
                         }
                         Spacer(minLength: 8)
@@ -1150,9 +1150,6 @@ struct RunnerDetailContent: View {
                      RunnerPageFormat.versionValue(runner, latest: runners.latestVersion, managed: managedRow != nil))
             // A managed runner never installs a release into itself: Orbit replaces its image.
             aboutRow(RunnerPageCopy.RUNNER_ABOUT_LAST_UPDATE, managedRow == nil ? RunnerPageFormat.lastUpdate(runner) : nil)
-            if managedRow != nil {
-                aboutRow(ManagedRunnerUpdateCopy.ABOUT_UPDATES, ManagedRunnerUpdateCopy.ABOUT_UPDATES_VALUE)
-            }
             // Only while a release is waiting: a check with nothing newer to install is not offered.
             if RunnerPageFormat.isBehindLatest(runner, latest: runners.latestVersion),
                RunnerAttention.runnerCanUpdateNow(runner, nowMs: RunnerPageFormat.nowMs(now)) {

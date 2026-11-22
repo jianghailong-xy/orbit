@@ -427,7 +427,7 @@ final class RunnerSelfUpdateTests: XCTestCase {
         XCTAssertEqual(RunnerPageFormat.hostLine(shaRunner, managed: false), "lab-host · v\(hash)", "a runner not managed: as before")
         let release = try runner(try caseInput("selfUpdate disabledByEnv and behind"))
         XCTAssertEqual(RunnerPageFormat.versionValue(release, latest: "0.1.197", managed: true),
-                       "0.1.190 · Orbit updates this machine for you.")
+                       "0.1.190 · Orbit moves it to each new build.")
         XCTAssertEqual(RunnerPageFormat.hostLine(release, managed: true), "lab-host · v0.1.190")
         XCTAssertEqual(RunnerPageFormat.versionValue(release, latest: "0.1.197", managed: false), "0.1.190")
         XCTAssertEqual(RunnerAttention.runnerVersionLine(hash, managed: true, known: nil), "Build 95884b1")

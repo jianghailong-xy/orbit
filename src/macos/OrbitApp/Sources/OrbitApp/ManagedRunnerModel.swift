@@ -16,6 +16,8 @@ final class ManagedRunnerModel {
     private(set) var display: ManagedRunnerDisplay?
     /// The build the last Update Now finished on, drawn as the Updated card for a day.
     private(set) var updated: ManagedRunnerUpdated?
+    /// An Update Now the server took and the runner has not finished.
+    private(set) var pending: ManagedRunnerPendingUpdate?
     /// A Retry or Set up is in flight.
     private(set) var acting = false
     /// Why the last Retry or Set up did not go through, in the server's words.
@@ -95,12 +97,14 @@ final class ManagedRunnerModel {
     }
 
     /// The owner's Update Now. Without `interruptTurns` a busy runner answers `.busy` with what it would stop.
-    func updateNow(interruptTurns: Bool) async -> UpdateNowResult {
+    func updateNow(interruptTurns: Bool, turns: Int, to build: ManagedRunnerBuild) async -> UpdateNowResult {
         guard !acting else { return .failed(RunnerPageCopy.RUNNER_UPDATE_NOW_FAILED) }
         acting = true
         defer { acting = false }
         do {
-            adopt(try await api.updateManagedRunnerNow(interruptTurns: interruptTurns))
+            let answer = try await api.updateManagedRunnerNow(interruptTurns: interruptTurns)
+            pending = ManagedRunnerPendingUpdate(at: Date(), interruptedTurns: turns, to: build)
+            adopt(answer)
             return .started
         } catch {
             if let busy = ManagedRunnerUpdateLogic.busy(from: error) { return .busy(busy) }
@@ -116,6 +120,7 @@ final class ManagedRunnerModel {
         ManagedRunnerIdentity.runnerID = nil
         ManagedRunnerRunningBuild.build = nil
         updated = nil
+        pending = nil
         errorText = nil
         offered = nil
         refreshNotBefore = .distantPast
@@ -137,7 +142,9 @@ final class ManagedRunnerModel {
     }
 
     private func adopt(_ answer: ManagedRunnerStatus?) {
-        updated = ManagedRunnerUpdateLogic.observe(previous: status, next: answer, updated: updated, now: Date())
+        let finished = ManagedRunnerUpdateLogic.observe(previous: status, next: answer, updated: updated, pending: pending, now: Date())
+        if finished != nil, finished != updated { pending = nil }
+        updated = finished
         ManagedRunnerRunningBuild.build = answer?.update?.running
         status = answer
         display = ManagedRunnerLogic.display(answer)

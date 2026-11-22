@@ -13,7 +13,8 @@ struct ManagedRunnerUpdateSection: View {
     @State private var failure: String?
 
     var body: some View {
-        if let card = ManagedRunnerUpdateLogic.card(status: managedRunner.status, updated: managedRunner.updated) {
+        if let card = ManagedRunnerUpdateLogic.card(status: managedRunner.status, updated: managedRunner.updated,
+                                                      pendingTurns: managedRunner.pending?.interruptedTurns) {
             Section {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(alignment: .firstTextBaseline) {
@@ -42,7 +43,7 @@ struct ManagedRunnerUpdateSection: View {
                     .disabled(managedRunner.acting)
                     .accessibilityIdentifier("runner-update-now")
                     .orbitConfirmation({ $0.title }, isPresented: askingShown, presenting: asking) { confirmation in
-                        Button(confirmation.confirm, role: .destructive) { interrupt() }
+                        Button(confirmation.confirm, role: .destructive) { interrupt(turns: confirmation.turns.count, build: confirmation.build) }
                         Button("Cancel", role: .cancel) {}
                     } message: { confirmation in
                         Text(confirmation.message)
@@ -65,9 +66,9 @@ struct ManagedRunnerUpdateSection: View {
     /// Ask without interrupting: an idle runner restarts at once, a busy one answers with what it would stop.
     private func press(_ card: ManagedRunnerUpdateLogic.Card) {
         Task {
-            switch await managedRunner.updateNow(interruptTurns: false) {
+            switch await managedRunner.updateNow(interruptTurns: false, turns: 0, to: card.build) {
             case .started:
-                onNotice?(ManagedRunnerUpdateCopy.restartingTitle(build: ManagedRunnerUpdateLogic.buildName(card.build)))
+                onNotice?(RunnerPageCopy.managedUpdateRestartingTitle(build: ManagedRunnerUpdateLogic.buildName(card.build)))
             case .busy(let busy):
                 asking = ManagedRunnerUpdateLogic.confirmation(busy, build: card.build, now: Date())
             case .failed(let reason):
@@ -76,9 +77,9 @@ struct ManagedRunnerUpdateSection: View {
         }
     }
 
-    private func interrupt() {
+    private func interrupt(turns: Int, build: ManagedRunnerBuild) {
         Task {
-            switch await managedRunner.updateNow(interruptTurns: true) {
+            switch await managedRunner.updateNow(interruptTurns: true, turns: turns, to: build) {
             case .started:
                 break
             case .busy, .failed:

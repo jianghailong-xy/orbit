@@ -1,35 +1,18 @@
 import Foundation
 
-/// Orbit Cloud's Update card, confirmation and version line (docs/managed-runner-update-now-design.md,
-/// board 5), driven by the managed status's `update` field instead of a self-managed runner's `selfUpdate`.
-/// Its copy is kept here, not in `RunnerPageCopy`, which is held sentence by sentence to the web's runnerCopy.ts.
-public enum ManagedRunnerUpdateCopy {
-    public static let AVAILABLE_BODY =
-        "It moves the next time this runner is idle. Update Now restarts it on the new build now."
-    public static let RESTARTING_BODY = "Usually under a minute."
-    public static let RESTARTING_BODY_WAITS_FOR_IDLE = "It restarts once the runner is idle."
-    /// About's Updates row on Orbit Cloud.
-    public static let ABOUT_UPDATES = "Updates"
-    public static let ABOUT_UPDATES_VALUE = "Each new build"
-    public static let CONFIRM_TITLE = "Update Orbit Cloud now?"
-    public static let CONFIRM_IDLE = "Update Now"
-    public static func availableTitle(build: String) -> String { "The \(build) is available" }
-    public static func restartingTitle(build: String) -> String { "Restarting into the \(build)…" }
-    public static func updatedTitle(build: String) -> String { "Updated to the \(build)" }
-    public static func bodyNone(build: String) -> String {
-        "No turn is running. It restarts on the \(build) — usually under a minute."
-    }
-    public static func bodyOne(build: String) -> String {
-        "It stops 1 turn and restarts on the \(build). It continues where it stopped."
-    }
-    public static func bodyMany(turns: Int, build: String) -> String {
-        "It stops \(turns) turns and restarts on the \(build). Each continues where it stopped."
-    }
-    public static func jobs(_ count: Int) -> String {
-        count == 1 ? "1 background job stops too." : "\(count) background jobs stop too."
-    }
-    public static func confirm(turns: Int) -> String {
-        turns == 0 ? CONFIRM_IDLE : turns == 1 ? "Interrupt 1 Turn and Update" : "Interrupt \(turns) Turns and Update"
+/// Orbit Cloud's Update card, confirmation and version line (docs/managed-runner-update-now-design.md, board 5),
+/// driven by the managed status's `update` field instead of a self-managed runner's `selfUpdate`. Its words are
+/// `RunnerPageCopy`'s managed* sentences, held to the web's by `RunnerPageCopyParityTests`.
+/// An Update Now pressed and not yet seen through: when, how many turns it interrupted, and the build it goes to.
+public struct ManagedRunnerPendingUpdate: Equatable, Sendable {
+    public let at: Date
+    public let interruptedTurns: Int
+    public let to: ManagedRunnerBuild
+
+    public init(at: Date, interruptedTurns: Int, to: ManagedRunnerBuild) {
+        self.at = at
+        self.interruptedTurns = interruptedTurns
+        self.to = to
     }
 }
 
@@ -37,10 +20,15 @@ public enum ManagedRunnerUpdateCopy {
 public struct ManagedRunnerUpdated: Equatable, Sendable {
     public let build: ManagedRunnerBuild
     public let at: Date
+    /// How long the restart took (from the press), and how many turns it interrupted.
+    public let tookSeconds: Int?
+    public let interruptedTurns: Int
 
-    public init(build: ManagedRunnerBuild, at: Date) {
+    public init(build: ManagedRunnerBuild, at: Date, tookSeconds: Int? = nil, interruptedTurns: Int = 0) {
         self.build = build
         self.at = at
+        self.tookSeconds = tookSeconds
+        self.interruptedTurns = interruptedTurns
     }
 }
 
@@ -59,14 +47,15 @@ public enum ManagedRunnerUpdateLogic {
 
     /// The version line: `Build 95884b1 · Nov 16`, or `Build 95884b1` when no build date is known.
     public static func buildLine(_ build: ManagedRunnerBuild, timeZone: TimeZone = .current) -> String {
-        let name = "Build " + shortSha(build.sha)
-        guard let day = dayLabel(build.builtAt, timeZone: timeZone) else { return name }
-        return name + RunnerPageCopy.RUNNER_LINE_SEPARATOR + day
+        guard let day = dayLabel(build.builtAt, timeZone: timeZone) else {
+            return RunnerPageCopy.managedBuildLine(sha: shortSha(build.sha))
+        }
+        return RunnerPageCopy.managedBuildLineBuilt(sha: shortSha(build.sha), built: day)
     }
 
-    /// How a card names a build: `Nov 18 build`, or `build 1a2b3c4` when it has no date.
+    /// How a card names a build: `the Nov 18 build`, or `the 1a2b3c4 build` when it has no date.
     public static func buildName(_ build: ManagedRunnerBuild, timeZone: TimeZone = .current) -> String {
-        dayLabel(build.builtAt, timeZone: timeZone).map { "\($0) build" } ?? "build " + shortSha(build.sha)
+        RunnerPageCopy.managedBuildNamed(name: dayLabel(build.builtAt, timeZone: timeZone) ?? shortSha(build.sha))
     }
 
     /// The build a runner's `managed-<sha>` version names, with the date the status knows for it.
@@ -99,20 +88,22 @@ public enum ManagedRunnerUpdateLogic {
 
     /// The card the status calls for; nil when the runner is current (no `update`) and no update finished in the
     /// last day. A reader who is not the runner's owner sees the card without Update Now….
-    public static func card(status: ManagedRunnerStatus?, updated: ManagedRunnerUpdated? = nil, isOwner: Bool = true,
+    public static func card(status: ManagedRunnerStatus?, updated: ManagedRunnerUpdated? = nil, isOwner: Bool = true, pendingTurns: Int? = nil,
                             now: Date = Date(), timeZone: TimeZone = .current) -> Card? {
         if let update = status?.update {
             let build = buildName(update.current, timeZone: timeZone)
             switch update.phase {
             case "available":
-                return Card(phase: "available", warn: false, title: ManagedRunnerUpdateCopy.availableTitle(build: build),
-                            tag: RunnerPageCopy.RUNNER_UPDATE_TAG_AVAILABLE, body: ManagedRunnerUpdateCopy.AVAILABLE_BODY,
+                return Card(phase: "available", warn: false,
+                            title: RunnerPageCopy.managedUpdateAvailableTitle(build: capitalized(build)),
+                            tag: RunnerPageCopy.RUNNER_UPDATE_TAG_AVAILABLE, body: RunnerPageCopy.MANAGED_UPDATE_AVAILABLE_BODY,
                             canUpdateNow: isOwner, build: update.current)
             case "updating":
-                return Card(phase: "updating", warn: true, title: ManagedRunnerUpdateCopy.restartingTitle(build: build),
+                let interrupted = pendingTurns ?? 0
+                return Card(phase: "updating", warn: true, title: RunnerPageCopy.managedUpdateRestartingTitle(build: build),
                             tag: RunnerPageCopy.RUNNER_UPDATE_TAG_RESTARTING,
-                            body: update.waitsForIdle ? ManagedRunnerUpdateCopy.RESTARTING_BODY_WAITS_FOR_IDLE
-                                : ManagedRunnerUpdateCopy.RESTARTING_BODY,
+                            body: interrupted > 0 ? RunnerPageCopy.runnerUpdateRestartingBodyInterrupted(turns: interrupted)
+                                : RunnerPageCopy.RUNNER_UPDATE_RESTARTING_BODY,
                             canUpdateNow: false, build: update.current)
             default:
                 return nil
@@ -120,23 +111,28 @@ public enum ManagedRunnerUpdateLogic {
         }
         guard let updated, now.timeIntervalSince(updated.at) <= Double(RunnerPageCopy.RUNNER_UPDATE_TAG_UPDATED_HOURS) * 3600,
               now >= updated.at.addingTimeInterval(-60) else { return nil }
-        let clock = DateFormatter()
-        clock.locale = Locale(identifier: "en_US_POSIX")
-        clock.timeZone = timeZone
-        clock.dateFormat = "HH:mm"
         return Card(phase: "updated", warn: false,
-                    title: ManagedRunnerUpdateCopy.updatedTitle(build: buildName(updated.build, timeZone: timeZone)),
-                    tag: clock.string(from: updated.at), body: "", canUpdateNow: false, build: updated.build)
+                    title: RunnerPageCopy.managedUpdateUpdatedTitle(build: buildName(updated.build, timeZone: timeZone)),
+                    tag: RunnerPageCopy.MANAGED_UPDATE_TAG_UPDATED,
+                    body: RunnerPageCopy.runnerUpdateUpdatedBody(
+                        took: updated.tookSeconds.map { RunnerPageCopy.runnerUpdateTook(seconds: $0) },
+                        interruptedTurns: updated.interruptedTurns),
+                    canUpdateNow: false, build: updated.build)
     }
+
+    private static func capitalized(_ text: String) -> String { text.prefix(1).uppercased() + text.dropFirst() }
 
     /// What follows from one status read after another: an update that was on its way and is gone with the
     /// runner READY has finished, on the build it was moving to; a new `update` ends the mark.
     public static func observe(previous: ManagedRunnerStatus?, next: ManagedRunnerStatus?, updated: ManagedRunnerUpdated?,
-                               now: Date) -> ManagedRunnerUpdated? {
+                               pending: ManagedRunnerPendingUpdate? = nil, now: Date) -> ManagedRunnerUpdated? {
         guard let next else { return updated }
         if next.update != nil { return nil }
         if let moved = previous?.update, moved.phase == "updating", next.managementState == "READY" {
-            return ManagedRunnerUpdated(build: moved.current, at: now)
+            return ManagedRunnerUpdated(
+                build: pending?.to ?? moved.current, at: now,
+                tookSeconds: pending.map { max(1, Int(now.timeIntervalSince($0.at).rounded())) },
+                interruptedTurns: pending?.interruptedTurns ?? 0)
         }
         return updated
     }
@@ -150,6 +146,8 @@ public enum ManagedRunnerUpdateLogic {
         public let turns: [String]
         public let jobsNote: String?
         public let confirm: String
+        /// The build it moves to, for the press that confirms.
+        public let build: ManagedRunnerBuild
         /// The whole question as one text, for an alert's message.
         public var message: String {
             var paragraphs = [body]
@@ -168,17 +166,22 @@ public enum ManagedRunnerUpdateLogic {
             let shown = title.isEmpty ? RunnerPageCopy.RUNNER_UPDATE_UNTITLED_TURN : title
             guard let started = turn.startedAt.flatMap({ RelativeTime.parse($0) }) else { return shown }
             let minutes = max(0, Int(now.timeIntervalSince(started) / 60))
-            return shown + RunnerPageCopy.RUNNER_LINE_SEPARATOR + RunnerPageFormat.updateWaited(minutes: minutes)
+            return shown + RunnerPageCopy.RUNNER_LINE_SEPARATOR
+                + RunnerPageCopy.runnerUpdateTurnRunning(duration: RunnerPageFormat.updateWaited(minutes: minutes))
         }
         let count = busy.turns.count
         return Confirmation(
-            title: ManagedRunnerUpdateCopy.CONFIRM_TITLE,
-            body: count == 0 ? ManagedRunnerUpdateCopy.bodyNone(build: name)
-                : count == 1 ? ManagedRunnerUpdateCopy.bodyOne(build: name)
-                : ManagedRunnerUpdateCopy.bodyMany(turns: count, build: name),
+            title: RunnerPageCopy.runnerUpdateNowTitle(runner: RunnerPageCopy.MANAGED_RUNNER_LABEL),
+            body: count == 0 ? RunnerPageCopy.managedUpdateNowBodyNone(build: name)
+                : count == 1 ? RunnerPageCopy.managedUpdateNowBodyOne(build: name)
+                : RunnerPageCopy.managedUpdateNowBodyMany(build: name),
             turns: turns,
-            jobsNote: busy.backgroundJobs > 0 ? ManagedRunnerUpdateCopy.jobs(busy.backgroundJobs) : nil,
-            confirm: ManagedRunnerUpdateCopy.confirm(turns: count))
+            jobsNote: busy.backgroundJobs > 0
+                ? RunnerPageCopy.managedUpdateNowJobs(
+                    jobs: busy.backgroundJobs,
+                    noun: busy.backgroundJobs == 1 ? "background job" : "background jobs")
+                : RunnerPageCopy.MANAGED_UPDATE_NOW_SERVICES,
+            confirm: RunnerPageCopy.runnerUpdateNowConfirm(turns: count), build: build)
     }
 
     /// The busy answer inside a refused Update Now, or nil for any other failure.
