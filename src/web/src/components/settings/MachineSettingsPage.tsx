@@ -22,7 +22,7 @@ import {
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { engineUpdateFailedLines, engineUpdateLineFailed, type LoginEngine } from '@orbit/shared';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, cleanUpWorkspaceRepo } from '../../api';
 import { encodeId, routeId } from '../../lib/idCodec';
@@ -30,6 +30,8 @@ import { machineDraftPath, machineName } from '../../lib/machineSetup';
 import { managedRowOf, useManagedRunner, useWakeForSignIn } from '../../lib/managedRunner';
 import { RunnerBrowserSection } from './RunnerBrowserSection';
 import { ManagedRunnerNotice } from '../ManagedRunnerNotice';
+import { ManagedUpdateCard } from '../ManagedUpdateCard';
+import { managedVersionLine, readUpdateOutcome } from '../../lib/managedRunnerUpdate';
 import { machineEmpty, START_A_SESSION } from '../../lib/machineSetupCopy';
 import { publishedRunnerVersionQuery, workspaceSessionCountsQuery } from '../../lib/queries';
 import { AbandonedCheckouts } from '../AbandonedCheckouts';
@@ -83,7 +85,6 @@ import {
   RUNNER_COPY_COMMAND,
   RUNNER_ENGINES,
   RUNNER_RESOURCES,
-  MANAGED_RUNNER_KEPT_UP_TO_DATE,
   MANAGED_RUNNER_NOT_REPORTED,
   MANAGED_RUNNER_UPDATED_BY_ORBIT,
   RUNNER_ENGINES_FOOTER,
@@ -250,6 +251,9 @@ const MANAGED_PILL = { ready: 'online', progress: 'offline', idle: 'offline', at
 
 export function MachineSettingsPage() {
   const runnerId = routeId(useParams().id);
+  // The Updated card's record is kept on this browser; the card says when it changes, so About's line follows.
+  const [, setOutcomeRead] = useState(0);
+  const refreshOutcome = useCallback(() => setOutcomeRead((n) => n + 1), []);
   const navigate = useNavigate();
   const [confirm, confirmation] = useConfirm();
   const message = useToast();
@@ -471,10 +475,13 @@ export function MachineSettingsPage() {
   const version = runner.version?.trim() || null;
   // The account's managed runner before it first reports (preparing, waiting for capacity, failed to
   // start): no version, no readings, no engines. Once it reports, the page is the ordinary one.
+  const managedOutcome = managed && runnerId ? readUpdateOutcome(runnerId) : null;
   const managedWaiting = !!managedRow && managedRow.kind !== 'available' && !version;
+  // Orbit Cloud's version line: the build it runs (`Build 95884b1 · Nov 16`), never "Kept up to date by Orbit".
+  const managedBuild = isManaged ? managedVersionLine(managed, version, managedOutcome) : null;
   const versionNote = (() => {
-    // Orbit rolls the managed runner's image: nothing here is for its owner to do.
-    if (isManaged) return isReleaseVersion(version) ? { text: MANAGED_RUNNER_UPDATED_BY_ORBIT, warn: false } : null;
+    // Orbit rolls the managed runner's image; its Update card (managed.status.update) says when one waits.
+    if (isManaged) return managedBuild || isReleaseVersion(version) ? { text: MANAGED_RUNNER_UPDATED_BY_ORBIT, warn: false } : null;
     if (!version || !latestVersion) return null;
     const stuck = attention.find((item) => item.kind === 'cannotSelfUpdate');
     if (stuck) return { text: stuck.short, warn: true };
@@ -732,7 +739,7 @@ export function MachineSettingsPage() {
       : RUNNER_OFFLINE;
   const metaline = [
     runner.hostname || null,
-    runnerVersionLine(version, isManaged),
+    managedBuild ?? runnerVersionLine(version, isManaged),
     runner.online && runner.lastHeartbeatAt ? `${RUNNER_ABOUT_LAST_CHECK_IN} ${ago(runner.lastHeartbeatAt, nowMs)}` : null,
   ].filter(Boolean) as string[];
   // The country its IP is in, ahead of the rest; hovering it says when it was checked.
@@ -785,6 +792,11 @@ export function MachineSettingsPage() {
       {/* The managed runner's own state, Retry and the way to a model included; none while it is ready. */}
       {managed && managed.display.kind !== 'available' && (
         <ManagedRunnerNotice managed={managed} className="machine-managed-notice" />
+      )}
+
+      {/* Orbit Cloud's own Update card (docs/managed-runner-update-now-design.md): its image is behind. */}
+      {managed && (
+        <ManagedUpdateCard managed={managed} machine={shownName} runnerId={runnerId ?? ""} idle={(runner.activeSessions ?? 0) === 0} onChange={refreshOutcome} />
       )}
 
       {/* The Update card (board 4): a release this runner is behind, in the phase it reports. */}
@@ -1113,7 +1125,7 @@ export function MachineSettingsPage() {
             title={RUNNER_ABOUT_VERSION}
             control={
               <span className="machine-about-value">
-                {isManaged && !isReleaseVersion(version) ? MANAGED_RUNNER_KEPT_UP_TO_DATE : (version ?? '—')}
+                {managedBuild ?? (isManaged && !isReleaseVersion(version) ? '—' : (version ?? '—'))}
                 {versionNote && <small className={versionNote.warn ? 'warn' : undefined}>{versionNote.text}</small>}
               </span>
             }
