@@ -3314,7 +3314,12 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1444 adds four nullable work-session columns and three checks on project_open_item, and widens
       // project_integration_job_retry_failure_class_chk to admit CONFLICT (revision 42, §12.4, R1); no row is
       // written, and no preserved relation, trigger, function or DONE fence changes.
-      '1444_open_item_work_session'],
+      '1444_open_item_work_session',
+      // 1449 replaces 0152's session_merge_projection_checkpoint_authority body so an update that clears a session's
+      // merge state is not read as a landing claim (a NULL `claimed` used to raise; revision 42, §12.5 W6). It
+      // creates, alters or drops no table, column, constraint or trigger, names none of the preserved triggers or
+      // functions, and writes no row.
+      '1449_merge_projection_authority_null_safe'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
