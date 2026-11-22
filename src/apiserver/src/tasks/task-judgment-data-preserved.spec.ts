@@ -3290,6 +3290,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // beside 0130's claim index (plan step 4.5, release A), dropping a leftover INVALID one first. Session is not a
       // preserved relation, and no function, trigger, type, constraint or DONE fence changes. No INSERT, UPDATE or DELETE.
       '1426_session_task_execution_claim_finished_at_idx',
+      // 1427 replaces 0512's `open_list_bump_owner` so that a workspace UPDATE changing only heartbeat-probe columns
+      // bumps no Open-list counter. It creates, alters or drops no table, column, constraint or trigger, and it names
+      // or replaces none of the preserved triggers or functions. No INSERT, UPDATE or DELETE runs at apply time.
+      '1427_open_list_workspace_probes',
       // 1430 adds managed_runner.update_interrupt_turns, BOOLEAN NOT NULL with a constant default (catalog-only, no
       // rewrite), for an owner's Update Now of a busy runner; `managed_runner` is none of the preserved relations, no
       // row is written, and no trigger, function or DONE fence changes.
