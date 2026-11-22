@@ -766,7 +766,7 @@
     "RUNNING": "Running",
     "AWAITING_INPUT": "Waiting for your reply",
     "INTERRUPTED": "Interrupted",
-    "SUCCEEDED": "Finished",
+    "SUCCEEDED": "Succeeded",
     "FAILED": "Failed",
     "ENDED": "Ended"
   }
