@@ -3686,6 +3686,9 @@ model DriveTrashGroup {
   actorRunnerId  String?   @map("actor_runner_id") @db.Uuid
   itemCount      Int       @default(0) @map("item_count")
   sizeBytes      BigInt    @default(0) @map("size_bytes")
+  /// A folder's marking into this group is still under way, a batch per transaction (§1.4); partial index
+  /// drive_trash_group_marking_idx (migration 1440) finds the ones left part-way.
+  marking        Boolean   @default(false)
   entries        DriveEntry[]
   versions       DriveVersion[]
 
