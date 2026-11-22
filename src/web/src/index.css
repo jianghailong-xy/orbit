@@ -2327,6 +2327,15 @@ button.toast--pill:focus-visible {
   background: var(--warning-bg);
   border-color: var(--warning-border);
 }
+/* Orbit Cloud's Updated card (board 4): green, for the day after its update. */
+.rd-update-card.done {
+  background: var(--success-bg);
+  border-color: var(--success-border);
+}
+.rd-update-card.done .rd-update-tag {
+  color: var(--success);
+  font-weight: 500;
+}
 .rd-update-head {
   display: flex;
   align-items: baseline;
