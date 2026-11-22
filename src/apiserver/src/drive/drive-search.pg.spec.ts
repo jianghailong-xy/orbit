@@ -1,5 +1,5 @@
 /**
- * Drive search (GET /drive/search; migration 1427; drive/drive.service.ts `search`), over a real PostgreSQL:
+ * Drive search (GET /drive/search; migration 1439; drive/drive.service.ts `search`), over a real PostgreSQL:
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/drive/drive-search.pg.spec.ts
  *
