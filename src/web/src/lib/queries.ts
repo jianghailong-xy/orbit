@@ -85,7 +85,6 @@ import {
   type LabelSummary,
   type TaskCounts,
 } from './taskPages';
-import { mergeWatches } from './watches';
 import { integrationInFlight, pollWhileInFlight, streamPoll, streamStaleTime } from './listBudget';
 import { readOpenList, type OpenListAnswer } from './openListDelta';
 import type { SessionReach, SessionReachDeclaration } from './sessionReach';
@@ -1302,33 +1301,28 @@ export const landingLogQuery = (sessionId: string, selectors: LandingLogSelector
   });
 
 /**
- * The owner's watches, newest first, as one list. `GET /watches` answers with the 100 newest of any
- * state, so a long history would push a live watch out of it, and a failure nobody has seen yet with
- * it: the two live states are read on their own beside it, and so are the watches that need attention
- * (`?needsAttention=true`, contract `attention`) — at most 100 each, as the Mac app reads them — and
- * each watch is kept once. The Following page, every watch card and the Following / Followed by
- * relations on sessions and tasks are all drawn from this one read, so a watch reads the same
+ * The owner's watches, newest first, as one list, in one request. `GET /watches` alone answers with
+ * the 100 newest of any state, so a long history would push a live watch, or a failure nobody has
+ * seen yet, out of it; `?following=true` answers with those 100 and then every ACTIVE, PAUSED and
+ * needs-attention watch (contract `attention`) they did not hold — at most 100 each — every watch
+ * once (docs/watch-contract.md §3). The Following page, every watch card and the Following / Followed
+ * by relations on sessions and tasks are all drawn from this one read, so a watch reads the same
  * wherever it is shown. The control-plane
  * stream nudges it on the session, approval and task events that can move a watch, and on the
  * server's own `watch.changed` for the four changes none of those accompany — a delivery, a
  * deadline, a dead letter, an agent making or releasing one (useControlPlane, docs/watch-contract.md
  * §8.1). The slow poll stays: that event is an accelerant, dropped without a word when a replica
  * restarts or a socket goes quiet, and a watch may not be read a minute late because one was lost.
+ * While the stream is live what is cached stays good for that minute, so a component that mounts
+ * on a fresh list reads nothing.
  */
 export const watchesQuery = () =>
   queryOptions({
     queryKey: ['watches'] as const,
     meta: { entities: ['watch', 'session', 'task'] },
-    queryFn: async () =>
-      mergeWatches(
-        await Promise.all([
-          api<WatchView[]>('/watches'),
-          api<WatchView[]>('/watches?state=ACTIVE'),
-          api<WatchView[]>('/watches?state=PAUSED'),
-          api<WatchView[]>('/watches?needsAttention=true'),
-        ]),
-      ),
-    refetchInterval: 60_000,
+    queryFn: () => api<WatchView[]>('/watches?following=true'),
+    refetchInterval: streamPoll(),
+    staleTime: streamStaleTime,
   });
 
 /**

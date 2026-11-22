@@ -91,6 +91,7 @@ beforeEach(() => {
   vi.mocked(api).mockImplementation(async (path: string) => {
     requested.push(path);
     if (path === `/sessions/${SESSION}/created-tasks`) return answer as never;
+    if (path === '/watches?following=true') return watching as never;
     if (path === '/watches?needsAttention=true') return [] as never;
     const state = /^\/watches\?state=([A-Z]+)$/.exec(path);
     if (state) return watching.filter((w) => w.state === state[1]) as never;
